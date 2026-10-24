@@ -12,6 +12,7 @@ import { Ticket, TicketAssign, TicketComment, TicketComplete, TicketCreate, Tick
 
 import { FIXTURE_COMPANY_ID, getModuleDefinition, type BusinessRecord } from "../../data/business-modules"
 import { defaultFactColumns } from "../../data/business-view-kinds"
+import { NO_ONE } from "../../data/properties"
 import { problemSentence } from "../problem"
 import { NOTHING_RESOLVED, type MappingContext, type Resolver } from "../records/adapter"
 import { isServerBacked, SERVER_MODULE_KEYS } from "../records/modules"
@@ -183,6 +184,7 @@ describe("a ticket", () => {
       parentTicketId: "",
       resolution: "",
       recollectionRouteId: "",
+      recollectionPickupId: "",
     })
   })
 
@@ -225,6 +227,11 @@ describe("a ticket", () => {
     assert.equal(completed.facts["Re-collection route"], "RC-1042")
     assert.equal(completed.facts.Closed, "2026-10-01 11:00")
     assert.equal(completed.submittedValues?.recollectionRouteId, rc1042.id)
+    // The stop the office added for it, where the completion named one (#111): by its id chip until the stops load.
+    const onItsStop = ticketAdapter.toRecord({ ...missed, status: "completed", resolution: "recollected", recollectionRouteId: routeId, recollectionPickupId: pickupId, closedAt: "2026-10-01T09:00:00.000Z" }, context())
+    assert.equal(onItsStop.facts["Re-collection stop"], `pickup-${pickupId}`)
+    assert.equal(onItsStop.submittedValues?.recollectionPickupId, `pickup-${pickupId}`)
+    assert.equal(completed.facts["Re-collection stop"], undefined)
   })
 
   test("reads each status as the list and the details spell it", () => {
@@ -391,6 +398,23 @@ describe("the ticket's commands", () => {
     assert.deepEqual(body("complete", { note: "x" }), { path: "resolution", message: "Pick what the ticket ended in" })
     assert.deepEqual(body("complete", { resolution: "fixed", note: "x" }), { path: "resolution", message: "Pick what the ticket ended in: recollected, serviced, answered, no-action, duplicate" })
     assert.deepEqual(body("complete", { resolution: "answered" }), { path: "note", message: "Say how the case was resolved" })
+  })
+
+  test("complete · recollected may name the stop the office added on that route, by server id; None names the route alone (#111)", () => {
+    const withStop = body("complete", { resolution: "recollected", note: "On the added stop", recollectionRouteId: rc1042.id, recollectionPickupId: `pickup-${pickupId}` })
+    assert.deepEqual(withStop, { resolution: "recollected", note: "On the added stop", recollectionRouteId: routeId, recollectionPickupId: pickupId })
+    assert.ok(TicketComplete.safeParse(withStop).success)
+    assert.deepEqual(body("complete", { resolution: "recollected", note: "x", recollectionRouteId: rc1042.id, recollectionPickupId: NO_ONE }), { resolution: "recollected", note: "x", recollectionRouteId: routeId })
+    assert.deepEqual(body("complete", { resolution: "recollected", note: "x", recollectionRouteId: rc1042.id, recollectionPickupId: "Stop 4" }), { path: "recollectionPickupId", message: "Pick a stop the API holds" })
+    assert.deepEqual(body("complete", { resolution: "serviced", note: "x", recollectionRouteId: rc1042.id, recollectionPickupId: `pickup-${pickupId}` }), { resolution: "serviced", note: "x" }, "a stop rides with recollected alone, as its route does")
+  })
+
+  test("complete · recollected refuses a loaded stop of another route — picked before the route was changed — at the stop", () => {
+    const stop = { ...row(`pickup-${pickupId}`, "Stop 4 · Parkvej 18", "Pickup"), submittedValues: { routeId: rc1042.id } }
+    const withStop: ServerRecordsState = new Map([...state, ["route-studio.pickups", loaded({ records: [stop], serverIds: serverIdsOf([stop], [pickupId]) }, 1)]])
+    const complete = (recollectionRouteId: string) => commands.complete?.toBody?.({ resolution: "recollected", note: "x", recollectionRouteId, recollectionPickupId: stop.id }, record, context(resolverOver(withStop)))
+    assert.deepEqual(complete(rc1042.id), { resolution: "recollected", note: "x", recollectionRouteId: routeId, recollectionPickupId: pickupId })
+    assert.deepEqual(complete(rc1040.id), { path: "recollectionPickupId", message: "Pick a stop on the re-collection route" })
   })
 
   test("each posts its body to its path and the ticket the API answers replaces the row", async () => {

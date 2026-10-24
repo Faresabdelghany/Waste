@@ -6,19 +6,22 @@ import assert from "node:assert/strict"
 import { describe, test } from "node:test"
 
 import type { Driver } from "@waste/contracts/fleet"
-import { PickupCorrection, PickupRemove, type Pickup } from "@waste/contracts/pickups"
+import { PickupAdd, PickupCorrection, PickupRemove, type Pickup } from "@waste/contracts/pickups"
 import { RouteAssign, RouteCancel, RouteReschedule, type Route } from "@waste/contracts/routes"
 import { PICKUP_OUTCOMES } from "@waste/domain/execution/vocabulary"
 
 import { NOTHING_RESOLVED, type MappingContext } from "../../api/records/adapter"
 import { driverAdapter } from "../../api/records/fleet"
 import { CORRECT_PICKUP, pickupAdapter, REMOVE_PICKUP } from "../../api/records/pickups"
-import { ASSIGN_ROUTE, CANCEL_ROUTE, RESCHEDULE_ROUTE, routeAdapter } from "../../api/records/routes"
+import { CONTAINERS_MODULE } from "../../api/records/containers"
+import { ADD_STOP, ASSIGN_ROUTE, CANCEL_ROUTE, RESCHEDULE_ROUTE, routeAdapter } from "../../api/records/routes"
 import { loaded, resolverOver, type ServerRecordsState } from "../../api/records/server-records"
 import { DEPOTS_MODULE, DRIVERS_MODULE, isTrailerRecord, VEHICLES_MODULE } from "../allocations"
 import { FIXTURE_COMPANY_ID, type BusinessRecord } from "../business-modules"
 import type { BusinessFormSchema } from "../business-form-types"
-import { PICKUP_COMMAND_FORMS, ROUTE_COMMAND_FORMS, routeCommandValues } from "../routes"
+import { MASTER_DATA_MODULE } from "../master-data"
+import { PROPERTIES_MODULE, SHARED_POINTS_MODULE } from "../properties"
+import { createRouteRecord, PICKUP_COMMAND_FORMS, ROUTE_COMMAND_FORMS, ROUTE_CREATE_FORM, routeCommandValues } from "../routes"
 
 const NOW = new Date("2026-09-30T12:00:00Z")
 const STAMPS = { createdAt: "2026-09-29T02:00:00.000Z", updatedAt: "2026-09-29T02:00:00.000Z" }
@@ -104,6 +107,29 @@ describe("the route's dialogs", () => {
     const body = routeAdapter.commands?.[RESCHEDULE_ROUTE]?.toBody?.({ ...routeCommandValues(record), operatingDate: "2026-10-02" }, record, context)
     assert.deepEqual(body, { operatingDate: "2026-10-02" })
     assert.ok(RouteReschedule.safeParse(body).success)
+  })
+
+  test("New route names the project and the day, required, and the optional ends, crew and note; the routes adapter owns the record it makes (#111)", () => {
+    assert.deepEqual(fieldIdsOf(ROUTE_CREATE_FORM), ["projectId", "operatingDate", "depotId", "unloadingStationId", "vehicleId", "driverId", "note"])
+    assert.deepEqual(requiredOf(ROUTE_CREATE_FORM), ["projectId", "operatingDate"])
+    assert.equal(ROUTE_CREATE_FORM.mode, "create")
+    assert.ok(routeAdapter.owns(createRouteRecord({ operatingDate: "2026-10-06" }, { now: 1 })), "the routes adapter owns what New route makes; routes.test.ts holds its body to the contract")
+  })
+
+  test("Add stop asks what it collects at, then the container, or the property or the shared point with its fraction, each shown only for its choice, and a note (#111)", () => {
+    const form = ROUTE_COMMAND_FORMS["add-stop"]
+    assert.deepEqual(fieldIdsOf(form), ["stopAt", "containerId", "propertyId", "sharedCollectionPointId", "wasteFractionId", "note"])
+    assert.deepEqual(requiredOf(form), ["stopAt"])
+    assert.equal(fieldOf(form, "stopAt")?.defaultValue, "container")
+    assert.deepEqual(fieldOf(form, "containerId")?.relation, CONTAINERS_MODULE)
+    assert.deepEqual(fieldOf(form, "propertyId")?.relation, PROPERTIES_MODULE)
+    assert.deepEqual(fieldOf(form, "sharedCollectionPointId")?.relation, SHARED_POINTS_MODULE)
+    assert.deepEqual(fieldOf(form, "wasteFractionId")?.relation, MASTER_DATA_MODULE)
+    assert.deepEqual(fieldOf(form, "wasteFractionId")?.requiredWhen, { fieldId: "stopAt", oneOf: ["property", "shared-point"] })
+    const atAProperty = routeAdapter.commands?.[ADD_STOP]?.toBody?.({ stopAt: "property", propertyId: "property-01a0d2a4-a280-7011-8000-000000000001", wasteFractionId: "fraction-01a0d2a4-a280-7005-8000-000000000001", note: "Re-collection" }, record, context)
+    assert.ok(PickupAdd.safeParse(atAProperty).success, JSON.stringify(atAProperty))
+    // It opens empty but for its choice's default: nothing of the route's own values belongs in it.
+    assert.deepEqual(Object.keys(routeCommandValues(record)).filter((key) => fieldIdsOf(form).includes(key)), [])
   })
 
   test("cancel asks why, and the reason is the body", () => {

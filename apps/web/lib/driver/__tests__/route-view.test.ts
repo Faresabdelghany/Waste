@@ -9,7 +9,7 @@ import { describe, test } from "node:test"
 
 import type { QueueEntry } from "../command-queue"
 import type { PilotCommand } from "../commands"
-import { endRouteWarning, MAPS_STOPS_MAX, mapsHref, routeActions, routeMapsHref, routesInDayOrder, stopActions, stopsInOrder, unreachableBanner, waitingOn } from "../route-view"
+import { endRouteWarning, MAPS_STOPS_MAX, mapsHref, routeActions, routeMapsHref, routesInDayOrder, stopActions, stopCollects, stopsInOrder, unreachableBanner, waitingOn } from "../route-view"
 import { pickup, pickupId, route, ROUTE_ID, routeDetail } from "./driver-fixtures"
 
 const queued = (command: Pick<PilotCommand, "kind" | "body"> & { routeId?: string }): QueueEntry =>
@@ -21,6 +21,11 @@ describe("the stops", () => {
     assert.deepEqual(stopsInOrder(pickups).map((stop) => stop.position), [2, 3, 1])
     const unsequenced = [pickup(2, { sequence: undefined }), pickup(1, { sequence: undefined })]
     assert.deepEqual(stopsInOrder(unsequenced).map((stop) => stop.position), [1, 2])
+  })
+
+  test("say what they collect beneath the address: the container and the fraction, or at an address-only stop the office added, the fraction alone (#111)", () => {
+    assert.equal(stopCollects(pickup(1)), "BIN-91001 · Residual")
+    assert.equal(stopCollects(pickup(2, { containerId: null, origin: "office", containerLabel: null })), "Residual", "no container, no separator")
   })
 
   test("open in Maps over the pickup's own point, and not at all without one", () => {

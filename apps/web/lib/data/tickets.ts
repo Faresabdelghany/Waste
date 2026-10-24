@@ -16,6 +16,7 @@ import { TICKET_KINDS, TICKET_PRIORITIES, TICKET_RESOLUTIONS } from "@waste/doma
 import { statusLabel, statusToken } from "../api/records/adapter"
 import { CONTAINERS_MODULE } from "../api/records/containers"
 import { accessModule } from "../api/records/organisation"
+import { PICKUPS_MODULE } from "../api/records/pickups"
 import { ROUTES_MODULE } from "../api/records/routes"
 import { ASSIGNEE_ACCOUNT_KEY, isOpenTicketStatus, OFFICE_TICKET_SOURCES } from "../api/records/tickets"
 import { AGREEMENTS_MODULE } from "./agreements"
@@ -23,7 +24,7 @@ import { DRIVERS_MODULE } from "./allocations"
 import type { BusinessFormField, BusinessFormOption, BusinessFormSchema, BusinessFormValues } from "./business-form-types"
 import type { BusinessRecord, ModuleLocation } from "./business-modules"
 import { mintedRecord, ORGANISATION_MODULE } from "./containers"
-import { CONTACTS_MODULE, PROPERTIES_MODULE, SHARED_POINTS_MODULE } from "./properties"
+import { CONTACTS_MODULE, NO_ONE, PROPERTIES_MODULE, SHARED_POINTS_MODULE } from "./properties"
 
 /** Configure › Users & roles: the accounts a ticket is assigned to, where the access module is switched. */
 export const ACCESS_MODULE: ModuleLocation = { workspaceId: accessModule.workspaceId, moduleId: accessModule.moduleId }
@@ -110,13 +111,27 @@ export const TICKET_COMMAND_FORMS: Readonly<Record<TicketCommandWithForm, Busine
   assign: commandForm("Assign", "Who works the case: an account working in the ticket's project. None takes it off everyone.", "Assign", [assignee(), note("Note", false)]),
   wait: commandForm("Waiting for the customer", "The case waits on the customer; say for what.", "Set waiting", [note("Waiting for", true)]),
   hold: commandForm("Put on hold", "The case waits on the office; say for what.", "Put on hold", [note("Held for", true)]),
-  complete: commandForm("Complete", "What the case ended in. A re-collection rides on a route of the project that has not ended, picked from Route Studio; it is never made here.", "Complete", [
+  complete: commandForm("Complete", "What the case ended in. A re-collection rides on a route of the project that has not ended, and may name the stop of it the office added for it — both made in Route Studio, never here.", "Complete", [
     { id: "resolution", label: "Resolution", type: "select", required: true, options: tokenOptions(TICKET_RESOLUTIONS) },
     { id: "recollectionRouteId", label: "Re-collection route", type: "select", relation: ROUTES_MODULE, visibleWhen: RECOLLECTED, requiredWhen: RECOLLECTED, description: "The routes that have not ended." },
+    { id: "recollectionPickupId", label: "Re-collection stop", type: "select", relation: PICKUPS_MODULE, visibleWhen: RECOLLECTED, description: "A stop on that route, planned or collected: the one the office added for it. None names the route alone." },
     note("How it was resolved", true),
   ]),
   reject: commandForm("Reject", "The case is not taken; the reason goes into its history.", "Reject", [{ id: "reason", label: "Reason", type: "textarea", required: true }]),
   reopen: commandForm("Reopen", "A closed case opens again; say why.", "Reopen", [note("Why it is reopened", true)]),
+}
+
+/** A stop that was missed — skipped or failed — is no re-collection: the API refuses it (#111). */
+const MISSED_STOP = new Set(["skipped", "failed"])
+
+/**
+ * The stops a completion's re-collection may name (#111): the picked route's
+ * that are planned or collected, by the stops module's records, after None —
+ * the route alone; only None until a route is picked.
+ */
+export function recollectionStopOptions(stops: readonly BusinessRecord[], routeWebId: string | undefined): BusinessFormOption[] {
+  const ofRoute = routeWebId === undefined || routeWebId === "" ? [] : stops.filter((stop) => stop.submittedValues?.routeId === routeWebId && !MISSED_STOP.has(String(stop.submittedValues?.status ?? "")))
+  return [{ value: NO_ONE, label: "None: the route alone" }, ...ofRoute.map((stop) => ({ value: stop.id, label: stop.status === "Planned" ? stop.name : `${stop.name} · ${stop.status}` }))]
 }
 
 /** A ticket the New ticket form made: the generic create path's id and kind, so the adapter owns it until the API's answer replaces it. `extra` rides along unseen — the alert a ticket answers. */

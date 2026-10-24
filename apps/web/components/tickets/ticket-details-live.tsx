@@ -318,6 +318,7 @@ export function LiveTicketDetailsDialog({ record, onClose }: { record: BusinessR
                   <Row label="Occurred" value={live.facts.Occurred ?? ""} />
                   {live.facts.Resolution !== undefined && <Row label="Resolution" value={live.facts.Resolution} />}
                   {live.facts["Re-collection route"] !== undefined && <Row label="Re-collection route" value={live.facts["Re-collection route"]} />}
+                  {live.facts["Re-collection stop"] !== undefined && <Row label="Re-collection stop" value={live.facts["Re-collection stop"]} />}
                   {live.facts.Closed !== undefined && <Row label="Closed" value={live.facts.Closed} />}
                 </div>
               </section>

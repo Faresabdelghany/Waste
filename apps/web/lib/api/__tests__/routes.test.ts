@@ -3,9 +3,10 @@
 // route's details read; the dispatcher's five commands — assign, dispatch,
 // reschedule, cancel and the stop order — whose bodies are held here
 // against the contracts' own zod schemas, sent through the store's seam over
-// a scripted `fetch`, the API's refusals coming back as its sentences. A
-// route is never created or edited here: generation writes it, and its
-// status moves by command alone.
+// a scripted `fetch`, the API's refusals coming back as its sentences. Since
+// #111 the office makes an ad-hoc route here (New route) and adds a stop to
+// a route (Add stop); a route is never edited, and its status moves by
+// command alone.
 import assert from "node:assert/strict"
 import { describe, test } from "node:test"
 
@@ -13,11 +14,12 @@ import type { WasteFraction } from "@waste/contracts/catalogue"
 import type { Driver, Vehicle } from "@waste/contracts/fleet"
 import type { Project } from "@waste/contracts/organisation"
 import type { Depot, UnloadingStation } from "@waste/contracts/places"
-import { PickupOrderSet, Route, RouteAssign, RouteCancel, RouteDetail, RouteReleaseHold, RouteReschedule } from "@waste/contracts/routes"
+import { PickupAdd } from "@waste/contracts/pickups"
+import { PickupOrderSet, Route, RouteAssign, RouteCancel, RouteCreate, RouteDetail, RouteReleaseHold, RouteReschedule } from "@waste/contracts/routes"
 import type { ActivePlan } from "@waste/contracts/plans"
 
 import { FIXTURE_COMPANY_ID, getModuleDefinition, type BusinessRecord } from "../../data/business-modules"
-import { ROUTE_ACTIVE_PLAN_KEY } from "../../data/routes"
+import { createRouteRecord, ROUTE_ACTIVE_PLAN_KEY } from "../../data/routes"
 import { problemSentence } from "../problem"
 import { NOTHING_RESOLVED, type MappingContext, type Resolver } from "../records/adapter"
 import { driverAdapter, vehicleAdapter } from "../records/fleet"
@@ -25,10 +27,13 @@ import { isServerBacked, SERVER_MODULE_KEYS } from "../records/modules"
 import { projectAdapter } from "../records/organisation"
 import { depotAdapter, unloadingStationAdapter } from "../records/places"
 import {
+  ADD_STOP,
+  addedStopBody,
   ASSIGN_ROUTE,
   CANCEL_ROUTE,
   DISPATCH_ROUTE,
   isHeldRoute,
+  MADE_BY_THE_OFFICE,
   RELEASE_HOLD,
   REORDER_ROUTE,
   RESCHEDULE_ROUTE,
@@ -283,13 +288,11 @@ describe("a route", () => {
     assert.deepEqual(JSON.parse(String(routeAdapter.toRecord(detailOf(planned, { activePlan: plan }), context()).submittedValues?.[ROUTE_ACTIVE_PLAN_KEY])), plan)
   })
 
-  test("is never created or edited here: generation writes it and its commands move it", async () => {
-    assert.equal(routeAdapter.toCreateBody, undefined)
-    assert.equal(routeAdapter.create, undefined)
+  test("is never edited here: its commands move it", async () => {
     assert.equal(routeAdapter.statuses, undefined, "a route's status moves by command alone")
     const record = routeAdapter.toRecord(planned, context())
     const edited: BusinessRecord = { ...record, submittedValues: { ...record.submittedValues, plannedStartTime: "07:00" } }
-    assert.deepEqual(routeAdapter.toPatchBody(record, edited, context()), { path: "", message: "A route is changed by its commands: assign, dispatch, reschedule, release its hold, cancel or reorder its stops" })
+    assert.deepEqual(routeAdapter.toPatchBody(record, edited, context()), { path: "", message: "A route is changed by its commands: assign, dispatch, reschedule, release its hold, cancel, add a stop or reorder its stops" })
     const { fetch, calls } = scripted([])
     const current = loaded({ records: [record], serverIds: new Map([[record.id, planned.id]]) }, 1)
     const moved = await writeRecord(clientOver(fetch), routesModule, current, { ...record, status: "Ready" }, options)
@@ -297,6 +300,56 @@ describe("a route", () => {
     const edit = await writeRecord(clientOver(fetch), routesModule, current, edited, options)
     assert.equal(edit.kind, "refused")
     assert.equal(calls.length, 0)
+  })
+})
+
+describe("the office's ad-hoc route (#111)", () => {
+  const adHoc: Route = { ...planned, id: "01a0d2a4-a280-7030-8000-000000000009", routeSchemeId: null, collectionGroupId: null, number: 1100, label: "RC-1100", generationRunId: null, plannedStartTime: null, note: "Re-collections", progress: { planned: 0, completed: 0, skipped: 0, failed: 0, total: 0, fraction: 0 } }
+
+  test("says whose it is where a generated route names its scheme, and names no scheme and no group", () => {
+    const record = routeAdapter.toRecord(adHoc, context())
+    assert.equal(record.facts.Origin, MADE_BY_THE_OFFICE)
+    assert.equal(record.facts["Route scheme"], undefined)
+    // Its note is New route's, under its own name: no scheme to deviate from.
+    assert.deepEqual([record.facts.Note, record.facts.Deviation], ["Re-collections", undefined])
+    assert.equal(record.description, "The office's own route, with no scheme, for 2026-10-01.")
+    assert.deepEqual([record.submittedValues?.schemeId, record.submittedValues?.collectionGroupId], ["", ""])
+    assert.equal(record.value, "0 stops")
+    assert.equal(routeAdapter.toRecord(planned, context()).facts.Origin, undefined, "a generated route says nothing of the kind")
+  })
+
+  test("New route's record is the create body the contract accepts: the project and the day, its ends and crew by server id, its note", () => {
+    const values = { projectId: projectRecord.id, operatingDate: "2026-10-06", depotId: depotRecord.id, unloadingStationId: stationRecord.id, vehicleId: wh24Record.id, driverId: madsRecord.id, note: "Re-collections for Tuesday" }
+    const body = routeAdapter.toCreateBody?.(createRouteRecord(values, { now: 1 }), context())
+    assert.deepEqual(body, { projectId: copenhagen.id, operatingDate: "2026-10-06", depotId: nordhavn.id, unloadingStationId: arc.id, vehicleId: wh24.id, driverId: mads.id, note: "Re-collections for Tuesday" })
+    assert.ok(RouteCreate.safeParse(body).success)
+    // The bare minimum: a project and a day; a blank optional field is left out.
+    const bare = routeAdapter.toCreateBody?.(createRouteRecord({ projectId: projectRecord.id, operatingDate: "2026-10-06", depotId: "", note: "" }, { now: 2 }), context())
+    assert.deepEqual(bare, { projectId: copenhagen.id, operatingDate: "2026-10-06" })
+    assert.ok(RouteCreate.safeParse(bare).success)
+  })
+
+  test("New route is refused here without a project or a day, or with a reference of the wrong kind", () => {
+    const refusedFor = (values: Record<string, string>) => routeAdapter.toCreateBody?.(createRouteRecord({ projectId: projectRecord.id, operatingDate: "2026-10-06", ...values }, { now: 3 }), context())
+    assert.equal((refusedFor({ operatingDate: "" }) as { path: string }).path, "operatingDate")
+    assert.equal((refusedFor({ operatingDate: "Tuesday" }) as { path: string }).path, "operatingDate")
+    assert.deepEqual(refusedFor({ driverId: wh31Record.id }), { path: "driverId", message: "Pick a driver the API holds" }, "a vehicle is no driver; a trailer named as the vehicle is the API's 400, as for assign")
+    assert.deepEqual(refusedFor({ depotId: stationRecord.id }), { path: "depotId", message: "Pick a depot the API holds" })
+    assert.equal((refusedFor({ projectId: "" }) as { path: string }).path, "projectId")
+  })
+
+  test("New route posts its body, and the route the API answers is the row, planned with no stops", async () => {
+    const record = createRouteRecord({ projectId: projectRecord.id, operatingDate: "2026-10-06", driverId: madsRecord.id }, { now: 4 })
+    const created = detailOf({ ...adHoc, operatingDate: "2026-10-06", serviceDate: "2026-10-06" })
+    const { fetch, calls } = scripted([() => json(created, 201, { location: `/routes/${adHoc.id}` })])
+    const outcome = await writeRecord(clientOver(fetch), routesModule, loaded({ records: [], serverIds: new Map() }, 1), record, options)
+    assert.equal(calls[0].url, "http://api.test/routes")
+    assert.equal(calls[0].init.method, "POST")
+    assert.deepEqual(bodyOf(calls[0]), { projectId: copenhagen.id, operatingDate: "2026-10-06", driverId: mads.id })
+    assert.equal(outcome.kind, "created")
+    if (outcome.kind !== "created") return
+    assert.equal(outcome.serverId, adHoc.id)
+    assert.deepEqual([outcome.record.name, outcome.record.status, outcome.record.facts.Origin, outcome.record.facts["Service date"]], ["RC-1100", "Planned", MADE_BY_THE_OFFICE, "2026-10-06"])
   })
 })
 
@@ -312,6 +365,49 @@ describe("the route's commands", () => {
     for (const name of [ASSIGN_ROUTE, DISPATCH_ROUTE, RESCHEDULE_ROUTE]) assert.deepEqual(routeAdapter.commands?.[name]?.touches, ["route-studio.live"], name)
     assert.deepEqual(cancel?.touches, ["route-studio.pickups", "route-studio.live"])
     assert.deepEqual(routeAdapter.commands?.[REORDER_ROUTE]?.touches, ["route-studio.pickups", "route-studio.live"])
+    assert.deepEqual(routeAdapter.commands?.[ADD_STOP]?.touches, ["route-studio.pickups", "route-studio.live"], "an added stop is a new row of the stops, and moves the route's progress")
+  })
+
+  test("add a stop sends a container alone, or one address with its fraction, by server id, and the note: the stop body the contract accepts (#111)", () => {
+    const bin = "01a0d2a4-a280-7015-8000-000000000009"
+    const parkvej = "01a0d2a4-a280-7011-8000-000000000001"
+    const point = "01a0d2a4-a280-7019-8000-000000000001"
+    const atAContainer = addedStopBody({ stopAt: "container", containerId: `asset-${bin}`, note: "Extra emptying" }, context())
+    assert.deepEqual(atAContainer, { containerId: bin, note: "Extra emptying" })
+    assert.ok(PickupAdd.safeParse(atAContainer).success)
+    const atAProperty = addedStopBody({ stopAt: "property", propertyId: `property-${parkvej}`, wasteFractionId: `fraction-${residual.id}`, containerId: `asset-${bin}` }, context())
+    assert.deepEqual(atAProperty, { propertyId: parkvej, wasteFractionId: residual.id }, "a container the form now hides is not read")
+    assert.ok(PickupAdd.safeParse(atAProperty).success)
+    const atAPoint = addedStopBody({ stopAt: "shared-point", sharedCollectionPointId: `shared-point-${point}`, wasteFractionId: `fraction-${residual.id}` }, context())
+    assert.deepEqual(atAPoint, { sharedCollectionPointId: point, wasteFractionId: residual.id })
+    assert.ok(PickupAdd.safeParse(atAPoint).success)
+    assert.deepEqual(routeAdapter.commands?.[ADD_STOP]?.toBody?.({ containerId: `asset-${bin}` }, record, context()), { containerId: bin }, "a container unless the form says otherwise")
+  })
+
+  test("add a stop is refused here without what it collects, or with a row the API does not hold", () => {
+    assert.deepEqual(addedStopBody({ stopAt: "container" }, context()), { path: "containerId", message: "Pick the container to collect" })
+    assert.deepEqual(addedStopBody({ stopAt: "container", containerId: "asset-bin-1" }, context()), { path: "containerId", message: "Pick a container the API holds" })
+    assert.deepEqual(addedStopBody({ stopAt: "property", wasteFractionId: `fraction-${residual.id}` }, context()), { path: "propertyId", message: "Pick a property the API holds" })
+    assert.deepEqual(addedStopBody({ stopAt: "property", propertyId: "property-01a0d2a4-a280-7011-8000-000000000001" }, context()), { path: "wasteFractionId", message: "Name the waste fraction collected there" })
+    assert.deepEqual(addedStopBody({ stopAt: "somewhere" }, context()).path, "stopAt")
+  })
+
+  test("add a stop posts the stop to the route, then reads the route back: its row, its stops and its progress (#111)", async () => {
+    const bin = "01a0d2a4-a280-7015-8000-000000000009"
+    const grown = detailOf({ ...planned, progress: { ...planned.progress, planned: 4, total: 4 } })
+    const { fetch, calls } = scripted([() => json({ id: "01a0d2a4-a280-7033-8000-000000000009" }, 201, { location: "/pickups/01a0d2a4-a280-7033-8000-000000000009" }), () => json(grown)])
+    const outcome = await commandRecord(clientOver(fetch), routesModule, current, record, ADD_STOP, { stopAt: "container", containerId: `asset-${bin}` }, options)
+    assert.deepEqual(
+      calls.map((call) => [call.init.method, call.url]),
+      [
+        ["POST", `http://api.test/routes/${planned.id}/pickups`],
+        ["GET", `http://api.test/routes/${planned.id}`],
+      ],
+    )
+    assert.deepEqual(bodyOf(calls[0]), { containerId: bin })
+    assert.equal(outcome.kind, "done")
+    if (outcome.kind !== "done") return
+    assert.equal(outcome.record.value, "4 stops")
   })
 
   test("assign sends only what moved, by server id, a cleared field as null", () => {

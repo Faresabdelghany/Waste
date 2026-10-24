@@ -18,7 +18,8 @@ import { ASSIGNEE_ACCOUNT_KEY, ticketAdapter } from "../../api/records/tickets"
 import { ALERT_COMMAND_FORMS, ALERT_FORM, ALERT_LIST_INITIAL, alertListReaders, createAlertRecord, ticketValuesOfAlert } from "../alerts"
 import type { BusinessFormSchema, BusinessFormValues } from "../business-form-types"
 import { FIXTURE_COMPANY_ID, type BusinessRecord } from "../business-modules"
-import { createTicketRecord, MINE, opennessOf, TICKET_COMMAND_FORMS, TICKET_EDIT_FORM, TICKET_FORM, TICKET_LIST_INITIAL, ticketListReaders, updateTicketRecord } from "../tickets"
+import { NO_ONE } from "../properties"
+import { createTicketRecord, MINE, opennessOf, recollectionStopOptions, TICKET_COMMAND_FORMS, TICKET_EDIT_FORM, TICKET_FORM, TICKET_LIST_INITIAL, ticketListReaders, updateTicketRecord } from "../tickets"
 
 const NOW = new Date("2026-10-01T10:00:00Z")
 const STAMPS = { createdAt: "2026-10-01T08:00:00.000Z", updatedAt: "2026-10-01T08:00:00.000Z" }
@@ -28,6 +29,7 @@ const projectRecord = projectAdapter.toRecord(copenhagen, { fixtures: [], resolv
 const ids = {
   user: "01a0d2a4-a280-7004-8000-000000000001",
   route: "01a0d2a4-a280-7030-8000-000000000001",
+  pickup: "01a0d2a4-a280-7033-8000-000000000001",
   container: "01a0d2a4-a280-7020-8000-000000000001",
   customer: "01a0d2a4-a280-7003-8000-000000000001",
   property: "01a0d2a4-a280-7021-8000-000000000001",
@@ -43,6 +45,7 @@ const rows: Array<[string, BusinessRecord, string]> = [
   ["configure.organization", projectRecord, copenhagen.id],
   ["configure.access", row(`user-${ids.user}`, "User"), ids.user],
   ["route-studio.routes", row(`route-${ids.route}`, "Route"), ids.route],
+  ["route-studio.pickups", row(`pickup-${ids.pickup}`, "Pickup"), ids.pickup],
   ["resources.containers", row(`asset-${ids.container}`, "Container"), ids.container],
   // An organisation is `company-<uuid>` as the registry's adapter makes it, and no tenant company.
   ["customers.contacts", row(`company-${ids.customer}`, "Contact or Customer Organization"), ids.customer],
@@ -106,7 +109,7 @@ describe("the ticket's command dialogs", () => {
     assign: [{ assigneeUserAccountId: web("configure.access"), note: "Taking it" }, TicketAssign],
     wait: [{ note: "The gate code" }, TicketWait],
     hold: [{ note: "A crane" }, TicketHold],
-    complete: [{ resolution: "recollected", recollectionRouteId: web("route-studio.routes"), note: "On tomorrow's route" }, TicketComplete],
+    complete: [{ resolution: "recollected", recollectionRouteId: web("route-studio.routes"), recollectionPickupId: web("route-studio.pickups"), note: "On tomorrow's route" }, TicketComplete],
     reject: [{ reason: "Not ours" }, TicketReject],
     reopen: [{ note: "Came back" }, TicketReopen],
   }
@@ -118,6 +121,19 @@ describe("the ticket's command dialogs", () => {
       assert.ok(schema.safeParse(body).success, JSON.stringify(body))
     })
   }
+
+  test("the re-collection's stop is picked among the picked route's stops still to collect or collected, after None (#111)", () => {
+    const stop = (id: string, routeId: string, status: string, shown: string): BusinessRecord => ({ ...row(`pickup-${id}`, "Pickup"), name: `Stop ${id}`, status: shown, submittedValues: { routeId, status } })
+    const route = web("route-studio.routes")
+    const stops = [stop("1", route, "planned", "Planned"), stop("2", route, "collected", "Collected"), stop("3", route, "skipped", "Skipped"), stop("4", route, "failed", "Failed"), stop("5", "route-other", "planned", "Planned")]
+    assert.deepEqual(recollectionStopOptions(stops, route), [
+      { value: NO_ONE, label: "None: the route alone" },
+      { value: "pickup-1", label: "Stop 1" },
+      { value: "pickup-2", label: "Stop 2 · Collected" },
+    ])
+    assert.deepEqual(recollectionStopOptions(stops, undefined), [{ value: NO_ONE, label: "None: the route alone" }], "no stop before a route is picked")
+    assert.deepEqual(recollectionStopOptions(stops, ""), [{ value: NO_ONE, label: "None: the route alone" }])
+  })
 
   test("an edit keeps the row and puts its values over the typed ones", () => {
     const edited = updateTicketRecord(record, { subject: "The gate", description: "Locked" })

@@ -32,8 +32,9 @@ test("a generated route is the API's row: listed under its label, opened under t
   const listed = page.waitForResponse((response) => response.request().method() === "GET" && new URL(response.url()).pathname === "/waste-api/routes")
   await page.goto("/route-studio?module=routes")
   expect((await listed).status()).toBe(200)
-  // Generation writes a route: the Pilot offers no create.
+  // The Pilot's create is the office's New route (#111, ad-hoc-routes.spec.ts), never the fixtures' Create route.
   await expect(page.getByRole("button", { name: "Create route" })).toHaveCount(0)
+  await expect(page.getByRole("button", { name: "New route" })).toBeVisible()
   await page.getByRole("main").getByRole("textbox", { name: /^Search .+/ }).fill(route.label)
   await page.getByRole("main").getByText(route.label, { exact: true }).first().click()
   await expect(page).toHaveURL(new RegExp(`record=route-${route.id}`))

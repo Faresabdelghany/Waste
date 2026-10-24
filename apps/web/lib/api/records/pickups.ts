@@ -5,8 +5,10 @@
 // (`@waste/contracts/pickups`), imported as types so no zod reaches the
 // bundle; the routes are apps/api/src/routes/pickups.ts.
 //
-// A pickup is never created or edited here: generation writes it, the
-// driver's device decides it, and the dispatcher has two commands on it —
+// A pickup is written by generation or added by the office through its
+// route's Add stop (#111: `origin = office`, a container or an address-only
+// stop, its Added by fact saying so), never edited here: the driver's device
+// decides it, and the dispatcher has two commands on it —
 // `remove` takes a stop off a route that has not started, saying why
 // (`planned → skipped · removed-by-dispatcher`), and `correct-outcome` is the
 // audited correction after the fact, which appends a correction proof. So
@@ -19,8 +21,10 @@
 // id chip where its module has not loaded. The office pickup carries no
 // place: the map puts a stop where its container stands — on the Pilot where
 // its placement in force delivers (#184) — linking the two by the container's
-// id and by its label (`Container ID`), which the stop carries as a fact. The
-// time a stop was decided is shown on its project's clock.
+// id and by its label (`Container ID`), which the stop carries as a fact; an
+// address-only stop has neither, and is named by the property or the shared
+// point it is collected at (customers.properties and .shared, an id chip until
+// they load). The time a stop was decided is shown on its project's clock.
 import type { Pickup, PickupDetail } from "@waste/contracts/pickups"
 import type { ProofOfService } from "@waste/contracts/proofs"
 import { PICKUP_OUTCOMES, PICKUP_REASONS } from "@waste/domain/execution/vocabulary"
@@ -31,6 +35,8 @@ import { command, get, listAll } from "../client"
 import { inheritedPresentation, moduleKeyOf, ofKind, said, stampFacts, statusLabel, typed, webIdOf, type Client, type MappingContext, type RecordCommand, type ResourceAdapter, type ServerModule } from "./adapter"
 import { shownOn, wallClockIn } from "./clock"
 import { LIVE_MODULE } from "./live"
+import { PROPERTY_PREFIX, SHARED_POINT_PREFIX } from "@/lib/data/agreements"
+
 import { referenced, refusal } from "./places"
 import { webIdVia } from "./references"
 import { ROUTES_MODULE, routesWindowFrom } from "./routes"
@@ -50,6 +56,20 @@ const PICKUP_PREFIX = "pickup"
 /** "06:15": when an instant was, on the project's clock. */
 const clockOn = (instant: string, timezone: string | undefined) => wallClockIn(instant, timezone).slice(11, 16)
 
+/** Who put a stop on its route, under its Added by fact (#111): the office's alone, a generated stop saying nothing. */
+export const ADDED_BY_THE_OFFICE = "The office"
+
+/** The place a stop is collected at, by web id, name and street address: the property's or the shared collection point's, whichever it names; the address is its record's, once its module is loaded. */
+function placeOf(pickup: Pickup, context: MappingContext): { key: "propertyId" | "sharedCollectionPointId"; webId: string; name: string; address: string | undefined } | undefined {
+  const of = (key: "propertyId" | "sharedCollectionPointId", prefix: string, serverId: string) => {
+    const { webId, name } = referenced(context, prefix, serverId)
+    return { key, webId, name: name ?? webId, address: context.resolve.byServerId(serverId)?.facts.Address }
+  }
+  if (pickup.propertyId !== null) return of("propertyId", PROPERTY_PREFIX, pickup.propertyId)
+  if (pickup.sharedCollectionPointId !== null) return of("sharedCollectionPointId", SHARED_POINT_PREFIX, pickup.sharedCollectionPointId)
+  return undefined
+}
+
 export function toPickupRecord(pickup: Pickup, context: MappingContext): BusinessRecord {
   const project = referenced(context, "project", pickup.projectId)
   const projectRecord = context.resolve.byServerId(pickup.projectId)
@@ -60,6 +80,8 @@ export function toPickupRecord(pickup: Pickup, context: MappingContext): Busines
   const container = pickup.containerId === null ? undefined : referenced(context, "asset", pickup.containerId)
   const containerRecord = pickup.containerId === null ? undefined : context.resolve.byServerId(pickup.containerId)
   const fraction = referenced(context, "fraction", pickup.wasteFractionId)
+  const place = placeOf(pickup, context)
+  const byTheOffice = pickup.origin === "office"
   const stop = pickup.sequence ?? pickup.position
   const status = statusLabel(pickup.status)
   const facts: Record<string, string> = {
@@ -72,6 +94,9 @@ export function toPickupRecord(pickup: Pickup, context: MappingContext): Busines
   // The label a fixture container is linked by on the map; a container the store has not loaded has none to give.
   const label = containerRecord?.facts["Container ID"] ?? containerRecord?.name
   if (label !== undefined) facts["Container ID"] = label
+  // An address-only stop is collected at its place, which names it.
+  if (container === undefined && place !== undefined) facts.Address = place.address ?? place.name
+  if (byTheOffice) facts["Added by"] = ADDED_BY_THE_OFFICE
   if (pickup.arrivedAt !== null) facts["Arrived at"] = clockOn(pickup.arrivedAt, timezone)
   if (pickup.status === "completed" && pickup.outcomeAt !== null) facts["Completed at"] = clockOn(pickup.outcomeAt, timezone)
   if (pickup.reason !== null) facts.Reason = statusLabel(pickup.reason)
@@ -82,13 +107,15 @@ export function toPickupRecord(pickup: Pickup, context: MappingContext): Busines
   }
   return {
     id: webIdOf(PICKUP_PREFIX, pickup.id),
-    name: `Stop ${stop} · ${label ?? container?.webId ?? "Address-only stop"}`,
+    name: `Stop ${stop} · ${container === undefined ? (place?.name ?? fraction.name ?? fraction.webId) : (label ?? container.webId)}`,
     context: [route?.name ?? routeWebId, fraction.name ?? fraction.webId].join(" · "),
     status,
     ...inheritedPresentation(undefined),
     ...stampFacts(pickup, context.now),
     value: pickup.status === "planned" || pickup.outcomeAt === null ? status : `${clockOn(pickup.outcomeAt, timezone)} · ${status}`,
-    description: "A stop of a dated route: generation wrote it, the driver decides it, the dispatcher may remove it or correct its outcome.",
+    description: byTheOffice
+      ? `A stop the office added to its route${container === undefined ? ", at an address with no container" : ""}: generation never moves or skips it, the driver decides it, the dispatcher may remove it or correct its outcome.`
+      : "A stop of a dated route: generation wrote it, the driver decides it, the dispatcher may remove it or correct its outcome.",
     facts,
     deepLink: `/route-studio?module=routes&record=${routeWebId}`,
     companyId: context.companyRecordId ?? FIXTURE_COMPANY_ID,
@@ -97,6 +124,8 @@ export function toPickupRecord(pickup: Pickup, context: MappingContext): Busines
     submittedValues: {
       routeId: routeWebId,
       ...(container === undefined ? {} : { containerId: container.webId }),
+      ...(place === undefined ? {} : { [place.key]: place.webId }),
+      origin: pickup.origin,
       wasteFractionId: fraction.webId,
       position: String(pickup.position),
       ...(pickup.sequence === undefined ? {} : { sequence: String(pickup.sequence) }),

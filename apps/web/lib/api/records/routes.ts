@@ -4,13 +4,17 @@
 // are the contracts' (`@waste/contracts/routes`), imported as types so no zod
 // reaches the bundle; the routes are apps/api/src/routes/routes.ts.
 //
-// A route is never created or edited here: generation writes it (the office
-// asks for a run on its scheme, the nightly sweep runs on its own), and the
-// dispatcher moves it by five commands — `assign` the Planned Assignment,
+// A route is written by generation (the office asks for a run on its scheme,
+// the nightly sweep runs on its own), or made by the office as an ad-hoc
+// route with no scheme (#111: `POST /routes`, the module's New route, its
+// Origin fact saying so), and never edited: the dispatcher moves it by its
+// commands — `assign` the Planned Assignment,
 // `dispatch` it to its driver, `reschedule` the day it runs or its planned
 // start (never its service date, the identity), `cancel` it with a reason,
-// which becomes its note, and put its open stops in order (`PUT
-// /routes/:id/pickup-order`, a manual Plan). So the adapter lists no
+// which becomes its note, put its open stops in order (`PUT
+// /routes/:id/pickup-order`, a manual Plan), and add a stop of the office's
+// own (`POST /routes/:id/pickups`, #111), which answers the stop and so has
+// the route read back after it. So the adapter lists no
 // `statuses` and refuses every patch: the status and every field move by
 // command alone. What a route may take is the API's to say — every command
 // is offered and its 409 speaks (the rules on #81): a dispatch without a
@@ -32,16 +36,21 @@
 // as JSON under `ROUTE_ACTIVE_PLAN_KEY`, which the map's legs layer reads
 // (#173): absent where the read carries none (the list, until #173 adds it).
 import type { DriverCommandReceipt } from "@waste/contracts/driver-commands"
+import type { PickupDetail } from "@waste/contracts/pickups"
 import type { Route, RouteDetail } from "@waste/contracts/routes"
 
 import { FIXTURE_COMPANY_ID, type BusinessRecord, type ModuleLocation } from "@/lib/data/business-modules"
-import { ROUTE_ACTIVE_PLAN_KEY } from "@/lib/data/routes"
+import { PROPERTY_PREFIX, SHARED_POINT_PREFIX } from "@/lib/data/agreements"
+import { masterDataKindOf } from "@/lib/data/master-data"
+import { isPropertyRecord, isSharedPointRecord } from "@/lib/data/properties"
+import { ROUTE_ACTIVE_PLAN_KEY, STOP_AT_CONTAINER, STOP_AT_POINT, STOP_AT_PROPERTY } from "@/lib/data/routes"
 
-import { command, get, listAll, put } from "../client"
-import { hasPrefix, inheritedPresentation, moduleKeyOf, ofKind, said, stampFacts, statusLabel, typed, webIdOf, type Client, type MappingContext, type RecordCommand, type ResourceAdapter, type ServerModule } from "./adapter"
+import { command, create, get, listAll, put } from "../client"
+import { hasPrefix, inheritedPresentation, isLocalRefusal, moduleKeyOf, ofKind, said, stampFacts, statusLabel, typed, webIdOf, type Client, type MappingContext, type RecordCommand, type ResourceAdapter, type ServerModule } from "./adapter"
 import { FLEET_AND_DEPOT_PICKS } from "./allocations"
 import { shownOn } from "./clock"
-import { referenced, refusal, unloadingStationAdapter } from "./places"
+import { containerAdapter } from "./containers"
+import { projectServerIdOf, referenced, refusal, unloadingStationAdapter } from "./places"
 import { nameVia, referencedServerId, webIdVia, type ReferenceRule } from "./references"
 
 /** The workspace module the routes are the rows of. */
@@ -74,6 +83,11 @@ export const CANCEL_ROUTE = "cancel"
 export const REORDER_ROUTE = "reorder"
 /** The office's hand-back of a held route to its scheme (#226). */
 export const RELEASE_HOLD = "release-hold"
+/** A stop the office adds to a route that has not started (#111). */
+export const ADD_STOP = "add-stop"
+
+/** What an ad-hoc route says it is, under its Origin fact (#111): the office's own, with no scheme. */
+export const MADE_BY_THE_OFFICE = "Made by the office"
 
 const ROUTE_PREFIX = "route"
 const SCHEME_PREFIX = "scheme"
@@ -124,7 +138,8 @@ export function toRouteRecord(route: RouteRead, context: MappingContext): Busine
   const facts: Record<string, string> = {
     Project: project.name ?? project.webId,
     ...(area === undefined ? {} : { Area: area }),
-    ...(route.routeSchemeId === null ? {} : { "Route scheme": nameVia(context, SCHEME_PREFIX, route.routeSchemeId) }),
+    // An ad-hoc route says whose it is where a generated one names its scheme.
+    ...(route.routeSchemeId === null ? { Origin: MADE_BY_THE_OFFICE } : { "Route scheme": nameVia(context, SCHEME_PREFIX, route.routeSchemeId) }),
     "Service date": route.serviceDate,
     "Operating date": route.operatingDate,
   }
@@ -135,7 +150,8 @@ export function toRouteRecord(route: RouteRead, context: MappingContext): Busine
   if (route.planned.serviceProviderId !== null) facts["Service provider"] = nameVia(context, "service-provider", route.planned.serviceProviderId)
   if (route.planned.depotId !== null) facts.Depot = nameVia(context, "depot", route.planned.depotId)
   if (route.planned.unloadingStationId !== null) facts.Unloading = nameVia(context, "station", route.planned.unloadingStationId)
-  facts.Deviation = route.note ?? "None"
+  // A generated route's note is how it deviated from its scheme; the office's own route has no scheme to deviate from, and its note is the one New route took (#111).
+  facts[route.routeSchemeId === null ? "Note" : "Deviation"] = route.note ?? "None"
   // Every stop it has, decided or not, as a generated route's fact in fixture mode: the scheme's routes table reads it (#252).
   facts.Stops = String(route.progress.total)
   // A route the office moved by hand is held (#209): generation keeps what the office moved until an edit of the same releases it.
@@ -163,7 +179,7 @@ export function toRouteRecord(route: RouteRead, context: MappingContext): Busine
     ...stampFacts(route, context.now),
     owner: driver ?? "Unassigned",
     value: stopsValue(route.progress),
-    description: `${route.routeSchemeId === null ? "Made by the office" : `Generated from ${scheme?.name ?? "its route scheme"}`} for ${route.serviceDate}${route.operatingDate === route.serviceDate ? "" : `, running ${route.operatingDate}`}.${held === undefined ? "" : ` Held by the office since ${held}.`}`,
+    description: `${route.routeSchemeId === null ? "The office's own route, with no scheme," : `Generated from ${scheme?.name ?? "its route scheme"}`} for ${route.serviceDate}${route.operatingDate === route.serviceDate ? "" : `, running ${route.operatingDate}`}.${held === undefined ? "" : ` Held by the office since ${held}.`}`,
     facts,
     companyId: context.companyRecordId ?? FIXTURE_COMPANY_ID,
     projectIds: [project.webId],
@@ -266,6 +282,16 @@ export const ROUTE_COMMANDS = {
     },
     [PICKUPS_KEY, LIVE_KEY],
   ),
+  // A stop of the office's own (#111): a container, or an address with the fraction collected there. The API answers the stop; the route is read back for the row, its stops and its progress.
+  [ADD_STOP]: {
+    toBody: (input, _record, context) => addedStopBody(input, context),
+    run: async (client, serverId, body) => {
+      await create<PickupDetail>(client, `/routes/${serverId}/pickups`, body)
+      return routeDetail(client, serverId)
+    },
+    refused: (record) => `No stop was added to ${record.name}`,
+    touches: [PICKUPS_KEY, LIVE_KEY],
+  },
   // Every open stop once, in the order they will be visited: the API makes it a manual Plan.
   [REORDER_ROUTE]: {
     toBody: (input, _record, context) => {
@@ -282,6 +308,48 @@ export const ROUTE_COMMANDS = {
   },
 } satisfies Record<string, RecordCommand<Route>>
 
+/** What a stop's fraction is held to when the store holds the row: a waste fraction of the master data. */
+const FRACTION_RULE: ReferenceRule = { owns: (record) => masterDataKindOf(record) === "waste-fraction" }
+
+/** The places an address-only stop names, by what the form says it collects at: the field, the web id's prefix, the kind, the sentence a miss is told in. */
+const STOP_PLACES: Readonly<Record<string, readonly [string, string, ReferenceRule, string]>> = {
+  [STOP_AT_PROPERTY]: ["propertyId", PROPERTY_PREFIX, { owns: isPropertyRecord }, "Pick a property the API holds"],
+  [STOP_AT_POINT]: ["sharedCollectionPointId", SHARED_POINT_PREFIX, { owns: isSharedPointRecord }, "Pick a shared collection point the API holds"],
+}
+
+/**
+ * The body of an added stop (`PickupAdd`): the container alone, or the one
+ * place the form collects at with its fraction, each by server id, and the
+ * note where there is one. A field the form hides for another choice is not
+ * read, whatever it still holds.
+ */
+export function addedStopBody(input: Record<string, unknown>, context: MappingContext): Record<string, string> | ReturnType<typeof refusal> {
+  const at = said(input, "stopAt") ?? STOP_AT_CONTAINER
+  const note = said(input, "note")
+  const withNote = (body: Record<string, string>) => (note === undefined ? body : { ...body, note })
+  if (at === STOP_AT_CONTAINER) {
+    const picked = said(input, "containerId")
+    if (picked === undefined) return refusal("containerId", "Pick the container to collect")
+    const containerId = referencedServerId(picked, "asset", context, { owns: containerAdapter.owns })
+    return containerId === undefined ? refusal("containerId", "Pick a container the API holds") : withNote({ containerId })
+  }
+  const place = STOP_PLACES[at]
+  if (place === undefined) return refusal("stopAt", "Collect at a container, a property or a shared collection point")
+  const [field, prefix, rule, sentence] = place
+  const picked = said(input, field)
+  if (picked === undefined) return refusal(field, sentence)
+  const placeId = referencedServerId(picked, prefix, context, rule)
+  if (placeId === undefined) return refusal(field, sentence)
+  const fraction = said(input, "wasteFractionId")
+  if (fraction === undefined) return refusal("wasteFractionId", "Name the waste fraction collected there")
+  const wasteFractionId = referencedServerId(fraction, "fraction", context, FRACTION_RULE)
+  if (wasteFractionId === undefined) return refusal("wasteFractionId", "Pick a waste fraction the API holds")
+  return withNote({ [field]: placeId, wasteFractionId })
+}
+
+/** What an ad-hoc route may name beside its project and its day: everything an assign moves but the trailer, which `RouteCreate` does not take, held as `assign` holds them. */
+const CREATED_WITH = ASSIGNED.filter(([field]) => field !== "trailerId")
+
 /** The route as its own read gives it: the pickups in sequence, the active Plan, the open session and every session, the unloads. */
 export function routeDetail(client: Client, serverId: string): Promise<RouteDetail> {
   return get<RouteDetail>(client, `/routes/${serverId}`)
@@ -292,7 +360,7 @@ export function routeCommandLog(client: Client, serverId: string): Promise<Drive
   return listAll<DriverCommandReceipt>(client, `/routes/${serverId}/commands`)
 }
 
-const CHANGED_BY_COMMANDS = "A route is changed by its commands: assign, dispatch, reschedule, release its hold, cancel or reorder its stops"
+const CHANGED_BY_COMMANDS = "A route is changed by its commands: assign, dispatch, reschedule, release its hold, cancel, add a stop or reorder its stops"
 
 export const routeAdapter: ResourceAdapter<Route> = {
   prefix: ROUTE_PREFIX,
@@ -301,12 +369,30 @@ export const routeAdapter: ResourceAdapter<Route> = {
   statuses: undefined,
   list: (client) => listAll<Route>(client, "/routes", { from: routesWindowFrom() }),
   toRecord: toRouteRecord,
+  // New route (#111): an ad-hoc route on a project's day, its references by server id as `assign` names them.
+  toCreateBody: (record, context) => {
+    const projectId = projectServerIdOf(record, context)
+    if (isLocalRefusal(projectId)) return projectId
+    const operatingDate = typed(record, "operatingDate")
+    if (operatingDate === undefined || !ISO_DAY.test(operatingDate)) return refusal("operatingDate", "A route runs on a day: give its operating date")
+    const body: Record<string, string> = { projectId, operatingDate }
+    for (const [field, prefix, sentence, rule] of CREATED_WITH) {
+      const picked = typed(record, field)
+      if (picked === undefined) continue
+      const serverId = referencedServerId(picked, prefix, context, rule)
+      if (serverId === undefined) return refusal(field, sentence)
+      body[field] = serverId
+    }
+    const note = typed(record, "note")
+    return note === undefined ? body : { ...body, note }
+  },
+  create: async (client, body) => (await create<RouteDetail>(client, "/routes", body)).body,
   toPatchBody: () => refusal("", CHANGED_BY_COMMANDS),
   update: () => Promise.reject(new Error(CHANGED_BY_COMMANDS)),
   commands: ROUTE_COMMANDS,
 }
 
-/** Route Studio › Routes: the dated routes generation wrote, moved by the dispatcher's commands. */
+/** Route Studio › Routes: the dated routes generation wrote and the office's own, moved by the dispatcher's commands. */
 export const routesModule: ServerModule = {
   workspaceId: ROUTES_MODULE.workspaceId,
   moduleId: ROUTES_MODULE.moduleId,

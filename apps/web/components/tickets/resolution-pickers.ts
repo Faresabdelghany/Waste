@@ -10,12 +10,14 @@
 // A picker hides no row by status — a status gates a new reference and never
 // an existing one, and the API's 409 says why (#79) — but for one: the
 // re-collection's route is picked among the routes that have not ended,
-// which is the reference's own rule (#126), and an optional pick offers None
-// first, since a select cannot be emptied.
+// which is the reference's own rule (#126), and its stop (#111) among that
+// route's stops that are planned or collected — the API refuses a missed one
+// — and an optional pick offers None first, since a select cannot be emptied.
 import { useModuleRecords } from "@/components/waste/business-record-store"
 import { useRelationPickers, type RelationPickers } from "@/components/waste/commands/use-command-support"
 import { moduleKeyOf } from "@/lib/api/records/adapter"
 import { CONTAINERS_MODULE } from "@/lib/api/records/containers"
+import { PICKUPS_MODULE } from "@/lib/api/records/pickups"
 import { ROUTES_MODULE } from "@/lib/api/records/routes"
 import { TICKET_NUMBER_FACT, TICKETS_MODULE } from "@/lib/api/records/tickets"
 import { AGREEMENTS_MODULE, isAgreementRecord } from "@/lib/data/agreements"
@@ -23,7 +25,7 @@ import type { BusinessFormField, BusinessFormOption, BusinessFormSchema, Busines
 import { getModuleDefinition, type BusinessRecord, type ModuleLocation } from "@/lib/data/business-modules"
 import { keptOptions, keptValue } from "@/lib/data/place-pickers"
 import { NO_ONE, SHARED_POINTS_MODULE } from "@/lib/data/properties"
-import { ACCESS_MODULE } from "@/lib/data/tickets"
+import { ACCESS_MODULE, recollectionStopOptions } from "@/lib/data/tickets"
 import { isSoftDeleted } from "@waste/domain/record-visibility"
 
 const NO_RECORDS: readonly BusinessRecord[] = []
@@ -52,6 +54,11 @@ export function useResolutionPickers(): RelationPickers {
   const points = useModuleRecords(SHARED_POINTS_MODULE.workspaceId, SHARED_POINTS_MODULE.moduleId, fixturesOf(SHARED_POINTS_MODULE))
   const agreements = useModuleRecords(AGREEMENTS_MODULE.workspaceId, AGREEMENTS_MODULE.moduleId, fixturesOf(AGREEMENTS_MODULE))
   const tickets = useModuleRecords(TICKETS_MODULE.workspaceId, TICKETS_MODULE.moduleId, fixturesOf(TICKETS_MODULE))
+  const pickups = useModuleRecords(PICKUPS_MODULE.workspaceId, PICKUPS_MODULE.moduleId, fixturesOf(PICKUPS_MODULE))
+  // The modules a dialog waits on. Not the stops: the re-collection's stop is
+  // optional and a recollected completion's alone, so a Complete answering
+  // otherwise is never held back by the stops' read — before it lands the
+  // stop's picker offers None, the route alone.
   const own = new Map([
     [keyOf(ACCESS_MODULE), users],
     [keyOf(ROUTES_MODULE), routes],
@@ -60,7 +67,7 @@ export function useResolutionPickers(): RelationPickers {
     [keyOf(TICKETS_MODULE), tickets],
   ])
 
-  const rowsFor = (field: BusinessFormField, projectId: string | undefined): readonly BusinessFormOption[] | undefined => {
+  const rowsFor = (field: BusinessFormField, projectId: string | undefined, values: BusinessFormValues): readonly BusinessFormOption[] | undefined => {
     const optional = (options: readonly BusinessFormOption[]) => (field.required ? options : [{ value: NO_ONE, label: "None" }, ...options])
     switch (field.id) {
       // An account of the company working in the project: one with every project, or this one among its own; a provider's account works through its provider.
@@ -76,6 +83,9 @@ export function useResolutionPickers(): RelationPickers {
         return inProject(routes.records, projectId)
           .filter((record) => !ENDED.has(record.status))
           .map((record) => optionOf(record, record.facts["Operating date"]))
+      // The stop of the picked route the re-collection is: none until a route is picked, then its stops still to collect or collected.
+      case "recollectionPickupId":
+        return recollectionStopOptions(pickups.records, typeof values.recollectionRouteId === "string" ? values.recollectionRouteId : undefined)
       case "containerId":
         return optional(inProject(containers.records, projectId).map((record) => optionOf(record)))
       case "sharedCollectionPointId":
@@ -91,7 +101,7 @@ export function useResolutionPickers(): RelationPickers {
 
   const options = (field: BusinessFormField, values: BusinessFormValues, projectId?: string, opened?: BusinessFormValues): readonly BusinessFormOption[] => {
     const project = projectId ?? (typeof values.projectId === "string" && values.projectId !== "" ? values.projectId : undefined)
-    const rows = rowsFor(field, project)
+    const rows = rowsFor(field, project, values)
     if (rows !== undefined) return keptOptions(field, rows, keptValue(field.id, values, opened))
     const shared = base.options(field, values, projectId, opened)
     // An optional pick of the shared pickers — a property, a driver, a vehicle — takes None first as well.
