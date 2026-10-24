@@ -61,7 +61,7 @@ test("the office publishes a project's sorting guide from Settings, a visitor wi
     await reader.goto(publicPath)
     await expect(reader.getByRole("heading", { level: 1, name: "Sorting guide" })).toBeVisible()
     await expect(reader.getByText(project.name)).toBeVisible()
-    await expect(reader.getByRole("main")).toHaveAttribute("lang", "da")
+    await expect(reader.getByText(project.name)).toHaveAttribute("lang", "da")
 
     const search = reader.getByRole("searchbox", { name: "What do you want to throw away?" })
     await search.fill("vinflaske")

@@ -1,7 +1,7 @@
 import assert from "node:assert/strict"
 import { describe, test } from "node:test"
 
-import { readDoor, readPublishedProject, searchSortingGuide, visitorOf } from "../door"
+import { readCollectionDays, readCollectionFeed, readDoor, readPublishedProject, searchAddresses, searchSortingGuide, visitorOf } from "../door"
 
 type Asked = { url: string; headers: Record<string, string> }
 
@@ -65,5 +65,30 @@ describe("readDoor", () => {
     assert.deepEqual(await readDoor("kystbyen", { origin: "http://api.test", forwardedFor: null, fetch: garbled.fetching }), { kind: "unavailable" })
     const silent = answering(() => Promise.reject(new TypeError("fetch failed")))
     assert.deepEqual(await readDoor("kystbyen", { origin: "http://api.test", forwardedFor: null, fetch: silent.fetching }), { kind: "unavailable" })
+  })
+})
+
+describe("the Collection Days reads", () => {
+  test("the address search and an address's days, by the door's paths", async () => {
+    const { asked, fetching } = answering(() => json({ addresses: [] }))
+    const options = { origin: "http://api.test", forwardedFor: "198.51.100.1", fetch: fetching }
+    await searchAddresses("kystbyen", "Strand 5", options)
+    await readCollectionDays("kystbyen", "a1", 13, options)
+    assert.deepEqual(
+      asked.map((ask) => [ask.url, ask.headers.accept, ask.headers["x-forwarded-for"]]),
+      [
+        ["http://api.test/public/kystbyen/addresses?q=Strand%205", "application/json", "198.51.100.1"],
+        ["http://api.test/public/kystbyen/addresses/a1/collection-days?weeks=13", "application/json", "198.51.100.1"],
+      ],
+    )
+  })
+
+  test("the feed is asked for as a calendar and answered as its text, the visitor named as for a page", async () => {
+    const { asked, fetching } = answering(() => new Response("BEGIN:VCALENDAR\r\nEND:VCALENDAR\r\n", { headers: { "content-type": "text/calendar; charset=utf-8" } }))
+    const answer = await readCollectionFeed("kystbyen", "a1", 26, { origin: "http://api.test", forwardedFor: "6.6.6.6, 198.51.100.1", fetch: fetching })
+    assert.deepEqual(answer, { kind: "ok", body: "BEGIN:VCALENDAR\r\nEND:VCALENDAR\r\n" })
+    assert.deepEqual([asked[0]?.url, asked[0]?.headers.accept, asked[0]?.headers["x-forwarded-for"]], ["http://api.test/public/kystbyen/addresses/a1/collection-days.ics?weeks=26", "text/calendar", "198.51.100.1"])
+    const gone = answering(() => json({ status: 404 }, 404))
+    assert.deepEqual(await readCollectionFeed("kystbyen", "a1", 26, { origin: "http://api.test", forwardedFor: null, fetch: gone.fetching }), { kind: "not-published" })
   })
 })
