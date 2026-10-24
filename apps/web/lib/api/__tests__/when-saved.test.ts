@@ -46,6 +46,15 @@ describe("whenSaved", () => {
     assert.deepEqual(await said(Promise.resolve(refused)), ["settled"])
   })
 
+  test("a write that throws instead of answering frees the pane and is never said to have landed (#263)", async () => {
+    const ran: string[] = []
+    const thrown = Promise.reject(new Error("a store fault"))
+    whenSaved(thrown, () => ran.push("done"), () => ran.push("settled"))
+    await thrown.catch(() => undefined)
+    await Promise.resolve()
+    assert.deepEqual(ran, ["settled"])
+  })
+
   // #263: a surface reads what the write did inside `done`, never by subscribing to the outcome a second time.
   test("done is handed the outcome, undefined on the browser's own path", async () => {
     const handed: unknown[] = []

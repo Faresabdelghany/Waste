@@ -890,10 +890,11 @@ describe("a write the API took", () => {
   })
 })
 
-// A write in several requests — a mutation, then the row read back, or a second mutation (#263): where one landed and a
-// later one failed, the store tells the two apart without the adapter's help. A failed read back is landed, as an
-// unmappable answer is (#243); a later mutation refused is a partial refusal, the module read again rather than the
-// row put back as the server no longer holds it. A command whose movement landed and whose read back failed is done.
+// A write in several requests — a mutation, then the row read back, or a second mutation (#263): where one landed, the
+// store tells what followed apart without the adapter's help. Where no mutation failed — a read back, a mapper, an
+// answer's body — it has landed, as an unmappable answer has (#243); where a later mutation failed it is a partial
+// refusal, the row kept as typed and the module read again, never put back as the server no longer holds it. A command
+// whose movement landed with no mutation failing has landed too: the store reads its row again and answers done.
 describe("a write or a command of several requests that fails after one landed", () => {
   const twoStep = (second: "read" | "write"): ResourceAdapter<Thing> => ({
     ...thingAdapter("t", []),
@@ -932,10 +933,29 @@ describe("a write or a command of several requests that fails after one landed",
     assert.deepEqual(first.kind === "refused" ? [first.problem.detail, first.partial] : first.kind, ["Taken", undefined], "nothing landed: the row goes back as it was")
   })
 
-  test("a command whose movement landed and whose read back failed is done, the row as it stands and its own module read again with what it touches", async () => {
+  test("a write whose mutation landed and whose answer the adapter's own mapping threw on has landed, never a partial refusal: no mutation failed", async () => {
+    const throwing: ResourceAdapter<Thing> = {
+      ...thingAdapter("t", []),
+      update: async (client, serverId, body) => {
+        await patch<Thing>(client, `/things/${serverId}`, body)
+        throw new TypeError("Cannot read properties of undefined (reading 'body')")
+      },
+    }
+    const { fetch } = scripted([() => json({ id: "1", createdAt: "", updatedAt: "", name: "One renamed" })])
+    const outcome = await writeRecord(clientOver(fetch), moduleOf(throwing), current, record("t-1", "One renamed"), options())
+    assert.deepEqual(outcome.kind === "landed" ? [outcome.recordId, outcome.serverId] : outcome.kind, ["t-1", "1"])
+  })
+
+  test("a partial refusal keeps the row as typed with the problem, so a second save sends only what moved since; the module's read again says how it stands", () => {
+    const typed = record("t-1", "One renamed")
+    const settled = withOutcome(current, { kind: "refused", recordId: "t-1", problem: genericProblem(409, "The set moved"), partial: true }, typed, record("t-1", "One"))
+    assert.deepEqual([settled.records[0].name, settled.problem?.detail], ["One renamed", "The set moved"])
+  })
+
+  test("a command whose movement landed and whose read back failed has landed, its own module to read again with what it touches", async () => {
     const { fetch } = scripted([() => json({ id: "1", createdAt: "", updatedAt: "", name: "One" }, 201), unavailable])
     const outcome = await commandRecord(clientOver(fetch), moduleOf(twoStep("read")), current, record("t-1", "One"), "move", undefined, options())
-    assert.deepEqual(outcome.kind === "done" ? [outcome.record.id, outcome.serverId, [...outcome.touches].sort()] : outcome.kind, ["t-1", "1", ["configure.organization", "resources.inventory"]], "never refused: sending it again would make a second movement")
+    assert.deepEqual(outcome.kind === "landed" ? [outcome.recordId, outcome.serverId, [...outcome.touches].sort()] : outcome.kind, ["t-1", "1", ["configure.organization", "resources.inventory"]], "never refused: sending it again would make a second movement")
     const refused = scripted([() => problem(409, "Not in stock")])
     const notSent = await commandRecord(clientOver(refused.fetch), moduleOf(twoStep("read")), current, record("t-1", "One"), "move", undefined, options())
     assert.deepEqual(notSent.kind === "refused" ? [notSent.problem.detail, [...notSent.touches]] : notSent.kind, ["Not in stock", ["resources.inventory"]], "refused at the movement: what it touches is read again as before, its own row as it was")

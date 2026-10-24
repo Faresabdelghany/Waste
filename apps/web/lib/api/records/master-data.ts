@@ -300,9 +300,9 @@ export const vehicleTypeAdapter: ResourceAdapter<VehicleType> = {
   create: (client, body) => create<VehicleType>(client, "/vehicle-types", body).then((created) => created.body),
   // The type first, then the whole set through its own route; the answer is
   // the type as it now stands. Two requests are still two: a type patched
-  // before a set the transport loses stays patched, and the pane's refusal
-  // says the write did not land while the list shows the old name until a
-  // reload — the trade-off the planning adapters accept as well.
+  // before a set the transport loses stays patched, and the store says it was
+  // saved only in part, keeps the row as typed and reads the module again
+  // (#263) — as for the planning adapters.
   update: async (client, serverId, body) => {
     const write = body as VehicleTypeWrite
     let type: VehicleType | undefined

@@ -37,7 +37,6 @@ import { Dialog, DialogContent, DialogDescription, DialogFooter, DialogHeader, D
 import { Table, TableBody, TableCell, TableHead, TableHeader, TableRow } from "@/components/ui/table"
 import { BusinessRecordFormDialog } from "@/components/waste/business-record-form-dialog"
 import { savedRow, useBusinessRecordStore, useServerModuleState, whenSaved } from "@/components/waste/business-record-store"
-import { answered } from "@/lib/api/records/write-gate"
 import { useCommercialPickers } from "@/components/waste/commands/commercial-pickers"
 import type { RowSurfaceProps } from "@/components/waste/commands/command-surfaces"
 import { CreateSurface } from "@/components/waste/commands/create-surface"
@@ -114,7 +113,7 @@ function useRowWrite(module: ModuleLocation) {
     if (busy) return
     setBusy(true)
     whenSaved(
-      answered(upsertRecord(module.workspaceId, module.moduleId, record), record.id, () => toast.error(`${record.name} was not saved`, { description: "The write did not complete; try again." })),
+      upsertRecord(module.workspaceId, module.moduleId, record),
       (saved) => {
         const changed = saved?.kind !== "unchanged"
         if (!changed) toast.info("Nothing to change", { description: "The row is as the API holds it." })

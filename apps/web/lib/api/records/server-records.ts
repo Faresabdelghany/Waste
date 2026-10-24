@@ -35,10 +35,14 @@
 //   the row as the server now holds it instead, read back by the adapter.
 //   Without that, the store tells it apart itself (#263): the write's
 //   requests go through a client that notes whether a mutation landed and
-//   whether what failed after it was a read, so a failed read back is
-//   `landed` and a later refusal a `partial` one, the module read again —
-//   never the row put back as the server no longer holds it — and a
-//   command whose movement landed and whose read back failed is done.
+//   whether a mutation failed. One that landed with none failing — a read
+//   back, a mapper or an answer's body failed after it — is `landed`; one
+//   that landed before another mutation failed is a `partial` refusal, the
+//   row kept as typed and the module read again, never put back as the
+//   server no longer holds it; and a command's movement that landed with
+//   none failing is `landed`, which the store answers as done once it has
+//   read the row again. An adapter does its reads after its writes, so a
+//   read never decides a later mutation.
 //
 //   A record the workspace writes that no adapter owns — a companion row a
 //   controlled action made, a soft delete's marked copy — has no route. The
@@ -531,14 +535,15 @@ export type WriteOutcome =
    * `record`, when part of a write landed before the refusal: the row as the
    * server now holds it, which the store shows instead of the row as it was;
    * `partial`, when part landed and the adapter could not say how the row now
-   * stands (#263): the module is read again for it.
+   * stands (#263): the row stays as typed, so a second save sends only what
+   * moved since, and the module is read again for it.
    */
   | { kind: "refused"; problem: Problem; recordId: string; record?: BusinessRecord; partial?: true }
   /**
    * The API took the write — a create's 201, a patch's 200 — but its answer
-   * could not be mapped into a record (#243), or the row read back after it
-   * in a request of its own could not be read (#263): saved, so never asked
-   * for again. `serverId` is the row it was written to — undefined for a
+   * could not be mapped into a record (#243), or whatever failed after it
+   * was no mutation — the row's read back, an answer's body (#263): saved,
+   * so never asked for again. `serverId` is the row it was written to — undefined for a
    * create whose answer named none, whose row only the module's read again
    * finds; `problem`, why it could not be shown.
    */
@@ -570,29 +575,31 @@ function statusRefusal(adapter: ResourceAdapter<Resource>, status: string): Prob
 }
 
 /**
- * A client that notes what a write's requests did (#263): whether a request
- * that changes something — anything but a `GET` — landed, and whether the
- * request that failed was a read. An adapter that writes in several
- * requests needs no rule of its own: a failure after one of them landed is
- * the store's to tell apart.
+ * A client that notes what a write's or a command's requests did (#263):
+ * whether a request that changes something — anything but a `GET` — landed,
+ * and whether one failed, refused or unanswered. An adapter that writes in
+ * several requests needs no rule of its own: a failure after one of them
+ * landed is the store's to tell apart.
  */
-function trackingClient(client: ApiClient): { client: ApiClient; landed: () => boolean; failedReading: () => boolean } {
+function trackingClient(client: ApiClient): { client: ApiClient; landed: () => boolean; mutationFailed: () => boolean } {
   const send = client.fetch ?? fetch
   let landed = false
-  let failedReading = false
+  let mutationFailed = false
   const tracked: typeof fetch = async (input, init) => {
-    const reading = (init?.method ?? "GET").toUpperCase() === "GET"
+    const mutating = (init?.method ?? "GET").toUpperCase() !== "GET"
     try {
       const response = await send(input, init)
-      if (response.ok) landed ||= !reading
-      else failedReading = reading
+      if (mutating) {
+        if (response.ok) landed = true
+        else mutationFailed = true
+      }
       return response
     } catch (error) {
-      failedReading = reading
+      if (mutating) mutationFailed = true
       throw error
     }
   }
-  return { client: { ...client, fetch: tracked }, landed: () => landed, failedReading: () => failedReading }
+  return { client: { ...client, fetch: tracked }, landed: () => landed, mutationFailed: () => mutationFailed }
 }
 
 /**
@@ -600,10 +607,10 @@ function trackingClient(client: ApiClient): { client: ApiClient; landed: () => b
  * server id for it, a patch of what moved otherwise, nothing when nothing
  * moved. `before` is the row as the module last had it, for the patch. A
  * soft delete and a move to a status the adapter cannot spell are refused
- * before anything is sent (the header says why). A write of several
- * requests that fails after one of them landed (#263) is `landed` where
- * what failed was the row's read back, and otherwise a `partial` refusal:
- * never the row put back as it was, which the server no longer holds.
+ * before anything is sent (the header says why). A write that fails after
+ * a mutation of it landed (#263) is `landed` where no mutation failed, and a
+ * `partial` refusal where a later one did: never the row put back as it
+ * was, which the server no longer holds.
  */
 export async function writeRecord(client: ApiClient, module: ServerModule, current: ModuleState, record: BusinessRecord, options: LoadOptions): Promise<WriteOutcome> {
   const adapter = adapterFor(module, record)
@@ -652,8 +659,8 @@ export async function writeRecord(client: ApiClient, module: ServerModule, curre
       return { kind: "refused", recordId: record.id, problem: problemOfError(error.refusal), ...(landed === undefined ? {} : { record: landed }) }
     }
     if (requests.landed()) {
-      if (requests.failedReading()) return { kind: "landed", recordId: record.id, ...(serverId === undefined ? {} : { serverId }), problem: problemOfError(error) }
-      return { kind: "refused", recordId: record.id, problem: problemOfError(error), partial: true }
+      if (requests.mutationFailed()) return { kind: "refused", recordId: record.id, problem: problemOfError(error), partial: true }
+      return { kind: "landed", recordId: record.id, ...(serverId === undefined ? {} : { serverId }), problem: problemOfError(error) }
     }
     return { kind: "refused", recordId: record.id, problem: problemOfError(error) }
   }
@@ -689,6 +696,8 @@ export function withOutcome(settled: ModuleState, outcome: WriteOutcome, record:
     case "landed":
       return outcome.serverId === undefined ? withoutRecord(settled, outcome.recordId) : withCreated(settled, outcome.recordId, record, outcome.serverId)
     case "refused": {
+      // Part of it landed and nobody says how the row stands: as typed, until the module's read again says.
+      if (outcome.partial === true) return { ...withRecord(settled, record), problem: outcome.problem }
       const restored =
         outcome.record !== undefined
           ? withRecord(settled, outcome.record)
@@ -707,7 +716,16 @@ export function withOutcome(settled: ModuleState, outcome: WriteOutcome, record:
  * may land before another fails — and none for a command never sent.
  */
 export type CommandOutcome =
+  /** `touches`: the modules the store reads again — the other modules the command may have changed rows of, and its own where a request of it failed after its movement landed (#263). */
   | { kind: "done"; record: BusinessRecord; serverId: string; touches: readonly string[] }
+  /**
+   * The movement landed and nothing that failed after it was a mutation — the
+   * row's read back, or its mapping (#263): done, but the row as it now is
+   * is not known. The store reads it again and answers `done` with it; only
+   * where that read fails too does this reach the caller, never a refusal
+   * that would invite a second movement.
+   */
+  | { kind: "landed"; what: string; problem: Problem; recordId: string; serverId: string; touches: readonly string[] }
   /** `what` is the heading the person is told the refusal under; the problem is the API's, or the store's own for a command that was never sent. */
   | { kind: "refused"; what: string; problem: Problem; recordId: string; touches: readonly string[] }
 
@@ -743,12 +761,12 @@ export async function commandRecord(client: ApiClient, module: ServerModule, cur
     return { kind: "done", record: { ...adapter.toRecord(resource, context), id: record.id }, serverId: resource.id, touches }
   } catch (error) {
     // A command of several requests (a movement, then the row read back) may have changed what it touches before one failed; where
-    // one landed, its own module is read again too (#263) — and where only the read back failed, the command is done: the movement
-    // stands, and sending it again would make a second.
+    // one landed, its own module is read again too (#263) — and where no mutation failed after it, the command has landed: the
+    // movement stands, and sending it again would make a second.
     if (!requests.landed()) return refused(problemOfError(error), sent ? touches : [])
     const readAgain = [...new Set([...touches, moduleKeyOf(module.workspaceId, module.moduleId)])]
-    if (requests.failedReading()) return { kind: "done", record, serverId, touches: readAgain }
-    return refused(problemOfError(error), readAgain)
+    if (requests.mutationFailed()) return refused(problemOfError(error), readAgain)
+    return { kind: "landed", what, problem: problemOfError(error), recordId: record.id, serverId, touches: readAgain }
   }
 }
 

@@ -361,8 +361,9 @@ export const planningAreaAdapter: ResourceAdapter<PlanningAreaResource> = {
   // overlap or a polygon PostGIS rejects — so a refusal leaves the area as
   // it was; then the area, then the versions read back, so the record shows
   // what stands. Two requests are still two: a version written before an
-  // area patch the API refuses stays written, and the pane's refusal says so
-  // in the API's sentence while the row shows the version.
+  // area patch the API refuses stays written, and the store says it was saved
+  // only in part, in the API's sentence, keeps the row as typed and reads the
+  // module again (#263), so a second save sends the rename alone.
   update: async (client, serverId, body) => {
     const write = body as PlanningAreaWrite
     if (write.boundary !== undefined && "patch" in write.boundary) {
