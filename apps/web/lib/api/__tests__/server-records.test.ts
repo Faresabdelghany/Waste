@@ -11,8 +11,8 @@ import { softDeletedRecord } from "@waste/domain/record-visibility"
 
 import type { BusinessRecord } from "../../data/business-modules"
 import { createExternalStore } from "../../external-store"
-import type { ApiClient } from "../client"
-import { ApiProblem, genericProblem, NO_ACTIVE_ACCOUNT_PROBLEM_TYPE } from "../problem"
+import { UNREACHABLE_STATUS, type ApiClient } from "../client"
+import { ApiProblem, genericProblem, NO_ACTIVE_ACCOUNT_PROBLEM_TYPE, type Problem } from "../problem"
 import { NOTHING_RESOLVED, PartialWrite, type MappingContext, type Resource, type ResourceAdapter, type ServerModule } from "../records/adapter"
 import {
   adapterFor,
@@ -295,12 +295,65 @@ describe("reading a module into the store", () => {
       throw new ApiProblem(problem)
     })
     const ready = createExternalStore<ServerRecordsState>(new Map([["resources.inventory", oldRows]]))
-    assert.deepEqual(await readModuleInto(ready, client, failing, { fixtures, alive: () => true }), problem)
+    assert.deepEqual(await readModuleInto(ready, client, failing, { fixtures, alive: () => true, retryDelaysMs: [] }), problem)
     const kept = ready.getSnapshot().get("resources.inventory")
     assert.deepEqual([kept?.status, kept?.records, kept?.problem], ["ready", oldRows.records, problem])
     const first = createExternalStore<ServerRecordsState>(new Map())
-    await readModuleInto(first, client, failing, { fixtures, alive: () => true })
+    await readModuleInto(first, client, failing, { fixtures, alive: () => true, retryDelaysMs: [] })
     assert.equal(first.getSnapshot().get("resources.inventory")?.status, "failed")
+  })
+
+  describe("a read that fails on the way, not by the API's answer", () => {
+    /** A module whose list fails with `failures` in turn, then answers; the calls are counted. */
+    function flaky(failures: readonly Problem[]) {
+      let calls = 0
+      const module = heldModule(async () => {
+        const failure = failures[calls]
+        calls += 1
+        if (failure !== undefined) throw new ApiProblem(failure)
+        return things
+      })
+      return { module, calls: () => calls }
+    }
+    const reset = genericProblem(500, "Internal Server Error")
+    const unreachable = genericProblem(UNREACHABLE_STATUS, "The API at /waste-api did not answer (fetch failed)")
+
+    test("a 5xx or an API that did not answer is asked again, and the module lands: one proxy reset in the page's burst of reads does not fail it for the session", async () => {
+      for (const failure of [reset, unreachable]) {
+        const { module, calls } = flaky([failure])
+        const store = createExternalStore<ServerRecordsState>(new Map())
+        assert.equal(await readModuleInto(store, client, module, { fixtures, alive: () => true, now: () => 9, retryDelaysMs: [0, 0] }), null)
+        assert.equal(calls(), 2)
+        assert.equal(store.getSnapshot().get("resources.inventory")?.status, "ready")
+      }
+    })
+
+    test("asked once per delay, then the failure stands", async () => {
+      const { module, calls } = flaky([reset, reset, reset, reset])
+      const store = createExternalStore<ServerRecordsState>(new Map())
+      assert.deepEqual(await readModuleInto(store, client, module, { fixtures, alive: () => true, retryDelaysMs: [0, 0] }), reset)
+      assert.equal(calls(), 3, "the first read and one per delay")
+      assert.equal(store.getSnapshot().get("resources.inventory")?.status, "failed")
+    })
+
+    test("a refusal the API answered is never asked again: a 4xx says the same twice", async () => {
+      const { module, calls } = flaky([genericProblem(403, "This account's role does not allow view on resources.inventory")])
+      const store = createExternalStore<ServerRecordsState>(new Map())
+      await readModuleInto(store, client, module, { fixtures, alive: () => true, retryDelaysMs: [0, 0] })
+      assert.equal(calls(), 1)
+      assert.equal(store.getSnapshot().get("resources.inventory")?.status, "failed")
+    })
+
+    test("a session that ended while it waited asks nothing more and writes nothing", async () => {
+      let alive = true
+      const { module, calls } = flaky([reset])
+      const store = createExternalStore<ServerRecordsState>(new Map())
+      const read = readModuleInto(store, client, module, { fixtures, alive: () => alive, retryDelaysMs: [20] })
+      alive = false
+      assert.equal(await read, null)
+      assert.equal(calls(), 1)
+      assert.equal(store.getSnapshot().get("resources.inventory")?.status, "loading", "left as the read found it; the session's next load replaces the store")
+    })
   })
 
   test("the account's own refusal comes back and is written nowhere: the session has ended, and /login says why", async () => {

@@ -1,6 +1,6 @@
 import type { APIRequestContext, Page } from "@playwright/test"
 
-import { expect, test } from "./fixtures"
+import { chainLanded, expect, test } from "./fixtures"
 import { uniqueName } from "./env"
 import { createScheme, openEdit, pick, toasts } from "./routes-support"
 import { listAll } from "./tester"
@@ -30,11 +30,16 @@ type Named = { id: string; name: string }
 const answerOf = (page: Page, method: string, path: string) =>
   page.waitForResponse((response) => response.request().method() === method && new URL(response.url()).pathname === `/waste-api${path}`)
 
-/** Opens Route Studio's schemes and waits for the API's rows: the list shows its fixtures until they land. */
+/**
+ * Opens Route Studio's schemes and waits for the API's rows — the list shows its fixtures until they land — and for the
+ * page's whole chain: a scheme's form names its fraction and container types through the master data, read in the same
+ * burst, and a master-data read asked again after a failure on the way lands after the schemes'.
+ */
 async function openSchemes(page: Page) {
   const loaded = page.waitForResponse((response) => response.request().method() === "GET" && new URL(response.url()).pathname === "/waste-api/route-schemes")
   await page.goto("/route-studio?module=schemes")
   expect((await loaded).status()).toBe(200)
+  await chainLanded(page)
 }
 
 /** Opens a scheme's page from the list, narrowed to its name first: a developer's stack accumulates schemes across runs. */
@@ -119,6 +124,27 @@ test("quick create lands as a server row: a POST the API answers with its Locati
 })
 
 test("a quick create the API refuses is its sentence over the dialog, which stays open on what was typed", async ({ api, page }) => {
+  await quickCreateTaken(page, api)
+})
+
+test("a master-data read lost on the way is asked again, so the scheme form still names its fraction and the create reaches the API", async ({ api, page }) => {
+  // CI's flake of the test above (run 40042976572): the proxy answered one of the page's forty reads 500 (ECONNRESET), the
+  // master data stayed failed for the session, and the form refused locally — no fraction named "Residual" — before any POST.
+  let lost = 0
+  await page.route("**/waste-api/vehicle-types**", async (route) => {
+    if (lost === 0) {
+      lost += 1
+      await route.fulfill({ status: 500, contentType: "text/plain", body: "Internal Server Error" })
+      return
+    }
+    await route.continue()
+  })
+  await quickCreateTaken(page, api)
+  expect(lost, "the first read was lost").toBe(1)
+})
+
+/** Quick create of a name taken after the page loaded: the POST the API refuses, its sentence over the dialog, which stays open on what was typed. */
+async function quickCreateTaken(page: Page, api: APIRequestContext) {
   await openSchemes(page)
   await page.getByRole("button", { name: "Create route scheme" }).click()
   await page.getByText("Quick create", { exact: true }).click()
@@ -143,7 +169,7 @@ test("a quick create the API refuses is its sentence over the dialog, which stay
   await expect(toasts(page)).toContainText("A route scheme of this name is already in force over that period")
   await expect(dialog).toBeVisible()
   await expect(dialog.getByRole("textbox", { name: /^Route scheme name/ })).toHaveValue(taken)
-})
+}
 
 test("an edit is the scheme's PATCH: the stored policy and a shaping change land without a question, a rename too, and read back from the API", async ({ api, page }) => {
   const name = uniqueName("E2E Policy")

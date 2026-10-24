@@ -174,6 +174,11 @@ test("Create service area opens the Pilot's award form on the selection's planni
   await expect(page.locator("[data-service-area-outline]")).toHaveCount(1)
   await expect(panel.locator("li", { hasText: name })).toContainText(`${rowCount} containers`)
 
+  // The award's toast settles over the Layers button (1440 × 900: the toast's 356 × 74 at the bottom right covers the
+  // button's centre). A click aimed through it would leave the pointer on the toast, and sonner holds a hovered toast for
+  // as long as the pointer stays — CI's 107 intercepted retries. The pointer leaves the toaster and the toast goes first.
+  await page.mouse.move(0, 0)
+  await expect(page.locator("[data-sonner-toast]")).toHaveCount(0)
   await page.getByRole("button", { name: /^Layers/ }).click()
   const layers = page.getByRole("dialog", { name: "Layers" })
   const toggle = layers.getByTestId("service-areas-layer").getByRole("checkbox", { name: new RegExp(name) })
