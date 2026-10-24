@@ -48,7 +48,7 @@ const context = (fixtures: readonly BusinessRecord[], resolve: Resolver = NOTHIN
 
 // The seeded demo company as the API answers it.
 const company: Company = { id: "01a0d2a4-a280-7001-8000-000000000001", ...STAMPS, name: "Kystbyen Renovation", legalName: "Kystbyen Renovation A/S", registrationNumber: "12345678", country: "DK", status: "active" }
-const copenhagen: Project = { id: "01a0d2a4-a280-7002-8000-000000000001", ...STAMPS, name: "Copenhagen Central", kind: "Municipality", language: "da", currency: "DKK", timezone: "Europe/Copenhagen", status: "active", weekend: ["saturday", "sunday"], holidayList: null }
+const copenhagen: Project = { id: "01a0d2a4-a280-7002-8000-000000000001", ...STAMPS, name: "Copenhagen Central", kind: "Municipality", language: "da", currency: "DKK", timezone: "Europe/Copenhagen", status: "active", weekend: ["saturday", "sunday"], holidayList: null, publicSlug: null }
 const harbor: Project = { ...copenhagen, id: "01a0d2a4-a280-7002-8000-000000000002", name: "Harbor Commercial", kind: "Business unit", status: "onboarding" }
 const nordren: ServiceProvider = { id: "01a0d2a4-a280-7003-8000-000000000001", ...STAMPS, legalName: "NordRen ApS", registrationNumber: "40291188", country: "DK", contactName: "Lars Mikkelsen", contactEmail: "contact@nordren.example" }
 const administrator: Role = { id: "01a0d2a4-a280-7004-8000-000000000001", ...STAMPS, key: "company-administrator", name: "Company Administrator", scope: "Company", description: "Company, projects, users, and settings", system: true, grants: [] }

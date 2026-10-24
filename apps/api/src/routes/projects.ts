@@ -47,6 +47,7 @@ const columns = {
   status: project.status,
   weekend: project.weekend,
   holidayList: project.holidayList,
+  publicSlug: project.publicSlug,
   createdAt: project.createdAt,
   updatedAt: project.updatedAt,
 }
@@ -65,6 +66,7 @@ function projectOf(row: Row): Project {
     status: row.status as ProjectStatus,
     weekend: row.weekend as ServiceDay[],
     holidayList: row.holidayList,
+    publicSlug: row.publicSlug,
     ...stampsOf(row),
   }
 }
@@ -72,6 +74,10 @@ function projectOf(row: Row): Project {
 /** `unique (company_id, name)`: a name is one project's inside a company, and free in the next. */
 const NAME_TAKEN = "project_name_key"
 const nameTaken = (name: string) => `This company already has a project called ${JSON.stringify(name)}`
+
+/** `unique (public_slug)`, across every company (ADR-0010): one public address names one project. The sentence names no other company, since the slug is the one thing about that project anyone may know. */
+const SLUG_TAKEN = "project_public_slug_key"
+const slugTaken = (slug: string) => `Another project already publishes itself as ${JSON.stringify(slug)}; choose another slug`
 
 const noSuchProject = (id: string) => problem(404, { detail: `No project ${id} in this company` })
 
@@ -178,7 +184,7 @@ export function projectRoutes(guard: MiddlewareHandler<AuthEnv>) {
         operationId: "patchProject",
         summary: "Change a project",
         description:
-          "Changes one project of the caller's company; every field is optional and at least one must be given. `weekend` replaces the days the project rests on with the list given, each of the seven named at most once; `holidayList` renames the list its holidays are looked up under, or as null takes it away, and a project without one rests on its weekend only, whatever collection calendars it has.",
+          "Changes one project of the caller's company; every field is optional and at least one must be given. `weekend` replaces the days the project rests on with the list given, each of the seven named at most once; `holidayList` renames the list its holidays are looked up under, or as null takes it away, and a project without one rests on its weekend only, whatever collection calendars it has. `publicSlug` publishes the project on the public door under that name (`GET /public/<slug>`, ADR-0010), unique across every company; null unpublishes it: its public pages answer 404 from the next request, and an answer someone cached before (they may keep one for a minute) runs out within that minute.",
         security: BEARER_SECURITY,
         responses: {
           200: describeJson("The project as it now stands.", Project),
@@ -186,7 +192,7 @@ export function projectRoutes(guard: MiddlewareHandler<AuthEnv>) {
           401: describeProblem("No usable token (see WWW-Authenticate)."),
           403: describeProblem("No active account here, or the caller's role does not allow `edit` on `configure.organization`."),
           404: describeProblem("No project with that id in this company."),
-          409: describeProblem("The company already has another project with that name."),
+          409: describeProblem("The company already has another project with that name, or another project already publishes itself under that slug."),
         },
       }),
       guard,
@@ -196,7 +202,10 @@ export function projectRoutes(guard: MiddlewareHandler<AuthEnv>) {
       async (c) => {
         const { id } = c.req.valid("param")
         const patch = c.req.valid("json")
-        const sentences: Record<string, string> = patch.name === undefined ? {} : { [NAME_TAKEN]: nameTaken(patch.name) }
+        const sentences: Record<string, string> = {
+          ...(patch.name === undefined ? {} : { [NAME_TAKEN]: nameTaken(patch.name) }),
+          ...(patch.publicSlug == null ? {} : { [SLUG_TAKEN]: slugTaken(patch.publicSlug) }),
+        }
         const [row] = await refuseDuplicate(sentences, () =>
           c
             .get("tx")

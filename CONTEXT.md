@@ -36,6 +36,18 @@ _Avoid_: Account, credentials, auth user
 A User Account no Login is bound to yet.
 _Avoid_: Pending user, unconfirmed account
 
+**Published Project**:
+A project the company has made readable to the public under its public slug (`kystbyen`), through the public door: anonymous pages a municipality links from its own website. An unpublished project has no public pages.
+_Avoid_: Public tenant, open project, portal (the portal is for signed-in customers)
+
+**Sorting Guide**:
+A project's public answer to "where does this go?": the Sorting Guide Items a resident searches by name or synonym, each naming the waste fraction it belongs in and how to present it.
+_Avoid_: Waste wizard, recycling dictionary, A–Z list
+
+**Sorting Guide Item**:
+One thing a Sorting Guide knows, such as a pizza box or a battery: its name, the other words it is known by, its waste fraction where it has one, and its instructions. It is a draft until published, and withdrawn rather than deleted.
+_Avoid_: Article, product (a Product is what is sold), entry
+
 **Customer**:
 A person or organization that receives or finances a service.
 _Avoid_: Property, payer, account

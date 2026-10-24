@@ -21,7 +21,11 @@
 // domain line of the allowlist. The direction is sound — the innermost ring
 // depends on nothing — and listing the subpath,
 // not the package, keeps every further reach into the domain a deliberate
-// line here.
+// line here. Issue #293 added two: organisation.ts reads the public slug's
+// shape from @waste/domain/access/public-slug, and sorting-guide.ts the
+// Sorting Guide's statuses from @waste/domain/sorting-guide/vocabulary and
+// the search's `normalise` from @waste/domain/sorting-guide/search, so a
+// synonym is "each once" by the spelling the search compares.
 import path from "node:path"
 import { fileURLToPath } from "node:url"
 
@@ -31,6 +35,7 @@ definePurityTests({
   packageDir: path.resolve(path.dirname(fileURLToPath(import.meta.url)), "../.."),
   allowedImports: [
     "@waste/domain/access/modules",
+    "@waste/domain/access/public-slug",
     "@waste/domain/execution/proof-shapes",
     "@waste/domain/execution/vocabulary",
     "@waste/domain/finance/vocabulary",
@@ -40,6 +45,8 @@ definePurityTests({
     "@waste/domain/resolution/vocabulary",
     "@waste/domain/resources/vocabulary",
     "@waste/domain/routing/vocabulary",
+    "@waste/domain/sorting-guide/search",
+    "@waste/domain/sorting-guide/vocabulary",
     "zod",
   ],
   allowedTestImports: ["@waste/tooling/purity"],

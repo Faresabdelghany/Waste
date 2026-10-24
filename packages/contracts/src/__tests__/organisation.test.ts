@@ -41,6 +41,7 @@ const project = {
   status: "onboarding",
   weekend: ["saturday", "sunday"],
   holidayList: "Danish public holidays",
+  publicSlug: null,
   ...STAMPS,
 }
 
@@ -165,7 +166,7 @@ describe("Project", () => {
     assert.deepEqual(Project.parse({ ...project, weekend: sixDays }).weekend, sixDays)
     const everyDay = { path: "weekend", message: A_WORKING_DAY }
     assert.deepEqual(refusal(Project.safeParse({ ...project, weekend: [...SERVICE_DAYS] })), [everyDay])
-    const { id: _id, createdAt: _createdAt, updatedAt: _updatedAt, ...body } = project
+    const { id: _id, createdAt: _createdAt, updatedAt: _updatedAt, publicSlug: _publicSlug, ...body } = project
     assert.deepEqual(refusal(ProjectCreate.safeParse({ ...body, weekend: [...SERVICE_DAYS] })), [everyDay])
     assert.deepEqual(refusal(ProjectPatch.safeParse({ weekend: [...SERVICE_DAYS] })), [everyDay])
   })
@@ -182,21 +183,21 @@ describe("Project", () => {
 
 describe("ProjectCreate", () => {
   test("takes what a project needs and mints nothing: the server owns the id and the timestamps", () => {
-    const { id: _id, createdAt: _createdAt, updatedAt: _updatedAt, ...body } = project
+    const { id: _id, createdAt: _createdAt, updatedAt: _updatedAt, publicSlug: _publicSlug, ...body } = project
     assert.deepEqual(ProjectCreate.parse(body), body)
     assert.match(refusal(ProjectCreate.safeParse({ ...body, id: ID }))[0].message, /id/)
     assert.match(refusal(ProjectCreate.safeParse({ ...body, createdAt: STAMPS.createdAt }))[0].message, /createdAt/)
   })
 
   test("defaults the status to onboarding, and says so in the schema", () => {
-    const { id: _id, createdAt: _createdAt, updatedAt: _updatedAt, status: _status, ...body } = project
+    const { id: _id, createdAt: _createdAt, updatedAt: _updatedAt, publicSlug: _publicSlug, status: _status, ...body } = project
     assert.equal(ProjectCreate.parse(body).status, "onboarding")
     assert.equal(ProjectCreate.parse({ ...body, status: "active" }).status, "active")
     assert.match(ProjectCreate.shape.status.description ?? "", /onboarding/)
   })
 
   test("defaults the weekend to Saturday and Sunday and the holiday list to nothing, and says so in the schema (#97)", () => {
-    const { id: _id, createdAt: _createdAt, updatedAt: _updatedAt, weekend: _weekend, holidayList: _holidayList, ...body } = project
+    const { id: _id, createdAt: _createdAt, updatedAt: _updatedAt, publicSlug: _publicSlug, weekend: _weekend, holidayList: _holidayList, ...body } = project
     const parsed = ProjectCreate.parse(body)
     assert.deepEqual(parsed.weekend, ["saturday", "sunday"])
     assert.deepEqual(parsed.weekend, [...DEFAULT_WEEKEND], "the domain's constant, the same one the column default is built from")
@@ -208,12 +209,31 @@ describe("ProjectCreate", () => {
   })
 
   test("needs a name, a kind, a language, a currency and a timezone", () => {
-    const { id: _id, createdAt: _createdAt, updatedAt: _updatedAt, ...body } = project
+    const { id: _id, createdAt: _createdAt, updatedAt: _updatedAt, publicSlug: _publicSlug, ...body } = project
     for (const key of ["name", "kind", "language", "currency", "timezone"]) {
       const { [key]: _dropped, ...without } = body as Record<string, unknown>
       assert.deepEqual(refusal(ProjectCreate.safeParse(without)).map((issue) => issue.path), [key])
     }
     assert.equal(ProjectCreate.safeParse({ ...body, name: "" }).success, false)
+  })
+})
+
+describe("a project's public slug (ADR-0010)", () => {
+  test("is null while unpublished, or a lowercase slug of three to 63 characters", () => {
+    for (const publicSlug of [null, "kystbyen", "kystbyen-nord", "k2b", "a".repeat(63)]) {
+      assert.equal(Project.parse({ ...project, publicSlug }).publicSlug, publicSlug, String(publicSlug))
+    }
+    for (const publicSlug of ["", "ab", "a".repeat(64), "Kystbyen", "kyst byen", "kyst--byen", "-kyst", "kyst-", "kystbyen/", "øster"]) {
+      assert.equal(Project.safeParse({ ...project, publicSlug }).success, false, JSON.stringify(publicSlug))
+    }
+  })
+
+  test("a patch publishes under a slug, or unpublishes with null; a create takes none", () => {
+    assert.deepEqual(ProjectPatch.parse({ publicSlug: "kystbyen" }), { publicSlug: "kystbyen" })
+    assert.deepEqual(ProjectPatch.parse({ publicSlug: null }), { publicSlug: null })
+    assert.equal(ProjectPatch.safeParse({ publicSlug: "Not A Slug" }).success, false)
+    const { id: _id, createdAt: _created, updatedAt: _updated, publicSlug: _slug, ...create } = project
+    assert.equal(ProjectCreate.safeParse({ ...create, publicSlug: "kystbyen" }).success, false)
   })
 })
 

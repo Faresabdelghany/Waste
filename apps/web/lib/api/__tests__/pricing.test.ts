@@ -36,7 +36,7 @@ const productFixtures = fixturesOf("commercial", "products")
 const rowFixtures = fixturesOf("commercial", "price-rows")
 
 // The seeded rows as the API answers them (packages/db/src/seed), in the seed's id scheme.
-const copenhagen: Project = { id: "01a0d2a4-a280-7002-8000-000000000001", ...STAMPS, name: "Copenhagen Central", kind: "Municipality", language: "da", currency: "DKK", timezone: "Europe/Copenhagen", status: "active", weekend: ["saturday", "sunday"], holidayList: "Danish public holidays" }
+const copenhagen: Project = { id: "01a0d2a4-a280-7002-8000-000000000001", ...STAMPS, name: "Copenhagen Central", kind: "Municipality", language: "da", currency: "DKK", timezone: "Europe/Copenhagen", status: "active", weekend: ["saturday", "sunday"], holidayList: "Danish public holidays", publicSlug: null }
 const residual: WasteFraction = { id: "01a0d2a4-a280-7005-8000-000000000001", ...STAMPS, key: "residual", name: "Residual" }
 const bin240: ContainerType = { id: "01a0d2a4-a280-7006-8000-000000000002", ...STAMPS, name: "Two-wheel bin · 240 L", volumeLitres: 240 }
 const fortnightly: ServiceFrequency = { id: "01a0d2a4-a280-7007-8000-000000000002", ...STAMPS, projectId: copenhagen.id, name: "Every 2 weeks", description: null, collectionsPerWeek: 1, weeksBetween: 2, daysBetween: null }

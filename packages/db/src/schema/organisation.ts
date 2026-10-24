@@ -49,6 +49,7 @@
 // them unbroken and a run that fails rolls its numbers back with its rows.
 // The series is the company's because the legal entity's is; it arrived with
 // migration 0010.
+import { PUBLIC_SLUG_LENGTH, PUBLIC_SLUG_PATTERN } from "@waste/domain/access/public-slug"
 import { DEFAULT_WEEKEND, SERVICE_DAYS } from "@waste/domain/planning/vocabulary"
 import { sql } from "drizzle-orm"
 import { check, integer, text } from "drizzle-orm/pg-core"
@@ -118,6 +119,13 @@ export const project = wms.table(
       .default(sql.raw(`'{${DEFAULT_WEEKEND.join(",")}}'`)),
     /** The name of the holiday list its holidays are looked up under (`Danish public holidays`); null is no list, and then the project rests on its weekend only. */
     holidayList: text(),
+    /**
+     * The name the project publishes itself under on the public door
+     * (ADR-0010, Issue #293): `/public/<slug>`. Null is unpublished, and the
+     * public role sees no row of a project without one. Unique across every
+     * company, since one public address names one project.
+     */
+    publicSlug: text(),
   },
   (t) => [
     companyReference(t, company),
@@ -129,6 +137,14 @@ export const project = wms.table(
     // this holds them to fewer than all seven. No helper spells it because no
     // other table has it; the label names the check itself.
     check(tableObjectName(t.id.table, "weekend_not_every_day", "project"), sql`cardinality(${t.weekend}) < ${sql.raw(String(SERVICE_DAYS.length))}`),
+    uniqueOn(t.publicSlug),
+    // The slug's shape, `@waste/domain/access/public-slug`'s one spelling:
+    // lowercase words joined by single hyphens, within the lengths. No helper
+    // spells it because no other table has it; the label names the check.
+    check(
+      tableObjectName(t.id.table, "public_slug_shape", "project"),
+      sql`${t.publicSlug} ~ ${sql.raw(`'${PUBLIC_SLUG_PATTERN}'`)} and char_length(${t.publicSlug}) between ${sql.raw(String(PUBLIC_SLUG_LENGTH.min))} and ${sql.raw(String(PUBLIC_SLUG_LENGTH.max))}`,
+    ),
   ],
 )
 

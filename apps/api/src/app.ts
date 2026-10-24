@@ -29,11 +29,12 @@ import { type BuildInfo, HealthResponse, PROBE_HEADERS, ReadinessResponse, Ready
 import { NO_ACTIVE_ACCOUNT } from "@waste/contracts/problem"
 import type { Database } from "@waste/db/client"
 import { createJobSender, type JobSender } from "@waste/db/jobs"
-import { Hono } from "hono"
+import { Hono, type Context } from "hono"
 import { describeRoute, openAPIRouteHandler, resolver } from "hono-openapi"
 
 import manifest from "../package.json" with { type: "json" }
 import { authenticate, BEARER_AUTH, BEARER_SECURITY_SCHEME, identify } from "./auth/principal"
+import { Allowance, PUBLIC_REQUESTS_PER_MINUTE, publicDoor } from "./auth/public-door"
 import type { Verifier } from "./auth/verify"
 import { errorHandler, notFound } from "./problem"
 import { checkDatabase, DATABASE_CHECK_TIMEOUT_MS } from "./readiness"
@@ -67,6 +68,7 @@ import { productRoutes } from "./routes/products"
 import { projectRoutes } from "./routes/projects"
 import { propertyRoutes } from "./routes/properties"
 import { propertyGroupRoutes } from "./routes/property-groups"
+import { publicRoutes } from "./routes/public"
 import { roleRoutes } from "./routes/roles"
 import { routeSchemeRoutes } from "./routes/route-schemes"
 import { planRoutes } from "./routes/plans"
@@ -78,6 +80,7 @@ import { serviceProviderPriceRoutes } from "./routes/service-provider-prices"
 import { serviceProviderRoutes } from "./routes/service-providers"
 import { settlementRoutes } from "./routes/settlements"
 import { sharedCollectionPointRoutes } from "./routes/shared-collection-points"
+import { sortingGuideRoutes } from "./routes/sorting-guide"
 import { ticketRoutes } from "./routes/tickets"
 import { unloadRoutes } from "./routes/unloads"
 import { unloadingStationRoutes } from "./routes/unloading-stations"
@@ -124,6 +127,12 @@ export type AppOptions = {
    * knobs; a test injects one over a scripted fake.
    */
   routingEngine?: QuotaEngine
+  /** Each public client's requests a minute on the public door (ADR-0010); a test injects one with a small allowance or a pinned clock. */
+  publicAllowance?: Allowance
+  /** The socket's peer address, the public door's client where no trusted proxy names one: server.ts reads the Node request's; a test has none. */
+  peer?: (c: Context) => string | undefined
+  /** How many proxies in front of the API append to X-Forwarded-For (PUBLIC_TRUSTED_PROXIES): 0, the default, ignores the header. */
+  trustedProxies?: number
 }
 
 export function createApp({
@@ -137,6 +146,9 @@ export function createApp({
   jobs = createJobSender(probe),
   routing = { name: providerNameFromEnv() },
   routingEngine = new QuotaEngine(new FakeProvider(), { ...STANDARD_PLAN, callsPerMinute: PREVIEW_CALLS_PER_MINUTE, waits: false }),
+  publicAllowance = new Allowance(PUBLIC_REQUESTS_PER_MINUTE, now),
+  peer = () => undefined,
+  trustedProxies = 0,
 }: AppOptions) {
   const app = new Hono()
   app.onError(errorHandler(log))
@@ -239,6 +251,8 @@ export function createApp({
   app.route("/", driverDoorRoutes(guard, { now }))
   // Resolution (Issue #109): a ticket's `occurredAt` and an alert's `detectedAt` default to the request's clock and may not run ahead of it, and every command stamps and publishes with it, so both modules take `now` too.
   app.route("/", ticketRoutes(guard, { now }))
+  app.route("/", sortingGuideRoutes(guard))
+  app.route("/", publicRoutes(publicDoor({ pool, allowance: publicAllowance, peer, trustedProxies })))
   app.route("/", alertRoutes(guard, { now }))
   // Finance & Contracting (Issue #112). The tariffs, the awards and what a provider is paid: every rule there is a period against a day the caller names, so none of the three takes the clock.
   app.route("/", priceListRoutes(guard))

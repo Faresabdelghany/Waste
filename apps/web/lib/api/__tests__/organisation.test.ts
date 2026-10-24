@@ -58,6 +58,7 @@ const copenhagen: Project = {
   status: "active",
   weekend: ["saturday", "sunday"],
   holidayList: "Danish public holidays",
+  publicSlug: null,
 }
 const harbor: Project = { ...copenhagen, id: "01a0d2a4-a280-7002-8000-000000000002", name: "Harbor Commercial", kind: "Business unit", status: "onboarding", holidayList: null }
 const aarhus: Project = { ...copenhagen, id: "019995e0-0000-7000-8000-00000000abcd", name: "Aarhus North", kind: "Contract", weekend: ["friday", "saturday"], holidayList: null }
