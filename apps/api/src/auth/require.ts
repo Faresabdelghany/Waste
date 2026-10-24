@@ -14,7 +14,7 @@ import type { Action, ModuleKey } from "@waste/domain/access/modules"
 import type { MiddlewareHandler } from "hono"
 
 import { problem } from "../problem"
-import type { IdentifiedEnv } from "./principal"
+import type { IdentifiedEnv, Principal } from "./principal"
 
 /** Whether a normalised grant set lists the action for the module. */
 export function allows(grants: readonly Grant[], moduleKey: ModuleKey, action: Action): boolean {
@@ -33,3 +33,19 @@ export function requireGrant(moduleKey: ModuleKey, action: Action): MiddlewareHa
     await next()
   }
 }
+
+/**
+ * The guard of a route two modules open, the module chosen by the account
+ * (#291 slice 23b): the office's users and roles are `configure.access`'s, a
+ * Service Provider's own team `service-providers.service-provider-workspace`'s
+ * — so a provider's manager administers its team without the company's
+ * access settings, and each answer is fenced by the account in the handler.
+ */
+export function requireGrantOf(moduleOf: (principal: Principal) => ModuleKey, action: Action): MiddlewareHandler<IdentifiedEnv> {
+  return async (c, next) => {
+    const principal = c.get("principal")
+    requireAllowed(principal.grants, moduleOf(principal), action)
+    await next()
+  }
+}
+

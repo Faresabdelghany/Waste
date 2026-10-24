@@ -91,8 +91,8 @@ export const COMMENT_ON_TICKET = "comment"
 /** The reply quoting the stop's record, a command: with `complete` it closes the case `answered`. */
 export const REPLY_WITH_EVIDENCE = "reply-with-evidence"
 
-/** The sources an office opens a ticket from: every one but the consumer's two (`TicketCreate.source`). */
-export const OFFICE_TICKET_SOURCES = TICKET_SOURCES.filter((source) => source !== "driver-app" && source !== "dispatch")
+/** The sources an office opens a ticket from: every one but the consumer's two and a Service Provider's, which the API writes (`TicketCreate.source`). */
+export const OFFICE_TICKET_SOURCES = TICKET_SOURCES.filter((source) => source !== "driver-app" && source !== "dispatch" && source !== "service-provider")
 
 /** Whether a loaded row is a ticket: its id, or — a row made this session, under its minted id — its kind. */
 export const isTicketRecord = ofKind(TICKET_PREFIX, ["Ticket"])
@@ -400,7 +400,7 @@ const COMMENT: RecordAction<TicketEvent> = {
     const body = said(input, "body")
     if (body === undefined) return refusal("body", "Write the comment")
     const visibility = said(input, "visibility") ?? "internal"
-    if (!(TICKET_VISIBILITIES as readonly string[]).includes(visibility)) return refusal("visibility", `A comment is ${TICKET_VISIBILITIES.join(" or ")}`)
+    if (!(TICKET_VISIBILITIES as readonly string[]).includes(visibility)) return refusal("visibility", `A comment is ${TICKET_VISIBILITIES.slice(0, -1).join(", ")} or ${TICKET_VISIBILITIES.at(-1)}`)
     return { body, visibility }
   },
   run: (client, serverId, body) => command<TicketEvent>(client, `/tickets/${serverId}/comments`, body),

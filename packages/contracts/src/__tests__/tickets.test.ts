@@ -187,7 +187,7 @@ describe("TicketCreate", () => {
   })
 
   test("never comes from the driver's device or the dispatcher's cancellation: those are the consumer's", () => {
-    for (const source of ["driver-app", "dispatch"]) assert.deepEqual(refusal(TicketCreate.safeParse({ ...body, source })).map((issue) => issue.path), ["source"], source)
+    for (const source of ["driver-app", "dispatch", "service-provider"]) assert.deepEqual(refusal(TicketCreate.safeParse({ ...body, source })).map((issue) => issue.path), ["source"], source)
     for (const source of ["office", "phone", "email", "portal", "import", "integration"]) assert.equal(TicketCreate.safeParse({ ...body, source }).success, true, source)
   })
 

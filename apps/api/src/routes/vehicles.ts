@@ -9,6 +9,12 @@
 // `inProjects` (auth/projects.ts): a caller reads the vehicles of the projects
 // it works in, a create names one of those in the body (400 on `projectId`),
 // and the project is not patchable — a record does not move between projects.
+// A Service Provider's account works in no project and keeps its own fleet
+// (#291 slice 23b, auth/provider.ts's `reachesFleet`): every statement carries
+// the tenant and the vehicles its provider owns, wherever they are based; a
+// create names a project its provider holds a Service Area in today
+// (`requireReachedProject`, 400 on `projectId`), and its ownership and
+// provider are its own (`requireOwnFleet`, 400 at each) — on a patch too.
 // Nor is `kind`: a powered vehicle does not become a trailer, and the
 // contracts keep both off the patch.
 //
@@ -87,14 +93,14 @@ import { Hono, type MiddlewareHandler } from "hono"
 import { describeRoute } from "hono-openapi"
 
 import { BEARER_SECURITY, type AuthEnv, type Principal } from "../auth/principal"
-import { inProjects, requireProject } from "../auth/projects"
+import { reachesFleet, requireOwnFleet, requireReachedProject } from "../auth/provider"
 import { requireGrant } from "../auth/require"
 import { newId } from "../ids"
 import { afterCursor, fetchLimit, pageOf } from "../pagination"
 import { describeProblem, invalidRequest, problem, validate } from "../problem"
 import { refuseStranded } from "./periods"
 import { requireDepot, requireServiceProvider, requireVehicleType, requireWasteFraction, type Scope } from "./references"
-import { groupsInForceNaming } from "./scheme-groups"
+import { groupsInForceNaming, type ClockOptions } from "./scheme-groups"
 import { created, describeCreated, describeJson, IdParam, lockRow, refuseDuplicate, requireProviderShape, stamp, stampsOf } from "./shared"
 import { groupsName, liveAllocationsName, liveAllocationsNaming } from "./statuses"
 
@@ -319,10 +325,10 @@ const groupsNameThis = groupsName("vehicle")
 const liveAllocations = (companyId: string, vehicleId: string) =>
   liveAllocationsNaming(companyId, or(eq(vehicleAllocation.vehicleId, vehicleId), eq(vehicleAllocation.trailerId, vehicleId)))
 
-/** The rows of this company, in the projects the caller works in: what every vehicle statement is bounded by. */
-const scope = (principal: Principal) => and(eq(vehicle.companyId, principal.companyId), inProjects(vehicle.projectId, principal))
+/** The rows of this company the caller reaches — its projects' for an office account, its provider's own for a Service Provider's (`reachesFleet`): what every vehicle statement is bounded by. */
+const scope = (principal: Principal) => and(eq(vehicle.companyId, principal.companyId), reachesFleet(principal, vehicle))
 
-/** One vehicle of this company by id, inside the caller's projects; undefined when it is neither. */
+/** One vehicle of this company by id, inside the caller's reach; undefined when it is neither. */
 async function findVehicle(tx: Tx, principal: Principal, id: string): Promise<Row | undefined> {
   const [row] = await tx
     .select(columns)
@@ -332,7 +338,7 @@ async function findVehicle(tx: Tx, principal: Principal, id: string): Promise<Ro
   return row
 }
 
-export function vehicleRoutes(guard: MiddlewareHandler<AuthEnv>) {
+export function vehicleRoutes(guard: MiddlewareHandler<AuthEnv>, { now = () => new Date() }: ClockOptions = {}) {
   return new Hono<AuthEnv>()
     .get(
       "/vehicles",
@@ -340,11 +346,11 @@ export function vehicleRoutes(guard: MiddlewareHandler<AuthEnv>) {
         operationId: "listVehicles",
         summary: "The vehicles the caller's projects run",
         description:
-          "One page of vehicles, oldest first (ids are time-ordered), from the projects the caller works in — an account that works in none, such as a service provider's, reads an empty page — each with its compartments by position and each compartment's waste fractions. `projectId` narrows it to one of those projects; naming another is refused. `kind` answers the powered vehicles or the trailers, `vehicleTypeId` one type's, `status` one status, `homeDepotId` the vehicles based at one depot. The filters combine. Hand `nextCursor` back as `cursor` for the next page.",
+          "One page of vehicles, oldest first (ids are time-ordered), from the projects the caller works in — or, for a Service Provider's account, which works in none, the vehicles its provider owns, wherever they are based — each with its compartments by position and each compartment's waste fractions. `projectId` narrows it to one of those projects, or for a provider's account to a project its provider holds a Service Area in today; naming another is refused. `kind` answers the powered vehicles or the trailers, `vehicleTypeId` one type's, `status` one status, `homeDepotId` the vehicles based at one depot. The filters combine. Hand `nextCursor` back as `cursor` for the next page.",
         security: BEARER_SECURITY,
         responses: {
           200: describeJson("One page of vehicles, each with its compartments.", VehiclePage),
-          400: describeProblem("The page size is outside 1..200, the cursor is not one this API wrote, a filter is malformed, or `projectId` is not a project this account works in."),
+          400: describeProblem("The page size is outside 1..200, the cursor is not one this API wrote, a filter is malformed, or `projectId` is not a project this account works in (for a provider's account, one its provider holds a Service Area in)."),
           401: describeProblem("No usable token (see WWW-Authenticate)."),
           403: describeProblem("No active account here, or the caller's role does not allow `view` on `fleet.vehicles`."),
         },
@@ -357,7 +363,7 @@ export function vehicleRoutes(guard: MiddlewareHandler<AuthEnv>) {
         const after = afterCursor(cursor)
         const tx = c.get("tx")
         const principal = c.get("principal")
-        if (projectId !== undefined) requireProject(principal, projectId, "projectId", "query")
+        if (projectId !== undefined) await requireReachedProject(tx, principal, projectId, now, "projectId", "query")
         const rows = await tx
           .select(columns)
           .from(vehicle)
@@ -386,7 +392,7 @@ export function vehicleRoutes(guard: MiddlewareHandler<AuthEnv>) {
         operationId: "createVehicle",
         summary: "Register a vehicle with its compartments",
         description:
-          "Registers a vehicle in one project, which must be a project the caller works in, with the compartments it starts with in position order, 1..n in the body's order — a powered vehicle has at least one, a trailer may have none. The registration (the plate) is unique across the company, not inside a project, and so is the callsign where given. The vehicle type is one of this company's, the home depot one of the named project's, the owning service provider one of this company's and named with `service-provider` ownership and with nothing else, and every compartment's waste fractions are this company's, each named once per compartment. `ownership` defaults to `company` and `status` to `active`. `requiredLicenceClass` is required: an unknown class passes nobody, so a vehicle without one is a vehicle nobody may take out. The server mints every id.",
+          "Registers a vehicle in one project, which must be a project the caller works in, with the compartments it starts with in position order, 1..n in the body's order — a powered vehicle has at least one, a trailer may have none. The registration (the plate) is unique across the company, not inside a project, and so is the callsign where given. The vehicle type is one of this company's, the home depot one of the named project's, the owning service provider one of this company's and named with `service-provider` ownership and with nothing else, and every compartment's waste fractions are this company's, each named once per compartment. `ownership` defaults to `company` and `status` to `active`. `requiredLicenceClass` is required: an unknown class passes nobody, so a vehicle without one is a vehicle nobody may take out. A Service Provider's account registers its own vehicles: in a project its provider holds a Service Area in today, with `service-provider` ownership naming its own provider — anything else is refused at the field. The server mints every id.",
         security: BEARER_SECURITY,
         responses: {
           201: describeCreated("The vehicle as it was written, with its compartments.", Vehicle),
@@ -405,7 +411,8 @@ export function vehicleRoutes(guard: MiddlewareHandler<AuthEnv>) {
         const { compartments, ...values } = c.req.valid("json")
         const tx = c.get("tx")
         const principal = c.get("principal")
-        requireProject(principal, values.projectId)
+        await requireReachedProject(tx, principal, values.projectId, now)
+        requireOwnFleet(principal, { kind: values.ownership, serviceProviderId: values.serviceProviderId }, "vehicle", "create")
         const within: Scope = { companyId: principal.companyId, projectId: values.projectId }
 
         // The 400s first, each at its field, in the order a body reads.
@@ -448,7 +455,7 @@ export function vehicleRoutes(guard: MiddlewareHandler<AuthEnv>) {
           400: describeProblem("The path does not hold an id."),
           401: describeProblem("No usable token (see WWW-Authenticate)."),
           403: describeProblem("No active account here, or the caller's role does not allow `view` on `fleet.vehicles`."),
-          404: describeProblem("No vehicle with that id in the projects this account works in."),
+          404: describeProblem("No vehicle with that id in the projects this account works in, or, for a Service Provider's account, none its provider owns."),
         },
       }),
       guard,
@@ -478,7 +485,7 @@ export function vehicleRoutes(guard: MiddlewareHandler<AuthEnv>) {
           ),
           401: describeProblem("No usable token (see WWW-Authenticate)."),
           403: describeProblem("No active account here, or the caller's role does not allow `edit` on `fleet.vehicles`."),
-          404: describeProblem("No vehicle with that id in the projects this account works in."),
+          404: describeProblem("No vehicle with that id in the projects this account works in, or, for a Service Provider's account, none its provider owns."),
           409: describeProblem("The company already has another vehicle with that registration or that callsign, or the vehicle is being retired under live allocations or under collection groups of schemes in force: the detail counts them."),
         },
       }),
@@ -501,7 +508,8 @@ export function vehicleRoutes(guard: MiddlewareHandler<AuthEnv>) {
         const within: Scope = { companyId: principal.companyId, projectId: current.projectId }
         const merged = { ...current, ...patch }
 
-        // The provider rule as the merged row must hold it (routes/shared.ts): a patch carries one half and the stored row the other.
+        // A provider's own vehicle stays its own; then the provider rule as the merged row must hold it (routes/shared.ts): a patch carries one half and the stored row the other.
+        requireOwnFleet(principal, { kind: patch.ownership, serviceProviderId: patch.serviceProviderId }, "vehicle", "patch")
         requireProviderShape(merged.ownership, merged, PROVIDER_WITH_PROVIDER_OWNERSHIP)
         await requireVehicleType(tx, principal.companyId, patch.vehicleTypeId)
         await requireServiceProvider(tx, principal.companyId, patch.serviceProviderId)
@@ -537,7 +545,7 @@ export function vehicleRoutes(guard: MiddlewareHandler<AuthEnv>) {
           ),
           401: describeProblem("No usable token (see WWW-Authenticate)."),
           403: describeProblem("No active account here, or the caller's role does not allow `edit` on `fleet.vehicles`."),
-          404: describeProblem("No vehicle with that id in the projects this account works in."),
+          404: describeProblem("No vehicle with that id in the projects this account works in, or, for a Service Provider's account, none its provider owns."),
         },
       }),
       guard,

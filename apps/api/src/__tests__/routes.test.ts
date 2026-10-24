@@ -340,7 +340,8 @@ describe("the route endpoints", { skip: database.skip || owner.skip }, () => {
       assert.equal(gone.detail, `Route ${cancelled.label} is cancelled and does not change`)
       await refused(await command(theirs.routes.planned.id, "assign", { driverId: fleet.drivers.mads.id }), 404)
       await refused(await command(harbors.id, "assign", { driverId: fleet.drivers.henrik.id }, viewer), 404)
-      assert.match((await refused(await command(harbors.id, "assign", { driverId: fleet.drivers.henrik.id }, lars), 403)).detail ?? "", /edit on route-studio\.routes/, "the provider manager's charter grants route-studio view, not edit")
+      // The provider manager's charter grants the routes' `edit` to crew the routes it runs (#291 slice 23b), and NordRen runs none here: the family's 404.
+      await refused(await command(harbors.id, "assign", { driverId: fleet.drivers.henrik.id }, lars), 404)
       assert.match((await refused(await command(harbors.id, "assign", { driverId: fleet.drivers.henrik.id }, ungranted), 403)).detail ?? "", /edit on route-studio\.routes/)
     })
   })

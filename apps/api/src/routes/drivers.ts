@@ -8,6 +8,13 @@
 // `inProjects` (auth/projects.ts): a caller reads the drivers of the projects
 // it works in, a create names one of those in the body (400 on `projectId`),
 // and the project is not patchable — a record does not move between projects.
+// A Service Provider's account works in no project and keeps its own drivers
+// (#291 slice 23b, auth/provider.ts's `reachesFleet`): every statement carries
+// the tenant and the drivers its provider employs, wherever they are based; a
+// create names a project its provider holds a Service Area in today, its
+// employment and provider are its own (`requireOwnFleet`), and the login it
+// binds is an account of its own team (`requireProviderAccount`) — each a 400
+// at its field, on a patch too.
 //
 // The login is `userAccountId`, a user account of this company that is not
 // deactivated (400 "Not a user account of this company" otherwise), and one
@@ -54,14 +61,14 @@ import { Hono, type MiddlewareHandler } from "hono"
 import { describeRoute } from "hono-openapi"
 
 import { BEARER_SECURITY, type AuthEnv, type Principal } from "../auth/principal"
-import { inProjects, requireProject } from "../auth/projects"
+import { providerIdOf, providerNameOf, reachesFleet, requireOwnFleet, requireReachedProject } from "../auth/provider"
 import { requireGrant } from "../auth/require"
 import { newId } from "../ids"
 import { afterCursor, fetchLimit, pageOf } from "../pagination"
 import { describeProblem, problem, validate } from "../problem"
 import { refuseStranded } from "./periods"
-import { requireDepot, requireServiceProvider, requireUserAccount, type Scope } from "./references"
-import { groupsInForceNaming } from "./scheme-groups"
+import { requireDepot, requireProviderAccount, requireServiceProvider, requireUserAccount, type Scope } from "./references"
+import { groupsInForceNaming, type ClockOptions } from "./scheme-groups"
 import { created, describeCreated, describeJson, IdParam, lockRow, refuseDuplicate, requireProviderShape, stampsOf } from "./shared"
 import { groupsName, liveAllocationsName, liveAllocationsNaming } from "./statuses"
 
@@ -134,10 +141,10 @@ const groupsNameThis = groupsName("driver")
 /** The allocations the change would strand: the live ones naming the driver (routes/statuses.ts spells the rest). */
 const liveAllocations = (companyId: string, driverId: string) => liveAllocationsNaming(companyId, eq(vehicleAllocation.driverId, driverId))
 
-/** The rows of this company, in the projects the caller works in: what every driver statement is bounded by. */
-const scope = (principal: Principal) => and(eq(driver.companyId, principal.companyId), inProjects(driver.projectId, principal))
+/** The rows of this company the caller reaches — its projects' for an office account, its provider's own for a Service Provider's (`reachesFleet`): what every driver statement is bounded by. */
+const scope = (principal: Principal) => and(eq(driver.companyId, principal.companyId), reachesFleet(principal, driver))
 
-/** One driver of this company by id, inside the caller's projects; undefined when it is neither. */
+/** One driver of this company by id, inside the caller's reach; undefined when it is neither. */
 async function findDriver(tx: Tx, principal: Principal, id: string): Promise<Row | undefined> {
   const [row] = await tx
     .select(columns)
@@ -147,7 +154,14 @@ async function findDriver(tx: Tx, principal: Principal, id: string): Promise<Row
   return row
 }
 
-export function driverRoutes(guard: MiddlewareHandler<AuthEnv>) {
+/** The login a body names: any account of the company for the office, an account of its own team for a provider's (#291 slice 23b). */
+async function requireLogin(tx: Tx, principal: Principal, id: string | null | undefined): Promise<void> {
+  const providerId = providerIdOf(principal)
+  if (providerId === null) return await requireUserAccount(tx, principal.companyId, id)
+  await requireProviderAccount(tx, { companyId: principal.companyId, serviceProviderId: providerId, provider: providerNameOf(principal) }, id)
+}
+
+export function driverRoutes(guard: MiddlewareHandler<AuthEnv>, { now = () => new Date() }: ClockOptions = {}) {
   return new Hono<AuthEnv>()
     .get(
       "/drivers",
@@ -155,11 +169,11 @@ export function driverRoutes(guard: MiddlewareHandler<AuthEnv>) {
         operationId: "listDrivers",
         summary: "The drivers the caller's projects employ",
         description:
-          "One page of drivers, oldest first (ids are time-ordered), from the projects the caller works in — an account that works in none, such as a service provider's, reads an empty page. `projectId` narrows it to one of those projects; naming another is refused. `status` answers one status, `licenceClass` the drivers holding exactly that class (not the ones whose class covers it: that is the licence rule's question, asked when a vehicle is named), `homeDepotId` the drivers based at one depot. The filters combine. Hand `nextCursor` back as `cursor` for the next page.",
+          "One page of drivers, oldest first (ids are time-ordered), from the projects the caller works in — or, for a Service Provider's account, which works in none, the drivers its provider employs, wherever they are based. `projectId` narrows it to one of those projects, or for a provider's account to a project its provider holds a Service Area in today; naming another is refused. `status` answers one status, `licenceClass` the drivers holding exactly that class (not the ones whose class covers it: that is the licence rule's question, asked when a vehicle is named), `homeDepotId` the drivers based at one depot. The filters combine. Hand `nextCursor` back as `cursor` for the next page.",
         security: BEARER_SECURITY,
         responses: {
           200: describeJson("One page of drivers.", DriverPage),
-          400: describeProblem("The page size is outside 1..200, the cursor is not one this API wrote, a filter is malformed, or `projectId` is not a project this account works in."),
+          400: describeProblem("The page size is outside 1..200, the cursor is not one this API wrote, a filter is malformed, or `projectId` is not a project this account works in (for a provider's account, one its provider holds a Service Area in)."),
           401: describeProblem("No usable token (see WWW-Authenticate)."),
           403: describeProblem("No active account here, or the caller's role does not allow `view` on `fleet.drivers`."),
         },
@@ -172,7 +186,7 @@ export function driverRoutes(guard: MiddlewareHandler<AuthEnv>) {
         const after = afterCursor(cursor)
         const tx = c.get("tx")
         const principal = c.get("principal")
-        if (projectId !== undefined) requireProject(principal, projectId, "projectId", "query")
+        if (projectId !== undefined) await requireReachedProject(tx, principal, projectId, now, "projectId", "query")
         const rows = await tx
           .select(columns)
           .from(driver)
@@ -198,7 +212,7 @@ export function driverRoutes(guard: MiddlewareHandler<AuthEnv>) {
         operationId: "createDriver",
         summary: "Register a driver",
         description:
-          "Registers a workforce profile in one project, which must be a project the caller works in. The workforce reference, where given, is unique across the company; the login (`userAccountId`), where given, is a user account of this company that is not deactivated, and one account is the login of at most one driver. The employing service provider is this company's and is named with `service-provider` employment and with nothing else; the home depot is the named project's. The licence is three attributes: the class held (`b`, `c` or `ce`; null is not on record, which is eligible for nothing), the number, and the expiry as the last day it holds — whether a driver may take a vehicle on a day is judged where a vehicle is named, never here. `status` defaults to `active`. The server mints the id.",
+          "Registers a workforce profile in one project, which must be a project the caller works in. The workforce reference, where given, is unique across the company; the login (`userAccountId`), where given, is a user account of this company that is not deactivated, and one account is the login of at most one driver. The employing service provider is this company's and is named with `service-provider` employment and with nothing else; the home depot is the named project's. The licence is three attributes: the class held (`b`, `c` or `ce`; null is not on record, which is eligible for nothing), the number, and the expiry as the last day it holds — whether a driver may take a vehicle on a day is judged where a vehicle is named, never here. `status` defaults to `active`. A Service Provider's account registers its own drivers: in a project its provider holds a Service Area in today, with `service-provider` employment naming its own provider, and a login, where given, of its own team — anything else is refused at the field. The server mints the id.",
         security: BEARER_SECURITY,
         responses: {
           201: describeCreated("The driver as it was written.", Driver),
@@ -217,13 +231,14 @@ export function driverRoutes(guard: MiddlewareHandler<AuthEnv>) {
         const values = c.req.valid("json")
         const tx = c.get("tx")
         const principal = c.get("principal")
-        requireProject(principal, values.projectId)
+        await requireReachedProject(tx, principal, values.projectId, now)
+        requireOwnFleet(principal, { kind: values.employment, serviceProviderId: values.serviceProviderId }, "driver", "create")
         const within: Scope = { companyId: principal.companyId, projectId: values.projectId }
 
         // The 400s first, each at its field, in the order a body reads.
         await requireServiceProvider(tx, principal.companyId, values.serviceProviderId)
         await requireDepot(tx, within, values.homeDepotId, "homeDepotId")
-        await requireUserAccount(tx, principal.companyId, values.userAccountId)
+        await requireLogin(tx, principal, values.userAccountId)
 
         const [row] = await refuseDuplicate(collisions(values), () =>
           tx
@@ -258,7 +273,7 @@ export function driverRoutes(guard: MiddlewareHandler<AuthEnv>) {
           400: describeProblem("The path does not hold an id."),
           401: describeProblem("No usable token (see WWW-Authenticate)."),
           403: describeProblem("No active account here, or the caller's role does not allow `view` on `fleet.drivers`."),
-          404: describeProblem("No driver with that id in the projects this account works in."),
+          404: describeProblem("No driver with that id in the projects this account works in, or, for a Service Provider's account, none its provider employs."),
         },
       }),
       guard,
@@ -288,7 +303,7 @@ export function driverRoutes(guard: MiddlewareHandler<AuthEnv>) {
           ),
           401: describeProblem("No usable token (see WWW-Authenticate)."),
           403: describeProblem("No active account here, or the caller's role does not allow `edit` on `fleet.drivers`."),
-          404: describeProblem("No driver with that id in the projects this account works in."),
+          404: describeProblem("No driver with that id in the projects this account works in, or, for a Service Provider's account, none its provider employs."),
           409: describeProblem(
             "The company already has another driver with that workforce reference, that login already has a driver profile, or the driver is being set inactive or suspended under live allocations or under collection groups of schemes in force: the detail counts them.",
           ),
@@ -313,11 +328,12 @@ export function driverRoutes(guard: MiddlewareHandler<AuthEnv>) {
         const within: Scope = { companyId: principal.companyId, projectId: current.projectId }
         const merged = { ...current, ...patch }
 
-        // The provider rule as the merged row must hold it (routes/shared.ts), in the driver's words: a patch carries one half and the stored row the other.
+        // A provider's own driver stays its own; then the provider rule as the merged row must hold it (routes/shared.ts), in the driver's words: a patch carries one half and the stored row the other.
+        requireOwnFleet(principal, { kind: patch.employment, serviceProviderId: patch.serviceProviderId }, "driver", "patch")
         requireProviderShape(merged.employment, merged, PROVIDER_WITH_PROVIDER_EMPLOYMENT)
         await requireServiceProvider(tx, principal.companyId, patch.serviceProviderId)
         await requireDepot(tx, within, patch.homeDepotId, "homeDepotId")
-        await requireUserAccount(tx, principal.companyId, patch.userAccountId)
+        await requireLogin(tx, principal, patch.userAccountId)
         if (patch.status !== undefined && OUT_OF_SERVICE.includes(patch.status) && !OUT_OF_SERVICE.includes(current.status)) {
           await refuseStranded(tx, vehicleAllocation, liveAllocations(principal.companyId, id), liveAllocationsNameThis)
           await refuseStranded(tx, collectionGroup, groupsInForceNaming(tx, collectionGroup.driverId, principal.companyId, id), groupsNameThis)

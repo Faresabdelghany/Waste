@@ -21,15 +21,19 @@
 // `on-hold` waiting on us, `completed` and `rejected` are closed.
 // `TICKET_SOURCES` spells the driver as Execution spells it (`driver-app`)
 // and puts `dispatch` beside it, since a stop closed by a dispatcher's
-// cancellation is the dispatcher's word. `TICKET_RESOLUTIONS` is what a
+// cancellation is the dispatcher's word; `service-provider` is a ticket a
+// Service Provider's account raised from its workspace on a route it runs
+// (#291 slice 23b, migration 0025), which only the API writes. `TICKET_RESOLUTIONS` is what a
 // `completed` ticket ended in — a re-collection arranged, the request
 // fulfilled, information given, nothing to do, a duplicate — and a `rejected`
 // ticket has a reason and no resolution. `TICKET_EVENT_KINDS` is what a
 // history row is; there is no `edited`, since the history of a field edit is
 // the audit log's and not the domain model's (ADR-0005). `TICKET_VISIBILITIES`
-// is who may read a comment: the office, or the office and the customer the
-// ticket is about; every other kind of row is `internal`, which
-// resolution/event-shapes.ts holds. The Alert is "a condition that requires
+// is who may read a comment: the office, the office and the customer the
+// ticket is about, or the office and the Service Provider that runs the
+// ticket's route (#291 slice 23b, migration 0025) — the one thread a
+// provider's account reads, and what its own comments are; every other kind
+// of row is `internal`, which resolution/event-shapes.ts holds. The Alert is "a condition that requires
 // attention, notification, or acknowledgement and may create or link to a
 // ticket": `ALERT_KINDS` the prototype's six condition types as tokens,
 // `ALERT_SOURCES` who raised it — `manual` is the one written here; the
@@ -54,14 +58,14 @@ export const TICKET_STATUSES = ["open", "in-progress", "pending", "on-hold", "co
 export const TICKET_KINDS = ["missed-collection", "overflow", "access-issue", "container-request", "container-defect", "proof-follow-up", "complaint", "reported-problem", "rejected-command", "internal-task", "other"] as const
 /** How urgent: the prototype's five, `none` the default. */
 export const TICKET_PRIORITIES = ["critical", "high", "medium", "low", "none"] as const
-/** Where a Ticket came from: the office's doors, the driver's device as Execution spells it, the dispatcher's word, and two machines. */
-export const TICKET_SOURCES = ["office", "phone", "email", "portal", "driver-app", "dispatch", "import", "integration"] as const
+/** Where a Ticket came from: the office's doors, the driver's device as Execution spells it, the dispatcher's word, two machines, and a Service Provider's workspace. */
+export const TICKET_SOURCES = ["office", "phone", "email", "portal", "driver-app", "dispatch", "import", "integration", "service-provider"] as const
 /** What a completed Ticket ended in; a rejected one has a reason and no resolution. */
 export const TICKET_RESOLUTIONS = ["recollected", "serviced", "answered", "no-action", "duplicate"] as const
 /** What a row of a Ticket's history is; there is no `edited` (ADR-0005). */
 export const TICKET_EVENT_KINDS = ["created", "assigned", "status-changed", "comment"] as const
-/** Who may read a comment: the office, or the office and the customer. */
-export const TICKET_VISIBILITIES = ["internal", "customer"] as const
+/** Who may read a comment: the office, the office and the customer, or the office and the Service Provider running the ticket's route. */
+export const TICKET_VISIBILITIES = ["internal", "customer", "service-provider"] as const
 /** What an Alert is about: the prototype's six condition types, verbatim as tokens. */
 export const ALERT_KINDS = ["route-exception", "resource", "service-risk", "asset", "weight", "other"] as const
 /** How severe an Alert is. */

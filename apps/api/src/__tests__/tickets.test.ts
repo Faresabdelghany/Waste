@@ -358,7 +358,7 @@ describe("the ticket endpoints", { skip: database.skip || owner.skip }, () => {
     test("holds the project, the clock, the assignee, every link and the alert, each a 400 at its field", async () => {
       const errorsOf = async (values: Record<string, unknown>, call = olivia) => (await refused(await open(values, call), 400)).errors
       assert.deepEqual(await errorsOf({ projectId: a.projects.harbor.id }, viewer), [{ path: "projectId", message: "Not a project this account works in" }])
-      assert.deepEqual(await errorsOf({}, lars), [{ path: "projectId", message: "Not a project this account works in" }], "the provider's manager may create and works in no project")
+      assert.deepEqual(await errorsOf({}, lars), [{ path: "links.routeId", message: "A ticket NordRen ApS raises names a route NordRen ApS runs" }], "the provider's manager raises a ticket about a route it runs alone (#291 slice 23b), and this suite awards it none")
       assert.deepEqual(await errorsOf({ occurredAt: new Date(NOON.getTime() + 6 * 60_000).toISOString() }), [{ path: "occurredAt", message: RECORDED_AFTER_IT_HAPPENED }])
       assert.equal((await opened({ occurredAt: new Date(NOON.getTime() + 4 * 60_000).toISOString() })).occurredAt, new Date(NOON.getTime() + 4 * 60_000).toISOString(), "four minutes ahead is a clock's skew")
       assert.deepEqual(await errorsOf({ source: "driver-app" }).then((errors) => errors?.map((error) => error.path)), ["source"], "the consumer's source is not the office's")

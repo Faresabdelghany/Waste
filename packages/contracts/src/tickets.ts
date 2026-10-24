@@ -184,8 +184,10 @@ export const TicketCreate = z
     description: Paragraph,
     kind: TicketKind,
     priority: TicketPriority.default("none").describe("Defaults to none when absent."),
-    /** Never `driver-app` or `dispatch`: those are what the outbox's consumer writes. */
-    source: TicketSource.exclude(["driver-app", "dispatch"]).default("office").describe("Defaults to office when absent; driver-app and dispatch are the consumer's."),
+    /** Never `driver-app` or `dispatch`, what the outbox's consumer writes, nor `service-provider`, what the API writes for a provider's account (#291 slice 23b). */
+    source: TicketSource.exclude(["driver-app", "dispatch", "service-provider"])
+      .default("office")
+      .describe("Defaults to office when absent; driver-app and dispatch are the consumer's, and service-provider is what the API writes for a ticket a Service Provider's account raises."),
     /** When the issue or request happened; the request's clock when absent. */
     occurredAt: IsoDateTime.optional(),
     /** The due date; null for none, and the project's SLA target of the kind and priority when absent. */
@@ -279,7 +281,7 @@ export type TicketReopen = z.infer<typeof TicketReopen>
 /** `POST /tickets/:id/comments`: a note on the thread, the office's unless said to be the customer's, with an attachment's key if one was uploaded. */
 export const TicketComment = z.strictObject({
   body: Paragraph,
-  visibility: TicketVisibility.default("internal").describe("Defaults to internal when absent: the office's to read, not the customer's."),
+  visibility: TicketVisibility.default("internal").describe("Defaults to internal when absent: the office's to read, not the customer's; service-provider is the thread the office and the provider running the ticket's route read, and what a provider's comment always is."),
   /** `<companyId>/<ticketId>/<objectId>.<ext>`: the route holds the company and the ticket to the row's own, the object's id is the client's (#109 §7.23 as corrected). */
   objectKey: TicketObjectKey.optional(),
 })

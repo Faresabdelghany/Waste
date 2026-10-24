@@ -72,15 +72,20 @@
 // the reads — the list, a route's read and its device log — carry the tenant
 // and the reach (`routeReach`, auth/provider.ts): the office's projects, or,
 // for a Service Provider's account, the routes its provider serves on their
-// operating date (#291 slice 23). A provider reads the routes it runs and
-// commands none of them, so one whose role is granted `edit` finds no row —
-// the family's 404, the way a settlement's commands answer it.
+// operating date (#291 slice 23). A provider crews the routes it runs and
+// commands nothing else of them (#291 slice 23b): `assign` and `dispatch`
+// read the route through the reach, and from a provider's account `assign`
+// names only its own vehicles, trailers and drivers — never the depot or the
+// station, the office's — and `dispatch` sends a route only to its own
+// crew. Every other command finds no row for it — the family's 404, the way
+// a settlement's commands answer it.
 import { DriverCommandReceipt } from "@waste/contracts/driver-commands"
 import { Page, PageRequest } from "@waste/contracts/pagination"
 import { PickupOrderSet, RouteAssign, RouteCancel, RouteCreate, RouteDetail, RouteDispatchMany, RouteDispatchResults, RouteListItem, RouteListQuery, RouteReleaseHold, RouteReschedule, type Route, type RouteDispatchResult } from "@waste/contracts/routes"
 import type { Tx } from "@waste/db/client"
 import { collectionCalendarHoliday } from "@waste/db/schema/collection-calendars"
 import { driverCommand, pickup, route, session } from "@waste/db/schema/execution"
+import { driver, vehicle } from "@waste/db/schema/fleet"
 import { project } from "@waste/db/schema/organisation"
 import { unloadingStation, unloadingStationFraction } from "@waste/db/schema/places"
 import { routeScheme } from "@waste/db/schema/route-schemes"
@@ -101,13 +106,14 @@ import { describeRoute } from "hono-openapi"
 
 import { BEARER_SECURITY, type AuthEnv, type Principal } from "../auth/principal"
 import { requireProject } from "../auth/projects"
+import { providerIdOf, providerNameOf } from "../auth/provider"
 import { allows, requireGrant } from "../auth/require"
 import { newId } from "../ids"
 import { emit } from "../outbox"
 import { afterCursor, fetchLimit, pageOf } from "../pagination"
 import { describeProblem, invalidRequest, problem, ProblemError, validate } from "../problem"
 import { detailOf, findReachedRoute, findRoute, labelOf, noSuchRoute, pickupColumns, pickupOf, pickupsOfRoute, receiptColumns, receiptOf, routeColumns, routeReach, routeScope, routesOf, type RouteRow } from "./execution-shapes"
-import { findDriver, findVehicle, projectToday, vehicleLabel, type DriverRow, type VehicleRow } from "./fleet-lookups"
+import { findDriver, findVehicle, projectToday, vehicleLabel, type DriverRow, type OwnedBy, type VehicleRow } from "./fleet-lookups"
 import { activePlansByRoute, ensurePlan } from "./plan-shapes"
 import { QueueMissing, type JobSender } from "@waste/db/jobs"
 import { NOT_AN_UNLOADING_STATION, requireDepot, requireServiceProvider, requireUnloadingStation, type Scope } from "./references"
@@ -175,6 +181,79 @@ export async function lockedRoute(tx: Tx, principal: Principal, id: string): Pro
   const current = await findRoute(tx, principal, id)
   if (current === undefined) throw noSuchRoute(id)
   return current
+}
+
+/**
+ * The route `assign` or `dispatch` names, locked and read through the reach
+ * (#291 slice 23b): a route of the office's projects for an office account,
+ * as `lockedRoute` reads it, and for a Service Provider's account a route its
+ * provider runs — the two commands a provider crews its routes with.
+ */
+async function lockedCrewedRoute(tx: Tx, principal: Principal, id: string): Promise<RouteRow> {
+  await lockRow(tx, route, { companyId: principal.companyId, id })
+  const current = await findReachedRoute(tx, principal, id)
+  if (current === undefined) throw noSuchRoute(id)
+  return current
+}
+
+/** The provider a provider's account crews with, or undefined for an office account: what `assign`'s and `dispatch`'s fleet is held to. */
+function crewOf(principal: Principal): OwnedBy | undefined {
+  const serviceProviderId = providerIdOf(principal)
+  return serviceProviderId === null ? undefined : { serviceProviderId, provider: providerNameOf(principal) }
+}
+
+/** What a provider's `assign` naming the depot or the station is told: those are the office's to set. */
+export const officeSetsIt = (what: "depot" | "unloading station", provider: string): string => `The office sets a route's ${what}; ${provider} assigns its own vehicle, trailer and driver`
+
+/** What a provider's `assign` naming another provider, or none, as the route's planned provider is told. */
+export const plansForItself = (provider: string): string => `${provider} names itself as a route's planned provider, and no other`
+
+/** What a provider's `dispatch` of a route crewed by anyone else's fleet is told. */
+export const notYourCrew = (label: string, what: "driver" | "vehicle" | "trailer", provider: string): string => `Route ${label}'s planned ${what} is not ${provider}'s; assign one of yours first`
+
+/** What a provider's `dispatch` of a route with no truck is told: its crew is a driver and a vehicle of its own. */
+export const noPlannedVehicle = (label: string, provider: string): string => `Route ${label} has no planned vehicle; assign one of ${provider}'s first`
+
+/**
+ * A provider's `dispatch` sends a route only to its own crew (#291 slice
+ * 23b): a planned driver and a planned vehicle of its provider's, and the
+ * trailer where the route names one, or the command is refused (409) naming
+ * the first that is not — a route the provider cleared the office's truck
+ * from goes out with one of its own or not at all. One statement per table
+ * over the route's own planned ids; the planned driver is there already, as
+ * every dispatch demands.
+ */
+async function requireOwnCrew(tx: Tx, companyId: string, current: RouteRow, crew: OwnedBy): Promise<void> {
+  const label = labelOf(current)
+  if (current.plannedVehicleId === null) throw problem(409, { detail: noPlannedVehicle(label, crew.provider) })
+  if (current.plannedDriverId !== null) {
+    const [planned] = await tx
+      .select({ serviceProviderId: driver.serviceProviderId })
+      .from(driver)
+      .where(and(eq(driver.companyId, companyId), eq(driver.id, current.plannedDriverId)))
+      .limit(1)
+    if (planned?.serviceProviderId !== crew.serviceProviderId) throw problem(409, { detail: notYourCrew(label, "driver", crew.provider) })
+  }
+  const vehicles = [
+    { id: current.plannedVehicleId, what: "vehicle" as const },
+    { id: current.plannedTrailerId, what: "trailer" as const },
+  ].filter((named): named is { id: string; what: "vehicle" | "trailer" } => named.id !== null)
+  if (vehicles.length === 0) return
+  const owners = await tx
+    .select({ id: vehicle.id, serviceProviderId: vehicle.serviceProviderId })
+    .from(vehicle)
+    .where(
+      and(
+        eq(vehicle.companyId, companyId),
+        inArray(
+          vehicle.id,
+          vehicles.map((named) => named.id),
+        ),
+      ),
+    )
+  for (const named of vehicles) {
+    if (owners.find((owner) => owner.id === named.id)?.serviceProviderId !== crew.serviceProviderId) throw problem(409, { detail: notYourCrew(label, named.what, crew.provider) })
+  }
 }
 
 /**
@@ -288,17 +367,20 @@ function routeOfDetail(detail: RouteDetail): Route {
  * machine's refusal, and a route with no planned driver, are the 409.
  */
 async function dispatchRoute(tx: Tx, principal: Principal, id: string, at: Date): Promise<RouteDetail> {
-  const current = await lockedRoute(tx, principal, id)
+  // Through the reach (#291 slice 23b): a provider dispatches a route its provider runs, to its own crew alone.
+  const current = await lockedCrewedRoute(tx, principal, id)
   const transition = routeTransition(current.status as RouteStatus, "dispatch", labelOf(current))
   if (transition.kind === "refuse") throw problem(409, { detail: transition.sentence })
   if (transition.kind === "stay") return await detailOf(tx, principal.companyId, current)
   if (current.plannedDriverId === null) throw problem(409, { detail: noPlannedDriver(labelOf(current)) })
+  const crew = crewOf(principal)
+  if (crew !== undefined) await requireOwnCrew(tx, principal.companyId, current, crew)
   // The crew it goes out with is there on its day (O6 of #290): a period recorded after the assign stops the dispatch, each route of a bulk one its own.
   await refuseDispatchAway(tx, { companyId: principal.companyId, projectId: current.projectId }, { vehicleId: current.plannedVehicleId, trailerId: current.plannedTrailerId, driverId: current.plannedDriverId }, current.operatingDate)
   const [row] = await tx
     .update(route)
     .set({ status: transition.to, dispatchedAt: at, heldAt: null })
-    .where(and(routeScope(principal), eq(route.id, id)))
+    .where(and(routeReach(tx, principal), eq(route.id, id)))
     .returning(routeColumns)
   if (row === undefined) throw noSuchRoute(id)
   const detail = await detailOf(tx, principal.companyId, row)
@@ -368,15 +450,19 @@ async function requireLicenceOn(tx: Tx, scope: Scope, pair: { plannedVehicleId: 
 const ASSIGN_RULES =
   "The vehicle is a powered vehicle of the route's project, the trailer a trailer of it, the driver one of its drivers, the service provider one of this company's, the depot one of its depots, and the unloading station one of this company's that accepts at least one of the waste fractions the route's pickups carry (a route with no pickups yet names any station) — each refused (400) at its field. Where the route ends up naming both a driver and a vehicle, the driver holds the licence class the vehicle requires on the operating date, refused at `driverId` with the reason. Then, after every such 400, the statuses of what the body named afresh: a vehicle or a trailer that is not active — retired, unavailable or in maintenance, the rule a route's start holds — and an inactive or a suspended driver are refused (409) naming the row and its status, while a stored one the body did not move is not asked."
 
-const commandProblems = (action: "view" | "edit") => ({
+const commandProblems = (action: "view" | "edit" | "crew") => ({
   401: describeProblem("No usable token (see WWW-Authenticate)."),
-  403: describeProblem(`No active account here, or the caller's role does not allow \`${action}\` on \`${MODULE}\`.`),
+  403: describeProblem(`No active account here, or the caller's role does not allow \`${action === "view" ? "view" : "edit"}\` on \`${MODULE}\`.`),
   404: describeProblem(
-    action === "view"
-      ? "No route with that id in the projects this account works in, or, for a Service Provider's account, none its provider runs."
-      : "No route with that id in the projects this account works in: a Service Provider's account reads the routes it runs and commands none of them.",
+    action === "edit"
+      ? "No route with that id in the projects this account works in: a Service Provider's account reads the routes it runs and crews them through `assign` and `dispatch` alone."
+      : "No route with that id in the projects this account works in, or, for a Service Provider's account, none its provider runs.",
   ),
 })
+
+/** What a provider's `assign` is held to, spelled once for its description. */
+const PROVIDER_ASSIGN =
+  "A Service Provider's account assigns on a route its provider runs (as `GET /routes` reaches it), and changes it to its own fleet alone: a vehicle and a trailer its provider owns and a driver it employs, of the route's project — another is refused (400) at its field, `Not a vehicle of NordRen ApS` — and never the depot or the unloading station, which are the office's to set, nor another provider as the route's planned provider (400 at the field); a field it restates as the route stands changes nothing and is not refused."
 
 export function routeRoutes(guard: MiddlewareHandler<AuthEnv>, { now = () => new Date(), routing, jobs }: ClockOptions & { routing: RoutingIdentity; jobs: JobSender }) {
   return new Hono<AuthEnv>()
@@ -518,6 +604,8 @@ export function routeRoutes(guard: MiddlewareHandler<AuthEnv>, { now = () => new
           "The `assign` command: moves the planned vehicle, driver, trailer, service provider, depot or unloading station of a route that has not started, any of them cleared with null; at least one field must be given. Under the route's row lock. A `planned` route stays `planned` and a `ready` one stays `ready` — a route already running is refused (409): the session's driver and vehicle are its actual assignment, and a swap mid-route is a Ticket's outcome later; a completed or cancelled route does not change. A `ready` route keeps a driver: it was dispatched to one, and a dispatched route without a driver would reach no device, so clearing `driverId` on it is refused (409, `Route RC-1042 is dispatched; assign another driver or cancel it`) where moving it to another driver is not. " +
           ASSIGN_RULES +
           " A vehicle or trailer out of use, or a driver absent, on the operating date (O6 of #290) is refused (409) naming the period, after the statuses and for what the body names afresh alone. " +
+          PROVIDER_ASSIGN +
+          " " +
           HOLDS +
           " The `route-reassigned` event is written in the same transaction when the driver, the vehicle or the service provider moved, carrying the route as answered here.",
         security: BEARER_SECURITY,
@@ -526,7 +614,7 @@ export function routeRoutes(guard: MiddlewareHandler<AuthEnv>, { now = () => new
           400: describeProblem(
             "The path does not hold an id, or the body changes nothing, names a member the command does not take, or names a vehicle, trailer, driver, service provider, depot or station the rules above refuse — each at the field that is wrong.",
           ),
-          ...commandProblems("edit"),
+          ...commandProblems("crew"),
           409: describeProblem("The route is active, completed or cancelled, the body clears the driver of a ready route, or a vehicle or trailer named afresh is not active or is out of use on the operating date, or a driver named afresh is inactive, suspended or absent on it; the detail says which."),
         },
       }),
@@ -539,9 +627,10 @@ export function routeRoutes(guard: MiddlewareHandler<AuthEnv>, { now = () => new
         const body = c.req.valid("json")
         const tx = c.get("tx")
         const principal = c.get("principal")
-        const current = await lockedRoute(tx, principal, id)
+        const current = await lockedCrewedRoute(tx, principal, id)
         requireNotStarted(current, ASSIGNMENT_IS_THE_SESSIONS)
         const scope: Scope = { companyId: principal.companyId, projectId: current.projectId }
+        const crew = crewOf(principal)
         // The assignment the command leaves behind: the body's fields where given, the stored ones where not; a null given clears.
         const after: Assignment = {
           plannedVehicleId: body.vehicleId === undefined ? current.plannedVehicleId : body.vehicleId,
@@ -555,10 +644,31 @@ export function routeRoutes(guard: MiddlewareHandler<AuthEnv>, { now = () => new
         // The route's own state, judged with `requireNotStarted` before the body's references: a dispatched route keeps a driver (dispatch demanded one), so clearing it is refused where moving it is not.
         if (current.status === "ready" && moved.driver && after.plannedDriverId === null) throw problem(409, { detail: dispatchedNeedsADriver(labelOf(current)) })
 
-        // The 400s in body order: what is named afresh is the project's and of its kind, then the pair's licence on the operating date — over the rows just read where the body named them — then the places.
-        const vehicle = moved.vehicle && after.plannedVehicleId !== null ? await findVehicle(tx, scope, after.plannedVehicleId, "powered-vehicle", "vehicleId") : null
-        const driver = moved.driver && after.plannedDriverId !== null ? await findDriver(tx, scope, after.plannedDriverId, "driverId") : null
-        const trailer = moved.trailer && after.plannedTrailerId !== null ? await findVehicle(tx, scope, after.plannedTrailerId, "trailer", "trailerId") : null
+        // A provider's account names its own fleet and nothing of the office's: a depot or a station it would change is refused at its field, together; a field it restates as it stands names nothing new.
+        const changes = {
+          vehicle: after.plannedVehicleId !== current.plannedVehicleId,
+          driver: after.plannedDriverId !== current.plannedDriverId,
+          trailer: after.plannedTrailerId !== current.plannedTrailerId,
+          provider: after.plannedServiceProviderId !== current.plannedServiceProviderId,
+          depot: after.depotId !== current.depotId,
+          station: after.unloadingStationId !== current.unloadingStationId,
+        }
+        // The route's planned provider, too, it changes to itself alone.
+        const elsewhere = crew !== undefined && changes.provider && after.plannedServiceProviderId !== crew.serviceProviderId
+        if (crew !== undefined && (elsewhere || changes.depot || changes.station)) {
+          throw invalidRequest("body", [
+            ...(elsewhere ? [{ path: "serviceProviderId", message: plansForItself(crew.provider) }] : []),
+            ...(changes.depot ? [{ path: "depotId", message: officeSetsIt("depot", crew.provider) }] : []),
+            ...(changes.station ? [{ path: "unloadingStationId", message: officeSetsIt("unloading station", crew.provider) }] : []),
+          ])
+        }
+        // From a provider's account, a row it changes the route to is its own.
+        const ownedIf = (changed: boolean) => (changed ? crew : undefined)
+
+        // The 400s in body order: what is named afresh is the project's and of its kind — and, from a provider's account, its own — then the pair's licence on the operating date — over the rows just read where the body named them — then the places.
+        const vehicle = moved.vehicle && after.plannedVehicleId !== null ? await findVehicle(tx, scope, after.plannedVehicleId, "powered-vehicle", "vehicleId", ownedIf(changes.vehicle)) : null
+        const driver = moved.driver && after.plannedDriverId !== null ? await findDriver(tx, scope, after.plannedDriverId, "driverId", ownedIf(changes.driver)) : null
+        const trailer = moved.trailer && after.plannedTrailerId !== null ? await findVehicle(tx, scope, after.plannedTrailerId, "trailer", "trailerId", ownedIf(changes.trailer)) : null
         if (moved.vehicle || moved.driver) await requireLicenceOn(tx, scope, after, current.operatingDate, "driverId", { vehicle: vehicle ?? undefined, driver: driver ?? undefined })
         if (moved.provider && after.plannedServiceProviderId !== null) await requireServiceProvider(tx, principal.companyId, after.plannedServiceProviderId, "serviceProviderId")
         if (moved.depot) await requireDepot(tx, scope, after.depotId)
@@ -575,7 +685,7 @@ export function routeRoutes(guard: MiddlewareHandler<AuthEnv>, { now = () => new
         const [row] = await tx
           .update(route)
           .set({ ...after, ...holdOf(current, changed, at) })
-          .where(and(routeScope(principal), eq(route.id, id)))
+          .where(and(routeReach(tx, principal), eq(route.id, id)))
           .returning(routeColumns)
         if (row === undefined) throw noSuchRoute(id)
         const detail = await detailOf(tx, principal.companyId, row)
@@ -591,7 +701,7 @@ export function routeRoutes(guard: MiddlewareHandler<AuthEnv>, { now = () => new
         operationId: "dispatchRoutes",
         summary: "Dispatch a day of routes, or a selection",
         description:
-          "The `dispatch` command over many routes at once (O5 of #290): the body names one to fifty routes — a day's, or a selection of them; a larger day goes in several requests, since each route is a savepoint of the request's transaction — and each is judged exactly as `POST /routes/{id}/dispatch` judges it, in a savepoint of its own under its own row lock: `planned` becomes `ready` with `dispatchedAt` stamped and its hold cleared, and `route-dispatched` is written for it; a route already `ready` is answered as it stands; a route with no planned driver, one whose planned crew is away on its day (O6 of #290: a driver absent, a vehicle or trailer out of use), an active, completed or cancelled one, and an id that is not a route of the caller's projects are refused, each on its own, and leave the others to go ahead. The answer is one result per id, in the body's order: `dispatched` with the route as it now stands, or `refused` with the status (404 or 409) and the sentence its own dispatch would have answered. The routes are locked first, in one statement in id order whatever the body's — the order a generation run locks a scheme's routes in — so a bulk dispatch and a run, or two bulk dispatches, over the same routes never wait on each other's second row. 200 whenever the body is well-formed, however many were refused.",
+          "The `dispatch` command over many routes at once (O5 of #290): the body names one to fifty routes — a day's, or a selection of them; a larger day goes in several requests, since each route is a savepoint of the request's transaction — and each is judged exactly as `POST /routes/{id}/dispatch` judges it, in a savepoint of its own under its own row lock: `planned` becomes `ready` with `dispatchedAt` stamped and its hold cleared, and `route-dispatched` is written for it; a route already `ready` is answered as it stands; a route with no planned driver, one whose planned crew is away on its day (O6 of #290: a driver absent, a vehicle or trailer out of use), an active, completed or cancelled one, and an id that is not a route of the caller's projects — for a Service Provider's account, a route its provider does not run, or one crewed by anyone else's fleet — are refused, each on its own, and leave the others to go ahead. The answer is one result per id, in the body's order: `dispatched` with the route as it now stands, or `refused` with the status (404 or 409) and the sentence its own dispatch would have answered. The routes are locked first, in one statement in id order whatever the body's — the order a generation run locks a scheme's routes in — so a bulk dispatch and a run, or two bulk dispatches, over the same routes never wait on each other's second row. 200 whenever the body is well-formed, however many were refused.",
         security: BEARER_SECURITY,
         responses: {
           200: describeJson("One result per route, in the body's order: dispatched with the route, or refused with the status and why.", RouteDispatchResults),
@@ -631,13 +741,13 @@ export function routeRoutes(guard: MiddlewareHandler<AuthEnv>, { now = () => new
         operationId: "dispatchRoute",
         summary: "Dispatch a route to its driver",
         description:
-          "The `dispatch` command: `planned` becomes `ready`, `dispatchedAt` is stamped, and the route is frozen against regeneration (#97's rule) and reaches its driver's device; a hold `assign` or `reschedule` put on it (`heldAt`) is cleared, since the route is now frozen whole. A route without a planned driver is refused (409): the driver door's scope is the assignment, so a route without one reaches nobody — assign one first. A planned driver absent, or a planned vehicle or trailer out of use, on the operating date (O6 of #290) — a period recorded after the assign — is refused (409) naming the period: the route goes out with a crew that is there. A route already `ready` answers 200 as it stands, without a write; an active one is refused, and a completed or cancelled one does not change. Takes no body. Under the route's row lock; the `route-dispatched` event is written in the same transaction, carrying the route as answered here.",
+          "The `dispatch` command: `planned` becomes `ready`, `dispatchedAt` is stamped, and the route is frozen against regeneration (#97's rule) and reaches its driver's device; a hold `assign` or `reschedule` put on it (`heldAt`) is cleared, since the route is now frozen whole. A route without a planned driver is refused (409): the driver door's scope is the assignment, so a route without one reaches nobody — assign one first. A planned driver absent, or a planned vehicle or trailer out of use, on the operating date (O6 of #290) — a period recorded after the assign — is refused (409) naming the period: the route goes out with a crew that is there. A Service Provider's account dispatches a route its provider runs (as `GET /routes` reaches it) to its own crew alone: a planned driver and a planned vehicle of its provider's, and the trailer where named, or the command is refused (409, `Route RC-1042's planned driver is not NordRen ApS's; assign one of yours first`). A route already `ready` answers 200 as it stands, without a write; an active one is refused, and a completed or cancelled one does not change. Takes no body. Under the route's row lock; the `route-dispatched` event is written in the same transaction, carrying the route as answered here.",
         security: BEARER_SECURITY,
         responses: {
           200: describeJson("The route, dispatched.", RouteDetail),
           400: describeProblem("The path does not hold an id."),
-          ...commandProblems("edit"),
-          409: describeProblem("The route has no planned driver, its planned driver is absent or its planned vehicle or trailer out of use on the operating date, it is already active, or it is completed or cancelled; the detail says which."),
+          ...commandProblems("crew"),
+          409: describeProblem("The route has no planned driver, its planned driver is absent or its planned vehicle or trailer out of use on the operating date, it is already active, or it is completed or cancelled, or — from a provider's account — its planned driver, vehicle or trailer is not the provider's; the detail says which."),
         },
       }),
       guard,

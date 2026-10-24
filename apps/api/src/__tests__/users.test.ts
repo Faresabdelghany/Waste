@@ -6,7 +6,7 @@ import { User } from "@waste/contracts/access"
 import { Id } from "@waste/contracts/ids"
 import { Page } from "@waste/contracts/pagination"
 import { createDb, type Database } from "@waste/db/client"
-import { projectAccess, serviceProviderAccess, userAccount } from "@waste/db/schema/access"
+import { projectAccess, roleGrant, serviceProviderAccess, userAccount } from "@waste/db/schema/access"
 import { company } from "@waste/db/schema/organisation"
 import { withCompany } from "@waste/db/tenant"
 import { and, eq } from "drizzle-orm"
@@ -181,9 +181,18 @@ describe("the user endpoints", { skip: database.skip }, () => {
 
     test("lets a role with configure.access view list, refuses one without the module, and refuses no token at all", async () => {
       assert.equal((await viewer("/users")).status, 200, "the custom viewer may look")
-      const refused = await lars("/users")
+      // A Service Provider's account reads under its own team's module (#291 slice 23b): its own provider's accounts alone.
+      const his = await lars("/users?limit=200")
+      assert.equal(his.status, 200)
+      const listed = (await his.json()) as { items: { serviceProviderId: string | null }[] }
+      assert.ok(listed.items.length > 0 && listed.items.every((user) => user.serviceProviderId === a.serviceProviders.nordren.id))
+      // Without that module — the third company's manager, its grant taken away — it is refused in the module's name.
+      await withCompany(pool.db, c.companyId, async (tx) => {
+        await tx.delete(roleGrant).where(and(eq(roleGrant.companyId, c.companyId), eq(roleGrant.roleId, c.roles.providerManager.id), eq(roleGrant.moduleKey, "service-providers.service-provider-workspace")))
+      })
+      const refused = await callingAs(app, keys, c.users.lars, c.companyId)("/users")
       assert.equal(refused.status, 403)
-      assert.match((await readProblem(refused)).detail ?? "", /view on configure\.access/)
+      assert.match((await readProblem(refused)).detail ?? "", /view on service-providers\.service-provider-workspace/)
       assert.equal((await app.request("/users")).status, 401)
     })
   })
@@ -319,7 +328,10 @@ describe("the user endpoints", { skip: database.skip }, () => {
       const refused = await viewer("/users", { method: "POST", body })
       assert.equal(refused.status, 403)
       assert.match((await readProblem(refused)).detail ?? "", /create on configure\.access/)
-      assert.equal((await lars("/users", { method: "POST", body })).status, 403)
+      // A provider's manager invites under its team's module, into its own team on a provider's role alone (#291 slice 23b): this body is the office's, refused at its fields.
+      const provider = await lars("/users", { method: "POST", body })
+      assert.equal(provider.status, 400)
+      assert.deepEqual((await readProblem(provider)).errors?.map((error) => error.path), ["roleId"])
     })
   })
 

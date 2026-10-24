@@ -490,7 +490,7 @@ describe("the comment and the detail read", () => {
     assert.ok(TicketComment.safeParse(internal).success)
     assert.deepEqual(comment?.toBody?.({ body: "We come back tomorrow", visibility: "customer" }, record, context()), { body: "We come back tomorrow", visibility: "customer" })
     assert.deepEqual(comment?.toBody?.({ body: " " }, record, context()), { path: "body", message: "Write the comment" })
-    assert.deepEqual(comment?.toBody?.({ body: "x", visibility: "sms" }, record, context()), { path: "visibility", message: "A comment is internal or customer" })
+    assert.deepEqual(comment?.toBody?.({ body: "x", visibility: "sms" }, record, context()), { path: "visibility", message: "A comment is internal, customer or service-provider" })
 
     const { fetch, calls } = scripted([() => json(event, 201)])
     const outcome = await actOnRecord<TicketEvent>(clientOver(fetch), ticketsModule, current, record, COMMENT_ON_TICKET, { body: "Called the caretaker" }, options)

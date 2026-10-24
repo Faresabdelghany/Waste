@@ -97,12 +97,15 @@ describe("the seeded system roles", () => {
     assert.deepEqual(actionsOn("operations-manager"), ["view", "edit"])
   })
 
-  test("every role that may move a route may make one: edit on route-studio.routes comes with create, the ad-hoc route being a dispatcher's daily job (#111)", () => {
+  test("every office role that may move a route may make one: edit on route-studio.routes comes with create, the ad-hoc route being a dispatcher's daily job (#111); the provider's manager crews the routes it runs and makes none (#291 slice 23b)", () => {
     const routes = (key: string) => SYSTEM_ROLES.find((role) => role.key === key)?.grants.find((grant) => grant.moduleKey === "route-studio.routes")?.actions ?? []
     const editors = SYSTEM_ROLES.filter((role) => routes(role.key).includes("edit")).map((role) => role.key)
-    assert.deepEqual(editors, ["company-administrator", "operations-manager", "dispatcher", "route-planner"])
-    for (const key of editors) assert.ok(routes(key).includes("create"), key)
+    assert.deepEqual(editors, ["company-administrator", "operations-manager", "dispatcher", "route-planner", "service-provider-manager"])
+    for (const key of editors.filter((editor) => editor !== "service-provider-manager")) assert.ok(routes(key).includes("create"), key)
     assert.deepEqual([...routes("dispatcher")], ["view", "edit", "create"], "and nothing more: a dispatcher deletes no route")
+    // `edit` reaches `assign` and `dispatch` alone from a provider's account (apps/api/src/routes/routes.ts); an ad-hoc route names a project, and a provider works in none.
+    assert.deepEqual([...routes("service-provider-manager")], ["view", "edit"])
+    assert.deepEqual([...routes("service-provider-foreman")], ["view"], "the foreman reads the routes and crews none")
   })
 
   test("a system role's scope and permissions are its charter's, which every seed restores: each sentence names the role, as the tenant calls it, and the way out (#291)", () => {
