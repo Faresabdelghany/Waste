@@ -45,15 +45,16 @@ import { weightsModule } from "./weights"
  * with; the fleet after the master data (a vehicle's type and fractions),
  * the access module (a driver's login) and the depots (a home base) (#180);
  * the properties after the customers their parties name, and the groups and
- * the shared points after the properties they gather (#184); the agreements
- * after the customers they name and the places their subscriptions are
- * delivered at, and before the placements that name their subscriptions
- * (#183); the containers after the master data
- * and the warehouses they name, the ledger after the containers its movements
- * name, and the allocations after the fleet and the places they reserve (#181);
- * the Price Engine's catalogue, which names no route: the products after the
- * master data, and the price lists and their rows after the products, the
- * customers and the planning areas their conditions name (#185);
+ * the shared points after the properties they gather (#184); the Price
+ * Engine's catalogue, which names no route: the products after the master
+ * data, and the price lists and their rows after the products, the customers
+ * and the planning areas their conditions name (#185); the agreements after
+ * the customers they name, the price lists they are priced under and the
+ * products and places their subscriptions deliver (#291), and before the
+ * placements that name their subscriptions (#183); the containers after the
+ * master data and the warehouses they name, the ledger after the containers
+ * its movements name, and the allocations after the fleet and the places they
+ * reserve (#181);
  * the route schemes after everything a scheme and its groups name — the
  * areas, the master data, the providers, the fleet and the places — so none
  * of it is left an id chip on a scheme (#177); then the Live board, today's
@@ -82,12 +83,12 @@ export const SERVER_MODULES: readonly ServerModule[] = [
   propertiesModule,
   propertyGroupsModule,
   sharedPointsModule,
+  productsModule,
+  priceRowsModule,
   agreementsModule,
   containersModule,
   inventoryModule,
   vehiclePlanningModule,
-  productsModule,
-  priceRowsModule,
   serviceAreasModule,
   providerPricesModule,
   routeSchemesModule,

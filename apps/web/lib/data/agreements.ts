@@ -14,18 +14,21 @@
 // session, before the API has answered (`recordKind`, adapter.ts `ofKind`).
 //
 // The agreement's form is the registry's own (business-form-schemas-customers-
-// resources.ts). The subscription's is here, the module's second form: an
-// agreement fixed to the row the person chose "Add subscription" on, a
-// product and a place, a quantity and a period. The place is picked from its
-// switched module (`customers.properties`, `customers.shared`, slice 9b); the
-// product's module (`commercial.products`, slice 10) is not switched yet, so
-// a subscription names it as an id chip — `product-<uuid>`, or the bare id —
-// the way #126 has an unswitched link read, until that slice lands, and
-// `referencedId` is the one reading of a chip.
+// resources.ts), trimmed on the API to what the wire takes, its price list
+// picked from the lists of `commercial.price-rows` in the agreement's
+// project and currency (#291). The subscription's is here, the module's
+// second form: an agreement fixed to the row the person chose "Add
+// subscription" on, a product and a place, a quantity and a period, each
+// picked from its switched module (`commercial.products`, slice 10;
+// `customers.properties`, `customers.shared`, slice 9b) among the rows of the
+// agreement's project. A row the store does not hold is still named by an id
+// chip — `product-<uuid>`, or the bare id — and `referencedId` is the one
+// reading of a chip.
 import { ofKind } from "@/lib/api/records/adapter"
 
-import type { BusinessFormField, BusinessFormSchema, BusinessFormValues } from "./business-form-types"
+import type { BusinessFormField, BusinessFormOption, BusinessFormSchema, BusinessFormValues } from "./business-form-types"
 import type { BusinessRecord, ModuleLocation } from "./business-modules"
+import { isPriceListRecord, PRICE_ROWS_MODULE, PRODUCTS_MODULE } from "./commercial"
 
 /** Where the agreements live — the one seam callers resolve the module through. */
 export const AGREEMENTS_MODULE: ModuleLocation = { workspaceId: "customers", moduleId: "agreements" }
@@ -38,7 +41,7 @@ export const SUBSCRIPTION_PREFIX = "subscription"
 export const AGREEMENT_RECORD_KIND = "Agreement"
 export const SUBSCRIPTION_RECORD_KIND = "Subscription"
 
-/** The id prefixes the chips of the modules not yet switched carry: the fixtures' own, so a fixture row and a chip read alike. */
+/** The id prefixes a row of another module carries, and its chip while the store does not hold it: the fixtures' own, so a fixture row and a chip read alike. */
 export const PRODUCT_PREFIX = "product"
 export const PROPERTY_PREFIX = "property"
 export const SHARED_POINT_PREFIX = "shared-point"
@@ -75,31 +78,74 @@ export const ONE_PLACE = "Give exactly one of propertyId and sharedCollectionPoi
 /**
  * The agreement form's fields the wire has no home for: the prototype's
  * source and template, the place and the initial subscription (a subscription
- * is a row of its own on the API, added under a saved agreement), the
- * container (a placement's, Resources') and the price list, whose options
- * are the fixtures' names until #185 switches the price lists.
+ * is a row of its own on the API, added under a saved agreement) and the
+ * container (a placement's, Resources').
  */
-const FIXTURE_ONLY_AGREEMENT_FIELDS: ReadonlySet<string> = new Set(["source", "agreementTemplate", "propertyId", "propertyGroupId", "sharedPointId", "productId", "priceListId", "containerId"])
+const FIXTURE_ONLY_AGREEMENT_FIELDS: ReadonlySet<string> = new Set(["source", "agreementTemplate", "propertyId", "propertyGroupId", "sharedPointId", "productId", "containerId"])
 
-/** What the section that held the initial subscription is called once only the notes remain. */
+/** What the section that held the initial subscription is called once the price list and the notes alone remain. */
 const NOTES_SECTION = "initial-service"
+
+/** The price list option that is no list at all: the wire's null, the project's default list (#291). A select is never emptied once picked, so the default is a pick of its own. */
+export const PROJECT_DEFAULT_LIST = "project-default"
+
+/** The agreement's price list on the API (#291): one of the lists of `commercial.price-rows`, where the fixture form tags the fixtures' names. */
+const PRICE_LIST_ON_API: BusinessFormField = {
+  id: "priceListId",
+  label: "Price list",
+  type: "select",
+  relation: PRICE_ROWS_MODULE,
+  defaultValue: PROJECT_DEFAULT_LIST,
+  description: "The list the agreement's work is priced under: one of the project's, in the agreement's currency.",
+}
 
 /**
  * The registry's agreement form as the API takes it: the fields above gone,
- * a section that lost fields losing the words that were about them, and the
- * one left holding the notes alone called so. Fixture mode keeps the
- * registry's form whole.
+ * the price list the API's, a section that lost fields losing the words that
+ * were about them, and the one left holding the price list and the notes
+ * called so. Fixture mode keeps the registry's form whole.
  */
 export function agreementFormSchemaOnApi(schema: BusinessFormSchema): BusinessFormSchema {
   return {
     ...schema,
     sections: schema.sections.flatMap((section) => {
-      const fields = section.fields.filter((field) => !FIXTURE_ONLY_AGREEMENT_FIELDS.has(field.id))
+      const fields = section.fields.filter((field) => !FIXTURE_ONLY_AGREEMENT_FIELDS.has(field.id)).map((field) => (field.id === PRICE_LIST_ON_API.id ? PRICE_LIST_ON_API : field))
       if (fields.length === 0) return []
-      if (fields.length === section.fields.length) return [section]
-      return [{ id: section.id, title: section.id === NOTES_SECTION ? "Notes" : section.title, fields }]
+      if (fields.length === section.fields.length) return [{ ...section, fields }]
+      return [{ id: section.id, title: section.id === NOTES_SECTION ? "Price list and notes" : section.title, fields }]
     }),
   }
+}
+
+/** A row's name as a picker offers it: its status beside it where it is not Active (#79: a status gates a new reference, and the API's 409 says so). */
+const optionOf = (record: BusinessRecord): BusinessFormOption => ({ value: record.id, label: record.status === "Active" ? record.name : `${record.name} · ${record.status}` })
+
+const valueOf = (values: BusinessFormValues, key: string) => (typeof values[key] === "string" && values[key] !== "" ? (values[key] as string) : undefined)
+
+/**
+ * The price lists an agreement may be priced under, from the rows of
+ * `commercial.price-rows`: the lists alone, of the project the form names, in
+ * the currency it bills in — the API refuses another project's list and a list
+ * in another currency (400 on `priceListId`) — after the project's default
+ * list, which is no list at all; none but the default until a project is
+ * picked. The list the form already names stays offered where none of these
+ * is it — a role that reads no price lists edits its agreements all the same
+ * — named by its id chip, as the agreement's fact is, and a list the API
+ * would refuse comes back as its sentence.
+ */
+export function agreementPriceListOptions(records: readonly BusinessRecord[], values: BusinessFormValues): BusinessFormOption[] {
+  const project = valueOf(values, "projectId")
+  const currency = valueOf(values, "currency")
+  const lists = project === undefined ? [] : records.filter((record) => isPriceListRecord(record) && record.projectIds?.includes(project) === true && record.submittedValues?.currency === currency)
+  const options = [{ value: PROJECT_DEFAULT_LIST, label: "The project's default list" }, ...lists.map(optionOf)]
+  const current = valueOf(values, "priceListId")
+  return current === undefined || options.some((option) => option.value === current) ? options : [...options, { value: current, label: current }]
+}
+
+/** The products a subscription may name: its agreement's project's (`subscriptionInitialValues`), or every project's where it names none. */
+export function subscriptionProductOptions(records: readonly BusinessRecord[], values: BusinessFormValues): BusinessFormOption[] {
+  const project = valueOf(values, "projectId")
+  return records.filter((record) => project === undefined || !record.projectIds?.length || record.projectIds.includes(project)).map(optionOf)
 }
 
 // ---------------------------------------------------------------------------
@@ -114,8 +160,8 @@ const PLACE_KINDS = [
 
 /**
  * The create form, opened from an agreement's "Add subscription": the
- * agreement read-only, since it is the row the person chose, the product as
- * the API's id until its module is switched, and the place picked.
+ * agreement read-only, since it is the row the person chose, and the product
+ * and the place picked.
  */
 export const subscriptionFormSchema: BusinessFormSchema = {
   key: `${AGREEMENTS_MODULE.workspaceId}.${AGREEMENTS_MODULE.moduleId}`,
@@ -131,7 +177,7 @@ export const subscriptionFormSchema: BusinessFormSchema = {
       title: "Subscription",
       fields: [
         { id: "agreementId", label: "Agreement", type: "select", required: true, readOnly: true, relation: AGREEMENTS_MODULE },
-        { id: "productId", label: "Product", type: "text", required: true, placeholder: "The product's id on the API", description: "Only an active product can be subscribed to. Until the products are on the API here, give the product's id." },
+        { id: "productId", label: "Product", type: "select", required: true, relation: PRODUCTS_MODULE, description: "Only an active product can be subscribed to." },
         // One place, its kind chosen first: the other kind's picker is hidden, and a hidden field is not submitted, so a pick is taken back by choosing the other kind.
         { id: "placeKind", label: "Delivered at", type: "select", required: true, defaultValue: "property", options: PLACE_KINDS, description: "A subscription is delivered at one place: a property or a shared collection point." },
         // The places' modules by location: lib/data/properties.ts spells them, and imports this module.
@@ -146,10 +192,39 @@ export const subscriptionFormSchema: BusinessFormSchema = {
   execution: { kind: "create-record", initialStatus: "Active", completionMessage: "Subscription added." },
 }
 
-/** The place's field on the edit form: shown, not picked — a read-only picker would still be held to the rows its module offers, and an edit refused while that module is not ready. */
-function shownPlace(field: BusinessFormField): BusinessFormField {
-  const shown: BusinessFormField = { ...field, type: "text", readOnly: true }
+/**
+ * The create form as the person's role allows: the product picked where the
+ * role reads the products, and given by its id where it reads none — a
+ * picker over a module the store never reads would offer nothing — the API
+ * holding the product to the agreement's project and an active status either
+ * way.
+ */
+export function subscriptionFormSchemaFor(productsViewed: boolean): BusinessFormSchema {
+  if (productsViewed) return subscriptionFormSchema
+  return {
+    ...subscriptionFormSchema,
+    sections: subscriptionFormSchema.sections.map((section) => ({
+      ...section,
+      fields: section.fields.map((field) => {
+        if (field.id !== "productId") return field
+        const byId: BusinessFormField = { ...field, type: "text", placeholder: "The product's id on the API", description: "Your role reads no products here: give the product's id. Only an active product can be subscribed to." }
+        delete byId.relation
+        return byId
+      }),
+    })),
+  }
+}
+
+/** The fields the edit form shows by name in place of a picker, under the record's key for the name (lib/api/records/agreements.ts). */
+const SHOWN_BY_NAME: Readonly<Record<string, string>> = { productId: "productName", propertyId: "propertyName", sharedPointId: "sharedPointName" }
+
+/** A picked row on the edit form: shown by its name, not picked — a read-only picker would still be held to the rows its module offers, and an edit refused while that module is not ready. */
+function shownByName(field: BusinessFormField, id: string): BusinessFormField {
+  const shown: BusinessFormField = { ...field, id, type: "text", readOnly: true }
   delete shown.relation
+  delete shown.required
+  delete shown.requiredWhen
+  delete shown.description
   return shown
 }
 
@@ -162,22 +237,25 @@ export const subscriptionEditSchema: BusinessFormSchema = {
   sections: subscriptionFormSchema.sections.map((section) => ({
     ...section,
     fields: section.fields.map((field) => {
-      if (field.id === "propertyId" || field.id === "sharedPointId") return shownPlace(field)
-      return ["agreementId", "productId", "placeKind"].includes(field.id) ? { ...field, readOnly: true } : field
+      const shown = SHOWN_BY_NAME[field.id]
+      if (shown !== undefined) return shownByName(field, shown)
+      return ["agreementId", "placeKind"].includes(field.id) ? { ...field, readOnly: true } : field
     }),
   })),
 }
 
-/** The values a new subscription opens with: under its agreement, for the agreement's own period, since the API holds it inside that. */
+/** The values a new subscription opens with: under its agreement, in its project — so the pickers offer that project's products and places, a row of another being one the API refuses — for the agreement's own period, since the API holds it inside that. */
 export function subscriptionInitialValues(agreement: BusinessRecord): BusinessFormValues {
   const day = (key: string) => {
     const value = agreement.submittedValues?.[key]
     return typeof value === "string" && value.trim() !== "" ? value : undefined
   }
+  const projectId = agreement.projectIds?.[0]
   const validFrom = day("effectiveFrom")
   const validTo = day("effectiveTo")
   return {
     agreementId: agreement.id,
+    ...(projectId === undefined ? {} : { projectId }),
     ...(validFrom === undefined ? {} : { validFrom }),
     ...(validTo === undefined ? {} : { validTo }),
   }

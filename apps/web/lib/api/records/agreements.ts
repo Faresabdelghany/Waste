@@ -15,16 +15,18 @@
 // spells a move to Cancelled and refuses the lifecycle's Pending, Expiring,
 // Expired and Terminated before the API sees them: those are readings of the
 // period (ADR-0005), and the end of an agreement is its `validTo`, never a
-// delete. The transitions a row offers follow its wire status.
+// delete. The transitions a row offers follow its wire status. Its price list
+// is a list of `commercial.price-rows`, read before this module (#291): the
+// list's web id on the record, `PROJECT_DEFAULT_LIST` for the wire's null.
 //
 // A subscription names its product and its place — a property or a shared
-// collection point, one of the two — as id chips until their modules are
-// switched (slices 10 and 9b): `product-<uuid>` on the record, and on a
-// write the store's resolver first, then the chip's or a bare id
-// (`referencedId`), so the fields become pickers as the modules land without
-// a change here. No status is on the wire, so every move is refused; the
-// record's status is a reading of its period on the project's day (Pending,
-// Active, Expired), the same day the planning areas are read on.
+// collection point, one of the two — by the rows of their switched modules
+// (slices 10 and 9b), read before this one: the web id on the record, the
+// name beside it for the edit form to show, and on a write the store's
+// resolver first, then a chip's or a bare id (`referencedId`) for a row the
+// store does not hold. No status is on the wire, so every move is refused;
+// the record's status is a reading of its period on the project's day
+// (Pending, Active, Expired), the same day the planning areas are read on.
 //
 // #79's gates are the API's: an inactive customer or payer on an agreement,
 // a draft product or an unserved place on a subscription come back as the
@@ -55,6 +57,7 @@ import {
   ONE_PLACE,
   PRICE_LIST_PREFIX,
   PRODUCT_PREFIX,
+  PROJECT_DEFAULT_LIST,
   PROPERTY_PREFIX,
   referencedId,
   SHARED_POINT_PREFIX,
@@ -112,6 +115,16 @@ const chipServerId = (value: string | undefined, prefix: string, context: Mappin
 /** The customer a party field names, as the server's id: the store's row, else the chip an unresolved row was shown as. */
 const partyServerId = (record: BusinessRecord, key: string, context: MappingContext) => chipServerId(typed(record, key), "customer", context)
 
+/** What a price list the store does not hold is refused with. */
+export const PRICE_LIST_REFUSAL = "Pick a price list the API holds"
+
+/** The price list the record names, as the server's id: null for the project's default list — blank, or the default picked — undefined for a list the store does not hold. */
+function priceListServerId(record: BusinessRecord, context: MappingContext): string | null | undefined {
+  const picked = typed(record, "priceListId")
+  if (picked === undefined || picked === PROJECT_DEFAULT_LIST) return null
+  return chipServerId(picked, PRICE_LIST_PREFIX, context)
+}
+
 /** What the record says the agreement's fields are, as the wire spells them: undefined leaves a field alone on a patch, null clears it. */
 function agreementFields(record: BusinessRecord, context: MappingContext) {
   const lastDay = typed(record, "effectiveTo")
@@ -124,6 +137,7 @@ function agreementFields(record: BusinessRecord, context: MappingContext) {
     currency: typed(record, "currency"),
     // The record carries notes only where the wire has some, so a blank and an absent field both read as the wire's null.
     notes: typed(record, "internalNotes") ?? null,
+    priceListId: priceListServerId(record, context),
     validFrom: typed(record, "effectiveFrom"),
     validTo: lastDay === undefined ? null : firstDayOut(lastDay),
   }
@@ -142,6 +156,7 @@ export const agreementAdapter: ResourceAdapter<Agreement> = {
     const projectWebId = project?.id ?? webIdOf("project", agreement.projectId)
     const period = periodLabel(agreement.validFrom, agreement.validTo)
     const lastDay = agreement.validTo === null ? undefined : lastDayIn(agreement.validTo)
+    const priceList = agreement.priceListId === null ? undefined : referenced(context, agreement.priceListId, PRICE_LIST_PREFIX)
     return {
       id: webIdOf(AGREEMENT_PREFIX, agreement.id),
       name: `${agreement.number} · ${customer.name}`,
@@ -159,7 +174,7 @@ export const agreementAdapter: ResourceAdapter<Agreement> = {
         Project: project?.name ?? "Project",
         Billing: statusLabel(agreement.billingCadence),
         Currency: agreement.currency,
-        ...(agreement.priceListId === null ? {} : { "Price list": referenced(context, agreement.priceListId, PRICE_LIST_PREFIX).name }),
+        ...(priceList === undefined ? {} : { "Price list": priceList.name }),
         ...(agreement.notes === null ? {} : { Notes: agreement.notes }),
         "Valid from": agreement.validFrom,
         ...(lastDay === undefined ? {} : { "Valid to": lastDay }),
@@ -179,6 +194,7 @@ export const agreementAdapter: ResourceAdapter<Agreement> = {
         billingCadence: agreement.billingCadence,
         currency: agreement.currency,
         ...(agreement.notes === null ? {} : { internalNotes: agreement.notes }),
+        priceListId: priceList?.id ?? PROJECT_DEFAULT_LIST,
       },
     }
   },
@@ -194,6 +210,7 @@ export const agreementAdapter: ResourceAdapter<Agreement> = {
     if (fields.validFrom === undefined) return refusal("effectiveFrom", "An agreement needs the first day it is in force")
     if (fields.billingCadence === undefined || !(BILLING_CADENCES as readonly string[]).includes(fields.billingCadence)) return refusal("billingCadence", "Pick a billing cadence")
     if (fields.currency === undefined) return refusal("currency", "Pick a currency")
+    if (fields.priceListId === undefined) return refusal("priceListId", PRICE_LIST_REFUSAL)
     return {
       projectId,
       number: fields.number,
@@ -204,6 +221,8 @@ export const agreementAdapter: ResourceAdapter<Agreement> = {
       billingCadence: fields.billingCadence,
       currency: fields.currency,
       ...(fields.notes === null ? {} : { notes: fields.notes }),
+      // Absent is the project's default list.
+      ...(fields.priceListId === null ? {} : { priceListId: fields.priceListId }),
       validFrom: fields.validFrom,
       ...(fields.validTo === null ? {} : { validTo: fields.validTo }),
     }
@@ -214,6 +233,7 @@ export const agreementAdapter: ResourceAdapter<Agreement> = {
     const fields = agreementFields(after, context)
     if (typed(after, "customerId") !== undefined && fields.customerId === undefined) return refusal("customerId", "Pick a customer the API holds")
     if (typed(after, "payerId") !== undefined && fields.payerCustomerId === undefined) return refusal("payerId", "Pick a payer the API holds")
+    if (fields.priceListId === undefined) return refusal("priceListId", PRICE_LIST_REFUSAL)
     return patchOf(before, after, (record) => agreementFields(record, context))
   },
   create: (client, body) => create<Agreement>(client, "/agreements", body).then((created) => created.body),
@@ -281,11 +301,14 @@ export const subscriptionAdapter: ResourceAdapter<Subscription> = {
       recordKind: SUBSCRIPTION_RECORD_KIND,
       submittedValues: {
         agreementId: agreementWebId,
+        projectId: projectWebId,
         productId: product.id,
+        // The names the edit form shows the product and the place by, since it picks neither (lib/data/agreements.ts).
+        productName: product.name,
         // Which of the form's two place pickers holds the place (lib/data/agreements.ts): the edit shows that one.
         placeKind: point === undefined ? "property" : "shared-point",
-        ...(property === undefined ? {} : { propertyId: property.id }),
-        ...(point === undefined ? {} : { sharedPointId: point.id }),
+        ...(property === undefined ? {} : { propertyId: property.id, propertyName: property.name }),
+        ...(point === undefined ? {} : { sharedPointId: point.id, sharedPointName: point.name }),
         quantity: String(subscription.quantity),
         validFrom: subscription.validFrom,
         ...(lastDay === undefined ? {} : { validTo: lastDay }),

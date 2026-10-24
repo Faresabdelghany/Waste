@@ -14,7 +14,7 @@ import { AgreementCreate, AgreementPatch, SubscriptionCreate, SubscriptionPatch,
 import type { Customer } from "@waste/contracts/customers"
 import type { Project } from "@waste/contracts/organisation"
 
-import { AGREEMENTS_MODULE, ONE_PLACE, SUBSCRIPTION_RECORD_KIND } from "../../data/agreements"
+import { AGREEMENTS_MODULE, ONE_PLACE, PROJECT_DEFAULT_LIST, SUBSCRIPTION_RECORD_KIND } from "../../data/agreements"
 import { FIXTURE_COMPANY_ID, FIXTURE_PROJECT_IDS, getModuleDefinition, type BusinessRecord } from "../../data/business-modules"
 import { problemSentence } from "../problem"
 import { NOTHING_RESOLVED, type MappingContext, type Resolver } from "../records/adapter"
@@ -70,6 +70,12 @@ function withAgreements(agreements: readonly Agreement[], base: ServerRecordsSta
 const loadedState = withAgreements([agr2408, agr2188, agrDraft])
 const resolveLoaded = resolverOver(loadedState)
 
+// A price list of the project as `commercial.price-rows` holds it once loaded (#291): read before the agreements, which name it.
+const PRICE_LIST = "01a0d2a4-a280-7028-8000-000000000001"
+const PRICE_LIST_WEB_ID = `price-list-${PRICE_LIST}`
+const priceListRecord: BusinessRecord = { ...customerRecords[0], id: PRICE_LIST_WEB_ID, name: "Copenhagen tariff 2026", recordKind: "Price list" }
+const withPriceLists: ServerRecordsState = new Map([...state, ["commercial.price-rows", loaded({ records: [priceListRecord], serverIds: new Map([[PRICE_LIST_WEB_ID, PRICE_LIST]]) }, 1)]])
+
 const pageOf = (items: unknown[]) => json({ items, nextCursor: null })
 
 /** A record the generic create path makes from the agreement form, before the API has answered. */
@@ -123,10 +129,13 @@ const SUBSCRIPTION_FORM = {
 }
 
 describe("the agreements module", () => {
-  test("is switched, after the organisation its agreements are scoped by and the customers they name", () => {
+  test("is switched, after the organisation its agreements are scoped by, the customers they name and the products and price lists they are priced in", () => {
     assert.ok(isServerBacked("customers", "agreements"))
     assert.ok(SERVER_MODULE_KEYS.indexOf("customers.agreements") > SERVER_MODULE_KEYS.indexOf("configure.organization"))
     assert.ok(SERVER_MODULE_KEYS.indexOf("customers.agreements") > SERVER_MODULE_KEYS.indexOf("customers.contacts"))
+    // A subscription names its product and an agreement its price list (#291): read first, they are named by name, never by an id chip.
+    assert.ok(SERVER_MODULE_KEYS.indexOf("customers.agreements") > SERVER_MODULE_KEYS.indexOf("commercial.products"))
+    assert.ok(SERVER_MODULE_KEYS.indexOf("customers.agreements") > SERVER_MODULE_KEYS.indexOf("commercial.price-rows"))
     assert.deepEqual(agreementsModule.resources, [agreementAdapter, subscriptionAdapter], "the agreements before the subscriptions that name them")
   })
 
@@ -186,6 +195,7 @@ describe("an agreement", () => {
       effectiveTo: "2026-12-31",
       billingCadence: "monthly",
       currency: "DKK",
+      priceListId: PROJECT_DEFAULT_LIST,
     })
     assert.equal(record.updated, "5 days ago")
     assert.ok(agreementAdapter.owns(record))
@@ -213,8 +223,11 @@ describe("an agreement", () => {
     assert.deepEqual(draft.allowedTransitions, ["Active", "Cancelled"])
     assert.equal(draft.facts.Notes, "Payer to be confirmed")
     assert.equal(draft.submittedValues?.internalNotes, "Payer to be confirmed")
-    assert.equal(draft.facts["Price list"], `price-list-${agrDraft.priceListId}`, "an id chip until the price lists are switched")
-    assert.equal(draft.submittedValues?.priceListId, undefined, "the form's price list options are names, so the id is never seeded into it")
+    assert.equal(draft.facts["Price list"], `price-list-${agrDraft.priceListId}`, "an id chip while the store holds no price lists")
+    assert.equal(draft.submittedValues?.priceListId, `price-list-${agrDraft.priceListId}`, "the list's web id, which the form's picker offers")
+    const priced = agreementAdapter.toRecord(agrDraft, context(resolverOver(withPriceLists)))
+    assert.equal(priced.facts["Price list"], "Copenhagen tariff 2026", "named by the list the store holds")
+    assert.equal(priced.submittedValues?.priceListId, PRICE_LIST_WEB_ID)
     const cancelled = agreementAdapter.toRecord(agrCancelled, context())
     assert.equal(cancelled.status, "Cancelled")
     assert.deepEqual(cancelled.allowedTransitions, [])
@@ -263,6 +276,24 @@ describe("an agreement", () => {
     assert.deepEqual(made({ effectiveFrom: "" }), { path: "effectiveFrom", message: "An agreement needs the first day it is in force" })
     assert.deepEqual(made({ billingCadence: "" }), { path: "billingCadence", message: "Pick a billing cadence" })
     assert.deepEqual(made({ currency: "" }), { path: "currency", message: "Pick a currency" })
+  })
+
+  test("the price list picked goes out by its server id, the project's default list as no list at all; one the store does not hold is refused at the field", () => {
+    const priced = agreementAdapter.toCreateBody?.(madeAgreement({ ...AGREEMENT_FORM, priceListId: PRICE_LIST_WEB_ID }), context(resolverOver(withPriceLists))) as Record<string, unknown>
+    assert.equal(priced.priceListId, PRICE_LIST)
+    assert.ok(AgreementCreate.safeParse(priced).success)
+    const byDefault = agreementAdapter.toCreateBody?.(madeAgreement({ ...AGREEMENT_FORM, priceListId: PROJECT_DEFAULT_LIST }), context()) as Record<string, unknown>
+    assert.equal("priceListId" in byDefault, false, "absent is the project's default list")
+    assert.deepEqual(agreementAdapter.toCreateBody?.(madeAgreement({ ...AGREEMENT_FORM, priceListId: "price-list-copenhagen-2026" }), context()), { path: "priceListId", message: "Pick a price list the API holds" })
+
+    const running = agreementAdapter.toRecord(agr2408, context(resolverOver(withPriceLists)))
+    const moved: BusinessRecord = { ...running, submittedValues: { ...running.submittedValues, priceListId: PRICE_LIST_WEB_ID } }
+    const onto = agreementAdapter.toPatchBody(running, moved, context(resolverOver(withPriceLists)))
+    assert.deepEqual(onto, { priceListId: PRICE_LIST })
+    assert.ok(AgreementPatch.safeParse(onto).success)
+    assert.deepEqual(agreementAdapter.toPatchBody(moved, running, context(resolverOver(withPriceLists))), { priceListId: null }, "back to the project's default list")
+    const lost: BusinessRecord = { ...running, submittedValues: { ...running.submittedValues, priceListId: "price-list-nowhere" } }
+    assert.deepEqual(agreementAdapter.toPatchBody(running, lost, context()), { path: "priceListId", message: "Pick a price list the API holds" })
   })
 
   test("a product named on the agreement form is refused: a subscription is its own row, added once the agreement is saved", () => {
@@ -353,9 +384,13 @@ describe("a subscription", () => {
     assert.deepEqual(record.related, ["AGR-2408 · Østerbro Housing", `product-${PRODUCT}`, `property-${PROPERTY}`])
     assert.deepEqual(record.submittedValues, {
       agreementId: `agreement-${agr2408.id}`,
+      projectId: FIXTURE_PROJECT_IDS.copenhagen,
       productId: `product-${PRODUCT}`,
+      // What the edit form shows the product and the place by (lib/data/agreements.ts): their names, never a picker.
+      productName: `product-${PRODUCT}`,
       placeKind: "property",
       propertyId: `property-${PROPERTY}`,
+      propertyName: `property-${PROPERTY}`,
       quantity: "1",
       validFrom: "2026-01-01",
       validTo: "2026-12-31",
@@ -375,6 +410,8 @@ describe("a subscription", () => {
     assert.equal(pending.facts.Quantity, "2")
     assert.equal(pending.submittedValues?.propertyId, undefined)
     assert.equal(pending.submittedValues?.sharedPointId, `shared-point-${POINT}`)
+    assert.equal(pending.submittedValues?.sharedPointName, `shared-point-${POINT}`)
+    assert.equal(pending.submittedValues?.propertyName, undefined)
     assert.equal(pending.submittedValues?.placeKind, "shared-point", "the edit form shows the point's field")
     assert.equal(pending.submittedValues?.validTo, undefined)
     assert.equal(subscriptionAdapter.toRecord(subEnded, context(resolveLoaded)).status, "Expired")
@@ -387,6 +424,7 @@ describe("a subscription", () => {
     assert.equal(record.name, "AGR-2408 · Residual waste · 240L bin")
     assert.equal(record.facts.Product, "Residual waste · 240L bin")
     assert.equal(record.submittedValues?.productId, "product-res-240")
+    assert.equal(record.submittedValues?.productName, "Residual waste · 240L bin", "the edit shows the product by its name")
     const orphan = subscriptionAdapter.toRecord(sub1, context())
     assert.equal(orphan.submittedValues?.agreementId, `agreement-${agr2408.id}`)
     assert.equal(orphan.facts.Agreement, `agreement-${agr2408.id}`)

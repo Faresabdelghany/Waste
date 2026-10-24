@@ -27,7 +27,8 @@ import { listAll, projectNamed, TESTER_PROJECT } from "./tester"
 // come: a subscription at an inactive property, a placement at a closed point.
 type ServiceProvider = { id: string; legalName: string; registrationNumber: string; country: string; contactName: string; contactEmail: string }
 type Customer = { id: string; kind: "person" | "organisation"; name: string; registrationNumber: string | null; email: string | null; status: string }
-type Agreement = { id: string; projectId: string; number: string; customerId: string; payerCustomerId: string; status: string; billingCadence: string; currency: string; notes: string | null; validFrom: string; validTo: string | null }
+type Agreement = { id: string; projectId: string; number: string; customerId: string; payerCustomerId: string; status: string; billingCadence: string; currency: string; notes: string | null; priceListId: string | null; validFrom: string; validTo: string | null }
+type PriceList = { id: string; name: string; currency: string }
 type Subscription = { id: string; agreementId: string; productId: string; propertyId: string | null; sharedCollectionPointId: string | null; quantity: number; validFrom: string; validTo: string | null }
 type Product = { id: string; name: string; status: string }
 type Party = { customerId: string; role: string }
@@ -261,6 +262,15 @@ async function productThroughApi(api: APIRequestContext, projectId: string, stat
   return (await response.json()) as Product
 }
 
+/** A named price list of the project in its currency, made before the page loads so the switched price lists are the agreement form's picker (#291). */
+async function priceListThroughApi(api: APIRequestContext, projectId: string) {
+  const name = uniqueName("E2E tariff")
+  const code = name.toLowerCase().replace(/[^a-z0-9]+/g, "-")
+  const response = await api.post("/price-lists", { data: { projectId, code, name, validFrom: "2026-01-01" } })
+  expect(response.status(), "POST /price-lists").toBe(201)
+  return (await response.json()) as PriceList
+}
+
 /** A property of the project, made before the page loads so the switched properties module lists it for the pickers. */
 async function propertyThroughApi(api: APIRequestContext, projectId: string) {
   const response = await api.post("/properties", { data: { projectId, name: uniqueName("E2E Property"), address: "Parkvej 18, 2100 København Ø", kind: "residential" } })
@@ -300,12 +310,13 @@ async function createAgreement(page: Page, values: { number: string; customer: s
   return response
 }
 
-/** Add subscription from the open agreement's sheet: the product as the API's id until its module is switched, the property picked by name, the period prefilled from the agreement's own. */
-async function addSubscription(page: Page, agreementId: string, values: { productId: string; property: string; quantity: string }, period = { validFrom: "2026-10-01", validTo: "2026-12-31" }) {
+/** Add subscription from the open agreement's sheet: the product and the property picked by name from the agreement's project (#291), the period prefilled from the agreement's own. */
+async function addSubscription(page: Page, agreementId: string, values: { product: string; property: string; quantity: string }, period = { validFrom: "2026-10-01", validTo: "2026-12-31" }) {
   await page.getByRole("dialog").getByRole("button", { name: "Add subscription" }).click()
   const dialog = page.getByRole("dialog").filter({ has: page.getByRole("heading", { name: "Add subscription" }) })
   await expect(dialog).toBeVisible()
-  await dialog.getByLabel("Product").fill(values.productId)
+  await dialog.getByRole("combobox", { name: /^Product/ }).click()
+  await page.getByRole("option", { name: values.product, exact: true }).click()
   await dialog.getByRole("combobox", { name: /^Property/ }).click()
   await page.getByRole("option", { name: values.property, exact: true }).click()
   await dialog.getByLabel("Quantity").fill(values.quantity)
@@ -322,16 +333,18 @@ test("Agreements: created in the browser with Location, signed, its subscription
   const product = await productThroughApi(api, project.id, "active")
   const draftProduct = await productThroughApi(api, project.id, "draft")
   const property = await propertyThroughApi(api, project.id)
+  const priceList = await priceListThroughApi(api, project.id)
   const number = uniqueName("E2E-AGR").replace(/\s+/g, "-").toUpperCase()
   await openAgreementsLoaded(page)
 
-  // The agreement, a draft in the pinned project, its customer and payer picked by name from the switched contacts module.
+  // The agreement, a draft in the pinned project, its customer and payer picked by name from the switched contacts module, priced under the project's default list, which the form opens on (#291).
   const created = await createAgreement(page, { number, customer: customer.name, payer: customer.name })
   expect(created.status()).toBe(201)
+  expect(created.request().postDataJSON()).not.toHaveProperty("priceListId")
   const agreement = (await created.json()) as Agreement
   const location = created.headers()["location"]
   expect(location).toBe(`/agreements/${agreement.id}`)
-  expect(agreement).toMatchObject({ projectId: project.id, number, customerId: customer.id, payerCustomerId: customer.id, status: "draft", billingCadence: "monthly", currency: "DKK", validFrom: "2026-10-01", validTo: "2027-01-01" })
+  expect(agreement).toMatchObject({ projectId: project.id, number, customerId: customer.id, payerCustomerId: customer.id, status: "draft", billingCadence: "monthly", currency: "DKK", priceListId: null, validFrom: "2026-10-01", validTo: "2027-01-01" })
   const read = await api.get(location)
   expect(read.status()).toBe(200)
   expect(await read.json()).toEqual(agreement)
@@ -352,29 +365,42 @@ test("Agreements: created in the browser with Location, signed, its subscription
   expect(await signed.json()).toMatchObject({ id: agreement.id, status: "active" })
   await expect(page.getByText("Draft → Active", { exact: true })).toBeVisible()
 
-  // A subscription under it: the product by the API's id, since its module is not switched yet, the property picked by name (#184); two of the product for the agreement's period.
-  const subscribed = await addSubscription(page, agreement.id, { productId: product.id, property: property.name, quantity: "2" })
+  // Its edit moves it onto a named list of the project in its currency, picked by name (#291), and the sheet names the list.
+  await page.getByRole("dialog").getByRole("button", { name: "Edit agreement" }).click()
+  const editing = page.getByRole("dialog").filter({ has: page.getByRole("heading", { name: /^Edit/ }) })
+  await expect(editing.getByRole("combobox", { name: /^Price list/ })).toContainText("The project's default list")
+  await editing.getByRole("combobox", { name: /^Price list/ }).click()
+  await page.getByRole("option", { name: priceList.name, exact: true }).click()
+  const [repriced] = await Promise.all([answerOf(page, "PATCH", location), editing.getByRole("button", { name: /^Save/ }).click()])
+  expect(repriced.status()).toBe(200)
+  expect(repriced.request().postDataJSON()).toEqual({ priceListId: priceList.id })
+  expect(await repriced.json()).toMatchObject({ id: agreement.id, priceListId: priceList.id })
+  await expect(page.getByRole("dialog").getByText(priceList.name, { exact: true })).toBeVisible()
+
+  // A subscription under it: the product and the property picked by name (#184, #291); two of the product for the agreement's period.
+  const subscribed = await addSubscription(page, agreement.id, { product: product.name, property: property.name, quantity: "2" })
   expect(subscribed.status()).toBe(201)
   const subscription = (await subscribed.json()) as Subscription
   expect(subscribed.headers()["location"]).toBe(`/subscriptions/${subscription.id}`)
   expect(subscription).toMatchObject({ agreementId: agreement.id, productId: product.id, propertyId: property.id, sharedCollectionPointId: null, quantity: 2, validFrom: "2026-10-01", validTo: "2027-01-01" })
 
-  // The sheet moved to the subscription; its edit changes the quantity alone, the product and the place held read-only.
-  await expect(page.getByRole("dialog").getByRole("heading", { name: new RegExp(`^${number} · `) })).toBeVisible()
+  // The sheet moved to the subscription, named by its product; its edit changes the quantity alone, the product and the place held read-only and shown by name.
+  await expect(page.getByRole("dialog").getByRole("heading", { name: `${number} · ${product.name}` })).toBeVisible()
   await page.getByRole("dialog").getByRole("button", { name: "Edit subscription" }).click()
   const edit = page.getByRole("dialog").filter({ has: page.getByRole("heading", { name: "Edit subscription" }) })
   await expect(edit.getByLabel("Product")).toHaveJSProperty("readOnly", true)
-  await expect(edit.getByLabel("Product")).toHaveValue(`product-${product.id}`)
+  await expect(edit.getByLabel("Product")).toHaveValue(product.name)
+  await expect(edit.getByLabel("Property")).toHaveValue(property.name)
   await edit.getByLabel("Quantity").fill("3")
   const [changed] = await Promise.all([answerOf(page, "PATCH", `/subscriptions/${subscription.id}`), edit.getByRole("button", { name: "Save changes" }).click()])
   expect(changed.status()).toBe(200)
   expect(await changed.json()).toMatchObject({ id: subscription.id, quantity: 3, productId: product.id })
   expect((await (await api.get(`/subscriptions/${subscription.id}`)).json()) as Subscription).toMatchObject({ quantity: 3 })
 
-  // #79 on a subscription: a draft product cannot be subscribed to, and the API's sentence is shown.
+  // #79 on a subscription: the picker offers the draft product, its status beside its name, which cannot be subscribed to, and the API's sentence is shown.
   await openAgreementsLoaded(page)
   await (await rowNamed(page, `${number} · ${customer.name}`)).click()
-  const refusedProduct = await addSubscription(page, agreement.id, { productId: draftProduct.id, property: property.name, quantity: "1" })
+  const refusedProduct = await addSubscription(page, agreement.id, { product: `${draftProduct.name} · Draft`, property: property.name, quantity: "1" })
   expect(refusedProduct.status()).toBe(409)
   await expect(page.getByText("The product is draft; only an active product can be subscribed to")).toBeVisible()
 
@@ -528,7 +554,7 @@ test("Properties: created in the browser with its owner and its point, read back
   // #79 on a subscription: the property picker offers the inactive property, and the API refuses the new reference in its own sentence.
   await openAgreementsLoaded(page)
   await (await rowNamed(page, `${agreement.number} · ${owner.name}`)).click()
-  const refused = await addSubscription(page, agreement.id, { productId: product.id, property: `${name} B`, quantity: "1" })
+  const refused = await addSubscription(page, agreement.id, { product: product.name, property: `${name} B`, quantity: "1" })
   expect(refused.status()).toBe(409)
   await expect(page.getByText("The property is inactive; a subscription needs an active property")).toBeVisible()
 })

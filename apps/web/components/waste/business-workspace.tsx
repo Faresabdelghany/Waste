@@ -156,12 +156,15 @@ import {
 } from "@/lib/data/business-links"
 import {
   agreementFormSchemaOnApi,
+  agreementPriceListOptions,
   AGREEMENTS_MODULE,
   isAgreementRecord,
   isSubscriptionRecord,
+  SUBSCRIPTION_RECORD_KIND,
   subscriptionEditSchema,
-  subscriptionFormSchema,
+  subscriptionFormSchemaFor,
   subscriptionInitialValues,
+  subscriptionProductOptions,
 } from "@/lib/data/agreements"
 import type { TimelineTask } from "@/lib/data/project-details"
 import { cn, slugify } from "@/lib/utils"
@@ -272,7 +275,7 @@ import { CollectionGroupsEditorDialog } from "@/components/waste/collection-grou
 import { SchemeGenerateRoutesDialog } from "@/components/waste/scheme-generate-routes"
 import { SchemeDetailsPage } from "@/components/waste/scheme-details-page"
 import { SchemePlanAheadRunner } from "@/components/waste/scheme-plan-ahead"
-import { useBusinessRecordStore, useServerModuleState, whenSaved } from "@/components/waste/business-record-store"
+import { useBusinessRecordStore, useModuleRecords, useServerModuleState, whenSaved } from "@/components/waste/business-record-store"
 import { useApiConfigured, useApiSession } from "@/components/waste/api-session-store"
 import { commandSurfaceFor, initialFiltersOf, listShows, primaryOf } from "@/components/waste/commands/command-surfaces"
 import { answered, writeGate } from "@/lib/api/records/write-gate"
@@ -287,7 +290,7 @@ import {
   type ContainerType,
   type WasteFraction,
 } from "@/components/settings/asset-management-store"
-import { FIXTURE_PRICE_LISTS, FIXTURE_PRICE_LISTS_BUCKET, isPriceListRecord } from "@/lib/data/commercial"
+import { FIXTURE_PRICE_LISTS, FIXTURE_PRICE_LISTS_BUCKET, isPriceListRecord, PRICE_ROWS_MODULE, PRODUCTS_MODULE } from "@/lib/data/commercial"
 import { ServiceProviderDetailsPage } from "@/components/waste/service-provider-details-page"
 import { ContainerDetailsSheet } from "@/components/waste/containers-assets-register"
 import { MapPlanningView } from "@/components/waste/map-planning/map-planning-view"
@@ -348,6 +351,8 @@ type BusinessWorkspaceProps = {
 // configure.organization project records (issue #44, lib/data/project-scope),
 // so the default is a project record's id, not a name of its own.
 const DEFAULT_PROJECT_SCOPE: ProjectScope = FIXTURE_PROJECT_IDS.copenhagen
+/** What the agreement forms' pickers fall back to: nothing, since they are read on the Pilot alone. */
+const NO_PICKER_FIXTURES: readonly BusinessRecord[] = []
 
 type AuditEvent = {
   id: string
@@ -1247,6 +1252,12 @@ export function BusinessWorkspace({
     apiConfigured &&
     workspace.id === AGREEMENTS_MODULE.workspaceId &&
     activeModule.id === AGREEMENTS_MODULE.moduleId
+  // What an agreement's price list and a subscription's product are picked
+  // from there (#291): the server's rows alone — a fixture row offered on the
+  // Pilot is a row the API does not hold — and whether the role reads them.
+  const agreementPriceRows = useModuleRecords(PRICE_ROWS_MODULE.workspaceId, PRICE_ROWS_MODULE.moduleId, NO_PICKER_FIXTURES)
+  const agreementProducts = useModuleRecords(PRODUCTS_MODULE.workspaceId, PRODUCTS_MODULE.moduleId, NO_PICKER_FIXTURES)
+  const productsViewed = !agreementProducts.notGranted
   const activeModuleGrants = roleAccess
     ? roleAccess[`${workspace.id}.${activeModule.id}`] ?? []
     : null
@@ -1903,13 +1914,13 @@ export function BusinessWorkspace({
               workspaceId: AGREEMENTS_MODULE.workspaceId,
               moduleId: AGREEMENTS_MODULE.moduleId,
               initialValues: subscriptionInitialValues(target),
-              schemaOverride: subscriptionFormSchema,
+              schemaOverride: subscriptionFormSchemaFor(productsViewed),
             }),
         })
       }
       return actions.length === 0 ? undefined : actions
     },
-    [canAddSubscriptions, canEditAgreements],
+    [canAddSubscriptions, canEditAgreements, productsViewed],
   )
   /** The module-specific actions a row and its sheet offer: the schemes' or the agreements', never both. */
   const recordExtraActions = useCallback(
@@ -2525,6 +2536,15 @@ export function BusinessWorkspace({
         resolved.module.id,
         resolved.module.records,
       )
+      // On the API an agreement's price list is one of its project's lists in
+      // its currency, the project's default list first, and a subscription's
+      // product one of its agreement's project's (#291, lib/data/agreements.ts).
+      if (isAgreementsView && field.id === "priceListId") {
+        return agreementPriceListOptions(agreementPriceRows.records, values)
+      }
+      if (isAgreementsView && formSchema?.recordKind === SUBSCRIPTION_RECORD_KIND && field.id === "productId") {
+        return subscriptionProductOptions(agreementProducts.records, values)
+      }
 
       const permittedRecords = relationRecords
         .filter((record) => {
@@ -2706,7 +2726,7 @@ export function BusinessWorkspace({
         label: showsStatus && record.status !== "Active" ? `${record.name} · ${record.status}` : record.name,
       }))
     },
-    [apiConfigured, customersOnApi, serviceProviderScopeId, formSchema?.key, formSchema?.recordKind, getRecords, projectScope],
+    [apiConfigured, customersOnApi, isAgreementsView, agreementPriceRows.records, agreementProducts.records, serviceProviderScopeId, formSchema?.key, formSchema?.recordKind, getRecords, projectScope],
   )
 
   const formInitialValues = useMemo<BusinessFormValues>(() => {
