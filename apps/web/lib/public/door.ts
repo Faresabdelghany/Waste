@@ -16,7 +16,7 @@
 // allowance spent for the minute, or the door not reachable — no origin
 // configured, a refusal the page has no words for, or no answer at all. A
 // public page never shows an API's sentence.
-import type { AddressMatches, PublicCollectionDays, PublishedProject } from "@waste/contracts/public"
+import type { AddressMatches, PublicCollectionDays, PublicDropOffPoints, PublishedProject } from "@waste/contracts/public"
 import type { SortingGuideAnswer } from "@waste/contracts/sorting-guide"
 
 export type DoorAnswer<T> = { kind: "ok"; body: T } | { kind: "not-published" } | { kind: "too-many"; retryAfterSeconds: number } | { kind: "unavailable" }
@@ -97,3 +97,7 @@ export const readCollectionDays = (slug: string, addressId: string, weeks: numbe
 /** An address's collection days as the API's iCalendar feed, `weeks` weeks from today. */
 export const readCollectionFeed = (slug: string, addressId: string, weeks: number, options: DoorOptions) =>
   askDoor(`${encodeURIComponent(slug)}/addresses/${encodeURIComponent(addressId)}/collection-days.ics?weeks=${weeks}`, options, "text/calendar", (response) => response.text())
+
+/** The published project's drop-off points on the map, those taking one fraction where a key is given. */
+export const readDropOffPoints = (slug: string, fractionKey: string | null, options: DoorOptions) =>
+  readDoor<PublicDropOffPoints>(`${encodeURIComponent(slug)}/drop-off-points${fractionKey === null ? "" : `?fraction=${encodeURIComponent(fractionKey)}`}`, options)
