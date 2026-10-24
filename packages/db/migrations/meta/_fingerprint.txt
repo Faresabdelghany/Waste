@@ -853,6 +853,30 @@ index wms.driver driver_workforce_reference_idx CREATE UNIQUE INDEX driver_workf
 trigger wms.driver driver_audit_trail enabled=O CREATE TRIGGER driver_audit_trail AFTER INSERT OR DELETE OR UPDATE ON wms.driver FOR EACH ROW EXECUTE FUNCTION wms.audit_row('', '')
 trigger wms.driver driver_touch_updated_at enabled=O CREATE TRIGGER driver_touch_updated_at BEFORE UPDATE ON wms.driver FOR EACH ROW EXECUTE FUNCTION wms.touch_updated_at()
 policy wms.driver driver_tenant_fence permissive ALL to=wms_api using=(company_id = ( SELECT wms.current_company_id() AS current_company_id)) check=(company_id = ( SELECT wms.current_company_id() AS current_company_id))
+relation wms.driver_absence kind=table owner=<owner> persistence=p rls=true force-rls=true replica-identity=d acl=[<owner>=DELETE,INSERT,MAINTAIN,REFERENCES,SELECT,TRIGGER,TRUNCATE,UPDATE/<owner> wms_api=DELETE,INSERT,SELECT,UPDATE/<owner> wms_worker=SELECT/<owner>]
+column wms.driver_absence 1 id uuid not-null default=wms.uuidv7()
+column wms.driver_absence 2 company_id uuid not-null
+column wms.driver_absence 3 project_id uuid not-null
+column wms.driver_absence 4 created_at timestamp with time zone not-null default=now()
+column wms.driver_absence 5 updated_at timestamp with time zone not-null default=now()
+column wms.driver_absence 6 valid_from date not-null
+column wms.driver_absence 7 valid_to date
+column wms.driver_absence 8 driver_id uuid not-null
+column wms.driver_absence 9 reason text not-null
+column wms.driver_absence 10 note text
+constraint wms.driver_absence driver_absence_company_id_fk FOREIGN KEY (company_id) REFERENCES wms.company(id)
+constraint wms.driver_absence driver_absence_driver_id_fk FOREIGN KEY (company_id, project_id, driver_id) REFERENCES wms.driver(company_id, project_id, id)
+constraint wms.driver_absence driver_absence_no_overlap EXCLUDE USING gist (company_id WITH =, driver_id WITH =, daterange(valid_from, valid_to, '[)'::text) WITH &&)
+constraint wms.driver_absence driver_absence_pkey PRIMARY KEY (id)
+constraint wms.driver_absence driver_absence_project_id_fk FOREIGN KEY (company_id, project_id) REFERENCES wms.project(company_id, id)
+constraint wms.driver_absence driver_absence_reason_one_of CHECK ((reason = ANY (ARRAY['holiday'::text, 'sick'::text, 'training'::text, 'leave'::text, 'other'::text])))
+constraint wms.driver_absence driver_absence_validity CHECK (((valid_to IS NULL) OR (valid_to > valid_from)))
+index wms.driver_absence driver_absence_no_overlap CREATE INDEX driver_absence_no_overlap ON wms.driver_absence USING gist (company_id, driver_id, daterange(valid_from, valid_to, '[)'::text))
+index wms.driver_absence driver_absence_pkey CREATE UNIQUE INDEX driver_absence_pkey ON wms.driver_absence USING btree (id)
+index wms.driver_absence driver_absence_project_id_valid_from_idx CREATE INDEX driver_absence_project_id_valid_from_idx ON wms.driver_absence USING btree (company_id, project_id, valid_from)
+trigger wms.driver_absence driver_absence_audit_trail enabled=O CREATE TRIGGER driver_absence_audit_trail AFTER INSERT OR DELETE OR UPDATE ON wms.driver_absence FOR EACH ROW EXECUTE FUNCTION wms.audit_row('driver', 'driver_id')
+trigger wms.driver_absence driver_absence_touch_updated_at enabled=O CREATE TRIGGER driver_absence_touch_updated_at BEFORE UPDATE ON wms.driver_absence FOR EACH ROW EXECUTE FUNCTION wms.touch_updated_at()
+policy wms.driver_absence driver_absence_tenant_fence permissive ALL to=wms_api using=(company_id = ( SELECT wms.current_company_id() AS current_company_id)) check=(company_id = ( SELECT wms.current_company_id() AS current_company_id))
 relation wms.driver_command kind=table owner=<owner> persistence=p rls=true force-rls=true replica-identity=d acl=[<owner>=DELETE,INSERT,MAINTAIN,REFERENCES,SELECT,TRIGGER,TRUNCATE,UPDATE/<owner> wms_api=INSERT,SELECT/<owner> wms_sync=SELECT/<owner> wms_worker=SELECT/<owner>]
 column wms.driver_command 1 id uuid not-null default=wms.uuidv7()
 column wms.driver_command 2 company_id uuid not-null
@@ -2908,6 +2932,30 @@ index wms.vehicle_type vehicle_type_tenant_key CREATE UNIQUE INDEX vehicle_type_
 trigger wms.vehicle_type vehicle_type_audit_trail enabled=O CREATE TRIGGER vehicle_type_audit_trail AFTER INSERT OR DELETE OR UPDATE ON wms.vehicle_type FOR EACH ROW EXECUTE FUNCTION wms.audit_row('', '')
 trigger wms.vehicle_type vehicle_type_touch_updated_at enabled=O CREATE TRIGGER vehicle_type_touch_updated_at BEFORE UPDATE ON wms.vehicle_type FOR EACH ROW EXECUTE FUNCTION wms.touch_updated_at()
 policy wms.vehicle_type vehicle_type_tenant_fence permissive ALL to=wms_api using=(company_id = ( SELECT wms.current_company_id() AS current_company_id)) check=(company_id = ( SELECT wms.current_company_id() AS current_company_id))
+relation wms.vehicle_unavailability kind=table owner=<owner> persistence=p rls=true force-rls=true replica-identity=d acl=[<owner>=DELETE,INSERT,MAINTAIN,REFERENCES,SELECT,TRIGGER,TRUNCATE,UPDATE/<owner> wms_api=DELETE,INSERT,SELECT,UPDATE/<owner> wms_worker=SELECT/<owner>]
+column wms.vehicle_unavailability 1 id uuid not-null default=wms.uuidv7()
+column wms.vehicle_unavailability 2 company_id uuid not-null
+column wms.vehicle_unavailability 3 project_id uuid not-null
+column wms.vehicle_unavailability 4 created_at timestamp with time zone not-null default=now()
+column wms.vehicle_unavailability 5 updated_at timestamp with time zone not-null default=now()
+column wms.vehicle_unavailability 6 valid_from date not-null
+column wms.vehicle_unavailability 7 valid_to date
+column wms.vehicle_unavailability 8 vehicle_id uuid not-null
+column wms.vehicle_unavailability 9 reason text not-null
+column wms.vehicle_unavailability 10 note text
+constraint wms.vehicle_unavailability vehicle_unavailability_company_id_fk FOREIGN KEY (company_id) REFERENCES wms.company(id)
+constraint wms.vehicle_unavailability vehicle_unavailability_no_overlap EXCLUDE USING gist (company_id WITH =, vehicle_id WITH =, daterange(valid_from, valid_to, '[)'::text) WITH &&)
+constraint wms.vehicle_unavailability vehicle_unavailability_pkey PRIMARY KEY (id)
+constraint wms.vehicle_unavailability vehicle_unavailability_project_id_fk FOREIGN KEY (company_id, project_id) REFERENCES wms.project(company_id, id)
+constraint wms.vehicle_unavailability vehicle_unavailability_reason_one_of CHECK ((reason = ANY (ARRAY['maintenance'::text, 'repair'::text, 'inspection'::text, 'breakdown'::text, 'other'::text])))
+constraint wms.vehicle_unavailability vehicle_unavailability_validity CHECK (((valid_to IS NULL) OR (valid_to > valid_from)))
+constraint wms.vehicle_unavailability vehicle_unavailability_vehicle_id_fk FOREIGN KEY (company_id, project_id, vehicle_id) REFERENCES wms.vehicle(company_id, project_id, id)
+index wms.vehicle_unavailability vehicle_unavailability_no_overlap CREATE INDEX vehicle_unavailability_no_overlap ON wms.vehicle_unavailability USING gist (company_id, vehicle_id, daterange(valid_from, valid_to, '[)'::text))
+index wms.vehicle_unavailability vehicle_unavailability_pkey CREATE UNIQUE INDEX vehicle_unavailability_pkey ON wms.vehicle_unavailability USING btree (id)
+index wms.vehicle_unavailability vehicle_unavailability_project_id_valid_from_idx CREATE INDEX vehicle_unavailability_project_id_valid_from_idx ON wms.vehicle_unavailability USING btree (company_id, project_id, valid_from)
+trigger wms.vehicle_unavailability vehicle_unavailability_audit_trail enabled=O CREATE TRIGGER vehicle_unavailability_audit_trail AFTER INSERT OR DELETE OR UPDATE ON wms.vehicle_unavailability FOR EACH ROW EXECUTE FUNCTION wms.audit_row('vehicle', 'vehicle_id')
+trigger wms.vehicle_unavailability vehicle_unavailability_touch_updated_at enabled=O CREATE TRIGGER vehicle_unavailability_touch_updated_at BEFORE UPDATE ON wms.vehicle_unavailability FOR EACH ROW EXECUTE FUNCTION wms.touch_updated_at()
+policy wms.vehicle_unavailability vehicle_unavailability_tenant_fence permissive ALL to=wms_api using=(company_id = ( SELECT wms.current_company_id() AS current_company_id)) check=(company_id = ( SELECT wms.current_company_id() AS current_company_id))
 relation wms.warehouse kind=table owner=<owner> persistence=p rls=true force-rls=true replica-identity=d acl=[<owner>=DELETE,INSERT,MAINTAIN,REFERENCES,SELECT,TRIGGER,TRUNCATE,UPDATE/<owner> wms_api=DELETE,INSERT,SELECT,UPDATE/<owner> wms_worker=SELECT/<owner>]
 column wms.warehouse 1 id uuid not-null default=wms.uuidv7()
 column wms.warehouse 2 company_id uuid not-null
@@ -3050,4 +3098,5 @@ journal 1792864456446 3eb735d6ee46445f2225b160768a05e288b7db43da18d83c06c7b05582
 journal 1792865708689 34a95f7c352373cd3eb625466c5610a65b46b791a1b940ba4e02ccf528f490a9
 journal 1792867065800 f8212d9d9ad7d0d5e457e9772d762f6453b4ca8b3d68bd81d86470274b6d25bf
 journal 1792868216557 6775a033d267b5b88bf3f92f2efd3f695a1039822f38c8c2c49e9e7b24ee0e56
+journal 1792869628829 b505b3c7d5a7facb5ef7d48d8c936b335c3a626fdce876f9866e5ee49bc273e8
 pgboss-version 42

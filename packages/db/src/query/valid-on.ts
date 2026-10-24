@@ -2,7 +2,10 @@
 // day. Generation asks which Service Placement was valid on the service date,
 // billing which Price List on the day of the pickup, authorisation which
 // Service Area Assignment on the day of the request; each passes its own date,
-// and none of them asks "which is current" without saying when.
+// and none of them asks "which is current" without saying when. `validOver`
+// asks the same of a span of days rather than one: which rows were valid on
+// any day of a half-open period — the absences and the unavailability a
+// command or a run judges its days against (O6 of #290).
 //
 //   db.select().from(agreement).where(and(eq(agreement.containerId, id), validOn(agreement, serviceDate)))
 //
@@ -35,4 +38,18 @@ export function validOn(columns: ValidityColumns, day: string | SQLWrapper): SQL
     throw new Error(`validOn: "${day}" is not a YYYY-MM-DD day`)
   }
   return sql`(${columns.validFrom} <= ${day} and (${columns.validTo} is null or ${columns.validTo} > ${day}))`
+}
+
+/**
+ * The condition that the row was valid on some day of the half-open period
+ * `[validFrom, validTo)`, for a `where`: it starts before the period ends and
+ * ends after the period starts, a null end on either side reaching every
+ * later day. The two days are refused as `validOn` refuses one.
+ */
+export function validOver(columns: ValidityColumns, period: { validFrom: string; validTo: string | null }): SQL {
+  for (const day of [period.validFrom, period.validTo]) {
+    if (day !== null && !isCalendarDay(day)) throw new Error(`validOver: "${day}" is not a YYYY-MM-DD day`)
+  }
+  const endsAfter = sql`(${columns.validTo} is null or ${columns.validTo} > ${period.validFrom})`
+  return period.validTo === null ? endsAfter : sql`(${columns.validFrom} < ${period.validTo} and ${endsAfter})`
 }

@@ -32,6 +32,7 @@ import { emptyBusinessFilters, type BusinessFilters, type FilterValueReaders } f
 
 import { AgreementCommandsSurface } from "./agreement-surfaces"
 import { AllocateSurface, AllocationCommandsSurface } from "./allocation-surfaces"
+import { DriverAbsenceSurface, VehicleUnavailabilitySurface } from "./availability-surfaces"
 import { AddManualEventSurface, BillingRunSurface, EventCommandsSurface, InvoiceSurface, RunBillingSurface } from "./billing-surfaces"
 import { BILLING_LIST, EVENTS_LIST, INVOICES_LIST, PRICE_ROWS_LIST } from "./commercial-lists"
 import { AddContainerSurface, ContainerCommandsSurface } from "./container-surfaces"
@@ -59,6 +60,13 @@ export type CommandSurface = {
   primary: "form" | ComponentType<PrimarySurfaceProps> | null
   /** The row's commands, and what they read (a ledger, a history), in its details. */
   rowActions?: ComponentType<RowSurfaceProps>
+  /**
+   * Whether the row keeps the generic Edit beside its surface: a surface
+   * changes the row otherwise, so the workspace offers no Edit (#179). The
+   * fleet's (O6 of #290) add what the row is away for and change nothing the
+   * form holds.
+   */
+  genericEdit?: true
   /** Mounted beside the module's table while the module is shown, rendering nothing itself: the Live board's re-read. */
   whileShown?: ComponentType
   /** Which of the module's records are its rows on the Pilot, and how they are filtered, in place of the workspace's own per-module matching. */
@@ -111,6 +119,9 @@ export const COMMAND_SURFACES: Readonly<Record<string, CommandSurface>> = {
   // The ledger is read-only on the wire: a movement is a container's command.
   "resources.inventory": { primary: null },
   "fleet.vehicle-planning": { primary: AllocateSurface, rowActions: AllocationCommandsSurface },
+  // O6 of #290: a driver's absences and a vehicle's periods out of use, in the row's details; the row itself by its own form as before.
+  "fleet.drivers": { primary: "form", rowActions: DriverAbsenceSurface, genericEdit: true },
+  "fleet.vehicles": { primary: "form", rowActions: VehicleUnavailabilitySurface, genericEdit: true },
   // Slice 9b (#184): each place by its own form, its set replaced whole by its Edit; the status by the lifecycle's actions.
   "customers.properties": { primary: AddPropertySurface, rowActions: PropertyCommandsSurface },
   "customers.groups": { primary: AddPropertyGroupSurface, rowActions: PropertyGroupCommandsSurface },

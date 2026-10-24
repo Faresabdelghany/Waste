@@ -87,7 +87,8 @@ import { requireGrant } from "../auth/require"
 import { newId } from "../ids"
 import { afterCursor, fetchLimit, pageOf } from "../pagination"
 import { describeProblem, invalidRequest, problem, validate } from "../problem"
-import { lastDayInside } from "./days"
+import { daysThrough, refuseCrewAway } from "./availability-rules"
+import { dayInTimezone, lastDayInside } from "./days"
 import { findDriver, findVehicle, projectTimezone, vehicleLabel, type DriverRow, type VehicleRow } from "./fleet-lookups"
 import { requireDepot, requireWasteFraction, type Scope } from "./references"
 import { created, describeCreated, describeJson, IdParam, lockRow, refuseOverlap, stampsOf } from "./shared"
@@ -286,10 +287,12 @@ async function holdReservation(tx: Tx, scope: Scope, reservation: Reservation, m
   }
 
   const driver = reservation.driverId === null || !judgeDriver ? null : await findDriver(tx, scope, reservation.driverId)
+  // The project's clock, read once and only where a rule below renders the window as its days.
+  let timezone: string | undefined
+  const timezoneOf = async (): Promise<string> => (timezone ??= await projectTimezone(tx, scope.companyId, scope.projectId))
   if (driver !== null && vehicle !== null) {
     // The window's last day, where the driver is: the licence rule takes a day and refuses an instant, and the end itself is outside the window.
-    const timezone = await projectTimezone(tx, scope.companyId, scope.projectId)
-    const refusal = licenceRefusal(driver, vehicle.requiredLicenceClass, lastDayInside(new Date(reservation.plannedTo), timezone))
+    const refusal = licenceRefusal(driver, vehicle.requiredLicenceClass, lastDayInside(new Date(reservation.plannedTo), await timezoneOf()))
     if (refusal !== undefined) {
       throw invalidRequest("body", [{ path: "driverId", message: licenceSentence(refusal, { driver: driver.name, vehicle: vehicleLabel(vehicle) }) }])
     }
@@ -302,6 +305,18 @@ async function holdReservation(tx: Tx, scope: Scope, reservation: Reservation, m
   if (vehicle !== null && moved.vehicleId) refuseRetiredVehicle(vehicle.status, vehicleLabel(vehicle), "an allocation")
   if (trailer !== null && moved.trailerId) refuseRetiredVehicle(trailer.status, vehicleLabel(trailer), "an allocation", "trailer")
   if (driver !== null && moved.driverId) refuseUnavailableDriver(driver.status, driver.name, "an allocation")
+
+  // Then whether the crew is there over the window's days on the project's clock (O6 of #290): what the body named afresh, or all of it where the window moved under it.
+  const crew = {
+    vehicleId: moved.vehicleId || moved.window ? reservation.vehicleId : null,
+    trailerId: moved.trailerId || moved.window ? reservation.trailerId : null,
+    driverId: moved.driverId || moved.window ? reservation.driverId : null,
+  }
+  if (crew.vehicleId !== null || crew.trailerId !== null || crew.driverId !== null) {
+    const clock = await timezoneOf()
+    const days = daysThrough(dayInTimezone(new Date(reservation.plannedFrom), clock), lastDayInside(new Date(reservation.plannedTo), clock))
+    await refuseCrewAway(tx, scope, crew, days, "a vehicle allocation")
+  }
   return { vehicle, driver, trailer }
 }
 
@@ -365,7 +380,7 @@ async function setStatus(tx: Tx, principal: Principal, id: string, status: Alloc
 }
 
 const RESERVATION_RULES =
-  "The vehicle is a powered vehicle of that project; the trailer, where given, a trailer of it and not the vehicle of another live allocation over the window; the driver, where given, a driver of that project who holds the licence class the vehicle requires on the window's last day, the last instant inside it rendered in the project's timezone, so a window ending at midnight is judged on the day before — refused at `driverId` with the reason (no class on record, a class too low, a licence expiring before the window ends); the depot one of that project's, the waste fraction this company's. The window is two instants and the end comes after the start. Then, after every such 400, the statuses: a vehicle or a trailer named afresh is in service and a driver named afresh is active — a retired, an inactive or a suspended one is refused (409) naming the row, its status and what the allocation needs, since the id is right and the row is there."
+  "The vehicle is a powered vehicle of that project; the trailer, where given, a trailer of it and not the vehicle of another live allocation over the window; the driver, where given, a driver of that project who holds the licence class the vehicle requires on the window's last day, the last instant inside it rendered in the project's timezone, so a window ending at midnight is judged on the day before — refused at `driverId` with the reason (no class on record, a class too low, a licence expiring before the window ends); the depot one of that project's, the waste fraction this company's. The window is two instants and the end comes after the start. Then, after every such 400, the statuses: a vehicle or a trailer named afresh is in service and a driver named afresh is active — a retired, an inactive or a suspended one is refused (409) naming the row, its status and what the allocation needs, since the id is right and the row is there; and then whether each is there over the window's days on the project's clock (O6 of #290) — a vehicle or a trailer out of use, or a driver absent, on any of them is refused (409) naming the period — asked of what the body names afresh, and of the whole crew where the window moves."
 
 export function vehicleAllocationRoutes(guard: MiddlewareHandler<AuthEnv>) {
   return new Hono<AuthEnv>()
@@ -433,7 +448,7 @@ export function vehicleAllocationRoutes(guard: MiddlewareHandler<AuthEnv>) {
           ),
           401: describeProblem("No usable token (see WWW-Authenticate)."),
           403: describeProblem("No active account here, or the caller's role does not allow `create` on `fleet.vehicle-planning`."),
-          409: describeProblem("The vehicle or the trailer named is retired, the driver named is inactive or suspended, or the vehicle, the driver or the trailer is already allocated over part of that window; the detail says which."),
+          409: describeProblem("The vehicle or the trailer named is retired or out of use on a day of the window, the driver named is inactive, suspended or absent on one, or the vehicle, the driver or the trailer is already allocated over part of that window; the detail says which."),
         },
       }),
       guard,
@@ -511,7 +526,7 @@ export function vehicleAllocationRoutes(guard: MiddlewareHandler<AuthEnv>) {
           401: describeProblem("No usable token (see WWW-Authenticate)."),
           403: describeProblem("No active account here, or the caller's role does not allow `edit` on `fleet.vehicle-planning`."),
           404: describeProblem("No vehicle allocation with that id in the projects this account works in."),
-          409: describeProblem("The allocation is released, a vehicle or a trailer named afresh is retired, a driver named afresh is inactive or suspended, or the vehicle, the driver or the trailer is already allocated over part of the new window; the detail says which."),
+          409: describeProblem("The allocation is released, a vehicle or a trailer named afresh is retired, a driver named afresh is inactive or suspended, the crew is away on a day of the window as the change leaves it, or the vehicle, the driver or the trailer is already allocated over part of the new window; the detail says which."),
         },
       }),
       guard,

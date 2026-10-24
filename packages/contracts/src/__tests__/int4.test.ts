@@ -14,6 +14,7 @@ import * as agreementsModule from "../agreements"
 import * as alertsModule from "../alerts"
 import * as allocationsModule from "../allocations"
 import * as auditModule from "../audit"
+import * as availabilityModule from "../availability"
 import * as billableEventsModule from "../billable-events"
 import * as billingModule from "../billing"
 import * as catalogueModule from "../catalogue"
@@ -79,6 +80,7 @@ const MODULES: Readonly<Record<string, Record<string, unknown>>> = {
   "alerts": alertsModule,
   "allocations": allocationsModule,
   "audit": auditModule,
+  "availability": availabilityModule,
   "billable-events": billableEventsModule,
   "billing": billingModule,
   "catalogue": catalogueModule,

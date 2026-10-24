@@ -99,6 +99,7 @@ import {
   type NamedResource,
 } from "@waste/domain/planning/checks"
 import type { HolidayPolicy, RecurrenceFrequency, RouteSchemeStatus, SchemeEditPolicy, ServiceDay, ServiceType, StopSource, WeekRotation } from "@waste/domain/planning/vocabulary"
+import { firstRunDay } from "@waste/domain/resources/availability"
 import { and, asc, eq, exists, inArray, lte, max, sql, type SQL } from "drizzle-orm"
 import type { PgColumn, PgTable } from "drizzle-orm/pg-core"
 
@@ -120,6 +121,7 @@ import {
 import { eachPresent, groupedBy, rowsPresent, whereNamed, type Named } from "./sets"
 import { instantOf, stamp, stampsOf, timeOf } from "./shared"
 import { refuseRetiredVehicle, refuseUnavailableDriver } from "./statuses"
+import { oneDay, refuseCrewsAway } from "./availability-rules"
 
 /** What a route module takes beside the guard: the app's clock, which "today" on a project's clock is rendered from; a test pins it. */
 export type ClockOptions = { now?: () => Date }
@@ -549,6 +551,30 @@ export function requireFleetInService(refs: GroupReferences, rows: FleetRows): v
     const row = rows.drivers.get(id)
     if (row !== undefined) refuseUnavailableDriver(row.status, row.name, "a collection group")
   }
+}
+
+/** What a group's crew answers to beside its statuses (O6 of #290), as the routes that name a crew describe it. */
+export const CREW_THERE =
+  "A vehicle out of use, or a driver absent, on the group's first run day from the day the crew is judged — the day the scheme's period starts or today, whichever is later, then the first of the group's days from it — is refused (409) naming the period, after the statuses and for what the body names afresh; a group recurs, so a period on a later day refuses nothing, and generation writes that day's route without whoever is away, with the run's warning."
+
+/** A group's crew as a body names it afresh — each id null or absent where it names none — with the days the group runs on. */
+export type GroupCrew = { vehicleId?: string | null; driverId?: string | null; days: readonly string[] }
+
+/**
+ * The fleet a body named afresh is there on each group's first run day from
+ * the day the crew is judged (O6 of #290, `CREW_THERE`): a 409 naming the
+ * period, in the groups' order, after the statuses. A parked group runs on no
+ * day and is asked nothing. One read per family over every group asked.
+ */
+export async function requireFleetThere(tx: Tx, scope: Scope, scheme: { validFrom: string }, crews: readonly GroupCrew[], today: Today): Promise<void> {
+  const named = crews.filter((crew) => crew.vehicleId != null || crew.driverId != null)
+  if (named.length === 0) return
+  const judged = schemeLicenceDay(scheme.validFrom, await today()).day
+  const asked = named.flatMap((crew) => {
+    const day = firstRunDay(judged, crew.days as ServiceDay[])
+    return day === undefined ? [] : [{ vehicleId: crew.vehicleId, driverId: crew.driverId, days: oneDay(day) }]
+  })
+  await refuseCrewsAway(tx, scope, asked, "a collection group")
 }
 
 /**

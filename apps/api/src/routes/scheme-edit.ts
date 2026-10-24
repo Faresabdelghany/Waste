@@ -64,6 +64,7 @@ import {
   pickOf,
   referencesOf,
   requireFleetInService,
+  requireFleetThere,
   requireGroupDriver,
   requireGroupReferences,
   requireNotPickedTwice,
@@ -133,13 +134,14 @@ export async function requireGroupEdit(
   // A group the list leaves out keeps its crew parked, and un-parking it asks no licence, so a later start judges it too, as the patch without the list judges every stored group.
   if (scheme.startsLater) for (const group of leftOut) await requireGroupDriver(tx, scope, scheme, group, { path: "validFrom", today })
 
-  const afresh = edit.map((restating, n) => {
+  const crews = edit.map((restating) => {
     const { entry, group } = restating
     const unparking = group !== undefined && isParked(group.days) && groupRuns(entry)
     const named = (key: "vehicleId" | "driverId") => (unparking || moves(restating, key) ? entry[key] : null)
-    return referencesOf({ vehicleId: named("vehicleId"), driverId: named("driverId") }, { prefix: path(n) })
+    return { vehicleId: named("vehicleId"), driverId: named("driverId"), days: entry.days }
   })
-  requireFleetInService(mergeReferences(afresh), rows)
+  requireFleetInService(mergeReferences(crews.map((crew, n) => referencesOf(crew, { prefix: path(n) }))), rows)
+  await requireFleetThere(tx, scope, scheme, crews, today)
   // The structure over the groups as the edit leaves them, in the order they stand — the order a read lists them in, position then id, an added group after the stored ones — since its sentences name groups in that order.
   const standing = [...edit.map(({ entry, group, position }) => ({ ...entry, position, id: group?.id })), ...leftOut.map((group) => ({ ...group, days: [] }))]
   await requireStructure(tx, scope, scheme, standing.sort((a, b) => a.position - b.position || ((a.id ?? ADDED) < (b.id ?? ADDED) ? -1 : 1)))

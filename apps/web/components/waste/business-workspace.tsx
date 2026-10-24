@@ -1783,13 +1783,15 @@ export function BusinessWorkspace({
   // they are worked through lifecycle transitions and the details view), the
   // viewer's grants, and for edits a form execution policy.
   // A module with a row surface on the Pilot is changed through it (#179: a
-  // route or a stop moves by its commands), so the generic Edit is not offered.
+  // route or a stop moves by its commands), so the generic Edit is not
+  // offered — unless the surface says the row keeps it (O6 of #290: the
+  // fleet's absences sit beside the driver's and the vehicle's own form).
   const offersRowActions = moduleOffersRowActions(activeModule.id)
   const canEditRecords =
     offersRowActions &&
     Boolean(activeModuleFormSchema?.execution) &&
     hasGrant("edit") &&
-    RowSurface === undefined
+    (RowSurface === undefined || commandSurface?.genericEdit === true)
   // The API has no delete (Issue #81): a switched module's record is
   // deactivated or moved to another status, never soft-deleted, so the
   // action is not offered there — and the store refuses one that arrives
