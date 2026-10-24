@@ -26,7 +26,7 @@ import { containerAdapter } from "../records/containers"
 import { containerTypeAdapter, wasteFractionAdapter } from "../records/master-data"
 import { isServerBacked, SERVER_MODULE_KEYS } from "../records/modules"
 import { projectAdapter } from "../records/organisation"
-import { CORRECT_PICKUP, PICKUPS_MODULE, pickupAdapter, pickupProofs, pickupsModule, proofLine, REASON_WITH_A_MISS as LOCAL_REASON_WITH_A_MISS, REMOVE_PICKUP } from "../records/pickups"
+import { CORRECT_PICKUP, PICKUPS_MODULE, pickupAdapter, pickupProofObjects, pickupProofs, pickupsModule, proofLine, proofObjectNoun, REASON_WITH_A_MISS as LOCAL_REASON_WITH_A_MISS, REMOVE_PICKUP } from "../records/pickups"
 import { routeAdapter, routesWindowFrom } from "../records/routes"
 import { commandRecord, loaded, loadModule, resolverOver, writeRecord, type ServerRecordsState } from "../records/server-records"
 import { bodyOf, clientOver, json, problem, scripted } from "./scripted-fetch"
@@ -333,6 +333,17 @@ describe("the pickup's commands", () => {
     const { fetch, calls } = scripted([() => json(detail(first, [proof]))])
     assert.deepEqual(await pickupProofs(clientOver(fetch), first.id), [proof])
     assert.equal(calls[0].url, `http://api.test/pickups/${first.id}`)
+  })
+
+  test("its photos and signatures are a read of their own, a signed URL per proof naming an object, null where Storage holds none (O1 of #290)", async () => {
+    const items = [
+      { proofId: "01a0d2a4-a280-7034-8000-000000000002", objectKey: `${FIXTURE_COMPANY_ID}/${route.id}/01a0d2a4-a280-7034-8000-000000000002.jpg`, url: "http://storage.test/object/sign/proofs/a.jpg?token=t", expiresAt: "2026-10-01T04:25:00.000Z" },
+      { proofId: "01a0d2a4-a280-7034-8000-000000000003", objectKey: `${FIXTURE_COMPANY_ID}/${route.id}/01a0d2a4-a280-7034-8000-000000000003.png`, url: null, expiresAt: "2026-10-01T04:25:00.000Z" },
+    ]
+    const { fetch, calls } = scripted([() => json({ items })])
+    assert.deepEqual(await pickupProofObjects(clientOver(fetch), first.id), items)
+    assert.equal(calls[0].url, `http://api.test/pickups/${first.id}/proof-objects`)
+    assert.deepEqual(["photo", "signature", "completion"].map((kind) => proofObjectNoun({ kind: kind as ProofOfService["kind"] })), ["photo", "signature", "file"])
   })
 
   test("a proof reads as one line on the project's clock: its kind and source, an outcome, a weight and a note where it has them (O2 of #290)", () => {

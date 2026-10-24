@@ -3,8 +3,9 @@
 // media type must be the problem one, the body must parse with the contracts'
 // schema, its status must repeat the response's, and its type is the generic
 // one unless the test names the kind it expects — which only a test of the
-// principal's two account refusals does (`NO_ACTIVE_ACCOUNT`, Issue #150), so
-// every other refusal the suites read is held to `about:blank`.
+// principal's two account refusals does (`NO_ACTIVE_ACCOUNT`, Issue #150), or
+// of a deployment without Storage (`NO_PROOF_STORAGE`, O1 of #290), so every
+// other refusal the suites read is held to `about:blank`.
 import assert from "node:assert/strict"
 
 import { BLANK_PROBLEM_TYPE, Problem, type ProblemKind } from "@waste/contracts/problem"

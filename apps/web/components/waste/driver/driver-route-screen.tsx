@@ -6,7 +6,8 @@
 // address-only stop the office added, #111), fraction and
 // status and an "Open in Maps" link over its own point, and per stop:
 // arrived, complete, skip, fail, report a problem, add a note, record a weight
-// (O2 of #290). On the route: the next places still to do handed to Maps in
+// (O2 of #290), a signature, and a photo with a skip, a failure or a problem —
+// of any stop where the deployment offers it (O1). On the route: the next places still to do handed to Maps in
 // one link, report a problem,
 // pause or resume, record an unload (any time while active, never required)
 // and end the route behind a confirm that counts the stops still planned.
@@ -15,16 +16,26 @@
 // else is sent and the server decides (lib/driver/route-view.ts).
 import Link from "next/link"
 import { useEffect, useState } from "react"
-import { ArrowLeft, CheckCircle, FlagCheckered, MapPin, MapTrifold, NavigationArrow, NotePencil, Pause, Play, Scales, SkipForward, Warning, XCircle } from "@phosphor-icons/react/dist/ssr"
+import { ArrowLeft, Camera, CheckCircle, FlagCheckered, MapPin, MapTrifold, NavigationArrow, NotePencil, Pause, Play, Scales, Signature, SkipForward, Warning, XCircle } from "@phosphor-icons/react/dist/ssr"
 
 import { Badge } from "@/components/ui/badge"
 import { Button } from "@/components/ui/button"
 import { useDriverApp, useDriverAppState } from "@/components/waste/driver/driver-app-provider"
 import { EndRouteDialog, NoteDialog, ReasonDialog, UnloadDialog, WeightDialog } from "@/components/waste/driver/driver-dialogs"
 import { DriverFrame } from "@/components/waste/driver/driver-frame"
+import { PhotoDialog, SignatureDialog } from "@/components/waste/driver/driver-proof-dialogs"
 import { RejectionList, operatingDay, progressLine } from "@/components/waste/driver/driver-parts"
 import type { DriverMe, DriverPickup, DriverRouteDetail } from "@waste/contracts/driver-commands"
+import type { ProofBytes } from "@/lib/driver/commands"
+import type { DriverAppController, Tap } from "@/lib/driver/driver-app"
+import { STOP_PHOTOS } from "@/lib/driver/proof-images"
 import { DRIVER_REASON_LABELS, endRouteWarning, mapsHref, PICKUP_STATUS_LABELS, ROUTE_STATUS_LABELS, routeActions, routeMapsHref, stopActions, stopCollects, stopsInOrder, waitingOn } from "@/lib/driver/route-view"
+
+/** A photo taken with a stop's exception goes first, then the exception: the queue sends in the order of the taps. */
+async function withPhoto(app: DriverAppController, photo: ProofBytes | null, routeId: string, pickupId: string, then: Tap): Promise<void> {
+  if (photo !== null) await app.tap({ kind: "add-photo", routeId, body: { pickupId }, object: photo })
+  await app.tap(then)
+}
 
 export function DriverRouteScreen({ routeId }: { routeId: string }) {
   const app = useDriverApp()
@@ -139,6 +150,7 @@ function RouteDetailView({ detail, me }: { detail: DriverRouteDetail; me: Driver
         description="The office hears of it as a ticket."
         confirm="Report problem"
         noteRequired
+        takesPhoto={false}
         onConfirm={(reason, note) => void app.tap({ kind: "report-problem", routeId: detail.id, body: { reason, note: note ?? "" } })}
       />
       <UnloadDialog open={dialog === "unload"} onOpenChange={close} me={me} onConfirm={(body) => void app.tap({ kind: "record-unload", routeId: detail.id, body })} />
@@ -153,7 +165,7 @@ function StopCard({ detail, stop, number }: { detail: DriverRouteDetail; stop: D
   const actions = stopActions(detail, stop, state.waiting)
   const rejections = state.rejections.filter((rejection) => rejection.pickupId === stop.id)
   const maps = mapsHref(stop.location)
-  const [dialog, setDialog] = useState<"skip" | "fail" | "report" | "note" | "weight" | null>(null)
+  const [dialog, setDialog] = useState<"skip" | "fail" | "report" | "note" | "weight" | "signature" | "photo" | null>(null)
   const close = (open: boolean) => {
     if (!open) setDialog(null)
   }
@@ -225,6 +237,16 @@ function StopCard({ detail, stop, number }: { detail: DriverRouteDetail; stop: D
             <Scales aria-hidden />
             Weight
           </Button>
+          <Button variant="outline" className="h-11" disabled={!actions.report} onClick={() => setDialog("signature")}>
+            <Signature aria-hidden />
+            Signature
+          </Button>
+          {STOP_PHOTOS && (
+            <Button variant="outline" className="h-11" disabled={!actions.report} onClick={() => setDialog("photo")}>
+              <Camera aria-hidden />
+              Photo
+            </Button>
+          )}
         </div>
       )}
       <ReasonDialog
@@ -234,7 +256,8 @@ function StopCard({ detail, stop, number }: { detail: DriverRouteDetail; stop: D
         description={stop.address}
         confirm="Skip stop"
         noteRequired={false}
-        onConfirm={(reason, note) => void app.tap({ kind: "skip-pickup", routeId: detail.id, body: { pickupId: stop.id, reason, ...(note === undefined ? {} : { note }) } })}
+        takesPhoto
+        onConfirm={(reason, note, photo) => void withPhoto(app, photo, detail.id, stop.id, { kind: "skip-pickup", routeId: detail.id, body: { pickupId: stop.id, reason, ...(note === undefined ? {} : { note }) } })}
       />
       <ReasonDialog
         open={dialog === "fail"}
@@ -243,7 +266,8 @@ function StopCard({ detail, stop, number }: { detail: DriverRouteDetail; stop: D
         description={stop.address}
         confirm="Fail stop"
         noteRequired={false}
-        onConfirm={(reason, note) => void app.tap({ kind: "fail-pickup", routeId: detail.id, body: { pickupId: stop.id, reason, ...(note === undefined ? {} : { note }) } })}
+        takesPhoto
+        onConfirm={(reason, note, photo) => void withPhoto(app, photo, detail.id, stop.id, { kind: "fail-pickup", routeId: detail.id, body: { pickupId: stop.id, reason, ...(note === undefined ? {} : { note }) } })}
       />
       <ReasonDialog
         open={dialog === "report"}
@@ -252,9 +276,18 @@ function StopCard({ detail, stop, number }: { detail: DriverRouteDetail; stop: D
         description={stop.address}
         confirm="Report problem"
         noteRequired
-        onConfirm={(reason, note) => void app.tap({ kind: "report-problem", routeId: detail.id, body: { pickupId: stop.id, reason, note: note ?? "" } })}
+        takesPhoto
+        onConfirm={(reason, note, photo) => void withPhoto(app, photo, detail.id, stop.id, { kind: "report-problem", routeId: detail.id, body: { pickupId: stop.id, reason, note: note ?? "" } })}
       />
       <NoteDialog open={dialog === "note"} onOpenChange={close} title={`A note on stop ${number}`} description={stop.address} onConfirm={(note) => void app.tap({ kind: "add-note", routeId: detail.id, body: { pickupId: stop.id, note } })} />
+      <SignatureDialog
+        open={dialog === "signature"}
+        onOpenChange={close}
+        title={`Signature at stop ${number}`}
+        description={stop.address}
+        onConfirm={(signature) => void app.tap({ kind: "add-signature", routeId: detail.id, body: { pickupId: stop.id }, object: signature })}
+      />
+      <PhotoDialog open={dialog === "photo"} onOpenChange={close} title={`A photo of stop ${number}`} description={stop.address} onConfirm={(photo) => void app.tap({ kind: "add-photo", routeId: detail.id, body: { pickupId: stop.id }, object: photo })} />
       <WeightDialog open={dialog === "weight"} onOpenChange={close} title={`Weight at stop ${number}`} description={stopCollects(stop)} onConfirm={(weightKg) => void app.tap({ kind: "add-weight", routeId: detail.id, body: { pickupId: stop.id, weightKg } })} />
     </article>
   )

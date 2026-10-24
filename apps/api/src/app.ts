@@ -29,6 +29,7 @@ import { type BuildInfo, HealthResponse, PROBE_HEADERS, ReadinessResponse, Ready
 import { NO_ACTIVE_ACCOUNT } from "@waste/contracts/problem"
 import type { Database } from "@waste/db/client"
 import { createJobSender, type JobSender } from "@waste/db/jobs"
+import type { ProofStorage } from "@waste/db/storage"
 import { Hono, type Context } from "hono"
 import { describeRoute, openAPIRouteHandler, resolver } from "hono-openapi"
 
@@ -74,6 +75,7 @@ import { roleRoutes } from "./routes/roles"
 import { routeSchemeRoutes } from "./routes/route-schemes"
 import { planRoutes } from "./routes/plans"
 import { routeRoutes } from "./routes/routes"
+import { proofObjectRoutes } from "./routes/proof-objects"
 import { PREVIEW_CALLS_PER_MINUTE, routingPreviewRoutes } from "./routes/routing-preview"
 import { routingQuotaRoutes } from "./routes/routing-quota"
 import { serviceAreaRoutes } from "./routes/service-areas"
@@ -134,6 +136,8 @@ export type AppOptions = {
   peer?: (c: Context) => string | undefined
   /** How many proxies in front of the API append to X-Forwarded-For (PUBLIC_TRUSTED_PROXIES): 0, the default, ignores the header. */
   trustedProxies?: number
+  /** The proofs' Storage (O1 of #290), which signs uploads and reads of photos and signatures; null where the deployment holds no service-role key, and its routes answer 503. server.ts builds it from the environment; a test injects a fake. */
+  storage?: ProofStorage | null
 }
 
 export function createApp({
@@ -150,6 +154,7 @@ export function createApp({
   publicAllowance = new Allowance(PUBLIC_REQUESTS_PER_MINUTE, now),
   peer = () => undefined,
   trustedProxies = 0,
+  storage = null,
 }: AppOptions) {
   const app = new Hono()
   app.onError(errorHandler(log))
@@ -247,6 +252,8 @@ export function createApp({
   // The preview calls the provider, so its guard ends the principal's transaction before the handler, which opens its own short ones around the call (#124 §4, #173).
   app.route("/", routingPreviewRoutes(identify({ pool, verifier }), { pool, engine: routingEngine, now, log: log ?? console.error }))
   app.route("/", pickupRoutes(guard, { now }))
+  // Proof objects (O1 of #290) call Storage, so, like the preview, their guard ends the principal's transaction and each handler reads its fence in a short one of its own.
+  app.route("/", proofObjectRoutes(identify({ pool, verifier }), { pool, storage, now, log: log ?? console.error }))
   app.route("/", unloadRoutes(guard, { now }))
   // The driver door (Issue #104, slice 4) goes on after the office: its commands are judged against the request's clock, so it takes `now` like the ledger routes.
   app.route("/", driverDoorRoutes(guard, { now }))

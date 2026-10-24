@@ -119,6 +119,11 @@ export const Env = z.object({
   WORKER_BOSS_IDLE_TIMEOUT_SECONDS: wholeNumber(0, " of seconds, 0 for never"),
   /** OpenRouteService's key (#171), when ROUTING_PROVIDER names it: one person's, server-side only, never logged; `providerFromEnv` refuses the provider without it. */
   OPENROUTESERVICE_API_KEY: z.string().optional(),
+  /** The Supabase project's URL and its service-role key (O1 of #290): the purge removes old photos and signatures from Storage with them, server-side only, never logged. Both, or the purge removes nothing. */
+  SUPABASE_URL: z.url().optional(),
+  SUPABASE_SERVICE_ROLE_KEY: z.string().min(1).optional(),
+  /** How many days a photo or a signature is kept before the nightly purge removes it, unless an open ticket names its stop; a Pilot setting (apps/pilot/README.md), unset means no purge. */
+  PROOF_RETENTION_DAYS: wholeNumber(1, " of days, at least 1"),
   /** Where batch routing work stops, per family (#132 §1): the remaining it leaves for the office's own calls; the Standard plan's 500 directions and 100 optimisations unless set. */
   ROUTING_DIRECTIONS_RESERVE: wholeNumber(0, " of requests"),
   ROUTING_OPTIMISATION_RESERVE: wholeNumber(0, " of requests"),

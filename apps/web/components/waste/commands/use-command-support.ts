@@ -246,7 +246,7 @@ type Read<T> = { key: string; rows: T[] | null; problem: string | null }
  * (a transfer between two warehouses keeps the status) nor its stamps.
  * Nothing until the row is on the API.
  */
-export function useRowHistory<T>(workspaceId: WorkspaceId, moduleId: string, record: BusinessRecord, version: number, read: (client: ApiClient, serverId: string) => Promise<T[]>): { rows: T[] | null; problem: string | null } {
+export function useRowHistory<T>(workspaceId: WorkspaceId, moduleId: string, record: BusinessRecord, version: number | string, read: (client: ApiClient, serverId: string) => Promise<T[]>): { rows: T[] | null; problem: string | null } {
   const client = useApiClient()
   const serverId = useServerModuleState(workspaceId, moduleId)?.serverIds.get(record.id)
   const key = `${serverId ?? ""}|${version}`

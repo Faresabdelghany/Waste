@@ -21,7 +21,13 @@ describe("parseEnv", () => {
   })
 
   test("carries nothing it does not know: the process environment is large", () => {
-    assert.deepEqual(parseEnv({ ...base, PATH: "/usr/bin", HOME: "/home/worker", SUPABASE_URL: "https://x.supabase.co" }), expected)
+    assert.deepEqual(parseEnv({ ...base, PATH: "/usr/bin", HOME: "/home/worker", NEXT_PUBLIC_SUPABASE_URL: "https://x.supabase.co" }), expected)
+  })
+
+  test("reads the proofs' purge settings (O1 of #290), each absent unless set: the project's URL, the service-role key and the retention in whole days, at least one", () => {
+    assert.deepEqual(parseEnv({ ...base, SUPABASE_URL: "https://x.supabase.co", SUPABASE_SERVICE_ROLE_KEY: "service-key", PROOF_RETENTION_DAYS: "90" }), { ...expected, SUPABASE_URL: "https://x.supabase.co", SUPABASE_SERVICE_ROLE_KEY: "service-key", PROOF_RETENTION_DAYS: 90 })
+    for (const value of ["0", "ninety", "1.5"]) assert.throws(() => parseEnv({ ...base, PROOF_RETENTION_DAYS: value }), naming("PROOF_RETENTION_DAYS"), value)
+    assert.throws(() => parseEnv({ ...base, SUPABASE_URL: "not a url" }), naming("SUPABASE_URL"))
   })
 
   test("refuses a HOST with whitespace, brackets, a scheme or an IPv6 zone id, and a PORT outside 1..65535, naming the variable", () => {

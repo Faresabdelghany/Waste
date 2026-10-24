@@ -17,6 +17,7 @@
 // whose file says nothing usable stops before it binds.
 import { getConnInfo } from "@hono/node-server/conninfo"
 import { createDb, DEFAULT_POOL_MAX } from "@waste/db/client"
+import { supabaseStorage } from "@waste/db/storage"
 import { QuotaEngine, quotaKnobs } from "@waste/routing/quota"
 import { providerFromEnv } from "@waste/routing/select"
 import type { Context } from "hono"
@@ -47,6 +48,9 @@ const routingEngine = new QuotaEngine(providerFromEnv({ ROUTING_PROVIDER: env.RO
 const peer = (c: Context): string | undefined => getConnInfo(c).remote.address
 const publicAllowance = new Allowance(env.PUBLIC_REQUESTS_PER_MINUTE ?? PUBLIC_REQUESTS_PER_MINUTE, () => new Date())
 
+// The proofs' Storage (O1 of #290), where the deployment holds Supabase's service-role key; none, and the photo routes answer 503.
+const storage = env.SUPABASE_SERVICE_ROLE_KEY === undefined ? null : supabaseStorage({ url: env.SUPABASE_URL, serviceKey: env.SUPABASE_SERVICE_ROLE_KEY })
+
 const listening = await listen(
   createApp({
     probe,
@@ -59,6 +63,7 @@ const listening = await listen(
     publicAllowance,
     peer,
     trustedProxies: env.PUBLIC_TRUSTED_PROXIES ?? 0,
+    storage,
   }),
   { host: env.HOST, port: env.PORT },
 )

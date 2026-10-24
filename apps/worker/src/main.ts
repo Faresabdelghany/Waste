@@ -35,6 +35,7 @@
 // that redeploys while the worker is still dialling gets a clean exit and
 // closed pools rather than Node's default 143 with the connections dropped.
 import { createDb, DEFAULT_POOL_MAX } from "@waste/db/client"
+import { supabaseStorage } from "@waste/db/storage"
 import { QuotaEngine, quotaKnobs } from "@waste/routing/quota"
 import { providerFromEnv } from "@waste/routing/select"
 
@@ -56,6 +57,8 @@ const routing = new QuotaEngine(
 // The Pilot's knobs (#149), each the code's default where the environment
 // leaves it unset: the two pools' sizes (an unset knob is `max: undefined`,
 // which createDb reads as its default), and the intervals boss.ts applies.
+// The proofs' Storage (O1 of #290), where both the project's URL and its service-role key are set: the purge's one door to the bytes.
+const proofStorage = env.SUPABASE_URL !== undefined && env.SUPABASE_SERVICE_ROLE_KEY !== undefined ? supabaseStorage({ url: env.SUPABASE_URL, serviceKey: env.SUPABASE_SERVICE_ROLE_KEY }) : undefined
 const api = createDb(env.DATABASE_URL, { max: env.WORKER_API_POOL_MAX })
 const worker = createDb(env.WORKER_DATABASE_URL, { max: env.WORKER_POOL_MAX })
 const probe = createDb(env.DATABASE_URL, probePoolOptions(CHECK_TIMEOUT_MS))
@@ -86,6 +89,8 @@ async function boot() {
     complete: (name, id, options) => boss.complete(name, id, undefined, options),
     routing,
     pollingIntervalSeconds: env.WORKER_POLLING_INTERVAL_SECONDS,
+    ...(proofStorage === undefined ? {} : { proofStorage }),
+    ...(env.PROOF_RETENTION_DAYS === undefined ? {} : { proofRetentionDays: env.PROOF_RETENTION_DAYS }),
   })
   made.running = running
   started = true

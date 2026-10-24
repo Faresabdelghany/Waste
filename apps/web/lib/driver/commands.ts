@@ -1,6 +1,5 @@
-// The Driver App's commands (Issue #145, decided on #125; O2 of #290): twelve
-// of the driver door's fourteen kinds — `add-photo` and `add-signature` wait
-// for a store to hold their bytes (O1) — each an
+// The Driver App's commands (Issue #145, decided on #125; O1 and O2 of #290):
+// the driver door's fourteen kinds, each an
 // envelope of `@waste/contracts/driver-commands`, imported as a type only, so
 // no zod reaches the browser (CLAUDE.md, contracts). The door parses each
 // body against its kind and answers a shape mistake as that command's
@@ -15,14 +14,37 @@
 // key order is the order of the taps even when the phone's clock ran
 // backwards across a reload.
 import type { DriverCommand } from "@waste/contracts/driver-commands"
+import type { ObjectExtension } from "@waste/domain/execution/commands"
 import { ID_RANDOM_BYTES, mintId, nextId } from "@waste/domain/ids"
 
 /** The kinds the pilot's Driver App sends. */
-export const PILOT_COMMAND_KINDS = ["start-route", "complete-pickup", "skip-pickup", "fail-pickup", "report-problem", "pause", "resume", "end-route", "record-unload", "arrive", "add-weight", "add-note"] as const
+export const PILOT_COMMAND_KINDS = [
+  "start-route",
+  "complete-pickup",
+  "skip-pickup",
+  "fail-pickup",
+  "report-problem",
+  "pause",
+  "resume",
+  "end-route",
+  "record-unload",
+  "arrive",
+  "add-weight",
+  "add-note",
+  "add-photo",
+  "add-signature",
+] as const
 export type PilotCommandKind = (typeof PILOT_COMMAND_KINDS)[number]
 
-/** One of the twelve, as the door takes it: `{ id, kind, routeId, occurredAt, deviceId, body }`. */
+/** One of the fourteen, as the door takes it: `{ id, kind, routeId, occurredAt, deviceId, body }`. */
 export type PilotCommand = Extract<DriverCommand, { kind: PilotCommandKind }>
+
+/** The kinds whose command names an object in Storage (O1 of #290): its bytes are put there before the command is sent, under the key the API names. */
+export const OBJECT_KINDS = ["add-photo", "add-signature"] as const
+export type ObjectKind = (typeof OBJECT_KINDS)[number]
+
+/** A photo's or a signature's bytes as the screen made them: a JPEG photo, a PNG signature. */
+export type ProofBytes = { extension: ObjectExtension; contentType: string; bytes: ArrayBuffer }
 
 /** The most commands one batch carries: the contracts' `BATCH_MAX`, spelled again so no zod reaches the browser, and held equal to it by a test. */
 export const BATCH_LIMIT = 200

@@ -400,8 +400,8 @@ jobs:
       - if: steps.browser.outputs.cache-hit == 'true'
         run: pnpm --filter @waste/web exec playwright install-deps chromium
 
-      # The trimmed local stack — Postgres, Kong and GoTrue, the other
-      # services excluded by name — migrated, bootstrapped, seeded and given
+      # The trimmed local stack — Postgres, Kong, GoTrue and Storage (the
+      # proofs' private bucket, O1 of #290), the other services excluded by name — migrated, bootstrapped, seeded and given
       # its Logins, by the one root script developers run (root CLAUDE.md,
       # Commands). The ES256 signing key is minted on this runner first and
       # dies with it. The images are pulled every run and never put in the
@@ -417,9 +417,12 @@ jobs:
       - name: Read the stack's URL and publishable key
         run: |
           eval "$(pnpm exec supabase status -o env | grep -E '^[A-Z_]+=')"
+          # The stack's own service-role key, minted with this runner's signing key and dying with it: the API and the worker sign and purge proof objects with it, server-side; masked all the same.
+          echo "::add-mask::$SERVICE_ROLE_KEY"
           {
             echo "NEXT_PUBLIC_SUPABASE_URL=$API_URL"
             echo "NEXT_PUBLIC_SUPABASE_ANON_KEY=$PUBLISHABLE_KEY"
+            echo "SUPABASE_SERVICE_ROLE_KEY=$SERVICE_ROLE_KEY"
           } >> "$GITHUB_ENV"
       - run: pnpm --filter @waste/web build
         env:

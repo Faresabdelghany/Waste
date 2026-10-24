@@ -26,6 +26,7 @@ import { generateRoutes } from "./generate-routes"
 import { heartbeat } from "./heartbeat"
 import { openTickets } from "./open-tickets"
 import { planAheadJob } from "./plan-ahead"
+import { purgeProofObjectsJob } from "./purge-proof-objects"
 import { recordBillableEvents } from "./record-billable-events"
 import { relayOutbox } from "./relay-outbox"
 import { sweepHorizonJob } from "./routing-horizon"
@@ -33,7 +34,7 @@ import { routingMeasure } from "./routing-measure"
 import { routingOptimise } from "./routing-optimise"
 import { runScheduledBilling } from "./run-billing"
 
-export const JOBS: readonly AnyJob[] = [heartbeat, generateRoutes, planAheadJob, routingMeasure, routingOptimise, sweepHorizonJob, relayOutbox, ...openTickets, ...recordBillableEvents, runScheduledBilling]
+export const JOBS: readonly AnyJob[] = [heartbeat, generateRoutes, planAheadJob, routingMeasure, routingOptimise, sweepHorizonJob, relayOutbox, ...openTickets, ...recordBillableEvents, runScheduledBilling, purgeProofObjectsJob]
 
 export type { AnyJob, JobContext, JobDefinition, JobQueueOptions, PublishedQueue } from "./definition"
 export { defineJob } from "./definition"

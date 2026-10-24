@@ -118,12 +118,31 @@ export const problem = (status: number, detail: string) =>
 export const outcomes = (commands: readonly { id: string }[], decide: (id: string, index: number) => Partial<CommandOutcomeRow> = () => ({})) =>
   json({ outcomes: commands.map((command, index) => ({ commandId: command.id, outcome: "applied", ...decide(command.id, index) })) })
 
+/** The commands of a batch the door was sent. */
+export const commandsOf = (body: unknown) => (body as { commands: { id: string }[] }).commands
+
+/** Storage as the API signs for it: another origin than the API's, the bucket's objects under its upload path. */
+export const STORAGE_ORIGIN = "http://storage.test"
+export const COMPANY_ID = "01950000-0000-7000-8000-0000000000aa"
+export const objectKey = (commandId: string, extension: string) => `${COMPANY_ID}/${ROUTE_ID}/${commandId}.${extension}`
+export const uploadPath = (commandId: string, extension: string) => `/storage/v1/object/upload/sign/proofs/${objectKey(commandId, extension)}`
+
+/** `POST /driver/uploads` answered as the API answers it: the key its rule names, and an upload URL for it. */
+export const signedUpload = ({ body }: DoorCall) => {
+  const { commandId, extension } = body as { commandId: string; extension: string }
+  return json({ state: "upload", objectKey: objectKey(commandId, extension), uploadUrl: `${STORAGE_ORIGIN}${uploadPath(commandId, extension)}?token=signed`, expiresAt: new Date(NOW + 7_200_000).toISOString() })
+}
+
+/** Storage's own error body, which is no problem document. */
+export const storageError = (status: number, message: string, statusCode = String(status)) => json({ statusCode, error: "Error", message }, status)
+
 /** What a fetch that never reached the server throws. */
 export const offline = () => {
   throw new TypeError("Failed to fetch")
 }
 
-export type DoorCall = { method: string; path: string; body: unknown; signal: AbortSignal | null }
+/** One request: its JSON body parsed, and anything else — a photo's bytes — as it was handed to fetch. */
+export type DoorCall = { method: string; origin: string; path: string; body: unknown; raw: unknown; headers: Headers; signal: AbortSignal | null }
 
 /** An answer that never comes, unless the request is aborted, which fails it the way the browser's fetch does. */
 export const hang = ({ signal }: DoorCall) =>
@@ -144,7 +163,8 @@ export function fakeDoor() {
   const fetchImpl = (async (input: RequestInfo | URL, init: RequestInit = {}) => {
     const url = new URL(String(input))
     const method = init.method ?? "GET"
-    const call: DoorCall = { method, path: url.pathname, body: typeof init.body === "string" ? JSON.parse(init.body) : undefined, signal: init.signal ?? null }
+    const parsed = typeof init.body === "string"
+    const call: DoorCall = { method, origin: url.origin, path: url.pathname, body: parsed ? JSON.parse(init.body as string) : undefined, raw: parsed ? undefined : init.body, headers: new Headers(init.headers), signal: init.signal ?? null }
     calls.push(call)
     const key = `${method} ${url.pathname}`
     const answer = queued.get(key)?.shift() ?? standing.get(key)

@@ -7,7 +7,8 @@
 // its fraction — and what the route's own read gives: its stops
 // in their sequence, each opening its pickup, its sessions, and the device's
 // command log. A stop's details offer remove and correct outcome, with its
-// proofs; a live row its sessions and the way to its route. Every command is
+// proofs — a photo or a signature shown from the URL the API signs for it
+// (O1 of #290) — a live row its sessions and the way to its route. Every command is
 // offered whatever the status, and the API's 409 says why one does not apply
 // (the rules on #81): a dispatch without a planned driver, a reorder of an
 // active route. A route without a Plan is complete — nothing here waits on
@@ -30,13 +31,15 @@ import { statusLabel, webIdOf, type CommandInput } from "@/lib/api/records/adapt
 import { shownOn } from "@/lib/api/records/clock"
 import { CONTAINERS_MODULE } from "@/lib/api/records/containers"
 import { LIVE_MODULE, routeSessions, whileWatched } from "@/lib/api/records/live"
-import { CORRECT_PICKUP, PICKUPS_MODULE, pickupProofs, proofLine, REMOVE_PICKUP } from "@/lib/api/records/pickups"
+import { CORRECT_PICKUP, PICKUPS_MODULE, pickupProofObjects, pickupProofs, proofLine, proofObjectNoun, REMOVE_PICKUP } from "@/lib/api/records/pickups"
 import { ADD_STOP, ASSIGN_ROUTE, callsignOf, CANCEL_ROUTE, DISPATCH_ROUTE, isHeldRoute, RELEASE_HOLD, REORDER_ROUTE, RESCHEDULE_ROUTE, routeCommandLog, routeDetail, ROUTES_MODULE } from "@/lib/api/records/routes"
 import { DRIVERS_MODULE, VEHICLES_MODULE } from "@/lib/data/allocations"
 import type { BusinessFormValues } from "@/lib/data/business-form-types"
 import { PROPERTIES_MODULE, SHARED_POINTS_MODULE } from "@/lib/data/properties"
 import { createRouteRecord, PICKUP_COMMAND_FORMS, pickupReasonLabel, ROUTE_COMMAND_FORMS, ROUTE_CREATE_FORM, routeCommandValues, type PickupCommandWithForm, type RouteCommandWithForm } from "@/lib/data/routes"
 import type { Pickup } from "@waste/contracts/pickups"
+import type { ProofObjectLink } from "@waste/contracts/proof-objects"
+import type { ProofOfService } from "@waste/contracts/proofs"
 import type { RouteDetail } from "@waste/contracts/routes"
 import type { Session } from "@waste/contracts/sessions"
 
@@ -263,12 +266,44 @@ function ReorderStopsDialog({ order, label, busy, onChange, onClose, onSave }: {
   )
 }
 
+/** A proof's photo or signature beside its line: the picture from its signed URL, opening it whole, or why there is none to show. */
+function ProofObject({ proof, links }: { proof: ProofOfService; links: { rows: ProofObjectLink[] | null; problem: string | null } }) {
+  if (proof.objectKey === null || links.rows === null) return null
+  const noun = proofObjectNoun(proof)
+  const link = links.rows.find((candidate) => candidate.proofId === proof.id)
+  if (link?.url == null) return <p className="mt-1 text-xs text-muted-foreground">The {noun} is no longer stored.</p>
+  return (
+    <a href={link.url} target="_blank" rel="noopener noreferrer" className="mt-1 inline-flex items-center gap-2 text-xs underline-offset-2 hover:underline">
+      {/* A private object's signed URL, which next/image would fetch through the server. */}
+      {/* eslint-disable-next-line @next/next/no-img-element */}
+      <img src={link.url} alt={`The ${noun} recorded at this stop`} className="h-16 w-16 rounded border bg-white object-contain" />
+      Open {noun}
+    </a>
+  )
+}
+
+/** No read of a stop's objects, for a stop whose proofs name none. */
+const NO_PROOF_OBJECTS = async (): Promise<ProofObjectLink[]> => []
+
+/** How long before its read URLs lapse a stop's objects are read again, so a details left open never offers a dead link. */
+const RENEW_BEFORE_MS = 30_000
+
 /** A stop's commands and its proofs, in its details. */
 export function PickupCommandsSurface({ record }: RowSurfaceProps) {
   const pickers = useRelationPickers()
   const moduleReady = useModuleReady(PICKUPS_MODULE)
   const { busy, version, run: send } = useCommandRunner(PICKUPS_MODULE, record.id)
   const proofs = useRowHistory(PICKUPS_MODULE.workspaceId, PICKUPS_MODULE.moduleId, record, version, pickupProofs)
+  // The objects' read URLs are asked for only where a proof names an object, and asked again before they lapse.
+  const withObjects = proofs.rows?.some((proof) => proof.objectKey !== null) ?? false
+  const [renewals, setRenewals] = useState(0)
+  const objects = useRowHistory(PICKUPS_MODULE.workspaceId, PICKUPS_MODULE.moduleId, record, `${version}:${withObjects}:${renewals}`, withObjects ? pickupProofObjects : NO_PROOF_OBJECTS)
+  const lapsesAt = objects.rows?.reduce<number | null>((soonest, link) => Math.min(soonest ?? Infinity, Date.parse(link.expiresAt)), null) ?? null
+  useEffect(() => {
+    if (lapsesAt === null) return
+    const renew = setTimeout(() => setRenewals((count) => count + 1), Math.max(0, lapsesAt - RENEW_BEFORE_MS - Date.now()))
+    return () => clearTimeout(renew)
+  }, [lapsesAt])
   const openRoute = useOpenRecord(ROUTES_MODULE.moduleId)
   const [open, setOpen] = useState<PickupCommandWithForm | null>(null)
   const projectId = record.projectIds?.[0]
@@ -306,8 +341,14 @@ export function PickupCommandsSurface({ record }: RowSurfaceProps) {
           label="Reading the stop's proofs…"
           empty="No proof yet."
           testId="pickup-proofs"
-          line={(proof) => proofLine(proof, timezone)}
+          line={(proof) => (
+            <>
+              <span>{proofLine(proof, timezone)}</span>
+              <ProofObject proof={proof} links={objects} />
+            </>
+          )}
         />
+        {objects.problem !== null && proofs.rows?.some((proof) => proof.objectKey !== null) && <p className="text-xs text-muted-foreground">{objects.problem}</p>}
       </div>
       {open !== null && <BusinessRecordFormDialog schema={PICKUP_COMMAND_FORMS[open]} open onOpenChange={(isOpen) => !isOpen && setOpen(null)} onSubmit={(values) => run(open, values)} relationOptions={pickers.options} />}
     </section>

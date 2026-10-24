@@ -92,6 +92,8 @@ export const Env = z.object({
   SUPABASE_URL: SupabaseUrl,
   /** The routing provider's name (#170, #131): unset means the fake; the one validator of the value is providerFromEnv (@waste/routing/select), so the refusal has one spelling. */
   ROUTING_PROVIDER: z.string().optional(),
+  /** Supabase's service-role key (O1 of #290): the API signs uploads and reads of proof photos and signatures in the private `proofs` bucket with it (`@waste/db/storage`), server-side only, never logged and never the web's. Unset, those routes answer 503 and the Driver App keeps its photos waiting. */
+  SUPABASE_SERVICE_ROLE_KEY: z.string().min(1).optional(),
   /** OpenRouteService's key (#171), when ROUTING_PROVIDER names it: the guided setup's preview calls the provider from the API (#173); one person's, server-side only, never logged; `providerFromEnv` refuses the provider without it. */
   OPENROUTESERVICE_API_KEY: z.string().optional(),
   /** How many preview calls a minute the API makes per family (#173): PREVIEW_CALLS_PER_MINUTE, 10, unless set — the rest of the plan's 40 beside the worker's ROUTING_CALLS_PER_MINUTE, on the one key. The preview is interactive, so the reserves are the worker's alone. */

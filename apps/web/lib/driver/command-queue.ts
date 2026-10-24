@@ -9,15 +9,16 @@
 //                  before idempotent all the same;
 //   queue        — one row per command, keyed by that installation id and the
 //                  command's own, so a row is written once at the tap and
-//                  rewritten in place when its location arrives, and the key
-//                  order — the UUIDv7 ids' — is the order of the taps.
+//                  rewritten in place when its location arrives or its bytes
+//                  reach Storage, and the key order — the UUIDv7 ids' — is
+//                  the order of the taps.
 //
 // Only storage: what a row's state means, when the queue drains and what an
 // answer does to it is the controller's (driver-app.ts). The factory is an
 // argument, the browser's `indexedDB` in the page and fake-indexeddb's in the
 // tests.
 import { DRIVER_COMMAND_QUEUE_DATABASE } from "../storage-keys"
-import type { PilotCommand } from "./commands"
+import type { PilotCommand, ProofBytes } from "./commands"
 
 const VERSION = 1
 const INSTALLATION = "installation"
@@ -29,13 +30,16 @@ const DEVICE = "device"
  * One queued command: whose tap it was (the signed-in login, `whoOf` in
  * lib/api/session.ts, so a phone handed to another driver never sends the
  * last one's commands under the new one's token), whether a location lookup
- * may still enrich it, and the envelope exactly as the door takes it.
+ * may still enrich it, the envelope exactly as the door takes it, and a
+ * photo's or a signature's bytes until Storage has them.
  */
 export type QueueEntry = {
   owner: string
   /** `location-pending` from the tap until the lookup answers or gives up; `ready` once it may be sent as it stands. */
   state: "location-pending" | "ready"
   command: PilotCommand
+  /** The bytes of the object the command names, held from the tap until Storage has them; meanwhile the body's `objectKey` is empty, the key being the API's to name, and the command is never sent. */
+  object?: ProofBytes
 }
 
 export type CommandQueueStore = {

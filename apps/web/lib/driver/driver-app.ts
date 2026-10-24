@@ -41,6 +41,18 @@
 //                 and a confirmed Discard waiting actions, the only way a
 //                 person empties the queue. The triggers keep trying.
 //
+// A photo or a signature (O1 of #290). The tap holds its bytes in the row, and
+// the drain puts them to Storage before the batch that carries the command:
+// `POST /driver/uploads` names the key and signs an upload URL, the bytes go
+// to it, and the command, naming the key, goes in the batch. An object Storage
+// holds already — a put whose answer was lost — is done. Out of reach on the
+// way, what was tapped before it is sent and it and what follows wait, as for
+// a batch, and the API's 401 waits for the session; any other refusal — a
+// deployment without Storage (its 503 told by its type), a route no longer
+// the driver's or no longer active, Storage refusing the bytes or its own
+// URL — is the action's rejection, shown as the server's would be, and the
+// rest goes. Once Storage has the bytes the row keeps the key alone.
+//
 // A command older than 48 h is still sent and comes back rejected, the
 // recorded answer ADR-0004 wants.
 import type { DriverMe, DriverRouteDetail } from "@waste/contracts/driver-commands"
@@ -50,9 +62,9 @@ import { problemSentence, type Problem } from "../api/problem"
 import { problemOfError } from "../api/records/server-records"
 import { createExternalStore, type ExternalStore } from "../external-store"
 import type { CommandQueueStore, QueueEntry } from "./command-queue"
-import { BATCH_LIMIT, createCommandIds, pickupIdOf, takesLocation, type PilotBody, type PilotCommand, type PilotCommandKind } from "./commands"
+import { BATCH_LIMIT, createCommandIds, pickupIdOf, takesLocation, type ObjectKind, type PilotBody, type PilotCommand, type PilotCommandKind, type ProofBytes } from "./commands"
 import { lookupFix } from "./location"
-import { outOfReach, readDriverMe, readDriverRoute, sendCommands } from "./reads"
+import { NO_PROOF_STORAGE_TYPE, outOfReach, putObject, readDriverMe, readDriverRoute, sendCommands, signProofUpload } from "./reads"
 import { BROWSER_TIMERS, type Timers } from "./timers"
 
 /** How long the queue waits before trying again while anything waits. */
@@ -60,6 +72,9 @@ export const DRAIN_RETRY_MS = 30_000
 
 /** How long a request may go unanswered before it counts as the server out of reach: a weak signal can hold a fetch open for minutes, and one batch in flight at a time would hold the queue with it. A batch the server did apply is replayed when it is sent again. */
 export const REQUEST_TIMEOUT_MS = 30_000
+
+/** How long a photo's bytes may take to reach Storage: a phone's JPEG is a few hundred kilobytes, which a weak signal carries in well under this. */
+export const UPLOAD_TIMEOUT_MS = 120_000
 
 /** Who is signed in — `whoOf` their session — and the client for their token, null while it has expired unrefreshed. */
 export type DriverSession = { who: string; client: ApiClient | null }
@@ -93,11 +108,13 @@ export type DriverAppState = {
 
 const INITIAL: DriverAppState = { status: "loading", refusal: null, me: null, routes: {}, waiting: [], unreachable: false, refused: null, rejections: [] }
 
-/** What the server owns on a start, and a position, which the controller adds: never part of a tap. */
-type Added<Kind extends PilotCommandKind> = "location" | "accuracyM" | (Kind extends "start-route" ? "appVersion" : never)
+/** What the server owns on a start, the key the API names for an object, and a position, which the controller adds: never part of a tap. */
+type Added<Kind extends PilotCommandKind> = "location" | "accuracyM" | (Kind extends "start-route" ? "appVersion" : never) | (Kind extends ObjectKind ? "objectKey" : never)
 
-/** One tap: the kind, the route, and the body as the screen fills it. */
-export type Tap = { [Kind in PilotCommandKind]: { kind: Kind; routeId: string; body: Omit<PilotBody<Kind>, Added<Kind>> } }[PilotCommandKind]
+/** One tap: the kind, the route, the body as the screen fills it, and a photo's or a signature's bytes. */
+export type Tap = {
+  [Kind in PilotCommandKind]: { kind: Kind; routeId: string; body: Omit<PilotBody<Kind>, Added<Kind>> } & (Kind extends ObjectKind ? { object: ProofBytes } : unknown)
+}[PilotCommandKind]
 
 export type DriverAppOptions = {
   /** The Command Queue's storage; a failure to open it leaves this page's commands in memory. */
@@ -209,9 +226,9 @@ export function createDriverApp({ openQueue, geolocation = null, now = Date.now,
   }
 
   /** A call under a deadline of its own: past it the request is aborted, which the client answers as the server out of reach. */
-  const withDeadline = async <Answer>(client: ApiClient, call: (client: ApiClient) => Promise<Answer>): Promise<Answer> => {
+  const withDeadline = async <Answer>(client: ApiClient, call: (client: ApiClient) => Promise<Answer>, ms = REQUEST_TIMEOUT_MS): Promise<Answer> => {
     const deadline = new AbortController()
-    const handle = timers.set(() => deadline.abort(), REQUEST_TIMEOUT_MS)
+    const handle = timers.set(() => deadline.abort(), ms)
     try {
       return await call({ ...client, signal: deadline.signal })
     } finally {
@@ -286,6 +303,48 @@ export function createDriverApp({ openQueue, geolocation = null, now = Date.now,
     }, DRAIN_RETRY_MS)
   }
 
+  /**
+   * Puts an entry's bytes to Storage under the key the API names, and answers
+   * the entry as it now stands, naming the key without the bytes; `refused`
+   * once a refusal is the action's rejection and the entry has left the
+   * queue; `unreachable` when the API or Storage could not be reached; null
+   * when nothing may be sent now.
+   */
+  const upload = async (client: ApiClient, who: string, entry: QueueEntry, object: ProofBytes): Promise<QueueEntry | "refused" | "unreachable" | null> => {
+    const { command } = entry
+    let objectKey: string
+    let atStorage = false
+    try {
+      const signed = await withDeadline(client, (under) => signProofUpload(under, { routeId: command.routeId, commandId: command.id, extension: object.extension }))
+      objectKey = signed.objectKey
+      if (signed.state === "upload") {
+        atStorage = true
+        await withDeadline(client, (under) => putObject(under, signed.uploadUrl, object), UPLOAD_TIMEOUT_MS)
+      }
+    } catch (error) {
+      const problem = problemOfError(error)
+      // The API's 401 waits for the session's refresh; Storage's own refuses the URL it signed, which no new token changes.
+      if ((problem.status === 401 && !atStorage) || session?.who !== who) return null
+      if (outOfReach(problem.status) && problem.type !== NO_PROOF_STORAGE_TYPE) {
+        store.set((state) => ({ ...state, unreachable: true }))
+        return "unreachable"
+      }
+      const sentence = atStorage ? `Storage refused the ${command.kind === "add-photo" ? "photo" : "signature"}: ${problemSentence(problem)}` : problemSentence(problem)
+      const rejection: Rejection = { commandId: command.id, kind: command.kind, routeId: command.routeId, pickupId: pickupIdOf(command), sentence }
+      entries = entries.filter((candidate) => candidate.command.id !== command.id)
+      fresh.add(command.id)
+      store.set((state) => ({ ...state, unreachable: false, rejections: [...state.rejections, rejection], waiting: mine() }))
+      await forget([command.id])
+      return "refused"
+    }
+    // Discarded meanwhile: nothing is written back.
+    if (!entries.some((candidate) => candidate.command.id === command.id)) return null
+    const uploaded: QueueEntry = { owner: entry.owner, state: entry.state, command: { ...command, body: { ...command.body, objectKey } } as PilotCommand }
+    entries = entries.map((candidate) => (candidate.command.id === command.id ? uploaded : candidate))
+    await persist(uploaded)
+    return session?.who === who ? uploaded : null
+  }
+
   const drainOnce = async (): Promise<void> => {
     const current = session
     if (!loaded || current?.client == null) return
@@ -296,6 +355,25 @@ export function createDriverApp({ openQueue, geolocation = null, now = Date.now,
     }
     if (sendable.length === 0) return
     const batch = sendable.slice(0, BATCH_LIMIT)
+    // A photo's or a signature's bytes reach Storage before the batch carrying its command is sent.
+    let heldBack = false
+    for (const [index, entry] of batch.entries()) {
+      if (entry.object === undefined) continue
+      const uploaded = await upload(current.client, current.who, entry, entry.object)
+      if (uploaded === null) return
+      if (uploaded === "refused") {
+        again = true
+        return
+      }
+      if (uploaded === "unreachable") {
+        // What was tapped before it goes; it and what follows wait for the next try, and the banner with them.
+        batch.splice(index)
+        heldBack = true
+        break
+      }
+      batch[index] = uploaded
+    }
+    if (batch.length === 0) return
 
     let rows: unknown
     try {
@@ -335,9 +413,9 @@ export function createDriverApp({ openQueue, geolocation = null, now = Date.now,
     try {
       await refresh()
     } finally {
-      store.set((state) => ({ ...state, waiting: mine() }))
+      store.set((state) => ({ ...state, waiting: mine(), ...(heldBack ? { unreachable: true } : {}) }))
     }
-    if (sendable.length > batch.length) again = true
+    if (!heldBack && sendable.length > batch.length) again = true
   }
 
   const drain = async (): Promise<void> => {
@@ -421,8 +499,11 @@ export function createDriverApp({ openQueue, geolocation = null, now = Date.now,
       const occurredAt = new Date(now()).toISOString()
       const id = nextId()
       const located = takesLocation(tap.kind)
-      const body = tap.kind === "start-route" && appVersion ? { ...tap.body, appVersion } : tap.body
-      const entry: QueueEntry = { owner, state: located ? "location-pending" : "ready", command: { id, kind: tap.kind, routeId: tap.routeId, occurredAt, deviceId, body } as PilotCommand }
+      const object = "object" in tap ? tap.object : undefined
+      // An object's key is the API's to name at the upload, which comes before the command is sent.
+      const body = tap.kind === "start-route" && appVersion ? { ...tap.body, appVersion } : object === undefined ? tap.body : { ...tap.body, objectKey: "" }
+      const command = { id, kind: tap.kind, routeId: tap.routeId, occurredAt, deviceId, body } as PilotCommand
+      const entry: QueueEntry = { owner, state: located ? "location-pending" : "ready", command, ...(object === undefined ? {} : { object }) }
       entries = [...entries, entry]
       publishWaiting()
       await persist(entry)

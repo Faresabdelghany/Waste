@@ -1,22 +1,34 @@
-// The Driver App's commands (Issue #145, O2 of #290): the twelve kinds the pilot sends, which
-// of them carry a position, and the ids the browser mints for them — UUIDv7
+// The Driver App's commands (Issue #145, O1 and O2 of #290): the door's fourteen kinds, which
+// of them carry a position or name an object, and the ids the browser mints for them — UUIDv7
 // through @waste/domain/ids over the browser's clock and randomness, each
 // after the last so the queue's key order is the order of the taps.
 import assert from "node:assert/strict"
 import { describe, test } from "node:test"
 
 import { BATCH_MAX, COMMAND_BODIES } from "@waste/contracts/driver-commands"
+import { NO_PROOF_STORAGE } from "@waste/contracts/problem"
 import { PARAGRAPH_MAX } from "@waste/contracts/text"
 import { DRIVER_COMMAND_KINDS } from "@waste/domain/execution/vocabulary"
 
-import { BATCH_LIMIT, createCommandIds, NOTE_MAX, PILOT_COMMAND_KINDS, pickupIdOf, takesLocation, wholeKilograms } from "../commands"
+import { BATCH_LIMIT, createCommandIds, NOTE_MAX, OBJECT_KINDS, PILOT_COMMAND_KINDS, pickupIdOf, takesLocation, wholeKilograms } from "../commands"
+import { NO_PROOF_STORAGE_TYPE } from "../reads"
 
 const UUID_V7 = /^[0-9a-f]{8}-[0-9a-f]{4}-7[0-9a-f]{3}-[89ab][0-9a-f]{3}-[0-9a-f]{12}$/
 
 describe("the pilot's commands", () => {
-  test("are twelve of the door's fourteen, never the photo or the signature, whose bytes no store holds yet", () => {
-    assert.deepEqual([...PILOT_COMMAND_KINDS].sort(), ["add-note", "add-weight", "arrive", "complete-pickup", "end-route", "fail-pickup", "pause", "record-unload", "report-problem", "resume", "skip-pickup", "start-route"])
-    for (const kind of PILOT_COMMAND_KINDS) assert.ok((DRIVER_COMMAND_KINDS as readonly string[]).includes(kind), kind)
+  test("are the door's fourteen", () => {
+    assert.deepEqual([...PILOT_COMMAND_KINDS].sort(), [...DRIVER_COMMAND_KINDS].sort())
+  })
+
+  test("name an object in Storage exactly where the body requires a key: the photo and the signature, whose bytes go first", () => {
+    assert.deepEqual(
+      PILOT_COMMAND_KINDS.filter((kind) => "objectKey" in COMMAND_BODIES[kind].shape && !COMMAND_BODIES[kind].shape.objectKey.safeParse(undefined).success),
+      [...OBJECT_KINDS],
+    )
+  })
+
+  test("tell a deployment without Storage by the problem's type, spelled again here the same way", () => {
+    assert.equal(NO_PROOF_STORAGE_TYPE, NO_PROOF_STORAGE.type)
   })
 
   test("go at most as many to a batch as the door takes, spelled again here so no zod reaches the browser", () => {
