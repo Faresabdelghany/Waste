@@ -22,8 +22,9 @@
 // is the backstop, not the rule. It is not unique — a housing
 // administrator's address serves many organisations.
 //
-// The grant is `customers.contacts`, the surface's own.
-import { Customer, CustomerCreate, CustomerPatch, type CustomerKind, type CustomerStatus } from "@waste/contracts/customers"
+// The grant is `customers.contacts`, the surface's own. The writes are
+// customer-writes.ts's, which the CSV import runs too.
+import { Customer, CustomerCreate, CustomerPatch } from "@waste/contracts/customers"
 import { Page, PageRequest } from "@waste/contracts/pagination"
 import { customer } from "@waste/db/schema/customers"
 import { and, asc, eq, gt } from "drizzle-orm"
@@ -32,60 +33,13 @@ import { describeRoute } from "hono-openapi"
 
 import { BEARER_SECURITY, type AuthEnv } from "../auth/principal"
 import { requireGrant } from "../auth/require"
-import { newId } from "../ids"
 import { afterCursor, fetchLimit, pageOf } from "../pagination"
-import { describeProblem, problem, validate } from "../problem"
-import { created, describeCreated, describeJson, IdParam, refuseDuplicate, stampsOf } from "./shared"
+import { describeProblem, validate } from "../problem"
+import { createCustomer, customerColumns as columns, customerOf, noSuchCustomer, patchCustomer } from "./customer-writes"
+import { created, describeCreated, describeJson, IdParam } from "./shared"
 
 const MODULE = "customers.contacts"
 const CustomerPage = Page(Customer)
-
-const columns = {
-  id: customer.id,
-  kind: customer.kind,
-  name: customer.name,
-  registrationNumber: customer.registrationNumber,
-  email: customer.email,
-  phone: customer.phone,
-  billingAddress: customer.billingAddress,
-  serviceMessagesAllowed: customer.serviceMessagesAllowed,
-  status: customer.status,
-  createdAt: customer.createdAt,
-  updatedAt: customer.updatedAt,
-}
-
-type Row = Pick<typeof customer.$inferSelect, keyof typeof columns>
-
-/** The row on the wire. `kind` and `status` are text with a CHECK in the database and an enum here; the vocabulary holds the two in lockstep. */
-function customerOf(row: Row): Customer {
-  return {
-    id: row.id,
-    kind: row.kind as CustomerKind,
-    name: row.name,
-    registrationNumber: row.registrationNumber,
-    email: row.email,
-    phone: row.phone,
-    billingAddress: row.billingAddress,
-    serviceMessagesAllowed: row.serviceMessagesAllowed,
-    status: row.status as CustomerStatus,
-    ...stampsOf(row),
-  }
-}
-
-/** The partial unique index `(company_id, registration_number) where registration_number is not null`, which Postgres names as the constraint it refused with. */
-const REGISTRATION_TAKEN = "customer_registration_number_idx"
-const registrationTaken = (registrationNumber: string) =>
-  `This company already has a customer with registration number ${registrationNumber}`
-
-const noSuchCustomer = (id: string) => problem(404, { detail: `No customer ${id} in this company` })
-
-/** The one sentence a collision here can earn, and only when the body gave a number to collide on. */
-const collisions = (registrationNumber: string | null | undefined): Record<string, string> =>
-  registrationNumber == null ? {} : { [REGISTRATION_TAKEN]: registrationTaken(registrationNumber) }
-
-/** The e-mail as it is stored: lowercase, so the address is written the way it is compared. */
-const lowercased = <T extends { email?: string | null }>(values: T): T =>
-  values.email == null ? values : { ...values, email: values.email.toLowerCase() }
 
 export function customerRoutes(guard: MiddlewareHandler<AuthEnv>) {
   return new Hono<AuthEnv>()
@@ -139,17 +93,7 @@ export function customerRoutes(guard: MiddlewareHandler<AuthEnv>) {
       guard,
       requireGrant(MODULE, "create"),
       validate("json", CustomerCreate),
-      async (c) => {
-        const values = lowercased(c.req.valid("json"))
-        const [row] = await refuseDuplicate(collisions(values.registrationNumber), () =>
-          c
-            .get("tx")
-            .insert(customer)
-            .values({ ...values, id: newId(), companyId: c.get("principal").companyId })
-            .returning(columns),
-        )
-        return created(c, "/customers", customerOf(row))
-      },
+      async (c) => created(c, "/customers", await createCustomer(c.get("tx"), c.get("principal"), c.req.valid("json"))),
     )
     .get(
       "/customers/:id",
@@ -202,19 +146,6 @@ export function customerRoutes(guard: MiddlewareHandler<AuthEnv>) {
       requireGrant(MODULE, "edit"),
       validate("param", IdParam),
       validate("json", CustomerPatch),
-      async (c) => {
-        const { id } = c.req.valid("param")
-        const patch = lowercased(c.req.valid("json"))
-        const [row] = await refuseDuplicate(collisions(patch.registrationNumber), () =>
-          c
-            .get("tx")
-            .update(customer)
-            .set(patch)
-            .where(and(eq(customer.companyId, c.get("principal").companyId), eq(customer.id, id)))
-            .returning(columns),
-        )
-        if (row === undefined) throw noSuchCustomer(id)
-        return c.json(customerOf(row))
-      },
+      async (c) => c.json(await patchCustomer(c.get("tx"), c.get("principal"), c.req.valid("param").id, c.req.valid("json"))),
     )
 }
