@@ -27,7 +27,11 @@ export type ProofStorage = {
   signReads(keys: readonly string[], seconds: number): Promise<Map<string, string | null>>
   /** Removes the objects and answers how many Storage held; a key no longer there is nothing to remove. */
   remove(keys: readonly string[]): Promise<number>
-  /** The bucket as its migration makes it (`proof-storage.ts`), for a database that gained Storage after the migration ran: made where Storage lacks it, or kept private with its limits; answers which. */
+}
+
+/** Supabase's Storage: the proofs' calls, and the bucket's own upkeep, which only the API's boot asks for. */
+export type SupabaseStorage = ProofStorage & {
+  /** The bucket as its migration makes it (`proof-storage.ts`), for a database that gained Storage after the migration ran: made where Storage lacks it, or kept private with its limits; answers which. The migration and this are the two places the bucket's settings are written, from the one spelling of its limits. */
   ensureBucket(): Promise<"made" | "kept">
 }
 
@@ -57,7 +61,7 @@ const KEY_ALREADY_EXISTS = "KeyAlreadyExists"
 /** And to a bucket it holds already, which it answers 400. */
 const BUCKET_ALREADY_EXISTS = "BucketAlreadyExists"
 
-export function supabaseStorage({ url, serviceKey, bucket = PROOF_BUCKET, fetch = globalThis.fetch, now = () => new Date(), timeoutMs = STORAGE_TIMEOUT_MS }: SupabaseStorageOptions): ProofStorage {
+export function supabaseStorage({ url, serviceKey, bucket = PROOF_BUCKET, fetch = globalThis.fetch, now = () => new Date(), timeoutMs = STORAGE_TIMEOUT_MS }: SupabaseStorageOptions): SupabaseStorage {
   const base = `${url.replace(/\/+$/, "")}/storage/v1`
   const auth = { authorization: `Bearer ${serviceKey}`, apikey: serviceKey }
 
@@ -125,7 +129,8 @@ export function supabaseStorage({ url, serviceKey, bucket = PROOF_BUCKET, fetch 
       const settings = { public: false, file_size_limit: PROOF_OBJECT_MAX_BYTES, allowed_mime_types: [...PROOF_MIME_TYPES] }
       const made = await call("POST", "/bucket", { id: bucket, name: bucket, ...settings })
       if (made.status === 200) return "made"
-      if (made.status !== 409 && (made.answer as { code?: unknown } | null)?.code !== BUCKET_ALREADY_EXISTS) throw refused("POST", "/bucket", made.status, made.answer)
+      const said = made.answer as { code?: unknown; statusCode?: unknown } | null
+      if (made.status !== 409 && said?.statusCode !== "409" && said?.code !== BUCKET_ALREADY_EXISTS) throw refused("POST", "/bucket", made.status, made.answer)
       // Held already: kept private with its limits, as the migration's ON CONFLICT does, so one made public by hand is private again.
       const path = `/bucket/${bucket}`
       const kept = await call("PUT", path, settings)

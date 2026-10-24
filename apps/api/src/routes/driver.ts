@@ -322,8 +322,9 @@ async function openSessionOf(tx: Tx, companyId: string, profile: DriverProfile):
  * `shared_collection_point_id`, the place on the service date (§7.11), never
  * the placement valid today, which may have moved since — and its container
  * and fraction, the address and the point read through the property's or
- * the point's column with the place's instructions to the driver, the point's codec decoding it (@waste/db/schema/geometry)
- * exactly as the Registry's own reads do. `pickup_place_exactly_one` and the
+ * the point's column, the point's codec decoding it (@waste/db/schema/geometry)
+ * exactly as the Registry's own reads do, and the place's instructions to the
+ * driver, never the property's notes. `pickup_place_exactly_one` and the
  * two project keys hold every pickup to one place that is there, so a row
  * with neither address is a broken invariant and thrown, not a client's. The
  * container is a left join: an address-only stop the office added (#111)

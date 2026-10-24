@@ -44,22 +44,26 @@ test("a driver works a dispatched route on a phone, through an outage, and every
   const stops = ordered(route)
   expect(stops.length, `${route.label} needs six stops for this flow`).toBeGreaterThanOrEqual(6)
 
-  // The office writes what the driver is told at the first stop's property, through the property's own edit form.
   const propertyId = stops[0].propertyId
   if (propertyId === null) throw new Error(`${route.label}'s first stop is at a shared point, not a property`)
-  const place = (await (await api.get(`/properties/${propertyId}`)).json()) as { address: string; notes: string | null }
   const instructions = "Gate code 4711; the bins stand behind the garage"
-  await office.goto(`/customers?module=properties&record=property-${propertyId}`)
-  const sheet = office.getByRole("dialog").filter({ has: office.getByTestId("place-commands") })
-  await sheet.getByRole("button", { name: "Edit property" }).click({ timeout: 30_000 })
-  const edit = office.getByRole("dialog").filter({ has: office.getByRole("heading", { name: "Edit property" }) })
-  await edit.getByLabel("Driver instructions").fill(instructions)
-  const [written] = await Promise.all([answerOf(office, "PATCH", `/properties/${propertyId}`), edit.getByRole("button", { name: "Save changes" }).click()])
-  expect(written.status()).toBe(200)
-  expect(written.request().postDataJSON()).toEqual({ driverInstructions: instructions })
+  /** The seeded property telling the driver nothing, as the seed has it: before the office writes, so a run that died after its write never meets "Nothing to change", and after. */
+  const uninstructed = async () => expect((await api.patch(`/properties/${propertyId}`, { data: { driverInstructions: null } })).status()).toBe(200)
 
   const context = await freshContext(browser, { viewport: { width: 390, height: 844 }, geolocation: POSITION, permissions: ["geolocation"] })
   try {
+    // The office writes what the driver is told at the first stop's property, through the property's own edit form.
+    await uninstructed()
+    const place = (await (await api.get(`/properties/${propertyId}`)).json()) as { address: string; notes: string | null }
+    await office.goto(`/customers?module=properties&record=property-${propertyId}`)
+    const sheet = office.getByRole("dialog").filter({ has: office.getByTestId("place-commands") })
+    await sheet.getByRole("button", { name: "Edit property" }).click({ timeout: 30_000 })
+    const edit = office.getByRole("dialog").filter({ has: office.getByRole("heading", { name: "Edit property" }) })
+    await edit.getByLabel("Driver instructions").fill(instructions)
+    const [written] = await Promise.all([answerOf(office, "PATCH", `/properties/${propertyId}`), edit.getByRole("button", { name: "Save changes" }).click()])
+    expect(written.status()).toBe(200)
+    expect(written.request().postDataJSON()).toEqual({ driverInstructions: instructions })
+
     const page = await context.newPage()
     await signIn(page, SEEDED_DRIVER.email, E2E.loginPassword)
     // A bound driver lands on the Driver App (lib/api/landing.ts).
@@ -76,10 +80,14 @@ test("a driver works a dispatched route on a phone, through an outage, and every
     const stop = (index: number) => page.getByRole("article", { name: `Stop ${index + 1}`, exact: true })
     const dialog = page.getByRole("dialog")
 
-    // The instructions stand on every stop at that property, and nothing of the office's own notes does.
+    // The instructions stand on every stop at that property and on no other, and nothing of the office's own notes does.
+    const atProperty = stops.filter((pickup) => pickup.propertyId === propertyId).length
     const instructed = page.getByRole("article").filter({ has: page.getByRole("note", { name: "Driver instructions" }) })
-    await expect(instructed.first()).toContainText(place.address)
-    await expect(instructed.first().getByRole("note", { name: "Driver instructions" })).toHaveText(instructions)
+    await expect(instructed).toHaveCount(atProperty)
+    for (const card of await instructed.all()) {
+      await expect(card).toContainText(place.address)
+      await expect(card.getByRole("note", { name: "Driver instructions" })).toHaveText(instructions)
+    }
     if (place.notes !== null) await expect(page.getByText(place.notes)).toHaveCount(0)
 
     // The next places still to do go to Maps in one link, in the order driven, from wherever the phone is.
@@ -225,8 +233,10 @@ test("a driver works a dispatched route on a phone, through an outage, and every
       .poll(async () => (await listAll<Ticket>(api, "/tickets", { routeId: route.id })).map((ticket) => ticket.links.pickupId), { timeout: 30_000 })
       .toEqual(expect.arrayContaining([worked[2].id, worked[3].id]))
   } finally {
-    await context.close()
-    // The seeded property goes back to telling the driver nothing, as the seed has it.
-    await api.patch(`/properties/${propertyId}`, { data: { driverInstructions: null } })
+    try {
+      await context.close()
+    } finally {
+      await uninstructed()
+    }
   }
 })

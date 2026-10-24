@@ -190,12 +190,13 @@ function StopCard({ detail, stop, number }: { detail: DriverRouteDetail; stop: D
           {actions.sending && <Badge variant="outline">Sending</Badge>}
         </div>
       </div>
-      {stop.driverInstructions !== null && (
+      {/* Truthy, not non-null: an API from before the field answers none at all, and an empty note is worse than none. */}
+      {stop.driverInstructions ? (
         <div role="note" aria-label="Driver instructions" className="flex gap-2 rounded-lg bg-muted px-3 py-2 text-sm">
           <Info aria-hidden className="mt-0.5 shrink-0" />
           <p className="whitespace-pre-line">{stop.driverInstructions}</p>
         </div>
-      )}
+      ) : null}
       <RejectionList rejections={rejections} onDismiss={app.dismiss} />
       <div className="flex flex-wrap gap-2">
         {maps !== null && (

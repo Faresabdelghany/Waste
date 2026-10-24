@@ -51,9 +51,6 @@ describe("execution.purge-proof-objects", { skip: roles.skip }, () => {
       removed.push(...there)
       return there.length
     },
-    ensureBucket: async () => {
-      throw new Error("not the purge's")
-    },
   }
   const context = (overrides: Partial<JobContext> = {}) => ({ api, worker, now: () => NOW, log: (line: string) => void lines.push(line), proofStorage: storage, proofRetentionDays: RETENTION_DAYS, ...overrides }) as JobContext
 

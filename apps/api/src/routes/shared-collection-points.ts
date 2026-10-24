@@ -289,7 +289,7 @@ export function sharedCollectionPointRoutes(guard: MiddlewareHandler<AuthEnv>) {
         operationId: "patchSharedCollectionPoint",
         summary: "Change a shared collection point",
         description:
-          "Changes one shared collection point of a project the caller works in; every field is optional and at least one must be given. The location may move but not be cleared, since the place is the record; a null clears the eligibility distance, the access conditions, the availability or the customer the point answers to. The project is not patchable, since a record does not move between projects, and the members are a set, so they are `PUT /shared-collection-points/{id}/members`.",
+          "Changes one shared collection point of a project the caller works in; every field is optional and at least one must be given. The location may move but not be cleared, since the place is the record; a null clears the eligibility distance, the access conditions, the availability, the driver's instructions or the customer the point answers to. The project is not patchable, since a record does not move between projects, and the members are a set, so they are `PUT /shared-collection-points/{id}/members`.",
         security: BEARER_SECURITY,
         responses: {
           200: describeJson("The shared collection point as it now stands.", SharedCollectionPoint),

@@ -72,22 +72,6 @@ export type ProofObjectOptions = {
   log: (error: unknown) => void
 }
 
-/**
- * The bucket as migration 0018 makes it, asked of Storage on the API's boot
- * where the deployment holds the key: a database that gained Storage after
- * the migration ran — a restore into another project, a stack started
- * without storage-api — gets its private bucket all the same. Best-effort:
- * a Storage that refuses or is silent is logged, and the boot goes on; the
- * routes answer for themselves.
- */
-export async function ensureProofBucket(storage: ProofStorage, log: (line: string) => void): Promise<void> {
-  try {
-    log(`proofs: the private bucket ${(await storage.ensureBucket()) === "made" ? "was made" : "is in place"}`)
-  } catch (error) {
-    log(`proofs: the private bucket could not be ensured (${error instanceof Error ? error.message : String(error)}); photos and signatures wait on Storage`)
-  }
-}
-
 export function proofObjectRoutes(guard: MiddlewareHandler<IdentifiedEnv>, { pool, storage, now, log }: ProofObjectOptions) {
   /** Storage, or the deployment's 503. */
   const required = (): ProofStorage => {

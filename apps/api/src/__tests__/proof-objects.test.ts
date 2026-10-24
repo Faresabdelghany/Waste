@@ -21,7 +21,7 @@ import { NOT_A_DRIVERS_LOGIN } from "../auth/driver"
 import { authenticate, identify } from "../auth/principal"
 import { errorHandler } from "../problem"
 import { driverDoorRoutes } from "../routes/driver"
-import { ensureProofBucket, NO_PROOF_STORAGE_DETAIL, proofObjectRoutes, READ_URL_TTL_SECONDS, STORAGE_REFUSED, STORAGE_SILENT } from "../routes/proof-objects"
+import { NO_PROOF_STORAGE_DETAIL, proofObjectRoutes, READ_URL_TTL_SECONDS, STORAGE_REFUSED, STORAGE_SILENT } from "../routes/proof-objects"
 import { callingAs, type Call } from "./calls"
 import { databaseUnderTest, ownerUnderTest } from "./database"
 import { FIXTURE_DAY, routeFor, seedDriverFixtures, type DriverFixtures } from "./execution-fixtures"
@@ -60,11 +60,6 @@ function fakeStorage() {
     },
     async remove() {
       throw new Error("not the routes'")
-    },
-    async ensureBucket() {
-      asked.push("ensure")
-      if (refusing) throw new StorageRefused("Storage answered 400: invalid compact JWS")
-      return held.has("bucket") ? "kept" : "made"
     },
   }
   return { storage, held, asked, silence: () => (silent = true), refuse: () => (refusing = true), speak: () => ((silent = false), (refusing = false)) }
@@ -270,20 +265,5 @@ describe("proof objects", { skip: database.skip || owner.skip }, () => {
       const { stop } = await stopWithObjects()
       assert.equal((await refused(await oliviaWithout(`/pickups/${stop}/proof-objects`), 503, NO_PROOF_STORAGE)).detail, NO_PROOF_STORAGE_DETAIL)
     })
-  })
-})
-
-describe("the proofs' bucket on the API's boot", () => {
-  test("is made where Storage lacks it or found in place, and a Storage that refuses or is silent is logged, never thrown at the boot", async () => {
-    const fake = fakeStorage()
-    const lines: string[] = []
-    await ensureProofBucket(fake.storage, (line) => void lines.push(line))
-    fake.held.add("bucket")
-    await ensureProofBucket(fake.storage, (line) => void lines.push(line))
-    fake.refuse()
-    await ensureProofBucket(fake.storage, (line) => void lines.push(line))
-    assert.deepEqual(lines.slice(0, 2), ["proofs: the private bucket was made", "proofs: the private bucket is in place"])
-    assert.match(lines[2], /^proofs: the private bucket could not be ensured \(Storage answered 400: invalid compact JWS\); photos and signatures wait on Storage$/)
-    assert.deepEqual(fake.asked, ["ensure", "ensure", "ensure"])
   })
 })

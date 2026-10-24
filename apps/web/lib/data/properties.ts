@@ -63,15 +63,6 @@ export const GROUP_PREFIX = "group"
 
 /** What the forms stamp on a row of each kind (`recordKind`), and what a new row is recognised by until the API has answered. */
 export const PROPERTY_RECORD_KIND = "Property"
-
-/** What the driver is told at a property or a point: the Driver App's stop shows it. */
-const DRIVER_INSTRUCTIONS: BusinessFormField = {
-  id: "driverInstructions",
-  label: "Driver instructions",
-  type: "textarea",
-  placeholder: "Gate code 4711; the bins stand behind the garage",
-  description: "Shown to the driver at the stop.",
-}
 export const PROPERTY_GROUP_RECORD_KIND = "Property Group"
 export const SHARED_POINT_RECORD_KIND = "Shared Collection Point"
 
@@ -187,6 +178,14 @@ const latitude = (required: boolean, description?: string): BusinessFormField =>
 const longitude = (required: boolean): BusinessFormField => ({ id: "longitude", label: "Longitude", type: "number", required, min: -180, max: 180 })
 const responsibleCustomer = (label: string): BusinessFormField => ({ id: "responsibleCustomerId", label, type: "select", relation: CONTACTS_MODULE })
 const members = (label: string): BusinessFormField => ({ id: MEMBERS_KEY, label, type: "multiselect", relation: PROPERTIES_MODULE, description: "Properties of the same project." })
+/** What the driver is told at a property or a point: the Driver App's stop shows it. */
+const DRIVER_INSTRUCTIONS: BusinessFormField = {
+  id: "driverInstructions",
+  label: "Driver instructions",
+  type: "textarea",
+  placeholder: "Gate code 4711; the bins stand behind the garage",
+  description: "Shown to the driver at the stop.",
+}
 const memberRole = (tokens: readonly string[], labels: Readonly<Record<string, string>>): BusinessFormField => ({
   id: MEMBER_ROLE_KEY,
   label: "Role for new members",

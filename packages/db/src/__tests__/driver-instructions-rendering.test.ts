@@ -103,8 +103,10 @@ const pointAsOf0018 = wms.table(
 const referenced = { company, project, customer }
 
 describe("the driver instructions as drizzle-kit writes them", () => {
+  const generated = statementsBetween({ ...referenced, property: propertyAsOf0018, sharedCollectionPoint: pointAsOf0018 }, { ...referenced, property, sharedCollectionPoint })
+
   test("one nullable text column on each place, nothing else moved", async () => {
-    assert.deepEqual(await statementsBetween({ ...referenced, property: propertyAsOf0018, sharedCollectionPoint: pointAsOf0018 }, { ...referenced, property, sharedCollectionPoint }), [
+    assert.deepEqual(await generated, [
       'ALTER TABLE "wms"."property" ADD COLUMN "driver_instructions" text;',
       'ALTER TABLE "wms"."shared_collection_point" ADD COLUMN "driver_instructions" text;',
     ])
@@ -112,7 +114,6 @@ describe("the driver instructions as drizzle-kit writes them", () => {
 
   test("migration 0019 is exactly those statements", async () => {
     const statements = statementsOf(await readFile(join(MIGRATIONS_FOLDER, MIGRATION), "utf8"))
-    const generated = await statementsBetween({ ...referenced, property: propertyAsOf0018, sharedCollectionPoint: pointAsOf0018 }, { ...referenced, property, sharedCollectionPoint })
-    assert.deepEqual(statements, generated.map(normalised))
+    assert.deepEqual(statements, (await generated).map(normalised))
   })
 })
