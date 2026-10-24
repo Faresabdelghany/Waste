@@ -48,13 +48,14 @@
 // `project.timezone`. The days a report reads begin at `REPORT_FIRST_DAY`.
 // A rate is 0..1, or null where there was nothing to divide by — a rate of
 // nothing is not zero (`rate`).
-import { REPORT_INTERVALS } from "@waste/domain/insight/vocabulary"
+import { REPORT_INTERVALS, WASTE_DATA_WARNINGS } from "@waste/domain/insight/vocabulary"
 import * as z from "zod"
 
 import { IsoDate, IsoDateTime } from "./dates"
 import { PickupReason } from "./execution"
 import { Id } from "./ids"
 import { Currency } from "./organisation"
+import { WasteCode } from "./catalogue"
 import { dayWindowIsOrdered, dayWindowOrdered } from "./queries"
 import { TicketKind } from "./resolution"
 import { Minor, NonNegativeTotal } from "./resource"
@@ -336,3 +337,97 @@ export const TonnageReport = z.object({
   pickupWeights: z.array(PickupWeightRow),
 })
 export type TonnageReport = z.infer<typeof TonnageReport>
+
+// The waste-data report (#291 slice 29, C29, row 19.4): a period's reviewed
+// Unloads as net kilograms per municipality — the project the unloads were
+// collected for — unloading station and waste fraction, each fraction with
+// its waste code, for the office to file with the national waste-data
+// system by hand; `GET /reports/waste-data.csv` is the same report as a file
+// (@waste/domain/insight/waste-data says its columns). An unload counts when
+// its latest weight review approved it; one nobody has reviewed is counted
+// in a warning and not in a row, a rejected one nowhere, and a corrected one
+// through its correction once that is approved.
+
+/** `GET /reports/waste-data`: one of the caller's projects or all of them, over a period of days. */
+export const WasteDataReportQuery = z
+  .strictObject({
+    projectId: windowFields.projectId,
+    from: windowFields.from,
+    to: windowFields.to,
+  })
+  .refine(dayWindowOrdered, dayWindowIsOrdered)
+  .refine(reportWindowFits, reportWindowFitsAt)
+export type WasteDataReportQuery = z.infer<typeof WasteDataReportQuery>
+
+/** How the file separates its fields: commas, or semicolons for a spreadsheet under a Danish locale. */
+export const REPORT_FILE_SEPARATORS = ["comma", "semicolon"] as const
+
+/** `GET /reports/waste-data.csv`: the report's query, and the file's separator. */
+export const WasteDataFileQuery = z
+  .strictObject({
+    projectId: windowFields.projectId,
+    from: windowFields.from,
+    to: windowFields.to,
+    separator: z.enum(REPORT_FILE_SEPARATORS).default("comma").describe("Commas when absent; semicolons for a spreadsheet under a Danish locale."),
+  })
+  .refine(dayWindowOrdered, dayWindowIsOrdered)
+  .refine(reportWindowFits, reportWindowFitsAt)
+export type WasteDataFileQuery = z.infer<typeof WasteDataFileQuery>
+
+/** One municipality's reviewed weight of one fraction at one station over the period. */
+export const WasteDataRow = z.object({
+  projectId: Id,
+  /** The project's name: the municipality the unloads were collected for. */
+  municipality: z.string(),
+  unloadingStationId: Id,
+  unloadingStationName: z.string(),
+  wasteFractionId: Id,
+  wasteFractionName: z.string(),
+  /** Null where the fraction has none: the report warns of it. */
+  wasteCode: WasteCode.nullable(),
+  netKg: Kilograms,
+  unloads: Count,
+})
+export type WasteDataRow = z.infer<typeof WasteDataRow>
+
+export const WasteDataWarningKind = z.enum(WASTE_DATA_WARNINGS)
+export type WasteDataWarningKind = z.infer<typeof WasteDataWarningKind>
+
+/** What the report warns of beside its rows, with the sentence the file's warning row carries. */
+export const WasteDataWarning = z.discriminatedUnion("kind", [
+  z.object({ kind: z.literal("no-waste-code"), wasteFractionId: Id, wasteFractionName: z.string(), sentence: z.string() }),
+  z.object({
+    kind: z.literal("not-a-municipality"),
+    projectId: Id,
+    /** The project's name, which its rows carry as the municipality. */
+    municipality: z.string(),
+    /** The project's kind, which is not `Municipality`. */
+    projectKind: z.string(),
+    sentence: z.string(),
+  }),
+  z.object({
+    kind: z.literal("not-reviewed"),
+    projectId: Id,
+    municipality: z.string(),
+    unloadingStationId: Id,
+    unloadingStationName: z.string(),
+    wasteFractionId: Id,
+    wasteFractionName: z.string(),
+    unloads: Count,
+    netKg: Kilograms,
+    sentence: z.string(),
+  }),
+])
+export type WasteDataWarning = z.infer<typeof WasteDataWarning>
+
+/** `GET /reports/waste-data`. */
+export const WasteDataReport = z.object({
+  window: z.object({ projectId: Id.nullable(), from: IsoDate, to: IsoDate }),
+  /** By municipality, station and fraction, in name order. */
+  rows: z.array(WasteDataRow),
+  /** The reviewed weight the rows add up to. */
+  totals: z.object({ netKg: Kilograms, unloads: Count }),
+  /** Of the rows: a fraction without a code, then a project that is not a municipality, each in name order; then the unloads nobody has reviewed, in the rows' order. */
+  warnings: z.array(WasteDataWarning),
+})
+export type WasteDataReport = z.infer<typeof WasteDataReport>

@@ -86,8 +86,11 @@ export type ImportFile = {
   issues: { unknown: string[]; missing: string[]; repeated: string[]; unclosedQuote: number | null }
 }
 
-/** The apostrophe an export writes before a cell a spreadsheet would read as a formula (`=`, `+`, `-`, `@`, a tab or a carriage return). */
-const FORMULA_GUARD = /^'(?=[=+\-@\t\r])/
+/** What a spreadsheet starts a formula with: `=`, `+`, `-`, `@`, a tab or a carriage return. */
+const FORMULA_START = /^[=+\-@\t\r]/
+
+/** The apostrophe `csvField` writes before a cell that starts as `FORMULA_START` does, read back off it. */
+const FORMULA_GUARD = new RegExp(`^'(?=${FORMULA_START.source.slice(1)})`)
 
 /** The rows of a CSV text for one kind of import, every cell trimmed and an empty one left out, keyed by the kind's own column headers. */
 export function importRows(kind: ImportKind, text: string): ImportFile {
@@ -106,9 +109,16 @@ export function importRows(kind: ImportKind, text: string): ImportFile {
   return { rows, issues: { ...headerIssues(kind, header.fields), unclosedQuote } }
 }
 
-/** A field as a CSV writes it: in double quotes, its quotes doubled, when it holds the separator, a quote or a line break. */
+/**
+ * A field as a CSV writes it: behind an apostrophe when it starts as a
+ * spreadsheet formula does (`=`, `+`, `-`, `@`, a tab or a carriage return),
+ * so a name a person typed never runs when the file is opened — the guard
+ * `importRows` takes off again — and in double quotes, its quotes doubled,
+ * when it holds the separator, a quote or a line break.
+ */
 export function csvField(value: string, separator: "," | ";"): string {
-  return value.includes(separator) || /["\r\n]/.test(value) ? `"${value.replaceAll('"', '""')}"` : value
+  const guarded = FORMULA_START.test(value) ? `'${value}` : value
+  return guarded.includes(separator) || /["\r\n]/.test(guarded) ? `"${guarded.replaceAll('"', '""')}"` : guarded
 }
 
 /**

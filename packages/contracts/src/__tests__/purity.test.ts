@@ -52,6 +52,7 @@ definePurityTests({
     "@waste/domain/insight/vocabulary",
     "@waste/domain/planning/vocabulary",
     "@waste/domain/registry/vocabulary",
+    "@waste/domain/registry/waste-code",
     "@waste/domain/resolution/event-shapes",
     "@waste/domain/resolution/sla",
     "@waste/domain/resolution/vocabulary",

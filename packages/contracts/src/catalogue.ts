@@ -37,6 +37,7 @@
 // priced at — zero being exempt, and a product without one blocking its
 // events with `no-vat-rate`, which is the actionable reason.
 import { PRODUCT_KINDS, PRODUCT_STATUSES, PRODUCT_UNITS } from "@waste/domain/registry/vocabulary"
+import { WASTE_CODE_PATTERN, WASTE_CODE_SHAPE } from "@waste/domain/registry/waste-code"
 import * as z from "zod"
 
 import { Id } from "./ids"
@@ -58,6 +59,9 @@ export type ProductUnit = z.infer<typeof ProductUnit>
 /** A lowercase slug: `residual`, `food`, `hard-plastic` — the one key shape of text.ts. */
 const FractionKey = Slug()
 
+/** A fraction's entry of the European List of Waste, compact (`200301`, `200121*`): @waste/domain/registry/waste-code's shape, which the database's check reads too (#291 slice 29). */
+export const WasteCode = z.string().regex(new RegExp(WASTE_CODE_PATTERN), WASTE_CODE_SHAPE)
+
 /** A volume, a rate or an interval: a whole positive number, since zero is none of them. */
 const Count = PositiveInt
 
@@ -67,19 +71,23 @@ export const WasteFraction = z.object({
   key: FractionKey,
   /** What a person reads; unique per company. */
   name: Label,
+  /** The European List of Waste entry the national waste-data system keys it by; null where nobody has set one. */
+  wasteCode: WasteCode.nullable(),
 })
 export type WasteFraction = z.infer<typeof WasteFraction>
 
 export const WasteFractionCreate = z.strictObject({
   key: FractionKey,
   name: Label,
+  wasteCode: WasteCode.nullable().optional(),
 })
 export type WasteFractionCreate = z.infer<typeof WasteFractionCreate>
 
-/** The name only: the key is the slug the rest of the system quotes, and a fraction that needs another one is another fraction. */
+/** The name and the waste code: the key is the slug the rest of the system quotes, and a fraction that needs another one is another fraction. Null clears the code. */
 export const WasteFractionPatch = z
   .strictObject({
     name: Label.optional(),
+    wasteCode: WasteCode.nullable().optional(),
   })
   .refine(changesSomething, somethingToChange)
 export type WasteFractionPatch = z.infer<typeof WasteFractionPatch>

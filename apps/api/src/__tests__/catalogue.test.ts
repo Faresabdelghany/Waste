@@ -196,6 +196,17 @@ describe("the master data endpoints", { skip: database.skip }, () => {
       assert.match(problem.detail ?? "", /"Glass"/)
       assert.equal((await one(olivia, `/waste-fractions/${created.id}`, WasteFraction)).name, "Plastic")
     })
+
+    test("takes a waste code on a create and a patch, clears it with a null, and refuses another shape at the field (#291 slice 29)", async () => {
+      const coded = await create(olivia, "/waste-fractions", { key: "park-and-garden", name: "Park and garden waste", wasteCode: "200201" }, WasteFraction)
+      assert.equal(coded.wasteCode, "200201")
+      assert.equal((await create(olivia, "/waste-fractions", { key: "textiles", name: "Used textiles" }, WasteFraction)).wasteCode, null, "a fraction is made before anyone files it")
+      assert.equal((await patch(olivia, `/waste-fractions/${coded.id}`, { wasteCode: "200121*" }, WasteFraction)).wasteCode, "200121*")
+      assert.equal((await patch(olivia, `/waste-fractions/${coded.id}`, { wasteCode: null }, WasteFraction)).wasteCode, null)
+      const spaced = await refused(await olivia(`/waste-fractions/${coded.id}`, { method: "PATCH", body: { wasteCode: "20 02 01" } }), 400)
+      assert.deepEqual(spaced.errors?.map((error) => error.path), ["wasteCode"])
+      assert.equal((await one(olivia, `/waste-fractions/${coded.id}`, WasteFraction)).wasteCode, null)
+    })
   })
 
   describe("the container types", () => {
