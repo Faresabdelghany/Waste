@@ -99,13 +99,13 @@ function EditSurface({ record, module, schema, noun }: RowSurfaceProps & { modul
     setBusy(true)
     whenSaved(
       outcome,
-      () => setOpened(null),
+      (saved) => {
+        setOpened(null)
+        if (saved?.kind === "updated") toast.success(`${noun} updated`, { description: `${edited.name} was updated.` })
+        else if (saved?.kind === "unchanged") toast.info("Nothing to change", { description: `${edited.name} is as the API holds it.` })
+      },
       () => setBusy(false),
     )
-    void outcome?.then((result) => {
-      if (result.kind === "updated") toast.success(`${noun} updated`, { description: `${edited.name} was updated.` })
-      else if (result.kind === "unchanged") toast.info("Nothing to change", { description: `${edited.name} is as the API holds it.` })
-    })
   }
 
   return (

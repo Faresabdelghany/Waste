@@ -80,10 +80,10 @@ export function ContainerCommandsSurface({ record }: RowSurfaceProps) {
     if (busy) return
     const edited = updateContainerRecord(record, values)
     const outcome = upsertRecord(workspaceId, moduleId, edited)
-    save(outcome, () => setOpen(null))
-    void outcome?.then((result) => {
-      if (result.kind === "updated") toast.success("Container updated", { description: `${edited.name} was updated.` })
-      else if (result.kind === "unchanged") toast.info("Nothing to change", { description: `${edited.name} is as the API holds it.` })
+    save(outcome, (saved) => {
+      setOpen(null)
+      if (saved?.kind === "updated") toast.success("Container updated", { description: `${edited.name} was updated.` })
+      else if (saved?.kind === "unchanged") toast.info("Nothing to change", { description: `${edited.name} is as the API holds it.` })
     })
   }
 

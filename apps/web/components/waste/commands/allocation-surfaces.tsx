@@ -55,11 +55,11 @@ export function AllocationCommandsSurface({ record }: RowSurfaceProps) {
   const change = (values: BusinessFormValues) => {
     if (busy) return
     const outcome = upsertRecord(workspaceId, moduleId, changedAllocationRecord(record, values))
-    save(outcome, () => setOpen(null))
-    void outcome?.then((result) => {
-      if (result.kind === "updated") toast.success("Allocation changed", { description: `${record.name}: the change and its reason are on its history.` })
+    save(outcome, (saved) => {
+      setOpen(null)
+      if (saved?.kind === "updated") toast.success("Allocation changed", { description: `${record.name}: the change and its reason are on its history.` })
       // Nothing but the reason moved: no change was sent, and nothing went on the history.
-      else if (result.kind === "unchanged") toast.info("Nothing to change", { description: `${record.name} already reserves what the form says; no change was recorded.` })
+      else if (saved?.kind === "unchanged") toast.info("Nothing to change", { description: `${record.name} already reserves what the form says; no change was recorded.` })
     })
   }
 

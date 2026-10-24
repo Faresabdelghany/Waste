@@ -53,19 +53,17 @@ export function CreateSurface({
     const outcome = upsertRecord(module.workspaceId, module.moduleId, record)
     whenSaved(
       outcome,
-      () => {
+      (saved) => {
         setOpen(false)
         openRecord(record.id)
         const said = created(record)
         toast.success(said.title, { description: said.description })
+        // A create the API took whose answer could not be shown has landed as well (#243), once it names its row.
+        const serverId = saved?.kind === "created" || saved?.kind === "landed" ? saved.serverId : undefined
+        if (serverId !== undefined) onCreated?.(record, serverId)
       },
       () => setSaving(false),
     )
-    void outcome?.then((result) => {
-      // A create the API took whose answer could not be shown has landed as well (#243), once it names its row.
-      const serverId = result.kind === "created" || result.kind === "landed" ? result.serverId : undefined
-      if (serverId !== undefined) onCreated?.(record, serverId)
-    })
   }
 
   return (

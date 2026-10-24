@@ -30,6 +30,7 @@ import { SERVER_MODULES, serverModuleOf, viewableModules } from "@/lib/api/recor
 import { organisationModule } from "@/lib/api/records/organisation"
 import {
   actOnRecord,
+  adapterFor,
   commandRecord,
   dayTurnRereads,
   derivedFromChanged,
@@ -152,7 +153,7 @@ type BusinessRecordStoreValue = {
   refreshModule: (workspaceId: WorkspaceId, moduleId: string) => Promise<void>
 }
 
-type BusinessRecordStores = {
+export type BusinessRecordStores = {
   records: ExternalStore<StoredRecords>
   /**
    * Flips to true once the provider has loaded localStorage. Effects that
@@ -249,6 +250,11 @@ function reportLanded(name: string) {
   toast.warning(`${name} was saved`, { description: "The API took it, but its answer could not be shown here; it is read again from the API." })
 }
 
+/** A command whose movement landed but whose row could not be read, even again (#263): said as done, so nobody sends it a second time. */
+function reportLandedCommand(name: string) {
+  toast.warning(`${name} was changed`, { description: "The API took it, but the row could not be read back; do not send it again. It is read again from the API." })
+}
+
 /** A write refused before it was sent, its module not read (#243): one toast for the module, which a sync of many of its rows replaces rather than stacks. */
 function reportUnsent(key: string, name: string, problem: Problem) {
   toast.error(`${name} was not saved`, { id: `unsent-${key}`, description: problemSentence(problem) })
@@ -272,6 +278,29 @@ function enqueue<T>(pending: Map<string, Promise<unknown>>, key: string, turn: (
   })
   pending.set(key, next)
   return next
+}
+
+/**
+ * The row read again after a command that landed unread (#263): alone
+ * through its adapter's own read where it has one, else with its module;
+ * undefined where that read fails too, or the session has moved on.
+ */
+export async function rowAgain(stores: BusinessRecordStores, module: ServerModule, key: string, row: BusinessRecord, client: ApiClient): Promise<BusinessRecord | undefined> {
+  const serverStore = stores.server
+  const generation = stores.generation.getSnapshot()
+  const outlived = () => stores.generation.getSnapshot() !== generation
+  const state = serverStore.getSnapshot().get(key)
+  if (state === undefined) return undefined
+  if (adapterFor(module, row)?.read !== undefined) {
+    const again = await rereadRecord(client, module, state, row, { fixtures: fixturesOf(module.workspaceId, module.moduleId), state: serverStore.getSnapshot() })
+    if (again.kind !== "done" || outlived()) return undefined
+    serverStore.set((current) => new Map(current).set(key, withRecord(current.get(key) ?? state, again.record, again.serverId)))
+    return again.record
+  }
+  const loadedAt = state.loadedAt
+  await rereadModule(stores, module, outlived, client)
+  const read = serverStore.getSnapshot().get(key)
+  return read === undefined || read.loadedAt === loadedAt ? undefined : read.records.find((candidate) => candidate.id === row.id)
 }
 
 /** A module's read the API refused or did not answer, told as the load tells it; the account's own refusal is /login's to say. */
@@ -661,9 +690,11 @@ export function useBusinessRecordStore(): BusinessRecordStoreValue {
             return next === settled ? state : new Map(state).set(key, next)
           })
           // The account's own refusal has ended the session; /login says why.
-          if (outcome.kind === "refused" && report && !isAccountRefusal(outcome.problem)) reportProblem(`${record.name} was not saved`, outcome.problem)
-          if (outcome.kind === "landed") {
-            reportLanded(record.name)
+          // Part of it landed — the adapter's `PartialWrite`, or the store's own reading (#263) — and is said so.
+          const inPart = outcome.kind === "refused" && (outcome.partial === true || outcome.record !== undefined)
+          if (outcome.kind === "refused" && report && !isAccountRefusal(outcome.problem)) reportProblem(inPart ? `${record.name} was saved only in part` : `${record.name} was not saved`, outcome.problem)
+          if (outcome.kind === "landed") reportLanded(record.name)
+          if (outcome.kind === "landed" || (outcome.kind === "refused" && outcome.partial === true)) {
             // Once the writes now out have answered — this one's among them — so the read never lands between a create's POST and its answer.
             const inFlight = [...stores.pendingWrites.values()]
             void Promise.allSettled(inFlight).then(() => rereadModule(stores, module, outlived, turn))
@@ -719,11 +750,22 @@ export function useBusinessRecordStore(): BusinessRecordStoreValue {
         const row = latest.records.find((candidate) => candidate.id === recordId) ?? record
         const client = stores.client.getSnapshot()
         if (client === null) return ended()
-        const outcome = await commandRecord(client, module, latest, row, name, input, { fixtures: fixturesOf(workspaceId, moduleId), state: serverStore.getSnapshot() })
+        let outcome = await commandRecord(client, module, latest, row, name, input, { fixtures: fixturesOf(workspaceId, moduleId), state: serverStore.getSnapshot() })
+        if (outlived()) return outcome
+        if (outcome.kind === "landed") {
+          // The movement stands and its row could not be read back (#263): read again once the other writes now out have answered,
+          // and answered as done with the row as it now is, so what the caller says of it is true; sending it again would make a second.
+          const landed = outcome
+          const others = [...stores.pendingWrites.entries()].filter(([id]) => id !== recordId).map(([, pending]) => pending)
+          await Promise.allSettled(others)
+          const again = outlived() ? undefined : await rowAgain(stores, module, key, row, client)
+          if (again !== undefined) outcome = { kind: "done", record: again, serverId: landed.serverId, touches: landed.touches.filter((touched) => touched !== key) }
+          else if (!outlived()) reportLandedCommand(row.name)
+        }
         if (outlived()) return outcome
         if (outcome.kind === "done") {
           serverStore.set((state) => new Map(state).set(key, withRecord(state.get(key) ?? latest, outcome.record, outcome.serverId)))
-        } else if (!isAccountRefusal(outcome.problem)) {
+        } else if (outcome.kind === "refused" && !isAccountRefusal(outcome.problem)) {
           reportProblem(outcome.what, outcome.problem)
         }
         // The other modules the command may have changed rows of are read again, the command's answer not waiting on them.
@@ -885,15 +927,38 @@ export function useModuleRecords(
  * `settled`, when given, runs either way once the answer is in — for a pane
  * that holds its form against a second submit while the first is out. On
  * the browser's own path there is nothing to wait for, and both run at once.
+ * `done` is handed the outcome (undefined on the browser's path), for a pane
+ * that says what the row now is (`savedRow`) or that nothing moved.
  */
-export function whenSaved(outcome: Promise<WriteOutcome> | undefined, done: () => void, settled?: () => void): void {
+export function whenSaved(outcome: Promise<WriteOutcome> | undefined, done: (saved: SavedOutcome | undefined) => void, settled?: () => void): void {
   if (outcome === undefined) {
-    done()
+    done(undefined)
     settled?.()
     return
   }
-  void outcome.then((result) => {
-    settled?.()
-    if (result.kind !== "refused") done()
-  })
+  void outcome.then(
+    (result) => {
+      settled?.()
+      if (result.kind !== "refused") done(result)
+    },
+    // A write that threw instead of answering — a store fault, never the API's word — frees the pane and says so (#263).
+    () => {
+      settled?.()
+      toast.error("The write did not complete", { description: "Nothing was saved that the page can show; try again." })
+    },
+  )
+}
+
+/** A write's outcome other than a refusal: what `whenSaved` hands `done`. */
+export type SavedOutcome = Exclude<WriteOutcome, { kind: "refused" }>
+
+/**
+ * The row a saved write left, under the id the store holds it by: the API's
+ * answer, mapped — a create's under the id the workspace minted, as
+ * `withCreated` files it — or, on the browser's path or where the API took
+ * the write but its answer could not be shown, the row as written.
+ */
+export function savedRow(saved: SavedOutcome | undefined, written: BusinessRecord): BusinessRecord {
+  if (saved === undefined || saved.kind === "landed") return written
+  return saved.kind === "created" ? { ...saved.record, id: saved.optimisticId } : saved.record
 }

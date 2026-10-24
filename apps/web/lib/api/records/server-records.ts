@@ -33,6 +33,16 @@
 //   field is a person's to read, not a console's. A write that is several
 //   requests and is refused after one of them landed (`PartialWrite`) puts
 //   the row as the server now holds it instead, read back by the adapter.
+//   Without that, the store tells it apart itself (#263): the write's
+//   requests go through a client that notes whether a mutation landed and
+//   whether a mutation failed. One that landed with none failing — a read
+//   back, a mapper or an answer's body failed after it — is `landed`; one
+//   that landed before another mutation failed is a `partial` refusal, the
+//   row kept as typed and the module read again, never put back as the
+//   server no longer holds it; and a command's movement that landed with
+//   none failing is `landed`, which the store answers as done once it has
+//   read the row again. An adapter does its reads after its writes, so a
+//   read never decides a later mutation.
 //
 //   A record the workspace writes that no adapter owns — a companion row a
 //   controlled action made, a soft delete's marked copy — has no route. The
@@ -521,14 +531,21 @@ export type WriteOutcome =
   | { kind: "created"; record: BusinessRecord; serverId: string; optimisticId: string }
   | { kind: "updated"; record: BusinessRecord; serverId: string }
   | { kind: "unchanged"; record: BusinessRecord }
-  /** `record`, when part of a write landed before the refusal: the row as the server now holds it, which the store shows instead of the row as it was. */
-  | { kind: "refused"; problem: Problem; recordId: string; record?: BusinessRecord }
+  /**
+   * `record`, when part of a write landed before the refusal: the row as the
+   * server now holds it, which the store shows instead of the row as it was;
+   * `partial`, when part landed and the adapter could not say how the row now
+   * stands (#263): the row stays as typed, so a second save sends only what
+   * moved since, and the module is read again for it.
+   */
+  | { kind: "refused"; problem: Problem; recordId: string; record?: BusinessRecord; partial?: true }
   /**
    * The API took the write — a create's 201, a patch's 200 — but its answer
-   * could not be mapped into a record (#243): saved, so never asked for
-   * again. `serverId` is the row it was written to — undefined for a create
-   * whose answer named none, whose row only the module's read again finds;
-   * `problem`, why it could not be shown.
+   * could not be mapped into a record (#243), or whatever failed after it
+   * was no mutation — the row's read back, an answer's body (#263): saved,
+   * so never asked for again. `serverId` is the row it was written to — undefined for a
+   * create whose answer named none, whose row only the module's read again
+   * finds; `problem`, why it could not be shown.
    */
   | { kind: "landed"; recordId: string; serverId?: string; problem: Problem }
 
@@ -558,11 +575,42 @@ function statusRefusal(adapter: ResourceAdapter<Resource>, status: string): Prob
 }
 
 /**
+ * A client that notes what a write's or a command's requests did (#263):
+ * whether a request that changes something — anything but a `GET` — landed,
+ * and whether one failed, refused or unanswered. An adapter that writes in
+ * several requests needs no rule of its own: a failure after one of them
+ * landed is the store's to tell apart.
+ */
+function trackingClient(client: ApiClient): { client: ApiClient; landed: () => boolean; mutationFailed: () => boolean } {
+  const send = client.fetch ?? fetch
+  let landed = false
+  let mutationFailed = false
+  const tracked: typeof fetch = async (input, init) => {
+    const mutating = (init?.method ?? "GET").toUpperCase() !== "GET"
+    try {
+      const response = await send(input, init)
+      if (mutating) {
+        if (response.ok) landed = true
+        else mutationFailed = true
+      }
+      return response
+    } catch (error) {
+      if (mutating) mutationFailed = true
+      throw error
+    }
+  }
+  return { client: { ...client, fetch: tracked }, landed: () => landed, mutationFailed: () => mutationFailed }
+}
+
+/**
  * Writes one record through its adapter: a create when the module holds no
  * server id for it, a patch of what moved otherwise, nothing when nothing
  * moved. `before` is the row as the module last had it, for the patch. A
  * soft delete and a move to a status the adapter cannot spell are refused
- * before anything is sent (the header says why).
+ * before anything is sent (the header says why). A write that fails after
+ * a mutation of it landed (#263) is `landed` where no mutation failed, and a
+ * `partial` refusal where a later one did: never the row put back as it
+ * was, which the server no longer holds.
  */
 export async function writeRecord(client: ApiClient, module: ServerModule, current: ModuleState, record: BusinessRecord, options: LoadOptions): Promise<WriteOutcome> {
   const adapter = adapterFor(module, record)
@@ -574,6 +622,7 @@ export async function writeRecord(client: ApiClient, module: ServerModule, curre
   }
   const context: MappingContext = { fixtures: options.fixtures, resolve: resolverOver(options.state), companyRecordId: companyRecordIdOf(options.state), now: options.now }
   const serverId = current.serverIds.get(record.id)
+  const requests = trackingClient(client)
   try {
     if (serverId === undefined) {
       if (adapter.toCreateBody === undefined || adapter.create === undefined) {
@@ -581,7 +630,7 @@ export async function writeRecord(client: ApiClient, module: ServerModule, curre
       }
       const body = adapter.toCreateBody(record, context)
       if (isLocalRefusal(body)) return { kind: "refused", recordId: record.id, problem: refusalProblem(body) }
-      const resource = (await adapter.create(client, body)) as Resource | undefined
+      const resource = (await adapter.create(requests.client, body)) as Resource | undefined
       // The API said 201 whatever its answer holds: one that names no row has landed, and only the module's read again finds it.
       if (typeof resource?.id !== "string") return { kind: "landed", recordId: record.id, problem: genericProblem(0, "The API's answer named no row") }
       return mappedAnswer(record, resource.id, () => ({ kind: "created", record: adapter.toRecord(resource, context), serverId: resource.id, optimisticId: record.id }))
@@ -593,7 +642,7 @@ export async function writeRecord(client: ApiClient, module: ServerModule, curre
     const body = adapter.toPatchBody(before, record, context)
     if (body === null) return { kind: "unchanged", record }
     if (isLocalRefusal(body)) return { kind: "refused", recordId: record.id, problem: refusalProblem(body) }
-    const resource = await adapter.update(client, serverId, body)
+    const resource = await adapter.update(requests.client, serverId, body)
     // Under the row's own web id, whatever the mapping would now derive — a
     // fixture matched by a name the write just changed — so one server row
     // stays one row here, as `withCreated` keeps a minted id.
@@ -608,6 +657,10 @@ export async function writeRecord(client: ApiClient, module: ServerModule, curre
         landed = undefined
       }
       return { kind: "refused", recordId: record.id, problem: problemOfError(error.refusal), ...(landed === undefined ? {} : { record: landed }) }
+    }
+    if (requests.landed()) {
+      if (requests.mutationFailed()) return { kind: "refused", recordId: record.id, problem: problemOfError(error), partial: true }
+      return { kind: "landed", recordId: record.id, ...(serverId === undefined ? {} : { serverId }), problem: problemOfError(error) }
     }
     return { kind: "refused", recordId: record.id, problem: problemOfError(error) }
   }
@@ -643,6 +696,8 @@ export function withOutcome(settled: ModuleState, outcome: WriteOutcome, record:
     case "landed":
       return outcome.serverId === undefined ? withoutRecord(settled, outcome.recordId) : withCreated(settled, outcome.recordId, record, outcome.serverId)
     case "refused": {
+      // Part of it landed and nobody says how the row stands: as typed, until the module's read again says.
+      if (outcome.partial === true) return { ...withRecord(settled, record), problem: outcome.problem }
       const restored =
         outcome.record !== undefined
           ? withRecord(settled, outcome.record)
@@ -661,7 +716,16 @@ export function withOutcome(settled: ModuleState, outcome: WriteOutcome, record:
  * may land before another fails — and none for a command never sent.
  */
 export type CommandOutcome =
+  /** `touches`: the modules the store reads again — the other modules the command may have changed rows of, and its own where a request of it failed after its movement landed (#263). */
   | { kind: "done"; record: BusinessRecord; serverId: string; touches: readonly string[] }
+  /**
+   * The movement landed and nothing that failed after it was a mutation — the
+   * row's read back, or its mapping (#263): done, but the row as it now is
+   * is not known. The store reads it again and answers `done` with it; only
+   * where that read fails too does this reach the caller, never a refusal
+   * that would invite a second movement.
+   */
+  | { kind: "landed"; what: string; problem: Problem; recordId: string; serverId: string; touches: readonly string[] }
   /** `what` is the heading the person is told the refusal under; the problem is the API's, or the store's own for a command that was never sent. */
   | { kind: "refused"; what: string; problem: Problem; recordId: string; touches: readonly string[] }
 
@@ -686,17 +750,23 @@ export async function commandRecord(client: ApiClient, module: ServerModule, cur
   if (serverId === undefined) return refused(genericProblem(400, `${record.name} is not on the API yet: wait for it to be saved, then try again`))
   const context: MappingContext = { fixtures: options.fixtures, resolve: resolverOver(options.state), companyRecordId: companyRecordIdOf(options.state), now: options.now }
   const touches = command.touches ?? []
+  const requests = trackingClient(client)
   let sent = false
   try {
     // Inside the try: a mapper that throws on a stray input is a refusal under the command's heading, as a failing request is.
     const body = command.toBody?.(input ?? {}, record, context)
     if (isLocalRefusal(body)) return refused(refusalProblem(body))
     sent = true
-    const resource = await command.run(client, serverId, body)
+    const resource = await command.run(requests.client, serverId, body)
     return { kind: "done", record: { ...adapter.toRecord(resource, context), id: record.id }, serverId: resource.id, touches }
   } catch (error) {
-    // A command of several requests (a movement, then the row read back) may have changed what it touches before one failed.
-    return refused(problemOfError(error), sent ? touches : [])
+    // A command of several requests (a movement, then the row read back) may have changed what it touches before one failed; where
+    // one landed, its own module is read again too (#263) — and where no mutation failed after it, the command has landed: the
+    // movement stands, and sending it again would make a second.
+    if (!requests.landed()) return refused(problemOfError(error), sent ? touches : [])
+    const readAgain = [...new Set([...touches, moduleKeyOf(module.workspaceId, module.moduleId)])]
+    if (requests.mutationFailed()) return refused(problemOfError(error), readAgain)
+    return { kind: "landed", what, problem: problemOfError(error), recordId: record.id, serverId, touches: readAgain }
   }
 }
 

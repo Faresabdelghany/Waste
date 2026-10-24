@@ -31,7 +31,7 @@ import { CONTACTS_MODULE, PROPERTIES_MODULE } from "@/lib/data/properties"
 import { isSoftDeleted } from "@waste/domain/record-visibility"
 
 import { useApiClient } from "../api-session-store"
-import { useBusinessRecordStore, useMeProjects, useModuleRecords, useServerModuleState, whenSaved } from "../business-record-store"
+import { useBusinessRecordStore, useMeProjects, useModuleRecords, useServerModuleState, whenSaved, type SavedOutcome } from "../business-record-store"
 import type { CommandInput } from "@/lib/api/records/adapter"
 
 /** What a command the API took answers: the row as the API now holds it. */
@@ -49,7 +49,7 @@ export function useCommandRunner(module: ModuleLocation, recordId: string): {
   busy: boolean
   version: number
   run: (name: string, input: CommandInput | undefined, done: (outcome: CommandDone) => void) => void
-  save: (outcome: Promise<WriteOutcome> | undefined, done: () => void) => void
+  save: (outcome: Promise<WriteOutcome> | undefined, done: (saved: SavedOutcome | undefined) => void) => void
 } {
   const { sendCommand } = useBusinessRecordStore()
   const [busy, setBusy] = useState(false)
@@ -65,12 +65,12 @@ export function useCommandRunner(module: ModuleLocation, recordId: string): {
       done(outcome)
     })
   }
-  const save = (outcome: Promise<WriteOutcome> | undefined, done: () => void) => {
+  const save = (outcome: Promise<WriteOutcome> | undefined, done: (saved: SavedOutcome | undefined) => void) => {
     setBusy(true)
     whenSaved(
       outcome,
-      () => {
-        done()
+      (saved) => {
+        done(saved)
         bump()
       },
       () => setBusy(false),

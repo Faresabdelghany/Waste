@@ -294,6 +294,16 @@ describe("writing a container", () => {
     assert.equal(outcome.record.facts["Waste fractions"], "Organic")
   })
 
+  test("an edit whose patch the API took but whose row could not be read back has landed: saved, never a refusal that invites sending it again (#263)", async () => {
+    const record = containerAdapter.toRecord({ ...bin91007, placements: [placed] }, context())
+    const edited: BusinessRecord = { ...record, submittedValues: { ...record.submittedValues, rfid: "E2091007" } }
+    const { fetch, calls } = scripted([() => json({ ...bin91007, rfid: "E2091007" }), () => problem(503, "The API is unavailable")])
+    const current = loaded({ records: [record], serverIds: new Map([[record.id, bin91007.id]]) }, 1)
+    const outcome = await writeRecord(clientOver(fetch), containersModule, current, edited, { fixtures, state, now: NOW })
+    assert.deepEqual(calls.map((call) => call.init.method), ["PATCH", "GET"], "the patch landed; the placements' read failed")
+    assert.deepEqual(outcome.kind === "landed" ? [outcome.recordId, outcome.serverId, outcome.problem.detail] : outcome.kind, [record.id, bin91007.id, "The API is unavailable"])
+  })
+
   test("the API's refusal comes back as its own sentence", async () => {
     const { fetch } = scripted([() => problem(409, "A container labelled BIN-91007 is already registered")])
     const current = loaded({ records: [], serverIds: new Map() }, 1)
@@ -412,14 +422,13 @@ describe("the container's commands", () => {
     assert.deepEqual(outcome.touches, ["resources.inventory"], "the API had the command, so the ledger is read again: one read, the price of never missing a movement")
   })
 
-  test("a movement that landed before the row's read back failed is still the ledger's: the refusal names the ledger to read again (#198)", async () => {
+  test("a movement that landed before the row's read back failed has landed: never refused, which would invite a second movement; the ledger and the containers are read again (#198, #263)", async () => {
     const { fetch, calls } = scripted([() => json(movement, 201), () => problem(503, "The API is restarting"), () => pageOf([])])
     const outcome = await commandRecord(clientOver(fetch), containersModule, current, record, "receive", { warehouseId: nordhavn.webId }, options)
     assert.deepEqual(calls.map((call) => call.init.method), ["POST", "GET", "GET"], "the POST, then the read back, which failed")
-    assert.equal(outcome.kind, "refused")
-    if (outcome.kind !== "refused") return
-    assert.equal(problemSentence(outcome.problem), "The API is restarting")
-    assert.deepEqual(outcome.touches, ["resources.inventory"])
+    assert.equal(outcome.kind, "landed", "the store reads the row again and answers done with it")
+    if (outcome.kind !== "landed") return
+    assert.deepEqual([...outcome.touches].sort(), ["resources.containers", "resources.inventory"])
   })
 
   test("a command refused before it is sent touches nothing: nothing reached the API", async () => {
