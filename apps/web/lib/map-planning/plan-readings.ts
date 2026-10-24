@@ -106,6 +106,25 @@ export function planReading(plan: RoutePlan | null, now: Date): PlanReading {
   return { kind: "measured", sentence: `${totals}${plan.solver === "baseline" ? " · Not optimised" : ""}${stale}`, retry: false }
 }
 
+/**
+ * The order the map asks for its drawn routes' Plans, a few at a time: the
+ * routes of `today` first, then the days ahead nearest first, then the past
+ * window from yesterday back, an undated route last — a route of one day in
+ * the order it is drawn. So tomorrow's roads come before a run of weeks ago,
+ * whatever the Routes layer's own order, which is by status and then date
+ * from the oldest.
+ */
+export function planFetchOrder<Route extends { date: string | null }>(routes: readonly Route[], today: string): Route[] {
+  const rank = (date: string | null) => (date === null ? 2 : date >= today ? 0 : 1)
+  return [...routes].sort((a, b) => {
+    const byRank = rank(a.date) - rank(b.date)
+    if (byRank !== 0 || a.date === null || b.date === null || a.date === b.date) return byRank
+    // Ahead, the nearest is the earliest; behind, the latest. ISO dates order as strings.
+    const earlier = a.date < b.date ? -1 : 1
+    return rank(a.date) === 0 ? earlier : -earlier
+  })
+}
+
 /** How often the map asks again of a Plan it draws while the Plan calculates with its job due. */
 export const PLAN_POLL_MS = 10_000
 

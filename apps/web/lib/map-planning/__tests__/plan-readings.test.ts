@@ -9,7 +9,7 @@ import type { ActivePlan, Plan, PlanDetail } from "@waste/contracts/plans"
 
 import { ROUTE_ACTIVE_PLAN_KEY } from "@/lib/data/routes"
 
-import { activePlanOf, nextPlanFetch, PLAN_POLL_MS, planReading, routePlanOf, type RoutePlan } from "../plan-readings"
+import { activePlanOf, nextPlanFetch, PLAN_POLL_MS, planFetchOrder, planReading, routePlanOf, type RoutePlan } from "../plan-readings"
 
 const PLAN = "01a0d3a5-e5e0-7000-8000-0000000000a1"
 const RETRY = "01a0d3a5-e5e0-7000-8000-0000000000a2"
@@ -157,5 +157,29 @@ describe("nextPlanFetch: when the map asks GET /plans/:id of a Plan it draws", (
 
   test("a fetch of another Plan is none of this one's", () => {
     assert.deepEqual(nextPlanFetch(routePlan({ id: RETRY }), detail(), now - 1, now), { kind: "now" })
+  })
+})
+
+describe("the order the map asks for its routes' Plans", () => {
+  const TODAY = "2026-10-24"
+  const dated = (id: string, date: string | null) => ({ id, date })
+
+  test("today's first, then the days ahead nearest first, then the past window from yesterday back, an undated route last", () => {
+    const routes = [
+      dated("past-far", "2026-09-20"),
+      dated("ahead-far", "2026-11-03"),
+      dated("undated", null),
+      dated("yesterday", "2026-10-23"),
+      dated("tomorrow", "2026-10-25"),
+      dated("today", TODAY),
+      dated("ahead", "2026-10-30"),
+    ]
+    assert.deepEqual(planFetchOrder(routes, TODAY).map((route) => route.id), ["today", "tomorrow", "ahead", "ahead-far", "yesterday", "past-far", "undated"])
+  })
+
+  test("routes of one day keep the order they were drawn in, and the drawn list is left as it was", () => {
+    const routes = [dated("b", "2026-10-25"), dated("a", "2026-10-25"), dated("old", "2026-10-01"), dated("c", "2026-10-25")]
+    assert.deepEqual(planFetchOrder(routes, TODAY).map((route) => route.id), ["b", "a", "c", "old"])
+    assert.deepEqual(routes.map((route) => route.id), ["b", "a", "old", "c"])
   })
 })

@@ -316,7 +316,7 @@ export function MapPlanningView({
     return Array.from(lines.values())
   }, [areaRoutes.routes, playbackRoute, routesOnMap, windowRoutes, windowRoutesOnMap])
   // Each drawn route's road and routing reading, off its active Plan alone (#173).
-  const planLegs = usePlanLegs(routeLines, routes)
+  const planLegs = usePlanLegs(routeLines, routes, today)
   const roadGeometries = planLegs.roads
 
   // Where the replayed vehicle stands: along the road when its legs are the stops', straight otherwise.
