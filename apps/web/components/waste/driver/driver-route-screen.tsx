@@ -2,7 +2,8 @@
 
 // The Driver App's route screen (Issue #145), from `GET /driver/routes/:id`:
 // the stops in the order they are driven (the Plan's `sequence` where there
-// is one, else `position`), each with its address, container, fraction and
+// is one, else `position`), each with its address, container (none at an
+// address-only stop the office added, #111), fraction and
 // status and an "Open in Maps" link over its own point, and per stop:
 // arrived, complete, skip, fail, report a problem, add a note, record a weight
 // (O2 of #290). On the route: the next places still to do handed to Maps in
@@ -23,7 +24,7 @@ import { EndRouteDialog, NoteDialog, ReasonDialog, UnloadDialog, WeightDialog } 
 import { DriverFrame } from "@/components/waste/driver/driver-frame"
 import { RejectionList, operatingDay, progressLine } from "@/components/waste/driver/driver-parts"
 import type { DriverMe, DriverPickup, DriverRouteDetail } from "@waste/contracts/driver-commands"
-import { DRIVER_REASON_LABELS, endRouteWarning, mapsHref, PICKUP_STATUS_LABELS, ROUTE_STATUS_LABELS, routeActions, routeMapsHref, stopActions, stopsInOrder, waitingOn } from "@/lib/driver/route-view"
+import { DRIVER_REASON_LABELS, endRouteWarning, mapsHref, PICKUP_STATUS_LABELS, ROUTE_STATUS_LABELS, routeActions, routeMapsHref, stopActions, stopCollects, stopsInOrder, waitingOn } from "@/lib/driver/route-view"
 
 export function DriverRouteScreen({ routeId }: { routeId: string }) {
   const app = useDriverApp()
@@ -163,9 +164,7 @@ function StopCard({ detail, stop, number }: { detail: DriverRouteDetail; stop: D
         <div className="min-w-0">
           <p className="text-sm text-muted-foreground">Stop {number}</p>
           <h2 className="font-semibold">{stop.address}</h2>
-          <p className="text-sm text-muted-foreground">
-            {stop.containerLabel} · {stop.wasteFractionName}
-          </p>
+          <p className="text-sm text-muted-foreground">{stopCollects(stop)}</p>
           {stop.reason !== null && (
             <p className="text-sm text-muted-foreground">
               {PICKUP_STATUS_LABELS[stop.status]} · {stop.reason in DRIVER_REASON_LABELS ? DRIVER_REASON_LABELS[stop.reason as keyof typeof DRIVER_REASON_LABELS] : stop.reason.replaceAll("-", " ")}
@@ -256,7 +255,7 @@ function StopCard({ detail, stop, number }: { detail: DriverRouteDetail; stop: D
         onConfirm={(reason, note) => void app.tap({ kind: "report-problem", routeId: detail.id, body: { pickupId: stop.id, reason, note: note ?? "" } })}
       />
       <NoteDialog open={dialog === "note"} onOpenChange={close} title={`A note on stop ${number}`} description={stop.address} onConfirm={(note) => void app.tap({ kind: "add-note", routeId: detail.id, body: { pickupId: stop.id, note } })} />
-      <WeightDialog open={dialog === "weight"} onOpenChange={close} title={`Weight at stop ${number}`} description={`${stop.containerLabel} · ${stop.wasteFractionName}`} onConfirm={(weightKg) => void app.tap({ kind: "add-weight", routeId: detail.id, body: { pickupId: stop.id, weightKg } })} />
+      <WeightDialog open={dialog === "weight"} onOpenChange={close} title={`Weight at stop ${number}`} description={stopCollects(stop)} onConfirm={(weightKg) => void app.tap({ kind: "add-weight", routeId: detail.id, body: { pickupId: stop.id, weightKg } })} />
     </article>
   )
 }

@@ -1,7 +1,9 @@
 "use client"
 // What the command surfaces share (Issue #181): the pickers their dialogs
 // name other modules' rows by — since #184 the customers, the properties and
-// the subscriptions too, their words in lib/data/place-pickers.ts — whether a surface's own module and its forms'
+// the subscriptions too, their words in lib/data/place-pickers.ts, and since
+// #111 the containers and the shared points a route's added stop collects
+// at — whether a surface's own module and its forms'
 // modules have answered, a read of one row's appended history (a container's
 // ledger, an allocation's events) from the API, and opening a row made.
 //
@@ -18,6 +20,7 @@ import { usePathname, useRouter, useSearchParams } from "next/navigation"
 import type { ApiClient } from "@/lib/api/client"
 import { problemSentence } from "@/lib/api/problem"
 import { depotAdapter, unloadingStationAdapter } from "@/lib/api/records/places"
+import { CONTAINERS_MODULE } from "@/lib/api/records/containers"
 import { problemOfError, type CommandOutcome, type WriteOutcome } from "@/lib/api/records/server-records"
 import { AGREEMENTS_MODULE } from "@/lib/data/agreements"
 import { DEPOTS_MODULE, DRIVERS_MODULE, isTrailerRecord, VEHICLES_MODULE } from "@/lib/data/allocations"
@@ -27,7 +30,8 @@ import { ORGANISATION_MODULE, WAREHOUSES_MODULE } from "@/lib/data/containers"
 import { MASTER_DATA_MODULE, masterDataKindOf } from "@/lib/data/master-data"
 import type { MasterDataKind } from "@/lib/data/master-data-kinds"
 import { keptOptions, keptValue, optionalRowOptions, rowOptions, subscriptionOptions } from "@/lib/data/place-pickers"
-import { CONTACTS_MODULE, PROPERTIES_MODULE } from "@/lib/data/properties"
+import { recordsForProject } from "@/lib/data/project-scope"
+import { CONTACTS_MODULE, PROPERTIES_MODULE, SHARED_POINTS_MODULE } from "@/lib/data/properties"
 import { isSoftDeleted } from "@waste/domain/record-visibility"
 
 import { useApiClient } from "../api-session-store"
@@ -120,6 +124,8 @@ export function useRelationPickers(): RelationPickers {
   const contacts = useModuleRecords(CONTACTS_MODULE.workspaceId, CONTACTS_MODULE.moduleId, fixturesOf(CONTACTS_MODULE))
   const properties = useModuleRecords(PROPERTIES_MODULE.workspaceId, PROPERTIES_MODULE.moduleId, fixturesOf(PROPERTIES_MODULE))
   const agreements = useModuleRecords(AGREEMENTS_MODULE.workspaceId, AGREEMENTS_MODULE.moduleId, fixturesOf(AGREEMENTS_MODULE))
+  const containers = useModuleRecords(CONTAINERS_MODULE.workspaceId, CONTAINERS_MODULE.moduleId, fixturesOf(CONTAINERS_MODULE))
+  const points = useModuleRecords(SHARED_POINTS_MODULE.workspaceId, SHARED_POINTS_MODULE.moduleId, fixturesOf(SHARED_POINTS_MODULE))
   // A role that does not view the organisation picks from `/me`'s projects (Issue #217).
   const meProjects = useMeProjects()
   const byKey = new Map([
@@ -132,6 +138,8 @@ export function useRelationPickers(): RelationPickers {
     [keyOf(CONTACTS_MODULE), contacts],
     [keyOf(PROPERTIES_MODULE), properties],
     [keyOf(AGREEMENTS_MODULE), agreements],
+    [keyOf(CONTAINERS_MODULE), containers],
+    [keyOf(SHARED_POINTS_MODULE), points],
   ])
   const live = (records: readonly BusinessRecord[]) => records.filter((record) => !isSoftDeleted(record))
   const rowsFor = (field: BusinessFormField, values: BusinessFormValues, projectId?: string): readonly BusinessFormOption[] => {
@@ -148,10 +156,12 @@ export function useRelationPickers(): RelationPickers {
     if (field.relation !== undefined && keyOf(field.relation) === keyOf(CONTACTS_MODULE)) {
       return field.type === "select" && !field.required ? optionalRowOptions(live(contacts.records)) : rowOptions(live(contacts.records))
     }
+    const ofProject = (records: readonly BusinessRecord[]) => recordsForProject(live(records), project)
     // A member property: the form's project's, since a set holds its own project's properties alone.
-    if (field.relation !== undefined && keyOf(field.relation) === keyOf(PROPERTIES_MODULE)) {
-      return rowOptions(live(properties.records).filter((record) => project === undefined || !record.projectIds?.length || record.projectIds.includes(project)))
-    }
+    if (field.relation !== undefined && keyOf(field.relation) === keyOf(PROPERTIES_MODULE)) return rowOptions(ofProject(properties.records))
+    // A container or a shared point a route's added stop collects at (#111): the route's project's, with its status beside it.
+    if (field.relation !== undefined && keyOf(field.relation) === keyOf(CONTAINERS_MODULE)) return ofProject(containers.records).map((record) => optionOf(record, true))
+    if (field.relation !== undefined && keyOf(field.relation) === keyOf(SHARED_POINTS_MODULE)) return ofProject(points.records).map((record) => optionOf(record, true))
     switch (field.id) {
       case "subscriptionId":
         return subscriptionOptions(live(agreements.records), project)

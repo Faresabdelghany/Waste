@@ -158,6 +158,8 @@ describe("a pickup", () => {
     assert.deepEqual(record.submittedValues, {
       routeId: routeRecord.id,
       containerId: containerRecords[1].id,
+      propertyId: `property-${second.propertyId}`,
+      origin: "generation",
       wasteFractionId: masterRecords[0].id,
       position: "2",
       schemeId: routeRecord.submittedValues?.schemeId,
@@ -165,6 +167,24 @@ describe("a pickup", () => {
       operatingDate: "2026-10-01",
       status: "planned",
     })
+  })
+
+  test("a stop the office added says so, and an address-only one is named by the place it is collected at, with no container (#111)", () => {
+    const parkvej: BusinessRecord = { ...projectRecord, id: `property-${second.propertyId}`, name: "Parkvej 18", recordKind: "Property", facts: { Address: "Parkvej 18, 2100 København Ø" } }
+    const withPlaces: ServerRecordsState = new Map([...state, ["customers.properties", loaded({ records: [parkvej], serverIds: new Map([[parkvej.id, second.propertyId as string]]) }, 1)]])
+    const addressOnly = pickupAdapter.toRecord({ ...second, containerId: null, origin: "office", position: 4, note: "Re-collection of T-1001" }, context(resolverOver(withPlaces)))
+    assert.equal(addressOnly.name, "Stop 4 · Parkvej 18")
+    // Named by its place, and its Address column the place's street address.
+    assert.deepEqual([addressOnly.facts.Address, addressOnly.facts["Added by"], addressOnly.facts["Container ID"]], ["Parkvej 18, 2100 København Ø", "The office", undefined])
+    assert.equal(addressOnly.submittedValues?.containerId, undefined)
+    assert.deepEqual([addressOnly.submittedValues?.propertyId, addressOnly.submittedValues?.origin], [parkvej.id, "office"])
+    assert.match(addressOnly.description, /^A stop the office added to its route, at an address with no container/)
+    // Before the places load it is named by its id chip, never left blank.
+    assert.equal(pickupAdapter.toRecord({ ...second, containerId: null, origin: "office" }, context()).name, `Stop 2 · property-${second.propertyId}`)
+    // An office stop at a container is named by the container, and still says whose it is.
+    const officeContainer = pickupAdapter.toRecord({ ...second, origin: "office" }, context())
+    assert.deepEqual([officeContainer.name, officeContainer.facts["Added by"], officeContainer.facts.Address], ["Stop 2 · BIN-66420", "The office", undefined])
+    assert.equal(pickupAdapter.toRecord(second, context()).facts["Added by"], undefined, "a generated stop says nothing of the kind")
   })
 
   test("a decided stop says when, on the project's clock, and why it was missed", () => {

@@ -34,6 +34,15 @@ export function stopsInOrder<Stop extends Pick<DriverPickup, "position" | "seque
   return [...pickups].sort((a, b) => (a.sequence ?? a.position) - (b.sequence ?? b.position) || a.position - b.position)
 }
 
+/**
+ * What a stop collects, beneath its address: the container's label and the
+ * fraction, or the fraction alone at an address-only stop the office added
+ * (#111), which names no container — never a dangling separator.
+ */
+export function stopCollects(stop: Pick<DriverPickup, "containerLabel" | "wasteFractionName">): string {
+  return stop.containerLabel === null ? stop.wasteFractionName : `${stop.containerLabel} · ${stop.wasteFractionName}`
+}
+
 /** A point as Maps reads it: latitude, then longitude. */
 const mapsPlace = ({ coordinates: [longitude, latitude] }: FlatPoint): string => `${latitude},${longitude}`
 

@@ -38,7 +38,7 @@ import { AddPropertyGroupSurface, AddPropertySurface, AddSharedPointSurface, Pro
 import { PriceRowCommandsSurface, PriceRowsPrimarySurface, ProductCommandsSurface, ProductsPrimarySurface } from "./pricing-surfaces"
 import { PROVIDER_PRICES_LIST, SERVICE_AREAS_LIST, SETTLEMENTS_LIST, WEIGHTS_LIST } from "./provider-money-lists"
 import { AddProviderPriceSurface, CreateServiceAreaSurface, OpenSettlementSurface, ProviderPriceCommandsSurface, ServiceAreaCommandsSurface, ServiceAreasRead, SettlementSurface, WeightReviewSurface } from "./provider-money-surfaces"
-import { LiveBoardRefresh, LiveRouteSurface, PickupCommandsSurface, RouteCommandsSurface } from "./route-surfaces"
+import { LiveBoardRefresh, LiveRouteSurface, NewRouteSurface, PickupCommandsSurface, RouteCommandsSurface } from "./route-surfaces"
 
 /** What a primary surface is handed: the label the module's primary action carries. */
 export type PrimarySurfaceProps = { label: string }
@@ -114,10 +114,12 @@ export const COMMAND_SURFACES: Readonly<Record<string, CommandSurface>> = {
   "customers.properties": { primary: AddPropertySurface, rowActions: PropertyCommandsSurface },
   "customers.groups": { primary: AddPropertyGroupSurface, rowActions: PropertyGroupCommandsSurface },
   "customers.shared": { primary: AddSharedPointSurface, rowActions: SharedPointCommandsSurface },
-  // Slice 6 (#179): generation writes routes and their stops, so there is no
-  // create; a route and a stop move by their commands, and the Live board
-  // only reads. A route's details are these, not the fixture route page.
-  "route-studio.routes": { primary: null, rowActions: RouteCommandsSurface },
+  // Slice 6 (#179): generation writes routes and their stops; a route and a
+  // stop move by their commands, and the Live board only reads. A route's
+  // details are these, not the fixture route page. #111: New route makes the
+  // office's ad-hoc route, and a route's Add stop the office's stop, so the
+  // stops still have no create of their own.
+  "route-studio.routes": { primary: NewRouteSurface, rowActions: RouteCommandsSurface },
   "route-studio.pickups": { primary: null, rowActions: PickupCommandsSurface },
   "route-studio.live": { primary: null, rowActions: LiveRouteSurface, whileShown: LiveBoardRefresh },
   // Slice 8 (#182, #147): a ticket opened by the office's own form and worked

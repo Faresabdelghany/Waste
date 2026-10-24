@@ -134,6 +134,7 @@ export function toTicketRecord(ticket: Ticket, context: MappingContext): Busines
   for (const link of links) facts[link.fact] = link.name
   if (ticket.resolution !== null) facts.Resolution = statusLabel(ticket.resolution)
   if (ticket.recollectionRouteId !== null) facts["Re-collection route"] = nameVia(context, "route", ticket.recollectionRouteId)
+  if (ticket.recollectionPickupId !== null) facts["Re-collection stop"] = nameVia(context, "pickup", ticket.recollectionPickupId)
   if (ticket.closedAt !== null) facts.Closed = shownOn(ticket.closedAt, project.timezone)
   const linked = Object.fromEntries(TICKET_LINKS.map(([key, prefix]) => [key, ticket.links[key] === null ? "" : webIdVia(context, prefix, ticket.links[key] as string)]))
   return {
@@ -167,6 +168,7 @@ export function toTicketRecord(ticket: Ticket, context: MappingContext): Busines
       ...linked,
       resolution: ticket.resolution ?? "",
       recollectionRouteId: ticket.recollectionRouteId === null ? "" : webIdVia(context, "route", ticket.recollectionRouteId),
+      recollectionPickupId: ticket.recollectionPickupId === null ? "" : webIdVia(context, "pickup", ticket.recollectionPickupId),
     },
   }
 }
@@ -334,7 +336,16 @@ export const TICKET_COMMANDS_BY_NAME = {
     if (routeWebId === undefined) return refusal("recollectionRouteId", "Pick the route the re-collection rides on")
     const recollectionRouteId = referencedServerId(routeWebId, "route", context, { owns: routeAdapter.owns })
     if (recollectionRouteId === undefined) return refusal("recollectionRouteId", "Pick a route the API holds")
-    return { resolution, note, recollectionRouteId }
+    // And, where the office added one for it, the stop of that route the re-collection is (#111); None names the route alone.
+    const stopWebId = said(input, "recollectionPickupId")
+    if (stopWebId === undefined || stopWebId === NO_ONE) return { resolution, note, recollectionRouteId }
+    const recollectionPickupId = referencedServerId(stopWebId, "pickup", context, { owns: pickupAdapter.owns })
+    if (recollectionPickupId === undefined) return refusal("recollectionPickupId", "Pick a stop the API holds")
+    // A stop picked before the route was changed is another route's, where its row is loaded to say so: refused here as the API would (400, Not a pickup of this route).
+    const stopRoute = context.resolve.byServerId(recollectionPickupId)?.submittedValues?.routeId
+    const stopRouteId = typeof stopRoute === "string" && stopRoute !== "" ? context.resolve.serverIdOf(stopRoute) : undefined
+    if (stopRouteId !== undefined && stopRouteId !== recollectionRouteId) return refusal("recollectionPickupId", "Pick a stop on the re-collection route")
+    return { resolution, note, recollectionRouteId, recollectionPickupId }
   }),
   reject: onTicket("reject", "rejected", (input) => withNote(needed(input, "reason", "Say why the ticket is rejected"), "reason")),
   reopen: onTicket("reopen", "reopened", (input) => withNote(needed(input, "note", "Say why the ticket is reopened"))),

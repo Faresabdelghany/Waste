@@ -1,8 +1,10 @@
 "use client"
 // Routes on the Pilot (Issue #179, slice 6 of #81): the command surfaces of
-// `route-studio.routes`, `.pickups` and `.live`. A route's details offer the
-// dispatcher's five commands — assign, dispatch, reschedule, cancel, and the
-// stop order (a manual Plan) — and what the route's own read gives: its stops
+// `route-studio.routes`, `.pickups` and `.live`. New route makes the office's
+// own ad-hoc route (#111). A route's details offer the dispatcher's commands
+// — assign, dispatch, reschedule, cancel, the stop order (a manual Plan), and
+// on a planned or ready route Add stop (#111), a container or an address with
+// its fraction — and what the route's own read gives: its stops
 // in their sequence, each opening its pickup, its sessions, and the device's
 // command log. A stop's details offer remove and correct outcome, with its
 // proofs; a live row its sessions and the way to its route. Every command is
@@ -20,6 +22,7 @@ import { Dialog, DialogContent, DialogDescription, DialogFooter, DialogHeader, D
 import { BusinessRecordFormDialog } from "@/components/waste/business-record-form-dialog"
 import { useBusinessRecordStore } from "@/components/waste/business-record-store"
 import type { RowSurfaceProps } from "@/components/waste/commands/command-surfaces"
+import { CreateSurface } from "@/components/waste/commands/create-surface"
 import { ReadRows } from "@/components/waste/commands/read-rows"
 import { useCommandRunner, useModuleReady, useOpenRecord, useRelationPickers, useRowHistory, useServerNames } from "@/components/waste/commands/use-command-support"
 import type { ApiClient } from "@/lib/api/client"
@@ -28,10 +31,11 @@ import { shownOn } from "@/lib/api/records/clock"
 import { CONTAINERS_MODULE } from "@/lib/api/records/containers"
 import { LIVE_MODULE, routeSessions, whileWatched } from "@/lib/api/records/live"
 import { CORRECT_PICKUP, PICKUPS_MODULE, pickupProofs, proofLine, REMOVE_PICKUP } from "@/lib/api/records/pickups"
-import { ASSIGN_ROUTE, callsignOf, CANCEL_ROUTE, DISPATCH_ROUTE, isHeldRoute, RELEASE_HOLD, REORDER_ROUTE, RESCHEDULE_ROUTE, routeCommandLog, routeDetail, ROUTES_MODULE } from "@/lib/api/records/routes"
+import { ADD_STOP, ASSIGN_ROUTE, callsignOf, CANCEL_ROUTE, DISPATCH_ROUTE, isHeldRoute, RELEASE_HOLD, REORDER_ROUTE, RESCHEDULE_ROUTE, routeCommandLog, routeDetail, ROUTES_MODULE } from "@/lib/api/records/routes"
 import { DRIVERS_MODULE, VEHICLES_MODULE } from "@/lib/data/allocations"
 import type { BusinessFormValues } from "@/lib/data/business-form-types"
-import { PICKUP_COMMAND_FORMS, pickupReasonLabel, ROUTE_COMMAND_FORMS, routeCommandValues, type PickupCommandWithForm, type RouteCommandWithForm } from "@/lib/data/routes"
+import { PROPERTIES_MODULE, SHARED_POINTS_MODULE } from "@/lib/data/properties"
+import { createRouteRecord, PICKUP_COMMAND_FORMS, pickupReasonLabel, ROUTE_COMMAND_FORMS, ROUTE_CREATE_FORM, routeCommandValues, type PickupCommandWithForm, type RouteCommandWithForm } from "@/lib/data/routes"
 import type { Pickup } from "@waste/contracts/pickups"
 import type { RouteDetail } from "@waste/contracts/routes"
 import type { Session } from "@waste/contracts/sessions"
@@ -39,11 +43,25 @@ import type { Session } from "@waste/contracts/sessions"
 /** The route's own read, as a one-row history the surface reads again after each command. */
 const readRoute = (client: ApiClient, serverId: string) => routeDetail(client, serverId).then((detail): RouteDetail[] => [detail])
 
-/** A status token as a person reads it. */
 /** The command each of the route's dialogs sends. */
-const ROUTE_COMMAND_OF: Readonly<Record<RouteCommandWithForm, string>> = { assign: ASSIGN_ROUTE, reschedule: RESCHEDULE_ROUTE, cancel: CANCEL_ROUTE }
+const ROUTE_COMMAND_OF: Readonly<Record<RouteCommandWithForm, string>> = { assign: ASSIGN_ROUTE, reschedule: RESCHEDULE_ROUTE, cancel: CANCEL_ROUTE, "add-stop": ADD_STOP }
 
-/** A read's rows, or the sentence of its refusal, or that it is being read. */
+/** The statuses a stop may be added in (#111): a route that has not started. */
+const TAKES_A_STOP = new Set(["planned", "ready"])
+
+/** New route (#111): the office's own ad-hoc route, planned on a project's day; its stops are added next. Named for what it makes, not the fixture module's "Create route". */
+export function NewRouteSurface() {
+  return (
+    <CreateSurface
+      label="New route"
+      module={ROUTES_MODULE}
+      schema={ROUTE_CREATE_FORM}
+      make={(values, now) => createRouteRecord(values, { now })}
+      created={() => ({ title: "Route created", description: "It is planned with no stops: add its stops, then dispatch it to its driver." })}
+    />
+  )
+}
+
 /** "Mads Jensen · WH-31" for a session: who drove, with what. */
 function useSessionLine(): (session: Session, timezone: string | undefined) => string {
   const driverName = useServerNames(DRIVERS_MODULE, "driver")
@@ -60,11 +78,13 @@ const DONE: Readonly<Record<string, (name: string) => string>> = {
   [CANCEL_ROUTE]: (name) => `${name} cancelled`,
   [REORDER_ROUTE]: (name) => `The stops of ${name} are reordered`,
   [RELEASE_HOLD]: (name) => `${name} handed back to its scheme`,
+  [ADD_STOP]: (name) => `A stop was added to ${name}`,
 }
 
 /** What each command's toast says beneath its title: where it now stands, or, for a hand-back, what is still to come (#226). */
 const DONE_SAYS: Readonly<Record<string, string>> = {
   [RELEASE_HOLD]: "The next generation run brings back the scheme's day, start and assignment.",
+  [ADD_STOP]: "It goes after the route's last stop, and generation never moves or skips it.",
 }
 
 type RouteOpen = { kind: "form"; name: RouteCommandWithForm; values: BusinessFormValues } | { kind: "reorder"; order: string[] }
@@ -78,6 +98,8 @@ export function RouteCommandsSurface({ record }: RowSurfaceProps) {
   const reads = useRowHistory(ROUTES_MODULE.workspaceId, ROUTES_MODULE.moduleId, record, version, readRoute)
   const log = useRowHistory(ROUTES_MODULE.workspaceId, ROUTES_MODULE.moduleId, record, version, routeCommandLog)
   const containerName = useServerNames(CONTAINERS_MODULE, "asset")
+  const propertyName = useServerNames(PROPERTIES_MODULE, "property")
+  const pointName = useServerNames(SHARED_POINTS_MODULE, "shared-point")
   const sessionLine = useSessionLine()
   const openPickup = useOpenRecord(PICKUPS_MODULE.moduleId)
   const [open, setOpen] = useState<RouteOpen | null>(null)
@@ -93,10 +115,16 @@ export function RouteCommandsSurface({ record }: RowSurfaceProps) {
     })
 
   const offered = moduleReady && !busy
-  const openForm = (name: RouteCommandWithForm) => setOpen({ kind: "form", name, values: name === "cancel" ? {} : routeCommandValues(record) })
-  // An address-only stop the office added (#111) names no container.
-  const stopName = (pickup: Pickup) => (pickup.containerId === null ? "Address-only stop" : containerName(pickup.containerId))
-  const stopLine = (pickup: Pickup & { sequence?: number }) => `${pickup.sequence ?? pickup.position}. ${stopName(pickup)} · ${statusLabel(pickup.status)}${pickup.reason === null ? "" : ` · ${pickupReasonLabel(pickup.reason)}`}`
+  const status = typeof record.submittedValues?.status === "string" ? record.submittedValues.status : ""
+  const openForm = (name: RouteCommandWithForm) => setOpen({ kind: "form", name, values: name === "assign" || name === "reschedule" ? routeCommandValues(record) : {} })
+  // An address-only stop the office added (#111) names no container: it is named by the place it is collected at.
+  const stopName = (pickup: Pickup) => {
+    if (pickup.containerId !== null) return containerName(pickup.containerId)
+    if (pickup.propertyId !== null) return propertyName(pickup.propertyId)
+    return pickup.sharedCollectionPointId === null ? "A stop with no place" : pointName(pickup.sharedCollectionPointId)
+  }
+  const stopLine = (pickup: Pickup & { sequence?: number }) =>
+    `${pickup.sequence ?? pickup.position}. ${stopName(pickup)} · ${statusLabel(pickup.status)}${pickup.reason === null ? "" : ` · ${pickupReasonLabel(pickup.reason)}`}${pickup.origin === "office" ? " · added by the office" : ""}`
 
   return (
     <section className="space-y-4" data-testid="route-commands">
@@ -118,6 +146,12 @@ export function RouteCommandsSurface({ record }: RowSurfaceProps) {
             Release hold
           </Button>
         )}
+        {/* A stop of the office's own goes onto a route that has not started (#111). */}
+        {TAKES_A_STOP.has(status) && (
+          <Button variant="outline" size="sm" disabled={!offered || !pickers.readyFor(ROUTE_COMMAND_FORMS["add-stop"])} onClick={() => openForm("add-stop")}>
+            Add stop
+          </Button>
+        )}
         <Button variant="outline" size="sm" disabled={!offered || detail === undefined || openStops.length < 2} onClick={() => setOpen({ kind: "reorder", order: openStops.map((pickup) => pickup.id) })}>
           Reorder stops
         </Button>
@@ -130,7 +164,7 @@ export function RouteCommandsSurface({ record }: RowSurfaceProps) {
         <ReadRows
           read={{ rows: detail?.pickups ?? null, problem: reads.problem }}
           label="Reading the route's stops…"
-          empty="No stop: generation matched no container for this route."
+          empty={record.facts.Origin === undefined ? "No stop: generation matched no container for this route." : "No stop yet: add the route's stops."}
           testId="route-stops"
           line={(pickup) => (
             <span className="flex items-center justify-between gap-2">
