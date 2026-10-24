@@ -6,8 +6,13 @@
 //
 // A ticket is `ticket-<uuid>` from the start: the fixtures' T-8831 is a
 // fixture's number, never a server row's (the plan on #81, fixture ids (b)).
-// Its label (`T-1001`) is the case's name in every sentence the API says, so
-// it leads the row's context; its subject is the row's name.
+// Its label (`T-1001`) is the case's name in every sentence the API says, a
+// fact of its own (`TICKET_NUMBER_FACT`), since the table's title column is
+// already headed Ticket (#253); its subject is the row's name. The row's
+// context is what the module's column heads it, Customer · property: the
+// customer and the place the ticket names, each once, and nothing where it
+// names neither; its other links are facts of their own, the route and the
+// container among the table's columns.
 //
 // The status moves by command alone: `assign` moves the assignee and
 // `start`, `wait`, `hold`, `complete`, `reject` and `reopen` the status
@@ -50,6 +55,12 @@ import type { ActionOutcome, SendAction } from "./server-records"
 export const TICKETS_MODULE: ModuleLocation = { workspaceId: "operate", moduleId: "tickets" }
 
 export const TICKET_PREFIX = "ticket"
+
+/** The fact a ticket record carries its label under (`T-1001`): never "Ticket", the table's title column's heading (#253). */
+export const TICKET_NUMBER_FACT = "Number"
+
+/** The links the module's "Customer · property" column shows, in its order: whom and where a case is about. */
+const CONTEXT_LINKS: ReadonlyArray<keyof TicketLinks> = ["customerId", "propertyId", "sharedCollectionPointId"]
 
 /** The submitted value a ticket record carries its assignee's server id under, for the list's "Mine" (`/me`'s account). */
 export const ASSIGNEE_ACCOUNT_KEY = "assigneeAccountId"
@@ -104,7 +115,7 @@ export function toTicketRecord(ticket: Ticket, context: MappingContext): Busines
     return serverId === null ? [] : [{ key, fact, webId: webIdVia(context, prefix, serverId), name: nameVia(context, prefix, serverId) }]
   })
   const facts: Record<string, string> = {
-    Ticket: ticket.label,
+    [TICKET_NUMBER_FACT]: ticket.label,
     Kind: statusLabel(ticket.kind),
     Priority: statusLabel(ticket.priority),
     Assignee: assignee ?? "Unassigned",
@@ -122,7 +133,7 @@ export function toTicketRecord(ticket: Ticket, context: MappingContext): Busines
   return {
     id: webIdOf(TICKET_PREFIX, ticket.id),
     name: ticket.subject,
-    context: [ticket.label, ...links.map((link) => link.name)].join(" · "),
+    context: CONTEXT_LINKS.flatMap((key) => links.find((link) => link.key === key)?.name ?? []).join(" · "),
     status: statusLabel(ticket.status),
     ...inheritedPresentation(undefined),
     ...stampFacts(ticket, context.now),

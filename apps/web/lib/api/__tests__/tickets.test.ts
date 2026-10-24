@@ -11,6 +11,7 @@ import type { Project } from "@waste/contracts/organisation"
 import { Ticket, TicketAssign, TicketComment, TicketComplete, TicketCreate, TicketDetail, TicketEvent, TicketHold, TicketPatch, TicketReject, TicketReopen, TicketStart, TicketWait } from "@waste/contracts/tickets"
 
 import { FIXTURE_COMPANY_ID, getModuleDefinition, type BusinessRecord } from "../../data/business-modules"
+import { defaultFactColumns } from "../../data/business-view-kinds"
 import { problemSentence } from "../problem"
 import { NOTHING_RESOLVED, type MappingContext, type Resolver } from "../records/adapter"
 import { isServerBacked, SERVER_MODULE_KEYS } from "../records/modules"
@@ -25,6 +26,7 @@ import {
   ticketAdapter,
   ticketDetail,
   TICKETS_MODULE,
+  TICKET_NUMBER_FACT,
   ticketsModule,
 } from "../records/tickets"
 import { bodyOf, clientOver, json, problem, scripted } from "./scripted-fetch"
@@ -44,6 +46,8 @@ const containerId = "01a0d2a4-a280-7020-8000-000000000001"
 const customerId = "01a0d2a4-a280-7003-8000-000000000001"
 const pickupId = "01a0d2a4-a280-7033-8000-000000000001"
 const alertId = "01a0d2a4-a280-7041-8000-000000000001"
+const propertyId = "01a0d2a4-a280-7006-8000-000000000001"
+const driverId = "01a0d2a4-a280-7014-8000-000000000001"
 
 /** A loaded row of another module, as its adapter would have made it: its web id, its name, its kind. */
 const row = (id: string, name: string, recordKind: string, facts: Record<string, string> = {}): BusinessRecord => ({ ...projectRecord, id, name, recordKind, facts, submittedValues: {} })
@@ -53,11 +57,13 @@ const rc1040 = row(`route-${endedRouteId}`, "RC-1040", "Route")
 const bin = row(`asset-${containerId}`, "BIN-82014", "Container")
 // An organisation is `company-<uuid>`, as the registry's adapter makes it.
 const housing = row(`company-${customerId}`, "Østerbro Housing", "Contact or Customer Organization")
+const strandboulevarden = row(`property-${propertyId}`, "Strandboulevarden 52", "Property")
 const serverIdsOf = (records: readonly BusinessRecord[], ids: readonly string[]) => new Map(records.map((record, index) => [record.id, ids[index]]))
 const state: ServerRecordsState = new Map([
   ["configure.organization", loaded({ records: [projectRecord], serverIds: serverIdsOf([projectRecord], [copenhagen.id]) }, 1)],
   ["configure.access", loaded({ records: [olivia], serverIds: serverIdsOf([olivia], [oliviaId]) }, 1)],
   ["customers.contacts", loaded({ records: [housing], serverIds: serverIdsOf([housing], [customerId]) }, 1)],
+  ["customers.properties", loaded({ records: [strandboulevarden], serverIds: serverIdsOf([strandboulevarden], [propertyId]) }, 1)],
   ["resources.containers", loaded({ records: [bin], serverIds: serverIdsOf([bin], [containerId]) }, 1)],
   ["route-studio.routes", loaded({ records: [rc1042, rc1040], serverIds: serverIdsOf([rc1042, rc1040], [routeId, endedRouteId]) }, 1)],
 ])
@@ -126,10 +132,10 @@ describe("a ticket", () => {
     assert.ok(Ticket.safeParse(missed).success)
   })
 
-  test("is the record the list and the details read: its subject the name, its label leading the context, the wire's facts alone", () => {
+  test("is the record the list and the details read: its subject the name, its label the number fact, the wire's facts alone", () => {
     assert.equal(record.id, `ticket-${missed.id}`)
     assert.equal(record.name, "Missed collection at Adelgade 12")
-    assert.equal(record.context, `T-1001 · RC-1042 · pickup-${pickupId} · BIN-82014`)
+    assert.equal(record.context, "", "about a route, a stop and a container: no customer, no property")
     assert.equal(record.status, "Open")
     assert.equal(record.owner, "Unassigned")
     assert.equal(record.value, "Due 2026-10-01 14:00", "on the project's clock")
@@ -137,7 +143,7 @@ describe("a ticket", () => {
     assert.equal(record.recordKind, "Ticket")
     assert.deepEqual(record.projectIds, [projectRecord.id])
     assert.deepEqual(record.facts, {
-      Ticket: "T-1001",
+      Number: "T-1001",
       Kind: "Missed collection",
       Priority: "High",
       Assignee: "Unassigned",
@@ -176,6 +182,27 @@ describe("a ticket", () => {
       resolution: "",
       recollectionRouteId: "",
     })
+  })
+
+  test("says under Customer · property whom and where it is about, each once: never its number, the route, the stop, the container or the driver (#253)", () => {
+    const reported = ticketAdapter.toRecord({ ...missed, links: { ...missed.links, propertyId, driverId } }, context())
+    assert.equal(reported.context, "Strandboulevarden 52", "the consumer names the stop's property and no customer")
+    assert.equal(reported.facts.Property, "Strandboulevarden 52")
+    assert.equal(reported.facts.Container, "BIN-82014", "the container under its own fact, once")
+    const named = ticketAdapter.toRecord({ ...missed, source: "office", links: { ...NO_LINKS, customerId, propertyId } }, context())
+    assert.equal(named.context, "Østerbro Housing · Strandboulevarden 52")
+    const unloaded = ticketAdapter.toRecord({ ...missed, links: { ...NO_LINKS, customerId, propertyId } }, context(NOTHING_RESOLVED))
+    assert.equal(unloaded.context, `customer-${customerId} · property-${propertyId}`, "by id chip until their modules load")
+  })
+
+  test("carries no fact headed as the table's title column, so one column is headed Ticket (#253)", () => {
+    const entityLabel = getModuleDefinition(TICKETS_MODULE)?.entityLabel ?? ""
+    assert.equal(entityLabel, "Ticket")
+    assert.ok(!(entityLabel in record.facts))
+    assert.equal(record.facts[TICKET_NUMBER_FACT], "T-1001")
+    const seeded = defaultFactColumns(TICKETS_MODULE.moduleId, [])
+    for (const fact of [TICKET_NUMBER_FACT, "Route", "Container"]) assert.ok(seeded.includes(fact), `${fact} is a column the table opens with`)
+    assert.ok(!seeded.includes(entityLabel))
   })
 
   test("names its links and its assignee by id chip until their modules load", () => {
@@ -270,7 +297,7 @@ describe("the office's create", () => {
     assert.equal(outcome.kind, "created")
     if (outcome.kind !== "created") return
     assert.equal(outcome.record.id, `ticket-${answered.id}`)
-    assert.equal(outcome.record.facts.Ticket, "T-1003")
+    assert.equal(outcome.record.facts[TICKET_NUMBER_FACT], "T-1003")
   })
 })
 

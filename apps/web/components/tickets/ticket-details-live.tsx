@@ -32,7 +32,7 @@ import { shownOn } from "@/lib/api/records/clock"
 import { CONTAINERS_MODULE } from "@/lib/api/records/containers"
 import { PICKUPS_MODULE } from "@/lib/api/records/pickups"
 import { ROUTES_MODULE } from "@/lib/api/records/routes"
-import { ASSIGN_TICKET, commentOnTicket, isOpenTicketStatus, offersTicketCommand, ticketDetail, TICKET_LINKS, TICKET_MACHINE_COMMANDS, TICKETS_MODULE, type TicketCommandName } from "@/lib/api/records/tickets"
+import { ASSIGN_TICKET, commentOnTicket, isOpenTicketStatus, offersTicketCommand, ticketDetail, TICKET_LINKS, TICKET_MACHINE_COMMANDS, TICKET_NUMBER_FACT, TICKETS_MODULE, type TicketCommandName } from "@/lib/api/records/tickets"
 import { AGREEMENTS_MODULE } from "@/lib/data/agreements"
 import { DRIVERS_MODULE } from "@/lib/data/allocations"
 import { getBusinessModuleHref } from "@/lib/data/business-links"
@@ -130,7 +130,7 @@ export function LiveTicketDetailsDialog({ record, onClose }: { record: BusinessR
   const projectId = value("projectId") || live.projectIds?.[0]
   const timezone = pickers.timezoneOf(projectId)
   const status = (value("status") || "open") as TicketStatus
-  const label = live.facts.Ticket ?? live.name
+  const label = live.facts[TICKET_NUMBER_FACT] ?? live.name
   const detail = reads.rows?.[0]
   const offered = ready && !busy && !saving
   // A closed ticket's own fields are refused by the API until it is reopened: its edits are offered while it is open.

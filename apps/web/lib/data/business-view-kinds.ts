@@ -98,10 +98,13 @@ export const RICH_MODULE_TABLES: Readonly<Record<string, RichModuleTable>> = {
   // provider workspace. They are worked through lifecycle transitions and
   // the ticket details view, so no generic row Edit/Delete. A column shows
   // only where a row carries its fact, so the fixtures' Type and Team and
-  // the API's label, kind, assignee, source and time (#147) are seeded side
-  // by side, each mode showing its own.
+  // the API's number, route, container, kind, assignee, source and time
+  // (#147) are seeded side by side, each mode showing its own. The API's
+  // label is its Number, since the title column is already headed Ticket, and
+  // its route and container are columns of their own beside the Customer ·
+  // property the context holds (#253).
   tickets: {
-    seededFactColumns: ["Ticket", "Type", "Kind", "Priority", "Team", "Assignee", "Opened via", "Occurred"],
+    seededFactColumns: ["Number", "Route", "Container", "Type", "Kind", "Priority", "Team", "Assignee", "Opened via", "Occurred"],
     // Form fields that duplicate the title/description cell or hold long
     // free text.
     excludedColumnFacts: new Set([
