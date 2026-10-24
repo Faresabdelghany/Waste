@@ -57,7 +57,7 @@ import { isSoftDeleted } from "@waste/domain/record-visibility"
 
 import type { BusinessRecord, WorkspaceId } from "@/lib/data/business-modules"
 
-import type { ApiClient } from "../client"
+import { UNREACHABLE_STATUS, type ApiClient } from "../client"
 import { ApiProblem, genericProblem, isAccountRefusal, type Problem } from "../problem"
 import { isLocalRefusal, moduleKeyOf, PartialWrite, statusToken, webIdOf, type CommandInput, type MappingContext, type Resolver, type Resource, type ResourceAdapter, type ServerModule } from "./adapter"
 import { isCompanyRecord } from "./organisation"
@@ -404,26 +404,57 @@ export type ReadOptions = {
   alive: () => boolean
   /** The clock a read that lands is stamped with. */
   now?: () => number
+  /** The waits before a failure on the way is asked again (`READ_RETRY_DELAYS_MS`); a test hands its own. */
+  retryDelaysMs?: readonly number[]
+}
+
+/**
+ * How long a module's read waits before it asks again after a failure on the
+ * way rather than an answer — a 5xx, or an API that did not answer: in a
+ * page's burst of some forty reads, a connection the proxy finds reset is
+ * one of them, and without a second ask the whole module stays failed for
+ * the session (a master-data read lost so leaves every scheme form unable to
+ * name its fraction). Once per delay, then the failure stands. A refusal the
+ * API answered, a 4xx, says the same twice and is never asked again.
+ */
+export const READ_RETRY_DELAYS_MS: readonly number[] = [300, 1_000]
+
+/** Whether a read failed on the way rather than by the API's answer: a 5xx or no answer at all. */
+const failedOnTheWay = (error: unknown): boolean => error instanceof ApiProblem && (error.problem.status === UNREACHABLE_STATUS || error.problem.status >= 500)
+
+/** The module's lists, asked again after each delay while the failure is on the way; undefined once the session ended during a wait. */
+async function listModuleAgain(client: ApiClient, module: ServerModule, alive: () => boolean, delays: readonly number[]): Promise<ModuleLists | undefined> {
+  for (let attempt = 0; ; attempt += 1) {
+    try {
+      return await listModule(client, module)
+    } catch (error) {
+      const delay = delays[attempt]
+      if (delay === undefined || !failedOnTheWay(error)) throw error
+      await new Promise((resolve) => setTimeout(resolve, delay))
+      if (!alive()) return undefined
+    }
+  }
 }
 
 /**
  * One module read into the store: the load's read of each module, and the
  * read again after a command changed its rows (Issue #198). The module is
  * `loading` while the read is out, so one that was ready keeps its rows;
- * then it holds the API's rows, or the problem beside the rows it had. Once
+ * then it holds the API's rows, or the problem beside the rows it had. A
+ * failure on the way is asked again first (`READ_RETRY_DELAYS_MS`). Once
  * `alive` says the session is over nothing is written, not even the
  * `loading` mark, which would land in the next session's store. The account's
  * own refusal is written nowhere either, since it has ended the session and
  * /login says why. The problem comes back for the caller to report.
  */
-export async function readModuleInto(store: ServerStore, client: ApiClient, module: ServerModule, { fixtures, alive, now = Date.now }: ReadOptions): Promise<Problem | null> {
+export async function readModuleInto(store: ServerStore, client: ApiClient, module: ServerModule, { fixtures, alive, now = Date.now, retryDelaysMs = READ_RETRY_DELAYS_MS }: ReadOptions): Promise<Problem | null> {
   if (!alive()) return null
   const key = moduleKeyOf(module.workspaceId, module.moduleId)
   store.set((state) => new Map(state).set(key, loading(state.get(key) ?? IDLE)))
   try {
     const started = store.getSnapshot()
-    const lists = await listModule(client, module)
-    if (!alive()) return null
+    const lists = await listModuleAgain(client, module, alive, retryDelaysMs)
+    if (lists === undefined || !alive()) return null
     // Mapped against the store as the answer lands, so a row made while the
     // read was out keeps the id it was minted under and the rows that name it
     // name that one (#240). The stamp is the snapshot the read began with:
