@@ -234,6 +234,34 @@ test("a service day added to a validated scheme is one PATCH of the days and the
   expect({ status: read.status, serviceDays: read.serviceDays, groupDays: read.collectionGroups.map((row) => row.days) }).toEqual({ status: "validated", serviceDays: ["monday", "thursday", "saturday"], groupDays: [["monday", "thursday", "saturday"]] })
 })
 
+test("an Actions item that opens a dialog leaves focus in it: the menu never hands focus back to Actions as it closes, which on a busy page dismissed a picker opened in the dialog", async ({ api, page }) => {
+  const name = uniqueName("E2E Actions focus")
+  await schemeThroughApi(api, name)
+  await openSchemes(page)
+  await openScheme(page, name)
+  type Counted = { __e2eToActions?: number }
+  const actions = page.getByRole("button", { name: "Actions", exact: true })
+  // Counted as focus leaves where it was: the dialog's trap takes it back before Actions ever has it.
+  await actions.evaluate((button) =>
+    document.addEventListener("focusout", (event) => {
+      if (event.relatedTarget === button) (window as unknown as Counted).__e2eToActions = ((window as unknown as Counted).__e2eToActions ?? 0) + 1
+    }, true),
+  )
+  for (const item of ["Edit scheme", "Edit collection groups"]) {
+    await actions.click()
+    await page.getByRole("menuitem", { name: item }).click()
+    const dialog = page.getByRole("dialog").or(page.getByRole("alertdialog"))
+    await expect(dialog).toBeVisible()
+    // The menu hands focus on a task after it unmounts, its exit animation done; by the DOM, since the dialog hides it from roles at once.
+    await expect(page.locator('[role="menu"]')).toHaveCount(0)
+    await page.evaluate(() => new Promise((settled) => requestAnimationFrame(() => setTimeout(settled, 50))))
+    expect(await page.evaluate(() => (window as unknown as Counted).__e2eToActions ?? 0), `focus handed back to Actions after ${item}`).toBe(0)
+    expect(await page.evaluate(() => Boolean(document.activeElement?.closest('[role="dialog"], [role="alertdialog"]'))), `focus in the dialog ${item} opened`).toBe(true)
+    await page.keyboard.press("Escape")
+    await expect(dialog).toBeHidden()
+  }
+})
+
 test("a rename the API refuses is its sentence over the dialog, which keeps what was typed", async ({ api, page }) => {
   const name = uniqueName("E2E Rename")
   const scheme = await schemeThroughApi(api, name)

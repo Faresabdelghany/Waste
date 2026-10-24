@@ -84,9 +84,23 @@ function DropdownMenuSubContent({
   )
 }
 
+/**
+ * Radix hands focus back to the trigger once the menu's exit animation has
+ * ended. Where something else holds focus by then — the dialog an item
+ * opened, a field clicked outside — it stays there: pulled back to the
+ * trigger, it would leave the dialog and dismiss a picker opened in it
+ * meanwhile. A menu closed with focus still in it finds focus on the body
+ * once it is gone, and hands it back as before.
+ */
+function keepFocusHeldElsewhere(event: Event) {
+  const held = globalThis.document?.activeElement
+  if (held && held !== document.body) event.preventDefault()
+}
+
 function DropdownMenuContent({
   className,
   sideOffset = 4,
+  onCloseAutoFocus,
   ...props
 }: React.ComponentProps<typeof DropdownMenuPrimitive.Content>) {
   return (
@@ -94,6 +108,10 @@ function DropdownMenuContent({
       <DropdownMenuPrimitive.Content
         data-slot="dropdown-menu-content"
         sideOffset={sideOffset}
+        onCloseAutoFocus={(event) => {
+          onCloseAutoFocus?.(event)
+          keepFocusHeldElsewhere(event)
+        }}
         className={cn(
           'glass glass-popover text-popover-foreground data-[state=open]:animate-in data-[state=closed]:animate-out data-[state=closed]:fade-out-0 data-[state=open]:fade-in-0 data-[state=closed]:zoom-out-95 data-[state=open]:zoom-in-95 data-[side=bottom]:slide-in-from-top-2 data-[side=left]:slide-in-from-right-2 data-[side=right]:slide-in-from-left-2 data-[side=top]:slide-in-from-bottom-2 z-50 min-w-[8rem] overflow-hidden rounded-md border p-1 shadow-md outline-hidden',
           className,
