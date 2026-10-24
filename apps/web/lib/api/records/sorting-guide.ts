@@ -30,6 +30,7 @@ const statusOf = (record: Parameters<typeof typed>[0] & { status: string }) =>
 
 export const sortingGuideItemAdapter: ResourceAdapter<SortingGuideItem> = {
   prefix: SORTING_GUIDE_ITEM_PREFIX,
+  auditTable: "sorting_guide_item",
   owns: ofKind(SORTING_GUIDE_ITEM_PREFIX, [SORTING_GUIDE_ITEM_KIND]),
   statuses: SORTING_GUIDE_ITEM_STATUSES,
   list: (client) => listAll<SortingGuideItem>(client, "/sorting-guide-items"),

@@ -24,6 +24,66 @@ export const CHANGE_REASON_HEADER = "waste-change-reason"
 export const AuditAction = z.enum(AUDIT_ACTIONS)
 export type AuditAction = z.infer<typeof AuditAction>
 
+/**
+ * The tables whose rows have a history, as the database spells them, in the
+ * audit trail's order (`AUDITED`, @waste/db/sql/audit-trail, whose test holds
+ * the two equal): what a client names a row's table from.
+ */
+export const AUDITED_TABLES = [
+  "company",
+  "project",
+  "service_provider",
+  "role",
+  "role_grant",
+  "user_account",
+  "project_access",
+  "service_provider_access",
+  "waste_fraction",
+  "container_type",
+  "service_frequency",
+  "vehicle_type",
+  "container_type_vehicle_type",
+  "product",
+  "customer",
+  "property",
+  "property_party",
+  "property_group",
+  "property_group_member",
+  "shared_collection_point",
+  "shared_collection_point_member",
+  "agreement",
+  "subscription",
+  "container",
+  "container_service_placement",
+  "depot",
+  "unloading_station",
+  "unloading_station_fraction",
+  "warehouse",
+  "vehicle",
+  "vehicle_compartment",
+  "vehicle_compartment_fraction",
+  "driver",
+  "planning_area",
+  "planning_area_boundary",
+  "collection_calendar",
+  "collection_calendar_holiday",
+  "route_scheme",
+  "collection_group",
+  "collection_group_fraction",
+  "collection_group_container_type",
+  "collection_group_container",
+  "price_list",
+  "price_list_row",
+  "service_area",
+  "service_area_planning_area",
+  "service_area_waste_fraction",
+  "service_area_assignment",
+  "service_provider_price",
+  "settlement",
+  "sorting_guide_item",
+] as const
+export type AuditedTable = (typeof AUDITED_TABLES)[number]
+
 /** A table's name as the database spells it: `role_grant`, `property_party`. */
 const TableName = z.string().regex(/^[a-z][a-z_]*$/, "a table's name, in the database's spelling: role_grant")
 

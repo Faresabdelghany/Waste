@@ -1,20 +1,23 @@
 // The status dialog's governance (Issue #251): what it asks and what it
 // promises, by where the record lives. In fixture mode the prototype's
 // governed action stands — a reason, an effective date, an audit row the
-// browser keeps. On a module the API holds, the status is all a wire takes:
-// no patch carries a reason or a date for it, and the API keeps no audit
-// row, so the dialog offers neither and promises neither.
+// browser keeps. On a module the API holds, a patch carries the status and
+// no date, and the API's audit log keeps the change (#291): the dialog asks a
+// reason, which travels in the change-reason header and is not required, and
+// offers no date.
 import assert from "node:assert/strict"
 import { describe, test } from "node:test"
 
-import { actionDecisionShape, actionRecordedSentence } from "../action-decision"
+import { PARAGRAPH_MAX } from "@waste/contracts/text"
+
+import { actionDecisionShape, actionRecordedSentence, REASON_MAX } from "../action-decision"
 
 describe("the status dialog in fixture mode", () => {
   test("asks a reason before it confirms, offers an effective date, and keeps the browser's audit row", () => {
     const shape = actionDecisionShape({ onApi: false, createsCompanion: false })
     assert.deepEqual(
-      { asksReason: shape.asksReason, asksEffectiveDate: shape.asksEffectiveDate, keepsBrowserAudit: shape.keepsBrowserAudit },
-      { asksReason: true, asksEffectiveDate: true, keepsBrowserAudit: true },
+      { asksReason: shape.asksReason, requiresReason: shape.requiresReason, asksEffectiveDate: shape.asksEffectiveDate, keepsBrowserAudit: shape.keepsBrowserAudit },
+      { asksReason: true, requiresReason: true, asksEffectiveDate: true, keepsBrowserAudit: true },
     )
     assert.match(shape.promise, /appended to audit history/)
   })
@@ -29,18 +32,22 @@ describe("the status dialog in fixture mode", () => {
   })
 })
 
-describe("the status dialog on a module the API holds (#251)", () => {
+describe("the status dialog on a module the API holds (#251, #291)", () => {
   const shape = actionDecisionShape({ onApi: true, createsCompanion: false })
 
-  test("asks no reason and offers no effective date: no wire takes either for a status", () => {
-    assert.equal(shape.asksReason, false)
+  test("asks a reason, not required, for the audit log, and offers no effective date: no wire takes a date for a status", () => {
+    assert.equal(shape.asksReason, true)
+    assert.equal(shape.requiresReason, false)
     assert.equal(shape.asksEffectiveDate, false)
   })
 
-  test("promises the change now on the API and no audit row, and the browser keeps none either", () => {
+  test("promises the change now and the API's audit log of who and why; the browser keeps no row of its own", () => {
     assert.equal(shape.keepsBrowserAudit, false)
-    assert.doesNotMatch(shape.promise, /audit/i)
-    assert.match(shape.promise, /now/)
+    assert.equal(shape.promise, "The status changes now, as the API holds it, and its audit log keeps who changed it and the reason given.")
+  })
+
+  test("a reason is held to the bound the API holds the header to", () => {
+    assert.equal(REASON_MAX, PARAGRAPH_MAX)
   })
 
   test("the recorded toast names the move and nothing it did not do", () => {

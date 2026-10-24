@@ -243,6 +243,7 @@ const codeSetOnce = (noun: string) => `The code is set once: ${noun} that needs 
 
 export const depotAdapter: ResourceAdapter<Depot> = {
   prefix: "depot",
+  auditTable: "depot",
   owns: (record) => hasPrefix("depot")(record) || (record.recordKind === LOCATION_KIND && !isStationRecord(record)),
   statuses: DEPOT_STATUSES,
   list: (client) => listAll<Depot>(client, "/depots"),
@@ -378,6 +379,7 @@ const FRACTIONS_KEY = "acceptedFractionIds"
 
 export const unloadingStationAdapter: ResourceAdapter<UnloadingStation> = {
   prefix: "station",
+  auditTable: "unloading_station",
   owns: (record) => hasPrefix("station")(record) || (record.recordKind === LOCATION_KIND && isStationRecord(record)),
   statuses: UNLOADING_STATION_STATUSES,
   list: (client) => listAll<UnloadingStation>(client, "/unloading-stations"),
@@ -521,6 +523,7 @@ export const unloadingStationAdapter: ResourceAdapter<UnloadingStation> = {
 
 export const warehouseAdapter: ResourceAdapter<Warehouse> = {
   prefix: "warehouse",
+  auditTable: "warehouse",
   owns: ofKind("warehouse", ["Warehouse"]),
   statuses: WAREHOUSE_STATUSES,
   list: (client) => listAll<Warehouse>(client, "/warehouses"),

@@ -142,6 +142,7 @@ type IndexWrite = { indexes: string; body: unknown }
 
 export const providerPriceAdapter: ResourceAdapter<ServiceProviderPrice> = {
   prefix: PROVIDER_PRICE_PREFIX,
+  auditTable: "service_provider_price",
   owns: isProviderPriceRecord,
   // No status on the wire: the record's is a reading of its period.
   statuses: undefined,
@@ -331,6 +332,7 @@ const PAST: Readonly<Record<SettlementCommand, string>> = { calculate: "calculat
 
 export const settlementAdapter: ResourceAdapter<Settlement | SettlementDetail> = {
   prefix: SETTLEMENT_PREFIX,
+  auditTable: "settlement",
   owns: isSettlementRecord,
   // Its status moves by command alone.
   statuses: undefined,

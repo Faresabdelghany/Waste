@@ -93,6 +93,7 @@ const CUSTOMER_STATUSES: readonly Customer["status"][] = ["active", "inactive"]
 
 export const customerAdapter: ResourceAdapter<Customer> = {
   prefix: "customer",
+  auditTable: "customer",
   // Both fixture prefixes, and nothing else the module could hold.
   owns: (record) => customerKindOf(record) !== undefined,
   statuses: CUSTOMER_STATUSES,

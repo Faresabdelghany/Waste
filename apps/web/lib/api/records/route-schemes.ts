@@ -456,6 +456,7 @@ const generateRoutes: RecordAction<GenerationAnswer> = {
 
 export const routeSchemeAdapter: ResourceAdapter<RouteScheme> = {
   prefix: SCHEME_PREFIX,
+  auditTable: "route_scheme",
   owns: ofKind(SCHEME_PREFIX, ["Route Scheme"]),
   statuses: ["draft", "validated"],
   list: (client) => listAll<RouteScheme>(client, "/route-schemes"),

@@ -246,6 +246,7 @@ type PlanningAreaWrite = {
 
 export const planningAreaAdapter: ResourceAdapter<PlanningAreaResource> = {
   prefix: "area",
+  auditTable: "planning_area",
   owns: ofKind("area", ["Operational Planning Area version"]),
   // No status on the wire: the record's is a reading of its versions, and every move the lifecycle offers is refused.
   statuses: undefined,
@@ -398,6 +399,7 @@ type CollectionCalendarWrite = {
 
 export const collectionCalendarAdapter: ResourceAdapter<CollectionCalendar> = {
   prefix: "calendar",
+  auditTable: "collection_calendar",
   owns: ofKind("calendar", ["Collection Calendar"]),
   // No status on the wire: a calendar is in force or not by its period, which the readers judge.
   statuses: undefined,

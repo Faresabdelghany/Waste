@@ -305,6 +305,7 @@ export function containerMovements(client: Client, serverId: string): Promise<St
 
 export const containerAdapter: ResourceAdapter<ContainerResource> = {
   prefix: CONTAINER_PREFIX,
+  auditTable: "container",
   owns: ofKind(CONTAINER_PREFIX, ["Container"]),
   // The asset state is the ledger's, moved only by the lifecycle's commands.
   statuses: undefined,

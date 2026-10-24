@@ -14,6 +14,7 @@ import path from "node:path"
 import { fileURLToPath } from "node:url"
 import { after, before, describe, test } from "node:test"
 
+import { AUDITED_TABLES } from "@waste/contracts/audit"
 import { eq, getTableName, is, sql } from "drizzle-orm"
 import { PgTable } from "drizzle-orm/pg-core"
 
@@ -54,6 +55,10 @@ describe("the audit trail's classification", () => {
       assert.ok(audited.has(nameOf(entry.parent.table)), `${nameOf(entry.table)}'s parent ${nameOf(entry.parent.table)} is audited`)
       assert.equal(entry.parent.column.table, entry.table, `${nameOf(entry.table)} names its parent through its own column`)
     }
+  })
+
+  test("the contracts name the audited tables, in order, as the trail does: the list a client names a row's table from", () => {
+    assert.deepEqual(AUDITED.map((entry) => nameOf(entry.table)), [...AUDITED_TABLES])
   })
 
   test("the hot tables are exempt: execution, generation, routing and the money the work makes", () => {

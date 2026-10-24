@@ -40,7 +40,7 @@ import {
   type WorkspaceDefinition,
   type WorkspaceId,
 } from "@/lib/data/business-modules"
-import { actionDecisionShape, actionRecordedSentence } from "@/lib/data/action-decision"
+import { actionDecisionShape, actionRecordedSentence, REASON_MAX } from "@/lib/data/action-decision"
 import { COLLECTION_CALENDARS_MODULE } from "@/lib/data/collection-calendars"
 import { PLANNING_AREAS_MODULE } from "@/lib/data/planning-areas"
 import { readableKey } from "@/lib/data/record-key"
@@ -233,6 +233,7 @@ import {
   type BusinessFilterKey,
   type BusinessFilters,
 } from "@waste/domain/business-filters"
+import { RecordHistory } from "@/components/waste/record-history"
 import { RecordSearchInput } from "@/components/waste/record-search-input"
 import {
   canonicalServiceFrequencyName,
@@ -2455,7 +2456,7 @@ export function BusinessWorkspace({
         })
       }, () => setActionSaving(false))
     } else {
-      // On a module the API holds, the status is all the wire takes and nothing keeps an audit row (#251): no action facts, no browser row.
+      // On a module the API holds, the status is all the wire takes (#251) and the API's audit log keeps the change: no action facts, no browser row, the reason in the write's change-reason header (#291).
       const onApi = apiConfigured && activeModuleOnApi !== null
       const { keepsBrowserAudit } = actionDecisionShape({ onApi, createsCompanion })
       const nextRecord: BusinessRecord = {
@@ -2485,7 +2486,8 @@ export function BusinessWorkspace({
       // live row, which moves at once and back on a refusal — and the person
       // is told, all once the write has landed.
       setActionSaving(true)
-      whenSaved(upsertRecord(workspace.id, activeModule.id, nextRecord), () => {
+      const said = reason.trim()
+      whenSaved(upsertRecord(workspace.id, activeModule.id, nextRecord, onApi && said !== "" ? { reason: said } : undefined), () => {
         // This action's dialog, unless another has been opened since.
         setPendingAction((current) => (current === pendingAction ? null : current))
         if (keepsBrowserAudit) recordAuditEvent()
@@ -5832,6 +5834,11 @@ export function BusinessWorkspace({
           showActions={canRunRecordActions}
           extraActions={selectedRecord ? recordExtraActions(selectedRecord) : undefined}
           commands={RowSurface && detailsRecord ? <RowSurface record={detailsRecord} /> : undefined}
+          history={
+            apiConfigured && activeModuleOnApi !== null && detailsRecord ? (
+              <RecordHistory key={detailsRecord.id} workspaceId={workspace.id} moduleId={activeModule.id} record={detailsRecord} />
+            ) : undefined
+          }
           onApi={apiConfigured && activeModuleOnApi !== null}
           attention={
             isSchemesView && selectedRecord
@@ -5975,6 +5982,7 @@ function RecordDetailsDialog({
   showActions = true,
   extraActions,
   commands,
+  history,
   attention,
   onApi = false,
 }: {
@@ -5984,6 +5992,8 @@ function RecordDetailsDialog({
   onAction: (action: string) => void
   /** The row's commands on the Pilot (the command surfaces' `rowActions`), under its facts. */
   commands?: ReactNode
+  /** The row's History on the Pilot, the API's audit log (#291), under its lifecycle. */
+  history?: ReactNode
   /** The transitions offered as buttons — `offeredTransitions`, which the parent computes since it knows the workspace. */
   transitions: string[]
   showDeepLinks: boolean
@@ -6078,6 +6088,8 @@ function RecordDetailsDialog({
                   </div>
                 )}
               </section>
+
+              {history}
 
               <section className="space-y-4">
                 <div className="flex items-center justify-between">
@@ -6268,13 +6280,14 @@ function ActionDecisionDialog({
 
               {shape.asksReason && (
                 <div className="space-y-2">
-                  <Label htmlFor="action-reason">Decision or action reason</Label>
+                  <Label htmlFor="action-reason">{shape.requiresReason ? "Decision or action reason" : "Reason (optional)"}</Label>
                   <Textarea
                     id="action-reason"
                     value={reason}
                     onChange={(event) => setReason(event.target.value)}
-                    placeholder="Explain why this action is appropriate and note the evidence reviewed."
+                    placeholder={shape.requiresReason ? "Explain why this action is appropriate and note the evidence reviewed." : "Why, in a sentence the history will show beside the change."}
                     className="min-h-24 resize-none"
+                    maxLength={REASON_MAX}
                   />
                 </div>
               )}
@@ -6306,7 +6319,7 @@ function ActionDecisionDialog({
               </Button>
               <Button
                 onClick={confirm}
-                disabled={saving || (shape.asksReason && !reason.trim()) || (isDeleteAction && !deletionCategory)}
+                disabled={saving || (shape.requiresReason && !reason.trim()) || (isDeleteAction && !deletionCategory)}
               >
                 Confirm {action.toLowerCase()}
               </Button>

@@ -188,6 +188,7 @@ const propertyKind = (record: BusinessRecord) => tokenOf(record, "propertyType",
 
 export const propertyAdapter: ResourceAdapter<Property> = {
   prefix: PROPERTY_PREFIX,
+  auditTable: "property",
   owns: isPropertyRecord,
   statuses: PROPERTY_STATUSES,
   list: (client) => listAll<Property>(client, "/properties"),
@@ -368,6 +369,7 @@ const GROUP_MEMBER = "a group member"
 
 export const propertyGroupAdapter: ResourceAdapter<PropertyGroup> = {
   prefix: GROUP_PREFIX,
+  auditTable: "property_group",
   owns: isPropertyGroupRecord,
   statuses: PROPERTY_GROUP_STATUSES,
   list: (client) => listAll<PropertyGroup>(client, "/property-groups"),
@@ -479,6 +481,7 @@ const pointToken = (record: BusinessRecord, key: string, tokens: readonly string
 
 export const sharedPointAdapter: ResourceAdapter<SharedCollectionPoint> = {
   prefix: SHARED_POINT_PREFIX,
+  auditTable: "shared_collection_point",
   owns: isSharedPointRecord,
   statuses: SHARED_COLLECTION_POINT_STATUSES,
   list: (client) => listAll<SharedCollectionPoint>(client, "/shared-collection-points"),

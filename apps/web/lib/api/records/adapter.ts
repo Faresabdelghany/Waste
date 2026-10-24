@@ -27,6 +27,8 @@
 // The typed form payload (`submittedValues`) is keyed by the module's form
 // field ids where the module has a form (the edit dialog seeds from them) and
 // by the wire's names where it has none.
+import type { AuditedTable } from "@waste/contracts/audit"
+
 import type { BusinessRecord, WorkspaceId } from "@/lib/data/business-modules"
 
 import type { ApiClient } from "../client"
@@ -135,6 +137,8 @@ export type RecordAction<Answer> = {
 export type ResourceAdapter<R extends Resource> = {
   /** The id prefix a record of this kind carries: `project`, `customer`, … */
   prefix: string
+  /** The table the API's audit log names a row of this kind by (#291), absent for a kind whose table keeps no history (a ledger, execution, the money the work makes). */
+  auditTable?: AuditedTable
   /** Whether a record of the module is one of this kind; the composed module asks each adapter in turn. */
   owns: (record: BusinessRecord) => boolean
   /**

@@ -113,6 +113,7 @@ const rekinded = (kind: MasterDataKind, after: BusinessRecord) => {
 
 export const wasteFractionAdapter: ResourceAdapter<WasteFraction> = {
   prefix: MASTER_DATA_KIND_DETAILS["waste-fraction"].prefix,
+  auditTable: "waste_fraction",
   owns: (record) => masterDataKindOf(record) === "waste-fraction",
   statuses: undefined,
   list: (client) => listAll<WasteFraction>(client, "/waste-fractions"),
@@ -140,6 +141,7 @@ export const wasteFractionAdapter: ResourceAdapter<WasteFraction> = {
 
 export const containerTypeAdapter: ResourceAdapter<ContainerType> = {
   prefix: CONTAINER_TYPE_PREFIX,
+  auditTable: "container_type",
   owns: (record) => masterDataKindOf(record) === "container-type",
   statuses: undefined,
   list: (client) => listAll<ContainerType>(client, "/container-types"),
@@ -169,6 +171,7 @@ export const containerTypeAdapter: ResourceAdapter<ContainerType> = {
 
 export const serviceFrequencyAdapter: ResourceAdapter<ServiceFrequency> = {
   prefix: MASTER_DATA_KIND_DETAILS["service-frequency"].prefix,
+  auditTable: "service_frequency",
   owns: (record) => masterDataKindOf(record) === "service-frequency",
   statuses: undefined,
   list: (client) => listAll<ServiceFrequency>(client, "/service-frequencies"),
@@ -252,6 +255,7 @@ const sameSet = (a: readonly string[], b: readonly string[]) => [...a].sort().jo
 
 export const vehicleTypeAdapter: ResourceAdapter<VehicleType> = {
   prefix: MASTER_DATA_KIND_DETAILS["vehicle-type"].prefix,
+  auditTable: "vehicle_type",
   owns: (record) => masterDataKindOf(record) === "vehicle-type",
   statuses: undefined,
   list: (client) => listAll<VehicleType>(client, "/vehicle-types"),
