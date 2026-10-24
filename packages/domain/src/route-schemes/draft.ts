@@ -61,6 +61,7 @@ export function resolvedDraftGroups(
     serviceDays: data.serviceDays,
     areaId: data.planningAreaId,
     projectIds: draftProjectIds(data),
+    from: data.effectiveFrom,
     containers,
   })
 }

@@ -12,7 +12,7 @@
 
 import type { BusinessRecord } from "../prototype-record"
 import { splitList } from "../record-values"
-import { SERVICE_DAYS, sortServiceDays, type ServiceDay } from "./recurrence"
+import { addDays, isIsoDate, SERVICE_DAYS, sortServiceDays, type ServiceDay } from "./recurrence"
 import { stringValue } from "./validation"
 
 /* ------------------------------ vocabulary -------------------------------- */
@@ -61,16 +61,60 @@ export const CONTAINER_VEHICLE_COMPATIBILITY: Readonly<
 export const ELIGIBLE_CONTAINER_STATUSES = new Set(["Available"])
 
 /**
- * Where a container the API holds says whether it is in service today (#207):
- * `"yes"` while a placement serves it under a subscription and an agreement
- * in force on its project's day — the worker's eligibility (apps/worker's
- * stop-matching) — `"no"` otherwise. A record that says it is held to that
- * and not to its status, which is its asset state there (every seeded
- * container has no movement yet), and named by its facts, since its typed
- * fraction and type are master-data web ids. The fixtures' containers say
- * nothing here and keep their status as the gate and their typed tokens.
+ * Where a container the API holds says when it is in service (#207, #232):
+ * JSON `ServingPeriod`, the period its placement serves it in under a
+ * subscription and an agreement in force — the worker's eligibility
+ * (apps/worker's stop-matching), the three periods intersected — read on its
+ * project's day. A record that carries it is held to it and not to its
+ * status, which is its asset state there (every seeded container has no
+ * movement yet), and named by its facts, since its typed fraction and type
+ * are master-data web ids. The fixtures' containers say nothing here and keep
+ * their status as the gate and their typed tokens.
  */
-export const SERVES_TODAY_KEY = "servesToday"
+export const SERVING_PERIOD_KEY = "servingPeriod"
+
+/**
+ * A container's serving period: `from` its first day, null where it serves
+ * on no day; `until` its first day out, null while open (half-open, as the
+ * wire spells periods); `asOf` the project's day the reading was made.
+ */
+export type ServingPeriod = { from: string | null; until: string | null; asOf: string }
+
+/** The serving period a container the API holds carries; undefined for a fixture's. One it cannot read serves on no day. */
+export function servingPeriodOf(record: Pick<BusinessRecord, "submittedValues">): ServingPeriod | undefined {
+  const raw = stringValue(record.submittedValues ?? {}, SERVING_PERIOD_KEY)
+  if (raw === undefined) return undefined
+  try {
+    const parsed: unknown = JSON.parse(raw)
+    if (parsed !== null && typeof parsed === "object") {
+      const { from, until, asOf } = parsed as Record<string, unknown>
+      const day = (value: unknown) => (typeof value === "string" && isIsoDate(value) ? value : null)
+      const read = day(asOf)
+      if (read !== null) return { from: day(from), until: day(until), asOf: read }
+    }
+  } catch {
+    // Unreadable: below.
+  }
+  return { from: null, until: null, asOf: "" }
+}
+
+/**
+ * The day a container is judged on (#232): the scheme's first day where it
+ * is later than the day the reading was made — a new scheme's first
+ * collection — else that day, a running scheme's collections being from now
+ * on. Without a first day, the day read.
+ */
+function judgedOn(period: ServingPeriod, schemeFrom: string | undefined): string {
+  return schemeFrom !== undefined && isIsoDate(schemeFrom) && schemeFrom > period.asOf ? schemeFrom : period.asOf
+}
+
+/** Why a container is out of service on `day`, or undefined while its period holds it. */
+function outOfService(period: ServingPeriod, day: string): string | undefined {
+  if (period.from === null) return "No placement serves it"
+  if (day < period.from) return `Serves from ${period.from}`
+  if (period.until !== null && day >= period.until) return `Served until ${addDays(period.until, -1)}`
+  return undefined
+}
 
 /**
  * Where a container the API holds lists every planning area whose boundary in
@@ -280,7 +324,7 @@ export type ContainerMatchProfile = {
   id: string
   name: string
   status: string
-  /** Whether it can be planned today: its placement's serving today where the record says so (`SERVES_TODAY_KEY`), its status otherwise. */
+  /** Whether it can be planned on the day judged: its serving period where the record carries one (`SERVING_PERIOD_KEY`), its status otherwise. */
   inService: boolean
   /** The configure.areas record ids it lies in; none = never matches an area-scoped rule. */
   areaIds: string[]
@@ -296,13 +340,14 @@ type ContainerRecordLike = Pick<
   "id" | "name" | "status" | "facts" | "submittedValues" | "projectIds"
 >
 
-/** Whether a container is one the API holds: held to its placement (`SERVES_TODAY_KEY`) rather than its status, and named by its facts. */
-function heldToPlacement(record: ContainerRecordLike): boolean {
-  return stringValue(record.submittedValues ?? {}, SERVES_TODAY_KEY) !== undefined
-}
-
+/**
+ * A container as a rule matches it. `schemeFrom`, the scheme's first day,
+ * is the day a container the API holds is judged in service on where it is
+ * later than the day its reading was made (`judgedOn`).
+ */
 export function containerMatchProfile(
   record: ContainerRecordLike,
+  schemeFrom?: string,
 ): ContainerMatchProfile {
   const values = record.submittedValues ?? {}
   const facts = record.facts ?? {}
@@ -319,7 +364,8 @@ export function containerMatchProfile(
   }
   // A container the API holds types its master data by web id (#207), which
   // is no name a rule matches: its display facts say the names instead.
-  const fromApi = heldToPlacement(record)
+  const period = servingPeriodOf(record)
+  const fromApi = period !== undefined
   const typedName = (key: string, labels: Readonly<Record<string, string>>) => {
     const value = fromApi ? undefined : stringValue(values, key)
     return value === undefined ? undefined : (labels[value] ?? value)
@@ -342,7 +388,7 @@ export function containerMatchProfile(
     id: record.id,
     name: record.name,
     status: record.status,
-    inService: fromApi ? values[SERVES_TODAY_KEY] === "yes" : ELIGIBLE_CONTAINER_STATUSES.has(record.status),
+    inService: period !== undefined ? outOfService(period, judgedOn(period, schemeFrom)) === undefined : ELIGIBLE_CONTAINER_STATUSES.has(record.status),
     areaIds: areaList !== undefined ? splitList(areaList) : areaId !== undefined ? [areaId] : [],
     fractions,
     ...(containerType ? { containerType } : {}),
@@ -398,12 +444,20 @@ const fractionsIntersect = (
  * its container type is compatible. An empty-fraction rule matches nothing
  * (the rule IS the fraction selection; validation blocks saving one).
  */
+/** Why a container the API holds is out of service on the day judged; undefined for a fixture's, whose status says it. */
+function servingReason(record: ContainerRecordLike, schemeFrom: string | undefined): string | undefined {
+  const period = servingPeriodOf(record)
+  return period === undefined ? undefined : outOfService(period, judgedOn(period, schemeFrom))
+}
+
 export function resolveStopMatches(input: {
   rule: StopMatchRule
   /** The scheme's planning area (configure.areas record id); required to match. */
   areaId: string | undefined
   /** The scheme's project scope; absent = company-wide. */
   projectIds?: readonly string[]
+  /** The scheme's first day, which a container the API holds is judged in service on where it is still ahead (#232). */
+  from?: string | undefined
   containers: readonly ContainerRecordLike[]
 }): StopMatchResult {
   const matched: ContainerMatchProfile[] = []
@@ -413,7 +467,7 @@ export function resolveStopMatches(input: {
   if (!input.areaId) return { matched, excluded, scopeTotal }
 
   for (const record of input.containers) {
-    const profile = containerMatchProfile(record)
+    const profile = containerMatchProfile(record, input.from)
     if (!profile.areaIds.includes(input.areaId)) continue
     if (!projectsOverlap(profile.projectIds, input.projectIds)) continue
     scopeTotal += 1
@@ -435,7 +489,7 @@ export function resolveStopMatches(input: {
       excluded.push({
         id: profile.id,
         name: profile.name,
-        reason: `${heldToPlacement(record) ? "No placement serves it today" : profile.status} — not in service`,
+        reason: `${servingReason(record, input.from) ?? profile.status} — not in service`,
       })
       continue
     }

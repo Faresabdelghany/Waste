@@ -200,8 +200,8 @@ describe("a container", () => {
       serviceFrequencyId: "",
       placementFrom: "2026-01-01",
       placementTo: "",
-      // Its subscription is not loaded here, so nothing says it serves today (container-places.test.ts reads the place).
-      servesToday: "no",
+      // Its subscription is not loaded here, so it serves on no day the record can say (container-places.test.ts reads the place).
+      servingPeriod: JSON.stringify({ from: null, until: null, asOf: "2026-09-30" }),
     })
     assert.equal(stocked.submittedValues?.assetStatus, "in-warehouse")
     assert.equal(stocked.submittedValues?.warehouseId, `warehouse-${warehouseId}`)

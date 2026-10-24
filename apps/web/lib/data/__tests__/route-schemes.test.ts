@@ -7,7 +7,7 @@ import assert from "node:assert/strict"
 import { describe, test } from "node:test"
 
 import { validateGuidedScheme } from "@waste/domain/route-schemes/draft"
-import { PLANNING_AREA_IDS_KEY, SERVES_TODAY_KEY } from "@waste/domain/route-schemes/matching"
+import { PLANNING_AREA_IDS_KEY, SERVING_PERIOD_KEY } from "@waste/domain/route-schemes/matching"
 import type { GuidedSchemeData } from "@waste/domain/route-schemes/quick-create"
 
 import { statusLabel } from "../../api/records/adapter"
@@ -54,12 +54,13 @@ describe("the wizard's validation over the API's containers", () => {
     ...over,
   })
   // As the containers adapter carries one: master data by web id, the names as facts, no movement yet, its place read from its placement.
-  const held = (servesToday: "yes" | "no") => ({
+  // Its serving period read on 2026-10-01: serving from the first of the year, or on no day.
+  const held = (serves: "yes" | "no" | { from: string }) => ({
     id: "container-01a0d2a4-a280-7014-8000-000000000001",
     name: "BIN-91001",
     status: "No stock record",
     facts: { "Waste fractions": "Residual", "Container type": "Two-wheel bin · 240 L" },
-    submittedValues: { wasteFraction: "fraction-01a0d2a4-a280-7007-8000-000000000001", containerType: "container-type-01a0d2a4-a280-7008-8000-000000000002", [PLANNING_AREA_IDS_KEY]: "area-osterbro,area-indre-by", [SERVES_TODAY_KEY]: servesToday },
+    submittedValues: { wasteFraction: "fraction-01a0d2a4-a280-7007-8000-000000000001", containerType: "container-type-01a0d2a4-a280-7008-8000-000000000002", [PLANNING_AREA_IDS_KEY]: "area-osterbro,area-indre-by", [SERVING_PERIOD_KEY]: JSON.stringify({ from: serves === "yes" ? "2026-01-01" : serves === "no" ? null : serves.from, until: null, asOf: "2026-10-01" }) },
     projectIds: ["project-copenhagen"],
   })
   const validated = (containers: ReturnType<typeof held>[]) => validateGuidedScheme(draft(), [], [], containers as never, [vehicle as never])
@@ -70,8 +71,13 @@ describe("the wizard's validation over the API's containers", () => {
     assert.equal(result.status, "Validated")
   })
 
+  test("a container whose placement starts on the draft's first day is a stop of it: a new scheme no longer blocks on placements that start with it (#232)", () => {
+    const result = validated([held({ from: "2026-10-05" })])
+    assert.deepEqual([result.status, result.issues], ["Validated", []])
+  })
+
   test("with none the rule matches, the zero-match sentence blocks: the draft stays a Draft", () => {
-    for (const containers of [[], [held("no")]]) {
+    for (const containers of [[], [held("no"), held({ from: "2026-10-12" })]]) {
       const result = validated(containers)
       assert.equal(result.status, "Draft")
       assert.deepEqual(result.issues, ["No containers currently match the stop rule"], `${containers.length} container(s)`)

@@ -12,7 +12,7 @@ import {
   containerTypeShortLabel,
   matchPlansFromValues,
   PLANNING_AREA_IDS_KEY,
-  SERVES_TODAY_KEY,
+  SERVING_PERIOD_KEY,
   matchPlansToValues,
   resolveStopMatches,
   stopRuleSummary,
@@ -145,10 +145,13 @@ describe("container types with a thousands separator round-trip (issue #43)", ()
   })
 })
 
-describe("a container the API holds (#207)", () => {
+describe("a container the API holds (#207, #232)", () => {
   // As the web's containers adapter carries one: its typed fraction and type are master-data web ids, its facts their names,
-  // its status the asset state (every seeded container has no movement yet), and its place read from its placement in force.
-  const server = (id: string, over: { fraction?: string; type?: string; areas?: string; serves?: "yes" | "no" } = {}) => ({
+  // its status the asset state (every seeded container has no movement yet), its areas read from its placement's place, and
+  // the period that placement serves it in under its subscription and agreement, read on the project's day `asOf`.
+  const ASOF = "2026-10-24"
+  const serving = (from: string | null, until: string | null = null) => JSON.stringify({ from, until, asOf: ASOF })
+  const server = (id: string, over: { fraction?: string; type?: string; areas?: string; period?: string } = {}) => ({
     id,
     name: id.toUpperCase(),
     status: "No stock record",
@@ -157,12 +160,12 @@ describe("a container the API holds (#207)", () => {
       wasteFraction: "fraction-01a0d2a4-a280-7007-8000-000000000001",
       containerType: "container-type-01a0d2a4-a280-7008-8000-000000000002",
       ...(over.areas === undefined ? {} : { planningAreaId: over.areas.split(",")[0], [PLANNING_AREA_IDS_KEY]: over.areas }),
-      [SERVES_TODAY_KEY]: over.serves ?? "yes",
+      [SERVING_PERIOD_KEY]: over.period ?? serving("2026-01-01"),
     },
     projectIds: ["project-copenhagen"],
   })
 
-  test("is read by its names where its typed values are no form tokens, and is in service while a placement serves it today, whatever its asset state", () => {
+  test("is read by its names where its typed values are no form tokens, and is in service while a placement serves it on the day read, whatever its asset state", () => {
     assert.deepEqual(containerMatchProfile(server("asset-1", { areas: "area-indreby" })), {
       id: "asset-1",
       name: "ASSET-1",
@@ -185,11 +188,31 @@ describe("a container the API holds (#207)", () => {
     assert.equal(resolveStopMatches({ rule: { fractions: ["Residual"] }, areaId: "area-amager", containers: [both] }).scopeTotal, 0)
   })
 
-  test("held to a placement that serves it nowhere today, it is excluded with the reason where it is in scope, never matched", () => {
-    const idle = server("asset-3", { areas: "area-indreby", serves: "no" })
-    const result = resolveStopMatches({ rule: { fractions: ["Residual"] }, areaId: "area-indreby", containers: [idle] })
-    assert.deepEqual(result.matched, [])
-    assert.deepEqual(result.excluded, [{ id: "asset-3", name: "ASSET-3", reason: "No placement serves it today — not in service" }])
+  test("is judged on the scheme's first day where that is later than the day read: a placement that starts with a new scheme matches it (#232)", () => {
+    const starting = server("asset-3", { areas: "area-indreby", period: serving("2026-11-02", "2026-12-01") })
+    const on = (from?: string) => resolveStopMatches({ rule: { fractions: ["Residual"] }, areaId: "area-indreby", ...(from === undefined ? {} : { from }), containers: [starting] })
+    assert.deepEqual(on("2026-11-02").matched.map((profile) => profile.id), ["asset-3"], "from the scheme's first day")
+    assert.deepEqual(on("2026-11-30").matched.map((profile) => profile.id), ["asset-3"], "its last day in")
+    assert.equal(containerMatchProfile(starting, "2026-11-02").inService, true)
+    assert.equal(containerMatchProfile(starting).inService, false, "without a first day, the day read")
+  })
+
+  test("a scheme already running is judged on the day read, not on a first day behind it", () => {
+    const starting = server("asset-4", { areas: "area-indreby", period: serving("2026-11-02") })
+    assert.deepEqual(resolveStopMatches({ rule: { fractions: ["Residual"] }, areaId: "area-indreby", from: "2026-09-01", containers: [starting] }).matched, [])
+    const serves = server("asset-5", { areas: "area-indreby", period: serving("2026-01-01", "2026-10-25") })
+    assert.deepEqual(resolveStopMatches({ rule: { fractions: ["Residual"] }, areaId: "area-indreby", from: "2026-09-01", containers: [serves] }).matched.map((profile) => profile.id), ["asset-5"])
+  })
+
+  test("out of service on the day judged, it is in scope and excluded with the reason, never matched", () => {
+    const reasons = (period: string, from?: string) => {
+      const result = resolveStopMatches({ rule: { fractions: ["Residual"] }, areaId: "area-indreby", ...(from === undefined ? {} : { from }), containers: [server("asset-6", { areas: "area-indreby", period })] })
+      assert.deepEqual([result.matched, result.scopeTotal], [[], 1])
+      return result.excluded.map((exclusion) => exclusion.reason)
+    }
+    assert.deepEqual(reasons(serving("2026-11-02")), ["Serves from 2026-11-02 — not in service"])
+    assert.deepEqual(reasons(serving("2026-11-02", "2026-12-01"), "2026-12-01"), ["Served until 2026-11-30 — not in service"])
+    assert.deepEqual(reasons(serving(null)), ["No placement serves it — not in service"])
   })
 
   test("a fixture's container keeps its readings: its status the gate, its one area, its form tokens", () => {
