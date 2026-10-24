@@ -61,6 +61,7 @@
 // of a project this account does not work in, is a group that does not exist
 // here. The grant is `route-studio.schemes` throughout: a group is a part of
 // its scheme and not a surface of its own.
+import { INT4_MAX } from "@waste/contracts/resource"
 import { Page, PageRequest } from "@waste/contracts/pagination"
 import {
   CollectionGroup,
@@ -174,6 +175,9 @@ async function groupWithSets(tx: Tx, companyId: string, row: GroupRow): Promise<
   return group
 }
 
+/** What a group appended after one standing at the last position an `integer` holds is told: the column is an `integer`, and a position past it would fail the write (22003). */
+export const NO_POSITION_LEFT = `The last group stands at position ${INT4_MAX}, the last a group can take; give this one a position`
+
 export function collectionGroupRoutes(guard: MiddlewareHandler<AuthEnv>, { now = () => new Date() }: ClockOptions = {}) {
   return new Hono<AuthEnv>()
     .get(
@@ -229,7 +233,7 @@ export function collectionGroupRoutes(guard: MiddlewareHandler<AuthEnv>, { now =
           401: describeProblem("No usable token (see WWW-Authenticate)."),
           403: describeProblem("No active account here, or the caller's role does not allow `create` on `route-studio.schemes`."),
           404: describeProblem("No route scheme with that id in the projects this account works in."),
-          409: describeProblem("The vehicle named is retired or the driver named is inactive or suspended, the scheme already has a collection group with that name, or the scheme is `validated` and does not hold together with the group: the detail lists every structural sentence that fails."),
+          409: describeProblem("The vehicle named is retired or the driver named is inactive or suspended, the scheme already has a collection group with that name, or the scheme is `validated` and does not hold together with the group: the detail lists every structural sentence that fails, or the group is given no position and the last group stands at the last position a group can take."),
         },
       }),
       guard,
@@ -258,6 +262,9 @@ export function collectionGroupRoutes(guard: MiddlewareHandler<AuthEnv>, { now =
         // Then the 409s: the fleet's statuses, the structure, and the name the database holds unique.
         requireFleetInService(refs, rows)
         await requireStructure(tx, within, scheme, [...others, values])
+        // A group given no position goes after the last; past the last a position can be, it is told to name one.
+        const position = values.position ?? Math.max(0, ...others.map((group) => group.position)) + 1
+        if (position > INT4_MAX) throw problem(409, { detail: NO_POSITION_LEFT })
 
         const [row] = await refuseDuplicate({ [GROUP_NAME_TAKEN]: groupNameTaken(values.name) }, () =>
           tx
@@ -268,7 +275,7 @@ export function collectionGroupRoutes(guard: MiddlewareHandler<AuthEnv>, { now =
               projectId: scheme.projectId,
               routeSchemeId: scheme.id,
               name: values.name,
-              position: values.position ?? Math.max(0, ...others.map((group) => group.position)) + 1,
+              position,
               days: values.days,
               stopSource: values.stopSource,
               ruleVehicleTypeId: values.rule?.vehicleTypeId ?? null,

@@ -84,6 +84,7 @@
 // finds no row — the family's 404, not a 403, since which settlements exist
 // outside its reach is not its to learn.
 import { Page } from "@waste/contracts/pagination"
+import { fitsInt4, INT4_MAX } from "@waste/contracts/resource"
 import { SettlementCalculate, SettlementClose, SettlementCreate, SettlementDetail, SettlementEvent, SettlementEventListQuery, SettlementListQuery, SettlementReopen, type Settlement, type SettlementLine } from "@waste/contracts/settlements"
 import type { Tx } from "@waste/db/client"
 import { validOn } from "@waste/db/query/valid-on"
@@ -400,6 +401,9 @@ async function servedEvents(tx: Tx, companyId: string, current: Row): Promise<Se
 /** A line's amount: the fee times the quantity, negated on a reversal, the way the event's own is; null where no price covers the product on the day. */
 const lineNet = (event: Served): number | null => (event.unitPriceMinor === null ? null : (event.kind === "reversal" ? -1 : 1) * event.unitPriceMinor * event.quantity)
 
+/** What a calculation whose line comes to more than its column holds is told: the fee times the quantity is an `integer` in the database. */
+export const LINE_TOO_LARGE = (eventId: string) => `The line for billable event ${eventId} comes to more than ${INT4_MAX} minor units, the most a line holds; correct the event's quantity or the provider's fee`
+
 /** How many lines one insert carries: nine parameters a line, well under Postgres's ceiling of 65 535. */
 const LINES_PER_INSERT = 1000
 
@@ -421,6 +425,9 @@ async function calculate(tx: Tx, principal: Principal, current: Row, at: Date): 
     unitPriceMinor: event.unitPriceMinor,
     netMinor: lineNet(event),
   }))
+  // A line past its column is the settlement's 409, judged before the lines are replaced, never the database's 22003.
+  const tooLarge = lines.find((line) => line.netMinor !== null && !fitsInt4(line.netMinor))
+  if (tooLarge !== undefined) throw problem(409, { detail: LINE_TOO_LARGE(tooLarge.billableEventId) })
   await tx.delete(settlementLine).where(and(eq(settlementLine.companyId, principal.companyId), eq(settlementLine.settlementId, current.id)))
   for (let start = 0; start < lines.length; start += LINES_PER_INSERT) {
     await tx.insert(settlementLine).values(lines.slice(start, start + LINES_PER_INSERT))
@@ -576,7 +583,7 @@ export function settlementRoutes(guard: MiddlewareHandler<AuthEnv>, { now = () =
           200: describeJson("The settlement, calculated, with its lines.", SettlementDetail),
           400: describeProblem("The path does not hold an id, or the body carries a member."),
           ...commandProblems,
-          409: describeProblem("The settlement is closed, or its period has not begun; the detail says which."),
+          409: describeProblem("The settlement is closed, or its period has not begun, or a line comes to more than 2147483647 minor units; the detail says which."),
         },
       }),
       guard,

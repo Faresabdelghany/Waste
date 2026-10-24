@@ -45,6 +45,7 @@
 // grant is `commercial.service-provider-prices` throughout.
 import type { IndexBase } from "@waste/contracts/finance"
 import { Page } from "@waste/contracts/pagination"
+import { fitsInt4, INT4_MAX } from "@waste/contracts/resource"
 import {
   ServiceProviderPrice,
   ServiceProviderPriceCreate,
@@ -128,6 +129,12 @@ export const OUTSIDE_ASSIGNMENT = "Outside the assignment's period"
 
 /** What an indexation applied on or before the row's start is refused with, at `appliedFrom`. */
 export const INDEX_OUTSIDE_PERIOD = "The index applies inside the price's period"
+
+/** What an index that takes the fee below zero is told: a fee is a price, and a deflator past -100 % would make it negative. */
+export const INDEX_BELOW_ZERO = "The index would take the fee below zero"
+
+/** What an index whose fee is past the column is told. */
+export const INDEX_TOO_LARGE = `The indexed fee would be more than ${INT4_MAX} minor units, the most a price holds`
 
 const noSuchPrice = (id: string) => problem(404, { detail: `No service provider price ${id} this account reaches` })
 
@@ -350,7 +357,7 @@ export function serviceProviderPriceRoutes(guard: MiddlewareHandler<AuthEnv>) {
         security: BEARER_SECURITY,
         responses: {
           201: describeCreated("The indexed price, the new row of the chain.", ServiceProviderPrice),
-          400: describeProblem("The path does not hold an id, or the body is missing a field, names a member the server owns, gives a base outside the two, or applies the index on or before the row's start."),
+          400: describeProblem("The path does not hold an id, or the body is missing a field, names a member the server owns, gives a base outside the two, applies the index on or before the row's start, or gives basis points that take the fee below zero or past 2147483647 minor units."),
           401: describeProblem("No usable token (see WWW-Authenticate)."),
           403: describeProblem("No active account here, or the caller's role does not allow `edit` on `commercial.service-provider-prices`."),
           404: describeProblem("No service provider price with that id in the projects this account works in."),
@@ -373,10 +380,14 @@ export function serviceProviderPriceRoutes(guard: MiddlewareHandler<AuthEnv>) {
         const current = await findPrice(tx, writable(principal), id)
         if (current === undefined) throw noSuchPrice(id)
         if (index.appliedFrom <= current.validFrom) throw invalidRequest("body", [{ path: "appliedFrom", message: INDEX_OUTSIDE_PERIOD }])
+        const base = index.base === "bid" ? current.bidMinor : current.unitPriceMinor
+        // The fee is a price, so not below zero, and an `integer` in the database: a deflator past -100 % or an index past the column is the basis points' 400, never a failed write.
+        const fee = indexedFee(base, index.basisPoints)
+        if (fee < 0) throw invalidRequest("body", [{ path: "basisPoints", message: INDEX_BELOW_ZERO }])
+        if (!fitsInt4(fee)) throw invalidRequest("body", [{ path: "basisPoints", message: INDEX_TOO_LARGE }])
         // The row in force is the one to index; the refusal names the end by its last day in, as the office reads a period (#281).
         if (current.validTo !== null && priceEndedBy(current.validTo, index.appliedFrom)) throw problem(409, { detail: priceEnded(current.validTo) })
 
-        const base = index.base === "bid" ? current.bidMinor : current.unitPriceMinor
         await tx
           .update(serviceProviderPrice)
           .set({ validTo: index.appliedFrom })
@@ -391,7 +402,7 @@ export function serviceProviderPriceRoutes(guard: MiddlewareHandler<AuthEnv>) {
             serviceAreaAssignmentId: current.serviceAreaAssignmentId,
             productId: current.productId,
             bidMinor: current.bidMinor,
-            unitPriceMinor: indexedFee(base, index.basisPoints),
+            unitPriceMinor: fee,
             currency: current.currency,
             indexedFromId: current.id,
             indexLabel: index.label,

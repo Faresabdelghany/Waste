@@ -9,6 +9,7 @@ import { ENDS_AFTER_IT_STARTS } from "@waste/contracts/validity"
 import { createDb, type Database } from "@waste/db/client"
 
 import { createApp } from "../app"
+import { INDEX_BELOW_ZERO, INDEX_TOO_LARGE } from "../routes/service-provider-prices"
 import { callingAs, type Call } from "./calls"
 import { nextMillisecond } from "./clock"
 import { created } from "./created"
@@ -312,6 +313,23 @@ describe("the service provider price endpoints", { skip: database.skip }, () => 
       const harborPrice = (await page(olivia, `?projectId=${a.projects.harbor.id}`)).items[0]
       await refused(await viewer(`/service-provider-prices/${harborPrice.id}/index`, { method: "POST", body: { label: "CPI", basisPoints: 100, base: "bid", appliedFrom: DECEMBER } }), 404)
       assert.equal((await page(olivia, `?productId=${bulky.id}&serviceAreaAssignmentId=${nordren.assignmentId}&limit=200`)).items.length, 3, "a refused index wrote nothing")
+    })
+
+    test("refuses basis points that take the fee below zero or past what a price holds, at basisPoints, and ends nothing", async () => {
+      // CityHaul's rental, a bid of 10 000.00 kr, in years no other test prices.
+      const large = await price({ serviceAreaAssignmentId: cityhaul.assignmentId, productId: products.rental.id, bidMinor: 1_000_000, validFrom: "2031-01-01", validTo: "2032-01-01" })
+      const indexing = (basisPoints: number) => olivia(`/service-provider-prices/${large.id}/index`, { method: "POST", body: { label: "CPI", basisPoints, base: "bid", appliedFrom: "2031-07-01" } })
+      const below = await refused(await indexing(-10_001), 400)
+      assert.deepEqual([paths(below), messages(below)], [["basisPoints"], [INDEX_BELOW_ZERO]])
+      // round(1 000 000 × (1 + 200 000)) is past an integer: the column's refusal, never 22003.
+      const past = await refused(await indexing(2_000_000_000), 400)
+      assert.deepEqual([paths(past), messages(past)], [["basisPoints"], [INDEX_TOO_LARGE]])
+      // A number past the integer itself is the schema's.
+      assert.deepEqual(paths(await refused(await indexing(2 ** 31), 400)), ["basisPoints"])
+      // The fee is the body's 400, judged before the 409 an ended row earns, which needs the body's day too.
+      const late = await refused(await olivia(`/service-provider-prices/${large.id}/index`, { method: "POST", body: { label: "CPI", basisPoints: -10_001, base: "bid", appliedFrom: "2032-06-01" } }), 400)
+      assert.deepEqual(paths(late), ["basisPoints"])
+      assert.equal((await one(olivia, large.id)).validTo, "2032-01-01", "a refused index ends nothing")
     })
 
     test("the indexed row can meet no other: the ground it takes is the tail of the row it splits, which the constraint holds clear — a create over it is refused, and the split row is indexed again inside what it kept", async () => {

@@ -49,6 +49,7 @@
 // commands.
 import { BillableEvent, BillableEventCancel, BillableEventCreate, BillableEventListQuery, BillableEventReprice } from "@waste/contracts/billable-events"
 import { Page } from "@waste/contracts/pagination"
+import { fitsInt4, INT4_MAX } from "@waste/contracts/resource"
 import type { Tx } from "@waste/db/client"
 import { agreement } from "@waste/db/schema/agreements"
 import { container } from "@waste/db/schema/containers"
@@ -108,6 +109,12 @@ export const DRAFT_AGREEMENT_BY_HAND = "The agreement is a draft; an event price
 
 /** What a hand-priced manual event under a product with no VAT rate is told. */
 export const NO_VAT_RATE_BY_HAND = "The product has no VAT rate; an event priced by hand needs the product's rate — set it first"
+
+/** What an event priced past what its amount columns hold is told: a quantity times a price is an `integer` in the database, and more is a refusal rather than a failed write (22003). */
+export const AMOUNT_TOO_LARGE = `The amount comes to more than ${INT4_MAX} minor units, the most an event holds`
+
+/** Whether a price's net fits the event's `integer` column; the unit price is a column's or a bounded body's, and the VAT is never more than the net. No price fits trivially. */
+const amountsFit = (price: PricedAmounts | null): boolean => price === null || fitsInt4(price.netMinor)
 
 /** A manual event links to nothing. */
 const NO_LINKS: BillableEventLinks = { routeId: null, pickupId: null, ticketId: null, reversesEventId: null }
@@ -233,7 +240,7 @@ export function billableEventRoutes(guard: MiddlewareHandler<AuthEnv>, { now = (
         security: BEARER_SECURITY,
         responses: {
           201: describeCreated("The event as recorded, `ready` or `blocked`.", BillableEvent),
-          400: describeProblem("The body is missing a field, names a member the server owns, gives a price without its reason or a reason without a price, or names a project, agreement or product the rules above refuse — each at the field that is wrong."),
+          400: describeProblem("The body is missing a field, names a member the server owns, gives a price without its reason or a reason without a price, or names a project, agreement or product the rules above refuse — each at the field that is wrong — or a quantity whose amount comes to more than 2147483647 minor units."),
           401: describeProblem("No usable token (see WWW-Authenticate)."),
           403: describeProblem(`No active account here, or the caller's role does not allow \`create\` on \`${MODULE}\`.`),
           409: describeProblem("The product is not offered, or a hand-priced event's agreement is a draft or its product has no VAT rate; the detail says which."),
@@ -251,6 +258,8 @@ export function billableEventRoutes(guard: MiddlewareHandler<AuthEnv>, { now = (
         // The 400s in body order, then the one gate (routes/statuses.ts).
         await requireAgreement(tx, scope, body.agreementId)
         const productStatus = await requireProduct(tx, scope, body.productId)
+        // A hand price's amount is the body's alone: its 400 comes before every 409.
+        if (body.unitPriceMinor !== undefined && !fitsInt4(body.unitPriceMinor * body.quantity)) throw invalidRequest("body", [{ path: "quantity", message: AMOUNT_TOO_LARGE }])
         refuseUnofferedProduct(productStatus)
         let price: PricedAmounts | null
         let blockReason: BlockReason | null
@@ -269,6 +278,8 @@ export function billableEventRoutes(guard: MiddlewareHandler<AuthEnv>, { now = (
           price = outcome.price
           blockReason = outcome.blockReason
         }
+        // A resolver's price is the list row's times the body's quantity: past the column, the quantity's 400 too.
+        if (!amountsFit(price)) throw invalidRequest("body", [{ path: "quantity", message: AMOUNT_TOO_LARGE }])
         const { answered } = await recordBillableEvent(tx, {
           companyId: principal.companyId,
           projectId: body.projectId,
@@ -318,7 +329,7 @@ export function billableEventRoutes(guard: MiddlewareHandler<AuthEnv>, { now = (
           200: describeJson("The event as it now stands, `ready` or `blocked`.", BillableEvent),
           400: describeProblem("The path does not hold an id, or the body names a member the command does not take, names a product on an event that is not a ticket's, or names a product that is not the project's."),
           ...commandProblems("edit"),
-          409: describeProblem("The event is not blocked, or the product named is not offered; the detail says which."),
+          409: describeProblem("The event is not blocked, or the product named is not offered, or the price comes to more than an event's amount holds; the detail says which."),
         },
       }),
       guard,
@@ -345,6 +356,8 @@ export function billableEventRoutes(guard: MiddlewareHandler<AuthEnv>, { now = (
           productId === null
             ? { price: null, blockReason: "no-product" as const }
             : await priceDraft(tx, scope, { agreementId: current.agreementId, productId, quantity: current.quantity, serviceDate: current.serviceDate, ...(await conditionsOf(tx, principal.companyId, current)) })
+        // The quantity is the stored event's, so an amount past the columns is the row's 409.
+        if (!amountsFit(outcome.price)) throw problem(409, { detail: AMOUNT_TOO_LARGE })
         const after: ComposedEvent = { ...current, productId, blockReason: outcome.blockReason, ...priceColumns(outcome.price), kind: current.kind as ComposedEvent["kind"] }
         const issue = billableEventShapeIssue(after)
         if (issue !== undefined) throw new Error(`billable event ${id}: ${issue}`)

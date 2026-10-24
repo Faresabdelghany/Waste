@@ -18,7 +18,7 @@ import { IndexBase } from "./finance"
 import { Id } from "./ids"
 import { Currency } from "./organisation"
 import { ProjectScopedListQuery } from "./queries"
-import { changesSomething, NonNegativeMinor, somethingToChange, stamped } from "./resource"
+import { changesSomething, Int4, NonNegativeMinor, somethingToChange, stamped } from "./resource"
 import { Label, Paragraph } from "./text"
 import { endsAfterItStarts, Validity, ValidityCreate, validityOrdered } from "./validity"
 import * as z from "zod"
@@ -76,8 +76,8 @@ export type ServiceProviderPricePatch = z.infer<typeof ServiceProviderPricePatch
 export const ServiceProviderPriceIndex = z.strictObject({
   /** What the indexation is: `CPI`. */
   label: Label,
-  /** 500 for +5 %; negative allowed, a deflator. */
-  basisPoints: z.int(),
+  /** 500 for +5 %; negative allowed, a deflator. Within an `integer`, the column it is kept in. */
+  basisPoints: Int4,
   base: IndexBase,
   /** The first day the new fee holds: after this row's start, and inside its period when it has an end. */
   appliedFrom: IsoDate,

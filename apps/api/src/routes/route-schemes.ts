@@ -346,7 +346,7 @@ export function routeSchemeRoutes(guard: MiddlewareHandler<AuthEnv>, { now = () 
           401: describeProblem("No usable token (see WWW-Authenticate)."),
           403: describeProblem("No active account here, or the caller's role does not allow `edit` on `route-studio.schemes` — nor `create`, where an entry of `collectionGroups` adds a group."),
           404: describeProblem("No route scheme with that id in the projects this account works in."),
-          409: describeProblem("Collection groups run on days the scheme would no longer serve, a vehicle an entry names afresh is retired or a driver so named is inactive or suspended, the scheme is or becomes `validated` and does not hold together (the detail lists every sentence), an entry takes the name a parked group keeps, or another scheme of that name is already in force over part of the period."),
+          409: describeProblem("Collection groups run on days the scheme would no longer serve, a vehicle an entry names afresh is retired or a driver so named is inactive or suspended, the scheme is or becomes `validated` and does not hold together (the detail lists every sentence), an entry takes the name a parked group keeps, or another scheme of that name is already in force over part of the period, or an added group is given no position and the last stands at the last position a group can take."),
         },
       }),
       guard,

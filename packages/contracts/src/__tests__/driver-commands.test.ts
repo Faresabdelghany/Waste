@@ -16,11 +16,11 @@ import {
   DriverPickup,
   DriverRouteDetail,
   EACH_COMMAND_ONCE,
-  KILOGRAMS_MAX,
   OBJECT_KEY_SHAPE,
   PROBLEM_WITH_A_REJECTION,
   WireOutcome,
 } from "../driver-commands"
+import { INT4_MAX } from "../resource"
 import { LABEL_IS_THE_NUMBER } from "../routes"
 import { BOTH_GROSS_AND_TARE, NET_IS_GROSS_LESS_TARE } from "../unloads"
 import { refusal } from "./expect"
@@ -129,10 +129,10 @@ describe("DriverCommand", () => {
     assert.equal(DriverCommand.safeParse(command("record-unload", { unloadingStationId: THIRD, wasteFractionId: ID, netKg: 4_200 })).success, true, "net alone")
     assert.equal(DriverCommand.safeParse(command("add-weight", { pickupId: THIRD, weightKg: 0 })).success, false)
     // No more kilograms than an `integer` column holds: a mistyped weight is that command's rejection, never a failed write that holds the queue.
-    assert.equal(DriverCommand.safeParse(command("add-weight", { pickupId: THIRD, weightKg: KILOGRAMS_MAX })).success, true)
-    assert.deepEqual(refusal(DriverCommand.safeParse(command("add-weight", { pickupId: THIRD, weightKg: KILOGRAMS_MAX + 1 }))).map((issue) => issue.path), ["body.weightKg"])
+    assert.equal(DriverCommand.safeParse(command("add-weight", { pickupId: THIRD, weightKg: INT4_MAX })).success, true)
+    assert.deepEqual(refusal(DriverCommand.safeParse(command("add-weight", { pickupId: THIRD, weightKg: INT4_MAX + 1 }))).map((issue) => issue.path), ["body.weightKg"])
     for (const member of ["netKg", "grossKg", "tareKg"]) {
-      const body = { unloadingStationId: THIRD, wasteFractionId: ID, netKg: 4_200, grossKg: 12_400, tareKg: 8_200, [member]: KILOGRAMS_MAX + 1 }
+      const body = { unloadingStationId: THIRD, wasteFractionId: ID, netKg: 4_200, grossKg: 12_400, tareKg: 8_200, [member]: INT4_MAX + 1 }
       assert.ok(refusal(DriverCommand.safeParse(command("record-unload", body))).some((issue) => issue.path === `body.${member}`), member)
     }
     assert.equal(DriverCommand.safeParse(command("arrive", { pickupId: THIRD, location: { type: "Point", coordinates: [12.5951, 55.7089, 10] } })).success, false, "a flat point")

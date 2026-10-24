@@ -42,6 +42,7 @@
 // vehicle, driver or provider, and a running group the list parks, release
 // the holds on that group's routes; one that takes a day away, those on it
 // (#209, #226, `groupsReleasing`).
+import { INT4_MAX } from "@waste/contracts/resource"
 import type { CollectionGroup, CollectionGroupEntry } from "@waste/contracts/route-schemes"
 import { OUTSIDE_SERVICE_DAYS, withinServiceDays } from "@waste/contracts/route-schemes"
 import { LABEL_MAX } from "@waste/contracts/text"
@@ -52,6 +53,7 @@ import { and, eq, inArray, sql, type SQL } from "drizzle-orm"
 
 import { newId } from "../ids"
 import { invalidRequest, problem } from "../problem"
+import { NO_POSITION_LEFT } from "./collection-groups"
 import type { Today } from "./fleet-lookups"
 import type { Scope } from "./references"
 import { groupReleases, type HoldRelease } from "./route-holds"
@@ -145,6 +147,8 @@ export async function requireGroupEdit(
   const kept = new Set(leftOut.map((group) => group.name))
   const clash = entries.find((entry) => kept.has(entry.name))
   if (clash !== undefined) throw problem(409, { detail: groupNameTaken(clash.name) })
+  // An added group given no position goes after the last, and past the last a position can be it is told to name one, as `POST …/collection-groups` is.
+  if (edit.some(({ position }) => position > INT4_MAX)) throw problem(409, { detail: NO_POSITION_LEFT })
   return { entries: edit, leftOut }
 }
 

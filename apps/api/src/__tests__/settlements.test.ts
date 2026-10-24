@@ -7,12 +7,13 @@ import { A_PERIOD_ENDS, SettlementDetail, SettlementEvent } from "@waste/contrac
 import { ENDS_AFTER_IT_STARTS } from "@waste/contracts/validity"
 import { createDb, type Database, type Tx } from "@waste/db/client"
 import { outboxEvent } from "@waste/db/schema/execution"
+import { billableEvent } from "@waste/db/schema/finance"
 import { withCompany } from "@waste/db/tenant"
 import { closedSettlement, notCalculated, periodNotBegun, periodNotEnded } from "@waste/domain/finance/transitions"
-import { and, asc, eq } from "drizzle-orm"
+import { and, asc, eq, sql } from "drizzle-orm"
 
 import { createApp } from "../app"
-import { eventsMissed, linesStale, ONE_SETTLEMENT_AT_A_TIME, unpricedLines } from "../routes/settlements"
+import { eventsMissed, LINE_TOO_LARGE, linesStale, ONE_SETTLEMENT_AT_A_TIME, unpricedLines } from "../routes/settlements"
 import { callingAs, type Call } from "./calls"
 import { created } from "./created"
 import { databaseUnderTest, ownerUnderTest } from "./database"
@@ -287,6 +288,23 @@ describe("the settlement endpoints", { skip: database.skip || owner.skip }, () =
       // Reopened, so the list below reads November's settlement open, as it was opened.
       assert.equal((await ok(await command(next.id, "reopen", { reason: "Kept open for the reads below" }))).status, "open")
       assert.deepEqual(await kindsOf(next.id), ["calculated", "calculated", "calculated", "closed", "reopened"])
+    })
+
+    test("refuses a calculation whose line would pass an integer, naming the event, and replaces nothing (#291)", async () => {
+      // A November event a million strong at 0.01 kr is a fair price of its own; at the provider's indexed fee of 55.00 kr its line is 5 500 000 000 øre, past the column.
+      const served = await recordServedEvent(pool, a, fleet, ex, fx, "2026-11-16")
+      await withCompany(pool.db, a.companyId, async (tx: Tx) => {
+        await tx
+          .update(billableEvent)
+          .set({ quantity: 1_000_000, unitPriceMinor: 1, netMinor: 1_000_000, vatMinor: sql`round(1000000 * ${billableEvent.vatPercent} / 100.0)` })
+          .where(and(eq(billableEvent.companyId, a.companyId), eq(billableEvent.id, served.id)))
+      })
+      const before = await detail(next.id)
+      assert.equal((await refused(await command(next.id, "calculate"), 409)).detail, LINE_TOO_LARGE(served.id))
+      assert.deepEqual(await detail(next.id), before, "the lines and the status stand as they were")
+      // Cancelled, so the reads below see November as it was.
+      const cancelled = await olivia(`/billable-events/${served.id}/cancel`, { method: "POST", body: { reason: "not-delivered" } })
+      assert.equal(cancelled.status, 200, JSON.stringify(await cancelled.clone().json()))
     })
   })
 

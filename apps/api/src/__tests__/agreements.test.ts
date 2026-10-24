@@ -758,4 +758,17 @@ describe("the agreement and subscription endpoints", { skip: database.skip || ow
     })
   })
 
+  describe("a number past an integer (#291)", () => {
+    test("is the 400 at its field, on a create and on a patch, and never the database's 22003", async () => {
+      const held = await agreement("AGR-INT4")
+      const asked = await olivia(`/agreements/${held.id}/subscriptions`, { method: "POST", body: { productId: residual.id, propertyId: parkvej.id, quantity: 2 ** 31, validFrom: JANUARY } })
+      assert.equal(asked.status, 400)
+      assert.deepEqual((await readProblem(asked)).errors?.map((error) => error.path), ["quantity"])
+      const line = await create(olivia, `/agreements/${held.id}/subscriptions`, { productId: residual.id, propertyId: parkvej.id, quantity: 2_147_483_647, validFrom: JANUARY }, Subscription)
+      assert.equal(line.quantity, 2_147_483_647, "the largest an integer holds is taken")
+      const patched = await olivia(`/subscriptions/${line.id}`, { method: "PATCH", body: { quantity: 2 ** 31 } })
+      assert.equal(patched.status, 400)
+      assert.deepEqual((await readProblem(patched)).errors?.map((error) => error.path), ["quantity"])
+    })
+  })
 })
