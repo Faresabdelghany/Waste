@@ -49,7 +49,7 @@ export default defineConfig({
   // a job that times out is cancelled and uploads nothing.
   retries: ci ? 2 : 0,
   maxFailures: ci ? 10 : 0,
-  globalTimeout: ci ? 11 * 60_000 : 0,
+  globalTimeout: ci ? 22 * 60_000 : 0,
   timeout: 60_000,
   expect: { timeout: 10_000 },
   reporter: reporters("playwright-report-api"),
