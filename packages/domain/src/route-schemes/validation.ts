@@ -456,6 +456,8 @@ export function validateScheme(
       issues.push(`No collection group covers ${shortDays(uncovered)}`)
     }
     for (const group of groups) {
+      // A group the scheme's days were all taken from (#250): kept for the person to give it a day or remove it.
+      if (group.days.length === 0) issues.push(`${group.name} runs on no service day`)
       const stray = group.days.filter((day) => !input.serviceDays.includes(day))
       if (stray.length > 0) {
         issues.push(
