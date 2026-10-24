@@ -31,7 +31,7 @@
 // and `settlement-<uuid>`; no fixture lends its id.
 import type { ServiceProviderPrice } from "@waste/contracts/service-provider-prices"
 import type { Settlement, SettlementDetail, SettlementEvent } from "@waste/contracts/settlements"
-import { SETTLEMENT_COMMANDS, settlementTransition, type SettlementCommand, type SettlementState } from "@waste/domain/finance/transitions"
+import { priceEnded, priceEndedBy, SETTLEMENT_COMMANDS, settlementTransition, type SettlementCommand, type SettlementState } from "@waste/domain/finance/transitions"
 import { INDEX_BASES, SETTLEMENT_STATUSES } from "@waste/domain/finance/vocabulary"
 import { PRODUCT_UNITS } from "@waste/domain/registry/vocabulary"
 
@@ -109,6 +109,34 @@ export function basisPointsOf(text: string): number {
 /** Basis points as a signed percent: 500 is `+5%`, -125 is `-1.25%`. */
 const percentLabel = (points: number) => `${points < 0 ? "-" : "+"}${(Math.abs(points) / 100).toFixed(2).replace(/\.?0+$/, "")}%`
 
+/** The submitted value a price record carries the project's day it was read on under: what Apply index is offered on (#281). */
+export const PRICE_DAY_KEY = "readOn"
+
+/** A price record's end as the wire spells it — the first day out, from the last day in the record keeps — and the project's day it was read on; undefined where the record does not say the day. */
+function priceOnItsDay(record: Pick<BusinessRecord, "submittedValues">): { validTo: string | null; today: string } | undefined {
+  const [lastDay, today] = ["validTo", PRICE_DAY_KEY].map((key) => record.submittedValues?.[key])
+  if (typeof today !== "string") return undefined
+  return { validTo: typeof lastDay === "string" && lastDay !== "" ? firstDayOut(lastDay) : null, today }
+}
+
+/**
+ * Whether a price's details offer Apply index (#281): only a price not ended
+ * on the project's day it was read on — an upcoming one too, since an index
+ * applies inside its period — for an ended one is refused by the API (the
+ * domain's `priceEndedBy`) and the price in force is the one to index. The
+ * module reads the day (`readsTheDay`), so the offer turns with it.
+ */
+export function providerPriceIndexOffered(record: Pick<BusinessRecord, "submittedValues">): boolean {
+  const read = priceOnItsDay(record)
+  return read !== undefined && !priceEndedBy(read.validTo, read.today)
+}
+
+/** Why an ended price offers no Apply index: the API's sentence, its end named as the details name it, by its last day in; undefined where the price takes one. */
+export function providerPriceIndexHeldBack(record: Pick<BusinessRecord, "submittedValues">): string | undefined {
+  const read = priceOnItsDay(record)
+  return read === undefined || read.validTo === null || !priceEndedBy(read.validTo, read.today) ? undefined : priceEnded(read.validTo)
+}
+
 /** What Apply index's create carries: the row it indexes, and the body the contract accepts; a chain's first row is its body alone. */
 type IndexWrite = { indexes: string; body: unknown }
 
@@ -169,6 +197,7 @@ export const providerPriceAdapter: ResourceAdapter<ServiceProviderPrice> = {
         validFrom: price.validFrom,
         ...(lastDay === undefined ? {} : { validTo: lastDay }),
         ...(price.indexedFromId === null ? {} : { indexedFromId: webIdVia(context, PROVIDER_PRICE_PREFIX, price.indexedFromId) }),
+        [PRICE_DAY_KEY]: projectDay(price.projectId, context),
       },
     }
   },
@@ -237,8 +266,8 @@ export const providerPriceAdapter: ResourceAdapter<ServiceProviderPrice> = {
   update: (client, serverId, body) => patch<ServiceProviderPrice>(client, `/service-provider-prices/${serverId}`, body),
 }
 
-/** Price Engine › Service Provider Prices. */
-export const providerPricesModule: ServerModule = { workspaceId: PROVIDER_PRICES_MODULE.workspaceId, moduleId: PROVIDER_PRICES_MODULE.moduleId, resources: [providerPriceAdapter] }
+/** Price Engine › Service Provider Prices: read on the project's day, which a price's period reading and its Apply index are judged on. */
+export const providerPricesModule: ServerModule = { workspaceId: PROVIDER_PRICES_MODULE.workspaceId, moduleId: PROVIDER_PRICES_MODULE.moduleId, resources: [providerPriceAdapter], readsTheDay: true }
 
 // ---------------------------------------------------------------------------
 // Settlements

@@ -760,14 +760,20 @@ export async function commandRecord(client: ApiClient, module: ServerModule, cur
     const resource = await command.run(requests.client, serverId, body)
     return { kind: "done", record: { ...adapter.toRecord(resource, context), id: record.id }, serverId: resource.id, touches }
   } catch (error) {
+    const problem = namingRow(problemOfError(error), serverId, record.name)
     // A command of several requests (a movement, then the row read back) may have changed what it touches before one failed; where
     // one landed, its own module is read again too (#263) — and where no mutation failed after it, the command has landed: the
     // movement stands, and sending it again would make a second.
-    if (!requests.landed()) return refused(problemOfError(error), sent ? touches : [])
+    if (!requests.landed()) return refused(problem, sent ? touches : [])
     const readAgain = [...new Set([...touches, moduleKeyOf(module.workspaceId, module.moduleId)])]
-    if (requests.mutationFailed()) return refused(problemOfError(error), readAgain)
-    return { kind: "landed", what, problem: problemOfError(error), recordId: record.id, serverId, touches: readAgain }
+    if (requests.mutationFailed()) return refused(problem, readAgain)
+    return { kind: "landed", what, problem, recordId: record.id, serverId, touches: readAgain }
   }
+}
+
+/** A problem the API answered about a row, which names it by its server id: the office reads the row by its name, so the id is said as the name (#281). */
+function namingRow(problem: Problem, serverId: string, name: string): Problem {
+  return problem.detail?.includes(serverId) === true ? { ...problem, detail: problem.detail.replaceAll(serverId, name) } : problem
 }
 
 export type ActionOutcome<Answer = unknown> =
@@ -801,7 +807,7 @@ export async function actOnRecord<Answer = unknown>(client: ApiClient, module: S
     if (isLocalRefusal(body)) return refused(refusalProblem(body))
     return { kind: "done", answer: (await action.run(client, serverId, body)) as Answer }
   } catch (error) {
-    return refused(problemOfError(error))
+    return refused(namingRow(problemOfError(error), serverId, record.name))
   }
 }
 

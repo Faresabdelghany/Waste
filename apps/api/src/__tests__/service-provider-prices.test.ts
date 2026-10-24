@@ -37,7 +37,8 @@ const NEXT_YEAR = "2027-01-01"
 const PRICE_RUNNING = "This assignment already prices this product over part of that period; end it first"
 const OUTSIDE_ASSIGNMENT = "Outside the assignment's period"
 const INDEX_OUTSIDE = "The index applies inside the price's period"
-const priceEnded = (day: string) => `This price ended on ${day}; index the price in force`
+/** An ended price is named by its last day in, the day its details read as Valid to (#281). */
+const priceEnded = (lastDay: string) => `This price was valid to ${lastDay}; index the price in force`
 
 describe("the service provider price endpoints", { skip: database.skip }, () => {
   let pool: Database
@@ -301,9 +302,9 @@ describe("the service provider price endpoints", { skip: database.skip }, () => 
       const early = await refused(await olivia(`/service-provider-prices/${third.id}/index`, { method: "POST", body: { label: "CPI", basisPoints: 100, base: "bid", appliedFrom: OCTOBER } }), 400)
       assert.deepEqual([paths(early), messages(early)], [["appliedFrom"], [INDEX_OUTSIDE]])
       const over = await refused(await olivia(`/service-provider-prices/${first.id}/index`, { method: "POST", body: { label: "CPI", basisPoints: 100, base: "bid", appliedFrom: DECEMBER } }), 409)
-      assert.equal(over.detail, priceEnded(JULY))
+      assert.equal(over.detail, priceEnded(JUNE), "ended on the first of July: its last day in is the 30th of June")
       const onTheEnd = await refused(await olivia(`/service-provider-prices/${first.id}/index`, { method: "POST", body: { label: "CPI", basisPoints: 100, base: "bid", appliedFrom: JULY } }), 409)
-      assert.equal(onTheEnd.detail, priceEnded(JULY))
+      assert.equal(onTheEnd.detail, priceEnded(JUNE))
       const base = await refused(await olivia(`/service-provider-prices/${third.id}/index`, { method: "POST", body: { label: "CPI", basisPoints: 100, base: "wholesale", appliedFrom: DECEMBER } }), 400)
       assert.deepEqual(paths(base), ["base"])
       await refused(await lars(`/service-provider-prices/${third.id}/index`, { method: "POST", body: { label: "CPI", basisPoints: 100, base: "bid", appliedFrom: DECEMBER } }), 403)

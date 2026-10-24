@@ -56,8 +56,8 @@ describe("a module read through others", () => {
     )
   })
 
-  test("the modules read on the project's day are the planning areas, the containers and the settlements", () => {
-    assert.deepEqual(SERVER_MODULES.filter((module) => module.readsTheDay === true).map((module) => moduleKeyOf(module.workspaceId, module.moduleId)), ["configure.areas", "resources.containers", "commercial.settlements"])
+  test("the modules read on the project's day are the planning areas, the containers, the provider prices and the settlements", () => {
+    assert.deepEqual(SERVER_MODULES.filter((module) => module.readsTheDay === true).map((module) => moduleKeyOf(module.workspaceId, module.moduleId)), ["configure.areas", "resources.containers", "commercial.service-provider-prices", "commercial.settlements"])
   })
 
   test("names switched modules read before it, never itself nor another module read through others", () => {

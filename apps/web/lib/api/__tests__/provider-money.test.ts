@@ -23,6 +23,8 @@ import {
   basisPointsOf,
   INDEX_REFUSAL,
   providerPriceAdapter,
+  providerPriceIndexHeldBack,
+  providerPriceIndexOffered,
   providerPricesModule,
   settlementAdapter,
   settlementCommandsOffered,
@@ -102,7 +104,7 @@ describe("the service provider prices module", () => {
     assert.equal(record.status, "Active")
     assert.equal(record.facts.Bid, "DKK 11.20")
     assert.equal(record.facts.Index, "CPI +5% on the bid")
-    assert.deepEqual(record.submittedValues, { serviceAreaAssignmentId: `assignment-${ASSIGNMENT}`, productId: productRecord.id, bid: "11.20", fee: "11.76", validFrom: "2026-03-01", indexedFromId: `provider-price-${first.id}` })
+    assert.deepEqual(record.submittedValues, { serviceAreaAssignmentId: `assignment-${ASSIGNMENT}`, productId: productRecord.id, bid: "11.20", fee: "11.76", validFrom: "2026-03-01", indexedFromId: `provider-price-${first.id}`, readOn: "2026-09-30" })
     assert.equal(providerPriceAdapter.toRecord(first, context(priceFixtures)).status, "Expired")
     assert.ok(!spellsStatus(providerPricesModule, record, "Expired"))
   })
@@ -140,6 +142,28 @@ describe("the service provider prices module", () => {
     assert.equal(calls[0].url, `http://api.test/service-provider-prices/${first.id}/index`)
     assert.equal(outcome.kind, "created")
     if (outcome.kind === "created") assert.equal(outcome.record.value, "DKK 11.76/pickup")
+  })
+
+  test("offers Apply index only on a price not ended on the project's day it was read on, the module read again as the day turns (#281)", () => {
+    /** A price read on the clock `now`: whether its details offer Apply index. */
+    const offered = (price: ServiceProviderPrice, now: Date) => providerPriceIndexOffered(providerPriceAdapter.toRecord(price, { ...context(priceFixtures), now }))
+    assert.equal(offered(indexed, NOW), true, "an open price")
+    assert.equal(offered(first, new Date("2026-02-28T12:00:00Z")), true, "on its last day in")
+    assert.equal(offered(first, NOW), false, "ended: the price in force is the one to index")
+    assert.equal(offered({ ...indexed, validFrom: "2026-12-01" }, NOW), true, "upcoming: an index applies inside its period")
+    // 23:30 UTC on its last day is the first of March in Copenhagen, the project's clock.
+    assert.equal(offered(first, new Date("2026-02-28T23:30:00Z")), false)
+    assert.equal(providerPriceIndexOffered({ ...providerPriceAdapter.toRecord(indexed, context(priceFixtures)), submittedValues: {} }), false, "a record that does not say its day is offered nothing")
+    assert.equal(providerPricesModule.readsTheDay, true)
+  })
+
+  test("says why an ended price takes no index, naming its end as its details do: the last day in (#281)", () => {
+    const heldBack = (price: ServiceProviderPrice, now: Date) => providerPriceIndexHeldBack(providerPriceAdapter.toRecord(price, { ...context(priceFixtures), now }))
+    const ended = providerPriceAdapter.toRecord(first, context(priceFixtures))
+    assert.equal(ended.facts["Valid to"], "2026-02-28")
+    assert.equal(heldBack(first, NOW), "This price was valid to 2026-02-28; index the price in force")
+    assert.equal(heldBack(first, new Date("2026-02-28T12:00:00Z")), undefined)
+    assert.equal(heldBack(indexed, NOW), undefined)
   })
 
   test("patches the notes and the end alone: the fee moves by index, the bid never", () => {

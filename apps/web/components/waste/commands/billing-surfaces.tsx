@@ -4,10 +4,11 @@
 // `.billing` and `.invoices`.
 //
 // Events: Add manual event creates one through the store, and an event's
-// details offer its two commands, reprice and cancel, whatever its status —
-// the API's 409 says why one does not apply (the rules on #81) — and Explain
-// price, the price rows' own dialog opened on the event's question
-// (`eventQuestion`, #259): why it costs what it costs, or why it is blocked.
+// details offer the commands the API moves it by from its status
+// (`eventCommandsOffered`, #281: reprice a blocked one, cancel a blocked or a
+// ready one) — never one its status refuses — and Explain price, the price
+// rows' own dialog opened on the event's question (`eventQuestion`, #259):
+// why it costs what it costs, or why it is blocked.
 //
 // Billing runs: Run billing asks the project and the period, previews the run
 // through the client (`POST /billing-runs/preview` writes nothing), shows the
@@ -44,7 +45,7 @@ import { useCommandRunner, useModuleReady, useOpenRecord, useRowHistory, useServ
 import type { ApiClient } from "@/lib/api/client"
 import { problemSentence } from "@/lib/api/problem"
 import { isLocalRefusal, moduleKeyOf, webIdOf } from "@/lib/api/records/adapter"
-import { billingRunBody, billingRunDetail, billingRunInvoices, eventPricedByList, eventQuestion, invoiceDetail, previewBillingRun } from "@/lib/api/records/billing"
+import { billingRunBody, billingRunDetail, billingRunInvoices, eventCommandsOffered, eventPricedByList, eventQuestion, invoiceDetail, previewBillingRun } from "@/lib/api/records/billing"
 import { CONTAINERS_MODULE } from "@/lib/api/records/containers"
 import { PICKUPS_MODULE } from "@/lib/api/records/pickups"
 import { problemOfError, resolverOver, type ModuleState } from "@/lib/api/records/server-records"
@@ -60,7 +61,6 @@ import {
   createEventRecord,
   creditNoteForm,
   EVENT_COMMAND_FORMS,
-  EVENT_COMMANDS,
   EVENT_FORM,
   remainingByLine,
   RUN_BILLING_FORM,
@@ -123,13 +123,14 @@ function useEventQuestion(record: BusinessRecord): () => BusinessFormValues {
   }
 }
 
-/** An event's two commands and, where its price is a list's, Explain price on its own question, in its details. */
+/** The commands an event's status moves it by and, where its price is a list's, Explain price on its own question, in its details. */
 export function EventCommandsSurface({ record }: RowSurfaceProps) {
   const pickers = useCommercialPickers()
   const moduleReady = useModuleReady(EVENTS_MODULE)
   const { busy, run } = useCommandRunner(EVENTS_MODULE, record.id)
   const question = useEventQuestion(record)
   const [open, setOpen] = useState<EventCommand | null>(null)
+  const offered = eventCommandsOffered(record)
 
   const send = (name: EventCommand, values: BusinessFormValues) =>
     run(name, blankNone(values), (outcome) => {
@@ -142,14 +143,15 @@ export function EventCommandsSurface({ record }: RowSurfaceProps) {
       <h3 className="text-sm font-semibold">Event commands</h3>
       {!moduleReady && <p className="text-sm text-muted-foreground">The events are being read from the API; their commands follow.</p>}
       <div className="flex flex-wrap gap-2">
-        {EVENT_COMMANDS.map((name) => (
+        {offered.map((name) => (
           <Button key={name} variant="outline" size="sm" disabled={!moduleReady || busy || !pickers.readyFor(EVENT_COMMAND_FORMS[name])} onClick={() => setOpen(name)}>
             {EVENT_COMMAND_FORMS[name].submitLabel}
           </Button>
         ))}
         {eventPricedByList(record) && <ExplainPrice initial={question} />}
       </div>
-      {open !== null && (
+      {/* Asked only while the status still moves the event by it: a re-read or another desk may have moved it since. */}
+      {open !== null && offered.includes(open) && (
         <BusinessRecordFormDialog schema={EVENT_COMMAND_FORMS[open]} open onOpenChange={(isOpen) => !isOpen && setOpen(null)} onSubmit={(values) => send(open, values)} relationOptions={(field, values) => pickers.options(field, values, record.projectIds?.[0], {})} />
       )}
     </section>

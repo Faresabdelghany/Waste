@@ -242,6 +242,43 @@ test("Service provider prices: Add price under an assignment, then Apply index â
   await expect(page.getByRole("table").locator("tr", { hasText: productName }).filter({ hasText: "11.76" })).toHaveCount(1)
 })
 
+test("Service provider prices: an ended price offers no Apply index and says why, its end the same day as its details and the API's refusal (#281)", async ({ page, api }) => {
+  const project = await copenhagen(api)
+  const nordren = await providerNamed(api, "NordRen")
+  const award = await newAward(api, project, nordren, { validFrom: "2026-01-01", validTo: "2028-01-01" })
+  const productName = uniqueName("E2E Lid repair")
+  const productResponse = await api.post("/products", { data: { projectId: project.id, name: productName, kind: "additional-service", status: "active", unit: "job", invoiceName: productName, invoiceCode: `E2E-${Date.now().toString(36)}`.toUpperCase(), vatPercent: 25 } })
+  expect(productResponse.status()).toBe(201)
+
+  const loaded = answerOf(page, "GET", /^\/service-provider-prices$/)
+  await page.goto("/commercial?module=service-provider-prices")
+  expect((await loaded).status()).toBe(200)
+  await page.getByRole("button", { name: "Add price" }).click()
+  const dialog = dialogTitled(page, "New service provider price")
+  await pick(dialog, page, /^Service area assignment/, new RegExp(`^${award.code} Â· NordRen`))
+  await pick(dialog, page, /^Product/, new RegExp(`^${productName}`))
+  await dialog.getByLabel(/^Bid/).fill("9.00")
+  await dialog.getByLabel(/^Valid from/).fill("2026-01-01")
+  // February's last day: the price has ended on any day this suite runs.
+  await dialog.getByLabel(/^Valid until/).fill("2026-02-28")
+  const [created] = await Promise.all([answerOf(page, "POST", /^\/service-provider-prices$/), dialog.getByRole("button", { name: "Add price" }).click()])
+  expect(created.status(), await created.text()).toBe(201)
+  const price = (await created.json()) as ProviderPrice
+  expect(price.validTo).toBe("2026-03-01")
+  await expect(dialog).toBeHidden()
+
+  const details = page.getByRole("dialog").filter({ has: page.getByTestId("provider-price-commands") })
+  const commands = details.getByTestId("provider-price-commands")
+  await expect(commands.getByRole("button", { name: "Edit price" })).toBeVisible()
+  await expect(commands.getByRole("button", { name: "Apply index" })).toHaveCount(0)
+  await expect(details.getByTestId("price-index-held-back")).toHaveText("This price was valid to 2026-02-28; index the price in force.")
+  await expect(details).toContainText("2026-02-28")
+  // The API, asked anyway, refuses in the same words, naming the same day.
+  const refused = await api.post(`/service-provider-prices/${price.id}/index`, { data: { label: "CPI", basisPoints: 100, base: "bid", appliedFrom: "2026-06-01" } })
+  expect(refused.status()).toBe(409)
+  expect(((await refused.json()) as { detail?: string }).detail).toBe("This price was valid to 2026-02-28; index the price in force")
+})
+
 test("Settlements: one opened over an assignment's ended period is calculated, closed once asked and reopened with why, each move offered only where its status and the day move it", async ({ page, api }) => {
   const project = await copenhagen(api)
   const cityhaul = await providerNamed(api, "CityHaul")
