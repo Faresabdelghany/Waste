@@ -234,6 +234,10 @@ _Avoid_: Alert, message
 A condition that requires attention, notification, or acknowledgement and may create or link to a ticket. It is acknowledged and resolved, and links to at most one Ticket.
 _Avoid_: Ticket, insight
 
+**SLA Target**:
+The hours a project gives a Ticket of a priority, of every kind or of one kind, from when its issue or request happened to its due date; one kind's target wins over every kind's. Opening a ticket without a due date sets one from it, and an open ticket past its due date is overdue.
+_Avoid_: Deadline, response time, ticket type
+
 **Billable Event**:
 A validated occurrence that is eligible to become an invoice line.
 _Avoid_: Invoice line, route event

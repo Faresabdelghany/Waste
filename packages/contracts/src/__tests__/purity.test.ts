@@ -29,7 +29,9 @@
 // shape from @waste/domain/access/public-slug, and sorting-guide.ts the
 // Sorting Guide's statuses from @waste/domain/sorting-guide/vocabulary and
 // the search's `normalise` from @waste/domain/sorting-guide/search, so a
-// synonym is "each once" by the spelling the search compares.
+// synonym is "each once" by the spelling the search compares. O4 of #290
+// added @waste/domain/resolution/sla: ticket-sla.ts reads the longest target
+// and the rule a set names a kind and a priority once by.
 import path from "node:path"
 import { fileURLToPath } from "node:url"
 
@@ -49,6 +51,7 @@ definePurityTests({
     "@waste/domain/planning/vocabulary",
     "@waste/domain/registry/vocabulary",
     "@waste/domain/resolution/event-shapes",
+    "@waste/domain/resolution/sla",
     "@waste/domain/resolution/vocabulary",
     "@waste/domain/resources/vocabulary",
     "@waste/domain/routing/vocabulary",

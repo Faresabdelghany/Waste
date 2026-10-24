@@ -30,7 +30,7 @@ import { newId } from "@waste/db/ids"
 import { appendTicketEvent, openTicket } from "@waste/db/commands/open-ticket"
 import { outboxEvent } from "@waste/db/schema/execution"
 import { driver } from "@waste/db/schema/fleet"
-import { ticket, ticketEvent } from "@waste/db/schema/resolution"
+import { ticket, ticketEvent, ticketSla } from "@waste/db/schema/resolution"
 import { withCompany } from "@waste/db/tenant"
 import { OPEN_TICKET_STATUSES } from "@waste/domain/resolution/vocabulary"
 import { and, asc, eq, inArray, sql } from "drizzle-orm"
@@ -128,6 +128,27 @@ describe("resolution.open-tickets", { skip: api.skip || owner.skip }, () => {
     const payload = emitted[0].payload as { id: string; label: string; createdBy: string | null; sourceEventId: string | null; links: { pickupId: string | null } }
     assert.deepEqual([payload.id, payload.label, payload.createdBy, payload.sourceEventId, payload.links.pickupId], [row.id, `T-${row.number}`, null, event.id, failedId], "the payload is the Ticket as the route would answer it")
     assert.match(lines.at(-1)!, new RegExp(`^resolution\\.open-tickets: pickup-failed ${event.id} → opened \\(ticket ${row.id}\\)$`))
+  })
+
+  test("an event's ticket is due by the project's SLA, its kind's target winning over every kind's, counted from when the event happened and not from when the worker got to it (O4 of #290)", async () => {
+    const { companyId, projectId } = tenant
+    await withCompany(pool.db, companyId, (tx) =>
+      tx.insert(ticketSla).values([
+        { id: newId(), companyId, projectId, kind: null, priority: "high", hours: 24 },
+        { id: newId(), companyId, projectId, kind: "missed-collection", priority: "high", hours: 8 },
+      ]),
+    )
+    try {
+      const seeded = await seedRoute(pool, tenant)
+      const [failedId] = seeded.pickupIds
+      const event = outboxJob(tenant, { kind: "pickup-failed", aggregateKind: "pickup", aggregateId: failedId, payload: pickupPayload(tenant, seeded.id, failedId, { container: "bin1", status: "failed", reason: "not-presented" }, []) })
+      assert.equal((await openTicketFor(event, context())).outcome, "opened")
+      const [row] = await ticketsFrom(event.id)
+      assert.notEqual(event.occurredAt, NOW.toISOString(), "the event happened hours before the job ran")
+      assert.equal(row.dueAt?.toISOString(), new Date(Date.parse(event.occurredAt) + 8 * 60 * 60 * 1000).toISOString())
+    } finally {
+      await withCompany(pool.db, companyId, (tx) => tx.delete(ticketSla).where(eq(ticketSla.companyId, companyId)))
+    }
   })
 
   test("a pickup-failed of an address-only stop the office added, on its ad-hoc route, opens the stop's missed collection by its address — no container, no label, no placement and so no agreement — and is never a dead letter (#111)", async () => {

@@ -71,7 +71,7 @@ import { pickup, route } from "@waste/db/schema/execution"
 import { ticket, ticketEvent } from "@waste/db/schema/resolution"
 import { closedTicket, ticketTransition, type TicketCommand } from "@waste/domain/resolution/transitions"
 import { CLOSED_TICKET_STATUSES, isClosedTicketStatus, OPEN_TICKET_STATUSES, type TicketStatus } from "@waste/domain/resolution/vocabulary"
-import { and, asc, eq, exists, gt, inArray, or } from "drizzle-orm"
+import { and, asc, eq, exists, gt, gte, inArray, isNull, lt, notInArray, or, type SQL } from "drizzle-orm"
 import { Hono, type MiddlewareHandler } from "hono"
 import { describeRoute } from "hono-openapi"
 
@@ -102,7 +102,7 @@ import { alertOf, alertsNamingTicket, eventColumns, eventOf, eventsOfTicket, fin
 import type { ClockOptions } from "./scheme-groups"
 import { created, dayWindow, describeCreated, describeJson, IdParam, lockRow, requireNotAhead } from "./shared"
 import { recordCustomerReply, replyBody, stopEvidenceFor } from "./ticket-evidence"
-import { appendTicketEvent, openTicket, type TicketEventDraft } from "./ticket-writes"
+import { appendTicketEvent, BY_SLA, openTicket, type TicketEventDraft } from "./ticket-writes"
 
 const MODULE = "operate.tickets"
 
@@ -256,6 +256,12 @@ const ANSWERED_BY_RECORD = "Answered with the stop's record."
 /** The 409 of a reply with evidence on a ticket about no stop. */
 const NO_STOP = "This ticket names no stop, so no record answers it"
 
+/** An open ticket past its due date at `at` (`overdue=true`), or every other ticket (`false`): `slaStateOf`'s `overdue`, in SQL. */
+function overdueAt(overdue: boolean, at: Date): SQL | undefined {
+  const pastDue = and(inArray(ticket.status, [...OPEN_TICKET_STATUSES]), lt(ticket.dueAt, at))
+  return overdue ? pastDue : or(notInArray(ticket.status, [...OPEN_TICKET_STATUSES]), isNull(ticket.dueAt), gte(ticket.dueAt, at))
+}
+
 export function ticketRoutes(guard: MiddlewareHandler<AuthEnv>, { now = () => new Date() }: ClockOptions = {}) {
   /**
    * One machine command: the lock, the read, the transition, and on a move
@@ -306,7 +312,7 @@ export function ticketRoutes(guard: MiddlewareHandler<AuthEnv>, { now = () => ne
         operationId: "listTickets",
         summary: "The tickets of the caller's projects",
         description:
-          "One page of tickets, oldest first (ids are time-ordered, so a cursor over them is a cursor over time), from the projects the caller works in — an account that works in none, such as a service provider's, reads an empty page. `projectId` narrows it to one of those projects; naming another is refused. `status` is one of the six, `open=true` the four open statuses and `open=false` the two closed (the two combine with `status`), `kind`, `priority` and `source` one each, `assigneeUserAccountId` one account's tickets, `propertyId`, `routeId`, `pickupId`, `containerId` and `driverId` the tickets naming that row, and `from` and `to` the tickets whose `occurredAt` falls in a window of days — both ends inclusive, on the UTC calendar day, so `to=2026-10-05` takes the whole of the 5th (`to` on or after `from`). `customerId` is the citizen portal's read model: the tickets naming the customer, or naming a property a party row names them on in any role — one row per ticket however many roles they hold — held to a customer of this company (400 on the query); its fence on the portal's own login is the portal issue's. Hand `nextCursor` back as `cursor` for the next page.",
+          "One page of tickets, oldest first (ids are time-ordered, so a cursor over them is a cursor over time), from the projects the caller works in — an account that works in none, such as a service provider's, reads an empty page. `projectId` narrows it to one of those projects; naming another is refused. `status` is one of the six, `open=true` the four open statuses and `open=false` the two closed (the two combine with `status`), `overdue=true` the open tickets whose `dueAt` has passed on the request's clock and `overdue=false` every other — closed, without a due date, or not due yet — `kind`, `priority` and `source` one each, `assigneeUserAccountId` one account's tickets, `propertyId`, `routeId`, `pickupId`, `containerId` and `driverId` the tickets naming that row, and `from` and `to` the tickets whose `occurredAt` falls in a window of days — both ends inclusive, on the UTC calendar day, so `to=2026-10-05` takes the whole of the 5th (`to` on or after `from`). `customerId` is the citizen portal's read model: the tickets naming the customer, or naming a property a party row names them on in any role — one row per ticket however many roles they hold — held to a customer of this company (400 on the query); its fence on the portal's own login is the portal issue's. Hand `nextCursor` back as `cursor` for the next page.",
         security: BEARER_SECURITY,
         responses: {
           200: describeJson("One page of tickets.", TicketPage),
@@ -319,7 +325,7 @@ export function ticketRoutes(guard: MiddlewareHandler<AuthEnv>, { now = () => ne
       requireGrant(MODULE, "view"),
       validate("query", TicketListQuery),
       async (c) => {
-        const { limit, cursor, projectId, status, open, kind, priority, source, assigneeUserAccountId, customerId, propertyId, routeId, pickupId, containerId, driverId, from, to } = c.req.valid("query")
+        const { limit, cursor, projectId, status, open, overdue, kind, priority, source, assigneeUserAccountId, customerId, propertyId, routeId, pickupId, containerId, driverId, from, to } = c.req.valid("query")
         const after = afterCursor(cursor)
         const tx = c.get("tx")
         const principal = c.get("principal")
@@ -334,6 +340,7 @@ export function ticketRoutes(guard: MiddlewareHandler<AuthEnv>, { now = () => ne
               projectId === undefined ? undefined : eq(ticket.projectId, projectId),
               status === undefined ? undefined : eq(ticket.status, status),
               open === undefined ? undefined : inArray(ticket.status, [...(open ? OPEN_TICKET_STATUSES : CLOSED_TICKET_STATUSES)]),
+              overdue === undefined ? undefined : overdueAt(overdue, now()),
               kind === undefined ? undefined : eq(ticket.kind, kind),
               priority === undefined ? undefined : eq(ticket.priority, priority),
               source === undefined ? undefined : eq(ticket.source, source),
@@ -359,7 +366,7 @@ export function ticketRoutes(guard: MiddlewareHandler<AuthEnv>, { now = () => ne
         operationId: "createTicket",
         summary: "Open a ticket",
         description:
-          "Opens a case in a project the caller works in (400 at `projectId` otherwise): the number is taken from the company's counter (`T-<n>`, never renumbered), the row is written `open`, and a `created` event is appended with the assignee if one and the caller as its recorder. `source` is one of the office's doors and defaults to `office`; `driver-app` and `dispatch` are the outbox consumer's and are refused. `occurredAt` is when the issue or request happened, the request's clock when absent, and may run at most five minutes ahead of it (400) — with no lower bound, since the office records a complaint made yesterday. Every link named is held to the ticket's project (400 at `links.<field>`): a route of the project, a pickup of that route (a pickup is named with its route, 400 at `links.pickupId`), a container, a property, a shared collection point, an agreement, a driver and a parent ticket of the project, a customer of the company; no status gates a link — a ticket is about whatever it is about. `assigneeUserAccountId` is an account of this company that is not deactivated and works in the project (400). `alertId` is an alert of the project (400) that is not resolved (409, `This alert is resolved and does not change`) and not linked to another ticket (409, `This alert is linked to ticket T-8831; an alert links to one ticket`); its `ticketId` is set in the same transaction. The `ticket-opened` event is written in the same transaction, carrying the ticket as answered. A `missed-collection` naming an emptying whose driver recorded the bin was not presented — skipped or failed, reason `not-presented`, and not since corrected by the office — is answered by that record as it opens, unless `answerFromRecord` is false: a customer-visible `comment` quoting the record (as `GET /tickets/{id}/evidence` writes it) is appended, the case is completed `answered`, and `ticket-completed` follows `ticket-opened`; the 201 answers it completed. The reply is recorded, not sent: sending is the communications slice's, and a reply recorded before it is never sent after it.",
+          "Opens a case in a project the caller works in (400 at `projectId` otherwise): the number is taken from the company's counter (`T-<n>`, never renumbered), the row is written `open`, and a `created` event is appended with the assignee if one and the caller as its recorder. `source` is one of the office's doors and defaults to `office`; `driver-app` and `dispatch` are the outbox consumer's and are refused. `occurredAt` is when the issue or request happened, the request's clock when absent, and may run at most five minutes ahead of it (400) — with no lower bound, since the office records a complaint made yesterday. `dueAt` is the due date, null for none; absent, it is the project's SLA target of the ticket's kind and priority counted from `occurredAt` (`GET /projects/:id/ticket-sla`: the kind's own target, else every kind's), and none where the project sets neither. Every link named is held to the ticket's project (400 at `links.<field>`): a route of the project, a pickup of that route (a pickup is named with its route, 400 at `links.pickupId`), a container, a property, a shared collection point, an agreement, a driver and a parent ticket of the project, a customer of the company; no status gates a link — a ticket is about whatever it is about. `assigneeUserAccountId` is an account of this company that is not deactivated and works in the project (400). `alertId` is an alert of the project (400) that is not resolved (409, `This alert is resolved and does not change`) and not linked to another ticket (409, `This alert is linked to ticket T-8831; an alert links to one ticket`); its `ticketId` is set in the same transaction. The `ticket-opened` event is written in the same transaction, carrying the ticket as answered. A `missed-collection` naming an emptying whose driver recorded the bin was not presented — skipped or failed, reason `not-presented`, and not since corrected by the office — is answered by that record as it opens, unless `answerFromRecord` is false: a customer-visible `comment` quoting the record (as `GET /tickets/{id}/evidence` writes it) is appended, the case is completed `answered`, and `ticket-completed` follows `ticket-opened`; the 201 answers it completed. The reply is recorded, not sent: sending is the communications slice's, and a reply recorded before it is never sent after it.",
         security: BEARER_SECURITY,
         responses: {
           201: describeCreated("The ticket as opened, or completed `answered` where the stop's record answered it.", Ticket),
@@ -395,7 +402,7 @@ export function ticketRoutes(guard: MiddlewareHandler<AuthEnv>, { now = () => ne
             subject: body.subject,
             description: body.description,
             occurredAt,
-            dueAt: body.dueAt == null ? null : new Date(body.dueAt),
+            dueAt: body.dueAt === undefined ? BY_SLA : body.dueAt === null ? null : new Date(body.dueAt),
             assigneeUserAccountId: body.assigneeUserAccountId ?? null,
             links,
             alertId: body.alertId ?? null,

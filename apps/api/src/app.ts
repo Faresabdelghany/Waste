@@ -89,6 +89,7 @@ import { serviceProviderRoutes } from "./routes/service-providers"
 import { settlementRoutes } from "./routes/settlements"
 import { sharedCollectionPointRoutes } from "./routes/shared-collection-points"
 import { sortingGuideRoutes } from "./routes/sorting-guide"
+import { ticketSlaRoutes } from "./routes/ticket-sla"
 import { ticketRoutes } from "./routes/tickets"
 import { unloadRoutes } from "./routes/unloads"
 import { unloadingStationRoutes } from "./routes/unloading-stations"
@@ -271,6 +272,7 @@ export function createApp({
   // Resolution (Issue #109): a ticket's `occurredAt` and an alert's `detectedAt` default to the request's clock and may not run ahead of it, and every command stamps and publishes with it, so both modules take `now` too.
   app.route("/", ticketRoutes(guard, { now }))
   app.route("/", sortingGuideRoutes(guard))
+  app.route("/", ticketSlaRoutes(guard))
   app.route(
     "/",
     publicRoutes(

@@ -82,6 +82,13 @@ describe("the Resolution lists' categories (#147)", () => {
     assert.ok(!matchesBusinessFilters(record, filters({ openness: ["Closed"] }), readers))
     assert.ok(matchesBusinessFilters(record, filters({ severities: ["High"] }), readers), "no severity reader on this surface")
   })
+
+  test("a case's SLA is a category of its own, chipped after the assignee (O4 of #290)", () => {
+    assert.deepEqual(businessFilterChips(filters({ assignees: ["Mine"], sla: ["Overdue"] })), [
+      { key: "assignees", label: "Assignee", value: "Mine" },
+      { key: "sla", label: "SLA", value: "Overdue" },
+    ])
+  })
 })
 
 describe("the Finance lists' categories (#185)", () => {

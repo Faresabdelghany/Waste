@@ -34,6 +34,7 @@ import {
   ticketEvidence,
   TICKETS_MODULE,
   TICKET_NUMBER_FACT,
+  TICKET_SLA_FACT,
   ticketOpened,
   ticketsModule,
 } from "../records/tickets"
@@ -141,6 +142,15 @@ describe("a ticket", () => {
     assert.ok(Ticket.safeParse(missed).success)
   })
 
+  test("its SLA is what its due date reads as at the list's clock: overdue, on track, met, breached or none (O4 of #290)", () => {
+    const sla = (values: Partial<Ticket>) => ticketAdapter.toRecord({ ...missed, ...values }, context()).facts[TICKET_SLA_FACT]
+    assert.equal(sla({}), "On track", "open, due at noon, read at ten")
+    assert.equal(sla({ dueAt: "2026-10-01T09:59:00.000Z" }), "Overdue")
+    assert.equal(sla({ status: "completed", resolution: "serviced", closedAt: "2026-10-01T11:00:00.000Z" }), "Met")
+    assert.equal(sla({ status: "rejected", closedAt: "2026-10-01T12:30:00.000Z" }), "Breached")
+    assert.equal(sla({ dueAt: null }), "No due date")
+  })
+
   test("is the record the list and the details read: its subject the name, its label the number fact, the wire's facts alone", () => {
     assert.equal(record.id, `ticket-${missed.id}`)
     assert.equal(record.name, "Missed collection at Adelgade 12")
@@ -159,12 +169,13 @@ describe("a ticket", () => {
       "Opened via": "Driver app",
       Occurred: "2026-10-01 07:31",
       Due: "2026-10-01 14:00",
+      SLA: "On track",
       Project: "Copenhagen Central",
       Route: "RC-1042",
       Pickup: `pickup-${pickupId}`,
       Container: "BIN-82014",
     })
-    assert.ok(!("Team" in record.facts), "no team, SLA or configured type: the wire has none")
+    assert.ok(!("Team" in record.facts), "no team or configured type: the wire has neither")
     assert.ok(!("Source" in record.facts), "the wire's source is no fixture's Source")
     assert.deepEqual(record.submittedValues, {
       projectId: projectRecord.id,

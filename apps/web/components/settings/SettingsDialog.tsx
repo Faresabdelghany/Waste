@@ -23,6 +23,7 @@ import {
   SlidersHorizontal,
   SquaresFour,
   Tag,
+  Timer,
   UserCircle,
   UsersThree,
   Warning,
@@ -52,12 +53,14 @@ import { PlanningAreasSettings } from "@/components/settings/planning-areas-sett
 import { CollectionCalendarsSettings } from "@/components/settings/collection-calendars-settings"
 import { HolidayListsSettings } from "@/components/settings/holiday-lists-settings"
 import { SortingGuideSettings } from "@/components/settings/sorting-guide-settings"
+import { TicketSlaSettings } from "@/components/settings/ticket-sla-settings"
 import { MasterDataSettings } from "@/components/settings/master-data-settings"
 import { useApiConfigured, useApiSession } from "@/components/waste/api-session-store"
 import { profileOf, type AccountProfile } from "@/lib/data/account-profile"
 import { HOLIDAY_LISTS_SETTINGS_PANE_ID, MASTER_DATA_SETTINGS_PANE_ID } from "@/lib/data/business-links"
 import { ASSET_MANAGEMENT_SETTINGS_PANE_ID, settingsPaneOffered, settingsPaneOpened } from "@/lib/data/settings-panes"
 import { SORTING_GUIDE_SETTINGS_PANE_ID } from "@/lib/data/sorting-guide"
+import { TICKET_SLA_SETTINGS_PANE_ID } from "@/lib/data/ticket-sla"
 import { PLANNING_AREAS_SETTINGS_PANE_ID } from "@/lib/data/planning-areas"
 import { COLLECTION_CALENDARS_SETTINGS_PANE_ID } from "@/lib/data/collection-calendars"
 import { migrateLegacyId } from "@/lib/data/legacy-ids"
@@ -153,7 +156,10 @@ const settingsSections: Array<{
       // The company's catalogue vocabulary on the API (slice 2 of #81): offered with the adapter configured, since fixture mode never had the pane.
       { id: MASTER_DATA_SETTINGS_PANE_ID, label: "Master data", icon: Database },
       { id: "operations-setup", label: "Operations setup", icon: SlidersHorizontal },
+      // Offered in fixture mode only: on the Pilot the Ticket SLA takes its place (lib/data/settings-panes.ts).
       { id: "ticket-comms", label: "Tickets & communication", icon: Bell },
+      // A project's ticket SLA on the API (O4 of #290): offered with the adapter configured.
+      { id: TICKET_SLA_SETTINGS_PANE_ID, label: "Ticket SLA", icon: Timer },
     ],
   },
   {
@@ -1320,6 +1326,11 @@ const visiblePaneDefinitions: Record<string, SettingsPaneDefinition> = {
       "Each project's holiday list: its name, the weekend the project rests on, and the dated holidays of every year.",
     groups: [],
   },
+  [TICKET_SLA_SETTINGS_PANE_ID]: {
+    title: "Ticket SLA",
+    description: "How long a ticket has from opening to its due date, by priority, for every kind or for one kind.",
+    groups: [],
+  },
   [SORTING_GUIDE_SETTINGS_PANE_ID]: {
     title: "Sorting guide",
     description: "What residents find when they search where a thing goes, on the project's public page.",
@@ -1418,6 +1429,7 @@ function isFullPanelPane(paneId: string): boolean {
     paneId === COLLECTION_CALENDARS_SETTINGS_PANE_ID ||
     paneId === MASTER_DATA_SETTINGS_PANE_ID ||
     paneId === SORTING_GUIDE_SETTINGS_PANE_ID ||
+    paneId === TICKET_SLA_SETTINGS_PANE_ID ||
     paneId.startsWith("commercial-")
   )
 }
@@ -1825,6 +1837,8 @@ function SettingsPane({
         <MasterDataSettings />
       ) : paneId === SORTING_GUIDE_SETTINGS_PANE_ID ? (
         <SortingGuideSettings />
+      ) : paneId === TICKET_SLA_SETTINGS_PANE_ID ? (
+        <TicketSlaSettings />
       ) : paneId.startsWith("commercial-") ? (
         <CommercialSectionPane paneId={paneId} />
       ) : (

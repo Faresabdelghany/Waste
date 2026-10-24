@@ -190,6 +190,8 @@ describe("the lists' categories", () => {
     assert.deepEqual(readers.priorities?.(open), ["High"])
     assert.deepEqual(readers.sources?.(open), ["Driver app"])
     assert.deepEqual(readers.assignees?.(open), ["Olivia Larsen"], "no Mine for nobody signed in")
+    assert.deepEqual(readers.sla?.(ticket("Open", "", { SLA: "Overdue" })), ["Overdue"])
+    assert.deepEqual(readers.sla?.(open), [], "a row the API has not answered yet has no SLA to read")
   })
 
   test("openness reads the row's own status: a row the API has not answered yet reads as it shows, and the fixtures' Created is open", () => {

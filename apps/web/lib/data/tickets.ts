@@ -19,7 +19,7 @@ import { CONTAINERS_MODULE } from "../api/records/containers"
 import { accessModule } from "../api/records/organisation"
 import { PICKUPS_MODULE } from "../api/records/pickups"
 import { ROUTES_MODULE } from "../api/records/routes"
-import { ASSIGNEE_ACCOUNT_KEY, isOpenTicketStatus, OFFICE_TICKET_SOURCES } from "../api/records/tickets"
+import { ASSIGNEE_ACCOUNT_KEY, isOpenTicketStatus, OFFICE_TICKET_SOURCES, TICKET_SLA_FACT } from "../api/records/tickets"
 import { AGREEMENTS_MODULE } from "./agreements"
 import { DRIVERS_MODULE } from "./allocations"
 import type { BusinessFormField, BusinessFormOption, BusinessFormSchema, BusinessFormValues } from "./business-form-types"
@@ -38,7 +38,8 @@ const subject: BusinessFormField = { id: "subject", label: "Subject", type: "tex
 const description: BusinessFormField = { id: "description", label: "Description", type: "textarea", required: true, description: "What happened, or what is asked." }
 const kind: BusinessFormField = { id: "kind", label: "Kind", type: "select", required: true, options: tokenOptions(TICKET_KINDS) }
 const priority: BusinessFormField = { id: "priority", label: "Priority", type: "select", defaultValue: "none", options: tokenOptions(TICKET_PRIORITIES) }
-const due: BusinessFormField = { id: "dueAt", label: "Due", type: "datetime", description: "The response target, on the project's clock." }
+/** Left blank on opening, the API takes the project's SLA for the kind and priority (O4 of #290). */
+const due: BusinessFormField = { id: "dueAt", label: "Due", type: "datetime", description: "On the project's clock. Left blank, the project's SLA for the kind and priority sets it." }
 const assignee = (description?: string): BusinessFormField => ({ id: "assigneeUserAccountId", label: "Assignee", type: "select", relation: ACCESS_MODULE, description })
 
 /** What a ticket may be about, field by field, each from its module: the office's eight links, the stop among its route's, and whether the stop's record may answer the case. */
@@ -199,8 +200,9 @@ export const MINE = "Mine"
  * The tickets list's categories on the Pilot (#147), read off a row for the
  * person looking: open or closed, the status, the kind, the priority, the
  * assignee — "Mine" among the values where the ticket is `/me`'s account's —
- * and where it came from. Team, SLA and the configured type are no category:
- * the wire has none of them.
+ * where it came from, and what its due date reads as (O4 of #290: overdue,
+ * on track, met, breached or none). Team and the configured type are no
+ * category: the wire has neither.
  */
 export function ticketListReaders(accountId: string | null): FilterValueReaders {
   return {
@@ -210,6 +212,7 @@ export function ticketListReaders(accountId: string | null): FilterValueReaders 
     priorities: (record) => singleFilterValue(record.facts.Priority),
     assignees: (record) => [...singleFilterValue(record.facts.Assignee), ...(accountId !== null && record.submittedValues?.[ASSIGNEE_ACCOUNT_KEY] === accountId ? [MINE] : [])],
     sources: (record) => singleFilterValue(record.facts["Opened via"]),
+    sla: (record) => singleFilterValue(record.facts[TICKET_SLA_FACT]),
   }
 }
 

@@ -31,7 +31,8 @@
 // `sourceEventId` the event's id, which `ticket_origin_shape` ties together
 // and `ticket_source_event_id_idx` makes the idempotency key; `ticket-opened`
 // is emitted inside it, as for the office's. `occurredAt` is the event's
-// instant, `dueAt` null (no SLA yet), and the draft's links are what the
+// instant, `dueAt` the project's SLA target of the kind and priority counted
+// from that instant (`BY_SLA`, O4 of #290), and the draft's links are what the
 // event named — a problem on the route alone names no stop and so no
 // container and no place, whatever was read. An address-only stop the office
 // added (#111) names no container either: it reads no label and no
@@ -95,7 +96,7 @@ import { Pickup } from "@waste/contracts/pickups"
 import { ProofOfService } from "@waste/contracts/proofs"
 import { routeFields } from "@waste/contracts/routes"
 import type { Database, Tx } from "@waste/db/client"
-import { appendTicketEvent, openTicket, type TicketDraft, type TicketEventDraft } from "@waste/db/commands/open-ticket"
+import { appendTicketEvent, BY_SLA, openTicket, type TicketDraft, type TicketEventDraft } from "@waste/db/commands/open-ticket"
 import { emit } from "@waste/db/commands/outbox"
 import { labelOf, ticketColumns, ticketOf, type TicketRow } from "@waste/db/commands/resolution-rows"
 import { newId } from "@waste/db/ids"
@@ -277,7 +278,7 @@ async function factsOf(tx: Tx, event: OutboxJob): Promise<EventFacts> {
   }
 }
 
-/** The domain's draft as `openTicket` takes it: the event's project and instant, no due date, nobody assigned, the nine links with the parent the consumer never names null, no alert. */
+/** The domain's draft as `openTicket` takes it: the event's project and instant, the project's SLA for the due date, nobody assigned, the nine links with the parent the consumer never names null, no alert. */
 const asTicketDraft = (event: OutboxJob, draft: DomainDraft): TicketDraft => ({
   projectId: event.projectId,
   kind: draft.kind,
@@ -286,7 +287,7 @@ const asTicketDraft = (event: OutboxJob, draft: DomainDraft): TicketDraft => ({
   subject: draft.subject,
   description: draft.description,
   occurredAt: new Date(event.occurredAt),
-  dueAt: null,
+  dueAt: BY_SLA,
   assigneeUserAccountId: null,
   links: { ...draft.links, parentTicketId: null },
   alertId: null,

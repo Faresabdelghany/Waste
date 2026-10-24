@@ -11,4 +11,4 @@
 // order and in the caller's transaction, and every history row's shape
 // consulted before the insert — and this module is the API's name for it, so
 // routes/tickets.ts and ticket-writes.test.ts read it where they always did.
-export { appendTicketEvent, openTicket, type OpenTicketInput, type TicketDraft, type TicketEventDraft, type TicketRef } from "@waste/db/commands/open-ticket"
+export { appendTicketEvent, BY_SLA, openTicket, type OpenTicketInput, type TicketDraft, type TicketEventDraft, type TicketRef } from "@waste/db/commands/open-ticket"
