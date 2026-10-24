@@ -18,6 +18,7 @@ import { BusinessRecordFormDialog } from "@/components/waste/business-record-for
 import { useBusinessRecordStore, whenSaved } from "@/components/waste/business-record-store"
 import type { PrimarySurfaceProps, RowSurfaceProps } from "@/components/waste/commands/command-surfaces"
 import { CreateSurface } from "@/components/waste/commands/create-surface"
+import { PickupExceptionsSection } from "@/components/waste/commands/pickup-exceptions-section"
 import { useModuleReady, useRelationPickers } from "@/components/waste/commands/use-command-support"
 import type { BusinessFormField, BusinessFormSchema, BusinessFormValues } from "@/lib/data/business-form-types"
 import type { ModuleLocation } from "@/lib/data/business-modules"
@@ -123,9 +124,14 @@ function EditSurface({ record, module, schema, noun }: RowSurfaceProps & { modul
   )
 }
 
-/** A property's details: its Edit, its parties replaced whole. */
+/** A property's details: its Edit, its parties replaced whole, and its Pickup Exceptions (M5 of #293). */
 export function PropertyCommandsSurface({ record }: RowSurfaceProps) {
-  return <EditSurface record={record} module={PROPERTIES_MODULE} schema={PROPERTY_EDIT_FORM} noun="Property" />
+  return (
+    <>
+      <EditSurface record={record} module={PROPERTIES_MODULE} schema={PROPERTY_EDIT_FORM} noun="Property" />
+      <PickupExceptionsSection record={record} module={PROPERTIES_MODULE} place="property" />
+    </>
+  )
 }
 
 /** A property group's details: its Edit, its members replaced whole. */
@@ -133,7 +139,12 @@ export function PropertyGroupCommandsSurface({ record }: RowSurfaceProps) {
   return <EditSurface record={record} module={PROPERTY_GROUPS_MODULE} schema={PROPERTY_GROUP_EDIT_FORM} noun="Property group" />
 }
 
-/** A shared point's details: its Edit, its members replaced whole. */
+/** A shared point's details: its Edit, its members replaced whole, and its Pickup Exceptions (M5 of #293). */
 export function SharedPointCommandsSurface({ record }: RowSurfaceProps) {
-  return <EditSurface record={record} module={SHARED_POINTS_MODULE} schema={SHARED_POINT_EDIT_FORM} noun="Shared point" />
+  return (
+    <>
+      <EditSurface record={record} module={SHARED_POINTS_MODULE} schema={SHARED_POINT_EDIT_FORM} noun="Shared point" />
+      <PickupExceptionsSection record={record} module={SHARED_POINTS_MODULE} place="shared-point" />
+    </>
+  )
 }
