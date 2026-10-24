@@ -359,7 +359,7 @@ jobs:
     # job that times out is cancelled, and a cancelled job uploads nothing.
     # Measured on the first runs: see the pull request that added the job
     # (#151).
-    timeout-minutes: 24
+    timeout-minutes: 35
     env:
       # The API verifies tokens from the stack's own Auth, behind Kong on
       # 54321 (supabase/config.toml's default): the workflow-level placeholder
