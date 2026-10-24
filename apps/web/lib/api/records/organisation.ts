@@ -25,9 +25,11 @@
 // and service-provider modules are loaded first (records/modules.ts).
 import type { Role, User } from "@waste/contracts/access"
 import type { Company, Project, ServiceProvider } from "@waste/contracts/organisation"
+import { PAYMENT_REFERENCE_SCHEMES } from "@waste/domain/finance/vocabulary"
 import type { Grant } from "@waste/contracts/permissions"
 
 import { FIXTURE_COMPANY_ID, type BusinessRecord } from "@/lib/data/business-modules"
+import { COMPANY_IDENTITY_FIELDS, paymentReferenceSchemeLabel, paymentTermsLabel, paymentTermsRefusalOf } from "@/lib/data/finance-settings"
 import { isRoleAccessMap, type RoleAccessMap } from "@/lib/data/role-permissions"
 
 import { command, create, get, listAll, patch, put } from "../client"
@@ -37,6 +39,7 @@ import {
   fixtureNamed,
   hasPrefix,
   inheritedPresentation,
+  isLocalRefusal,
   ofKind,
   languageName,
   patchOf,
@@ -54,6 +57,21 @@ import { projectWebIdOf } from "./me-projects"
 
 const refusal = (path: string, message: string): LocalRefusal => ({ path, message })
 
+/** The payment terms a record's form typed, as the wire's days: undefined when it typed none, a refusal when the API would refuse them (#291 C4). */
+export function typedPaymentTerms(record: BusinessRecord, blank: "refused" | "cleared"): number | null | undefined | LocalRefusal {
+  const value = record.submittedValues?.paymentTermsDays
+  if (typeof value !== "string") return undefined
+  if (value.trim() === "" && blank === "cleared") return null
+  const refused = paymentTermsRefusalOf(value)
+  return refused === null ? Number(value.trim()) : refusal("paymentTermsDays", refused)
+}
+
+/** `typedPaymentTerms` as a patch reads a field: the days, or nothing said. */
+export const daysOf = (terms: ReturnType<typeof typedPaymentTerms>): number | undefined => (typeof terms === "number" ? terms : undefined)
+
+/** `typedPaymentTerms` as a nullable field reads: the days, none of its own, or nothing said. */
+export const daysOrNoneOf = (terms: ReturnType<typeof typedPaymentTerms>): number | null | undefined => (typeof terms === "number" || terms === null ? terms : undefined)
+
 // ---------------------------------------------------------------------------
 // Company
 // ---------------------------------------------------------------------------
@@ -68,6 +86,15 @@ export const companyAdapter: ResourceAdapter<Company> = {
   list: async (client) => [await get<Company>(client, "/company")],
   toRecord: (company, context) => {
     const fixture = fixtureNamed(context.fixtures, "company", [company.legalName, company.name])
+    // The invoice identity (#291 C4): a fact and a typed value each where it is set, none where it is not.
+    const identityFacts: Record<string, string> = {}
+    const identityValues: Record<string, string> = {}
+    for (const field of COMPANY_IDENTITY_FIELDS) {
+      const value = company[field.key]
+      if (value === null) continue
+      identityFacts[field.fact] = value
+      identityValues[field.key] = value
+    }
     // The caller's company is the one the fixtures call the tenant, whatever
     // it is named: every fixture record's `companyId` is this id, and the
     // organisation store's tenant is it too.
@@ -84,6 +111,7 @@ export const companyAdapter: ResourceAdapter<Company> = {
         Name: company.name,
         CVR: company.registrationNumber,
         Country: countryName(company.country),
+        ...identityFacts,
       },
       companyId: id,
       projectIds: fixture?.projectIds,
@@ -94,6 +122,7 @@ export const companyAdapter: ResourceAdapter<Company> = {
         legalName: company.legalName,
         registrationNumber: company.registrationNumber,
         country: company.country,
+        ...identityValues,
       },
     }
   },
@@ -104,6 +133,8 @@ export const companyAdapter: ResourceAdapter<Company> = {
       // The form seeds `registrationNumber` from the read above, so it is always typed; a fact is presentation and never read back.
       registrationNumber: typed(record, "registrationNumber"),
       country: typed(record, "country") === undefined ? undefined : countryCode(typed(record, "country") as string),
+      // Settings › Finance & invoicing sets the identity and clears it (#291 C4): a field not typed is none.
+      ...Object.fromEntries(COMPANY_IDENTITY_FIELDS.map((field) => [field.key, typed(record, field.key) ?? null])),
     })),
   update: (client, _serverId, body) => patch<Company>(client, "/company", body),
 }
@@ -147,6 +178,9 @@ export const projectAdapter: ResourceAdapter<Project> = {
     // The public address a published project's pages are read at (ADR-0010, #293).
     if (project.publicSlug === null) delete facts["Public address"]
     else facts["Public address"] = `/p/${project.publicSlug}`
+    // What its invoices are due by and the reference they carry (#291 C4).
+    facts["Payment terms"] = paymentTermsLabel(project.paymentTermsDays)
+    facts["Payment reference"] = paymentReferenceSchemeLabel(project.paymentReferenceScheme)
     const submittedValues: Record<string, string> = {
       name: project.name,
       kind: project.kind,
@@ -154,6 +188,8 @@ export const projectAdapter: ResourceAdapter<Project> = {
       currency: project.currency,
       timezone: project.timezone,
       weekend: project.weekend.join(", "),
+      paymentTermsDays: String(project.paymentTermsDays),
+      paymentReferenceScheme: project.paymentReferenceScheme,
     }
     if (project.holidayList !== null) submittedValues.holidayList = project.holidayList
     if (project.publicSlug !== null) submittedValues.publicSlug = project.publicSlug
@@ -185,6 +221,9 @@ export const projectAdapter: ResourceAdapter<Project> = {
     // says it only when the form set one the lifecycle knows (`Active`,
     // `Onboarding`), else the API's default stands.
     const status = PROJECT_STATUSES.find((candidate) => candidate === statusToken(record.status))
+    const terms = typedPaymentTerms(record, "refused")
+    if (isLocalRefusal(terms)) return terms
+    const scheme = typedScheme(record)
     return {
       name,
       kind,
@@ -193,10 +232,15 @@ export const projectAdapter: ResourceAdapter<Project> = {
       timezone,
       ...projectCalendarBody(record),
       ...(status === undefined ? {} : { status }),
+      // A create says the terms and the scheme only where the form gave them; the API's defaults do the rest.
+      ...(typeof terms === "number" ? { paymentTermsDays: terms } : {}),
+      ...(scheme === undefined ? {} : { paymentReferenceScheme: scheme }),
     }
   },
-  toPatchBody: (before, after) =>
-    patchOf(before, after, (record) => ({
+  toPatchBody: (before, after) => {
+    const terms = typedPaymentTerms(after, "refused")
+    if (isLocalRefusal(terms)) return terms
+    return patchOf(before, after, (record) => ({
       name: typed(record, "name") ?? record.name,
       kind: typed(record, "kind"),
       language: typed(record, "language"),
@@ -207,9 +251,19 @@ export const projectAdapter: ResourceAdapter<Project> = {
       ...projectCalendarBody(record),
       // Settings › Sorting guide publishes the project under a slug and takes it down again (#293); no slug is unpublished.
       publicSlug: typed(record, "publicSlug") ?? null,
-    })),
+      // Settings › Finance & invoicing (#291 C4); `before` was read with both, so an unmoved value moves nothing.
+      paymentTermsDays: daysOf(typedPaymentTerms(record, "refused")),
+      paymentReferenceScheme: typedScheme(record),
+    }))
+  },
   create: (client, body) => create<Project>(client, "/projects", body).then((created) => created.body),
   update: (client, serverId, body) => patch<Project>(client, `/projects/${serverId}`, body),
+}
+
+/** The reference scheme a project record's form typed, when it is one the wire knows. */
+function typedScheme(record: BusinessRecord): Project["paymentReferenceScheme"] | undefined {
+  const value = typed(record, "paymentReferenceScheme")
+  return PAYMENT_REFERENCE_SCHEMES.find((scheme) => scheme === value)
 }
 
 /** `Sat–Sun`, the fixture's spelling of a weekend, from the wire's day list. */

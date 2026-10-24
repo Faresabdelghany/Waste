@@ -8,7 +8,7 @@ import assert from "node:assert/strict"
 import { describe, test } from "node:test"
 
 import { MASTER_DATA_SETTINGS_PANE_ID } from "../business-links"
-import { ASSET_MANAGEMENT_SETTINGS_PANE_ID, FINANCE_SETTINGS_PANE_ID, settingsPaneOffered, settingsPaneOpened, TICKETS_COMMUNICATION_SETTINGS_PANE_ID } from "../settings-panes"
+import { ASSET_MANAGEMENT_SETTINGS_PANE_ID, FINANCE_ON_API_SETTINGS_PANE_ID, FINANCE_SETTINGS_PANE_ID, settingsPaneOffered, settingsPaneOpened, TICKETS_COMMUNICATION_SETTINGS_PANE_ID } from "../settings-panes"
 import { SORTING_GUIDE_SETTINGS_PANE_ID } from "../sorting-guide"
 import { TICKET_SLA_SETTINGS_PANE_ID } from "../ticket-sla"
 
@@ -36,14 +36,17 @@ describe("the Settings panes offered", () => {
     assert.equal(settingsPaneOpened(TICKETS_COMMUNICATION_SETTINGS_PANE_ID, false), TICKETS_COMMUNICATION_SETTINGS_PANE_ID)
   })
 
-  test("Finance & invoicing in fixture mode only: configure.finance is hidden on the Pilot (#148)", () => {
+  test("Finance & invoicing is the API's on the Pilot (#291 C4) and the browser's in fixture mode, one pane in each", () => {
     assert.equal(settingsPaneOffered(FINANCE_SETTINGS_PANE_ID, true), false)
     assert.equal(settingsPaneOffered(FINANCE_SETTINGS_PANE_ID, false), true)
+    assert.equal(settingsPaneOffered(FINANCE_ON_API_SETTINGS_PANE_ID, true), true)
+    assert.equal(settingsPaneOffered(FINANCE_ON_API_SETTINGS_PANE_ID, false), false)
     assert.equal(settingsPaneOffered("commercial-price-lists", true), true, "Settings › Commercial keeps its price lists in both modes")
     assert.equal(settingsPaneOffered("commercial-products", true), true)
-    // A link to it — Configure's Finance module, `/settings?pane=finance` — opens Settings › Commercial on the Pilot, never the browser-only pane.
-    assert.equal(settingsPaneOpened(FINANCE_SETTINGS_PANE_ID, true), "commercial-products")
+    // A link to it — Configure's Finance module, `/settings?pane=finance` — opens the API's pane on the Pilot, never the browser-only one.
+    assert.equal(settingsPaneOpened(FINANCE_SETTINGS_PANE_ID, true), FINANCE_ON_API_SETTINGS_PANE_ID)
     assert.equal(settingsPaneOpened(FINANCE_SETTINGS_PANE_ID, false), FINANCE_SETTINGS_PANE_ID)
+    assert.equal(settingsPaneOpened(FINANCE_ON_API_SETTINGS_PANE_ID, false), FINANCE_SETTINGS_PANE_ID, "and the API's pane is the browser's in fixture mode")
   })
 
   test("a link to Asset management opens Master data on the Pilot, and itself in fixture mode", () => {
