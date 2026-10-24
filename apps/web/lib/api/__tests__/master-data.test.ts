@@ -56,7 +56,7 @@ const weekly: ServiceFrequency = { id: "01a0d2a4-a280-7007-8000-000000000001", .
 const monthly: ServiceFrequency = { ...weekly, id: "01a0d2a4-a280-7007-8000-000000000003", name: "Once a month", description: null, collectionsPerWeek: 1, weeksBetween: null, daysBetween: null }
 const onDemand: ServiceFrequency = { ...weekly, id: "01a0d2a4-a280-7007-8000-000000000004", name: "On demand", description: null, collectionsPerWeek: null, weeksBetween: null, daysBetween: null }
 const twiceWeekly: ServiceFrequency = { ...weekly, id: "01a0d2a4-a280-7007-8000-000000000005", name: "Twice a week", description: null, collectionsPerWeek: 2, weeksBetween: null, daysBetween: 3 }
-const rearLoader: VehicleType = { id: "01a0d2a4-a280-7008-8000-000000000001", ...STAMPS, key: "rear-loader", name: "Rear loader", description: null, containerTypeIds: [bin240.id] }
+const rearLoader: VehicleType = { id: "01a0d2a4-a280-7008-8000-000000000001", ...STAMPS, key: "rear-loader", name: "Rear loader", description: null, containerTypeIds: [bin240.id], consumption: [] }
 const glassCrane: VehicleType = { ...rearLoader, id: "01a0d2a4-a280-7008-8000-000000000004", key: "glass-crane", name: "Glass crane", description: "Crane over the igloo", containerTypeIds: [igloo.id] }
 const trailer: VehicleType = { ...rearLoader, id: "01a0d2a4-a280-7008-8000-000000000006", key: "closed-trailer", name: "Closed trailer", description: null, containerTypeIds: [] }
 

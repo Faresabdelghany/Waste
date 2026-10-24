@@ -85,6 +85,7 @@ import { and, eq, inArray, sql } from "drizzle-orm"
 import { createDb, type Tx } from "../client"
 import { projectAccess, role, roleGrant, serviceProviderAccess, userAccount } from "../schema/access"
 import { company, project, serviceProvider } from "../schema/organisation"
+import { applyEmissions, EMISSIONS_COUNTS, EMISSIONS_IDS, type EmissionsCounts } from "./emissions"
 import { applyFinance, FINANCE_COUNTS, FINANCE_IDS, type FinanceCounts } from "./finance"
 import { DEMO_COMPANY_ID, DEMO_PROJECT_IDS, DEMO_SERVICE_PROVIDER_IDS, DEMO_USER_IDS } from "./ids"
 import { applyPlanning, PLANNING_COUNTS, PLANNING_IDS, type PlanningCounts } from "./planning"
@@ -126,6 +127,7 @@ export const DEMO_IDS = {
   registry: REGISTRY_IDS,
   resources: RESOURCES_IDS,
   pickupExceptions: PICKUP_EXCEPTIONS_IDS,
+  emissions: EMISSIONS_IDS,
   planning: PLANNING_IDS,
   finance: FINANCE_IDS,
 } as const
@@ -297,7 +299,7 @@ const PROVIDER_ACCESS: (typeof serviceProviderAccess.$inferInsert)[] = [
   },
 ]
 
-/** What the seed says the company holds: Organisation & Access by name, then the Registry's fifteen tables, the configuration's twenty, and the contaminant codes' two (M5 of #293). */
+/** What the seed says the company holds: Organisation & Access by name, then the Registry's fifteen tables, the configuration's twenty, the contaminant codes' two (M5 of #293) and the fleet's emissions' two (M10 of #293). */
 export type DemoSeedCounts = {
   projects: number
   serviceProviders: number
@@ -310,7 +312,8 @@ export type DemoSeedCounts = {
   ResourcesCounts &
   PlanningCounts &
   FinanceCounts &
-  PickupExceptionsCounts
+  PickupExceptionsCounts &
+  EmissionsCounts
 
 export type DemoSeedReport = {
   companyId: string
@@ -332,6 +335,7 @@ const COUNTS: DemoSeedCounts = {
   ...PLANNING_COUNTS,
   ...FINANCE_COUNTS,
   ...PICKUP_EXCEPTIONS_COUNTS,
+  ...EMISSIONS_COUNTS,
 }
 
 const COMPANY_COLUMNS = [company.name, company.legalName, company.registrationNumber, company.country, company.status]
@@ -461,6 +465,8 @@ export async function applyDemo(tx: Tx): Promise<number> {
   changed += await applyFinance(tx)
   // The contaminant codes (M5 of #293) name the Registry's fractions and nothing after it.
   changed += await applyPickupExceptions(tx)
+  // The fleet's emission factors and its vehicle types' consumption (M10 of #293) name Resources' types and nothing after them.
+  changed += await applyEmissions(tx)
 
   return changed
 }

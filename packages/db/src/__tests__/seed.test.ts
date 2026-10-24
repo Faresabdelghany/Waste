@@ -136,6 +136,8 @@ const CONFIGURATION_COUNTS = {
   priceListRows: 10,
   contaminantCodes: 6,
   contaminantCodeFractions: 3,
+  fuelEmissionFactors: 3,
+  vehicleTypeConsumptions: 4,
 }
 
 /** Every id the seed spells, wherever it sits in DEMO_IDS. */
@@ -205,12 +207,14 @@ describe("the demo seed's fixed ids", () => {
       priceListRow: 0x029,
       contaminantCode: 0x02a,
       contaminantCodeFraction: 0x02b,
+      fuelEmissionFactor: 0x02c,
+      vehicleTypeConsumption: 0x02d,
     })
     assert.equal(demoId("routeScheme", 1), "01a0d2a4-a280-701a-8000-000000000001")
   })
 
   test("the configuration's ids are keyed by the prototype's record ids, each in its table's kind, as many as the counts", () => {
-    const { planning, resources, finance, pickupExceptions } = DEMO_IDS
+    const { planning, resources, finance, pickupExceptions, emissions } = DEMO_IDS
     assert.ok(planning.routeSchemes["scheme-central-a"] && planning.collectionGroups["scheme-osterbro-b:default"] && planning.planningAreaBoundaries["area-harbor-1"])
     assert.ok(planning.collectionCalendarHolidays["calendar-cairo-2027:2027-07-23"] && planning.collectionGroupContainers["scheme-osterbro-b:default:asset-seed-91007"])
     assert.ok(resources.vehicleTypes["rear-loader"] && resources.containerTypeVehicleTypes["glass-crane:igloo-2500"] && resources.vehicleCompartmentFractions["vehicle-wh24:1:mixed"])
@@ -218,7 +222,8 @@ describe("the demo seed's fixed ids", () => {
     assert.ok(finance.priceLists["price-list-harbor-2026"] && finance.priceListRows.copenhagen["price-row-res-osterbro"] && finance.priceListRows.harbor["price-row-glass-default"])
     assert.equal(planning.planningAreaBoundaries["area-cairo-nasr"], undefined, "Cairo's area has no located container")
     assert.ok(pickupExceptions.contaminantCodes["plastic-in-organic"] && pickupExceptions.contaminantCodeFractions["food-in-paper:cardboard"])
-    const tables = { ...resources, ...planning, ...finance, ...pickupExceptions }
+    assert.ok(emissions.fuelEmissionFactors["diesel-2025"] && emissions.vehicleTypeConsumptions["rear-loader:hvo"])
+    const tables = { ...resources, ...planning, ...finance, ...pickupExceptions, ...emissions }
     const kinds: Record<keyof typeof tables, DemoKind> = {
       vehicleTypes: "vehicleType",
       containerTypeVehicleTypes: "containerTypeVehicleType",
@@ -242,6 +247,8 @@ describe("the demo seed's fixed ids", () => {
       priceListRows: "priceListRow",
       contaminantCodes: "contaminantCode",
       contaminantCodeFractions: "contaminantCodeFraction",
+      fuelEmissionFactors: "fuelEmissionFactor",
+      vehicleTypeConsumptions: "vehicleTypeConsumption",
     }
     for (const [table, ids] of Object.entries(tables)) {
       const spelled = allIds(ids)

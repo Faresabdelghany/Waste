@@ -89,7 +89,7 @@ export const REPORT_FIRST_DAY = "2000-01-01"
 export const REPORT_DAY_TOO_EARLY = `A report reads days from ${REPORT_FIRST_DAY} on`
 
 /** A day of a report's window: a calendar day, from `REPORT_FIRST_DAY` on; comparing two `YYYY-MM-DD` strings compares the days. */
-const ReportDay = IsoDate.refine((day) => day >= REPORT_FIRST_DAY, REPORT_DAY_TOO_EARLY)
+export const ReportDay = IsoDate.refine((day) => day >= REPORT_FIRST_DAY, REPORT_DAY_TOO_EARLY)
 
 /** The parameters every report takes; each query restates the two rules on its window, since spreading takes the fields and not the rules. */
 const windowFields = {

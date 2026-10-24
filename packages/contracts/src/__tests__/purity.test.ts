@@ -36,7 +36,9 @@
 // and the rule a set names a kind and a priority once by. #291 C4 added one:
 // finance.ts reads the invoice identity's shapes and the payment terms' range
 // from @waste/domain/finance/payment, the patterns the database's checks read
-// too.
+// too. M10 of #293 added @waste/domain/resources/emissions: emissions.ts
+// bounds a factor and a consumption by the domain's caps, which the
+// database's checks read too.
 import path from "node:path"
 import { fileURLToPath } from "node:url"
 
@@ -62,6 +64,7 @@ definePurityTests({
     "@waste/domain/resolution/sla",
     "@waste/domain/resolution/vocabulary",
     "@waste/domain/resources/drop-off-points",
+    "@waste/domain/resources/emissions",
     "@waste/domain/resources/vocabulary",
     "@waste/domain/routing/vocabulary",
     "@waste/domain/sorting-guide/search",

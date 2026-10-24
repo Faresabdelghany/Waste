@@ -12,7 +12,7 @@ const STAMPS = { createdAt: "2026-09-24T13:41:00.000Z", updatedAt: "2026-09-24T1
 /** More ids than a set body may carry, to tell the body's bound from the row's. */
 const tooManyIds = Array.from({ length: 201 }, (_unused, index) => `01a0d3a5-e5e0-7000-8000-${String(index).padStart(12, "0")}`)
 
-const vehicleType = { id: ID, key: "rear-loader", name: "Rear loader", description: "Lifts two- and four-wheel bins from the back.", containerTypeIds: [OTHER, THIRD], ...STAMPS }
+const vehicleType = { id: ID, key: "rear-loader", name: "Rear loader", description: "Lifts two- and four-wheel bins from the back.", containerTypeIds: [OTHER, THIRD], consumption: [{ fuel: "diesel", unit: "litre", milliUnitsPerKm: 450 }], ...STAMPS }
 
 describe("VehicleType", () => {
   test("is the company's row with its compatibility set: a key, a name, a description and the container types it services", () => {

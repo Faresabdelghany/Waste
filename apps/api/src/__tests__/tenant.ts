@@ -47,6 +47,7 @@ import {
   weightReview,
 } from "@waste/db/schema/finance"
 import { driver, vehicle, vehicleCompartment, vehicleCompartmentFraction } from "@waste/db/schema/fleet"
+import { fuelEmissionFactor, vehicleTypeConsumption } from "@waste/db/schema/emissions"
 import { containerTypeVehicleType, vehicleType } from "@waste/db/schema/fleet-types"
 import { generationMatch, generationRun } from "@waste/db/schema/generation"
 import { importRun, importRunRow } from "@waste/db/schema/imports"
@@ -383,6 +384,8 @@ export async function dropTenant(pool: Database, companyId: string, owner?: Data
     await tx.delete(warehouse).where(eq(warehouse.companyId, companyId))
     await tx.delete(depot).where(eq(depot.companyId, companyId))
     await tx.delete(containerTypeVehicleType).where(eq(containerTypeVehicleType.companyId, companyId))
+    await tx.delete(vehicleTypeConsumption).where(eq(vehicleTypeConsumption.companyId, companyId))
+    await tx.delete(fuelEmissionFactor).where(eq(fuelEmissionFactor.companyId, companyId))
     await tx.delete(vehicleType).where(eq(vehicleType.companyId, companyId))
     await tx.delete(collectionCalendarHoliday).where(eq(collectionCalendarHoliday.companyId, companyId))
     await tx.delete(collectionCalendar).where(eq(collectionCalendar.companyId, companyId))
