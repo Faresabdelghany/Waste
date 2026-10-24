@@ -36,10 +36,12 @@
 // of row is `internal`, which resolution/event-shapes.ts holds. The Alert is "a condition that requires
 // attention, notification, or acknowledgement and may create or link to a
 // ticket": `ALERT_KINDS` the prototype's six condition types as tokens,
-// `ALERT_SOURCES` who raised it — `manual` is the one written here; the
-// prototype's rule, route event and sensor keep their token so a later source
-// is a code change and not a migration — and `ALERT_STATUSES` the prototype's
-// four less "Linked to ticket", which is a reading of `ticket_id`.
+// `ALERT_SOURCES` who raised it — `manual` the office, `rule` and `execution`
+// the worker's rules (O4 of #290), and the sensor's token kept so a later
+// source is a code change and not a migration — `ALERT_STATUSES` the
+// prototype's four less "Linked to ticket", which is a reading of
+// `ticket_id`, and `ALERT_RULES` the worker's rules an alert is raised by
+// (resolution/alert-rules.ts).
 //
 // Three values beside the lists, the way Execution's `CLOSING_REASONS` and
 // Planning's `DEFAULT_WEEKEND` are values and not vocabularies:
@@ -72,10 +74,12 @@ export const TICKET_VISIBILITIES = ["internal", "customer", "service-provider"] 
 export const ALERT_KINDS = ["route-exception", "resource", "service-risk", "asset", "weight", "other"] as const
 /** How severe an Alert is. */
 export const ALERT_SEVERITIES = ["critical", "high", "medium", "low"] as const
-/** Who raised an Alert; `manual` is the one written by the office, the other three wait for their sources. */
+/** Who raised an Alert: the office (`manual`), the worker's rules (`rule`, and `execution` for a condition of the work itself), or a sensor, which waits for its source. */
 export const ALERT_SOURCES = ["manual", "execution", "telemetry", "rule"] as const
 /** Where an Alert stands; "linked to a ticket" is a reading of `ticket_id`, not a status. */
 export const ALERT_STATUSES = ["new", "acknowledged", "resolved"] as const
+/** The worker's rules an Alert is raised by (O4 of #290); null on an alert a person raised. */
+export const ALERT_RULES = ["route-not-started", "session-silent", "licence-expiring", "ticket-overdue"] as const
 
 export type TicketStatus = (typeof TICKET_STATUSES)[number]
 export type TicketKind = (typeof TICKET_KINDS)[number]
@@ -88,6 +92,7 @@ export type AlertKind = (typeof ALERT_KINDS)[number]
 export type AlertSeverity = (typeof ALERT_SEVERITIES)[number]
 export type AlertSource = (typeof ALERT_SOURCES)[number]
 export type AlertStatus = (typeof ALERT_STATUSES)[number]
+export type AlertRule = (typeof ALERT_RULES)[number]
 
 /** The statuses a Ticket is open in: what "open" means in a list filter and a count. A value of `TICKET_STATUSES`, not a vocabulary. */
 export const OPEN_TICKET_STATUSES = ["open", "in-progress", "pending", "on-hold"] as const satisfies readonly TicketStatus[]
@@ -119,4 +124,5 @@ export const RESOLUTION_VOCABULARIES = {
   ALERT_SEVERITIES,
   ALERT_SOURCES,
   ALERT_STATUSES,
+  ALERT_RULES,
 } as const satisfies Record<string, readonly [string, ...string[]]>

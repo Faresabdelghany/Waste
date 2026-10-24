@@ -495,6 +495,7 @@ describe("GET /openapi.json", () => {
       "query:limit",
       "query:projectId",
       "query:routeId",
+      "query:rule",
       "query:severity",
       "query:status",
       "query:ticketId",

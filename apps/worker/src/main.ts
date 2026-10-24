@@ -42,7 +42,8 @@ import { providerFromEnv } from "@waste/routing/select"
 import { createApp } from "./app"
 import { createBoss, startBoss, type Boss } from "./boss"
 import { parseEnv } from "./env"
-import { JOBS } from "./jobs"
+import { jobsWithRulesEvery } from "./jobs"
+import { ALERT_RULES_INTERVAL_SECONDS } from "./jobs/alert-rules"
 import { staleOutboxCount } from "./jobs/relay-outbox"
 import { listen, type Listening } from "./listen"
 import { OUTBOX_DEAD_QUEUE } from "./outbox/subscribe"
@@ -71,7 +72,7 @@ const boss = createBoss({
 })
 const seconds = (value: number | undefined, fallback: string) => (value === undefined ? fallback : `${value} s`)
 console.log(
-  `@waste/worker knobs: api-role pool max ${env.WORKER_API_POOL_MAX ?? DEFAULT_POOL_MAX}, worker-role pool max ${env.WORKER_POOL_MAX ?? DEFAULT_POOL_MAX}, pg-boss pool 3, polling ${seconds(env.WORKER_POLLING_INTERVAL_SECONDS, "the jobs' own")}, supervise ${seconds(env.WORKER_SUPERVISE_INTERVAL_SECONDS, "pg-boss's 60 s")}, queue cache ${seconds(env.WORKER_QUEUE_CACHE_INTERVAL_SECONDS, "pg-boss's 60 s")}, pg-boss idle timeout ${env.WORKER_BOSS_IDLE_TIMEOUT_SECONDS === 0 ? "never" : seconds(env.WORKER_BOSS_IDLE_TIMEOUT_SECONDS, "pg-pool's 10 s")}`,
+  `@waste/worker knobs: api-role pool max ${env.WORKER_API_POOL_MAX ?? DEFAULT_POOL_MAX}, worker-role pool max ${env.WORKER_POOL_MAX ?? DEFAULT_POOL_MAX}, pg-boss pool 3, polling ${seconds(env.WORKER_POLLING_INTERVAL_SECONDS, "the jobs' own")}, supervise ${seconds(env.WORKER_SUPERVISE_INTERVAL_SECONDS, "pg-boss's 60 s")}, queue cache ${seconds(env.WORKER_QUEUE_CACHE_INTERVAL_SECONDS, "pg-boss's 60 s")}, pg-boss idle timeout ${env.WORKER_BOSS_IDLE_TIMEOUT_SECONDS === 0 ? "never" : seconds(env.WORKER_BOSS_IDLE_TIMEOUT_SECONDS, "pg-pool's 10 s")}, alert rules ${seconds(env.WORKER_RULES_INTERVAL_SECONDS, `the job's ${ALERT_RULES_INTERVAL_SECONDS} s`)}`,
 )
 let started = false
 
@@ -80,7 +81,7 @@ const made: { running?: Boss; listening?: Listening } = {}
 
 /** pg-boss started with every job, and the probes bound; a failure of either is the process's exit. */
 async function boot() {
-  const running = await startBoss(boss, JOBS, {
+  const running = await startBoss(boss, jobsWithRulesEvery(env.WORKER_RULES_INTERVAL_SECONDS), {
     api,
     worker,
     now: () => new Date(),

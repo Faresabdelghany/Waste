@@ -23,7 +23,7 @@ import * as z from "zod"
 import { IsoDateTime } from "./dates"
 import { Id } from "./ids"
 import { ProjectScopedListQuery } from "./queries"
-import { AlertKind, AlertSeverity, AlertSource, AlertStatus } from "./resolution"
+import { AlertKind, AlertRule, AlertSeverity, AlertSource, AlertStatus } from "./resolution"
 import { stamped } from "./resource"
 import { Label, Paragraph } from "./text"
 
@@ -39,7 +39,7 @@ export const Alert = z.object({
   details: Paragraph,
   /** When the condition was seen. */
   detectedAt: IsoDateTime,
-  /** What the alert is about: at least one of the four. */
+  /** What the alert is about: at least one of the four, or the ticket a rule's alert is about. */
   routeId: Id.nullable(),
   vehicleId: Id.nullable(),
   driverId: Id.nullable(),
@@ -51,8 +51,11 @@ export const Alert = z.object({
   acknowledgedAt: IsoDateTime.nullable(),
   acknowledgedBy: Id.nullable(),
   resolvedAt: IsoDateTime.nullable(),
+  /** The person who resolved it; null for an open alert, and for a rule's alert the worker resolved when its condition cleared. */
   resolvedBy: Id.nullable(),
   resolutionNote: Paragraph.nullable(),
+  /** The worker's rule that raised it (O4 of #290); null for an alert a person raised. Absent on an answer from before the rules, read as null. */
+  rule: AlertRule.nullable().default(null),
 })
 export type Alert = z.infer<typeof Alert>
 
@@ -99,6 +102,8 @@ export type AlertLinkTicket = z.infer<typeof AlertLinkTicket>
 /** A page of alerts: one project's, of one status, severity or kind, about one route, vehicle, driver or container, linked to one ticket. */
 export const AlertListQuery = ProjectScopedListQuery.extend({
   status: AlertStatus.optional(),
+  /** The alerts one of the worker's rules raised. */
+  rule: AlertRule.optional(),
   severity: AlertSeverity.optional(),
   kind: AlertKind.optional(),
   routeId: Id.optional(),

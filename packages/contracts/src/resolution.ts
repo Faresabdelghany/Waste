@@ -24,7 +24,7 @@
 // since a customer's letter is a document and not a photo, and a schema of
 // its own because a ticket's object is not a proof's: the two buckets have
 // two policies, and a key of the one must not parse as a key of the other.
-import { ALERT_KINDS, ALERT_SEVERITIES, ALERT_SOURCES, ALERT_STATUSES, TICKET_EVENT_KINDS, TICKET_KINDS, TICKET_PRIORITIES, TICKET_RESOLUTIONS, TICKET_SOURCES, TICKET_STATUSES, TICKET_VISIBILITIES } from "@waste/domain/resolution/vocabulary"
+import { ALERT_KINDS, ALERT_RULES, ALERT_SEVERITIES, ALERT_SOURCES, ALERT_STATUSES, TICKET_EVENT_KINDS, TICKET_KINDS, TICKET_PRIORITIES, TICKET_RESOLUTIONS, TICKET_SOURCES, TICKET_STATUSES, TICKET_VISIBILITIES } from "@waste/domain/resolution/vocabulary"
 import * as z from "zod"
 
 import { objectKeyPattern } from "./execution"
@@ -65,13 +65,17 @@ export type AlertKind = z.infer<typeof AlertKind>
 export const AlertSeverity = z.enum(ALERT_SEVERITIES)
 export type AlertSeverity = z.infer<typeof AlertSeverity>
 
-/** Who raised an Alert; the API writes `manual` and no body says otherwise. */
+/** Who raised an Alert: the API writes `manual` and no body says otherwise; the worker's rules write `rule` and `execution` (O4 of #290). */
 export const AlertSource = z.enum(ALERT_SOURCES)
 export type AlertSource = z.infer<typeof AlertSource>
 
 /** Where an Alert stands. */
 export const AlertStatus = z.enum(ALERT_STATUSES)
 export type AlertStatus = z.infer<typeof AlertStatus>
+
+/** The worker's rule an Alert was raised by (O4 of #290). */
+export const AlertRule = z.enum(ALERT_RULES)
+export type AlertRule = z.infer<typeof AlertRule>
 
 /** The prefix a ticket's number is shown with: `T-8831`. Presentation, spelled once. */
 export const TICKET_NUMBER_PREFIX = "T-"

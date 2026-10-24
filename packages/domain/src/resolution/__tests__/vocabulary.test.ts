@@ -12,7 +12,7 @@ import { defineVocabularyTests } from "../../__tests__/vocabulary"
 import { EXECUTION_SOURCES } from "../../execution/vocabulary"
 import * as vocabulary from "../vocabulary"
 
-defineVocabularyTests("Resolution", vocabulary, vocabulary.RESOLUTION_VOCABULARIES, 11, ["OPEN_TICKET_STATUSES", "CLOSED_TICKET_STATUSES", "BILLABLE_RESOLUTIONS"])
+defineVocabularyTests("Resolution", vocabulary, vocabulary.RESOLUTION_VOCABULARIES, 12, ["OPEN_TICKET_STATUSES", "CLOSED_TICKET_STATUSES", "BILLABLE_RESOLUTIONS"])
 
 describe("the Resolution vocabulary's own rules", () => {
   test("the open and the closed statuses are values of the status list and together make the whole of it, in its order", () => {
@@ -45,6 +45,7 @@ describe("the Resolution vocabulary's own rules", () => {
     assert.deepEqual([...vocabulary.ALERT_SEVERITIES], ["critical", "high", "medium", "low"])
     assert.deepEqual([...vocabulary.ALERT_SOURCES], ["manual", "execution", "telemetry", "rule"])
     assert.deepEqual([...vocabulary.ALERT_STATUSES], ["new", "acknowledged", "resolved"])
+    assert.deepEqual([...vocabulary.ALERT_RULES], ["route-not-started", "session-silent", "licence-expiring", "ticket-overdue"])
     assert.equal((vocabulary.ALERT_STATUSES as readonly string[]).includes("linked"), false, "a reading of ticket_id")
   })
 })

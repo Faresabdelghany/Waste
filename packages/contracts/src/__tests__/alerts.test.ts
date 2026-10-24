@@ -31,10 +31,18 @@ const alert = {
   resolvedAt: null,
   resolvedBy: null,
   resolutionNote: null,
+  rule: null,
   ...STAMPS,
 }
 
 describe("Alert", () => {
+  test("names the worker's rule that raised it, null for a person's, and reads an answer from before the rules as a person's (O4 of #290)", () => {
+    assert.equal(Alert.parse({ ...alert, rule: "ticket-overdue", source: "rule" }).rule, "ticket-overdue")
+    const { rule: _rule, ...before } = alert
+    assert.equal(Alert.parse(before).rule, null)
+    assert.equal(Alert.safeParse({ ...alert, rule: "weather" }).success, false)
+  })
+
   test("carries its kind, severity, source and status, its words, when it was seen, what it is about, the ticket it links to and the two pairs of stamps", () => {
     assert.deepEqual(Alert.parse(alert), alert)
     const acknowledged = { ...alert, status: "acknowledged", acknowledgedAt: "2026-10-05T14:10:00.000Z", acknowledgedBy: OTHER }
