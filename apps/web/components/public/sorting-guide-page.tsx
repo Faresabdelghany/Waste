@@ -4,7 +4,8 @@
 // what it shows for each answer of the door is lib/public/sorting-guide.ts's.
 // The page's own words are English until M21; what the office wrote — the
 // project's name and its items — is marked with the project's language.
-import { MagnifyingGlass } from "@phosphor-icons/react/ssr"
+import { MagnifyingGlass, MapPin } from "@phosphor-icons/react/ssr"
+import Link from "next/link"
 import { headers } from "next/headers"
 import { notFound } from "next/navigation"
 
@@ -13,6 +14,8 @@ import { Badge } from "@/components/ui/badge"
 import { Button } from "@/components/ui/button"
 import { Input } from "@/components/ui/input"
 import { doorFor, readPublishedProject, searchSortingGuide } from "@/lib/public/door"
+import { dropOffHrefOf } from "@/lib/public/drop-off-points"
+import { DROP_OFF_COPY } from "@/lib/public/drop-off-points-copy"
 import { pageViewOf, queryOf, SEARCH_MAX, type GuideView, type PageAsked } from "@/lib/public/sorting-guide"
 import { SORTING_GUIDE_COPY as COPY } from "@/lib/public/sorting-guide-copy"
 
@@ -57,7 +60,7 @@ export async function SortingGuidePage({ params, searchParams }: SortingGuidePag
               </Button>
             </form>
             <section aria-live="polite" className="mt-8">
-              <GuideResults view={page.guide} language={page.project.language} />
+              <GuideResults slug={slug} view={page.guide} language={page.project.language} />
             </section>
           </>
         ) : (
@@ -70,7 +73,7 @@ export async function SortingGuidePage({ params, searchParams }: SortingGuidePag
   )
 }
 
-function GuideResults({ view, language }: { view: GuideView; language: string }) {
+function GuideResults({ slug, view, language }: { slug: string; view: GuideView; language: string }) {
   switch (view.kind) {
     case "prompt":
       return null
@@ -102,6 +105,11 @@ function GuideResults({ view, language }: { view: GuideView; language: string })
                     {COPY.alsoCalled}: <span lang={language}>{match.synonyms.join(", ")}</span>
                   </p>
                 )}
+                {/* The drop-off points that take its fraction, or every point where it is for no bin at home (M3b). */}
+                <Link href={dropOffHrefOf(slug, match.fraction?.key ?? null)} className="mt-3 inline-flex items-center gap-1.5 text-sm font-medium text-primary underline-offset-4 hover:underline">
+                  <MapPin aria-hidden="true" className="size-4" />
+                  {match.fraction === null ? DROP_OFF_COPY.findDropOff : DROP_OFF_COPY.whereToHandIn}
+                </Link>
               </li>
             ))}
           </ul>
