@@ -205,11 +205,12 @@ describe("the Planning tables against a fresh database", { skip: database.skip }
     })
 
   test("0006 created the nine tables in wms, each fenced (row-level security enabled and forced, one policy for the API role) and with its updated_at trigger", async () => {
+    // The API role's policies alone: the public door's own (0018) are public-door.test.ts's question.
     const names = Object.values(tables).map(getTableName).sort()
     assert.equal(names.length, 9)
     const rows = await owner.sql<{ table: string; enabled: boolean; forced: boolean; policies: string[]; triggers: string[] }[]>`
       select c.relname as table, c.relrowsecurity as enabled, c.relforcerowsecurity as forced,
-        (select array_agg(p.policyname order by p.policyname) from pg_policies p where p.schemaname = 'wms' and p.tablename = c.relname) as policies,
+        (select array_agg(p.policyname order by p.policyname) from pg_policies p where p.schemaname = 'wms' and p.tablename = c.relname and 'wms_api' = any (p.roles)) as policies,
         (select array_agg(t.tgname order by t.tgname) from pg_trigger t where t.tgrelid = c.oid and not t.tgisinternal) as triggers
       from pg_class c join pg_namespace n on n.oid = c.relnamespace
       where n.nspname = 'wms' and c.relkind = 'r' and c.relname = any (${names}::text[])

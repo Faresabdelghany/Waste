@@ -127,6 +127,13 @@
       "when": 1792833996415,
       "tag": "0017_sorting_guide",
       "breakpoints": true
+    },
+    {
+      "idx": 18,
+      "version": "7",
+      "when": 1792837574262,
+      "tag": "0018_collection_days_door",
+      "breakpoints": true
     }
   ]
 }

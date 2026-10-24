@@ -253,7 +253,7 @@ export function createApp({
   // Resolution (Issue #109): a ticket's `occurredAt` and an alert's `detectedAt` default to the request's clock and may not run ahead of it, and every command stamps and publishes with it, so both modules take `now` too.
   app.route("/", ticketRoutes(guard, { now }))
   app.route("/", sortingGuideRoutes(guard))
-  app.route("/", publicRoutes(publicDoor({ pool, allowance: publicAllowance, peer, trustedProxies })))
+  app.route("/", publicRoutes(publicDoor({ pool, allowance: publicAllowance, peer, trustedProxies }), { now }))
   app.route("/", alertRoutes(guard, { now }))
   // Finance & Contracting (Issue #112). The tariffs, the awards and what a provider is paid: every rule there is a period against a day the caller names, so none of the three takes the clock.
   app.route("/", priceListRoutes(guard))
