@@ -39,8 +39,11 @@ import * as z from "zod"
 
 import { Alert } from "./alerts"
 import { IsoDate, IsoDateTime } from "./dates"
+import { PickupReason, PickupStatus } from "./execution"
+import { FlatPoint } from "./geojson"
 import { Id } from "./ids"
 import { PageRequest } from "./pagination"
+import { ProofOfService } from "./proofs"
 import { dayWindowIsOrdered, dayWindowOrdered, ProjectScopedListQuery } from "./queries"
 import { ticketLabel, TicketEventKind, TicketKind, TicketObjectKey, TicketPriority, TicketResolution, TicketSource, TicketStatus, TicketVisibility } from "./resolution"
 import { changesSomething, PositiveInt, recorded, somethingToChange, stamped } from "./resource"
@@ -192,6 +195,13 @@ export const TicketCreate = z
     links: TicketLinksSet.optional(),
     /** An alert of the project the ticket answers, linked to it in the same transaction. */
     alertId: Id.optional(),
+    /**
+     * A missed collection against a stop recorded `not-presented` is answered by
+     * the stop's record (#293 M6): the reply quoting it is recorded for the
+     * customer and the case completed `answered` in the same transaction.
+     * False opens it for the office to judge instead.
+     */
+    answerFromRecord: z.boolean().default(true).describe("Defaults to true: a missed collection the stop's record answers is answered, not opened."),
   })
   // zod 4 runs a check on a body whose fields failed, so the links are read with care.
   .refine((body) => pickupWithItsRoute(body.links), pickupWithItsRouteAt)
@@ -304,3 +314,37 @@ export const TicketEventListQuery = PageRequest.extend({
   visibility: TicketVisibility.optional(),
 })
 export type TicketEventListQuery = z.infer<typeof TicketEventListQuery>
+
+/**
+ * What the stop a ticket is about recorded (#293 M6): its outcome, when, where
+ * the device stood for it, the proofs taken there in recording order — a
+ * photo's or a signature's bytes are signed for through
+ * `GET /pickups/{id}/proof-objects`, never here — the reply that quotes it,
+ * and whether a missed collection is answered by it.
+ */
+export const StopEvidence = z.object({
+  pickupId: Id,
+  routeId: Id,
+  outcome: PickupStatus,
+  reason: PickupReason.nullable(),
+  /** The outcome's instant, else the arrival's; null for a stop not yet recorded. */
+  at: IsoDateTime.nullable(),
+  location: FlatPoint.nullable(),
+  proofs: z.array(ProofOfService),
+  /** The customer-visible reply that quotes the record, its time on the project's clock. */
+  reply: z.string(),
+  /** Whether a missed collection against this stop is answered by the record. */
+  answeredByRecord: z.boolean(),
+})
+export type StopEvidence = z.infer<typeof StopEvidence>
+
+/** `GET /tickets/:id/evidence`: the stop's evidence, or null for a ticket about no stop. */
+export const TicketEvidence = z.object({ stop: StopEvidence.nullable() })
+export type TicketEvidence = z.infer<typeof TicketEvidence>
+
+/** `POST /tickets/:id/reply-with-evidence`: one step — the reply quoting the stop's record, the office's note after it, and the case completed `answered` where asked. */
+export const TicketReplyWithEvidence = z.strictObject({
+  note: Paragraph.optional(),
+  complete: z.boolean().default(false).describe("Defaults to false: the reply alone; true completes the case `answered` in the same transaction."),
+})
+export type TicketReplyWithEvidence = z.infer<typeof TicketReplyWithEvidence>

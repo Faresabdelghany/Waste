@@ -299,9 +299,11 @@ describe("GET /openapi.json", () => {
       "/tickets/{id}/comments",
       "/tickets/{id}/complete",
       "/tickets/{id}/events",
+      "/tickets/{id}/evidence",
       "/tickets/{id}/hold",
       "/tickets/{id}/reject",
       "/tickets/{id}/reopen",
+      "/tickets/{id}/reply-with-evidence",
       "/tickets/{id}/start",
       "/tickets/{id}/wait",
       "/unloading-stations",
@@ -391,8 +393,8 @@ describe("GET /openapi.json", () => {
     }
     assert.equal(
       secured,
-      263,
-      "/me, the ten organisation routes, the twelve access routes, the audit log's one read (#291), the fifty-four registry routes — waste fractions, container types, service frequencies, products and customers, four each; properties, property groups and shared collection points, five each, the four plus the route that replaces the set travelling with the record; and the two effective-dated families, agreements with their subscriptions, eleven with the subscriptions listed across agreements (Issue #183) and a subscription's change and an agreement's termination (#291), and containers with their placements, eight —the twenty-five planning routes of part A: planning areas with their boundary versions, nine, collection calendars with their holidays, five, route schemes with the occurrence read, five, and collection groups with their two set replacements, six — and the three of part B, the generate command and the two run reads — and the eighteen resources routes of slice 3: vehicle types with their container types, five, warehouses and depots, four each, and unloading stations with their fractions, five — and the seven of the container ledger (Issue #101, slice 5): the five commands receive, return, transfer, decommission and adjust, one container's movements, and the ledger across containers — and Resources' seven vehicle allocation routes (#101, slice 6): the list, the allocate command, the read, the three commands change, confirm and release, and the history — and the nine fleet routes of Resources' slice 4: vehicles with the compartments set, five, and drivers, four — and the twenty-two office routes of Execution's slice 3 (Issue #104): routes, eleven (the list, the read, assign, dispatch, reschedule, the hold's release (#226), cancel, the pickup order, the command log, the office's ad-hoc route (#111) and the bulk dispatch of a day or a selection (O5 of #290)), pickups, five (the list, the read, remove, correct-outcome and the office's stop added under its route (#111)), live, three (the live read, the sessions list and one session), and weights, three (the unloads list, one unload and the office's capture on a route) — and the five of the driver door (Issue #104, slice 4): the driver's start screen, their routes, one route, the command batch and the receipts — and Resolution's nineteen (Issue #109): the thirteen ticket routes, the list and the create, the read and the patch, the seven commands assign, start, wait, hold, complete, reject and reopen, the history and the comment, and the six alert routes, the list, the raise, the read, and the three commands acknowledge, resolve and link-ticket — and Finance's forty-eight (Issue #112): price lists, nine (the list, the create, the read and the patch, a list's rows and the row added under it, one row and its patch, and the resolve read), service areas, eleven (the list, the create, the read and the patch, the two set replacements, an area's assignments and the assignment added under it, the assignments across the caller's reach, one assignment and its patch), and service provider prices, five (the list, the create, the read, the patch and the index command, which writes the next row of the chain), billable events, five (the list, the manual create, the read, and the two commands reprice and cancel), billing runs, four (the list, the run, the preview and the read), and invoices, three (the list, the read and the credit note), settlements, seven (the list, the create, the read, the three commands calculate, close and reopen, and the history), and weight control's four (the three decisions approve, reject and correct on an unload, and its reviews) — and Routing's five (#170, #171, #173): a route's Plans, one Plan with its legs, the optimise command, the quota read, and the guided setup's preview — and the Sorting Guide's four (Issue #293): the list, the create, the read and the patch — and the four reports (#292): service, tickets, revenue and tonnage — and the CSV import's seven (#291 slice 12): a kind's template, the preview, the run's create, list and read, and its rows written a batch at a time and read back — and the proof objects' two (O1 of #290): the driver door's signed upload and the office's read URLs for a stop",
+      265,
+      "/me, the ten organisation routes, the twelve access routes, the audit log's one read (#291), the fifty-four registry routes — waste fractions, container types, service frequencies, products and customers, four each; properties, property groups and shared collection points, five each, the four plus the route that replaces the set travelling with the record; and the two effective-dated families, agreements with their subscriptions, eleven with the subscriptions listed across agreements (Issue #183) and a subscription's change and an agreement's termination (#291), and containers with their placements, eight —the twenty-five planning routes of part A: planning areas with their boundary versions, nine, collection calendars with their holidays, five, route schemes with the occurrence read, five, and collection groups with their two set replacements, six — and the three of part B, the generate command and the two run reads — and the eighteen resources routes of slice 3: vehicle types with their container types, five, warehouses and depots, four each, and unloading stations with their fractions, five — and the seven of the container ledger (Issue #101, slice 5): the five commands receive, return, transfer, decommission and adjust, one container's movements, and the ledger across containers — and Resources' seven vehicle allocation routes (#101, slice 6): the list, the allocate command, the read, the three commands change, confirm and release, and the history — and the nine fleet routes of Resources' slice 4: vehicles with the compartments set, five, and drivers, four — and the twenty-two office routes of Execution's slice 3 (Issue #104): routes, eleven (the list, the read, assign, dispatch, reschedule, the hold's release (#226), cancel, the pickup order, the command log, the office's ad-hoc route (#111) and the bulk dispatch of a day or a selection (O5 of #290)), pickups, five (the list, the read, remove, correct-outcome and the office's stop added under its route (#111)), live, three (the live read, the sessions list and one session), and weights, three (the unloads list, one unload and the office's capture on a route) — and the five of the driver door (Issue #104, slice 4): the driver's start screen, their routes, one route, the command batch and the receipts — and Resolution's twenty-one (Issue #109): the fifteen ticket routes, the list and the create, the read and the patch, the seven commands assign, start, wait, hold, complete, reject and reopen, the history and the comment, and the stop's evidence and the reply with it (M6 of #293), and the six alert routes, the list, the raise, the read, and the three commands acknowledge, resolve and link-ticket — and Finance's forty-eight (Issue #112): price lists, nine (the list, the create, the read and the patch, a list's rows and the row added under it, one row and its patch, and the resolve read), service areas, eleven (the list, the create, the read and the patch, the two set replacements, an area's assignments and the assignment added under it, the assignments across the caller's reach, one assignment and its patch), and service provider prices, five (the list, the create, the read, the patch and the index command, which writes the next row of the chain), billable events, five (the list, the manual create, the read, and the two commands reprice and cancel), billing runs, four (the list, the run, the preview and the read), and invoices, three (the list, the read and the credit note), settlements, seven (the list, the create, the read, the three commands calculate, close and reopen, and the history), and weight control's four (the three decisions approve, reject and correct on an unload, and its reviews) — and Routing's five (#170, #171, #173): a route's Plans, one Plan with its legs, the optimise command, the quota read, and the guided setup's preview — and the Sorting Guide's four (Issue #293): the list, the create, the read and the patch — and the four reports (#292): service, tickets, revenue and tonnage — and the CSV import's seven (#291 slice 12): a kind's template, the preview, the run's create, list and read, and its rows written a batch at a time and read back — and the proof objects' two (O1 of #290): the driver door's signed upload and the office's read URLs for a stop",
     )
   })
 
@@ -410,7 +412,8 @@ describe("GET /openapi.json", () => {
     const ledgerCommands = new Set(["receive", "return", "transfer", "decommission", "adjust"].map((verb) => `POST /containers/{id}/${verb}`))
     const reviewCommands = new Set(["approve", "reject", "correct"].map((verb) => `POST /unloads/{id}/${verb}`))
     // An import's batch (#291 slice 12) appends its rows' outcomes to the run's ledger, read on `GET /imports/{id}/rows`.
-    const appendsWithoutAddress = new Set([...ledgerCommands, "POST /tickets/{id}/comments", ...reviewCommands, "POST /imports/{id}/rows"])
+    // A reply with the stop's record (M6 of #293) is a comment too.
+    const appendsWithoutAddress = new Set([...ledgerCommands, "POST /tickets/{id}/comments", "POST /tickets/{id}/reply-with-evidence", ...reviewCommands, "POST /imports/{id}/rows"])
     let creates = 0
     let appends = 0
     for (const [path, operations] of Object.entries(document.paths)) {
@@ -434,7 +437,7 @@ describe("GET /openapi.json", () => {
         }
       }
     }
-    assert.equal(appends, 10, "the ledger's five commands: receive, return, transfer, decommission and adjust — a ticket's comment — weight control's three decisions, approve, reject and correct — and an import's batch")
+    assert.equal(appends, 11, "the ledger's five commands: receive, return, transfer, decommission and adjust — a ticket's comment and its reply with the stop's record — weight control's three decisions, approve, reject and correct — and an import's batch")
     assert.equal(
       creates,
       46,
@@ -528,6 +531,8 @@ describe("GET /openapi.json", () => {
     assert.deepEqual(operations("/tickets/{id}/reopen"), { post: "reopenTicket" })
     assert.deepEqual(operations("/tickets/{id}/events"), { get: "listTicketEvents" })
     assert.deepEqual(operations("/tickets/{id}/comments"), { post: "commentTicket" })
+    assert.deepEqual(operations("/tickets/{id}/evidence"), { get: "getTicketEvidence" })
+    assert.deepEqual(operations("/tickets/{id}/reply-with-evidence"), { post: "replyToTicketWithEvidence" })
 
     // The create's 409 is the alert's (resolved, or linked to another ticket); the patch and six of the commands refuse a closed ticket; reopen is the one command a closed ticket takes and has no 409; the reads, the history and the comment collide with nothing.
     const responses = (path: string, method: "get" | "post" | "patch") => Object.keys(document.paths[path][method].responses)
@@ -540,6 +545,9 @@ describe("GET /openapi.json", () => {
     assert.deepEqual(responses("/tickets/{id}/reopen", "post"), ["200", "400", "401", "403", "404"], "reopen has no 409: a closed ticket is what it takes, and an open one answers 200 as it stands")
     assert.deepEqual(responses("/tickets/{id}/events", "get"), ["200", "400", "401", "403", "404"])
     assert.deepEqual(responses("/tickets/{id}/comments", "post"), ["201", "400", "401", "403", "404"])
+    // The stop's evidence (M6 of #293): the read collides with nothing; the reply refuses a ticket about no stop, and a completion asked of a closed one.
+    assert.deepEqual(responses("/tickets/{id}/evidence", "get"), ["200", "400", "401", "403", "404"])
+    assert.deepEqual(responses("/tickets/{id}/reply-with-evidence", "post"), ["201", "400", "401", "403", "404", "409"])
     for (const [status, operation] of Object.entries(document.paths["/tickets/{id}/complete"].post.responses)) {
       assert.deepEqual(Object.keys(operation.content), [status === "200" ? "application/json" : "application/problem+json"], `complete ${status}`)
     }
@@ -580,6 +588,7 @@ describe("GET /openapi.json", () => {
     assert.deepEqual(required("/tickets/{id}/reject"), ["reason"])
     assert.deepEqual(required("/tickets/{id}/reopen"), ["note"])
     assert.deepEqual(required("/tickets/{id}/comments"), ["body"])
+    assert.equal(required("/tickets/{id}/reply-with-evidence"), undefined, "the reply's words are the record's; the note and the completion are optional")
 
     // The two 201s: the create names where the ticket is now read, the comment names nothing, like the ledger's commands.
     assert.equal(document.paths["/tickets"].post.responses["201"].headers?.Location?.schema?.type, "string")

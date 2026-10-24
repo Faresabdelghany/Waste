@@ -53,11 +53,13 @@ import {
   TicketDetail,
   TicketEvent,
   TicketEventListQuery,
+  TicketEvidence,
   TicketHold,
   TicketListQuery,
   TicketPatch,
   TicketReject,
   TicketReopen,
+  TicketReplyWithEvidence,
   TicketStart,
   TicketWait,
   type TicketLinks,
@@ -99,6 +101,7 @@ import {
 import { alertOf, alertsNamingTicket, eventColumns, eventOf, eventsOfTicket, findTicket, labelOf, linksOf, noSuchTicket, ticketColumns, ticketOf, ticketScope, type TicketRow } from "./resolution-shapes"
 import type { ClockOptions } from "./scheme-groups"
 import { created, dayWindow, describeCreated, describeJson, IdParam, lockRow, requireNotAhead } from "./shared"
+import { recordCustomerReply, replyBody, stopEvidenceFor } from "./ticket-evidence"
 import { appendTicketEvent, openTicket, type TicketEventDraft } from "./ticket-writes"
 
 const MODULE = "operate.tickets"
@@ -248,6 +251,11 @@ const commandProblems = (action: "view" | "edit" | "create") => ({
 
 const CLOSED = "A completed or rejected ticket is refused (409, `Ticket T-8831 is completed; reopen it first`)."
 
+/** The note on the `status-changed` row of a case the stop's record answered. */
+const ANSWERED_BY_RECORD = "Answered with the stop's record."
+/** The 409 of a reply with evidence on a ticket about no stop. */
+const NO_STOP = "This ticket names no stop, so no record answers it"
+
 export function ticketRoutes(guard: MiddlewareHandler<AuthEnv>, { now = () => new Date() }: ClockOptions = {}) {
   /**
    * One machine command: the lock, the read, the transition, and on a move
@@ -351,10 +359,10 @@ export function ticketRoutes(guard: MiddlewareHandler<AuthEnv>, { now = () => ne
         operationId: "createTicket",
         summary: "Open a ticket",
         description:
-          "Opens a case in a project the caller works in (400 at `projectId` otherwise): the number is taken from the company's counter (`T-<n>`, never renumbered), the row is written `open`, and a `created` event is appended with the assignee if one and the caller as its recorder. `source` is one of the office's doors and defaults to `office`; `driver-app` and `dispatch` are the outbox consumer's and are refused. `occurredAt` is when the issue or request happened, the request's clock when absent, and may run at most five minutes ahead of it (400) — with no lower bound, since the office records a complaint made yesterday. Every link named is held to the ticket's project (400 at `links.<field>`): a route of the project, a pickup of that route (a pickup is named with its route, 400 at `links.pickupId`), a container, a property, a shared collection point, an agreement, a driver and a parent ticket of the project, a customer of the company; no status gates a link — a ticket is about whatever it is about. `assigneeUserAccountId` is an account of this company that is not deactivated and works in the project (400). `alertId` is an alert of the project (400) that is not resolved (409, `This alert is resolved and does not change`) and not linked to another ticket (409, `This alert is linked to ticket T-8831; an alert links to one ticket`); its `ticketId` is set in the same transaction. The `ticket-opened` event is written in the same transaction, carrying the ticket as answered.",
+          "Opens a case in a project the caller works in (400 at `projectId` otherwise): the number is taken from the company's counter (`T-<n>`, never renumbered), the row is written `open`, and a `created` event is appended with the assignee if one and the caller as its recorder. `source` is one of the office's doors and defaults to `office`; `driver-app` and `dispatch` are the outbox consumer's and are refused. `occurredAt` is when the issue or request happened, the request's clock when absent, and may run at most five minutes ahead of it (400) — with no lower bound, since the office records a complaint made yesterday. Every link named is held to the ticket's project (400 at `links.<field>`): a route of the project, a pickup of that route (a pickup is named with its route, 400 at `links.pickupId`), a container, a property, a shared collection point, an agreement, a driver and a parent ticket of the project, a customer of the company; no status gates a link — a ticket is about whatever it is about. `assigneeUserAccountId` is an account of this company that is not deactivated and works in the project (400). `alertId` is an alert of the project (400) that is not resolved (409, `This alert is resolved and does not change`) and not linked to another ticket (409, `This alert is linked to ticket T-8831; an alert links to one ticket`); its `ticketId` is set in the same transaction. The `ticket-opened` event is written in the same transaction, carrying the ticket as answered. A `missed-collection` naming a stop whose record says the bin was not presented — skipped or failed, reason `not-presented` — is answered by that record as it opens, unless `answerFromRecord` is false: a customer-visible `comment` quoting the record (as `GET /tickets/{id}/evidence` writes it) is appended, the case is completed `answered`, and `ticket-completed` follows `ticket-opened`; the 201 answers it completed. The reply is recorded, not sent: sending is the communications slice's, and a reply recorded before it is never sent after it.",
         security: BEARER_SECURITY,
         responses: {
-          201: describeCreated("The ticket as opened.", Ticket),
+          201: describeCreated("The ticket as opened, or completed `answered` where the stop's record answered it.", Ticket),
           400: describeProblem("The body is missing a field, names a member the server owns, names a source the office may not write, dates the ticket more than five minutes after the request, names a pickup without its route, or names a project, link, assignee or alert the rules above refuse — each at the field that is wrong."),
           401: describeProblem("No usable token (see WWW-Authenticate)."),
           403: describeProblem(`No active account here, or the caller's role does not allow \`create\` on \`${MODULE}\`.`),
@@ -397,7 +405,16 @@ export function ticketRoutes(guard: MiddlewareHandler<AuthEnv>, { now = () => ne
           newId,
           now: () => at,
         })
-        return created(c, "/tickets", answered)
+        if (body.kind !== "missed-collection" || !body.answerFromRecord || links.pickupId === null) return created(c, "/tickets", answered)
+        // A missed collection the stop's record answers is answered as it opens (M6): the reply that quotes the record, then the case completed `answered`, in this transaction.
+        const opened = await findTicket(tx, principal, answered.id)
+        const evidence = opened === undefined ? null : await stopEvidenceFor(tx, principal.companyId, opened)
+        if (opened === undefined || evidence === null || !evidence.answeredByRecord) return created(c, "/tickets", answered)
+        await recordCustomerReply(tx, { companyId: principal.companyId, projectId: opened.projectId, id: opened.id }, { status: opened.status as TicketStatus, assigneeUserAccountId: opened.assigneeUserAccountId }, evidence.reply, principal.user.id)
+        const { row } = await moved(tx, principal, opened.id, "complete", ANSWERED_BY_RECORD, async () => ({ resolution: "answered", recollectionRouteId: null, recollectionPickupId: null, closedAt: at }))
+        const completed = ticketOf(row)
+        await emit(tx, principal, { aggregate: "ticket", aggregateId: row.id, kind: "ticket-completed", payload: completed, projectId: row.projectId, occurredAt: at })
+        return created(c, "/tickets", completed)
       },
     )
     .get(
@@ -689,6 +706,72 @@ export function ticketRoutes(guard: MiddlewareHandler<AuthEnv>, { now = () => ne
       },
     )
     .get(
+      "/tickets/:id/evidence",
+      describeRoute({
+        operationId: "getTicketEvidence",
+        summary: "What the stop a ticket is about recorded",
+        description:
+          "The stop the ticket names (`links.pickupId`), read as one thing for the office and for the reply its customer is sent: the stop's outcome and reason, when it was recorded, where the device stood for it — the latest completion's, skip's or failure's place, the office's correction's where one stands, the arrival's where the outcome recorded none — the proofs taken at the stop, the reply that quotes them on the project's clock, and whether the record alone answers the case (a `missed-collection` whose stop was skipped or failed `not-presented`). A photo's or a signature's bytes are signed for through `GET /pickups/{id}/proof-objects`. `stop` is null for a ticket about no stop.",
+        security: BEARER_SECURITY,
+        responses: {
+          200: describeJson("The stop's evidence, or null.", TicketEvidence),
+          400: describeProblem("The path does not hold an id."),
+          ...commandProblems("view"),
+        },
+      }),
+      guard,
+      requireGrant(MODULE, "view"),
+      validate("param", IdParam),
+      async (c) => {
+        const { id } = c.req.valid("param")
+        const tx = c.get("tx")
+        const principal = c.get("principal")
+        const row = await findTicket(tx, principal, id)
+        if (row === undefined) throw noSuchTicket(id)
+        const answer: TicketEvidence = { stop: await stopEvidenceFor(tx, principal.companyId, row) }
+        return c.json(answer)
+      },
+    )
+    .post(
+      "/tickets/:id/reply-with-evidence",
+      describeRoute({
+        operationId: "replyToTicketWithEvidence",
+        summary: "Reply to the customer with the stop's record",
+        description:
+          "One step: a customer-visible `comment` whose body is the reply `GET /tickets/{id}/evidence` writes, the body's `note` after it, and with `complete` the case completed `answered` in the same transaction — the `status-changed` row, `closedAt` and the `ticket-completed` event, as `complete` writes them. Under the ticket's row lock. A ticket about no stop is refused (409, `This ticket names no stop, so no record answers it`); with `complete`, a completed or rejected ticket is refused as `complete` refuses it, while the reply alone is taken on a closed ticket, as a comment is. The reply is recorded, not sent: sending is the communications slice's, and a reply recorded before it is never sent after it. Answers 201 with the ticket's history, and no `Location`, like a comment.",
+        security: BEARER_SECURITY,
+        responses: {
+          201: describeJson("The ticket with its history, the reply its last comment.", TicketDetail),
+          400: describeProblem("The path does not hold an id, or the body names a member the command does not take."),
+          ...commandProblems("edit"),
+          409: describeProblem("The ticket names no stop, or `complete` was asked of a completed or rejected ticket."),
+        },
+      }),
+      guard,
+      requireGrant(MODULE, "edit"),
+      validate("param", IdParam),
+      validate("json", TicketReplyWithEvidence),
+      async (c) => {
+        const { id } = c.req.valid("param")
+        const { note, complete } = c.req.valid("json")
+        const tx = c.get("tx")
+        const principal = c.get("principal")
+        const at = now()
+        const current = await lockedTicket(tx, principal, id)
+        const evidence = await stopEvidenceFor(tx, principal.companyId, current)
+        if (evidence === null) throw problem(409, { detail: NO_STOP })
+        // The machine judges `complete` before the reply is written, so a refused completion leaves no reply behind it.
+        if (complete) {
+          const transition = ticketTransition(current.status as TicketStatus, "complete", labelOf(current))
+          if (transition.kind === "refuse") throw problem(409, { detail: transition.sentence })
+        }
+        await recordCustomerReply(tx, { companyId: principal.companyId, projectId: current.projectId, id: current.id }, { status: current.status as TicketStatus, assigneeUserAccountId: current.assigneeUserAccountId }, replyBody(evidence, note), principal.user.id)
+        const row = complete ? (await moved(tx, principal, id, "complete", ANSWERED_BY_RECORD, async () => ({ resolution: "answered", recollectionRouteId: null, recollectionPickupId: null, closedAt: at }))).row : current
+        if (complete) await emit(tx, principal, { aggregate: "ticket", aggregateId: row.id, kind: "ticket-completed", payload: ticketOf(row), projectId: row.projectId, occurredAt: at })
+        return c.json(await detailOf(tx, principal.companyId, row), 201)
+      },
+    )
+    .get(
       "/tickets/:id/events",
       describeRoute({
         operationId: "listTicketEvents",
@@ -759,21 +842,13 @@ export function ticketRoutes(guard: MiddlewareHandler<AuthEnv>, { now = () => ne
         if (objectKey !== undefined && !objectKey.startsWith(`${principal.companyId}/${current.id}/`)) {
           throw invalidRequest("body", [{ path: "objectKey", message: KEY_NAMES_ANOTHER }])
         }
-        const row = await appendTicketEvent(
-          tx,
-          { companyId: principal.companyId, projectId: current.projectId, id: current.id },
-          {
-            kind: "comment",
-            status: current.status as TicketStatus,
-            assigneeUserAccountId: current.assigneeUserAccountId,
-            resolution: null,
-            body,
-            visibility,
-            objectKey: objectKey ?? null,
-            recordedBy: principal.user.id,
-            sourceEventId: null,
-          },
-        )
+        const ref = { companyId: principal.companyId, projectId: current.projectId, id: current.id }
+        const snapshot = { status: current.status as TicketStatus, assigneeUserAccountId: current.assigneeUserAccountId }
+        // A comment the customer reads is a reply, written the one way a reply is (ticket-evidence.ts), where its sending will be.
+        const row =
+          visibility === "customer"
+            ? await recordCustomerReply(tx, ref, snapshot, body, principal.user.id, objectKey ?? null)
+            : await appendTicketEvent(tx, ref, { kind: "comment", ...snapshot, resolution: null, body, visibility, objectKey: objectKey ?? null, recordedBy: principal.user.id, sourceEventId: null })
         return c.json(eventOf(row), 201)
       },
     )
