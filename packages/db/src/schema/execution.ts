@@ -116,7 +116,7 @@
 // e-mail index, for the same reason: the relay's read is one statement in the
 // system that crosses companies.
 import { PROOF_SHAPES } from "@waste/domain/execution/proof-shapes"
-import { COMMAND_OUTCOMES, DRIVER_COMMAND_KINDS, EXECUTION_SOURCES, OUTBOX_AGGREGATES, OUTBOX_KINDS, PICKUP_ORIGINS, PICKUP_OUTCOMES, PICKUP_REASONS, PICKUP_SERVICES, PICKUP_STATUSES, PROOF_KINDS, ROUTE_STATUSES } from "@waste/domain/execution/vocabulary"
+import { COMMAND_OUTCOMES, DRIVER_COMMAND_KINDS, EXECUTION_SOURCES, OUTBOX_AGGREGATES, OUTBOX_KINDS, PICKUP_ORIGINS, PICKUP_OUTCOMES, PICKUP_REASONS, PICKUP_SERVICES, PICKUP_STATUSES, PROOF_KINDS, ROUTE_CANCEL_REASON_CODES, ROUTE_STATUSES } from "@waste/domain/execution/vocabulary"
 import { sql, type SQL } from "drizzle-orm"
 import { boolean, check, date, index, integer, jsonb, text, time, timestamp, unique, uniqueIndex, uuid, type PgColumn } from "drizzle-orm/pg-core"
 
@@ -156,6 +156,8 @@ export const route = wms.table(
     cancelledByGeneration: boolean().notNull().default(false),
     /** The deviation note: the holiday note, the regeneration sentence, or the dispatcher's cancel reason. */
     note: text(),
+    /** Why the route was cancelled (O5 of #290): one of the office's codes, or `regeneration` on a route a run cancelled; the note beside it stays free. A cancelled route's alone (`route_cancel_reason_shape`), and null on one cancelled before the codes. */
+    cancelReasonCode: text(),
     /** The generation run that last wrote the route (#97 part B, migration 0012); null on a route no run has written. */
     generationRunId: uuid(),
     /** The active Plan (#39 S1, migration 0013): the execution sequence when set; null means the generated baseline stands unmeasured, drawn dashed (#124). */
@@ -224,6 +226,12 @@ export const route = wms.table(
     check(
       tableObjectName(t.id.table, "scheme_shape", "route"),
       sql`(${t.routeSchemeId} is null) = (${t.collectionGroupId} is null) and (${t.routeSchemeId} is not null or (${t.generationRunId} is null and not ${t.cancelledByGeneration}))`,
+    ),
+    oneOf(t.cancelReasonCode, ROUTE_CANCEL_REASON_CODES),
+    // A reason code is a cancelled route's (O5 of #290), and `regeneration` is exactly a run's cancel: the office's codes are the office's, and a route brought back by a run, or never cancelled, carries none.
+    check(
+      tableObjectName(t.id.table, "cancel_reason_shape", "route"),
+      sql`${t.cancelReasonCode} is null or (${t.status} = 'cancelled' and (${t.cancelReasonCode} = 'regeneration') = ${t.cancelledByGeneration})`,
     ),
     tenantIndex(t, t.collectionGroupId),
     // The dispatcher's day, and the driver door's two reads.

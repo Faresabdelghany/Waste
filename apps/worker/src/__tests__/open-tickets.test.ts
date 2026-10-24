@@ -221,6 +221,15 @@ describe("resolution.open-tickets", { skip: api.skip || owner.skip }, () => {
       payload: { ...before209, proofs: [proofPayload(tenant, seeded.id, null, "problem", { reason: "safety", note: "Bridge closed", recordedBy: testId() })] },
     })
     assert.equal((await openTicketFor(older, context())).outcome, "opened")
+    // Nor one taken before the cancel's reason code (O5 of #290), which carries no `cancelReasonCode`.
+    const { cancelReasonCode: _code, ...beforeCodes } = routePayload(tenant, seeded)
+    const uncoded = outboxJob(tenant, {
+      kind: "pickup-problem-reported",
+      aggregateKind: "route",
+      aggregateId: seeded.id,
+      payload: { ...beforeCodes, proofs: [proofPayload(tenant, seeded.id, null, "problem", { reason: "safety", note: "Ferry delayed", recordedBy: testId() })] },
+    })
+    assert.equal((await openTicketFor(uncoded, context())).outcome, "opened")
   })
 
   test("a command-rejected opens a low rejected-command ticket of the driver's naming the receipt's route and pickup; one for a route the driver does not reach names no route", async () => {

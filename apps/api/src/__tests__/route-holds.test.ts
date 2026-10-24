@@ -215,7 +215,7 @@ describe("the hold on a route (#209)", { skip: database.skip }, () => {
     assert.deepEqual([ready.status, ready.heldAt, ready.planned.vehicleId], ["ready", null, fleet.vehicles.wh24.id], "frozen whole now, the office's crew with it")
 
     await hold(cancelled)
-    const gone = await commanded(cancelled, "cancel", { reason: "Road closed" })
+    const gone = await commanded(cancelled, "cancel", { reasonCode: "road-closure", reason: "Road closed" })
     assert.deepEqual([gone.status, gone.heldAt], ["cancelled", null])
   })
 

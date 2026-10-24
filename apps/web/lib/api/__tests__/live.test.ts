@@ -46,6 +46,7 @@ const route: Route = {
   label: "RC-1042",
   status: "active",
   note: null,
+  cancelReasonCode: null,
   cancelledByGeneration: false,
   generationRunId: null,
   plannedStartTime: "06:30",

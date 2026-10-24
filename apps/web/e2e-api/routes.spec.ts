@@ -99,11 +99,14 @@ test("the dispatcher's commands: an unassigned dispatch is the API's 409, assign
   await commands.getByRole("button", { name: "Cancel route" }).click()
   const cancel = page.getByRole("dialog", { name: "Cancel route" })
   const reason = uniqueName("Road closed")
+  await pick(cancel, page, "Why", "Road closure")
   await cancel.getByRole("textbox", { name: /^Reason/ }).fill(reason)
   const [cancelled] = await Promise.all([answerOf(page, "POST", `/routes/${route.id}/cancel`), cancel.getByRole("button", { name: "Cancel route" }).click()])
   expect(cancelled.status()).toBe(200)
-  expect(cancelled.request().postDataJSON()).toEqual({ reason })
+  expect(cancelled.request().postDataJSON()).toEqual({ reasonCode: "road-closure", reason })
   await expect(details).toContainText(reason)
+  // The code beside the free reason (O5 of #290).
+  await expect(details).toContainText("Cancel reasonRoad closure")
   await expect(details.getByTestId("route-stops")).toContainText("Skipped · Route cancelled")
 
   const read = await routeRead(api, route.id)
@@ -252,6 +255,7 @@ test("the Live board reads what the driver's device reports, and the office's ca
   await expect(log).toContainText("Complete pickup · Applied")
   await details.getByTestId("route-commands").getByRole("button", { name: "Cancel route" }).click()
   const cancel = page.getByRole("dialog", { name: "Cancel route" })
+  await pick(cancel, page, "Why", "Vehicle breakdown")
   await cancel.getByRole("textbox", { name: /^Reason/ }).fill("Vehicle breakdown on the way to the second stop")
   const [cancelled] = await Promise.all([answerOf(page, "POST", `/routes/${route.id}/cancel`), cancel.getByRole("button", { name: "Cancel route" }).click()])
   expect(cancelled.status()).toBe(200)

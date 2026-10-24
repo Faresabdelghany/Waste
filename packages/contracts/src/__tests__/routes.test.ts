@@ -2,7 +2,7 @@ import assert from "node:assert/strict"
 import { describe, test } from "node:test"
 
 import { DAY_WINDOW_ORDERED, dayWindowOrdered } from "../queries"
-import { EACH_PICKUP_ONCE, LABEL_IS_THE_NUMBER, labelMatches, LiveRoute, LiveRouteQuery, PICKUP_ORDER_MAX, PickupOrderSet, Route, RouteAssign, RouteCancel, RouteCreate, RouteDetail, RouteListItem, RouteListQuery, RouteProgress, RouteReschedule } from "../routes"
+import { DISPATCH_MANY_MAX, EACH_PICKUP_ONCE, EACH_ROUTE_ONCE, LABEL_IS_THE_NUMBER, labelMatches, LiveRoute, LiveRouteQuery, PICKUP_ORDER_MAX, PickupOrderSet, Route, RouteAssign, RouteCancel, RouteCreate, RouteDetail, RouteDispatchMany, RouteDispatchResults, RouteListItem, RouteListQuery, RouteProgress, RouteReschedule } from "../routes"
 import { refusal, refusesAnEmptyPatch } from "./expect"
 
 const ID = "01a0d3a5-e5e0-7000-8000-000000000001"
@@ -23,6 +23,7 @@ const route = {
   label: "RC-1042",
   status: "active",
   note: null,
+  cancelReasonCode: null,
   cancelledByGeneration: false,
   generationRunId: null,
   plannedStartTime: "06:30",
@@ -138,8 +139,11 @@ describe("the dispatcher's commands", () => {
   test("assign moves any field of the Planned Assignment, clears one with null, and changes something", () => {
     assert.deepEqual(RouteAssign.parse({ driverId: THIRD }), { driverId: THIRD })
     assert.deepEqual(RouteAssign.parse({ trailerId: null, unloadingStationId: OTHER, depotId: null }), { trailerId: null, unloadingStationId: OTHER, depotId: null })
+    // The service provider is the Planned Assignment's too (O5 of #290), moved or cleared like the rest.
+    assert.deepEqual(RouteAssign.parse({ serviceProviderId: OTHER }), { serviceProviderId: OTHER })
+    assert.deepEqual(RouteAssign.parse({ serviceProviderId: null }), { serviceProviderId: null })
     refusesAnEmptyPatch(RouteAssign)
-    for (const key of ["serviceProviderId", "status", "operatingDate", "actualDriverId", "id"]) assert.match(refusal(RouteAssign.safeParse({ driverId: THIRD, [key]: THIRD }))[0].message, new RegExp(key), key)
+    for (const key of ["status", "operatingDate", "actualDriverId", "id"]) assert.match(refusal(RouteAssign.safeParse({ driverId: THIRD, [key]: THIRD }))[0].message, new RegExp(key), key)
   })
 
   test("reschedule moves the operating date or the planned start and never the service date, the identity", () => {
@@ -150,10 +154,32 @@ describe("the dispatcher's commands", () => {
     assert.equal(RouteReschedule.safeParse({ operatingDate: "2026-10-06T06:00:00Z" }).success, false)
   })
 
-  test("cancel carries the reason and nothing else", () => {
-    assert.deepEqual(RouteCancel.parse({ reason: "Snowed in" }), { reason: "Snowed in" })
-    assert.deepEqual(refusal(RouteCancel.safeParse({})).map((issue) => issue.path), ["reason"])
-    assert.match(refusal(RouteCancel.safeParse({ reason: "x", note: "y" }))[0].message, /note/)
+  test("reschedule takes a day the project rests on only when it says so, and that alone moves nothing (O5 of #290)", () => {
+    assert.deepEqual(RouteReschedule.parse({ operatingDate: "2026-10-10", acceptNonWorkingDay: true }), { operatingDate: "2026-10-10", acceptNonWorkingDay: true })
+    assert.equal(RouteReschedule.safeParse({ operatingDate: "2026-10-10", acceptNonWorkingDay: false }).success, false, "the flag is said or left out, never false")
+    assert.deepEqual(refusal(RouteReschedule.safeParse({ acceptNonWorkingDay: true })).map((issue) => issue.message), ["Give at least one field to change"])
+  })
+
+  test("cancel carries one of the office's reason codes and the reason, and nothing else (O5 of #290)", () => {
+    assert.deepEqual(RouteCancel.parse({ reasonCode: "weather", reason: "Snowed in" }), { reasonCode: "weather", reason: "Snowed in" })
+    assert.deepEqual(refusal(RouteCancel.safeParse({})).map((issue) => issue.path), ["reasonCode", "reason"])
+    assert.equal(RouteCancel.safeParse({ reasonCode: "regeneration", reason: "x" }).success, false, "a run's code is not the office's to give")
+    assert.match(refusal(RouteCancel.safeParse({ reasonCode: "other", reason: "x", note: "y" }))[0].message, /note/)
+  })
+
+  test("a bulk dispatch names each route once, one to fifty of them, and is answered route by route (O5 of #290)", () => {
+    assert.deepEqual(RouteDispatchMany.parse({ routeIds: [ID, OTHER] }), { routeIds: [ID, OTHER] })
+    assert.deepEqual(refusal(RouteDispatchMany.safeParse({ routeIds: [ID, OTHER, ID] })), [{ path: "routeIds", message: EACH_ROUTE_ONCE }])
+    assert.equal(RouteDispatchMany.safeParse({ routeIds: [] }).success, false)
+    assert.equal(RouteDispatchMany.safeParse({ routeIds: Array.from({ length: DISPATCH_MANY_MAX + 1 }, (_, index) => `01a0d3a5-e5e0-7000-8000-${String(index).padStart(12, "0")}`) }).success, false)
+    const answered = RouteDispatchResults.parse({
+      results: [
+        { routeId: ID, outcome: "dispatched", route: { ...route, status: "ready", startedAt: null, actual: { vehicleId: null, driverId: null, trailerId: null } } },
+        { routeId: OTHER, outcome: "refused", status: 409, detail: "Route RC-1043 has no planned driver; assign one first" },
+      ],
+    })
+    assert.deepEqual(answered.results.map((result) => result.outcome), ["dispatched", "refused"])
+    assert.equal(RouteDispatchResults.safeParse({ results: [{ routeId: ID, outcome: "refused", status: 500, detail: "x" }] }).success, false, "a refusal is its own dispatch's 404 or 409")
   })
 
   test("a pickup order names each pickup once, one to five hundred of them", () => {

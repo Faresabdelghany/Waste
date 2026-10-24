@@ -14,8 +14,10 @@
 // The commands. `RouteAssign` moves the Planned Assignment on a route that
 // has not started, each field `Id.nullable().optional()` so a form may clear
 // one; `RouteReschedule` moves the `operatingDate` and never the
-// `serviceDate`, the identity; `RouteCancel` carries the reason, which
-// becomes the route's `note`; `PickupOrderSet` names every open pickup of the
+// `serviceDate`, the identity, onto a day the project rests on only when it
+// says so; `RouteCancel` carries a reason code and the reason, which
+// becomes the route's `note`; `RouteDispatchMany` dispatches a day or a
+// selection, each route judged and answered on its own; `PickupOrderSet` names every open pickup of the
 // route once, in the order they will be visited (ADR-0002: the sequence is
 // frozen once a session has started, which the route holds). The live read
 // (`LiveRoute`) is a route with its open session and three readings — the
@@ -24,7 +26,7 @@
 import * as z from "zod"
 
 import { IsoDate, IsoDateTime, IsoTime } from "./dates"
-import { routeLabel, RouteStatus } from "./execution"
+import { OfficeCancelReasonCode, RouteCancelReasonCode, routeLabel, RouteStatus } from "./execution"
 import { FlatPoint } from "./geojson"
 import { Id } from "./ids"
 import { Pickup } from "./pickups"
@@ -81,6 +83,8 @@ export const routeFields = {
   status: RouteStatus,
   /** The deviation note: the holiday note, the regeneration sentence, or the dispatcher's cancel reason. */
   note: Paragraph.nullable(),
+  /** Why it was cancelled (O5 of #290): the office's code, or `regeneration` on a route a run cancelled; null on a route not cancelled, or cancelled before the codes. */
+  cancelReasonCode: RouteCancelReasonCode.nullable(),
   cancelledByGeneration: z.boolean(),
   /** #97 B's, null until generation writes it. */
   generationRunId: Id.nullable(),
@@ -159,30 +163,63 @@ export const RouteCreate = z.strictObject({
 })
 export type RouteCreate = z.infer<typeof RouteCreate>
 
-/** `POST /routes/:id/assign`: the Planned Assignment moved, any field cleared with null, on a route that has not started. */
+/** `POST /routes/:id/assign`: the Planned Assignment moved, any field cleared with null, on a route that has not started — the service provider too since O5 of #290. */
 export const RouteAssign = z
   .strictObject({
     vehicleId: Id.nullable().optional(),
     driverId: Id.nullable().optional(),
     trailerId: Id.nullable().optional(),
+    serviceProviderId: Id.nullable().optional(),
     depotId: Id.nullable().optional(),
     unloadingStationId: Id.nullable().optional(),
   })
   .refine(changesSomething, somethingToChange)
 export type RouteAssign = z.infer<typeof RouteAssign>
 
-/** `POST /routes/:id/reschedule`: the day the route runs, or its planned start, moved; never the service date. */
+/**
+ * `POST /routes/:id/reschedule`: the day the route runs, or its planned
+ * start, moved; never the service date. A day its project's calendar rests
+ * on is taken only with `acceptNonWorkingDay` (O5 of #290): the move is made
+ * knowingly, and the flag alone moves nothing.
+ */
 export const RouteReschedule = z
   .strictObject({
     operatingDate: IsoDate.optional(),
     plannedStartTime: IsoTime.nullable().optional(),
+    acceptNonWorkingDay: z.literal(true).optional(),
   })
-  .refine(changesSomething, somethingToChange)
+  .refine(({ acceptNonWorkingDay: _accepted, ...moved }) => changesSomething(moved), somethingToChange)
 export type RouteReschedule = z.infer<typeof RouteReschedule>
 
-/** `POST /routes/:id/cancel`: the reason, which becomes the route's note. */
-export const RouteCancel = z.strictObject({ reason: Paragraph })
+/** `POST /routes/:id/cancel`: why, as one of the office's codes (O5 of #290), and the free reason, which becomes the route's note. */
+export const RouteCancel = z.strictObject({ reasonCode: OfficeCancelReasonCode, reason: Paragraph })
 export type RouteCancel = z.infer<typeof RouteCancel>
+
+/** The most routes one bulk dispatch names: each is a savepoint of the request's transaction, so fifty, below the 64 subtransactions Postgres caches per transaction, as the CSV import's `IMPORT_BATCH_MAX`; a larger day goes in several. */
+export const DISPATCH_MANY_MAX = 50
+
+export const EACH_ROUTE_ONCE = eachOnceSentence("route", "a route is dispatched once")
+
+/** `POST /routes/dispatch` (O5 of #290): the routes of a day, or a selection of them, each dispatched as its own `POST /routes/:id/dispatch` would be. */
+export const RouteDispatchMany = z.strictObject({
+  routeIds: z
+    .array(Id)
+    .min(1)
+    .max(DISPATCH_MANY_MAX)
+    .refine((ids) => eachOnce(ids), { message: EACH_ROUTE_ONCE }),
+})
+export type RouteDispatchMany = z.infer<typeof RouteDispatchMany>
+
+/** One route's answer in a bulk dispatch: dispatched, with the route as it now stands, or refused with the status and the sentence its own dispatch answers. */
+export const RouteDispatchResult = z.discriminatedUnion("outcome", [
+  z.object({ routeId: Id, outcome: z.literal("dispatched"), route: Route }),
+  z.object({ routeId: Id, outcome: z.literal("refused"), status: z.union([z.literal(404), z.literal(409)]), detail: z.string().min(1) }),
+])
+export type RouteDispatchResult = z.infer<typeof RouteDispatchResult>
+
+/** `POST /routes/dispatch`'s answer: one result per route the body named, in its order. */
+export const RouteDispatchResults = z.object({ results: z.array(RouteDispatchResult) })
+export type RouteDispatchResults = z.infer<typeof RouteDispatchResults>
 
 /** `POST /routes/:id/release-hold` (#226): a held planned route handed back to its scheme. Takes nothing. */
 export const RouteReleaseHold = z.strictObject({})

@@ -12,7 +12,7 @@ import { describe, test } from "node:test"
 import { defineVocabularyTests } from "../../__tests__/vocabulary"
 import * as vocabulary from "../vocabulary"
 
-defineVocabularyTests("Execution", vocabulary, vocabulary.EXECUTION_VOCABULARIES, 12, ["DRIVER_PICKUP_REASONS", "CLOSING_REASONS", "OFFICE_STOP_SERVICES"])
+defineVocabularyTests("Execution", vocabulary, vocabulary.EXECUTION_VOCABULARIES, 13, ["DRIVER_PICKUP_REASONS", "CLOSING_REASONS", "OFFICE_STOP_SERVICES", "OFFICE_CANCEL_REASON_CODES"])
 
 describe("the Execution vocabulary's own rules", () => {
   test("the route and pickup statuses are #97 B's, verbatim, and the outcomes are the statuses less planned", () => {
@@ -37,6 +37,14 @@ describe("the Execution vocabulary's own rules", () => {
     assert.deepEqual([...vocabulary.PICKUP_SERVICES], ["empty", "deliver", "remove", "swap", "repair", "wash"])
     assert.deepEqual([...vocabulary.OFFICE_STOP_SERVICES], ["empty", "repair", "wash"])
     for (const service of vocabulary.OFFICE_STOP_SERVICES) assert.ok((vocabulary.PICKUP_SERVICES as readonly string[]).includes(service), service)
+  })
+
+  test("a route is cancelled for one of the office's eight reasons, or by a run that no longer plans it (O5 of #290): the office's codes are the list less the run's", () => {
+    assert.deepEqual([...vocabulary.OFFICE_CANCEL_REASON_CODES], ["vehicle-breakdown", "crew-unavailable", "weather", "road-closure", "holiday", "duplicate", "merged", "other"])
+    assert.deepEqual(
+      vocabulary.ROUTE_CANCEL_REASON_CODES.filter((code) => !(vocabulary.OFFICE_CANCEL_REASON_CODES as readonly string[]).includes(code)),
+      [vocabulary.REGENERATION_CANCEL],
+    )
   })
 
   test("the proof kinds are seven driver events — five about a stop, two about the route — four kinds of evidence and the correction", () => {

@@ -19,18 +19,25 @@ export const ROUTE_ACTIVE_PLAN_KEY = "activePlan"
 // module's create — an ad-hoc route on a project's day with what is known of
 // its crew and its ends — and Add stop a route's command, a container or an
 // address of the route's project with the fraction collected there.
-import { PICKUP_OUTCOMES, PICKUP_REASONS } from "@waste/domain/execution/vocabulary"
+//
+// Since O5 of #290: Assign names the service provider too; Reschedule asks
+// whether a move onto a day the project rests on is meant (the API refuses
+// one unasked, in the domain's sentence); Cancel takes one of the office's
+// reason codes beside the free reason; and a day's routes, or a selection of
+// them, are dispatched together (`dispatchDayRows`).
+import { OFFICE_CANCEL_REASON_CODES, PICKUP_OUTCOMES, PICKUP_REASONS } from "@waste/domain/execution/vocabulary"
 
 import { statusLabel } from "../api/records/adapter"
 import { CONTAINERS_MODULE } from "../api/records/containers"
 import { DRIVER_REASON_LABELS } from "../driver/route-view"
 import { DEPOTS_MODULE, DRIVERS_MODULE, VEHICLES_MODULE } from "./allocations"
 import type { BusinessRecord } from "./business-modules"
-import type { BusinessFormField, BusinessFormSchema, BusinessFormValues } from "./business-form-types"
+import type { BusinessFormField, BusinessFormOption, BusinessFormSchema, BusinessFormValues } from "./business-form-types"
 import { mintedRecord, ORGANISATION_MODULE } from "./containers"
 import { MASTER_DATA_MODULE } from "./master-data"
 import { OFFICE_STOP_SERVICE_OPTIONS } from "./pickup-services"
 import { PROPERTIES_MODULE, SHARED_POINTS_MODULE } from "./properties"
+import { SERVICE_PROVIDERS_MODULE } from "./provider-money"
 
 /** The route's commands that take a dialog. */
 export type RouteCommandWithForm = "assign" | "reschedule" | "cancel" | "add-stop"
@@ -66,21 +73,33 @@ const AT_A_POINT = { fieldId: "stopAt", equals: STOP_AT_POINT } as const
 const AT_AN_ADDRESS = { fieldId: "stopAt", oneOf: [STOP_AT_PROPERTY, STOP_AT_POINT] } as const
 const pickupForm = (title: string, description: string, submitLabel: string, fields: readonly BusinessFormField[]) => commandForm("route-studio.pickups", "Pickup", title, description, submitLabel, fields)
 
+/** The office's cancel reason codes as a select offers them (O5 of #290): "Vehicle breakdown" for `vehicle-breakdown`. */
+export const CANCEL_REASON_OPTIONS: readonly BusinessFormOption[] = OFFICE_CANCEL_REASON_CODES.map((value) => ({ value, label: statusLabel(value) }))
+
 /** Each route command's dialog, its fields the keys its `toBody` reads. */
 export const ROUTE_COMMAND_FORMS: Readonly<Record<RouteCommandWithForm, BusinessFormSchema>> = {
   assign: routeForm("Assign", "The Planned Assignment: what is expected to run the route. Only what you change is sent; a cleared field is cleared.", "Assign", [
     { id: "vehicleId", label: "Vehicle", type: "select", relation: VEHICLES_MODULE },
     { id: "driverId", label: "Driver", type: "select", relation: DRIVERS_MODULE, description: "A route is dispatched to its planned driver." },
     { id: "trailerId", label: "Trailer", type: "select", relation: VEHICLES_MODULE },
+    { id: "serviceProviderId", label: "Service provider", type: "select", relation: SERVICE_PROVIDERS_MODULE, description: "The company that runs the route, where it is not your own." },
     { id: "depotId", label: "Depot", type: "select", relation: DEPOTS_MODULE },
     { id: "unloadingStationId", label: "Unloading station", type: "select", relation: DEPOTS_MODULE },
   ]),
   reschedule: routeForm("Reschedule", "The day the route runs, or its planned start. Its service date, the day its scheme named, never moves.", "Reschedule", [
     { id: "operatingDate", label: "Operating date", type: "date", required: true },
     { id: "plannedStartTime", label: "Planned start", type: "time", description: "On the project's clock; blank clears it." },
+    {
+      id: "acceptNonWorkingDay",
+      label: "Run it on a non-working day",
+      type: "checkbox",
+      defaultValue: false,
+      description: "A holiday on the project's calendar, or a weekend day its scheme does not serve, is taken only when you say so; without it such a move is refused with the day named.",
+    },
   ]),
   cancel: routeForm("Cancel route", "The route will not run. Its open stops are skipped, an active route's session ends, and the reason becomes its deviation.", "Cancel route", [
-    { id: "reason", label: "Reason", type: "textarea", required: true },
+    { id: "reasonCode", label: "Why", type: "select", required: true, options: CANCEL_REASON_OPTIONS },
+    { id: "reason", label: "Reason", type: "textarea", required: true, description: "What happened, in your words: it becomes the route's note." },
   ]),
   "add-stop": routeForm(
     "Add stop",
@@ -156,4 +175,39 @@ export const PICKUP_COMMAND_FORMS: Readonly<Record<PickupCommandWithForm, Busine
 export function routeCommandValues(record: BusinessRecord): BusinessFormValues {
   const fieldIds = new Set([ROUTE_COMMAND_FORMS.assign, ROUTE_COMMAND_FORMS.reschedule].flatMap((form) => form.sections.flatMap((section) => section.fields.map((field) => field.id))))
   return Object.fromEntries(Object.entries(record.submittedValues ?? {}).filter(([key, value]) => fieldIds.has(key) && typeof value === "string"))
+}
+
+/** Dispatch day's first question (O5 of #290): which project's day. The routes it runs follow, each ticked, in the dialog after it. */
+export const DISPATCH_DAY_FORM: BusinessFormSchema = {
+  key: "route-studio.routes",
+  mode: "action",
+  recordKind: "Route",
+  title: "Dispatch day",
+  description: "The project's planned routes running on the day, dispatched to their drivers together. Pick the day; untick a route to leave it planned.",
+  submitLabel: "Show the routes",
+  sections: [
+    {
+      id: "day",
+      title: "Day",
+      fields: [
+        { id: "projectId", label: "Project", type: "select", required: true, relation: ORGANISATION_MODULE },
+        { id: "operatingDate", label: "Operating date", type: "date", required: true },
+      ],
+    },
+  ],
+  execution: { kind: "append-event", completionMessage: "Routes dispatched." },
+}
+
+/**
+ * The routes Dispatch day offers (O5 of #290): the project's routes running
+ * on the day that are still planned, by their number — a ready one is
+ * dispatched already, and an active or ended one past dispatching. The
+ * dialog lists them all, ticked, so the office dispatches the day or the
+ * selection it leaves ticked.
+ */
+export function dispatchDayRows(records: readonly BusinessRecord[], projectId: string | undefined, day: string): BusinessRecord[] {
+  if (projectId === undefined || projectId === "" || day === "") return []
+  return records
+    .filter((record) => record.recordKind === "Route" && (record.projectIds ?? []).includes(projectId) && record.submittedValues?.operatingDate === day && record.submittedValues?.status === "planned")
+    .sort((a, b) => a.name.localeCompare(b.name, "en", { numeric: true }))
 }

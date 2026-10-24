@@ -38,8 +38,8 @@
 // route is frozen), or a pickup inserted, moved, brought back or skipped —
 // so a second run of the same inputs writes no route and moves no
 // `updated_at`; a `resurrect` brings a route an earlier run cancelled back to
-// `planned`; `cancel` marks a `planned` route cancelled by generation with
-// the sentence and skips its open pickups with `regeneration` as the reason,
+// `planned`, its reason code cleared; `cancel` marks a `planned` route cancelled by generation with
+// the sentence and the `regeneration` code (O5 of #290) and skips its open pickups with `regeneration` as the reason,
 // deleting nothing; `trim` (#111) skips the run's own open pickups of a
 // `planned` route the same way and leaves the route planned with the
 // sentence as its note, since it carries an open stop the office added and a
@@ -95,7 +95,7 @@ import { generationMatch, generationRun } from "@waste/db/schema/generation"
 import { company, project } from "@waste/db/schema/organisation"
 import { collectionGroup, collectionGroupContainer, collectionGroupContainerType, collectionGroupFraction, routeScheme } from "@waste/db/schema/route-schemes"
 import { withCompany } from "@waste/db/tenant"
-import type { PickupOrigin, PickupReason, PickupService, PickupStatus, RouteStatus } from "@waste/domain/execution/vocabulary"
+import { REGENERATION_CANCEL, type PickupOrigin, type PickupReason, type PickupService, type PickupStatus, type RouteStatus } from "@waste/domain/execution/vocabulary"
 import {
   compatibilityKey,
   holidayListOf,
@@ -252,12 +252,13 @@ async function generate(tx: Tx, runId: string, companyId: string, at: Date): Pro
           )
   const holidays = holidayListOf(holidayRows, calendar.holidayList)
 
-  // The routes of the scheme inside the walk, locked: a dispatch racing the run takes its turn.
+  // The routes of the scheme inside the walk, locked in id order: a dispatch racing the run takes its turn, and a bulk dispatch (O5 of #290), which locks its routes in the same order, never waits on the run's second row while the run waits on its first.
   const walk = walkWindow(window)
   const existingRoutes = await tx
     .select()
     .from(route)
     .where(and(eq(route.companyId, companyId), eq(route.routeSchemeId, scheme.id), gte(route.serviceDate, walk.from), lte(route.serviceDate, walk.to)))
+    .orderBy(asc(route.id))
     .for("update")
   // The planned routes among them that carry an open stop the office added (#111): trimmed, never cancelled under it. Only a planned route is the run's to cancel, so only those are asked.
   const plannedIds = existingRoutes.filter((row) => row.status === "planned").map((row) => row.id)
@@ -374,7 +375,7 @@ async function generate(tx: Tx, runId: string, companyId: string, at: Date): Pro
     if (decision.kind === "cancel") {
       await tx
         .update(route)
-        .set({ status: "cancelled", cancelledAt: at, cancelledByGeneration: true, note: decision.note, generationRunId: run.id, heldAt: null })
+        .set({ status: "cancelled", cancelledAt: at, cancelledByGeneration: true, cancelReasonCode: REGENERATION_CANCEL, note: decision.note, generationRunId: run.id, heldAt: null })
         .where(and(eq(route.companyId, companyId), eq(route.id, decision.routeId)))
       await skipOpen(
         pickupsOf(decision.routeId)
@@ -456,7 +457,7 @@ async function generate(tx: Tx, runId: string, companyId: string, at: Date): Pro
         note: decision.note,
         generationRunId: run.id,
         ...refreshed,
-        ...(decision.resurrect ? { status: "planned", cancelledAt: null, cancelledByGeneration: false } : {}),
+        ...(decision.resurrect ? { status: "planned", cancelledAt: null, cancelledByGeneration: false, cancelReasonCode: null } : {}),
       })
       .where(and(eq(route.companyId, companyId), eq(route.id, decision.routeId)))
     if (changes.insert.length > 0) {

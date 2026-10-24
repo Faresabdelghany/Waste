@@ -3,7 +3,7 @@ import { after, before, describe, test } from "node:test"
 
 import { DriverCommandReceipt } from "@waste/contracts/driver-commands"
 import { Page } from "@waste/contracts/pagination"
-import { Route, RouteDetail } from "@waste/contracts/routes"
+import { Route, RouteDetail, RouteDispatchResults } from "@waste/contracts/routes"
 import { createDb, type Database, type Tx } from "@waste/db/client"
 import { driverCommand, outboxEvent, session } from "@waste/db/schema/execution"
 import { unloadingStation, unloadingStationFraction } from "@waste/db/schema/places"
@@ -20,7 +20,7 @@ import { nextMillisecond } from "./clock"
 import { databaseUnderTest, ownerUnderTest } from "./database"
 import { at, seedExecution, seedRoute, TOWN_HALL, type ExecutionFixtures, type SeededRoute } from "./execution-fixtures"
 import { readProblem } from "./read-problem"
-import { seedFleet, seedPlanning, SOFIE_LICENCE_EXPIRY, type FleetFixtures } from "./scheme-fixtures"
+import { COPENHAGEN_HOLIDAYS, seedFleet, seedPlanning, SOFIE_LICENCE_EXPIRY, type FleetFixtures } from "./scheme-fixtures"
 import { dropTenant, grantRole, seedTenant, testId, type Tenant } from "./tenant"
 import { signingKeys, type SigningKeys } from "./tokens"
 
@@ -307,6 +307,19 @@ describe("the route endpoints", { skip: database.skip || owner.skip }, () => {
       assert.equal((await eventsAbout(seeded.id)).length, 1, "one reassignment went through")
     })
 
+    test("moves the planned service provider (O5 of #290): one of the company's, cleared with null, holding the planned route and telling the reassignment", async () => {
+      const seeded = await fresh()
+      await nextMillisecond()
+      const provided = await commanded(seeded.id, "assign", { serviceProviderId: a.serviceProviders.nordren.id })
+      assert.equal(provided.planned.serviceProviderId, a.serviceProviders.nordren.id)
+      assert.equal(provided.heldAt, NOON.toISOString(), "the office moved who runs it: the next run keeps it")
+      assert.deepEqual((await eventsAbout(seeded.id)).map((event) => event.kind), ["route-reassigned"], "who runs the route moved")
+      const theirProvider = await refused(await command(seeded.id, "assign", { serviceProviderId: b.serviceProviders.nordren.id }), 400)
+      assert.deepEqual(theirProvider.errors, [{ path: "serviceProviderId", message: "Not a service provider of this company" }])
+      assert.equal((await commanded(seeded.id, "assign", { serviceProviderId: null })).planned.serviceProviderId, null)
+      assert.equal((await eventsAbout(seeded.id)).length, 2)
+    })
+
     test("keeps a ready route's driver: clearing it is refused (409), while moving it, and clearing a planned route's, are not", async () => {
       const kept = await refused(await command(ex.routes.ready.id, "assign", { driverId: null }), 409)
       assert.equal(kept.detail, `Route ${ex.routes.ready.label} is dispatched; assign another driver or cancel it`)
@@ -364,6 +377,53 @@ describe("the route endpoints", { skip: database.skip || owner.skip }, () => {
     })
   })
 
+  describe("POST /routes/dispatch", () => {
+    const dispatchMany = (routeIds: unknown, call = olivia) => call("/routes/dispatch", { method: "POST", body: { routeIds } })
+
+    test("dispatches a day or a selection route by route (O5 of #290): each judged as its own dispatch, answered in the body's order, a refusal leaving the others to go ahead", async () => {
+      const assigned = await fresh(mads())
+      const unassigned = await fresh()
+      const ready = await fresh({ status: "ready", ...mads() })
+      const active = await fresh({ status: "active" })
+      await nextMillisecond()
+      const body = [unassigned.id, assigned.id, theirs.routes.planned.id, ready.id, active.id]
+      const response = await dispatchMany(body)
+      assert.equal(response.status, 200, JSON.stringify(await response.clone().json()))
+      const { results } = RouteDispatchResults.parse(await response.json())
+      assert.deepEqual(
+        results.map((result) => [result.routeId, result.outcome, result.outcome === "refused" ? result.status : result.route.status]),
+        [
+          [unassigned.id, "refused", 409],
+          [assigned.id, "dispatched", "ready"],
+          [theirs.routes.planned.id, "refused", 404],
+          [ready.id, "dispatched", "ready"],
+          [active.id, "refused", 409],
+        ],
+      )
+      const refusals = results.flatMap((result) => (result.outcome === "refused" ? [result.detail] : []))
+      assert.deepEqual(refusals, [`Route ${unassigned.label} has no planned driver; assign one first`, `No route ${theirs.routes.planned.id} in the projects this account works in`, `Route ${active.label} is already active`], "each in its own dispatch's words; another company's route is a route that is not here")
+
+      // What each route now is, and the news each is worth: one route-dispatched for the one that moved, none for the one already ready.
+      const dispatched = await read(assigned.id)
+      assert.deepEqual([dispatched.status, dispatched.dispatchedAt], ["ready", NOON.toISOString()])
+      const moved = results.find((result) => result.routeId === assigned.id)
+      assert.deepEqual(moved?.outcome === "dispatched" ? moved.route : undefined, routeOf(dispatched), "the route as it now stands")
+      assert.deepEqual((await eventsAbout(assigned.id)).map((event) => event.kind), ["route-dispatched"])
+      assert.equal((await eventsAbout(ready.id)).length, 0, "a ready route is answered as it stands, without a write")
+      assert.equal((await read(unassigned.id)).status, "planned", "a refusal rolled back its own route alone")
+      assert.equal((await eventsAbout(unassigned.id)).length, 0)
+    })
+
+    test("refuses a body naming no route, one twice or more than fifty, and a role without edit", async () => {
+      const seeded = await fresh(mads())
+      assert.equal((await refused(await dispatchMany([]), 400)).errors?.[0]?.path, "routeIds")
+      assert.equal((await refused(await dispatchMany([seeded.id, seeded.id]), 400)).errors?.[0]?.message, "Name each route once: a route is dispatched once")
+      assert.equal((await refused(await dispatchMany(Array.from({ length: 51 }, () => testId())), 400)).errors?.[0]?.path, "routeIds")
+      assert.match((await refused(await dispatchMany([seeded.id], ungranted), 403)).detail ?? "", /edit on route-studio\.routes/)
+      assert.equal((await read(seeded.id)).status, "planned", "nothing refused was written")
+    })
+  })
+
   describe("POST /routes/:id/reschedule", () => {
     test("moves the operating date and the start and never the service date, judging the licence on the new day where both are planned", async () => {
       const seeded = await fresh({ ...mads() })
@@ -376,12 +436,41 @@ describe("the route endpoints", { skip: database.skip || owner.skip }, () => {
       const sofies = await fresh({ operatingDate: "2026-09-01", plannedDriverId: fleet.drivers.sofie.id, plannedVehicleId: fleet.vehicles.wh24.id })
       const past = await refused(await command(sofies.id, "reschedule", { operatingDate: "2026-09-10" }), 400)
       assert.deepEqual(past.errors, [{ path: "operatingDate", message: `Sofie Nielsen's licence expires on ${SOFIE_LICENCE_EXPIRY}, before the operating date` }])
-      assert.equal((await commanded(sofies.id, "reschedule", { operatingDate: SOFIE_LICENCE_EXPIRY })).operatingDate, SOFIE_LICENCE_EXPIRY, "her last day holds")
+      // Her last day is a Saturday, which the Monday scheme does not serve: taken knowingly (O5 of #290), and her licence holds on it.
+      assert.equal((await commanded(sofies.id, "reschedule", { operatingDate: SOFIE_LICENCE_EXPIRY, acceptNonWorkingDay: true })).operatingDate, SOFIE_LICENCE_EXPIRY, "her last day holds")
       const nothing = await refused(await command(seeded.id, "reschedule", {}), 400)
       assert.deepEqual(nothing.errors?.map((error) => error.path), [""])
       const identity = await refused(await command(seeded.id, "reschedule", { serviceDate: "2026-10-06" }), 400)
       assert.ok(identity.errors?.some((error) => /serviceDate/.test(error.message)), "the service date is the identity and no body moves it")
       assert.equal((await eventsAbout(seeded.id)).length, 0, "a reschedule is nobody else's news")
+    })
+
+    test("judges the new day against the project's calendar (O5 of #290): a holiday or a weekend day the scheme does not run on is taken only knowingly, a working day as ever", async () => {
+      const seeded = await fresh({ ...mads() })
+      const holiday = await refused(await command(seeded.id, "reschedule", { operatingDate: COPENHAGEN_HOLIDAYS.christmasEve }), 409)
+      assert.equal(holiday.detail, `Thu 24 Dec is Christmas Eve, a holiday on the project's calendar; confirm the move to run route ${seeded.label} on a non-working day`)
+      const weekend = await refused(await command(seeded.id, "reschedule", { operatingDate: "2026-10-10", plannedStartTime: "08:00" }), 409)
+      assert.equal(weekend.detail, `Sat 10 Oct is a Saturday of the project's weekend; confirm the move to run route ${seeded.label} on a non-working day`)
+      const untouched = await read(seeded.id)
+      assert.deepEqual([untouched.operatingDate, untouched.plannedStartTime], [ex.day, null], "a refused move wrote nothing, its start included")
+
+      const knowingly = await commanded(seeded.id, "reschedule", { operatingDate: "2026-10-10", acceptNonWorkingDay: true })
+      assert.equal(knowingly.operatingDate, "2026-10-10")
+      assert.equal((await commanded(seeded.id, "reschedule", { operatingDate: "2026-10-07", acceptNonWorkingDay: true })).operatingDate, "2026-10-07", "the flag on a working day changes nothing about the move")
+      assert.equal((await commanded(seeded.id, "reschedule", { plannedStartTime: "07:00" })).plannedStartTime, "07:00", "a start moved on the same day asks no calendar")
+      const flagAlone = await refused(await command(seeded.id, "reschedule", { acceptNonWorkingDay: true }), 400)
+      assert.deepEqual(flagAlone.errors?.map((error) => error.path), [""], "the flag alone moves nothing")
+
+      // A licence the new day refuses is the body's 400, judged before the calendar's 409.
+      const sofies = await fresh({ operatingDate: "2026-09-01", plannedDriverId: fleet.drivers.sofie.id, plannedVehicleId: fleet.vehicles.wh24.id })
+      const licenceFirst = await refused(await command(sofies.id, "reschedule", { operatingDate: "2026-09-12" }), 400)
+      assert.deepEqual(licenceFirst.errors?.map((error) => error.path), ["operatingDate"])
+
+      // The office's ad-hoc route has no scheme to serve a weekday: every weekend day is non-working for it.
+      const made = await olivia("/routes", { method: "POST", body: { projectId: a.projects.copenhagen.id, operatingDate: "2026-10-06" } })
+      assert.equal(made.status, 201, JSON.stringify(await made.clone().json()))
+      const adHoc = RouteDetail.parse(await made.json())
+      assert.match((await refused(await command(adHoc.id, "reschedule", { operatingDate: "2026-10-11" }), 409)).detail ?? "", /^Sun 11 Oct is a Sunday of the project's weekend; /)
     })
 
     test("refuses a route that runs or has ended", async () => {
@@ -396,8 +485,8 @@ describe("the route endpoints", { skip: database.skip || owner.skip }, () => {
     test("cancels a ready route with the reason as its note, closes every open pickup as skipped · route-cancelled, and writes one event per row it touched", async () => {
       const seeded = await fresh({ status: "ready", ...mads() })
       await nextMillisecond()
-      const cancelled = await commanded(seeded.id, "cancel", { reason: "Snow: no collection today" })
-      assert.deepEqual([cancelled.status, cancelled.note, cancelled.cancelledAt, cancelled.dispatchedAt], ["cancelled", "Snow: no collection today", NOON.toISOString(), at(ex.day, "05:30").toISOString()], "cancelling keeps what the route had done")
+      const cancelled = await commanded(seeded.id, "cancel", { reasonCode: "weather", reason: "Snow: no collection today" })
+      assert.deepEqual([cancelled.status, cancelled.cancelReasonCode, cancelled.note, cancelled.cancelledAt, cancelled.dispatchedAt], ["cancelled", "weather", "Snow: no collection today", NOON.toISOString(), at(ex.day, "05:30").toISOString()], "cancelling keeps what the route had done; the code beside the free reason")
       assert.deepEqual(cancelled.pickups.map((stop) => [stop.status, stop.reason, stop.outcomeAt]), Array(3).fill(["skipped", "route-cancelled", NOON.toISOString()]))
       assert.deepEqual(cancelled.progress, { planned: 0, completed: 0, skipped: 3, failed: 0, total: 3, fraction: 1 })
       const events = await eventsAbout(seeded.id)
@@ -411,8 +500,8 @@ describe("the route endpoints", { skip: database.skip || owner.skip }, () => {
         const { sequence: _sequence, ...asEmitted } = stop
         assert.deepEqual(skipped.payload, asEmitted, "the pickup as the cancellation left it")
       }
-      const again = await commanded(seeded.id, "cancel", { reason: "Once more" })
-      assert.deepEqual(again, cancelled, "idempotent, the first reason kept")
+      const again = await commanded(seeded.id, "cancel", { reasonCode: "other", reason: "Once more" })
+      assert.deepEqual(again, cancelled, "idempotent, the first code and reason kept")
       assert.equal((await eventsAbout(seeded.id)).length, 1)
     })
 
@@ -425,7 +514,7 @@ describe("the route endpoints", { skip: database.skip || owner.skip }, () => {
           { containerId: ex.containers.bin3.id, propertyId: ex.properties.norrebrogade.id },
         ],
       })
-      const cancelled = await commanded(active.id, "cancel", { reason: "Truck broke down" })
+      const cancelled = await commanded(active.id, "cancel", { reasonCode: "vehicle-breakdown", reason: "Truck broke down" })
       assert.deepEqual([cancelled.status, cancelled.startedAt, cancelled.completedAt], ["cancelled", at(ex.day, "06:00").toISOString(), null])
       assert.deepEqual(cancelled.pickups.map((stop) => [stop.status, stop.reason]), [["completed", null], ["skipped", "route-cancelled"], ["skipped", "route-cancelled"]])
       assert.equal(cancelled.session, null, "no open session any more")
@@ -436,12 +525,14 @@ describe("the route endpoints", { skip: database.skip || owner.skip }, () => {
       assert.equal((await eventsAbout(cancelled.pickups[1].id)).length, 1)
     })
 
-    test("refuses a completed route, a body without a reason, and a route out of reach", async () => {
-      assert.equal((await refused(await command(ex.routes.completed.id, "cancel", { reason: "Too late" }), 409)).detail, `Route ${ex.routes.completed.label} is completed and does not change`)
-      assert.deepEqual((await refused(await command(ex.routes.planned.id, "cancel", {}), 400)).errors?.map((error) => error.path), ["reason"])
-      await refused(await command(theirs.routes.planned.id, "cancel", { reason: "Mine" }), 404)
-      await refused(await command(harbors.id, "cancel", { reason: "Mine" }, viewer), 404)
-      assert.match((await refused(await command(harbors.id, "cancel", { reason: "Mine" }, ungranted), 403)).detail ?? "", /edit on route-studio\.routes/)
+    test("refuses a completed route, a body without a code or a reason, a run's code, and a route out of reach", async () => {
+      assert.equal((await refused(await command(ex.routes.completed.id, "cancel", { reasonCode: "other", reason: "Too late" }), 409)).detail, `Route ${ex.routes.completed.label} is completed and does not change`)
+      assert.deepEqual((await refused(await command(ex.routes.planned.id, "cancel", {}), 400)).errors?.map((error) => error.path), ["reasonCode", "reason"])
+      assert.deepEqual((await refused(await command(ex.routes.planned.id, "cancel", { reason: "No code" }), 400)).errors?.map((error) => error.path), ["reasonCode"], "the free reason alone is not enough (O5 of #290)")
+      assert.deepEqual((await refused(await command(ex.routes.planned.id, "cancel", { reasonCode: "regeneration", reason: "Not mine to say" }), 400)).errors?.map((error) => error.path), ["reasonCode"], "a run's code is a run's to write")
+      await refused(await command(theirs.routes.planned.id, "cancel", { reasonCode: "other", reason: "Mine" }), 404)
+      await refused(await command(harbors.id, "cancel", { reasonCode: "other", reason: "Mine" }, viewer), 404)
+      assert.match((await refused(await command(harbors.id, "cancel", { reasonCode: "other", reason: "Mine" }, ungranted), 403)).detail ?? "", /edit on route-studio\.routes/)
       assert.equal((await read(ex.routes.planned.id)).status, "planned", "untouched")
     })
   })

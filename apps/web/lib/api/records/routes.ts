@@ -35,16 +35,26 @@
 // its sessions and unloads, and the read's `activePlan` goes on the record
 // as JSON under `ROUTE_ACTIVE_PLAN_KEY`, which the map's legs layer reads
 // (#173): absent where the read carries none (the list, until #173 adds it).
+//
+// Since O5 of #290 the office's dispatch-day tooling: a day's routes, or a
+// selection, dispatched in one request (`dispatchRoutes`, each route answered
+// on its own), Optimise from the route's details (`OPTIMISE_ROUTE`, which
+// answers the Plan and so has the route read back), the active Plan's
+// distance and duration as the route's facts, the route's Plans as its
+// history (`routePlans`), the service provider on Assign, a reschedule onto a
+// non-working day only when the dialog says so, and the cancel's reason code.
 import type { DriverCommandReceipt } from "@waste/contracts/driver-commands"
 import type { PickupDetail } from "@waste/contracts/pickups"
-import type { Route, RouteDetail } from "@waste/contracts/routes"
-import { OFFICE_STOP_SERVICES } from "@waste/domain/execution/vocabulary"
+import type { OptimiseAnswer, Plan } from "@waste/contracts/plans"
+import type { Route, RouteDetail, RouteDispatchResults } from "@waste/contracts/routes"
+import { OFFICE_CANCEL_REASON_CODES, OFFICE_STOP_SERVICES } from "@waste/domain/execution/vocabulary"
 
 import { FIXTURE_COMPANY_ID, type BusinessRecord, type ModuleLocation } from "@/lib/data/business-modules"
 import { PROPERTY_PREFIX, SHARED_POINT_PREFIX } from "@/lib/data/agreements"
 import { masterDataKindOf } from "@/lib/data/master-data"
 import { A_WORK_ORDER_IS_OF_A_CONTAINER } from "@/lib/data/pickup-services"
 import { isPropertyRecord, isSharedPointRecord } from "@/lib/data/properties"
+import { formatDistance, formatDuration } from "@/lib/map-planning/format"
 import { ROUTE_ACTIVE_PLAN_KEY, STOP_AT_CONTAINER, STOP_AT_POINT, STOP_AT_PROPERTY } from "@/lib/data/routes"
 
 import { command, create, get, listAll, put } from "../client"
@@ -52,6 +62,7 @@ import { hasPrefix, inheritedPresentation, isLocalRefusal, moduleKeyOf, ofKind, 
 import { FLEET_AND_DEPOT_PICKS } from "./allocations"
 import { shownOn } from "./clock"
 import { containerAdapter } from "./containers"
+import { serviceProviderAdapter } from "./organisation"
 import { projectServerIdOf, referenced, refusal, unloadingStationAdapter } from "./places"
 import { nameVia, referencedServerId, webIdVia, type ReferenceRule } from "./references"
 
@@ -87,6 +98,8 @@ export const REORDER_ROUTE = "reorder"
 export const RELEASE_HOLD = "release-hold"
 /** A stop the office adds to a route that has not started (#111). */
 export const ADD_STOP = "add-stop"
+/** The office's ask for a Plan over the route's open stops (O5 of #290): the optimiser's order, or a measured baseline where it cannot take the route. */
+export const OPTIMISE_ROUTE = "optimise"
 
 /** What an ad-hoc route says it is, under its Origin fact (#111): the office's own, with no scheme. */
 export const MADE_BY_THE_OFFICE = "Made by the office"
@@ -152,6 +165,11 @@ export function toRouteRecord(route: RouteRead, context: MappingContext): Busine
   if (route.planned.serviceProviderId !== null) facts["Service provider"] = nameVia(context, "service-provider", route.planned.serviceProviderId)
   if (route.planned.depotId !== null) facts.Depot = nameVia(context, "depot", route.planned.depotId)
   if (route.planned.unloadingStationId !== null) facts.Unloading = nameVia(context, "station", route.planned.unloadingStationId)
+  // The active Plan's measure, once it has one (O5 of #290): the road the route drives and how long it takes.
+  const plan = "activePlan" in route ? route.activePlan : undefined
+  if (plan?.distanceMetres != null) facts.Distance = formatDistance(plan.distanceMetres)
+  if (plan?.durationSeconds != null) facts.Duration = formatDuration(plan.durationSeconds)
+  if (route.cancelReasonCode !== null) facts["Cancel reason"] = statusLabel(route.cancelReasonCode)
   // A generated route's note is how it deviated from its scheme; the office's own route has no scheme to deviate from, and its note is the one New route took (#111).
   facts[route.routeSchemeId === null ? "Note" : "Deviation"] = route.note ?? "None"
   // Every stop it has, decided or not, as a generated route's fact in fixture mode: the scheme's routes table reads it (#252).
@@ -200,9 +218,11 @@ export function toRouteRecord(route: RouteRead, context: MappingContext): Busine
       vehicleId: reference("vehicle", route.planned.vehicleId),
       driverId: reference("driver", route.planned.driverId),
       trailerId: reference("vehicle", route.planned.trailerId),
+      serviceProviderId: reference("service-provider", route.planned.serviceProviderId),
       depotId: reference("depot", route.planned.depotId),
       unloadingStationId: reference("station", route.planned.unloadingStationId),
       status: route.status,
+      cancelReasonCode: route.cancelReasonCode ?? "",
       heldAt: route.heldAt ?? "",
       ...("activePlan" in route ? { [ROUTE_ACTIVE_PLAN_KEY]: JSON.stringify(route.activePlan ?? null) } : {}),
     },
@@ -222,13 +242,14 @@ export function toRouteRecord(route: RouteRead, context: MappingContext): Busine
 // command is sent, so a scheme's one-off names only what it moves (#209); the
 // dialogs name every field, a cleared one as "".
 
-/** What an assign may move — the field, the id chip's prefix, the sentence a miss is refused in, the kind a loaded row is held to: the fleet's and the depot's chips as the allocations name them (allocations.ts), and the unloading station. */
+/** What an assign may move — the field, the id chip's prefix, the sentence a miss is refused in, the kind a loaded row is held to: the fleet's and the depot's chips as the allocations name them (allocations.ts), the unloading station, and the service provider (O5 of #290). */
 const ASSIGNED: ReadonlyArray<readonly [string, string, string, ReferenceRule]> = [
   ...(Object.entries(FLEET_AND_DEPOT_PICKS) as ReadonlyArray<[string, readonly [string, string, ReferenceRule]]>).map(([field, [prefix, sentence, rule]]) => [field, prefix, sentence, rule] as const),
   ["unloadingStationId", "station", "Pick an unloading station the API holds", { owns: unloadingStationAdapter.owns }],
+  ["serviceProviderId", "service-provider", "Pick a service provider the API holds", { owns: (record) => serviceProviderAdapter.owns(record) }],
 ]
 
-const NOTHING_TO_ASSIGN = "Nothing to assign: pick another vehicle, driver, trailer, depot or unloading station"
+const NOTHING_TO_ASSIGN = "Nothing to assign: pick another vehicle, driver, trailer, service provider, depot or unloading station"
 const NOTHING_TO_RESCHEDULE = "Nothing to reschedule: move the day it runs or its planned start"
 const ISO_DAY = /^\d{4}-\d{2}-\d{2}$/
 const CLOCK_TIME = /^([01]\d|2[0-3]):[0-5]\d$/
@@ -270,17 +291,22 @@ export const ROUTE_COMMANDS = {
     if (day === undefined) return refusal("operatingDate", "A route runs on a day: give its operating date")
     if (!ISO_DAY.test(day)) return refusal("operatingDate", "Give the day it runs as a date")
     if (start !== undefined && !CLOCK_TIME.test(start)) return refusal("plannedStartTime", "Give the planned start as HH:MM")
-    const body: { operatingDate?: string; plannedStartTime?: string | null } = {}
+    const body: { operatingDate?: string; plannedStartTime?: string | null; acceptNonWorkingDay?: true } = {}
     if (day !== typed(record, "operatingDate")) body.operatingDate = day
     if (start !== typed(record, "plannedStartTime")) body.plannedStartTime = start ?? null
-    return Object.keys(body).length === 0 ? refusal("operatingDate", NOTHING_TO_RESCHEDULE) : body
+    if (Object.keys(body).length === 0) return refusal("operatingDate", NOTHING_TO_RESCHEDULE)
+    // A day the project rests on is taken only when the dialog says so (O5 of #290); said on a move of the day alone, since a start moved on the same day asks no calendar.
+    return input.acceptNonWorkingDay === true && body.operatingDate !== undefined ? { ...body, acceptNonWorkingDay: true } : body
   }),
   [CANCEL_ROUTE]: onRoute(
     "cancel",
     "cancelled",
     (input) => {
+      // One of the office's codes (O5 of #290), then the free reason, which becomes the route's note.
+      const reasonCode = said(input, "reasonCode")
+      if (reasonCode === undefined || !(OFFICE_CANCEL_REASON_CODES as readonly string[]).includes(reasonCode)) return refusal("reasonCode", "Pick why the route is cancelled")
       const reason = said(input, "reason")
-      return reason === undefined ? refusal("reason", "Say why the route is cancelled") : { reason }
+      return reason === undefined ? refusal("reason", "Say why the route is cancelled") : { reasonCode, reason }
     },
     [PICKUPS_KEY, LIVE_KEY],
   ),
@@ -292,6 +318,15 @@ export const ROUTE_COMMANDS = {
       return routeDetail(client, serverId)
     },
     refused: (record) => `No stop was added to ${record.name}`,
+    touches: [PICKUPS_KEY, LIVE_KEY],
+  },
+  // A Plan over the route's open stops (O5 of #290): the API answers the Plan, calculating or re-activated, so the route is read back for its active Plan.
+  [OPTIMISE_ROUTE]: {
+    run: async (client, serverId) => {
+      await command<OptimiseAnswer>(client, `/routes/${serverId}/optimise`)
+      return routeDetail(client, serverId)
+    },
+    refused: (record) => `${record.name} was not optimised`,
     touches: [PICKUPS_KEY, LIVE_KEY],
   },
   // Every open stop once, in the order they will be visited: the API makes it a manual Plan.
@@ -353,12 +388,54 @@ export function addedStopBody(input: Record<string, unknown>, context: MappingCo
   return withNote({ [field]: placeId, wasteFractionId })
 }
 
-/** What an ad-hoc route may name beside its project and its day: everything an assign moves but the trailer, which `RouteCreate` does not take, held as `assign` holds them. */
-const CREATED_WITH = ASSIGNED.filter(([field]) => field !== "trailerId")
+/** What an ad-hoc route may name beside its project and its day: everything an assign moves but the trailer and the service provider, which `RouteCreate` does not take, held as `assign` holds them. */
+const CREATED_WITH = ASSIGNED.filter(([field]) => field !== "trailerId" && field !== "serviceProviderId")
 
 /** The route as its own read gives it: the pickups in sequence, the active Plan, the open session and every session, the unloads. */
 export function routeDetail(client: Client, serverId: string): Promise<RouteDetail> {
   return get<RouteDetail>(client, `/routes/${serverId}`)
+}
+
+/** Every Plan ever asked for over the route, oldest first: the optimiser's, the dispatcher's orders, the measured baselines (O5 of #290). The route's read says which is active. */
+export function routePlans(client: Client, serverId: string): Promise<Plan[]> {
+  return listAll<Plan>(client, `/routes/${serverId}/plans`)
+}
+
+/** Who ordered a Plan's stops, as its history reads it. */
+const SOLVER_LABELS: Readonly<Record<Plan["solver"], string>> = {
+  optimiser: "Optimised",
+  manual: "The dispatcher's order",
+  baseline: "Generated order, not optimised",
+}
+
+/**
+ * One line of a route's Plan history (O5 of #290): when it was asked for on
+ * the project's clock, who ordered it, where it stands — its distance and
+ * duration once measured, why it failed — and whether it is the one the
+ * route runs by.
+ */
+export function planLine(plan: Pick<Plan, "id" | "createdAt" | "solver" | "status" | "distanceMetres" | "durationSeconds" | "failureReason">, { activePlanId, timezone }: { activePlanId: string | null | undefined; timezone: string | undefined }): string {
+  const measured = plan.status === "ready" && plan.distanceMetres !== null && plan.durationSeconds !== null ? ` · ${formatDistance(plan.distanceMetres)} · ${formatDuration(plan.durationSeconds)}` : ""
+  const failed = plan.status === "failed" && plan.failureReason !== null ? ` · ${plan.failureReason}` : ""
+  return `${shownOn(plan.createdAt, timezone)} · ${SOLVER_LABELS[plan.solver]} · ${statusLabel(plan.status)}${measured}${failed}${plan.id === activePlanId ? " · Active" : ""}`
+}
+
+/** The most routes one bulk dispatch names: the contracts' `DISPATCH_MANY_MAX`, spelled again since the web imports the contracts as types only; routes.test.ts holds the two equal. */
+export const DISPATCH_BATCH = 50
+
+/**
+ * A day's routes, or a selection, dispatched (O5 of #290): one request per
+ * `DISPATCH_BATCH` of them, one after another, and one result per route in
+ * the order given, each dispatched or refused with its own dispatch's
+ * sentence. Nothing to dispatch asks nothing.
+ */
+export async function dispatchRoutes(client: Client, routeIds: readonly string[]): Promise<RouteDispatchResults> {
+  const results: RouteDispatchResults["results"] = []
+  for (let start = 0; start < routeIds.length; start += DISPATCH_BATCH) {
+    const answered = await command<RouteDispatchResults>(client, "/routes/dispatch", { routeIds: routeIds.slice(start, start + DISPATCH_BATCH) })
+    results.push(...answered.results)
+  }
+  return { results }
 }
 
 /** What the driver's device sent for the route, applied and rejected, oldest first: its command log. */
@@ -366,7 +443,7 @@ export function routeCommandLog(client: Client, serverId: string): Promise<Drive
   return listAll<DriverCommandReceipt>(client, `/routes/${serverId}/commands`)
 }
 
-const CHANGED_BY_COMMANDS = "A route is changed by its commands: assign, dispatch, reschedule, release its hold, cancel, add a stop or reorder its stops"
+const CHANGED_BY_COMMANDS = "A route is changed by its commands: assign, dispatch, reschedule, release its hold, cancel, add a stop, optimise or reorder its stops"
 
 export const routeAdapter: ResourceAdapter<Route> = {
   prefix: ROUTE_PREFIX,
@@ -375,6 +452,8 @@ export const routeAdapter: ResourceAdapter<Route> = {
   statuses: undefined,
   list: (client) => listAll<Route>(client, "/routes", { from: routesWindowFrom() }),
   toRecord: toRouteRecord,
+  // One route read back, as its details show it (O5 of #290): what `refreshRecord` asks once an optimisation's Plan is measured, for the row's distance and duration.
+  read: (client, serverId) => routeDetail(client, serverId),
   // New route (#111): an ad-hoc route on a project's day, its references by server id as `assign` names them.
   toCreateBody: (record, context) => {
     const projectId = projectServerIdOf(record, context)

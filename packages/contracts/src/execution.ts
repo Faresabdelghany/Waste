@@ -2,7 +2,7 @@
 // @waste/domain/execution/vocabulary's tuples turned into the `z.enum` the
 // routes validate against, so an unknown token never reaches a `CHECK` that
 // would refuse it as a 500 naming nothing. Shared here because seven modules
-// read them — `routes.ts` the route status, `pickups.ts` the pickup's status,
+// read them — `routes.ts` the route status and its cancel's reason codes, `pickups.ts` the pickup's status,
 // origin and reasons, `proofs.ts` the kinds and sources, `unloads.ts` the sources,
 // `driver-commands.ts` the command kinds, the outcomes and the driver's
 // reasons, `outbox.ts` the event kinds and aggregates — and a list spelled in
@@ -24,6 +24,7 @@ import {
   DRIVER_COMMAND_KINDS,
   DRIVER_PICKUP_REASONS,
   EXECUTION_SOURCES,
+  OFFICE_CANCEL_REASON_CODES,
   OFFICE_STOP_SERVICES,
   OUTBOX_AGGREGATES,
   OUTBOX_KINDS,
@@ -33,6 +34,7 @@ import {
   PICKUP_SERVICES,
   PICKUP_STATUSES,
   PROOF_KINDS,
+  ROUTE_CANCEL_REASON_CODES,
   ROUTE_STATUSES,
 } from "@waste/domain/execution/vocabulary"
 import * as z from "zod"
@@ -40,6 +42,14 @@ import * as z from "zod"
 /** Where a dated Route stands. */
 export const RouteStatus = z.enum(ROUTE_STATUSES)
 export type RouteStatus = z.infer<typeof RouteStatus>
+
+/** Why a route was cancelled (O5 of #290): the office's eight, and the run's `regeneration`. */
+export const RouteCancelReasonCode = z.enum(ROUTE_CANCEL_REASON_CODES)
+export type RouteCancelReasonCode = z.infer<typeof RouteCancelReasonCode>
+
+/** The eight codes the office's cancel may give; `regeneration` is a run's to write. */
+export const OfficeCancelReasonCode = z.enum(OFFICE_CANCEL_REASON_CODES)
+export type OfficeCancelReasonCode = z.infer<typeof OfficeCancelReasonCode>
 
 /** Where a Pickup stands; `skipped` was not attempted, `failed` was. */
 export const PickupStatus = z.enum(PICKUP_STATUSES)

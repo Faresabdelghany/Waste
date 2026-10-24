@@ -453,6 +453,6 @@ test("Weight review: an unload captured on a running route opens in the desk's q
     expect(read.weightReview.correctionUnloadId).not.toBeNull()
   } finally {
     // The driver holds one open session at a time: the office ends this route for the next test.
-    await api.post(`/routes/${route.id}/cancel`, { data: { reason: "Ended by the weight review end-to-end test" } })
+    await api.post(`/routes/${route.id}/cancel`, { data: { reasonCode: "other", reason: "Ended by the weight review end-to-end test" } })
   }
 })

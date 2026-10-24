@@ -3,7 +3,7 @@
 // name other modules' rows by — since #184 the customers, the properties and
 // the subscriptions too, their words in lib/data/place-pickers.ts, and since
 // #111 the containers and the shared points a route's added stop collects
-// at — whether a surface's own module and its forms'
+// at, and since O5 of #290 the service provider a route's Assign names — whether a surface's own module and its forms'
 // modules have answered, a read of one row's appended history (a container's
 // ledger, an allocation's events) from the API, and opening a row made.
 //
@@ -21,6 +21,7 @@ import type { ApiClient } from "@/lib/api/client"
 import { problemSentence } from "@/lib/api/problem"
 import { depotAdapter, unloadingStationAdapter } from "@/lib/api/records/places"
 import { CONTAINERS_MODULE } from "@/lib/api/records/containers"
+import { serviceProviderAdapter } from "@/lib/api/records/organisation"
 import { problemOfError, type CommandOutcome, type WriteOutcome } from "@/lib/api/records/server-records"
 import { AGREEMENTS_MODULE } from "@/lib/data/agreements"
 import { DEPOTS_MODULE, DRIVERS_MODULE, isTrailerRecord, VEHICLES_MODULE } from "@/lib/data/allocations"
@@ -31,6 +32,7 @@ import { MASTER_DATA_MODULE, masterDataKindOf } from "@/lib/data/master-data"
 import type { MasterDataKind } from "@/lib/data/master-data-kinds"
 import { keptOptions, keptValue, optionalRowOptions, rowOptions, subscriptionOptions } from "@/lib/data/place-pickers"
 import { recordsForProject } from "@/lib/data/project-scope"
+import { SERVICE_PROVIDERS_MODULE } from "@/lib/data/provider-money"
 import { CONTACTS_MODULE, PROPERTIES_MODULE, SHARED_POINTS_MODULE } from "@/lib/data/properties"
 import { isSoftDeleted } from "@waste/domain/record-visibility"
 
@@ -126,6 +128,7 @@ export function useRelationPickers(): RelationPickers {
   const agreements = useModuleRecords(AGREEMENTS_MODULE.workspaceId, AGREEMENTS_MODULE.moduleId, fixturesOf(AGREEMENTS_MODULE))
   const containers = useModuleRecords(CONTAINERS_MODULE.workspaceId, CONTAINERS_MODULE.moduleId, fixturesOf(CONTAINERS_MODULE))
   const points = useModuleRecords(SHARED_POINTS_MODULE.workspaceId, SHARED_POINTS_MODULE.moduleId, fixturesOf(SHARED_POINTS_MODULE))
+  const providers = useModuleRecords(SERVICE_PROVIDERS_MODULE.workspaceId, SERVICE_PROVIDERS_MODULE.moduleId, fixturesOf(SERVICE_PROVIDERS_MODULE))
   // A role that does not view the organisation picks from `/me`'s projects (Issue #217).
   const meProjects = useMeProjects()
   const byKey = new Map([
@@ -140,6 +143,7 @@ export function useRelationPickers(): RelationPickers {
     [keyOf(AGREEMENTS_MODULE), agreements],
     [keyOf(CONTAINERS_MODULE), containers],
     [keyOf(SHARED_POINTS_MODULE), points],
+    [keyOf(SERVICE_PROVIDERS_MODULE), providers],
   ])
   const live = (records: readonly BusinessRecord[]) => records.filter((record) => !isSoftDeleted(record))
   const rowsFor = (field: BusinessFormField, values: BusinessFormValues, projectId?: string): readonly BusinessFormOption[] => {
@@ -162,6 +166,8 @@ export function useRelationPickers(): RelationPickers {
     // A container or a shared point a route's added stop collects at (#111): the route's project's, with its status beside it.
     if (field.relation !== undefined && keyOf(field.relation) === keyOf(CONTAINERS_MODULE)) return ofProject(containers.records).map((record) => optionOf(record, true))
     if (field.relation !== undefined && keyOf(field.relation) === keyOf(SHARED_POINTS_MODULE)) return ofProject(points.records).map((record) => optionOf(record, true))
+    // The company a route's Assign names as the one that runs it (O5 of #290): the service providers themselves, not their child rows.
+    if (field.relation !== undefined && keyOf(field.relation) === keyOf(SERVICE_PROVIDERS_MODULE)) return live(providers.records).filter((record) => serviceProviderAdapter.owns(record)).map((record) => optionOf(record, false))
     switch (field.id) {
       case "subscriptionId":
         return subscriptionOptions(live(agreements.records), project)
