@@ -18,6 +18,7 @@
     "./finance/__tests__/*": null,
     "./insight/__tests__/*": null,
     "./routing/__tests__/*": null,
+    "./audit/__tests__/*": null,
     "./fixtures/__tests__/*": null,
     "./sorting-guide/__tests__/*": null,
     "./*": "./src/*.ts"

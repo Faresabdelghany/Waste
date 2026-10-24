@@ -40,6 +40,7 @@ import { company, project, serviceProvider } from "../schema/organisation"
 import { depot, unloadingStation, unloadingStationFraction, warehouse } from "../schema/places"
 import { collectionGroup, routeScheme } from "../schema/route-schemes"
 import { stockMovement } from "../schema/stock"
+import { triggersOf } from "../sql/audit-trail"
 import { withCompany } from "../tenant"
 import { databaseUnderTest, freshDatabase, type FreshDatabase } from "./database"
 import { refusedWith, rolledBack, rolledBackIn } from "./specimen"
@@ -234,7 +235,7 @@ describe("the Resources tables against a fresh database", { skip: database.skip 
     const ledgers = ["stock_movement", "vehicle_allocation_event"]
     assert.deepEqual(
       rows.map(({ table, enabled, forced, policies, triggers }) => ({ table, enabled, forced, policies, triggers })),
-      names.map((table) => ({ table, enabled: true, forced: true, policies: [`${table}_tenant_fence`], triggers: ledgers.includes(table) ? null : [`${table}_touch_updated_at`] })),
+      names.map((table) => ({ table, enabled: true, forced: true, policies: [`${table}_tenant_fence`], triggers: ledgers.includes(table) ? null : triggersOf(table) })),
     )
   })
 

@@ -22,6 +22,7 @@ import { containerType, product, serviceFrequency, wasteFraction } from "../sche
 import { container, containerServicePlacement } from "../schema/containers"
 import { customer, property, propertyGroup, propertyGroupMember, propertyParty, sharedCollectionPoint, sharedCollectionPointMember } from "../schema/customers"
 import { company, project } from "../schema/organisation"
+import { triggersOf } from "../sql/audit-trail"
 import { withCompany } from "../tenant"
 import { databaseUnderTest, freshDatabase, type FreshDatabase } from "./database"
 import { refusedWith, rolledBack, rolledBackIn } from "./specimen"
@@ -195,7 +196,7 @@ describe("the Registry tables against a fresh database", { skip: database.skip }
       order by c.relname`
     assert.deepEqual(
       rows.map(({ table, enabled, forced, policies, triggers }) => ({ table, enabled, forced, policies, triggers })),
-      names.map((table) => ({ table, enabled: true, forced: true, policies: [`${table}_tenant_fence`], triggers: [`${table}_touch_updated_at`] })),
+      names.map((table) => ({ table, enabled: true, forced: true, policies: [`${table}_tenant_fence`], triggers: triggersOf(table) })),
     )
   })
 

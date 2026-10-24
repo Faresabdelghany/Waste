@@ -68,6 +68,7 @@ import { createDb, type Tx } from "./client"
 import { columnName } from "./names"
 import * as schema from "./schema"
 import { projectAccess, role, roleGrant, serviceProviderAccess, userAccount } from "./schema/access"
+import { auditEvent } from "./schema/audit"
 import { outboxEvent } from "./schema/execution"
 import { company, project, serviceProvider } from "./schema/organisation"
 import { applyDemo, DEMO_IDS } from "./seed/demo"
@@ -109,10 +110,18 @@ export function sweepOrder(tables: readonly PgTable[]): PgTable[] {
   return order
 }
 
-/** Every table the reset sweeps, children first: all of the schema's but the kept eight. */
-export const SWEPT_TABLES: readonly PgTable[] = sweepOrder(
-  (Object.values(schema) as unknown[]).filter((value): value is PgTable => is(value, PgTable) && !KEPT_TABLES.includes(value)),
-)
+/**
+ * Every table the reset sweeps, children first: all of the schema's but the
+ * kept eight — and the audit log last, whatever its keys say. The sweep's own
+ * deletes of audited tables append to the log as they run, so a log swept in
+ * its keys' place, first, would keep a row for every row the reset removed:
+ * a reset leaves the tenant with no history but the seed's writing it back
+ * (#291, slice 9).
+ */
+export const SWEPT_TABLES: readonly PgTable[] = [
+  ...sweepOrder((Object.values(schema) as unknown[]).filter((value): value is PgTable => is(value, PgTable) && !KEPT_TABLES.includes(value) && value !== auditEvent)),
+  auditEvent,
+]
 
 /** The company's three counters. */
 const COUNTERS = { nextRouteNumber: company.nextRouteNumber, nextTicketNumber: company.nextTicketNumber, nextInvoiceNumber: company.nextInvoiceNumber }

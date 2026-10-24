@@ -16,6 +16,7 @@ import { migrateDatabase } from "../migrate"
 import { API_ROLE } from "../roles"
 import { projectAccess, role, roleGrant, serviceProviderAccess, userAccount } from "../schema/access"
 import { company, project, serviceProvider } from "../schema/organisation"
+import { triggersOf } from "../sql/audit-trail"
 import { withCompany } from "../tenant"
 import { databaseUnderTest, freshDatabase, type FreshDatabase } from "./database"
 import { refusedWith, rolledBack, rolledBackIn } from "./specimen"
@@ -98,7 +99,7 @@ describe("the Organisation & Access tables against a fresh database", { skip: da
         enabled: true,
         forced: true,
         policies: [`${table}_tenant_fence`],
-        triggers: [`${table}_touch_updated_at`],
+        triggers: triggersOf(table),
       })),
     )
   })

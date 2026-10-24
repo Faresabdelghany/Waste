@@ -253,6 +253,7 @@ index wms.agreement agreement_payer_customer_id_idx CREATE INDEX agreement_payer
 index wms.agreement agreement_pkey CREATE UNIQUE INDEX agreement_pkey ON wms.agreement USING btree (id)
 index wms.agreement agreement_price_list_id_idx CREATE INDEX agreement_price_list_id_idx ON wms.agreement USING btree (company_id, price_list_id)
 index wms.agreement agreement_project_key CREATE UNIQUE INDEX agreement_project_key ON wms.agreement USING btree (company_id, project_id, id)
+trigger wms.agreement agreement_audit_trail enabled=O CREATE TRIGGER agreement_audit_trail AFTER INSERT OR DELETE OR UPDATE ON wms.agreement FOR EACH ROW EXECUTE FUNCTION wms.audit_row('', '')
 trigger wms.agreement agreement_touch_updated_at enabled=O CREATE TRIGGER agreement_touch_updated_at BEFORE UPDATE ON wms.agreement FOR EACH ROW EXECUTE FUNCTION wms.touch_updated_at()
 policy wms.agreement agreement_tenant_fence permissive ALL to=wms_api using=(company_id = ( SELECT wms.current_company_id() AS current_company_id)) check=(company_id = ( SELECT wms.current_company_id() AS current_company_id))
 relation wms.alert kind=table owner=<owner> persistence=p rls=true force-rls=true replica-identity=d acl=[<owner>=DELETE,INSERT,MAINTAIN,REFERENCES,SELECT,TRIGGER,TRUNCATE,UPDATE/<owner> wms_api=DELETE,INSERT,SELECT,UPDATE/<owner> wms_worker=SELECT/<owner>]
@@ -316,6 +317,27 @@ index wms.alert alert_ticket_id_idx CREATE INDEX alert_ticket_id_idx ON wms.aler
 index wms.alert alert_vehicle_id_idx CREATE INDEX alert_vehicle_id_idx ON wms.alert USING btree (company_id, vehicle_id)
 trigger wms.alert alert_touch_updated_at enabled=O CREATE TRIGGER alert_touch_updated_at BEFORE UPDATE ON wms.alert FOR EACH ROW EXECUTE FUNCTION wms.touch_updated_at()
 policy wms.alert alert_tenant_fence permissive ALL to=wms_api using=(company_id = ( SELECT wms.current_company_id() AS current_company_id)) check=(company_id = ( SELECT wms.current_company_id() AS current_company_id))
+relation wms.audit_event kind=table owner=<owner> persistence=p rls=true force-rls=true replica-identity=d acl=[<owner>=DELETE,INSERT,MAINTAIN,REFERENCES,SELECT,TRIGGER,TRUNCATE,UPDATE/<owner> wms_api=INSERT,SELECT/<owner> wms_worker=SELECT/<owner>]
+column wms.audit_event 1 id uuid not-null default=wms.uuidv7()
+column wms.audit_event 2 company_id uuid not-null
+column wms.audit_event 3 recorded_at timestamp with time zone not-null default=now()
+column wms.audit_event 4 project_id uuid
+column wms.audit_event 5 table_name text not-null
+column wms.audit_event 6 row_id uuid not-null
+column wms.audit_event 7 parent_table text
+column wms.audit_event 8 parent_id uuid
+column wms.audit_event 9 action text not-null
+column wms.audit_event 10 changed jsonb not-null
+column wms.audit_event 11 actor_user_account_id uuid
+column wms.audit_event 12 reason text
+column wms.audit_event 13 transaction_id bigint not-null
+constraint wms.audit_event audit_event_action_one_of CHECK ((action = ANY (ARRAY['insert'::text, 'update'::text, 'delete'::text])))
+constraint wms.audit_event audit_event_company_id_fk FOREIGN KEY (company_id) REFERENCES wms.company(id) ON DELETE CASCADE
+constraint wms.audit_event audit_event_pkey PRIMARY KEY (id)
+index wms.audit_event audit_event_parent_idx CREATE INDEX audit_event_parent_idx ON wms.audit_event USING btree (company_id, parent_table, parent_id, id) WHERE (parent_id IS NOT NULL)
+index wms.audit_event audit_event_pkey CREATE UNIQUE INDEX audit_event_pkey ON wms.audit_event USING btree (id)
+index wms.audit_event audit_event_row_idx CREATE INDEX audit_event_row_idx ON wms.audit_event USING btree (company_id, table_name, row_id, id)
+policy wms.audit_event audit_event_tenant_fence permissive ALL to=wms_api using=(company_id = ( SELECT wms.current_company_id() AS current_company_id)) check=(company_id = ( SELECT wms.current_company_id() AS current_company_id))
 relation wms.billable_event kind=table owner=<owner> persistence=p rls=true force-rls=true replica-identity=d acl=[<owner>=DELETE,INSERT,MAINTAIN,REFERENCES,SELECT,TRIGGER,TRUNCATE,UPDATE/<owner> wms_api=DELETE,INSERT,SELECT,UPDATE/<owner> wms_worker=SELECT/<owner>]
 column wms.billable_event 1 id uuid not-null default=wms.uuidv7()
 column wms.billable_event 2 company_id uuid not-null
@@ -474,6 +496,7 @@ index wms.collection_calendar collection_calendar_no_overlap CREATE INDEX collec
 index wms.collection_calendar collection_calendar_pkey CREATE UNIQUE INDEX collection_calendar_pkey ON wms.collection_calendar USING btree (id)
 index wms.collection_calendar collection_calendar_project_id_name_key CREATE UNIQUE INDEX collection_calendar_project_id_name_key ON wms.collection_calendar USING btree (company_id, project_id, name)
 index wms.collection_calendar collection_calendar_project_key CREATE UNIQUE INDEX collection_calendar_project_key ON wms.collection_calendar USING btree (company_id, project_id, id)
+trigger wms.collection_calendar collection_calendar_audit_trail enabled=O CREATE TRIGGER collection_calendar_audit_trail AFTER INSERT OR DELETE OR UPDATE ON wms.collection_calendar FOR EACH ROW EXECUTE FUNCTION wms.audit_row('', '')
 trigger wms.collection_calendar collection_calendar_touch_updated_at enabled=O CREATE TRIGGER collection_calendar_touch_updated_at BEFORE UPDATE ON wms.collection_calendar FOR EACH ROW EXECUTE FUNCTION wms.touch_updated_at()
 policy wms.collection_calendar collection_calendar_tenant_fence permissive ALL to=wms_api using=(company_id = ( SELECT wms.current_company_id() AS current_company_id)) check=(company_id = ( SELECT wms.current_company_id() AS current_company_id))
 relation wms.collection_calendar_holiday kind=table owner=<owner> persistence=p rls=true force-rls=true replica-identity=d acl=[<owner>=DELETE,INSERT,MAINTAIN,REFERENCES,SELECT,TRIGGER,TRUNCATE,UPDATE/<owner> wms_api=DELETE,INSERT,SELECT,UPDATE/<owner> wms_worker=SELECT/<owner>]
@@ -493,6 +516,7 @@ constraint wms.collection_calendar_holiday collection_calendar_holiday_project_i
 index wms.collection_calendar_holiday collection_calendar_holiday_collection_calendar_id_day_key CREATE UNIQUE INDEX collection_calendar_holiday_collection_calendar_id_day_key ON wms.collection_calendar_holiday USING btree (company_id, collection_calendar_id, day)
 index wms.collection_calendar_holiday collection_calendar_holiday_pkey CREATE UNIQUE INDEX collection_calendar_holiday_pkey ON wms.collection_calendar_holiday USING btree (id)
 index wms.collection_calendar_holiday collection_calendar_holiday_project_id_idx CREATE INDEX collection_calendar_holiday_project_id_idx ON wms.collection_calendar_holiday USING btree (company_id, project_id)
+trigger wms.collection_calendar_holiday collection_calendar_holiday_audit_trail enabled=O CREATE TRIGGER collection_calendar_holiday_audit_trail AFTER INSERT OR DELETE OR UPDATE ON wms.collection_calendar_holiday FOR EACH ROW EXECUTE FUNCTION wms.audit_row('collection_calendar', 'collection_calendar_id')
 trigger wms.collection_calendar_holiday collection_calendar_holiday_touch_updated_at enabled=O CREATE TRIGGER collection_calendar_holiday_touch_updated_at BEFORE UPDATE ON wms.collection_calendar_holiday FOR EACH ROW EXECUTE FUNCTION wms.touch_updated_at()
 policy wms.collection_calendar_holiday collection_calendar_holiday_tenant_fence permissive ALL to=wms_api using=(company_id = ( SELECT wms.current_company_id() AS current_company_id)) check=(company_id = ( SELECT wms.current_company_id() AS current_company_id))
 relation wms.collection_group kind=table owner=<owner> persistence=p rls=true force-rls=true replica-identity=d acl=[<owner>=DELETE,INSERT,MAINTAIN,REFERENCES,SELECT,TRIGGER,TRUNCATE,UPDATE/<owner> wms_api=DELETE,INSERT,SELECT,UPDATE/<owner> wms_worker=SELECT/<owner>]
@@ -531,6 +555,7 @@ index wms.collection_group collection_group_route_scheme_id_name_key CREATE UNIQ
 index wms.collection_group collection_group_rule_vehicle_type_id_idx CREATE INDEX collection_group_rule_vehicle_type_id_idx ON wms.collection_group USING btree (company_id, rule_vehicle_type_id)
 index wms.collection_group collection_group_service_provider_id_idx CREATE INDEX collection_group_service_provider_id_idx ON wms.collection_group USING btree (company_id, service_provider_id)
 index wms.collection_group collection_group_vehicle_id_idx CREATE INDEX collection_group_vehicle_id_idx ON wms.collection_group USING btree (company_id, vehicle_id)
+trigger wms.collection_group collection_group_audit_trail enabled=O CREATE TRIGGER collection_group_audit_trail AFTER INSERT OR DELETE OR UPDATE ON wms.collection_group FOR EACH ROW EXECUTE FUNCTION wms.audit_row('route_scheme', 'route_scheme_id')
 trigger wms.collection_group collection_group_touch_updated_at enabled=O CREATE TRIGGER collection_group_touch_updated_at BEFORE UPDATE ON wms.collection_group FOR EACH ROW EXECUTE FUNCTION wms.touch_updated_at()
 policy wms.collection_group collection_group_tenant_fence permissive ALL to=wms_api using=(company_id = ( SELECT wms.current_company_id() AS current_company_id)) check=(company_id = ( SELECT wms.current_company_id() AS current_company_id))
 relation wms.collection_group_container kind=table owner=<owner> persistence=p rls=true force-rls=true replica-identity=d acl=[<owner>=DELETE,INSERT,MAINTAIN,REFERENCES,SELECT,TRIGGER,TRUNCATE,UPDATE/<owner> wms_api=DELETE,INSERT,SELECT,UPDATE/<owner> wms_worker=SELECT/<owner>]
@@ -555,6 +580,7 @@ index wms.collection_group_container collection_group_container_collection_group
 index wms.collection_group_container collection_group_container_container_id_idx CREATE INDEX collection_group_container_container_id_idx ON wms.collection_group_container USING btree (company_id, container_id)
 index wms.collection_group_container collection_group_container_pkey CREATE UNIQUE INDEX collection_group_container_pkey ON wms.collection_group_container USING btree (id)
 index wms.collection_group_container collection_group_container_project_id_idx CREATE INDEX collection_group_container_project_id_idx ON wms.collection_group_container USING btree (company_id, project_id)
+trigger wms.collection_group_container collection_group_container_audit_trail enabled=O CREATE TRIGGER collection_group_container_audit_trail AFTER INSERT OR DELETE OR UPDATE ON wms.collection_group_container FOR EACH ROW EXECUTE FUNCTION wms.audit_row('collection_group', 'collection_group_id')
 trigger wms.collection_group_container collection_group_container_touch_updated_at enabled=O CREATE TRIGGER collection_group_container_touch_updated_at BEFORE UPDATE ON wms.collection_group_container FOR EACH ROW EXECUTE FUNCTION wms.touch_updated_at()
 policy wms.collection_group_container collection_group_container_tenant_fence permissive ALL to=wms_api using=(company_id = ( SELECT wms.current_company_id() AS current_company_id)) check=(company_id = ( SELECT wms.current_company_id() AS current_company_id))
 relation wms.collection_group_container_type kind=table owner=<owner> persistence=p rls=true force-rls=true replica-identity=d acl=[<owner>=DELETE,INSERT,MAINTAIN,REFERENCES,SELECT,TRIGGER,TRUNCATE,UPDATE/<owner> wms_api=DELETE,INSERT,SELECT,UPDATE/<owner> wms_worker=SELECT/<owner>]
@@ -575,6 +601,7 @@ index wms.collection_group_container_type collection_group_container_type_contai
 index wms.collection_group_container_type collection_group_container_type_membership_key CREATE UNIQUE INDEX collection_group_container_type_membership_key ON wms.collection_group_container_type USING btree (company_id, collection_group_id, container_type_id)
 index wms.collection_group_container_type collection_group_container_type_pkey CREATE UNIQUE INDEX collection_group_container_type_pkey ON wms.collection_group_container_type USING btree (id)
 index wms.collection_group_container_type collection_group_container_type_project_id_idx CREATE INDEX collection_group_container_type_project_id_idx ON wms.collection_group_container_type USING btree (company_id, project_id)
+trigger wms.collection_group_container_type collection_group_container_type_audit_trail enabled=O CREATE TRIGGER collection_group_container_type_audit_trail AFTER INSERT OR DELETE OR UPDATE ON wms.collection_group_container_type FOR EACH ROW EXECUTE FUNCTION wms.audit_row('collection_group', 'collection_group_id')
 trigger wms.collection_group_container_type collection_group_container_type_touch_updated_at enabled=O CREATE TRIGGER collection_group_container_type_touch_updated_at BEFORE UPDATE ON wms.collection_group_container_type FOR EACH ROW EXECUTE FUNCTION wms.touch_updated_at()
 policy wms.collection_group_container_type collection_group_container_type_tenant_fence permissive ALL to=wms_api using=(company_id = ( SELECT wms.current_company_id() AS current_company_id)) check=(company_id = ( SELECT wms.current_company_id() AS current_company_id))
 relation wms.collection_group_fraction kind=table owner=<owner> persistence=p rls=true force-rls=true replica-identity=d acl=[<owner>=DELETE,INSERT,MAINTAIN,REFERENCES,SELECT,TRIGGER,TRUNCATE,UPDATE/<owner> wms_api=DELETE,INSERT,SELECT,UPDATE/<owner> wms_worker=SELECT/<owner>]
@@ -595,6 +622,7 @@ index wms.collection_group_fraction collection_group_fraction_membership_key CRE
 index wms.collection_group_fraction collection_group_fraction_pkey CREATE UNIQUE INDEX collection_group_fraction_pkey ON wms.collection_group_fraction USING btree (id)
 index wms.collection_group_fraction collection_group_fraction_project_id_idx CREATE INDEX collection_group_fraction_project_id_idx ON wms.collection_group_fraction USING btree (company_id, project_id)
 index wms.collection_group_fraction collection_group_fraction_waste_fraction_id_idx CREATE INDEX collection_group_fraction_waste_fraction_id_idx ON wms.collection_group_fraction USING btree (company_id, waste_fraction_id)
+trigger wms.collection_group_fraction collection_group_fraction_audit_trail enabled=O CREATE TRIGGER collection_group_fraction_audit_trail AFTER INSERT OR DELETE OR UPDATE ON wms.collection_group_fraction FOR EACH ROW EXECUTE FUNCTION wms.audit_row('collection_group', 'collection_group_id')
 trigger wms.collection_group_fraction collection_group_fraction_touch_updated_at enabled=O CREATE TRIGGER collection_group_fraction_touch_updated_at BEFORE UPDATE ON wms.collection_group_fraction FOR EACH ROW EXECUTE FUNCTION wms.touch_updated_at()
 policy wms.collection_group_fraction collection_group_fraction_tenant_fence permissive ALL to=wms_api using=(company_id = ( SELECT wms.current_company_id() AS current_company_id)) check=(company_id = ( SELECT wms.current_company_id() AS current_company_id))
 relation wms.company kind=table owner=<owner> persistence=p rls=true force-rls=true replica-identity=d acl=[<owner>=DELETE,INSERT,MAINTAIN,REFERENCES,SELECT,TRIGGER,TRUNCATE,UPDATE/<owner> wms_api=DELETE,INSERT,SELECT,UPDATE/<owner> wms_worker=SELECT/<owner>]
@@ -616,6 +644,7 @@ constraint wms.company company_self CHECK ((company_id = id))
 constraint wms.company company_status_one_of CHECK ((status = ANY (ARRAY['active'::text, 'onboarding'::text])))
 index wms.company company_country_registration_number_key CREATE UNIQUE INDEX company_country_registration_number_key ON wms.company USING btree (country, registration_number)
 index wms.company company_pkey CREATE UNIQUE INDEX company_pkey ON wms.company USING btree (id)
+trigger wms.company company_audit_trail enabled=O CREATE TRIGGER company_audit_trail AFTER INSERT OR DELETE OR UPDATE ON wms.company FOR EACH ROW EXECUTE FUNCTION wms.audit_row('', '', 'next_route_number', 'next_ticket_number', 'next_invoice_number')
 trigger wms.company company_touch_updated_at enabled=O CREATE TRIGGER company_touch_updated_at BEFORE UPDATE ON wms.company FOR EACH ROW EXECUTE FUNCTION wms.touch_updated_at()
 policy wms.company company_tenant_fence permissive ALL to=wms_api using=(company_id = ( SELECT wms.current_company_id() AS current_company_id)) check=(company_id = ( SELECT wms.current_company_id() AS current_company_id))
 relation wms.container kind=table owner=<owner> persistence=p rls=true force-rls=true replica-identity=d acl=[<owner>=DELETE,INSERT,MAINTAIN,REFERENCES,SELECT,TRIGGER,TRUNCATE,UPDATE/<owner> wms_api=DELETE,INSERT,SELECT,UPDATE/<owner> wms_sync=SELECT/<owner> wms_worker=SELECT/<owner>]
@@ -642,6 +671,7 @@ index wms.container container_container_type_id_idx CREATE INDEX container_conta
 index wms.container container_label_key CREATE UNIQUE INDEX container_label_key ON wms.container USING btree (company_id, label)
 index wms.container container_pkey CREATE UNIQUE INDEX container_pkey ON wms.container USING btree (id)
 index wms.container container_project_key CREATE UNIQUE INDEX container_project_key ON wms.container USING btree (company_id, project_id, id)
+trigger wms.container container_audit_trail enabled=O CREATE TRIGGER container_audit_trail AFTER INSERT OR DELETE OR UPDATE ON wms.container FOR EACH ROW EXECUTE FUNCTION wms.audit_row('', '')
 trigger wms.container container_touch_updated_at enabled=O CREATE TRIGGER container_touch_updated_at BEFORE UPDATE ON wms.container FOR EACH ROW EXECUTE FUNCTION wms.touch_updated_at()
 policy wms.container container_tenant_fence permissive ALL to=wms_api using=(company_id = ( SELECT wms.current_company_id() AS current_company_id)) check=(company_id = ( SELECT wms.current_company_id() AS current_company_id))
 relation wms.container_service_placement kind=table owner=<owner> persistence=p rls=true force-rls=true replica-identity=d acl=[<owner>=DELETE,INSERT,MAINTAIN,REFERENCES,SELECT,TRIGGER,TRUNCATE,UPDATE/<owner> wms_api=DELETE,INSERT,SELECT,UPDATE/<owner> wms_worker=SELECT/<owner>]
@@ -672,6 +702,7 @@ index wms.container_service_placement container_service_placement_pkey CREATE UN
 index wms.container_service_placement container_service_placement_service_frequency_id_idx CREATE INDEX container_service_placement_service_frequency_id_idx ON wms.container_service_placement USING btree (company_id, service_frequency_id)
 index wms.container_service_placement container_service_placement_subscription_id_idx CREATE INDEX container_service_placement_subscription_id_idx ON wms.container_service_placement USING btree (company_id, subscription_id)
 index wms.container_service_placement container_service_placement_waste_fraction_id_idx CREATE INDEX container_service_placement_waste_fraction_id_idx ON wms.container_service_placement USING btree (company_id, waste_fraction_id)
+trigger wms.container_service_placement container_service_placement_audit_trail enabled=O CREATE TRIGGER container_service_placement_audit_trail AFTER INSERT OR DELETE OR UPDATE ON wms.container_service_placement FOR EACH ROW EXECUTE FUNCTION wms.audit_row('container', 'container_id')
 trigger wms.container_service_placement container_service_placement_touch_updated_at enabled=O CREATE TRIGGER container_service_placement_touch_updated_at BEFORE UPDATE ON wms.container_service_placement FOR EACH ROW EXECUTE FUNCTION wms.touch_updated_at()
 policy wms.container_service_placement container_service_placement_tenant_fence permissive ALL to=wms_api using=(company_id = ( SELECT wms.current_company_id() AS current_company_id)) check=(company_id = ( SELECT wms.current_company_id() AS current_company_id))
 relation wms.container_type kind=table owner=<owner> persistence=p rls=true force-rls=true replica-identity=d acl=[<owner>=DELETE,INSERT,MAINTAIN,REFERENCES,SELECT,TRIGGER,TRUNCATE,UPDATE/<owner> wms_api=DELETE,INSERT,SELECT,UPDATE/<owner> wms_sync=SELECT/<owner> wms_worker=SELECT/<owner>]
@@ -689,6 +720,7 @@ constraint wms.container_type container_type_volume_litres_positive CHECK ((volu
 index wms.container_type container_type_name_key CREATE UNIQUE INDEX container_type_name_key ON wms.container_type USING btree (company_id, name)
 index wms.container_type container_type_pkey CREATE UNIQUE INDEX container_type_pkey ON wms.container_type USING btree (id)
 index wms.container_type container_type_tenant_key CREATE UNIQUE INDEX container_type_tenant_key ON wms.container_type USING btree (company_id, id)
+trigger wms.container_type container_type_audit_trail enabled=O CREATE TRIGGER container_type_audit_trail AFTER INSERT OR DELETE OR UPDATE ON wms.container_type FOR EACH ROW EXECUTE FUNCTION wms.audit_row('', '')
 trigger wms.container_type container_type_touch_updated_at enabled=O CREATE TRIGGER container_type_touch_updated_at BEFORE UPDATE ON wms.container_type FOR EACH ROW EXECUTE FUNCTION wms.touch_updated_at()
 policy wms.container_type container_type_tenant_fence permissive ALL to=wms_api using=(company_id = ( SELECT wms.current_company_id() AS current_company_id)) check=(company_id = ( SELECT wms.current_company_id() AS current_company_id))
 relation wms.container_type_vehicle_type kind=table owner=<owner> persistence=p rls=true force-rls=true replica-identity=d acl=[<owner>=DELETE,INSERT,MAINTAIN,REFERENCES,SELECT,TRIGGER,TRUNCATE,UPDATE/<owner> wms_api=DELETE,INSERT,SELECT,UPDATE/<owner> wms_worker=SELECT/<owner>]
@@ -706,6 +738,7 @@ constraint wms.container_type_vehicle_type container_type_vehicle_type_vehicle_t
 index wms.container_type_vehicle_type container_type_vehicle_type_container_type_id_idx CREATE INDEX container_type_vehicle_type_container_type_id_idx ON wms.container_type_vehicle_type USING btree (company_id, container_type_id)
 index wms.container_type_vehicle_type container_type_vehicle_type_membership_key CREATE UNIQUE INDEX container_type_vehicle_type_membership_key ON wms.container_type_vehicle_type USING btree (company_id, vehicle_type_id, container_type_id)
 index wms.container_type_vehicle_type container_type_vehicle_type_pkey CREATE UNIQUE INDEX container_type_vehicle_type_pkey ON wms.container_type_vehicle_type USING btree (id)
+trigger wms.container_type_vehicle_type container_type_vehicle_type_audit_trail enabled=O CREATE TRIGGER container_type_vehicle_type_audit_trail AFTER INSERT OR DELETE OR UPDATE ON wms.container_type_vehicle_type FOR EACH ROW EXECUTE FUNCTION wms.audit_row('vehicle_type', 'vehicle_type_id')
 trigger wms.container_type_vehicle_type container_type_vehicle_type_touch_updated_at enabled=O CREATE TRIGGER container_type_vehicle_type_touch_updated_at BEFORE UPDATE ON wms.container_type_vehicle_type FOR EACH ROW EXECUTE FUNCTION wms.touch_updated_at()
 policy wms.container_type_vehicle_type container_type_vehicle_type_tenant_fence permissive ALL to=wms_api using=(company_id = ( SELECT wms.current_company_id() AS current_company_id)) check=(company_id = ( SELECT wms.current_company_id() AS current_company_id))
 relation wms.customer kind=table owner=<owner> persistence=p rls=true force-rls=true replica-identity=d acl=[<owner>=DELETE,INSERT,MAINTAIN,REFERENCES,SELECT,TRIGGER,TRUNCATE,UPDATE/<owner> wms_api=DELETE,INSERT,SELECT,UPDATE/<owner> wms_worker=SELECT/<owner>]
@@ -730,6 +763,7 @@ constraint wms.customer customer_tenant_key UNIQUE (company_id, id)
 index wms.customer customer_pkey CREATE UNIQUE INDEX customer_pkey ON wms.customer USING btree (id)
 index wms.customer customer_registration_number_idx CREATE UNIQUE INDEX customer_registration_number_idx ON wms.customer USING btree (company_id, registration_number) WHERE (registration_number IS NOT NULL)
 index wms.customer customer_tenant_key CREATE UNIQUE INDEX customer_tenant_key ON wms.customer USING btree (company_id, id)
+trigger wms.customer customer_audit_trail enabled=O CREATE TRIGGER customer_audit_trail AFTER INSERT OR DELETE OR UPDATE ON wms.customer FOR EACH ROW EXECUTE FUNCTION wms.audit_row('', '')
 trigger wms.customer customer_touch_updated_at enabled=O CREATE TRIGGER customer_touch_updated_at BEFORE UPDATE ON wms.customer FOR EACH ROW EXECUTE FUNCTION wms.touch_updated_at()
 policy wms.customer customer_tenant_fence permissive ALL to=wms_api using=(company_id = ( SELECT wms.current_company_id() AS current_company_id)) check=(company_id = ( SELECT wms.current_company_id() AS current_company_id))
 relation wms.depot kind=table owner=<owner> persistence=p rls=true force-rls=true replica-identity=d acl=[<owner>=DELETE,INSERT,MAINTAIN,REFERENCES,SELECT,TRIGGER,TRUNCATE,UPDATE/<owner> wms_api=DELETE,INSERT,SELECT,UPDATE/<owner> wms_sync=SELECT/<owner> wms_worker=SELECT/<owner>]
@@ -767,6 +801,7 @@ index wms.depot depot_project_id_code_key CREATE UNIQUE INDEX depot_project_id_c
 index wms.depot depot_project_id_name_key CREATE UNIQUE INDEX depot_project_id_name_key ON wms.depot USING btree (company_id, project_id, name)
 index wms.depot depot_project_key CREATE UNIQUE INDEX depot_project_key ON wms.depot USING btree (company_id, project_id, id)
 index wms.depot depot_service_provider_id_idx CREATE INDEX depot_service_provider_id_idx ON wms.depot USING btree (company_id, service_provider_id)
+trigger wms.depot depot_audit_trail enabled=O CREATE TRIGGER depot_audit_trail AFTER INSERT OR DELETE OR UPDATE ON wms.depot FOR EACH ROW EXECUTE FUNCTION wms.audit_row('', '')
 trigger wms.depot depot_touch_updated_at enabled=O CREATE TRIGGER depot_touch_updated_at BEFORE UPDATE ON wms.depot FOR EACH ROW EXECUTE FUNCTION wms.touch_updated_at()
 policy wms.depot depot_tenant_fence permissive ALL to=wms_api using=(company_id = ( SELECT wms.current_company_id() AS current_company_id)) check=(company_id = ( SELECT wms.current_company_id() AS current_company_id))
 relation wms.driver kind=table owner=<owner> persistence=p rls=true force-rls=true replica-identity=d acl=[<owner>=DELETE,INSERT,MAINTAIN,REFERENCES,SELECT,TRIGGER,TRUNCATE,UPDATE/<owner> wms_api=DELETE,INSERT,SELECT,UPDATE/<owner> wms_sync=SELECT/<owner> wms_worker=SELECT/<owner>]
@@ -803,6 +838,7 @@ index wms.driver driver_project_key CREATE UNIQUE INDEX driver_project_key ON wm
 index wms.driver driver_service_provider_id_idx CREATE INDEX driver_service_provider_id_idx ON wms.driver USING btree (company_id, service_provider_id)
 index wms.driver driver_user_account_id_idx CREATE UNIQUE INDEX driver_user_account_id_idx ON wms.driver USING btree (company_id, user_account_id) WHERE (user_account_id IS NOT NULL)
 index wms.driver driver_workforce_reference_idx CREATE UNIQUE INDEX driver_workforce_reference_idx ON wms.driver USING btree (company_id, workforce_reference) WHERE (workforce_reference IS NOT NULL)
+trigger wms.driver driver_audit_trail enabled=O CREATE TRIGGER driver_audit_trail AFTER INSERT OR DELETE OR UPDATE ON wms.driver FOR EACH ROW EXECUTE FUNCTION wms.audit_row('', '')
 trigger wms.driver driver_touch_updated_at enabled=O CREATE TRIGGER driver_touch_updated_at BEFORE UPDATE ON wms.driver FOR EACH ROW EXECUTE FUNCTION wms.touch_updated_at()
 policy wms.driver driver_tenant_fence permissive ALL to=wms_api using=(company_id = ( SELECT wms.current_company_id() AS current_company_id)) check=(company_id = ( SELECT wms.current_company_id() AS current_company_id))
 relation wms.driver_command kind=table owner=<owner> persistence=p rls=true force-rls=true replica-identity=d acl=[<owner>=DELETE,INSERT,MAINTAIN,REFERENCES,SELECT,TRIGGER,TRUNCATE,UPDATE/<owner> wms_api=INSERT,SELECT/<owner> wms_sync=SELECT/<owner> wms_worker=SELECT/<owner>]
@@ -1155,6 +1191,7 @@ index wms.planning_area planning_area_pkey CREATE UNIQUE INDEX planning_area_pke
 index wms.planning_area planning_area_project_id_code_key CREATE UNIQUE INDEX planning_area_project_id_code_key ON wms.planning_area USING btree (company_id, project_id, code)
 index wms.planning_area planning_area_project_id_name_key CREATE UNIQUE INDEX planning_area_project_id_name_key ON wms.planning_area USING btree (company_id, project_id, name)
 index wms.planning_area planning_area_project_key CREATE UNIQUE INDEX planning_area_project_key ON wms.planning_area USING btree (company_id, project_id, id)
+trigger wms.planning_area planning_area_audit_trail enabled=O CREATE TRIGGER planning_area_audit_trail AFTER INSERT OR DELETE OR UPDATE ON wms.planning_area FOR EACH ROW EXECUTE FUNCTION wms.audit_row('', '')
 trigger wms.planning_area planning_area_touch_updated_at enabled=O CREATE TRIGGER planning_area_touch_updated_at BEFORE UPDATE ON wms.planning_area FOR EACH ROW EXECUTE FUNCTION wms.touch_updated_at()
 policy wms.planning_area planning_area_tenant_fence permissive ALL to=wms_api using=(company_id = ( SELECT wms.current_company_id() AS current_company_id)) check=(company_id = ( SELECT wms.current_company_id() AS current_company_id))
 relation wms.planning_area_boundary kind=table owner=<owner> persistence=p rls=true force-rls=true replica-identity=d acl=[<owner>=DELETE,INSERT,MAINTAIN,REFERENCES,SELECT,TRIGGER,TRUNCATE,UPDATE/<owner> wms_api=DELETE,INSERT,SELECT,UPDATE/<owner> wms_worker=SELECT/<owner>]
@@ -1179,6 +1216,7 @@ index wms.planning_area_boundary planning_area_boundary_no_overlap CREATE INDEX 
 index wms.planning_area_boundary planning_area_boundary_pkey CREATE UNIQUE INDEX planning_area_boundary_pkey ON wms.planning_area_boundary USING btree (id)
 index wms.planning_area_boundary planning_area_boundary_planning_area_id_idx CREATE INDEX planning_area_boundary_planning_area_id_idx ON wms.planning_area_boundary USING btree (company_id, planning_area_id)
 index wms.planning_area_boundary planning_area_boundary_project_id_idx CREATE INDEX planning_area_boundary_project_id_idx ON wms.planning_area_boundary USING btree (company_id, project_id)
+trigger wms.planning_area_boundary planning_area_boundary_audit_trail enabled=O CREATE TRIGGER planning_area_boundary_audit_trail AFTER INSERT OR DELETE OR UPDATE ON wms.planning_area_boundary FOR EACH ROW EXECUTE FUNCTION wms.audit_row('planning_area', 'planning_area_id')
 trigger wms.planning_area_boundary planning_area_boundary_touch_updated_at enabled=O CREATE TRIGGER planning_area_boundary_touch_updated_at BEFORE UPDATE ON wms.planning_area_boundary FOR EACH ROW EXECUTE FUNCTION wms.touch_updated_at()
 policy wms.planning_area_boundary planning_area_boundary_tenant_fence permissive ALL to=wms_api using=(company_id = ( SELECT wms.current_company_id() AS current_company_id)) check=(company_id = ( SELECT wms.current_company_id() AS current_company_id))
 relation wms.price_list kind=table owner=<owner> persistence=p rls=true force-rls=true replica-identity=d acl=[<owner>=DELETE,INSERT,MAINTAIN,REFERENCES,SELECT,TRIGGER,TRUNCATE,UPDATE/<owner> wms_api=DELETE,INSERT,SELECT,UPDATE/<owner> wms_worker=SELECT/<owner>]
@@ -1205,6 +1243,7 @@ index wms.price_list price_list_no_overlap CREATE INDEX price_list_no_overlap ON
 index wms.price_list price_list_pkey CREATE UNIQUE INDEX price_list_pkey ON wms.price_list USING btree (id)
 index wms.price_list price_list_project_id_name_idx CREATE INDEX price_list_project_id_name_idx ON wms.price_list USING btree (company_id, project_id, name)
 index wms.price_list price_list_project_key CREATE UNIQUE INDEX price_list_project_key ON wms.price_list USING btree (company_id, project_id, id)
+trigger wms.price_list price_list_audit_trail enabled=O CREATE TRIGGER price_list_audit_trail AFTER INSERT OR DELETE OR UPDATE ON wms.price_list FOR EACH ROW EXECUTE FUNCTION wms.audit_row('', '')
 trigger wms.price_list price_list_touch_updated_at enabled=O CREATE TRIGGER price_list_touch_updated_at BEFORE UPDATE ON wms.price_list FOR EACH ROW EXECUTE FUNCTION wms.touch_updated_at()
 policy wms.price_list price_list_tenant_fence permissive ALL to=wms_api using=(company_id = ( SELECT wms.current_company_id() AS current_company_id)) check=(company_id = ( SELECT wms.current_company_id() AS current_company_id))
 relation wms.price_list_row kind=table owner=<owner> persistence=p rls=true force-rls=true replica-identity=d acl=[<owner>=DELETE,INSERT,MAINTAIN,REFERENCES,SELECT,TRIGGER,TRUNCATE,UPDATE/<owner> wms_api=DELETE,INSERT,SELECT,UPDATE/<owner> wms_worker=SELECT/<owner>]
@@ -1248,6 +1287,7 @@ index wms.price_list_row price_list_row_price_list_id_product_id_idx CREATE INDE
 index wms.price_list_row price_list_row_product_id_idx CREATE INDEX price_list_row_product_id_idx ON wms.price_list_row USING btree (company_id, product_id)
 index wms.price_list_row price_list_row_project_key CREATE UNIQUE INDEX price_list_row_project_key ON wms.price_list_row USING btree (company_id, project_id, id)
 index wms.price_list_row price_list_row_waste_fraction_id_idx CREATE INDEX price_list_row_waste_fraction_id_idx ON wms.price_list_row USING btree (company_id, waste_fraction_id)
+trigger wms.price_list_row price_list_row_audit_trail enabled=O CREATE TRIGGER price_list_row_audit_trail AFTER INSERT OR DELETE OR UPDATE ON wms.price_list_row FOR EACH ROW EXECUTE FUNCTION wms.audit_row('price_list', 'price_list_id')
 trigger wms.price_list_row price_list_row_touch_updated_at enabled=O CREATE TRIGGER price_list_row_touch_updated_at BEFORE UPDATE ON wms.price_list_row FOR EACH ROW EXECUTE FUNCTION wms.touch_updated_at()
 policy wms.price_list_row price_list_row_tenant_fence permissive ALL to=wms_api using=(company_id = ( SELECT wms.current_company_id() AS current_company_id)) check=(company_id = ( SELECT wms.current_company_id() AS current_company_id))
 relation wms.product kind=table owner=<owner> persistence=p rls=true force-rls=true replica-identity=d acl=[<owner>=DELETE,INSERT,MAINTAIN,REFERENCES,SELECT,TRIGGER,TRUNCATE,UPDATE/<owner> wms_api=DELETE,INSERT,SELECT,UPDATE/<owner> wms_worker=SELECT/<owner>]
@@ -1285,6 +1325,7 @@ index wms.product product_project_id_name_key CREATE UNIQUE INDEX product_projec
 index wms.product product_project_key CREATE UNIQUE INDEX product_project_key ON wms.product USING btree (company_id, project_id, id)
 index wms.product product_service_frequency_id_idx CREATE INDEX product_service_frequency_id_idx ON wms.product USING btree (company_id, service_frequency_id)
 index wms.product product_waste_fraction_id_idx CREATE INDEX product_waste_fraction_id_idx ON wms.product USING btree (company_id, waste_fraction_id)
+trigger wms.product product_audit_trail enabled=O CREATE TRIGGER product_audit_trail AFTER INSERT OR DELETE OR UPDATE ON wms.product FOR EACH ROW EXECUTE FUNCTION wms.audit_row('', '')
 trigger wms.product product_touch_updated_at enabled=O CREATE TRIGGER product_touch_updated_at BEFORE UPDATE ON wms.product FOR EACH ROW EXECUTE FUNCTION wms.touch_updated_at()
 policy wms.product product_tenant_fence permissive ALL to=wms_api using=(company_id = ( SELECT wms.current_company_id() AS current_company_id)) check=(company_id = ( SELECT wms.current_company_id() AS current_company_id))
 relation wms.project kind=table owner=<owner> persistence=p rls=true force-rls=true replica-identity=d acl=[<owner>=DELETE,INSERT,MAINTAIN,REFERENCES,SELECT,TRIGGER,TRUNCATE,UPDATE/<owner> wms_api=DELETE,INSERT,SELECT,UPDATE/<owner> wms_worker=SELECT/<owner>]
@@ -1314,6 +1355,7 @@ index wms.project project_name_key CREATE UNIQUE INDEX project_name_key ON wms.p
 index wms.project project_pkey CREATE UNIQUE INDEX project_pkey ON wms.project USING btree (id)
 index wms.project project_public_slug_key CREATE UNIQUE INDEX project_public_slug_key ON wms.project USING btree (public_slug)
 index wms.project project_tenant_key CREATE UNIQUE INDEX project_tenant_key ON wms.project USING btree (company_id, id)
+trigger wms.project project_audit_trail enabled=O CREATE TRIGGER project_audit_trail AFTER INSERT OR DELETE OR UPDATE ON wms.project FOR EACH ROW EXECUTE FUNCTION wms.audit_row('', '')
 trigger wms.project project_touch_updated_at enabled=O CREATE TRIGGER project_touch_updated_at BEFORE UPDATE ON wms.project FOR EACH ROW EXECUTE FUNCTION wms.touch_updated_at()
 policy wms.project project_public_door permissive SELECT to=wms_public using=(public_slug IS NOT NULL) check=none
 policy wms.project project_tenant_fence permissive ALL to=wms_api using=(company_id = ( SELECT wms.current_company_id() AS current_company_id)) check=(company_id = ( SELECT wms.current_company_id() AS current_company_id))
@@ -1331,6 +1373,7 @@ constraint wms.project_access project_access_user_account_id_project_id_key UNIQ
 index wms.project_access project_access_pkey CREATE UNIQUE INDEX project_access_pkey ON wms.project_access USING btree (id)
 index wms.project_access project_access_project_id_idx CREATE INDEX project_access_project_id_idx ON wms.project_access USING btree (company_id, project_id)
 index wms.project_access project_access_user_account_id_project_id_key CREATE UNIQUE INDEX project_access_user_account_id_project_id_key ON wms.project_access USING btree (company_id, user_account_id, project_id)
+trigger wms.project_access project_access_audit_trail enabled=O CREATE TRIGGER project_access_audit_trail AFTER INSERT OR DELETE OR UPDATE ON wms.project_access FOR EACH ROW EXECUTE FUNCTION wms.audit_row('user_account', 'user_account_id')
 trigger wms.project_access project_access_touch_updated_at enabled=O CREATE TRIGGER project_access_touch_updated_at BEFORE UPDATE ON wms.project_access FOR EACH ROW EXECUTE FUNCTION wms.touch_updated_at()
 policy wms.project_access project_access_tenant_fence permissive ALL to=wms_api using=(company_id = ( SELECT wms.current_company_id() AS current_company_id)) check=(company_id = ( SELECT wms.current_company_id() AS current_company_id))
 relation wms.proof_of_service kind=table owner=<owner> persistence=p rls=true force-rls=true replica-identity=d acl=[<owner>=DELETE,INSERT,MAINTAIN,REFERENCES,SELECT,TRIGGER,TRUNCATE,UPDATE/<owner> wms_api=INSERT,SELECT/<owner> wms_sync=SELECT/<owner> wms_worker=SELECT/<owner>]
@@ -1417,6 +1460,7 @@ index wms.property property_pkey CREATE UNIQUE INDEX property_pkey ON wms.proper
 index wms.property property_project_id_name_key CREATE UNIQUE INDEX property_project_id_name_key ON wms.property USING btree (company_id, project_id, name)
 index wms.property property_project_key CREATE UNIQUE INDEX property_project_key ON wms.property USING btree (company_id, project_id, id)
 index wms.property property_registry_id_idx CREATE UNIQUE INDEX property_registry_id_idx ON wms.property USING btree (company_id, registry_id) WHERE (registry_id IS NOT NULL)
+trigger wms.property property_audit_trail enabled=O CREATE TRIGGER property_audit_trail AFTER INSERT OR DELETE OR UPDATE ON wms.property FOR EACH ROW EXECUTE FUNCTION wms.audit_row('', '')
 trigger wms.property property_touch_updated_at enabled=O CREATE TRIGGER property_touch_updated_at BEFORE UPDATE ON wms.property FOR EACH ROW EXECUTE FUNCTION wms.touch_updated_at()
 policy wms.property property_tenant_fence permissive ALL to=wms_api using=(company_id = ( SELECT wms.current_company_id() AS current_company_id)) check=(company_id = ( SELECT wms.current_company_id() AS current_company_id))
 relation wms.property_group kind=table owner=<owner> persistence=p rls=true force-rls=true replica-identity=d acl=[<owner>=DELETE,INSERT,MAINTAIN,REFERENCES,SELECT,TRIGGER,TRUNCATE,UPDATE/<owner> wms_api=DELETE,INSERT,SELECT,UPDATE/<owner> wms_worker=SELECT/<owner>]
@@ -1441,6 +1485,7 @@ index wms.property_group property_group_pkey CREATE UNIQUE INDEX property_group_
 index wms.property_group property_group_project_id_name_key CREATE UNIQUE INDEX property_group_project_id_name_key ON wms.property_group USING btree (company_id, project_id, name)
 index wms.property_group property_group_project_key CREATE UNIQUE INDEX property_group_project_key ON wms.property_group USING btree (company_id, project_id, id)
 index wms.property_group property_group_responsible_customer_id_idx CREATE INDEX property_group_responsible_customer_id_idx ON wms.property_group USING btree (company_id, responsible_customer_id)
+trigger wms.property_group property_group_audit_trail enabled=O CREATE TRIGGER property_group_audit_trail AFTER INSERT OR DELETE OR UPDATE ON wms.property_group FOR EACH ROW EXECUTE FUNCTION wms.audit_row('', '')
 trigger wms.property_group property_group_touch_updated_at enabled=O CREATE TRIGGER property_group_touch_updated_at BEFORE UPDATE ON wms.property_group FOR EACH ROW EXECUTE FUNCTION wms.touch_updated_at()
 policy wms.property_group property_group_tenant_fence permissive ALL to=wms_api using=(company_id = ( SELECT wms.current_company_id() AS current_company_id)) check=(company_id = ( SELECT wms.current_company_id() AS current_company_id))
 relation wms.property_group_member kind=table owner=<owner> persistence=p rls=true force-rls=true replica-identity=d acl=[<owner>=DELETE,INSERT,MAINTAIN,REFERENCES,SELECT,TRIGGER,TRUNCATE,UPDATE/<owner> wms_api=DELETE,INSERT,SELECT,UPDATE/<owner> wms_worker=SELECT/<owner>]
@@ -1463,6 +1508,7 @@ index wms.property_group_member property_group_member_pkey CREATE UNIQUE INDEX p
 index wms.property_group_member property_group_member_project_id_idx CREATE INDEX property_group_member_project_id_idx ON wms.property_group_member USING btree (company_id, project_id)
 index wms.property_group_member property_group_member_property_group_id_property_id_key CREATE UNIQUE INDEX property_group_member_property_group_id_property_id_key ON wms.property_group_member USING btree (company_id, property_group_id, property_id)
 index wms.property_group_member property_group_member_property_id_idx CREATE INDEX property_group_member_property_id_idx ON wms.property_group_member USING btree (company_id, property_id)
+trigger wms.property_group_member property_group_member_audit_trail enabled=O CREATE TRIGGER property_group_member_audit_trail AFTER INSERT OR DELETE OR UPDATE ON wms.property_group_member FOR EACH ROW EXECUTE FUNCTION wms.audit_row('property_group', 'property_group_id')
 trigger wms.property_group_member property_group_member_touch_updated_at enabled=O CREATE TRIGGER property_group_member_touch_updated_at BEFORE UPDATE ON wms.property_group_member FOR EACH ROW EXECUTE FUNCTION wms.touch_updated_at()
 policy wms.property_group_member property_group_member_tenant_fence permissive ALL to=wms_api using=(company_id = ( SELECT wms.current_company_id() AS current_company_id)) check=(company_id = ( SELECT wms.current_company_id() AS current_company_id))
 relation wms.property_party kind=table owner=<owner> persistence=p rls=true force-rls=true replica-identity=d acl=[<owner>=DELETE,INSERT,MAINTAIN,REFERENCES,SELECT,TRIGGER,TRUNCATE,UPDATE/<owner> wms_api=DELETE,INSERT,SELECT,UPDATE/<owner> wms_worker=SELECT/<owner>]
@@ -1485,6 +1531,7 @@ index wms.property_party property_party_customer_id_idx CREATE INDEX property_pa
 index wms.property_party property_party_pkey CREATE UNIQUE INDEX property_party_pkey ON wms.property_party USING btree (id)
 index wms.property_party property_party_project_id_idx CREATE INDEX property_party_project_id_idx ON wms.property_party USING btree (company_id, project_id)
 index wms.property_party property_party_property_id_customer_id_role_key CREATE UNIQUE INDEX property_party_property_id_customer_id_role_key ON wms.property_party USING btree (company_id, property_id, customer_id, role)
+trigger wms.property_party property_party_audit_trail enabled=O CREATE TRIGGER property_party_audit_trail AFTER INSERT OR DELETE OR UPDATE ON wms.property_party FOR EACH ROW EXECUTE FUNCTION wms.audit_row('property', 'property_id')
 trigger wms.property_party property_party_touch_updated_at enabled=O CREATE TRIGGER property_party_touch_updated_at BEFORE UPDATE ON wms.property_party FOR EACH ROW EXECUTE FUNCTION wms.touch_updated_at()
 policy wms.property_party property_party_tenant_fence permissive ALL to=wms_api using=(company_id = ( SELECT wms.current_company_id() AS current_company_id)) check=(company_id = ( SELECT wms.current_company_id() AS current_company_id))
 relation wms.role kind=table owner=<owner> persistence=p rls=true force-rls=true replica-identity=d acl=[<owner>=DELETE,INSERT,MAINTAIN,REFERENCES,SELECT,TRIGGER,TRUNCATE,UPDATE/<owner> wms_api=DELETE,INSERT,SELECT,UPDATE/<owner> wms_worker=SELECT/<owner>]
@@ -1506,6 +1553,7 @@ index wms.role role_key_key CREATE UNIQUE INDEX role_key_key ON wms.role USING b
 index wms.role role_name_key CREATE UNIQUE INDEX role_name_key ON wms.role USING btree (company_id, name)
 index wms.role role_pkey CREATE UNIQUE INDEX role_pkey ON wms.role USING btree (id)
 index wms.role role_tenant_key CREATE UNIQUE INDEX role_tenant_key ON wms.role USING btree (company_id, id)
+trigger wms.role role_audit_trail enabled=O CREATE TRIGGER role_audit_trail AFTER INSERT OR DELETE OR UPDATE ON wms.role FOR EACH ROW EXECUTE FUNCTION wms.audit_row('', '')
 trigger wms.role role_touch_updated_at enabled=O CREATE TRIGGER role_touch_updated_at BEFORE UPDATE ON wms.role FOR EACH ROW EXECUTE FUNCTION wms.touch_updated_at()
 policy wms.role role_tenant_fence permissive ALL to=wms_api using=(company_id = ( SELECT wms.current_company_id() AS current_company_id)) check=(company_id = ( SELECT wms.current_company_id() AS current_company_id))
 relation wms.role_grant kind=table owner=<owner> persistence=p rls=true force-rls=true replica-identity=d acl=[<owner>=DELETE,INSERT,MAINTAIN,REFERENCES,SELECT,TRIGGER,TRUNCATE,UPDATE/<owner> wms_api=DELETE,INSERT,SELECT,UPDATE/<owner> wms_worker=SELECT/<owner>]
@@ -1521,6 +1569,7 @@ constraint wms.role_grant role_grant_role_id_fk FOREIGN KEY (company_id, role_id
 constraint wms.role_grant role_grant_role_id_module_key_action_key UNIQUE (company_id, role_id, module_key, action)
 index wms.role_grant role_grant_pkey CREATE UNIQUE INDEX role_grant_pkey ON wms.role_grant USING btree (id)
 index wms.role_grant role_grant_role_id_module_key_action_key CREATE UNIQUE INDEX role_grant_role_id_module_key_action_key ON wms.role_grant USING btree (company_id, role_id, module_key, action)
+trigger wms.role_grant role_grant_audit_trail enabled=O CREATE TRIGGER role_grant_audit_trail AFTER INSERT OR DELETE OR UPDATE ON wms.role_grant FOR EACH ROW EXECUTE FUNCTION wms.audit_row('role', 'role_id')
 trigger wms.role_grant role_grant_touch_updated_at enabled=O CREATE TRIGGER role_grant_touch_updated_at BEFORE UPDATE ON wms.role_grant FOR EACH ROW EXECUTE FUNCTION wms.touch_updated_at()
 policy wms.role_grant role_grant_tenant_fence permissive ALL to=wms_api using=(company_id = ( SELECT wms.current_company_id() AS current_company_id)) check=(company_id = ( SELECT wms.current_company_id() AS current_company_id))
 relation wms.route kind=table owner=<owner> persistence=p rls=true force-rls=true replica-identity=d acl=[<owner>=DELETE,INSERT,MAINTAIN,REFERENCES,SELECT,TRIGGER,TRUNCATE,UPDATE/<owner> wms_api=DELETE,INSERT,SELECT,UPDATE/<owner> wms_sync=SELECT/<owner> wms_worker=SELECT/<owner>]
@@ -1650,6 +1699,7 @@ index wms.route_scheme route_scheme_pkey CREATE UNIQUE INDEX route_scheme_pkey O
 index wms.route_scheme route_scheme_planning_area_id_idx CREATE INDEX route_scheme_planning_area_id_idx ON wms.route_scheme USING btree (company_id, planning_area_id)
 index wms.route_scheme route_scheme_project_key CREATE UNIQUE INDEX route_scheme_project_key ON wms.route_scheme USING btree (company_id, project_id, id)
 index wms.route_scheme route_scheme_unloading_station_id_idx CREATE INDEX route_scheme_unloading_station_id_idx ON wms.route_scheme USING btree (company_id, unloading_station_id)
+trigger wms.route_scheme route_scheme_audit_trail enabled=O CREATE TRIGGER route_scheme_audit_trail AFTER INSERT OR DELETE OR UPDATE ON wms.route_scheme FOR EACH ROW EXECUTE FUNCTION wms.audit_row('', '')
 trigger wms.route_scheme route_scheme_touch_updated_at enabled=O CREATE TRIGGER route_scheme_touch_updated_at BEFORE UPDATE ON wms.route_scheme FOR EACH ROW EXECUTE FUNCTION wms.touch_updated_at()
 policy wms.route_scheme route_scheme_tenant_fence permissive ALL to=wms_api using=(company_id = ( SELECT wms.current_company_id() AS current_company_id)) check=(company_id = ( SELECT wms.current_company_id() AS current_company_id))
 relation wms.routing_quota kind=table owner=<owner> persistence=p rls=true force-rls=true replica-identity=d acl=[<owner>=DELETE,INSERT,MAINTAIN,REFERENCES,SELECT,TRIGGER,TRUNCATE,UPDATE/<owner> wms_api=DELETE,INSERT,SELECT,UPDATE/<owner> wms_worker=SELECT/<owner>]
@@ -1695,6 +1745,7 @@ index wms.service_area service_area_no_overlap CREATE INDEX service_area_no_over
 index wms.service_area service_area_pkey CREATE UNIQUE INDEX service_area_pkey ON wms.service_area USING btree (id)
 index wms.service_area service_area_project_id_name_idx CREATE INDEX service_area_project_id_name_idx ON wms.service_area USING btree (company_id, project_id, name)
 index wms.service_area service_area_project_key CREATE UNIQUE INDEX service_area_project_key ON wms.service_area USING btree (company_id, project_id, id)
+trigger wms.service_area service_area_audit_trail enabled=O CREATE TRIGGER service_area_audit_trail AFTER INSERT OR DELETE OR UPDATE ON wms.service_area FOR EACH ROW EXECUTE FUNCTION wms.audit_row('', '')
 trigger wms.service_area service_area_touch_updated_at enabled=O CREATE TRIGGER service_area_touch_updated_at BEFORE UPDATE ON wms.service_area FOR EACH ROW EXECUTE FUNCTION wms.touch_updated_at()
 policy wms.service_area service_area_tenant_fence permissive ALL to=wms_api using=(company_id = ( SELECT wms.current_company_id() AS current_company_id)) check=(company_id = ( SELECT wms.current_company_id() AS current_company_id))
 relation wms.service_area_assignment kind=table owner=<owner> persistence=p rls=true force-rls=true replica-identity=d acl=[<owner>=DELETE,INSERT,MAINTAIN,REFERENCES,SELECT,TRIGGER,TRUNCATE,UPDATE/<owner> wms_api=DELETE,INSERT,SELECT,UPDATE/<owner> wms_worker=SELECT/<owner>]
@@ -1720,6 +1771,7 @@ index wms.service_area_assignment service_area_assignment_no_overlap CREATE INDE
 index wms.service_area_assignment service_area_assignment_pkey CREATE UNIQUE INDEX service_area_assignment_pkey ON wms.service_area_assignment USING btree (id)
 index wms.service_area_assignment service_area_assignment_project_key CREATE UNIQUE INDEX service_area_assignment_project_key ON wms.service_area_assignment USING btree (company_id, project_id, id)
 index wms.service_area_assignment service_area_assignment_service_provider_id_idx CREATE INDEX service_area_assignment_service_provider_id_idx ON wms.service_area_assignment USING btree (company_id, service_provider_id)
+trigger wms.service_area_assignment service_area_assignment_audit_trail enabled=O CREATE TRIGGER service_area_assignment_audit_trail AFTER INSERT OR DELETE OR UPDATE ON wms.service_area_assignment FOR EACH ROW EXECUTE FUNCTION wms.audit_row('service_area', 'service_area_id')
 trigger wms.service_area_assignment service_area_assignment_touch_updated_at enabled=O CREATE TRIGGER service_area_assignment_touch_updated_at BEFORE UPDATE ON wms.service_area_assignment FOR EACH ROW EXECUTE FUNCTION wms.touch_updated_at()
 policy wms.service_area_assignment service_area_assignment_tenant_fence permissive ALL to=wms_api using=(company_id = ( SELECT wms.current_company_id() AS current_company_id)) check=(company_id = ( SELECT wms.current_company_id() AS current_company_id))
 relation wms.service_area_planning_area kind=table owner=<owner> persistence=p rls=true force-rls=true replica-identity=d acl=[<owner>=DELETE,INSERT,MAINTAIN,REFERENCES,SELECT,TRIGGER,TRUNCATE,UPDATE/<owner> wms_api=DELETE,INSERT,SELECT,UPDATE/<owner> wms_worker=SELECT/<owner>]
@@ -1740,6 +1792,7 @@ index wms.service_area_planning_area service_area_planning_area_membership_key C
 index wms.service_area_planning_area service_area_planning_area_pkey CREATE UNIQUE INDEX service_area_planning_area_pkey ON wms.service_area_planning_area USING btree (id)
 index wms.service_area_planning_area service_area_planning_area_planning_area_id_idx CREATE INDEX service_area_planning_area_planning_area_id_idx ON wms.service_area_planning_area USING btree (company_id, planning_area_id)
 index wms.service_area_planning_area service_area_planning_area_project_id_idx CREATE INDEX service_area_planning_area_project_id_idx ON wms.service_area_planning_area USING btree (company_id, project_id)
+trigger wms.service_area_planning_area service_area_planning_area_audit_trail enabled=O CREATE TRIGGER service_area_planning_area_audit_trail AFTER INSERT OR DELETE OR UPDATE ON wms.service_area_planning_area FOR EACH ROW EXECUTE FUNCTION wms.audit_row('service_area', 'service_area_id')
 trigger wms.service_area_planning_area service_area_planning_area_touch_updated_at enabled=O CREATE TRIGGER service_area_planning_area_touch_updated_at BEFORE UPDATE ON wms.service_area_planning_area FOR EACH ROW EXECUTE FUNCTION wms.touch_updated_at()
 policy wms.service_area_planning_area service_area_planning_area_tenant_fence permissive ALL to=wms_api using=(company_id = ( SELECT wms.current_company_id() AS current_company_id)) check=(company_id = ( SELECT wms.current_company_id() AS current_company_id))
 relation wms.service_area_waste_fraction kind=table owner=<owner> persistence=p rls=true force-rls=true replica-identity=d acl=[<owner>=DELETE,INSERT,MAINTAIN,REFERENCES,SELECT,TRIGGER,TRUNCATE,UPDATE/<owner> wms_api=DELETE,INSERT,SELECT,UPDATE/<owner> wms_worker=SELECT/<owner>]
@@ -1760,6 +1813,7 @@ index wms.service_area_waste_fraction service_area_waste_fraction_membership_key
 index wms.service_area_waste_fraction service_area_waste_fraction_pkey CREATE UNIQUE INDEX service_area_waste_fraction_pkey ON wms.service_area_waste_fraction USING btree (id)
 index wms.service_area_waste_fraction service_area_waste_fraction_project_id_idx CREATE INDEX service_area_waste_fraction_project_id_idx ON wms.service_area_waste_fraction USING btree (company_id, project_id)
 index wms.service_area_waste_fraction service_area_waste_fraction_waste_fraction_id_idx CREATE INDEX service_area_waste_fraction_waste_fraction_id_idx ON wms.service_area_waste_fraction USING btree (company_id, waste_fraction_id)
+trigger wms.service_area_waste_fraction service_area_waste_fraction_audit_trail enabled=O CREATE TRIGGER service_area_waste_fraction_audit_trail AFTER INSERT OR DELETE OR UPDATE ON wms.service_area_waste_fraction FOR EACH ROW EXECUTE FUNCTION wms.audit_row('service_area', 'service_area_id')
 trigger wms.service_area_waste_fraction service_area_waste_fraction_touch_updated_at enabled=O CREATE TRIGGER service_area_waste_fraction_touch_updated_at BEFORE UPDATE ON wms.service_area_waste_fraction FOR EACH ROW EXECUTE FUNCTION wms.touch_updated_at()
 policy wms.service_area_waste_fraction service_area_waste_fraction_tenant_fence permissive ALL to=wms_api using=(company_id = ( SELECT wms.current_company_id() AS current_company_id)) check=(company_id = ( SELECT wms.current_company_id() AS current_company_id))
 relation wms.service_frequency kind=table owner=<owner> persistence=p rls=true force-rls=true replica-identity=d acl=[<owner>=DELETE,INSERT,MAINTAIN,REFERENCES,SELECT,TRIGGER,TRUNCATE,UPDATE/<owner> wms_api=DELETE,INSERT,SELECT,UPDATE/<owner> wms_worker=SELECT/<owner>]
@@ -1785,6 +1839,7 @@ constraint wms.service_frequency service_frequency_weeks_between_positive CHECK 
 index wms.service_frequency service_frequency_pkey CREATE UNIQUE INDEX service_frequency_pkey ON wms.service_frequency USING btree (id)
 index wms.service_frequency service_frequency_project_id_name_key CREATE UNIQUE INDEX service_frequency_project_id_name_key ON wms.service_frequency USING btree (company_id, project_id, name)
 index wms.service_frequency service_frequency_project_key CREATE UNIQUE INDEX service_frequency_project_key ON wms.service_frequency USING btree (company_id, project_id, id)
+trigger wms.service_frequency service_frequency_audit_trail enabled=O CREATE TRIGGER service_frequency_audit_trail AFTER INSERT OR DELETE OR UPDATE ON wms.service_frequency FOR EACH ROW EXECUTE FUNCTION wms.audit_row('', '')
 trigger wms.service_frequency service_frequency_touch_updated_at enabled=O CREATE TRIGGER service_frequency_touch_updated_at BEFORE UPDATE ON wms.service_frequency FOR EACH ROW EXECUTE FUNCTION wms.touch_updated_at()
 policy wms.service_frequency service_frequency_tenant_fence permissive ALL to=wms_api using=(company_id = ( SELECT wms.current_company_id() AS current_company_id)) check=(company_id = ( SELECT wms.current_company_id() AS current_company_id))
 relation wms.service_provider kind=table owner=<owner> persistence=p rls=true force-rls=true replica-identity=d acl=[<owner>=DELETE,INSERT,MAINTAIN,REFERENCES,SELECT,TRIGGER,TRUNCATE,UPDATE/<owner> wms_api=DELETE,INSERT,SELECT,UPDATE/<owner> wms_worker=SELECT/<owner>]
@@ -1804,6 +1859,7 @@ constraint wms.service_provider service_provider_tenant_key UNIQUE (company_id, 
 index wms.service_provider service_provider_country_registration_number_key CREATE UNIQUE INDEX service_provider_country_registration_number_key ON wms.service_provider USING btree (company_id, country, registration_number)
 index wms.service_provider service_provider_pkey CREATE UNIQUE INDEX service_provider_pkey ON wms.service_provider USING btree (id)
 index wms.service_provider service_provider_tenant_key CREATE UNIQUE INDEX service_provider_tenant_key ON wms.service_provider USING btree (company_id, id)
+trigger wms.service_provider service_provider_audit_trail enabled=O CREATE TRIGGER service_provider_audit_trail AFTER INSERT OR DELETE OR UPDATE ON wms.service_provider FOR EACH ROW EXECUTE FUNCTION wms.audit_row('', '')
 trigger wms.service_provider service_provider_touch_updated_at enabled=O CREATE TRIGGER service_provider_touch_updated_at BEFORE UPDATE ON wms.service_provider FOR EACH ROW EXECUTE FUNCTION wms.touch_updated_at()
 policy wms.service_provider service_provider_tenant_fence permissive ALL to=wms_api using=(company_id = ( SELECT wms.current_company_id() AS current_company_id)) check=(company_id = ( SELECT wms.current_company_id() AS current_company_id))
 relation wms.service_provider_access kind=table owner=<owner> persistence=p rls=true force-rls=true replica-identity=d acl=[<owner>=DELETE,INSERT,MAINTAIN,REFERENCES,SELECT,TRIGGER,TRUNCATE,UPDATE/<owner> wms_api=DELETE,INSERT,SELECT,UPDATE/<owner> wms_worker=SELECT/<owner>]
@@ -1818,6 +1874,7 @@ constraint wms.service_provider_access service_provider_access_user_account_id_s
 constraint wms.service_provider_access service_provider_access_user_account_id_service_provider_id_key UNIQUE (company_id, user_account_id, service_provider_id)
 index wms.service_provider_access service_provider_access_pkey CREATE UNIQUE INDEX service_provider_access_pkey ON wms.service_provider_access USING btree (id)
 index wms.service_provider_access service_provider_access_user_account_id_service_provider_id_key CREATE UNIQUE INDEX service_provider_access_user_account_id_service_provider_id_key ON wms.service_provider_access USING btree (company_id, user_account_id, service_provider_id)
+trigger wms.service_provider_access service_provider_access_audit_trail enabled=O CREATE TRIGGER service_provider_access_audit_trail AFTER INSERT OR DELETE OR UPDATE ON wms.service_provider_access FOR EACH ROW EXECUTE FUNCTION wms.audit_row('user_account', 'user_account_id')
 trigger wms.service_provider_access service_provider_access_touch_updated_at enabled=O CREATE TRIGGER service_provider_access_touch_updated_at BEFORE UPDATE ON wms.service_provider_access FOR EACH ROW EXECUTE FUNCTION wms.touch_updated_at()
 policy wms.service_provider_access service_provider_access_tenant_fence permissive ALL to=wms_api using=(company_id = ( SELECT wms.current_company_id() AS current_company_id)) check=(company_id = ( SELECT wms.current_company_id() AS current_company_id))
 relation wms.service_provider_price kind=table owner=<owner> persistence=p rls=true force-rls=true replica-identity=d acl=[<owner>=DELETE,INSERT,MAINTAIN,REFERENCES,SELECT,TRIGGER,TRUNCATE,UPDATE/<owner> wms_api=DELETE,INSERT,SELECT,UPDATE/<owner> wms_worker=SELECT/<owner>]
@@ -1857,6 +1914,7 @@ index wms.service_provider_price service_provider_price_no_overlap CREATE INDEX 
 index wms.service_provider_price service_provider_price_pkey CREATE UNIQUE INDEX service_provider_price_pkey ON wms.service_provider_price USING btree (id)
 index wms.service_provider_price service_provider_price_product_id_idx CREATE INDEX service_provider_price_product_id_idx ON wms.service_provider_price USING btree (company_id, product_id)
 index wms.service_provider_price service_provider_price_project_key CREATE UNIQUE INDEX service_provider_price_project_key ON wms.service_provider_price USING btree (company_id, project_id, id)
+trigger wms.service_provider_price service_provider_price_audit_trail enabled=O CREATE TRIGGER service_provider_price_audit_trail AFTER INSERT OR DELETE OR UPDATE ON wms.service_provider_price FOR EACH ROW EXECUTE FUNCTION wms.audit_row('service_area_assignment', 'service_area_assignment_id')
 trigger wms.service_provider_price service_provider_price_touch_updated_at enabled=O CREATE TRIGGER service_provider_price_touch_updated_at BEFORE UPDATE ON wms.service_provider_price FOR EACH ROW EXECUTE FUNCTION wms.touch_updated_at()
 policy wms.service_provider_price service_provider_price_tenant_fence permissive ALL to=wms_api using=(company_id = ( SELECT wms.current_company_id() AS current_company_id)) check=(company_id = ( SELECT wms.current_company_id() AS current_company_id))
 relation wms.session kind=table owner=<owner> persistence=p rls=true force-rls=true replica-identity=d acl=[<owner>=DELETE,INSERT,MAINTAIN,REFERENCES,SELECT,TRIGGER,TRUNCATE,UPDATE/<owner> wms_api=DELETE,INSERT,SELECT,UPDATE/<owner> wms_sync=SELECT/<owner> wms_worker=SELECT/<owner>]
@@ -1933,6 +1991,7 @@ index wms.settlement settlement_pkey CREATE UNIQUE INDEX settlement_pkey ON wms.
 index wms.settlement settlement_project_id_status_idx CREATE INDEX settlement_project_id_status_idx ON wms.settlement USING btree (company_id, project_id, status)
 index wms.settlement settlement_project_key CREATE UNIQUE INDEX settlement_project_key ON wms.settlement USING btree (company_id, project_id, id)
 index wms.settlement settlement_service_area_assignment_id_idx CREATE INDEX settlement_service_area_assignment_id_idx ON wms.settlement USING btree (company_id, service_area_assignment_id)
+trigger wms.settlement settlement_audit_trail enabled=O CREATE TRIGGER settlement_audit_trail AFTER INSERT OR DELETE OR UPDATE ON wms.settlement FOR EACH ROW EXECUTE FUNCTION wms.audit_row('', '')
 trigger wms.settlement settlement_touch_updated_at enabled=O CREATE TRIGGER settlement_touch_updated_at BEFORE UPDATE ON wms.settlement FOR EACH ROW EXECUTE FUNCTION wms.touch_updated_at()
 policy wms.settlement settlement_tenant_fence permissive ALL to=wms_api using=(company_id = ( SELECT wms.current_company_id() AS current_company_id)) check=(company_id = ( SELECT wms.current_company_id() AS current_company_id))
 relation wms.settlement_event kind=table owner=<owner> persistence=p rls=true force-rls=true replica-identity=d acl=[<owner>=DELETE,INSERT,MAINTAIN,REFERENCES,SELECT,TRIGGER,TRUNCATE,UPDATE/<owner> wms_api=INSERT,SELECT/<owner> wms_worker=SELECT/<owner>]
@@ -2023,6 +2082,7 @@ index wms.shared_collection_point shared_collection_point_pkey CREATE UNIQUE IND
 index wms.shared_collection_point shared_collection_point_project_id_name_key CREATE UNIQUE INDEX shared_collection_point_project_id_name_key ON wms.shared_collection_point USING btree (company_id, project_id, name)
 index wms.shared_collection_point shared_collection_point_project_key CREATE UNIQUE INDEX shared_collection_point_project_key ON wms.shared_collection_point USING btree (company_id, project_id, id)
 index wms.shared_collection_point shared_collection_point_responsible_customer_id_idx CREATE INDEX shared_collection_point_responsible_customer_id_idx ON wms.shared_collection_point USING btree (company_id, responsible_customer_id)
+trigger wms.shared_collection_point shared_collection_point_audit_trail enabled=O CREATE TRIGGER shared_collection_point_audit_trail AFTER INSERT OR DELETE OR UPDATE ON wms.shared_collection_point FOR EACH ROW EXECUTE FUNCTION wms.audit_row('', '')
 trigger wms.shared_collection_point shared_collection_point_touch_updated_at enabled=O CREATE TRIGGER shared_collection_point_touch_updated_at BEFORE UPDATE ON wms.shared_collection_point FOR EACH ROW EXECUTE FUNCTION wms.touch_updated_at()
 policy wms.shared_collection_point shared_collection_point_tenant_fence permissive ALL to=wms_api using=(company_id = ( SELECT wms.current_company_id() AS current_company_id)) check=(company_id = ( SELECT wms.current_company_id() AS current_company_id))
 relation wms.shared_collection_point_member kind=table owner=<owner> persistence=p rls=true force-rls=true replica-identity=d acl=[<owner>=DELETE,INSERT,MAINTAIN,REFERENCES,SELECT,TRIGGER,TRUNCATE,UPDATE/<owner> wms_api=DELETE,INSERT,SELECT,UPDATE/<owner> wms_worker=SELECT/<owner>]
@@ -2045,6 +2105,7 @@ index wms.shared_collection_point_member shared_collection_point_member_membersh
 index wms.shared_collection_point_member shared_collection_point_member_pkey CREATE UNIQUE INDEX shared_collection_point_member_pkey ON wms.shared_collection_point_member USING btree (id)
 index wms.shared_collection_point_member shared_collection_point_member_project_id_idx CREATE INDEX shared_collection_point_member_project_id_idx ON wms.shared_collection_point_member USING btree (company_id, project_id)
 index wms.shared_collection_point_member shared_collection_point_member_property_id_idx CREATE INDEX shared_collection_point_member_property_id_idx ON wms.shared_collection_point_member USING btree (company_id, property_id)
+trigger wms.shared_collection_point_member shared_collection_point_member_audit_trail enabled=O CREATE TRIGGER shared_collection_point_member_audit_trail AFTER INSERT OR DELETE OR UPDATE ON wms.shared_collection_point_member FOR EACH ROW EXECUTE FUNCTION wms.audit_row('shared_collection_point', 'shared_collection_point_id')
 trigger wms.shared_collection_point_member shared_collection_point_member_touch_updated_at enabled=O CREATE TRIGGER shared_collection_point_member_touch_updated_at BEFORE UPDATE ON wms.shared_collection_point_member FOR EACH ROW EXECUTE FUNCTION wms.touch_updated_at()
 policy wms.shared_collection_point_member shared_collection_point_member_tenant_fence permissive ALL to=wms_api using=(company_id = ( SELECT wms.current_company_id() AS current_company_id)) check=(company_id = ( SELECT wms.current_company_id() AS current_company_id))
 relation wms.sorting_guide_item kind=table owner=<owner> persistence=p rls=true force-rls=true replica-identity=d acl=[<owner>=DELETE,INSERT,MAINTAIN,REFERENCES,SELECT,TRIGGER,TRUNCATE,UPDATE/<owner> wms_api=DELETE,INSERT,SELECT,UPDATE/<owner> wms_worker=SELECT/<owner>]
@@ -2069,6 +2130,7 @@ index wms.sorting_guide_item sorting_guide_item_pkey CREATE UNIQUE INDEX sorting
 index wms.sorting_guide_item sorting_guide_item_project_id_name_key CREATE UNIQUE INDEX sorting_guide_item_project_id_name_key ON wms.sorting_guide_item USING btree (company_id, project_id, name)
 index wms.sorting_guide_item sorting_guide_item_project_key CREATE UNIQUE INDEX sorting_guide_item_project_key ON wms.sorting_guide_item USING btree (company_id, project_id, id)
 index wms.sorting_guide_item sorting_guide_item_waste_fraction_id_idx CREATE INDEX sorting_guide_item_waste_fraction_id_idx ON wms.sorting_guide_item USING btree (company_id, waste_fraction_id)
+trigger wms.sorting_guide_item sorting_guide_item_audit_trail enabled=O CREATE TRIGGER sorting_guide_item_audit_trail AFTER INSERT OR DELETE OR UPDATE ON wms.sorting_guide_item FOR EACH ROW EXECUTE FUNCTION wms.audit_row('', '')
 trigger wms.sorting_guide_item sorting_guide_item_touch_updated_at enabled=O CREATE TRIGGER sorting_guide_item_touch_updated_at BEFORE UPDATE ON wms.sorting_guide_item FOR EACH ROW EXECUTE FUNCTION wms.touch_updated_at()
 policy wms.sorting_guide_item sorting_guide_item_public_door permissive SELECT to=wms_public using=((company_id = ( SELECT wms.current_company_id() AS current_company_id)) AND (status = 'published'::text) AND (EXISTS ( SELECT 1
    FROM wms.project published
@@ -2159,6 +2221,7 @@ index wms.subscription subscription_product_id_idx CREATE INDEX subscription_pro
 index wms.subscription subscription_project_key CREATE UNIQUE INDEX subscription_project_key ON wms.subscription USING btree (company_id, project_id, id)
 index wms.subscription subscription_property_id_idx CREATE INDEX subscription_property_id_idx ON wms.subscription USING btree (company_id, property_id)
 index wms.subscription subscription_shared_collection_point_id_idx CREATE INDEX subscription_shared_collection_point_id_idx ON wms.subscription USING btree (company_id, shared_collection_point_id)
+trigger wms.subscription subscription_audit_trail enabled=O CREATE TRIGGER subscription_audit_trail AFTER INSERT OR DELETE OR UPDATE ON wms.subscription FOR EACH ROW EXECUTE FUNCTION wms.audit_row('agreement', 'agreement_id')
 trigger wms.subscription subscription_touch_updated_at enabled=O CREATE TRIGGER subscription_touch_updated_at BEFORE UPDATE ON wms.subscription FOR EACH ROW EXECUTE FUNCTION wms.touch_updated_at()
 policy wms.subscription subscription_tenant_fence permissive ALL to=wms_api using=(company_id = ( SELECT wms.current_company_id() AS current_company_id)) check=(company_id = ( SELECT wms.current_company_id() AS current_company_id))
 relation wms.ticket kind=table owner=<owner> persistence=p rls=true force-rls=true replica-identity=d acl=[<owner>=DELETE,INSERT,MAINTAIN,REFERENCES,SELECT,TRIGGER,TRUNCATE,UPDATE/<owner> wms_api=DELETE,INSERT,SELECT,UPDATE/<owner> wms_worker=SELECT/<owner>]
@@ -2359,6 +2422,7 @@ index wms.unloading_station unloading_station_name_key CREATE UNIQUE INDEX unloa
 index wms.unloading_station unloading_station_pkey CREATE UNIQUE INDEX unloading_station_pkey ON wms.unloading_station USING btree (id)
 index wms.unloading_station unloading_station_service_provider_id_idx CREATE INDEX unloading_station_service_provider_id_idx ON wms.unloading_station USING btree (company_id, service_provider_id)
 index wms.unloading_station unloading_station_tenant_key CREATE UNIQUE INDEX unloading_station_tenant_key ON wms.unloading_station USING btree (company_id, id)
+trigger wms.unloading_station unloading_station_audit_trail enabled=O CREATE TRIGGER unloading_station_audit_trail AFTER INSERT OR DELETE OR UPDATE ON wms.unloading_station FOR EACH ROW EXECUTE FUNCTION wms.audit_row('', '')
 trigger wms.unloading_station unloading_station_touch_updated_at enabled=O CREATE TRIGGER unloading_station_touch_updated_at BEFORE UPDATE ON wms.unloading_station FOR EACH ROW EXECUTE FUNCTION wms.touch_updated_at()
 policy wms.unloading_station unloading_station_tenant_fence permissive ALL to=wms_api using=(company_id = ( SELECT wms.current_company_id() AS current_company_id)) check=(company_id = ( SELECT wms.current_company_id() AS current_company_id))
 relation wms.unloading_station_fraction kind=table owner=<owner> persistence=p rls=true force-rls=true replica-identity=d acl=[<owner>=DELETE,INSERT,MAINTAIN,REFERENCES,SELECT,TRIGGER,TRUNCATE,UPDATE/<owner> wms_api=DELETE,INSERT,SELECT,UPDATE/<owner> wms_sync=SELECT/<owner> wms_worker=SELECT/<owner>]
@@ -2376,6 +2440,7 @@ constraint wms.unloading_station_fraction unloading_station_fraction_waste_fract
 index wms.unloading_station_fraction unloading_station_fraction_membership_key CREATE UNIQUE INDEX unloading_station_fraction_membership_key ON wms.unloading_station_fraction USING btree (company_id, unloading_station_id, waste_fraction_id)
 index wms.unloading_station_fraction unloading_station_fraction_pkey CREATE UNIQUE INDEX unloading_station_fraction_pkey ON wms.unloading_station_fraction USING btree (id)
 index wms.unloading_station_fraction unloading_station_fraction_waste_fraction_id_idx CREATE INDEX unloading_station_fraction_waste_fraction_id_idx ON wms.unloading_station_fraction USING btree (company_id, waste_fraction_id)
+trigger wms.unloading_station_fraction unloading_station_fraction_audit_trail enabled=O CREATE TRIGGER unloading_station_fraction_audit_trail AFTER INSERT OR DELETE OR UPDATE ON wms.unloading_station_fraction FOR EACH ROW EXECUTE FUNCTION wms.audit_row('unloading_station', 'unloading_station_id')
 trigger wms.unloading_station_fraction unloading_station_fraction_touch_updated_at enabled=O CREATE TRIGGER unloading_station_fraction_touch_updated_at BEFORE UPDATE ON wms.unloading_station_fraction FOR EACH ROW EXECUTE FUNCTION wms.touch_updated_at()
 policy wms.unloading_station_fraction unloading_station_fraction_tenant_fence permissive ALL to=wms_api using=(company_id = ( SELECT wms.current_company_id() AS current_company_id)) check=(company_id = ( SELECT wms.current_company_id() AS current_company_id))
 relation wms.user_account kind=table owner=<owner> persistence=p rls=true force-rls=true replica-identity=d acl=[<owner>=DELETE,INSERT,MAINTAIN,REFERENCES,SELECT,TRIGGER,TRUNCATE,UPDATE/<owner> wms_api=DELETE,INSERT,SELECT,UPDATE/<owner> wms_sync=SELECT/<owner> wms_worker=SELECT/<owner>]
@@ -2408,6 +2473,7 @@ index wms.user_account user_account_primary_administrator_idx CREATE UNIQUE INDE
 index wms.user_account user_account_role_id_idx CREATE INDEX user_account_role_id_idx ON wms.user_account USING btree (company_id, role_id)
 index wms.user_account user_account_service_provider_id_idx CREATE INDEX user_account_service_provider_id_idx ON wms.user_account USING btree (company_id, service_provider_id)
 index wms.user_account user_account_tenant_key CREATE UNIQUE INDEX user_account_tenant_key ON wms.user_account USING btree (company_id, id)
+trigger wms.user_account user_account_audit_trail enabled=O CREATE TRIGGER user_account_audit_trail AFTER INSERT OR DELETE OR UPDATE ON wms.user_account FOR EACH ROW EXECUTE FUNCTION wms.audit_row('', '')
 trigger wms.user_account user_account_touch_updated_at enabled=O CREATE TRIGGER user_account_touch_updated_at BEFORE UPDATE ON wms.user_account FOR EACH ROW EXECUTE FUNCTION wms.touch_updated_at()
 policy wms.user_account user_account_tenant_fence permissive ALL to=wms_api using=(company_id = ( SELECT wms.current_company_id() AS current_company_id)) check=(company_id = ( SELECT wms.current_company_id() AS current_company_id))
 relation wms.vehicle kind=table owner=<owner> persistence=p rls=true force-rls=true replica-identity=d acl=[<owner>=DELETE,INSERT,MAINTAIN,REFERENCES,SELECT,TRIGGER,TRUNCATE,UPDATE/<owner> wms_api=DELETE,INSERT,SELECT,UPDATE/<owner> wms_sync=SELECT/<owner> wms_worker=SELECT/<owner>]
@@ -2451,6 +2517,7 @@ index wms.vehicle vehicle_project_key CREATE UNIQUE INDEX vehicle_project_key ON
 index wms.vehicle vehicle_registration_key CREATE UNIQUE INDEX vehicle_registration_key ON wms.vehicle USING btree (company_id, registration)
 index wms.vehicle vehicle_service_provider_id_idx CREATE INDEX vehicle_service_provider_id_idx ON wms.vehicle USING btree (company_id, service_provider_id)
 index wms.vehicle vehicle_vehicle_type_id_idx CREATE INDEX vehicle_vehicle_type_id_idx ON wms.vehicle USING btree (company_id, vehicle_type_id)
+trigger wms.vehicle vehicle_audit_trail enabled=O CREATE TRIGGER vehicle_audit_trail AFTER INSERT OR DELETE OR UPDATE ON wms.vehicle FOR EACH ROW EXECUTE FUNCTION wms.audit_row('', '')
 trigger wms.vehicle vehicle_touch_updated_at enabled=O CREATE TRIGGER vehicle_touch_updated_at BEFORE UPDATE ON wms.vehicle FOR EACH ROW EXECUTE FUNCTION wms.touch_updated_at()
 policy wms.vehicle vehicle_tenant_fence permissive ALL to=wms_api using=(company_id = ( SELECT wms.current_company_id() AS current_company_id)) check=(company_id = ( SELECT wms.current_company_id() AS current_company_id))
 relation wms.vehicle_allocation kind=table owner=<owner> persistence=p rls=true force-rls=true replica-identity=d acl=[<owner>=DELETE,INSERT,MAINTAIN,REFERENCES,SELECT,TRIGGER,TRUNCATE,UPDATE/<owner> wms_api=DELETE,INSERT,SELECT,UPDATE/<owner> wms_worker=SELECT/<owner>]
@@ -2557,6 +2624,7 @@ index wms.vehicle_compartment vehicle_compartment_pkey CREATE UNIQUE INDEX vehic
 index wms.vehicle_compartment vehicle_compartment_project_id_idx CREATE INDEX vehicle_compartment_project_id_idx ON wms.vehicle_compartment USING btree (company_id, project_id)
 index wms.vehicle_compartment vehicle_compartment_project_key CREATE UNIQUE INDEX vehicle_compartment_project_key ON wms.vehicle_compartment USING btree (company_id, project_id, id)
 index wms.vehicle_compartment vehicle_compartment_vehicle_id_position_key CREATE UNIQUE INDEX vehicle_compartment_vehicle_id_position_key ON wms.vehicle_compartment USING btree (company_id, vehicle_id, "position")
+trigger wms.vehicle_compartment vehicle_compartment_audit_trail enabled=O CREATE TRIGGER vehicle_compartment_audit_trail AFTER INSERT OR DELETE OR UPDATE ON wms.vehicle_compartment FOR EACH ROW EXECUTE FUNCTION wms.audit_row('vehicle', 'vehicle_id')
 trigger wms.vehicle_compartment vehicle_compartment_touch_updated_at enabled=O CREATE TRIGGER vehicle_compartment_touch_updated_at BEFORE UPDATE ON wms.vehicle_compartment FOR EACH ROW EXECUTE FUNCTION wms.touch_updated_at()
 policy wms.vehicle_compartment vehicle_compartment_tenant_fence permissive ALL to=wms_api using=(company_id = ( SELECT wms.current_company_id() AS current_company_id)) check=(company_id = ( SELECT wms.current_company_id() AS current_company_id))
 relation wms.vehicle_compartment_fraction kind=table owner=<owner> persistence=p rls=true force-rls=true replica-identity=d acl=[<owner>=DELETE,INSERT,MAINTAIN,REFERENCES,SELECT,TRIGGER,TRUNCATE,UPDATE/<owner> wms_api=DELETE,INSERT,SELECT,UPDATE/<owner> wms_worker=SELECT/<owner>]
@@ -2577,6 +2645,7 @@ index wms.vehicle_compartment_fraction vehicle_compartment_fraction_membership_k
 index wms.vehicle_compartment_fraction vehicle_compartment_fraction_pkey CREATE UNIQUE INDEX vehicle_compartment_fraction_pkey ON wms.vehicle_compartment_fraction USING btree (id)
 index wms.vehicle_compartment_fraction vehicle_compartment_fraction_project_id_idx CREATE INDEX vehicle_compartment_fraction_project_id_idx ON wms.vehicle_compartment_fraction USING btree (company_id, project_id)
 index wms.vehicle_compartment_fraction vehicle_compartment_fraction_waste_fraction_id_idx CREATE INDEX vehicle_compartment_fraction_waste_fraction_id_idx ON wms.vehicle_compartment_fraction USING btree (company_id, waste_fraction_id)
+trigger wms.vehicle_compartment_fraction vehicle_compartment_fraction_audit_trail enabled=O CREATE TRIGGER vehicle_compartment_fraction_audit_trail AFTER INSERT OR DELETE OR UPDATE ON wms.vehicle_compartment_fraction FOR EACH ROW EXECUTE FUNCTION wms.audit_row('vehicle_compartment', 'vehicle_compartment_id')
 trigger wms.vehicle_compartment_fraction vehicle_compartment_fraction_touch_updated_at enabled=O CREATE TRIGGER vehicle_compartment_fraction_touch_updated_at BEFORE UPDATE ON wms.vehicle_compartment_fraction FOR EACH ROW EXECUTE FUNCTION wms.touch_updated_at()
 policy wms.vehicle_compartment_fraction vehicle_compartment_fraction_tenant_fence permissive ALL to=wms_api using=(company_id = ( SELECT wms.current_company_id() AS current_company_id)) check=(company_id = ( SELECT wms.current_company_id() AS current_company_id))
 relation wms.vehicle_type kind=table owner=<owner> persistence=p rls=true force-rls=true replica-identity=d acl=[<owner>=DELETE,INSERT,MAINTAIN,REFERENCES,SELECT,TRIGGER,TRUNCATE,UPDATE/<owner> wms_api=DELETE,INSERT,SELECT,UPDATE/<owner> wms_worker=SELECT/<owner>]
@@ -2597,6 +2666,7 @@ index wms.vehicle_type vehicle_type_key_key CREATE UNIQUE INDEX vehicle_type_key
 index wms.vehicle_type vehicle_type_name_key CREATE UNIQUE INDEX vehicle_type_name_key ON wms.vehicle_type USING btree (company_id, name)
 index wms.vehicle_type vehicle_type_pkey CREATE UNIQUE INDEX vehicle_type_pkey ON wms.vehicle_type USING btree (id)
 index wms.vehicle_type vehicle_type_tenant_key CREATE UNIQUE INDEX vehicle_type_tenant_key ON wms.vehicle_type USING btree (company_id, id)
+trigger wms.vehicle_type vehicle_type_audit_trail enabled=O CREATE TRIGGER vehicle_type_audit_trail AFTER INSERT OR DELETE OR UPDATE ON wms.vehicle_type FOR EACH ROW EXECUTE FUNCTION wms.audit_row('', '')
 trigger wms.vehicle_type vehicle_type_touch_updated_at enabled=O CREATE TRIGGER vehicle_type_touch_updated_at BEFORE UPDATE ON wms.vehicle_type FOR EACH ROW EXECUTE FUNCTION wms.touch_updated_at()
 policy wms.vehicle_type vehicle_type_tenant_fence permissive ALL to=wms_api using=(company_id = ( SELECT wms.current_company_id() AS current_company_id)) check=(company_id = ( SELECT wms.current_company_id() AS current_company_id))
 relation wms.warehouse kind=table owner=<owner> persistence=p rls=true force-rls=true replica-identity=d acl=[<owner>=DELETE,INSERT,MAINTAIN,REFERENCES,SELECT,TRIGGER,TRUNCATE,UPDATE/<owner> wms_api=DELETE,INSERT,SELECT,UPDATE/<owner> wms_worker=SELECT/<owner>]
@@ -2626,6 +2696,7 @@ index wms.warehouse warehouse_pkey CREATE UNIQUE INDEX warehouse_pkey ON wms.war
 index wms.warehouse warehouse_project_id_code_key CREATE UNIQUE INDEX warehouse_project_id_code_key ON wms.warehouse USING btree (company_id, project_id, code)
 index wms.warehouse warehouse_project_id_name_key CREATE UNIQUE INDEX warehouse_project_id_name_key ON wms.warehouse USING btree (company_id, project_id, name)
 index wms.warehouse warehouse_project_key CREATE UNIQUE INDEX warehouse_project_key ON wms.warehouse USING btree (company_id, project_id, id)
+trigger wms.warehouse warehouse_audit_trail enabled=O CREATE TRIGGER warehouse_audit_trail AFTER INSERT OR DELETE OR UPDATE ON wms.warehouse FOR EACH ROW EXECUTE FUNCTION wms.audit_row('', '')
 trigger wms.warehouse warehouse_touch_updated_at enabled=O CREATE TRIGGER warehouse_touch_updated_at BEFORE UPDATE ON wms.warehouse FOR EACH ROW EXECUTE FUNCTION wms.touch_updated_at()
 policy wms.warehouse warehouse_tenant_fence permissive ALL to=wms_api using=(company_id = ( SELECT wms.current_company_id() AS current_company_id)) check=(company_id = ( SELECT wms.current_company_id() AS current_company_id))
 relation wms.waste_fraction kind=table owner=<owner> persistence=p rls=true force-rls=true replica-identity=d acl=[<owner>=DELETE,INSERT,MAINTAIN,REFERENCES,SELECT,TRIGGER,TRUNCATE,UPDATE/<owner> wms_api=DELETE,INSERT,SELECT,UPDATE/<owner> wms_sync=SELECT/<owner> wms_worker=SELECT/<owner>]
@@ -2645,6 +2716,7 @@ index wms.waste_fraction waste_fraction_key_key CREATE UNIQUE INDEX waste_fracti
 index wms.waste_fraction waste_fraction_name_key CREATE UNIQUE INDEX waste_fraction_name_key ON wms.waste_fraction USING btree (company_id, name)
 index wms.waste_fraction waste_fraction_pkey CREATE UNIQUE INDEX waste_fraction_pkey ON wms.waste_fraction USING btree (id)
 index wms.waste_fraction waste_fraction_tenant_key CREATE UNIQUE INDEX waste_fraction_tenant_key ON wms.waste_fraction USING btree (company_id, id)
+trigger wms.waste_fraction waste_fraction_audit_trail enabled=O CREATE TRIGGER waste_fraction_audit_trail AFTER INSERT OR DELETE OR UPDATE ON wms.waste_fraction FOR EACH ROW EXECUTE FUNCTION wms.audit_row('', '')
 trigger wms.waste_fraction waste_fraction_touch_updated_at enabled=O CREATE TRIGGER waste_fraction_touch_updated_at BEFORE UPDATE ON wms.waste_fraction FOR EACH ROW EXECUTE FUNCTION wms.touch_updated_at()
 policy wms.waste_fraction waste_fraction_public_door permissive SELECT to=wms_public using=(company_id = ( SELECT wms.current_company_id() AS current_company_id)) check=none
 policy wms.waste_fraction waste_fraction_tenant_fence permissive ALL to=wms_api using=(company_id = ( SELECT wms.current_company_id() AS current_company_id)) check=(company_id = ( SELECT wms.current_company_id() AS current_company_id))
@@ -2680,6 +2752,7 @@ function pgboss.job_table_format(command text, table_name text) returns=text kin
 function pgboss.job_table_run(command text, tbl_name text, queue_name text) returns=void kind=f language=plpgsql volatility=v security=invoker leakproof=false strict=false parallel=u config=none owner=<owner> acl=[<owner>=EXECUTE/<owner> PUBLIC=EXECUTE/<owner> wms_api=EXECUTE/<owner> wms_worker=EXECUTE/<owner>] definition=sha256:484a8e6c2754ba95e846a8feb1a791701a4a79ff0eb2802c6d082b7bc98a43fe
 function pgboss.job_table_run_async(command_name text, version integer, command text, tbl_name text, queue_name text) returns=void kind=f language=plpgsql volatility=v security=invoker leakproof=false strict=false parallel=u config=none owner=<owner> acl=[<owner>=EXECUTE/<owner> PUBLIC=EXECUTE/<owner> wms_api=EXECUTE/<owner> wms_worker=EXECUTE/<owner>] definition=sha256:3eeb338c4219bc926b18e7dfa9bfed3fb6e379ede69deb8fda7ae338e562dfbc
 function public.custom_access_token_hook(event jsonb) returns=jsonb kind=f language=plpgsql volatility=v security=definer leakproof=false strict=false parallel=u config=search_path="" owner=<owner> acl=[<owner>=EXECUTE/<owner> supabase_auth_admin=EXECUTE/<owner>] definition=sha256:4ba9abb1e7acbac0b4f6742a18be7a4d2311854eb0590a9baec8d5cdfb8cb6e8
+function wms.audit_row() returns=trigger kind=f language=plpgsql volatility=v security=invoker leakproof=false strict=false parallel=u config=search_path="" owner=<owner> acl=[<owner>=EXECUTE/<owner> PUBLIC=EXECUTE/<owner>] definition=sha256:521ebe2c73340116d37e978803ba229519004efaa7741c3ac63ced9091504c1e
 function wms.current_company_id() returns=uuid kind=f language=sql volatility=s security=invoker leakproof=false strict=false parallel=s config=none owner=<owner> acl=[<owner>=EXECUTE/<owner> PUBLIC=EXECUTE/<owner>] definition=sha256:b71ab5ed9aa5b1a28d007d6cb4a610c9e359b9017dac1602e4f0cdec2c818345
 function wms.touch_updated_at() returns=trigger kind=f language=plpgsql volatility=v security=invoker leakproof=false strict=false parallel=u config=search_path="" owner=<owner> acl=[<owner>=EXECUTE/<owner> PUBLIC=EXECUTE/<owner>] definition=sha256:c0ce23ad4411c35b23ddcac383c7968118296a4552277c22e9ac0e9a1eb826a1
 function wms.uuidv7() returns=uuid kind=f language=sql volatility=v security=invoker leakproof=false strict=false parallel=s config=none owner=<owner> acl=[<owner>=EXECUTE/<owner> PUBLIC=EXECUTE/<owner>] definition=sha256:2c0a2510199d1c6b9609fd581f967fe015e01ece2e0fa7727479fe55a93a557f
@@ -2725,4 +2798,5 @@ journal 1792792624765 fda36e0c49140a7ed394dbfec44684ac30c511a2b5f6a82bd8e5ae7ac2
 journal 1792829657532 2890edfac120d4acd038f3a88d82884231cd5f9467d0d529e285d3f5c87d762c
 journal 1792833996415 43ed2744affd49a9709342b9afe4151fc09b46ea85358d6e9f98226f9d493e7a
 journal 1792835336131 c86420c3cc9a06fd3e215602bb6c79af70edbd8854f0abdc53abfc3922ba56a3
+journal 1792842805965 03e5b0cdd4ad64f14d6df90763efe8d132a29e1ee8dfa5edc4bed61351df9c7c
 pgboss-version 42

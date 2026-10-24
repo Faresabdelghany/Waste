@@ -41,6 +41,7 @@
 // the context carries an error or the response is an error status, and
 // committed otherwise: a request that failed leaves nothing behind, whether
 // the handler threw a problem or returned one.
+import { CHANGE_REASON_HEADER } from "@waste/contracts/audit"
 import { NO_ACTIVE_ACCOUNT } from "@waste/contracts/problem"
 import type { Database, Tx } from "@waste/db/client"
 import { projectAccess, role, roleGrant, userAccount } from "@waste/db/schema/access"
@@ -54,6 +55,7 @@ import type { MiddlewareHandler } from "hono"
 
 import { grantsOfRows } from "../access-shape"
 import { problem } from "../problem"
+import { writtenBy } from "./audit"
 import { bearerToken, type VerifiedClaims, type Verifier } from "./verify"
 
 export type Principal = {
@@ -247,6 +249,8 @@ export function authenticate(options: AuthenticateOptions): MiddlewareHandler<Au
   return async (c, next) => {
     try {
       await guard(c.req.header("authorization"), options, async (principal, tx) => {
+        // The audit trail's writer (#291): the Principal, never the client's word, and the reason the request gives.
+        await writtenBy(tx, principal, c.req.header(CHANGE_REASON_HEADER))
         c.set("principal", principal)
         c.set("tx", tx)
         await next()
