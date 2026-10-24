@@ -46,8 +46,8 @@ const encoded = (canvas: HTMLCanvasElement, type: string, quality?: number): Pro
 export async function photoOf(file: Blob): Promise<ProofBytes> {
   let bitmap: ImageBitmap
   try {
-    // The photo's own orientation applied, which a camera records rather than turning the pixels.
-    bitmap = await createImageBitmap(file, { imageOrientation: "from-image" })
+    // The photo's own orientation is applied by default, which a camera records rather than turning the pixels; an older Safari refuses the option that names it.
+    bitmap = await createImageBitmap(file)
   } catch {
     throw new Error("This photo could not be read; take another")
   }
@@ -67,6 +67,14 @@ export async function photoOf(file: Blob): Promise<ProofBytes> {
   } finally {
     bitmap.close()
   }
+}
+
+/** The bytes as a `data:` URL, for the screen to show what goes: no blob URL to revoke, which a remount in development would leave dangling. */
+export function dataUrlOf({ contentType, bytes }: ProofBytes): string {
+  const view = new Uint8Array(bytes)
+  let binary = ""
+  for (let start = 0; start < view.length; start += 0x8000) binary += String.fromCharCode(...view.subarray(start, start + 0x8000))
+  return `data:${contentType};base64,${btoa(binary)}`
 }
 
 /** The signature pad's canvas as PNG. */

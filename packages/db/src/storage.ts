@@ -39,13 +39,14 @@ const KEY_ALREADY_EXISTS = "KeyAlreadyExists"
 
 export function supabaseStorage({ url, serviceKey, bucket = PROOF_BUCKET, fetch = globalThis.fetch, now = () => new Date() }: SupabaseStorageOptions): ProofStorage {
   const base = `${url.replace(/\/+$/, "")}/storage/v1`
-  const headers = { authorization: `Bearer ${serviceKey}`, apikey: serviceKey, "content-type": "application/json" }
+  const auth = { authorization: `Bearer ${serviceKey}`, apikey: serviceKey }
 
   /** One call to Storage, its JSON answer and status, or StorageSilent where the network fails. */
   async function call(method: string, path: string, body?: unknown): Promise<{ status: number; answer: unknown }> {
     let response: Response
     try {
-      response = await fetch(`${base}${path}`, { method, headers, ...(body === undefined ? {} : { body: JSON.stringify(body) }) })
+      // A type only over a body: Storage refuses an empty one that says it is JSON.
+      response = await fetch(`${base}${path}`, body === undefined ? { method, headers: auth } : { method, headers: { ...auth, "content-type": "application/json" }, body: JSON.stringify(body) })
     } catch (error) {
       throw new StorageSilent(`Storage did not answer ${method} ${path}`, { cause: error })
     }

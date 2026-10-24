@@ -7,7 +7,7 @@ import { describe, test } from "node:test"
 
 import { PROOF_OBJECT_MAX_BYTES } from "@waste/contracts/proof-objects"
 
-import { fitWithin, PHOTO_BYTES_MAX, PHOTO_MAX_EDGE, stopPhotosOf } from "../proof-images"
+import { dataUrlOf, fitWithin, PHOTO_BYTES_MAX, PHOTO_MAX_EDGE, stopPhotosOf } from "../proof-images"
 
 describe("a photo", () => {
   test("is scaled to fit its longer edge within 1600 px, its shape kept, and a smaller one is left as it is", () => {
@@ -20,6 +20,13 @@ describe("a photo", () => {
 
   test("is never larger than the bucket takes, spelled again here so no zod reaches the browser", () => {
     assert.equal(PHOTO_BYTES_MAX, PROOF_OBJECT_MAX_BYTES)
+  })
+
+  test("is shown before it goes as its own bytes, a large one whole", () => {
+    assert.equal(dataUrlOf({ extension: "png", contentType: "image/png", bytes: new Uint8Array([0x89, 0x50, 0x4e, 0x47]).buffer }), "data:image/png;base64,iVBORw==")
+    const large = new Uint8Array(100_000).map((_, index) => index % 251)
+    const url = dataUrlOf({ extension: "jpg", contentType: "image/jpeg", bytes: large.buffer })
+    assert.deepEqual(new Uint8Array(Buffer.from(url.slice("data:image/jpeg;base64,".length), "base64")), large)
   })
 })
 

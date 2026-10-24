@@ -26,6 +26,7 @@
 // point it is collected at (customers.properties and .shared, an id chip until
 // they load). The time a stop was decided is shown on its project's clock.
 import type { Pickup, PickupDetail } from "@waste/contracts/pickups"
+import type { ProofObjectLink, ProofObjectLinks } from "@waste/contracts/proof-objects"
 import type { ProofOfService } from "@waste/contracts/proofs"
 import { PICKUP_OUTCOMES, PICKUP_REASONS } from "@waste/domain/execution/vocabulary"
 
@@ -173,6 +174,16 @@ export const PICKUP_COMMANDS = {
 /** A stop's proofs, in recording order: its own read. */
 export async function pickupProofs(client: Client, serverId: string): Promise<ProofOfService[]> {
   return (await get<PickupDetail>(client, `/pickups/${serverId}`)).proofs
+}
+
+/** Read URLs for the stop's photos and signatures (O1 of #290), one per proof naming an object, each lasting minutes: the bucket is private, and the API signs. */
+export async function pickupProofObjects(client: Client, serverId: string): Promise<ProofObjectLink[]> {
+  return (await get<ProofObjectLinks>(client, `/pickups/${serverId}/proof-objects`)).items
+}
+
+/** What a proof's object is to a person: a photo, a signature, or — for a kind that names one otherwise — a file. */
+export function proofObjectNoun(proof: Pick<ProofOfService, "kind">): string {
+  return proof.kind === "photo" ? "photo" : proof.kind === "signature" ? "signature" : "file"
 }
 
 /** A stop's proof as one line on the project's clock: its kind and source, then the outcome a correction moved it to, a weight and a note where it has them. */

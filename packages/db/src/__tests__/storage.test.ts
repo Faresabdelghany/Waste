@@ -35,11 +35,15 @@ describe("the proofs' Storage", () => {
     assert.equal(calls[0].url, `${BASE}/storage/v1/object/upload/sign/proofs/${KEY}`)
     assert.equal(calls[0].headers.authorization, "Bearer service-role-key")
     assert.equal(calls[0].headers.apikey, "service-role-key")
+    assert.equal(calls[0].headers["content-type"], undefined, "the request has no body, and Storage refuses JSON's type over nothing")
   })
 
   test("a key the bucket holds already is no upload: the retry after a lost answer is done", async () => {
-    const { storage } = scripted(() => json(409, { statusCode: "409", error: "Duplicate", message: "The resource already exists", code: "KeyAlreadyExists" }))
-    assert.deepEqual(await storage.signUpload(KEY), { kind: "exists" })
+    // Storage answers 400 and says 409 in its body (probed on a local stack), or a plain 409.
+    for (const status of [400, 409]) {
+      const { storage } = scripted(() => json(status, { statusCode: "409", error: "Duplicate", message: "The resource already exists", code: "KeyAlreadyExists" }))
+      assert.deepEqual(await storage.signUpload(KEY), { kind: "exists" }, String(status))
+    }
   })
 
   test("signs reads for many keys in one call, a key the bucket does not hold read as null", async () => {

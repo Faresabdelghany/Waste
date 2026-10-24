@@ -1,23 +1,29 @@
 import { apiAs, accessTokenOf, expect, freshContext, signIn, test } from "./fixtures"
 import { dispatchedRouteFor, SEEDED_DRIVER, type RouteDetail } from "./dispatched-route"
 import { E2E } from "./env"
+import { openRoute } from "./routes-support"
 import { listAll } from "./tester"
 
 // The Driver App (Issue #145) on a phone-sized browser against the real door:
 // the seeded driver signs in, sees the route the office dispatched, starts it
 // on the planned vehicle, hands the next stops to Maps, arrives at a stop,
-// adds a note and a weight (O2 of #290), completes,
-// skips and fails stops with reasons,
+// adds a note, a weight and a signature (O2 and O1 of #290), completes,
+// skips and fails stops with reasons, a photo with the failure,
 // reports a problem, pauses and resumes, records an unload, loses the
 // connection for two stops and ends the route. Then, through the API: one
 // receipt per command and none twice, the Live board's position, and the
 // tickets the Resolution consumer opened for the failed stop and the
-// reported problem. The route comes from generation and the office's
+// reported problem; and the office reads the photo and the signature back
+// from Storage, through the URLs the API signs. The route comes from generation and the office's
 // commands (dispatched-route.ts), never from a fixture.
 
 type Receipt = { id: string; kind: string; outcome: string; routeId: string | null }
 type LiveRoute = { id: string; status: string; lastLocation: unknown }
 type Ticket = { id: string; links: { routeId: string | null; pickupId: string | null } }
+type ProofObjectLinks = { items: { proofId: string; objectKey: string; url: string | null }[] }
+
+/** A photo as the phone's camera would hand one over, which the Driver App draws again as JPEG. */
+const PHOTO = "public/avatar-profile.jpg"
 
 /** Where the phone stands, and so where every located command says it stood. */
 const POSITION = { latitude: 55.6867, longitude: 12.5701, accuracy: 12 }
@@ -30,7 +36,7 @@ test("an office login on /driver is told the door does not take it, and sees no 
   await expect(page.getByRole("article")).toHaveCount(0)
 })
 
-test("a driver works a dispatched route on a phone, through an outage, and every action is one receipt", async ({ api, browser }) => {
+test("a driver works a dispatched route on a phone, through an outage, and every action is one receipt", async ({ api, browser, page: office }) => {
   test.setTimeout(180_000)
   const { route } = await dispatchedRouteFor(api)
   const stops = ordered(route)
@@ -75,6 +81,20 @@ test("a driver works a dispatched route on a phone, through an outage, and every
     await dialog.getByLabel("Note").fill("Lid cracked, still closes")
     await dialog.getByRole("button", { name: "Add note" }).click()
     await expect(stop(0).getByText("Sending")).toBeHidden()
+    // A signature, drawn on the pad: its bytes go to Storage before its command.
+    await stop(0).getByRole("button", { name: "Signature" }).click()
+    const pad = dialog.getByLabel("Signature pad")
+    await pad.hover()
+    const box = await pad.boundingBox()
+    if (box === null) throw new Error("the signature pad is not drawn")
+    await page.mouse.move(box.x + 24, box.y + box.height * 0.7)
+    await page.mouse.down()
+    await page.mouse.move(box.x + box.width * 0.4, box.y + box.height * 0.3, { steps: 8 })
+    await page.mouse.move(box.x + box.width * 0.8, box.y + box.height * 0.6, { steps: 8 })
+    await page.mouse.up()
+    await dialog.getByRole("button", { name: "Save signature" }).click()
+    await expect(dialog).toBeHidden()
+    await expect(stop(0).getByText("Sending")).toBeHidden()
 
     await stop(1).getByRole("button", { name: "Skip" }).click()
     await dialog.getByLabel("Reason").selectOption("not-presented")
@@ -84,8 +104,11 @@ test("a driver works a dispatched route on a phone, through an outage, and every
     await stop(2).getByRole("button", { name: "Fail" }).click()
     await dialog.getByLabel("Reason").selectOption("inaccessible")
     await dialog.getByLabel("Note (optional)").fill("Gate locked, no answer at the door")
+    await dialog.getByLabel("Photo (optional)").setInputFiles(PHOTO)
+    await expect(dialog.getByRole("img", { name: "The photo to send" })).toBeVisible()
     await dialog.getByRole("button", { name: "Fail stop" }).click()
     await expect(stop(2).getByText("Failed · Inaccessible")).toBeVisible()
+    await expect(stop(2).getByText("Sending")).toBeHidden()
 
     await stop(3).getByRole("button", { name: "Problem" }).click()
     await dialog.getByLabel("Reason").selectOption("safety")
@@ -130,14 +153,14 @@ test("a driver works a dispatched route on a phone, through an outage, and every
     await dialog.getByRole("button", { name: "End route" }).click()
     await expect(page.getByRole("region", { name: `Route ${route.label}` }).getByText("Completed", { exact: true })).toBeVisible()
 
-    // One receipt per command and none twice: the start, an arrival, three outcomes, a weight, a note, a problem, pause, resume, an unload, two queued outcomes and the end.
+    // One receipt per command and none twice: the start, an arrival, three outcomes, a weight, a note, a signature, a photo, a problem, pause, resume, an unload, two queued outcomes and the end.
     const token = await accessTokenOf(context)
     if (token === null) throw new Error("the driver's browser holds no API session")
     const asDriver = await apiAs(token)
     try {
       const receipts = await listAll<Receipt>(asDriver, "/driver/commands", { routeId: route.id })
       expect(receipts.map((receipt) => receipt.kind).sort()).toEqual(
-        ["add-note", "add-weight", "arrive", "complete-pickup", "complete-pickup", "complete-pickup", "end-route", "fail-pickup", "pause", "record-unload", "report-problem", "resume", "skip-pickup", "start-route"].sort(),
+        ["add-note", "add-photo", "add-signature", "add-weight", "arrive", "complete-pickup", "complete-pickup", "complete-pickup", "end-route", "fail-pickup", "pause", "record-unload", "report-problem", "resume", "skip-pickup", "start-route"].sort(),
       )
       expect(new Set(receipts.map((receipt) => receipt.id)).size).toBe(receipts.length)
       expect(receipts.every((receipt) => receipt.outcome === "applied")).toBe(true)
@@ -152,7 +175,26 @@ test("a driver works a dispatched route on a phone, through an outage, and every
     expect(ordered(ended)[0].arrivedAt, "the first stop's arrival").not.toBeNull()
     // The first stop's proofs carry the arrival, the weight and the note, as the office's details list them.
     const proofs = ((await (await api.get(`/pickups/${stops[0].id}`)).json()) as { proofs: { kind: string; weightKg: number | null; note: string | null }[] }).proofs
-    expect(proofs.map((proof) => [proof.kind, proof.weightKg, proof.note])).toEqual(expect.arrayContaining([["arrival", null, null], ["weight", 212, null], ["note", null, "Lid cracked, still closes"]]))
+    expect(proofs.map((proof) => [proof.kind, proof.weightKg, proof.note])).toEqual(expect.arrayContaining([["arrival", null, null], ["weight", 212, null], ["note", null, "Lid cracked, still closes"], ["signature", null, null]]))
+
+    // The office reads the signature and the failed stop's photo back from the private bucket, through URLs the API signs.
+    for (const [index, type] of [
+      [0, "image/png"],
+      [2, "image/jpeg"],
+    ] as const) {
+      const links = (await (await api.get(`/pickups/${stops[index].id}/proof-objects`)).json()) as ProofObjectLinks
+      expect(links.items, `stop ${index + 1}'s objects`).toHaveLength(1)
+      const url = links.items[0].url
+      if (url === null) throw new Error(`Storage holds no object for stop ${index + 1}`)
+      const object = await fetch(url)
+      expect([object.status, object.headers.get("content-type")]).toEqual([200, type])
+    }
+    // And sees the photo in the failed stop's details.
+    const details = await openRoute(office, route)
+    await details.getByTestId("route-stops").getByRole("button", { name: "Open stop" }).nth(2).click()
+    const photo = office.getByRole("dialog", { name: /^Stop 3 · / }).getByTestId("pickup-commands").getByRole("img", { name: "The photo recorded at this stop" })
+    await expect(photo).toBeVisible({ timeout: 30_000 })
+    await expect.poll(() => photo.evaluate((image: HTMLImageElement) => image.naturalWidth)).toBeGreaterThan(0)
 
     // Resolution heard of the failed stop and the reported problem, each a ticket on its stop.
     await expect
