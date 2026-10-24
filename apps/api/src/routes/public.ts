@@ -1,9 +1,11 @@
 // The public door's routes (Issue #293, ADR-0010): what anyone may read of a
 // project that publishes itself, with no token. `GET /public/:slug` names the
 // project as its public pages do, and `GET /public/:slug/sorting-guide?q=`
-// answers a resident's search of its Sorting Guide. Every one runs behind
-// `publicDoor` (auth/public-door.ts): counted against the client's minute,
-// then read as the public role, whose column grants and policies are what
+// answers a resident's search of its Sorting Guide; the addresses' routes
+// answer its Collection Days. Every one runs behind `publicDoor`
+// (auth/public-door.ts): counted against the client's minute — an address's
+// feed against an allowance of its own, by client and address — then read as
+// the public role, whose column grants and policies are what
 // bound the answer — a draft item, another project's or another company's is
 // a row this transaction cannot see, whatever the statement says.
 //
@@ -37,7 +39,7 @@ import { describeRoute } from "hono-openapi"
 import type { Tx } from "@waste/db/client"
 import type { PublishedProject as PublishedProjectRow } from "@waste/db/public-door"
 
-import type { PublicEnv } from "../auth/public-door"
+import { FEED_ADDRESSES_PER_CLIENT, FEED_REQUESTS_PER_ADDRESS, type PublicEnv } from "../auth/public-door"
 import { CALENDAR_MEDIA_TYPE, icsOf } from "../ical"
 import { describeProblem, problem, validate } from "../problem"
 import { dayInTimezone } from "./days"
@@ -57,7 +59,10 @@ export type PublicRoutesOptions = {
   now: () => Date
 }
 
-export function publicRoutes(door: MiddlewareHandler<PublicEnv>, { now }: PublicRoutesOptions) {
+/** The door every public route stands behind, and the one an address's feed does, counted by its own allowance (auth/public-door.ts). */
+export type PublicDoors = { door: MiddlewareHandler<PublicEnv>; feedDoor: MiddlewareHandler<PublicEnv> }
+
+export function publicRoutes({ door, feedDoor }: PublicDoors, { now }: PublicRoutesOptions) {
   /** An address's days from today, on the project's clock, for `weeks` weeks: what both the JSON and the feed answer. */
   const collectionDaysFor = async (tx: Tx, published: PublishedProjectRow, propertyId: string, weeks: number) => {
     const scope = { companyId: published.companyId, projectId: published.id }
@@ -142,9 +147,9 @@ export function publicRoutes(door: MiddlewareHandler<PublicEnv>, { now }: Public
       "/public/:slug/addresses",
       describeRoute({
         operationId: "searchPublicAddresses",
-        summary: "Find an address in a published project's collection calendar",
+        summary: "Find an address whose Collection Days a published project shows",
         description:
-          "The project's addresses that hold `q`, at least three characters, among those with something collected there today: at most ten, by address, each with the id its collection days are read under. The address alone; nothing about who lives there. Never a listing. No token is needed; each address has an allowance a minute. The answer may be cached for a minute.",
+          "The project searched, as `GET /public/:slug` names it, so a page that searches asks once; then the project's addresses that hold `q`, at least three characters, among those with something collected there today: at most ten, by address, each with the id its collection days are read under. The address alone; nothing about who lives there. Never a listing. No token is needed; each address has an allowance a minute. The answer may be cached for a minute.",
         responses: {
           200: describeJson("The addresses found, by address.", AddressMatches),
           400: describeProblem("`q` is missing, shorter than three characters or longer than 100."),
@@ -160,7 +165,8 @@ export function publicRoutes(door: MiddlewareHandler<PublicEnv>, { now }: Public
         const published = c.get("published")
         const today = dayInTimezone(now(), published.timezone)
         const addresses = await searchAddresses(c.get("tx"), { companyId: published.companyId, projectId: published.id }, q, today)
-        const body: AddressMatches = { addresses }
+        const { slug, name, language, timezone } = published
+        const body: AddressMatches = { project: { slug, name, language, timezone }, addresses }
         return c.json(body, 200, { "Cache-Control": PUBLIC_CACHE })
       },
     )
@@ -203,7 +209,7 @@ export function publicRoutes(door: MiddlewareHandler<PublicEnv>, { now }: Public
         operationId: "getPublicCollectionDaysCalendar",
         summary: "An address's collection days as a calendar feed",
         description:
-          "The same days as `GET /public/:slug/addresses/:id/collection-days`, as an iCalendar feed to subscribe to: one all-day event per collection, summarised by its fractions, each with a UID that stays the same across fetches and names no internal id, so a moved day moves rather than repeats; a moved or cancelled day carries SEQUENCE 1. A day the policy skips is a cancelled event saying why. The project's timezone rides as X-WR-TIMEZONE. No customer data. No token is needed; each address has an allowance a minute.",
+          "The same days as `GET /public/:slug/addresses/:id/collection-days`, as an iCalendar feed to subscribe to: one all-day event per collection, summarised by its fractions, each with a UID that stays the same across fetches and names no internal id, so a moved day moves rather than repeats; a moved or cancelled day carries SEQUENCE 1. A day the policy skips is a cancelled event saying why. The project's timezone rides as X-WR-TIMEZONE. No customer data. No token is needed. A feed has an allowance of its own, since a calendar service reads its subscribers' feeds from a few addresses: " + FEED_REQUESTS_PER_ADDRESS + " requests a minute per client and address, and " + FEED_ADDRESSES_PER_CLIENT + " distinct addresses a minute per client, an address the project does not know counted the same.",
         responses: {
           200: { description: "The feed (text/calendar).", content: { "text/calendar": { schema: { type: "string" } } } },
           400: describeProblem("The address id is not an id, or `weeks` is outside 1..26."),
@@ -211,7 +217,7 @@ export function publicRoutes(door: MiddlewareHandler<PublicEnv>, { now }: Public
           429: describeProblem(TOO_MANY),
         },
       }),
-      door,
+      feedDoor,
       validate("param", PublicAddressParam),
       validate("query", CollectionDaysQuery),
       async (c) => {

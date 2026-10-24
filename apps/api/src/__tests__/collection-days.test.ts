@@ -17,6 +17,7 @@ import { withCompany } from "@waste/db/tenant"
 import { eq } from "drizzle-orm"
 
 import { createApp } from "../app"
+import { Allowance, FeedAllowance } from "../auth/public-door"
 import { databaseUnderTest } from "./database"
 import { readProblem } from "./read-problem"
 import { dropTenant, seedTenant, testId, type Tenant } from "./tenant"
@@ -134,6 +135,7 @@ describe("the collection days by address on the public door", { skip: database.s
       const response = await get(`/public/${slug}/addresses?q=parkvej`)
       assert.equal(response.status, 200)
       const found = AddressMatches.parse(await response.json())
+      assert.deepEqual(found.project, { slug, name: "Copenhagen Central", language: "da", timezone: "Europe/Copenhagen" }, "the project searched, so a page asks once")
       assert.deepEqual(found.addresses, [{ id: ids.parkvej1, address: "Parkvej 1, 2100 København Ø" }], "not Parkvej 3 (nothing collected), not Harbor's (unpublished), not the other company's")
     })
 
@@ -193,6 +195,57 @@ describe("the collection days by address on the public door", { skip: database.s
       assert.ok(lines.includes("X-WR-TIMEZONE:Europe/Copenhagen"))
       assert.ok(!lines.some((line) => line.includes("Mikkel")), "no customer data")
     })
+  })
+})
+
+describe("an address's feed behind its own allowance", { skip: database.skip }, () => {
+  // Counted apart from the pages, per client and address and per client across
+  // addresses: a calendar service reading many residents' feeds from one address
+  // is not held to a visitor's minute, and the feed walks addresses no faster.
+  let pool: Database
+  let keys: SigningKeys
+  let a: Tenant
+  let slug: string
+  let address: string
+
+  before(async () => {
+    pool = createDb(database.url!, { max: 4 })
+    keys = await signingKeys()
+    a = await seedTenant(pool)
+    slug = freshSlug("feed")
+    address = testId()
+    await withCompany(pool.db, a.companyId, async (tx) => {
+      await tx.update(project).set({ publicSlug: slug }).where(eq(project.id, a.projects.copenhagen.id))
+    })
+  })
+
+  after(async () => {
+    if (a) await dropTenant(pool, a.companyId)
+    await pool?.close()
+  })
+
+  test("a client past a visitor's minute still reads one feed, up to the feed's bound for that address, and walks only the feed's few addresses", async () => {
+    const limited = createApp({
+      probe: pool,
+      pool,
+      verifier: keys.verifier,
+      now: () => NOW,
+      publicAllowance: new Allowance(1, () => NOW),
+      feedAllowance: new FeedAllowance(3, 2, () => NOW),
+      trustedProxies: 1,
+    })
+    const from = (client: string, path: string) => limited.request(path, { headers: { "x-forwarded-for": client } })
+    const feed = (id: string) => `/public/${slug}/addresses/${id}/collection-days.ics`
+    assert.equal((await from("198.51.100.1", `/public/${slug}`)).status, 200)
+    assert.equal((await from("198.51.100.1", `/public/${slug}`)).status, 429, "the visitor's minute is spent")
+    for (let i = 0; i < 3; i++) assert.equal((await from("198.51.100.1", feed(address))).status, 404, "an address with nothing collected, read through the feed's own allowance")
+    const over = await from("198.51.100.1", feed(address))
+    assert.equal(over.status, 429, "the feed's bound for one address")
+    assert.equal(over.headers.get("retry-after"), "60")
+    assert.equal((await from("198.51.100.1", feed(testId()))).status, 404, "a second address")
+    assert.equal((await from("198.51.100.1", feed(testId()))).status, 429, "a third is past the addresses one client reads a minute")
+    assert.equal((await from("198.51.100.1", feed("not-an-id"))).status, 429, "a malformed address counts the same: the door counts before the path is read")
+    assert.equal((await from("198.51.100.2", feed(address))).status, 404, "another client reads apart")
   })
 })
 
