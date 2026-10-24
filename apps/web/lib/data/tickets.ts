@@ -41,7 +41,7 @@ const priority: BusinessFormField = { id: "priority", label: "Priority", type: "
 const due: BusinessFormField = { id: "dueAt", label: "Due", type: "datetime", description: "The response target, on the project's clock." }
 const assignee = (description?: string): BusinessFormField => ({ id: "assigneeUserAccountId", label: "Assignee", type: "select", relation: ACCESS_MODULE, description })
 
-/** What a ticket may be about, field by field, each from its module: the office's eight links, the stop among its route's. */
+/** What a ticket may be about, field by field, each from its module: the office's eight links, the stop among its route's, and whether the stop's record may answer the case. */
 export const TICKET_LINK_FIELDS: readonly BusinessFormField[] = [
   { id: "routeId", label: "Route", type: "select", relation: ROUTES_MODULE },
   {
@@ -49,7 +49,14 @@ export const TICKET_LINK_FIELDS: readonly BusinessFormField[] = [
     label: "Stop",
     type: "select",
     relation: PICKUPS_MODULE,
-    description: "A stop of that route. A missed collection whose stop recorded the bin was not put out is answered with that record as it opens.",
+    description: "A stop of that route.",
+  },
+  {
+    id: "answerFromRecord",
+    label: "Answer from the stop's record",
+    type: "checkbox",
+    defaultValue: true,
+    description: "A missed collection whose driver recorded the bin was not put out is answered with that record and completed as it opens. Clear it to open the case for the office to judge.",
   },
   { id: "containerId", label: "Container", type: "select", relation: CONTAINERS_MODULE },
   { id: "customerId", label: "Customer", type: "select", relation: CONTACTS_MODULE },

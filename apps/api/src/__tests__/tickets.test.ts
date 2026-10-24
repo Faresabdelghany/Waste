@@ -20,7 +20,7 @@ import { callingAs, type Call } from "./calls"
 import { nextMillisecond } from "./clock"
 import { created } from "./created"
 import { databaseUnderTest, ownerUnderTest } from "./database"
-import { seedExecution, seedRoute, TOWN_HALL, type ExecutionFixtures, type SeededRoute } from "./execution-fixtures"
+import { at, seedExecution, seedRoute, TOWN_HALL, type ExecutionFixtures, type SeededRoute } from "./execution-fixtures"
 import { readProblem } from "./read-problem"
 import { seedFleet, seedPlanning, type FleetFixtures } from "./scheme-fixtures"
 import { dropTenant, grantRole, seedTenant, testId, type Tenant } from "./tenant"
@@ -663,12 +663,25 @@ describe("the ticket endpoints", { skip: database.skip || owner.skip }, () => {
         routeId: ex.routes.completed.id,
         outcome: "failed",
         reason: "not-presented",
+        service: "empty",
+        corrected: false,
         at: "2026-10-05T05:12:00.000Z",
         location: TOWN_HALL,
         reply: NOT_PRESENTED,
         answeredByRecord: true,
       })
-      assert.deepEqual(proofs.map((proof) => [proof.kind, proof.pickupId]), [["arrival", missed.links.pickupId], ["failure", missed.links.pickupId]], "the stop's own proofs, in recording order")
+      assert.deepEqual(
+        proofs.map((proof) => [proof.kind, proof.source, proof.reason]),
+        [
+          ["arrival", "driver-app", null],
+          ["failure", "driver-app", "not-presented"],
+        ],
+        "the stop's own proofs, in recording order",
+      )
+      assert.deepEqual(Object.keys(proofs[0]).sort(), ["id", "kind", "objectKey", "occurredAt", "outcome", "reason", "source"], "narrowed under the ticket's grant: no device, account, session, driver's note or weight")
+
+      const ended = (await evidenceOf((await opened({ answerFromRecord: false, links: stop(2) })).id)).stop
+      assert.equal(ended?.reply, "The bin was not collected: the route ended at 13:00 on Monday 5 October before our driver reached it.", "never puts the driver at an address the route never reached")
 
       const collected = (await evidenceOf((await opened({ links: stop(0) })).id)).stop
       assert.deepEqual([collected?.outcome, collected?.reply, collected?.answeredByRecord], ["completed", COLLECTED, false], "a collected stop answers nothing by itself")
@@ -706,6 +719,20 @@ describe("the ticket endpoints", { skip: database.skip || owner.skip }, () => {
         assert.equal(left.status, "open", `${why} opens the case`)
         assert.deepEqual((await read(left.id)).events.map((event) => event.kind), ["created"], `${why}: no reply is written`)
       }
+
+      // The office corrected a collected stop to not-presented: its word, not the driver's record, so the office judges the case.
+      const corrected = await seedRoute(pool, a, fleet, ex, {
+        status: "completed",
+        pickups: [{ containerId: ex.containers.bin1.id, propertyId: ex.properties.parkvej.id, status: "failed", reason: "not-presented", arrivedAt: at(ex.day, "06:40"), outcomeAt: at(ex.day, "11:00") }],
+        proofs: [
+          { kind: "completion", pickupIndex: 0, occurredAt: at(ex.day, "06:45"), location: TOWN_HALL },
+          { kind: "correction", pickupIndex: 0, occurredAt: at(ex.day, "11:00"), source: "dispatch", outcome: "failed", reason: "not-presented", note: "The resident sent a photo of an empty kerb" },
+        ],
+      })
+      const judged = await opened({ links: { routeId: corrected.id, pickupId: corrected.pickupIds[0] } })
+      assert.equal(judged.status, "open", "an outcome the office corrected answers no case by itself")
+      const review = (await (await olivia(`/tickets/${judged.id}/evidence`)).json()) as TicketEvidence
+      assert.deepEqual([review.stop?.corrected, review.stop?.answeredByRecord, review.stop?.reply], [true, false, "Our office reviewed the collection at 11:00 on Monday 5 October and recorded that the bin was not put out for collection."])
     })
 
     test("replies with the record and the office's note in one step, completing the case only when asked, and answers 201 with the history and no Location", async () => {

@@ -33,6 +33,7 @@ import type { RowSurfaceProps } from "@/components/waste/commands/command-surfac
 import { CreateSurface } from "@/components/waste/commands/create-surface"
 import { ReadRows } from "@/components/waste/commands/read-rows"
 import { useCommandRunner, useModuleReady, useOpenRecord, useRelationPickers, useRowHistory, useServerNames } from "@/components/waste/commands/use-command-support"
+import { useProofObjectLinks } from "@/components/waste/commands/use-proof-object-links"
 import type { ApiClient } from "@/lib/api/client"
 import { problemSentence } from "@/lib/api/problem"
 import { problemOfError } from "@/lib/api/records/server-records"
@@ -41,7 +42,7 @@ import { statusLabel, webIdOf, type CommandInput } from "@/lib/api/records/adapt
 import { shownOn } from "@/lib/api/records/clock"
 import { CONTAINERS_MODULE } from "@/lib/api/records/containers"
 import { LIVE_MODULE, routeSessions, whileWatched } from "@/lib/api/records/live"
-import { CORRECT_PICKUP, PICKUPS_MODULE, pickupProofObjects, pickupProofs, proofLine, proofObjectNoun, REMOVE_PICKUP } from "@/lib/api/records/pickups"
+import { CORRECT_PICKUP, PICKUPS_MODULE, pickupProofs, proofLine, proofObjectNoun, REMOVE_PICKUP } from "@/lib/api/records/pickups"
 import { ADD_STOP, ASSIGN_ROUTE, callsignOf, CANCEL_ROUTE, DISPATCH_ROUTE, dispatchRoutes, isHeldRoute, OPTIMISE_ROUTE, planLine, RELEASE_HOLD, REORDER_ROUTE, RESCHEDULE_ROUTE, routeCommandLog, routeDetail, routePlans, ROUTES_MODULE } from "@/lib/api/records/routes"
 import { DRIVERS_MODULE, VEHICLES_MODULE } from "@/lib/data/allocations"
 import type { BusinessFormValues } from "@/lib/data/business-form-types"
@@ -472,7 +473,7 @@ function ReorderStopsDialog({ order, label, busy, onChange, onClose, onSave }: {
 }
 
 /** A proof's photo or signature beside its line: the picture from its signed URL, opening it whole, or why there is none to show. */
-export function ProofObject({ proof, links }: { proof: ProofOfService; links: { rows: ProofObjectLink[] | null; problem: string | null } }) {
+export function ProofObject({ proof, links }: { proof: Pick<ProofOfService, "id" | "kind" | "objectKey">; links: { rows: ProofObjectLink[] | null; problem: string | null } }) {
   if (proof.objectKey === null || links.rows === null) return null
   const noun = proofObjectNoun(proof)
   const link = links.rows.find((candidate) => candidate.proofId === proof.id)
@@ -487,28 +488,16 @@ export function ProofObject({ proof, links }: { proof: ProofOfService; links: { 
   )
 }
 
-/** No read of a stop's objects, for a stop whose proofs name none. */
-const NO_PROOF_OBJECTS = async (): Promise<ProofObjectLink[]> => []
-
-/** How long before its read URLs lapse a stop's objects are read again, so a details left open never offers a dead link. */
-const RENEW_BEFORE_MS = 30_000
-
 /** A stop's commands and its proofs, in its details. */
 export function PickupCommandsSurface({ record }: RowSurfaceProps) {
   const pickers = useRelationPickers()
   const moduleReady = useModuleReady(PICKUPS_MODULE)
   const { busy, version, run: send } = useCommandRunner(PICKUPS_MODULE, record.id)
   const proofs = useRowHistory(PICKUPS_MODULE.workspaceId, PICKUPS_MODULE.moduleId, record, version, pickupProofs)
-  // The objects' read URLs are asked for only where a proof names an object, and asked again before they lapse.
+  // The objects' read URLs are asked for only where a proof names an object.
   const withObjects = proofs.rows?.some((proof) => proof.objectKey !== null) ?? false
-  const [renewals, setRenewals] = useState(0)
-  const objects = useRowHistory(PICKUPS_MODULE.workspaceId, PICKUPS_MODULE.moduleId, record, `${version}:${withObjects}:${renewals}`, withObjects ? pickupProofObjects : NO_PROOF_OBJECTS)
-  const lapsesAt = objects.rows?.reduce<number | null>((soonest, link) => Math.min(soonest ?? Infinity, Date.parse(link.expiresAt)), null) ?? null
-  useEffect(() => {
-    if (lapsesAt === null) return
-    const renew = setTimeout(() => setRenewals((count) => count + 1), Math.max(0, lapsesAt - RENEW_BEFORE_MS - Date.now()))
-    return () => clearTimeout(renew)
-  }, [lapsesAt])
+  const serverId = useServerModuleState(PICKUPS_MODULE.workspaceId, PICKUPS_MODULE.moduleId)?.serverIds.get(record.id)
+  const objects = useProofObjectLinks(withObjects ? (serverId ?? null) : null, version)
   const openRoute = useOpenRecord(ROUTES_MODULE.moduleId)
   const [open, setOpen] = useState<PickupCommandWithForm | null>(null)
   const projectId = record.projectIds?.[0]

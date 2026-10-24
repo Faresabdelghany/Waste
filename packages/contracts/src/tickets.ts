@@ -39,11 +39,10 @@ import * as z from "zod"
 
 import { Alert } from "./alerts"
 import { IsoDate, IsoDateTime } from "./dates"
-import { PickupReason, PickupStatus } from "./execution"
+import { ExecutionSource, ObjectKey, PickupOutcome, PickupReason, PickupService, PickupStatus, ProofKind } from "./execution"
 import { FlatPoint } from "./geojson"
 import { Id } from "./ids"
 import { PageRequest } from "./pagination"
-import { ProofOfService } from "./proofs"
 import { dayWindowIsOrdered, dayWindowOrdered, ProjectScopedListQuery } from "./queries"
 import { ticketLabel, TicketEventKind, TicketKind, TicketObjectKey, TicketPriority, TicketResolution, TicketSource, TicketStatus, TicketVisibility } from "./resolution"
 import { changesSomething, PositiveInt, recorded, somethingToChange, stamped } from "./resource"
@@ -322,15 +321,39 @@ export type TicketEventListQuery = z.infer<typeof TicketEventListQuery>
  * `GET /pickups/{id}/proof-objects`, never here — the reply that quotes it,
  * and whether a missed collection is answered by it.
  */
+/**
+ * A proof at the stop as the ticket's evidence tells it: what was recorded,
+ * by which door, when, and the object a photo or a signature names — read
+ * under the ticket's grant, so narrower than the stop's own read (`GET
+ * /pickups/{id}`): no device, no account, no session, no driver's note and no
+ * weight. The object's bytes are signed for through `GET
+ * /pickups/{id}/proof-objects`, under the stops' grant.
+ */
+export const EvidenceProof = z.object({
+  id: Id,
+  kind: ProofKind,
+  source: ExecutionSource,
+  occurredAt: IsoDateTime,
+  reason: PickupReason.nullable(),
+  /** On a correction: the outcome the stop was moved to. */
+  outcome: PickupOutcome.nullable(),
+  objectKey: ObjectKey.nullable(),
+})
+export type EvidenceProof = z.infer<typeof EvidenceProof>
+
 export const StopEvidence = z.object({
   pickupId: Id,
   routeId: Id,
   outcome: PickupStatus,
   reason: PickupReason.nullable(),
+  /** What the stop is for: an emptying, or a work order's visit. */
+  service: PickupService,
+  /** Whether the outcome stands on the office's correction rather than the driver's record. */
+  corrected: z.boolean(),
   /** The outcome's instant, else the arrival's; null for a stop not yet recorded. */
   at: IsoDateTime.nullable(),
   location: FlatPoint.nullable(),
-  proofs: z.array(ProofOfService),
+  proofs: z.array(EvidenceProof),
   /** The customer-visible reply that quotes the record, its time on the project's clock. */
   reply: z.string(),
   /** Whether a missed collection against this stop is answered by the record. */
@@ -343,8 +366,11 @@ export const TicketEvidence = z.object({ stop: StopEvidence.nullable() })
 export type TicketEvidence = z.infer<typeof TicketEvidence>
 
 /** `POST /tickets/:id/reply-with-evidence`: one step — the reply quoting the stop's record, the office's note after it, and the case completed `answered` where asked. */
+/** The office's note after the record's reply: bounded so the two, a blank line between, fit a comment's `Paragraph`. */
+export const REPLY_NOTE_MAX = 1500
+
 export const TicketReplyWithEvidence = z.strictObject({
-  note: Paragraph.optional(),
+  note: Paragraph.max(REPLY_NOTE_MAX).optional(),
   complete: z.boolean().default(false).describe("Defaults to false: the reply alone; true completes the case `answered` in the same transaction."),
 })
 export type TicketReplyWithEvidence = z.infer<typeof TicketReplyWithEvidence>

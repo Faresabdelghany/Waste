@@ -2,10 +2,12 @@
 // is about recorded, read for the office's ticket and quoted in the reply its
 // customer is sent, through the domain's one rule
 // (`@waste/domain/resolution/evidence`). The stop is the ticket's
-// `links.pickupId`, held to the ticket's project when it was linked; its
-// proofs are read here as rows, and a photo's or a signature's bytes are
-// signed for through `GET /pickups/{id}/proof-objects` alone, never a second
-// door to Storage.
+// `links.pickupId`, held to the ticket's project when it was linked. Its
+// proofs are read here under the ticket's grant and told narrowed to what the
+// reply quotes (`EvidenceProof`: no device, account, session, driver's note
+// or weight, which the stop's own read keeps under the stops' grant); a
+// photo's or a signature's bytes are signed for through `GET
+// /pickups/{id}/proof-objects` alone, never a second door to Storage.
 //
 // `recordCustomerReply` is the one way a reply reaches the customer's thread:
 // a `comment` the customer may read, which the portal reads. It sends
@@ -16,7 +18,7 @@ import type { StopEvidence } from "@waste/contracts/tickets"
 import type { Tx } from "@waste/db/client"
 import { pickup } from "@waste/db/schema/execution"
 import { project } from "@waste/db/schema/organisation"
-import type { PickupReason, PickupStatus, ProofKind } from "@waste/domain/execution/vocabulary"
+import type { PickupReason, PickupService, PickupStatus, ProofKind } from "@waste/domain/execution/vocabulary"
 import { replyFromRecord, stopEvidenceOf, answeredByRecord, type Coordinates } from "@waste/domain/resolution/evidence"
 import type { TicketKind, TicketStatus } from "@waste/domain/resolution/vocabulary"
 import { and, eq } from "drizzle-orm"
@@ -49,18 +51,19 @@ export async function stopEvidenceFor(tx: Tx, companyId: string, row: TicketRow)
     .limit(1)
   const proofs = (await proofsOfPickup(tx, companyId, stop.id)).map(proofOf)
   const evidence = stopEvidenceOf(
-    { status: stop.status as PickupStatus, reason: stop.reason as PickupReason | null, arrivedAt: stop.arrivedAt?.toISOString() ?? null, outcomeAt: stop.outcomeAt?.toISOString() ?? null },
+    { status: stop.status as PickupStatus, reason: stop.reason as PickupReason | null, service: stop.service as PickupService, arrivedAt: stop.arrivedAt?.toISOString() ?? null, outcomeAt: stop.outcomeAt?.toISOString() ?? null },
     proofs.map((proof) => ({ id: proof.id, kind: proof.kind as ProofKind, occurredAt: proof.occurredAt, location: (proof.location?.coordinates as Coordinates | undefined) ?? null, objectKey: proof.objectKey })),
   )
-  const told = new Set(evidence.proofs.map((proof) => proof.id))
   return {
     pickupId: stop.id,
     routeId: stop.routeId,
     outcome: evidence.outcome,
     reason: evidence.reason,
+    service: evidence.service,
+    corrected: evidence.corrected,
     at: evidence.at,
     location: evidence.location === null ? null : { type: "Point", coordinates: [evidence.location[0], evidence.location[1]] },
-    proofs: proofs.filter((proof) => told.has(proof.id)),
+    proofs: proofs.map(({ id, kind, source, occurredAt, reason, outcome, objectKey }) => ({ id, kind, source, occurredAt, reason, outcome, objectKey })),
     reply: replyFromRecord(evidence, evidence.at === null ? null : whenOn(evidence.at, clock?.timezone ?? "UTC")),
     answeredByRecord: answeredByRecord(row.kind as TicketKind, evidence),
   }

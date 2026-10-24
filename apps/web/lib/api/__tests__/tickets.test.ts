@@ -26,6 +26,7 @@ import {
   commentOnTicket,
   evidenceOutcome,
   evidencePlace,
+  evidenceProofLine,
   offersTicketCommand,
   REPLY_WITH_EVIDENCE,
   ticketAdapter,
@@ -515,12 +516,21 @@ describe("the stop's evidence (M6 of #293)", () => {
     routeId,
     outcome: "failed",
     reason: "not-presented",
+    service: "empty",
+    corrected: false,
     at: "2026-10-05T05:12:00.000Z",
     location: { type: "Point", coordinates: [12.5683, 55.6761] },
-    proofs: [],
+    proofs: [{ id: "01a0d2a4-a280-7034-8000-000000000001", kind: "failure", source: "driver-app", occurredAt: "2026-10-05T05:12:00.000Z", reason: "not-presented", outcome: null, objectKey: null }],
     reply: "Our driver was at the address at 07:12 on Monday 5 October and recorded that the bin was not put out for collection.",
     answeredByRecord: true,
   }
+
+  test("the office's create leaves the answer from the record to the API's default, and sends only its opt-out", () => {
+    const body = (answerFromRecord: boolean) => ticketAdapter.toCreateBody?.({ ...minted({ routeId: rc1042.id, pickupId: stop.id }), submittedValues: { ...minted({ routeId: rc1042.id, pickupId: stop.id }).submittedValues, answerFromRecord } }, context(resolverOver(withStop))) as Record<string, unknown>
+    assert.equal("answerFromRecord" in body(true), false, "the API's default is the answer")
+    assert.equal(body(false).answerFromRecord, false)
+    assert.ok(TicketCreate.safeParse(body(false)).success)
+  })
 
   test("the office's create names the stop with its route, by server id, and refuses a stop without its route or of another", () => {
     const body = ticketAdapter.toCreateBody?.(minted({ routeId: rc1042.id, pickupId: stop.id }), context(resolverOver(withStop)))
@@ -548,7 +558,9 @@ describe("the stop's evidence (M6 of #293)", () => {
     assert.equal(calls[0].url, `http://api.test/tickets/${missed.id}/evidence`)
     assert.equal(await ticketEvidence(clientOver(fetch), missed.id), null, "a ticket about no stop")
     assert.equal(evidenceOutcome(evidence), "Failed · Not presented")
-    assert.equal(evidenceOutcome({ outcome: "completed", reason: null }), "Completed")
+    assert.equal(evidenceOutcome({ outcome: "completed", reason: null, corrected: false }), "Completed")
+    assert.equal(evidenceOutcome({ outcome: "failed", reason: "not-presented", corrected: true }), "Failed · Not presented · corrected by the office")
+    assert.equal(evidenceProofLine(evidence.proofs[0], "Europe/Copenhagen"), "2026-10-05 07:12 · Failure · Driver app · Not presented")
     assert.equal(evidencePlace(evidence.location), "55.67610, 12.56830", "latitude first, as a person reads a place")
     assert.equal(evidencePlace(null), "Not recorded")
   })

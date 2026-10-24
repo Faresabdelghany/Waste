@@ -32,7 +32,7 @@
 // until then; the assignee is a User Account of Users & roles. The assignee's
 // server id rides beside its web id (`ASSIGNEE_ACCOUNT_KEY`), since what the
 // list's "Mine" compares with is `/me`'s account, a server id.
-import type { StopEvidence, Ticket, TicketDetail, TicketEvent, TicketEvidence, TicketLinks } from "@waste/contracts/tickets"
+import type { EvidenceProof, StopEvidence, Ticket, TicketDetail, TicketEvent, TicketEvidence, TicketLinks } from "@waste/contracts/tickets"
 import { ticketTransition, TICKET_COMMANDS, type TicketCommand } from "@waste/domain/resolution/transitions"
 import { OPEN_TICKET_STATUSES, TICKET_KINDS, TICKET_PRIORITIES, TICKET_RESOLUTIONS, TICKET_SOURCES, TICKET_VISIBILITIES, type TicketStatus } from "@waste/domain/resolution/vocabulary"
 
@@ -206,6 +206,12 @@ function linkOf(record: BusinessRecord, key: string, prefix: string, fact: strin
   return referencedServerId(webId, prefix, context, { owns }) ?? refusal(key, `Pick ${/^[aeiou]/.test(noun) ? "an" : "a"} ${noun} the API holds`)
 }
 
+/** The server id of the route a loaded stop rides on; undefined where the stop's row, or its route's, is not loaded. */
+function routeOfStop(stopServerId: string, context: MappingContext): string | undefined {
+  const routeWebId = context.resolve.byServerId(stopServerId)?.submittedValues?.routeId
+  return typeof routeWebId === "string" && routeWebId !== "" ? context.resolve.serverIdOf(routeWebId) : undefined
+}
+
 /** Whether a loaded row is an alert — the alerts' own rule, spelled here since their adapter is built on this one's. */
 const isAlertRecord = ofKind("alert", ["Alert"])
 
@@ -255,8 +261,7 @@ export function toTicketCreateBody(record: BusinessRecord, context: MappingConte
   }
   // A stop is named with its route, and one picked before the route was changed is another route's: refused here as the contracts and the API would.
   if (links.pickupId !== undefined) {
-    const stopRoute = context.resolve.byServerId(links.pickupId)?.submittedValues?.routeId
-    const stopRouteId = typeof stopRoute === "string" && stopRoute !== "" ? context.resolve.serverIdOf(stopRoute) : undefined
+    const stopRouteId = routeOfStop(links.pickupId, context)
     if (links.routeId === undefined || (stopRouteId !== undefined && stopRouteId !== links.routeId)) return refusal("pickupId", "Pick a stop on the ticket's route")
   }
   const alertId = linkOf(record, "alertId", "alert", "Alert", isAlertRecord, context)
@@ -273,6 +278,8 @@ export function toTicketCreateBody(record: BusinessRecord, context: MappingConte
     ...(assignee === null ? {} : { assigneeUserAccountId: assignee }),
     ...(Object.keys(links).length === 0 ? {} : { links }),
     ...(alertId === undefined ? {} : { alertId }),
+    // The API answers a missed collection its stop's record answers unless told not to (M6 of #293): only the opt-out goes out.
+    ...(record.submittedValues?.answerFromRecord === false ? { answerFromRecord: false } : {}),
   }
 }
 
@@ -354,8 +361,7 @@ export const TICKET_COMMANDS_BY_NAME = {
     const recollectionPickupId = referencedServerId(stopWebId, "pickup", context, { owns: pickupAdapter.owns })
     if (recollectionPickupId === undefined) return refusal("recollectionPickupId", "Pick a stop the API holds")
     // A stop picked before the route was changed is another route's, where its row is loaded to say so: refused here as the API would (400, Not a pickup of this route).
-    const stopRoute = context.resolve.byServerId(recollectionPickupId)?.submittedValues?.routeId
-    const stopRouteId = typeof stopRoute === "string" && stopRoute !== "" ? context.resolve.serverIdOf(stopRoute) : undefined
+    const stopRouteId = routeOfStop(recollectionPickupId, context)
     if (stopRouteId !== undefined && stopRouteId !== recollectionRouteId) return refusal("recollectionPickupId", "Pick a stop on the re-collection route")
     return { resolution, note, recollectionRouteId, recollectionPickupId }
   }),
@@ -422,8 +428,14 @@ export async function ticketEvidence(client: Client, serverId: string): Promise<
   return (await get<TicketEvidence>(client, `/tickets/${serverId}/evidence`)).stop
 }
 
-/** The stop's outcome as the details read it: `Failed · Not presented`. */
-export const evidenceOutcome = (stop: Pick<StopEvidence, "outcome" | "reason">): string => (stop.reason === null ? statusLabel(stop.outcome) : `${statusLabel(stop.outcome)} · ${statusLabel(stop.reason)}`)
+/** The stop's outcome as the details read it: `Failed · Not presented`, and `· corrected by the office` where the office's correction set it. */
+export const evidenceOutcome = (stop: Pick<StopEvidence, "outcome" | "reason" | "corrected">): string =>
+  [statusLabel(stop.outcome), stop.reason === null ? undefined : statusLabel(stop.reason), stop.corrected ? "corrected by the office" : undefined].filter(Boolean).join(" · ")
+
+/** One proof of the evidence as a line on the project's clock: when, what and by which door, then the outcome a correction moved the stop to or the reason it gave. */
+export function evidenceProofLine(proof: EvidenceProof, timezone: string | undefined): string {
+  return [shownOn(proof.occurredAt, timezone), statusLabel(proof.kind), statusLabel(proof.source), proof.outcome === null ? undefined : statusLabel(proof.outcome), proof.reason === null ? undefined : statusLabel(proof.reason)].filter(Boolean).join(" · ")
+}
 
 /** Where the device stood for the outcome, latitude first as a person reads a place: `55.67610, 12.56830`. */
 export const evidencePlace = (location: StopEvidence["location"]): string => (location === null ? "Not recorded" : `${location.coordinates[1].toFixed(5)}, ${location.coordinates[0].toFixed(5)}`)

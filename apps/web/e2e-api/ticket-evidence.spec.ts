@@ -111,7 +111,8 @@ test("a missed collection against a stop recorded not-presented is answered by t
   await page.goto(`/tickets?module=tickets&record=ticket-${asked.id}`)
   const second = page.getByRole("dialog", { name: asked.subject })
   const record = second.getByTestId("ticket-evidence")
-  await expect(record).toContainText("Completed")
+  // The details open once the tickets module has read its rows, which a long-lived stack holds many of.
+  await expect(record).toContainText("Completed", { timeout: 30_000 })
   await expect(second.getByTestId("ticket-evidence-reply")).toContainText("Our driver collected the bin at")
   const collectedReply = (await second.getByTestId("ticket-evidence-reply").textContent()) ?? ""
 

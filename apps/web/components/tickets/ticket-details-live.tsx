@@ -17,7 +17,7 @@
 // reply that quotes them, which Reply with the record writes on the
 // customer's thread — the note after it, and the case completed `answered`
 // where asked.
-import { useEffect, useState, type ReactNode } from "react"
+import { useState, type ReactNode } from "react"
 import { ArrowLeft, ArrowSquareOut, ChatCircleText, CheckCircle, ClockCounterClockwise, LockKey, PaperPlaneTilt, PencilSimple, X } from "@phosphor-icons/react/dist/ssr"
 import Link from "next/link"
 import { toast } from "sonner"
@@ -28,25 +28,24 @@ import { Dialog, DialogContent, DialogDescription, DialogTitle } from "@/compone
 import { Input } from "@/components/ui/input"
 import { Popover, PopoverContent, PopoverTrigger } from "@/components/ui/popover"
 import { Textarea } from "@/components/ui/textarea"
-import { useApiClient } from "@/components/waste/api-session-store"
 import { BusinessRecordFormDialog } from "@/components/waste/business-record-form-dialog"
 import { useBusinessRecordStore, useServerModuleState, whenSaved } from "@/components/waste/business-record-store"
 import { ProofObject } from "@/components/waste/commands/route-surfaces"
 import { useCommandRunner, useRowHistory, useServerNames } from "@/components/waste/commands/use-command-support"
+import { useProofObjectLinks } from "@/components/waste/commands/use-proof-object-links"
 import type { ApiClient } from "@/lib/api/client"
-import { problemSentence } from "@/lib/api/problem"
 import { statusLabel, webIdOf } from "@/lib/api/records/adapter"
 import { ALERT_PREFIX, ALERTS_MODULE } from "@/lib/api/records/alerts"
 import { shownOn } from "@/lib/api/records/clock"
 import { CONTAINERS_MODULE } from "@/lib/api/records/containers"
-import { pickupProofObjects, PICKUPS_MODULE, proofLine } from "@/lib/api/records/pickups"
+import { PICKUPS_MODULE } from "@/lib/api/records/pickups"
 import { ROUTES_MODULE } from "@/lib/api/records/routes"
-import { problemOfError } from "@/lib/api/records/server-records"
 import {
   ASSIGN_TICKET,
   commentOnTicket,
   evidenceOutcome,
   evidencePlace,
+  evidenceProofLine,
   isOpenTicketStatus,
   offersTicketCommand,
   REPLY_WITH_EVIDENCE,
@@ -66,7 +65,6 @@ import type { BusinessRecord, ModuleLocation } from "@/lib/data/business-modules
 import { CONTACTS_MODULE, NO_ONE, PROPERTIES_MODULE, SHARED_POINTS_MODULE } from "@/lib/data/properties"
 import { ACCESS_MODULE, replyWithEvidenceForm, TICKET_COMMAND_FORMS, TICKET_EDIT_FORM, updateTicketRecord, type TicketCommandWithForm } from "@/lib/data/tickets"
 import { cn } from "@/lib/utils"
-import type { ProofObjectLink } from "@waste/contracts/proof-objects"
 import type { StopEvidence, TicketDetail, TicketEvent } from "@waste/contracts/tickets"
 import { TICKET_KINDS, TICKET_PRIORITIES, type TicketStatus } from "@waste/domain/resolution/vocabulary"
 
@@ -81,37 +79,6 @@ const readTicket = (client: ApiClient, serverId: string) => ticketDetail(client,
 const readEvidence = (client: ApiClient, serverId: string) => ticketEvidence(client, serverId).then((stop): Array<StopEvidence | null> => [stop])
 /** No read, for a ticket about no stop. */
 const NO_EVIDENCE = async (): Promise<Array<StopEvidence | null>> => []
-
-/** How long before its read URLs lapse a stop's objects are read again, so a details left open never offers a dead link. */
-const RENEW_BEFORE_MS = 30_000
-
-/** Read URLs for the photos and signatures of the stop the evidence names, asked only where a proof names an object, and asked again before they lapse. */
-function useStopObjects(stop: StopEvidence | null | undefined): { rows: ProofObjectLink[] | null; problem: string | null } {
-  const client = useApiClient()
-  const pickupId = stop != null && stop.proofs.some((proof) => proof.objectKey !== null) ? stop.pickupId : null
-  const [renewals, setRenewals] = useState(0)
-  const key = `${pickupId ?? ""}|${renewals}`
-  const [state, setState] = useState<{ key: string; rows: ProofObjectLink[] | null; problem: string | null }>({ key: "", rows: null, problem: null })
-  useEffect(() => {
-    if (client === null || pickupId === null) return
-    let current = true
-    pickupProofObjects(client, pickupId).then(
-      (rows) => current && setState({ key, rows, problem: null }),
-      (error: unknown) => current && setState({ key, rows: null, problem: problemSentence(problemOfError(error)) }),
-    )
-    return () => {
-      current = false
-    }
-  }, [client, key, pickupId])
-  const read = state.key === key ? state : { rows: null, problem: null }
-  const lapsesAt = read.rows?.reduce<number | null>((soonest, link) => Math.min(soonest ?? Infinity, Date.parse(link.expiresAt)), null) ?? null
-  useEffect(() => {
-    if (lapsesAt === null) return
-    const renew = setTimeout(() => setRenewals((count) => count + 1), Math.max(0, lapsesAt - RENEW_BEFORE_MS - Date.now()))
-    return () => clearTimeout(renew)
-  }, [lapsesAt])
-  return { rows: read.rows, problem: read.problem }
-}
 
 /** Where each link's rows live, by the link's key: the way to a linked row. */
 const LINK_MODULES: Readonly<Record<string, ModuleLocation>> = {
@@ -183,7 +150,8 @@ export function LiveTicketDetailsDialog({ record, onClose }: { record: BusinessR
   const aboutAStop = typeof live.submittedValues?.pickupId === "string" && live.submittedValues.pickupId !== ""
   const evidenceRead = useRowHistory(workspaceId, moduleId, live, `${version + changes}:${aboutAStop}`, aboutAStop ? readEvidence : NO_EVIDENCE)
   const evidence = evidenceRead.rows === null ? undefined : evidenceRead.rows[0]
-  const objects = useStopObjects(evidence)
+  // The photos and signatures, where a proof names one: signed under the stops' grant, which a role reading tickets may lack.
+  const objects = useProofObjectLinks(evidence != null && evidence.proofs.some((proof) => proof.objectKey !== null) ? evidence.pickupId : null, version + changes)
   const alertsState = useServerModuleState(ALERTS_MODULE.workspaceId, ALERTS_MODULE.moduleId)
   const alertWebId = (serverId: string) => [...(alertsState?.serverIds ?? [])].find(([, id]) => id === serverId)?.[0] ?? webIdOf(ALERT_PREFIX, serverId)
   const [open, setOpen] = useState<Open | null>(null)
@@ -464,7 +432,7 @@ export function LiveTicketDetailsDialog({ record, onClose }: { record: BusinessR
                         <ul className="space-y-2 text-xs text-muted-foreground" aria-label="Proofs at the stop">
                           {evidence.proofs.map((proof) => (
                             <li key={proof.id}>
-                              {proofLine(proof, timezone)}
+                              {evidenceProofLine(proof, timezone)}
                               <ProofObject proof={proof} links={objects} />
                             </li>
                           ))}
@@ -472,7 +440,7 @@ export function LiveTicketDetailsDialog({ record, onClose }: { record: BusinessR
                       )}
                       {objects.problem !== null && <p className="text-xs text-muted-foreground">The photos are not shown: {objects.problem}</p>}
                       <figure className="rounded-lg border border-blue-500/20 bg-blue-500/5 px-3 py-2">
-                        <figcaption className="text-[11px] font-medium text-blue-700 dark:text-blue-200">The reply the customer is sent</figcaption>
+                        <figcaption className="text-[11px] font-medium text-blue-700 dark:text-blue-200">The reply quoting the record</figcaption>
                         <blockquote className="mt-1 text-sm leading-6" data-testid="ticket-evidence-reply">
                           {evidence.reply}
                         </blockquote>
@@ -557,14 +525,15 @@ function HistoryRow({ event, who, assignee, at }: { event: TicketEvent; who: str
         )}
       </span>
       <div className="min-w-0 flex-1 pt-0.5">
-        <p className="text-sm font-medium">
+        {/* A div, not a p: the badge is a div, which a paragraph may not hold. */}
+        <div className="text-sm font-medium">
           {title}
           {isComment && (
             <Badge variant="outline" className={cn("ml-2 rounded-full px-2 py-0 text-[10px] font-medium", event.visibility === "customer" ? "border-blue-500/30 bg-blue-500/10 text-blue-700 dark:text-blue-200" : "border-amber-500/30 bg-amber-500/10 text-amber-700 dark:text-amber-200")}>
               {event.visibility === "customer" ? "Customer" : "Internal"}
             </Badge>
           )}
-        </p>
+        </div>
         {event.body !== null && (
           <p className={cn("mt-1 whitespace-pre-wrap text-sm leading-6", isComment ? "rounded-lg border border-border/60 bg-muted/30 px-3 py-2 text-foreground" : "text-muted-foreground")}>{event.body}</p>
         )}
