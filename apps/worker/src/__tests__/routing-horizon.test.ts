@@ -5,9 +5,9 @@
 // of fifty stops or fewer from a depot, a baseline measurement above or
 // without one, a dispatcher's order extended — and the nightly
 // `routing.sweep-horizon` asks for every planned or ready route of an active
-// project in that window with no active Plan or a stale one, across
-// companies as the worker role, nearest date first, and re-sends the job of
-// a calculating Plan a day old whose job is gone. The jobs land on real
+// project in that window with no active Plan, a stale one or a failed one,
+// across companies as the worker role, nearest date first, and re-sends the
+// job of a calculating Plan a day old whose job is gone. The jobs land on real
 // pg-boss queues made with their options and are handed to routing's
 // handlers the way the worker's poll takes them, over the fake provider on a
 // pinned clock. Company A generates from three schemes and carries most of
@@ -743,6 +743,74 @@ describe("the horizon: generation's routing jobs and routing.sweep-horizon", { s
     )
     assert.deepEqual([kept.id, kept.status, (await jobsOf([kept.id])).length], [measured.id, "ready", 1], "the old order is kept as it was, its first job its only one")
     assert.ok(readFresh(await sweepHorizon(contextOf())), "and the night after reads the new order fresh")
+  })
+
+  test("the sweep asks again a route whose active baseline or manual Plan failed its measurement (#231): a new Plan of its solver, active and calculating, its job batch, the failed one kept as it was; once measured, it reads fresh", async () => {
+    const at = (bin: string, house: string) => ({ containerId: bin, propertyId: house, fractionId: a.residual })
+    const stops = [at(a.farBin, a.unreachable), at(a.bin1, a.parkvej)]
+    // Two routes naming no depot, through Prøvestenen: the sweep asks a baseline for one, and a dispatcher puts Parkvej first on the other, through the office's door.
+    const measured = await handMade(a, { operatingDate: "2026-10-07", stops })
+    const reordered = await handMade(a, { operatingDate: "2026-10-08", stops })
+    const [reorderedRow] = await owner.db.select().from(route).where(eq(route.id, reordered.id))
+    const dispatcherOrder = [reordered.pickupIds[1], reordered.pickupIds[0]]
+    await withCompany(api.db, a.company, (tx: Tx) =>
+      ensurePlan(tx, a.company, reorderedRow, { solver: "manual", orderedPickupIds: dispatcherOrder, class: "interactive" }, { routing: { name: "fake", profile: DEFAULT_PROFILE }, send: (queue, data, options) => boss.send(queue, data, options ?? {}) }),
+    )
+    const first = await sweepHorizon(contextOf())
+    assert.ok(first.asked.includes(measured.id) && !first.asked.includes(reordered.id), "the dispatcher's order waits on its own measurement")
+    const routes = [
+      { id: measured.id, solver: "baseline", order: measured.pickupIds, date: "2026-10-07" },
+      { id: reordered.id, solver: "manual", order: dispatcherOrder, date: "2026-10-08" },
+    ] as const
+    // The provider refuses every trip through Prøvestenen: each measurement fails finally, and its Plan stays the route's active one.
+    let refusals = 0
+    const fake = new FakeProvider()
+    const unreachable: RoutingProvider = {
+      name: fake.name,
+      maxWaypoints: fake.maxWaypoints,
+      optimise: (request) => fake.optimise(request),
+      measure: async (request) => {
+        if (!request.points.some(([longitude, latitude]) => longitude === UNREACHABLE[0] && latitude === UNREACHABLE[1])) return fake.measure(request)
+        refusals += 1
+        return { kind: "refused", status: 404, sentence: UNROUTABLE, quota: null }
+      },
+    }
+    await drain(ROUTING_MEASURE_QUEUE, contextOf(engineOf({}, unreachable).engine))
+    assert.equal(refusals, 2, "one call a route")
+    const failedPlans: string[] = []
+    for (const row of routes) {
+      const [only, ...more] = await plansOf(row.id)
+      assert.deepEqual(more, [])
+      assert.deepEqual([only.solver, only.status, only.failureReason, await activeOf(row.id), await stopsOf(only.id)], [row.solver, "failed", UNROUTABLE, only.id, row.order])
+      failedPlans.push(only.id)
+    }
+
+    const next = await sweepHorizon(contextOf())
+    assert.deepEqual(
+      next.asked.filter((routeId) => routes.some((row) => row.id === routeId)),
+      [measured.id, reordered.id],
+      "a failed measurement answers nothing",
+    )
+    for (const [index, row] of routes.entries()) {
+      const [failed, asked, ...more] = await plansOf(row.id)
+      assert.deepEqual(more, [], "one Plan more")
+      assert.equal(failed.id, failedPlans[index])
+      assert.deepEqual([asked.solver, asked.status, asked.fingerprint, await activeOf(row.id), await stopsOf(asked.id)], [row.solver, "calculating", failed.fingerprint, asked.id, row.order])
+      assert.deepEqual(
+        (await jobsOf([asked.id])).map((job) => [job.name, job.state, job.data.class, job.priority]),
+        [[ROUTING_MEASURE_QUEUE, "created", "batch", batchPriority[row.date]]],
+      )
+      assert.deepEqual(
+        [failed.status, failed.failureReason, (await jobsOf([failed.id])).map((job) => job.state)],
+        ["failed", UNROUTABLE, ["completed"]],
+        "the failed Plan is kept as it was, its first job its only one",
+      )
+    }
+    // The provider routes Prøvestenen from here on: the new measurements land, and the night after reads both routes fresh.
+    await drain(ROUTING_MEASURE_QUEUE, contextOf())
+    for (const row of routes) assert.equal((await plansOf(row.id))[1].status, "ready")
+    const nightAfter = await sweepHorizon(contextOf())
+    for (const row of routes) assert.ok(!nightAfter.asked.includes(row.id) && !nightAfter.failed.includes(row.id), `the ${row.date} route reads fresh once measured`)
   })
 
   test("the sweep re-sends the job of a calculating Plan more than a day old whose job is gone, to its solver's queue, and leaves one whose job is live and one younger than a day", async () => {
