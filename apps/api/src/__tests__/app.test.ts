@@ -733,7 +733,7 @@ describe("GET /openapi.json", () => {
     assert.deepEqual(Object.keys(document.paths["/users/{id}/deactivate"].post.responses), ["200", "400", "401", "403", "404", "409"])
     assert.deepEqual(Object.keys(document.paths["/users/{id}/reactivate"].post.responses), ["200", "400", "401", "403", "404"])
     assert.deepEqual(Object.keys(document.paths["/users/{id}/make-primary-administrator"].post.responses), ["200", "400", "401", "403", "404", "409"])
-    assert.deepEqual(Object.keys(document.paths["/roles/{id}/grants"].put.responses), ["200", "400", "401", "403", "404"])
+    assert.deepEqual(Object.keys(document.paths["/roles/{id}/grants"].put.responses), ["200", "400", "401", "403", "404", "409"])
     for (const [path, method] of [["/users/{id}", "patch"], ["/roles/{id}/grants", "put"]] as const) {
       for (const [status, operation] of Object.entries(document.paths[path][method].responses)) {
         const media = Object.keys(operation.content)
@@ -745,6 +745,9 @@ describe("GET /openapi.json", () => {
     assert.match(document.paths["/users"].post.description ?? "", /exactly one of `allProjects: true`, `projectIds` or `serviceProviderId`/)
     assert.match(document.paths["/users/{id}"].patch.description ?? "", /primary administrator cannot be moved to another role or narrowed \(409\)/)
     assert.match(document.paths["/users/{id}/deactivate"].post.description ?? "", /primary administrator cannot be deactivated \(409\)/)
+    // A system role's scope and matrix are the platform's, which every seed restores (#291).
+    assert.match(document.paths["/roles/{id}"].patch.description ?? "", /another scope on a system role is refused \(409\)/)
+    assert.match(document.paths["/roles/{id}/grants"].put.description ?? "", /A system role's matrix is the platform's, which every seed restores to the charter, so replacing it is refused \(409\)/)
     const transfer = document.paths["/users/{id}/make-primary-administrator"].post.description ?? ""
     assert.match(transfer, /service provider's account, or one given some projects only, is refused \(409\)/)
     assert.match(transfer, /already is the primary administrator answers 200 unchanged/)

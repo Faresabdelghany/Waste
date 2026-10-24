@@ -339,7 +339,11 @@ const SERVICE_PROVIDER_COLUMNS = [
   serviceProvider.contactName,
   serviceProvider.contactEmail,
 ]
-const ROLE_COLUMNS = [role.key, role.name, role.scope, role.description, role.system]
+// Not `name` and not `description`: a system role's copy is the tenant's once
+// it is seeded (#291) — a company may call the Dispatcher "Disponent" — so the
+// seed writes it on insert alone. Its key, its scope and its grants are the
+// platform's, put back on every run, and the API refuses a change to either.
+const ROLE_COLUMNS = [role.key, role.scope, role.system]
 // Not `auth_user_id` and not `deactivated_at`: the hook binds the first when
 // the person signs in and the API writes the second, and a seed run must not
 // unbind an account or wake a deactivated one.

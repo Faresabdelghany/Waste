@@ -18,8 +18,10 @@
 // its projects and service providers, its roles with their grants, its User
 // Accounts with their Project and Service Provider Access. Those are kept,
 // and the seed writes each seeded one back to what it says (demo.ts: an
-// edited name, a grant a charter dropped, an access row it does not name), so
-// they return to the seed's word without being deleted, because:
+// edited name, a system role's scope, a grant a charter dropped, an access
+// row it does not name — but never a system role's name or description,
+// which are the tenant's once seeded, #291), so they return to the seed's
+// word without being deleted, because:
 //
 //   - a Login stays bound. The seed never writes `auth_user_id`: sweeping the
 //     accounts would unbind every Login, the access token hook (migration

@@ -17,12 +17,15 @@
 // projects or a service provider. The type of `InviteAccess` makes the
 // one-of a matter of shape, so the record carries exactly one way and the
 // adapter finds exactly one.
+import { systemRoleKept } from "@waste/domain/access/system-roles"
+
 import { typed, typedFlag } from "@/lib/api/records/adapter"
-import { ALL_PROJECTS_ACCESS, NO_PROJECT_ACCESS, roleAdapter, roleWebIdOf, SERVICE_PROVIDER_ACCESS, serviceProviderAdapter, userAdapter } from "@/lib/api/records/organisation"
+import { accessMapOf, ALL_PROJECTS_ACCESS, GRANTS_KEY, grantsOfRecord, NO_PROJECT_ACCESS, roleAdapter, roleWebIdOf, SERVICE_PROVIDER_ACCESS, serviceProviderAdapter, userAdapter } from "@/lib/api/records/organisation"
 import type { ModuleState } from "@/lib/api/records/server-records"
 
 import { FIXTURE_COMPANY_ID, type BusinessRecord } from "./business-modules"
 import { projectRecordsOf } from "./project-scope"
+import type { RoleAccessMap } from "./role-permissions"
 
 export type UserRow = {
   id: string
@@ -338,8 +341,74 @@ export function inviteRecord(invite: Invite, id: string): BusinessRecord {
   }
 }
 
+const mintedSuffix = () => (typeof crypto !== "undefined" && "randomUUID" in crypto ? crypto.randomUUID() : `${Date.now()}-${Math.random().toString(36).slice(2, 9)}`)
+
 /** The id an invitation is minted under, the generic create path's shape, `access-user-<random>`: on the API it keeps it through the session's reads (#240). */
 export function mintInviteId(): string {
-  const random = typeof crypto !== "undefined" && "randomUUID" in crypto ? crypto.randomUUID() : `${Date.now()}-${Math.random().toString(36).slice(2, 9)}`
-  return `access-user-${random}`
+  return `access-user-${mintedSuffix()}`
+}
+
+/** The id a new role is minted under, `access-role-<random>`, as an invitation's is. */
+export function mintRoleId(): string {
+  return `access-role-${mintedSuffix()}`
+}
+
+export type NewRole = {
+  name: string
+  scope: string
+  description: string
+  /** A role whose permissions the new one starts with — a system role's among them, the way to change what one allows; none is no permission at all. */
+  startFrom?: BusinessRecord
+}
+
+/**
+ * The record New role hands the store on the Pilot (#291): a custom role as
+ * the table shows it until the API answers, and what `roleAdapter.toCreateBody`
+ * reads the `RoleCreate` body off — its copy trimmed, and the matrix it starts
+ * from, as the role it copies carries it, or none.
+ */
+export function newRoleRecord(role: NewRole, id: string, companyRecordId?: string): BusinessRecord {
+  const name = role.name.trim()
+  const description = role.description.trim()
+  const grants = role.startFrom === undefined ? [] : (grantsOfRecord(role.startFrom) ?? [])
+  return {
+    id,
+    name,
+    context: `Role · ${role.scope.toLowerCase()} scope`,
+    status: "Active",
+    owner: "",
+    value: "",
+    updated: "Just now",
+    description,
+    facts: { Identity: "Role", Type: "Custom", Scope: role.scope },
+    related: [],
+    source: "Waste API",
+    freshness: "Just now",
+    companyId: companyRecordId ?? FIXTURE_COMPANY_ID,
+    recordKind: "Role",
+    submittedValues: { name, scope: role.scope, description, system: false, [GRANTS_KEY]: JSON.stringify(grants) },
+  }
+}
+
+/** A matrix as one comparable text: each module granted something, its actions sorted. */
+const accessKey = (access: Readonly<Record<string, readonly string[]>>) =>
+  JSON.stringify(
+    Object.entries(access)
+      .filter(([, actions]) => actions.length > 0)
+      .map(([moduleKey, actions]) => [moduleKey, [...actions].sort()])
+      .sort(([a], [b]) => String(a).localeCompare(String(b))),
+  )
+
+/** Whether the panel's draft grants anything other than the saved matrix: a module emptied or the actions reordered is no change. */
+export function accessChanged(saved: Readonly<Record<string, readonly string[]>>, draft: Readonly<Record<string, readonly string[]>>): boolean {
+  return accessKey(saved) !== accessKey(draft)
+}
+
+/** A role's matrix as the permissions panel reads it on the Pilot: its grants by module, and why it is read-only where it is — a system role's is the platform's (#291). */
+export function roleMatrixOf(record: BusinessRecord): { name: string; access: RoleAccessMap; readOnlyBecause: string | null } {
+  return {
+    name: record.name,
+    access: accessMapOf(grantsOfRecord(record) ?? []),
+    readOnlyBecause: typedFlag(record, "system") === true ? systemRoleKept(record.name) : null,
+  }
 }

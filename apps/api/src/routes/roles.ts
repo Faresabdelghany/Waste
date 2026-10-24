@@ -9,9 +9,12 @@
 // @waste/domain/access/system-roles, which keep their `key` and `system =
 // true`; a role created here is custom, so the server writes `key: null` and
 // `system: false` and no write body names either — a seeded role's key is
-// what matches its rows back to the charter, and its copy and its matrix are
-// the company's to change (the prototype lets an administrator edit a system
-// role's matrix, and so does this).
+// what matches its rows back to the charter. A system role's name and
+// description are the company's to change (the seed writes them on insert
+// alone); its scope and its matrix are the platform's, which every seed
+// restores to the charter, so a change to either is refused (409) rather than
+// taken and silently undone at the next seed (#291): a company that wants
+// another reach makes a custom role.
 //
 // The matrix is always the set as the system stores it (access-shape.ts, over
 // the one rule in @waste/domain/access/grants): `edit`, `create` and `delete`
@@ -33,6 +36,7 @@ import { Page, PageRequest } from "@waste/contracts/pagination"
 import type { Grant } from "@waste/contracts/permissions"
 import type { Tx } from "@waste/db/client"
 import { role, roleGrant } from "@waste/db/schema/access"
+import { systemRoleKept, systemRoleScopeKept } from "@waste/domain/access/system-roles"
 import { and, asc, eq, gt, inArray, sql } from "drizzle-orm"
 import { Hono, type MiddlewareHandler } from "hono"
 import { describeRoute } from "hono-openapi"
@@ -106,6 +110,17 @@ const NAME_TAKEN = "role_name_key"
 const nameTaken = (name: string) => `This company already has a role called ${JSON.stringify(name)}`
 
 const noSuchRole = (id: string) => problem(404, { detail: `No role ${id} in this company` })
+
+/** The role of the path, or the family's 404. */
+async function findRole(tx: Tx, companyId: string, id: string): Promise<Row> {
+  const [row] = await tx
+    .select(columns)
+    .from(role)
+    .where(and(eq(role.companyId, companyId), eq(role.id, id)))
+    .limit(1)
+  if (row === undefined) throw noSuchRole(id)
+  return row
+}
 
 export function roleRoutes(guard: MiddlewareHandler<AuthEnv>) {
   return new Hono<AuthEnv>()
@@ -217,7 +232,7 @@ export function roleRoutes(guard: MiddlewareHandler<AuthEnv>) {
         operationId: "patchRole",
         summary: "Change a role's copy",
         description:
-          "Changes the name, the scope or the description, a seeded role's included; every field is optional and at least one must be given. A seeded role's `key` and its `system` flag are not a caller's to change, so the body does not name them, and the matrix is `PUT /roles/{id}/grants`.",
+          "Changes the name, the scope or the description; every field is optional and at least one must be given. A system role's name and description are the company's to change — a company may call the Dispatcher by a name of its own — but its scope is the platform's, which every seed restores to the charter: another scope on a system role is refused (409), while re-stating the one it has names nothing new, so a body sending the copy whole is taken. A role's `key` and its `system` flag are not a caller's to change, so the body does not name them, and the matrix is `PUT /roles/{id}/grants`.",
         security: BEARER_SECURITY,
         responses: {
           200: describeJson("The role as it now stands.", Role),
@@ -225,7 +240,7 @@ export function roleRoutes(guard: MiddlewareHandler<AuthEnv>) {
           401: describeProblem("No usable token (see WWW-Authenticate)."),
           403: describeProblem("No active account here, or the caller's role does not allow `edit` on `configure.access`."),
           404: describeProblem("No role with that id in this company."),
-          409: describeProblem("The company already has another role with that name."),
+          409: describeProblem("The company already has another role with that name, or the patch moves a system role's scope."),
         },
       }),
       guard,
@@ -237,6 +252,8 @@ export function roleRoutes(guard: MiddlewareHandler<AuthEnv>) {
         const patch = c.req.valid("json")
         const tx = c.get("tx")
         const { companyId } = c.get("principal")
+        const current = await findRole(tx, companyId, id)
+        if (current.system && patch.scope !== undefined && patch.scope !== current.scope) throw problem(409, { detail: systemRoleScopeKept(current.name) })
         const sentences: Record<string, string> = patch.name === undefined ? {} : { [NAME_TAKEN]: nameTaken(patch.name) }
         const [row] = await refuseDuplicate(sentences, () =>
           tx
@@ -255,7 +272,7 @@ export function roleRoutes(guard: MiddlewareHandler<AuthEnv>) {
         operationId: "putRoleGrants",
         summary: "Replace a role's matrix",
         description:
-          "Replaces the whole matrix with the one in the body: a module the body leaves out is not allowed at all afterwards, and an empty list is a role that may do nothing. The set is stored as the system spells it — `edit`, `create` and `delete` imply `view`, a module named twice is merged — and a revoked grant takes effect on the holder's very next request, since the API looks a caller's grants up on every call. Allowed on a seeded role too: only its key and its `system` flag are its for life.",
+          "Replaces the whole matrix of a custom role with the one in the body: a module the body leaves out is not allowed at all afterwards, and an empty list is a role that may do nothing. The set is stored as the system spells it — `edit`, `create` and `delete` imply `view`, a module named twice is merged — and a revoked grant takes effect on the holder's very next request, since the API looks a caller's grants up on every call. A system role's matrix is the platform's, which every seed restores to the charter, so replacing it is refused (409): a company that wants another reach makes a custom role.",
         security: BEARER_SECURITY,
         responses: {
           200: describeJson("The role with the matrix it now has.", Role),
@@ -263,6 +280,7 @@ export function roleRoutes(guard: MiddlewareHandler<AuthEnv>) {
           401: describeProblem("No usable token (see WWW-Authenticate)."),
           403: describeProblem("No active account here, or the caller's role does not allow `edit` on `configure.access`."),
           404: describeProblem("No role with that id in this company."),
+          409: describeProblem("The role is a system role, whose matrix is the platform's."),
         },
       }),
       guard,
@@ -274,10 +292,11 @@ export function roleRoutes(guard: MiddlewareHandler<AuthEnv>) {
         const { grants: asked } = c.req.valid("json")
         const tx = c.get("tx")
         const { companyId } = c.get("principal")
+        const current = await findRole(tx, companyId, id)
+        if (current.system) throw problem(409, { detail: systemRoleKept(current.name) })
         // The matrix is part of the role on the wire, so replacing it changes
-        // the role: the update is what says so — and what answers 404 when
-        // there is no such role here. The trigger would stamp `updated_at`
-        // whatever this set said; naming it is naming what changed.
+        // the role: the update is what says so. The trigger would stamp
+        // `updated_at` whatever this set said; naming it is naming what changed.
         const [row] = await tx
           .update(role)
           .set({ updatedAt: sql`now()` })

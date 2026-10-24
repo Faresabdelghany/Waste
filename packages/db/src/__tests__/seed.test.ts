@@ -680,6 +680,22 @@ describe("the demo seed against a fresh database", { skip: database.skip }, () =
     assert.equal((await seedDemo(fresh.url)).changed, 0)
   })
 
+  test("a system role's name and description are the tenant's once seeded: a rename survives the next run, while its scope goes back to the charter's (#291)", async () => {
+    const charter = SYSTEM_ROLES.find((systemRole) => systemRole.key === "dispatcher")
+    assert.ok(charter)
+    await owner.db.update(role).set({ name: "Disponent", description: "Ruter, opgaver og tildelinger", scope: "Company" }).where(eq(role.id, DEMO_IDS.roles.dispatcher))
+    const report = await seedDemo(fresh.url)
+    assert.equal(report.changed, 1, "the scope alone was put back")
+    const [dispatcher] = await owner.db.select().from(role).where(eq(role.id, DEMO_IDS.roles.dispatcher))
+    assert.deepEqual(
+      [dispatcher.name, dispatcher.description, dispatcher.scope, dispatcher.key, dispatcher.system],
+      ["Disponent", "Ruter, opgaver og tildelinger", charter.scope, "dispatcher", true],
+    )
+    assert.equal((await seedDemo(fresh.url)).changed, 0, "and the run after writes nothing")
+    // The charter's copy back for the tests after this one, which read the roles as a clean run writes them.
+    await owner.db.update(role).set({ name: charter.name, description: charter.description }).where(eq(role.id, DEMO_IDS.roles.dispatcher))
+  })
+
   test("an access row is the pair it joins: one the API wrote back under another id is left as it is, and nothing is written", async () => {
     // What the API does whenever an account's access is edited: the rows go, and come back under new ids.
     await owner.db.delete(projectAccess).where(eq(projectAccess.userAccountId, DEMO_IDS.users.mads))

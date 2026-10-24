@@ -8,10 +8,12 @@
 //
 // A seeded role keeps its `key` in the database (`role.key`, `system = true`),
 // so a company's rows can be matched back to the charter here; a custom role
-// has neither. The grants are the defaults a company starts with, not a rule
-// the API enforces: once seeded, a role's grants are its own rows, and
-// `PUT /roles/:id/grants` may take them anywhere (a system role's key and
-// `system` flag are what stay immutable).
+// has neither. A system role's name and description are the tenant's once it
+// is seeded — a company may call the Dispatcher "Disponent" — and the seed
+// writes them on insert alone; its key, its scope and its grants are the
+// platform's, which every seed restores to the charter, so the API refuses a
+// change to its scope or its grants in the sentences below (#291), and a
+// company that wants another reach makes a custom role.
 //
 // Every list below is already normalised in the sense of grants.ts — `view`
 // wherever anything else is granted — and a test holds it to that, so the
@@ -36,6 +38,12 @@ export const SYSTEM_ROLE_KEYS = [
 
 /** The key of a seeded role. Null in the database for a custom one. */
 export type SystemRoleKey = (typeof SYSTEM_ROLE_KEYS)[number]
+
+/** What a change to a system role's grants is refused with, the role named as the tenant calls it (#291). */
+export const systemRoleKept = (name: string): string => `${name} is a system role, whose permissions every seed restores to its charter; make a custom role to allow something else`
+
+/** What a change to a system role's scope is refused with (#291). */
+export const systemRoleScopeKept = (name: string): string => `${name} is a system role, whose scope every seed restores to its charter; make a custom role for another scope`
 
 /** A seeded role: its key, the copy Settings shows, and the grants it starts with. */
 export type SystemRole = {

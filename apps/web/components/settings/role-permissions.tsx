@@ -1,6 +1,6 @@
 "use client"
 
-import { useEffect, useMemo, useRef, useState } from "react"
+import { useEffect, useMemo, useRef, useState, type ReactNode } from "react"
 import {
   CaretDown,
   CaretLeft,
@@ -109,6 +109,7 @@ function PermissionSectionCard({
   open,
   onOpenChange,
   hasAction,
+  disabled,
   onToggleCell,
   onToggleColumn,
   onToggleSection,
@@ -118,6 +119,8 @@ function PermissionSectionCard({
   open: boolean
   onOpenChange: (open: boolean) => void
   hasAction: (key: string, action: RolePermissionAction) => boolean
+  /** A read-only matrix: every box shown and none to tick. */
+  disabled: boolean
   onToggleCell: (
     key: string,
     action: RolePermissionAction,
@@ -164,9 +167,10 @@ function PermissionSectionCard({
         </CollapsibleTrigger>
         <CollapsibleContent>
           <div className="border-t border-border/60">
-            <label className="flex w-fit cursor-pointer items-center gap-2.5 px-4 py-3 text-sm text-foreground">
+            <label className={cn("flex w-fit items-center gap-2.5 px-4 py-3 text-sm text-foreground", !disabled && "cursor-pointer")}>
               <Checkbox
                 checked={triState(grantedCells, totalCells)}
+                disabled={disabled}
                 onCheckedChange={(checked) =>
                   onToggleSection(section, checked === true)
                 }
@@ -181,12 +185,13 @@ function PermissionSectionCard({
                   </TableHead>
                   {ROLE_PERMISSION_ACTIONS.map((action) => (
                     <TableHead key={action} className="h-10 w-[132px]">
-                      <label className="flex w-fit cursor-pointer items-center gap-2 whitespace-nowrap text-xs font-medium text-foreground">
+                      <label className={cn("flex w-fit items-center gap-2 whitespace-nowrap text-xs font-medium text-foreground", !disabled && "cursor-pointer")}>
                         <Checkbox
                           checked={triState(
                             columnGranted(action),
                             section.items.length,
                           )}
+                          disabled={disabled}
                           onCheckedChange={(checked) =>
                             onToggleColumn(section, action, checked === true)
                           }
@@ -207,6 +212,7 @@ function PermissionSectionCard({
                       <TableCell key={action}>
                         <Checkbox
                           checked={hasAction(item.key, action)}
+                          disabled={disabled}
                           aria-label={`${ROLE_PERMISSION_ACTION_LABELS[action]} — ${item.label}`}
                           onCheckedChange={(checked) =>
                             onToggleCell(item.key, action, checked === true)
@@ -225,6 +231,7 @@ function PermissionSectionCard({
   )
 }
 
+/** Fixture mode's panel: the organisation store's role, every tick saved to the browser as it is made. */
 export function RolePermissionsPanel({
   roleId,
   onBack,
@@ -233,6 +240,65 @@ export function RolePermissionsPanel({
   onBack: () => void
 }) {
   const { roles, updateRoleAccess } = useOrganizationStore()
+  const role = roles.find((candidate) => candidate.id === roleId)
+  const access = useMemo(
+    () => (role ? effectiveRoleAccess(role) : {}),
+    [role],
+  )
+  if (!role) return <RoleGone onBack={onBack} />
+  return (
+    <RolePermissionsMatrix
+      title={role.name}
+      access={access}
+      onAccessChange={(next) => updateRoleAccess({ roleId: role.id, access: next })}
+      onBack={onBack}
+    />
+  )
+}
+
+/** A role the panel was opened on that is not there any more. */
+export function RoleGone({ onBack }: { onBack: () => void }) {
+  return (
+    <div className="flex flex-1 flex-col">
+      <header className="flex items-center gap-1.5 border-b border-border px-4 py-3">
+        <Button
+          variant="ghost"
+          size="sm"
+          className="-ml-2 h-7 gap-1 px-2 text-muted-foreground hover:text-foreground"
+          onClick={onBack}
+        >
+          <CaretLeft className="h-3.5 w-3.5" weight="bold" />
+          Roles
+        </Button>
+      </header>
+      <div className="flex flex-1 items-center justify-center p-8 text-sm text-muted-foreground">
+        This role no longer exists.
+      </div>
+    </div>
+  )
+}
+
+/**
+ * A role's matrix, by section: the access it is handed, each change handed
+ * back whole through `onAccessChange` — the browser's store in fixture mode,
+ * a draft saved at once on the Pilot (pilot-role-permissions.tsx) — and
+ * read-only where there is none. `notice` stands under the title: why the
+ * matrix is read-only, or what saving it does.
+ */
+export function RolePermissionsMatrix({
+  title,
+  access,
+  onAccessChange,
+  notice,
+  onBack,
+}: {
+  title: string
+  access: RoleAccessMap
+  onAccessChange?: (next: RoleAccessMap) => void
+  notice?: ReactNode
+  onBack: () => void
+}) {
+  const readOnly = onAccessChange === undefined
   const [query, setQuery] = useState("")
   const [openSections, setOpenSections] = useState<Record<string, boolean>>({})
   const [activeSectionId, setActiveSectionId] = useState<string | null>(
@@ -242,12 +308,6 @@ export function RolePermissionsPanel({
   // While a menu click smooth-scrolls, the spy would sweep through the
   // sections in between; hold it briefly so the clicked item stays active.
   const spySuppressedUntil = useRef(0)
-
-  const role = roles.find((candidate) => candidate.id === roleId)
-  const access = useMemo(
-    () => (role ? effectiveRoleAccess(role) : {}),
-    [role],
-  )
 
   const normalizedQuery = query.trim().toLowerCase()
   const visibleSections = useMemo(() => {
@@ -321,31 +381,11 @@ export function RolePermissionsPanel({
     )
   }
 
-  if (!role) {
-    return (
-      <div className="flex flex-1 flex-col">
-        <header className="flex items-center gap-1.5 border-b border-border px-4 py-3">
-          <Button
-            variant="ghost"
-            size="sm"
-            className="-ml-2 h-7 gap-1 px-2 text-muted-foreground hover:text-foreground"
-            onClick={onBack}
-          >
-            <CaretLeft className="h-3.5 w-3.5" weight="bold" />
-            Roles
-          </Button>
-        </header>
-        <div className="flex flex-1 items-center justify-center p-8 text-sm text-muted-foreground">
-          This role no longer exists.
-        </div>
-      </div>
-    )
-  }
-
   const hasAction = (key: string, action: RolePermissionAction) =>
     access[key]?.includes(action) ?? false
 
   const applyAccess = (mutate: (draft: AccessDraft) => void) => {
+    if (onAccessChange === undefined) return
     const draft: AccessDraft = new Map(
       Object.entries(access).map(([key, actions]) => [key, new Set(actions)]),
     )
@@ -358,7 +398,7 @@ export function RolePermissionsPanel({
         )
       }
     }
-    updateRoleAccess({ roleId: role.id, access: next })
+    onAccessChange(next)
   }
 
   const toggleCell = (
@@ -424,7 +464,7 @@ export function RolePermissionsPanel({
           Roles
         </Button>
         <span className="text-sm text-muted-foreground">/</span>
-        <p className="text-base font-medium text-foreground">{role.name}</p>
+        <p className="text-base font-medium text-foreground">{title}</p>
       </header>
       <div className="flex-1 p-4">
         <div className="mx-auto flex w-full max-w-[1500px] items-start gap-6">
@@ -464,7 +504,7 @@ export function RolePermissionsPanel({
           <div className="min-w-0 flex-1 space-y-4">
             <section className="flex flex-wrap items-start justify-between gap-3">
               <h1 className="text-lg font-semibold tracking-tight">
-                {role.name}
+                {title}
               </h1>
               <div className="text-right">
                 <p className="text-sm font-medium tabular-nums text-foreground">
@@ -475,6 +515,7 @@ export function RolePermissionsPanel({
                 </p>
               </div>
             </section>
+            {notice}
   
             <div className="relative max-w-sm">
               <MagnifyingGlass className="absolute left-3 top-1/2 h-4 w-4 -translate-y-1/2 text-muted-foreground" />
@@ -509,6 +550,7 @@ export function RolePermissionsPanel({
                       }))
                     }
                     hasAction={hasAction}
+                    disabled={readOnly}
                     onToggleCell={toggleCell}
                     onToggleColumn={toggleColumn}
                     onToggleSection={toggleSection}

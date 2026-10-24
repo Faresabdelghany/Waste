@@ -3,7 +3,7 @@ import { describe, test } from "node:test"
 
 import { normaliseGrants } from "../grants"
 import { ACTIONS, MODULE_KEYS } from "../modules"
-import { SYSTEM_ROLES, SYSTEM_ROLE_KEYS } from "../system-roles"
+import { SYSTEM_ROLES, SYSTEM_ROLE_KEYS, systemRoleKept, systemRoleScopeKept } from "../system-roles"
 
 describe("the seeded system roles", () => {
   test("the eleven roles of the spec, in order, each with its copy and system true", () => {
@@ -72,6 +72,11 @@ describe("the seeded system roles", () => {
     assert.deepEqual(editors, ["company-administrator", "operations-manager", "dispatcher", "route-planner"])
     for (const key of editors) assert.ok(routes(key).includes("create"), key)
     assert.deepEqual([...routes("dispatcher")], ["view", "edit", "create"], "and nothing more: a dispatcher deletes no route")
+  })
+
+  test("a system role's scope and permissions are its charter's, which every seed restores: each sentence names the role, as the tenant calls it, and the way out (#291)", () => {
+    assert.equal(systemRoleKept("Disponent"), "Disponent is a system role, whose permissions every seed restores to its charter; make a custom role to allow something else")
+    assert.equal(systemRoleScopeKept("Disponent"), "Disponent is a system role, whose scope every seed restores to its charter; make a custom role for another scope")
   })
 
   test("a hand-spelled role carries exactly its own modules: the driver's one, the driver door (#179)", () => {

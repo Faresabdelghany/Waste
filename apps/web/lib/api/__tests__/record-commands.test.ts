@@ -16,7 +16,7 @@ import { getModuleDefinition, type BusinessRecord } from "../../data/business-mo
 import { command } from "../client"
 import { problemSentence } from "../problem"
 import { NOTHING_RESOLVED, type LocalRefusal, type MappingContext, type ResourceAdapter, type Resource, type ServerModule } from "../records/adapter"
-import { accessModule, DEACTIVATE_USER, REACTIVATE_USER, roleAdapter, userAdapter } from "../records/organisation"
+import { accessModule, DEACTIVATE_USER, REACTIVATE_USER, REPLACE_ROLE_GRANTS, roleAdapter, userAdapter } from "../records/organisation"
 import { commandRecord, loaded, resolverOver, type ServerRecordsState } from "../records/server-records"
 import { bodyOf, clientOver, json, problem, scripted } from "./scripted-fetch"
 
@@ -158,9 +158,9 @@ describe("deactivate and reactivate", () => {
     assert.match(outcome.problem.detail ?? "", /has no server resource for elsewhere-1/)
   })
 
-  test("the user adapter has exactly the two commands the pane offers, and the role adapter none", () => {
+  test("the user adapter has exactly the two commands the pane offers, and the role adapter the one its permissions are saved by (#291)", () => {
     assert.deepEqual(Object.keys(userAdapter.commands ?? {}).sort(), [DEACTIVATE_USER, REACTIVATE_USER].sort())
-    assert.equal(roleAdapter.commands, undefined)
+    assert.deepEqual(Object.keys(roleAdapter.commands ?? {}), [REPLACE_ROLE_GRANTS])
     const module: ServerModule = accessModule
     assert.deepEqual(module.resources.map((resource) => resource.prefix), ["role", "user"])
   })
