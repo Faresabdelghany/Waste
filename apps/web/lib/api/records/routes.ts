@@ -289,7 +289,7 @@ export function routeCommandLog(client: Client, serverId: string): Promise<Drive
   return listAll<DriverCommandReceipt>(client, `/routes/${serverId}/commands`)
 }
 
-const CHANGED_BY_COMMANDS = "A route is changed by its commands: assign, dispatch, reschedule, cancel or reorder its stops"
+const CHANGED_BY_COMMANDS = "A route is changed by its commands: assign, dispatch, reschedule, release its hold, cancel or reorder its stops"
 
 export const routeAdapter: ResourceAdapter<Route> = {
   prefix: ROUTE_PREFIX,

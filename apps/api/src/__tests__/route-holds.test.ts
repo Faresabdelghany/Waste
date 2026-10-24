@@ -38,7 +38,7 @@ import { callingAs, type Call } from "./calls"
 import { databaseUnderTest } from "./database"
 import { readProblem } from "./read-problem"
 import { seedFleet, seedPlanning, type FleetFixtures, type PlanningFixtures } from "./scheme-fixtures"
-import { dropTenant, seedTenant, testId, type Tenant } from "./tenant"
+import { dropTenant, grantRole, seedTenant, testId, type Tenant } from "./tenant"
 import { signingKeys, type SigningKeys } from "./tokens"
 
 const database = databaseUnderTest()
@@ -317,11 +317,11 @@ describe("the hold on a route (#209)", { skip: database.skip }, () => {
 
   describe("release-hold (#226)", () => {
     type Sent = { name: string; data: unknown; singletonKey: unknown }
-    /** The office, through an app whose job sender answers as `send` does, each send recorded. */
-    const officeWith = (send: (sent: Sent) => Promise<string | null>) => {
+    /** The office — or the user named — through an app whose job sender answers as `send` does, each send recorded. */
+    const officeWith = (send: (sent: Sent) => Promise<string | null>, user = a.users.olivia) => {
       const sent: Sent[] = []
       const jobs: { send: Send } = { send: (name, data, options) => send({ name, data, singletonKey: options?.singletonKey }).then((answer) => (sent.push({ name, data, singletonKey: options?.singletonKey }), answer)) }
-      return { sent, call: callingAs(createApp({ probe: pool, pool, verifier: keys.verifier, now: () => clock, jobs }), keys, a.users.olivia, a.companyId) }
+      return { sent, call: callingAs(createApp({ probe: pool, pool, verifier: keys.verifier, now: () => clock, jobs }), keys, user, a.companyId) }
     }
     const released = async (call: Call, id: string): Promise<RouteDetail> => {
       const response = await call(`/routes/${id}/release-hold`, { method: "POST", body: {} })
@@ -352,6 +352,16 @@ describe("the hold on a route (#209)", { skip: database.skip }, () => {
       assert.equal((await released(officeWith(async () => null).call, absorbed)).heldAt, null, "a queued run absorbs the send")
       assert.equal((await released(officeWith(async () => Promise.reject(new QueueMissing(GENERATE_ROUTES_QUEUE))).call, unqueued)).heldAt, null, "no queue: the hand-back stands")
       assert.deepEqual(await runsOf(scheme.id), before, "no run written for either")
+    })
+
+    test("asks no run for a role that may edit routes but not schemes, as Generate would refuse it: the route is still handed back", async () => {
+      await grantRole(pool, a.companyId, a.roles.viewer.id, [{ moduleKey: "route-studio.routes", actions: ["view", "edit"] }])
+      const { scheme, groups: [one] } = await schemeWith("Dispatcher Mondays", ["Round 1"], true)
+      const id = await routeOn(scheme, one, MONDAYS[2])
+      await hold(id)
+      const dispatcher = officeWith(async () => testId(), a.users.viewer)
+      assert.equal((await released(dispatcher.call, id)).heldAt, null)
+      assert.deepEqual(dispatcher.sent, [], "a run of the scheme is the schemes module's edit")
     })
 
     test("asks no run of a draft scheme, which generates nothing; refuses a planned route that is not held and a route that is not planned", async () => {

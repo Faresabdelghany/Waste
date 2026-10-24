@@ -31,10 +31,9 @@
 // run takes before it reads a route, so a release and a run take turns. A
 // held route is a planned one, so a release never writes a route that was
 // dispatched.
-import { serviceDayOf } from "@waste/domain/route-schemes/recurrence"
 import type { Tx } from "@waste/db/client"
 import { route } from "@waste/db/schema/execution"
-import { and, eq, inArray, isNotNull } from "drizzle-orm"
+import { and, eq, inArray, isNotNull, sql } from "drizzle-orm"
 
 import type { Principal } from "../auth/principal"
 import { routeScope } from "./execution-shapes"
@@ -48,6 +47,9 @@ type SchemeCoveredPatch = Partial<SchemeCovered>
 
 /** A group's fields a hold covers. */
 export type GroupCovered = { vehicleId: string | null; driverId: string | null; serviceProviderId: string | null; days: readonly string[] }
+
+/** A service day as Postgres's ISO day of the week counts it: Monday 1 to Sunday 7. */
+const ISO_DOW: Readonly<Record<string, number>> = { monday: 1, tuesday: 2, wednesday: 3, thursday: 4, friday: 5, saturday: 6, sunday: 7 }
 
 /** What an edit releases of the held routes it reaches: every one, those on the weekdays it takes away, or none. */
 export type HoldRelease = { kind: "all" } | { kind: "days"; left: readonly string[] } | { kind: "none" }
@@ -87,17 +89,14 @@ export function groupReleases(before: GroupCovered, after: GroupCovered): HoldRe
  * route statement (`routeScope`: the tenant and the caller's projects), and
  * to the scheme's own project.
  */
-export async function releaseHolds(tx: Tx, principal: Principal, projectId: string, of: { routeSchemeId: string } | { collectionGroupIds: readonly string[] }, release: HoldRelease = { kind: "all" }): Promise<void> {
+export async function releaseHolds(tx: Tx, principal: Principal, projectId: string, of: { routeSchemeId: string } | { collectionGroupIds: readonly string[] }, release: HoldRelease): Promise<void> {
   if (release.kind === "none") return
   const routes = "routeSchemeId" in of ? eq(route.routeSchemeId, of.routeSchemeId) : of.collectionGroupIds.length === 0 ? undefined : inArray(route.collectionGroupId, [...of.collectionGroupIds])
   if (routes === undefined) return
-  const held = and(routeScope(principal), eq(route.projectId, projectId), routes, isNotNull(route.heldAt))
-  if (release.kind === "all") {
-    await tx.update(route).set({ heldAt: null }).where(held)
-    return
-  }
-  // The held routes whose own collection the edit took away: on a weekday the days no longer hold, by the route's service date — its identity, which a day move by hand never changes.
-  const candidates = await tx.select({ id: route.id, serviceDate: route.serviceDate }).from(route).where(held)
-  const away = candidates.filter((row) => release.left.includes(serviceDayOf(row.serviceDate))).map((row) => row.id)
-  if (away.length > 0) await tx.update(route).set({ heldAt: null }).where(and(held, inArray(route.id, away)))
+  // A day taken away: the held routes whose own collection it took, by the weekday of the route's service date — its identity, which a day move by hand never changes.
+  const away = release.kind === "days" ? inArray(sql<number>`extract(isodow from ${route.serviceDate})::int`, release.left.map((day) => ISO_DOW[day])) : undefined
+  await tx
+    .update(route)
+    .set({ heldAt: null })
+    .where(and(routeScope(principal), eq(route.projectId, projectId), routes, isNotNull(route.heldAt), away))
 }

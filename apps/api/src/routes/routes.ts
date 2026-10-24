@@ -1,9 +1,10 @@
 // The dated Route as the dispatcher reads and moves it (Issue #104, slice 3;
 // ADR-0002, ADR-0004): `GET /routes` lists them, `GET /routes/:id` reads one
-// with its pickups, sessions and unloads, and five commands move it —
+// with its pickups, sessions and unloads, and six commands move it —
 // `assign` (the Planned Assignment), `dispatch` (`planned → ready`),
-// `reschedule` (the operating day and the start), `cancel` and the order of
-// its stops (`PUT /routes/:id/pickup-order`) — while `GET /routes/:id/commands`
+// `reschedule` (the operating day and the start), `release-hold` (the
+// office's hold handed back, #226), `cancel` and the order of its stops
+// (`PUT /routes/:id/pickup-order`) — while `GET /routes/:id/commands`
 // is the log of what the device said, rejections included. No create and no
 // patch: a route is written by generation (#97 B) and no delete, since a
 // route is cancelled and a record standing behind pickups is not removed.
@@ -71,7 +72,7 @@ import { describeRoute } from "hono-openapi"
 
 import { BEARER_SECURITY, type AuthEnv, type Principal } from "../auth/principal"
 import { requireProject } from "../auth/projects"
-import { requireGrant } from "../auth/require"
+import { allows, requireGrant } from "../auth/require"
 import { emit } from "../outbox"
 import { afterCursor, fetchLimit, pageOf } from "../pagination"
 import { describeProblem, invalidRequest, problem, validate } from "../problem"
@@ -80,9 +81,8 @@ import { findDriver, findVehicle, vehicleLabel, type DriverRow, type VehicleRow 
 import { activePlansByRoute, ensurePlan } from "./plan-shapes"
 import { QueueMissing, type JobSender } from "@waste/db/jobs"
 import { NOT_AN_UNLOADING_STATION, requireDepot, type Scope } from "./references"
-import type { ClockOptions } from "./scheme-groups"
+import { findScheme, MODULE as SCHEMES_MODULE, type ClockOptions } from "./scheme-groups"
 import { askGeneration } from "./generation"
-import { findScheme } from "./scheme-groups"
 import { describeJson, IdParam, lockRow, stamp, timeOf } from "./shared"
 import { refuseUnavailableDriver } from "./statuses"
 
@@ -232,7 +232,7 @@ const holdOf = (current: RouteRow, moved: boolean, at: Date): { heldAt?: Date } 
 
 /** What a hold says on the wire, spelled once for `assign` and `reschedule`. */
 const HOLDS =
-  "On a `planned` route a command that changes something stamps `heldAt` with its instant: the route is held, and the next generation run keeps its operating date, its planned start and its Planned Assignment — vehicle, driver, provider, trailer, depot and unloading station — as the office left them, still refreshing its pickups and its note, until `dispatch` clears the hold or an edit of the scheme or of the route's collection group that moves what the hold covers releases it. A command that changes nothing holds nothing, and on a `ready` route, frozen against regeneration already, the command holds nothing either."
+  "On a `planned` route a command that changes something stamps `heldAt` with its instant: the route is held, and the next generation run keeps its operating date, its planned start and its Planned Assignment — vehicle, driver, provider, trailer, depot and unloading station — as the office left them, still refreshing its pickups and its note, until `release-hold` hands it back, `dispatch` or `cancel` clears the hold, or an edit of the scheme or of the route's collection group releases it: one that moves the start, the depot, the station, the vehicle, the driver or the provider, or that takes the route's own service day away. A command that changes nothing holds nothing, and on a `ready` route, frozen against regeneration already, the command holds nothing either."
 
 /** The Planned Assignment as a write leaves it: the body's fields over the stored ones, a null given clearing. */
 type Assignment = Pick<RouteRow, "plannedVehicleId" | "plannedDriverId" | "plannedTrailerId" | "depotId" | "unloadingStationId">
@@ -504,7 +504,7 @@ export function routeRoutes(guard: MiddlewareHandler<AuthEnv>, { now = () => new
         operationId: "releaseRouteHold",
         summary: "Hand a held route back to its scheme",
         description:
-          "The `release-hold` command (#226): clears the hold `assign` or `reschedule` put on a `planned` route (`heldAt`), so the route follows its scheme again, and in the same transaction asks a generation run of the route's scheme over the route's service date — that one day, both ends of the window — which brings back the scheme's operating date, planned start and Planned Assignment. The run is asked as the scheme's Generate asks one, under the scheme's key: where a run of the scheme is already queued or in flight, that run absorbs the request, and a run that does not reach the day leaves it to the next. Where no worker has made the queue yet, or the scheme is a draft, which generates nothing, no run is asked and the route is still handed back: the next run brings it back. The answer is the route as it now stands, its hold cleared, before any run has brought it back. A planned route that is not held is refused (409), and so is a route past `planned`, which is never held. Takes no body. Under the route's row lock; no event is written, as for `reschedule`.",
+          "The `release-hold` command (#226): clears the hold `assign` or `reschedule` put on a `planned` route (`heldAt`), so the route follows its scheme again, and in the same transaction asks a generation run of the route's scheme over the route's service date — that one day, both ends of the window — which brings back the scheme's operating date, planned start and Planned Assignment. The run is asked as the scheme's Generate asks one, under the scheme's key: where a run of the scheme is already queued or in flight, that run absorbs the request, and one that does not reach the day, or that read the route before the hand-back, leaves it to the next run — the nightly plan-ahead or the next Generate. A run of the scheme is the schemes module's to ask (`edit` on `route-studio.schemes`, as Generate): for a caller without it, for a draft scheme, which generates nothing, and where no worker has made the queue yet, no run is asked and the route is still handed back, the next run bringing it back. The answer is the route as it now stands, its hold cleared, before any run has brought it back. A planned route that is not held is refused (409), and so is a route past `planned`, which is never held. Takes no body. Under the route's row lock; no event is written, as for `reschedule`.",
         security: BEARER_SECURITY,
         responses: {
           200: describeJson("The route, its hold cleared; a run of its scheme over its service date is asked.", RouteDetail),
@@ -526,8 +526,9 @@ export function routeRoutes(guard: MiddlewareHandler<AuthEnv>, { now = () => new
         if (current.heldAt === null) throw problem(409, { detail: notHeld(labelOf(current)) })
         const [row] = await tx.update(route).set({ heldAt: null }).where(and(routeScope(principal), eq(route.id, id))).returning(routeColumns)
         if (row === undefined) throw noSuchRoute(id)
-        // The scheme's day, start and assignment come back with a run over the route's service date: asked here, never awaited, and never a refusal of the hand-back.
-        const scheme = row.routeSchemeId === null ? undefined : await findScheme(tx, principal, row.routeSchemeId)
+        // The scheme's day, start and assignment come back with a run over the route's service date: asked here where the caller may
+        // ask a run of the scheme (Generate's grant), never awaited, and never a refusal of the hand-back.
+        const scheme = allows(principal.grants, SCHEMES_MODULE, "edit") ? await findScheme(tx, principal, row.routeSchemeId) : undefined
         if (scheme !== undefined && scheme.status === "validated") {
           try {
             await askGeneration(tx, principal, jobs.send, scheme, { from: row.serviceDate, to: row.serviceDate })
