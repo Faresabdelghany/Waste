@@ -23,6 +23,13 @@
 // unload's project key stands above the two foreign keys that point at it
 // (the head is compared as a set, and the order pinned by itself), the 0007
 // precedent.
+//
+// Migration 0028 (#314) recast four checks so none multiplies two integers
+// into an `integer` that overflows: the two `_amounts_shape` checks a bigint
+// product, the two `_vat_shape` checks the net cast to numeric first. An
+// applied file is never edited, so `CHANGED_IN_0028` maps each of the four
+// constraints as today's schema spells it, whole, onto what 0010 says, and
+// money-casts-rendering.test.ts pins the replacements themselves.
 import assert from "node:assert/strict"
 import { readFile } from "node:fs/promises"
 import { join } from "node:path"
@@ -110,7 +117,13 @@ const SETTLEMENT_STATUSES = [...V.SETTLEMENT_STATUSES]
 /** The generated condition key, as the file spells it: five nullable conditions as one NOT NULL value. */
 export const CONDITION_KEY = `coalesce("planning_area_id"::text, '') || '/' || coalesce("customer_kind", '') || '/' || coalesce("container_type_id"::text, '') || '/' || coalesce("waste_fraction_id"::text, '') || '/' || coalesce("customer_id"::text, '')`
 
-/** The domain's vatOf as SQL, spelled once for the two tables that carry it. */
+/** The two amounts checks as 0010 wrote them: the unit price times the quantity, an `integer` product until 0028 cast it (#314). */
+const AMOUNTS_0010 = {
+  billableEvent: `CONSTRAINT "billable_event_amounts_shape" CHECK (${ref("billable_event", "net_minor")} is null or ${ref("billable_event", "net_minor")} = (case ${ref("billable_event", "kind")} when 'reversal' then -1 else 1 end) * ${ref("billable_event", "unit_price_minor")} * ${ref("billable_event", "quantity")})`,
+  invoiceLine: `CONSTRAINT "invoice_line_amounts_shape" CHECK (abs(${ref("invoice_line", "net_minor")}) = ${ref("invoice_line", "unit_price_minor")} * ${ref("invoice_line", "quantity")} and (${ref("invoice_line", "credits_line_id")} is null or ${ref("invoice_line", "net_minor")} <= 0))`,
+}
+
+/** The domain's vatOf as SQL, spelled once for the two tables that carry it, as 0010 wrote it. */
 const vatShape = (table: string, nullable: boolean): string =>
   `CONSTRAINT "${table}_vat_shape" CHECK (${nullable ? `${ref(table, "vat_minor")} is null or ` : ""}${ref(table, "vat_minor")} = round(${ref(table, "net_minor")} * ${ref(table, "vat_percent")} / 100.0))`
 
@@ -234,7 +247,7 @@ const expected = [
     positiveCheck("billable_event", "quantity"),
     `CONSTRAINT "billable_event_priced_references" CHECK (${ref("billable_event", "block_reason")} is not null or (${ref("billable_event", "agreement_id")} is not null and ${ref("billable_event", "product_id")} is not null))`,
     `CONSTRAINT "billable_event_priced_shape" CHECK ((${ref("billable_event", "block_reason")} is null) = (${ref("billable_event", "net_minor")} is not null) and (${ref("billable_event", "net_minor")} is null) = (${ref("billable_event", "unit_price_minor")} is null) and (${ref("billable_event", "net_minor")} is null) = (${ref("billable_event", "vat_percent")} is null) and (${ref("billable_event", "net_minor")} is null) = (${ref("billable_event", "vat_minor")} is null) and (${ref("billable_event", "net_minor")} is null) = (${ref("billable_event", "currency")} is null))`,
-    `CONSTRAINT "billable_event_amounts_shape" CHECK (${ref("billable_event", "net_minor")} is null or ${ref("billable_event", "net_minor")} = (case ${ref("billable_event", "kind")} when 'reversal' then -1 else 1 end) * ${ref("billable_event", "unit_price_minor")} * ${ref("billable_event", "quantity")})`,
+    AMOUNTS_0010.billableEvent,
     vatShape("billable_event", true),
     `CONSTRAINT "billable_event_row_shape" CHECK (${ref("billable_event", "price_list_row_id")} is not null or ${ref("billable_event", "block_reason")} is not null or ${ref("billable_event", "kind")} in ('manual', 'reversal'))`,
     `CONSTRAINT "billable_event_override_shape" CHECK ((${ref("billable_event", "kind")} = 'manual' and ${ref("billable_event", "price_list_row_id")} is null and ${ref("billable_event", "block_reason")} is null) = (${ref("billable_event", "override_reason")} is not null))`,
@@ -314,7 +327,7 @@ const expected = [
     positiveCheck("invoice_line", "position"),
     positiveCheck("invoice_line", "quantity"),
     `CONSTRAINT "invoice_line_source_exactly_one" CHECK ((${ref("invoice_line", "billable_event_id")} is not null)::int + (${ref("invoice_line", "credits_line_id")} is not null)::int = 1)`,
-    `CONSTRAINT "invoice_line_amounts_shape" CHECK (abs(${ref("invoice_line", "net_minor")}) = ${ref("invoice_line", "unit_price_minor")} * ${ref("invoice_line", "quantity")} and (${ref("invoice_line", "credits_line_id")} is null or ${ref("invoice_line", "net_minor")} <= 0))`,
+    AMOUNTS_0010.invoiceLine,
     vatShape("invoice_line", false),
   ]),
   createTable("settlement", "dated", [
@@ -696,18 +709,34 @@ const handWritten = [
   ...excludeOverlapping(settlement, [settlement.serviceAreaAssignmentId]),
 ]
 
+/** What 0028 changed (#314): four constraints, each as today's schema spells it whole and as 0010 wrote it. */
+const CHANGED_IN_0028: readonly (readonly [today: string, then: string])[] = (
+  [
+    [billableEvent, "billable_event_amounts_shape", AMOUNTS_0010.billableEvent],
+    [billableEvent, "billable_event_vat_shape", vatShape("billable_event", true)],
+    [invoiceLine, "invoice_line_amounts_shape", AMOUNTS_0010.invoiceLine],
+    [invoiceLine, "invoice_line_vat_shape", vatShape("invoice_line", false)],
+  ] as const
+).map(([table, name, then]) => [`CONSTRAINT "${name}" CHECK (${checksOf(table).get(name)})`, then] as const)
+
+/** A statement as 0010 wrote it, from today's spelling: each recast constraint mapped back whole, and nothing else touched. */
+const asOf0010 = (statement: string): string => CHANGED_IN_0028.reduce((text, [today, then]) => text.replace(today, then), statement)
+
+/** The sixteen tables' CREATE TABLE statements as drizzle-kit writes them today, mapped back to 0010. */
+const tablesAsOf0010 = async (): Promise<string[]> => (await statementsFor(tables)).map(asOf0010)
+
 /** The ALTER TABLEs as drizzle-kit writes them: the five altered tables from their last spelling to today's, in one diff. */
 const generatedAlterations = (): Promise<string[]> =>
   statementsBetween({ company: companyAsOf0009, product: productAsOf0004, agreement: agreementAsOf0004, unload: unloadAsOf0008, outboxEvent: outboxEventAsOf0009 }, { company, product, agreement, unload, outboxEvent })
 
 /** Everything drizzle-kit wrote at the head of 0010: the sixteen tables and the five altered ones. */
-const generatedHead = async (): Promise<string[]> => [...(await statementsFor(tables)), ...(await generatedAlterations())]
+const generatedHead = async (): Promise<string[]> => [...(await tablesAsOf0010()), ...(await generatedAlterations())]
 
 const fileStatements = async (): Promise<string[]> => statementsOf(await readFile(join(MIGRATIONS_FOLDER, MIGRATION), "utf8"))
 
 describe("the Finance & Contracting tables as drizzle-kit writes them", () => {
   test("sixteen tables, every column, key, unique, check, generated column and partial index as the Domain model spells them, every name within 63 bytes", async () => {
-    assert.deepEqual(await statementsFor(tables), expected)
+    assert.deepEqual(await tablesAsOf0010(), expected)
   })
 
   test("the company gains its invoice-number counter, the product its invoicing columns with their check and partial unique, the agreement its list with key and index, the unload its project key, and the outbox its two checks in their grown spelling, in ALTER TABLE statements", async () => {
@@ -769,9 +798,11 @@ describe("the checks of this context", () => {
     for (const kind of V.BILLABLE_EVENT_KINDS) assert.ok(checksOf(billableEvent).get("billable_event_kind_shape")?.includes(`when '${kind}' then`), kind)
   })
 
-  test("the domain's vatOf is spelled twice as SQL, half away from zero per line: round(net * percent / 100.0)", () => {
-    assert.equal(checksOf(billableEvent).get("billable_event_vat_shape"), `${ref("billable_event", "vat_minor")} is null or ${ref("billable_event", "vat_minor")} = round(${ref("billable_event", "net_minor")} * ${ref("billable_event", "vat_percent")} / 100.0)`)
-    assert.equal(checksOf(invoiceLine).get("invoice_line_vat_shape"), `${ref("invoice_line", "vat_minor")} = round(${ref("invoice_line", "net_minor")} * ${ref("invoice_line", "vat_percent")} / 100.0)`)
+  test("the domain's vatOf is spelled twice as SQL, half away from zero per line, the net cast first since 0028: round(net::numeric * percent / 100.0)", () => {
+    // Each recast constraint stands once in today's CREATE TABLE, so the mapping back to 0010 names exactly the four.
+    for (const [today] of CHANGED_IN_0028) assert.ok(today.includes("::"), today)
+    assert.equal(checksOf(billableEvent).get("billable_event_vat_shape"), `${ref("billable_event", "vat_minor")} is null or ${ref("billable_event", "vat_minor")} = round(${ref("billable_event", "net_minor")}::numeric * ${ref("billable_event", "vat_percent")} / 100.0)`)
+    assert.equal(checksOf(invoiceLine).get("invoice_line_vat_shape"), `${ref("invoice_line", "vat_minor")} = round(${ref("invoice_line", "net_minor")}::numeric * ${ref("invoice_line", "vat_percent")} / 100.0)`)
   })
 
   test("the condition key is the five conditions as one text, coalesced and joined, generated and stored: what the row's exclusion constraint keys on", async () => {

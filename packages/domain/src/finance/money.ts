@@ -4,9 +4,11 @@
 // rounding, spelled once: half away from zero, which is what Postgres's
 // `round(numeric)` does and what Danish invoices show per line. The
 // database's `billable_event_vat_shape` and `invoice_line_vat_shape` checks
-// spell the same expression as SQL, `vat_minor = round(net_minor * vat_percent
-// / 100.0)`, and packages/db's finance test holds the two together by writing
-// rows this module computed over odd amounts of both signs.
+// spell the same expression as SQL, `vat_minor = round(net_minor::numeric *
+// vat_percent / 100.0)` — the net cast before the product, which as two
+// integers would overflow past about 85.9 million minor units at 25 % (#314)
+// — and packages/db's finance test holds the two together by writing rows
+// this module computed over odd amounts of both signs.
 //
 // `Math.round` alone would not do: it rounds half towards positive infinity,
 // so `Math.round(-0.5)` is `-0` where Postgres says `-1`, and a reversal's

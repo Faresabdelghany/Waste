@@ -373,7 +373,7 @@ constraint wms.billable_event billable_event_amounts_shape CHECK (((net_minor IS
 CASE kind
     WHEN 'reversal'::text THEN '-1'::integer
     ELSE 1
-END * unit_price_minor) * quantity))))
+END * (unit_price_minor)::bigint) * quantity))))
 constraint wms.billable_event billable_event_block_reason_one_of CHECK ((block_reason = ANY (ARRAY['no-subscription'::text, 'agreement-draft'::text, 'no-price-list'::text, 'no-price-row'::text, 'no-product'::text, 'no-vat-rate'::text])))
 constraint wms.billable_event billable_event_cancel_reason_one_of CHECK ((cancel_reason = ANY (ARRAY['pickup-corrected'::text, 'duplicate'::text, 'not-delivered'::text, 'other'::text])))
 constraint wms.billable_event billable_event_cancel_shape CHECK ((((cancelled_at IS NULL) = (cancel_reason IS NULL)) AND ((cancelled_by IS NULL) OR (cancelled_at IS NOT NULL))))
@@ -406,7 +406,7 @@ constraint wms.billable_event billable_event_route_id_pickup_id_fk FOREIGN KEY (
 constraint wms.billable_event billable_event_row_shape CHECK (((price_list_row_id IS NOT NULL) OR (block_reason IS NOT NULL) OR (kind = ANY (ARRAY['manual'::text, 'reversal'::text]))))
 constraint wms.billable_event billable_event_subscription_id_fk FOREIGN KEY (company_id, project_id, subscription_id) REFERENCES wms.subscription(company_id, project_id, id)
 constraint wms.billable_event billable_event_ticket_id_fk FOREIGN KEY (company_id, project_id, ticket_id) REFERENCES wms.ticket(company_id, project_id, id)
-constraint wms.billable_event billable_event_vat_shape CHECK (((vat_minor IS NULL) OR ((vat_minor)::numeric = round((((net_minor * vat_percent))::numeric / 100.0)))))
+constraint wms.billable_event billable_event_vat_shape CHECK (((vat_minor IS NULL) OR ((vat_minor)::numeric = round((((net_minor)::numeric * (vat_percent)::numeric) / 100.0)))))
 index wms.billable_event billable_event_agreement_id_idx CREATE INDEX billable_event_agreement_id_idx ON wms.billable_event USING btree (company_id, agreement_id)
 index wms.billable_event billable_event_cancelled_by_idx CREATE INDEX billable_event_cancelled_by_idx ON wms.billable_event USING btree (company_id, cancelled_by)
 index wms.billable_event billable_event_created_by_idx CREATE INDEX billable_event_created_by_idx ON wms.billable_event USING btree (company_id, created_by)
@@ -1168,7 +1168,7 @@ column wms.invoice_line 13 unit_price_minor integer not-null
 column wms.invoice_line 14 net_minor integer not-null
 column wms.invoice_line 15 vat_percent integer not-null
 column wms.invoice_line 16 vat_minor integer not-null
-constraint wms.invoice_line invoice_line_amounts_shape CHECK (((abs(net_minor) = (unit_price_minor * quantity)) AND ((credits_line_id IS NULL) OR (net_minor <= 0))))
+constraint wms.invoice_line invoice_line_amounts_shape CHECK (((abs((net_minor)::bigint) = ((unit_price_minor)::bigint * quantity)) AND ((credits_line_id IS NULL) OR (net_minor <= 0))))
 constraint wms.invoice_line invoice_line_billable_event_id_fk FOREIGN KEY (company_id, project_id, billable_event_id) REFERENCES wms.billable_event(company_id, project_id, id)
 constraint wms.invoice_line invoice_line_company_id_fk FOREIGN KEY (company_id) REFERENCES wms.company(id)
 constraint wms.invoice_line invoice_line_credits_line_id_fk FOREIGN KEY (company_id, project_id, credits_line_id) REFERENCES wms.invoice_line(company_id, project_id, id)
@@ -1181,7 +1181,7 @@ constraint wms.invoice_line invoice_line_project_id_fk FOREIGN KEY (company_id, 
 constraint wms.invoice_line invoice_line_project_key UNIQUE (company_id, project_id, id)
 constraint wms.invoice_line invoice_line_quantity_positive CHECK ((quantity > 0))
 constraint wms.invoice_line invoice_line_source_exactly_one CHECK (((((billable_event_id IS NOT NULL))::integer + ((credits_line_id IS NOT NULL))::integer) = 1))
-constraint wms.invoice_line invoice_line_vat_shape CHECK (((vat_minor)::numeric = round((((net_minor * vat_percent))::numeric / 100.0))))
+constraint wms.invoice_line invoice_line_vat_shape CHECK (((vat_minor)::numeric = round((((net_minor)::numeric * (vat_percent)::numeric) / 100.0))))
 index wms.invoice_line invoice_line_billable_event_id_idx CREATE UNIQUE INDEX invoice_line_billable_event_id_idx ON wms.invoice_line USING btree (company_id, billable_event_id) WHERE (billable_event_id IS NOT NULL)
 index wms.invoice_line invoice_line_credits_line_id_idx CREATE INDEX invoice_line_credits_line_id_idx ON wms.invoice_line USING btree (company_id, credits_line_id)
 index wms.invoice_line invoice_line_invoice_id_position_key CREATE UNIQUE INDEX invoice_line_invoice_id_position_key ON wms.invoice_line USING btree (company_id, invoice_id, "position")
@@ -3046,4 +3046,5 @@ journal 1792852172844 5b8ae15e560cf82f9d1d4aab8e4dd4c3a48405fb2ed3dba507b5c9b0ca
 journal 1792855994902 ed271976c254711aed17a7b7aab7841cb2251fa343ec29a4de366b49f61f876c
 journal 1792864456446 3eb735d6ee46445f2225b160768a05e288b7db43da18d83c06c7b05582b9bfd5
 journal 1792865708689 34a95f7c352373cd3eb625466c5610a65b46b791a1b940ba4e02ccf528f490a9
+journal 1792867065800 f8212d9d9ad7d0d5e457e9772d762f6453b4ca8b3d68bd81d86470274b6d25bf
 pgboss-version 42
