@@ -230,12 +230,12 @@ async function serviceReport(tx: Tx, principal: Principal, query: ServiceReportQ
     )
     .groupBy(route.routeSchemeId, route.projectId, route.operatingDate, route.status)
   const pickupGroups = await tx
-    .select({ routeSchemeId: route.routeSchemeId, operatingDate: route.operatingDate, status: pickup.status, reason: pickup.reason, n: count() })
+    .select({ routeSchemeId: route.routeSchemeId, projectId: route.projectId, operatingDate: route.operatingDate, status: pickup.status, reason: pickup.reason, n: count() })
     .from(pickup)
     .innerJoin(route, and(eq(route.companyId, pickup.companyId), eq(route.id, pickup.routeId)))
     .where(and(fenced(pickup, principal, projectId), routeWindow, wasteFractionId === undefined ? undefined : eq(pickup.wasteFractionId, wasteFractionId)))
-    .groupBy(route.routeSchemeId, route.operatingDate, pickup.status, pickup.reason)
-  const schemeIds = [...new Set(routeGroups.map((group) => group.routeSchemeId))]
+    .groupBy(route.routeSchemeId, route.projectId, route.operatingDate, pickup.status, pickup.reason)
+  const schemeIds = [...new Set(routeGroups.flatMap((group) => (group.routeSchemeId === null ? [] : [group.routeSchemeId])))]
   const names =
     schemeIds.length === 0
       ? []
@@ -248,10 +248,12 @@ async function serviceReport(tx: Tx, principal: Principal, query: ServiceReportQ
   const routes = noRoutes()
   const pickups = noPickups()
   const series = seriesOf(window, query.interval, () => ({ routes: noRoutes(), pickups: noPickups() }))
-  const schemes = new Map<string, { projectId: string; routes: RouteCounts; pickups: PickupStandings }>()
+  // A scheme's routes are one row; the office's ad-hoc routes (#111), which have no scheme, are one row per project.
+  const schemeKey = (group: { routeSchemeId: string | null; projectId: string }) => group.routeSchemeId ?? `ad-hoc|${group.projectId}`
+  const schemes = new Map<string, { routeSchemeId: string | null; projectId: string; routes: RouteCounts; pickups: PickupStandings }>()
   for (const group of routeGroups) {
-    const scheme = schemes.get(group.routeSchemeId) ?? { projectId: group.projectId, routes: noRoutes(), pickups: noPickups() }
-    schemes.set(group.routeSchemeId, scheme)
+    const scheme = schemes.get(schemeKey(group)) ?? { routeSchemeId: group.routeSchemeId, projectId: group.projectId, routes: noRoutes(), pickups: noPickups() }
+    schemes.set(schemeKey(group), scheme)
     for (const tally of [routes, inSeries(series, group.operatingDate, window, query.interval).routes, scheme.routes]) addRoutes(tally, group)
   }
   const missed = new Map<PickupReason, MissedReason>()
@@ -259,7 +261,7 @@ async function serviceReport(tx: Tx, principal: Principal, query: ServiceReportQ
     const status = group.status as PickupStatus
     const reason = group.reason as PickupReason | null
     // Every pickup's route is in the route groups, since both statements read the same window: its scheme is there already.
-    const scheme = schemes.get(group.routeSchemeId)
+    const scheme = schemes.get(schemeKey(group))
     for (const tally of [pickups, inSeries(series, group.operatingDate, window, query.interval).pickups, ...(scheme === undefined ? [] : [scheme.pickups])]) addPickups(tally, status, reason, group.n)
     if (reason !== null && pickupStanding(status, reason) === "missed") {
       const byReason = missed.get(reason) ?? { reason, skipped: 0, failed: 0 }
@@ -268,9 +270,17 @@ async function serviceReport(tx: Tx, principal: Principal, query: ServiceReportQ
       missed.set(reason, byReason)
     }
   }
-  const schemeRows: ServiceScheme[] = [...schemes.entries()]
-    .map(([id, scheme]) => ({ routeSchemeId: id, name: nameOf.get(id) ?? "", projectId: scheme.projectId, routes: scheme.routes, pickups: scheme.pickups, rates: serviceRates(scheme.routes, scheme.pickups) }))
-    .sort((a, b) => byName(a.name, b.name) || a.routeSchemeId.localeCompare(b.routeSchemeId))
+  const schemeRows: ServiceScheme[] = [...schemes.values()]
+    .map((scheme) => ({
+      routeSchemeId: scheme.routeSchemeId,
+      name: scheme.routeSchemeId === null ? null : (nameOf.get(scheme.routeSchemeId) ?? ""),
+      projectId: scheme.projectId,
+      routes: scheme.routes,
+      pickups: scheme.pickups,
+      rates: serviceRates(scheme.routes, scheme.pickups),
+    }))
+    // The schemes by name, then each project's ad-hoc routes.
+    .sort((a, b) => Number(a.name === null) - Number(b.name === null) || byName(a.name ?? "", b.name ?? "") || (a.routeSchemeId ?? "").localeCompare(b.routeSchemeId ?? "") || a.projectId.localeCompare(b.projectId))
   return {
     window: windowOf(query),
     routes,
@@ -553,7 +563,7 @@ export function reportRoutes(guard: MiddlewareHandler<AuthEnv>, { now = () => ne
       describeRoute({
         operationId: "getServiceReport",
         summary: "How the routes ran and their pickups were served",
-        description: `The routes operating in the window — a regeneration's cancellations left out, since the occurrence they stood for is gone — by status, how many went out, and whether they went out on time: started no later than the planned start on the project's clock on the operating date plus ${ON_TIME_GRACE_MINUTES} minutes, a route with no planned start counted apart as unjudged. And their pickups by standing: completed, missed (skipped or failed, with the reasons), open (still planned) and withdrawn (taken off by a regeneration or removed by the dispatcher, counted in nothing else); \`due\` is completed, missed and open. The collection and missed rates are over the pickups with an outcome, the on-time rate over the routes judged; each is null where there was nothing to divide by. The same counts per interval of the series, every interval present, and per Route Scheme with a route in the window. ${WINDOW_SENTENCE} \`wasteFractionId\` narrows the pickups to one fraction and the routes to the ones holding a pickup of it; \`routeSchemeId\` to one scheme's routes.`,
+        description: `The routes operating in the window — a regeneration's cancellations left out, since the occurrence they stood for is gone — by status, how many went out, and whether they went out on time: started no later than the planned start on the project's clock on the operating date plus ${ON_TIME_GRACE_MINUTES} minutes, a route with no planned start counted apart as unjudged. And their pickups by standing: completed, missed (skipped or failed, with the reasons), open (still planned) and withdrawn (taken off by a regeneration or removed by the dispatcher, counted in nothing else); \`due\` is completed, missed and open. The collection and missed rates are over the pickups with an outcome, the on-time rate over the routes judged; each is null where there was nothing to divide by. The same counts per interval of the series, every interval present, and per Route Scheme with a route in the window, the office's ad-hoc routes (no scheme) in a row of their own per project with \`routeSchemeId\` and \`name\` null. ${WINDOW_SENTENCE} \`wasteFractionId\` narrows the pickups to one fraction and the routes to the ones holding a pickup of it; \`routeSchemeId\` to one scheme's routes.`,
         security: BEARER_SECURITY,
         responses: {
           200: describeJson("The service report.", ServiceReport),

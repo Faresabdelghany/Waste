@@ -544,4 +544,30 @@ describe("the report endpoints", { skip: database.skip || owner.skip }, () => {
       assert.equal(running.projectId, copenhagen)
     })
   })
+
+  // Last, since it adds a route to the week the suites above count.
+  describe("the office's ad-hoc routes (#111)", () => {
+    test("count in the window as any route does, and stand in a row of their own per project, after the schemes, with no scheme and no name", async () => {
+      const before = await service(olivia)
+      const made = await olivia("/routes", { method: "POST", body: { projectId: copenhagen, operatingDate: "2026-10-09" } })
+      assert.equal(made.status, 201, JSON.stringify(await made.clone().json()))
+      const { id } = (await made.json()) as { id: string }
+      const stop = await olivia(`/routes/${id}/pickups`, { method: "POST", body: { propertyId: ex.properties.parkvej.id, wasteFractionId: ex.fractions.residual.id } })
+      assert.equal(stop.status, 201, JSON.stringify(await stop.clone().json()))
+
+      const after = await service(olivia)
+      assert.deepEqual([after.routes.total, after.routes.planned, after.pickups.due, after.pickups.open], [before.routes.total + 1, before.routes.planned + 1, before.pickups.due + 1, before.pickups.open + 1])
+      assert.deepEqual(
+        after.schemes.map((scheme) => [scheme.name, scheme.routeSchemeId === null, scheme.projectId, scheme.routes.total, scheme.pickups.open]),
+        [
+          ["Centrum Mondays", false, copenhagen, 6, 8],
+          ["Havnen Mondays", false, harbor, 1, 0],
+          [null, true, copenhagen, 1, 1],
+        ],
+      )
+      assert.equal(after.intervals.find((span) => span.from === "2026-10-09")?.routes.planned, 1)
+      const centrum = await service(olivia, `${WEEK}&routeSchemeId=${ex.schemes.copenhagen.id}`)
+      assert.equal(centrum.schemes.some((scheme) => scheme.routeSchemeId === null), false, "a scheme's filter leaves the ad-hoc routes out")
+    })
+  })
 })

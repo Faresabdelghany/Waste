@@ -86,7 +86,11 @@ describe("the report answers", () => {
       rates: { collection: 5 / 8, missed: 3 / 8, onTime: 0.5 },
       missedByReason: [{ reason: "not-presented", skipped: 0, failed: 1 }],
       intervals: [{ from: "2026-10-01", to: "2026-10-04", routes, pickups }],
-      schemes: [{ routeSchemeId: SCHEME, name: "Centrum Mondays", projectId: PROJECT, routes, pickups, rates: { collection: null, missed: null, onTime: null } }],
+      schemes: [
+        { routeSchemeId: SCHEME, name: "Centrum Mondays", projectId: PROJECT, routes, pickups, rates: { collection: null, missed: null, onTime: null } },
+        // The office's ad-hoc routes (#111): no scheme, so no name.
+        { routeSchemeId: null, name: null, projectId: PROJECT, routes, pickups, rates: { collection: null, missed: null, onTime: null } },
+      ],
     }
     assert.deepEqual(ServiceReport.parse(report), report)
     assert.deepEqual(refusal(ServiceReport.safeParse({ ...report, rates: { ...report.rates, collection: 1.2 } })).map((issue) => issue.path), ["rates.collection"])

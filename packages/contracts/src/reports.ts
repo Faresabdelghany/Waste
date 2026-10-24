@@ -200,10 +200,10 @@ export type ServiceRates = z.infer<typeof ServiceRates>
 export const ServiceInterval = z.object({ ...intervalFields, routes: RouteCounts, pickups: PickupStandings })
 export type ServiceInterval = z.infer<typeof ServiceInterval>
 
-/** One Route Scheme's routes and their pickups over the window, with its rates. */
+/** One Route Scheme's routes and their pickups over the window, with its rates; or one project's ad-hoc routes, the office's own with no scheme (#111), `routeSchemeId` and `name` null. */
 export const ServiceScheme = z.object({
-  routeSchemeId: Id,
-  name: z.string(),
+  routeSchemeId: Id.nullable(),
+  name: z.string().nullable(),
   projectId: Id,
   routes: RouteCounts,
   pickups: PickupStandings,
@@ -220,7 +220,7 @@ export const ServiceReport = z.object({
   /** The missed pickups by reason, the reasons with any, in the vocabulary's order. */
   missedByReason: z.array(MissedReason),
   intervals: z.array(ServiceInterval),
-  /** The schemes with a route in the window, by name in English collation. */
+  /** The schemes with a route in the window, by name in English collation, then each project's ad-hoc routes. */
   schemes: z.array(ServiceScheme),
 })
 export type ServiceReport = z.infer<typeof ServiceReport>
