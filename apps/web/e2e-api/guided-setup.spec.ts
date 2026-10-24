@@ -21,7 +21,8 @@ import { listAll, projectNamed } from "./tester"
 // Schemes the tests make are uniquely named and never cleaned up.
 type Named = { id: string; name: string }
 type Scheme = { id: string; name: string; status: string; collectionGroups: { name: string; rule: { wasteFractionIds: string[]; containerTypeIds: string[] } | null; vehicleId: string | null; driverId: string | null }[] }
-type GenerationRun = { id: string; status: string; routeSchemeId: string; trigger: string; windowFrom: string; windowTo: string; routesCreated: number }
+type GenerationRun = { id: string; createdAt: string; status: string; routeSchemeId: string; trigger: string; windowFrom: string; windowTo: string; routesCreated: number; pickupsWritten: number }
+type Route = { id: string; label: string; progress: { total: number } }
 
 const NO_MATCH = "No containers currently match the stop rule"
 /** Step 3's Containers cell of a group: its stop count, then its fractions and container types. */
@@ -231,6 +232,23 @@ test("Generate on the scheme's page asks the API for a run, and the page watches
 
   const finished = (await (await api.get(`/generation-runs/${run.id}`)).json()) as GenerationRun
   expect({ status: finished.status, trigger: finished.trigger, routeSchemeId: finished.routeSchemeId }).toEqual({ status: "succeeded", trigger: "on-demand", routeSchemeId: scheme.id })
+
+  // Asked on the project's clock, Copenhagen's, whatever the browser's (#255).
+  const asked = new Intl.DateTimeFormat("en-GB", { day: "numeric", month: "short", hour: "2-digit", minute: "2-digit", timeZone: "Europe/Copenhagen" }).format(new Date(finished.createdAt))
+  await expect(row.getByRole("cell").first()).toHaveText(asked)
+
+  // What the run made is on the page once it has finished, with no reload (#247): the tabs count it, the table lists it,
+  // each row its own stops (#252). Mondays and Thursdays over the next seven days: two routes.
+  const routes = await listAll<Route>(api, "/routes", { routeSchemeId: scheme.id })
+  expect(routes).toHaveLength(finished.routesCreated)
+  expect(routes.length).toBeGreaterThan(0)
+  await expect(page.getByRole("tab", { name: new RegExp(`^Routes\\s*${routes.length}$`) })).toBeVisible()
+  await expect(page.getByRole("tab", { name: new RegExp(`^Stops\\s*${finished.pickupsWritten}$`) })).toBeVisible()
+  const table = page.getByRole("table").filter({ has: page.getByRole("columnheader", { name: "Route ID" }) })
+  for (const route of routes) {
+    const routeRow = table.getByRole("button", { name: `Open ${route.label}` })
+    await expect(routeRow.getByRole("cell").nth(3)).toHaveText(String(route.progress.total))
+  }
 })
 
 // Step 4's browser pair (#173, from its pull request, for whichever of #173 and #178 merged second): the preview's road

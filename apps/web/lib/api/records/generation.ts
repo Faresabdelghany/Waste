@@ -14,8 +14,12 @@
 // worker has not reported on it), or once the page is gone.
 import type { GenerationRun } from "@waste/contracts/generation"
 
+import type { ModuleLocation } from "@/lib/data/business-modules"
+
 import { get, listPage, type ApiClient } from "../client"
 import type { Problem } from "../problem"
+import { PICKUPS_MODULE } from "./pickups"
+import { ROUTES_MODULE } from "./routes"
 import { problemOfError } from "./server-records"
 
 /** How often an open run is read again. */
@@ -72,6 +76,17 @@ export function runCounts(run: GenerationRun): string {
 export function runReading(run: Pick<GenerationRun, "status" | "updatedAt">, now: number): "watched" | "unreported" | "finished" {
   if (run.status !== "queued" && run.status !== "running") return "finished"
   return now - Date.parse(run.updatedAt) < RUN_REPORTS_WITHIN_MS ? "watched" : "unreported"
+}
+
+/**
+ * The modules a finished run wrote, read again once it has finished (#247),
+ * one after the other in this order: a succeeded run's routes, then their
+ * stops, which the scheme's page counts and lists — a stop is filed under its
+ * route's scheme and dates as the routes stand when it is read, so the routes
+ * go first. A failed run's one transaction rolled back, and wrote nothing.
+ */
+export function modulesAfterRun(run: Pick<GenerationRun, "status">): readonly ModuleLocation[] {
+  return run.status === "succeeded" ? [ROUTES_MODULE, PICKUPS_MODULE] : []
 }
 
 /** The timer a watch waits on; a test hands one it fires by hand. */

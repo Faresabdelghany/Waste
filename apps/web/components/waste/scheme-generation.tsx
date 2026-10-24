@@ -8,7 +8,9 @@
 // queued, two clicks being one run — and the list reads an open run again
 // every few seconds until it has finished (lib/api/records/generation.ts has
 // the rule and the watch), then reads the scheme back, since the scheme's
-// last-run and drift readings are the runs'. A run open for fifteen minutes
+// last-run and drift readings are the runs', and a succeeded run's routes and
+// stops, which the page counts and lists (#247). Its times read the project's
+// clock, as the route's own do (#255). A run open for fifteen minutes
 // since its last update is left unwatched and says so: its row cannot say
 // whether the worker is still at it. Fixture mode never reaches this file;
 // its Generate dialog is scheme-generate-routes.tsx.
@@ -26,7 +28,8 @@ import { Label } from "@/components/ui/label"
 import { Table, TableBody, TableCell, TableHead, TableHeader, TableRow } from "@/components/ui/table"
 import type { ApiClient } from "@/lib/api/client"
 import { problemSentence } from "@/lib/api/problem"
-import { generationRunOf, runCounts, runReading, schemeGenerationRuns, watchGenerationRun, withRun } from "@/lib/api/records/generation"
+import { dayAndTimeOn, timeOn } from "@/lib/api/records/clock"
+import { generationRunOf, modulesAfterRun, runCounts, runReading, schemeGenerationRuns, watchGenerationRun, withRun } from "@/lib/api/records/generation"
 import { generateScheme, type GenerationAnswer } from "@/lib/api/records/route-schemes"
 import { problemOfError } from "@/lib/api/records/server-records"
 import type { BusinessRecord } from "@/lib/data/business-modules"
@@ -34,9 +37,6 @@ import { ROUTE_SCHEMES_MODULE } from "@/lib/data/route-schemes"
 
 import { useApiClient, useApiSessionIdentity } from "./api-session-store"
 import { useBusinessRecordStore, useServerModuleState } from "./business-record-store"
-
-const INSTANT = new Intl.DateTimeFormat("en-GB", { day: "numeric", month: "short", hour: "2-digit", minute: "2-digit" })
-const CLOCK = new Intl.DateTimeFormat("en-GB", { hour: "2-digit", minute: "2-digit" })
 
 const TRIGGER_LABELS: Record<GenerationRun["trigger"], string> = { "on-demand": "Generate routes", cron: "Nightly plan-ahead" }
 const STATUS_LABELS: Record<GenerationRun["status"], string> = { queued: "Queued", running: "Running", succeeded: "Succeeded", failed: "Failed" }
@@ -56,6 +56,8 @@ export type SchemeGenerationRuns = {
   unreported: ReadonlySet<string>
   /** Shows the run a Generate answered, in its place, and watches it. */
   follow: (answer: GenerationAnswer) => void
+  /** The scheme's project's timezone, the clock the runs' times read on; the browser's while the project is not read. */
+  timezone: string | undefined
 }
 
 /**
@@ -63,12 +65,12 @@ export type SchemeGenerationRuns = {
  * open: one watch per open run, all stopped when the page goes. Idle in
  * fixture mode (no client) and for a scheme the API does not hold yet.
  */
-export function useSchemeGenerationRuns(record: BusinessRecord): SchemeGenerationRuns {
+export function useSchemeGenerationRuns(record: BusinessRecord, timezone?: string): SchemeGenerationRuns {
   const recordId = record.id
   const client = useApiClient()
   const identity = useApiSessionIdentity()
   const serverId = useServerModuleState(ROUTE_SCHEMES_MODULE.workspaceId, ROUTE_SCHEMES_MODULE.moduleId)?.serverIds.get(recordId)
-  const { refreshRecord } = useBusinessRecordStore()
+  const { refreshModule, refreshRecord } = useBusinessRecordStore()
   const [loaded, setLoaded] = useState<Loaded | null>(null)
   const [unreported, setUnreported] = useState<ReadonlySet<string>>(() => new Set())
   const [readProblem, setReadProblem] = useState<string | null>(null)
@@ -96,8 +98,11 @@ export function useSchemeGenerationRuns(record: BusinessRecord): SchemeGeneratio
           setLoaded((current) => (current?.key === key && "runs" in current ? { key, runs: withRun(current.runs, next) } : current))
           if (!isFinished(next)) return
           watches.current.delete(next.id)
-          // The scheme's last run and its drift are the runs': read them back.
+          // The scheme's last run and its drift are the runs': read them back, and what a succeeded run wrote (#247).
           void refreshRecord(ROUTE_SCHEMES_MODULE.workspaceId, ROUTE_SCHEMES_MODULE.moduleId, recordId)
+          void (async () => {
+            for (const written of modulesAfterRun(next)) await refreshModule(written.workspaceId, written.moduleId)
+          })()
           if (next.status === "succeeded") toast.success(`Routes generated — ${nameRef.current}`, { description: runCounts(next) })
           else toast.error(`Generation failed — ${nameRef.current}`, { description: next.error ?? "The worker gave no reason" })
         },
@@ -114,7 +119,7 @@ export function useSchemeGenerationRuns(record: BusinessRecord): SchemeGeneratio
       // A run the watch declined at once (finished, or already unreported) left no timer to stop.
       if (runReading(run, Date.now()) === "watched") watches.current.set(run.id, stop)
     },
-    [recordId, refreshRecord],
+    [recordId, refreshModule, refreshRecord],
   )
 
   useEffect(() => {
@@ -159,6 +164,7 @@ export function useSchemeGenerationRuns(record: BusinessRecord): SchemeGeneratio
     readProblem,
     unreported,
     follow,
+    timezone,
   }
 }
 
@@ -238,7 +244,7 @@ export function SchemeGenerateDialog({
 
 /** The scheme's newest runs, from the Generate button and the nightly plan-ahead, each as the worker has left it. */
 export function SchemeGenerationRunsSection({ generation }: { generation: SchemeGenerationRuns }) {
-  const { runs, problem, readProblem, unreported } = generation
+  const { runs, problem, readProblem, unreported, timezone } = generation
   return (
     <section className="space-y-3 rounded-xl border border-border/60 p-4" aria-labelledby="scheme-generation-runs">
       <div>
@@ -269,14 +275,14 @@ export function SchemeGenerationRunsSection({ generation }: { generation: Scheme
           <TableBody>
             {runs.map((run) => (
               <TableRow key={run.id} data-run-status={run.status}>
-                <TableCell className="whitespace-nowrap tabular-nums">{INSTANT.format(new Date(run.createdAt))}</TableCell>
+                <TableCell className="whitespace-nowrap tabular-nums">{dayAndTimeOn(run.createdAt, timezone)}</TableCell>
                 <TableCell>{TRIGGER_LABELS[run.trigger]}</TableCell>
                 <TableCell className="whitespace-nowrap">
                   {formatServiceDate(run.windowFrom)} → {formatServiceDate(run.windowTo)}
                 </TableCell>
                 <TableCell>
                   {unreported.has(run.id) && !isFinished(run) ? (
-                    <span className="text-xs text-amber-700 dark:text-amber-400">Open since {CLOCK.format(new Date(run.updatedAt))}, the worker has not reported</span>
+                    <span className="text-xs text-amber-700 dark:text-amber-400">Open since {timeOn(run.updatedAt, timezone)}, the worker has not reported</span>
                   ) : (
                     <Badge variant={run.status === "succeeded" ? "secondary" : "outline"} className={run.status === "failed" ? "border-destructive/40 text-destructive" : undefined}>
                       {STATUS_LABELS[run.status]}

@@ -64,6 +64,14 @@ export function instantOn(value: string, timezone: string | undefined): string |
 /** An instant as a person reads it on the project's clock: `2026-10-01 05:30`. */
 export const shownOn = (instant: string, timezone: string | undefined): string => wallClockIn(instant, timezone).replace("T", " ")
 
+/** An instant as a list reads it on the project's clock, its day and time without the year: `24 Oct, 04:32` (#255). */
+export const dayAndTimeOn = (instant: string, timezone: string | undefined): string =>
+  new Intl.DateTimeFormat("en-GB", { day: "numeric", month: "short", hour: "2-digit", minute: "2-digit", timeZone: knownZone(timezone) }).format(new Date(instant))
+
+/** The time of day an instant reads on the project's clock: `04:32` (#255). */
+export const timeOn = (instant: string, timezone: string | undefined): string =>
+  new Intl.DateTimeFormat("en-GB", { hour: "2-digit", minute: "2-digit", timeZone: knownZone(timezone) }).format(new Date(instant))
+
 /** The timezone of the project a record is in — its typed `projectId`, else its scope — from the organisation the store loaded; undefined when the store holds no such project. */
 export function projectTimezoneOf(record: Pick<BusinessRecord, "submittedValues" | "projectIds">, context: MappingContext): string | undefined {
   const webId = typed(record, "projectId") ?? record.projectIds?.[0]
