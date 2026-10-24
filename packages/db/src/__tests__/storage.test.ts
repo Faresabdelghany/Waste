@@ -15,7 +15,7 @@ type Call = { url: string; method: string; headers: Record<string, string>; body
 
 function scripted(...answers: Array<(call: Call) => Response>) {
   const calls: Call[] = []
-  const fetch = (async (input: RequestInfo | URL, init: RequestInit = {}) => {
+  const fetch = (async (input: string | URL | Request, init: RequestInit = {}) => {
     const call: Call = { url: String(input), method: init.method ?? "GET", headers: Object.fromEntries(new Headers(init.headers).entries()), body: typeof init.body === "string" ? JSON.parse(init.body) : undefined }
     calls.push(call)
     const answer = answers.shift()

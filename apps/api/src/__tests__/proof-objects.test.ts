@@ -8,6 +8,7 @@ import assert from "node:assert/strict"
 import { after, before, describe, test } from "node:test"
 
 import { CommandOutcomeRow, DriverCommandBatchOutcome } from "@waste/contracts/driver-commands"
+import { NO_PROOF_STORAGE } from "@waste/contracts/problem"
 import { ProofObjectLinks, ProofUpload } from "@waste/contracts/proof-objects"
 import { createDb, type Database } from "@waste/db/client"
 import { StorageSilent, type ProofStorage } from "@waste/db/storage"
@@ -19,7 +20,7 @@ import { NOT_A_DRIVERS_LOGIN } from "../auth/driver"
 import { authenticate, identify } from "../auth/principal"
 import { errorHandler } from "../problem"
 import { driverDoorRoutes } from "../routes/driver"
-import { NO_PROOF_STORAGE, proofObjectRoutes, READ_URL_TTL_SECONDS, STORAGE_SILENT } from "../routes/proof-objects"
+import { NO_PROOF_STORAGE_DETAIL, proofObjectRoutes, READ_URL_TTL_SECONDS, STORAGE_SILENT } from "../routes/proof-objects"
 import { callingAs, type Call } from "./calls"
 import { databaseUnderTest, ownerUnderTest } from "./database"
 import { FIXTURE_DAY, routeFor, seedDriverFixtures, type DriverFixtures } from "./execution-fixtures"
@@ -172,9 +173,11 @@ describe("proof objects", { skip: database.skip || owner.skip }, () => {
       }
     })
 
-    test("a deployment without Storage's key stores no photo: 503", async () => {
+    test("a deployment without Storage's key stores no photo: 503, typed so a device tells it from an outage", async () => {
       const route = await routeFor(pool, a, fleet, fixtures, { driver: fleet.drivers.mads })
-      assert.equal((await refused(await madsWithout("/driver/uploads", { method: "POST", body: { routeId: route.id, commandId: mint(), extension: "jpg" } }), 503)).detail, NO_PROOF_STORAGE)
+      const answer = await refused(await madsWithout("/driver/uploads", { method: "POST", body: { routeId: route.id, commandId: mint(), extension: "jpg" } }), 503)
+      assert.equal(answer.detail, NO_PROOF_STORAGE_DETAIL)
+      assert.equal(answer.type, NO_PROOF_STORAGE.type)
     })
   })
 
@@ -224,7 +227,7 @@ describe("proof objects", { skip: database.skip || owner.skip }, () => {
 
     test("a deployment without Storage's key: 503", async () => {
       const { stop } = await stopWithObjects()
-      assert.equal((await refused(await oliviaWithout(`/pickups/${stop}/proof-objects`), 503)).detail, NO_PROOF_STORAGE)
+      assert.equal((await refused(await oliviaWithout(`/pickups/${stop}/proof-objects`), 503)).detail, NO_PROOF_STORAGE_DETAIL)
     })
   })
 })

@@ -21,7 +21,9 @@
 // Both call Storage, and no transaction is held across a call to another
 // service (#124 §4): their guard is `identify`, and each handler reads the
 // fence in one short transaction of its own before it asks Storage. A
-// deployment without the key has no Storage: both answer 503 in one sentence.
+// deployment without the key has no Storage: both answer 503 in one sentence,
+// typed `NO_PROOF_STORAGE` so a device tells it from an outage.
+import { NO_PROOF_STORAGE } from "@waste/contracts/problem"
 import { ProofObjectLinks, ProofUpload, ProofUploadRequest } from "@waste/contracts/proof-objects"
 import type { Database } from "@waste/db/client"
 import { pickup, proofOfService } from "@waste/db/schema/execution"
@@ -46,7 +48,7 @@ const PICKUPS = "route-studio.pickups"
 export const READ_URL_TTL_SECONDS = 10 * 60
 
 /** What a deployment without Storage's key is told. */
-export const NO_PROOF_STORAGE = "Photos and signatures are not stored on this deployment: it holds no Storage key"
+export const NO_PROOF_STORAGE_DETAIL = "Photos and signatures are not stored on this deployment: it holds no Storage key"
 
 /** What Storage's silence is told: nothing was signed, and the request may be asked again. */
 export const STORAGE_SILENT = "Storage did not answer; nothing was signed, and the request may be asked again"
@@ -65,7 +67,7 @@ export type ProofObjectOptions = {
 export function proofObjectRoutes(guard: MiddlewareHandler<IdentifiedEnv>, { pool, storage, now, log }: ProofObjectOptions) {
   /** Storage, or the deployment's 503. */
   const required = (): ProofStorage => {
-    if (storage === null) throw problem(503, { detail: NO_PROOF_STORAGE })
+    if (storage === null) throw problem(503, { kind: NO_PROOF_STORAGE, detail: NO_PROOF_STORAGE_DETAIL })
     return storage
   }
   /** A call to Storage, its silence a 502 and its cause in the log. */
@@ -95,7 +97,7 @@ export function proofObjectRoutes(guard: MiddlewareHandler<IdentifiedEnv>, { poo
           403: describeProblem("No active account here, or no active driver profile is bound to this login."),
           404: describeProblem("The route is not assigned to this driver, or not there."),
           502: describeProblem(STORAGE_SILENT),
-          503: describeProblem(NO_PROOF_STORAGE),
+          503: describeProblem(NO_PROOF_STORAGE_DETAIL),
         },
       }),
       guard,
@@ -128,7 +130,7 @@ export function proofObjectRoutes(guard: MiddlewareHandler<IdentifiedEnv>, { poo
           403: describeProblem(`No active account here, or the caller's role does not allow \`view\` on \`${PICKUPS}\`.`),
           404: describeProblem("No such pickup in the projects this account works in."),
           502: describeProblem(STORAGE_SILENT),
-          503: describeProblem(NO_PROOF_STORAGE),
+          503: describeProblem(NO_PROOF_STORAGE_DETAIL),
         },
       }),
       guard,

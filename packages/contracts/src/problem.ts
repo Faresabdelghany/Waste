@@ -34,6 +34,14 @@ export type ProblemKind = { readonly type: string; readonly title: string }
  */
 export const NO_ACTIVE_ACCOUNT = { type: "urn:waste:problem:no-active-account", title: "No active account" } as const satisfies ProblemKind
 
+/**
+ * The deployment holds no Storage key, so photos and signatures have nowhere
+ * to go (O1 of #290): the proof-object routes' 503, a lasting state of the
+ * deployment rather than a server out of reach, which a device tells apart by
+ * this type and answers as the action's refusal instead of waiting on it.
+ */
+export const NO_PROOF_STORAGE = { type: "urn:waste:problem:no-proof-storage", title: "No proof storage" } as const satisfies ProblemKind
+
 /** One field the request validator refused: where in the request, and why. */
 export const ProblemFieldError = z.object({
   /** Dotted path into the request target (`name`, `projectIds.1`); empty for the target as a whole. */

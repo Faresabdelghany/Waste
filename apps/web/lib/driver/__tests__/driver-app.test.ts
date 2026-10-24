@@ -6,15 +6,41 @@
 // successful batch is followed by a re-read, the server being the source of
 // truth. `applied` and `replayed` are silent, `rejected` leaves the queue with
 // its sentence shown until the next successful read, a batch refused whole
-// keeps the queue behind Discard, and a 401 waits for the session.
+// keeps the queue behind Discard, and a 401 waits for the session. A photo's
+// or a signature's bytes go to Storage before their command is sent (O1 of
+// #290): an object Storage holds already is done, Storage out of reach holds
+// the queue, and a refusal of the bytes is the action's rejection.
 import assert from "node:assert/strict"
 import { describe, test } from "node:test"
 
+import { NO_PROOF_STORAGE } from "@waste/contracts/problem"
 import { IDBFactory } from "fake-indexeddb"
 
+import { PROBLEM_MEDIA_TYPE } from "../../api/problem"
 import { openCommandQueue, type QueueEntry } from "../command-queue"
 import { createDriverApp, DRAIN_RETRY_MS, REQUEST_TIMEOUT_MS, type DriverAppOptions } from "../driver-app"
-import { driverMe, eventually, fakeDoor, fakeGeolocation, hang, json, NOW, offline, outcomes, pickupId, problem, ROUTE_ID, routeDetail, settle } from "./driver-fixtures"
+import {
+  commandsOf,
+  driverMe,
+  eventually,
+  fakeDoor,
+  fakeGeolocation,
+  hang,
+  json,
+  NOW,
+  objectKey,
+  offline,
+  outcomes,
+  pickupId,
+  problem,
+  ROUTE_ID,
+  routeDetail,
+  settle,
+  signedUpload,
+  STORAGE_ORIGIN,
+  storageError,
+  uploadPath,
+} from "./driver-fixtures"
 import { manualTimers } from "./manual-timers"
 
 const WHO = "mads-login"
@@ -504,5 +530,168 @@ describe("the drain", () => {
     await eventually(() => assert.equal(app.store.getSnapshot().waiting.length, 0), 10_000)
     assert.deepEqual(device.door.batches().map((batch) => batch.length), [200, 1])
     assert.deepEqual(device.door.batches().flat().map((command) => command.id), ids)
+  })
+})
+
+describe("a photo or a signature", () => {
+  const photo = () => ({ extension: "jpg", contentType: "image/jpeg", bytes: new Uint8Array([0xff, 0xd8, 0xff, 0xe0, 0x10, 0x4a]).buffer }) as const
+  const signature = () => ({ extension: "png", contentType: "image/png", bytes: new Uint8Array([0x89, 0x50, 0x4e, 0x47, 0x0d, 0x0a]).buffer }) as const
+  const stored = (key: string) => () => json({ Key: `proofs/${key}` })
+  /** Storage's answer to a key it holds already: a 400, the duplicate told by the body's code. */
+  const duplicate = () => json({ statusCode: "409", error: "Duplicate", message: "The resource already exists", code: "KeyAlreadyExists" }, 400)
+  const NO_STORAGE = "Photos and signatures are not stored on this deployment: it holds no Storage key"
+  const noProofStorage = () =>
+    new Response(JSON.stringify({ type: NO_PROOF_STORAGE.type, title: NO_PROOF_STORAGE.title, status: 503, detail: NO_STORAGE }), { status: 503, headers: { "content-type": PROBLEM_MEDIA_TYPE } })
+  /** What the phone asked of anything but the two reads, in order. */
+  const asked = (door: ReturnType<typeof fakeDoor>) => door.calls.filter((call) => call.method !== "GET")
+  const puts = (door: ReturnType<typeof fakeDoor>) => door.calls.filter((call) => call.method === "PUT")
+
+  test("is put to Storage before its command is sent — straight from the phone, with no token of the API's — and the command names the key the API named", async () => {
+    const { app, door, position } = await onRoute()
+    door.next("POST /driver/uploads", signedUpload)
+    door.next("POST /driver/commands", ({ body }) => outcomes(commandsOf(body)))
+    const id = await app.tap({ kind: "add-photo", routeId: ROUTE_ID, body: { pickupId: pickupId(1) }, object: photo() })
+    door.next(`PUT ${uploadPath(id, "jpg")}`, stored(objectKey(id, "jpg")))
+    position.answer()
+    await eventually(() => assert.deepEqual(app.store.getSnapshot().waiting, []))
+
+    assert.deepEqual(asked(door).map((call) => `${call.method} ${call.path}`), ["POST /driver/uploads", `PUT ${uploadPath(id, "jpg")}`, "POST /driver/commands"])
+    const [upload, put] = asked(door)
+    assert.deepEqual(upload.body, { routeId: ROUTE_ID, commandId: id, extension: "jpg" })
+    assert.equal(put.origin, STORAGE_ORIGIN)
+    assert.deepEqual(new Uint8Array(put.raw as ArrayBuffer), new Uint8Array(photo().bytes))
+    assert.equal(put.headers.get("content-type"), "image/jpeg")
+    assert.equal(put.headers.get("authorization"), null, "the signed URL is the permission; the API's token never goes to Storage")
+    const [sent] = door.batches()[0]
+    assert.equal(sent.kind, "add-photo")
+    assert.deepEqual(sent.body, { pickupId: pickupId(1), objectKey: objectKey(id, "jpg"), location: { type: "Point", coordinates: [12.58, 55.7] }, accuracyM: 8 })
+    assert.deepEqual(app.store.getSnapshot().rejections, [])
+  })
+
+  test("an object Storage holds already is done: the API's `uploaded` puts nothing, and the command goes", async () => {
+    const { app, door, position } = await onRoute()
+    door.next("POST /driver/uploads", ({ body }) => json({ state: "uploaded", objectKey: objectKey((body as { commandId: string }).commandId, "png") }))
+    door.next("POST /driver/commands", ({ body }) => outcomes(commandsOf(body)))
+    const id = await app.tap({ kind: "add-signature", routeId: ROUTE_ID, body: { pickupId: pickupId(1) }, object: signature() })
+    position.answer()
+    await eventually(() => assert.equal(door.batches().length, 1))
+    assert.deepEqual(puts(door), [])
+    assert.equal(door.batches()[0][0].body.objectKey, objectKey(id, "png"))
+  })
+
+  test("and so is Storage's own duplicate, a 400 it tells by the body's code: a put whose answer was lost, or two drains racing", async () => {
+    const { app, door, position } = await onRoute()
+    door.next("POST /driver/uploads", signedUpload)
+    door.next("POST /driver/commands", ({ body }) => outcomes(commandsOf(body)))
+    const id = await app.tap({ kind: "add-signature", routeId: ROUTE_ID, body: { pickupId: pickupId(1) }, object: signature() })
+    door.next(`PUT ${uploadPath(id, "png")}`, duplicate)
+    position.answer()
+    await eventually(() => assert.equal(door.batches().length, 1))
+    assert.equal(door.batches()[0][0].body.objectKey, objectKey(id, "png"))
+    assert.deepEqual(app.store.getSnapshot().rejections, [])
+  })
+
+  test("out of reach on the way to Storage, nothing is sent — what follows waits behind it — until Storage has the bytes", async () => {
+    const { app, door, position, timers } = await onRoute()
+    let reachable = false
+    door.always("POST /driver/uploads", (call) => (reachable ? signedUpload(call) : offline()))
+    door.always("POST /driver/commands", ({ body }) => outcomes(commandsOf(body)))
+    const photoId = await app.tap({ kind: "add-photo", routeId: ROUTE_ID, body: { pickupId: pickupId(1) }, object: photo() })
+    position.answer()
+    await eventually(() => assert.equal(app.store.getSnapshot().unreachable, true))
+    const paused = await app.tap({ kind: "pause", routeId: ROUTE_ID, body: {} })
+    await settle()
+    assert.deepEqual(door.batches(), [])
+    assert.equal(app.store.getSnapshot().waiting.length, 2)
+
+    // The API signs, and Storage itself is down.
+    reachable = true
+    door.next(`PUT ${uploadPath(photoId, "jpg")}`, () => storageError(503, "Service Unavailable"))
+    timers.advance(DRAIN_RETRY_MS)
+    await eventually(() => assert.equal(puts(door).length, 1))
+    await settle()
+    assert.deepEqual(door.batches(), [])
+    assert.equal(app.store.getSnapshot().unreachable, true)
+    assert.equal(app.store.getSnapshot().refused, null)
+
+    door.next(`PUT ${uploadPath(photoId, "jpg")}`, stored(objectKey(photoId, "jpg")))
+    timers.advance(DRAIN_RETRY_MS)
+    await eventually(() => assert.deepEqual(app.store.getSnapshot().waiting, []))
+    assert.deepEqual(door.batches().map((batch) => batch.map((command) => command.id)), [[photoId, paused]])
+    assert.equal(app.store.getSnapshot().unreachable, false)
+  })
+
+  test("a deployment without Storage refuses the action, not the queue: its sentence on its stop, the action dropped, and what follows sent", async () => {
+    const device = await onRoute()
+    const { app, door, position } = device
+    door.next("POST /driver/uploads", noProofStorage)
+    door.next("POST /driver/commands", ({ body }) => outcomes(commandsOf(body)))
+    const photoId = await app.tap({ kind: "add-photo", routeId: ROUTE_ID, body: { pickupId: pickupId(2) }, object: photo() })
+    const paused = await app.tap({ kind: "pause", routeId: ROUTE_ID, body: {} })
+    position.answer()
+    await eventually(() => assert.deepEqual(app.store.getSnapshot().waiting, []))
+    assert.deepEqual(door.batches().map((batch) => batch.map((command) => command.id)), [[paused]])
+    const state = app.store.getSnapshot()
+    assert.deepEqual(state.rejections, [{ commandId: photoId, kind: "add-photo", routeId: ROUTE_ID, pickupId: pickupId(2), sentence: NO_STORAGE }])
+    assert.equal(state.unreachable, false)
+    assert.equal(state.refused, null)
+    assert.deepEqual(await device.stored(), [])
+  })
+
+  test("Storage refusing the bytes — too large, a format it does not take — refuses the action with Storage's sentence", async () => {
+    const { app, door, position } = await onRoute()
+    door.next("POST /driver/uploads", signedUpload)
+    const id = await app.tap({ kind: "add-photo", routeId: ROUTE_ID, body: { pickupId: pickupId(1) }, object: photo() })
+    door.next(`PUT ${uploadPath(id, "jpg")}`, () => json({ statusCode: "413", error: "Payload too large", message: "The object exceeded the maximum allowed size", code: "EntityTooLarge" }, 400))
+    position.answer()
+    await eventually(() => assert.equal(app.store.getSnapshot().rejections.length, 1))
+    assert.deepEqual(app.store.getSnapshot().rejections, [{ commandId: id, kind: "add-photo", routeId: ROUTE_ID, pickupId: pickupId(1), sentence: "Storage refused the photo: The object exceeded the maximum allowed size" }])
+    assert.deepEqual(door.batches(), [])
+    assert.deepEqual(app.store.getSnapshot().waiting, [])
+  })
+
+  test("a 401 on the way waits for the session, as a batch does, and the new token sends it", async () => {
+    const { app, door, position } = await onRoute()
+    door.next("POST /driver/uploads", () => problem(401, "The token has expired"))
+    const id = await app.tap({ kind: "add-signature", routeId: ROUTE_ID, body: { pickupId: pickupId(1) }, object: signature() })
+    position.answer()
+    await eventually(() => assert.equal(asked(door).length, 1))
+    await settle()
+    const state = app.store.getSnapshot()
+    assert.equal(state.waiting.length, 1)
+    assert.deepEqual([state.unreachable, state.refused, state.rejections], [false, null, []])
+
+    door.next("POST /driver/uploads", signedUpload)
+    door.next(`PUT ${uploadPath(id, "png")}`, stored(objectKey(id, "png")))
+    door.next("POST /driver/commands", ({ body }) => outcomes(commandsOf(body)))
+    app.setSession({ who: WHO, client: door.client("n3w-t0k3n") })
+    await eventually(() => assert.deepEqual(app.store.getSnapshot().waiting, []))
+    assert.equal(door.batches()[0][0].body.objectKey, objectKey(id, "png"))
+  })
+
+  test("the bytes stay in the queue until Storage has them, and then only the key does: the next page sends the command without putting it again", async () => {
+    const device = await onRoute()
+    const { app, door, position } = device
+    door.always("POST /driver/uploads", signedUpload)
+    door.always("POST /driver/commands", offline)
+    const id = await app.tap({ kind: "add-photo", routeId: ROUTE_ID, body: {}, object: photo() })
+    const [held] = await device.stored()
+    assert.deepEqual(new Uint8Array(held.object?.bytes ?? new ArrayBuffer(0)), new Uint8Array(photo().bytes), "a page closed now loses nothing")
+
+    door.next(`PUT ${uploadPath(id, "jpg")}`, stored(objectKey(id, "jpg")))
+    position.answer()
+    await eventually(() => assert.equal(app.store.getSnapshot().unreachable, true))
+    const [kept] = await device.stored()
+    assert.equal(kept.object, undefined, "the bytes leave the phone once Storage has them")
+    assert.equal((kept.command.body as { objectKey?: string }).objectKey, objectKey(id, "jpg"))
+    app.dispose()
+
+    door.always("POST /driver/commands", ({ body }) => outcomes(commandsOf(body)))
+    const next = device.open()
+    await next.load()
+    await eventually(() => assert.deepEqual(next.store.getSnapshot().waiting, []))
+    assert.equal(puts(door).length, 1)
+    assert.equal(door.calls.filter((call) => call.path === "/driver/uploads").length, 1)
+    assert.equal(door.batches().at(-1)?.[0].body.objectKey, objectKey(id, "jpg"))
   })
 })
