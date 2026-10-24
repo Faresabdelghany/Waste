@@ -297,6 +297,7 @@ import { MapPlanningView } from "@/components/waste/map-planning/map-planning-vi
 import { SERVICE_AREAS_MODULE, serviceAreaFormValues } from "@/lib/data/service-areas"
 import { serviceAreaKindForField, serviceAreaKindOf } from "@/lib/data/provider-money"
 import { pilotProviderCreate, pilotServiceAreaCreate } from "@/lib/data/provider-money-forms"
+import { exportShownRows } from "@/lib/data/workspace-export"
 import {
   isInProjectScope,
   isProjectRecordId,
@@ -4986,11 +4987,27 @@ export function BusinessWorkspace({
                 <Button
                   variant="ghost"
                   size="sm"
-                  onClick={() =>
-                    toast.success("Export queued", {
-                      description: `${activeModule.title} · current filters · audit recorded`,
-                    })
-                  }
+                  onClick={() => {
+                    // The rows the table shows under the search, the filters and the scope, every page of them, by the columns it draws (#292).
+                    const rows = exportShownRows(
+                      filteredRecords,
+                      {
+                        view: isContainersAssetsView ? "containers" : isRoutesView ? "routes" : isServiceProviderUsersView ? "provider-users" : isCalendarsView ? "calendars" : isSchemesView ? "schemes" : "records",
+                        rich: isRichRecordView,
+                        entityLabel: activeModule.entityLabel,
+                        contextLabel: activeModule.contextLabel,
+                        valueLabel: activeModule.valueLabel,
+                        options: viewOptions,
+                        staticColumns: activeStaticColumns,
+                        factColumns: activeFactColumns,
+                        projectScopeOf: (record) => projectScopeLabel(record.projectIds ?? [], projectRecords),
+                        calendarRowOf: (record) => calendarRowsById.get(record.id),
+                        schemeRowOf: (record) => schemeRowsById.get(record.id),
+                      },
+                      { workspace: workspaceLabel ?? workspace.label, module: activeModule.label, day: todayIso() },
+                    )
+                    toast.success(`Exported ${rows} ${rows === 1 ? "row" : "rows"}`, { description: `${activeModule.title} · the rows and columns shown` })
+                  }}
                 >
                   <DownloadSimple className="h-4 w-4" />
                   <span className="hidden sm:inline">Export</span>
