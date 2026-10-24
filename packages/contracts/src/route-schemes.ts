@@ -89,11 +89,8 @@ export const AT_MOST_GROUPS = `A scheme has at most ${GROUPS_MAX} collection gro
 /** What a patch's list past the bound is told: the bound is the create's, and a scheme that has grown past it one group at a time is edited that way too. */
 export const AT_MOST_GROUPS_RESTATED = `An edit restates at most ${GROUPS_MAX} collection groups; a scheme with more is edited through its groups' own routes`
 
-/** The largest `integer` Postgres holds, which `collection_group.position` is: a larger position is refused at its field rather than failing the write (22003). */
-const POSITION_MAX = 2_147_483_647
-
-/** An order among siblings: whole and positive, since the first is number one, and no larger than the column holds. */
-const Ordinal = PositiveInt.max(POSITION_MAX)
+/** An order among siblings: whole and positive, since the first is number one, and no larger than `collection_group.position` holds — `PositiveInt`'s own bound, so a larger one is refused at its field rather than failing the write (22003). */
+const Ordinal = PositiveInt
 
 export const EACH_FRACTION_ONCE = eachOnceSentence("waste fraction", "a rule matches a fraction or it does not")
 export const EACH_CONTAINER_TYPE_ONCE = eachOnceSentence("container type", "a rule is restricted to a type or it is not")

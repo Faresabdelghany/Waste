@@ -48,20 +48,43 @@ export const somethingToChange = { message: "Give at least one field to change" 
 export const changesSomething = (patch: object) => Object.keys(patch).length > 0
 
 /**
+ * The bounds of Postgres's `integer`, the column every whole number a body
+ * writes lands in. zod's `int` stops at JavaScript's safe integers, far past
+ * them, and a number between the two would reach the database and come back
+ * as 22003, a 500; held here, it is the 400 naming its field.
+ */
+export const INT4_MAX = 2_147_483_647
+export const INT4_MIN = -2_147_483_648
+
+/** Whether a number a route computed from a body — a quantity times a price, an indexed fee — still fits an `integer` column. */
+export const fitsInt4 = (value: number): boolean => Number.isInteger(value) && value >= INT4_MIN && value <= INT4_MAX
+
+/**
  * A whole number above zero: an order among siblings, a count, a payload, a
  * volume, a distance. Every named positive integer of these modules
  * (`Ordinal`, `Quantity`, `Metres`, `Amount`, …) is this shape under the name
- * its field reads best by; the name adds nothing else.
+ * its field reads best by; the name adds nothing else. At most `INT4_MAX`,
+ * since its column is an `integer`.
  */
-export const PositiveInt = z.int().positive()
+export const PositiveInt = z.int().positive().max(INT4_MAX)
 
 /**
  * A whole number of zero or more: a count of what a run did, of a route's
  * pickups, of a settlement's lines — where none yet is a count of zero and
  * not a missing one. `PositiveInt`'s sibling, spelled once for the same
- * reason; a module names it by what its field counts.
+ * reason; a module names it by what its field counts. At most `INT4_MAX`.
  */
-export const NonNegativeInt = z.int().min(0)
+export const NonNegativeInt = z.int().min(0).max(INT4_MAX)
+
+/**
+ * A sum over many rows that a report answers and nothing writes: summed in
+ * `bigint` arithmetic, so it carries no `integer` bound — a city's tonnage
+ * over a long window may pass one.
+ */
+export const NonNegativeTotal = z.int().min(0)
+
+/** A whole number of either sign that a body writes into an `integer` column: basis points, which a deflator makes negative. */
+export const Int4 = z.int().min(INT4_MIN).max(INT4_MAX)
 
 /**
  * Money in minor units (Issue #112): a whole number of øre or cents, never a

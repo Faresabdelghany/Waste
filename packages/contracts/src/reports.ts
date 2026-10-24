@@ -57,7 +57,7 @@ import { Id } from "./ids"
 import { Currency } from "./organisation"
 import { dayWindowIsOrdered, dayWindowOrdered } from "./queries"
 import { TicketKind } from "./resolution"
-import { Minor, NonNegativeInt } from "./resource"
+import { Minor, NonNegativeTotal } from "./resource"
 
 /** How a report's series cuts its window: by the day, the ISO week or the calendar month. */
 export const ReportInterval = z.enum(REPORT_INTERVALS)
@@ -133,15 +133,15 @@ export const TonnageReportQuery = z
   .refine(reportWindowFits, reportWindowFitsAt)
 export type TonnageReportQuery = z.infer<typeof TonnageReportQuery>
 
-/** A count of rows: zero or more. */
-const Count = NonNegativeInt
+/** A count of rows: zero or more, summed and never written, so with no `integer` bound. */
+const Count = NonNegativeTotal
 
 /** A rate, 0..1, or null where there was nothing to divide by. */
 export const Rate = z.number().min(0).max(1).nullable()
 export type Rate = z.infer<typeof Rate>
 
-/** Whole kilograms, summed. */
-const Kilograms = NonNegativeInt
+/** Whole kilograms, summed: a city's tonnage over a long window may pass an `integer`. */
+const Kilograms = NonNegativeTotal
 
 /** The window a report answers, as it read the query: the interval as defaulted, the project as asked or null for every one of the caller's. */
 export const ReportWindow = z.object({

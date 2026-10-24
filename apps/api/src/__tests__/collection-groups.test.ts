@@ -9,6 +9,7 @@ import { CollectionGroup, RouteScheme } from "@waste/contracts/route-schemes"
 import { createDb, type Database } from "@waste/db/client"
 
 import { createApp } from "../app"
+import { NO_POSITION_LEFT } from "../routes/collection-groups"
 import { callingAs, type Call } from "./calls"
 import { created } from "./created"
 import { databaseUnderTest } from "./database"
@@ -170,6 +171,14 @@ describe("the collection group endpoints", { skip: database.skip }, () => {
       assert.deepEqual(glassRun.rule, { wasteFractionIds: [glass.id], containerTypeIds: [igloo.id], vehicleTypeId: planning.vehicleTypes.glassCrane.id })
       assert.deepEqual([glassRun.vehicleId, glassRun.driverId], [null, null], "Resources' columns, read as null until #101's slice 6 writes them")
       assert.deepEqual((await oneScheme(created.id)).collectionGroups.map((group) => [group.name, group.position]), [["Residual", 1], ["Glass", 1], ["Bank", 2]], "by position, ties by id — the order they were made in")
+    })
+
+    test("takes the last position an integer holds, and then asks the next group for a position rather than failing the write (#291)", async () => {
+      const created = await scheme("Last position")
+      const last = await add(created.id, manualGroup("Last", ["thursday"], [bin1.id], { position: 2_147_483_647 }))
+      assert.equal(last.position, 2_147_483_647)
+      assert.equal((await refused(await post(created.id, manualGroup("After", ["thursday"], [bin2.id])), 409)).detail, NO_POSITION_LEFT)
+      assert.equal((await add(created.id, manualGroup("Named", ["thursday"], [bin2.id], { position: 3 }))).position, 3, "a position given is taken")
     })
 
     test("refuses a name the scheme already has, and a group running on a day the scheme does not serve", async () => {

@@ -14,7 +14,7 @@ import { and, eq } from "drizzle-orm"
 
 import { createApp } from "../app"
 import { uniqueConstraintOf } from "../problem"
-import { DRAFT_AGREEMENT_BY_HAND, NO_VAT_RATE_BY_HAND, notCancelled, notRepriced, ONLY_A_TICKETS_EVENT_TAKES_A_PRODUCT, REVERSAL_NOT_CANCELLED } from "../routes/billable-events"
+import { AMOUNT_TOO_LARGE, DRAFT_AGREEMENT_BY_HAND, NO_VAT_RATE_BY_HAND, notCancelled, notRepriced, ONLY_A_TICKETS_EVENT_TAKES_A_PRODUCT, REVERSAL_NOT_CANCELLED } from "../routes/billable-events"
 import { NOT_AN_AGREEMENT } from "../routes/references"
 import { consumerEvent, pickupEvent, reversalEvent, seedBilling, ticketEvent, type BillingFixtures } from "./billing-fixtures"
 import { callingAs, type Call } from "./calls"
@@ -172,6 +172,13 @@ describe("the billable event endpoints", { skip: database.skip || owner.skip }, 
       assert.equal(draft.detail, DRAFT_AGREEMENT_BY_HAND)
       const noRate = await refused(await olivia("/billable-events", { method: "POST", body: manual({ productId: fx.products.bulky.id, unitPriceMinor: 9_900, overrideReason: "By hand" }) }), 409)
       assert.equal(noRate.detail, NO_VAT_RATE_BY_HAND)
+
+      // Each number fits an integer, the two together do not: the quantity's 400, never 22003.
+      const tooMuch = await refused(await olivia("/billable-events", { method: "POST", body: manual({ unitPriceMinor: 2_000_000_000, overrideReason: "By hand", quantity: 2 }) }), 400)
+      assert.deepEqual(tooMuch.errors, [{ path: "quantity", message: AMOUNT_TOO_LARGE }])
+      // And one past an integer is the schema's.
+      const huge = await refused(await olivia("/billable-events", { method: "POST", body: manual({ quantity: 2 ** 31 }) }), 400)
+      assert.deepEqual(huge.errors?.map((error) => error.path), ["quantity"])
     })
 
     test("refuses a project the caller does not work in, an agreement or a product of another project, a member the server owns, and an unoffered product after every 400", async () => {

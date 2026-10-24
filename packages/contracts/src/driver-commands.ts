@@ -89,15 +89,13 @@ const commandOf = <Kind extends DriverCommandKind, Body extends z.ZodType>(kind:
 export const BATCH_MAX = 200
 
 /**
- * The largest `integer` Postgres holds, which every weight column is
- * (`proof_of_service.weight_kg`, `unload.net_kg` and its pair): a larger
- * weight is the command's own refusal at its field, never a failed write
- * (22003) that would fail the batch and hold the device's whole queue.
+ * Whole kilograms, positive: `PositiveInt`, whose bound is the `integer`
+ * every weight column is (`proof_of_service.weight_kg`, `unload.net_kg` and
+ * its pair), so a larger weight is the command's own refusal at its field,
+ * never a failed write (22003) that would fail the batch and hold the
+ * device's whole queue.
  */
-export const KILOGRAMS_MAX = 2_147_483_647
-
-/** Whole kilograms, positive, no more than a weight column holds. */
-const Kilograms = PositiveInt.max(KILOGRAMS_MAX)
+const Kilograms = PositiveInt
 
 /** The fourteen bodies, by kind, for the route to parse a loosely read envelope's body against. */
 export const COMMAND_BODIES = {
