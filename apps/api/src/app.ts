@@ -25,8 +25,10 @@
 // is a 404, not a 401. The verifier is injected: server.ts builds it over the
 // project's remote key set, a test over a local one, and the app never reads
 // SUPABASE_URL itself.
+import { CHANGE_REASON_HEADER } from "@waste/contracts/audit"
 import { type BuildInfo, HealthResponse, PROBE_HEADERS, ReadinessResponse, ReadyResponse, UnavailableResponse } from "@waste/contracts/health"
 import { NO_ACTIVE_ACCOUNT } from "@waste/contracts/problem"
+import { PARAGRAPH_MAX } from "@waste/contracts/text"
 import type { Database } from "@waste/db/client"
 import { createJobSender, type JobSender } from "@waste/db/jobs"
 import type { ProofStorage } from "@waste/db/storage"
@@ -41,6 +43,7 @@ import { errorHandler, notFound } from "./problem"
 import { checkDatabase, DATABASE_CHECK_TIMEOUT_MS } from "./readiness"
 import { agreementRoutes } from "./routes/agreements"
 import { alertRoutes } from "./routes/alerts"
+import { auditEventRoutes } from "./routes/audit-events"
 import { billableEventRoutes } from "./routes/billable-events"
 import { billingRunRoutes } from "./routes/billing-runs"
 import { catalogueRoutes } from "./routes/catalogue"
@@ -216,6 +219,7 @@ export function createApp({
   app.route("/", serviceProviderRoutes(guard))
   app.route("/", userRoutes(guard))
   app.route("/", roleRoutes(guard))
+  app.route("/", auditEventRoutes(guard))
   app.route("/", catalogueRoutes(guard))
   app.route("/", productRoutes(guard))
   app.route("/", customerRoutes(guard))
@@ -283,7 +287,7 @@ export function createApp({
         info: {
           title: "Waste API",
           version: manifest.version,
-          description: `The only web boundary to domain data (ADR-0001). Every route but the probes and this document takes a Supabase access token as a bearer token; every error is an RFC 9457 problem. Every problem's type is \`about:blank\` but one: a 403 of type \`${NO_ACTIVE_ACCOUNT.type}\` refuses the account and not the request — the token names no company, or no active account in its company is bound to its login — and a client ends its session on it, while a 403 of \`about:blank\`, a role's grant refused, leaves the session alone. A 400 lists the fields it refused by path; every write body is strict, so a member it does not know is refused by name, and the error names the members it does accept. A create answers 201 with \`Location\`, the path of the resource's own GET, root-relative: the API is served at its origin's root and mounts under no prefix.`,
+          description: `The only web boundary to domain data (ADR-0001). Every route but the probes and this document takes a Supabase access token as a bearer token; every error is an RFC 9457 problem. Every problem's type is \`about:blank\` but one: a 403 of type \`${NO_ACTIVE_ACCOUNT.type}\` refuses the account and not the request — the token names no company, or no active account in its company is bound to its login — and a client ends its session on it, while a 403 of \`about:blank\`, a role's grant refused, leaves the session alone. A 400 lists the fields it refused by path; every write body is strict, so a member it does not know is refused by name, and the error names the members it does accept. A create answers 201 with \`Location\`, the path of the resource's own GET, root-relative: the API is served at its origin's root and mounts under no prefix. Every write is kept in the audit log (\`GET /audit-events\`) under the account the token names; any request may give its reason in the \`${CHANGE_REASON_HEADER}\` header, percent-encoded as \`encodeURIComponent\` spells it and at most ${PARAGRAPH_MAX} characters decoded (400 naming the header otherwise), which the log keeps beside what changed.`,
         },
         components: {
           securitySchemes: { [BEARER_AUTH]: BEARER_SECURITY_SCHEME },

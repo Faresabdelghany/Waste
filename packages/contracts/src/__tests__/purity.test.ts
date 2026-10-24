@@ -38,6 +38,7 @@ definePurityTests({
   allowedImports: [
     "@waste/domain/access/modules",
     "@waste/domain/access/public-slug",
+    "@waste/domain/audit/vocabulary",
     "@waste/domain/execution/proof-shapes",
     "@waste/domain/execution/vocabulary",
     "@waste/domain/finance/vocabulary",

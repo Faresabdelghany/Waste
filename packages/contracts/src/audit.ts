@@ -1,0 +1,59 @@
+// The audit log on the wire (#291, slice 9): `GET /audit-events`, the history
+// of one row — and of the sets it is the parent of — or of the whole company,
+// newest first. A row of it says what happened to which row of which table,
+// the columns that moved as `[before, after]`, who did it (an account, or
+// none for the worker, the seed and the access token hook), why where the
+// office said so, and the transaction it happened in, which groups a matrix
+// replaced whole into one change.
+//
+// The reason travels in a header, `Waste-Change-Reason`, on any write: a
+// person's own word for a change, percent-encoded as `encodeURIComponent`
+// spells it — a header carries bytes, and a reason may be in any script — and
+// bounded like any paragraph once decoded. The actor never travels: the API's
+// principal is the only source of who.
+import { AUDIT_ACTIONS } from "@waste/domain/audit/vocabulary"
+import * as z from "zod"
+
+import { Id } from "./ids"
+import { PageRequest } from "./pagination"
+import { recorded } from "./resource"
+
+/** The request header a write's reason travels in, as the API reads it (header names are case-insensitive). */
+export const CHANGE_REASON_HEADER = "waste-change-reason"
+
+export const AuditAction = z.enum(AUDIT_ACTIONS)
+export type AuditAction = z.infer<typeof AuditAction>
+
+/** A table's name as the database spells it: `role_grant`, `property_party`. */
+const TableName = z.string().regex(/^[a-z][a-z_]*$/, "a table's name, in the database's spelling: role_grant")
+
+export const AuditEvent = z.object({
+  ...recorded,
+  /** The project of the row, where its table is project-scoped. */
+  projectId: Id.nullable(),
+  table: TableName,
+  rowId: Id,
+  /** The parent a set's row belongs to: a role's grant names its role. */
+  parentTable: TableName.nullable(),
+  parentId: Id.nullable(),
+  action: AuditAction,
+  /** `{ column: [before, after] }`, over the columns that moved, in the database's spelling; a value is the column's JSON. */
+  changed: z.record(z.string(), z.tuple([z.unknown(), z.unknown()])),
+  /** Who made the change; null for the worker, the seed and the access token hook. */
+  actor: z.object({ id: Id, fullName: z.string() }).nullable(),
+  reason: z.string().nullable(),
+  /** One request's changes share it: a matrix replaced whole is one change. A decimal string, since it may outgrow a double. */
+  transactionId: z.string().regex(/^\d+$/),
+})
+export type AuditEvent = z.infer<typeof AuditEvent>
+
+/**
+ * A page of history, newest first: one row's — its own changes and those of
+ * the sets it is the parent of, two levels down — when `table` and `rowId`
+ * are both given, else the whole company's.
+ */
+export const AuditEventListQuery = PageRequest.extend({
+  table: TableName.optional(),
+  rowId: Id.optional(),
+}).refine((query) => (query.table === undefined) === (query.rowId === undefined), { message: "Give both table and rowId, or neither", path: ["rowId"] })
+export type AuditEventListQuery = z.infer<typeof AuditEventListQuery>

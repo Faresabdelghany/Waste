@@ -19,6 +19,8 @@ export type CallOptions = {
   method?: string
   /** Sent as JSON; absent for a GET. */
   body?: unknown
+  /** Beside the authorization: a write's reason (`waste-change-reason`), say. */
+  headers?: Readonly<Record<string, string>>
 }
 
 /** One account's way of calling the API. */
@@ -32,11 +34,12 @@ export type Call = (path: string, options?: CallOptions) => Promise<Response>
 export function callingAs(app: Callable, keys: SigningKeys, account: Account, companyId: string): Call {
   if (account.authUserId === null) throw new Error(`${account.email} has never signed in: no token to sign`)
   const sub = account.authUserId
-  return async (path, { method = "GET", body }: CallOptions = {}) => {
+  return async (path, { method = "GET", body, headers = {} }: CallOptions = {}) => {
     const token = await signToken(keys, { sub, companyId, email: account.email })
     return app.request(path, {
       method,
       headers: {
+        ...headers,
         authorization: `Bearer ${token}`,
         ...(body === undefined ? {} : { "content-type": "application/json" }),
       },

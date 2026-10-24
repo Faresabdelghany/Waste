@@ -65,6 +65,7 @@ import { depot, unloadingStation } from "../schema/places"
 import { planningArea } from "../schema/planning-areas"
 import { ticket } from "../schema/resolution"
 import { collectionGroup, routeScheme } from "../schema/route-schemes"
+import { triggersOf } from "../sql/audit-trail"
 import { withCompany } from "../tenant"
 import { databaseUnderTest, freshDatabase, type FreshDatabase } from "./database"
 import { refusedWith, rolledBack, rolledBackIn } from "./specimen"
@@ -417,7 +418,7 @@ describe("the Finance & Contracting tables against a fresh database", { skip: da
       order by c.relname`
     assert.deepEqual(
       rows.map(({ table, enabled, forced, policies, triggers }) => ({ table, enabled, forced, policies, triggers })),
-      names.map((table) => ({ table, enabled: true, forced: true, policies: [`${table}_tenant_fence`], triggers: LEDGERS.includes(table) ? null : [`${table}_touch_updated_at`] })),
+      names.map((table) => ({ table, enabled: true, forced: true, policies: [`${table}_tenant_fence`], triggers: LEDGERS.includes(table) ? null : triggersOf(table) })),
     )
     const counters = await owner.sql<{ column: string; default: string; nullable: string }[]>`select column_name as column, column_default as default, is_nullable as nullable from information_schema.columns where table_schema = 'wms' and table_name = 'company' and column_name like 'next_%' order by column_name`
     assert.deepEqual(

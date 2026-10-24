@@ -1,0 +1,246 @@
+// The audit trail (#291, slice 9): which tables the audit log keeps the
+// history of, and the two statements that keep it — the trigger function,
+// once, and one trigger per audited table — hand-written into migration 0019
+// beside `audit_event` (schema/audit.ts says what a row of the log is).
+//
+// Every table of the schema is classified here, in exactly one of two lists,
+// and __tests__/audit-trail.test.ts holds the schema to it: a table added
+// later fails the gate until someone says whether its edits are history.
+//
+//   AUDITED — current state the office configures or registers: Organisation
+//     & Access, the catalogue, the Registry, the containers and their
+//     placements, the places, the fleet, Planning's configuration and
+//     Finance's. A table that is a set its parent is replaced through — a
+//     role's grants, an account's access, a property's parties, a group's
+//     members — names its parent, so the parent's history reads the set's
+//     changes beside its own. Each names the module whose `view` grant reads
+//     its history (the API's audit route), which is the module its own routes
+//     are granted under.
+//
+//   EXEMPT — each with why: a ledger is its own history; execution,
+//     generation and routing are written in bulk by the driver door and the
+//     worker and have their own ledgers and outbox; a ticket's history is its
+//     ledger and an alert's its stamps; the money the work makes is the
+//     worker's and its stamps say who; the outbox is a transport; the log
+//     itself is the log.
+//
+// The function. `changed` is `{ column: [before, after] }` over the columns
+// whose values differ — for an insert every column the row has a value in,
+// for a delete every column it had one in — less `id`, `company_id`,
+// `created_at` and `updated_at`, and less the columns the table's trigger
+// passes as ignored, so an update that moved only those writes nothing. The
+// company's three document counters are the one such set: every generated
+// route, every ticket and every invoice steps one, and a nightly sweep must
+// not flood the trail. The actor is the transaction-local
+// `wms.user_account_id`, which only the API's principal guard sets, and the
+// reason `wms.change_reason`, which the guard sets from the bounded
+// `Waste-Change-Reason` header; both read as null where unset. The company
+// row's own delete is not recorded: only the owner deletes a company, and the
+// log's rows of that company go with it (the one cascade, schema/audit.ts).
+// SECURITY INVOKER, so the insert is the writer's own: the API role's under
+// its fence, the hook's and the owner's as theirs.
+import type { ModuleKey } from "@waste/domain/access/modules"
+import { getTableName } from "drizzle-orm"
+import type { PgColumn, PgTable } from "drizzle-orm/pg-core"
+
+import { columnName, qualifiedTable, quoted, tableObjectName } from "../names"
+import { ACTOR_SETTING, REASON_SETTING } from "../tenant"
+import { projectAccess, role, roleGrant, serviceProviderAccess, userAccount } from "../schema/access"
+import { agreement, subscription } from "../schema/agreements"
+import { vehicleAllocation, vehicleAllocationEvent } from "../schema/allocations"
+import { auditEvent } from "../schema/audit"
+import { containerType, product, serviceFrequency, wasteFraction } from "../schema/catalogue"
+import { collectionCalendar, collectionCalendarHoliday } from "../schema/collection-calendars"
+import { container, containerServicePlacement } from "../schema/containers"
+import { customer, property, propertyGroup, propertyGroupMember, propertyParty, sharedCollectionPoint, sharedCollectionPointMember } from "../schema/customers"
+import { driverCommand, outboxEvent, pickup, proofOfService, route, session, unload } from "../schema/execution"
+import {
+  billableEvent,
+  billingRun,
+  billingRunExclusion,
+  invoice,
+  invoiceLine,
+  priceList,
+  priceListRow,
+  serviceArea,
+  serviceAreaAssignment,
+  serviceAreaPlanningArea,
+  serviceAreaWasteFraction,
+  serviceProviderPrice,
+  settlement,
+  settlementEvent,
+  settlementLine,
+  weightReview,
+} from "../schema/finance"
+import { driver, vehicle, vehicleCompartment, vehicleCompartmentFraction } from "../schema/fleet"
+import { containerTypeVehicleType, vehicleType } from "../schema/fleet-types"
+import { generationMatch, generationRun } from "../schema/generation"
+import { company, project, serviceProvider } from "../schema/organisation"
+import { depot, unloadingStation, unloadingStationFraction, warehouse } from "../schema/places"
+import { planningArea, planningAreaBoundary } from "../schema/planning-areas"
+import { alert, ticket, ticketEvent } from "../schema/resolution"
+import { collectionGroup, collectionGroupContainer, collectionGroupContainerType, collectionGroupFraction, routeScheme } from "../schema/route-schemes"
+import { plan, planLeg, planStop, routingQuota } from "../schema/routing"
+import { sortingGuideItem } from "../schema/sorting-guide"
+import { stockMovement } from "../schema/stock"
+
+const HELPER = "auditTrail"
+/** The suffix of an audited table's trigger. */
+export const AUDIT_TRAIL = "audit_trail"
+
+/** An audited table: the module its history is read under, the parent it is a set of, and the columns whose moves are no history. */
+export type Audited = {
+  table: PgTable
+  module: ModuleKey
+  /** The table this one is a set or a child of, and the column naming the parent's row. */
+  parent?: { table: PgTable; column: PgColumn }
+  /** Columns an update may move without a row of history: a counter, never a person's word. */
+  ignored?: readonly PgColumn[]
+}
+
+/** A table the log does not keep, and why. */
+export type Exempt = { table: PgTable; why: string }
+
+const setOf = (table: PgTable, column: PgColumn) => ({ table, column })
+
+export const AUDITED: readonly Audited[] = [
+  // Organisation & Access, who may do what and who belongs where.
+  { table: company, module: "configure.organization", ignored: [company.nextRouteNumber, company.nextTicketNumber, company.nextInvoiceNumber] },
+  { table: project, module: "configure.organization" },
+  { table: serviceProvider, module: "service-providers.service-providers" },
+  { table: role, module: "configure.access" },
+  { table: roleGrant, module: "configure.access", parent: setOf(role, roleGrant.roleId) },
+  { table: userAccount, module: "configure.access" },
+  { table: projectAccess, module: "configure.access", parent: setOf(userAccount, projectAccess.userAccountId) },
+  { table: serviceProviderAccess, module: "configure.access", parent: setOf(userAccount, serviceProviderAccess.userAccountId) },
+  // The catalogue.
+  { table: wasteFraction, module: "configure.master" },
+  { table: containerType, module: "configure.master" },
+  { table: serviceFrequency, module: "configure.master" },
+  { table: vehicleType, module: "configure.master" },
+  { table: containerTypeVehicleType, module: "configure.master", parent: setOf(vehicleType, containerTypeVehicleType.vehicleTypeId) },
+  { table: product, module: "commercial.products" },
+  // The Registry.
+  { table: customer, module: "customers.contacts" },
+  { table: property, module: "customers.properties" },
+  { table: propertyParty, module: "customers.properties", parent: setOf(property, propertyParty.propertyId) },
+  { table: propertyGroup, module: "customers.groups" },
+  { table: propertyGroupMember, module: "customers.groups", parent: setOf(propertyGroup, propertyGroupMember.propertyGroupId) },
+  { table: sharedCollectionPoint, module: "customers.shared" },
+  { table: sharedCollectionPointMember, module: "customers.shared", parent: setOf(sharedCollectionPoint, sharedCollectionPointMember.sharedCollectionPointId) },
+  { table: agreement, module: "customers.agreements" },
+  { table: subscription, module: "customers.agreements", parent: setOf(agreement, subscription.agreementId) },
+  // Resources: the containers and their placements, the places, the fleet.
+  { table: container, module: "resources.containers" },
+  { table: containerServicePlacement, module: "resources.containers", parent: setOf(container, containerServicePlacement.containerId) },
+  { table: depot, module: "resources.depots" },
+  { table: unloadingStation, module: "resources.depots" },
+  { table: unloadingStationFraction, module: "resources.depots", parent: setOf(unloadingStation, unloadingStationFraction.unloadingStationId) },
+  { table: warehouse, module: "resources.warehouses" },
+  { table: vehicle, module: "fleet.vehicles" },
+  { table: vehicleCompartment, module: "fleet.vehicles", parent: setOf(vehicle, vehicleCompartment.vehicleId) },
+  { table: vehicleCompartmentFraction, module: "fleet.vehicles", parent: setOf(vehicleCompartment, vehicleCompartmentFraction.vehicleCompartmentId) },
+  { table: driver, module: "fleet.drivers" },
+  // Planning's configuration: the office writes it, generation only reads it.
+  { table: planningArea, module: "configure.areas" },
+  { table: planningAreaBoundary, module: "configure.areas", parent: setOf(planningArea, planningAreaBoundary.planningAreaId) },
+  { table: collectionCalendar, module: "configure.calendars" },
+  { table: collectionCalendarHoliday, module: "configure.calendars", parent: setOf(collectionCalendar, collectionCalendarHoliday.collectionCalendarId) },
+  { table: routeScheme, module: "route-studio.schemes" },
+  { table: collectionGroup, module: "route-studio.schemes", parent: setOf(routeScheme, collectionGroup.routeSchemeId) },
+  { table: collectionGroupFraction, module: "route-studio.schemes", parent: setOf(collectionGroup, collectionGroupFraction.collectionGroupId) },
+  { table: collectionGroupContainerType, module: "route-studio.schemes", parent: setOf(collectionGroup, collectionGroupContainerType.collectionGroupId) },
+  { table: collectionGroupContainer, module: "route-studio.schemes", parent: setOf(collectionGroup, collectionGroupContainer.collectionGroupId) },
+  // Finance's configuration: what the work is priced at, who holds an area, what a provider is paid.
+  { table: priceList, module: "commercial.price-rows" },
+  { table: priceListRow, module: "commercial.price-rows", parent: setOf(priceList, priceListRow.priceListId) },
+  { table: serviceArea, module: "service-providers.service-areas" },
+  { table: serviceAreaPlanningArea, module: "service-providers.service-areas", parent: setOf(serviceArea, serviceAreaPlanningArea.serviceAreaId) },
+  { table: serviceAreaWasteFraction, module: "service-providers.service-areas", parent: setOf(serviceArea, serviceAreaWasteFraction.serviceAreaId) },
+  { table: serviceAreaAssignment, module: "service-providers.service-areas", parent: setOf(serviceArea, serviceAreaAssignment.serviceAreaId) },
+  { table: serviceProviderPrice, module: "commercial.service-provider-prices", parent: setOf(serviceAreaAssignment, serviceProviderPrice.serviceAreaAssignmentId) },
+  { table: settlement, module: "commercial.settlements" },
+  // The Sorting Guide (#293): what the office tells residents goes where.
+  { table: sortingGuideItem, module: "configure.sorting-guide" },
+]
+
+/** The audited tables by name, for a test that reads a migrated database's triggers. */
+export const AUDITED_TABLE_NAMES: ReadonlySet<string> = new Set(AUDITED.map((entry) => getTableName(entry.table)))
+
+/** The triggers a table of a migrated database carries, as `pg_trigger` names them in order: the audit trail where the table is audited, then the touch where it has `updated_at`. */
+export const triggersOf = (name: string, touched = true): string[] => [...(AUDITED_TABLE_NAMES.has(name) ? [`${name}_${AUDIT_TRAIL}`] : []), ...(touched ? [`${name}_touch_updated_at`] : [])]
+
+const LEDGER = "a ledger: its rows are its own history, appended and never rewritten"
+const EXECUTION = "execution: written in bulk by generation and the driver door; its ledgers and the outbox say what happened"
+const GENERATION = "generation's own record of a run, the worker's"
+const ROUTING = "routing: Plans and the quota, written by the worker and the provider's answers"
+
+export const EXEMPT: readonly Exempt[] = [
+  { table: auditEvent, why: "the audit log itself" },
+  ...[stockMovement, vehicleAllocationEvent, proofOfService, unload, driverCommand, ticketEvent, billingRunExclusion, invoice, invoiceLine, settlementEvent, weightReview].map((table) => ({ table, why: LEDGER })),
+  ...[route, pickup, session].map((table) => ({ table, why: EXECUTION })),
+  { table: outboxEvent, why: "the outbox: a transport, stamped as it is relayed" },
+  ...[generationRun, generationMatch].map((table) => ({ table, why: GENERATION })),
+  ...[plan, planStop, planLeg, routingQuota].map((table) => ({ table, why: ROUTING })),
+  { table: ticket, why: "a ticket's history is its ledger, ticket_event, appended by every command" },
+  { table: alert, why: "an alert's history is its stamps, held to its status" },
+  { table: vehicleAllocation, why: "an allocation's history is its ledger, vehicle_allocation_event" },
+  { table: billableEvent, why: "the money the work makes: recorded by the worker per pickup, its stamps saying who repriced or cancelled it" },
+  { table: billingRun, why: "a run's row is the record of the run, written once" },
+  { table: settlementLine, why: "a settlement's calculation, replaced whole on every calculate; the settlement's ledger says who" },
+]
+
+/** The trigger function, once (migration 0019). */
+export const AUDIT_ROW_FUNCTION = `CREATE OR REPLACE FUNCTION wms.audit_row() RETURNS trigger
+LANGUAGE plpgsql
+SET search_path = ''
+AS $$
+declare
+  before jsonb := case when tg_op = 'INSERT' then '{}'::jsonb else to_jsonb(old) end;
+  after jsonb := case when tg_op = 'DELETE' then '{}'::jsonb else to_jsonb(new) end;
+  touched jsonb := case when tg_op = 'DELETE' then to_jsonb(old) else to_jsonb(new) end;
+  parent_column text := nullif(tg_argv[1], '');
+  ignored text[] := coalesce(tg_argv[2:], '{}');
+  changed jsonb := '{}'::jsonb;
+  key text;
+begin
+  if tg_table_name = 'company' and tg_op = 'DELETE' then
+    return null;
+  end if;
+  for key in select jsonb_object_keys(before || after) loop
+    continue when key in ('id', 'company_id', 'created_at', 'updated_at') or key = any(ignored);
+    if coalesce(before -> key, 'null'::jsonb) is distinct from coalesce(after -> key, 'null'::jsonb) then
+      changed := changed || jsonb_build_object(key, jsonb_build_array(before -> key, after -> key));
+    end if;
+  end loop;
+  if changed = '{}'::jsonb then
+    return null;
+  end if;
+  insert into wms.audit_event (company_id, project_id, table_name, row_id, parent_table, parent_id, action, changed, actor_user_account_id, reason, transaction_id)
+  values (
+    (touched ->> 'company_id')::uuid,
+    (touched ->> 'project_id')::uuid,
+    tg_table_name,
+    (touched ->> 'id')::uuid,
+    nullif(tg_argv[0], ''),
+    case when parent_column is null then null else (touched ->> parent_column)::uuid end,
+    lower(tg_op),
+    changed,
+    nullif(current_setting('${ACTOR_SETTING}', true), '')::uuid,
+    nullif(current_setting('${REASON_SETTING}', true), ''),
+    pg_current_xact_id()::text::bigint
+  );
+  return null;
+end
+$$;`
+
+const literal = (value: string) => `'${value.replaceAll("'", "''")}'`
+
+/** The statement that adds the audit trigger to this table, for migration 0019 or the file that creates a table later. */
+export function auditTrail(entry: Audited): string[] {
+  const target = qualifiedTable(entry.table, HELPER)
+  const args = [entry.parent === undefined ? "" : getTableName(entry.parent.table), entry.parent === undefined ? "" : columnName(entry.parent.column), ...(entry.ignored ?? []).map(columnName)]
+  return [
+    `CREATE TRIGGER ${quoted(tableObjectName(entry.table, AUDIT_TRAIL, HELPER))} AFTER INSERT OR UPDATE OR DELETE ON ${target} FOR EACH ROW EXECUTE FUNCTION wms.audit_row(${args.map(literal).join(", ")});`,
+  ]
+}

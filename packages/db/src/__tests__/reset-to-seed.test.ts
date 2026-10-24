@@ -119,7 +119,7 @@ function withoutMintedIds(snapshot: Snapshot): Snapshot {
 }
 
 /** The tables of a snapshot a reset would sweep rows from, in the sweep's order. */
-const sweptTablesOf = (snapshot: Snapshot): string[] => SWEPT_TABLES.map(getTableName).filter((table) => snapshot[table].length > 0)
+const sweptTablesOf = (snapshot: Snapshot): string[] => SWEPT_TABLES.map(getTableName).filter((table) => (snapshot[table]?.length ?? 0) > 0)
 
 /** How many rows a reset would sweep from the company a snapshot holds. */
 const sweptRows = (snapshot: Snapshot): number => sweptTablesOf(snapshot).reduce((total, table) => total + snapshot[table].length, 0)
@@ -212,6 +212,8 @@ describe("reset-to-seed against a database of its own", { skip: database.skip },
       where n.nspname = 'wms' and c.relkind in ('r', 'p') order by c.relname`
     const result: Snapshot = {}
     for (const { name } of tables) {
+      // The audit log is history, not state: what a reset leaves of it is `trailOf`'s question (#291).
+      if (name === "audit_event") continue
       const [{ rows }] = await owner.sql.unsafe<{ rows: string }[]>(
         `select coalesce(jsonb_agg(to_jsonb(t) order by t.id), '[]'::jsonb)::text as rows from "wms"."${name}" t where t.company_id = $1`,
         [companyId],
@@ -219,6 +221,14 @@ describe("reset-to-seed against a database of its own", { skip: database.skip },
       result[name] = JSON.parse(rows) as Record<string, unknown>[]
     }
     return result
+  }
+
+  /** A company's audit trail: how many rows, how many transactions wrote them, and how many name an actor. */
+  const trailOf = async (companyId: string): Promise<{ rows: number; transactions: number; actors: number }> => {
+    const [trail] = await owner.sql<{ rows: number; transactions: number; actors: number }[]>`
+      select count(*)::int as rows, count(distinct transaction_id)::int as transactions, count(actor_user_account_id)::int as actors
+      from wms.audit_event where company_id = ${companyId}`
+    return trail
   }
 
   /** The first seeded row of the demo company in a table, by id, where a condition holds: for a tester's row to name. */
@@ -341,8 +351,16 @@ describe("reset-to-seed against a database of its own", { skip: database.skip },
     await queueJobs(DEMO, OTHER.company)
     const operated = await snapshot(DEMO)
     assert.notDeepEqual(operated, seeded)
+    const trailBefore = await trailOf(DEMO)
+    assert.ok(trailBefore.transactions > 1, "the seed's history and the testers' beside it")
 
     const report = await resetToSeed(fresh.url, DEMO)
+
+    // A reset also clears the tenant's audit history: what is left is the reset's own writing back, one transaction and no actor (#291).
+    const trailAfter = await trailOf(DEMO)
+    assert.deepEqual({ transactions: trailAfter.transactions, actors: trailAfter.actors }, { transactions: 1, actors: 0 })
+    assert.equal(report.swept.at(-1)?.table, "audit_event", "the log is swept last, its own sweep's rows with it")
+    assert.ok((report.swept.at(-1)?.rows ?? 0) >= trailBefore.rows)
 
     const reset = await snapshot(DEMO)
     const resetAt = resetInstant(reset, new Set([seedInstant, ...instantsIn(operated)]))
@@ -355,7 +373,7 @@ describe("reset-to-seed against a database of its own", { skip: database.skip },
     const expectedSweep = Object.entries(operated)
       .filter(([table, rows]) => !KEPT.has(table) && rows.length > 0)
       .map(([table, rows]) => [table, rows.length])
-    assert.deepEqual(Object.fromEntries(report.swept.map(({ table, rows }) => [table, rows])), Object.fromEntries(expectedSweep))
+    assert.deepEqual(Object.fromEntries(report.swept.filter(({ table }) => table !== "audit_event").map(({ table, rows }) => [table, rows])), Object.fromEntries(expectedSweep))
     assert.deepEqual(
       report.swept.map(({ table }) => table),
       SWEPT_TABLES.map(getTableName).filter((table) => report.swept.some((row) => row.table === table)),
@@ -450,13 +468,16 @@ describe("reset-to-seed against a database of its own", { skip: database.skip },
     assert.match(said[2], /Kept Organisation & Access .* so every Login stays bound; the seeded rows are back at the seed's word, and 1 account the seed does not name is as it was\.$/)
     // Every swept row but the outbox's was the seed's, and comes back from it.
     assert.equal(said[3], `The seed wrote ${sweptRows(before) - 1} rows; the route, ticket and invoice counters were put back to 1000, 1000 and 1000, as a fresh seed leaves them.`)
-    assert.deepEqual(said.slice(4), ["Outbox: 1 unpublished event went with the sweep and will never be relayed.", "pg-boss: no waiting job names the company.", ""])
+    assert.match(said[4], /^Audit history: the company's \d+ rows went with the sweep; the trail begins again with the seed writing the tenant back\.$/)
+    assert.deepEqual(said.slice(5), ["Outbox: 1 unpublished event went with the sweep and will never be relayed.", "pg-boss: no waiting job names the company.", ""])
 
     const settled = await snapshot(DEMO)
     await queueJobs(DEMO, DEMO)
     const again = script()
     assert.equal(again.status, 0, again.stderr)
-    assert.deepEqual(again.stdout.split("\n").slice(1), [
+    const lines = again.stdout.split("\n").slice(1)
+    assert.match(lines[3], /^Audit history: the company's \d+ rows went with the sweep; the trail begins again with the seed writing the tenant back\.$/, "the first reset's writing back, now history too")
+    assert.deepEqual([...lines.slice(0, 3), ...lines.slice(4)], [
       sweptLine(settled),
       "Kept Organisation & Access — the company, its projects, service providers, roles, grants, User Accounts and their access — so every Login stays bound; the seeded rows are back at the seed's word, and 1 account the seed does not name is as it was.",
       `The seed wrote ${sweptRows(settled)} rows; the route, ticket and invoice counters were already at 1000, 1000 and 1000, as a fresh seed leaves them.`,

@@ -43,6 +43,9 @@ describe("the Pilot's first generation over the seeded tenant", { skip }, () => 
   let api: Database
   let worker: Database
   const lines: string[] = []
+  /** The audit trail's length once the seed has written the tenant: the seed's inserts are history, generation's writes never are (#291). */
+  let trailAfterSeed = 0
+  const trailLength = async () => (await ownerPool.sql<{ rows: number }[]>`select count(*)::int as rows from wms.audit_event`)[0].rows
 
   const context = (): JobContext => ({ api, worker, now: () => NOW, log: (message) => void lines.push(message), send: async () => `sent-${lines.length}`, complete: settlesNothing, routing: fakeRouting() })
 
@@ -55,6 +58,7 @@ describe("the Pilot's first generation over the seeded tenant", { skip }, () => 
     ownerPool = createDb(url, { max: 2 })
     api = createDb(withDatabaseName(apiRole.url, name), { max: 2 })
     worker = createDb(withDatabaseName(workerRole.url, name), { max: 1 })
+    trailAfterSeed = await trailLength()
   })
   after(async () => {
     await api?.close()
@@ -142,5 +146,12 @@ describe("the Pilot's first generation over the seeded tenant", { skip }, () => 
       )
     }
     assert.ok(!pickups.some((row) => row.containerId === registry.containers["asset-seed-91007"]))
+  })
+
+  test("the sweep and both runs wrote no row of the audit trail: generation's writes are execution's, and the route counter they stepped is no history (#291)", async () => {
+    assert.ok(trailAfterSeed > 0, "the seed's own writing is history")
+    assert.equal(await trailLength(), trailAfterSeed)
+    const [{ next }] = await ownerPool.sql<{ next: number }[]>`select next_route_number as next from wms.company where id = ${DEMO_IDS.company}`
+    assert.equal(next, 1007, "the seven routes stepped the counter, unrecorded")
   })
 })

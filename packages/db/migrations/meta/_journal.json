@@ -134,6 +134,13 @@
       "when": 1792835336131,
       "tag": "0018_proof_storage",
       "breakpoints": true
+    },
+    {
+      "idx": 19,
+      "version": "7",
+      "when": 1792842805965,
+      "tag": "0019_audit_log",
+      "breakpoints": true
     }
   ]
 }

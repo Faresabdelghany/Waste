@@ -28,6 +28,24 @@ import type { Db, Tx } from "./client"
 /** The setting the fence reads; `wms.current_company_id()` spells the same name in SQL. */
 export const COMPANY_SETTING = "wms.company_id"
 
+/** Who is writing, for the audit trail (#291): the principal's account. Set by the API's guard alone, through `actAs`, never from anything a client sends. */
+export const ACTOR_SETTING = "wms.user_account_id"
+/** Why, for the audit trail: the office's own word for a change, the bounded `Waste-Change-Reason` header. */
+export const REASON_SETTING = "wms.change_reason"
+
+/**
+ * Names the writer of the transaction for the audit trail (sql/audit-trail.ts):
+ * the account every row the transaction changes is recorded under, and the
+ * reason, if any. Transaction-local, like the company: it ends with the
+ * transaction. The worker and the seed call nothing, and their rows say no one.
+ */
+export async function actAs(tx: Tx, actor: { userAccountId: string; reason: string | null }): Promise<void> {
+  if (!UUID.test(actor.userAccountId)) {
+    throw new Error(`actAs: "${actor.userAccountId}" is not a UUID`)
+  }
+  await tx.execute(sql`select set_config(${ACTOR_SETTING}, ${actor.userAccountId}, true), set_config(${REASON_SETTING}, ${actor.reason ?? ""}, true)`)
+}
+
 const UUID = /^[0-9a-f]{8}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{12}$/i
 
 /** Runs `fn` in a transaction that sees and writes this company's rows only. */

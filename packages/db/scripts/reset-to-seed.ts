@@ -18,9 +18,12 @@ await step(async () => {
   const url = required("DATABASE_ADMIN_URL")
   expectPilot(url, process.env.PILOT_SUPABASE_REF)
   const report = await resetToSeed(url)
-  const rows = report.swept.reduce((total, { rows: swept }) => total + swept, 0)
+  // The audit log is said apart from the state it is the history of (#291): a reset clears it.
+  const state = report.swept.filter(({ table }) => table !== "audit_event")
+  const history = report.swept.find(({ table }) => table === "audit_event")?.rows ?? 0
+  const rows = state.reduce((total, { rows: swept }) => total + swept, 0)
   summary(`Reset the demo company ${report.companyId} on ${new URL(url).hostname} to its seed, in one transaction.`)
-  summary(`Swept ${count(rows, "row")} from ${count(report.swept.length, "table")}, children first${report.swept.map(({ table, rows: swept }) => `, ${table} ${swept}`).join("")}.`)
+  summary(`Swept ${count(rows, "row")} from ${count(state.length, "table")}, children first${state.map(({ table, rows: swept }) => `, ${table} ${swept}`).join("")}.`)
   summary(
     `Kept Organisation & Access — the company, its projects, service providers, roles, grants, User Accounts and their access — so every Login stays bound; ` +
       `the seeded rows are back at the seed's word, and ${count(report.otherAccounts, "account")} the seed does not name ${report.otherAccounts === 1 ? "is" : "are"} as it was.`,
@@ -29,6 +32,7 @@ await step(async () => {
   summary(
     `The seed wrote ${count(report.written, "row")}; the route, ticket and invoice counters ${report.countersReset ? "were put back to" : "were already at"} ${counters}, as a fresh seed leaves them.`,
   )
+  summary(`Audit history: the company's ${count(history, "row")} went with the sweep; the trail begins again with the seed writing the tenant back.`)
   summary(
     report.unsentEvents === 0
       ? "Outbox: no unpublished event was swept."
