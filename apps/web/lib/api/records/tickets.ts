@@ -33,6 +33,7 @@
 // server id rides beside its web id (`ASSIGNEE_ACCOUNT_KEY`), since what the
 // list's "Mine" compares with is `/me`'s account, a server id.
 import type { EvidenceProof, StopEvidence, Ticket, TicketDetail, TicketEvent, TicketEvidence, TicketLinks } from "@waste/contracts/tickets"
+import { slaStateOf, type SlaState } from "@waste/domain/resolution/sla"
 import { ticketTransition, TICKET_COMMANDS, type TicketCommand } from "@waste/domain/resolution/transitions"
 import { OPEN_TICKET_STATUSES, TICKET_KINDS, TICKET_PRIORITIES, TICKET_RESOLUTIONS, TICKET_SOURCES, TICKET_VISIBILITIES, type TicketStatus } from "@waste/domain/resolution/vocabulary"
 
@@ -60,6 +61,12 @@ export const TICKET_PREFIX = "ticket"
 
 /** The fact a ticket record carries its label under (`T-1001`): never "Ticket", the table's title column's heading (#253). */
 export const TICKET_NUMBER_FACT = "Number"
+
+/** The fact a ticket record carries what its due date reads as under (O4 of #290), the list's SLA category. */
+export const TICKET_SLA_FACT = "SLA"
+
+/** What a due date reads as, in a person's words: an open case before its due date is on track. */
+export const SLA_STATE_LABELS: Readonly<Record<SlaState, string>> = { overdue: "Overdue", due: "On track", met: "Met", breached: "Breached", none: "No due date" }
 
 /** What opening a ticket is told, on the row the write left (#283): its number once the API has answered with it, as every other ticket toast names it; its subject only where that row is not known. A missed collection its stop's record answered (M6 of #293) comes back completed, and says so. */
 export function ticketOpened(record: Pick<BusinessRecord, "name" | "facts" | "status">): { title: string; description: string } {
@@ -135,6 +142,8 @@ export function toTicketRecord(ticket: Ticket, context: MappingContext): Busines
     "Opened via": statusLabel(ticket.source),
     Occurred: shownOn(ticket.occurredAt, project.timezone),
     Due: ticket.dueAt === null ? "None" : shownOn(ticket.dueAt, project.timezone),
+    // As the list was read: a ticket that falls due while the list is open reads overdue at the next read.
+    [TICKET_SLA_FACT]: SLA_STATE_LABELS[slaStateOf(ticket, context.now ?? new Date())],
     Project: project.name ?? project.webId,
   }
   for (const link of links) facts[link.fact] = link.name

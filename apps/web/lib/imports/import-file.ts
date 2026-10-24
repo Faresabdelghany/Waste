@@ -13,6 +13,7 @@ import type { ModuleKey } from "@waste/domain/access/modules"
 import { importRows, type ImportFile, type ImportRow } from "@waste/domain/imports/csv"
 import { IMPORT_BATCH_MAX, IMPORT_ROWS_MAX } from "@waste/domain/imports/vocabulary"
 
+import { allows, type Grants } from "@/lib/api/grants"
 import { REASON_MAX } from "@/lib/data/action-decision"
 
 /** Each kind as the screen offers it: its label, the module its rows are written to, and whether a file of it is a project's. */
@@ -27,17 +28,11 @@ export type ImportKindOption = (typeof IMPORT_KIND_OPTIONS)[number]
 
 export const kindOption = (kind: ImportKind): ImportKindOption => IMPORT_KIND_OPTIONS.find((option) => option.kind === kind) ?? IMPORT_KIND_OPTIONS[0]
 
-/** A role's grants as /me answers them. */
-type Grants = readonly { moduleKey: string; actions: readonly string[] }[]
-
-const allows = (grants: Grants, moduleKey: string, action: string): boolean =>
-  grants.some((grant) => grant.moduleKey === moduleKey && grant.actions.includes(action))
-
 /** Whether the role reads the imports run here: the import's own `view`. */
-export const mayView = (grants: Grants | undefined): boolean => allows(grants ?? [], "improve.imports", "view")
+export const mayView = (grants: Grants | undefined): boolean => allows(grants, "improve.imports", "view")
 
 /** Whether the role may run an import at all: the import's own `create`. */
-export const mayImport = (grants: Grants | undefined): boolean => allows(grants ?? [], "improve.imports", "create")
+export const mayImport = (grants: Grants | undefined): boolean => allows(grants, "improve.imports", "create")
 
 /** The kinds a role may import: those whose module it may write a row to, by making a record or changing one. */
 export function importableKinds(grants: Grants | undefined): ImportKindOption[] {

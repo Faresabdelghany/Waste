@@ -10,26 +10,33 @@
 // payment terms, cost centres and routing rules have no API, and the Pilot's
 // payment terms are the domain's `PAYMENT_TERMS_DAYS`. Fixture mode is
 // unchanged. The Sorting Guide (#293) is the API's alone too, so only the
-// Pilot offers it.
+// Pilot offers it. So is the Ticket SLA (O4 of #290), which takes the place
+// of Tickets & communication on the Pilot: that pane's ticket types,
+// templates and channels have no API, and its SLA is the new pane's, so a
+// link to it there opens the SLA.
 import { MASTER_DATA_SETTINGS_PANE_ID } from "./business-links"
 import { SORTING_GUIDE_SETTINGS_PANE_ID } from "./sorting-guide"
+import { TICKET_SLA_SETTINGS_PANE_ID } from "./ticket-sla"
 
 export const ASSET_MANAGEMENT_SETTINGS_PANE_ID = "asset-management"
 export const FINANCE_SETTINGS_PANE_ID = "finance"
+/** The fixtures' Tickets & communication, where `configure.templates` opens in fixture mode. */
+export const TICKETS_COMMUNICATION_SETTINGS_PANE_ID = "ticket-comms"
 /** Settings › Commercial › Products, where a link to the Pilot's hidden Finance pane lands. */
 export const COMMERCIAL_PRODUCTS_SETTINGS_PANE_ID = "commercial-products"
 
 /** Whether the Settings nav offers a pane, with the adapter configured or not. */
 export function settingsPaneOffered(paneId: string, configured: boolean): boolean {
-  if (paneId === MASTER_DATA_SETTINGS_PANE_ID || paneId === SORTING_GUIDE_SETTINGS_PANE_ID) return configured
-  if (paneId === ASSET_MANAGEMENT_SETTINGS_PANE_ID || paneId === FINANCE_SETTINGS_PANE_ID) return !configured
+  if (paneId === MASTER_DATA_SETTINGS_PANE_ID || paneId === SORTING_GUIDE_SETTINGS_PANE_ID || paneId === TICKET_SLA_SETTINGS_PANE_ID) return configured
+  if (paneId === ASSET_MANAGEMENT_SETTINGS_PANE_ID || paneId === FINANCE_SETTINGS_PANE_ID || paneId === TICKETS_COMMUNICATION_SETTINGS_PANE_ID) return !configured
   return true
 }
 
-/** The pane a link to one opens: on the Pilot, Asset management's is Master data's, and Finance & invoicing's is Settings › Commercial's products. */
+/** The pane a link to one opens: on the Pilot, Asset management's is Master data's, Finance & invoicing's is Settings › Commercial's products, and Tickets & communication's is the Ticket SLA. */
 export function settingsPaneOpened(paneId: string, configured: boolean): string {
   if (!configured) return paneId
   if (paneId === ASSET_MANAGEMENT_SETTINGS_PANE_ID) return MASTER_DATA_SETTINGS_PANE_ID
   if (paneId === FINANCE_SETTINGS_PANE_ID) return COMMERCIAL_PRODUCTS_SETTINGS_PANE_ID
+  if (paneId === TICKETS_COMMUNICATION_SETTINGS_PANE_ID) return TICKET_SLA_SETTINGS_PANE_ID
   return paneId
 }

@@ -77,6 +77,7 @@
 // Nothing points at an alert, so it carries no project key; and it has no
 // display number, being named by its title.
 import { TICKET_EVENT_SHAPES } from "@waste/domain/resolution/event-shapes"
+import { TICKET_SLA_HOURS_MAX } from "@waste/domain/resolution/sla"
 import { ALERT_KINDS, ALERT_SEVERITIES, ALERT_SOURCES, ALERT_STATUSES, TICKET_EVENT_KINDS, TICKET_KINDS, TICKET_PRIORITIES, TICKET_RESOLUTIONS, TICKET_SOURCES, TICKET_STATUSES, TICKET_VISIBILITIES } from "@waste/domain/resolution/vocabulary"
 import { sql, type SQL } from "drizzle-orm"
 import { check, index, integer, text, timestamp, uniqueIndex, uuid, type PgColumn } from "drizzle-orm/pg-core"
@@ -114,7 +115,7 @@ export const ticket = wms.table(
     description: text().notNull(),
     /** When the issue or request happened: the caller's word, or the event's; not when the row was made. */
     occurredAt: instant().notNull(),
-    /** The response target; the caller's until a ticket type supplies an SLA. */
+    /** The due date: the opener's, or the project's SLA target of the kind and priority from `occurred_at` (`ticket_sla`); null for neither. */
     dueAt: instant(),
     /** Who works it; null is unassigned. Moved by `assign` and by nothing else. */
     assigneeUserAccountId: uuid(),
@@ -334,5 +335,34 @@ export const alert = wms.table(
     tenantIndex(t, t.raisedBy),
     tenantIndex(t, t.acknowledgedBy),
     tenantIndex(t, t.resolvedBy),
+  ],
+)
+
+// The SLA (O4 of #290): the hours a project gives a ticket of a priority from
+// when it happened to its due date, for every kind (`kind` null) or for one kind, the
+// kind's own winning (`slaTargetFor`, @waste/domain/resolution/sla). A pair
+// is named once per project, every kind included, since the key treats nulls
+// as equal. Configuration the office edits under `configure.templates`, so
+// its rows are audited (sql/audit-trail.ts); `openTicket` reads them as it
+// opens a ticket, the API's and the consumer's alike.
+export const ticketSla = wms.table(
+  "ticket_sla",
+  {
+    ...id,
+    ...projectScoped,
+    ...timestamps,
+    /** The kind the target is for; null for every kind without one of its own. */
+    kind: text(),
+    priority: text().notNull(),
+    /** From when the ticket's issue happened to its due date, on the wall clock: 1 to a year. */
+    hours: integer().notNull(),
+  },
+  (t) => [
+    companyReference(t, company),
+    tenantReference(t, [t.projectId], project),
+    tenantUnique(t, t.projectId, t.kind, t.priority).nullsNotDistinct(),
+    oneOf(t.kind, TICKET_KINDS),
+    oneOf(t.priority, TICKET_PRIORITIES),
+    check(tableObjectName(t.id.table, "hours_range", "ticketSla"), sql`${t.hours} between 1 and ${sql.raw(String(TICKET_SLA_HOURS_MAX))}`),
   ],
 )

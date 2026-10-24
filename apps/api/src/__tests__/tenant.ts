@@ -63,7 +63,7 @@ import {
 } from "@waste/db/schema/customers"
 import { company, project, serviceProvider } from "@waste/db/schema/organisation"
 import { planningArea, planningAreaBoundary } from "@waste/db/schema/planning-areas"
-import { alert, ticket, ticketEvent } from "@waste/db/schema/resolution"
+import { alert, ticket, ticketEvent, ticketSla } from "@waste/db/schema/resolution"
 import { collectionGroup, collectionGroupContainer, collectionGroupContainerType, collectionGroupFraction, routeScheme } from "@waste/db/schema/route-schemes"
 import { withCompany } from "@waste/db/tenant"
 import { normaliseGrants, type Grant } from "@waste/domain/access/grants"
@@ -341,6 +341,7 @@ export async function dropTenant(pool: Database, companyId: string, owner?: Data
     await tx.delete(outboxEvent).where(eq(outboxEvent.companyId, companyId))
     await tx.delete(routingQuota).where(eq(routingQuota.companyId, companyId))
     await tx.delete(sortingGuideItem).where(eq(sortingGuideItem.companyId, companyId))
+    await tx.delete(ticketSla).where(eq(ticketSla.companyId, companyId))
     await tx.delete(plan).where(eq(plan.companyId, companyId))
     await tx.delete(session).where(eq(session.companyId, companyId))
     await tx.delete(pickup).where(eq(pickup.companyId, companyId))

@@ -80,7 +80,7 @@ import { importRun, importRunRow } from "../schema/imports"
 import { company, project, serviceProvider } from "../schema/organisation"
 import { depot, unloadingStation, unloadingStationFraction, warehouse } from "../schema/places"
 import { planningArea, planningAreaBoundary } from "../schema/planning-areas"
-import { alert, ticket, ticketEvent } from "../schema/resolution"
+import { alert, ticket, ticketEvent, ticketSla } from "../schema/resolution"
 import { collectionGroup, collectionGroupContainer, collectionGroupContainerType, collectionGroupFraction, routeScheme } from "../schema/route-schemes"
 import { plan, planLeg, planStop, routingQuota } from "../schema/routing"
 import { sortingGuideItem } from "../schema/sorting-guide"
@@ -178,8 +178,11 @@ export const SUBSCRIPTION_PAUSE_AUDITED: readonly Audited[] = [
   { table: subscriptionPause, module: "customers.agreements", parent: setOf(subscription, subscriptionPause.subscriptionId) },
 ]
 
+/** The ticket SLA's (O4 of #290): Resolution's configuration, the SLA a ticket is due by, a set the project's targets are replaced through. Its triggers are in the migration that creates `ticket_sla`. */
+export const TICKET_SLA_AUDITED: readonly Audited[] = [{ table: ticketSla, module: "configure.templates", parent: setOf(project, ticketSla.projectId) }]
+
 /** Every audited table: 0019's, then each later migration's, in the order they were written. */
-export const AUDITED: readonly Audited[] = [...AUDITED_AT_0019, ...SUBSCRIPTION_PAUSE_AUDITED]
+export const AUDITED: readonly Audited[] = [...AUDITED_AT_0019, ...SUBSCRIPTION_PAUSE_AUDITED, ...TICKET_SLA_AUDITED]
 
 /** The audited tables by name, for a test that reads a migrated database's triggers. */
 export const AUDITED_TABLE_NAMES: ReadonlySet<string> = new Set(AUDITED.map((entry) => getTableName(entry.table)))

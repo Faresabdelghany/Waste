@@ -16,7 +16,12 @@
 // is `nextNumber` (commands/shared.ts), one `update … returning` under the
 // company's row lock, the route's rule (`next_route_number`) one at a time: a
 // ticket is one create, and the lock is held for the rest of the transaction,
-// which tens of tickets a day do not notice.
+// which tens of tickets a day do not notice. A draft whose due date is
+// `BY_SLA` is due by the project's SLA target of its kind and priority,
+// counted from its `occurredAt` (`ticket_sla`, `slaTargetFor`), or never where
+// the project sets none (O4 of #290): the office's create when its body names
+// no due date, and every ticket the consumer opens — so a job the queue held
+// back hands its ticket no extra time.
 //
 // `appendTicketEvent` is the allocation's `appendEvent` rule (#101): every
 // write to the ticket's row is followed by one `ticket_event` in the same
@@ -32,15 +37,20 @@
 // `ticket_event_kind_shape` to answer as a 500 naming a constraint.
 import type { Ticket, TicketLinks } from "@waste/contracts/tickets"
 import { ticketEventShapeIssue } from "@waste/domain/resolution/event-shapes"
+import { dueBySla, slaTargetFor } from "@waste/domain/resolution/sla"
 import type { TicketEventKind, TicketKind, TicketPriority, TicketResolution, TicketSource, TicketStatus, TicketVisibility } from "@waste/domain/resolution/vocabulary"
+import { and, eq, isNull, or } from "drizzle-orm"
 
 import type { Tx } from "../client"
 import { newId as processId, type IdMinter } from "../ids"
-import { ticket, ticketEvent } from "../schema/resolution"
+import { ticket, ticketEvent, ticketSla } from "../schema/resolution"
 import { linkAlert } from "./alert-links"
 import { emit } from "./outbox"
 import { eventColumns, ticketColumns, ticketOf, type TicketEventRow, type TicketRow } from "./resolution-rows"
 import { nextNumber } from "./shared"
+
+/** A draft's due date that is the project's SLA target of the ticket's kind and priority, from when its issue or request happened. */
+export const BY_SLA = "sla"
 
 /** The case as a caller opens it: what the office's body or the consumer's `ticketFor` says, with every link spelled (null where none). */
 export type TicketDraft = {
@@ -52,7 +62,8 @@ export type TicketDraft = {
   description: string
   /** When the issue or request happened: the body's word, the request's clock, or the event's instant. */
   occurredAt: Date
-  dueAt: Date | null
+  /** The opener's due date, null for none, or `BY_SLA`: the project's target, none where it sets none. */
+  dueAt: Date | null | typeof BY_SLA
   assigneeUserAccountId: string | null
   links: TicketLinks
   /** The alert the ticket answers, linked in the same transaction; null for none. */
@@ -131,6 +142,7 @@ export async function appendTicketEvent(tx: Tx, ticketRef: TicketRef, event: Tic
  */
 export async function openTicket(tx: Tx, input: OpenTicketInput): Promise<{ row: TicketRow; answered: Ticket }> {
   const { companyId, draft, createdBy, sourceEventId } = input
+  const dueAt = draft.dueAt === BY_SLA ? await dueBySlaOf(tx, companyId, draft) : draft.dueAt
   const number = await nextNumber(tx, companyId, "nextTicketNumber")
   const [row] = await tx
     .insert(ticket)
@@ -146,7 +158,7 @@ export async function openTicket(tx: Tx, input: OpenTicketInput): Promise<{ row:
       subject: draft.subject,
       description: draft.description,
       occurredAt: draft.occurredAt,
-      dueAt: draft.dueAt,
+      dueAt,
       assigneeUserAccountId: draft.assigneeUserAccountId,
       createdBy,
       sourceEventId,
@@ -166,4 +178,18 @@ export async function openTicket(tx: Tx, input: OpenTicketInput): Promise<{ row:
   const answered = ticketOf(row)
   await emit(tx, { companyId }, { aggregate: "ticket", aggregateId: row.id, kind: "ticket-opened", payload: answered, projectId: row.projectId, occurredAt: input.now() })
   return { row, answered }
+}
+
+/** The due date the project's SLA gives a ticket of the draft's kind and priority, from when it happened: its kind's target, else every kind's; null where neither is set. */
+async function dueBySlaOf(tx: Tx, companyId: string, draft: Pick<TicketDraft, "projectId" | "kind" | "priority" | "occurredAt">): Promise<Date | null> {
+  const targets = await tx
+    .select({ kind: ticketSla.kind, priority: ticketSla.priority, hours: ticketSla.hours })
+    .from(ticketSla)
+    .where(and(eq(ticketSla.companyId, companyId), eq(ticketSla.projectId, draft.projectId), eq(ticketSla.priority, draft.priority), or(isNull(ticketSla.kind), eq(ticketSla.kind, draft.kind))))
+  const target = slaTargetFor(
+    targets.map((row) => ({ kind: row.kind as TicketKind | null, priority: row.priority as TicketPriority, hours: row.hours })),
+    draft.kind,
+    draft.priority,
+  )
+  return target === undefined ? null : dueBySla(draft.occurredAt, target.hours)
 }

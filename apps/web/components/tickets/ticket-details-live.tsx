@@ -54,6 +54,7 @@ import {
   TICKET_LINKS,
   TICKET_MACHINE_COMMANDS,
   TICKET_NUMBER_FACT,
+  TICKET_SLA_FACT,
   TICKETS_MODULE,
   type TicketCommandName,
 } from "@/lib/api/records/tickets"
@@ -357,6 +358,8 @@ export function LiveTicketDetailsDialog({ record, onClose }: { record: BusinessR
                   <PickRow label="Priority" value={value("priority")} tokens={TICKET_PRIORITIES} disabled={!editable} onPick={(token) => save({ priority: token }, "Priority changed")} />
                   <PickRow label="Kind" value={value("kind")} tokens={TICKET_KINDS} disabled={!editable} onPick={(token) => save({ kind: token }, "Kind changed")} />
                   <DueRow value={value("dueAt")} shown={live.facts.Due ?? "None"} disabled={!editable} onSave={(dueAt) => save({ dueAt }, dueAt === "" ? "Due cleared" : "Due changed")} />
+                  {/* What the due date reads as when the ticket was read (O4 of #290): overdue, on track, met or breached. */}
+                  {live.facts[TICKET_SLA_FACT] !== undefined && <Row label="SLA" value={live.facts[TICKET_SLA_FACT]} />}
                   <Row label="Occurred" value={live.facts.Occurred ?? ""} />
                   {live.facts.Resolution !== undefined && <Row label="Resolution" value={live.facts.Resolution} />}
                   {live.facts["Re-collection route"] !== undefined && <Row label="Re-collection route" value={live.facts["Re-collection route"]} />}

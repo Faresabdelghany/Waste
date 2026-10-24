@@ -87,7 +87,7 @@ export const ticketFields = {
   description: Paragraph,
   /** When the issue or request happened. */
   occurredAt: IsoDateTime,
-  /** The response target, the caller's; null until a ticket type supplies one. */
+  /** The due date: the opener's, or the project's SLA target of the kind and priority from `occurredAt` (O4 of #290); null for neither. */
   dueAt: IsoDateTime.nullable(),
   /** Who works it; null is unassigned. */
   assigneeUserAccountId: Id.nullable(),
@@ -188,6 +188,7 @@ export const TicketCreate = z
     source: TicketSource.exclude(["driver-app", "dispatch"]).default("office").describe("Defaults to office when absent; driver-app and dispatch are the consumer's."),
     /** When the issue or request happened; the request's clock when absent. */
     occurredAt: IsoDateTime.optional(),
+    /** The due date; null for none, and the project's SLA target of the kind and priority when absent. */
     dueAt: IsoDateTime.nullable().optional(),
     assigneeUserAccountId: Id.nullable().optional(),
     /** What the ticket is about; nothing at all for an internal task. */
@@ -284,11 +285,13 @@ export const TicketComment = z.strictObject({
 })
 export type TicketComment = z.infer<typeof TicketComment>
 
-/** A page of tickets: one project's, by status or open at all, by kind, priority or source, by assignee, about a customer, a property, a route, a pickup, a container or a driver, over a window of when they happened. */
+/** A page of tickets: one project's, by status or open at all, overdue or not, by kind, priority or source, by assignee, about a customer, a property, a route, a pickup, a container or a driver, over a window of when they happened. */
 export const TicketListQuery = ProjectScopedListQuery.extend({
   status: TicketStatus.optional(),
   /** A query string spells a boolean as `true` or `false`, exactly; `true` is the four open statuses, `false` the two closed. */
   open: z.stringbool({ truthy: ["true"], falsy: ["false"], case: "sensitive" }).optional(),
+  /** Likewise: `true` is an open ticket past its due date (O4 of #290), `false` every other. */
+  overdue: z.stringbool({ truthy: ["true"], falsy: ["false"], case: "sensitive" }).optional(),
   kind: TicketKind.optional(),
   priority: TicketPriority.optional(),
   source: TicketSource.optional(),

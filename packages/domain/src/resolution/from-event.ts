@@ -39,7 +39,7 @@
 // route alone names no stop, so it links no container and no place either,
 // whatever the worker read (§3: "container and place then", then being when
 // a pickup was named). What the draft does not carry is the API's:
-// `occurredAt` is the event's, `dueAt` null (no SLA yet), `createdBy` null
+// `occurredAt` is the event's, `dueAt` the project's SLA (O4 of #290), `createdBy` null
 // and `sourceEventId` the event's id, which `ticket_origin_shape` ties
 // together.
 import { CLOSING_REASONS, type ClosingReason, type OutboxKind, type PickupReason, type PickupService } from "../execution/vocabulary"
