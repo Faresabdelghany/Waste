@@ -48,6 +48,7 @@ test("the office opens a ticket about a route, assigns it to themselves, starts 
   expect(opened.status(), await opened.text()).toBe(201)
   expect(opened.request().postDataJSON()).toEqual({ projectId: project.id, subject, description: "Glass above the rim of the bank", kind: "overflow", priority: "high", source: "office", links: { routeId: about.id } })
   const ticket = (await opened.json()) as ApiTicket
+  await expect(toasts(page)).toContainText(`${ticket.label} is open.`)
 
   // The ticket made opens in its details, the case as the API holds it.
   const details = page.getByRole("dialog", { name: subject })
@@ -204,6 +205,9 @@ test("an alert about a vehicle is raised by hand, acknowledged and handed to a t
   expect(opened.status(), await opened.text()).toBe(201)
   expect(opened.request().postDataJSON()).toEqual({ projectId: project.id, subject: title, description: "No position from WH-24 for 14 minutes", kind: "other", priority: "high", source: "office", alertId: alert.id })
   const ticket = (await opened.json()) as ApiTicket
+  // Told by the number the API answered, as every other ticket toast names it (#283).
+  await expect(toasts(page)).toContainText(`${ticket.label} is open.`)
+  await expect(toasts(page)).not.toContainText("its number follows from the API")
 
   // The ticket made opens in its details and names the alert it answers; the API linked the two.
   await expect(page).toHaveURL(/module=tickets/)

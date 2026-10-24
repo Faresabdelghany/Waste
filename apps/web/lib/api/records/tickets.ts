@@ -59,6 +59,12 @@ export const TICKET_PREFIX = "ticket"
 /** The fact a ticket record carries its label under (`T-1001`): never "Ticket", the table's title column's heading (#253). */
 export const TICKET_NUMBER_FACT = "Number"
 
+/** What opening a ticket is told, on the row the write left (#283): its number once the API has answered with it, as every other ticket toast names it; its subject only where that row is not known. */
+export function ticketOpened(record: Pick<BusinessRecord, "name" | "facts">): { title: string; description: string } {
+  const number = record.facts[TICKET_NUMBER_FACT]
+  return { title: "Ticket opened", description: number === undefined ? `${record.name} is open; its number follows from the API.` : `${number} is open.` }
+}
+
 /** The links the module's "Customer · property" column shows, in its order: whom and where a case is about. */
 const CONTEXT_LINKS: ReadonlyArray<keyof TicketLinks> = ["customerId", "propertyId", "sharedCollectionPointId"]
 

@@ -20,15 +20,8 @@ import {
   DropdownMenuTrigger,
 } from "@/components/ui/dropdown-menu"
 import { useApiSession } from "@/components/waste/api-session-store"
+import { initialsOf } from "@/lib/data/account-profile"
 import { cn } from "@/lib/utils"
-
-/** The first letters of the first and last names; one letter for a single word. */
-function initialsOf(name: string): string {
-  const words = name.trim().split(/\s+/).filter(Boolean)
-  const first = words[0]?.[0] ?? ""
-  const last = words.length > 1 ? (words[words.length - 1]?.[0] ?? "") : ""
-  return `${first}${last}`.toUpperCase()
-}
 
 export function AccountMenu({ className }: { className?: string }) {
   const { me, session, signOut } = useApiSession()
