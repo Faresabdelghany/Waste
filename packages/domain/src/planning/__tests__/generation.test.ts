@@ -233,6 +233,7 @@ const candidate = (containerId: string, label: string, values: Partial<StopCandi
   sharedCollectionPointId: null,
   located: true,
   contained: true,
+  paused: false,
   ...values,
 })
 
@@ -301,6 +302,24 @@ describe("resolveStops", () => {
     // The same container with no manual group wanting it is unlocated as before; group order does not matter, since manual groups claim first whatever their position.
     assert.deepEqual(resolveStops([ruleGroup("residual", 1, residualRule)], candidates, noCompatibility).unlocated, ["c5"])
     assert.deepEqual(resolveStops([ruleGroup("residual", 1, residualRule), manualGroup("picked", 2, ["c5"])], candidates, noCompatibility).unlocated, [])
+  })
+
+  test("a container whose subscription is paused that day (#291) has no stop from a manual group or a rule group, and is not unlocated: it is not wanted, not lost", () => {
+    const candidates = [
+      candidate("c1", "BIN-1"),
+      candidate("c2", "BIN-2", { paused: true }),
+      candidate("c3", "BIN-3", { paused: true, located: false, contained: false }),
+      candidate("c4", "BIN-4", { paused: true }),
+    ]
+    const { stops, unlocated } = resolveStops([manualGroup("picked", 1, ["c4", "c1"]), ruleGroup("residual", 2, residualRule)], candidates, noCompatibility)
+    assert.deepEqual(stops.get("picked")?.map((stop) => [stop.containerId, stop.position]), [["c1", 1]], "the paused pick is passed over, and the next takes its position")
+    assert.deepEqual(stops.get("residual"), [], "c1 is the pick's, and the rest are paused")
+    assert.deepEqual(unlocated, [], "a paused container is not one nobody could place, located or not")
+    assert.deepEqual(
+      ruleMatchSet(candidates, residualRule, noCompatibility).map((match) => match.containerId),
+      ["c1", "c2", "c4"],
+      "the drift stamp still reads what the rule matches: a pause is not drift",
+    )
   })
 
   test("a rule group without a rule, or a day nothing is contained on, plans no stops and reports nothing unlocated it can place", () => {

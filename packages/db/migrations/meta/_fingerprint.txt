@@ -2308,6 +2308,30 @@ policy wms.subscription subscription_public_door permissive SELECT to=wms_public
    FROM wms.project published
   WHERE ((published.company_id = subscription.company_id) AND (published.id = subscription.project_id) AND (published.public_slug IS NOT NULL))))) check=none
 policy wms.subscription subscription_tenant_fence permissive ALL to=wms_api using=(company_id = ( SELECT wms.current_company_id() AS current_company_id)) check=(company_id = ( SELECT wms.current_company_id() AS current_company_id))
+relation wms.subscription_pause kind=table owner=<owner> persistence=p rls=true force-rls=true replica-identity=d acl=[<owner>=DELETE,INSERT,MAINTAIN,REFERENCES,SELECT,TRIGGER,TRUNCATE,UPDATE/<owner> wms_api=DELETE,INSERT,SELECT,UPDATE/<owner> wms_worker=SELECT/<owner>]
+column wms.subscription_pause 1 id uuid not-null default=wms.uuidv7()
+column wms.subscription_pause 2 company_id uuid not-null acl=[wms_public=SELECT/<owner>]
+column wms.subscription_pause 3 project_id uuid not-null acl=[wms_public=SELECT/<owner>]
+column wms.subscription_pause 4 created_at timestamp with time zone not-null default=now()
+column wms.subscription_pause 5 updated_at timestamp with time zone not-null default=now()
+column wms.subscription_pause 6 valid_from date not-null acl=[wms_public=SELECT/<owner>]
+column wms.subscription_pause 7 valid_to date acl=[wms_public=SELECT/<owner>]
+column wms.subscription_pause 8 subscription_id uuid not-null acl=[wms_public=SELECT/<owner>]
+constraint wms.subscription_pause subscription_pause_company_id_fk FOREIGN KEY (company_id) REFERENCES wms.company(id)
+constraint wms.subscription_pause subscription_pause_no_overlap EXCLUDE USING gist (company_id WITH =, subscription_id WITH =, daterange(valid_from, valid_to, '[)'::text) WITH &&)
+constraint wms.subscription_pause subscription_pause_pkey PRIMARY KEY (id)
+constraint wms.subscription_pause subscription_pause_project_id_fk FOREIGN KEY (company_id, project_id) REFERENCES wms.project(company_id, id)
+constraint wms.subscription_pause subscription_pause_subscription_id_fk FOREIGN KEY (company_id, project_id, subscription_id) REFERENCES wms.subscription(company_id, project_id, id)
+constraint wms.subscription_pause subscription_pause_validity CHECK (((valid_to IS NULL) OR (valid_to > valid_from)))
+index wms.subscription_pause subscription_pause_no_overlap CREATE INDEX subscription_pause_no_overlap ON wms.subscription_pause USING gist (company_id, subscription_id, daterange(valid_from, valid_to, '[)'::text))
+index wms.subscription_pause subscription_pause_pkey CREATE UNIQUE INDEX subscription_pause_pkey ON wms.subscription_pause USING btree (id)
+index wms.subscription_pause subscription_pause_subscription_id_idx CREATE INDEX subscription_pause_subscription_id_idx ON wms.subscription_pause USING btree (company_id, subscription_id)
+trigger wms.subscription_pause subscription_pause_audit_trail enabled=O CREATE TRIGGER subscription_pause_audit_trail AFTER INSERT OR DELETE OR UPDATE ON wms.subscription_pause FOR EACH ROW EXECUTE FUNCTION wms.audit_row('subscription', 'subscription_id')
+trigger wms.subscription_pause subscription_pause_touch_updated_at enabled=O CREATE TRIGGER subscription_pause_touch_updated_at BEFORE UPDATE ON wms.subscription_pause FOR EACH ROW EXECUTE FUNCTION wms.touch_updated_at()
+policy wms.subscription_pause subscription_pause_public_door permissive SELECT to=wms_public using=((company_id = ( SELECT wms.current_company_id() AS current_company_id)) AND (EXISTS ( SELECT 1
+   FROM wms.project published
+  WHERE ((published.company_id = subscription_pause.company_id) AND (published.id = subscription_pause.project_id) AND (published.public_slug IS NOT NULL))))) check=none
+policy wms.subscription_pause subscription_pause_tenant_fence permissive ALL to=wms_api using=(company_id = ( SELECT wms.current_company_id() AS current_company_id)) check=(company_id = ( SELECT wms.current_company_id() AS current_company_id))
 relation wms.ticket kind=table owner=<owner> persistence=p rls=true force-rls=true replica-identity=d acl=[<owner>=DELETE,INSERT,MAINTAIN,REFERENCES,SELECT,TRIGGER,TRUNCATE,UPDATE/<owner> wms_api=DELETE,INSERT,SELECT,UPDATE/<owner> wms_worker=SELECT/<owner>]
 column wms.ticket 1 id uuid not-null default=wms.uuidv7()
 column wms.ticket 2 company_id uuid not-null
@@ -2888,4 +2912,5 @@ journal 1792846267723 3c3b26a595add00ba051ae7cde46c1a2ed17b90c8576e94b77158085ab
 journal 1792849026873 2533f2d6782a4fa23496fd449cf6e420ae0d6b1c8031c6ef6398faa8878edf60
 journal 1792850584864 668e5896a05fba6d4a1237e565f8688e46aa923d1f1de3b921ba58baee5fc58f
 journal 1792852172844 5b8ae15e560cf82f9d1d4aab8e4dd4c3a48405fb2ed3dba507b5c9b0caccac08
+journal 1792855994902 ed271976c254711aed17a7b7aab7841cb2251fa343ec29a4de366b49f61f876c
 pgboss-version 42

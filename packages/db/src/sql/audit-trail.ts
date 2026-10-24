@@ -47,7 +47,7 @@ import type { PgColumn, PgTable } from "drizzle-orm/pg-core"
 import { columnName, qualifiedTable, quoted, tableObjectName } from "../names"
 import { ACTOR_SETTING, REASON_SETTING } from "../tenant"
 import { projectAccess, role, roleGrant, serviceProviderAccess, userAccount } from "../schema/access"
-import { agreement, subscription } from "../schema/agreements"
+import { agreement, subscription, subscriptionPause } from "../schema/agreements"
 import { vehicleAllocation, vehicleAllocationEvent } from "../schema/allocations"
 import { auditEvent } from "../schema/audit"
 import { containerType, product, serviceFrequency, wasteFraction } from "../schema/catalogue"
@@ -105,7 +105,14 @@ export type Exempt = { table: PgTable; why: string }
 
 const setOf = (table: PgTable, column: PgColumn) => ({ table, column })
 
-export const AUDITED: readonly Audited[] = [
+/**
+ * The audited tables as migration 0019 wrote their triggers, frozen: its
+ * rendering test reads this list, so a table audited later never edits it.
+ * A later migration that creates an audited table spreads a list of its own
+ * into `AUDITED` below, and its own rendering test pins the triggers it
+ * writes (the pattern `public-door.ts` set for the public door's grants).
+ */
+export const AUDITED_AT_0019: readonly Audited[] = [
   // Organisation & Access, who may do what and who belongs where.
   { table: company, module: "configure.organization", ignored: [company.nextRouteNumber, company.nextTicketNumber, company.nextInvoiceNumber] },
   { table: project, module: "configure.organization" },
@@ -165,6 +172,14 @@ export const AUDITED: readonly Audited[] = [
   // The Sorting Guide (#293): what the office tells residents goes where.
   { table: sortingGuideItem, module: "configure.sorting-guide" },
 ]
+
+/** The subscription's pause (#291, slice 10b), a set of its subscription: its trigger is the pause's migration's. */
+export const SUBSCRIPTION_PAUSE_AUDITED: readonly Audited[] = [
+  { table: subscriptionPause, module: "customers.agreements", parent: setOf(subscription, subscriptionPause.subscriptionId) },
+]
+
+/** Every audited table: 0019's, then each later migration's, in the order they were written. */
+export const AUDITED: readonly Audited[] = [...AUDITED_AT_0019, ...SUBSCRIPTION_PAUSE_AUDITED]
 
 /** The audited tables by name, for a test that reads a migrated database's triggers. */
 export const AUDITED_TABLE_NAMES: ReadonlySet<string> = new Set(AUDITED.map((entry) => getTableName(entry.table)))

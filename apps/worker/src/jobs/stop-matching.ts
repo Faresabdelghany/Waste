@@ -10,7 +10,11 @@
 // of the scheme's planning area in force on that day. Geography is
 // containment in the boundary in force, never a stored area id: the
 // Registry's `container` carries none on purpose, and a boundary that moves
-// next month leaves this week's routes as they were.
+// next month leaves this week's routes as they were. And whether a pause of
+// the subscription is in force that day (#291, slice 10): a paused row is
+// still a candidate, `paused`, so the domain passes it over in every group
+// without counting it unlocated, and what a rule matches — the drift stamp —
+// still sees it.
 //
 // One statement for every day of the walk, `unnest` over the dates, so a
 // year's run is one round trip and not three hundred; the domain's
@@ -31,7 +35,7 @@
 // `where` beside it.
 import type { Tx } from "@waste/db/client"
 import { validOn } from "@waste/db/query/valid-on"
-import { agreement, subscription } from "@waste/db/schema/agreements"
+import { agreement, subscription, subscriptionPause } from "@waste/db/schema/agreements"
 import { container, containerServicePlacement } from "@waste/db/schema/containers"
 import { property, sharedCollectionPoint } from "@waste/db/schema/customers"
 import { planningAreaBoundary } from "@waste/db/schema/planning-areas"
@@ -48,6 +52,7 @@ type Row = {
   shared_collection_point_id: string | null
   located: boolean
   contained: boolean
+  paused: boolean
 }
 
 /**
@@ -69,7 +74,11 @@ export async function stopCandidatesByDay(tx: Tx, scope: { companyId: string; pr
       ${subscription.propertyId} as property_id,
       ${subscription.sharedCollectionPointId} as shared_collection_point_id,
       (${place} is not null) as located,
-      (${planningAreaBoundary.boundary} is not null and ${place} is not null and extensions.st_contains(${planningAreaBoundary.boundary}, ${place})) as contained
+      (${planningAreaBoundary.boundary} is not null and ${place} is not null and extensions.st_contains(${planningAreaBoundary.boundary}, ${place})) as contained,
+      exists (
+        select 1 from ${subscriptionPause}
+        where ${subscriptionPause.companyId} = ${subscription.companyId} and ${subscriptionPause.subscriptionId} = ${subscription.id} and ${validOn(subscriptionPause, sql`d.day`)}
+      ) as paused
     from unnest(${sql.param([...days])}::text[]::date[]) as d(day)
     join ${container} on ${container.companyId} = ${scope.companyId} and ${container.projectId} = ${scope.projectId}
     join ${containerServicePlacement}
@@ -98,6 +107,7 @@ export async function stopCandidatesByDay(tx: Tx, scope: { companyId: string; pr
       sharedCollectionPointId: row.shared_collection_point_id,
       located: row.located,
       contained: row.contained,
+      paused: row.paused,
     })
   }
   return byDay

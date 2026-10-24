@@ -218,6 +218,57 @@ export const AgreementTerminated = z.object({
 })
 export type AgreementTerminated = z.infer<typeof AgreementTerminated>
 
+/**
+ * A Subscription's pause (#291, slice 10, scenario 12.5): an effective-dated
+ * suspension — a holiday, a season — through which no stop is generated for
+ * the containers serving it. Half-open like every period: `validTo` is the
+ * day collections resume, and an open end is a pause until the office
+ * resumes it. One pause of a subscription is in force at a time, inside the
+ * subscription's period; the project is the subscription's.
+ */
+export const SubscriptionPause = z
+  .object({
+    ...stamped,
+    projectId: Id,
+    subscriptionId: Id,
+    ...Validity.shape,
+  })
+  .refine(validityOrdered, endsAfterItStarts)
+export type SubscriptionPause = z.infer<typeof SubscriptionPause>
+
+/** A pause's period; the subscription is the path's (`POST /subscriptions/:id/pauses`). It begins today or later, which only the route can judge. */
+export const SubscriptionPauseCreate = z.strictObject({ ...ValidityCreate }).refine(validityOrdered, endsAfterItStarts)
+export type SubscriptionPauseCreate = z.infer<typeof SubscriptionPauseCreate>
+
+/** Moving a pause: its first day while it has not begun, its end — the day collections resume, a resume today included — while it has not ended. */
+export const SubscriptionPausePatch = z
+  .strictObject({
+    validFrom: IsoDate.optional(),
+    /** Null leaves it open, a pause until it is resumed. */
+    validTo: IsoDate.nullable().optional(),
+  })
+  .refine(changesSomething, somethingToChange)
+  .refine(validityOrdered, endsAfterItStarts)
+export type SubscriptionPausePatch = z.infer<typeof SubscriptionPausePatch>
+
+/** `POST /subscription-pauses/:id/cancel`: a pause that has not begun, removed. Takes nothing. */
+export const SubscriptionPauseCancel = z.strictObject({})
+export type SubscriptionPauseCancel = z.infer<typeof SubscriptionPauseCancel>
+
+/** What a pause written or moved answers: the pause as it now stands, and the stops still standing at its containers on its days that no run will take away, oldest first. */
+export const SubscriptionPaused = z.object({
+  pause: SubscriptionPause,
+  stopsToRemove: z.array(StopToRemove),
+})
+export type SubscriptionPaused = z.infer<typeof SubscriptionPaused>
+
+/** A page of pauses (`GET /subscription-pauses`): one project's, one subscription's, in force on a day. */
+export const SubscriptionPauseListQuery = ProjectScopedListQuery.extend({
+  subscriptionId: Id.optional(),
+  validOn: IsoDate.optional(),
+})
+export type SubscriptionPauseListQuery = z.infer<typeof SubscriptionPauseListQuery>
+
 /** A page of agreements: one project's, one customer's, by the number a person quoted, valid on a day. */
 export const AgreementListQuery = ProjectScopedListQuery.extend({
   /** The agreements this customer holds; a payer's are found the same way. */

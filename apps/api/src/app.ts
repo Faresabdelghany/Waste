@@ -42,6 +42,7 @@ import type { Verifier } from "./auth/verify"
 import { errorHandler, notFound } from "./problem"
 import { checkDatabase, DATABASE_CHECK_TIMEOUT_MS } from "./readiness"
 import { agreementRoutes } from "./routes/agreements"
+import { subscriptionPauseRoutes } from "./routes/subscription-pauses"
 import { alertRoutes } from "./routes/alerts"
 import { auditEventRoutes } from "./routes/audit-events"
 import { billableEventRoutes } from "./routes/billable-events"
@@ -232,6 +233,7 @@ export function createApp({
   app.route("/", sharedCollectionPointRoutes(guard))
   // A termination asks generation runs of the schemes whose planned routes stop at its containers (#291), so it takes the clock and the job sender.
   app.route("/", agreementRoutes(guard, { now, jobs }))
+  app.route("/", subscriptionPauseRoutes(guard, { now, jobs }))
   app.route("/", containerRoutes(guard, { now }))
   app.route("/", lifecycleRoutes(guard, { now }))
   app.route("/", planningAreaRoutes(guard))

@@ -14,12 +14,13 @@ import { AUDIT_ACTIONS } from "@waste/domain/audit/vocabulary"
 
 import { MIGRATIONS_FOLDER } from "../migrate"
 import { auditEvent } from "../schema/audit"
-import { AUDIT_ROW_FUNCTION, AUDITED, auditTrail } from "../sql/audit-trail"
+import { AUDIT_ROW_FUNCTION, AUDITED_AT_0019, auditTrail } from "../sql/audit-trail"
 import { handWrittenStatements, normalised, statementsOf } from "../sql/hand-written"
 import { COMPANY, columns, ID, oneOfCheck, ref } from "./rendering"
 import { statementsFor } from "./specimen"
 
 const MIGRATION = "0019_audit_log.sql"
+
 
 const expected = [
   [
@@ -61,12 +62,12 @@ describe("the audit log as drizzle-kit writes it", () => {
 describe("migration 0019", () => {
   test("is exactly that, then the ledger's fence and revoke, the trigger function and one trigger per audited table", async () => {
     const statements = await fileStatements()
-    assert.deepEqual(statements, [...expected, ...handWrittenStatements(auditEvent), AUDIT_ROW_FUNCTION, ...AUDITED.flatMap(auditTrail)].map(normalised))
-    assert.equal(statements.filter((statement) => statement.startsWith("CREATE TRIGGER")).length, AUDITED.length)
+    assert.deepEqual(statements, [...expected, ...handWrittenStatements(auditEvent), AUDIT_ROW_FUNCTION, ...AUDITED_AT_0019.flatMap(auditTrail)].map(normalised))
+    assert.equal(statements.filter((statement) => statement.startsWith("CREATE TRIGGER")).length, AUDITED_AT_0019.length)
   })
 
   test("the company passes its three document counters as ignored, and a set its parent; a table of neither passes nothing", () => {
-    const triggerOf = (name: string) => AUDITED.flatMap(auditTrail).find((statement) => statement.startsWith(`CREATE TRIGGER "${name}_audit_trail"`)) ?? ""
+    const triggerOf = (name: string) => AUDITED_AT_0019.flatMap(auditTrail).find((statement) => statement.startsWith(`CREATE TRIGGER "${name}_audit_trail"`)) ?? ""
     assert.match(triggerOf("company"), /wms\.audit_row\('', '', 'next_route_number', 'next_ticket_number', 'next_invoice_number'\);$/)
     assert.match(triggerOf("role_grant"), /wms\.audit_row\('role', 'role_id'\);$/)
     assert.match(triggerOf("customer"), /wms\.audit_row\('', ''\);$/)

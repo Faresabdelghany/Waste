@@ -122,3 +122,32 @@ export const subscription = wms.table(
     tenantIndex(t, t.sharedCollectionPointId),
   ],
 )
+
+/**
+ * A Subscription's pause (#291, slice 10, scenario 12.5): an effective-dated
+ * suspension — a holiday, a season — through which no stop is generated for
+ * the containers serving it (the worker's `stopCandidatesByDay` reads it as
+ * `paused`) and, once recurring charges exist, no charge falls due. Half-open
+ * like every period (ADR-0005), inside its subscription's, which the API
+ * holds; an open end is a pause until the office resumes it. One pause of a
+ * subscription is in force at a time, which `excludeOverlapping` over the
+ * subscription says in the migration. A set of the subscription in the audit
+ * trail, so the agreement's history shows it.
+ */
+export const subscriptionPause = wms.table(
+  "subscription_pause",
+  {
+    ...id,
+    ...projectScoped,
+    ...timestamps,
+    ...validity,
+    subscriptionId: uuid().notNull(),
+  },
+  (t) => [
+    companyReference(t, company),
+    tenantReference(t, [t.projectId], project),
+    projectReference(t, [t.subscriptionId], subscription),
+    validPeriod(t),
+    tenantIndex(t, t.subscriptionId),
+  ],
+)

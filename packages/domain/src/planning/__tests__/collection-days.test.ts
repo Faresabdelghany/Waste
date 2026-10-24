@@ -108,6 +108,21 @@ describe("collectionDaysOf", () => {
     ])
   })
 
+  test("a container is not counted on a day its subscription is paused (#291): a paused week has no day of its own, and the bins of another subscription still count", () => {
+    const pausedWeek = [{ validFrom: "2026-10-05", validTo: "2026-10-12" }]
+    const paused = { ...residual, containers: [{ ...always("Residual"), pauses: pausedWeek }] }
+    assert.deepEqual(collectionDaysOf({ window: week, calendar: restingWeekend, schemes: [scheme({ groups: [paused] })] }), [], "the whole week paused")
+    const pausedFromThursday = { ...residual, containers: [{ ...always("Residual"), pauses: [{ validFrom: "2026-10-08", validTo: null }] }] }
+    assert.deepEqual(
+      collectionDaysOf({ window: week, calendar: restingWeekend, schemes: [scheme({ groups: [pausedFromThursday, glass] })] }).map((day) => [day.date, day.fractions.join("+")]),
+      [
+        ["2026-10-05", "Residual"],
+        ["2026-10-08", "Glass+Metal"],
+      ],
+      "paused from Thursday until resumed: Monday stands, and Thursday is the glass group's alone",
+    )
+  })
+
   test("a parked group (no days), a scheme with no serving group, and a day moved outside the window give nothing", () => {
     assert.deepEqual(collectionDaysOf({ window: week, calendar: restingWeekend, schemes: [scheme({ groups: [{ ...residual, days: [] }] }), scheme({ groups: [] })] }), [])
     const moved = collectionDaysOf({ window: { from: "2026-10-05", to: "2026-10-05" }, calendar: restingWeekend, schemes: [scheme({ existingRoutes: [route({ id: "r", serviceDate: "2026-10-05", operatingDate: "2026-10-07", held: true })] })] })
