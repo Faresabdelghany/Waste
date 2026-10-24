@@ -35,7 +35,7 @@ const NOW = new Date("2026-09-30T12:00:00Z")
 const STAMPS = { createdAt: "2026-09-24T09:00:00.000Z", updatedAt: "2026-09-25T09:30:00.000Z" }
 const copenhagen: Project = { id: "01a0d2a4-a280-7002-8000-000000000001", ...STAMPS, name: "Copenhagen Central", kind: "Municipality", language: "da", currency: "DKK", timezone: "Europe/Copenhagen", status: "active", weekend: ["saturday", "sunday"], holidayList: "Danish public holidays", publicSlug: null }
 const osterbro: Customer = { id: "01a0d2a4-a280-700b-8000-000000000002", ...STAMPS, kind: "organisation", name: "Østerbro Housing", registrationNumber: "38112009", email: null, phone: null, billingAddress: null, serviceMessagesAllowed: true, status: "active" }
-const parkvej: Property = { id: "01a0d2a4-a280-700c-8000-000000000001", ...STAMPS, projectId: copenhagen.id, name: "Parkvej 18", address: "Parkvej 18, 2100 København Ø", registryId: null, kind: "residential", location: null, notes: null, status: "active", parties: [{ customerId: osterbro.id, role: "owner" }] }
+const parkvej: Property = { id: "01a0d2a4-a280-700c-8000-000000000001", ...STAMPS, projectId: copenhagen.id, name: "Parkvej 18", address: "Parkvej 18, 2100 København Ø", registryId: null, kind: "residential", location: null, notes: null, driverInstructions: null, status: "active", parties: [{ customerId: osterbro.id, role: "owner" }] }
 
 const fixtures = (moduleId: string, workspaceId: "configure" | "customers" = "customers") => getModuleDefinition({ workspaceId, moduleId })?.records ?? []
 const bare: MappingContext = { fixtures: [], resolve: NOTHING_RESOLVED, companyRecordId: FIXTURE_COMPANY_ID, now: NOW }
@@ -54,8 +54,14 @@ const requiredOf = (schema: BusinessFormSchema) => schema.sections.flatMap((sect
 const fieldOf = (schema: BusinessFormSchema, id: string) => schema.sections.flatMap((section) => section.fields).find((field) => field.id === id)
 
 describe("the property form on the Pilot", () => {
+  test("tells the driver's instructions apart from the office's own conditions, on a property and a point alike", () => {
+    assert.equal(fieldOf(PROPERTY_FORM, "driverInstructions")?.description, "Shown to the driver at the stop.")
+    assert.equal(fieldOf(PROPERTY_FORM, "specialConditions")?.description, "The office's own; never shown to a driver.")
+    assert.equal(fieldOf(SHARED_POINT_FORM, "driverInstructions")?.type, "textarea")
+  })
+
   test("offers what the wire carries — the point as two numbers, a multiselect per party role — and nothing it would drop", () => {
-    assert.deepEqual(fieldIdsOf(PROPERTY_FORM), ["projectId", "displayName", "serviceAddress", "registryId", "propertyType", "latitude", "longitude", "ownerIds", "payerIds", "tenantIds", "administratorIds", "serviceContactIds", "specialConditions"])
+    assert.deepEqual(fieldIdsOf(PROPERTY_FORM), ["projectId", "displayName", "serviceAddress", "registryId", "propertyType", "latitude", "longitude", "ownerIds", "payerIds", "tenantIds", "administratorIds", "serviceContactIds", "specialConditions", "driverInstructions"])
     assert.deepEqual(requiredOf(PROPERTY_FORM), ["projectId", "displayName", "serviceAddress", "propertyType"], "a property is registered before it is geocoded, and with nobody billed yet")
     assert.deepEqual(Object.values(PARTY_FIELDS), ["ownerIds", "payerIds", "tenantIds", "administratorIds", "serviceContactIds"])
     for (const id of Object.values(PARTY_FIELDS)) assert.equal(fieldOf(PROPERTY_FORM, id)?.type, "multiselect", id)
@@ -105,7 +111,7 @@ describe("the property group form on the Pilot", () => {
 
 describe("the shared collection point form on the Pilot", () => {
   test("offers the place always located, its access and billing, its initial state and its members", () => {
-    assert.deepEqual(fieldIdsOf(SHARED_POINT_FORM), ["projectId", "name", "pointType", "status", "address", "latitude", "longitude", "eligibilityDistance", "operatingModel", "availability", "accessMode", "accessConditions", "billingMode", "responsibleCustomerId", "memberPropertyIds", "memberRole"])
+    assert.deepEqual(fieldIdsOf(SHARED_POINT_FORM), ["projectId", "name", "pointType", "status", "address", "latitude", "longitude", "eligibilityDistance", "operatingModel", "availability", "accessMode", "accessConditions", "driverInstructions", "billingMode", "responsibleCustomerId", "memberPropertyIds", "memberRole"])
     assert.deepEqual(requiredOf(SHARED_POINT_FORM), ["projectId", "name", "pointType", "status", "address", "latitude", "longitude", "operatingModel", "accessMode", "billingMode"])
     assert.equal(fieldOf(SHARED_POINT_FORM, "memberRole")?.defaultValue, "service-member")
     assert.ok(!fieldIdsOf(SHARED_POINT_EDIT_FORM).includes("status"))

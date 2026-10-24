@@ -85,6 +85,7 @@ const property = {
   kind: "residential",
   location: POINT,
   notes: "Gate code at the caretaker.",
+  driverInstructions: "Gate code 4711; the bins stand behind the garage.",
   status: "active",
   parties: [{ customerId: THIRD, role: "owner" }],
   ...STAMPS,
@@ -113,6 +114,7 @@ const point = {
   accessMode: "member",
   accessConditions: "Members open the lid with the chip on their key ring.",
   availability: "Open around the clock",
+  driverInstructions: "Code 2210 on the enclosure.",
   billingMode: "member-share",
   responsibleCustomerId: THIRD,
   status: "open",
@@ -182,7 +184,7 @@ describe("CustomerCreate and CustomerPatch", () => {
 describe("Property", () => {
   test("is the service address, with its parties and the point it was geocoded to", () => {
     assert.deepEqual(Property.parse(property), property)
-    const ungeocoded = { ...property, location: null, registryId: null, notes: null, parties: [] }
+    const ungeocoded = { ...property, location: null, registryId: null, notes: null, driverInstructions: null, parties: [] }
     assert.deepEqual(Property.parse(ungeocoded), ungeocoded)
   })
 
@@ -232,6 +234,7 @@ describe("PropertyCreate and PropertyPatch", () => {
   test("leave the parties to their own route: a patch does not carry them, and neither does the project", () => {
     assert.deepEqual(PropertyPatch.parse({ location: POINT }), { location: POINT })
     assert.deepEqual(PropertyPatch.parse({ notes: null }), { notes: null })
+    assert.deepEqual(PropertyPatch.parse({ driverInstructions: null }), { driverInstructions: null }, "the driver's instructions are cleared with a null")
     refusesAnEmptyPatch(PropertyPatch)
     assert.match(refusal(PropertyPatch.safeParse({ name: "x", parties: [] }))[0].message, /parties/)
     assert.match(refusal(PropertyPatch.safeParse({ name: "x", projectId: OTHER }))[0].message, /projectId/)
@@ -317,7 +320,7 @@ describe("PropertyGroupMembersSet", () => {
 describe("SharedCollectionPoint", () => {
   test("is the place itself, so it is always located and always addressed", () => {
     assert.deepEqual(SharedCollectionPoint.parse(point), point)
-    const bare = { ...point, eligibilityDistanceM: null, accessConditions: null, availability: null, responsibleCustomerId: null, members: [] }
+    const bare = { ...point, eligibilityDistanceM: null, accessConditions: null, availability: null, driverInstructions: null, responsibleCustomerId: null, members: [] }
     assert.deepEqual(SharedCollectionPoint.parse(bare), bare)
     assert.equal(SharedCollectionPoint.safeParse({ ...point, location: null }).success, false)
     assert.equal(SharedCollectionPoint.safeParse({ ...point, eligibilityDistanceM: 0 }).success, false)
@@ -351,6 +354,7 @@ describe("SharedCollectionPoint", () => {
   test("patches the point but not its project or its membership", () => {
     assert.deepEqual(SharedCollectionPointPatch.parse({ status: "closed" }), { status: "closed" })
     assert.deepEqual(SharedCollectionPointPatch.parse({ accessConditions: null }), { accessConditions: null })
+    assert.deepEqual(SharedCollectionPointPatch.parse({ driverInstructions: null }), { driverInstructions: null })
     refusesAnEmptyPatch(SharedCollectionPointPatch)
     assert.match(refusal(SharedCollectionPointPatch.safeParse({ name: "x", members: [] }))[0].message, /members/)
     assert.match(refusal(SharedCollectionPointPatch.safeParse({ name: "x", projectId: OTHER }))[0].message, /projectId/)

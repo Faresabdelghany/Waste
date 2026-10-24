@@ -253,14 +253,15 @@ describe("what the door answers and stores", () => {
     assert.deepEqual(refusal(DriverMe.safeParse({ ...me, wasteFractions: [{ ...wasteFractions[0], key: "Residual waste" }] })).map((issue) => issue.path), ["wasteFractions.0.key"], "the key is the catalogue's slug")
   })
 
-  test("the driver's route read is the detail with each pickup's place joined: the address, the point or null, the container's label and the fraction's name", () => {
+  test("the driver's route read is the detail with each pickup's place joined: the address, the point or null, the place's instructions or null, the container's label and the fraction's name", () => {
     const pickup = { id: THIRD, projectId: OTHER, routeId: ID, containerId: COMPANY, position: 1, status: "planned", origin: "generation", reason: null, note: null, propertyId: ID, sharedCollectionPointId: null, wasteFractionId: OTHER, arrivedAt: null, outcomeAt: null, ...STAMPS }
-    const joined = { ...pickup, address: "Parkvej 18, 2100 København Ø", location: POINT, containerLabel: "BIN-82014", wasteFractionName: "Residual waste" }
+    const joined = { ...pickup, address: "Parkvej 18, 2100 København Ø", driverInstructions: "Gate code 4711", location: POINT, containerLabel: "BIN-82014", wasteFractionName: "Residual waste" }
     assert.deepEqual(DriverPickup.parse(joined), joined)
     assert.deepEqual(DriverPickup.parse({ ...joined, location: null }), { ...joined, location: null }, "a property not yet geocoded has no point")
+    assert.deepEqual(DriverPickup.parse({ ...joined, driverInstructions: null }), { ...joined, driverInstructions: null }, "a place that tells the driver nothing")
     const addressOnly = { ...joined, containerId: null, origin: "office", containerLabel: null, note: "Re-collection of T-8831" }
     assert.deepEqual(DriverPickup.parse(addressOnly), addressOnly, "a stop the office added at an address carries no container and no label, and is driven to by its address (#111)")
-    for (const key of ["address", "location", "containerLabel", "wasteFractionName"]) {
+    for (const key of ["address", "driverInstructions", "location", "containerLabel", "wasteFractionName"]) {
       assert.deepEqual(refusal(DriverPickup.safeParse({ ...joined, [key]: undefined })).map((issue) => issue.path), [key], `${key} is what the device shows at the stop`)
     }
     assert.equal(DriverPickup.safeParse({ ...joined, location: { type: "Point", coordinates: [12.5951, 55.7089, 10] } }).success, false, "a flat point")
@@ -292,7 +293,7 @@ describe("what the door answers and stores", () => {
     }
     const detail = { ...route, pickups: [joined], activePlan: null, session: null, sessions: [], unloads: [] }
     assert.deepEqual(DriverRouteDetail.parse(detail), detail)
-    assert.deepEqual(refusal(DriverRouteDetail.safeParse({ ...detail, pickups: [pickup] })).map((issue) => issue.path).sort(), ["pickups.0.address", "pickups.0.containerLabel", "pickups.0.location", "pickups.0.wasteFractionName"], "a bare pickup is the office's shape, not the driver's")
+    assert.deepEqual(refusal(DriverRouteDetail.safeParse({ ...detail, pickups: [pickup] })).map((issue) => issue.path).sort(), ["pickups.0.address", "pickups.0.containerLabel", "pickups.0.driverInstructions", "pickups.0.location", "pickups.0.wasteFractionName"], "a bare pickup is the office's shape, not the driver's")
     assert.deepEqual(refusal(DriverRouteDetail.safeParse({ ...detail, label: "RC-1043" })), [{ path: "label", message: LABEL_IS_THE_NUMBER }], "the route's own rule holds here too")
   })
 })

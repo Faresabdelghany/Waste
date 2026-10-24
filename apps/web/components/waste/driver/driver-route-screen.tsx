@@ -3,8 +3,9 @@
 // The Driver App's route screen (Issue #145), from `GET /driver/routes/:id`:
 // the stops in the order they are driven (the Plan's `sequence` where there
 // is one, else `position`), each with its address, container (none at an
-// address-only stop the office added, #111), fraction and
-// status and an "Open in Maps" link over its own point, and per stop:
+// address-only stop the office added, #111), fraction and status, the
+// place's instructions to the driver where it has some (never the office's
+// own notes), and an "Open in Maps" link over its own point, and per stop:
 // arrived, complete, skip, fail, report a problem, add a note, record a weight
 // (O2 of #290), a signature, and a photo with a skip, a failure or a problem —
 // of any stop where the deployment offers it (O1). On the route: the next places still to do handed to Maps in
@@ -16,7 +17,7 @@
 // else is sent and the server decides (lib/driver/route-view.ts).
 import Link from "next/link"
 import { useEffect, useState } from "react"
-import { ArrowLeft, Camera, CheckCircle, FlagCheckered, MapPin, MapTrifold, NavigationArrow, NotePencil, Pause, Play, Scales, Signature, SkipForward, Warning, XCircle } from "@phosphor-icons/react/dist/ssr"
+import { ArrowLeft, Camera, CheckCircle, FlagCheckered, Info, MapPin, MapTrifold, NavigationArrow, NotePencil, Pause, Play, Scales, Signature, SkipForward, Warning, XCircle } from "@phosphor-icons/react/dist/ssr"
 
 import { Badge } from "@/components/ui/badge"
 import { Button } from "@/components/ui/button"
@@ -189,6 +190,13 @@ function StopCard({ detail, stop, number }: { detail: DriverRouteDetail; stop: D
           {actions.sending && <Badge variant="outline">Sending</Badge>}
         </div>
       </div>
+      {/* Truthy, not non-null: an API from before the field answers none at all, and an empty note is worse than none. */}
+      {stop.driverInstructions ? (
+        <div role="note" aria-label="Driver instructions" className="flex gap-2 rounded-lg bg-muted px-3 py-2 text-sm">
+          <Info aria-hidden className="mt-0.5 shrink-0" />
+          <p className="whitespace-pre-line">{stop.driverInstructions}</p>
+        </div>
+      ) : null}
       <RejectionList rejections={rejections} onDismiss={app.dismiss} />
       <div className="flex flex-wrap gap-2">
         {maps !== null && (
