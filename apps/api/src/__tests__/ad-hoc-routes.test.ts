@@ -27,8 +27,8 @@ import { and, asc, eq } from "drizzle-orm"
 
 import { createApp } from "../app"
 import { NOT_A_PICKUP } from "../routes/references"
-import { stopWasMissed } from "../routes/tickets"
-import { alreadyAStop, NOT_A_CONTAINER, notPlacedOn } from "../routes/pickups"
+import { NOT_AN_EMPTYING, stopWasMissed } from "../routes/tickets"
+import { bookedAlready, NOT_A_CONTAINER, notPlacedOn } from "../routes/pickups"
 import { adHocNeverHeld, ORDER_IS_FROZEN } from "../routes/routes"
 import { callingAs, type Call } from "./calls"
 import { created } from "./created"
@@ -252,7 +252,7 @@ describe("the ad-hoc route and the extra pickup", { skip: database.skip || owner
       assert.equal(driven.pickups.length, 5, "the generated three and the office's two")
     })
 
-    test("refuses a route that has started (409), then a body that names no stop or names what is not the project's (400 at the field), then a container placed nowhere that day, one already a stop, or a place not served (409)", async () => {
+    test("refuses a route that has started (409), then a body that names no stop or names what is not the project's (400 at the field), then a container placed nowhere that day or a place not served (409)", async () => {
       const active = await seedRoute(pool, a, fleet, ex, { status: "active", plannedDriverId: fleet.drivers.mads.id, plannedVehicleId: fleet.vehicles.wh24.id, deviceId: "device-111" })
       assert.equal((await refused(await add(active.id, { containerId: placed.id }), 409)).detail, activeAnd(active.label, ORDER_IS_FROZEN))
       assert.equal((await refused(await add(ex.routes.completed.id, { containerId: placed.id }), 409)).detail, doesNotChange(ex.routes.completed.label, "completed"))
@@ -266,23 +266,43 @@ describe("the ad-hoc route and the extra pickup", { skip: database.skip || owner
       assert.deepEqual((await refused(await add(planned, { propertyId: ex.properties.parkvej.id, wasteFractionId: testId() }), 400)).errors?.map((error) => error.path), ["wasteFractionId"])
       assert.equal((await refused(await add(planned, { containerId: ex.containers.bin2.id }), 409)).detail, notPlacedOn("BIN-2"))
       assert.equal((await refused(await add(planned, { containerId: lapsed.id }), 409)).detail, notPlacedOn("BIN-8"), "its placement stands, its agreement does not: not in force, as generation judges a stop")
-      assert.equal((await refused(await add(planned, { containerId: ex.containers.bin1.id }), 409)).detail, alreadyAStop("BIN-1", ex.routes.planned.label, "planned"), "a container is one stop of a route, generation's or the office's")
+      assert.deepEqual((await refused(await add(planned, { service: "wash", propertyId: ex.properties.parkvej.id, wasteFractionId: ex.fractions.residual.id }), 400)).errors?.map((error) => error.path), ["containerId"], "a work order is of a container")
       assert.equal((await refused(await add(planned, { propertyId: inactive.id, wasteFractionId: ex.fractions.residual.id }), 409)).detail, "The property is inactive; a stop needs an active property")
       // Nothing written by any of them.
       assert.equal((await read(planned)).pickups.filter((pickup) => pickup.origin === "office").length, 1, "the one stop the first test added")
     })
 
-    test("is a dispatcher's command: edit on route-studio.pickups is enough, and a second stop of one container is refused whoever adds it", async () => {
+    test("is a dispatcher's command: edit on route-studio.pickups is enough, and the office may name a container again for other work — a repair, a wash — each its own stop, but not book the same work twice while it is planned (O3 of #290)", async () => {
       const route = await made({})
       const stop = await added(route.id, { containerId: placed.id }, viewer)
-      assert.deepEqual([stop.position, stop.origin], [1, "office"])
-      assert.equal((await refused(await add(route.id, { containerId: placed.id }, viewer), 409)).detail, alreadyAStop(placed.label, route.label, "planned"))
-      // Taken off again, it is still the route's one stop of that container, and the refusal says what it stands at.
-      const removed = await olivia(`/pickups/${stop.id}/remove`, { method: "POST", body: { reason: "Added by mistake" } })
+      assert.deepEqual([stop.position, stop.origin, stop.service], [1, "office", "empty"])
+      const repair = await added(route.id, { service: "repair", containerId: placed.id, note: "The lid hinge" }, viewer)
+      const wash = await added(route.id, { service: "wash", containerId: placed.id }, viewer)
+      assert.deepEqual(
+        [repair, wash].map((one) => [one.position, one.service, one.containerId, one.origin]),
+        [
+          [2, "repair", placed.id, "office"],
+          [3, "wash", placed.id, "office"],
+        ],
+      )
+      // The same work twice is a double-sent request: refused while the first is planned, booked again once it is taken off.
+      assert.equal((await refused(await add(route.id, { service: "wash", containerId: placed.id }, viewer), 409)).detail, bookedAlready(placed.label, "wash", route.label))
+      assert.equal((await refused(await add(route.id, { containerId: placed.id }, viewer), 409)).detail, bookedAlready(placed.label, "empty", route.label))
+      const removed = await olivia(`/pickups/${wash.id}/remove`, { method: "POST", body: { reason: "Booked twice" } })
       assert.equal(removed.status, 200, JSON.stringify(await removed.clone().json()))
-      assert.equal((await refused(await add(route.id, { containerId: placed.id }, viewer), 409)).detail, alreadyAStop(placed.label, route.label, "skipped"))
+      assert.equal((await added(route.id, { service: "wash", containerId: placed.id }, viewer)).service, "wash")
+      // The route's read carries each stop's service, the payload Finance prices by later.
+      assert.deepEqual((await read(route.id)).pickups.map((pickup) => pickup.service), ["empty", "repair", "wash", "wash"])
       // The ad-hoc route's service date is its day: the placement valid on Tuesday is the one read.
       assert.equal(stop.wasteFractionId, ex.fractions.glass.id)
+    })
+
+    test("a container generation plans is the office's to name again on its route: the extra emptying beside the planned one", async () => {
+      const planned = ex.routes.planned
+      const extra = await added(planned.id, { containerId: ex.containers.bin1.id, note: "Overflowing after the market" })
+      assert.deepEqual([extra.origin, extra.service, extra.containerId], ["office", "empty", ex.containers.bin1.id])
+      const atBin1 = (await read(planned.id)).pickups.filter((pickup) => pickup.containerId === ex.containers.bin1.id)
+      assert.deepEqual(atBin1.map((pickup) => pickup.origin).sort(), ["generation", "office"])
     })
   })
 
@@ -294,6 +314,9 @@ describe("the ad-hoc route and the extra pickup", { skip: database.skip || owner
       const complete = (values: Record<string, unknown>) => olivia(`/tickets/${ticket.id}/complete`, { method: "POST", body: { resolution: "recollected", note: "On Tuesday's extra stop", ...values } })
       assert.deepEqual((await refused(await complete({ recollectionRouteId: route.id, recollectionPickupId: ex.routes.planned.pickupIds[0] }), 400)).errors, [{ path: "recollectionPickupId", message: NOT_A_PICKUP }])
       assert.deepEqual((await refused(await complete({ recollectionPickupId: stop.id }), 400)).errors?.map((error) => error.path), ["recollectionPickupId"], "never without its route")
+      // A work order collects nothing, so it is no re-collection (O3 of #290).
+      const wash = await added(route.id, { service: "wash", containerId: placed.id })
+      assert.deepEqual((await refused(await complete({ recollectionRouteId: route.id, recollectionPickupId: wash.id }), 400)).errors, [{ path: "recollectionPickupId", message: NOT_AN_EMPTYING }])
       // A stop that was missed is no re-collection: one taken off the route is refused after the 400s.
       const takenOff = await added(route.id, { propertyId: ex.properties.havnegade.id, wasteFractionId: ex.fractions.residual.id })
       assert.equal((await olivia(`/pickups/${takenOff.id}/remove`, { method: "POST", body: { reason: "Wrong address" } })).status, 200)

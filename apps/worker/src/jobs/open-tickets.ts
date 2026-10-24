@@ -239,6 +239,7 @@ async function factsOf(tx: Tx, event: OutboxJob): Promise<EventFacts> {
         containerId: pickup.containerId,
         propertyId: pickup.propertyId,
         sharedCollectionPointId: pickup.sharedCollectionPointId,
+        service: pickup.service,
         reason,
         note: pickup.note ?? proof?.note ?? null,
         ...(await stopReads(tx, event, pickup, opensCase)),

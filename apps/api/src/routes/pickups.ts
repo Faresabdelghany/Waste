@@ -22,13 +22,16 @@
 // generation resolves a stop — or an address of the
 // route's project, a property or a shared collection point served as a
 // subscription's is (routes/statuses.ts), with the fraction collected there:
-// an address-only stop, with no container. A container is one stop of a
-// route (`pickup_route_id_container_id_key`), whoever put it there and
-// whatever it now stands at, which the refusal says; the route's row lock,
-// which generation takes on the routes it reads too, serialises every writer
-// of a route's stops, so the stop is looked for before the insert. No event
-// is written: no consumer reads a stop's arrival, and Resolution and Finance
-// hear of it at its outcome like any other.
+// an address-only stop, with no container. Its service (O3 of #290) is an
+// emptying, or a repair or a wash of a container where it stands; the office
+// may name a container the route stops at already — an extra emptying of one
+// generation plans, a work order beside its collection — since only
+// generation's stops hold one per container (`pickup_route_id_container_id_key`,
+// a unique index over them alone). The route's row lock, which generation
+// takes on the routes it reads too, serialises every writer of a route's
+// stops. No event is written: no consumer reads a stop's arrival, and
+// Resolution and Finance hear of it at its outcome like any other, its
+// service on the payload.
 //
 // Both commands run under the route's row lock, since the rule each holds is
 // the route's: a stop is removed only while the route is `planned` or
@@ -63,7 +66,7 @@ import { agreement, subscription } from "@waste/db/schema/agreements"
 import { container, containerServicePlacement } from "@waste/db/schema/containers"
 import { pickup, proofOfService, route } from "@waste/db/schema/execution"
 import { pickupCorrection, pickupTransition } from "@waste/domain/execution/transitions"
-import type { PickupStatus } from "@waste/domain/execution/vocabulary"
+import type { OfficeStopService, PickupStatus } from "@waste/domain/execution/vocabulary"
 import { and, asc, eq, gt, gte, lte, max } from "drizzle-orm"
 import { Hono, type MiddlewareHandler } from "hono"
 import { describeRoute } from "hono-openapi"
@@ -96,8 +99,6 @@ export const NOT_A_CONTAINER = "Not a container of this project"
 /** What a container placed nowhere on the route's service date is told: there is no place to collect it at, and no fraction to say what it holds. */
 export const notPlacedOn = (container: string): string => `Container ${container} has no placement in force on the route's service date, so no place to collect it at`
 
-/** What a container already a stop of the route is told, with what that stop now stands at: one stop per container on a route, whoever put it there. */
-export const alreadyAStop = (container: string, route: string, status: PickupStatus): string => `Container ${container} is a stop of route ${route} already (${status}); a route has one stop per container`
 
 /** Where and what a stop the office adds collects: the place, one of the two, and the fraction. */
 type StopPlace = { propertyId: string | null; sharedCollectionPointId: string | null; wasteFractionId: string }
@@ -136,8 +137,8 @@ async function containerStop(tx: Tx, scope: Scope, containerId: string, serviceD
  * What the stop a body names collects, judged in body order: a container's
  * place and fraction on the route's service date, or the address and the
  * fraction the body gives — the 400s of the fields first, then the 409s of
- * the rows they name. The label is the container's, for the sentence a
- * second stop of it on the route is told; an address-only stop has none.
+ * the rows they name. The label is the container's, for the sentence the
+ * same work booked twice is told; an address-only stop has none.
  */
 async function stopOf(tx: Tx, scope: Scope, body: PickupAdd, serviceDate: string): Promise<{ label: string | null; at: StopPlace & { containerId: string | null } }> {
   if (body.containerId != null) {
@@ -153,6 +154,10 @@ async function stopOf(tx: Tx, scope: Scope, body: PickupAdd, serviceDate: string
   refuseUnservedPlace(placeOf(propertyStatus, pointStatus), "stop")
   return { label: null, at: { containerId: null, propertyId: body.propertyId ?? null, sharedCollectionPointId: body.sharedCollectionPointId ?? null, wasteFractionId: body.wasteFractionId } }
 }
+
+/** What the same work booked twice on a route is told: an office stop of the container for that service is planned there already. A double-sent Add stop meets it; a second visit is booked once the first is done or taken off. */
+export const bookedAlready = (container: string, service: OfficeStopService, route: string): string =>
+  `Container ${container} has a planned ${service === "empty" ? "emptying" : service} the office added to route ${route} already`
 
 /** One pickup of this company by id, inside the caller's projects; undefined when it is neither. */
 async function findPickup(tx: Tx, principal: Principal, id: string): Promise<PickupRow | undefined> {
@@ -285,15 +290,15 @@ export function pickupRoutes(guard: MiddlewareHandler<AuthEnv>, { now = () => ne
         operationId: "addRoutePickup",
         summary: "Add a stop to a route that has not started",
         description:
-          "The office's stop (#111): a `planned` pickup with `origin` office, appended after the route's last position as the route stands, on a `planned` or `ready` route — on a `ready` one the driver's device sees it through the existing reads, and an active Plan that does not name it reads stale and keeps it at the end of the order until the route is measured again. Generation never moves it, so a later refresh that grows the plan may number its own stops past it; the dispatcher's order is how it goes elsewhere. The body names a container of the route's project (400 at `containerId`), whose placement in force on the route's service date — the placement, its subscription and its agreement each valid that day, as generation judges a stop — gives the stop its place and its fraction: a container with no such placement is refused (409, `Container BIN-82014 has no placement in force on the route's service date, so no place to collect it at`), and one already a stop of the route, whoever put it there and whatever that stop stands at, is refused (409, naming its status) — or an address-only stop: a property or a shared collection point of the project (400 at its field) that is served as a subscription's place is, an active property or an open or restricted point (409 naming the status otherwise), with the waste fraction collected there (400 at `wasteFractionId` for one that is not this company's), and no container. The note is what the driver reads at the stop. Generation's refresh never skips or moves the stop, and never plans the container a second time onto the route. A route that has started is refused (409): its order is frozen; a completed or cancelled one does not change. Under the route's row lock; the route's `updatedAt` moves, since its stops are part of it on the wire. No event is written: Resolution and Finance hear of the stop at its outcome, as of any other.",
+          "The office's stop (#111): a `planned` pickup with `origin` office, appended after the route's last position as the route stands, on a `planned` or `ready` route — on a `ready` one the driver's device sees it through the existing reads, and an active Plan that does not name it reads stale and keeps it at the end of the order until the route is measured again. Generation never moves it, so a later refresh that grows the plan may number its own stops past it; the dispatcher's order is how it goes elsewhere. The body names a container of the route's project (400 at `containerId`), whose placement in force on the route's service date — the placement, its subscription and its agreement each valid that day, as generation judges a stop — gives the stop its place and its fraction: a container with no such placement is refused (409, `Container BIN-82014 has no placement in force on the route's service date, so no place to collect it at`), while one the route stops at already is the office's to name again — an extra emptying, or a work order beside its collection — unless the office has the same work planned for it on the route already (409, `Container BIN-82014 has a planned wash the office added to route RC-1042 already`, which a double-sent request meets) — or an address-only stop: a property or a shared collection point of the project (400 at its field) that is served as a subscription's place is, an active property or an open or restricted point (409 naming the status otherwise), with the waste fraction collected there (400 at `wasteFractionId` for one that is not this company's), and no container. The `service` (O3 of #290) is `empty` unless the body says `repair` or `wash`, each of a container (400 at `containerId` otherwise). The note is what the driver reads at the stop. Generation's refresh never skips or moves the stop; an office emptying of a container generation has no stop of stands for the plan's emptying of it, while a repair or a wash leaves generation to plan the container's emptying beside it. A route that has started is refused (409): its order is frozen; a completed or cancelled one does not change. Under the route's row lock; the route's `updatedAt` moves, since its stops are part of it on the wire. No event is written: Resolution and Finance hear of the stop at its outcome, as of any other.",
         security: BEARER_SECURITY,
         responses: {
           201: describeCreated("The stop, planned, with its `sequence` in the route's order and no proofs yet.", PickupDetail),
-          400: describeProblem("The path does not hold an id, or the body names neither a container nor an address, a container beside a place or a fraction, two places, an address without its fraction, a member the command does not take, or a container, property, shared collection point or fraction that is not the project's or the company's — each at the field that is wrong."),
+          400: describeProblem("The path does not hold an id, or the body names neither a container nor an address, a container beside a place or a fraction, two places, an address without its fraction, a member the command does not take, or a container, property, shared collection point or fraction that is not the project's or the company's — each at the field that is wrong. A repair or a wash names no container (400 at `containerId`), or the service is not one the office books (400 at `service`)."),
           401: describeProblem("No usable token (see WWW-Authenticate)."),
           403: describeProblem(`No active account here, or the caller's role does not allow \`edit\` on \`${MODULE}\`.`),
           404: describeProblem("No route with that id in the projects this account works in."),
-          409: describeProblem("The route is active, completed or cancelled; the container has no placement on the route's service date or is a stop of the route already; or the property or the point is not served; the detail says which."),
+          409: describeProblem("The route is active, completed or cancelled; the container has no placement on the route's service date; or the property or the point is not served; the detail says which."),
         },
       }),
       guard,
@@ -313,18 +318,18 @@ export function pickupRoutes(guard: MiddlewareHandler<AuthEnv>, { now = () => ne
           .select({ position: max(pickup.position) })
           .from(pickup)
           .where(and(eq(pickup.companyId, principal.companyId), eq(pickup.routeId, parent.id)))
-        // One stop per container on a route, the key's rule, whatever the stop now stands at; under the route's lock nobody adds one meanwhile. An address-only stop names none and meets nothing.
+        // The office may repeat a container on a route — an extra emptying, a work order beside its collection — but not book the same work twice while it is planned: a double-sent request meets this. Under the route's lock nobody adds one meanwhile.
         if (stop.label !== null && stop.at.containerId !== null) {
-          const [standing] = await tx
-            .select({ status: pickup.status })
+          const [booked] = await tx
+            .select({ id: pickup.id })
             .from(pickup)
-            .where(and(eq(pickup.companyId, principal.companyId), eq(pickup.routeId, parent.id), eq(pickup.containerId, stop.at.containerId)))
+            .where(and(eq(pickup.companyId, principal.companyId), eq(pickup.routeId, parent.id), eq(pickup.containerId, stop.at.containerId), eq(pickup.origin, "office"), eq(pickup.service, body.service), eq(pickup.status, "planned")))
             .limit(1)
-          if (standing !== undefined) throw problem(409, { detail: alreadyAStop(stop.label, labelOf(parent), standing.status as PickupStatus) })
+          if (booked !== undefined) throw problem(409, { detail: bookedAlready(stop.label, body.service, labelOf(parent)) })
         }
         const [row] = await tx
           .insert(pickup)
-          .values({ id: newId(), ...scope, routeId: parent.id, position: (last?.position ?? 0) + 1, origin: "office", note: body.note ?? null, ...stop.at })
+          .values({ id: newId(), ...scope, routeId: parent.id, position: (last?.position ?? 0) + 1, origin: "office", service: body.service, note: body.note ?? null, ...stop.at })
           .returning(pickupColumns)
         await tx
           .update(route)

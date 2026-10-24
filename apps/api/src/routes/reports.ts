@@ -233,7 +233,8 @@ async function serviceReport(tx: Tx, principal: Principal, query: ServiceReportQ
     .select({ routeSchemeId: route.routeSchemeId, projectId: route.projectId, operatingDate: route.operatingDate, status: pickup.status, reason: pickup.reason, n: count() })
     .from(pickup)
     .innerJoin(route, and(eq(route.companyId, pickup.companyId), eq(route.id, pickup.routeId)))
-    .where(and(fenced(pickup, principal, projectId), routeWindow, wasteFractionId === undefined ? undefined : eq(pickup.wasteFractionId, wasteFractionId)))
+    // Collections alone: a repair or a wash (O3 of #290) empties nothing, so it is neither collected nor missed here.
+    .where(and(fenced(pickup, principal, projectId), routeWindow, eq(pickup.service, "empty"), wasteFractionId === undefined ? undefined : eq(pickup.wasteFractionId, wasteFractionId)))
     .groupBy(route.routeSchemeId, route.projectId, route.operatingDate, pickup.status, pickup.reason)
   const schemeIds = [...new Set(routeGroups.flatMap((group) => (group.routeSchemeId === null ? [] : [group.routeSchemeId])))]
   const names =

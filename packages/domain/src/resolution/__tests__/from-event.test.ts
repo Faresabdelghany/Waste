@@ -70,6 +70,21 @@ describe("ticketFor", () => {
     }
   })
 
+  test("a work order not done — failed, or closed by the route's end — is the office's task to book again, never a missed collection (O3 of #290)", () => {
+    assert.deepEqual(ticketFor(pickupEvent("pickup-failed", { service: "wash", reason: "inaccessible", note: "Gate locked" })), {
+      kind: "internal-task",
+      priority: "high",
+      source: "driver-app",
+      subject: "Wash not done: BIN-82014 at Parkvej 18",
+      description: "The driver could not do this stop's work. Reason: inaccessible. Note: Gate locked",
+      links: stopLinks(MADS),
+    })
+    const ended = ticketFor(pickupEvent("pickup-skipped", { service: "repair", reason: "route-ended" }))
+    assert.deepEqual([ended?.kind, ended?.subject], ["internal-task", "Repair not done: BIN-82014 at Parkvej 18"])
+    assert.equal(ticketFor(pickupEvent("pickup-failed", { service: "empty", reason: "inaccessible" }))?.kind, "missed-collection")
+    assert.equal(ticketFor(pickupEvent("pickup-skipped", { service: "wash", reason: "not-presented" })), undefined, "a driver's own skip opens nothing, a work order's included")
+  })
+
   test("a skipped pickup is a medium missed collection under each of Execution's closing reasons, and nothing for a reason outside them", () => {
     let tickets = 0
     for (const reason of PICKUP_REASONS) {

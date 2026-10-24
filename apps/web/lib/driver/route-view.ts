@@ -16,7 +16,9 @@ import type { FlatPoint } from "@waste/contracts/geojson"
 import type { Route } from "@waste/contracts/routes"
 import type { Session } from "@waste/contracts/sessions"
 import type { DriverPickupReason, PickupStatus, RouteStatus } from "@waste/domain/execution/vocabulary"
+import { extraEmptyings } from "@waste/domain/execution/services"
 
+import { PICKUP_SERVICE_LABELS } from "../data/pickup-services"
 import type { QueueEntry } from "./command-queue"
 import { pickupIdOf, type PilotCommandKind } from "./commands"
 
@@ -41,6 +43,27 @@ export function stopsInOrder<Stop extends Pick<DriverPickup, "position" | "seque
  */
 export function stopCollects(stop: Pick<DriverPickup, "containerLabel" | "wasteFractionName">): string {
   return stop.containerLabel === null ? stop.wasteFractionName : `${stop.containerLabel} · ${stop.wasteFractionName}`
+}
+
+/** What an office emptying of a container generation's plan empties on the route as well is: a second visit the office asked for. */
+export const EXTRA_EMPTYING = "Extra emptying"
+
+/**
+ * What each of a route's stops is for, beside its status, where it is more
+ * than its collection (O3 of #290): a work order by its service, an extra
+ * emptying by the domain's one rule (`extraEmptyings`), read once for the
+ * route; a collection is not in the map. A stop read from an API before the
+ * service is a collection.
+ */
+export function stopServices(stops: readonly DriverPickup[]): ReadonlyMap<string, string> {
+  const extra = extraEmptyings(stops)
+  const labels = new Map<string, string>()
+  for (const stop of stops) {
+    const service = stop.service ?? "empty"
+    if (service !== "empty") labels.set(stop.id, PICKUP_SERVICE_LABELS[service])
+    else if (extra.has(stop.id)) labels.set(stop.id, EXTRA_EMPTYING)
+  }
+  return labels
 }
 
 /** A point as Maps reads it: latitude, then longitude. */

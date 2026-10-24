@@ -9,7 +9,7 @@ import { describe, test } from "node:test"
 
 import type { QueueEntry } from "../command-queue"
 import type { PilotCommand } from "../commands"
-import { endRouteWarning, MAPS_STOPS_MAX, mapsHref, routeActions, routeMapsHref, routesInDayOrder, stopActions, stopCollects, stopsInOrder, unreachableBanner, waitingOn } from "../route-view"
+import { endRouteWarning, EXTRA_EMPTYING, MAPS_STOPS_MAX, mapsHref, routeActions, routeMapsHref, routesInDayOrder, stopActions, stopCollects, stopServices, stopsInOrder, unreachableBanner, waitingOn } from "../route-view"
 import { pickup, pickupId, route, ROUTE_ID, routeDetail } from "./driver-fixtures"
 
 const queued = (command: Pick<PilotCommand, "kind" | "body"> & { routeId?: string }): QueueEntry =>
@@ -26,6 +26,22 @@ describe("the stops", () => {
   test("say what they collect beneath the address: the container and the fraction, or at an address-only stop the office added, the fraction alone (#111)", () => {
     assert.equal(stopCollects(pickup(1)), "BIN-91001 · Residual")
     assert.equal(stopCollects(pickup(2, { containerId: null, origin: "office", containerLabel: null })), "Residual", "no container, no separator")
+  })
+
+  test("say what they are for where it is more than their collection, read once for the route: a work order by its service, an office emptying beside generation's emptying of the container its extra emptying (O3 of #290)", () => {
+    const collected = pickup(1)
+    const extra = pickup(4, { containerId: collected.containerId, origin: "office" })
+    const repair = pickup(5, { containerId: collected.containerId, origin: "office", service: "repair" })
+    const wash = pickup(6, { origin: "office", service: "wash" })
+    const alone = pickup(7, { origin: "office" })
+    const addressOnly = pickup(8, { containerId: null, origin: "office", containerLabel: null })
+    const older = { ...pickup(9), service: undefined } as unknown as typeof collected
+    const labels = stopServices([collected, pickup(2), extra, repair, wash, alone, addressOnly, older])
+    assert.deepEqual(Object.fromEntries(labels), { [extra.id]: EXTRA_EMPTYING, [repair.id]: "Repair", [wash.id]: "Wash" }, "a collection, the office's emptying of a container no other stop empties, an address-only stop and a stop from before the service say nothing more")
+    assert.equal(EXTRA_EMPTYING, "Extra emptying")
+    // Beside a stop the dispatcher took off, the office's emptying is the collection.
+    const removed = pickup(1, { status: "skipped", reason: "removed-by-dispatcher" })
+    assert.equal(stopServices([removed, extra]).has(extra.id), false)
   })
 
   test("open in Maps over the pickup's own point, and not at all without one", () => {

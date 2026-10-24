@@ -136,6 +136,8 @@ describe("the report endpoints", { skip: database.skip || owner.skip }, () => {
         { containerId: bin1.id, propertyId: parkvej.id, wasteFractionId: ex.fractions.glass.id, status: "completed", outcomeAt: at("2026-10-06", "07:10") },
         { containerId: bin2.id, propertyId: havnegade.id, status: "completed", outcomeAt: at("2026-10-06", "07:20") },
         { containerId: bin3.id, propertyId: norrebrogade.id, status: "skipped", reason: "removed-by-dispatcher", outcomeAt: at("2026-10-06", "05:00") },
+        // A wash the office booked beside bin1's collection, and not done: no collection of anything, so the service report counts nothing of it (O3 of #290).
+        { containerId: bin1.id, propertyId: parkvej.id, origin: "office", service: "wash", status: "failed", reason: "inaccessible", outcomeAt: at("2026-10-06", "07:12") },
       ],
       // The glass pickup weighed twice, the second reading the word; the residual pickup once.
       proofs: [

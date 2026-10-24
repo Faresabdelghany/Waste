@@ -30,7 +30,7 @@ import type { DriverMe, DriverPickup, DriverRouteDetail } from "@waste/contracts
 import type { ProofBytes } from "@/lib/driver/commands"
 import type { DriverAppController, Tap } from "@/lib/driver/driver-app"
 import { STOP_PHOTOS } from "@/lib/driver/proof-images"
-import { DRIVER_REASON_LABELS, endRouteWarning, mapsHref, PICKUP_STATUS_LABELS, ROUTE_STATUS_LABELS, routeActions, routeMapsHref, stopActions, stopCollects, stopsInOrder, waitingOn } from "@/lib/driver/route-view"
+import { DRIVER_REASON_LABELS, endRouteWarning, mapsHref, PICKUP_STATUS_LABELS, ROUTE_STATUS_LABELS, routeActions, routeMapsHref, stopActions, stopCollects, stopServices, stopsInOrder, waitingOn } from "@/lib/driver/route-view"
 
 /** A photo taken with a stop's exception goes first, then the exception: the queue sends in the order of the taps. */
 async function withPhoto(app: DriverAppController, photo: ProofBytes | null, routeId: string, pickupId: string, then: Tap): Promise<void> {
@@ -69,6 +69,8 @@ function RouteDetailView({ detail, me }: { detail: DriverRouteDetail; me: Driver
   const waiting = waitingOn(state.waiting, detail.id).length
   const rejections = state.rejections.filter((rejection) => rejection.routeId === detail.id && rejection.pickupId === null)
   const routeMaps = routeMapsHref(detail, state.waiting)
+  // What each stop is for, read once for the route rather than per card.
+  const services = stopServices(detail.pickups)
   const [dialog, setDialog] = useState<"report" | "unload" | "end" | null>(null)
   const close = (open: boolean) => {
     if (!open) setDialog(null)
@@ -139,7 +141,7 @@ function RouteDetailView({ detail, me }: { detail: DriverRouteDetail; me: Driver
       <ol className="flex flex-col gap-3" aria-label="Stops">
         {stopsInOrder(detail.pickups).map((stop, index) => (
           <li key={stop.id}>
-            <StopCard detail={detail} stop={stop} number={index + 1} />
+            <StopCard detail={detail} stop={stop} number={index + 1} service={services.get(stop.id) ?? null} />
           </li>
         ))}
       </ol>
@@ -160,7 +162,7 @@ function RouteDetailView({ detail, me }: { detail: DriverRouteDetail; me: Driver
   )
 }
 
-function StopCard({ detail, stop, number }: { detail: DriverRouteDetail; stop: DriverPickup; number: number }) {
+function StopCard({ detail, stop, number, service }: { detail: DriverRouteDetail; stop: DriverPickup; number: number; service: string | null }) {
   const app = useDriverApp()
   const state = useDriverAppState()
   const actions = stopActions(detail, stop, state.waiting)
@@ -187,6 +189,7 @@ function StopCard({ detail, stop, number }: { detail: DriverRouteDetail; stop: D
         <div className="flex shrink-0 flex-col items-end gap-1 whitespace-nowrap">
           <Badge variant={stop.status === "planned" ? "outline" : "secondary"}>{PICKUP_STATUS_LABELS[stop.status]}</Badge>
           {stop.status === "planned" && stop.arrivedAt !== null && <Badge variant="outline">Arrived</Badge>}
+          {service !== null && <Badge variant="outline">{service}</Badge>}
           {actions.sending && <Badge variant="outline">Sending</Badge>}
         </div>
       </div>

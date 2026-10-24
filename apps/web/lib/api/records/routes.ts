@@ -38,10 +38,12 @@
 import type { DriverCommandReceipt } from "@waste/contracts/driver-commands"
 import type { PickupDetail } from "@waste/contracts/pickups"
 import type { Route, RouteDetail } from "@waste/contracts/routes"
+import { OFFICE_STOP_SERVICES } from "@waste/domain/execution/vocabulary"
 
 import { FIXTURE_COMPANY_ID, type BusinessRecord, type ModuleLocation } from "@/lib/data/business-modules"
 import { PROPERTY_PREFIX, SHARED_POINT_PREFIX } from "@/lib/data/agreements"
 import { masterDataKindOf } from "@/lib/data/master-data"
+import { A_WORK_ORDER_IS_OF_A_CONTAINER } from "@/lib/data/pickup-services"
 import { isPropertyRecord, isSharedPointRecord } from "@/lib/data/properties"
 import { ROUTE_ACTIVE_PLAN_KEY, STOP_AT_CONTAINER, STOP_AT_POINT, STOP_AT_PROPERTY } from "@/lib/data/routes"
 
@@ -326,7 +328,11 @@ const STOP_PLACES: Readonly<Record<string, readonly [string, string, ReferenceRu
 export function addedStopBody(input: Record<string, unknown>, context: MappingContext): Record<string, string> | ReturnType<typeof refusal> {
   const at = said(input, "stopAt") ?? STOP_AT_CONTAINER
   const note = said(input, "note")
-  const withNote = (body: Record<string, string>) => (note === undefined ? body : { ...body, note })
+  // An emptying is the API's default, so a body says a service only where it is a work order (O3 of #290).
+  const service = said(input, "service") ?? "empty"
+  if (!(OFFICE_STOP_SERVICES as readonly string[]).includes(service)) return refusal("service", "Book an emptying, a repair or a wash")
+  if (service !== "empty" && at !== STOP_AT_CONTAINER) return refusal("stopAt", A_WORK_ORDER_IS_OF_A_CONTAINER)
+  const withNote = (body: Record<string, string>) => ({ ...(service === "empty" ? {} : { service }), ...body, ...(note === undefined ? {} : { note }) })
   if (at === STOP_AT_CONTAINER) {
     const picked = said(input, "containerId")
     if (picked === undefined) return refusal("containerId", "Pick the container to collect")

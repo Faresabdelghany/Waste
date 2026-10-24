@@ -24,11 +24,13 @@ import {
   DRIVER_COMMAND_KINDS,
   DRIVER_PICKUP_REASONS,
   EXECUTION_SOURCES,
+  OFFICE_STOP_SERVICES,
   OUTBOX_AGGREGATES,
   OUTBOX_KINDS,
   PICKUP_ORIGINS,
   PICKUP_OUTCOMES,
   PICKUP_REASONS,
+  PICKUP_SERVICES,
   PICKUP_STATUSES,
   PROOF_KINDS,
   ROUTE_STATUSES,
@@ -50,6 +52,14 @@ export type PickupOutcome = z.infer<typeof PickupOutcome>
 /** Who put a stop on its route (#111): generation, or the office, whose stop a refresh never skips or moves. */
 export const PickupOrigin = z.enum(PICKUP_ORIGINS)
 export type PickupOrigin = z.infer<typeof PickupOrigin>
+
+/** What a stop is for (O3 of #290): emptying its container, or one of the office's work orders. */
+export const PickupService = z.enum(PICKUP_SERVICES)
+export type PickupService = z.infer<typeof PickupService>
+
+/** The services the office books on a stop it adds: an emptying, a repair or a wash. */
+export const OfficeStopService = z.enum(OFFICE_STOP_SERVICES)
+export type OfficeStopService = z.infer<typeof OfficeStopService>
 
 /** Why a stop was skipped or failed: the driver's six and the system's four. */
 export const PickupReason = z.enum(PICKUP_REASONS)

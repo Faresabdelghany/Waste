@@ -42,7 +42,7 @@
 // `occurredAt` is the event's, `dueAt` null (no SLA yet), `createdBy` null
 // and `sourceEventId` the event's id, which `ticket_origin_shape` ties
 // together.
-import { CLOSING_REASONS, type ClosingReason, type OutboxKind, type PickupReason } from "../execution/vocabulary"
+import { CLOSING_REASONS, type ClosingReason, type OutboxKind, type PickupReason, type PickupService } from "../execution/vocabulary"
 import type { TicketKind, TicketPriority, TicketSource } from "./vocabulary"
 
 /** The events about a pickup, whose payload is the Pickup (or, for a problem on the route alone, the Route). */
@@ -58,6 +58,8 @@ export type PickupEventFacts = {
   containerId: string | null
   propertyId: string | null
   sharedCollectionPointId: string | null
+  /** What the stop was for (O3 of #290): an emptying, whose miss is a missed collection, or a work order, whose miss is the office's task; absent on an event from before the service. */
+  service?: PickupService
   /** The pickup's reason on a skip or a failure, the proof's on a problem; null otherwise. */
   reason: PickupReason | null
   /** The pickup's note, or the problem's. */
@@ -153,6 +155,25 @@ export const boundedSubject = (subject: string): string => bounded(subject, TICK
 /** A description cut to `TICKET_DESCRIPTION_MAX` the same way: a 5000-character note from a device is a note cut short, not a ticket the API's create refuses. */
 export const boundedDescription = (description: string): string => bounded(description, TICKET_DESCRIPTION_MAX)
 
+/** A work order as its subject names it. */
+const WORK_ORDER_NAMES: Readonly<Record<Exclude<PickupService, "empty">, string>> = { deliver: "Delivery", remove: "Removal", swap: "Swap", repair: "Repair", wash: "Wash" }
+
+/** "Wash not done: BIN-82014 at Parkvej 18": a work order the stop did not get done, with whichever of the two the worker found. */
+export const workOrderNotDoneSubject = (service: Exclude<PickupService, "empty">, containerLabel: string | null, address: string | null): string =>
+  boundedSubject(`${WORK_ORDER_NAMES[service]} not done${containerLabel === null ? "" : `: ${containerLabel}`}${address === null ? "" : ` at ${address}`}`)
+
+/**
+ * A stop's miss as its ticket names it: an emptying's is a missed collection,
+ * a work order's (O3 of #290) the office's task to book again — never a
+ * missed collection, since nothing was due to be collected.
+ */
+const missOf = (facts: PickupEventFacts): { kind: TicketKind; subject: string } => {
+  const service = facts.service ?? "empty"
+  return service === "empty"
+    ? { kind: "missed-collection", subject: missedCollectionSubject(facts.containerLabel, facts.address) }
+    : { kind: "internal-task", subject: workOrderNotDoneSubject(service, facts.containerLabel, facts.address) }
+}
+
 /** "Missed collection: BIN-82014 at Parkvej 18", with whichever of the two the worker found. */
 export const missedCollectionSubject = (containerLabel: string | null, address: string | null): string =>
   boundedSubject(`Missed collection${containerLabel === null ? "" : `: ${containerLabel}`}${address === null ? "" : ` at ${address}`}`)
@@ -190,21 +211,19 @@ export function ticketFor(event: EventFacts): TicketDraft | undefined {
   switch (event.kind) {
     case "pickup-failed":
       return {
-        kind: "missed-collection",
+        ...missOf(event),
         priority: "high",
         source: "driver-app",
-        subject: missedCollectionSubject(event.containerLabel, event.address),
-        description: describe("The driver could not collect this stop", event.reason, event.note),
+        description: describe((event.service ?? "empty") === "empty" ? "The driver could not collect this stop" : "The driver could not do this stop's work", event.reason, event.note),
         links: pickupLinks(event, event.actualDriverId),
       }
     case "pickup-skipped": {
       if (event.reason === null || !isClosingReason(event.reason)) return undefined
       const closing = CLOSED_BY_ROUTE[event.reason]
       return {
-        kind: "missed-collection",
+        ...missOf(event),
         priority: closing.priority,
         source: closing.source,
-        subject: missedCollectionSubject(event.containerLabel, event.address),
         description: describe(closing.sentence, event.reason, event.note),
         // A cancelled route was started by nobody, so its driver is the planned one; an ended route's is the one who ran it.
         links: pickupLinks(event, closing.source === "dispatch" ? event.plannedDriverId : event.actualDriverId),

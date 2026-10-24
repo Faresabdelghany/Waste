@@ -6,7 +6,7 @@ import assert from "node:assert/strict"
 import { describe, test } from "node:test"
 
 import type { Driver } from "@waste/contracts/fleet"
-import { PickupAdd, PickupCorrection, PickupRemove, type Pickup } from "@waste/contracts/pickups"
+import { A_WORK_ORDER_OF_A_CONTAINER, PickupAdd, PickupCorrection, PickupRemove, type Pickup } from "@waste/contracts/pickups"
 import { RouteAssign, RouteCancel, RouteReschedule, type Route } from "@waste/contracts/routes"
 import { PICKUP_OUTCOMES } from "@waste/domain/execution/vocabulary"
 
@@ -21,6 +21,7 @@ import { FIXTURE_COMPANY_ID, type BusinessRecord } from "../business-modules"
 import type { BusinessFormSchema } from "../business-form-types"
 import { MASTER_DATA_MODULE } from "../master-data"
 import { PROPERTIES_MODULE, SHARED_POINTS_MODULE } from "../properties"
+import { A_WORK_ORDER_IS_OF_A_CONTAINER } from "../pickup-services"
 import { createRouteRecord, PICKUP_COMMAND_FORMS, ROUTE_COMMAND_FORMS, ROUTE_CREATE_FORM, routeCommandValues } from "../routes"
 
 const NOW = new Date("2026-09-30T12:00:00Z")
@@ -118,8 +119,8 @@ describe("the route's dialogs", () => {
 
   test("Add stop asks what it collects at, then the container, or the property or the shared point with its fraction, each shown only for its choice, and a note (#111)", () => {
     const form = ROUTE_COMMAND_FORMS["add-stop"]
-    assert.deepEqual(fieldIdsOf(form), ["stopAt", "containerId", "propertyId", "sharedCollectionPointId", "wasteFractionId", "note"])
-    assert.deepEqual(requiredOf(form), ["stopAt"])
+    assert.deepEqual(fieldIdsOf(form), ["service", "stopAt", "containerId", "propertyId", "sharedCollectionPointId", "wasteFractionId", "note"])
+    assert.deepEqual(requiredOf(form), ["service", "stopAt"])
     assert.equal(fieldOf(form, "stopAt")?.defaultValue, "container")
     assert.deepEqual(fieldOf(form, "containerId")?.relation, CONTAINERS_MODULE)
     assert.deepEqual(fieldOf(form, "propertyId")?.relation, PROPERTIES_MODULE)
@@ -132,6 +133,22 @@ describe("the route's dialogs", () => {
     assert.deepEqual(Object.keys(routeCommandValues(record)).filter((key) => fieldIdsOf(form).includes(key)), [])
   })
 
+  test("Add stop books an emptying unless it says a repair or a wash, each of a container; an emptying's body says no service, the API's default (O3 of #290)", () => {
+    const form = ROUTE_COMMAND_FORMS["add-stop"]
+    assert.equal(fieldOf(form, "service")?.defaultValue, "empty")
+    assert.deepEqual(fieldOf(form, "service")?.options?.map((option) => [option.value, option.label]), [
+      ["empty", "Emptying"],
+      ["repair", "Repair"],
+      ["wash", "Wash"],
+    ])
+    const toBody = (input: Record<string, unknown>) => routeAdapter.commands?.[ADD_STOP]?.toBody?.(input, record, context)
+    const atAProperty = { stopAt: "property", propertyId: "property-01a0d2a4-a280-7011-8000-000000000001", wasteFractionId: "fraction-01a0d2a4-a280-7005-8000-000000000001" }
+    assert.equal((toBody({ ...atAProperty, service: "empty" }) as Record<string, unknown>).service, undefined, "an emptying is the API's default")
+    assert.deepEqual(toBody({ ...atAProperty, service: "wash" }), { path: "stopAt", message: A_WORK_ORDER_IS_OF_A_CONTAINER })
+    assert.equal(A_WORK_ORDER_IS_OF_A_CONTAINER, A_WORK_ORDER_OF_A_CONTAINER, "one sentence, whichever side refuses")
+    assert.deepEqual(toBody({ ...atAProperty, service: "deliver" }), { path: "service", message: "Book an emptying, a repair or a wash" })
+  })
+
   test("cancel asks why, and the reason is the body", () => {
     const form = ROUTE_COMMAND_FORMS[CANCEL_ROUTE]
     assert.deepEqual(fieldIdsOf(form), ["reason"])
@@ -142,7 +159,7 @@ describe("the route's dialogs", () => {
 })
 
 describe("the stop's dialogs", () => {
-  const pickup: Pickup = { id: "01a0d2a4-a280-7033-8000-000000000001", ...STAMPS, projectId: route.projectId, routeId: route.id, containerId: "01a0d2a4-a280-7014-8000-000000000009", position: 1, status: "completed", origin: "generation", reason: null, note: null, propertyId: null, sharedCollectionPointId: "01a0d2a4-a280-7019-8000-000000000001", wasteFractionId: "01a0d2a4-a280-7005-8000-000000000001", arrivedAt: null, outcomeAt: "2026-10-01T05:00:00.000Z" }
+  const pickup: Pickup = { id: "01a0d2a4-a280-7033-8000-000000000001", ...STAMPS, projectId: route.projectId, routeId: route.id, containerId: "01a0d2a4-a280-7014-8000-000000000009", position: 1, status: "completed", origin: "generation", service: "empty", reason: null, note: null, propertyId: null, sharedCollectionPointId: "01a0d2a4-a280-7019-8000-000000000001", wasteFractionId: "01a0d2a4-a280-7005-8000-000000000001", arrivedAt: null, outcomeAt: "2026-10-01T05:00:00.000Z" }
   const stop = pickupAdapter.toRecord(pickup, context)
 
   test("remove asks why", () => {

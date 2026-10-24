@@ -62,6 +62,8 @@ export const PICKUP_OUTCOMES = ["completed", "skipped", "failed"] as const
 export const PICKUP_REASONS = ["inaccessible", "contamination", "not-presented", "capacity", "safety", "other", "route-ended", "route-cancelled", "removed-by-dispatcher", "regeneration"] as const
 /** Who put a stop on its route (#111): generation, or the office by hand, whose stop a refresh never skips or moves. */
 export const PICKUP_ORIGINS = ["generation", "office"] as const
+/** What a stop is for (O3 of #290): emptying its container — generation's only service, and the office's too — or one of the office's work orders: a container delivered, removed or swapped, repaired or washed where it stands. */
+export const PICKUP_SERVICES = ["empty", "deliver", "remove", "swap", "repair", "wash"] as const
 /** What a Proof of Service is: seven driver events — five about a stop, two about the route — four kinds of evidence, and the dispatcher's correction. */
 export const PROOF_KINDS = ["arrival", "completion", "skip", "failure", "problem", "route-started", "route-ended", "photo", "weight", "signature", "note", "correction"] as const
 /** Who recorded a proof or an unload. */
@@ -80,6 +82,7 @@ export type PickupStatus = (typeof PICKUP_STATUSES)[number]
 export type PickupOutcome = (typeof PICKUP_OUTCOMES)[number]
 export type PickupReason = (typeof PICKUP_REASONS)[number]
 export type PickupOrigin = (typeof PICKUP_ORIGINS)[number]
+export type PickupService = (typeof PICKUP_SERVICES)[number]
 export type ProofKind = (typeof PROOF_KINDS)[number]
 export type ExecutionSource = (typeof EXECUTION_SOURCES)[number]
 export type DriverCommandKind = (typeof DRIVER_COMMAND_KINDS)[number]
@@ -98,6 +101,16 @@ export type OutboxAggregate = (typeof OUTBOX_AGGREGATES)[number]
 export const DRIVER_PICKUP_REASONS = ["inaccessible", "contamination", "not-presented", "capacity", "safety", "other"] as const satisfies readonly PickupReason[]
 export type DriverPickupReason = (typeof DRIVER_PICKUP_REASONS)[number]
 
+/**
+ * The services the office books on a stop it adds: an emptying — an extra
+ * one, of a container on the route already, included — a repair and a wash,
+ * each of a container where it stands. A delivery, a removal and a swap move
+ * a container through the ledger as the stop is completed, which comes with
+ * their booking; a value beside the lists, like the driver's six reasons.
+ */
+export const OFFICE_STOP_SERVICES = ["empty", "repair", "wash"] as const satisfies readonly PickupService[]
+export type OfficeStopService = (typeof OFFICE_STOP_SERVICES)[number]
+
 /** The two reasons the system writes when a route's end or cancellation closes its open pickups; a value beside the lists, like the driver's six. */
 export const CLOSING_REASONS = ["route-ended", "route-cancelled"] as const satisfies readonly PickupReason[]
 export type ClosingReason = (typeof CLOSING_REASONS)[number]
@@ -109,6 +122,7 @@ export const EXECUTION_VOCABULARIES = {
   PICKUP_OUTCOMES,
   PICKUP_REASONS,
   PICKUP_ORIGINS,
+  PICKUP_SERVICES,
   PROOF_KINDS,
   EXECUTION_SOURCES,
   DRIVER_COMMAND_KINDS,

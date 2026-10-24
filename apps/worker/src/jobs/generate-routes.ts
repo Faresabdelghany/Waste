@@ -49,7 +49,8 @@
 //
 // A stop the office added (#111, `origin = office`) is read with the route's
 // others and left as it stands: `pickupChanges` never skips or moves it, and
-// never plans its container onto the route a second time. Which of the
+// never plans a container it empties onto the route a second time — one it
+// repairs or washes (O3 of #290) is still emptied beside it. Which of the
 // walk's planned routes carry an open one is one statement, read under their
 // lock, so the domain can trim them rather than cancel them. A
 // route the office made, with no scheme, is never among a scheme's routes:
@@ -94,7 +95,7 @@ import { generationMatch, generationRun } from "@waste/db/schema/generation"
 import { company, project } from "@waste/db/schema/organisation"
 import { collectionGroup, collectionGroupContainer, collectionGroupContainerType, collectionGroupFraction, routeScheme } from "@waste/db/schema/route-schemes"
 import { withCompany } from "@waste/db/tenant"
-import type { PickupOrigin, PickupReason, PickupStatus, RouteStatus } from "@waste/domain/execution/vocabulary"
+import type { PickupOrigin, PickupReason, PickupService, PickupStatus, RouteStatus } from "@waste/domain/execution/vocabulary"
 import {
   compatibilityKey,
   holidayListOf,
@@ -327,6 +328,7 @@ async function generate(tx: Tx, runId: string, companyId: string, at: Date): Pro
         containerId: row.containerId,
         position: row.position,
         origin: row.origin as PickupOrigin,
+        service: row.service as PickupService,
         status: row.status as PickupStatus,
         reason: row.reason as PickupReason | null,
         propertyId: row.propertyId,

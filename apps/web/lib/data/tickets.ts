@@ -130,7 +130,9 @@ const MISSED_STOP = new Set(["skipped", "failed"])
  * the route alone; only None until a route is picked.
  */
 export function recollectionStopOptions(stops: readonly BusinessRecord[], routeWebId: string | undefined): BusinessFormOption[] {
-  const ofRoute = routeWebId === undefined || routeWebId === "" ? [] : stops.filter((stop) => stop.submittedValues?.routeId === routeWebId && !MISSED_STOP.has(String(stop.submittedValues?.status ?? "")))
+  // A repair or a wash collects nothing (O3 of #290), so it is no re-collection.
+  const empties = (stop: BusinessRecord) => (stop.submittedValues?.service ?? "empty") === "empty"
+  const ofRoute = routeWebId === undefined || routeWebId === "" ? [] : stops.filter((stop) => stop.submittedValues?.routeId === routeWebId && !MISSED_STOP.has(String(stop.submittedValues?.status ?? "")) && empties(stop))
   return [{ value: NO_ONE, label: "None: the route alone" }, ...ofRoute.map((stop) => ({ value: stop.id, label: stop.status === "Planned" ? stop.name : `${stop.name} · ${stop.status}` }))]
 }
 

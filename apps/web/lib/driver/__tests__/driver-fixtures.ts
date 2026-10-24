@@ -60,6 +60,7 @@ export function pickup(n: number, overrides: Partial<DriverPickup> = {}): Driver
     sequence: n,
     status: "planned",
     origin: "generation",
+    service: "empty",
     reason: null,
     note: null,
     propertyId: "01950000-0000-7000-8000-000000000301",

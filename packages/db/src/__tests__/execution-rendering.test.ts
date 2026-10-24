@@ -43,7 +43,13 @@
 // nullable, its `origin`, and the two checks over them, so `CHANGED_IN_0016`
 // maps the route's CREATE TABLE as drizzle-kit writes it now onto what it
 // wrote as of 0015, first of the chain, and the pickup's onto what 0008 says;
-// ad-hoc-rendering.test.ts pins the statements themselves.
+// ad-hoc-rendering.test.ts pins the statements themselves. Migration 0023
+// (O3 of #290) gave `pickup` its `service` with three checks and relaxed
+// `pickup_route_id_container_id_key` from a constraint to a unique index over
+// generation's stops, so `CHANGED_IN_0023` maps the pickup's CREATE TABLE as
+// drizzle-kit writes it now onto 0016's spelling, first of the chain, and
+// `ADDED_IN_0023` is the index; stop-service-rendering.test.ts pins the
+// statements themselves.
 import assert from "node:assert/strict"
 import { readFile } from "node:fs/promises"
 import { join } from "node:path"
@@ -241,14 +247,15 @@ const routeTable = (asOf: "0008" | "0012" | "0013" | "0015" | "0016"): string =>
       : []),
   ])
 
-/** pickup as drizzle-kit wrote it as of 0008, and as it writes it since 0016 (#111): the container nullable, the stop's origin, and the two checks over them. */
-const pickupTable = (asOf: "0008" | "0016"): string =>
+/** pickup as drizzle-kit wrote it as of 0008; as of 0016 (#111), the container nullable, the stop's origin, and the two checks over them; and as it writes it since 0023 (O3 of #290), the service with its three checks and the one-stop-per-container key a partial index of its own. */
+const pickupTable = (asOf: "0008" | "0016" | "0023"): string =>
   createTable("pickup", "project", [
     '"route_id" uuid NOT NULL',
-    asOf === "0016" ? '"container_id" uuid' : '"container_id" uuid NOT NULL',
+    asOf >= "0016" ? '"container_id" uuid' : '"container_id" uuid NOT NULL',
     '"position" integer NOT NULL',
     `"status" text DEFAULT 'planned' NOT NULL`,
-    ...(asOf === "0016" ? [`"origin" text DEFAULT 'generation' NOT NULL`] : []),
+    ...(asOf >= "0016" ? [`"origin" text DEFAULT 'generation' NOT NULL`] : []),
+    ...(asOf >= "0023" ? [`"service" text DEFAULT 'empty' NOT NULL`] : []),
     '"note" text',
     '"property_id" uuid',
     '"shared_collection_point_id" uuid',
@@ -256,19 +263,32 @@ const pickupTable = (asOf: "0008" | "0016"): string =>
     `"arrived_at" ${INSTANT}`,
     `"outcome_at" ${INSTANT}`,
     '"reason" text',
-    uniqueKey("pickup_route_id_container_id_key", "company_id", "route_id", "container_id"),
+    ...(asOf < "0023" ? [uniqueKey("pickup_route_id_container_id_key", "company_id", "route_id", "container_id")] : []),
     uniqueKey("pickup_route_id_project_key", "company_id", "project_id", "route_id", "id"),
     oneOfCheck("pickup", "status", ...STATUSES),
-    ...(asOf === "0016" ? [oneOfCheck("pickup", "origin", "generation", "office")] : []),
+    ...(asOf >= "0016" ? [oneOfCheck("pickup", "origin", "generation", "office")] : []),
+    ...(asOf >= "0023" ? [oneOfCheck("pickup", "service", "empty", "deliver", "remove", "swap", "repair", "wash")] : []),
+    ...(asOf >= "0023"
+      ? [
+          `CONSTRAINT "pickup_service_origin_shape" CHECK (${ref("pickup", "service")} = 'empty' or ${ref("pickup", "origin")} = 'office')`,
+          `CONSTRAINT "pickup_service_container_shape" CHECK (${ref("pickup", "service")} = 'empty' or ${ref("pickup", "container_id")} is not null)`,
+        ]
+      : []),
     oneOfCheck("pickup", "reason", ...REASONS),
     positiveCheck("pickup", "position"),
     `CONSTRAINT "pickup_place_exactly_one" CHECK ((${ref("pickup", "property_id")} is not null)::int + (${ref("pickup", "shared_collection_point_id")} is not null)::int = 1)`,
-    ...(asOf === "0016" ? [`CONSTRAINT "pickup_container_shape" CHECK (${ref("pickup", "container_id")} is not null or ${ref("pickup", "origin")} = 'office')`] : []),
+    ...(asOf >= "0016" ? [`CONSTRAINT "pickup_container_shape" CHECK (${ref("pickup", "container_id")} is not null or ${ref("pickup", "origin")} = 'office')`] : []),
     `CONSTRAINT "pickup_outcome_shape" CHECK ((${ref("pickup", "status")} <> 'planned') = (${ref("pickup", "outcome_at")} is not null))`,
     `CONSTRAINT "pickup_reason_shape" CHECK ((${ref("pickup", "status")} in ('skipped', 'failed')) = (${ref("pickup", "reason")} is not null))`,
   ])
 
-/** What 0016 changed on two of the seven (#111): the route's CREATE TABLE as drizzle-kit generates it now onto what it generated as of 0015, and the pickup's onto what 0008 says. Applied first, one file at a time. */
+/** What 0023 changed on one of the seven (O3 of #290): the pickup's CREATE TABLE as drizzle-kit generates it now onto what it generated as of 0016. Applied first, one file at a time. */
+const CHANGED_IN_0023 = new Map([[pickupTable("0023"), pickupTable("0016")]])
+
+/** What 0023 added to the pickup beside the column: the one-stop-per-container key as a unique index over generation's stops alone. */
+const ADDED_IN_0023 = [partialUniqueIndex("pickup", "pickup_route_id_container_id_key", ["company_id", "route_id", "container_id"], `${ref("pickup", "origin")} = 'generation'`)]
+
+/** What 0016 changed on two of the seven (#111): the route's CREATE TABLE as drizzle-kit generates it now onto what it generated as of 0015, and the pickup's as of 0016 onto what 0008 says. Applied after `CHANGED_IN_0023`, one file at a time. */
 const CHANGED_IN_0016 = new Map([
   [routeTable("0016"), routeTable("0015")],
   [pickupTable("0016"), pickupTable("0008")],
@@ -291,7 +311,7 @@ const ADDED_IN_0012 = [projectFkTo("route", "generation_run_id", "generation_run
 
 const expected = [
   routeTable("0016"),
-  pickupTable("0016"),
+  pickupTable("0023"),
   createTable("session", "project", [
     '"route_id" uuid NOT NULL',
     '"driver_id" uuid NOT NULL',
@@ -414,6 +434,7 @@ const expected = [
   index("route", "route_actual_trailer_id_idx", "company_id", "actual_trailer_id"),
   index("route", "route_generation_run_id_idx", "company_id", "generation_run_id"),
   index("route", "route_active_plan_id_idx", "company_id", "active_plan_id"),
+  ...ADDED_IN_0023,
   index("pickup", "pickup_project_id_idx", "company_id", "project_id"),
   index("pickup", "pickup_container_id_idx", "company_id", "container_id"),
   index("pickup", "pickup_property_id_idx", "company_id", "property_id"),
@@ -494,7 +515,8 @@ const handWritten = [...Object.values(tables).flatMap((table) => handWrittenStat
 /** Everything drizzle-kit wrote at the head of 0008: the seven tables as they were generated as of 0008 — the outbox and the unload in their earlier spelling, the route without the run that last wrote it, what 0012 added left out — and the company altered from 0002's spelling to 0008's. */
 const generatedHead = async (): Promise<string[]> => [
   ...(await statementsFor(tables))
-    .filter((statement) => !ADDED_IN_0013.includes(statement) && !ADDED_IN_0012.includes(statement))
+    .filter((statement) => !ADDED_IN_0023.includes(statement) && !ADDED_IN_0013.includes(statement) && !ADDED_IN_0012.includes(statement))
+    .map((statement) => CHANGED_IN_0023.get(statement) ?? statement)
     .map((statement) => CHANGED_IN_0016.get(statement) ?? statement)
     .map((statement) => CHANGED_IN_0015.get(statement) ?? statement)
     .map((statement) => CHANGED_IN_0013.get(statement) ?? statement)
@@ -523,7 +545,9 @@ describe("the Execution tables as drizzle-kit writes them", () => {
     assert.deepEqual([...statements.slice(0, generated.length)].sort(), generated)
     // The statements 0016 changed are ones the schema generates today, the one 0015 changed is what 0016 maps the route back to, the one 0013 changed is what 0015 maps back to, and the one 0012 changed is what 0013 maps back to — each mapping maps something, one file at a time; the same chain for 0010 and 0009.
     const today = await statementsFor(tables)
-    for (const statement of CHANGED_IN_0016.keys()) assert.ok(today.includes(statement), statement.split("\n")[0])
+    for (const statement of CHANGED_IN_0023.keys()) assert.ok(today.includes(statement), statement.split("\n")[0])
+    for (const statement of ADDED_IN_0023) assert.ok(today.includes(statement), statement)
+    for (const statement of CHANGED_IN_0016.keys()) assert.ok(today.includes(statement) || [...CHANGED_IN_0023.values()].includes(statement), statement.split("\n")[0])
     for (const statement of CHANGED_IN_0015.keys()) assert.ok([...CHANGED_IN_0016.values()].includes(statement), statement.split("\n")[0])
     for (const statement of CHANGED_IN_0013.keys()) assert.ok([...CHANGED_IN_0015.values()].includes(statement), statement.split("\n")[0])
     for (const statement of ADDED_IN_0013) assert.ok(today.includes(statement), statement)
@@ -536,6 +560,7 @@ describe("the Execution tables as drizzle-kit writes them", () => {
     assert.equal(CHANGED_IN_0013.size, 1, "the route's active Plan")
     assert.equal(CHANGED_IN_0015.size, 1, "the route's hold")
     assert.equal(CHANGED_IN_0016.size, 2, "the ad-hoc route and the extra pickup")
+    assert.equal(CHANGED_IN_0023.size, 1, "the stop's service")
   })
 
   test("and carries below them the fence and trigger, or revoke, of each table, then the sync role, its grants and the publication: 7 x 3 + 3 + 17 + 1 = 42 statements", async () => {
@@ -611,7 +636,19 @@ describe("the checks of this context", () => {
 
   test("every shape check of the seven tables renders without parameters, the way every check in a migration must", () => {
     assert.deepEqual([...checksOf(route).keys()], ["route_status_one_of", "route_actual_shape", "route_stamps_shape", "route_hold_shape", "route_scheme_shape"])
-    assert.deepEqual([...checksOf(pickup).keys()], ["pickup_status_one_of", "pickup_origin_one_of", "pickup_reason_one_of", "pickup_position_positive", "pickup_place_exactly_one", "pickup_container_shape", "pickup_outcome_shape", "pickup_reason_shape"])
+    assert.deepEqual([...checksOf(pickup).keys()], [
+      "pickup_status_one_of",
+      "pickup_origin_one_of",
+      "pickup_service_one_of",
+      "pickup_service_origin_shape",
+      "pickup_service_container_shape",
+      "pickup_reason_one_of",
+      "pickup_position_positive",
+      "pickup_place_exactly_one",
+      "pickup_container_shape",
+      "pickup_outcome_shape",
+      "pickup_reason_shape",
+    ])
     assert.deepEqual([...checksOf(unload).keys()].slice(-2), ["unload_session_shape", "unload_weights_shape"])
     assert.deepEqual([...checksOf(driverCommand).keys()], ["driver_command_kind_one_of", "driver_command_outcome_one_of", "driver_command_problem_shape", "driver_command_route_shape"])
     assert.deepEqual([...checksOf(outboxEvent).keys()], ["outbox_event_kind_one_of", "outbox_event_aggregate_kind_one_of"])

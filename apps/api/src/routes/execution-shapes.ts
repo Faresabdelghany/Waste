@@ -40,7 +40,7 @@ import { reviewStatus, weightReviewOf } from "@waste/db/query/weight-review"
 import { driverCommand, pickup, proofOfService, route, session, unload } from "@waste/db/schema/execution"
 import { noRouteAssigned } from "@waste/domain/execution/commands"
 import { progressOf, type PickupCounts } from "@waste/domain/execution/progress"
-import type { CommandOutcome, DriverCommandKind, ExecutionSource, PickupOrigin, PickupOutcome, PickupReason, PickupStatus, ProofKind, RouteStatus } from "@waste/domain/execution/vocabulary"
+import type { CommandOutcome, DriverCommandKind, ExecutionSource, PickupOrigin, PickupOutcome, PickupReason, PickupService, PickupStatus, ProofKind, RouteStatus } from "@waste/domain/execution/vocabulary"
 import type { WeightReviewStatus } from "@waste/domain/finance/vocabulary"
 import { and, asc, count, eq, inArray, isNull, sql, type SQL } from "drizzle-orm"
 
@@ -190,6 +190,7 @@ export const pickupColumns = {
   position: pickup.position,
   status: pickup.status,
   origin: pickup.origin,
+  service: pickup.service,
   reason: pickup.reason,
   note: pickup.note,
   propertyId: pickup.propertyId,
@@ -213,6 +214,7 @@ export function pickupOf(row: PickupRow): Pickup {
     position: row.position,
     status: row.status as PickupStatus,
     origin: row.origin as PickupOrigin,
+    service: row.service as PickupService,
     reason: row.reason as PickupReason | null,
     note: row.note,
     propertyId: row.propertyId,
