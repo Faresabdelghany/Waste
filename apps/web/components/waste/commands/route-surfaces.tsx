@@ -472,7 +472,7 @@ function ReorderStopsDialog({ order, label, busy, onChange, onClose, onSave }: {
 }
 
 /** A proof's photo or signature beside its line: the picture from its signed URL, opening it whole, or why there is none to show. */
-function ProofObject({ proof, links }: { proof: ProofOfService; links: { rows: ProofObjectLink[] | null; problem: string | null } }) {
+export function ProofObject({ proof, links }: { proof: ProofOfService; links: { rows: ProofObjectLink[] | null; problem: string | null } }) {
   if (proof.objectKey === null || links.rows === null) return null
   const noun = proofObjectNoun(proof)
   const link = links.rows.find((candidate) => candidate.proofId === proof.id)

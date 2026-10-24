@@ -1,8 +1,9 @@
 // Tickets on the Pilot (Issue #182, slice 8 of #81, for #147): the forms
 // Operate › Tickets offers once it reads the API — the office's New ticket,
 // trimmed to what `TicketCreate` carries, the edit of a case's own words, and
-// the dialogs of the commands that say something — and the list's
-// categories, read off a row for the person looking. Fixture mode keeps the
+// the dialogs of the commands that say something, the reply with the stop's
+// record among them (M6 of #293) — and the list's categories, read off a row
+// for the person looking. Fixture mode keeps the
 // registry's ticket form and the fixture details dialog untouched.
 //
 // Every field id is a key the adapter reads (lib/api/records/tickets.ts):
@@ -40,9 +41,16 @@ const priority: BusinessFormField = { id: "priority", label: "Priority", type: "
 const due: BusinessFormField = { id: "dueAt", label: "Due", type: "datetime", description: "The response target, on the project's clock." }
 const assignee = (description?: string): BusinessFormField => ({ id: "assigneeUserAccountId", label: "Assignee", type: "select", relation: ACCESS_MODULE, description })
 
-/** What a ticket may be about, field by field, each from its module: the office's seven links. */
+/** What a ticket may be about, field by field, each from its module: the office's eight links, the stop among its route's. */
 export const TICKET_LINK_FIELDS: readonly BusinessFormField[] = [
   { id: "routeId", label: "Route", type: "select", relation: ROUTES_MODULE },
+  {
+    id: "pickupId",
+    label: "Stop",
+    type: "select",
+    relation: PICKUPS_MODULE,
+    description: "A stop of that route. A missed collection whose stop recorded the bin was not put out is answered with that record as it opens.",
+  },
   { id: "containerId", label: "Container", type: "select", relation: CONTAINERS_MODULE },
   { id: "customerId", label: "Customer", type: "select", relation: CONTACTS_MODULE },
   { id: "propertyId", label: "Property", type: "select", relation: PROPERTIES_MODULE },
@@ -134,6 +142,24 @@ export function recollectionStopOptions(stops: readonly BusinessRecord[], routeW
   const empties = (stop: BusinessRecord) => (stop.submittedValues?.service ?? "empty") === "empty"
   const ofRoute = routeWebId === undefined || routeWebId === "" ? [] : stops.filter((stop) => stop.submittedValues?.routeId === routeWebId && !MISSED_STOP.has(String(stop.submittedValues?.status ?? "")) && empties(stop))
   return [{ value: NO_ONE, label: "None: the route alone" }, ...ofRoute.map((stop) => ({ value: stop.id, label: stop.status === "Planned" ? stop.name : `${stop.name} · ${stop.status}` }))]
+}
+
+/** The stops a ticket may be about: the picked route's, whatever their outcome, after None; only None until a route is picked. */
+export function ticketStopOptions(stops: readonly BusinessRecord[], routeWebId: string | undefined): BusinessFormOption[] {
+  const ofRoute = routeWebId === undefined || routeWebId === "" || routeWebId === NO_ONE ? [] : stops.filter((stop) => stop.submittedValues?.routeId === routeWebId)
+  return [{ value: NO_ONE, label: "None" }, ...ofRoute.map((stop) => ({ value: stop.id, label: `${stop.name} · ${stop.status}` }))]
+}
+
+/**
+ * Reply with the record (M6 of #293): the reply quoting what the stop
+ * recorded goes on the customer's thread as the details show it, the note
+ * after it; an open case may be completed `answered` in the same step, a
+ * closed one takes the reply alone.
+ */
+export function replyWithEvidenceForm(open: boolean): BusinessFormSchema {
+  const fields: BusinessFormField[] = [note("Note after the record", false)]
+  if (open) fields.push({ id: "complete", label: "Complete the case as answered", type: "checkbox", defaultValue: false })
+  return commandForm("Reply with the record", "The customer is told what the stop recorded, in the words shown under Evidence, then your note. It is recorded on the customer's thread; sending it is not part of the Pilot.", "Record reply", fields)
 }
 
 /** A ticket the New ticket form made: the generic create path's id and kind, so the adapter owns it until the API's answer replaces it. `extra` rides along unseen — the alert a ticket answers. */

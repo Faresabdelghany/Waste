@@ -8,11 +8,12 @@ import assert from "node:assert/strict"
 import { describe, test } from "node:test"
 
 import type { Project } from "@waste/contracts/organisation"
-import { Ticket, TicketAssign, TicketComment, TicketComplete, TicketCreate, TicketDetail, TicketEvent, TicketHold, TicketPatch, TicketReject, TicketReopen, TicketStart, TicketWait } from "@waste/contracts/tickets"
+import { StopEvidence, Ticket, TicketAssign, TicketComment, TicketComplete, TicketCreate, TicketDetail, TicketEvent, TicketEvidence, TicketHold, TicketPatch, TicketReject, TicketReopen, TicketReplyWithEvidence, TicketStart, TicketWait } from "@waste/contracts/tickets"
 
 import { FIXTURE_COMPANY_ID, getModuleDefinition, type BusinessRecord } from "../../data/business-modules"
 import { defaultFactColumns } from "../../data/business-view-kinds"
 import { NO_ONE } from "../../data/properties"
+import { replyWithEvidenceForm, ticketStopOptions } from "../../data/tickets"
 import { problemSentence } from "../problem"
 import { NOTHING_RESOLVED, type MappingContext, type Resolver } from "../records/adapter"
 import { isServerBacked, SERVER_MODULE_KEYS } from "../records/modules"
@@ -23,9 +24,13 @@ import {
   ASSIGNEE_ACCOUNT_KEY,
   COMMENT_ON_TICKET,
   commentOnTicket,
+  evidenceOutcome,
+  evidencePlace,
   offersTicketCommand,
+  REPLY_WITH_EVIDENCE,
   ticketAdapter,
   ticketDetail,
+  ticketEvidence,
   TICKETS_MODULE,
   TICKET_NUMBER_FACT,
   ticketOpened,
@@ -498,5 +503,74 @@ describe("the comment and the detail read", () => {
     const { fetch, calls } = scripted([() => json(detail)])
     assert.deepEqual(await ticketDetail(clientOver(fetch), missed.id), detail)
     assert.equal(calls[0].url, `http://api.test/tickets/${missed.id}`)
+  })
+})
+
+describe("the stop's evidence (M6 of #293)", () => {
+  const stop = { ...row(`pickup-${pickupId}`, "Stop 2 · Havnegade 4", "Pickup"), status: "Failed", submittedValues: { routeId: rc1042.id } }
+  const withStop: ServerRecordsState = new Map([...state, ["route-studio.pickups", loaded({ records: [stop], serverIds: serverIdsOf([stop], [pickupId]) }, 1)]])
+  const minted = (values: Record<string, string>): BusinessRecord => ({ ...record, id: "operate-ticket-1700000000000", name: values.subject ?? "", recordKind: "Ticket", projectIds: [projectRecord.id], submittedValues: { projectId: projectRecord.id, subject: "Bin not emptied", description: "Not emptied on Monday", kind: "missed-collection", ...values } })
+  const evidence: StopEvidence = {
+    pickupId,
+    routeId,
+    outcome: "failed",
+    reason: "not-presented",
+    at: "2026-10-05T05:12:00.000Z",
+    location: { type: "Point", coordinates: [12.5683, 55.6761] },
+    proofs: [],
+    reply: "Our driver was at the address at 07:12 on Monday 5 October and recorded that the bin was not put out for collection.",
+    answeredByRecord: true,
+  }
+
+  test("the office's create names the stop with its route, by server id, and refuses a stop without its route or of another", () => {
+    const body = ticketAdapter.toCreateBody?.(minted({ routeId: rc1042.id, pickupId: stop.id }), context(resolverOver(withStop)))
+    assert.deepEqual((body as { links: unknown }).links, { routeId, pickupId })
+    assert.ok(TicketCreate.safeParse(body).success)
+    assert.deepEqual(ticketAdapter.toCreateBody?.(minted({ pickupId: stop.id }), context(resolverOver(withStop))), { path: "pickupId", message: "Pick a stop on the ticket's route" })
+    assert.deepEqual(ticketAdapter.toCreateBody?.(minted({ routeId: rc1040.id, pickupId: stop.id }), context(resolverOver(withStop))), { path: "pickupId", message: "Pick a stop on the ticket's route" }, "picked before the route was changed")
+    assert.deepEqual((ticketAdapter.toCreateBody?.(minted({ routeId: rc1042.id, pickupId: NO_ONE }), context(resolverOver(withStop))) as { links: unknown }).links, { routeId }, "the picker's None is no stop")
+  })
+
+  test("the stop is picked among the route's, whatever their outcome, after None", () => {
+    assert.deepEqual(ticketStopOptions([stop], undefined), [{ value: NO_ONE, label: "None" }], "only None until a route is picked")
+    assert.deepEqual(ticketStopOptions([stop], rc1042.id), [{ value: NO_ONE, label: "None" }, { value: stop.id, label: "Stop 2 · Havnegade 4 · Failed" }], "a missed stop is what a complaint is about")
+    assert.deepEqual(ticketStopOptions([stop], rc1040.id), [{ value: NO_ONE, label: "None" }])
+  })
+
+  test("a create the record answered comes back completed and is told so", () => {
+    assert.deepEqual(ticketOpened({ ...record, status: "Completed" }), { title: "Ticket answered", description: "T-1001 was answered with the stop's record; the reply is on the customer's thread." })
+  })
+
+  test("is read whole from the ticket's evidence, and the details read its outcome and its place", async () => {
+    assert.ok(StopEvidence.safeParse(evidence).success)
+    const { fetch, calls } = scripted([() => json({ stop: evidence } satisfies TicketEvidence), () => json({ stop: null })])
+    assert.deepEqual(await ticketEvidence(clientOver(fetch), missed.id), evidence)
+    assert.equal(calls[0].url, `http://api.test/tickets/${missed.id}/evidence`)
+    assert.equal(await ticketEvidence(clientOver(fetch), missed.id), null, "a ticket about no stop")
+    assert.equal(evidenceOutcome(evidence), "Failed · Not presented")
+    assert.equal(evidenceOutcome({ outcome: "completed", reason: null }), "Completed")
+    assert.equal(evidencePlace(evidence.location), "55.67610, 12.56830", "latitude first, as a person reads a place")
+    assert.equal(evidencePlace(null), "Not recorded")
+  })
+
+  test("the reply is a command: its note where said and whether it completes, and the ticket the API answers replaces the row", async () => {
+    const reply = ticketAdapter.commands?.[REPLY_WITH_EVIDENCE]
+    assert.deepEqual(reply?.toBody?.({}, record, context()), { complete: false })
+    const said = reply?.toBody?.({ note: "Sorry for the trouble", complete: true }, record, context())
+    assert.deepEqual(said, { note: "Sorry for the trouble", complete: true })
+    assert.ok(TicketReplyWithEvidence.safeParse(said).success)
+    const answered: TicketDetail = { ...missed, status: "completed", resolution: "answered", closedAt: "2026-10-05T10:00:00.000Z", events: [], alerts: [] }
+    const { fetch, calls } = scripted([() => json(answered, 201)])
+    const outcome = await commandRecord(clientOver(fetch), ticketsModule, current, record, REPLY_WITH_EVIDENCE, { complete: true }, options)
+    assert.equal(calls[0].url, `http://api.test/tickets/${missed.id}/reply-with-evidence`)
+    assert.deepEqual(bodyOf(calls[0]), { complete: true })
+    assert.equal(outcome.kind, "done")
+    if (outcome.kind === "done") assert.deepEqual([outcome.record.id, outcome.record.status], [record.id, "Completed"])
+  })
+
+  test("its dialog offers the completion on an open ticket alone; a closed one takes the reply", () => {
+    const fieldsOf = (open: boolean) => replyWithEvidenceForm(open).sections.flatMap((section) => section.fields.map((field) => field.id))
+    assert.deepEqual(fieldsOf(true), ["note", "complete"])
+    assert.deepEqual(fieldsOf(false), ["note"])
   })
 })

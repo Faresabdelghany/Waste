@@ -21,7 +21,9 @@
 // case's own fields — subject, description, kind, priority, due — and never a
 // status, the assignee, the source or the links the consumer set. A comment
 // is appended to the history and changes nothing of the row: an action
-// answering the event (`commentOnTicket`), not a command.
+// answering the event (`commentOnTicket`), not a command. A reply with the
+// stop's record (M6 of #293) is a command, since it may complete the case:
+// the API answers the ticket with its history, which replaces the row.
 //
 // Relations by web id through the store's resolver, the nine links each
 // under its module's prefix: a route and a pickup (#179), a container (5b),
@@ -30,7 +32,7 @@
 // until then; the assignee is a User Account of Users & roles. The assignee's
 // server id rides beside its web id (`ASSIGNEE_ACCOUNT_KEY`), since what the
 // list's "Mine" compares with is `/me`'s account, a server id.
-import type { Ticket, TicketDetail, TicketEvent, TicketLinks } from "@waste/contracts/tickets"
+import type { StopEvidence, Ticket, TicketDetail, TicketEvent, TicketEvidence, TicketLinks } from "@waste/contracts/tickets"
 import { ticketTransition, TICKET_COMMANDS, type TicketCommand } from "@waste/domain/resolution/transitions"
 import { OPEN_TICKET_STATUSES, TICKET_KINDS, TICKET_PRIORITIES, TICKET_RESOLUTIONS, TICKET_SOURCES, TICKET_VISIBILITIES, type TicketStatus } from "@waste/domain/resolution/vocabulary"
 
@@ -59,9 +61,10 @@ export const TICKET_PREFIX = "ticket"
 /** The fact a ticket record carries its label under (`T-1001`): never "Ticket", the table's title column's heading (#253). */
 export const TICKET_NUMBER_FACT = "Number"
 
-/** What opening a ticket is told, on the row the write left (#283): its number once the API has answered with it, as every other ticket toast names it; its subject only where that row is not known. */
-export function ticketOpened(record: Pick<BusinessRecord, "name" | "facts">): { title: string; description: string } {
+/** What opening a ticket is told, on the row the write left (#283): its number once the API has answered with it, as every other ticket toast names it; its subject only where that row is not known. A missed collection its stop's record answered (M6 of #293) comes back completed, and says so. */
+export function ticketOpened(record: Pick<BusinessRecord, "name" | "facts" | "status">): { title: string; description: string } {
   const number = record.facts[TICKET_NUMBER_FACT]
+  if (number !== undefined && statusToken(record.status) === "completed") return { title: "Ticket answered", description: `${number} was answered with the stop's record; the reply is on the customer's thread.` }
   return { title: "Ticket opened", description: number === undefined ? `${record.name} is open; its number follows from the API.` : `${number} is open.` }
 }
 
@@ -77,6 +80,9 @@ export type TicketCommandName = typeof ASSIGN_TICKET | TicketCommand
 
 /** The comment, an action on the ticket answering its history row. */
 export const COMMENT_ON_TICKET = "comment"
+
+/** The reply quoting the stop's record, a command: with `complete` it closes the case `answered`. */
+export const REPLY_WITH_EVIDENCE = "reply-with-evidence"
 
 /** The sources an office opens a ticket from: every one but the consumer's two (`TicketCreate.source`). */
 export const OFFICE_TICKET_SOURCES = TICKET_SOURCES.filter((source) => source !== "driver-app" && source !== "dispatch")
@@ -100,8 +106,8 @@ export const TICKET_LINKS: ReadonlyArray<readonly [keyof TicketLinks, string, st
   ["parentTicketId", TICKET_PREFIX, "Parent ticket", isTicketRecord],
 ]
 
-/** The links an office's form names, each by a picker: the pickup comes with its route from the consumer alone, and the parent is set by nobody here. */
-export const OFFICE_TICKET_LINKS = TICKET_LINKS.filter(([key]) => key !== "pickupId" && key !== "parentTicketId")
+/** The links an office's form names, each by a picker: the stop among its route's (M6 of #293), and the parent set by nobody here. */
+export const OFFICE_TICKET_LINKS = TICKET_LINKS.filter(([key]) => key !== "parentTicketId")
 
 /** Whether a status is one of the four open ones: what the list opens on and the sidebar counts. */
 export const isOpenTicketStatus = (status: string): boolean => (OPEN_TICKET_STATUSES as readonly string[]).includes(status)
@@ -247,6 +253,12 @@ export function toTicketCreateBody(record: BusinessRecord, context: MappingConte
     if (isLocalRefusal(serverId)) return serverId
     if (serverId !== undefined) links[key] = serverId
   }
+  // A stop is named with its route, and one picked before the route was changed is another route's: refused here as the contracts and the API would.
+  if (links.pickupId !== undefined) {
+    const stopRoute = context.resolve.byServerId(links.pickupId)?.submittedValues?.routeId
+    const stopRouteId = typeof stopRoute === "string" && stopRoute !== "" ? context.resolve.serverIdOf(stopRoute) : undefined
+    if (links.routeId === undefined || (stopRouteId !== undefined && stopRouteId !== links.routeId)) return refusal("pickupId", "Pick a stop on the ticket's route")
+  }
   const alertId = linkOf(record, "alertId", "alert", "Alert", isAlertRecord, context)
   if (isLocalRefusal(alertId)) return alertId
   return {
@@ -390,6 +402,32 @@ export function ticketDetail(client: Client, serverId: string): Promise<TicketDe
   return get<TicketDetail>(client, `/tickets/${serverId}`)
 }
 
+/**
+ * The reply quoting the stop's record (M6 of #293): the office's note after
+ * it where one is said, and the case completed `answered` where asked. The
+ * API answers the ticket with its history, a ticket still, which replaces
+ * the row.
+ */
+const REPLY: RecordCommand<Ticket> = {
+  toBody: (input) => {
+    const note = said(input, "note")
+    return { ...(note === undefined ? {} : { note }), complete: input.complete === true }
+  },
+  run: (client, serverId, body) => command<Ticket>(client, `/tickets/${serverId}/reply-with-evidence`, body),
+  refused: (record) => `The reply on ${record.name} was not recorded`,
+}
+
+/** What the stop a ticket names recorded, and the reply that quotes it: null for a ticket about no stop. */
+export async function ticketEvidence(client: Client, serverId: string): Promise<TicketEvidence["stop"]> {
+  return (await get<TicketEvidence>(client, `/tickets/${serverId}/evidence`)).stop
+}
+
+/** The stop's outcome as the details read it: `Failed · Not presented`. */
+export const evidenceOutcome = (stop: Pick<StopEvidence, "outcome" | "reason">): string => (stop.reason === null ? statusLabel(stop.outcome) : `${statusLabel(stop.outcome)} · ${statusLabel(stop.reason)}`)
+
+/** Where the device stood for the outcome, latitude first as a person reads a place: `55.67610, 12.56830`. */
+export const evidencePlace = (location: StopEvidence["location"]): string => (location === null ? "Not recorded" : `${location.coordinates[1].toFixed(5)}, ${location.coordinates[0].toFixed(5)}`)
+
 export const ticketAdapter: ResourceAdapter<Ticket> = {
   prefix: TICKET_PREFIX,
   owns: isTicketRecord,
@@ -401,7 +439,7 @@ export const ticketAdapter: ResourceAdapter<Ticket> = {
   toPatchBody: toTicketPatchBody,
   create: (client, body) => create<Ticket>(client, "/tickets", body).then((created) => created.body),
   update: (client, serverId, body) => patch<Ticket>(client, `/tickets/${serverId}`, body),
-  commands: TICKET_COMMANDS_BY_NAME,
+  commands: { ...TICKET_COMMANDS_BY_NAME, [REPLY_WITH_EVIDENCE]: REPLY },
   actions: { [COMMENT_ON_TICKET]: COMMENT as RecordAction<unknown> },
 }
 
