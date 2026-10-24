@@ -66,6 +66,7 @@ import { planningAreaRoutes } from "./routes/planning-areas"
 import { priceListRoutes } from "./routes/price-lists"
 import { productRoutes } from "./routes/products"
 import { projectRoutes } from "./routes/projects"
+import { reportRoutes } from "./routes/reports"
 import { propertyRoutes } from "./routes/properties"
 import { propertyGroupRoutes } from "./routes/property-groups"
 import { publicRoutes } from "./routes/public"
@@ -265,6 +266,8 @@ export function createApp({
   // The settlements and weight control: a settlement's `calculatedAt` and `closedAt` are the request's clock and `settlement-closed` is published with it, so the module takes `now`; weight control stamps nothing of its own (a review's `recordedAt` is the database's) and takes no clock.
   app.route("/", settlementRoutes(guard, { now }))
   app.route("/", weightControlRoutes(guard))
+  // The reports (#292): reads that count the rows above and store nothing. The ticket report reads "open now" and "overdue" at the request's clock, so the module takes `now`.
+  app.route("/", reportRoutes(guard, { now }))
 
   app.get(
     "/openapi.json",

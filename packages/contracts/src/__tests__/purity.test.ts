@@ -18,7 +18,9 @@
 // @waste/domain/resolution/event-shapes as its refine for the same reason,
 // and finance.ts turns @waste/domain/finance/vocabulary into Finance &
 // Contracting's (Issue #112), the sixth `vocabulary` subpath and the ninth
-// domain line of the allowlist. The direction is sound — the innermost ring
+// domain line of the allowlist, and reports.ts turns
+// @waste/domain/insight/vocabulary into the reports' interval (#292). The
+// direction is sound — the innermost ring
 // depends on nothing — and listing the subpath,
 // not the package, keeps every further reach into the domain a deliberate
 // line here. Issue #293 added two: organisation.ts reads the public slug's
@@ -39,6 +41,7 @@ definePurityTests({
     "@waste/domain/execution/proof-shapes",
     "@waste/domain/execution/vocabulary",
     "@waste/domain/finance/vocabulary",
+    "@waste/domain/insight/vocabulary",
     "@waste/domain/planning/vocabulary",
     "@waste/domain/registry/vocabulary",
     "@waste/domain/resolution/event-shapes",

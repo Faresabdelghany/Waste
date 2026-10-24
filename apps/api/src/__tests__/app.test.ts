@@ -3,6 +3,7 @@ import { after, describe, test } from "node:test"
 
 import { Validator } from "@seriousme/openapi-schema-validator"
 import { HealthResponse, ReadinessResponse } from "@waste/contracts/health"
+import { REPORT_WINDOW_MAX_DAYS } from "@waste/contracts/reports"
 import { createDb } from "@waste/db/client"
 
 import manifest from "../../package.json" with { type: "json" }
@@ -219,6 +220,10 @@ describe("GET /openapi.json", () => {
       "/public/{slug}",
       "/public/{slug}/sorting-guide",
       "/readyz",
+      "/reports/revenue",
+      "/reports/service",
+      "/reports/tickets",
+      "/reports/tonnage",
       "/roles",
       "/roles/{id}",
       "/roles/{id}/grants",
@@ -372,8 +377,8 @@ describe("GET /openapi.json", () => {
     }
     assert.equal(
       secured,
-      246,
-      "/me, the ten organisation routes, the twelve access routes, the fifty-two registry routes — waste fractions, container types, service frequencies, products and customers, four each; properties, property groups and shared collection points, five each, the four plus the route that replaces the set travelling with the record; and the two effective-dated families, agreements with their subscriptions, nine with the subscriptions listed across agreements (Issue #183), and containers with their placements, eight —the twenty-five planning routes of part A: planning areas with their boundary versions, nine, collection calendars with their holidays, five, route schemes with the occurrence read, five, and collection groups with their two set replacements, six — and the three of part B, the generate command and the two run reads — and the eighteen resources routes of slice 3: vehicle types with their container types, five, warehouses and depots, four each, and unloading stations with their fractions, five — and the seven of the container ledger (Issue #101, slice 5): the five commands receive, return, transfer, decommission and adjust, one container's movements, and the ledger across containers — and Resources' seven vehicle allocation routes (#101, slice 6): the list, the allocate command, the read, the three commands change, confirm and release, and the history — and the nine fleet routes of Resources' slice 4: vehicles with the compartments set, five, and drivers, four — and the twenty-one office routes of Execution's slice 3 (Issue #104): routes, ten (the list, the read, assign, dispatch, reschedule, the hold's release (#226), cancel, the pickup order, the command log and the office's ad-hoc route (#111)), pickups, five (the list, the read, remove, correct-outcome and the office's stop added under its route (#111)), live, three (the live read, the sessions list and one session), and weights, three (the unloads list, one unload and the office's capture on a route) — and the five of the driver door (Issue #104, slice 4): the driver's start screen, their routes, one route, the command batch and the receipts — and Resolution's nineteen (Issue #109): the thirteen ticket routes, the list and the create, the read and the patch, the seven commands assign, start, wait, hold, complete, reject and reopen, the history and the comment, and the six alert routes, the list, the raise, the read, and the three commands acknowledge, resolve and link-ticket — and Finance's forty-eight (Issue #112): price lists, nine (the list, the create, the read and the patch, a list's rows and the row added under it, one row and its patch, and the resolve read), service areas, eleven (the list, the create, the read and the patch, the two set replacements, an area's assignments and the assignment added under it, the assignments across the caller's reach, one assignment and its patch), and service provider prices, five (the list, the create, the read, the patch and the index command, which writes the next row of the chain), billable events, five (the list, the manual create, the read, and the two commands reprice and cancel), billing runs, four (the list, the run, the preview and the read), and invoices, three (the list, the read and the credit note), settlements, seven (the list, the create, the read, the three commands calculate, close and reopen, and the history), and weight control's four (the three decisions approve, reject and correct on an unload, and its reviews) — and Routing's five (#170, #171, #173): a route's Plans, one Plan with its legs, the optimise command, the quota read, and the guided setup's preview — and the Sorting Guide's four (Issue #293): the list, the create, the read and the patch",
+      250,
+      "/me, the ten organisation routes, the twelve access routes, the fifty-two registry routes — waste fractions, container types, service frequencies, products and customers, four each; properties, property groups and shared collection points, five each, the four plus the route that replaces the set travelling with the record; and the two effective-dated families, agreements with their subscriptions, nine with the subscriptions listed across agreements (Issue #183), and containers with their placements, eight —the twenty-five planning routes of part A: planning areas with their boundary versions, nine, collection calendars with their holidays, five, route schemes with the occurrence read, five, and collection groups with their two set replacements, six — and the three of part B, the generate command and the two run reads — and the eighteen resources routes of slice 3: vehicle types with their container types, five, warehouses and depots, four each, and unloading stations with their fractions, five — and the seven of the container ledger (Issue #101, slice 5): the five commands receive, return, transfer, decommission and adjust, one container's movements, and the ledger across containers — and Resources' seven vehicle allocation routes (#101, slice 6): the list, the allocate command, the read, the three commands change, confirm and release, and the history — and the nine fleet routes of Resources' slice 4: vehicles with the compartments set, five, and drivers, four — and the twenty-one office routes of Execution's slice 3 (Issue #104): routes, ten (the list, the read, assign, dispatch, reschedule, the hold's release (#226), cancel, the pickup order, the command log and the office's ad-hoc route (#111)), pickups, five (the list, the read, remove, correct-outcome and the office's stop added under its route (#111)), live, three (the live read, the sessions list and one session), and weights, three (the unloads list, one unload and the office's capture on a route) — and the five of the driver door (Issue #104, slice 4): the driver's start screen, their routes, one route, the command batch and the receipts — and Resolution's nineteen (Issue #109): the thirteen ticket routes, the list and the create, the read and the patch, the seven commands assign, start, wait, hold, complete, reject and reopen, the history and the comment, and the six alert routes, the list, the raise, the read, and the three commands acknowledge, resolve and link-ticket — and Finance's forty-eight (Issue #112): price lists, nine (the list, the create, the read and the patch, a list's rows and the row added under it, one row and its patch, and the resolve read), service areas, eleven (the list, the create, the read and the patch, the two set replacements, an area's assignments and the assignment added under it, the assignments across the caller's reach, one assignment and its patch), and service provider prices, five (the list, the create, the read, the patch and the index command, which writes the next row of the chain), billable events, five (the list, the manual create, the read, and the two commands reprice and cancel), billing runs, four (the list, the run, the preview and the read), and invoices, three (the list, the read and the credit note), settlements, seven (the list, the create, the read, the three commands calculate, close and reopen, and the history), and weight control's four (the three decisions approve, reject and correct on an unload, and its reviews) — and Routing's five (#170, #171, #173): a route's Plans, one Plan with its legs, the optimise command, the quota read, and the guided setup's preview — and the Sorting Guide's four (Issue #293): the list, the create, the read and the patch — and the four reports (#292): service, tickets, revenue and tonnage",
     )
   })
 
@@ -606,6 +611,37 @@ describe("GET /openapi.json", () => {
       const page = document.paths[path].get.responses["200"].content["application/json"].schema
       assert.deepEqual(page.required, ["items", "nextCursor"], path)
       assert.equal(page.properties?.items.type, "array", path)
+    }
+  })
+
+  test("documents the four reports with their strict windows, their filters and their grants (#292)", async () => {
+    const document = await spec()
+    const operations = (path: string) =>
+      Object.fromEntries(Object.entries(document.paths[path]).map(([method, operation]) => [method, operation.operationId]))
+    assert.deepEqual(operations("/reports/service"), { get: "getServiceReport" })
+    assert.deepEqual(operations("/reports/tickets"), { get: "getTicketReport" })
+    assert.deepEqual(operations("/reports/revenue"), { get: "getRevenueReport" })
+    assert.deepEqual(operations("/reports/tonnage"), { get: "getTonnageReport" })
+
+    const byName = (operation: Operation) => (operation.parameters ?? []).map((parameter) => `${parameter.in}:${parameter.name}`)
+    const window = ["query:from", "query:interval", "query:projectId", "query:to"]
+    assert.deepEqual(byName(document.paths["/reports/service"].get).sort(), [...window, "query:routeSchemeId", "query:wasteFractionId"].sort())
+    assert.deepEqual(byName(document.paths["/reports/tickets"].get).sort(), window)
+    assert.deepEqual(byName(document.paths["/reports/revenue"].get).sort(), window)
+    assert.deepEqual(byName(document.paths["/reports/tonnage"].get).sort(), [...window, "query:unloadingStationId", "query:wasteFractionId"].sort())
+
+    // Two grants each: the Improve module it is read in, and the module whose rows it counts.
+    for (const [path, improve, rows] of [
+      ["/reports/service", "improve.performance", "route-studio.routes"],
+      ["/reports/tickets", "improve.performance", "operate.tickets"],
+      ["/reports/revenue", "improve.analytics", "commercial.invoices"],
+      ["/reports/tonnage", "improve.analytics", "route-studio.weights"],
+    ] as const) {
+      const operation = document.paths[path].get
+      assert.deepEqual(Object.keys(operation.responses), ["200", "400", "401", "403"], path)
+      assert.ok((operation.responses["403"].description ?? "").includes(`\`view\` on \`${improve}\` and \`view\` on \`${rows}\``), path)
+      assert.ok((operation.description ?? "").includes(`at most ${REPORT_WINDOW_MAX_DAYS} days`), path)
+      assert.match(operation.description ?? "", /a parameter this report does not read is refused by name/, path)
     }
   })
 
