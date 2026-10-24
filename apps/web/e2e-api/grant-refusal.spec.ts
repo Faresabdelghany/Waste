@@ -48,7 +48,6 @@ test("a role without the grant is refused in the API's words and stays signed in
     await expect(sheet.getByRole("heading", { name })).toBeVisible()
     await sheet.getByRole("button", { name: "Inactive" }).click()
     const governed = page.getByRole("dialog").filter({ has: page.getByRole("heading", { name: "Inactive" }) })
-    await governed.getByLabel("Decision or action reason").fill("E2E: a planner may not change a customer")
     const [patched] = await Promise.all([
       page.waitForResponse((response) => response.request().method() === "PATCH" && new URL(response.url()).pathname.startsWith("/waste-api/customers/")),
       governed.getByRole("button", { name: "Confirm inactive" }).click(),
@@ -60,9 +59,8 @@ test("a role without the grant is refused in the API's words and stays signed in
     expect(toasts).toContainEqual(expect.stringContaining("This account's role does not allow edit on customers.contacts"))
     expect(toasts?.filter((toast) => toast.includes("configure.organization"))).toEqual([])
     // The refusal is the only word on it: nothing said the change was recorded before the API answered (#210). The governed
-    // dialog waited for the answer and stays, holding the reason typed, its confirm free again; behind it the customer is still Active.
+    // dialog waited for the answer and stays, its confirm free again; behind it the customer is still Active.
     expect(toasts?.filter((toast) => toast.includes("recorded"))).toEqual([])
-    await expect(governed.getByLabel("Decision or action reason")).toHaveValue("E2E: a planner may not change a customer")
     await expect(governed.getByRole("button", { name: "Confirm inactive" })).toBeEnabled()
     await governed.getByRole("button", { name: "Cancel" }).click()
     await expect(governed).toBeHidden()

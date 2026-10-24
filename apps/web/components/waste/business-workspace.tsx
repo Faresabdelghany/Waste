@@ -40,6 +40,7 @@ import {
   type WorkspaceDefinition,
   type WorkspaceId,
 } from "@/lib/data/business-modules"
+import { actionDecisionShape, actionRecordedSentence } from "@/lib/data/action-decision"
 import { COLLECTION_CALENDARS_MODULE } from "@/lib/data/collection-calendars"
 import { PLANNING_AREAS_MODULE } from "@/lib/data/planning-areas"
 import { ROUTE_SCHEMES_MODULE, schemeValuesOfDraft, validationWhenUnplaced } from "@/lib/data/route-schemes"
@@ -2441,18 +2442,25 @@ export function BusinessWorkspace({
         })
       }, () => setActionSaving(false))
     } else {
+      // On a module the API holds, the status is all the wire takes and nothing keeps an audit row (#251): no action facts, no browser row.
+      const onApi = apiConfigured && activeModuleOnApi !== null
+      const { keepsBrowserAudit } = actionDecisionShape({ onApi, createsCompanion })
       const nextRecord: BusinessRecord = {
         ...record,
         status: nextStatus,
         updated: "Now",
-        facts: {
-          ...record.facts,
-          "Last controlled action": action,
-          "Action reason": reason,
-          "Action actor": actorName,
-          ...(effectiveDate ? { "Effective date": effectiveDate } : {}),
-        },
-        related: [`Audit ${event.id}`, ...record.related.filter((item) => item !== `Audit ${event.id}`)],
+        ...(keepsBrowserAudit
+          ? {
+              facts: {
+                ...record.facts,
+                "Last controlled action": action,
+                "Action reason": reason,
+                "Action actor": actorName,
+                ...(effectiveDate ? { "Effective date": effectiveDate } : {}),
+              },
+              related: [`Audit ${event.id}`, ...record.related.filter((item) => item !== `Audit ${event.id}`)],
+            }
+          : {}),
         allowedTransitions:
           nextStatus === record.status
             ? record.allowedTransitions
@@ -2467,14 +2475,9 @@ export function BusinessWorkspace({
       whenSaved(upsertRecord(workspace.id, activeModule.id, nextRecord), () => {
         // This action's dialog, unless another has been opened since.
         setPendingAction((current) => (current === pendingAction ? null : current))
-        recordAuditEvent()
+        if (keepsBrowserAudit) recordAuditEvent()
         setSelectedRecord((current) => (current?.id === record.id ? nextRecord : current))
-        toast.success(`${action} recorded`, {
-          description:
-            nextStatus === record.status
-              ? "The action and evidence were appended without bypassing the lifecycle."
-              : `${record.status} → ${nextStatus} · audit history updated`,
-        })
+        toast.success(`${action} recorded`, { description: actionRecordedSentence({ onApi, before: record.status, after: nextStatus }) })
       }, () => setActionSaving(false))
     }
   }
@@ -5826,6 +5829,7 @@ export function BusinessWorkspace({
         module={activeModule}
         pendingAction={pendingAction}
         saving={actionSaving}
+        onApi={apiConfigured && activeModuleOnApi !== null}
         onOpenChange={(open) => !open && setPendingAction(null)}
         onConfirm={commitRecordAction}
       />
@@ -6109,6 +6113,7 @@ function ActionDecisionDialog({
   module,
   pendingAction,
   saving = false,
+  onApi = false,
   onOpenChange,
   onConfirm,
 }: {
@@ -6116,6 +6121,8 @@ function ActionDecisionDialog({
   pendingAction: PendingAction | null
   /** The action's write is out to the API: confirm waits, and the form keeps what was typed for a refusal (#210). */
   saving?: boolean
+  /** The module is one the API holds: the status alone goes out, so no reason or date is asked (#251). */
+  onApi?: boolean
   onOpenChange: (open: boolean) => void
   onConfirm: (decision: { reason: string; effectiveDate: string }) => void
 }) {
@@ -6127,6 +6134,7 @@ function ActionDecisionDialog({
   const createsCompanion = pendingAction
     ? createsImmutableCompanion(module, action)
     : false
+  const shape = actionDecisionShape({ onApi, createsCompanion })
   const outcome = pendingAction
     ? actionOutcome(module, action, pendingAction.record.status)
     : ""
@@ -6209,37 +6217,37 @@ function ActionDecisionDialog({
                 </div>
               )}
 
-              <div className="space-y-2">
-                <Label htmlFor="action-reason">Decision or action reason</Label>
-                <Textarea
-                  id="action-reason"
-                  value={reason}
-                  onChange={(event) => setReason(event.target.value)}
-                  placeholder="Explain why this action is appropriate and note the evidence reviewed."
-                  className="min-h-24 resize-none"
-                />
-              </div>
+              {shape.asksReason && (
+                <div className="space-y-2">
+                  <Label htmlFor="action-reason">Decision or action reason</Label>
+                  <Textarea
+                    id="action-reason"
+                    value={reason}
+                    onChange={(event) => setReason(event.target.value)}
+                    placeholder="Explain why this action is appropriate and note the evidence reviewed."
+                    className="min-h-24 resize-none"
+                  />
+                </div>
+              )}
 
-              <div className="space-y-2">
-                <Label htmlFor="action-effective-date">Effective date</Label>
-                <Input
-                  id="action-effective-date"
-                  type="date"
-                  value={effectiveDate}
-                  onChange={(event) => setEffectiveDate(event.target.value)}
-                />
-                <p className="text-xs text-muted-foreground">
-                  Leave empty for an immediate governed action. Future-dated changes stay separate
-                  from the current active version.
-                </p>
-              </div>
+              {shape.asksEffectiveDate && (
+                <div className="space-y-2">
+                  <Label htmlFor="action-effective-date">Effective date</Label>
+                  <Input
+                    id="action-effective-date"
+                    type="date"
+                    value={effectiveDate}
+                    onChange={(event) => setEffectiveDate(event.target.value)}
+                  />
+                  <p className="text-xs text-muted-foreground">
+                    Leave empty for an immediate governed action. Future-dated changes stay separate
+                    from the current active version.
+                  </p>
+                </div>
+              )}
 
               <div className="rounded-xl border border-border/60 p-3">
-                <p className="text-xs leading-5 text-muted-foreground">
-                  {createsCompanion
-                    ? "The source record remains unchanged. A linked correction, immutable plan, promotion, child record, or ledger entry will be created."
-                    : "Company, project, capability, lifecycle, and effective-date checks run before the action is recorded. Actor, reason, before/after state, and evidence are appended to audit history."}
-                </p>
+                <p className="text-xs leading-5 text-muted-foreground">{shape.promise}</p>
               </div>
             </div>
 
@@ -6249,7 +6257,7 @@ function ActionDecisionDialog({
               </Button>
               <Button
                 onClick={confirm}
-                disabled={saving || !reason.trim() || (isDeleteAction && !deletionCategory)}
+                disabled={saving || (shape.asksReason && !reason.trim()) || (isDeleteAction && !deletionCategory)}
               >
                 Confirm {action.toLowerCase()}
               </Button>
