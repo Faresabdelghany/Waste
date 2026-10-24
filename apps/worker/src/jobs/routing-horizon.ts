@@ -15,14 +15,16 @@
 //                ready route of an active project operating inside the
 //                window with an open stop, Plan Ahead on or not, nearest date
 //                first, of which it asks for each whose active Plan is
-//                missing or no longer answers it: stale (`planIsStale`), not
-//                naming the stops the request would — a manual or baseline
-//                Plan in their order (`answersRequest`, #212) — or keyed on
-//                ends or places that have moved since (`planKey`), so a
-//                generation whose ask failed is asked again; then every
-//                calculating Plan more than a day old whose job pg-boss no
-//                longer holds — its retries spent, or lost across an outage
-//                — has its job re-sent under its key.
+//                missing or no longer answers it: failed (a manual or
+//                baseline Plan is active from its creation, so one whose
+//                measurement was refused stays the route's, #231), stale
+//                (`planIsStale`), not naming the stops the request would — a
+//                manual or baseline Plan in their order (`answersRequest`,
+//                #212) — or keyed on ends or places that have moved since
+//                (`planKey`), so a generation whose ask failed is asked
+//                again; then every calculating Plan more than a day old
+//                whose job pg-boss no longer holds — its retries spent, or
+//                lost across an outage — has its job re-sent under its key.
 //
 // Each route is its own transaction as `wms_api` under `withCompany`, under
 // the route's row lock (the office's order: a route before its Plans), so the
@@ -106,10 +108,10 @@ async function optimisationAskedAfter(tx: Tx, companyId: string, routeId: string
  * One route's turn, in a fenced transaction under its row lock: a planned or
  * ready route of an active project, operating inside the horizon with an
  * open stop, is asked a Plan through the office's door, `batch`. The sweep
- * leaves one whose active Plan still answers it — names its stops as they
- * stand, a manual or baseline Plan in their order, and keys the request it
- * would make now, its ends and places too — and
- * either leaves a route whose dispatcher asked to optimise after reordering.
+ * leaves one whose active Plan still answers it — has not failed, names its
+ * stops as they stand, a manual or baseline Plan in their order, and keys the
+ * request it would make now, its ends and places too — and either leaves a
+ * route whose dispatcher asked to optimise after reordering.
  */
 async function planRoute(context: JobContext, companyId: string, routeId: string, horizon: Horizon, occasion: Occasion): Promise<Turn> {
   return withCompany(context.api.db, companyId, async (tx: Tx): Promise<Turn> => {
@@ -138,7 +140,8 @@ async function planRoute(context: JobContext, companyId: string, routeId: string
     const request = horizonRequest({ open, hasDepot: row.depotId !== null, active, optimisationWaiting })
     if (request === null) return "waiting"
     const routing = { name: context.routing.name, profile: DEFAULT_PROFILE }
-    if (occasion === "unanswered" && active !== null) {
+    // A failed active Plan answers nothing (#231): `ensurePlan` reuses only a ready or calculating match, so the route is asked a new Plan.
+    if (occasion === "unanswered" && active !== null && active.status !== "failed") {
       const removed = stops.filter((stop) => stop.status === "skipped" && stop.reason === "regeneration").map((stop) => stop.id)
       const keysRequest = !planIsStale({ named: active.named, open, removed }) && (await planKey(tx, companyId, row, request, routing)).fingerprint === active.fingerprint
       // The fingerprint keys places, so two stops at one address that trade places key alike (#212): a Plan that keys the request, of its solver, must name its very stops too.
@@ -292,7 +295,7 @@ export const sweepHorizonJob = defineJob<SweepHorizonData>({
   scheduleData: { source: "schedule" },
   // A worker back after a night off sweeps once, not once per missed night: the horizon is tonight's.
   scheduleOptions: { tz: "UTC", missed: "once" },
-  // No retry: the next night is the retry. A second pass the same night would take every lock again and re-ask a route whose optimisation failed finally in the minute between, paying the provider twice; a failed sweep shows on /readyz meanwhile.
+  // No retry: the next night is the retry. A second pass the same night would take every lock again and re-ask a route whose optimisation or measurement failed finally in the minute between, paying the provider twice; a failed sweep shows on /readyz meanwhile.
   queueOptions: { retryLimit: 0, deleteAfterSeconds: 60 * 60 * 24 * 7 },
   handler: async (jobs, context) => {
     const sweeps: SweepOutcome[] = []
