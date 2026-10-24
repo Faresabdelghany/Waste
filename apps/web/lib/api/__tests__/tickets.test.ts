@@ -27,6 +27,7 @@ import {
   ticketDetail,
   TICKETS_MODULE,
   TICKET_NUMBER_FACT,
+  ticketOpened,
   ticketsModule,
 } from "../records/tickets"
 import { bodyOf, clientOver, json, problem, scripted } from "./scripted-fetch"
@@ -234,6 +235,12 @@ describe("a ticket", () => {
 describe("the office's create", () => {
   const minted = (values: Record<string, string>): BusinessRecord => ({ ...record, id: "operate-ticket-1700000000000", name: values.subject ?? "", recordKind: "Ticket", projectIds: [projectRecord.id], submittedValues: { projectId: projectRecord.id, ...values } })
   const typedValues = { subject: "Overflowing glass bank", description: "Glass above the rim", kind: "overflow", priority: "critical", source: "phone", occurredAt: "2026-10-01T09:15", dueAt: "2026-10-01T16:00", assigneeUserAccountId: olivia.id, routeId: rc1042.id, containerId: bin.id, customerId: housing.id }
+
+  test("is told by its number once the API has answered with it, as every other ticket toast names it; by its subject only while the row is not known (#283)", () => {
+    assert.deepEqual(ticketOpened(record), { title: "Ticket opened", description: "T-1001 is open." })
+    // The row the office made, before the API has numbered it: no number among its facts.
+    assert.deepEqual(ticketOpened({ ...minted({ subject: "Overflowing glass bank" }), facts: {} }), { title: "Ticket opened", description: "Overflowing glass bank is open; its number follows from the API." })
+  })
 
   test("is the contracts' TicketCreate, links and the assignee by server id, the times on the project's clock", () => {
     const body = ticketAdapter.toCreateBody?.(minted(typedValues), context())

@@ -51,7 +51,8 @@ import { PlanningAreasSettings } from "@/components/settings/planning-areas-sett
 import { CollectionCalendarsSettings } from "@/components/settings/collection-calendars-settings"
 import { HolidayListsSettings } from "@/components/settings/holiday-lists-settings"
 import { MasterDataSettings } from "@/components/settings/master-data-settings"
-import { useApiConfigured } from "@/components/waste/api-session-store"
+import { useApiConfigured, useApiSession } from "@/components/waste/api-session-store"
+import { profileOf, type AccountProfile } from "@/lib/data/account-profile"
 import { HOLIDAY_LISTS_SETTINGS_PANE_ID, MASTER_DATA_SETTINGS_PANE_ID } from "@/lib/data/business-links"
 import { ASSET_MANAGEMENT_SETTINGS_PANE_ID, settingsPaneOffered, settingsPaneOpened } from "@/lib/data/settings-panes"
 import { PLANNING_AREAS_SETTINGS_PANE_ID } from "@/lib/data/planning-areas"
@@ -93,6 +94,15 @@ type SettingControl =
       value: string
       tone: "healthy" | "warning" | "danger" | "neutral"
       action?: string
+    }
+  | {
+      id: string
+      label: string
+      description: string
+      scope: "Personal" | "Company" | "Project" | "Platform"
+      /** A line read, not set: what the API holds and no control here writes. */
+      type: "text"
+      value: string
     }
 
 type SettingsPaneDefinition = {
@@ -1408,6 +1418,22 @@ type SettingsWorkspaceProps = {
 
 type SettingValue = string | boolean
 
+/**
+ * The account pane on the Pilot (#282): its Profile the person signed in, as
+ * `/me` answered — name, e-mail, role and projects, each read, since no
+ * control here writes them — never the fixture persona. The rest of the pane,
+ * this device's preferences, is as in fixture mode.
+ */
+function withSignedInProfile(definition: SettingsPaneDefinition, profile: AccountProfile): SettingsPaneDefinition {
+  const controls: SettingControl[] = [
+    { id: "account-name", label: "Full name", description: "Shown in assignments, approvals, comments, and audit history, as your account holds it.", scope: "Personal", type: "text", value: profile.name },
+    { id: "account-email", label: "Email address", description: "The address you sign in with.", scope: "Personal", type: "text", value: profile.email },
+    { id: "account-role", label: "Primary role", description: "What you may see and do; an administrator sets it.", scope: "Personal", type: "status", value: profile.role, tone: "healthy" },
+    { id: "account-projects", label: "Projects", description: "The projects you work in.", scope: "Personal", type: "text", value: profile.projects },
+  ]
+  return { ...definition, groups: definition.groups.map((group) => (group.title === "Profile" ? { ...group, controls } : group)) }
+}
+
 function initialSettingValues(): Record<string, SettingValue> {
   return Object.fromEntries(
     Object.values(visiblePaneDefinitions).flatMap((pane) =>
@@ -1470,6 +1496,9 @@ export function SettingsWorkspace({
   // store retires on the Pilot (lib/data/settings-panes.ts): which of the two
   // the nav offers, and where a link to Asset management lands, follow the adapter.
   const configured = useApiConfigured()
+  const { me, session } = useApiSession()
+  // On the Pilot the account pane's profile is the person signed in, as `/me` answered (#282).
+  const profile = configured ? profileOf(me, session?.email) : null
   const openedPaneId = initialPaneId === undefined ? undefined : settingsPaneOpened(initialPaneId, configured)
   const [activeItemId, setActiveItemId] = useState(() =>
     openedPaneId && visiblePaneDefinitions[openedPaneId]
@@ -1692,8 +1721,9 @@ export function SettingsWorkspace({
           }
         >
           <SettingsPane
-            definition={activePane}
+            definition={profile !== null && activeItemId === "account" ? withSignedInProfile(activePane, profile) : activePane}
             paneId={activeItemId}
+            profile={profile}
             values={values}
             dirtyControlIds={dirtyControlIds}
             configurationHistory={configurationHistory}
@@ -1709,6 +1739,7 @@ export function SettingsWorkspace({
 function SettingsPane({
   definition,
   paneId,
+  profile,
   values,
   dirtyControlIds,
   configurationHistory,
@@ -1717,6 +1748,8 @@ function SettingsPane({
 }: {
   definition: SettingsPaneDefinition
   paneId: string
+  /** The person signed in on the Pilot; null in fixture mode, whose persona the account pane keeps. */
+  profile: AccountProfile | null
   values: Record<string, SettingValue>
   dirtyControlIds: string[]
   configurationHistory: Array<{ id: string; at: string; controls: string[] }>
@@ -1747,12 +1780,18 @@ function SettingsPane({
                 {definition.description}
               </p>
             </div>
-            {paneId === "account" && (
-              <Avatar className="h-12 w-12">
-                <AvatarImage src="/avatar-profile.jpg" />
-                <AvatarFallback>OL</AvatarFallback>
-              </Avatar>
-            )}
+            {paneId === "account" &&
+              (profile === null ? (
+                <Avatar className="h-12 w-12">
+                  <AvatarImage src="/avatar-profile.jpg" />
+                  <AvatarFallback>OL</AvatarFallback>
+                </Avatar>
+              ) : (
+                // The person signed in, by their initials: no photo is theirs on the Pilot (#282).
+                <Avatar className="h-12 w-12">
+                  <AvatarFallback>{profile.initials}</AvatarFallback>
+                </Avatar>
+              ))}
           </div>
 
           <Separator />
@@ -1858,6 +1897,16 @@ function SettingsPane({
                         >
                           <StatusIndicator tone={control.tone} value={control.value} />
                         </div>
+                      )}
+                      {control.type === "text" && (
+                        <p
+                          id={control.id}
+                          className="text-sm text-foreground"
+                          aria-labelledby={`${control.id}-label`}
+                          aria-describedby={`${control.id}-description`}
+                        >
+                          {control.value}
+                        </p>
                       )}
                     </div>
                   </div>

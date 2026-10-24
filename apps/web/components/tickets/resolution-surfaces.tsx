@@ -14,11 +14,11 @@ import { toast } from "sonner"
 
 import { Button } from "@/components/ui/button"
 import { BusinessRecordFormDialog } from "@/components/waste/business-record-form-dialog"
-import { useBusinessRecordStore, whenSaved } from "@/components/waste/business-record-store"
+import { savedRow, useBusinessRecordStore, whenSaved } from "@/components/waste/business-record-store"
 import type { PrimarySurfaceProps, RowSurfaceProps } from "@/components/waste/commands/command-surfaces"
 import { useCommandRunner, useModuleReady, useOpenRecord, type RelationPickers } from "@/components/waste/commands/use-command-support"
 import { ACKNOWLEDGE_ALERT, ALERTS_MODULE, LINK_ALERT_TICKET, RESOLVE_ALERT } from "@/lib/api/records/alerts"
-import { TICKETS_MODULE } from "@/lib/api/records/tickets"
+import { ticketOpened, TICKETS_MODULE } from "@/lib/api/records/tickets"
 import { ALERT_COMMAND_FORMS, ALERT_FORM, createAlertRecord, ticketValuesOfAlert, type AlertCommandWithForm } from "@/lib/data/alerts"
 import type { BusinessFormSchema, BusinessFormValues } from "@/lib/data/business-form-types"
 import type { BusinessRecord, ModuleLocation } from "@/lib/data/business-modules"
@@ -65,11 +65,12 @@ function ResolutionCreateDialog({
     setSaving(true)
     whenSaved(
       upsertRecord(module.workspaceId, module.moduleId, record),
-      () => {
+      (saved) => {
         onOpenChange(false)
         onSaved?.()
         openRecord(record.id)
-        const said = created(record)
+        // Told on the row the write left: a ticket's number is the API's answer (#283).
+        const said = created(savedRow(saved, record))
         toast.success(said.title, { description: said.description })
       },
       () => setSaving(false),
@@ -96,13 +97,11 @@ function CreateButton({ label, module, schema, children }: { label: string; modu
   )
 }
 
-const ticketCreated = (record: BusinessRecord) => ({ title: "Ticket opened", description: `${record.name} is open; its number follows from the API.` })
-
 /** New ticket: the office opens a case. */
 export function NewTicketSurface({ label }: PrimarySurfaceProps) {
   return (
     <CreateButton label={label} module={TICKETS_MODULE} schema={TICKET_FORM}>
-      {(open, setOpen, pickers) => <ResolutionCreateDialog module={TICKETS_MODULE} schema={TICKET_FORM} pickers={pickers} open={open} onOpenChange={setOpen} make={(values, now) => createTicketRecord(values, { now })} created={ticketCreated} />}
+      {(open, setOpen, pickers) => <ResolutionCreateDialog module={TICKETS_MODULE} schema={TICKET_FORM} pickers={pickers} open={open} onOpenChange={setOpen} make={(values, now) => createTicketRecord(values, { now })} created={ticketOpened} />}
     </CreateButton>
   )
 }
@@ -207,7 +206,7 @@ export function AlertCommandsSurface({ record }: RowSurfaceProps) {
           onOpenChange={(isOpen) => !isOpen && setOpen(null)}
           initial={ticketValuesOfAlert(record)}
           make={(values, now) => createTicketRecord(values, { now, extra: { alertId: record.id } })}
-          created={ticketCreated}
+          created={ticketOpened}
           // The API links the alert to the ticket it answers in the same transaction: the alert is read back.
           onSaved={() => void refreshRecord(ALERTS_MODULE.workspaceId, ALERTS_MODULE.moduleId, record.id)}
         />
