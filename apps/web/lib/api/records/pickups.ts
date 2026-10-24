@@ -31,6 +31,7 @@ import type { ProofOfService } from "@waste/contracts/proofs"
 import { PICKUP_OUTCOMES, PICKUP_REASONS } from "@waste/domain/execution/vocabulary"
 
 import { FIXTURE_COMPANY_ID, type BusinessRecord, type ModuleLocation } from "@/lib/data/business-modules"
+import { PICKUP_SERVICE_LABELS } from "@/lib/data/pickup-services"
 
 import { command, get, listAll } from "../client"
 import { inheritedPresentation, moduleKeyOf, ofKind, said, stampFacts, statusLabel, typed, webIdOf, type Client, type MappingContext, type RecordCommand, type ResourceAdapter, type ServerModule } from "./adapter"
@@ -83,12 +84,15 @@ export function toPickupRecord(pickup: Pickup, context: MappingContext): Busines
   const fraction = referenced(context, "fraction", pickup.wasteFractionId)
   const place = placeOf(pickup, context)
   const byTheOffice = pickup.origin === "office"
+  // An API from before the service sends none: every stop then emptied its container.
+  const service = pickup.service ?? "empty"
   const stop = pickup.sequence ?? pickup.position
   const status = statusLabel(pickup.status)
   const facts: Record<string, string> = {
     Route: route?.name ?? routeWebId,
     Stop: String(stop),
-    Type: "Collection",
+    // An emptying reads as the collection it always was; a work order by its service (O3 of #290).
+    Type: service === "empty" ? "Collection" : PICKUP_SERVICE_LABELS[service],
     "Waste fraction": fraction.name ?? fraction.webId,
     Project: project.name ?? project.webId,
   }
@@ -127,6 +131,7 @@ export function toPickupRecord(pickup: Pickup, context: MappingContext): Busines
       ...(container === undefined ? {} : { containerId: container.webId }),
       ...(place === undefined ? {} : { [place.key]: place.webId }),
       origin: pickup.origin,
+      service,
       wasteFractionId: fraction.webId,
       position: String(pickup.position),
       ...(pickup.sequence === undefined ? {} : { sequence: String(pickup.sequence) }),

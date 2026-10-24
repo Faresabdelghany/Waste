@@ -50,9 +50,15 @@
 // leaves alone — and the office's may name no container: an address-only
 // stop, its place `pickup_place_exactly_one`'s like every other pickup's and
 // its fraction the office's word (`pickup_container_shape` keeps a stop
-// without a container to the office). `pickup_route_id_container_id_key`
-// still holds one stop per container on a route; its nulls are distinct, so
-// a route takes any number of address-only stops.
+// without a container to the office). Since O3 of #290 a pickup carries its
+// `service` — `empty`, generation's only (`pickup_service_origin_shape`), or
+// one of the office's work orders, each of a container
+// (`pickup_service_container_shape`: an address-only stop empties) — and
+// `pickup_route_id_container_id_key` holds one of generation's stops per
+// container on a route, a partial unique index over `origin = 'generation'`:
+// the office's may repeat a container already there — an extra emptying, a
+// repair, a wash — and its nulls are distinct, so a route takes any number
+// of address-only stops.
 //
 // `session` is per Route, from `start-route` to `end-route` (#104 §7.3), its
 // id the start command's; open or ended is a reading of `ended_at`, paused of
@@ -110,7 +116,7 @@
 // e-mail index, for the same reason: the relay's read is one statement in the
 // system that crosses companies.
 import { PROOF_SHAPES } from "@waste/domain/execution/proof-shapes"
-import { COMMAND_OUTCOMES, DRIVER_COMMAND_KINDS, EXECUTION_SOURCES, OUTBOX_AGGREGATES, OUTBOX_KINDS, PICKUP_ORIGINS, PICKUP_OUTCOMES, PICKUP_REASONS, PICKUP_STATUSES, PROOF_KINDS, ROUTE_STATUSES } from "@waste/domain/execution/vocabulary"
+import { COMMAND_OUTCOMES, DRIVER_COMMAND_KINDS, EXECUTION_SOURCES, OUTBOX_AGGREGATES, OUTBOX_KINDS, PICKUP_ORIGINS, PICKUP_OUTCOMES, PICKUP_REASONS, PICKUP_SERVICES, PICKUP_STATUSES, PROOF_KINDS, ROUTE_STATUSES } from "@waste/domain/execution/vocabulary"
 import { sql, type SQL } from "drizzle-orm"
 import { boolean, check, date, index, integer, jsonb, text, time, timestamp, unique, uniqueIndex, uuid, type PgColumn } from "drizzle-orm/pg-core"
 
@@ -250,6 +256,8 @@ export const pickup = wms.table(
     status: text().notNull().default("planned"),
     /** Who put the stop on the route (#111): generation, or the office, whose stop a refresh never skips or moves. Every pickup before 0016 was generation's. */
     origin: text().notNull().default("generation"),
+    /** What the stop is for (O3 of #290): `empty`, every stop before the column and every one generation writes, or one of the office's work orders. */
+    service: text().notNull().default("empty"),
     note: text(),
     /** The place on the service date, from the subscription the placement valid that day named: exactly one of the two. */
     propertyId: uuid(),
@@ -271,11 +279,19 @@ export const pickup = wms.table(
     projectReference(t, [t.propertyId], property),
     projectReference(t, [t.sharedCollectionPointId], sharedCollectionPoint),
     tenantReference(t, [t.wasteFractionId], wasteFraction),
-    tenantUnique(t, t.routeId, t.containerId),
+    // One of generation's stops per container on a route; the office's may repeat a container already there (O3 of #290).
+    uniqueIndex(tableObjectName(t.id.table, "route_id_container_id_key", "pickup"))
+      .on(t.companyId, t.routeId, t.containerId)
+      .where(sql`${t.origin} = 'generation'`),
     // Carries the route: a proof or a receipt names a pickup of the route it names, and no other.
     projectKey(t, t.routeId),
     oneOf(t.status, PICKUP_STATUSES),
     oneOf(t.origin, PICKUP_ORIGINS),
+    oneOf(t.service, PICKUP_SERVICES),
+    // Generation empties; a work order is the office's.
+    check(tableObjectName(t.id.table, "service_origin_shape", "pickup"), sql`${t.service} = 'empty' or ${t.origin} = 'office'`),
+    // A work order is of a container; an address-only stop empties.
+    check(tableObjectName(t.id.table, "service_container_shape", "pickup"), sql`${t.service} = 'empty' or ${t.containerId} is not null`),
     oneOf(t.reason, PICKUP_REASONS),
     positive(t.position),
     // Every pickup names its place, an address-only one included: the address the stop is at.

@@ -26,7 +26,7 @@
 import * as z from "zod"
 
 import { IsoDate, IsoDateTime } from "./dates"
-import { PickupOrigin, PickupOutcome, PickupReason, PickupStatus } from "./execution"
+import { OfficeStopService, PickupOrigin, PickupOutcome, PickupReason, PickupService, PickupStatus } from "./execution"
 import { Id } from "./ids"
 import { ProofOfService } from "./proofs"
 import { dayWindowIsOrdered, dayWindowOrdered, ProjectScopedListQuery } from "./queries"
@@ -60,6 +60,13 @@ export const Pickup = z.object({
    * reads as `generation` and never as a dead letter.
    */
   origin: PickupOrigin.default("generation"),
+  /**
+   * What the stop is for (O3 of #290): `empty`, emptying its container, or
+   * one of the office's work orders. On every answer; absent on an event the
+   * outbox took before it, every one of which emptied, so it reads as
+   * `empty` — and Finance's pricing of a stop reads it off the payload.
+   */
+  service: PickupService.default("empty"),
   /** Why a skipped or failed pickup was not collected; null otherwise. */
   reason: PickupReason.nullable(),
   note: Paragraph.nullable(),
@@ -105,12 +112,19 @@ export const THE_CONTAINER_ALONE = "A container's stop takes its place and fract
 export const ONE_ADDRESS = "Name a property or a shared collection point, not both"
 /** What an address-only stop without its fraction is told. */
 export const AN_ADDRESS_WITH_ITS_FRACTION = "An address-only stop names the waste fraction collected there"
+/** What a repair or a wash at an address alone is told. */
+export const A_WORK_ORDER_OF_A_CONTAINER = "A repair or a wash is of a container: name the container"
 
 const given = (value: string | null | undefined): value is string => value != null
 
 /** The shape of a stop the office adds: a container alone, or one place with its fraction. A null counts as not given, as a form sends one for the field it leaves empty. */
-function addedStopIssues(body: { containerId?: string | null; propertyId?: string | null; sharedCollectionPointId?: string | null; wasteFractionId?: string | null }, context: z.RefinementCtx): void {
+function addedStopIssues(body: { service?: string; containerId?: string | null; propertyId?: string | null; sharedCollectionPointId?: string | null; wasteFractionId?: string | null }, context: z.RefinementCtx): void {
   const place = [given(body.propertyId), given(body.sharedCollectionPointId)].filter(Boolean).length
+  // A work order is of a container where it stands: the table's `pickup_service_container_shape`, at the boundary.
+  if (body.service !== undefined && body.service !== "empty" && !given(body.containerId)) {
+    context.addIssue({ code: "custom", message: A_WORK_ORDER_OF_A_CONTAINER, path: ["containerId"] })
+    return
+  }
   if (given(body.containerId)) {
     for (const path of ["propertyId", "sharedCollectionPointId", "wasteFractionId"] as const) {
       if (given(body[path])) context.addIssue({ code: "custom", message: THE_CONTAINER_ALONE, path: [path] })
@@ -126,10 +140,14 @@ function addedStopIssues(body: { containerId?: string | null; propertyId?: strin
  * `POST /routes/:id/pickups` (#111): the dispatcher adds a stop to a route
  * that has not started — a container of the route's project, or an address
  * of it (a property or a shared collection point) with the fraction
- * collected there — and a note the driver reads at the stop.
+ * collected there — and a note the driver reads at the stop. Its service
+ * (O3 of #290) is an emptying unless it says a repair or a wash, each of a
+ * container; a container already a stop of the route may be named again,
+ * for an extra emptying or a work order beside its collection.
  */
 export const PickupAdd = z
   .strictObject({
+    service: OfficeStopService.default("empty").describe("An emptying when absent; a repair or a wash names a container."),
     containerId: Id.nullable().optional(),
     propertyId: Id.nullable().optional(),
     sharedCollectionPointId: Id.nullable().optional(),

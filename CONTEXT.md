@@ -177,8 +177,12 @@ The office's release of a planned Route to execution: it requires a Planned Assi
 _Avoid_: Assign (dispatch releases an assignment, it does not create one), start (the driver's act), send
 
 **Pickup**:
-One stop-level service action inside a dated Route, generated from its scheme or added by the office — a container, or an address with the waste fraction collected there — which generation then leaves where the office put it. It exists from planning through execution, and its outcome and proof are recorded against that same Pickup.
-_Avoid_: Pickup history, separate service event, property, route
+One stop-level service action inside a dated Route, generated from its scheme or added by the office — a container, or an address with the waste fraction collected there — which generation then leaves where the office put it. It exists from planning through execution, and its outcome and proof are recorded against that same Pickup. Its service says what the action is: an emptying of its container — generation's only service — or a Work Order. The office's emptying of a container one of generation's emptyings on the Route visits too is an Extra Emptying.
+_Avoid_: Pickup history, separate service event, property, route, Product (a Pickup's service is what it does; the Product prices it)
+
+**Work Order**:
+A Pickup the office books whose service is not an emptying: a delivery, a removal, a swap, a repair or a wash of a container. Its outcome and proof are recorded as any Pickup's; one not done is the office's task to book again, never a missed collection.
+_Avoid_: Job, task (a Ticket's kind), collection
 
 **Stop**:
 The route-line presentation of a Pickup — one position (#) within a dated Route's stop list: the Route's active Plan's order where one exists, else the generated order. Presentation only: the Pickup remains the persisted record. Stops exist only once routes are generated; Stop Matching Rule matches are a preview and are never presented as Stops.

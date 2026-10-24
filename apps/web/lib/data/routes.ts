@@ -29,6 +29,7 @@ import type { BusinessRecord } from "./business-modules"
 import type { BusinessFormField, BusinessFormSchema, BusinessFormValues } from "./business-form-types"
 import { mintedRecord, ORGANISATION_MODULE } from "./containers"
 import { MASTER_DATA_MODULE } from "./master-data"
+import { OFFICE_STOP_SERVICE_OPTIONS } from "./pickup-services"
 import { PROPERTIES_MODULE, SHARED_POINTS_MODULE } from "./properties"
 
 /** The route's commands that take a dialog. */
@@ -83,9 +84,10 @@ export const ROUTE_COMMAND_FORMS: Readonly<Record<RouteCommandWithForm, Business
   ]),
   "add-stop": routeForm(
     "Add stop",
-    "A stop the office adds after the route's last one, on a route that has not started. A container is collected where it is placed on the route's service date; an address is collected with the fraction you name. Generation never moves or skips it.",
+    "A stop the office adds after the route's last one, on a route that has not started. A container is collected where it is placed on the route's service date, and may be one the route stops at already — an extra emptying, or a repair or a wash beside its collection; an address is collected with the fraction you name. Generation never moves or skips it.",
     "Add stop",
     [
+      { id: "service", label: "Service", type: "select", required: true, defaultValue: "empty", options: OFFICE_STOP_SERVICE_OPTIONS, description: "A repair or a wash is of a container." },
       { id: "stopAt", label: "Collect", type: "select", required: true, defaultValue: STOP_AT_CONTAINER, options: STOP_AT_OPTIONS },
       { id: "containerId", label: "Container", type: "select", relation: CONTAINERS_MODULE, visibleWhen: AT_A_CONTAINER, requiredWhen: AT_A_CONTAINER, description: "Its place and fraction are its placement's on the route's service date." },
       { id: "propertyId", label: "Property", type: "select", relation: PROPERTIES_MODULE, visibleWhen: AT_A_PROPERTY, requiredWhen: AT_A_PROPERTY },

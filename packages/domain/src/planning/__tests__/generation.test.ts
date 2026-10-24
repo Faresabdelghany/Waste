@@ -319,6 +319,7 @@ const existingPickup = (id: string, containerId: string | null, position: number
   containerId,
   position,
   origin: "generation",
+  service: "empty",
   status: "planned",
   reason: null,
   propertyId: `property-of-${containerId}`,
@@ -370,6 +371,28 @@ describe("pickupChanges", () => {
     assert.equal(changes.unchanged, 3, "each of the office's three stands as the office left it, counted once")
     // A plan that holds nothing any more skips the run's own stop and none of the office's.
     assert.deepEqual(pickupChanges(existing, []).skip, [{ id: "p1", note: REMOVED_FROM_DAY_PLAN }])
+  })
+
+  test("an office emptying beside generation's own stop of the container — an extra emptying — leaves that stop refreshed as any other: moved, brought back, never frozen (O3 of #290)", () => {
+    const existing = [
+      existingPickup("p1", "c1", 1),
+      existingPickup("p2", "c2", 2, { status: "skipped", reason: "regeneration" }),
+      existingPickup("o1", "c1", 3, { origin: "office" }),
+      existingPickup("o2", "c2", 4, { origin: "office" }),
+    ]
+    const changes = pickupChanges(existing, [stop("c2", 1), stop("c1", 2, { wasteFractionId: "paper" })])
+    assert.deepEqual(changes.update, [
+      { ...stop("c2", 1), id: "p2", resurrect: true },
+      { ...stop("c1", 2, { wasteFractionId: "paper" }), id: "p1", resurrect: false },
+    ])
+    assert.deepEqual([changes.insert, changes.skip], [[], []])
+  })
+
+  test("an office stop that empties nothing — a repair, a wash — leaves the plan's emptying of its container to go on the route beside it (O3 of #290)", () => {
+    const existing = [existingPickup("o1", "c1", 1, { origin: "office", service: "repair" }), existingPickup("o2", "c2", 2, { origin: "office", service: "wash" }), existingPickup("o3", "c3", 3, { origin: "office" })]
+    const changes = pickupChanges(existing, [stop("c1", 1), stop("c2", 2), stop("c3", 3)])
+    assert.deepEqual(changes.insert, [stop("c1", 1), stop("c2", 2)], "the repaired and the washed are emptied too; the office's emptying of c3 stands for the plan's")
+    assert.equal(changes.unchanged, 3)
   })
 })
 

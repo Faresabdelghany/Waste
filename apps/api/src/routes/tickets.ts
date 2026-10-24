@@ -115,6 +115,9 @@ export const routeHasEnded = (label: string, status: "completed" | "cancelled"):
 /** What a re-collection naming a stop that was missed is told: the re-collection is a stop still to be collected, or one collected. */
 export const stopWasMissed = (position: number, route: string, status: "skipped" | "failed"): string => `Stop ${position} of route ${route} is ${status}; a re-collection names a stop that is planned or collected`
 
+/** What a re-collection naming a work order is told, at `recollectionPickupId`: a repair or a wash collects nothing (O3 of #290). */
+export const NOT_AN_EMPTYING = "A re-collection names a stop that empties its container, not a repair or a wash"
+
 /** What a comment's attachment key naming another company's or another ticket's prefix is told, at `objectKey`. */
 export const KEY_NAMES_ANOTHER = "The attachment key names another company or another ticket"
 
@@ -190,11 +193,12 @@ async function requireRouteNotEnded(tx: Tx, scope: Scope, routeId: string, picku
     pickupId === undefined
       ? [undefined]
       : await tx
-          .select({ position: pickup.position, status: pickup.status })
+          .select({ position: pickup.position, status: pickup.status, service: pickup.service })
           .from(pickup)
           .where(and(eq(pickup.companyId, scope.companyId), eq(pickup.routeId, routeId), eq(pickup.id, pickupId)))
           .limit(1)
   if (pickupId !== undefined && stop === undefined) throw invalidRequest("body", [{ path: "recollectionPickupId", message: NOT_A_PICKUP }])
+  if (stop !== undefined && stop.service !== "empty") throw invalidRequest("body", [{ path: "recollectionPickupId", message: NOT_AN_EMPTYING }])
   if (found.status === "completed" || found.status === "cancelled") throw problem(409, { detail: routeHasEnded(routeLabelOf(found), found.status) })
   if (stop !== undefined && (stop.status === "skipped" || stop.status === "failed")) throw problem(409, { detail: stopWasMissed(stop.position, routeLabelOf(found), stop.status) })
 }

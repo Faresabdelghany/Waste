@@ -61,6 +61,7 @@ const pickup = {
   position: 1,
   status: "planned",
   origin: "generation",
+  service: "empty",
   reason: null,
   note: null,
   propertyId: ID,

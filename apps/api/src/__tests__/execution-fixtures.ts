@@ -148,6 +148,9 @@ export type PickupSeed = {
   arrivedAt?: Date | null
   /** Required by the table for any status but planned. */
   outcomeAt?: Date | null
+  /** Generation's unless said; a work order is the office's (O3 of #290). */
+  origin?: "generation" | "office"
+  service?: "empty" | "deliver" | "remove" | "swap" | "repair" | "wash"
 }
 
 /** One proof to seed on a route: on its pickup by index (0-based, in seed order), or on the route alone. */
@@ -297,6 +300,8 @@ export async function seedRoute(pool: Database, tenant: Tenant, fleet: FleetFixt
           containerId: stop.containerId,
           position: index + 1,
           status: stop.status ?? "planned",
+          origin: stop.origin ?? "generation",
+          service: stop.service ?? "empty",
           note: stop.note ?? null,
           propertyId: stop.propertyId,
           sharedCollectionPointId: null,

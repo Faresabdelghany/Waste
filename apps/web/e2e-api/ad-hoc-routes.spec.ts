@@ -1,6 +1,6 @@
 import type { APIRequestContext, Locator, Page } from "@playwright/test"
 
-import { dayIn, driverNamed, generate, SEEDED_DRIVER } from "./dispatched-route"
+import { dayIn, dispatchedRouteFor, driverNamed, generate, SEEDED_DRIVER } from "./dispatched-route"
 import { E2E, uniqueName } from "./env"
 import { chainLanded, expect, freshContext, signIn, test } from "./fixtures"
 import { answerOf, openRoute, pick, routeRead, schemeWithRoutes, toasts, type ApiRoute } from "./routes-support"
@@ -13,7 +13,9 @@ import { listAll, projectNamed, type Project } from "./tester"
 // driver reads the address-only stop by its address and its fraction. A stop
 // the office added to a generated route stands through the next Generate,
 // and a ticket's re-collection names it: complete · recollected picks the
-// route, then its stop. Every body is the one the contracts take, read off
+// route, then its stop. A stop says what it is for (O3 of #290): the office
+// books a wash of a container the route empties, and an extra emptying of
+// another, and the driver's phone labels each. Every body is the one the contracts take, read off
 // the browser's own request; the properties are made for the run, uniquely
 // named and never cleaned up.
 
@@ -21,7 +23,7 @@ type Named = { id: string; name: string }
 type Property = Named & { address: string }
 type Container = { id: string; label: string }
 type Placement = { containerId: string; projectId: string; wasteFractionId: string }
-type AddedPickup = { id: string; routeId: string; position: number; sequence?: number; status: string; origin: string; containerId: string | null; propertyId: string | null; sharedCollectionPointId: string | null; wasteFractionId: string; note: string | null }
+type AddedPickup = { id: string; routeId: string; position: number; sequence?: number; status: string; origin: string; service: string; containerId: string | null; propertyId: string | null; sharedCollectionPointId: string | null; wasteFractionId: string; note: string | null }
 type ApiTicket = { id: string; label: string; recollectionRouteId: string | null; recollectionPickupId: string | null }
 
 const escaped = (text: string) => text.replace(/[.*+?^${}()|[\]\\]/g, "\\$&")
@@ -221,4 +223,56 @@ test("a ticket's re-collection names the stop the office added for it: complete 
 
   const stored = (await (await api.get(`/tickets/${ticket.id}`)).json()) as ApiTicket
   expect({ route: stored.recollectionRouteId, stop: stored.recollectionPickupId }).toEqual({ route: recollection.id, stop: added.id })
+})
+
+test("a stop says what it is for: the office books a wash of a container its dispatched route empties and an extra emptying of another, and the driver reads each by its label (O3 of #290)", async ({ api, browser, page }) => {
+  test.setTimeout(150_000)
+  const { route } = await dispatchedRouteFor(api)
+  const before = (await routeRead(api, route.id)) as unknown as { pickups: AddedPickup[] }
+  const generated = before.pickups.filter((pickup) => pickup.origin === "generation" && pickup.containerId !== null)
+  expect(generated.length, `${route.label} needs two of generation's stops`).toBeGreaterThanOrEqual(2)
+  const labels = new Map((await listAll<Container>(api, "/containers")).map((container) => [container.id, container.label]))
+  const [washed, emptiedTwice] = generated
+  const washedLabel = labels.get(washed.containerId ?? "") ?? ""
+
+  // The office books the wash through Add stop: the service, then the container the route empties already.
+  const details = await openRoute(page, route)
+  const addStop = details.getByTestId("route-commands").getByRole("button", { name: "Add stop" })
+  await expect(addStop).toBeEnabled({ timeout: 30_000 })
+  await addStop.click()
+  const dialog = page.getByRole("dialog", { name: "Add stop" })
+  await expect(dialog.getByRole("combobox", { name: /^Service/ })).toContainText("Emptying")
+  await pickMatching(dialog, page, "Service", /^Wash$/)
+  await pickMatching(dialog, page, "Container", new RegExp(`^${escaped(washedLabel)}( · |$)`))
+  const [added] = await Promise.all([answerOf(page, "POST", `/routes/${route.id}/pickups`), dialog.getByRole("button", { name: "Add stop" }).click()])
+  expect(added.status(), await added.text()).toBe(201)
+  expect(added.request().postDataJSON()).toEqual({ service: "wash", containerId: washed.containerId })
+  const wash = (await added.json()) as AddedPickup
+  expect({ origin: wash.origin, service: wash.service, containerId: wash.containerId }).toEqual({ origin: "office", service: "wash", containerId: washed.containerId })
+
+  // And an extra emptying of another of the route's containers, as a second stop of it.
+  const extraResponse = await api.post(`/routes/${route.id}/pickups`, { data: { containerId: emptiedTwice.containerId, note: "Overflowing after the market" } })
+  expect(extraResponse.status(), await extraResponse.text()).toBe(201)
+  const extra = (await extraResponse.json()) as AddedPickup
+  expect({ origin: extra.origin, service: extra.service }).toEqual({ origin: "office", service: "empty" })
+
+  // The wash's details say what it is for.
+  await page.goto(`/route-studio?module=pickups&record=pickup-${wash.id}`)
+  await expect(page.getByRole("dialog").filter({ hasText: "Added by" })).toContainText("Wash", { timeout: 30_000 })
+
+  // The driver's phone labels the wash and the extra emptying, and leaves generation's stops of the two containers as their collections.
+  const context = await freshContext(browser, { viewport: { width: 390, height: 844 } })
+  try {
+    const phone = await context.newPage()
+    await signIn(phone, SEEDED_DRIVER.email, E2E.loginPassword)
+    await expect(phone).toHaveURL(/\/driver$/)
+    await phone.goto(`/driver/routes/${route.id}`)
+    const cards = phone.getByRole("article")
+    await expect(cards.filter({ has: phone.locator('[data-slot="badge"]', { hasText: /^Wash$/ }) })).toHaveCount(1, { timeout: 30_000 })
+    await expect(cards.filter({ has: phone.locator('[data-slot="badge"]', { hasText: /^Wash$/ }) })).toContainText(washedLabel)
+    await expect(cards.filter({ has: phone.locator('[data-slot="badge"]', { hasText: /^Extra emptying$/ }) })).toHaveCount(1)
+    await expect(cards.filter({ has: phone.locator('[data-slot="badge"]', { hasText: /^Extra emptying$/ }) })).toContainText(labels.get(emptiedTwice.containerId ?? "") ?? "")
+  } finally {
+    await context.close()
+  }
 })

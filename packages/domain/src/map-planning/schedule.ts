@@ -70,6 +70,9 @@ function* liveStops(
   }
   for (const pickup of pickups) {
     if (isSoftDeleted(pickup) || DEAD_STATUSES.has(pickup.status)) continue
+    // A repair or a wash (O3 of #290) collects nothing: the container's next collection is another stop's.
+    const service = typedString(pickup.submittedValues, "service")
+    if (service !== undefined && service !== "empty") continue
     const containerId = typedString(pickup.submittedValues, "containerId")
     const route = live.get(typedString(pickup.submittedValues, "routeId") ?? "")
     if (!containerId || route === undefined) continue

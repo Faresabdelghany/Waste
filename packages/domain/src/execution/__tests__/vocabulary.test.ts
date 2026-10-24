@@ -12,7 +12,7 @@ import { describe, test } from "node:test"
 import { defineVocabularyTests } from "../../__tests__/vocabulary"
 import * as vocabulary from "../vocabulary"
 
-defineVocabularyTests("Execution", vocabulary, vocabulary.EXECUTION_VOCABULARIES, 11, ["DRIVER_PICKUP_REASONS", "CLOSING_REASONS"])
+defineVocabularyTests("Execution", vocabulary, vocabulary.EXECUTION_VOCABULARIES, 12, ["DRIVER_PICKUP_REASONS", "CLOSING_REASONS", "OFFICE_STOP_SERVICES"])
 
 describe("the Execution vocabulary's own rules", () => {
   test("the route and pickup statuses are #97 B's, verbatim, and the outcomes are the statuses less planned", () => {
@@ -31,6 +31,12 @@ describe("the Execution vocabulary's own rules", () => {
 
   test("a stop is generation's or the office's (#111): the two who put one on a route", () => {
     assert.deepEqual([...vocabulary.PICKUP_ORIGINS], ["generation", "office"])
+  })
+
+  test("a stop empties its container, or is one of the office's work orders; the office books an emptying, a repair or a wash, each a service of the list (O3 of #290)", () => {
+    assert.deepEqual([...vocabulary.PICKUP_SERVICES], ["empty", "deliver", "remove", "swap", "repair", "wash"])
+    assert.deepEqual([...vocabulary.OFFICE_STOP_SERVICES], ["empty", "repair", "wash"])
+    for (const service of vocabulary.OFFICE_STOP_SERVICES) assert.ok((vocabulary.PICKUP_SERVICES as readonly string[]).includes(service), service)
   })
 
   test("the proof kinds are seven driver events — five about a stop, two about the route — four kinds of evidence and the correction", () => {

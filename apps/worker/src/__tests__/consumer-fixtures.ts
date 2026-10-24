@@ -241,6 +241,7 @@ export function pickupPayload(tenant: ConsumerTenant, routeId: string, pickupId:
     position: stop.position ?? 1,
     status: stop.status,
     origin: stop.container === null ? "office" : (stop.origin ?? "generation"),
+    service: "empty",
     reason: stop.reason ?? null,
     note: stop.note ?? null,
     propertyId: place.id,

@@ -125,12 +125,13 @@ describe("the ticket's command dialogs", () => {
   test("the re-collection's stop is picked among the picked route's stops still to collect or collected, after None (#111)", () => {
     const stop = (id: string, routeId: string, status: string, shown: string): BusinessRecord => ({ ...row(`pickup-${id}`, "Pickup"), name: `Stop ${id}`, status: shown, submittedValues: { routeId, status } })
     const route = web("route-studio.routes")
-    const stops = [stop("1", route, "planned", "Planned"), stop("2", route, "collected", "Collected"), stop("3", route, "skipped", "Skipped"), stop("4", route, "failed", "Failed"), stop("5", "route-other", "planned", "Planned")]
+    const wash: BusinessRecord = { ...stop("6", route, "planned", "Planned"), submittedValues: { routeId: route, status: "planned", service: "wash" } }
+    const stops = [stop("1", route, "planned", "Planned"), stop("2", route, "collected", "Collected"), stop("3", route, "skipped", "Skipped"), stop("4", route, "failed", "Failed"), stop("5", "route-other", "planned", "Planned"), wash]
     assert.deepEqual(recollectionStopOptions(stops, route), [
       { value: NO_ONE, label: "None: the route alone" },
       { value: "pickup-1", label: "Stop 1" },
       { value: "pickup-2", label: "Stop 2 · Collected" },
-    ])
+    ], "a wash collects nothing, so it is no re-collection (O3 of #290)")
     assert.deepEqual(recollectionStopOptions(stops, undefined), [{ value: NO_ONE, label: "None: the route alone" }], "no stop before a route is picked")
     assert.deepEqual(recollectionStopOptions(stops, ""), [{ value: NO_ONE, label: "None: the route alone" }])
   })

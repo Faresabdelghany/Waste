@@ -71,7 +71,7 @@
 // another set (`stampMoved`); an identical set writes nothing, so the two
 // latest rows are the two latest distinct sets, which is what
 // `containerDriftBetween` compares.
-import type { PickupOrigin, PickupReason, PickupStatus, RouteStatus } from "../execution/vocabulary"
+import type { PickupOrigin, PickupReason, PickupService, PickupStatus, RouteStatus } from "../execution/vocabulary"
 import { ruleSignature } from "../route-schemes/container-drift"
 import { WALK_CAP_DAYS } from "../route-schemes/generation"
 import { holidayLabel, holidayNamesFor, withCarriedNames } from "../route-schemes/holiday-names"
@@ -453,6 +453,8 @@ export type ExistingPickup = {
   position: number
   /** Generation's, or the office's, which a refresh leaves as it stands (#111). */
   origin: PickupOrigin
+  /** What the stop is for: only an office stop that empties its container stands for the plan's emptying of it (O3 of #290). */
+  service: PickupService
   status: PickupStatus
   reason: PickupReason | null
   propertyId: string | null
@@ -484,28 +486,29 @@ const samePlace = (existing: ExistingPickup, stop: PlannedStop): boolean =>
  * never deleted, and a pickup a person decided — removed by the dispatcher,
  * or with an outcome — is left as it stands, in or out of the plan. A stop
  * the office added (#111) is the office's whatever it holds: never skipped,
- * never moved, and a container it holds is the office's stop already, so the
- * plan's stop for that container is not inserted beside it — a route has one
- * stop per container, and the container is collected at the office's. That
- * holds whatever the office's stop now stands at: one the dispatcher removed
- * keeps the container off the route, as any stop a person decided does, and
- * how a collection both planned and asked for by the office is charged is
- * Finance's follow-up to decide.
+ * never moved, and a container it empties is the office's stop already, so
+ * the plan's stop for that container is not inserted beside it — the
+ * container is collected at the office's. That holds whatever the office's
+ * stop now stands at: one the dispatcher removed keeps the container off the
+ * route, as any stop a person decided does, and how a collection both planned
+ * and asked for by the office is charged is Finance's follow-up to decide. An
+ * office stop for another service — a repair, a wash (O3 of #290) — empties
+ * nothing, so the plan's emptying of its container goes on the route beside it.
  */
 export function pickupChanges(existing: readonly ExistingPickup[], planned: readonly PlannedStop[]): PickupChanges {
   const changes: PickupChanges = { insert: [], update: [], skip: [], unchanged: 0 }
   const own = existing.filter((pickup) => pickup.origin === "generation")
   const office = existing.filter((pickup) => pickup.origin === "office")
   changes.unchanged += office.length
-  const officeHolds = new Set(office.flatMap((pickup) => (pickup.containerId === null ? [] : [pickup.containerId])))
+  const officeHolds = new Set(office.flatMap((pickup) => (pickup.containerId === null || pickup.service !== "empty" ? [] : [pickup.containerId])))
   const byContainer = new Map(own.map((pickup) => [pickup.containerId, pickup]))
   const held = new Set(planned.map((stop) => stop.containerId))
 
   for (const stop of planned) {
-    if (officeHolds.has(stop.containerId)) continue
     const current = byContainer.get(stop.containerId)
     if (current === undefined) {
-      changes.insert.push(stop)
+      // A container the office empties already is not inserted beside its stop; generation's own stop of it, where it has one, is refreshed as any other.
+      if (!officeHolds.has(stop.containerId)) changes.insert.push(stop)
     } else if (current.status === "planned") {
       if (samePlace(current, stop)) changes.unchanged += 1
       else changes.update.push({ ...stop, id: current.id, resurrect: false })

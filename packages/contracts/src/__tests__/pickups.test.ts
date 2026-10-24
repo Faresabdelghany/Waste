@@ -3,7 +3,7 @@ import { describe, test } from "node:test"
 
 import { PICKUP_OUTCOMES } from "@waste/domain/execution/vocabulary"
 
-import { A_CONTAINER_OR_AN_ADDRESS, AN_ADDRESS_WITH_ITS_FRACTION, ONE_ADDRESS, Pickup, PickupAdd, PickupCorrection, PickupDetail, PickupListItem, PickupListQuery, PickupOutcome, PickupRemove, REASON_WITH_A_MISS, reasonWithOutcome, THE_CONTAINER_ALONE } from "../pickups"
+import { A_CONTAINER_OR_AN_ADDRESS, A_WORK_ORDER_OF_A_CONTAINER, AN_ADDRESS_WITH_ITS_FRACTION, ONE_ADDRESS, Pickup, PickupAdd, PickupCorrection, PickupDetail, PickupListItem, PickupListQuery, PickupOutcome, PickupRemove, REASON_WITH_A_MISS, reasonWithOutcome, THE_CONTAINER_ALONE } from "../pickups"
 import { DAY_WINDOW_ORDERED } from "../queries"
 import { refusal } from "./expect"
 
@@ -22,6 +22,7 @@ const pickup = {
   position: 12,
   status: "completed",
   origin: "generation",
+  service: "empty",
   reason: null,
   note: null,
   propertyId: OTHER,
@@ -75,6 +76,16 @@ describe("Pickup", () => {
     assert.equal(Pickup.safeParse({ ...pickup, origin: "planner" }).success, false)
   })
 
+  test("a stop says what it is for — an emptying, or one of the office's work orders — and an event the outbox took before it reads as an emptying (O3 of #290)", () => {
+    for (const service of ["deliver", "remove", "swap", "repair", "wash"]) {
+      const workOrder = { ...pickup, origin: "office", service }
+      assert.deepEqual(Pickup.parse(workOrder), workOrder, service)
+    }
+    const { service: _service, ...before } = pickup
+    assert.deepEqual(Pickup.parse(before), pickup, "every stop before the service emptied its container")
+    assert.equal(Pickup.safeParse({ ...pickup, service: "collect" }).success, false)
+  })
+
   test("a listed pickup carries its sequence, the place in its route's execution order, beside the baseline position (#219)", () => {
     const listed = { ...pickup, sequence: 3 }
     assert.deepEqual(PickupListItem.parse(listed), listed)
@@ -87,10 +98,10 @@ describe("Pickup", () => {
 
 describe("the dispatcher's commands", () => {
   test("add names a container alone, or one address with the fraction collected there, and a note if any (#111)", () => {
-    assert.deepEqual(PickupAdd.parse({ containerId: ID }), { containerId: ID })
-    assert.deepEqual(PickupAdd.parse({ propertyId: OTHER, wasteFractionId: THIRD, note: "Re-collection of T-8831" }), { propertyId: OTHER, wasteFractionId: THIRD, note: "Re-collection of T-8831" })
+    assert.deepEqual(PickupAdd.parse({ containerId: ID }), { service: "empty", containerId: ID })
+    assert.deepEqual(PickupAdd.parse({ propertyId: OTHER, wasteFractionId: THIRD, note: "Re-collection of T-8831" }), { service: "empty", propertyId: OTHER, wasteFractionId: THIRD, note: "Re-collection of T-8831" })
     // A form sends null for the fields it leaves empty; a null is a field not given.
-    const fromAForm = { containerId: null, propertyId: null, sharedCollectionPointId: OTHER, wasteFractionId: THIRD, note: null }
+    const fromAForm = { service: "empty", containerId: null, propertyId: null, sharedCollectionPointId: OTHER, wasteFractionId: THIRD, note: null }
     assert.deepEqual(PickupAdd.parse(fromAForm), fromAForm)
     assert.deepEqual(refusal(PickupAdd.safeParse({})), [{ path: "containerId", message: A_CONTAINER_OR_AN_ADDRESS }])
     assert.deepEqual(refusal(PickupAdd.safeParse({ wasteFractionId: THIRD })), [{ path: "containerId", message: A_CONTAINER_OR_AN_ADDRESS }])
@@ -102,6 +113,15 @@ describe("the dispatcher's commands", () => {
     assert.deepEqual(refusal(PickupAdd.safeParse({ propertyId: OTHER })), [{ path: "wasteFractionId", message: AN_ADDRESS_WITH_ITS_FRACTION }])
     assert.match(refusal(PickupAdd.safeParse({ containerId: ID, position: 3 }))[0].message, /position/, "the position is the server's: the stop goes after the last")
     assert.match(refusal(PickupAdd.safeParse({ containerId: ID, origin: "office" }))[0].message, /origin/)
+  })
+
+  test("add books an emptying, a repair or a wash, the two work orders each of a container; a delivery, a removal and a swap are not booked here (O3 of #290)", () => {
+    assert.deepEqual(PickupAdd.parse({ service: "repair", containerId: ID, note: "The lid hinge" }), { service: "repair", containerId: ID, note: "The lid hinge" })
+    assert.deepEqual(PickupAdd.parse({ service: "wash", containerId: ID }), { service: "wash", containerId: ID })
+    for (const service of ["repair", "wash"]) {
+      assert.deepEqual(refusal(PickupAdd.safeParse({ service, propertyId: OTHER, wasteFractionId: THIRD })), [{ path: "containerId", message: A_WORK_ORDER_OF_A_CONTAINER }], service)
+    }
+    for (const service of ["deliver", "remove", "swap"]) assert.deepEqual(refusal(PickupAdd.safeParse({ service, containerId: ID })).map((issue) => issue.path), ["service"], service)
   })
 
   test("remove carries the reason and nothing else", () => {
