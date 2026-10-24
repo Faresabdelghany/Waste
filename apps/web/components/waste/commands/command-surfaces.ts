@@ -30,6 +30,7 @@ import { ALERT_LIST_INITIAL, alertListReaders } from "@/lib/data/alerts"
 import { TICKET_LIST_INITIAL, ticketListReaders } from "@/lib/data/tickets"
 import { emptyBusinessFilters, type BusinessFilters, type FilterValueReaders } from "@waste/domain/business-filters"
 
+import { AgreementCommandsSurface } from "./agreement-surfaces"
 import { AllocateSurface, AllocationCommandsSurface } from "./allocation-surfaces"
 import { AddManualEventSurface, BillingRunSurface, EventCommandsSurface, InvoiceSurface, RunBillingSurface } from "./billing-surfaces"
 import { BILLING_LIST, EVENTS_LIST, INVOICES_LIST, PRICE_ROWS_LIST } from "./commercial-lists"
@@ -114,6 +115,8 @@ export const COMMAND_SURFACES: Readonly<Record<string, CommandSurface>> = {
   "customers.properties": { primary: AddPropertySurface, rowActions: PropertyCommandsSurface },
   "customers.groups": { primary: AddPropertyGroupSurface, rowActions: PropertyGroupCommandsSurface },
   "customers.shared": { primary: AddSharedPointSurface, rowActions: SharedPointCommandsSurface },
+  // Slice 10 of #291: an agreement and a subscription by their forms, as ever; their lifecycle — a termination, a change of service, a pause — by command.
+  "customers.agreements": { primary: "form", rowActions: AgreementCommandsSurface },
   // Slice 6 (#179): generation writes routes and their stops; a route and a
   // stop move by their commands, and the Live board only reads. A route's
   // details are these, not the fixture route page. #111: New route makes the
