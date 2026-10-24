@@ -30,7 +30,7 @@ import { driverAdapter, vehicleAdapter } from "./fleet"
 import { projectServerIdOf, referenced, refusal } from "./places"
 import { nameVia, referencedServerId, webIdVia } from "./references"
 import { callsignOf, routeAdapter } from "./routes"
-import { isTicketRecord, TICKET_PREFIX } from "./tickets"
+import { isTicketRecord, TICKET_NUMBER_FACT, TICKET_PREFIX } from "./tickets"
 
 /** The workspace module the alerts are the rows of: Operate's Exceptions & Alerts. */
 export const ALERTS_MODULE: ModuleLocation = { workspaceId: "operate", moduleId: "exceptions" }
@@ -67,7 +67,7 @@ export function toAlertRecord(alert: Alert, context: MappingContext): BusinessRe
   const nameOf = (prefix: string, serverId: string) => (prefix === "vehicle" ? callsignOf(nameVia(context, prefix, serverId)) : nameVia(context, prefix, serverId))
   const subjects = ALERT_SUBJECTS.flatMap(([key, prefix, fact]) => (alert[key] === null ? [] : [{ key, fact, webId: webIdVia(context, prefix, alert[key] as string), name: nameOf(prefix, alert[key] as string) }]))
   const ticket = alert.ticketId === null ? undefined : referenced(context, TICKET_PREFIX, alert.ticketId)
-  const ticketName = ticket === undefined ? undefined : (context.resolve.byServerId(alert.ticketId as string)?.facts.Ticket ?? ticket.name ?? ticket.webId)
+  const ticketName = ticket === undefined ? undefined : (context.resolve.byServerId(alert.ticketId as string)?.facts[TICKET_NUMBER_FACT] ?? ticket.name ?? ticket.webId)
   const acknowledged = stamp(alert.acknowledgedAt, alert.acknowledgedBy, context, timezone)
   const resolved = stamp(alert.resolvedAt, alert.resolvedBy, context, timezone)
   const facts: Record<string, string> = {

@@ -17,6 +17,7 @@ import { NOTHING_RESOLVED, type MappingContext, type Resolver } from "../records
 import { isServerBacked } from "../records/modules"
 import { projectAdapter } from "../records/organisation"
 import { commandRecord, loaded, loadModule, rereadRecord, resolverOver, writeRecord, type ServerRecordsState } from "../records/server-records"
+import { TICKET_NUMBER_FACT } from "../records/tickets"
 import { bodyOf, clientOver, json, problem, scripted } from "./scripted-fetch"
 
 const NOW = new Date("2026-10-01T10:00:00Z")
@@ -34,7 +35,7 @@ const ticketId = "01a0d2a4-a280-7040-8000-000000000001"
 const row = (id: string, name: string, recordKind: string, facts: Record<string, string> = {}): BusinessRecord => ({ ...projectRecord, id, name, recordKind, facts, submittedValues: {} })
 const wh24 = row(`vehicle-${vehicleId}`, "WH-24 · CN 42 018", "Vehicle")
 const olivia = row(`user-${oliviaId}`, "Olivia Larsen", "User")
-const t1001 = row(`ticket-${ticketId}`, "Stale position on WH-24", "Ticket", { Ticket: "T-1001" })
+const t1001 = row(`ticket-${ticketId}`, "Stale position on WH-24", "Ticket", { [TICKET_NUMBER_FACT]: "T-1001" })
 const serverIdsOf = (records: readonly BusinessRecord[], ids: readonly string[]) => new Map(records.map((record, index) => [record.id, ids[index]]))
 const state: ServerRecordsState = new Map([
   ["configure.organization", loaded({ records: [projectRecord], serverIds: serverIdsOf([projectRecord], [copenhagen.id]) }, 1)],

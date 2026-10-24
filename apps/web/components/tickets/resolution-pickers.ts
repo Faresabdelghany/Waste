@@ -17,7 +17,7 @@ import { useRelationPickers, type RelationPickers } from "@/components/waste/com
 import { moduleKeyOf } from "@/lib/api/records/adapter"
 import { CONTAINERS_MODULE } from "@/lib/api/records/containers"
 import { ROUTES_MODULE } from "@/lib/api/records/routes"
-import { TICKETS_MODULE } from "@/lib/api/records/tickets"
+import { TICKET_NUMBER_FACT, TICKETS_MODULE } from "@/lib/api/records/tickets"
 import { AGREEMENTS_MODULE, isAgreementRecord } from "@/lib/data/agreements"
 import type { BusinessFormField, BusinessFormOption, BusinessFormSchema, BusinessFormValues } from "@/lib/data/business-form-types"
 import { getModuleDefinition, type BusinessRecord, type ModuleLocation } from "@/lib/data/business-modules"
@@ -83,7 +83,7 @@ export function useResolutionPickers(): RelationPickers {
       case "agreementId":
         return optional(inProject(agreements.records, projectId).filter(isAgreementRecord).map((record) => optionOf(record)))
       case "ticketId":
-        return inProject(tickets.records, projectId).map((record) => ({ value: record.id, label: [record.facts.Ticket, record.name, record.status].filter(Boolean).join(" · ") }))
+        return inProject(tickets.records, projectId).map((record) => ({ value: record.id, label: [record.facts[TICKET_NUMBER_FACT], record.name, record.status].filter(Boolean).join(" · ") }))
       default:
         return undefined
     }

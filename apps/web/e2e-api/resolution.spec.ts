@@ -8,9 +8,10 @@ import { listAll, projectNamed } from "./tester"
 // rows. The office opens a ticket about a route through New ticket, works it
 // in its details — assigns it to themselves, starts it, notes it internally,
 // completes it as recollected on a route picked from Route Studio — and the
-// history shows every step; a command on a ticket another hand closed is the
-// API's own sentence; an alert about a vehicle is raised, acknowledged and
-// handed to a ticket that answers it. Every body is the one the contracts
+// history shows every step; the list's columns hold what they are headed
+// (#253); a command on a ticket another hand closed is the API's own
+// sentence; an alert about a vehicle is raised, acknowledged and handed to a
+// ticket that answers it. Every body is the one the contracts
 // take, read off the browser's own request. Nothing is seeded for
 // Resolution (#143): each test makes what it works on, uniquely named.
 
@@ -18,6 +19,7 @@ type ApiTicket = { id: string; label: string; status: string; subject: string; r
 type ApiEvent = { kind: string; body: string | null; visibility: string }
 type ApiAlert = { id: string; status: string; ticketId: string | null }
 type Me = { user: { id: string; fullName: string } }
+type Named = { id: string; name: string }
 
 test("the office opens a ticket about a route, assigns it to themselves, starts it, notes it and completes it as recollected on a route picked from Route Studio; the history shows every step", async ({ api, page }) => {
   test.setTimeout(120_000)
@@ -105,6 +107,38 @@ test("the office opens a ticket about a route, assigns it to themselves, starts 
   await expect(page.getByRole("main").getByText("No matching records").first()).toBeVisible()
   await page.getByRole("button", { name: "Remove Open or closed: Open" }).click()
   await expect(page.getByRole("main").getByText(subject).first()).toBeVisible()
+})
+
+test("the list heads one column Ticket and the number its own, and Customer · property holds whom and where a ticket is about, each once (#253)", async ({ api, page }) => {
+  const project = await projectNamed(api, "Copenhagen Central")
+  const made = await api.post("/customers", { data: { kind: "organisation", name: uniqueName("E2E Ticket customer") } })
+  expect(made.status(), await made.text()).toBe(201)
+  const customer = (await made.json()) as Named
+  const placed = await api.post("/properties", { data: { projectId: project.id, name: uniqueName("E2E Ticket property"), address: "Parkvej 18, 2100 København Ø", kind: "residential" } })
+  expect(placed.status(), await placed.text()).toBe(201)
+  const property = (await placed.json()) as Named
+  const subject = uniqueName("E2E blocked gate")
+  const created = await api.post("/tickets", { data: { projectId: project.id, subject, description: "The gate code changed", kind: "access-issue", links: { customerId: customer.id, propertyId: property.id } } })
+  expect(created.status(), await created.text()).toBe(201)
+  const ticket = (await created.json()) as ApiTicket
+
+  const listed = answerOf(page, "GET", "/tickets")
+  await page.goto("/tickets")
+  expect((await listed).status()).toBe(200)
+  await chainLanded(page)
+  const main = page.getByRole("main")
+  await expect(main.getByRole("columnheader", { name: "Ticket", exact: true })).toHaveCount(1)
+  await expect(main.getByRole("columnheader", { name: "Number", exact: true })).toBeVisible()
+  await main.getByRole("textbox", { name: /^Search .+/ }).fill(subject)
+  // A row is the button that opens it, its cells in the headers' order.
+  const headers = await main.getByRole("columnheader").allTextContents()
+  const column = (heading: string) => {
+    expect(headers, `a column headed ${heading}`).toContain(heading)
+    return headers.indexOf(heading)
+  }
+  const cells = main.getByRole("button", { name: `Open ${subject}` }).getByRole("cell")
+  await expect(cells.nth(column("Customer · property"))).toHaveText(`${customer.name} · ${property.name}`)
+  await expect(cells.nth(column("Number"))).toHaveText(ticket.label)
 })
 
 test("a command on a ticket another hand closed is refused in the API's own sentence", async ({ api, page }) => {
