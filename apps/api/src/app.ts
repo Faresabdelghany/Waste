@@ -34,7 +34,7 @@ import { describeRoute, openAPIRouteHandler, resolver } from "hono-openapi"
 
 import manifest from "../package.json" with { type: "json" }
 import { authenticate, BEARER_AUTH, BEARER_SECURITY_SCHEME, identify } from "./auth/principal"
-import { Allowance, PUBLIC_REQUESTS_PER_MINUTE, publicDoor } from "./auth/public-door"
+import { Allowance, FEED_ADDRESSES_PER_CLIENT, FEED_REQUESTS_PER_ADDRESS, FeedAllowance, PUBLIC_REQUESTS_PER_MINUTE, publicDoor } from "./auth/public-door"
 import type { Verifier } from "./auth/verify"
 import { errorHandler, notFound } from "./problem"
 import { checkDatabase, DATABASE_CHECK_TIMEOUT_MS } from "./readiness"
@@ -130,6 +130,8 @@ export type AppOptions = {
   routingEngine?: QuotaEngine
   /** Each public client's requests a minute on the public door (ADR-0010); a test injects one with a small allowance or a pinned clock. */
   publicAllowance?: Allowance
+  /** An address's calendar feed's own allowance, per client and address and per client across addresses; a test injects small bounds or a pinned clock. */
+  feedAllowance?: FeedAllowance
   /** The socket's peer address, the public door's client where no trusted proxy names one: server.ts reads the Node request's; a test has none. */
   peer?: (c: Context) => string | undefined
   /** How many proxies in front of the API append to X-Forwarded-For (PUBLIC_TRUSTED_PROXIES): 0, the default, ignores the header. */
@@ -148,6 +150,7 @@ export function createApp({
   routing = { name: providerNameFromEnv() },
   routingEngine = new QuotaEngine(new FakeProvider(), { ...STANDARD_PLAN, callsPerMinute: PREVIEW_CALLS_PER_MINUTE, waits: false }),
   publicAllowance = new Allowance(PUBLIC_REQUESTS_PER_MINUTE, now),
+  feedAllowance = new FeedAllowance(FEED_REQUESTS_PER_ADDRESS, FEED_ADDRESSES_PER_CLIENT, now),
   peer = () => undefined,
   trustedProxies = 0,
 }: AppOptions) {
@@ -253,7 +256,17 @@ export function createApp({
   // Resolution (Issue #109): a ticket's `occurredAt` and an alert's `detectedAt` default to the request's clock and may not run ahead of it, and every command stamps and publishes with it, so both modules take `now` too.
   app.route("/", ticketRoutes(guard, { now }))
   app.route("/", sortingGuideRoutes(guard))
-  app.route("/", publicRoutes(publicDoor({ pool, allowance: publicAllowance, peer, trustedProxies })))
+  app.route(
+    "/",
+    publicRoutes(
+      {
+        door: publicDoor({ pool, allowance: publicAllowance, peer, trustedProxies }),
+        // A feed is counted by its address too: the path's `:id`, read before it is validated, so a malformed one counts like any other.
+        feedDoor: publicDoor({ pool, allowance: { take: (client, c) => feedAllowance.take(client, c.req.param("id") ?? "") }, peer, trustedProxies }),
+      },
+      { now },
+    ),
+  )
   app.route("/", alertRoutes(guard, { now }))
   // Finance & Contracting (Issue #112). The tariffs, the awards and what a provider is paid: every rule there is a period against a day the caller names, so none of the three takes the clock.
   app.route("/", priceListRoutes(guard))

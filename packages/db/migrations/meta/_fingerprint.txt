@@ -478,13 +478,13 @@ trigger wms.collection_calendar collection_calendar_touch_updated_at enabled=O C
 policy wms.collection_calendar collection_calendar_tenant_fence permissive ALL to=wms_api using=(company_id = ( SELECT wms.current_company_id() AS current_company_id)) check=(company_id = ( SELECT wms.current_company_id() AS current_company_id))
 relation wms.collection_calendar_holiday kind=table owner=<owner> persistence=p rls=true force-rls=true replica-identity=d acl=[<owner>=DELETE,INSERT,MAINTAIN,REFERENCES,SELECT,TRIGGER,TRUNCATE,UPDATE/<owner> wms_api=DELETE,INSERT,SELECT,UPDATE/<owner> wms_worker=SELECT/<owner>]
 column wms.collection_calendar_holiday 1 id uuid not-null default=wms.uuidv7()
-column wms.collection_calendar_holiday 2 company_id uuid not-null
-column wms.collection_calendar_holiday 3 project_id uuid not-null
+column wms.collection_calendar_holiday 2 company_id uuid not-null acl=[wms_public=SELECT/<owner>]
+column wms.collection_calendar_holiday 3 project_id uuid not-null acl=[wms_public=SELECT/<owner>]
 column wms.collection_calendar_holiday 4 created_at timestamp with time zone not-null default=now()
 column wms.collection_calendar_holiday 5 updated_at timestamp with time zone not-null default=now()
 column wms.collection_calendar_holiday 6 collection_calendar_id uuid not-null
-column wms.collection_calendar_holiday 7 day date not-null
-column wms.collection_calendar_holiday 8 name text
+column wms.collection_calendar_holiday 7 day date not-null acl=[wms_public=SELECT/<owner>]
+column wms.collection_calendar_holiday 8 name text acl=[wms_public=SELECT/<owner>]
 constraint wms.collection_calendar_holiday collection_calendar_holiday_collection_calendar_id_day_key UNIQUE (company_id, collection_calendar_id, day)
 constraint wms.collection_calendar_holiday collection_calendar_holiday_collection_calendar_id_fk FOREIGN KEY (company_id, project_id, collection_calendar_id) REFERENCES wms.collection_calendar(company_id, project_id, id)
 constraint wms.collection_calendar_holiday collection_calendar_holiday_company_id_fk FOREIGN KEY (company_id) REFERENCES wms.company(id)
@@ -494,18 +494,21 @@ index wms.collection_calendar_holiday collection_calendar_holiday_collection_cal
 index wms.collection_calendar_holiday collection_calendar_holiday_pkey CREATE UNIQUE INDEX collection_calendar_holiday_pkey ON wms.collection_calendar_holiday USING btree (id)
 index wms.collection_calendar_holiday collection_calendar_holiday_project_id_idx CREATE INDEX collection_calendar_holiday_project_id_idx ON wms.collection_calendar_holiday USING btree (company_id, project_id)
 trigger wms.collection_calendar_holiday collection_calendar_holiday_touch_updated_at enabled=O CREATE TRIGGER collection_calendar_holiday_touch_updated_at BEFORE UPDATE ON wms.collection_calendar_holiday FOR EACH ROW EXECUTE FUNCTION wms.touch_updated_at()
+policy wms.collection_calendar_holiday collection_calendar_holiday_public_door permissive SELECT to=wms_public using=((company_id = ( SELECT wms.current_company_id() AS current_company_id)) AND (EXISTS ( SELECT 1
+   FROM wms.project published
+  WHERE ((published.company_id = collection_calendar_holiday.company_id) AND (published.id = collection_calendar_holiday.project_id) AND (published.public_slug IS NOT NULL))))) check=none
 policy wms.collection_calendar_holiday collection_calendar_holiday_tenant_fence permissive ALL to=wms_api using=(company_id = ( SELECT wms.current_company_id() AS current_company_id)) check=(company_id = ( SELECT wms.current_company_id() AS current_company_id))
 relation wms.collection_group kind=table owner=<owner> persistence=p rls=true force-rls=true replica-identity=d acl=[<owner>=DELETE,INSERT,MAINTAIN,REFERENCES,SELECT,TRIGGER,TRUNCATE,UPDATE/<owner> wms_api=DELETE,INSERT,SELECT,UPDATE/<owner> wms_worker=SELECT/<owner>]
-column wms.collection_group 1 id uuid not-null default=wms.uuidv7()
-column wms.collection_group 2 company_id uuid not-null
-column wms.collection_group 3 project_id uuid not-null
+column wms.collection_group 1 id uuid not-null default=wms.uuidv7() acl=[wms_public=SELECT/<owner>]
+column wms.collection_group 2 company_id uuid not-null acl=[wms_public=SELECT/<owner>]
+column wms.collection_group 3 project_id uuid not-null acl=[wms_public=SELECT/<owner>]
 column wms.collection_group 4 created_at timestamp with time zone not-null default=now()
 column wms.collection_group 5 updated_at timestamp with time zone not-null default=now()
-column wms.collection_group 6 route_scheme_id uuid not-null
+column wms.collection_group 6 route_scheme_id uuid not-null acl=[wms_public=SELECT/<owner>]
 column wms.collection_group 7 name text not-null
-column wms.collection_group 8 position integer not-null
-column wms.collection_group 9 days text[] not-null
-column wms.collection_group 10 stop_source text not-null
+column wms.collection_group 8 position integer not-null acl=[wms_public=SELECT/<owner>]
+column wms.collection_group 9 days text[] not-null acl=[wms_public=SELECT/<owner>]
+column wms.collection_group 10 stop_source text not-null acl=[wms_public=SELECT/<owner>]
 column wms.collection_group 11 service_provider_id uuid
 column wms.collection_group 12 rule_vehicle_type_id uuid
 column wms.collection_group 13 vehicle_id uuid
@@ -532,15 +535,18 @@ index wms.collection_group collection_group_rule_vehicle_type_id_idx CREATE INDE
 index wms.collection_group collection_group_service_provider_id_idx CREATE INDEX collection_group_service_provider_id_idx ON wms.collection_group USING btree (company_id, service_provider_id)
 index wms.collection_group collection_group_vehicle_id_idx CREATE INDEX collection_group_vehicle_id_idx ON wms.collection_group USING btree (company_id, vehicle_id)
 trigger wms.collection_group collection_group_touch_updated_at enabled=O CREATE TRIGGER collection_group_touch_updated_at BEFORE UPDATE ON wms.collection_group FOR EACH ROW EXECUTE FUNCTION wms.touch_updated_at()
+policy wms.collection_group collection_group_public_door permissive SELECT to=wms_public using=((company_id = ( SELECT wms.current_company_id() AS current_company_id)) AND (EXISTS ( SELECT 1
+   FROM wms.project published
+  WHERE ((published.company_id = collection_group.company_id) AND (published.id = collection_group.project_id) AND (published.public_slug IS NOT NULL))))) check=none
 policy wms.collection_group collection_group_tenant_fence permissive ALL to=wms_api using=(company_id = ( SELECT wms.current_company_id() AS current_company_id)) check=(company_id = ( SELECT wms.current_company_id() AS current_company_id))
 relation wms.collection_group_container kind=table owner=<owner> persistence=p rls=true force-rls=true replica-identity=d acl=[<owner>=DELETE,INSERT,MAINTAIN,REFERENCES,SELECT,TRIGGER,TRUNCATE,UPDATE/<owner> wms_api=DELETE,INSERT,SELECT,UPDATE/<owner> wms_worker=SELECT/<owner>]
 column wms.collection_group_container 1 id uuid not-null default=wms.uuidv7()
-column wms.collection_group_container 2 company_id uuid not-null
-column wms.collection_group_container 3 project_id uuid not-null
+column wms.collection_group_container 2 company_id uuid not-null acl=[wms_public=SELECT/<owner>]
+column wms.collection_group_container 3 project_id uuid not-null acl=[wms_public=SELECT/<owner>]
 column wms.collection_group_container 4 created_at timestamp with time zone not-null default=now()
 column wms.collection_group_container 5 updated_at timestamp with time zone not-null default=now()
-column wms.collection_group_container 6 collection_group_id uuid not-null
-column wms.collection_group_container 7 container_id uuid not-null
+column wms.collection_group_container 6 collection_group_id uuid not-null acl=[wms_public=SELECT/<owner>]
+column wms.collection_group_container 7 container_id uuid not-null acl=[wms_public=SELECT/<owner>]
 column wms.collection_group_container 8 position integer not-null
 constraint wms.collection_group_container collection_group_container_collection_group_id_container_id_key UNIQUE (company_id, collection_group_id, container_id)
 constraint wms.collection_group_container collection_group_container_collection_group_id_fk FOREIGN KEY (company_id, project_id, collection_group_id) REFERENCES wms.collection_group(company_id, project_id, id)
@@ -556,6 +562,9 @@ index wms.collection_group_container collection_group_container_container_id_idx
 index wms.collection_group_container collection_group_container_pkey CREATE UNIQUE INDEX collection_group_container_pkey ON wms.collection_group_container USING btree (id)
 index wms.collection_group_container collection_group_container_project_id_idx CREATE INDEX collection_group_container_project_id_idx ON wms.collection_group_container USING btree (company_id, project_id)
 trigger wms.collection_group_container collection_group_container_touch_updated_at enabled=O CREATE TRIGGER collection_group_container_touch_updated_at BEFORE UPDATE ON wms.collection_group_container FOR EACH ROW EXECUTE FUNCTION wms.touch_updated_at()
+policy wms.collection_group_container collection_group_container_public_door permissive SELECT to=wms_public using=((company_id = ( SELECT wms.current_company_id() AS current_company_id)) AND (EXISTS ( SELECT 1
+   FROM wms.project published
+  WHERE ((published.company_id = collection_group_container.company_id) AND (published.id = collection_group_container.project_id) AND (published.public_slug IS NOT NULL))))) check=none
 policy wms.collection_group_container collection_group_container_tenant_fence permissive ALL to=wms_api using=(company_id = ( SELECT wms.current_company_id() AS current_company_id)) check=(company_id = ( SELECT wms.current_company_id() AS current_company_id))
 relation wms.collection_group_container_type kind=table owner=<owner> persistence=p rls=true force-rls=true replica-identity=d acl=[<owner>=DELETE,INSERT,MAINTAIN,REFERENCES,SELECT,TRIGGER,TRUNCATE,UPDATE/<owner> wms_api=DELETE,INSERT,SELECT,UPDATE/<owner> wms_worker=SELECT/<owner>]
 column wms.collection_group_container_type 1 id uuid not-null default=wms.uuidv7()
@@ -646,15 +655,15 @@ trigger wms.container container_touch_updated_at enabled=O CREATE TRIGGER contai
 policy wms.container container_tenant_fence permissive ALL to=wms_api using=(company_id = ( SELECT wms.current_company_id() AS current_company_id)) check=(company_id = ( SELECT wms.current_company_id() AS current_company_id))
 relation wms.container_service_placement kind=table owner=<owner> persistence=p rls=true force-rls=true replica-identity=d acl=[<owner>=DELETE,INSERT,MAINTAIN,REFERENCES,SELECT,TRIGGER,TRUNCATE,UPDATE/<owner> wms_api=DELETE,INSERT,SELECT,UPDATE/<owner> wms_worker=SELECT/<owner>]
 column wms.container_service_placement 1 id uuid not-null default=wms.uuidv7()
-column wms.container_service_placement 2 company_id uuid not-null
-column wms.container_service_placement 3 project_id uuid not-null
+column wms.container_service_placement 2 company_id uuid not-null acl=[wms_public=SELECT/<owner>]
+column wms.container_service_placement 3 project_id uuid not-null acl=[wms_public=SELECT/<owner>]
 column wms.container_service_placement 4 created_at timestamp with time zone not-null default=now()
 column wms.container_service_placement 5 updated_at timestamp with time zone not-null default=now()
-column wms.container_service_placement 6 valid_from date not-null
-column wms.container_service_placement 7 valid_to date
-column wms.container_service_placement 8 container_id uuid not-null
-column wms.container_service_placement 9 subscription_id uuid not-null
-column wms.container_service_placement 10 waste_fraction_id uuid not-null
+column wms.container_service_placement 6 valid_from date not-null acl=[wms_public=SELECT/<owner>]
+column wms.container_service_placement 7 valid_to date acl=[wms_public=SELECT/<owner>]
+column wms.container_service_placement 8 container_id uuid not-null acl=[wms_public=SELECT/<owner>]
+column wms.container_service_placement 9 subscription_id uuid not-null acl=[wms_public=SELECT/<owner>]
+column wms.container_service_placement 10 waste_fraction_id uuid not-null acl=[wms_public=SELECT/<owner>]
 column wms.container_service_placement 11 service_frequency_id uuid
 constraint wms.container_service_placement container_service_placement_company_id_fk FOREIGN KEY (company_id) REFERENCES wms.company(id)
 constraint wms.container_service_placement container_service_placement_container_id_fk FOREIGN KEY (company_id, project_id, container_id) REFERENCES wms.container(company_id, project_id, id)
@@ -673,6 +682,9 @@ index wms.container_service_placement container_service_placement_service_freque
 index wms.container_service_placement container_service_placement_subscription_id_idx CREATE INDEX container_service_placement_subscription_id_idx ON wms.container_service_placement USING btree (company_id, subscription_id)
 index wms.container_service_placement container_service_placement_waste_fraction_id_idx CREATE INDEX container_service_placement_waste_fraction_id_idx ON wms.container_service_placement USING btree (company_id, waste_fraction_id)
 trigger wms.container_service_placement container_service_placement_touch_updated_at enabled=O CREATE TRIGGER container_service_placement_touch_updated_at BEFORE UPDATE ON wms.container_service_placement FOR EACH ROW EXECUTE FUNCTION wms.touch_updated_at()
+policy wms.container_service_placement container_service_placement_public_door permissive SELECT to=wms_public using=((company_id = ( SELECT wms.current_company_id() AS current_company_id)) AND (EXISTS ( SELECT 1
+   FROM wms.project published
+  WHERE ((published.company_id = container_service_placement.company_id) AND (published.id = container_service_placement.project_id) AND (published.public_slug IS NOT NULL))))) check=none
 policy wms.container_service_placement container_service_placement_tenant_fence permissive ALL to=wms_api using=(company_id = ( SELECT wms.current_company_id() AS current_company_id)) check=(company_id = ( SELECT wms.current_company_id() AS current_company_id))
 relation wms.container_type kind=table owner=<owner> persistence=p rls=true force-rls=true replica-identity=d acl=[<owner>=DELETE,INSERT,MAINTAIN,REFERENCES,SELECT,TRIGGER,TRUNCATE,UPDATE/<owner> wms_api=DELETE,INSERT,SELECT,UPDATE/<owner> wms_sync=SELECT/<owner> wms_worker=SELECT/<owner>]
 column wms.container_type 1 id uuid not-null default=wms.uuidv7()
@@ -839,15 +851,15 @@ index wms.driver_command driver_command_route_id_idx CREATE INDEX driver_command
 index wms.driver_command driver_command_session_id_idx CREATE INDEX driver_command_session_id_idx ON wms.driver_command USING btree (company_id, session_id, id)
 policy wms.driver_command driver_command_tenant_fence permissive ALL to=wms_api using=(company_id = ( SELECT wms.current_company_id() AS current_company_id)) check=(company_id = ( SELECT wms.current_company_id() AS current_company_id))
 relation wms.generation_match kind=table owner=<owner> persistence=p rls=true force-rls=true replica-identity=d acl=[<owner>=DELETE,INSERT,MAINTAIN,REFERENCES,SELECT,TRIGGER,TRUNCATE,UPDATE/<owner> wms_api=DELETE,INSERT,SELECT,UPDATE/<owner> wms_worker=SELECT/<owner>]
-column wms.generation_match 1 id uuid not-null default=wms.uuidv7()
-column wms.generation_match 2 company_id uuid not-null
-column wms.generation_match 3 project_id uuid not-null
+column wms.generation_match 1 id uuid not-null default=wms.uuidv7() acl=[wms_public=SELECT/<owner>]
+column wms.generation_match 2 company_id uuid not-null acl=[wms_public=SELECT/<owner>]
+column wms.generation_match 3 project_id uuid not-null acl=[wms_public=SELECT/<owner>]
 column wms.generation_match 4 created_at timestamp with time zone not-null default=now()
 column wms.generation_match 5 updated_at timestamp with time zone not-null default=now()
-column wms.generation_match 6 collection_group_id uuid not-null
+column wms.generation_match 6 collection_group_id uuid not-null acl=[wms_public=SELECT/<owner>]
 column wms.generation_match 7 generation_run_id uuid not-null
 column wms.generation_match 8 rule_signature text not-null
-column wms.generation_match 9 container_ids uuid[] not-null
+column wms.generation_match 9 container_ids uuid[] not-null acl=[wms_public=SELECT/<owner>]
 constraint wms.generation_match generation_match_collection_group_id_fk FOREIGN KEY (company_id, project_id, collection_group_id) REFERENCES wms.collection_group(company_id, project_id, id)
 constraint wms.generation_match generation_match_collection_group_id_generation_run_id_key UNIQUE (company_id, collection_group_id, generation_run_id)
 constraint wms.generation_match generation_match_company_id_fk FOREIGN KEY (company_id) REFERENCES wms.company(id)
@@ -859,6 +871,9 @@ index wms.generation_match generation_match_generation_run_id_idx CREATE INDEX g
 index wms.generation_match generation_match_pkey CREATE UNIQUE INDEX generation_match_pkey ON wms.generation_match USING btree (id)
 index wms.generation_match generation_match_project_id_idx CREATE INDEX generation_match_project_id_idx ON wms.generation_match USING btree (company_id, project_id)
 trigger wms.generation_match generation_match_touch_updated_at enabled=O CREATE TRIGGER generation_match_touch_updated_at BEFORE UPDATE ON wms.generation_match FOR EACH ROW EXECUTE FUNCTION wms.touch_updated_at()
+policy wms.generation_match generation_match_public_door permissive SELECT to=wms_public using=((company_id = ( SELECT wms.current_company_id() AS current_company_id)) AND (EXISTS ( SELECT 1
+   FROM wms.project published
+  WHERE ((published.company_id = generation_match.company_id) AND (published.id = generation_match.project_id) AND (published.public_slug IS NOT NULL))))) check=none
 policy wms.generation_match generation_match_tenant_fence permissive ALL to=wms_api using=(company_id = ( SELECT wms.current_company_id() AS current_company_id)) check=(company_id = ( SELECT wms.current_company_id() AS current_company_id))
 relation wms.generation_run kind=table owner=<owner> persistence=p rls=true force-rls=true replica-identity=d acl=[<owner>=DELETE,INSERT,MAINTAIN,REFERENCES,SELECT,TRIGGER,TRUNCATE,UPDATE/<owner> wms_api=DELETE,INSERT,SELECT,UPDATE/<owner> wms_worker=SELECT/<owner>]
 column wms.generation_run 1 id uuid not-null default=wms.uuidv7()
@@ -1298,8 +1313,8 @@ column wms.project 7 language text not-null acl=[wms_public=SELECT/<owner>]
 column wms.project 8 currency text not-null
 column wms.project 9 timezone text not-null acl=[wms_public=SELECT/<owner>]
 column wms.project 10 status text not-null
-column wms.project 11 weekend text[] not-null default='{saturday,sunday}'::text[]
-column wms.project 12 holiday_list text
+column wms.project 11 weekend text[] not-null default='{saturday,sunday}'::text[] acl=[wms_public=SELECT/<owner>]
+column wms.project 12 holiday_list text acl=[wms_public=SELECT/<owner>]
 column wms.project 13 public_slug text acl=[wms_public=SELECT/<owner>]
 constraint wms.project project_company_id_fk FOREIGN KEY (company_id) REFERENCES wms.company(id)
 constraint wms.project project_name_key UNIQUE (company_id, name)
@@ -1393,13 +1408,13 @@ index wms.proof_of_service proof_of_service_route_id_idx CREATE INDEX proof_of_s
 index wms.proof_of_service proof_of_service_session_id_idx CREATE INDEX proof_of_service_session_id_idx ON wms.proof_of_service USING btree (company_id, session_id)
 policy wms.proof_of_service proof_of_service_tenant_fence permissive ALL to=wms_api using=(company_id = ( SELECT wms.current_company_id() AS current_company_id)) check=(company_id = ( SELECT wms.current_company_id() AS current_company_id))
 relation wms.property kind=table owner=<owner> persistence=p rls=true force-rls=true replica-identity=d acl=[<owner>=DELETE,INSERT,MAINTAIN,REFERENCES,SELECT,TRIGGER,TRUNCATE,UPDATE/<owner> wms_api=DELETE,INSERT,SELECT,UPDATE/<owner> wms_sync=SELECT/<owner> wms_worker=SELECT/<owner>]
-column wms.property 1 id uuid not-null default=wms.uuidv7()
-column wms.property 2 company_id uuid not-null
-column wms.property 3 project_id uuid not-null
+column wms.property 1 id uuid not-null default=wms.uuidv7() acl=[wms_public=SELECT/<owner>]
+column wms.property 2 company_id uuid not-null acl=[wms_public=SELECT/<owner>]
+column wms.property 3 project_id uuid not-null acl=[wms_public=SELECT/<owner>]
 column wms.property 4 created_at timestamp with time zone not-null default=now()
 column wms.property 5 updated_at timestamp with time zone not-null default=now()
 column wms.property 6 name text not-null
-column wms.property 7 address text not-null
+column wms.property 7 address text not-null acl=[wms_public=SELECT/<owner>]
 column wms.property 8 registry_id text
 column wms.property 9 kind text not-null
 column wms.property 10 location extensions.geometry(Point,4326)
@@ -1418,6 +1433,9 @@ index wms.property property_project_id_name_key CREATE UNIQUE INDEX property_pro
 index wms.property property_project_key CREATE UNIQUE INDEX property_project_key ON wms.property USING btree (company_id, project_id, id)
 index wms.property property_registry_id_idx CREATE UNIQUE INDEX property_registry_id_idx ON wms.property USING btree (company_id, registry_id) WHERE (registry_id IS NOT NULL)
 trigger wms.property property_touch_updated_at enabled=O CREATE TRIGGER property_touch_updated_at BEFORE UPDATE ON wms.property FOR EACH ROW EXECUTE FUNCTION wms.touch_updated_at()
+policy wms.property property_public_door permissive SELECT to=wms_public using=((company_id = ( SELECT wms.current_company_id() AS current_company_id)) AND (EXISTS ( SELECT 1
+   FROM wms.project published
+  WHERE ((published.company_id = property.company_id) AND (published.id = property.project_id) AND (published.public_slug IS NOT NULL))))) check=none
 policy wms.property property_tenant_fence permissive ALL to=wms_api using=(company_id = ( SELECT wms.current_company_id() AS current_company_id)) check=(company_id = ( SELECT wms.current_company_id() AS current_company_id))
 relation wms.property_group kind=table owner=<owner> persistence=p rls=true force-rls=true replica-identity=d acl=[<owner>=DELETE,INSERT,MAINTAIN,REFERENCES,SELECT,TRIGGER,TRUNCATE,UPDATE/<owner> wms_api=DELETE,INSERT,SELECT,UPDATE/<owner> wms_worker=SELECT/<owner>]
 column wms.property_group 1 id uuid not-null default=wms.uuidv7()
@@ -1524,17 +1542,17 @@ index wms.role_grant role_grant_role_id_module_key_action_key CREATE UNIQUE INDE
 trigger wms.role_grant role_grant_touch_updated_at enabled=O CREATE TRIGGER role_grant_touch_updated_at BEFORE UPDATE ON wms.role_grant FOR EACH ROW EXECUTE FUNCTION wms.touch_updated_at()
 policy wms.role_grant role_grant_tenant_fence permissive ALL to=wms_api using=(company_id = ( SELECT wms.current_company_id() AS current_company_id)) check=(company_id = ( SELECT wms.current_company_id() AS current_company_id))
 relation wms.route kind=table owner=<owner> persistence=p rls=true force-rls=true replica-identity=d acl=[<owner>=DELETE,INSERT,MAINTAIN,REFERENCES,SELECT,TRIGGER,TRUNCATE,UPDATE/<owner> wms_api=DELETE,INSERT,SELECT,UPDATE/<owner> wms_sync=SELECT/<owner> wms_worker=SELECT/<owner>]
-column wms.route 1 id uuid not-null default=wms.uuidv7()
-column wms.route 2 company_id uuid not-null
-column wms.route 3 project_id uuid not-null
+column wms.route 1 id uuid not-null default=wms.uuidv7() acl=[wms_public=SELECT/<owner>]
+column wms.route 2 company_id uuid not-null acl=[wms_public=SELECT/<owner>]
+column wms.route 3 project_id uuid not-null acl=[wms_public=SELECT/<owner>]
 column wms.route 4 created_at timestamp with time zone not-null default=now()
 column wms.route 5 updated_at timestamp with time zone not-null default=now()
 column wms.route 6 route_scheme_id uuid
-column wms.route 7 collection_group_id uuid
-column wms.route 8 service_date date not-null
-column wms.route 9 operating_date date not-null
-column wms.route 10 status text not-null default='planned'::text
-column wms.route 11 cancelled_by_generation boolean not-null default=false
+column wms.route 7 collection_group_id uuid acl=[wms_public=SELECT/<owner>]
+column wms.route 8 service_date date not-null acl=[wms_public=SELECT/<owner>]
+column wms.route 9 operating_date date not-null acl=[wms_public=SELECT/<owner>]
+column wms.route 10 status text not-null default='planned'::text acl=[wms_public=SELECT/<owner>]
+column wms.route 11 cancelled_by_generation boolean not-null default=false acl=[wms_public=SELECT/<owner>]
 column wms.route 12 note text
 column wms.route 13 number integer not-null
 column wms.route 14 planned_start_time time without time zone
@@ -1553,7 +1571,7 @@ column wms.route 26 completed_at timestamp with time zone
 column wms.route 27 cancelled_at timestamp with time zone
 column wms.route 28 generation_run_id uuid
 column wms.route 29 active_plan_id uuid
-column wms.route 30 held_at timestamp with time zone
+column wms.route 30 held_at timestamp with time zone acl=[wms_public=SELECT/<owner>]
 constraint wms.route route_active_plan_id_fk FOREIGN KEY (company_id, project_id, id, active_plan_id) REFERENCES wms.plan(company_id, project_id, route_id, id) ON DELETE SET NULL (active_plan_id)
 constraint wms.route route_actual_driver_id_fk FOREIGN KEY (company_id, project_id, actual_driver_id) REFERENCES wms.driver(company_id, project_id, id)
 constraint wms.route route_actual_shape CHECK ((((actual_driver_id IS NOT NULL) = (started_at IS NOT NULL)) AND ((actual_vehicle_id IS NOT NULL) = (started_at IS NOT NULL)) AND ((actual_trailer_id IS NULL) OR (started_at IS NOT NULL))))
@@ -1604,26 +1622,29 @@ index wms.route route_project_id_operating_date_idx CREATE INDEX route_project_i
 index wms.route route_project_key CREATE UNIQUE INDEX route_project_key ON wms.route USING btree (company_id, project_id, id)
 index wms.route route_unloading_station_id_idx CREATE INDEX route_unloading_station_id_idx ON wms.route USING btree (company_id, unloading_station_id)
 trigger wms.route route_touch_updated_at enabled=O CREATE TRIGGER route_touch_updated_at BEFORE UPDATE ON wms.route FOR EACH ROW EXECUTE FUNCTION wms.touch_updated_at()
+policy wms.route route_public_door permissive SELECT to=wms_public using=((company_id = ( SELECT wms.current_company_id() AS current_company_id)) AND (EXISTS ( SELECT 1
+   FROM wms.project published
+  WHERE ((published.company_id = route.company_id) AND (published.id = route.project_id) AND (published.public_slug IS NOT NULL))))) check=none
 policy wms.route route_tenant_fence permissive ALL to=wms_api using=(company_id = ( SELECT wms.current_company_id() AS current_company_id)) check=(company_id = ( SELECT wms.current_company_id() AS current_company_id))
 relation wms.route_scheme kind=table owner=<owner> persistence=p rls=true force-rls=true replica-identity=d acl=[<owner>=DELETE,INSERT,MAINTAIN,REFERENCES,SELECT,TRIGGER,TRUNCATE,UPDATE/<owner> wms_api=DELETE,INSERT,SELECT,UPDATE/<owner> wms_worker=SELECT/<owner>]
-column wms.route_scheme 1 id uuid not-null default=wms.uuidv7()
-column wms.route_scheme 2 company_id uuid not-null
-column wms.route_scheme 3 project_id uuid not-null
+column wms.route_scheme 1 id uuid not-null default=wms.uuidv7() acl=[wms_public=SELECT/<owner>]
+column wms.route_scheme 2 company_id uuid not-null acl=[wms_public=SELECT/<owner>]
+column wms.route_scheme 3 project_id uuid not-null acl=[wms_public=SELECT/<owner>]
 column wms.route_scheme 4 created_at timestamp with time zone not-null default=now()
 column wms.route_scheme 5 updated_at timestamp with time zone not-null default=now()
-column wms.route_scheme 6 valid_from date not-null
-column wms.route_scheme 7 valid_to date
+column wms.route_scheme 6 valid_from date not-null acl=[wms_public=SELECT/<owner>]
+column wms.route_scheme 7 valid_to date acl=[wms_public=SELECT/<owner>]
 column wms.route_scheme 8 name text not-null
 column wms.route_scheme 9 planning_area_id uuid
 column wms.route_scheme 10 service_type text not-null
-column wms.route_scheme 11 frequency text not-null
-column wms.route_scheme 12 service_days text[] not-null
-column wms.route_scheme 13 week_rotation text
+column wms.route_scheme 11 frequency text not-null acl=[wms_public=SELECT/<owner>]
+column wms.route_scheme 12 service_days text[] not-null acl=[wms_public=SELECT/<owner>]
+column wms.route_scheme 13 week_rotation text acl=[wms_public=SELECT/<owner>]
 column wms.route_scheme 14 planned_start_time time without time zone
-column wms.route_scheme 15 holiday_policy text not-null default='skip'::text
+column wms.route_scheme 15 holiday_policy text not-null default='skip'::text acl=[wms_public=SELECT/<owner>]
 column wms.route_scheme 16 edit_policy text not-null default='ask'::text
 column wms.route_scheme 17 plan_ahead boolean not-null default=true
-column wms.route_scheme 18 status text not-null default='draft'::text
+column wms.route_scheme 18 status text not-null default='draft'::text acl=[wms_public=SELECT/<owner>]
 column wms.route_scheme 19 depot_id uuid
 column wms.route_scheme 20 unloading_station_id uuid
 constraint wms.route_scheme route_scheme_company_id_fk FOREIGN KEY (company_id) REFERENCES wms.company(id)
@@ -1651,6 +1672,9 @@ index wms.route_scheme route_scheme_planning_area_id_idx CREATE INDEX route_sche
 index wms.route_scheme route_scheme_project_key CREATE UNIQUE INDEX route_scheme_project_key ON wms.route_scheme USING btree (company_id, project_id, id)
 index wms.route_scheme route_scheme_unloading_station_id_idx CREATE INDEX route_scheme_unloading_station_id_idx ON wms.route_scheme USING btree (company_id, unloading_station_id)
 trigger wms.route_scheme route_scheme_touch_updated_at enabled=O CREATE TRIGGER route_scheme_touch_updated_at BEFORE UPDATE ON wms.route_scheme FOR EACH ROW EXECUTE FUNCTION wms.touch_updated_at()
+policy wms.route_scheme route_scheme_public_door permissive SELECT to=wms_public using=((company_id = ( SELECT wms.current_company_id() AS current_company_id)) AND (EXISTS ( SELECT 1
+   FROM wms.project published
+  WHERE ((published.company_id = route_scheme.company_id) AND (published.id = route_scheme.project_id) AND (published.public_slug IS NOT NULL))))) check=none
 policy wms.route_scheme route_scheme_tenant_fence permissive ALL to=wms_api using=(company_id = ( SELECT wms.current_company_id() AS current_company_id)) check=(company_id = ( SELECT wms.current_company_id() AS current_company_id))
 relation wms.routing_quota kind=table owner=<owner> persistence=p rls=true force-rls=true replica-identity=d acl=[<owner>=DELETE,INSERT,MAINTAIN,REFERENCES,SELECT,TRIGGER,TRUNCATE,UPDATE/<owner> wms_api=DELETE,INSERT,SELECT,UPDATE/<owner> wms_worker=SELECT/<owner>]
 column wms.routing_quota 1 id uuid not-null default=wms.uuidv7()
@@ -2128,16 +2152,16 @@ index wms.stock_movement stock_movement_tenant_key CREATE UNIQUE INDEX stock_mov
 index wms.stock_movement stock_movement_to_warehouse_id_idx CREATE INDEX stock_movement_to_warehouse_id_idx ON wms.stock_movement USING btree (company_id, to_warehouse_id)
 policy wms.stock_movement stock_movement_tenant_fence permissive ALL to=wms_api using=(company_id = ( SELECT wms.current_company_id() AS current_company_id)) check=(company_id = ( SELECT wms.current_company_id() AS current_company_id))
 relation wms.subscription kind=table owner=<owner> persistence=p rls=true force-rls=true replica-identity=d acl=[<owner>=DELETE,INSERT,MAINTAIN,REFERENCES,SELECT,TRIGGER,TRUNCATE,UPDATE/<owner> wms_api=DELETE,INSERT,SELECT,UPDATE/<owner> wms_worker=SELECT/<owner>]
-column wms.subscription 1 id uuid not-null default=wms.uuidv7()
-column wms.subscription 2 company_id uuid not-null
-column wms.subscription 3 project_id uuid not-null
+column wms.subscription 1 id uuid not-null default=wms.uuidv7() acl=[wms_public=SELECT/<owner>]
+column wms.subscription 2 company_id uuid not-null acl=[wms_public=SELECT/<owner>]
+column wms.subscription 3 project_id uuid not-null acl=[wms_public=SELECT/<owner>]
 column wms.subscription 4 created_at timestamp with time zone not-null default=now()
 column wms.subscription 5 updated_at timestamp with time zone not-null default=now()
-column wms.subscription 6 valid_from date not-null
-column wms.subscription 7 valid_to date
+column wms.subscription 6 valid_from date not-null acl=[wms_public=SELECT/<owner>]
+column wms.subscription 7 valid_to date acl=[wms_public=SELECT/<owner>]
 column wms.subscription 8 agreement_id uuid not-null
 column wms.subscription 9 product_id uuid not-null
-column wms.subscription 10 property_id uuid
+column wms.subscription 10 property_id uuid acl=[wms_public=SELECT/<owner>]
 column wms.subscription 11 shared_collection_point_id uuid
 column wms.subscription 12 location_id uuid not-null generated=(COALESCE(property_id, shared_collection_point_id))
 column wms.subscription 13 quantity integer not-null default=1
@@ -2160,6 +2184,9 @@ index wms.subscription subscription_project_key CREATE UNIQUE INDEX subscription
 index wms.subscription subscription_property_id_idx CREATE INDEX subscription_property_id_idx ON wms.subscription USING btree (company_id, property_id)
 index wms.subscription subscription_shared_collection_point_id_idx CREATE INDEX subscription_shared_collection_point_id_idx ON wms.subscription USING btree (company_id, shared_collection_point_id)
 trigger wms.subscription subscription_touch_updated_at enabled=O CREATE TRIGGER subscription_touch_updated_at BEFORE UPDATE ON wms.subscription FOR EACH ROW EXECUTE FUNCTION wms.touch_updated_at()
+policy wms.subscription subscription_public_door permissive SELECT to=wms_public using=((company_id = ( SELECT wms.current_company_id() AS current_company_id)) AND (EXISTS ( SELECT 1
+   FROM wms.project published
+  WHERE ((published.company_id = subscription.company_id) AND (published.id = subscription.project_id) AND (published.public_slug IS NOT NULL))))) check=none
 policy wms.subscription subscription_tenant_fence permissive ALL to=wms_api using=(company_id = ( SELECT wms.current_company_id() AS current_company_id)) check=(company_id = ( SELECT wms.current_company_id() AS current_company_id))
 relation wms.ticket kind=table owner=<owner> persistence=p rls=true force-rls=true replica-identity=d acl=[<owner>=DELETE,INSERT,MAINTAIN,REFERENCES,SELECT,TRIGGER,TRUNCATE,UPDATE/<owner> wms_api=DELETE,INSERT,SELECT,UPDATE/<owner> wms_worker=SELECT/<owner>]
 column wms.ticket 1 id uuid not-null default=wms.uuidv7()
@@ -2724,4 +2751,5 @@ journal 1790724616960 9cd2e4ce4f8e9009bff67362f1eb73d4bcab599e52beb22311fee0e415
 journal 1792792624765 fda36e0c49140a7ed394dbfec44684ac30c511a2b5f6a82bd8e5ae7ac2c0e5af
 journal 1792829657532 2890edfac120d4acd038f3a88d82884231cd5f9467d0d529e285d3f5c87d762c
 journal 1792833996415 43ed2744affd49a9709342b9afe4151fc09b46ea85358d6e9f98226f9d493e7a
+journal 1792837574262 3c3b26a595add00ba051ae7cde46c1a2ed17b90c8576e94b77158085ab540718
 pgboss-version 42

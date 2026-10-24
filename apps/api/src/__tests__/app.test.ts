@@ -218,6 +218,9 @@ describe("GET /openapi.json", () => {
       "/property-groups/{id}",
       "/property-groups/{id}/members",
       "/public/{slug}",
+      "/public/{slug}/addresses",
+      "/public/{slug}/addresses/{id}/collection-days",
+      "/public/{slug}/addresses/{id}/collection-days.ics",
       "/public/{slug}/sorting-guide",
       "/readyz",
       "/reports/revenue",
@@ -361,9 +364,9 @@ describe("GET /openapi.json", () => {
     assert.match(document.paths["/me"].get.responses["403"].description ?? "", /`urn:waste:problem:no-active-account`/)
   })
 
-  test("requires the bearer token on every operation but the two probes, the document itself and the public door's two reads (ADR-0010)", async () => {
+  test("requires the bearer token on every operation but the two probes, the document itself and the public door's reads (ADR-0010)", async () => {
     const document = await spec()
-    const open = new Set(["/healthz", "/readyz", "/openapi.json", "/public/{slug}", "/public/{slug}/sorting-guide"])
+    const open = new Set(["/healthz", "/readyz", "/openapi.json", "/public/{slug}", "/public/{slug}/sorting-guide", "/public/{slug}/addresses", "/public/{slug}/addresses/{id}/collection-days", "/public/{slug}/addresses/{id}/collection-days.ics"])
     let secured = 0
     for (const [path, operations] of Object.entries(document.paths)) {
       for (const [method, operation] of Object.entries(operations)) {
