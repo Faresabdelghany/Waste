@@ -225,16 +225,16 @@ export function PriceRowCommandsSurface({ record }: RowSurfaceProps) {
     setBusy(true)
     whenSaved(
       outcome,
-      () => setOpened(null),
+      (saved) => {
+        setOpened(null)
+        if (saved?.kind === "updated") {
+          rereadProducts()
+          toast.success("Price updated", { description: `${record.context}: ${saved.record.value}.` })
+        } else if (saved?.kind === "landed") rereadProducts()
+        else if (saved?.kind === "unchanged") toast.info("Nothing to change", { description: "The row is as the API holds it." })
+      },
       () => setBusy(false),
     )
-    void outcome?.then((result) => {
-      if (result.kind === "updated") {
-        rereadProducts()
-        toast.success("Price updated", { description: `${record.context}: ${result.record.value}.` })
-      } else if (result.kind === "landed") rereadProducts()
-      else if (result.kind === "unchanged") toast.info("Nothing to change", { description: "The row is as the API holds it." })
-    })
   }
 
   return (

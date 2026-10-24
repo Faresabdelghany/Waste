@@ -661,9 +661,10 @@ export function useBusinessRecordStore(): BusinessRecordStoreValue {
             return next === settled ? state : new Map(state).set(key, next)
           })
           // The account's own refusal has ended the session; /login says why.
-          if (outcome.kind === "refused" && report && !isAccountRefusal(outcome.problem)) reportProblem(`${record.name} was not saved`, outcome.problem)
-          if (outcome.kind === "landed") {
-            reportLanded(record.name)
+          // Part of it landed (#263): said so, since the row is read again rather than put back.
+          if (outcome.kind === "refused" && report && !isAccountRefusal(outcome.problem)) reportProblem(outcome.partial === true ? `${record.name} was saved only in part` : `${record.name} was not saved`, outcome.problem)
+          if (outcome.kind === "landed") reportLanded(record.name)
+          if (outcome.kind === "landed" || (outcome.kind === "refused" && outcome.partial === true)) {
             // Once the writes now out have answered — this one's among them — so the read never lands between a create's POST and its answer.
             const inFlight = [...stores.pendingWrites.values()]
             void Promise.allSettled(inFlight).then(() => rereadModule(stores, module, outlived, turn))
@@ -885,15 +886,31 @@ export function useModuleRecords(
  * `settled`, when given, runs either way once the answer is in — for a pane
  * that holds its form against a second submit while the first is out. On
  * the browser's own path there is nothing to wait for, and both run at once.
+ * `done` is handed the outcome (undefined on the browser's path), for a pane
+ * that says what the row now is (`savedRow`) or that nothing moved.
  */
-export function whenSaved(outcome: Promise<WriteOutcome> | undefined, done: () => void, settled?: () => void): void {
+export function whenSaved(outcome: Promise<WriteOutcome> | undefined, done: (saved: SavedOutcome | undefined) => void, settled?: () => void): void {
   if (outcome === undefined) {
-    done()
+    done(undefined)
     settled?.()
     return
   }
   void outcome.then((result) => {
     settled?.()
-    if (result.kind !== "refused") done()
+    if (result.kind !== "refused") done(result)
   })
+}
+
+/** A write's outcome other than a refusal: what `whenSaved` hands `done`. */
+export type SavedOutcome = Exclude<WriteOutcome, { kind: "refused" }>
+
+/**
+ * The row a saved write left, under the id the store holds it by: the API's
+ * answer, mapped — a create's under the id the workspace minted, as
+ * `withCreated` files it — or, on the browser's path or where the API took
+ * the write but its answer could not be shown, the row as written.
+ */
+export function savedRow(saved: SavedOutcome | undefined, written: BusinessRecord): BusinessRecord {
+  if (saved === undefined || saved.kind === "landed") return written
+  return saved.kind === "created" ? { ...saved.record, id: saved.optimisticId } : saved.record
 }

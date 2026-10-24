@@ -11,11 +11,12 @@ import { softDeletedRecord } from "@waste/domain/record-visibility"
 
 import type { BusinessRecord } from "../../data/business-modules"
 import { createExternalStore } from "../../external-store"
-import { UNREACHABLE_STATUS, type ApiClient } from "../client"
+import { command, get, patch, put, UNREACHABLE_STATUS, type ApiClient } from "../client"
 import { ApiProblem, genericProblem, NO_ACTIVE_ACCOUNT_PROBLEM_TYPE, type Problem } from "../problem"
 import { NOTHING_RESOLVED, PartialWrite, type MappingContext, type Resource, type ResourceAdapter, type ServerModule } from "../records/adapter"
 import {
   adapterFor,
+  commandRecord,
   companyRecordIdOf,
   dayTurned,
   dayTurnRereads,
@@ -48,6 +49,7 @@ import {
   type ModuleState,
   type ServerRecordsState,
 } from "../records/server-records"
+import { clientOver, json, problem, scripted } from "./scripted-fetch"
 
 const client: ApiClient = { baseUrl: "http://api.test", token: "t" }
 
@@ -885,5 +887,57 @@ describe("a write the API took", () => {
     assert.deepEqual([refused.records[0].name, refused.problem?.detail], ["One", "No"])
     const createRefused = withOutcome(withRecord(current, typed), { kind: "refused", recordId: "t-mint-1", problem: genericProblem(400, "No") }, typed, undefined)
     assert.deepEqual(createRefused.records.map((row) => row.id), ["t-1"])
+  })
+})
+
+// A write in several requests — a mutation, then the row read back, or a second mutation (#263): where one landed and a
+// later one failed, the store tells the two apart without the adapter's help. A failed read back is landed, as an
+// unmappable answer is (#243); a later mutation refused is a partial refusal, the module read again rather than the
+// row put back as the server no longer holds it. A command whose movement landed and whose read back failed is done.
+describe("a write or a command of several requests that fails after one landed", () => {
+  const twoStep = (second: "read" | "write"): ResourceAdapter<Thing> => ({
+    ...thingAdapter("t", []),
+    update: async (client, serverId, body) => {
+      await patch<Thing>(client, `/things/${serverId}`, body)
+      return second === "read" ? get<Thing>(client, `/things/${serverId}`) : put<Thing>(client, `/things/${serverId}/set`, { ids: [] })
+    },
+    commands: {
+      move: {
+        refused: (row) => `${row.name} was not moved`,
+        touches: ["resources.inventory"],
+        run: async (client, serverId) => {
+          await command(client, `/things/${serverId}/move`, {})
+          return get<Thing>(client, `/things/${serverId}`)
+        },
+      },
+    },
+  })
+  const moduleOf = (resource: ResourceAdapter<Thing>): ServerModule => ({ workspaceId: "configure", moduleId: "organization", resources: [resource] })
+  const current = loaded({ records: [record("t-1", "One")], serverIds: new Map([["t-1", "1"]]) }, 1)
+  const unavailable = () => problem(503, "The API is unavailable")
+
+  test("a patch that landed and a read back that failed has landed, under the row's server id, with the read's problem", async () => {
+    const { fetch, calls } = scripted([() => json({ id: "1", createdAt: "", updatedAt: "", name: "One renamed" }), unavailable])
+    const outcome = await writeRecord(clientOver(fetch), moduleOf(twoStep("read")), current, record("t-1", "One renamed"), options())
+    assert.deepEqual(calls.map((call) => call.init.method), ["PATCH", "GET"])
+    assert.deepEqual(outcome.kind === "landed" ? [outcome.recordId, outcome.serverId, outcome.problem.detail] : outcome.kind, ["t-1", "1", "The API is unavailable"])
+  })
+
+  test("a patch that landed and a second write refused is a partial refusal in the API's words; one refused at the first request is a refusal alone", async () => {
+    const partly = scripted([() => json({ id: "1", createdAt: "", updatedAt: "", name: "One renamed" }), () => problem(409, "The set moved")])
+    const outcome = await writeRecord(clientOver(partly.fetch), moduleOf(twoStep("write")), current, record("t-1", "One renamed"), options())
+    assert.deepEqual(outcome.kind === "refused" ? [outcome.problem.detail, outcome.partial] : outcome.kind, ["The set moved", true])
+    const refused = scripted([() => problem(409, "Taken")])
+    const first = await writeRecord(clientOver(refused.fetch), moduleOf(twoStep("write")), current, record("t-1", "One renamed"), options())
+    assert.deepEqual(first.kind === "refused" ? [first.problem.detail, first.partial] : first.kind, ["Taken", undefined], "nothing landed: the row goes back as it was")
+  })
+
+  test("a command whose movement landed and whose read back failed is done, the row as it stands and its own module read again with what it touches", async () => {
+    const { fetch } = scripted([() => json({ id: "1", createdAt: "", updatedAt: "", name: "One" }, 201), unavailable])
+    const outcome = await commandRecord(clientOver(fetch), moduleOf(twoStep("read")), current, record("t-1", "One"), "move", undefined, options())
+    assert.deepEqual(outcome.kind === "done" ? [outcome.record.id, outcome.serverId, [...outcome.touches].sort()] : outcome.kind, ["t-1", "1", ["configure.organization", "resources.inventory"]], "never refused: sending it again would make a second movement")
+    const refused = scripted([() => problem(409, "Not in stock")])
+    const notSent = await commandRecord(clientOver(refused.fetch), moduleOf(twoStep("read")), current, record("t-1", "One"), "move", undefined, options())
+    assert.deepEqual(notSent.kind === "refused" ? [notSent.problem.detail, [...notSent.touches]] : notSent.kind, ["Not in stock", ["resources.inventory"]], "refused at the movement: what it touches is read again as before, its own row as it was")
   })
 })

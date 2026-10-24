@@ -36,7 +36,8 @@ import { Button } from "@/components/ui/button"
 import { Dialog, DialogContent, DialogDescription, DialogFooter, DialogHeader, DialogTitle } from "@/components/ui/dialog"
 import { Table, TableBody, TableCell, TableHead, TableHeader, TableRow } from "@/components/ui/table"
 import { BusinessRecordFormDialog } from "@/components/waste/business-record-form-dialog"
-import { useBusinessRecordStore, useServerModuleState } from "@/components/waste/business-record-store"
+import { savedRow, useBusinessRecordStore, useServerModuleState, whenSaved } from "@/components/waste/business-record-store"
+import { answered } from "@/lib/api/records/write-gate"
 import { useCommercialPickers } from "@/components/waste/commands/commercial-pickers"
 import type { RowSurfaceProps } from "@/components/waste/commands/command-surfaces"
 import { CreateSurface } from "@/components/waste/commands/create-surface"
@@ -104,22 +105,23 @@ export function ServiceAreasRead() {
   return null
 }
 
-/** One write from a row's details: the dialog open until the API has answered, the store's toast over it on a refusal; `done` told the row the API holds, or the row as written where the API took it but its answer could not be shown (#243). */
+/** One write from a row's details, waited on through `whenSaved` (#263): the dialog open until the API has answered, the store's toast over it on a refusal; `done` told the row the write left (`savedRow`). */
 function useRowWrite(module: ModuleLocation) {
   const { upsertRecord } = useBusinessRecordStore()
   const [busy, setBusy] = useState(false)
-  const write = (record: BusinessRecord, done: (saved: BusinessRecord) => void) => {
+  /** `done` is told the row and whether the write changed it: one that changed nothing says so here, in place of the caller's success. */
+  const write = (record: BusinessRecord, done: (saved: BusinessRecord, changed: boolean) => void) => {
     if (busy) return
     setBusy(true)
-    void Promise.resolve(upsertRecord(module.workspaceId, module.moduleId, record)).then((result) => {
-      setBusy(false)
-      if (result?.kind === "created" || result?.kind === "updated") done(result.record)
-      else if (result?.kind === "landed") done(record)
-      else if (result?.kind === "unchanged") {
-        toast.info("Nothing to change", { description: "The row is as the API holds it." })
-        done(result.record)
-      }
-    })
+    whenSaved(
+      answered(upsertRecord(module.workspaceId, module.moduleId, record), record.id, () => toast.error(`${record.name} was not saved`, { description: "The write did not complete; try again." })),
+      (saved) => {
+        const changed = saved?.kind !== "unchanged"
+        if (!changed) toast.info("Nothing to change", { description: "The row is as the API holds it." })
+        done(savedRow(saved, record), changed)
+      },
+      () => setBusy(false),
+    )
   }
   return { busy, write }
 }
@@ -161,12 +163,12 @@ export function ServiceAreaCommandsSurface({ record }: RowSurfaceProps) {
   const project = record.projectIds?.[0]
 
   const save = (edited: BusinessRecord, said: string) =>
-    write(edited, (saved) => {
+    write(edited, (saved, changed) => {
       setDialog(null)
       // An assignment moves the award's holder: the award is read back.
       const award = isAssignmentRecord(edited) ? edited.submittedValues?.serviceAreaId : undefined
-      if (typeof award === "string") reread(award)
-      toast.success(said, { description: `${saved.name}.` })
+      if (typeof award === "string" && changed) reread(award)
+      if (changed) toast.success(said, { description: `${saved.name}.` })
     })
 
   const end = (assignment: BusinessRecord) => setDialog({ kind: "end", assignment, values: formValuesOf(assignmentEndForm(assignment), assignment) })
@@ -256,11 +258,12 @@ export function ProviderPriceCommandsSurface({ record }: RowSurfaceProps) {
 
   const submit = (values: BusinessFormValues) => {
     if (dialog === "edit")
-      write(editedRecord(record, values), (saved) => {
+      write(editedRecord(record, values), (saved, changed) => {
         setDialog(null)
-        toast.success("Price updated", { description: `${saved.name}: ${saved.value}.` })
+        if (changed) toast.success("Price updated", { description: `${saved.name}: ${saved.value}.` })
       })
     else
+      // A create always changes something: `changed` is never false here.
       write(createIndexedPriceRecord(record, values, Date.now()), (saved) => {
         setDialog(null)
         // This row now ends the day before the next: it is read back.

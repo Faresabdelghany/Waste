@@ -206,19 +206,17 @@ export function RunBillingSurface({ label }: PrimarySurfaceProps) {
     setBusy(true)
     whenSaved(
       outcome,
-      () => {
+      (saved) => {
         setStep("closed")
         // A run invoices the events it selected and issues the invoices: both are read again.
         void refreshModule(EVENTS_MODULE.workspaceId, EVENTS_MODULE.moduleId)
         void refreshModule(INVOICES_MODULE.workspaceId, INVOICES_MODULE.moduleId)
         openRecord(record.id)
+        // What the run itself did, which may differ from what its preview said: an event can be put right or billed in between.
+        if (saved?.kind === "created") toast.success("Billing run completed", { description: `${saved.record.value} issued for ${preview.body.periodFrom} – ${preview.body.periodTo}.` })
       },
       () => setBusy(false),
     )
-    // What the run itself did, which may differ from what its preview said: an event can be put right or billed in between.
-    void outcome?.then((result) => {
-      if (result.kind === "created") toast.success("Billing run completed", { description: `${result.record.value} issued for ${preview.body.periodFrom} – ${preview.body.periodTo}.` })
-    })
   }
 
   return (

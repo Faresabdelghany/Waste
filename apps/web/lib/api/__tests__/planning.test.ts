@@ -324,6 +324,17 @@ describe("an edited planning area", () => {
     assert.equal(outcome.record.name, "Indre By")
   })
 
+  test("through the store's write, a rename whose versions could not be read back has landed, and a version written before a refused rename is a partial refusal, read again (#263)", async () => {
+    const current = loaded({ records: [before], serverIds: new Map([[before.id, indreby.id]]) }, 1)
+    const unread = scripted([() => json({ ...indreby, name: "Indre By" }), () => problem(503, "The API is unavailable")])
+    const landed = await writeRecord(clientOver(unread.fetch), planningAreasModule, current, edited({ areaName: "Indre By" }), { fixtures: areaFixtures, state, now: NOW })
+    assert.deepEqual(landed.kind === "landed" ? [landed.recordId, landed.serverId] : landed.kind, [before.id, indreby.id])
+    const redrawn = JSON.stringify(RING.slice(0, 4).map(([lng, lat]) => [lng + 0.01, lat]))
+    const partly = scripted([() => json(indrebyBoundary), () => problem(409, "Another area is called Indre By")])
+    const refused = await writeRecord(clientOver(partly.fetch), planningAreasModule, current, edited({ areaName: "Indre By", geometry: redrawn }), { fixtures: areaFixtures, state, now: NOW })
+    assert.deepEqual(refused.kind === "refused" ? [refused.problem.detail, refused.partial] : refused.kind, ["Another area is called Indre By", true], "the version stands: the row is read again, never put back")
+  })
+
   test("on an area whose version has ended, a new polygon and a new start are the next version, never a patch of the ended one", () => {
     const ended = planningAreaAdapter.toRecord(withBoundaries(valby, [valbyExpired]), areaContext())
     const drawn: BusinessRecord = { ...ended, submittedValues: { ...ended.submittedValues, geometry: JSON.stringify(polygon), effectiveFrom: "2026-10-01" } }
