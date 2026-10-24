@@ -44,6 +44,20 @@ export const BillableEventLinks = z.object({
 })
 export type BillableEventLinks = z.infer<typeof BillableEventLinks>
 
+/**
+ * What a recurring charge charged (#291 C2): its charge period, half-open,
+ * and how many of the period's days were charged — the subscription in force
+ * and not paused — which its unit price was prorated by.
+ */
+export const BillableEventCharge = z.object({
+  periodFrom: IsoDate,
+  /** The first day of the next period. */
+  periodTo: IsoDate,
+  chargedDays: PositiveInt,
+  periodDays: PositiveInt,
+})
+export type BillableEventCharge = z.infer<typeof BillableEventCharge>
+
 export const BillableEvent = z.object({
   ...stamped,
   projectId: Id,
@@ -69,6 +83,8 @@ export const BillableEvent = z.object({
   /** Why the event is not ready; null once priced. */
   blockReason: BlockReason.nullable(),
   links: BillableEventLinks,
+  /** On a `subscription` event, a recurring charge, what it charged; null on every other kind. */
+  charge: BillableEventCharge.nullable(),
   /** The outbox event the consumer made it from, or null for a person's. */
   sourceEventId: Id.nullable(),
   /** The person who entered it, or null for the consumer's. */

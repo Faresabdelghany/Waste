@@ -360,6 +360,11 @@ export const billableEvent = wms.table(
     ticketId: uuid(),
     /** On a `reversal`: the invoiced event it undoes. */
     reversesEventId: uuid(),
+    /** On a `subscription` event, a recurring charge (#291 C2): the charge period, half-open, and how many of its days were charged of the days it has — what the unit price was prorated by. */
+    chargePeriodFrom: date(),
+    chargePeriodTo: date(),
+    chargedDays: integer(),
+    periodDays: integer(),
     /** The outbox event the consumer made it from: a soft uuid, and the idempotency key. */
     sourceEventId: uuid(),
     /** The person on a manual event; null on the consumer's. */
@@ -409,17 +414,27 @@ export const billableEvent = wms.table(
     check(tableObjectName(t.id.table, "override_shape", "billableEvent"), sql`(${t.kind} = 'manual' and ${t.priceListRowId} is null and ${t.blockReason} is null) = (${t.overrideReason} is not null)`),
     // A pickup names its route: Postgres leaves a composite key with a null member unchecked.
     check(tableObjectName(t.id.table, "pickup_shape", "billableEvent"), sql`${t.pickupId} is null or ${t.routeId} is not null`),
-    // What each kind names: a pickup its pickup, a ticket its ticket, a manual event neither and its person, a reversal the event it undoes and nothing of its own, with a net that is there and zero or less — a reversal is never blocked, and `null <= 0` is not false, so the null is refused by name.
+    // What each kind names: a pickup its pickup, a ticket its ticket, a manual event neither and its person, a reversal the event it undoes and nothing of its own, with a net that is there and zero or less — a reversal is never blocked, and `null <= 0` is not false, so the null is refused by name — and a recurring charge its subscription alone.
     check(
       tableObjectName(t.id.table, "kind_shape", "billableEvent"),
-      sql`case ${t.kind} when 'pickup' then ${t.pickupId} is not null and ${t.ticketId} is null and ${t.reversesEventId} is null when 'ticket' then ${t.ticketId} is not null and ${t.pickupId} is null and ${t.reversesEventId} is null when 'manual' then ${t.pickupId} is null and ${t.ticketId} is null and ${t.reversesEventId} is null and ${t.createdBy} is not null when 'reversal' then ${t.reversesEventId} is not null and ${t.pickupId} is null and ${t.ticketId} is null and ${t.netMinor} is not null and ${t.netMinor} <= 0 else false end`,
+      sql`case ${t.kind} when 'pickup' then ${t.pickupId} is not null and ${t.ticketId} is null and ${t.reversesEventId} is null when 'ticket' then ${t.ticketId} is not null and ${t.pickupId} is null and ${t.reversesEventId} is null when 'manual' then ${t.pickupId} is null and ${t.ticketId} is null and ${t.reversesEventId} is null and ${t.createdBy} is not null when 'reversal' then ${t.reversesEventId} is not null and ${t.pickupId} is null and ${t.ticketId} is null and ${t.netMinor} is not null and ${t.netMinor} <= 0 when 'subscription' then ${t.subscriptionId} is not null and ${t.pickupId} is null and ${t.ticketId} is null and ${t.reversesEventId} is null else false end`,
     ),
-    // An event is a person's or the consumer's, never both and never neither.
-    check(tableObjectName(t.id.table, "origin_shape", "billableEvent"), sql`(${t.createdBy} is null) = (${t.sourceEventId} is not null)`),
+    // An event is a person's or the consumer's, never both and never neither; a recurring charge is the billing run's, neither (#291 C2).
+    check(
+      tableObjectName(t.id.table, "origin_shape", "billableEvent"),
+      sql`case ${t.kind} when 'subscription' then ${t.createdBy} is null and ${t.sourceEventId} is null else (${t.createdBy} is null) = (${t.sourceEventId} is not null) end`,
+    ),
+    // A recurring charge carries its period, its charged days and the period's, and nothing else does; at least a day charged, at most the period's.
+    check(
+      tableObjectName(t.id.table, "charge_shape", "billableEvent"),
+      sql`(${t.kind} = 'subscription') = (${t.chargePeriodFrom} is not null) and (${t.chargePeriodFrom} is null) = (${t.chargePeriodTo} is null) and (${t.chargePeriodFrom} is null) = (${t.chargedDays} is null) and (${t.chargePeriodFrom} is null) = (${t.periodDays} is null) and (${t.chargePeriodTo} is null or ${t.chargePeriodTo} > ${t.chargePeriodFrom}) and (${t.chargedDays} is null or (${t.chargedDays} > 0 and ${t.chargedDays} <= ${t.periodDays}))`,
+    ),
     // A cancellation's instant and reason come together, and a person only with them: the consumer cancels with no person.
     check(tableObjectName(t.id.table, "cancel_shape", "billableEvent"), sql`(${t.cancelledAt} is null) = (${t.cancelReason} is null) and (${t.cancelledBy} is null or ${t.cancelledAt} is not null)`),
     // The consumer's idempotency key: one row per outbox event, whatever the row is.
     uniqueIndex(tableObjectName(t.companyId.table, "source_event_id_idx", "billableEvent")).on(t.companyId, t.sourceEventId).where(sql`${t.sourceEventId} is not null`),
+    // The billing run's idempotency key for a recurring charge (#291 C2): one per subscription and charge period, so a run again charges nothing twice.
+    uniqueIndex(tableObjectName(t.companyId.table, "subscription_charge_idx", "billableEvent")).on(t.companyId, t.subscriptionId, t.chargePeriodFrom).where(sql`${t.kind} = 'subscription'`),
     // The run's selection: a project's events by service date.
     tenantIndex(t, t.projectId, t.serviceDate),
     tenantIndex(t, t.agreementId),

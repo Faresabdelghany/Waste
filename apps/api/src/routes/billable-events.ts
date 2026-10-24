@@ -51,6 +51,7 @@ import { BillableEvent, BillableEventCancel, BillableEventCreate, BillableEventL
 import { Page } from "@waste/contracts/pagination"
 import { fitsInt4, INT4_MAX } from "@waste/contracts/resource"
 import type { Tx } from "@waste/db/client"
+import { priceRecurringCharge, type ChargeToPrice } from "@waste/db/commands/recurring-charges"
 import { agreement } from "@waste/db/schema/agreements"
 import { container } from "@waste/db/schema/containers"
 import { pickup, route } from "@waste/db/schema/execution"
@@ -114,8 +115,11 @@ export const NO_VAT_RATE_BY_HAND = "The product has no VAT rate; an event priced
 /** What an event priced past what its amount columns hold is told: a quantity times a price is an `integer` in the database, and more is a refusal rather than a failed write (22003). */
 export const AMOUNT_TOO_LARGE = `The amount comes to more than ${INT4_MAX} minor units, the most an event holds`
 
-/** Whether a price's net fits the event's `integer` column; the unit price is a column's or a bounded body's, and the VAT is never more than the net. No price fits trivially. */
-const amountsFit = (price: PricedAmounts | null): boolean => price === null || fitsInt4(price.netMinor)
+/** A recurring charge as `reprice` prices it again: its stored period and charged days, never its agreement's cadence now (#291 C2). */
+function chargeOf(row: EventReading, agreementId: string, productId: string): ChargeToPrice {
+  if (row.chargePeriodFrom === null || row.chargePeriodTo === null || row.chargedDays === null) throw new Error(`billable event ${row.id} is a recurring charge with no charge period (billable_event_charge_shape)`)
+  return { agreementId, productId, quantity: row.quantity, serviceDate: row.serviceDate, period: { from: row.chargePeriodFrom, to: row.chargePeriodTo }, chargedDays: row.chargedDays }
+}
 
 /** A manual event links to nothing. */
 const NO_LINKS: BillableEventLinks = { routeId: null, pickupId: null, ticketId: null, reversesEventId: null }
@@ -279,8 +283,8 @@ export function billableEventRoutes(guard: MiddlewareHandler<AuthEnv>, { now = (
           price = outcome.price
           blockReason = outcome.blockReason
         }
-        // A resolver's price is the list row's times the body's quantity: past the column, the quantity's 400 too.
-        if (!amountsFit(price)) throw invalidRequest("body", [{ path: "quantity", message: AMOUNT_TOO_LARGE }])
+        // A resolver's price is the list row's times the body's quantity: past the column it blocks, which a person's write answers as the quantity's 400.
+        if (blockReason === "amount-too-large") throw invalidRequest("body", [{ path: "quantity", message: AMOUNT_TOO_LARGE }])
         const { answered } = await recordBillableEvent(tx, {
           companyId: principal.companyId,
           projectId: body.projectId,
@@ -324,7 +328,7 @@ export function billableEventRoutes(guard: MiddlewareHandler<AuthEnv>, { now = (
         operationId: "repriceBillableEvent",
         summary: "Run the resolver again over a blocked event",
         description:
-          "The `reprice` command, on a `blocked` event only: the resolver runs again — the list the agreement is priced under and in force on the service date, the row that wins, the product's VAT rate, with the conditions a pickup's event carries (its route's scheme's planning area, its container's type, its fraction on the day) — and the row is written priced, or with the same block or the next one (`no-price-list` mended to `no-price-row`, then to `no-vat-rate`), answering the reading after. A ticket's event, blocked `no-product`, takes the `productId` the office picked — a product of the project (400, `Not a product of this project`), never one sold by the month (400, a recurring charge is not a ticket's work, #291 C3), that is offered (409, the #79 gate, since the event is a new reference to it) — and any other kind refuses one (400 at `productId`, `Only a ticket's event takes a product here`). An event blocked `no-subscription` has no agreement to price under and answers as it stands. A `ready` event is refused (409, `Billable event <id> is ready; a priced event is not repriced — cancel it and enter it again`), an `invoiced` one (409, `… is invoiced; correct it with a credit note`), a `cancelled` one (409, `… is cancelled`) and a `reversed` one (409, `… is reversed`). Under the event's row lock; `updatedAt` moves, since a reprice is the row's history. Nothing is published.",
+          "The `reprice` command, on a `blocked` event only: the resolver runs again — the list the agreement is priced under and in force on the service date, the row that wins, the product's VAT rate, with the conditions a pickup's event carries (its route's scheme's planning area, its container's type, its fraction on the day) — and the row is written priced, or with the same block or the next one (`no-price-list` mended to `no-price-row`, then to `no-vat-rate`), answering the reading after. A ticket's event, blocked `no-product`, takes the `productId` the office picked — a product of the project (400, `Not a product of this project`), never one sold by the month (400, a recurring charge is not a ticket's work, #291 C3), that is offered (409, the #79 gate, since the event is a new reference to it) — and any other kind refuses one (400 at `productId`, `Only a ticket's event takes a product here`). An event blocked `no-subscription` has no agreement to price under and answers as it stands. A recurring charge (`subscription`, minted by a billing run) is priced again as the run priced it: one month of its product on its first day charged, prorated to the days of its charge period it charged. A `ready` event is refused (409, `Billable event <id> is ready; a priced event is not repriced — cancel it and enter it again`), an `invoiced` one (409, `… is invoiced; correct it with a credit note`), a `cancelled` one (409, `… is cancelled`) and a `reversed` one (409, `… is reversed`). Under the event's row lock; `updatedAt` moves, since a reprice is the row's history. Nothing is published.",
         security: BEARER_SECURITY,
         responses: {
           200: describeJson("The event as it now stands, `ready` or `blocked`.", BillableEvent),
@@ -356,9 +360,11 @@ export function billableEventRoutes(guard: MiddlewareHandler<AuthEnv>, { now = (
         const outcome =
           productId === null
             ? { price: null, blockReason: "no-product" as const }
-            : await priceDraft(tx, scope, { agreementId: current.agreementId, productId, quantity: current.quantity, serviceDate: current.serviceDate, ...(await conditionsOf(tx, principal.companyId, current)) })
+            : current.kind === "subscription"
+              ? await priceRecurringCharge(tx, scope, chargeOf(current, current.agreementId, productId))
+              : await priceDraft(tx, scope, { agreementId: current.agreementId, productId, quantity: current.quantity, serviceDate: current.serviceDate, ...(await conditionsOf(tx, principal.companyId, current)) })
         // The quantity is the stored event's, so an amount past the columns is the row's 409.
-        if (!amountsFit(outcome.price)) throw problem(409, { detail: AMOUNT_TOO_LARGE })
+        if (outcome.blockReason === "amount-too-large") throw problem(409, { detail: AMOUNT_TOO_LARGE })
         const after: ComposedEvent = { ...current, productId, blockReason: outcome.blockReason, ...priceColumns(outcome.price), kind: current.kind as ComposedEvent["kind"] }
         const issue = billableEventShapeIssue(after)
         if (issue !== undefined) throw new Error(`billable event ${id}: ${issue}`)

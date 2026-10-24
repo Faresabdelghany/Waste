@@ -21,9 +21,13 @@
 // the agreement is not signed, neither the agreement nor the project names a
 // list, the list has no row for the product under the event's conditions on
 // the day, a ticket's event awaits the office's product, the product has no
-// VAT rate; the prototype's "Missing payer" is impossible, a payer being
-// `NOT NULL` on the agreement. `CANCEL_REASONS` puts the consumer's reason
-// first — a corrected pickup cancels its uninvoiced event with no person —
+// VAT rate, the amount does not fit the integer it is stored in (#291 C2: a
+// price times a quantity past 2³¹ − 1 øre, blocked rather than failing the
+// run); the prototype's "Missing payer" is impossible, a payer being
+// `NOT NULL` on the agreement. A `subscription` event is a recurring charge
+// (finance/recurring.ts): a month-sold product's charge period, minted by the
+// billing run. `CANCEL_REASONS` puts the consumer's reason first — a
+// corrected pickup cancels its uninvoiced event with no person —
 // and the office's three after it. `BILLING_RUN_STATUSES` is written
 // `completed` alone by part A, in the request's transaction; `requested` and
 // `failed` are the worker's when a run is scheduled (§7). `CREDIT_REASONS` is
@@ -43,10 +47,10 @@
 // is a `readonly` tuple with a type read off it; `FINANCE_VOCABULARIES` names
 // them all for the test that walks them.
 
-/** What the occurrence was: a completed pickup, a resolved ticket, a person's entry, or the reversal of an invoiced event a correction undid. */
-export const BILLABLE_EVENT_KINDS = ["pickup", "ticket", "manual", "reversal"] as const
+/** What the occurrence was: a completed pickup, a resolved ticket, a person's entry, the reversal of an invoiced event a correction undid, or a subscription's charge period a billing run charged. */
+export const BILLABLE_EVENT_KINDS = ["pickup", "ticket", "manual", "reversal", "subscription"] as const
 /** Why an event cannot be invoiced, each actionable; cleared by `reprice`. */
-export const BLOCK_REASONS = ["no-subscription", "agreement-draft", "no-price-list", "no-price-row", "no-product", "no-vat-rate"] as const
+export const BLOCK_REASONS = ["no-subscription", "agreement-draft", "no-price-list", "no-price-row", "no-product", "no-vat-rate", "amount-too-large"] as const
 /** Why a ready event was cancelled: the consumer's reason first, the office's three after it. */
 export const CANCEL_REASONS = ["pickup-corrected", "duplicate", "not-delivered", "other"] as const
 /** Where a Billable Event stands: a reading over its stamps and its invoice line, never a column. */

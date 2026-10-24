@@ -253,6 +253,13 @@
       "when": 1792911868439,
       "tag": "0035_ticket_stops",
       "breakpoints": true
+    },
+    {
+      "idx": 36,
+      "version": "7",
+      "when": 1792913386367,
+      "tag": "0036_recurring_charges",
+      "breakpoints": true
     }
   ]
 }

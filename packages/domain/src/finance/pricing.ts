@@ -36,7 +36,7 @@
 // when it names one, the project's default otherwise, none being
 // `no-price-list`. Money is minor units and the VAT rounds as money.ts says.
 import type { AgreementStatus, CustomerKind } from "../registry/vocabulary"
-import { vatOf } from "./money"
+import { fitsMinor, vatOf } from "./money"
 import type { BlockReason } from "./vocabulary"
 
 /** The one spelling of how a price is resolved (spec §4.4), verbatim from the web's price-model.ts. */
@@ -208,7 +208,8 @@ export type PricingOutcome<Row extends PriceRow = PriceRow> = { blockReason: nul
  * The whole pricing of one occurrence, in the order `reprice` mends the
  * blocks: an unsigned agreement is `agreement-draft`; no list is
  * `no-price-list`; a list with no eligible row is `no-price-row`; a winner
- * under a product with no VAT rate is `no-vat-rate`; otherwise the price,
+ * under a product with no VAT rate is `no-vat-rate`; an amount past what the
+ * event's integer columns hold is `amount-too-large`; otherwise the price,
  * `net = unit × quantity` and `vat = vatOf(net, rate)`, frozen on the event.
  */
 export function priceOccurrence<Row extends PriceRow>(occurrence: Occurrence<Row>, labels: PriceLabels = {}): PricingOutcome<Row> {
@@ -219,6 +220,9 @@ export function priceOccurrence<Row extends PriceRow>(occurrence: Occurrence<Row
   if (occurrence.product.vatPercent === null) return { blockReason: "no-vat-rate", price: null, resolution }
   const unitPriceMinor = resolution.winner.row.unitPriceMinor
   const netMinor = unitPriceMinor * occurrence.quantity
+  const vatMinor = vatOf(netMinor, occurrence.product.vatPercent)
+  // An amount the event's integer columns cannot hold is the office's to look at, not a write that fails the whole run.
+  if (![unitPriceMinor, netMinor, vatMinor].every(fitsMinor)) return { blockReason: "amount-too-large", price: null, resolution }
   return {
     blockReason: null,
     price: {
@@ -226,7 +230,7 @@ export function priceOccurrence<Row extends PriceRow>(occurrence: Occurrence<Row
       unitPriceMinor,
       netMinor,
       vatPercent: occurrence.product.vatPercent,
-      vatMinor: vatOf(netMinor, occurrence.product.vatPercent),
+      vatMinor,
       currency: occurrence.priceList.currency,
     },
     resolution,
