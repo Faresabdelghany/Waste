@@ -22,7 +22,7 @@ import {
   GIVE_VALID_TO,
   NOT_A_MOVEMENT_OF_THIS_CONTAINER,
   OUTSIDE_SUBSCRIPTION,
-  placementAlreadyEnded,
+  placedAgainFrom,
   VALID_TO_SAYS_NOTHING,
 } from "../routes/lifecycle"
 import { OCCURRED_AT_SKEW_MS } from "../routes/shared"
@@ -95,6 +95,9 @@ describe("the container lifecycle commands and the ledger's reads", { skip: data
   let bounded: Subscription
   /** The other company's, in its own warehouse. */
   let theirContainer: Container
+  /** Who the agreements are with, and what they subscribe to: for a test that writes an agreement of its own. */
+  let customer: Customer
+  let collection: Product
 
   before(async () => {
     pool = createDb(database.url, { max: 4 })
@@ -124,8 +127,8 @@ describe("the container lifecycle commands and the ledger's reads", { skip: data
     bin = await create(olivia, "/container-types", { name: "240 L bin", volumeLitres: 240 }, ContainerType)
     residual = await create(olivia, "/waste-fractions", { key: "residual", name: "Residual waste" }, WasteFraction)
     const weekly = await create(olivia, "/service-frequencies", { projectId: a.projects.copenhagen.id, name: "Weekly", collectionsPerWeek: 1 }, ServiceFrequency)
-    const customer = await create(olivia, "/customers", { kind: "organisation", name: "Acme Housing" }, Customer)
-    const collection = await create(
+    customer = await create(olivia, "/customers", { kind: "organisation", name: "Acme Housing" }, Customer)
+    collection = await create(
       olivia,
       "/products",
       // Active, since a subscription needs an active product (routes/statuses.ts, Issue #79).
@@ -672,15 +675,91 @@ describe("the container lifecycle commands and the ledger's reads", { skip: data
     })
   })
 
-  describe("a placement that already ended under a container the ledger has in service (a row from before the ledger, or an import)", () => {
-    test("is a 409 naming the day on a return and on a decommission, after the body's own 400s, and nothing is written", async () => {
+  describe("the placement a return or a decommission ends is the Registry's in force for the container, never the issue's (#291, slice 10)", () => {
+    /** A subscription of its own, under an agreement of its own at a property of its own, from January: what a change or a termination moves without touching the suite's shared ones. */
+    const ownSubscription = async (number: string): Promise<{ agreement: Agreement; subscription: Subscription }> => {
+      const agreement = await create(
+        olivia,
+        "/agreements",
+        { projectId: a.projects.copenhagen.id, number, customerId: customer.id, payerCustomerId: customer.id, billingCadence: "monthly", currency: "DKK", validFrom: JANUARY },
+        Agreement,
+      )
+      const place = await create(olivia, "/properties", { projectId: a.projects.copenhagen.id, name: `${number} Allé`, address: `${number} Allé 1, 2100 København Ø`, kind: "residential" }, Property)
+      const subscription = await create(olivia, `/agreements/${agreement.id}/subscriptions`, { productId: collection.id, propertyId: place.id, validFrom: JANUARY }, Subscription)
+      return { agreement, subscription }
+    }
+    const change = (subscription: Subscription, body: Record<string, unknown>) => create(olivia, `/subscriptions/${subscription.id}/change`, body, Subscription)
+    const terminate = async (agreement: Agreement, on: string) => {
+      const response = await olivia(`/agreements/${agreement.id}/terminate`, { method: "POST", body: { on } })
+      assert.equal(response.status, 200, JSON.stringify(await response.clone().json()))
+    }
+    /** The container's placements, oldest first, as [subscription, from, to]. */
+    const periodsOf = async (into: Container) => (await placements(`?containerId=${into.id}`)).items.map((placement) => [placement.subscriptionId, placement.validFrom, placement.validTo])
+
+    test("after a change of service, a return ends the replacement's placement and records it, though the issue named the one before", async () => {
+      const { subscription } = await ownSubscription("AGR-5121")
+      const into = await stocked("BIN-5121")
+      const first = await place(into, { subscriptionId: subscription.id })
+      const replacement = await change(subscription, { on: APRIL, quantity: 2 })
+      assert.deepEqual(await periodsOf(into), [[subscription.id, JANUARY, APRIL], [replacement.id, APRIL, null]], "handed on, without a movement")
+      assert.deepEqual((await movements(into)).items.map((movement) => movement.kind), ["receipt", "issue"])
+      assert.equal((await one(into.id)).assetState?.placementId, first.id, "the ledger still reads the issue's placement")
+
+      const returned = await giveBack(into, west, JULY)
+      const [, second] = (await placements(`?containerId=${into.id}`)).items
+      assert.equal(returned.placementId, second.id, "the movement records the placement in force, the replacement's")
+      assert.deepEqual(await periodsOf(into), [[subscription.id, JANUARY, APRIL], [replacement.id, APRIL, JULY]])
+      assert.equal((await one(into.id)).assetState?.status, "in-warehouse")
+    })
+
+    test("after a termination, a return records the placement that ended and ends nothing more; one before the day shortens it", async () => {
+      const ended = await ownSubscription("AGR-5122")
+      const later = await stocked("BIN-5122")
+      const placed = await place(later, { subscriptionId: ended.subscription.id })
+      await terminate(ended.agreement, JULY)
+      assert.equal((await onePlacement(placed.id)).validTo, JULY)
+      assert.equal((await one(later.id)).assetState?.status, "in-service", "the bin stays where it is until someone removes it")
+      const collected = await giveBack(later, west, OCTOBER)
+      assert.equal(collected.placementId, placed.id)
+      assert.equal((await onePlacement(placed.id)).validTo, JULY, "the termination's end stands")
+      assert.equal((await one(later.id)).assetState?.status, "in-warehouse")
+
+      const early = await ownSubscription("AGR-5123")
+      const sooner = await stocked("BIN-5123")
+      const before = await place(sooner, { subscriptionId: early.subscription.id })
+      await terminate(early.agreement, OCTOBER)
+      const returned = await giveBack(sooner, west, JULY)
+      assert.equal(returned.placementId, before.id)
+      assert.equal((await onePlacement(before.id)).validTo, JULY, "collected before the termination's day: the placement ends when the bin left")
+
+      const scrapped = await ownSubscription("AGR-5124")
+      const crushed = await stocked("BIN-5124")
+      const crushedAt = await place(crushed, { subscriptionId: scrapped.subscription.id })
+      await terminate(scrapped.agreement, APRIL)
+      const decommissioned = await decommission(crushed, { validTo: JULY })
+      assert.equal(decommissioned.placementId, crushedAt.id)
+      assert.equal((await onePlacement(crushedAt.id)).validTo, APRIL, "a decommission the same")
+    })
+
+    test("a return before a change planned for a later day is refused naming the day, and nothing is written", async () => {
+      const { subscription } = await ownSubscription("AGR-5125")
+      const into = await stocked("BIN-5125")
+      await place(into, { subscriptionId: subscription.id })
+      const replacement = await change(subscription, { on: OCTOBER, quantity: 3 })
+      const refusedReturn = await refusedCommand(into, "return", { warehouseId: west, validTo: JULY }, 409)
+      assert.equal(refusedReturn.detail, placedAgainFrom("BIN-5125", OCTOBER))
+      assert.equal(refusedReturn.detail, "Container BIN-5125 is placed again from 2026-10-01; end that placement before returning it earlier")
+      assert.deepEqual(await periodsOf(into), [[subscription.id, JANUARY, OCTOBER], [replacement.id, OCTOBER, null]], "untouched")
+      assert.deepEqual((await movements(into)).items.map((movement) => movement.kind), ["receipt", "issue"], "nothing appended")
+    })
+
+    test("an import's placement that already ended is recorded, not ended again, after the body's own 400s", async () => {
       const into = await stocked("BIN-5120")
       const placementId = testId()
       // The Registry says the placement ended in April; the ledger's issue
-      // row says the container is still in service at it. Both written
-      // through `tx` as `wms_api`, the way an import would, since no command
-      // produces the pair: a create carries no end and the patch sets none on
-      // an open placement.
+      // row says the container is still in service at it — the pair an
+      // import writes, and the pair a termination now leaves until the bin
+      // is collected. Both through `tx` as `wms_api`, the way an import would.
       await withCompany(pool.db, a.companyId, async (tx) => {
         await tx.insert(containerServicePlacement).values({
           id: placementId,
@@ -708,19 +787,14 @@ describe("the container lifecycle commands and the ledger's reads", { skip: data
       })
       assert.equal((await one(into.id)).assetState?.status, "in-service", "the ledger reads the import's issue")
 
-      // The body's 400s come first, as on every route: an end on or before the start is refused at validTo before the ledger's disagreement is.
       const backwards = await refusedCommand(into, "return", { warehouseId: west, validTo: JANUARY }, 400)
-      assert.deepEqual(backwards.errors, [{ path: "validTo", message: ENDS_AFTER_IT_STARTS }], "the body's 400 before the state's 409")
+      assert.deepEqual(backwards.errors, [{ path: "validTo", message: ENDS_AFTER_IT_STARTS }], "an end on or before every placement's start")
       assert.deepEqual((await refusedCommand(into, "decommission", { reason: "Crushed", validTo: JANUARY }, 400)).errors, [{ path: "validTo", message: ENDS_AFTER_IT_STARTS }])
 
-      const returned = await refusedCommand(into, "return", { warehouseId: west, validTo: JULY }, 409)
-      assert.equal(returned.detail, placementAlreadyEnded("BIN-5120", APRIL))
-      assert.equal(returned.detail, "Container BIN-5120's placement already ended on 2026-04-01; the ledger disagrees", "a 409 like every other state a command is refused by, not a 500")
-      const scrapped = await refusedCommand(into, "decommission", { reason: "Crushed", validTo: JULY }, 409)
-      assert.equal(scrapped.detail, placementAlreadyEnded("BIN-5120", APRIL))
+      const returned = await giveBack(into, west, JULY)
+      assert.equal(returned.placementId, placementId)
       assert.equal((await onePlacement(placementId)).validTo, APRIL, "the Registry's end stands")
-      assert.deepEqual((await movements(into)).items.map((movement) => movement.kind), ["receipt", "issue"], "nothing appended")
-      assert.equal((await one(into.id)).assetState?.status, "in-service", "and the ledger's reading stands")
+      assert.equal((await one(into.id)).assetState?.status, "in-warehouse")
     })
   })
 

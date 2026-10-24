@@ -160,6 +160,64 @@ export const SubscriptionPatch = z
   .refine(validityOrdered, endsAfterItStarts)
 export type SubscriptionPatch = z.infer<typeof SubscriptionPatch>
 
+/** What a change naming neither the product nor the quantity is told. */
+export const CHANGE_NAMES_SOMETHING = "Give the product or the quantity the replacement takes"
+
+/**
+ * A change of service (#291, slice 10, scenario 12.4): the subscription ends
+ * on `on` and the one replacing it begins there, at the same place under the
+ * same agreement, with the product or the quantity the body names — what it
+ * leaves out is the subscription's — and every container serving it serves
+ * the replacement from `on`. Nothing moves physically, so no stock movement
+ * is written. `on` lies inside the subscription's period, after its first
+ * day; whether the body changes anything is the route's to judge, since only
+ * it sees the stored row.
+ */
+export const SubscriptionChange = z
+  .strictObject({
+    /** The replacement's first day: the first day the subscription is no longer in force. */
+    on: IsoDate,
+    productId: Id.optional(),
+    quantity: Quantity.optional(),
+  })
+  .refine((body) => body.productId !== undefined || body.quantity !== undefined, { message: CHANGE_NAMES_SOMETHING })
+export type SubscriptionChange = z.infer<typeof SubscriptionChange>
+
+/**
+ * A termination (#291, slice 10, scenario 12.6): the agreement, every
+ * subscription in force past `on` and every placement serving them end
+ * together on `on`, the first day none of them is in force. A container stays
+ * in service until it is returned — a termination ends the service, and the
+ * bin stays until someone removes it.
+ */
+export const AgreementTermination = z.strictObject({
+  on: IsoDate,
+})
+export type AgreementTermination = z.infer<typeof AgreementTermination>
+
+/**
+ * A stop still standing at a container a command took out of service, which
+ * no generation run will take away: one on a dispatched or running route,
+ * which generation never refreshes, or the office's own on a planned one,
+ * which it never touches. The office removes it by hand.
+ */
+export const StopToRemove = z.object({
+  routeId: Id,
+  /** `RC-1042`. */
+  routeLabel: z.string(),
+  operatingDate: IsoDate,
+  pickupId: Id,
+  containerId: Id,
+})
+export type StopToRemove = z.infer<typeof StopToRemove>
+
+/** What a termination answers: the agreement as it now stands, and the stops still standing at its containers from `on`, oldest first. */
+export const AgreementTerminated = z.object({
+  agreement: Agreement,
+  stopsToRemove: z.array(StopToRemove),
+})
+export type AgreementTerminated = z.infer<typeof AgreementTerminated>
+
 /** A page of agreements: one project's, one customer's, by the number a person quoted, valid on a day. */
 export const AgreementListQuery = ProjectScopedListQuery.extend({
   /** The agreements this customer holds; a payer's are found the same way. */
