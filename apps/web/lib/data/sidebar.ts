@@ -43,6 +43,17 @@ export const navItems: NavItem[] = [
   { id: "commercial", label: "Price Engine", href: "/commercial", badge: 14 },
 ]
 
+/**
+ * A nav item's badge (#248): in fixture mode the registry's number; on the
+ * Pilot (`pilot` given) only a count of rows the API answered — the open
+ * tickets once read, none before — and no badge on an item no count is read
+ * for, never the registry's number.
+ */
+export function navBadgeOf(item: NavItem, pilot: { openTickets: number | undefined } | null): number | undefined {
+  if (pilot === null) return item.badge
+  return item.id === "operate" ? pilot.openTickets : undefined
+}
+
 export const activeRoutes: ActiveRouteSummary[] = [
   {
     id: "route-1042",

@@ -233,15 +233,18 @@ function summarizeStarredRoute(
  * Sidebar entries for a scope's starred routes, in starring order: fixture
  * pins keep their curated summary; other ids are summarized from their route
  * record and dropped when no record exists (e.g. a deleted created route).
+ * On the Pilot (`onApi`, `routeRecords` the API's rows alone) no curated
+ * summary stands in: a pin is a route the API holds, else nothing (#248).
  */
 export function resolveActiveRouteSummaries(
   starredRouteIds: readonly string[],
   routeRecords: readonly BusinessRecord[],
   scope: ActiveRoutesScope,
+  onApi = false,
 ): ActiveRouteSummary[] {
   const curated = curatedSummariesByScope[scope]
   return starredRouteIds.flatMap((routeId) => {
-    const curatedSummary = curated.get(routeId)
+    const curatedSummary = onApi ? undefined : curated.get(routeId)
     if (curatedSummary) return [curatedSummary]
     const record = routeRecords.find((candidate) => candidate.id === routeId)
     return record ? [summarizeStarredRoute(record, scope)] : []
