@@ -4,7 +4,9 @@
 // the stops in the order they are driven (the Plan's `sequence` where there
 // is one, else `position`), each with its address, container, fraction and
 // status and an "Open in Maps" link over its own point, and per stop:
-// complete, skip, fail, report a problem. On the route: report a problem,
+// arrived, complete, skip, fail, report a problem, add a note, record a weight
+// (O2 of #290). On the route: the next places still to do handed to Maps in
+// one link, report a problem,
 // pause or resume, record an unload (any time while active, never required)
 // and end the route behind a confirm that counts the stops still planned.
 // What the read model makes impossible is not offered and a stop with a
@@ -12,16 +14,16 @@
 // else is sent and the server decides (lib/driver/route-view.ts).
 import Link from "next/link"
 import { useEffect, useState } from "react"
-import { ArrowLeft, CheckCircle, FlagCheckered, NavigationArrow, Pause, Play, Scales, SkipForward, Warning, XCircle } from "@phosphor-icons/react/dist/ssr"
+import { ArrowLeft, CheckCircle, FlagCheckered, MapPin, MapTrifold, NavigationArrow, NotePencil, Pause, Play, Scales, SkipForward, Warning, XCircle } from "@phosphor-icons/react/dist/ssr"
 
 import { Badge } from "@/components/ui/badge"
 import { Button } from "@/components/ui/button"
 import { useDriverApp, useDriverAppState } from "@/components/waste/driver/driver-app-provider"
-import { EndRouteDialog, ReasonDialog, UnloadDialog } from "@/components/waste/driver/driver-dialogs"
+import { EndRouteDialog, NoteDialog, ReasonDialog, UnloadDialog, WeightDialog } from "@/components/waste/driver/driver-dialogs"
 import { DriverFrame } from "@/components/waste/driver/driver-frame"
 import { RejectionList, operatingDay, progressLine } from "@/components/waste/driver/driver-parts"
 import type { DriverMe, DriverPickup, DriverRouteDetail } from "@waste/contracts/driver-commands"
-import { DRIVER_REASON_LABELS, endRouteWarning, mapsHref, PICKUP_STATUS_LABELS, ROUTE_STATUS_LABELS, routeActions, stopActions, stopsInOrder, waitingOn } from "@/lib/driver/route-view"
+import { DRIVER_REASON_LABELS, endRouteWarning, mapsHref, PICKUP_STATUS_LABELS, ROUTE_STATUS_LABELS, routeActions, routeMapsHref, stopActions, stopsInOrder, waitingOn } from "@/lib/driver/route-view"
 
 export function DriverRouteScreen({ routeId }: { routeId: string }) {
   const app = useDriverApp()
@@ -53,6 +55,7 @@ function RouteDetailView({ detail, me }: { detail: DriverRouteDetail; me: Driver
   const actions = routeActions(detail, detail.session, state.waiting)
   const waiting = waitingOn(state.waiting, detail.id).length
   const rejections = state.rejections.filter((rejection) => rejection.routeId === detail.id && rejection.pickupId === null)
+  const routeMaps = routeMapsHref(detail, state.waiting)
   const [dialog, setDialog] = useState<"report" | "unload" | "end" | null>(null)
   const close = (open: boolean) => {
     if (!open) setDialog(null)
@@ -74,6 +77,14 @@ function RouteDetailView({ detail, me }: { detail: DriverRouteDetail; me: Driver
           </div>
         </div>
         <RejectionList rejections={rejections} onDismiss={app.dismiss} />
+        {routeMaps !== null && (
+          <Button asChild variant="outline" className="h-11">
+            <a href={routeMaps} target="_blank" rel="noopener noreferrer">
+              <MapTrifold aria-hidden />
+              Navigate the next stops in Maps
+            </a>
+          </Button>
+        )}
         {detail.status === "ready" && !actions.sending && (
           <p className="text-sm text-muted-foreground">
             Start this route from{" "}
@@ -141,7 +152,7 @@ function StopCard({ detail, stop, number }: { detail: DriverRouteDetail; stop: D
   const actions = stopActions(detail, stop, state.waiting)
   const rejections = state.rejections.filter((rejection) => rejection.pickupId === stop.id)
   const maps = mapsHref(stop.location)
-  const [dialog, setDialog] = useState<"skip" | "fail" | "report" | null>(null)
+  const [dialog, setDialog] = useState<"skip" | "fail" | "report" | "note" | "weight" | null>(null)
   const close = (open: boolean) => {
     if (!open) setDialog(null)
   }
@@ -163,6 +174,7 @@ function StopCard({ detail, stop, number }: { detail: DriverRouteDetail; stop: D
         </div>
         <div className="flex shrink-0 flex-col items-end gap-1 whitespace-nowrap">
           <Badge variant={stop.status === "planned" ? "outline" : "secondary"}>{PICKUP_STATUS_LABELS[stop.status]}</Badge>
+          {stop.status === "planned" && stop.arrivedAt !== null && <Badge variant="outline">Arrived</Badge>}
           {actions.sending && <Badge variant="outline">Sending</Badge>}
         </div>
       </div>
@@ -176,10 +188,16 @@ function StopCard({ detail, stop, number }: { detail: DriverRouteDetail; stop: D
             </a>
           </Button>
         )}
+        {actions.arrive && (
+          <Button variant="outline" size="sm" onClick={() => void app.tap({ kind: "arrive", routeId: detail.id, body: { pickupId: stop.id } })}>
+            <MapPin aria-hidden />
+            Arrived
+          </Button>
+        )}
       </div>
       {(actions.outcome || actions.report) && (
         <div className="grid grid-cols-2 gap-2">
-          {/* A decided stop keeps only its problem report: its outcome stands, and a second is the office's correction. */}
+          {/* A decided stop keeps its problem report, a note and a weight: its outcome stands, and a second is the office's correction. */}
           {stop.status === "planned" && (
             <>
               <Button className="h-11" disabled={!actions.outcome} onClick={() => void app.tap({ kind: "complete-pickup", routeId: detail.id, body: { pickupId: stop.id } })}>
@@ -199,6 +217,14 @@ function StopCard({ detail, stop, number }: { detail: DriverRouteDetail; stop: D
           <Button variant="outline" className="h-11" disabled={!actions.report} onClick={() => setDialog("report")}>
             <Warning aria-hidden />
             Problem
+          </Button>
+          <Button variant="outline" className="h-11" disabled={!actions.report} onClick={() => setDialog("note")}>
+            <NotePencil aria-hidden />
+            Note
+          </Button>
+          <Button variant="outline" className="h-11" disabled={!actions.report} onClick={() => setDialog("weight")}>
+            <Scales aria-hidden />
+            Weight
           </Button>
         </div>
       )}
@@ -229,6 +255,8 @@ function StopCard({ detail, stop, number }: { detail: DriverRouteDetail; stop: D
         noteRequired
         onConfirm={(reason, note) => void app.tap({ kind: "report-problem", routeId: detail.id, body: { pickupId: stop.id, reason, note: note ?? "" } })}
       />
+      <NoteDialog open={dialog === "note"} onOpenChange={close} title={`A note on stop ${number}`} description={stop.address} onConfirm={(note) => void app.tap({ kind: "add-note", routeId: detail.id, body: { pickupId: stop.id, note } })} />
+      <WeightDialog open={dialog === "weight"} onOpenChange={close} title={`Weight at stop ${number}`} description={`${stop.containerLabel} · ${stop.wasteFractionName}`} onConfirm={(weightKg) => void app.tap({ kind: "add-weight", routeId: detail.id, body: { pickupId: stop.id, weightKg } })} />
     </article>
   )
 }

@@ -329,9 +329,14 @@ export function createDriverApp({ openQueue, geolocation = null, now = Date.now,
       return
     }
     for (const rejection of rejections) fresh.add(rejection.commandId)
-    store.set((state) => ({ ...state, unreachable: false, refused: null, rejections: [...state.rejections, ...rejections], waiting: mine() }))
+    store.set((state) => ({ ...state, unreachable: false, refused: null, rejections: [...state.rejections, ...rejections] }))
     await forget([...doneIds])
-    await refresh()
+    // The answered leave the screen's queue once the route is read again, never before: off a read from before their answer a stop would offer again what was just done, and an arrival is applied twice.
+    try {
+      await refresh()
+    } finally {
+      store.set((state) => ({ ...state, waiting: mine() }))
+    }
     if (sendable.length > batch.length) again = true
   }
 

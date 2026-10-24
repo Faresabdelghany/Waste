@@ -34,11 +34,43 @@ export function stopsInOrder<Stop extends Pick<DriverPickup, "position" | "seque
   return [...pickups].sort((a, b) => (a.sequence ?? a.position) - (b.sequence ?? b.position) || a.position - b.position)
 }
 
+/** A point as Maps reads it: latitude, then longitude. */
+const mapsPlace = ({ coordinates: [longitude, latitude] }: FlatPoint): string => `${latitude},${longitude}`
+
 /** "Open in Maps" over the pickup's own point, which the phone hands to its maps app; null for a property not yet geocoded. */
 export function mapsHref(location: FlatPoint | null): string | null {
   if (location === null) return null
-  const [longitude, latitude] = location.coordinates
-  return `https://www.google.com/maps/search/?api=1&query=${encodeURIComponent(`${latitude},${longitude}`)}`
+  return `https://www.google.com/maps/search/?api=1&query=${encodeURIComponent(mapsPlace(location))}`
+}
+
+/** The most places one Maps link hands over: a destination and three waypoints, the most a Maps URL takes in a phone's browser (nine in the app or on a desktop). */
+export const MAPS_STOPS_MAX = 4
+
+/**
+ * "Navigate the next stops in Maps": from wherever the phone is, through the
+ * next places still to do in the order they are driven, the last of those one
+ * link carries the destination. A stop already decided, or with its outcome
+ * waiting to be sent, is behind the driver; a stop with no point is left out;
+ * stops at one place (a property's several bins) are one waypoint. The link
+ * moves on as stops are decided. Null when no stop still to do has a point.
+ */
+export function routeMapsHref(route: Pick<DriverRouteDetail, "id" | "pickups">, waiting: readonly QueueEntry[]): string | null {
+  const decided = new Set(
+    waitingOn(waiting, route.id)
+      .filter((entry) => OUTCOMES.includes(entry.command.kind))
+      .map((entry) => pickupIdOf(entry.command)),
+  )
+  const places: string[] = []
+  for (const stop of stopsInOrder(route.pickups)) {
+    if (stop.status !== "planned" || decided.has(stop.id) || stop.location === null) continue
+    const place = mapsPlace(stop.location)
+    if (places[places.length - 1] !== place) places.push(place)
+    if (places.length === MAPS_STOPS_MAX) break
+  }
+  if (places.length === 0) return null
+  const destination = places[places.length - 1]
+  const waypoints = places.slice(0, -1)
+  return `https://www.google.com/maps/dir/?api=1&travelmode=driving&destination=${encodeURIComponent(destination)}${waypoints.length > 0 ? `&waypoints=${encodeURIComponent(waypoints.join("|"))}` : ""}`
 }
 
 /** Whether the route is underway as far as offering goes: active, or its start waiting to be sent. */
@@ -47,15 +79,18 @@ const underway = (route: Pick<Route, "id" | "status">, waiting: readonly QueueEn
 export type StopActions = {
   /** One of the stop's commands waits: the stop shows "Sending" and offers nothing more. */
   sending: boolean
+  /** "Arrived", once, on a stop still to do: the door keeps the first arrival's instant and only adds a proof for another. */
+  arrive: boolean
   /** Complete, skip and fail. */
   outcome: boolean
+  /** A problem, a note or a weight: what adds to the stop's record without deciding it, before or after its outcome. */
   report: boolean
 }
 
-export function stopActions(route: Pick<Route, "id" | "status">, stop: Pick<DriverPickup, "id" | "status">, waiting: readonly QueueEntry[]): StopActions {
+export function stopActions(route: Pick<Route, "id" | "status">, stop: Pick<DriverPickup, "id" | "status" | "arrivedAt">, waiting: readonly QueueEntry[]): StopActions {
   const sending = waitingOn(waiting, route.id).some((entry) => pickupIdOf(entry.command) === stop.id)
   const open = underway(route, waiting) && !waits(waiting, route.id, ["end-route"]) && !sending
-  return { sending, outcome: open && stop.status === "planned", report: open }
+  return { sending, arrive: open && stop.status === "planned" && stop.arrivedAt === null, outcome: open && stop.status === "planned", report: open }
 }
 
 export type RouteActions = {

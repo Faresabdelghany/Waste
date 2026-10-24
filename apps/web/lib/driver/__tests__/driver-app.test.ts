@@ -322,6 +322,25 @@ describe("the drain", () => {
     assert.deepEqual(app.store.getSnapshot().rejections, [])
   })
 
+  test("an answered command stays on the screen's queue until the route is read again, so nothing is offered twice off the read from before its answer", async () => {
+    const { app, door } = await onRoute()
+    let release = () => {}
+    const reread = new Promise<void>((resolve) => {
+      release = resolve
+    })
+    door.next("POST /driver/commands", ({ body }) => outcomes((body as { commands: { id: string }[] }).commands, () => ({ outcome: "applied" })))
+    door.next(`GET /driver/routes/${ROUTE_ID}`, async () => {
+      await reread
+      return json(routeDetail({ status: "active" }))
+    })
+    await app.tap({ kind: "pause", routeId: ROUTE_ID, body: {} })
+    await eventually(() => assert.equal(door.batches().length, 1))
+    await settle()
+    assert.equal(app.store.getSnapshot().waiting.length, 1, "answered, but the read after it has not landed")
+    release()
+    await eventually(() => assert.deepEqual(app.store.getSnapshot().waiting, []))
+  })
+
   test("a rejected command leaves the queue, and its sentence stays on its stop through the batch's re-read until the next successful read", async () => {
     const { app, door, position, stored } = await onRoute()
     door.next("POST /driver/commands", ({ body }) =>

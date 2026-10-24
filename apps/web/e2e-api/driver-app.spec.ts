@@ -5,7 +5,9 @@ import { listAll } from "./tester"
 
 // The Driver App (Issue #145) on a phone-sized browser against the real door:
 // the seeded driver signs in, sees the route the office dispatched, starts it
-// on the planned vehicle, completes, skips and fails stops with reasons,
+// on the planned vehicle, hands the next stops to Maps, arrives at a stop,
+// adds a note and a weight (O2 of #290), completes,
+// skips and fails stops with reasons,
 // reports a problem, pauses and resumes, records an unload, loses the
 // connection for two stops and ends the route. Then, through the API: one
 // receipt per command and none twice, the Live board's position, and the
@@ -52,8 +54,27 @@ test("a driver works a dispatched route on a phone, through an outage, and every
     const stop = (index: number) => page.getByRole("article", { name: `Stop ${index + 1}`, exact: true })
     const dialog = page.getByRole("dialog")
 
+    // The next places still to do go to Maps in one link, in the order driven, from wherever the phone is.
+    const navigate = new URL((await page.getByRole("link", { name: "Navigate the next stops in Maps" }).getAttribute("href")) ?? "")
+    expect([navigate.pathname, navigate.searchParams.get("travelmode")]).toEqual(["/maps/dir/", "driving"])
+    expect(navigate.searchParams.get("destination")).toMatch(/^-?\d+(\.\d+)?,-?\d+(\.\d+)?$/)
+
+    // Arrived once: the badge comes from the server's arrival, and the button does not come back.
+    await stop(0).getByRole("button", { name: "Arrived" }).click()
+    await expect(stop(0).locator('[data-slot="badge"]', { hasText: /^Arrived$/ })).toBeVisible()
+    await expect(stop(0).getByRole("button", { name: "Arrived" })).toHaveCount(0)
+
     await stop(0).getByRole("button", { name: "Complete" }).click()
     await expect(stop(0).getByText("Completed", { exact: true })).toBeVisible()
+    // A weight and a note after the outcome: the stop's record grows, its outcome stands.
+    await stop(0).getByRole("button", { name: "Weight" }).click()
+    await dialog.getByLabel("Weight kg").fill("212")
+    await dialog.getByRole("button", { name: "Record weight" }).click()
+    await expect(stop(0).getByText("Sending")).toBeHidden()
+    await stop(0).getByRole("button", { name: "Note" }).click()
+    await dialog.getByLabel("Note").fill("Lid cracked, still closes")
+    await dialog.getByRole("button", { name: "Add note" }).click()
+    await expect(stop(0).getByText("Sending")).toBeHidden()
 
     await stop(1).getByRole("button", { name: "Skip" }).click()
     await dialog.getByLabel("Reason").selectOption("not-presented")
@@ -109,14 +130,14 @@ test("a driver works a dispatched route on a phone, through an outage, and every
     await dialog.getByRole("button", { name: "End route" }).click()
     await expect(page.getByRole("region", { name: `Route ${route.label}` }).getByText("Completed", { exact: true })).toBeVisible()
 
-    // One receipt per command and none twice: the start, three outcomes, a problem, pause, resume, an unload, two queued outcomes and the end.
+    // One receipt per command and none twice: the start, an arrival, three outcomes, a weight, a note, a problem, pause, resume, an unload, two queued outcomes and the end.
     const token = await accessTokenOf(context)
     if (token === null) throw new Error("the driver's browser holds no API session")
     const asDriver = await apiAs(token)
     try {
       const receipts = await listAll<Receipt>(asDriver, "/driver/commands", { routeId: route.id })
       expect(receipts.map((receipt) => receipt.kind).sort()).toEqual(
-        ["complete-pickup", "complete-pickup", "complete-pickup", "end-route", "fail-pickup", "pause", "record-unload", "report-problem", "resume", "skip-pickup", "start-route"].sort(),
+        ["add-note", "add-weight", "arrive", "complete-pickup", "complete-pickup", "complete-pickup", "end-route", "fail-pickup", "pause", "record-unload", "report-problem", "resume", "skip-pickup", "start-route"].sort(),
       )
       expect(new Set(receipts.map((receipt) => receipt.id)).size).toBe(receipts.length)
       expect(receipts.every((receipt) => receipt.outcome === "applied")).toBe(true)
@@ -128,6 +149,10 @@ test("a driver works a dispatched route on a phone, through an outage, and every
     const ended = (await done.json()) as RouteDetail
     expect(ended.status).toBe("completed")
     expect(Object.fromEntries(ordered(ended).slice(0, 5).map((pickup, index) => [index, pickup.status]))).toEqual({ 0: "completed", 1: "skipped", 2: "failed", 3: "completed", 4: "completed" })
+    expect(ordered(ended)[0].arrivedAt, "the first stop's arrival").not.toBeNull()
+    // The first stop's proofs carry the arrival, the weight and the note, as the office's details list them.
+    const proofs = ((await (await api.get(`/pickups/${stops[0].id}`)).json()) as { proofs: { kind: string; weightKg: number | null; note: string | null }[] }).proofs
+    expect(proofs.map((proof) => [proof.kind, proof.weightKg, proof.note])).toEqual(expect.arrayContaining([["arrival", null, null], ["weight", 212, null], ["note", null, "Lid cracked, still closes"]]))
 
     // Resolution heard of the failed stop and the reported problem, each a ticket on its stop.
     await expect

@@ -88,6 +88,17 @@ const commandOf = <Kind extends DriverCommandKind, Body extends z.ZodType>(kind:
 /** The most a batch carries: PowerSync's upload is one transaction's writes, and two hundred is a long day. */
 export const BATCH_MAX = 200
 
+/**
+ * The largest `integer` Postgres holds, which every weight column is
+ * (`proof_of_service.weight_kg`, `unload.net_kg` and its pair): a larger
+ * weight is the command's own refusal at its field, never a failed write
+ * (22003) that would fail the batch and hold the device's whole queue.
+ */
+export const KILOGRAMS_MAX = 2_147_483_647
+
+/** Whole kilograms, positive, no more than a weight column holds. */
+const Kilograms = PositiveInt.max(KILOGRAMS_MAX)
+
 /** The fourteen bodies, by kind, for the route to parse a loosely read envelope's body against. */
 export const COMMAND_BODIES = {
   "start-route": z.strictObject({ vehicleId: Id, trailerId: Id.optional(), appVersion: Label.optional(), ...located }),
@@ -97,16 +108,16 @@ export const COMMAND_BODIES = {
   "fail-pickup": z.strictObject({ pickupId: Id, reason: DriverPickupReason, note: Paragraph.optional(), ...located }),
   "report-problem": z.strictObject({ pickupId: Id.optional(), reason: DriverPickupReason, note: Paragraph, ...located }),
   "add-photo": z.strictObject({ pickupId: Id.optional(), objectKey: ObjectKey, ...located }),
-  "add-weight": z.strictObject({ pickupId: Id, weightKg: PositiveInt }),
+  "add-weight": z.strictObject({ pickupId: Id, weightKg: Kilograms }),
   "add-signature": z.strictObject({ pickupId: Id, objectKey: ObjectKey, ...located }),
   "add-note": z.strictObject({ pickupId: Id.optional(), note: Paragraph }),
   "record-unload": z
     .strictObject({
       unloadingStationId: Id,
       wasteFractionId: Id,
-      netKg: PositiveInt,
-      grossKg: PositiveInt.optional(),
-      tareKg: PositiveInt.optional(),
+      netKg: Kilograms,
+      grossKg: Kilograms.optional(),
+      tareKg: Kilograms.optional(),
       weighbridgeTicket: Label.optional(),
       objectKey: ObjectKey.optional(),
       note: Paragraph.optional(),

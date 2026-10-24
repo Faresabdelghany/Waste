@@ -9,7 +9,7 @@ import { describe, test } from "node:test"
 
 import type { QueueEntry } from "../command-queue"
 import type { PilotCommand } from "../commands"
-import { endRouteWarning, mapsHref, routeActions, routesInDayOrder, stopActions, stopsInOrder, unreachableBanner, waitingOn } from "../route-view"
+import { endRouteWarning, MAPS_STOPS_MAX, mapsHref, routeActions, routeMapsHref, routesInDayOrder, stopActions, stopsInOrder, unreachableBanner, waitingOn } from "../route-view"
 import { pickup, pickupId, route, ROUTE_ID, routeDetail } from "./driver-fixtures"
 
 const queued = (command: Pick<PilotCommand, "kind" | "body"> & { routeId?: string }): QueueEntry =>
@@ -33,30 +33,83 @@ describe("what a stop offers", () => {
   const active = routeDetail({ status: "active" })
 
   test("an outcome and a problem on a planned stop of an active route", () => {
-    assert.deepEqual(stopActions(active, active.pickups[0], []), { sending: false, outcome: true, report: true })
+    assert.deepEqual(stopActions(active, active.pickups[0], []), { sending: false, arrive: true, outcome: true, report: true })
   })
 
   test("no outcome on a decided stop, though a problem may still be reported", () => {
-    assert.deepEqual(stopActions(active, pickup(1, { status: "completed" }), []), { sending: false, outcome: false, report: true })
+    assert.deepEqual(stopActions(active, pickup(1, { status: "completed" }), []), { sending: false, arrive: false, outcome: false, report: true })
   })
 
   test("nothing while one of its commands waits: it is sending", () => {
     const waiting = [queued({ kind: "complete-pickup", body: { pickupId: pickupId(1) } })]
-    assert.deepEqual(stopActions(active, active.pickups[0], waiting), { sending: true, outcome: false, report: false })
-    assert.deepEqual(stopActions(active, active.pickups[1], waiting), { sending: false, outcome: true, report: true }, "another stop is untouched")
+    assert.deepEqual(stopActions(active, active.pickups[0], waiting), { sending: true, arrive: false, outcome: false, report: false })
+    assert.deepEqual(stopActions(active, active.pickups[1], waiting), { sending: false, arrive: true, outcome: true, report: true }, "another stop is untouched")
   })
 
   test("nothing on a route not yet started, unless its start is waiting to be sent", () => {
     const ready = routeDetail({ status: "ready" })
-    assert.deepEqual(stopActions(ready, ready.pickups[0], []), { sending: false, outcome: false, report: false })
+    assert.deepEqual(stopActions(ready, ready.pickups[0], []), { sending: false, arrive: false, outcome: false, report: false })
     const starting = [queued({ kind: "start-route", body: { vehicleId: "v" } })]
-    assert.deepEqual(stopActions(ready, ready.pickups[0], starting), { sending: false, outcome: true, report: true })
+    assert.deepEqual(stopActions(ready, ready.pickups[0], starting), { sending: false, arrive: true, outcome: true, report: true })
   })
 
   test("nothing once the route is completed, or its end is waiting", () => {
     const done = routeDetail({ status: "completed" })
-    assert.deepEqual(stopActions(done, done.pickups[0], []), { sending: false, outcome: false, report: false })
-    assert.deepEqual(stopActions(active, active.pickups[0], [queued({ kind: "end-route", body: {} })]), { sending: false, outcome: false, report: false })
+    assert.deepEqual(stopActions(done, done.pickups[0], []), { sending: false, arrive: false, outcome: false, report: false })
+    assert.deepEqual(stopActions(active, active.pickups[0], [queued({ kind: "end-route", body: {} })]), { sending: false, arrive: false, outcome: false, report: false })
+  })
+
+  test("an arrival once, on a stop still to do: not again once the read says the driver arrived, nor while it is being sent", () => {
+    assert.equal(stopActions(active, pickup(1, { arrivedAt: "2027-01-15T08:02:00.000Z" }), []).arrive, false)
+    assert.equal(stopActions(active, pickup(1), [queued({ kind: "arrive", body: { pickupId: pickupId(1) } })]).arrive, false)
+  })
+
+  test("a note and a weight go with a problem: on any stop of a route underway, decided or not", () => {
+    const decided = stopActions(active, pickup(1, { status: "completed" }), [])
+    assert.equal(decided.report, true, "a weight is often read as the bin is emptied, after the outcome")
+  })
+})
+
+describe("the route in Maps", () => {
+  const at = (n: number) => ({ type: "Point" as const, coordinates: [12.58, 55.7 + n / 1000] as [number, number] })
+  /** The fixture's stop n as Maps reads it: latitude, longitude. */
+  const place = (n: number) => `${55.7 + n / 1000},12.58`
+  const onRoute = (pickups: ReturnType<typeof pickup>[]) => routeDetail({ status: "active", pickups })
+  const directions = (destination: string, waypoints: string[] = []) =>
+    `https://www.google.com/maps/dir/?api=1&travelmode=driving&destination=${encodeURIComponent(destination)}${waypoints.length > 0 ? `&waypoints=${encodeURIComponent(waypoints.join("|"))}` : ""}`
+
+  test("drives the next places still to do in order: the last of them the destination, the rest waypoints, from wherever the phone is", () => {
+    const stops = [pickup(1, { status: "completed" }), pickup(2), pickup(3), pickup(4)]
+    assert.equal(routeMapsHref(onRoute(stops), []), directions(place(4), [place(2), place(3)]))
+  })
+
+  test("follows the order driven, leaves out a stop with no point, and goes without waypoints for one place", () => {
+    const stops = [pickup(1, { sequence: 2 }), pickup(2, { sequence: 1, location: null }), pickup(3, { sequence: 3, status: "skipped" })]
+    assert.equal(routeMapsHref(onRoute(stops), []), directions(place(1)))
+  })
+
+  test("a stop whose outcome waits to be sent is behind the driver, out of reach or not", () => {
+    const stops = [pickup(1), pickup(2), pickup(3)]
+    const waiting = [queued({ kind: "complete-pickup", body: { pickupId: pickupId(1) } }), queued({ kind: "skip-pickup", body: { pickupId: pickupId(2), reason: "not-presented" } })]
+    assert.equal(routeMapsHref(onRoute(stops), waiting), directions(place(3)))
+    assert.equal(routeMapsHref(onRoute(stops), [queued({ kind: "add-note", body: { pickupId: pickupId(1), note: "x" } })]), directions(place(3), [place(1), place(2)]), "a note decides nothing")
+  })
+
+  test("stops at one place, a property's several bins, are one waypoint", () => {
+    const stops = [pickup(1), pickup(2, { location: at(1) }), pickup(3, { location: at(1) }), pickup(4)]
+    assert.equal(routeMapsHref(onRoute(stops), []), directions(place(4), [place(1)]))
+  })
+
+  test(`hands over at most ${MAPS_STOPS_MAX} places, the next ones, as many as Maps takes in a phone's browser`, () => {
+    const stops = Array.from({ length: MAPS_STOPS_MAX + 5 }, (_, index) => pickup(index + 1, { location: at(index + 1) }))
+    const href = new URL(routeMapsHref(onRoute(stops), []) ?? "")
+    assert.equal(href.searchParams.get("destination"), place(MAPS_STOPS_MAX))
+    assert.equal(href.searchParams.get("waypoints")?.split("|").length, MAPS_STOPS_MAX - 1)
+  })
+
+  test("is nothing when no stop still to do has a point", () => {
+    assert.equal(routeMapsHref(onRoute([pickup(1, { status: "completed" }), pickup(2, { location: null })]), []), null)
+    assert.equal(routeMapsHref(onRoute([]), []), null)
   })
 })
 
