@@ -1,0 +1,119 @@
+// Improve › Imports on the Pilot (#291 slice 12, row 20.1): what the screen
+// makes of a file before the API sees it, kept out of the components so it
+// is tested without a browser. The reading of a CSV and the columns of each
+// kind are the domain's (@waste/domain/imports), the same ones the API's
+// template writes; this module says how a person meets them — the kinds a
+// role may import, the file's bytes read as UTF-8 or, failing that, as the
+// Windows code page a spreadsheet saves "CSV" in, what a header row must be
+// told before any row is sent, the batches a commit is sent in, the reason
+// a write carries for the audit log, and the separator a template is asked
+// for.
+import type { ImportKind, ImportRowResult } from "@waste/contracts/imports"
+import type { ModuleKey } from "@waste/domain/access/modules"
+import { importRows, type ImportFile, type ImportRow } from "@waste/domain/imports/csv"
+import { IMPORT_BATCH_MAX, IMPORT_ROWS_MAX } from "@waste/domain/imports/vocabulary"
+
+/** Each kind as the screen offers it: its label, the module its rows are written to, and whether a file of it is a project's. */
+export const IMPORT_KIND_OPTIONS = [
+  { kind: "customers", label: "Customers", moduleKey: "customers.contacts", projectScoped: false },
+  { kind: "properties", label: "Properties", moduleKey: "customers.properties", projectScoped: true },
+  { kind: "containers", label: "Containers", moduleKey: "resources.containers", projectScoped: true },
+  { kind: "agreements", label: "Agreements and subscriptions", moduleKey: "customers.agreements", projectScoped: true },
+] as const satisfies readonly { kind: ImportKind; label: string; moduleKey: ModuleKey; projectScoped: boolean }[]
+
+export type ImportKindOption = (typeof IMPORT_KIND_OPTIONS)[number]
+
+export const kindOption = (kind: ImportKind): ImportKindOption => IMPORT_KIND_OPTIONS.find((option) => option.kind === kind) ?? IMPORT_KIND_OPTIONS[0]
+
+/** A role's grants as /me answers them. */
+type Grants = readonly { moduleKey: string; actions: readonly string[] }[]
+
+const allows = (grants: Grants, moduleKey: string, action: string): boolean =>
+  grants.some((grant) => grant.moduleKey === moduleKey && grant.actions.includes(action))
+
+/** Whether the role reads the imports run here: the import's own `view`. */
+export const mayView = (grants: Grants | undefined): boolean => allows(grants ?? [], "improve.imports", "view")
+
+/** Whether the role may run an import at all: the import's own `create`. */
+export const mayImport = (grants: Grants | undefined): boolean => allows(grants ?? [], "improve.imports", "create")
+
+/** The kinds a role may import: those whose module it may write a row to, by making a record or changing one. */
+export function importableKinds(grants: Grants | undefined): ImportKindOption[] {
+  if (!mayImport(grants)) return []
+  return IMPORT_KIND_OPTIONS.filter((option) => allows(grants ?? [], option.moduleKey, "create") || allows(grants ?? [], option.moduleKey, "edit"))
+}
+
+/**
+ * A file's bytes as text: UTF-8, as the template is written and a
+ * spreadsheet saves "CSV UTF-8"; and, where the bytes are not UTF-8, the
+ * Windows code page a spreadsheet saves plain "CSV" in on a Danish machine,
+ * so "Østerbro" is read as it was typed rather than refused or garbled.
+ */
+export function textOf(bytes: ArrayBuffer | Uint8Array): string {
+  try {
+    return new TextDecoder("utf-8", { fatal: true }).decode(bytes)
+  } catch {
+    return new TextDecoder("windows-1252").decode(bytes)
+  }
+}
+
+/** What a file is told before any row is sent: the reasons it cannot be previewed, and the columns it holds that the kind will not read. */
+export type FileReading = { file: ImportFile; blocking: string[]; ignored: string[] }
+
+export function readImportFile(kind: ImportKind, text: string): FileReading {
+  const file = importRows(kind, text)
+  const blocking: string[] = []
+  const { missing, repeated, unknown, unclosedQuote } = file.issues
+  if (unclosedQuote !== null) blocking.push(`Row ${unclosedQuote} opens a quoted cell that never closes, so every row after it ran into it; close the quote and choose the file again.`)
+  if (missing.length > 0) blocking.push(`The file has no ${listed(missing)} ${missing.length === 1 ? "column" : "columns"}; every row needs ${missing.length === 1 ? "it" : "them"}.`)
+  if (repeated.length > 0) blocking.push(`The file names ${listed(repeated)} twice; give each column once.`)
+  if (file.rows.length === 0) blocking.push("The file has no rows below its header.")
+  if (file.rows.length > IMPORT_ROWS_MAX) blocking.push(`The file has ${file.rows.length} rows; an import takes at most ${IMPORT_ROWS_MAX}, so split it.`)
+  return { file, blocking, ignored: unknown }
+}
+
+const listed = (items: readonly string[]): string =>
+  items.length <= 1 ? (items[0] ?? "") : `${items.slice(0, -1).join(", ")} and ${items.at(-1)}`
+
+/** A commit's rows in the batches it sends them in, each at most what one batch may write. */
+export function batchesOf<Row>(rows: readonly Row[], size: number = IMPORT_BATCH_MAX): Row[][] {
+  const batches: Row[][] = []
+  for (let start = 0; start < rows.length; start += size) batches.push(rows.slice(start, start + size))
+  return batches
+}
+
+/**
+ * The header a write's reason travels in, for the audit log of #291 slice
+ * 9a, whose `CHANGE_REASON_HEADER` (@waste/contracts/audit) it spells: until
+ * that lands the API reads nothing from it, and once it has, a test here
+ * holds the two equal, since the contracts are types-only in the web.
+ */
+export const CHANGE_REASON_HEADER = "waste-change-reason"
+
+/** The longest reason the audit log keeps, decoded. */
+const REASON_MAX = 2000
+
+/** The reason an import's writes are recorded under, as the header carries it: percent-encoded, at most what the audit log keeps. */
+export function importReason(fileName: string): string {
+  return encodeURIComponent(`CSV import ${fileName}`.slice(0, REASON_MAX))
+}
+
+/** The separator a template is asked for: semicolons where the locale writes a decimal comma, as a spreadsheet there splits columns on them. */
+export function templateSeparatorFor(locale: string | undefined): "comma" | "semicolon" {
+  return new Intl.NumberFormat(locale).format(1.5).includes(",") ? "semicolon" : "comma"
+}
+
+/** How many rows came out each way. */
+export type OutcomeCounts = Record<ImportRowResult["outcome"], number>
+
+export function countsOf(results: readonly ImportRowResult[]): OutcomeCounts {
+  const counts: OutcomeCounts = { created: 0, updated: 0, unchanged: 0, refused: 0 }
+  for (const result of results) counts[result.outcome] += 1
+  return counts
+}
+
+/** The rows a preview answered, each beside the cells it was read from, for the table that shows them. */
+export function joinedRows(rows: readonly ImportRow[], results: readonly ImportRowResult[]): { row: ImportRow; result: ImportRowResult | undefined }[] {
+  const byRow = new Map(results.map((result) => [result.row, result]))
+  return rows.map((row) => ({ row, result: byRow.get(row.row) }))
+}

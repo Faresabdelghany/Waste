@@ -41,6 +41,8 @@ export type ApiClient = {
   signal?: AbortSignal
   /** Told of every refusal the API answers, just before it is thrown; a request that never reached the API is not the API's refusal and is not told. */
   onRefused?: (problem: Problem) => void
+  /** Headers every request of this client carries beside the token, such as the audit log's reason for an import's writes (#291 slice 12); never `authorization`, which is the token's. */
+  headers?: Readonly<Record<string, string>>
 }
 
 export type Page<Item> = { items: Item[]; nextCursor: string | null }
@@ -89,6 +91,7 @@ async function request(client: ApiClient, method: string, path: string, body?: u
     response = await doFetch(`${client.baseUrl}${path}`, {
       method,
       headers: {
+        ...client.headers,
         authorization: `Bearer ${client.token}`,
         accept: "application/json",
         ...(body === undefined ? {} : { "content-type": "application/json" }),

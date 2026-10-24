@@ -62,6 +62,15 @@ describe("the client", () => {
     assert.equal(calls[0].init.signal, undefined, "no signal unless the client carries one")
   })
 
+  test("a client's own headers ride beside the token and never replace it (#291 slice 12)", async () => {
+    const { fetch, calls } = scripted([() => json({ rows: [] }, 201)])
+    await create({ ...clientOver(fetch), headers: { "waste-change-reason": "CSV%20import%20a.csv", authorization: "Bearer forged" } }, "/imports/x/rows", { rows: [] })
+    const headers = calls[0].init.headers as Record<string, string>
+    assert.equal(headers["waste-change-reason"], "CSV%20import%20a.csv")
+    assert.equal(headers.authorization, "Bearer t0k3n")
+    assert.equal(headers["content-type"], "application/json")
+  })
+
   test("a client's signal reaches every fetch, and an aborted one is a problem of status 0 like any failed fetch", async () => {
     const controller = new AbortController()
     const { fetch, calls } = scripted([() => json({ items: [], nextCursor: null })])

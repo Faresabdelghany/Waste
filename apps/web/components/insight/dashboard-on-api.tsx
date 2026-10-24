@@ -12,8 +12,11 @@
 // asks nothing again.
 
 import { useMemo, useState } from "react"
+import Link from "next/link"
+import { UploadSimple } from "@phosphor-icons/react/dist/ssr"
 
 import { Breadcrumbs } from "@/components/projects/Breadcrumbs"
+import { Button } from "@/components/ui/button"
 import { Select, SelectContent, SelectItem, SelectTrigger, SelectValue } from "@/components/ui/select"
 import { SidebarTrigger } from "@/components/ui/sidebar"
 import { Tabs, TabsContent, TabsList, TabsTrigger } from "@/components/ui/tabs"
@@ -22,6 +25,7 @@ import { useBusinessRecordStore } from "@/components/waste/business-record-store
 import { projectWebIdOf } from "@/lib/api/records/me-projects"
 import type { ReportWindowQuery } from "@/lib/api/reports"
 import { getModuleDefinition } from "@/lib/data/business-modules"
+import { mayView as mayViewImports } from "@/lib/imports/import-file"
 import { projectToday, timezoneOfProject } from "@/lib/data/route-schemes"
 import {
   DASHBOARD_RANGES,
@@ -82,10 +86,19 @@ export function DashboardOnApi() {
       <header className="shrink-0 border-b border-border/70">
         <div className="flex min-h-14 items-center gap-3 border-b border-border/70 px-3 sm:px-4">
           <SidebarTrigger className="h-8 w-8 shrink-0 rounded-md text-muted-foreground hover:bg-accent" />
-          <div className="min-w-0">
+          <div className="min-w-0 flex-1">
             <Breadcrumbs items={[{ label: "Dashboard" }]} />
             <p className="hidden text-[11px] text-muted-foreground sm:block">Service, tickets, tonnage and invoicing, counted by the API</p>
           </div>
+          {/* Improve's Imports (#291 slice 12), for a role that reads them. */}
+          {mayViewImports(me?.role.grants) && (
+            <Button asChild variant="outline" size="sm" className="h-8 shrink-0 text-xs">
+              <Link href="/improve/imports" data-testid="dashboard-imports">
+                <UploadSimple className="h-4 w-4" />
+                Imports
+              </Link>
+            </Button>
+          )}
         </div>
         <div className="flex flex-col gap-2.5 px-3 py-3 sm:px-4 lg:flex-row lg:items-center lg:justify-between">
           <div className="flex flex-wrap items-center gap-2">
