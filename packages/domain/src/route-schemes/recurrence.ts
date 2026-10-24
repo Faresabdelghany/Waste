@@ -93,6 +93,19 @@ export const RECURRENCE_WEEKLY_RATES: Record<RecurrenceFrequency, number> = {
   monthly: 12 / 52,
 }
 
+/**
+ * How many dates a week the recurrence serves on the given days, averaged
+ * over one full cycle of its rotation (#280): a fortnight's Mon and Thu are
+ * one a week, three weeks' Tue is a third. Daily serves every date, so each
+ * day given counts once a week — its weekly rate is per container, the
+ * whole week. Monthly's first weekdays count on the weekly rates' 52-week
+ * year. The guided setup's routes per week sums it over the groups' days.
+ */
+export function occurrencesPerWeek(frequency: RecurrenceFrequency, days: readonly ServiceDay[]): number {
+  const perDay = frequency === "daily" ? 1 : RECURRENCE_WEEKLY_RATES[frequency]
+  return new Set(days).size * perDay
+}
+
 export type WeekRotation = (typeof WEEK_ROTATIONS)[number]
 
 export type SchemeRecurrence = {

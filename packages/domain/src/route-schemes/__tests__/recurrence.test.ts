@@ -3,13 +3,19 @@ import { describe, test } from "node:test"
 
 import {
   RECURRENCE_WEEKLY_RATES,
+  SERVICE_DAYS,
+  addDays,
   isoWeek,
   matchesRecurrence,
   mondayOf,
+  occurrencesPerWeek,
   recurrenceCadenceLabel,
   recurrenceFromValues,
+  serviceDayOf,
   serviceDaysRangeLabel,
   weeksFromEffectiveFrom,
+  type RecurrenceFrequency,
+  type ServiceDay,
 } from "../recurrence"
 
 describe("serviceDaysRangeLabel", () => {
@@ -112,5 +118,57 @@ describe("isoWeek", () => {
     assert.equal(isoWeek("2026-09-14"), 38)
     assert.equal(isoWeek("2026-12-28"), 53)
     assert.equal(isoWeek("2027-01-04"), 1)
+  })
+})
+
+describe("occurrencesPerWeek", () => {
+  // What a recurrence in force from `from` serves on the days over its first `days` dates, per week.
+  const walked = (frequency: RecurrenceFrequency, serviceDays: ServiceDay[], from: string, days: number) => {
+    const recurrence = { frequency, serviceDays, weekRotation: "odd" as const, effectiveFrom: from, effectiveTo: "" }
+    let served = 0
+    for (let offset = 0; offset < days; offset += 1) {
+      const date = addDays(from, offset)
+      if (matchesRecurrence(recurrence, date) && serviceDays.includes(serviceDayOf(date))) served += 1
+    }
+    return served / (days / 7)
+  }
+  const near = (actual: number, expected: number, message: string) =>
+    assert.ok(Math.abs(actual - expected) < 1e-9, `${message}: ${actual} is not ${expected}`)
+
+  test("weekly serves each of its days once a week", () => {
+    assert.equal(occurrencesPerWeek("weekly", ["monday", "thursday"]), 2)
+  })
+
+  test("every 2 weeks serves its days once a fortnight: Mon and Thu are one route a week, not two", () => {
+    assert.equal(occurrencesPerWeek("every-2-weeks", ["monday", "thursday"]), 1)
+    assert.equal(occurrencesPerWeek("every-2-weeks", ["wednesday"]), 0.5)
+  })
+
+  test("daily serves each day it is given once a week", () => {
+    assert.equal(occurrencesPerWeek("daily", [...SERVICE_DAYS]), 7)
+    assert.equal(occurrencesPerWeek("daily", ["monday", "tuesday"]), 2)
+  })
+
+  test("is the recurrence's average over one full cycle of its rotation", () => {
+    // 4 Jan 2027 is the Monday of ISO week 1, odd: the cycle starts in a served week.
+    const cycleWeeks = { daily: 1, weekly: 1, "every-2-weeks": 2, "every-3-weeks": 3, "every-4-weeks": 4 } as const
+    for (const [frequency, weeks] of Object.entries(cycleWeeks) as [RecurrenceFrequency, number][]) {
+      for (const days of [["monday"], ["monday", "thursday"], ["tuesday", "wednesday", "saturday"]] as ServiceDay[][]) {
+        near(occurrencesPerWeek(frequency, days), walked(frequency, days, "2027-01-04", weeks * 7), `${frequency} on ${days.join(", ")}`)
+      }
+    }
+  })
+
+  test("monthly serves each day's first of the month: the calendar year's twelve over the weekly rates' 52 weeks", () => {
+    for (const days of [["monday"], ["tuesday", "friday"]] as ServiceDay[][]) {
+      const servedIn2027 = walked("monthly", days, "2027-01-01", 365) * (365 / 7)
+      near(servedIn2027, 12 * days.length, `monthly on ${days.join(", ")} in 2027`)
+      near(occurrencesPerWeek("monthly", days), servedIn2027 / 52, `monthly on ${days.join(", ")}`)
+    }
+  })
+
+  test("counts a day once, and no day as nothing", () => {
+    assert.equal(occurrencesPerWeek("weekly", ["monday", "monday"]), 1)
+    assert.equal(occurrencesPerWeek("every-3-weeks", []), 0)
   })
 })
