@@ -19,7 +19,7 @@
 // `command-rejected` the `DriverCommandReceipt` — the contracts' shapes,
 // which the consumer parses, so a shape the applier does not write does not
 // pass here either.
-import { randomBytes, randomInt } from "node:crypto"
+import { randomBytes, randomInt, randomUUID } from "node:crypto"
 
 import type { DriverCommandReceipt } from "@waste/contracts/driver-commands"
 import { routeLabel } from "@waste/contracts/execution"
@@ -29,9 +29,11 @@ import type { Route } from "@waste/contracts/routes"
 import type { Database, Tx } from "@waste/db/client"
 import { nextNumber } from "@waste/db/commands/shared"
 import { createIdMinter } from "@waste/db/ids"
-import { containerType, wasteFraction } from "@waste/db/schema/catalogue"
-import { container } from "@waste/db/schema/containers"
-import { property } from "@waste/db/schema/customers"
+import { role, userAccount } from "@waste/db/schema/access"
+import { agreement, subscription } from "@waste/db/schema/agreements"
+import { containerType, product, wasteFraction } from "@waste/db/schema/catalogue"
+import { container, containerServicePlacement } from "@waste/db/schema/containers"
+import { customer, property } from "@waste/db/schema/customers"
 import { driverCommand, outboxEvent, pickup, proofOfService, route } from "@waste/db/schema/execution"
 import { driver, vehicle } from "@waste/db/schema/fleet"
 import { vehicleType } from "@waste/db/schema/fleet-types"
@@ -68,6 +70,11 @@ export type ConsumerTenant = {
   /** Two service addresses with a bin each: `BIN-1` at Parkvej 18, `BIN-2` at Havnegade 3. */
   properties: { parkvej: { id: string; address: string }; havnegade: { id: string; address: string } }
   containers: { bin1: { id: string; label: string }; bin2: { id: string; label: string } }
+  /** Parkvej Boligforening and its AGR-1, the agreement BIN-1 serves under at Parkvej from 2026-01-01; BIN-2 is placed under none. */
+  customerId: string
+  agreementId: string
+  /** Lars Mikkelsen, an office account, for a case a person made or works. */
+  officeUserId: string
 }
 
 /** Seeds the company, its project, the two drivers, the vehicle, the scheme and the Registry rows a pickup names, as `wms_api`. */
@@ -89,7 +96,13 @@ export async function seedConsumerTenant(pool: Database): Promise<ConsumerTenant
       havnegade: { id: testId(), address: "Havnegade 3, 1058 København K" },
     },
     containers: { bin1: { id: testId(), label: "BIN-1" }, bin2: { id: testId(), label: "BIN-2" } },
+    customerId: testId(),
+    agreementId: testId(),
+    officeUserId: testId(),
   }
+  const roleId = testId()
+  const productId = testId()
+  const subscriptionId = testId()
   await withCompany(pool.db, companyId, async (tx: Tx) => {
     await tx.insert(company).values({ id: companyId, companyId, name: `Consumer Test ${slug}`, legalName: `Consumer Test ${slug} A/S`, registrationNumber: String(randomInt(10_000_000, 100_000_000)), country: "DK", status: "active" })
     await tx.insert(project).values({ id: tenant.projectId, companyId, name: "Copenhagen Central", kind: "Municipality", language: "da", currency: "DKK", timezone: "Europe/Copenhagen", status: "active" })
@@ -110,6 +123,14 @@ export async function seedConsumerTenant(pool: Database): Promise<ConsumerTenant
       { id: tenant.containers.bin1.id, companyId, projectId: tenant.projectId, label: "BIN-1", containerTypeId: tenant.containerTypeId, ownership: "company" },
       { id: tenant.containers.bin2.id, companyId, projectId: tenant.projectId, label: "BIN-2", containerTypeId: tenant.containerTypeId, ownership: "company" },
     ])
+    await tx.insert(role).values({ id: roleId, companyId, key: null, name: "Dispatcher", scope: "Company", description: "Works the tickets", system: false })
+    await tx.insert(userAccount).values({ id: tenant.officeUserId, companyId, authUserId: randomUUID(), email: `lars.mikkelsen@${slug}.example`, fullName: "Lars Mikkelsen", roleId, allProjects: true })
+    const scoped = { companyId, projectId: tenant.projectId }
+    await tx.insert(customer).values({ id: tenant.customerId, companyId, kind: "organisation", name: "Parkvej Boligforening", registrationNumber: String(randomInt(10_000_000, 100_000_000)), status: "active" })
+    await tx.insert(product).values({ id: productId, ...scoped, name: "Residual 240 L weekly", kind: "container-collection", status: "active", unit: "pickup", containerTypeId: tenant.containerTypeId, wasteFractionId: tenant.fractionId })
+    await tx.insert(agreement).values({ id: tenant.agreementId, ...scoped, validFrom: "2026-01-01", number: "AGR-1", customerId: tenant.customerId, payerCustomerId: tenant.customerId, status: "active", billingCadence: "monthly", currency: "DKK" })
+    await tx.insert(subscription).values({ id: subscriptionId, ...scoped, validFrom: "2026-01-01", agreementId: tenant.agreementId, productId, propertyId: tenant.properties.parkvej.id })
+    await tx.insert(containerServicePlacement).values({ id: testId(), ...scoped, validFrom: "2026-01-01", containerId: tenant.containers.bin1.id, subscriptionId, wasteFractionId: tenant.fractionId })
   })
   return tenant
 }
@@ -364,6 +385,13 @@ export async function dropConsumerTenant(pool: Database, owner: Database, compan
     await tx.delete(unloadingStation).where(eq(unloadingStation.companyId, companyId))
     await tx.delete(depot).where(eq(depot.companyId, companyId))
     await tx.delete(vehicleType).where(eq(vehicleType.companyId, companyId))
+    await tx.delete(containerServicePlacement).where(eq(containerServicePlacement.companyId, companyId))
+    await tx.delete(subscription).where(eq(subscription.companyId, companyId))
+    await tx.delete(agreement).where(eq(agreement.companyId, companyId))
+    await tx.delete(product).where(eq(product.companyId, companyId))
+    await tx.delete(customer).where(eq(customer.companyId, companyId))
+    await tx.delete(userAccount).where(eq(userAccount.companyId, companyId))
+    await tx.delete(role).where(eq(role.companyId, companyId))
     await tx.delete(container).where(eq(container.companyId, companyId))
     await tx.delete(property).where(eq(property.companyId, companyId))
     await tx.delete(containerType).where(eq(containerType.companyId, companyId))

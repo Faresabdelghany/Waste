@@ -101,8 +101,8 @@ export async function pickupRow(tx: Tx, companyId: string, routeId: string, pick
 /** The placement as read, before the list: what the domain's `PlacementFacts` carries less the list, plus the list the agreement names (null for the project's default), which the next read needs. */
 type PlacementRead = Omit<PlacementFacts, "priceList"> & { priceListId: string | null }
 
-/** The placement of the container valid on the day, with its subscription, agreement, customer's kind and product; undefined when none was. */
-async function placementOn(tx: Tx, companyId: string, projectId: string, containerId: string, day: string): Promise<PlacementRead | undefined> {
+/** The placement of the container valid on the day, with its subscription, agreement, customer's kind and product; undefined when none was. Resolution's consumer reads a stop's agreement and customer through it too (#258). */
+export async function placementOn(tx: Tx, companyId: string, projectId: string, containerId: string, day: string): Promise<PlacementRead | undefined> {
   const [row] = await tx
     .select({
       subscriptionId: containerServicePlacement.subscriptionId,
@@ -209,8 +209,10 @@ export async function ticketRow(tx: Tx, companyId: string, ticketId: string): Pr
 
 /**
  * Everything a completed ticket's event is judged on: the agreement it
- * reaches — its own, or the one its pickup's placement ran under on the
- * route's service date, with that placement's subscription — and the day it
+ * reaches — the one its pickup's placement ran under on the route's service
+ * date, with that placement's subscription, where the ticket names no
+ * agreement or names that one (the Driver App's tickets name both, #258);
+ * else its own, with no subscription — and the day it
  * closed on the project's clock. `closedAt` is the ticket's own stamp
  * (`ticket_closed_shape` ties it to the status), read now rather than from
  * the payload for the same reason the pickup's status is: a ticket
@@ -221,14 +223,13 @@ export async function ticketRow(tx: Tx, companyId: string, ticketId: string): Pr
  * relay gone wrong.
  */
 export async function ticketFacts(tx: Tx, companyId: string, ticketId: string, found: TicketRow): Promise<TicketCompletedFacts> {
-  let reached: TicketCompletedFacts["agreement"] = found.agreementId === null ? null : { id: found.agreementId, subscriptionId: null }
-  if (reached === null && found.routeId !== null && found.pickupId !== null) {
+  let reached: TicketCompletedFacts["agreement"] = null
+  if (found.routeId !== null && found.pickupId !== null) {
     const stop = await pickupRow(tx, companyId, found.routeId, found.pickupId)
-    if (stop !== undefined) {
-      const placement = await placementOn(tx, companyId, stop.projectId, stop.containerId, stop.serviceDate)
-      if (placement !== undefined) reached = { id: placement.agreement.id, subscriptionId: placement.subscriptionId }
-    }
+    const placement = stop === undefined ? undefined : await placementOn(tx, companyId, stop.projectId, stop.containerId, stop.serviceDate)
+    if (placement !== undefined && (found.agreementId === null || found.agreementId === placement.agreement.id)) reached = { id: placement.agreement.id, subscriptionId: placement.subscriptionId }
   }
+  if (reached === null && found.agreementId !== null) reached = { id: found.agreementId, subscriptionId: null }
   const timezone = await projectTimezone(tx, companyId, found.projectId)
   return { kind: "ticket-completed", ticketId, resolution: found.resolution as TicketResolution | null, agreement: reached, closedOn: found.closedAt === null ? null : dayInTimezone(found.closedAt, timezone) }
 }

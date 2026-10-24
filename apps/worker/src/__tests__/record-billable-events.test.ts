@@ -383,6 +383,16 @@ describe("finance.record-billable-events against Postgres", { skip }, () => {
     const reached = (await allEvents()).find((event) => event.id === second.billableEventId)
     assert.deepEqual([second.did, reached?.agreementId, reached?.subscriptionId, reached?.links.ticketId], ["recorded", tenant.agreements.anna.id, bin.subscriptionId, viaPickup.id])
 
+    // A ticket naming both — the Driver App's, since #258: the stop and the agreement it served under — reaches the placement's subscription too; one the office pointed at another agreement keeps its own, with no subscription.
+    const both = await seedTicket(pool, tenant, { resolution: "recollected", agreementId: tenant.agreements.anna.id, pickup: { routeId: seeded.id, pickupId: seeded.pickupIds[0] } })
+    const third = await handle(published("ticket-completed", both.id, ticketPayload(both.id, 7, "recollected", closedAt, { agreementId: tenant.agreements.anna.id, routeId: seeded.id, pickupId: seeded.pickupIds[0] })))
+    const named = (await allEvents()).find((event) => event.id === third.billableEventId)
+    assert.deepEqual([third.did, named?.agreementId, named?.subscriptionId], ["recorded", tenant.agreements.anna.id, bin.subscriptionId])
+    const moved = await seedTicket(pool, tenant, { resolution: "recollected", agreementId: tenant.agreements.housing.id, pickup: { routeId: seeded.id, pickupId: seeded.pickupIds[0] } })
+    const fourth = await handle(published("ticket-completed", moved.id, ticketPayload(moved.id, 8, "recollected", closedAt, { agreementId: tenant.agreements.housing.id, routeId: seeded.id, pickupId: seeded.pickupIds[0] })))
+    const own = (await allEvents()).find((event) => event.id === fourth.billableEventId)
+    assert.deepEqual([fourth.did, own?.agreementId, own?.subscriptionId], ["recorded", tenant.agreements.housing.id, null])
+
     // Redelivered: a ticket's event takes no lock, so the row it wrote the first time is read back by the outbox event's id — and two workers on one fresh event at once meet the index, one recording and the other reading the winner back.
     const replayed = await handle(published("ticket-completed", direct.id, ticketPayload(direct.id, 1, "recollected", closedAt, { agreementId: tenant.agreements.housing.id }), first.event))
     assert.deepEqual([replayed.did, replayed.billableEventId], ["replayed", recorded.id])
@@ -398,7 +408,7 @@ describe("finance.record-billable-events against Postgres", { skip }, () => {
     assert.equal((await handle(published("ticket-completed", unreachable.id, ticketPayload(unreachable.id, 3, "recollected", closedAt)))).did, "nothing")
     const noAction = await seedTicket(pool, tenant, { resolution: "no-action", agreementId: tenant.agreements.housing.id })
     assert.equal((await handle(published("ticket-completed", noAction.id, ticketPayload(noAction.id, 4, "no-action", closedAt, { agreementId: tenant.agreements.housing.id })))).did, "nothing")
-    assert.equal((await allEvents()).filter((event) => event.kind === "ticket").length, 3)
+    assert.equal((await allEvents()).filter((event) => event.kind === "ticket").length, 5)
   })
 
   test("a ticket-completed for a ticket reopened since is stale news and nothing, not a failed job: the row stands open with no resolution and no closing instant, and its next completion is its own event", async () => {

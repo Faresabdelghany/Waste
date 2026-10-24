@@ -17,8 +17,9 @@
 // that the proof or the note records, and makes nothing. A
 // `pickup-problem-reported` is a `reported-problem`, on the stop it named or
 // on the route alone; a `command-rejected` is a `rejected-command`, the
-// driver's, and the worker folds it into the driver's open one where there is
-// one (§3). The route's own events, the completions, the corrections and the
+// driver's. Which case the ticket then belongs to — the driver's open one a
+// rejection folds into, the stop's open one a stop's event folds into or
+// supersedes — is `cases.ts` (§3, #258). The route's own events, the completions, the corrections and the
 // unloads are news nobody has to act on here — a `route-cancelled` makes
 // nothing of its own, since its closed stops each arrive as `pickup-skipped ·
 // route-cancelled` (#104 §5) — and Finance reads three of them.
@@ -67,6 +68,9 @@ export type PickupEventFacts = {
   /** The route's Actual Assignment driver — null while nobody started it — and its Planned one. */
   actualDriverId: string | null
   plannedDriverId: string | null
+  /** Read beside the payload: the agreement the container served under on the route's service date — its placement valid that day, through the placement's subscription — and the agreement's customer, where it has one. */
+  agreementId: string | null
+  customerId: string | null
 }
 
 /** A rejected command as the worker reads it off the receipt. */
@@ -94,6 +98,8 @@ export type TicketDraftLinks = {
   propertyId: string | null
   sharedCollectionPointId: string | null
   driverId: string | null
+  customerId: string | null
+  agreementId: string | null
 }
 
 /** The ticket the consumer opens: what the API's create takes from the draft, the rest being the event's. */
@@ -164,7 +170,7 @@ export const rejectedCommandSubject = (detail: string): string => boundedSubject
 export const describe = (sentence: string, reason: string | null, note: string | null): string =>
   boundedDescription([`${sentence}.`, reason === null ? undefined : `Reason: ${reason}.`, note === null ? undefined : `Note: ${note}`].filter((part) => part !== undefined).join(" "))
 
-/** The stop's links, with the driver given. An event on the route alone names no stop, so it names no container and no place either, whatever the worker read. */
+/** The stop's links, with the driver given: the stop's container and place, and the customer and agreement it served under. An event on the route alone names no stop, so it names none of them, whatever the worker read. */
 const pickupLinks = (facts: PickupEventFacts, driverId: string | null): TicketDraftLinks => {
   const onStop = facts.pickupId !== null
   return {
@@ -174,6 +180,8 @@ const pickupLinks = (facts: PickupEventFacts, driverId: string | null): TicketDr
     propertyId: onStop ? facts.propertyId : null,
     sharedCollectionPointId: onStop ? facts.sharedCollectionPointId : null,
     driverId,
+    customerId: onStop ? facts.customerId : null,
+    agreementId: onStop ? facts.agreementId : null,
   }
 }
 
@@ -218,7 +226,7 @@ export function ticketFor(event: EventFacts): TicketDraft | undefined {
         source: "driver-app",
         subject: rejectedCommandSubject(event.detail),
         description: describe("The driver's device sent a command the server refused", null, event.detail),
-        links: { routeId: event.routeId, pickupId: event.pickupId, containerId: null, propertyId: null, sharedCollectionPointId: null, driverId: event.driverId },
+        links: { routeId: event.routeId, pickupId: event.pickupId, containerId: null, propertyId: null, sharedCollectionPointId: null, driverId: event.driverId, customerId: null, agreementId: null },
       }
     default:
       return undefined
