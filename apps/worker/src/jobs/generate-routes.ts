@@ -40,9 +40,20 @@
 // `updated_at`; a `resurrect` brings a route an earlier run cancelled back to
 // `planned`; `cancel` marks a `planned` route cancelled by generation with
 // the sentence and skips its open pickups with `regeneration` as the reason,
-// deleting nothing; `leave` and `omit` write nothing. The route that a run
-// wrote names it (`generation_run_id`), and one it left alone keeps the run
-// that last wrote it.
+// deleting nothing; `trim` (#111) skips the run's own open pickups of a
+// `planned` route the same way and leaves the route planned with the
+// sentence as its note, since it carries an open stop the office added and a
+// cancellation would take that with it; `leave` and `omit` write nothing. The
+// route that a run wrote names it (`generation_run_id`), and one it left
+// alone keeps the run that last wrote it.
+//
+// A stop the office added (#111, `origin = office`) is read with the route's
+// others and left as it stands: `pickupChanges` never skips or moves it, and
+// never plans its container onto the route a second time. Which planned
+// routes carry an open one is one statement over the walk's routes, read
+// under their lock, so the domain can trim them rather than cancel them. A
+// route the office made, with no scheme, is never among a scheme's routes:
+// no run reads, refreshes or cancels it.
 //
 // A route the office held (#209: `held_at`, which `assign` and `reschedule`
 // stamp in apps/api) is refreshed like any other — its pickups and its note
@@ -83,7 +94,7 @@ import { generationMatch, generationRun } from "@waste/db/schema/generation"
 import { company, project } from "@waste/db/schema/organisation"
 import { collectionGroup, collectionGroupContainer, collectionGroupContainerType, collectionGroupFraction, routeScheme } from "@waste/db/schema/route-schemes"
 import { withCompany } from "@waste/db/tenant"
-import type { PickupReason, PickupStatus, RouteStatus } from "@waste/domain/execution/vocabulary"
+import type { PickupOrigin, PickupReason, PickupStatus, RouteStatus } from "@waste/domain/execution/vocabulary"
 import {
   compatibilityKey,
   holidayListOf,
@@ -143,6 +154,12 @@ async function takeNumbers(tx: Tx, companyId: string, count: number): Promise<nu
     .returning({ next: company.nextRouteNumber })
   if (row === undefined) throw new Error(`no company ${companyId} to number routes in`)
   return row.next - count
+}
+
+/** A route of the scheme as the walk reads it: generated, so it names its group (`route_scheme_shape` holds a route with a scheme to one). */
+const groupOfRoute = (row: { id: string; collectionGroupId: string | null }): string => {
+  if (row.collectionGroupId === null) throw new Error(`route ${row.id} names a scheme and no group, which route_scheme_shape refuses`)
+  return row.collectionGroupId
 }
 
 /** The stop as a pickup row's columns. */
@@ -241,13 +258,34 @@ async function generate(tx: Tx, runId: string, companyId: string, at: Date): Pro
     .from(route)
     .where(and(eq(route.companyId, companyId), eq(route.routeSchemeId, scheme.id), gte(route.serviceDate, walk.from), lte(route.serviceDate, walk.to)))
     .for("update")
+  // The planned routes among them that carry an open stop the office added (#111): trimmed, never cancelled under it.
+  const officeStops =
+    existingRoutes.length === 0
+      ? new Set<string>()
+      : new Set(
+          (
+            await tx
+              .selectDistinct({ routeId: pickup.routeId })
+              .from(pickup)
+              .where(and(eq(pickup.companyId, companyId), inArray(pickup.routeId, existingRoutes.map((row) => row.id)), eq(pickup.origin, "office"), eq(pickup.status, "planned")))
+          ).map((row) => row.routeId),
+        )
   const plan = planRoutes({
     recurrence,
     holidayPolicy: scheme.holidayPolicy as HolidayPolicy,
     calendar: { holidays, weekend: calendar.weekend as ServiceDay[] },
     window,
     groups: planningGroups,
-    existingRoutes: existingRoutes.map((row) => ({ id: row.id, collectionGroupId: row.collectionGroupId, serviceDate: row.serviceDate, status: row.status as RouteStatus, cancelledByGeneration: row.cancelledByGeneration, held: row.heldAt !== null, operatingDate: row.operatingDate })),
+    existingRoutes: existingRoutes.map((row) => ({
+      id: row.id,
+      collectionGroupId: groupOfRoute(row),
+      serviceDate: row.serviceDate,
+      status: row.status as RouteStatus,
+      cancelledByGeneration: row.cancelledByGeneration,
+      held: row.heldAt !== null,
+      officeStops: officeStops.has(row.id),
+      operatingDate: row.operatingDate,
+    })),
   })
   counts.holidaysSkipped = plan.holidaysSkipped
 
@@ -276,12 +314,24 @@ async function generate(tx: Tx, runId: string, companyId: string, at: Date): Pro
   counts.unlocated = unlocated.size
 
   // The existing pickups of the routes a refresh may touch, once.
-  const refreshing = plan.decisions.filter((decision): decision is Extract<RouteDecision, { kind: "refresh" | "cancel" }> => decision.kind === "refresh" || decision.kind === "cancel").map((decision) => decision.routeId)
+  const refreshing = plan.decisions
+    .filter((decision): decision is Extract<RouteDecision, { kind: "refresh" | "cancel" | "trim" }> => decision.kind === "refresh" || decision.kind === "cancel" || decision.kind === "trim")
+    .map((decision) => decision.routeId)
   const existingPickups = refreshing.length === 0 ? [] : await tx.select().from(pickup).where(and(eq(pickup.companyId, companyId), inArray(pickup.routeId, refreshing)))
   const pickupsOf = (routeId: string): ExistingPickup[] =>
     existingPickups
       .filter((row) => row.routeId === routeId)
-      .map((row) => ({ id: row.id, containerId: row.containerId, position: row.position, status: row.status as PickupStatus, reason: row.reason as PickupReason | null, propertyId: row.propertyId, sharedCollectionPointId: row.sharedCollectionPointId, wasteFractionId: row.wasteFractionId }))
+      .map((row) => ({
+        id: row.id,
+        containerId: row.containerId,
+        position: row.position,
+        origin: row.origin as PickupOrigin,
+        status: row.status as PickupStatus,
+        reason: row.reason as PickupReason | null,
+        propertyId: row.propertyId,
+        sharedCollectionPointId: row.sharedCollectionPointId,
+        wasteFractionId: row.wasteFractionId,
+      }))
   const existingRouteOf = new Map(existingRoutes.map((row) => [row.id, row]))
 
   // The Planned Assignment a create copies and a refresh copies afresh while planned: the group's vehicle, driver and provider, the scheme's start, depot and station.
@@ -322,6 +372,20 @@ async function generate(tx: Tx, runId: string, companyId: string, at: Date): Pro
         await tx.update(pickup).set({ status: "skipped", reason: "regeneration", note: decision.note, outcomeAt: at }).where(and(eq(pickup.companyId, companyId), inArray(pickup.id, open)))
       }
       counts.routesCancelled += 1
+      continue
+    }
+
+    if (decision.kind === "trim") {
+      // The route stays for the office's stop (#111): the run's own open stops go with the sentence, the office's stand, and the route keeps its day and its crew.
+      const own = pickupsOf(decision.routeId).filter((row) => row.origin === "generation" && row.status === "planned").map((row) => row.id)
+      const current = existingRouteOf.get(decision.routeId)!
+      if (own.length === 0 && current.note === decision.note) continue
+      await tx.update(route).set({ note: decision.note, generationRunId: run.id }).where(and(eq(route.companyId, companyId), eq(route.id, decision.routeId)))
+      if (own.length > 0) {
+        await tx.update(pickup).set({ status: "skipped", reason: "regeneration", note: decision.note, outcomeAt: at }).where(and(eq(pickup.companyId, companyId), inArray(pickup.id, own)))
+        reshaped.push({ id: decision.routeId, operatingDate: current.operatingDate })
+      }
+      counts.routesRefreshed += 1
       continue
     }
 

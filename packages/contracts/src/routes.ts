@@ -1,8 +1,10 @@
 // The dated Route on the wire (Issue #104): a dated, executable unit of work
 // assigned to vehicles and drivers — never a Route Scheme, which is what
-// recurs. A route is written by generation (#97 B) and moved by the
-// dispatcher's five commands and the driver's session; there is no create and
-// no patch. It carries its identity (scheme, group, `serviceDate`; ADR-0002),
+// recurs. A route is written by generation (#97 B), or made by the office as
+// an ad-hoc route with no scheme (`RouteCreate`, #111), and moved by the
+// dispatcher's commands and the driver's session; there is no patch. It
+// carries its identity (scheme, group, `serviceDate`; ADR-0002 — both null on
+// an ad-hoc route, whose service date is the day it was made for),
 // the `operatingDate` it runs on, its display `number` with the `label` a
 // person reads (`RC-1042`, `routeLabel`; the two are held together at
 // `label`), the Planned Assignment and the Actual Assignment as two singular
@@ -66,9 +68,10 @@ export const labelMatches = (value: { number: number; label: string }): boolean 
 export const routeFields = {
   ...stamped,
   projectId: Id,
-  routeSchemeId: Id,
-  collectionGroupId: Id,
-  /** The day the recurrence named: the identity, with the scheme and the group. */
+  /** The scheme and the group that generated the route; both null on the office's ad-hoc route (#111), which no generation run touches. */
+  routeSchemeId: Id.nullable(),
+  collectionGroupId: Id.nullable(),
+  /** The day the recurrence named: the identity, with the scheme and the group; on an ad-hoc route, the operating date it was made on. */
   serviceDate: IsoDate,
   /** The day the route runs. */
   operatingDate: IsoDate,
@@ -135,6 +138,26 @@ export const RouteDetail = z
   })
   .refine(labelMatches, labelIsTheNumber)
 export type RouteDetail = z.infer<typeof RouteDetail>
+
+/**
+ * `POST /routes` (#111): an ad-hoc route — the office's, with no scheme and
+ * no group — on a project's day, its service date that same day, with the
+ * depot, the unloading station, the Planned Assignment's vehicle and driver
+ * and the note where given; `planned`, numbered from the company's counter.
+ * Any optional field may be null, as a form sends one for the field it
+ * leaves empty.
+ */
+export const RouteCreate = z.strictObject({
+  projectId: Id,
+  /** The day the route runs, and so its service date. */
+  operatingDate: IsoDate,
+  depotId: Id.nullable().optional(),
+  unloadingStationId: Id.nullable().optional(),
+  vehicleId: Id.nullable().optional(),
+  driverId: Id.nullable().optional(),
+  note: Paragraph.nullable().optional(),
+})
+export type RouteCreate = z.infer<typeof RouteCreate>
 
 /** `POST /routes/:id/assign`: the Planned Assignment moved, any field cleared with null, on a route that has not started. */
 export const RouteAssign = z

@@ -2,8 +2,8 @@
 // @waste/domain/execution/vocabulary's tuples turned into the `z.enum` the
 // routes validate against, so an unknown token never reaches a `CHECK` that
 // would refuse it as a 500 naming nothing. Shared here because seven modules
-// read them — `routes.ts` the route status, `pickups.ts` the pickup's status
-// and reasons, `proofs.ts` the kinds and sources, `unloads.ts` the sources,
+// read them — `routes.ts` the route status, `pickups.ts` the pickup's status,
+// origin and reasons, `proofs.ts` the kinds and sources, `unloads.ts` the sources,
 // `driver-commands.ts` the command kinds, the outcomes and the driver's
 // reasons, `outbox.ts` the event kinds and aggregates — and a list spelled in
 // one place is a list that cannot drift between them.
@@ -26,6 +26,7 @@ import {
   EXECUTION_SOURCES,
   OUTBOX_AGGREGATES,
   OUTBOX_KINDS,
+  PICKUP_ORIGINS,
   PICKUP_OUTCOMES,
   PICKUP_REASONS,
   PICKUP_STATUSES,
@@ -45,6 +46,10 @@ export type PickupStatus = z.infer<typeof PickupStatus>
 /** The statuses a pickup may be moved to: every one but planned, which nothing moves a pickup back to. */
 export const PickupOutcome = z.enum(PICKUP_OUTCOMES)
 export type PickupOutcome = z.infer<typeof PickupOutcome>
+
+/** Who put a stop on its route (#111): generation, or the office, whose stop a refresh never skips or moves. */
+export const PickupOrigin = z.enum(PICKUP_ORIGINS)
+export type PickupOrigin = z.infer<typeof PickupOrigin>
 
 /** Why a stop was skipped or failed: the driver's six and the system's four. */
 export const PickupReason = z.enum(PICKUP_REASONS)

@@ -120,6 +120,8 @@ export const SYSTEM_ROLES: readonly SystemRole[] = [
     grants: charter(
       workspace("operate", VIEW_EDIT_CREATE),
       workspace("route-studio", VIEW_EDIT),
+      // The office's ad-hoc route is a dispatcher's daily job (#111): whoever moves a route may make one.
+      only("route-studio.routes", VIEW_EDIT_CREATE),
       workspace("fleet", VIEW),
       workspace("customers", VIEW),
       only("improve.performance", VIEW),

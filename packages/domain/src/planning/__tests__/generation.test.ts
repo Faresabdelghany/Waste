@@ -54,6 +54,7 @@ const route = (values: Partial<ExistingRoute> & Pick<ExistingRoute, "id" | "serv
   status: "planned",
   cancelledByGeneration: false,
   held: false,
+  officeStops: false,
   operatingDate: values.serviceDate,
   ...values,
 })
@@ -191,6 +192,28 @@ describe("planRoutes", () => {
     ])
   })
 
+  test("a planned route carrying an open stop the office added is trimmed, never cancelled, by the cleanup and by a skipped holiday: the route stays for the office's stop (#111)", () => {
+    const mondaysOnly: SchemeRecurrence = { ...weekly, serviceDays: ["monday"] }
+    const cleanup = planRoutes({
+      recurrence: mondaysOnly,
+      holidayPolicy: "skip",
+      calendar: restingWeekend,
+      window: { from: "2026-10-05", to: "2026-10-11" },
+      groups: [{ ...residual, days: ["monday"] }],
+      existingRoutes: [route({ id: "mon", serviceDate: "2026-10-05" }), route({ id: "thu", serviceDate: "2026-10-08", officeStops: true })],
+    })
+    assert.deepEqual(cleanup.decisions, [
+      { kind: "refresh", routeId: "mon", groupId: residual.id, serviceDate: "2026-10-05", operatingDate: "2026-10-05", note: null, resurrect: false },
+      { kind: "trim", routeId: "thu", groupId: residual.id, serviceDate: "2026-10-08", note: NO_LONGER_SERVES_DATE },
+    ])
+    const holiday = planRoutes({ recurrence: weekly, holidayPolicy: "skip", calendar: withHoliday, window: { from: "2026-10-08", to: "2026-10-08" }, groups: [residual], existingRoutes: [route({ id: "r2", serviceDate: "2026-10-08", officeStops: true })] })
+    assert.deepEqual(holiday.decisions, [{ kind: "trim", routeId: "r2", groupId: residual.id, serviceDate: "2026-10-08", note: "Skipped · Test Day" }])
+    assert.equal(holiday.holidaysSkipped, 1, "the scheme's collection is skipped all the same; only the office's stop keeps the route")
+    // A route still planned by the scheme is refreshed as ever, the office's stop or not: pickupChanges leaves the stop alone.
+    const served = planRoutes({ recurrence: weekly, holidayPolicy: "skip", calendar: restingWeekend, window: { from: "2026-10-05", to: "2026-10-05" }, groups: [residual], existingRoutes: [route({ id: "mon", serviceDate: "2026-10-05", officeStops: true })] })
+    assert.deepEqual(served.decisions.map((decision) => decision.kind), ["refresh"])
+  })
+
   test("routes past the cap are never judged: an over-long window neither creates nor cancels beyond WALK_CAP_DAYS", () => {
     const plan = planRoutes({ recurrence: weekly, holidayPolicy: "skip", calendar: restingWeekend, window: { from: "2026-10-05", to: "2029-01-01" }, groups: [residual], existingRoutes: [route({ id: "far", serviceDate: "2028-06-05", collectionGroupId: glass.id })] })
     assert.deepEqual(plan.walk, { from: "2026-10-05", to: "2027-10-06" })
@@ -291,10 +314,11 @@ describe("resolveStops", () => {
 /* --------------------------------- pickups --------------------------------- */
 
 const stop = (containerId: string, position: number, values: Partial<PlannedStop> = {}): PlannedStop => ({ containerId, position, propertyId: `property-of-${containerId}`, sharedCollectionPointId: null, wasteFractionId: "residual", ...values })
-const existingPickup = (id: string, containerId: string, position: number, values: Partial<ExistingPickup> = {}): ExistingPickup => ({
+const existingPickup = (id: string, containerId: string | null, position: number, values: Partial<ExistingPickup> = {}): ExistingPickup => ({
   id,
   containerId,
   position,
+  origin: "generation",
   status: "planned",
   reason: null,
   propertyId: `property-of-${containerId}`,
@@ -328,6 +352,24 @@ describe("pickupChanges", () => {
     assert.deepEqual(changes.update, [{ ...stop("c4", 1), id: "p4", resurrect: true }])
     assert.deepEqual(changes.insert, [])
     assert.equal(changes.unchanged, 2, "the dispatcher's removal and the completed stop stand, in or out of the plan")
+  })
+
+  test("a stop the office added is never skipped as no longer planned and never moved, an address-only one included, and a container it holds is not planned onto the route a second time (#111)", () => {
+    const existing = [
+      existingPickup("p1", "c1", 1),
+      // The office's: a container the plan no longer holds, at a position the plan now gives another stop, and an address-only stop.
+      existingPickup("o1", "c7", 2, { origin: "office" }),
+      existingPickup("o2", null, 3, { origin: "office", propertyId: "property-9", wasteFractionId: "bulky" }),
+      // The office's again: a container the plan holds too, which the office's stop stands for.
+      existingPickup("o3", "c3", 4, { origin: "office" }),
+    ]
+    const changes = pickupChanges(existing, [stop("c2", 1), stop("c1", 2), stop("c3", 3)])
+    assert.deepEqual(changes.insert, [stop("c2", 1)], "c3 is the office's stop already")
+    assert.deepEqual(changes.update, [{ ...stop("c1", 2), id: "p1", resurrect: false }])
+    assert.deepEqual(changes.skip, [])
+    assert.equal(changes.unchanged, 3, "each of the office's three stands as the office left it, counted once")
+    // A plan that holds nothing any more skips the run's own stop and none of the office's.
+    assert.deepEqual(pickupChanges(existing, []).skip, [{ id: "p1", note: REMOVED_FROM_DAY_PLAN }])
   })
 })
 

@@ -43,7 +43,7 @@ import { alert, ticket, ticketEvent } from "@waste/db/schema/resolution"
 import { plan, planLeg, planStop, routingQuota } from "@waste/db/schema/routing"
 import { collectionGroup, routeScheme } from "@waste/db/schema/route-schemes"
 import { withCompany } from "@waste/db/tenant"
-import type { PickupReason, PickupStatus, RouteStatus } from "@waste/domain/execution/vocabulary"
+import type { PickupOrigin, PickupReason, PickupStatus, RouteStatus } from "@waste/domain/execution/vocabulary"
 import { eq } from "drizzle-orm"
 
 import type { OutboxJob } from "../jobs/open-tickets"
@@ -141,9 +141,17 @@ export type SeededRoute = { id: string; number: number; label: string; pickupIds
 export type RouteSeed = {
   /** `completed` unless said otherwise: the route Mads went out on and ended; `cancelled` is the dispatcher's, started by nobody; `planned` has gone nowhere yet, its order still the office's to change. */
   status?: Extract<RouteStatus, "completed" | "cancelled" | "active" | "planned">
-  /** The stops in position order; both bins, decided as given. */
-  pickups?: { container: "bin1" | "bin2"; status: PickupStatus; reason?: PickupReason; note?: string }[]
+  /** The stops in position order; both bins, decided as given. A stop with no container is an address-only one at Havnegade, the office's (#111). */
+  pickups?: StopSeed[]
+  /** The office's ad-hoc route (#111): no scheme and no group. */
+  adHoc?: boolean
 }
+
+/** One stop: a bin, or none for an address-only stop; generation's unless said, and an address-only one is always the office's. */
+export type StopSeed = { container: "bin1" | "bin2" | null; status: PickupStatus; reason?: PickupReason; note?: string; origin?: PickupOrigin }
+
+/** The place a stop is at: Parkvej for the first bin, Havnegade for the second and for an address-only stop. */
+const placeOf = (tenant: ConsumerTenant, container: StopSeed["container"]) => (container === "bin1" ? tenant.properties.parkvej : tenant.properties.havnegade)
 
 /** The stamps a status carries (`route_stamps_shape`) and the actual assignment (`route_actual_shape`): a started route has Mads on it, a cancelled one nobody. */
 function stampsFor(status: NonNullable<RouteSeed["status"]>) {
@@ -168,7 +176,7 @@ export async function seedRoute(pool: Database, tenant: ConsumerTenant, seed: Ro
   const wentOut = stamps.startedAt !== null
   const routeId = testId()
   const collectionGroupId = testId()
-  const stops = seed.pickups ?? [
+  const stops: StopSeed[] = seed.pickups ?? [
     { container: "bin1", status: "failed", reason: "not-presented", note: "No bin at the kerb" },
     { container: "bin2", status: "skipped", reason: "route-ended" },
   ]
@@ -176,13 +184,13 @@ export async function seedRoute(pool: Database, tenant: ConsumerTenant, seed: Ro
   let number = 0
   await withCompany(pool.db, companyId, async (tx: Tx) => {
     number = await nextNumber(tx, companyId, "nextRouteNumber")
-    await tx.insert(collectionGroup).values({ id: collectionGroupId, companyId, projectId, routeSchemeId: tenant.schemeId, name: `Group ${number}`, position: number, days: ["monday"], stopSource: "rule" })
+    if (seed.adHoc !== true) await tx.insert(collectionGroup).values({ id: collectionGroupId, companyId, projectId, routeSchemeId: tenant.schemeId, name: `Group ${number}`, position: number, days: ["monday"], stopSource: "rule" })
     await tx.insert(route).values({
       id: routeId,
       companyId,
       projectId,
-      routeSchemeId: tenant.schemeId,
-      collectionGroupId,
+      routeSchemeId: seed.adHoc === true ? null : tenant.schemeId,
+      collectionGroupId: seed.adHoc === true ? null : collectionGroupId,
       serviceDate: FIXTURE_DAY,
       operatingDate: FIXTURE_DAY,
       status,
@@ -196,16 +204,16 @@ export async function seedRoute(pool: Database, tenant: ConsumerTenant, seed: Ro
     })
     await tx.insert(pickup).values(
       stops.map((stop, index) => {
-        const bin = tenant.containers[stop.container]
-        const place = stop.container === "bin1" ? tenant.properties.parkvej : tenant.properties.havnegade
+        const place = placeOf(tenant, stop.container)
         return {
           id: pickupIds[index],
           companyId,
           projectId,
           routeId,
-          containerId: bin.id,
+          containerId: stop.container === null ? null : tenant.containers[stop.container].id,
           position: index + 1,
           status: stop.status,
+          origin: stop.container === null ? "office" : (stop.origin ?? "generation"),
           reason: stop.reason ?? null,
           note: stop.note ?? null,
           propertyId: place.id,
@@ -223,15 +231,16 @@ export async function seedRoute(pool: Database, tenant: ConsumerTenant, seed: Ro
 const STAMPS = { createdAt: at("06:00").toISOString(), updatedAt: at("07:12").toISOString() }
 
 /** The `Pickup` as the wire carries it, for a payload; `proofs` beside it where the door wrote one. */
-export function pickupPayload(tenant: ConsumerTenant, routeId: string, pickupId: string, stop: { container: "bin1" | "bin2"; status: PickupStatus; reason?: PickupReason; note?: string; position?: number }, proofs?: ProofOfService[]): Pickup & { proofs?: ProofOfService[] } {
-  const place = stop.container === "bin1" ? tenant.properties.parkvej : tenant.properties.havnegade
+export function pickupPayload(tenant: ConsumerTenant, routeId: string, pickupId: string, stop: StopSeed & { position?: number }, proofs?: ProofOfService[]): Pickup & { proofs?: ProofOfService[] } {
+  const place = placeOf(tenant, stop.container)
   return {
     id: pickupId,
     projectId: tenant.projectId,
     routeId,
-    containerId: tenant.containers[stop.container].id,
+    containerId: stop.container === null ? null : tenant.containers[stop.container].id,
     position: stop.position ?? 1,
     status: stop.status,
+    origin: stop.container === null ? "office" : (stop.origin ?? "generation"),
     reason: stop.reason ?? null,
     note: stop.note ?? null,
     propertyId: place.id,

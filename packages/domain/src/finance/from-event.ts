@@ -35,7 +35,11 @@
 // day cleared, the completion stale news, its next completion its own event.
 // `answered`, `no-action` and `duplicate`, the route's events, the other
 // pickup events, the unload and the two Finance publishes are nothing here.
-// A credit for a missed collection is never the consumer's (§7.11).
+// A credit for a missed collection is never the consumer's (§7.11), and a
+// stop the office added (#111, `origin = office`) — a re-collection, a
+// container put on a route by hand, an address-only stop — is no pickup
+// charge either: its completion and its correction to `completed` are
+// nothing here, the extra collection's billable event being a follow-up's.
 //
 // Two of the facts are the table's word and not the payload's, because
 // pg-boss delivers at least once and in no promised order (part B): the
@@ -50,7 +54,7 @@
 // What the draft does not carry is the writer's: `createdBy` null,
 // `sourceEventId` the event's id (`billable_event_origin_shape` ties the two),
 // the stamps, and the row's own id.
-import type { OutboxKind, PickupOutcome } from "../execution/vocabulary"
+import type { OutboxKind, PickupOrigin, PickupOutcome } from "../execution/vocabulary"
 import type { AgreementStatus, CustomerKind, ProductUnit } from "../registry/vocabulary"
 import type { TicketResolution } from "../resolution/vocabulary"
 import { priceOccurrence, type PriceLabels, type PricedAmounts, type PricedList, type PriceRow } from "./pricing"
@@ -96,9 +100,12 @@ export type PickupEventFacts<Row extends PriceRow = PriceRow> = {
   pickupId: string
   /** The route's service date, `YYYY-MM-DD`: the identity day, never the operating date. */
   serviceDate: string
-  /** The route's scheme's planning area, the price row's zone; null for a scheme without one. */
+  /** The route's scheme's planning area, the price row's zone; null for a scheme without one, and for the office's ad-hoc route, which has no scheme (#111). */
   planningAreaId: string | null
-  containerTypeId: string
+  /** Who put the stop on its route (#111): an office stop's collection is no pickup event of the consumer's. */
+  origin: PickupOrigin
+  /** The container's type; null for an address-only stop, which names no container (#111). */
+  containerTypeId: string | null
   /** The pickup's fraction on the day. */
   wasteFractionId: string
   /** The pickup's status as the worker read it beside the payload — the table's word now, not the payload's then: `completed` on a completion still standing, the outcome a correction gave. */
@@ -163,8 +170,10 @@ export const isBillableResolution = (resolution: TicketResolution): boolean => (
 
 const NO_LINKS: BillableEventLinks = { routeId: null, pickupId: null, ticketId: null, reversesEventId: null }
 
-/** A completed pickup's event: blocked with `no-subscription` where no placement was valid, nothing under a `month` product, otherwise priced by the resolver or blocked with the reason that stood in the way. */
+/** A completed pickup's event: nothing for a stop the office added, blocked with `no-subscription` where no placement was valid, nothing under a `month` product, otherwise priced by the resolver or blocked with the reason that stood in the way. */
 function pickupDraft<Row extends PriceRow>(facts: PickupEventFacts<Row>, labels: PriceLabels): BillableEventDraft | undefined {
+  // The office's extra collection (#111) — a re-collection, a container added to a route, an address-only stop — is not a pickup charge; its billable event is the follow-up's.
+  if (facts.origin === "office") return undefined
   const links: BillableEventLinks = { ...NO_LINKS, routeId: facts.routeId, pickupId: facts.pickupId }
   const base = { kind: "pickup" as const, serviceDate: facts.serviceDate, quantity: 1, links }
   const placement = facts.placement

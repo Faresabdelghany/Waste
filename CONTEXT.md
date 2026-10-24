@@ -145,7 +145,7 @@ A versioned geographic area used for route planning, service operations, or noti
 _Avoid_: Service area, contract area, zone (unqualified)
 
 **Route**:
-A dated, executable unit of work assigned to vehicles and drivers.
+A dated, executable unit of work assigned to vehicles and drivers. Generated from a Route Scheme, or made by the office as an ad-hoc Route with no scheme, which generation never touches.
 _Avoid_: Route scheme, scenario
 
 **Planned Assignment**:
@@ -161,7 +161,7 @@ The office's release of a planned Route to execution: it requires a Planned Assi
 _Avoid_: Assign (dispatch releases an assignment, it does not create one), start (the driver's act), send
 
 **Pickup**:
-One stop-level service action generated inside a dated Route. It exists from planning through execution, and its outcome and proof are recorded against that same Pickup.
+One stop-level service action inside a dated Route, generated from its scheme or added by the office — a container, or an address with the waste fraction collected there — which generation then leaves where the office put it. It exists from planning through execution, and its outcome and proof are recorded against that same Pickup.
 _Avoid_: Pickup history, separate service event, property, route
 
 **Stop**:

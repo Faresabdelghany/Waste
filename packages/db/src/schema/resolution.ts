@@ -34,6 +34,10 @@
 // no other does), `ticket_recollection_shape` (the route a re-collection rides
 // on goes with `recollected`) and `ticket_closed_shape` (a closed ticket has
 // its instant); `reopen` clears all three, and the history keeps the closing.
+// Since 0016 (#111) the re-collection may name its stop too,
+// `recollection_pickup_id`, a pickup *of that route* through the same
+// project key the ticket's own pickup reaches, `ticket_recollection_pickup_shape`
+// saying the stop names its route; `reopen` clears it with the route.
 // Nothing here is effective-dated: a ticket carries a status, which is what a
 // record with no period does.
 //
@@ -134,6 +138,8 @@ export const ticket = wms.table(
     resolution: text(),
     /** The route the re-collection rides on, with `recollected`. */
     recollectionRouteId: uuid(),
+    /** The stop of that route the re-collection is, where the office added one (#111, migration 0016); never without the route. */
+    recollectionPickupId: uuid(),
     /** When the ticket was completed or rejected; cleared by reopen. */
     closedAt: instant(),
   },
@@ -154,6 +160,8 @@ export const ticket = wms.table(
     // The parent is a ticket of the same project, through this table's own project key.
     projectReference(t, [t.parentTicketId], t as ProjectTable),
     projectReference(t, [t.recollectionRouteId], route),
+    // The re-collection's stop is a stop of the route it rides on (#111): the key carries the route on both sides, as the ticket's own pickup's does.
+    projectReference(t, [t.recollectionRouteId, t.recollectionPickupId], pickup, [pickup.routeId, pickup.id]),
     tenantUnique(t, t.number),
     projectKey(t),
     oneOf(t.kind, TICKET_KINDS),
@@ -171,6 +179,8 @@ export const ticket = wms.table(
     check(tableObjectName(t.id.table, "resolution_shape", "ticket"), sql`(${t.status} = 'completed') = (${t.resolution} is not null)`),
     // The route a re-collection rides on goes with the resolution that says one was arranged. `is not distinct from`, because `null = 'recollected'` is null and a null check passes: an open ticket has no resolution and may still not carry the route.
     check(tableObjectName(t.id.table, "recollection_shape", "ticket"), sql`${t.recollectionRouteId} is null or ${t.resolution} is not distinct from 'recollected'`),
+    // The re-collection's stop names its route (#111): Postgres leaves a composite key with a null member unchecked.
+    check(tableObjectName(t.id.table, "recollection_pickup_shape", "ticket"), sql`${t.recollectionPickupId} is null or ${t.recollectionRouteId} is not null`),
     // A closed ticket has the instant it closed, and an open one none.
     check(tableObjectName(t.id.table, "closed_shape", "ticket"), sql`(${t.status} in ('completed', 'rejected')) = (${t.closedAt} is not null)`),
     // The consumer's idempotency key: one ticket per outbox event, the rows with one in the index and only those.
@@ -189,6 +199,7 @@ export const ticket = wms.table(
     tenantIndex(t, t.customerId),
     tenantIndex(t, t.parentTicketId),
     tenantIndex(t, t.recollectionRouteId),
+    tenantIndex(t, t.recollectionPickupId),
   ],
 )
 

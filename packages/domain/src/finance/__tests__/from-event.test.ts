@@ -45,6 +45,7 @@ const pickupEvent = (kind: "pickup-completed" | "pickup-corrected", values: Part
   pickupId: PICKUP,
   serviceDate: DAY,
   planningAreaId: HARBOR,
+  origin: "generation",
   containerTypeId: BIN_240,
   wasteFractionId: RESIDUAL,
   outcome: "completed",
@@ -123,6 +124,12 @@ describe("billableFor a completed pickup", () => {
     }
     assert.equal(billableFor(pickupEvent("pickup-completed", { liveEvent: live() })), undefined, "already charged for")
     assert.equal(billableFor(pickupEvent("pickup-completed", { liveEvent: live({ price: null }) })), undefined, "a blocked live event is still the pickup's event")
+  })
+
+  test("is nothing for a stop the office added (#111), a container's or an address-only one: the extra collection's billable event is a follow-up's to decide, never a pickup's charge", () => {
+    assert.equal(billableFor(pickupEvent("pickup-completed", { origin: "office" })), undefined, "a container placed under a per-pickup product")
+    assert.equal(billableFor(pickupEvent("pickup-completed", { origin: "office", containerTypeId: null, placement: null })), undefined, "an address-only stop, no placement and no block")
+    assert.equal(billableFor(pickupEvent("pickup-corrected", { origin: "office", outcome: "completed" })), undefined, "a correction to completed records nothing either")
   })
 })
 

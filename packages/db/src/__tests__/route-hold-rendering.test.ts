@@ -1,9 +1,10 @@
 // The route's hold (#209) as drizzle-kit writes it: `held_at`, the instant
 // the office last moved a planned route's day, start or Planned Assignment by
 // hand, and `route_hold_shape`, which keeps a hold on a planned route alone —
-// two ALTER TABLE statements diffed from 0013's spelling (route-as-of.ts),
-// since an applied file is never edited; execution-rendering.test.ts maps
-// today's route back (`CHANGED_IN_0015`). Then migration 0015, which is
+// two ALTER TABLE statements diffed from 0013's spelling to 0015's
+// (route-as-of.ts), not to today's, since 0016 changed the route again (#111)
+// and an applied file is never edited; execution-rendering.test.ts maps
+// today's route back (`CHANGED_IN_0016`, then `CHANGED_IN_0015`). Then migration 0015, which is
 // exactly those two: a column on a table already fenced and touched needs no
 // hand-written statement of its own (migrations/README.md). No database.
 import assert from "node:assert/strict"
@@ -27,8 +28,8 @@ const altered = [
   `ALTER TABLE "wms"."route" ADD CONSTRAINT "route_hold_shape" CHECK (${ref("route", "held_at")} is null or ${ref("route", "status")} = 'planned');`,
 ]
 
-/** The ALTER TABLEs as drizzle-kit writes them: the route from 0013's spelling to today's. */
-const generatedAlterations = (): Promise<string[]> => statementsBetween({ route: routeAsOf("0013") }, { route })
+/** The ALTER TABLEs as drizzle-kit writes them: the route from 0013's spelling to 0015's. */
+const generatedAlterations = (): Promise<string[]> => statementsBetween({ route: routeAsOf("0013") }, { route: routeAsOf("0015") })
 
 const fileStatements = async (): Promise<string[]> => statementsOf(await readFile(join(MIGRATIONS_FOLDER, MIGRATION), "utf8"))
 

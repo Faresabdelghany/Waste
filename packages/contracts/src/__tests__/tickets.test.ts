@@ -12,7 +12,9 @@ import {
   pickupWithItsRoute,
   pickupWithItsRouteOnPatch,
   RECOLLECTION_ROUTE_WITH_RECOLLECTED,
+  RECOLLECTION_STOP_WITH_ITS_ROUTE,
   recollectionRouteWithRecollected,
+  recollectionStopWithItsRoute,
   Ticket,
   TicketAssign,
   TicketComment,
@@ -60,6 +62,7 @@ const ticket = {
   links,
   resolution: null,
   recollectionRouteId: null,
+  recollectionPickupId: null,
   closedAt: null,
   ...STAMPS,
 }
@@ -107,6 +110,10 @@ describe("Ticket", () => {
     assert.deepEqual(Ticket.parse(consumers), consumers)
     const completed = { ...ticket, status: "completed", resolution: "recollected", recollectionRouteId: THIRD, closedAt: "2026-10-06T09:00:00.000Z" }
     assert.deepEqual(Ticket.parse(completed), completed)
+    const onItsStop = { ...completed, recollectionPickupId: OTHER }
+    assert.deepEqual(Ticket.parse(onItsStop), onItsStop, "the stop the office added for it (#111)")
+    const { recollectionPickupId: _stop, ...before } = completed
+    assert.deepEqual(Ticket.parse(before), completed, "an event the outbox took before #111 names no stop, and reads as null")
     assert.equal(Object.keys(TicketLinks.shape).length, 9)
   })
 
@@ -162,6 +169,7 @@ describe("TicketCreate", () => {
       ["sourceEventId", OTHER],
       ["resolution", "answered"],
       ["recollectionRouteId", OTHER],
+      ["recollectionPickupId", OTHER],
     ] as const) {
       const issues = refusal(TicketCreate.safeParse({ ...body, [key]: value }))
       assert.deepEqual(
@@ -217,6 +225,7 @@ describe("TicketPatch", () => {
       ["label", "T-1"],
       ["resolution", "answered"],
       ["recollectionRouteId", OTHER],
+      ["recollectionPickupId", OTHER],
       ["closedAt", WHEN],
       ["occurredAt", WHEN],
       ["createdBy", OTHER],
@@ -275,6 +284,15 @@ describe("the seven commands and the comment", () => {
     assert.equal(recollectionRouteWithRecollected({ resolution: "recollected", recollectionRouteId: OTHER }), true)
     assert.equal(recollectionRouteWithRecollected({ resolution: "no-action", recollectionRouteId: OTHER }), false)
     assert.equal(recollectionRouteWithRecollected({ resolution: "no-action" }), true)
+  })
+
+  test("complete may name the stop the office added for the re-collection beside its route, and never without it (#111)", () => {
+    const withStop = { resolution: "recollected", note: "On the extra stop", recollectionRouteId: OTHER, recollectionPickupId: THIRD }
+    assert.deepEqual(TicketComplete.parse(withStop), withStop)
+    assert.deepEqual(refusal(TicketComplete.safeParse({ resolution: "recollected", note: "x", recollectionPickupId: THIRD })), [{ path: "recollectionPickupId", message: RECOLLECTION_STOP_WITH_ITS_ROUTE }])
+    assert.deepEqual(refusal(TicketComplete.safeParse({ resolution: "serviced", note: "x", recollectionRouteId: OTHER, recollectionPickupId: THIRD })), [{ path: "recollectionRouteId", message: RECOLLECTION_ROUTE_WITH_RECOLLECTED }], "with recollected alone, through its route")
+    assert.equal(recollectionStopWithItsRoute({ recollectionPickupId: THIRD }), false)
+    assert.equal(recollectionStopWithItsRoute({ recollectionRouteId: OTHER }), true)
   })
 
   test("a comment carries a body, is internal unless said, and may attach a pdf", () => {

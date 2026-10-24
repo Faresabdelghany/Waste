@@ -24,7 +24,10 @@
 // a command cannot claim a stop was skipped by regeneration. `PICKUP_OUTCOMES`
 // is the statuses minus `planned`: what a correction gives and a correction
 // proof carries, a list of its own since a column's check and an enum read it
-// (nothing moves a pickup back to planned). `PROOF_KINDS` is the glossary's
+// (nothing moves a pickup back to planned). `PICKUP_ORIGINS` says who put a
+// stop on its route (#111): generation, or the office by hand — an extra stop
+// on a generated route or a stop of a route the office made — which
+// generation's refresh then leaves where the office put it. `PROOF_KINDS` is the glossary's
 // "time, GPS, photo, weight, signature, or driver event": seven driver events
 // — `arrival`, `completion`, `skip`, `failure`, `problem` about a stop,
 // `route-started` and `route-ended` about the route, so what the device said
@@ -57,6 +60,8 @@ export const PICKUP_STATUSES = ["planned", "completed", "skipped", "failed"] as 
 export const PICKUP_OUTCOMES = ["completed", "skipped", "failed"] as const
 /** Why a stop was skipped or failed: the driver's six, then the four the system writes. */
 export const PICKUP_REASONS = ["inaccessible", "contamination", "not-presented", "capacity", "safety", "other", "route-ended", "route-cancelled", "removed-by-dispatcher", "regeneration"] as const
+/** Who put a stop on its route (#111): generation, or the office by hand, whose stop a refresh never skips or moves. */
+export const PICKUP_ORIGINS = ["generation", "office"] as const
 /** What a Proof of Service is: seven driver events — five about a stop, two about the route — four kinds of evidence, and the dispatcher's correction. */
 export const PROOF_KINDS = ["arrival", "completion", "skip", "failure", "problem", "route-started", "route-ended", "photo", "weight", "signature", "note", "correction"] as const
 /** Who recorded a proof or an unload. */
@@ -74,6 +79,7 @@ export type RouteStatus = (typeof ROUTE_STATUSES)[number]
 export type PickupStatus = (typeof PICKUP_STATUSES)[number]
 export type PickupOutcome = (typeof PICKUP_OUTCOMES)[number]
 export type PickupReason = (typeof PICKUP_REASONS)[number]
+export type PickupOrigin = (typeof PICKUP_ORIGINS)[number]
 export type ProofKind = (typeof PROOF_KINDS)[number]
 export type ExecutionSource = (typeof EXECUTION_SOURCES)[number]
 export type DriverCommandKind = (typeof DRIVER_COMMAND_KINDS)[number]
@@ -102,6 +108,7 @@ export const EXECUTION_VOCABULARIES = {
   PICKUP_STATUSES,
   PICKUP_OUTCOMES,
   PICKUP_REASONS,
+  PICKUP_ORIGINS,
   PROOF_KINDS,
   EXECUTION_SOURCES,
   DRIVER_COMMAND_KINDS,

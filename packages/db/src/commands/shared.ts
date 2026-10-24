@@ -22,7 +22,8 @@
 //                  row lock, so two documents numbered at once take turns and
 //                  a transaction that fails rolls its number back with its
 //                  rows, the series unbroken. The route's counter is
-//                  generation's to take (#97 part B), in blocks, not here.
+//                  generation's to take (#97 part B), in blocks, and the
+//                  office's one at a time for an ad-hoc route (#111).
 //   a refusal    — a rule a statement holds and the caller answers for: the
 //                  API as a 409 with a sentence, the worker as a failed job
 //                  or a line in its log. A statement throws `Refused` with

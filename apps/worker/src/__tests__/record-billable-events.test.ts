@@ -97,7 +97,7 @@ describe("finance.record-billable-events against Postgres", { skip }, () => {
   })
 
   /** A pickup's payload as `PickupDetail` spells it, from the rows seeded: the consumer parses it for the ids and reads the rest from the table. */
-  const pickupPayload = (routeId: string, pickupId: string, containerId: string, status: "completed" | "skipped" | "failed" = "completed") => ({
+  const pickupPayload = (routeId: string, pickupId: string, containerId: string | null, status: "completed" | "skipped" | "failed" = "completed") => ({
     id: pickupId,
     createdAt: NOON.toISOString(),
     updatedAt: NOON.toISOString(),
@@ -214,6 +214,20 @@ describe("finance.record-billable-events against Postgres", { skip }, () => {
     assert.deepEqual([again.did, again.billableEventId], ["nothing", null])
     assert.equal((await eventsOfPickup(pickupId)).length, 1)
     assert.match(lines.at(-1) ?? "", /^finance\.record-billable-events: pickup-completed [0-9a-f-]{36} → nothing$/)
+  })
+
+  test("a stop the office added records nothing when it is completed — a placed container under a per-pickup product, or an address-only stop on an ad-hoc route — read without a dead letter, the extra collection's billable event being a follow-up's (#111)", async () => {
+    const bin = await placeBin(pool, tenant, "BIN-OFF-1", { agreementId: tenant.agreements.anna.id, productId: tenant.products.residual.id })
+    const extra = await seedCompletedRoute(pool, tenant, [{ containerId: bin.containerId, propertyId: bin.propertyId, origin: "office" }])
+    const [placedStop] = extra.pickupIds
+    const placed = await handle(published("pickup-completed", placedStop, { ...pickupPayload(extra.id, placedStop, bin.containerId), origin: "office" }))
+    assert.deepEqual([placed.did, placed.billableEventId], ["nothing", null], "the placement would price it, and the office's stop is not a pickup charge")
+    assert.deepEqual(await eventsOfPickup(placedStop), [])
+    const adHoc = await seedCompletedRoute(pool, tenant, [{ containerId: null, propertyId: tenant.properties.parkvej.id, origin: "office" }], FIXTURE_DAY, { adHoc: true })
+    const [addressOnly] = adHoc.pickupIds
+    assert.equal((await handle(published("pickup-completed", addressOnly, { ...pickupPayload(adHoc.id, addressOnly, null), origin: "office" }))).did, "nothing", "no scheme, no container: read all the same")
+    assert.equal((await handle(published("pickup-corrected", addressOnly, { ...pickupPayload(adHoc.id, addressOnly, null), origin: "office" }))).did, "nothing", "a correction to completed records nothing either")
+    assert.deepEqual(await eventsOfPickup(addressOnly), [])
   })
 
   test("the negotiated row wins for its customer, whatever the conditions score", async () => {

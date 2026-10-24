@@ -117,13 +117,14 @@ export function toRouteRecord(route: RouteRead, context: MappingContext): Busine
   const vehicle = route.planned.vehicleId === null ? undefined : callsignOf(nameVia(context, "vehicle", route.planned.vehicleId))
   const driver = route.planned.driverId === null ? undefined : nameVia(context, "driver", route.planned.driverId)
   const trailer = route.planned.trailerId === null ? undefined : callsignOf(nameVia(context, "vehicle", route.planned.trailerId))
-  const scheme = context.resolve.byServerId(route.routeSchemeId)
+  // The office's ad-hoc route (#111) names no scheme and no group.
+  const scheme = route.routeSchemeId === null ? undefined : context.resolve.byServerId(route.routeSchemeId)
   // The route carries no area on the wire: it is filed under its scheme's, once the schemes are loaded (#177).
   const area = scheme?.facts["Planning area"]
   const facts: Record<string, string> = {
     Project: project.name ?? project.webId,
     ...(area === undefined ? {} : { Area: area }),
-    "Route scheme": nameVia(context, SCHEME_PREFIX, route.routeSchemeId),
+    ...(route.routeSchemeId === null ? {} : { "Route scheme": nameVia(context, SCHEME_PREFIX, route.routeSchemeId) }),
     "Service date": route.serviceDate,
     "Operating date": route.operatingDate,
   }
@@ -162,7 +163,7 @@ export function toRouteRecord(route: RouteRead, context: MappingContext): Busine
     ...stampFacts(route, context.now),
     owner: driver ?? "Unassigned",
     value: stopsValue(route.progress),
-    description: `Generated from ${scheme?.name ?? "its route scheme"} for ${route.serviceDate}${route.operatingDate === route.serviceDate ? "" : `, running ${route.operatingDate}`}.${held === undefined ? "" : ` Held by the office since ${held}.`}`,
+    description: `${route.routeSchemeId === null ? "Made by the office" : `Generated from ${scheme?.name ?? "its route scheme"}`} for ${route.serviceDate}${route.operatingDate === route.serviceDate ? "" : `, running ${route.operatingDate}`}.${held === undefined ? "" : ` Held by the office since ${held}.`}`,
     facts,
     companyId: context.companyRecordId ?? FIXTURE_COMPANY_ID,
     projectIds: [project.webId],
@@ -170,9 +171,9 @@ export function toRouteRecord(route: RouteRead, context: MappingContext): Busine
     recordKind: "Route",
     submittedValues: {
       projectId: project.webId,
-      schemeId: webIdVia(context, SCHEME_PREFIX, route.routeSchemeId),
+      schemeId: reference(SCHEME_PREFIX, route.routeSchemeId),
       // A group is no record of its own (it rides in its scheme's JSON, #201): the resolver would miss it every time.
-      collectionGroupId: webIdOf(GROUP_PREFIX, route.collectionGroupId),
+      collectionGroupId: route.collectionGroupId === null ? "" : webIdOf(GROUP_PREFIX, route.collectionGroupId),
       serviceDate: route.serviceDate,
       operatingDate: route.operatingDate,
       // The date the map, the stop index and the scheme's tabs read a generated route by.

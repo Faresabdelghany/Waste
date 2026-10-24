@@ -383,6 +383,15 @@ describe("the Resolution tables against a fresh database", { skip: database.skip
       await tx.insert(ticket).values(opened({ routeId: a.secondRoute, pickupId: a.secondPickup }))
     }))
 
+  test("a re-collection names a stop of the route it rides on and no other route's (23503), and never a stop without its route (23514 ticket_recollection_pickup_shape) (#111)", () =>
+    seeded(async (tx) => {
+      const recollected = { status: "completed", closedAt: at(16), resolution: "recollected" } as const
+      await assert.rejects(tx.transaction((savepoint) => savepoint.insert(ticket).values(opened({ ...recollected, recollectionRouteId: a.secondRoute, recollectionPickupId: a.pickup }))), refusedWith("23503", /ticket_recollection_route_id_recollection_pickup_id_fk/), "the completed route's stop, named with the planned route")
+      await assert.rejects(tx.transaction((savepoint) => savepoint.insert(ticket).values(opened({ ...recollected, recollectionPickupId: a.secondPickup }))), refusedWith("23514", /ticket_recollection_pickup_shape/), "Postgres leaves a composite key with a null member unchecked, so the shape check says the stop names its route")
+      const [made] = await tx.insert(ticket).values(opened({ ...recollected, recollectionRouteId: a.secondRoute, recollectionPickupId: a.secondPickup })).returning({ stop: ticket.recollectionPickupId })
+      assert.equal(made.stop, a.secondPickup)
+    }))
+
   test("a ticket is a person's or an event's, never both and never neither (23514 ticket_origin_shape); one ticket per outbox event (23505 ticket_source_event_id_idx), a null passing", () =>
     seeded(async (tx) => {
       await assert.rejects(tx.transaction((savepoint) => savepoint.insert(ticket).values(opened({ createdBy: a.account, sourceEventId: a.outbox }))), refusedWith("23514", /ticket_origin_shape/), "a person and an event")

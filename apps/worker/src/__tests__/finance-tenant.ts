@@ -38,7 +38,7 @@ import { planningArea } from "@waste/db/schema/planning-areas"
 import { ticket, ticketEvent } from "@waste/db/schema/resolution"
 import { collectionGroup, routeScheme } from "@waste/db/schema/route-schemes"
 import { withCompany } from "@waste/db/tenant"
-import type { PickupStatus } from "@waste/domain/execution/vocabulary"
+import type { PickupOrigin, PickupStatus } from "@waste/domain/execution/vocabulary"
 import type { TicketResolution } from "@waste/domain/resolution/vocabulary"
 import { eq, sql } from "drizzle-orm"
 
@@ -191,7 +191,8 @@ export async function placeBin(pool: Database, tenant: FinanceTenant, label: str
   return placed
 }
 
-export type StopSeed = { containerId: string; propertyId: string; status?: PickupStatus; wasteFractionId?: string }
+/** A stop to seed: a container's, or — with `containerId` null — an address-only one, which only the office adds (#111). */
+export type StopSeed = { containerId: string | null; propertyId: string; status?: PickupStatus; wasteFractionId?: string; origin?: PickupOrigin }
 
 export type SeededRoute = { id: string; number: number; serviceDate: string; pickupIds: string[] }
 
@@ -210,9 +211,9 @@ async function nextRouteNumber(tx: Tx, companyId: string): Promise<number> {
  * A completed route of the scheme on a day with the stops given, each
  * `completed` unless said, with the stamps a completed route carries. Its
  * group is minted per route, since the generation key holds one route per
- * scheme, group and service date.
+ * scheme, group and service date; an ad-hoc route (#111) has neither.
  */
-export async function seedCompletedRoute(pool: Database, tenant: FinanceTenant, stops: StopSeed[], serviceDate = FIXTURE_DAY): Promise<SeededRoute> {
+export async function seedCompletedRoute(pool: Database, tenant: FinanceTenant, stops: StopSeed[], serviceDate = FIXTURE_DAY, { adHoc = false }: { adHoc?: boolean } = {}): Promise<SeededRoute> {
   const { companyId } = tenant
   const projectId = tenant.projects.copenhagen.id
   const minted = Date.now()
@@ -222,13 +223,13 @@ export async function seedCompletedRoute(pool: Database, tenant: FinanceTenant, 
   let number = 0
   await withCompany(pool.db, companyId, async (tx: Tx) => {
     number = await nextRouteNumber(tx, companyId)
-    await tx.insert(collectionGroup).values({ id: groupId, companyId, projectId, routeSchemeId: tenant.scheme.id, name: `Group ${number}`, position: number, days: ["monday"], stopSource: "rule" })
+    if (!adHoc) await tx.insert(collectionGroup).values({ id: groupId, companyId, projectId, routeSchemeId: tenant.scheme.id, name: `Group ${number}`, position: number, days: ["monday"], stopSource: "rule" })
     await tx.insert(route).values({
       id,
       companyId,
       projectId,
-      routeSchemeId: tenant.scheme.id,
-      collectionGroupId: groupId,
+      routeSchemeId: adHoc ? null : tenant.scheme.id,
+      collectionGroupId: adHoc ? null : groupId,
       serviceDate,
       operatingDate: serviceDate,
       status: "completed",
@@ -253,6 +254,7 @@ export async function seedCompletedRoute(pool: Database, tenant: FinanceTenant, 
           containerId: stop.containerId,
           position: index + 1,
           status,
+          origin: stop.origin ?? "generation",
           propertyId: stop.propertyId,
           sharedCollectionPointId: null,
           wasteFractionId: stop.wasteFractionId ?? tenant.fractions.residual.id,

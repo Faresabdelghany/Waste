@@ -251,13 +251,15 @@ export type DriverMe = z.infer<typeof DriverMe>
  * container's `label` and the waste fraction's `name` — the four things a
  * device shows at a stop, which the synced client joins from its own buckets
  * and the connected client reads here. `location` is null for a property not
- * yet geocoded; a shared collection point always has one.
+ * yet geocoded; a shared collection point always has one. `containerLabel`
+ * is null on an address-only stop the office added (#111), which names no
+ * container and is driven to by its address alone.
  */
 export const DriverPickup = Pickup.extend({
   /** The service address as one text, the property's or the point's. */
   address: Paragraph,
   location: FlatPoint.nullable(),
-  containerLabel: Label,
+  containerLabel: Label.nullable(),
   wasteFractionName: Label,
 })
 export type DriverPickup = z.infer<typeof DriverPickup>

@@ -30,8 +30,14 @@
 // placement's subscription; and the project's timezone, in which the worker
 // renders `closedAt` as the day the ticket closed — a ticket reopened since
 // has no `closedAt`, and its completion is stale news, not a failure.
+//
+// A stop the office added (#111) is read like any other, with its `origin`:
+// the scheme and the container are left joins, since an ad-hoc route names
+// no scheme (no planning area, then) and an address-only stop no container
+// (no type, and no placement to read), so the event is judged and never a
+// dead letter; the domain records nothing for an office stop.
 import type { PlacementFacts, PickupEventFacts, TicketCompletedFacts } from "@waste/domain/finance/from-event"
-import type { PickupOutcome } from "@waste/domain/execution/vocabulary"
+import type { PickupOrigin, PickupOutcome } from "@waste/domain/execution/vocabulary"
 import type { AgreementStatus, CustomerKind, ProductUnit } from "@waste/domain/registry/vocabulary"
 import type { TicketResolution } from "@waste/domain/resolution/vocabulary"
 import type { Tx } from "@waste/db/client"
@@ -50,14 +56,17 @@ import { ticket } from "@waste/db/schema/resolution"
 import { routeScheme } from "@waste/db/schema/route-schemes"
 import { and, eq } from "drizzle-orm"
 
-/** A pickup as the consumer read it: the row the event names, with its route's identity day and scheme, its container's type, and its status now. */
+/** A pickup as the consumer read it: the row the event names, with its route's identity day and scheme, its container's type, who put it there, and its status now. */
 export type PickupRow = {
   projectId: string
   routeId: string
   serviceDate: string
+  /** Null for a scheme without one, and on the office's ad-hoc route, which has no scheme (#111). */
   planningAreaId: string | null
-  containerId: string
-  containerTypeId: string
+  /** Both null on an address-only stop the office added (#111). */
+  containerId: string | null
+  containerTypeId: string | null
+  origin: PickupOrigin
   wasteFractionId: string
   status: string
 }
@@ -86,16 +95,17 @@ export async function pickupRow(tx: Tx, companyId: string, routeId: string, pick
       planningAreaId: routeScheme.planningAreaId,
       containerId: pickup.containerId,
       containerTypeId: container.containerTypeId,
+      origin: pickup.origin,
       wasteFractionId: pickup.wasteFractionId,
       status: pickup.status,
     })
     .from(pickup)
     .innerJoin(route, and(eq(route.companyId, pickup.companyId), eq(route.id, pickup.routeId)))
-    .innerJoin(routeScheme, and(eq(routeScheme.companyId, route.companyId), eq(routeScheme.id, route.routeSchemeId)))
-    .innerJoin(container, and(eq(container.companyId, pickup.companyId), eq(container.id, pickup.containerId)))
+    .leftJoin(routeScheme, and(eq(routeScheme.companyId, route.companyId), eq(routeScheme.id, route.routeSchemeId)))
+    .leftJoin(container, and(eq(container.companyId, pickup.companyId), eq(container.id, pickup.containerId)))
     .where(and(eq(pickup.companyId, companyId), eq(pickup.routeId, routeId), eq(pickup.id, pickupId)))
     .limit(1)
-  return row
+  return row === undefined ? undefined : { ...row, origin: row.origin as PickupOrigin }
 }
 
 /** The placement as read, before the list: what the domain's `PlacementFacts` carries less the list, plus the list the agreement names (null for the project's default), which the next read needs. */
@@ -155,7 +165,8 @@ const liveFacts = (live: EventReading): PickupEventFacts["liveEvent"] => ({
  * correction needs the row and not the domain's plain view of it.
  */
 export async function pickupFacts(tx: Tx, companyId: string, kind: PickupEventFacts["kind"], found: PickupRow, pickupId: string): Promise<{ facts: PickupEventFacts; live: EventReading | undefined }> {
-  const placement = await placementOn(tx, companyId, found.projectId, found.containerId, found.serviceDate)
+  // An address-only stop has no container and so no placement: the domain judges it on its origin alone.
+  const placement = found.containerId === null ? undefined : await placementOn(tx, companyId, found.projectId, found.containerId, found.serviceDate)
   let priced: PlacementFacts | null = null
   if (placement !== undefined) {
     const { priceListId, ...facts } = placement
@@ -171,6 +182,7 @@ export async function pickupFacts(tx: Tx, companyId: string, kind: PickupEventFa
       pickupId,
       serviceDate: found.serviceDate,
       planningAreaId: found.planningAreaId,
+      origin: found.origin,
       containerTypeId: found.containerTypeId,
       wasteFractionId: found.wasteFractionId,
       outcome: found.status as PickupOutcome,
@@ -226,7 +238,7 @@ export async function ticketFacts(tx: Tx, companyId: string, ticketId: string, f
   let reached: TicketCompletedFacts["agreement"] = null
   if (found.routeId !== null && found.pickupId !== null) {
     const stop = await pickupRow(tx, companyId, found.routeId, found.pickupId)
-    const placement = stop === undefined ? undefined : await placementOn(tx, companyId, stop.projectId, stop.containerId, stop.serviceDate)
+    const placement = stop === undefined || stop.containerId === null ? undefined : await placementOn(tx, companyId, stop.projectId, stop.containerId, stop.serviceDate)
     if (placement !== undefined && (found.agreementId === null || found.agreementId === placement.agreement.id)) reached = { id: placement.agreement.id, subscriptionId: placement.subscriptionId }
   }
   if (reached === null && found.agreementId !== null) reached = { id: found.agreementId, subscriptionId: null }
