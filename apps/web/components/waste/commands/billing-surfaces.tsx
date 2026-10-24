@@ -5,7 +5,9 @@
 //
 // Events: Add manual event creates one through the store, and an event's
 // details offer its two commands, reprice and cancel, whatever its status —
-// the API's 409 says why one does not apply (the rules on #81).
+// the API's 409 says why one does not apply (the rules on #81) — and Explain
+// price, the price rows' own dialog opened on the event's question
+// (`eventQuestion`, #259): why it costs what it costs, or why it is blocked.
 //
 // Billing runs: Run billing asks the project and the period, previews the run
 // through the client (`POST /billing-runs/preview` writes nothing), shows the
@@ -32,20 +34,25 @@ import { Dialog, DialogContent, DialogDescription, DialogFooter, DialogHeader, D
 import { Table, TableBody, TableCell, TableHead, TableHeader, TableRow } from "@/components/ui/table"
 import { useApiClient } from "@/components/waste/api-session-store"
 import { BusinessRecordFormDialog } from "@/components/waste/business-record-form-dialog"
-import { useBusinessRecordStore, whenSaved } from "@/components/waste/business-record-store"
+import { useBusinessRecordStore, useServerModuleState, whenSaved } from "@/components/waste/business-record-store"
 import { useCommercialPickers, useCommercialResolver } from "@/components/waste/commands/commercial-pickers"
 import type { PrimarySurfaceProps, RowSurfaceProps } from "@/components/waste/commands/command-surfaces"
 import { CreateSurface } from "@/components/waste/commands/create-surface"
+import { ExplainPrice } from "@/components/waste/commands/pricing-surfaces"
 import { ReadRows } from "@/components/waste/commands/read-rows"
 import { useCommandRunner, useModuleReady, useOpenRecord, useRowHistory, useServerNames } from "@/components/waste/commands/use-command-support"
 import type { ApiClient } from "@/lib/api/client"
 import { problemSentence } from "@/lib/api/problem"
-import { isLocalRefusal, webIdOf } from "@/lib/api/records/adapter"
-import { billingRunBody, billingRunDetail, billingRunInvoices, invoiceDetail, previewBillingRun } from "@/lib/api/records/billing"
-import { problemOfError } from "@/lib/api/records/server-records"
+import { isLocalRefusal, moduleKeyOf, webIdOf } from "@/lib/api/records/adapter"
+import { billingRunBody, billingRunDetail, billingRunInvoices, eventPricedByList, eventQuestion, invoiceDetail, previewBillingRun } from "@/lib/api/records/billing"
+import { CONTAINERS_MODULE } from "@/lib/api/records/containers"
+import { PICKUPS_MODULE } from "@/lib/api/records/pickups"
+import { problemOfError, resolverOver, type ModuleState } from "@/lib/api/records/server-records"
 import { formatMinor } from "@/lib/commercial/money"
+import { AGREEMENTS_MODULE } from "@/lib/data/agreements"
 import type { BusinessFormValues } from "@/lib/data/business-form-types"
-import { BILLING_MODULE, EVENTS_MODULE, INVOICE_PREFIX, INVOICES_MODULE } from "@/lib/data/commercial"
+import type { BusinessRecord } from "@/lib/data/business-modules"
+import { BILLING_MODULE, EVENTS_MODULE, INVOICE_PREFIX, INVOICES_MODULE, PRICE_ROWS_MODULE, ROUTES_MODULE_LOCATION } from "@/lib/data/commercial"
 import {
   blankNone,
   createBillingRunRecord,
@@ -60,6 +67,7 @@ import {
   type EventCommand,
 } from "@/lib/data/commercial-forms"
 import { CONTACTS_MODULE } from "@/lib/data/properties"
+import { ROUTE_SCHEMES_MODULE } from "@/lib/data/route-schemes"
 
 // ---------------------------------------------------------------------------
 // Billable events
@@ -92,11 +100,35 @@ function eventDone(name: EventCommand, record: { name: string; status: string; v
   toast.success(EVENT_DONE[name], { description: `${record.name} is now ${record.status.toLowerCase()}${record.value === "" ? "" : `: ${record.value}`}.` })
 }
 
-/** An event's two commands, in its details. */
+/** The modules an event's price question is read through (`eventQuestion`): its agreement and customer, the price rows, its route, scheme, pickup and container. */
+const QUESTION_MODULES = [AGREEMENTS_MODULE, CONTACTS_MODULE, PRICE_ROWS_MODULE, ROUTES_MODULE_LOCATION, ROUTE_SCHEMES_MODULE, PICKUPS_MODULE, CONTAINERS_MODULE] as const
+
+/** An event's price question, asked of the store as it holds those modules when Explain price opens. */
+function useEventQuestion(record: BusinessRecord): () => BusinessFormValues {
+  const states = [
+    useServerModuleState(AGREEMENTS_MODULE.workspaceId, AGREEMENTS_MODULE.moduleId),
+    useServerModuleState(CONTACTS_MODULE.workspaceId, CONTACTS_MODULE.moduleId),
+    useServerModuleState(PRICE_ROWS_MODULE.workspaceId, PRICE_ROWS_MODULE.moduleId),
+    useServerModuleState(ROUTES_MODULE_LOCATION.workspaceId, ROUTES_MODULE_LOCATION.moduleId),
+    useServerModuleState(ROUTE_SCHEMES_MODULE.workspaceId, ROUTE_SCHEMES_MODULE.moduleId),
+    useServerModuleState(PICKUPS_MODULE.workspaceId, PICKUPS_MODULE.moduleId),
+    useServerModuleState(CONTAINERS_MODULE.workspaceId, CONTAINERS_MODULE.moduleId),
+  ]
+  return () => {
+    const held = QUESTION_MODULES.flatMap((location, index): [string, ModuleState][] => {
+      const state = states[index]
+      return state === null ? [] : [[moduleKeyOf(location.workspaceId, location.moduleId), state]]
+    })
+    return eventQuestion(record, resolverOver(new Map(held)))
+  }
+}
+
+/** An event's two commands and, where its price is a list's, Explain price on its own question, in its details. */
 export function EventCommandsSurface({ record }: RowSurfaceProps) {
   const pickers = useCommercialPickers()
   const moduleReady = useModuleReady(EVENTS_MODULE)
   const { busy, run } = useCommandRunner(EVENTS_MODULE, record.id)
+  const question = useEventQuestion(record)
   const [open, setOpen] = useState<EventCommand | null>(null)
 
   const send = (name: EventCommand, values: BusinessFormValues) =>
@@ -115,6 +147,7 @@ export function EventCommandsSurface({ record }: RowSurfaceProps) {
             {EVENT_COMMAND_FORMS[name].submitLabel}
           </Button>
         ))}
+        {eventPricedByList(record) && <ExplainPrice initial={question} />}
       </div>
       {open !== null && (
         <BusinessRecordFormDialog schema={EVENT_COMMAND_FORMS[open]} open onOpenChange={(isOpen) => !isOpen && setOpen(null)} onSubmit={(values) => send(open, values)} relationOptions={(field, values) => pickers.options(field, values, record.projectIds?.[0], {})} />

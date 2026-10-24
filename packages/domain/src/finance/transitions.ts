@@ -18,6 +18,17 @@
 // its reason in the history. A settlement is named by what the office calls
 // it, the provider and the period, which the caller spells.
 //
+// The period is read on the project's day, which the caller hands in (#260):
+// `calculate` is refused while the period has not begun — its first day is
+// after today — "Settlement NordRen · July 2026 has not begun; calculate it
+// from its first day", since nothing in it has been delivered; and `close`
+// is refused until it has ended — its last day is before today — "…has not
+// ended; close it after its last day", since a closed settlement prices
+// nothing more and the rest of the period would be settled nowhere. The
+// status is judged first: an open settlement is calculated before anything
+// else is said of its close, a closed one reopened before its calculation,
+// and `reopen` reads no day.
+//
 // The review machine: `captured | approved | rejected → approved | rejected |
 // corrected` by the decision named, the same decision again `stay`, and
 // anything on `corrected` a refusal, "This unload was corrected by unload
@@ -36,14 +47,25 @@ export type SettlementCommand = (typeof SETTLEMENT_COMMANDS)[number]
 export const notCalculated = (label: string): string => `Settlement ${label} has not been calculated; calculate it first`
 /** A calculation asked of a closed settlement. */
 export const closedSettlement = (label: string): string => `Settlement ${label} is closed; reopen it first`
+/** A calculation asked of a settlement whose period has not begun. */
+export const periodNotBegun = (label: string): string => `Settlement ${label} has not begun; calculate it from its first day`
+/** A close asked of a settlement whose period has not ended. */
+export const periodNotEnded = (label: string): string => `Settlement ${label} has not ended; close it after its last day`
 
-/** The one place the settlement machine is spelled: status by status, what each command does. */
-export function settlementTransition(status: SettlementStatus, command: SettlementCommand, label: string): Transition<SettlementStatus> {
+/** A settlement as its machine reads it: its status, its name in the sentences, and its period by its first and last day in (the wire's `validTo` is the day after the last). */
+export type SettlementState = { status: SettlementStatus; label: string; firstDay: string; lastDay: string }
+
+/** The one place the settlement machine is spelled: status by status, what each command does on the project's `today`. */
+export function settlementTransition({ status, label, firstDay, lastDay }: SettlementState, command: SettlementCommand, today: string): Transition<SettlementStatus> {
+  // Days as `YYYY-MM-DD` compare as text: begun from its first day, ended once its last day is behind.
+  const begun = firstDay <= today
+  const ended = lastDay < today
+  const calculation: Transition<SettlementStatus> = begun ? { kind: "move", to: "calculated" } : { kind: "refuse", sentence: periodNotBegun(label) }
   switch (status) {
     case "open":
       switch (command) {
         case "calculate":
-          return { kind: "move", to: "calculated" }
+          return calculation
         case "close":
           return { kind: "refuse", sentence: notCalculated(label) }
         case "reopen":
@@ -53,9 +75,9 @@ export function settlementTransition(status: SettlementStatus, command: Settleme
       switch (command) {
         case "calculate":
           // A recalculation moves: the lines change, and the history gets its row.
-          return { kind: "move", to: "calculated" }
+          return calculation
         case "close":
-          return { kind: "move", to: "closed" }
+          return ended ? { kind: "move", to: "closed" } : { kind: "refuse", sentence: periodNotEnded(label) }
         case "reopen":
           return { kind: "stay" }
       }

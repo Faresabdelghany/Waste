@@ -16,10 +16,12 @@
 // before — so the module is read again once it lands.
 //
 // Settlements: Open settlement is a period of an assignment; its details offer
-// the commands the machine moves it by from its status (never a stay or a
-// refusal, `settlementCommandsOffered`), Reopen with the reason the history
-// keeps, then its lines — each event by name and route, and the provider
-// price that priced it — and its history.
+// the commands the machine moves it by from its status and the project's day
+// (never a stay or a refusal, `settlementCommandsOffered`: no Calculate before
+// the period has begun, no Close before it has ended, #260), Close settlement
+// once asked whether to (#257), Reopen with the reason the history keeps,
+// then its lines — each event by name and route, and the provider price that
+// priced it — and its history.
 //
 // Weights: an unload's details offer the reviews the machine moves it by
 // (`weightReviewsOffered`); a corrected one names the row to review instead.
@@ -29,9 +31,9 @@
 import { useEffect, useState } from "react"
 import { toast } from "sonner"
 import type { SettlementDetail, SettlementEvent } from "@waste/contracts/settlements"
-import { SETTLEMENT_STATUSES } from "@waste/domain/finance/vocabulary"
 
 import { Button } from "@/components/ui/button"
+import { Dialog, DialogContent, DialogDescription, DialogFooter, DialogHeader, DialogTitle } from "@/components/ui/dialog"
 import { Table, TableBody, TableCell, TableHead, TableHeader, TableRow } from "@/components/ui/table"
 import { BusinessRecordFormDialog } from "@/components/waste/business-record-form-dialog"
 import { useBusinessRecordStore, useServerModuleState } from "@/components/waste/business-record-store"
@@ -43,7 +45,7 @@ import { useCommandRunner, useModuleReady, useRowHistory, useServerNames } from 
 import type { ApiClient } from "@/lib/api/client"
 import { statusLabel } from "@/lib/api/records/adapter"
 import { shownOn } from "@/lib/api/records/clock"
-import { settlementCommandsOffered, settlementDetail, settlementHistory } from "@/lib/api/records/provider-money"
+import { settlementCommandsOffered, settlementDetail, settlementHeldBack, settlementHistory } from "@/lib/api/records/provider-money"
 import { weightReviewsOffered } from "@/lib/api/records/weights"
 import { formatMinor } from "@/lib/commercial/money"
 import type { BusinessFormValues } from "@/lib/data/business-form-types"
@@ -305,14 +307,15 @@ export function OpenSettlementSurface() {
   )
 }
 
-const COMMAND_LABELS = { calculate: "Calculate", close: "Close", reopen: "Reopen" } as const
+/** The commands as their buttons read: Close settlement, never a bare Close beside the drawer's own two (#257). */
+const COMMAND_LABELS = { calculate: "Calculate", close: "Close settlement", reopen: "Reopen" } as const
 const COMMAND_DONE = { calculate: "Settlement calculated", close: "Settlement closed", reopen: "Settlement reopened" } as const
 
 /** The settlement's own read and its history, as a one-row read its surface reads again after each command. */
 const readSettlement = (client: ApiClient, serverId: string) =>
   Promise.all([settlementDetail(client, serverId), settlementHistory(client, serverId)]).then(([detail, history]): { detail: SettlementDetail; history: SettlementEvent[] }[] => [{ detail, history }])
 
-/** A settlement's details: the commands its status moves by, its lines by event, and its history. */
+/** A settlement's details: the commands its status moves by on the project's day, its lines by event, and its history. */
 export function SettlementSurface({ record }: RowSurfaceProps) {
   const moduleReady = useModuleReady(SETTLEMENTS_MODULE)
   const { timezoneOf } = useCommercialPickers()
@@ -321,9 +324,10 @@ export function SettlementSurface({ record }: RowSurfaceProps) {
   const events = useServerModuleState(EVENTS_MODULE.workspaceId, EVENTS_MODULE.moduleId)
   const priceName = useServerNames(PROVIDER_PRICES_MODULE, PROVIDER_PRICE_PREFIX)
   const userName = useServerNames(ACCESS_MODULE, "user")
-  const [reopening, setReopening] = useState(false)
-  const status = SETTLEMENT_STATUSES.find((candidate) => candidate === record.submittedValues?.status)
-  const offered = status === undefined ? [] : settlementCommandsOffered(status)
+  // The two commands asked before they are sent: a reopening's reason, and whether to close at all.
+  const [asking, setAsking] = useState<"close" | "reopen" | null>(null)
+  const offered = settlementCommandsOffered(record)
+  const heldBack = settlementHeldBack(record)
   const settlement = read.rows?.[0]
   const money = (minor: number | null) => (minor === null ? "—" : formatMinor(minor, settlement?.detail.currency ?? record.facts.Currency ?? "DKK"))
 
@@ -339,7 +343,7 @@ export function SettlementSurface({ record }: RowSurfaceProps) {
 
   const send = (name: "calculate" | "close" | "reopen", values?: BusinessFormValues) =>
     run(name, values === undefined ? undefined : blankNone(values), (outcome) => {
-      setReopening(false)
+      setAsking(null)
       toast.success(COMMAND_DONE[name], { description: `${outcome.record.name}: ${outcome.record.value}.` })
     })
 
@@ -349,11 +353,13 @@ export function SettlementSurface({ record }: RowSurfaceProps) {
       {!moduleReady && <p className="text-sm text-muted-foreground">The settlements are being read from the API; their commands follow.</p>}
       <div className="flex flex-wrap gap-2">
         {offered.map((name) => (
-          <Button key={name} variant="outline" size="sm" disabled={!moduleReady || busy} onClick={() => (name === "reopen" ? setReopening(true) : send(name))}>
+          <Button key={name} variant="outline" size="sm" disabled={!moduleReady || busy} onClick={() => (name === "calculate" ? send(name) : setAsking(name))}>
             {COMMAND_LABELS[name]}
           </Button>
         ))}
       </div>
+      {/* Why a command the status moves by waits for the day: the API's own sentence (#260). */}
+      {heldBack !== undefined && <p className="text-sm text-muted-foreground" data-testid="settlement-held-back">{heldBack}.</p>}
       <div className="space-y-2">
         <h4 className="text-xs font-medium text-muted-foreground">Lines</h4>
         {read.problem !== null ? (
@@ -361,7 +367,7 @@ export function SettlementSurface({ record }: RowSurfaceProps) {
         ) : settlement === undefined ? (
           <p className="text-sm text-muted-foreground">Reading the settlement…</p>
         ) : settlement.detail.lines.length === 0 ? (
-          <p className="text-sm text-muted-foreground">{settlement.history.length === 0 ? "Not calculated yet: Calculate prices the provider's events in the period." : "No event of the provider's in the period."}</p>
+          <p className="text-sm text-muted-foreground">{settlement.history.length > 0 ? "No event of the provider's in the period." : offered.includes("calculate") ? "Not calculated yet: Calculate prices the provider's events in the period." : "Not calculated yet."}</p>
         ) : (
           <div className="overflow-auto rounded-lg border border-border/60">
             <Table data-testid="settlement-lines">
@@ -402,7 +408,29 @@ export function SettlementSurface({ record }: RowSurfaceProps) {
           line={(event) => `${statusLabel(event.kind)} · ${shownOn(event.recordedAt, timezoneOf(record.projectIds?.[0]))} · ${event.lineCount} line${event.lineCount === 1 ? "" : "s"}, ${money(event.netMinor)} · ${userName(event.recordedBy)}${event.reason === null ? "" : ` — ${event.reason}`}`}
         />
       </div>
-      {reopening && <BusinessRecordFormDialog schema={REOPEN_FORM} open onOpenChange={(isOpen) => !isOpen && setReopening(false)} onSubmit={(values) => send("reopen", values)} relationOptions={(field) => field.options ?? []} />}
+      {/* Each asked only while the machine still moves the settlement by it: a re-read, the day's turn or another desk may have moved it since. */}
+      {asking === "reopen" && offered.includes("reopen") && <BusinessRecordFormDialog schema={REOPEN_FORM} open onOpenChange={(isOpen) => !isOpen && setAsking(null)} onSubmit={(values) => send("reopen", values)} relationOptions={(field) => field.options ?? []} />}
+      {asking === "close" && offered.includes("close") && (
+        // A closed settlement is final until reopened with a reason, and the provider is told its totals: asked before it is sent (#257).
+        <Dialog open onOpenChange={(isOpen) => !isOpen && !busy && setAsking(null)}>
+          <DialogContent className="sm:max-w-md" data-testid="close-settlement">
+            <DialogHeader>
+              <DialogTitle>Close settlement</DialogTitle>
+              <DialogDescription>
+                {record.name} closes at {record.value}. Its lines stand still from here, and they are what {record.facts["Service provider"] ?? "the provider"} is told; they change only if the settlement is reopened, with the reason.
+              </DialogDescription>
+            </DialogHeader>
+            <DialogFooter>
+              <Button variant="outline" disabled={busy} onClick={() => setAsking(null)}>
+                Cancel
+              </Button>
+              <Button disabled={busy} onClick={() => send("close")}>
+                Close settlement
+              </Button>
+            </DialogFooter>
+          </DialogContent>
+        </Dialog>
+      )}
     </section>
   )
 }

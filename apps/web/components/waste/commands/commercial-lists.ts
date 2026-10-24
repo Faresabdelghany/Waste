@@ -20,9 +20,14 @@ export const PRICE_ROWS_LIST: ModuleList = {
   initial: {},
 }
 
-/** Billable events open on what is still to be invoiced, the blocked to put right and the ready to bill (#148). */
+/**
+ * Billable events open on what is still to be invoiced, the blocked to put
+ * right and the ready to bill (#148). An event's customers are both its
+ * agreement's parties, the customer served and the payer invoiced (#256), so
+ * the filter finds what a payer is billed as the invoices' does.
+ */
 export const EVENTS_LIST: ModuleList = {
-  readers: () => ({ statuses: status, kinds: fact("Kind"), blockReasons: fact("Block reason"), agreements: fact("Agreement"), customers: fact("Customer"), products: fact("Product"), routes: fact("Route"), serviceDates: fact("Service date") }),
+  readers: () => ({ statuses: status, kinds: fact("Kind"), blockReasons: fact("Block reason"), agreements: fact("Agreement"), customers: (record) => [...new Set([...fact("Customer")(record), ...fact("Payer")(record)])], products: fact("Product"), routes: fact("Route"), serviceDates: fact("Service date") }),
   initial: { statuses: ["Blocked", "Ready"] },
 }
 

@@ -90,10 +90,11 @@ const verdictLabel = (verdict: RowVerdict) => (verdict.winner ? "Won" : verdict.
 
 /**
  * Explain price: the question's dialog, then the verdicts. `initial` is what
- * the question opens with — a row's conditions, a product's default list —
- * and the day is today on the browser's clock unless it says another.
+ * the question opens with — a row's conditions, a product's default list, a
+ * billable event's own question, asked as it opens (#259) — and the day is
+ * today on the browser's clock unless it says another.
  */
-export function ExplainPrice({ initial = {}, label = "Explain price" }: { initial?: BusinessFormValues; label?: string }) {
+export function ExplainPrice({ initial = {}, label = "Explain price" }: { initial?: BusinessFormValues | (() => BusinessFormValues); label?: string }) {
   const client = useApiClient()
   const pickers = useCommercialPickers()
   const resolve = useCommercialResolver()
@@ -109,7 +110,7 @@ export function ExplainPrice({ initial = {}, label = "Explain price" }: { initia
   }
 
   const open = () => {
-    setValues({ on: dayIn(new Date(), undefined), ...initial })
+    setValues({ on: dayIn(new Date(), undefined), ...(typeof initial === "function" ? initial() : initial) })
     setStep("question")
   }
 

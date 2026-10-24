@@ -19,7 +19,10 @@
 // A settlement settles an assignment's period: opened over it, then moved by
 // its three commands — calculate, close, reopen with the reason the history
 // keeps — and offered only where the domain's `settlementTransition` moves it
-// (a stay is the API's answer to a retry, not an offer; #182's decision 5).
+// on the project's day it was read on, the record's `SETTLEMENT_DAY_KEY` (a
+// stay is the API's answer to a retry, not an offer; #182's decision 5): no
+// calculation before its period has begun, no close before it has ended
+// (#260).
 // Its lines settle billable events, each priced by the provider price in force
 // on the event's service date; a line no price covers blocks close, which the
 // record says. Nothing else changes on a settlement: every patch is refused.
@@ -28,8 +31,8 @@
 // and `settlement-<uuid>`; no fixture lends its id.
 import type { ServiceProviderPrice } from "@waste/contracts/service-provider-prices"
 import type { Settlement, SettlementDetail, SettlementEvent } from "@waste/contracts/settlements"
-import { SETTLEMENT_COMMANDS, settlementTransition, type SettlementCommand } from "@waste/domain/finance/transitions"
-import { INDEX_BASES, type SettlementStatus } from "@waste/domain/finance/vocabulary"
+import { SETTLEMENT_COMMANDS, settlementTransition, type SettlementCommand, type SettlementState } from "@waste/domain/finance/transitions"
+import { INDEX_BASES, SETTLEMENT_STATUSES } from "@waste/domain/finance/vocabulary"
 import { PRODUCT_UNITS } from "@waste/domain/registry/vocabulary"
 
 import { formatMinor, majorOf, minorOf } from "@/lib/commercial/money"
@@ -241,9 +244,45 @@ export const providerPricesModule: ServerModule = { workspaceId: PROVIDER_PRICES
 // Settlements
 // ---------------------------------------------------------------------------
 
-/** The commands a settlement's details offer: those the machine moves it by from its status, never a stay or a refusal. */
-export function settlementCommandsOffered(status: SettlementStatus): SettlementCommand[] {
-  return SETTLEMENT_COMMANDS.filter((name) => settlementTransition(status, name, "").kind === "move")
+/** The submitted value a settlement record carries the project's day it was read on under: what its offers are judged on (#260). */
+export const SETTLEMENT_DAY_KEY = "readOn"
+
+/**
+ * The commands a settlement's details offer: those the machine moves it by
+ * from its status, its period and the project's day it was read on — never a
+ * stay or a refusal, so a period not begun offers no Calculate and one not
+ * ended no Close (#260). The module reads the day (`readsTheDay`), so the
+ * offer turns with it.
+ */
+export function settlementCommandsOffered(record: Pick<BusinessRecord, "name" | "submittedValues">): SettlementCommand[] {
+  const read = settlementOnItsDay(record)
+  return read === undefined ? [] : SETTLEMENT_COMMANDS.filter((name) => settlementTransition(read.settlement, name, read.today).kind === "move")
+}
+
+/**
+ * Why a command the settlement's status moves it by is not offered on the
+ * day it was read on (#260): the machine's sentence — the API's — for the
+ * first one the day holds back, a calculation before the period has begun or
+ * a close before it has ended; undefined where the day holds none back.
+ */
+export function settlementHeldBack(record: Pick<BusinessRecord, "name" | "submittedValues">): string | undefined {
+  const read = settlementOnItsDay(record)
+  if (read === undefined) return undefined
+  // The machine as it answers once the period has ended: what the status alone moves.
+  const ended = firstDayOut(read.settlement.lastDay)
+  for (const name of SETTLEMENT_COMMANDS) {
+    const today = settlementTransition(read.settlement, name, read.today)
+    if (today.kind === "refuse" && settlementTransition(read.settlement, name, ended).kind === "move") return today.sentence
+  }
+  return undefined
+}
+
+/** A settlement record as its machine reads it, named as the details name it, and the project's day it was read on; undefined where the record does not say them. */
+function settlementOnItsDay(record: Pick<BusinessRecord, "name" | "submittedValues">): { settlement: SettlementState; today: string } | undefined {
+  const status = SETTLEMENT_STATUSES.find((candidate) => candidate === record.submittedValues?.status)
+  const [firstDay, lastDay, today] = ["validFrom", "validTo", SETTLEMENT_DAY_KEY].map((key) => record.submittedValues?.[key])
+  if (status === undefined || typeof firstDay !== "string" || typeof lastDay !== "string" || typeof today !== "string") return undefined
+  return { settlement: { status, label: record.name, firstDay, lastDay }, today }
 }
 
 /** `GET /settlements/:id`: the settlement with its lines, by event. */
@@ -302,7 +341,7 @@ export const settlementAdapter: ResourceAdapter<Settlement | SettlementDetail> =
       companyId: context.companyRecordId ?? FIXTURE_COMPANY_ID,
       projectIds: [project.webId],
       recordKind: SETTLEMENT_RECORD_KIND,
-      submittedValues: { serviceAreaAssignmentId: assignmentWebId, status: settlement.status, validFrom: settlement.validFrom, validTo: lastDay },
+      submittedValues: { serviceAreaAssignmentId: assignmentWebId, status: settlement.status, validFrom: settlement.validFrom, validTo: lastDay, [SETTLEMENT_DAY_KEY]: projectDay(settlement.projectId, context) },
     }
   },
   toCreateBody: (record, context) => {
@@ -334,5 +373,5 @@ export const settlementAdapter: ResourceAdapter<Settlement | SettlementDetail> =
   ),
 }
 
-/** Price Engine › Settlements. */
-export const settlementsModule: ServerModule = { workspaceId: SETTLEMENTS_MODULE.workspaceId, moduleId: SETTLEMENTS_MODULE.moduleId, resources: [settlementAdapter] }
+/** Price Engine › Settlements: read on the project's day, which its offers are judged on. */
+export const settlementsModule: ServerModule = { workspaceId: SETTLEMENTS_MODULE.workspaceId, moduleId: SETTLEMENTS_MODULE.moduleId, resources: [settlementAdapter], readsTheDay: true }

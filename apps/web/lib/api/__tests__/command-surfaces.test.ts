@@ -69,6 +69,10 @@ describe("a module's list on the Pilot (#147)", () => {
     const event = { status: "Blocked", facts: { Kind: "Ticket", "Block reason": "No product", Agreement: "AGR-2408", Customer: "Østerbro Housing", Route: "RC-1042", "Service date": "2026-09-29" } } as unknown as BusinessRecord
     const readers = COMMAND_SURFACES["commercial.events"].list!.readers({ accountId: null })
     assert.deepEqual([readers.blockReasons!(event), readers.agreements!(event), readers.products!(event)], [["No product"], ["AGR-2408"], []])
+    // An event's customers are both its agreement's parties: the customer served and the payer invoiced (#256).
+    const billedElsewhere = { ...event, facts: { ...event.facts, Agreement: "AGR-2607", Customer: "KAB Bolig", Payer: "Københavns Kommune" } } as unknown as BusinessRecord
+    assert.deepEqual(readers.customers!(billedElsewhere), ["KAB Bolig", "Københavns Kommune"])
+    assert.deepEqual(readers.customers!({ ...event, facts: { ...event.facts, Payer: "Østerbro Housing" } } as unknown as BusinessRecord), ["Østerbro Housing"], "one party once")
   })
 
   test("the provider-money chain's: the service areas' table lists the awards and never their assignments, the weights open on the desk's queue (#186)", () => {

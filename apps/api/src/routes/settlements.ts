@@ -57,11 +57,16 @@
 // without an event — `close` on a closed settlement, `reopen` on an open or a
 // calculated one — and `refuse` its sentence as the 409, "Settlement NordRen
 // ApS · 2026-07-01–2026-07-31 has not been calculated; calculate it first",
-// "… is closed; reopen it first". A settlement is named by its provider and
-// its period as a person reads one, the last day inside it and not the first
-// day out. Every command takes `lockRow(settlement)` before it reads, so two
-// commands on one settlement take turns and a calculation and a close never
-// interleave.
+// "… is closed; reopen it first". The machine reads the period on the
+// project's day (`projectToday` over the app's clock, #260): `calculate` is
+// refused while the period has not begun, "… has not begun; calculate it from
+// its first day", and `close` until it has ended, "… has not ended; close it
+// after its last day" — a closed settlement prices nothing more, so the rest
+// of its period would be settled nowhere. A settlement is named by its
+// provider and its period as a person reads one, the last day inside it and
+// not the first day out. Every command takes `lockRow(settlement)` before it
+// reads, so two commands on one settlement take turns and a calculation and a
+// close never interleave.
 //
 // Who reaches what (#112 §3 "Who a provider is", §7.22). Two scopes, as
 // routes/service-areas.ts has them. An office account reads and commands the
@@ -103,7 +108,7 @@ import { newId } from "../ids"
 import { emit } from "../outbox"
 import { afterCursor, fetchLimit, pageOf } from "../pagination"
 import { describeProblem, problem, validate } from "../problem"
-import { projectCurrency } from "./fleet-lookups"
+import { projectCurrency, projectToday } from "./fleet-lookups"
 import { refuseStranded } from "./periods"
 import { requireServiceAreaAssignment } from "./references"
 import type { ClockOptions } from "./scheme-groups"
@@ -151,8 +156,11 @@ const columns = {
 /** The settlement's columns and, through its assignment, whose it is: the provider's id for the scope and its name for the sentences. */
 type Row = Pick<typeof settlement.$inferSelect, keyof typeof columns> & { serviceProviderId: string; providerLegalName: string }
 
+/** The period's last day in: the day before its end, the first day out. */
+const lastDayOf = (row: Row): string => addDays(periodEnd(row), -1)
+
 /** How every sentence names a settlement: the provider and the period as a person reads it, `NordRen ApS · 2026-07-01–2026-07-31`, the last day inside and not the first day out. */
-const labelOf = (row: Row): string => `${row.providerLegalName} · ${row.validFrom}–${addDays(periodEnd(row), -1)}`
+const labelOf = (row: Row): string => `${row.providerLegalName} · ${row.validFrom}–${lastDayOf(row)}`
 
 /** The end every settlement has (`settlement_period_closed`): a null beside a settlement is a broken invariant, not a client's doing. */
 function periodEnd(row: { id: string; validTo: string | null }): string {
@@ -320,9 +328,11 @@ async function setStatus(tx: Tx, principal: Principal, current: Row, status: Set
   return { ...row, serviceProviderId: current.serviceProviderId, providerLegalName: current.providerLegalName }
 }
 
-/** The machine's answer for a command on the row as read: the 409 in its words, `stay`, or the status to move to. */
-function transitionOf(current: Row, command: SettlementCommand): { kind: "stay" } | { kind: "move"; to: SettlementStatus } {
-  const transition = settlementTransition(current.status as SettlementStatus, command, labelOf(current))
+/** The machine's answer for a command on the row as read, on the project's day: the 409 in its words, `stay`, or the status to move to. */
+async function transitionOf(tx: Tx, principal: Principal, current: Row, command: SettlementCommand, now: () => Date): Promise<{ kind: "stay" } | { kind: "move"; to: SettlementStatus }> {
+  const today = await projectToday(tx, { companyId: principal.companyId, projectId: current.projectId }, now)()
+  const state = { status: current.status as SettlementStatus, label: labelOf(current), firstDay: current.validFrom, lastDay: lastDayOf(current) }
+  const transition = settlementTransition(state, command, today)
   if (transition.kind === "refuse") throw problem(409, { detail: transition.sentence })
   return transition
 }
@@ -559,14 +569,14 @@ export function settlementRoutes(guard: MiddlewareHandler<AuthEnv>, { now = () =
         operationId: "calculateSettlement",
         summary: "Calculate a settlement's lines",
         description:
-          "The `calculate` command, on an open or a calculated settlement: replaces the lines whole. Selects every billable event of the project whose service date lies in the period, priced and not cancelled — reversals included, at their negative amounts — whose route's scheme's planning area is one of the assignment's service area's, and whose service date the assignment and the area were both valid on; prices each with the assignment's provider price for the event's product valid on that service date, or leaves it unpriced when none covers it; writes one line per event, the settlement's `lineCount`, `netMinor` (the priced lines summed) and `calculatedAt`, and appends a `calculated` event with the snapshot. A recalculation is a move like the first: the lines change and the history gets its row. The body is empty; a member in it is refused. A closed settlement is refused (409, `Settlement NordRen ApS · 2026-07-01–2026-07-31 is closed; reopen it first`). Runs under the settlement's row lock. " +
+          "The `calculate` command, on an open or a calculated settlement: replaces the lines whole. Selects every billable event of the project whose service date lies in the period, priced and not cancelled — reversals included, at their negative amounts — whose route's scheme's planning area is one of the assignment's service area's, and whose service date the assignment and the area were both valid on; prices each with the assignment's provider price for the event's product valid on that service date, or leaves it unpriced when none covers it; writes one line per event, the settlement's `lineCount`, `netMinor` (the priced lines summed) and `calculatedAt`, and appends a `calculated` event with the snapshot. A recalculation is a move like the first: the lines change and the history gets its row; one asked before the period has ended is a partial one. The body is empty; a member in it is refused. A closed settlement is refused (409, `Settlement NordRen ApS · 2026-07-01–2026-07-31 is closed; reopen it first`), and so is one whose period has not begun on the project's day (409, `Settlement NordRen ApS · 2026-07-01–2026-07-31 has not begun; calculate it from its first day`). Runs under the settlement's row lock. " +
           LABEL,
         security: BEARER_SECURITY,
         responses: {
           200: describeJson("The settlement, calculated, with its lines.", SettlementDetail),
           400: describeProblem("The path does not hold an id, or the body carries a member."),
           ...commandProblems,
-          409: describeProblem("The settlement is closed; reopen it first."),
+          409: describeProblem("The settlement is closed, or its period has not begun; the detail says which."),
         },
       }),
       guard,
@@ -579,7 +589,7 @@ export function settlementRoutes(guard: MiddlewareHandler<AuthEnv>, { now = () =
         const principal = c.get("principal")
         const current = await lockedSettlement(tx, principal, id)
         // `calculate` never stays: a recalculation is a move (the domain's machine).
-        transitionOf(current, "calculate")
+        await transitionOf(tx, principal, current, "calculate", now)
         const row = await calculate(tx, principal, current, now())
         await appendEvent(tx, principal, row, "calculated", null)
         return c.json(await detailOf(tx, principal.companyId, row))
@@ -591,14 +601,14 @@ export function settlementRoutes(guard: MiddlewareHandler<AuthEnv>, { now = () =
         operationId: "closeSettlement",
         summary: "Close a settlement",
         description:
-          "The `close` command, on a calculated settlement: refused while any line has no provider price (409, `3 lines have no service provider price for their product; add the prices and calculate again`), while any event of the period served under the assignment is on no line — one recorded after the last calculation (409, `2 events of the period are not in this calculation; calculate again`) — and while any line names an event no longer served in the period — one cancelled since the last calculation, which would otherwise be paid (409, `1 line names an event no longer served in the period; calculate again`); then `closedAt` and `closedBy` are stamped, a `closed` event appended with the snapshot, and `settlement-closed` written to the outbox in the same transaction, carrying the settlement with its lines as answered. The lines stand still from here: nothing writes them on a closed settlement, and its totals are what the provider is told. An open settlement is refused (409, `Settlement NordRen ApS · 2026-07-01–2026-07-31 has not been calculated; calculate it first`); a closed one answers 200 as it stands, without a write, an event or an outbox row. The body is empty; a member in it is refused. Runs under the settlement's row lock. " +
+          "The `close` command, on a calculated settlement whose period has ended on the project's day (409 while its last day is today or ahead, `Settlement NordRen ApS · 2026-07-01–2026-07-31 has not ended; close it after its last day`): refused while any line has no provider price (409, `3 lines have no service provider price for their product; add the prices and calculate again`), while any event of the period served under the assignment is on no line — one recorded after the last calculation (409, `2 events of the period are not in this calculation; calculate again`) — and while any line names an event no longer served in the period — one cancelled since the last calculation, which would otherwise be paid (409, `1 line names an event no longer served in the period; calculate again`); then `closedAt` and `closedBy` are stamped, a `closed` event appended with the snapshot, and `settlement-closed` written to the outbox in the same transaction, carrying the settlement with its lines as answered. The lines stand still from here: nothing writes them on a closed settlement, and its totals are what the provider is told. An open settlement is refused (409, `Settlement NordRen ApS · 2026-07-01–2026-07-31 has not been calculated; calculate it first`); a closed one answers 200 as it stands, without a write, an event or an outbox row. The body is empty; a member in it is refused. Runs under the settlement's row lock. " +
           LABEL,
         security: BEARER_SECURITY,
         responses: {
           200: describeJson("The settlement, closed, with its lines.", SettlementDetail),
           400: describeProblem("The path does not hold an id, or the body carries a member."),
           ...commandProblems,
-          409: describeProblem("The settlement has not been calculated, a line has no provider price, an event of the period is not in the calculation, or a line names an event no longer served; the detail says which."),
+          409: describeProblem("The settlement has not been calculated, its period has not ended, a line has no provider price, an event of the period is not in the calculation, or a line names an event no longer served; the detail says which."),
         },
       }),
       guard,
@@ -610,7 +620,7 @@ export function settlementRoutes(guard: MiddlewareHandler<AuthEnv>, { now = () =
         const tx = c.get("tx")
         const principal = c.get("principal")
         const current = await lockedSettlement(tx, principal, id)
-        const transition = transitionOf(current, "close")
+        const transition = await transitionOf(tx, principal, current, "close", now)
         if (transition.kind === "stay") return c.json(await detailOf(tx, principal.companyId, current))
         // The calculation's three gaps, the unpriced first: a price is what the office adds, a recalculation what it then runs. Then the served events against the lines, both ways — an event on no line, and a line whose event is no longer served.
         await refuseStranded(tx, settlementLine, and(eq(settlementLine.companyId, principal.companyId), eq(settlementLine.settlementId, current.id), isNull(settlementLine.serviceProviderPriceId)), unpricedLines)
@@ -654,7 +664,7 @@ export function settlementRoutes(guard: MiddlewareHandler<AuthEnv>, { now = () =
         const tx = c.get("tx")
         const principal = c.get("principal")
         const current = await lockedSettlement(tx, principal, id)
-        const transition = transitionOf(current, "reopen")
+        const transition = await transitionOf(tx, principal, current, "reopen", now)
         if (transition.kind === "stay") return c.json(await detailOf(tx, principal.companyId, current))
         const row = await setStatus(tx, principal, current, "open", { calculatedAt: null, closedAt: null, closedBy: null })
         await appendEvent(tx, principal, row, "reopened", reason)
