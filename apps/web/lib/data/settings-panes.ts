@@ -14,8 +14,10 @@
 // API's alone too, so only the Pilot offers it. So is the Ticket SLA (O4 of
 // #290), which takes the place of Tickets & communication on the Pilot: that
 // pane's ticket types, templates and channels have no API, and its SLA is the
-// new pane's, so a link to it there opens the SLA.
+// new pane's, so a link to it there opens the SLA. Exception charges (M5 of
+// #293) are the API's alone too.
 import { MASTER_DATA_SETTINGS_PANE_ID } from "./business-links"
+import { PICKUP_EXCEPTION_CHARGES_SETTINGS_PANE_ID } from "./pickup-exception-rules"
 import { SORTING_GUIDE_SETTINGS_PANE_ID } from "./sorting-guide"
 import { TICKET_SLA_SETTINGS_PANE_ID } from "./ticket-sla"
 
@@ -30,7 +32,7 @@ export const COMMERCIAL_PRODUCTS_SETTINGS_PANE_ID = "commercial-products"
 
 /** Whether the Settings nav offers a pane, with the adapter configured or not. */
 export function settingsPaneOffered(paneId: string, configured: boolean): boolean {
-  if (paneId === MASTER_DATA_SETTINGS_PANE_ID || paneId === SORTING_GUIDE_SETTINGS_PANE_ID || paneId === TICKET_SLA_SETTINGS_PANE_ID || paneId === FINANCE_ON_API_SETTINGS_PANE_ID) return configured
+  if (paneId === MASTER_DATA_SETTINGS_PANE_ID || paneId === SORTING_GUIDE_SETTINGS_PANE_ID || paneId === TICKET_SLA_SETTINGS_PANE_ID || paneId === FINANCE_ON_API_SETTINGS_PANE_ID || paneId === PICKUP_EXCEPTION_CHARGES_SETTINGS_PANE_ID) return configured
   if (paneId === ASSET_MANAGEMENT_SETTINGS_PANE_ID || paneId === FINANCE_SETTINGS_PANE_ID || paneId === TICKETS_COMMUNICATION_SETTINGS_PANE_ID) return !configured
   return true
 }
