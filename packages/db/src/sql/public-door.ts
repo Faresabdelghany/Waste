@@ -24,7 +24,7 @@ import type { PgColumn, PgTable } from "drizzle-orm/pg-core"
 
 import { columnName, qualifiedTable, quoted, tableObjectName } from "../names"
 import { API_ROLE, PUBLIC_ROLE } from "../roles"
-import { subscription } from "../schema/agreements"
+import { subscription, subscriptionPause } from "../schema/agreements"
 import { wasteFraction } from "../schema/catalogue"
 import { collectionCalendarHoliday } from "../schema/collection-calendars"
 import { containerServicePlacement } from "../schema/containers"
@@ -154,9 +154,23 @@ export const COLLECTION_DAYS_DOOR: readonly PublicDoorTable[] = [
 ]
 
 /** Every table and column the public role may read, and nothing else, as the migrations together grant them: the test that holds the database to them reads this. */
+/**
+ * What a subscription's pause (#291, slice 10b) opens to the collection days:
+ * the pause's days under its subscription, so a paused address shows no day
+ * generation will not plan. The keys the read is fenced by and the period,
+ * nothing else.
+ */
+export const SUBSCRIPTION_PAUSE_DOOR: readonly PublicDoorTable[] = [
+  {
+    table: subscriptionPause,
+    columns: [subscriptionPause.companyId, subscriptionPause.projectId, subscriptionPause.subscriptionId, subscriptionPause.validFrom, subscriptionPause.validTo],
+    rows: inPublishedProject("subscription_pause"),
+  },
+]
+
 export const PUBLIC_DOOR_TABLES: readonly { table: PgTable; columns: readonly PgColumn[] }[] = (() => {
   const merged = new Map<PgTable, PgColumn[]>()
-  for (const { table, columns } of [...SORTING_GUIDE_DOOR, ...COLLECTION_DAYS_DOOR]) merged.set(table, [...(merged.get(table) ?? []), ...columns])
+  for (const { table, columns } of [...SORTING_GUIDE_DOOR, ...COLLECTION_DAYS_DOOR, ...SUBSCRIPTION_PAUSE_DOOR]) merged.set(table, [...(merged.get(table) ?? []), ...columns])
   return [...merged].map(([table, columns]) => ({ table, columns }))
 })()
 
@@ -209,3 +223,6 @@ export const publicDoorStatements = (): string[] => [...publicRoleStatements(), 
 
 /** Everything the collection days' migration carries (#293 M2): the grants, then the policies of the tables it opens. */
 export const collectionDaysDoorStatements = (): string[] => [...publicGrantStatements(COLLECTION_DAYS_DOOR), ...publicPolicyStatements(COLLECTION_DAYS_DOOR)]
+
+/** What the subscription pause's migration carries for the door (#291 slice 10b), below the table's own statements: its grant, then its policy. */
+export const subscriptionPauseDoorStatements = (): string[] => [...publicGrantStatements(SUBSCRIPTION_PAUSE_DOOR), ...publicPolicyStatements(SUBSCRIPTION_PAUSE_DOOR)]

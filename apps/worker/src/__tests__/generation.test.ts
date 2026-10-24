@@ -36,7 +36,7 @@ import type { Point, Polygon } from "@waste/contracts/geojson"
 import { createDb, type Database, type Tx } from "@waste/db/client"
 import { GENERATE_ROUTES_QUEUE } from "@waste/db/commands/generation"
 import { migrateDatabase } from "@waste/db/migrate"
-import { agreement, subscription } from "@waste/db/schema/agreements"
+import { agreement, subscription, subscriptionPause } from "@waste/db/schema/agreements"
 import { containerType, product, wasteFraction } from "@waste/db/schema/catalogue"
 import { collectionCalendar, collectionCalendarHoliday } from "@waste/db/schema/collection-calendars"
 import { container, containerServicePlacement } from "@waste/db/schema/containers"
@@ -688,5 +688,33 @@ describe("generation against a migrated database", { skip }, () => {
     await running.stop(2_000)
     running = undefined
     await new PgBoss({ connectionString: withDatabaseName(owner.url, name), schema: PGBOSS_SCHEMA, migrate: false }).stop({ graceful: false, close: true, timeout: 1_000 }).catch(() => undefined)
+  })
+  test("a paused subscription's containers (#291) get no stop on the paused days, from the rule group or the manual group, are not counted unlocated, and are stopped at again once the pause ends", async () => {
+    // Company b, which nothing has generated for: Parkvej's subscription — bins 1 and 2 by the rule, the glass bin by hand — paused for Thursday the 8th alone.
+    await ownerPool.db.insert(subscriptionPause).values({ companyId: b.company, projectId: b.project, subscriptionId: b.parkvejSubscription, validFrom: "2026-10-08", validTo: "2026-10-09" })
+    const generateB = async (window: { from: string; to: string }) => {
+      const runId = await runFor(b.scheme, b.company, b.project, window)
+      const outcome = await runGeneration({ generationRunId: runId, companyId: b.company }, null, context())
+      assert.equal(outcome.kind, "succeeded")
+      const [run] = await ownerPool.db.select().from(generationRun).where(eq(generationRun.id, runId))
+      return run
+    }
+    const stopsOn = async (groupId: string, day: string): Promise<string[]> => {
+      const [row] = await ownerPool.db.select().from(route).where(and(eq(route.collectionGroupId, groupId), eq(route.serviceDate, day)))
+      return row === undefined ? [] : (await pickupsOf(row.id)).map((stop) => stop.containerId ?? "")
+    }
+
+    const paused = await generateB(WEEK)
+    assert.equal(paused.unlocated, 1, "the bin nobody located, and not the paused pick")
+    assert.deepEqual(await stopsOn(b.residualGroup, "2026-10-05"), [b.bin1, b.bin2, b.bin3], "Monday, before the pause")
+    assert.deepEqual(await stopsOn(b.residualGroup, "2026-10-08"), [b.bin3], "Thursday, paused: bin 1 is passed over, and bin 2's placement ended that day")
+    assert.deepEqual(await stopsOn(b.glassGroup, "2026-10-08"), [], "the paused pick has no stop")
+    const [stamp] = await ownerPool.db.select().from(generationMatch).where(eq(generationMatch.collectionGroupId, b.residualGroup))
+    assert.deepEqual([...stamp.containerIds].sort(), [b.bin1, b.bin2, b.bin3].sort(), "the drift stamp reads what the rule matched: a pause is not drift")
+
+    const resumed = await generateB({ from: "2026-10-12", to: "2026-10-18" })
+    assert.equal(resumed.unlocated, 1)
+    assert.deepEqual(await stopsOn(b.residualGroup, "2026-10-15"), [b.bin1, b.bin3], "the Thursday after: bin 1 is back")
+    assert.deepEqual(await stopsOn(b.glassGroup, "2026-10-15"), [b.glassBin], "and so is the pick")
   })
 })

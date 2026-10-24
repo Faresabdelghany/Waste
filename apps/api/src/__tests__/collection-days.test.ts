@@ -4,7 +4,7 @@ import { after, before, describe, test } from "node:test"
 
 import { AddressMatches, PublicCollectionDays } from "@waste/contracts/public"
 import { createDb, type Database } from "@waste/db/client"
-import { agreement, subscription } from "@waste/db/schema/agreements"
+import { agreement, subscription, subscriptionPause } from "@waste/db/schema/agreements"
 import { containerType, product, wasteFraction } from "@waste/db/schema/catalogue"
 import { collectionCalendar, collectionCalendarHoliday } from "@waste/db/schema/collection-calendars"
 import { container, containerServicePlacement } from "@waste/db/schema/containers"
@@ -194,6 +194,38 @@ describe("the collection days by address on the public door", { skip: database.s
       assert.ok(lines.includes("STATUS:CANCELLED"))
       assert.ok(lines.includes("X-WR-TIMEZONE:Europe/Copenhagen"))
       assert.ok(!lines.some((line) => line.includes("Mikkel")), "no customer data")
+    })
+  })
+
+  describe("a paused subscription (#291, slice 10b)", () => {
+    test("takes its paused days out of the page and the feed, as generation plans no stop on them, and gives them back once the pause is gone", async () => {
+      // Parkvej 1's subscription paused from Monday the 5th through Thursday the 8th: the first week's two days.
+      const pauseId = testId()
+      await withCompany(pool.db, a.companyId, async (tx) => {
+        await tx.insert(subscriptionPause).values({ id: pauseId, companyId: a.companyId, projectId: a.projects.copenhagen.id, subscriptionId: ids.subscription, validFrom: "2026-10-05", validTo: "2026-10-09" })
+      })
+      try {
+        const answer = await days(`/public/${slug}/addresses/${ids.parkvej1}/collection-days?weeks=2`)
+        assert.deepEqual(
+          answer.days.map((day) => [day.date, day.fractions.join("+"), day.status]),
+          [
+            ["2026-10-13", "Residual", "collected"],
+            ["2026-10-15", "Glass", "skipped"],
+          ],
+          "the paused week has no day; the next week stands",
+        )
+        const feed = await get(`/public/${slug}/addresses/${ids.parkvej1}/collection-days.ics?weeks=2`)
+        assert.equal(feed.status, 200)
+        const lines = (await feed.text()).split("\r\n")
+        assert.equal(lines.filter((line) => line === "BEGIN:VEVENT").length, 2)
+        assert.ok(!lines.includes("DTSTART;VALUE=DATE:20261005") && !lines.includes("DTSTART;VALUE=DATE:20261008"), "no event on a paused day")
+      } finally {
+        await withCompany(pool.db, a.companyId, async (tx) => {
+          await tx.delete(subscriptionPause).where(eq(subscriptionPause.id, pauseId))
+        })
+      }
+      const resumed = await days(`/public/${slug}/addresses/${ids.parkvej1}/collection-days?weeks=2`)
+      assert.equal(resumed.days.length, 4, "the pause gone, its days are back")
     })
   })
 })

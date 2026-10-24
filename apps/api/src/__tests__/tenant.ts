@@ -20,7 +20,7 @@ import { randomBytes, randomInt, randomUUID } from "node:crypto"
 
 import type { Database, Tx } from "@waste/db/client"
 import { projectAccess, role, roleGrant, serviceProviderAccess, userAccount } from "@waste/db/schema/access"
-import { agreement, subscription } from "@waste/db/schema/agreements"
+import { agreement, subscription, subscriptionPause } from "@waste/db/schema/agreements"
 import { containerType, product, serviceFrequency, wasteFraction } from "@waste/db/schema/catalogue"
 import { collectionCalendar, collectionCalendarHoliday } from "@waste/db/schema/collection-calendars"
 import { vehicleAllocation, vehicleAllocationEvent } from "@waste/db/schema/allocations"
@@ -368,6 +368,7 @@ export async function dropTenant(pool: Database, companyId: string, owner?: Data
     await tx.delete(planningAreaBoundary).where(eq(planningAreaBoundary.companyId, companyId))
     await tx.delete(planningArea).where(eq(planningArea.companyId, companyId))
     await tx.delete(containerServicePlacement).where(eq(containerServicePlacement.companyId, companyId))
+    await tx.delete(subscriptionPause).where(eq(subscriptionPause.companyId, companyId))
     await tx.delete(subscription).where(eq(subscription.companyId, companyId))
     await tx.delete(agreement).where(eq(agreement.companyId, companyId))
     // Finance's tariff: an agreement names its list, so the list goes after the agreements; its rows went above, before the planning areas they name.

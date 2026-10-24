@@ -18,6 +18,11 @@ import {
   SubscriptionCreate,
   SubscriptionListQuery,
   SubscriptionPatch,
+  SubscriptionPause,
+  SubscriptionPauseCancel,
+  SubscriptionPauseCreate,
+  SubscriptionPauseListQuery,
+  SubscriptionPausePatch,
 } from "../agreements"
 import { refusal, refusesAnEmptyPatch, refusesWhatTheServerOwns } from "./expect"
 
@@ -230,6 +235,27 @@ describe("SubscriptionChange and AgreementTermination (#291, slice 10)", () => {
   test("a termination answers the agreement and the stops left to remove by hand", () => {
     const stop = { routeId: ID, routeLabel: "RC-1042", operatingDate: "2026-11-03", pickupId: OTHER, containerId: THIRD }
     assert.deepEqual(AgreementTerminated.parse({ agreement: { ...agreement, validTo: "2026-11-01" }, stopsToRemove: [stop] }).stopsToRemove, [stop])
+  })
+})
+
+describe("a subscription's pause (#291, slice 10)", () => {
+  const pause = { id: ID, projectId: OTHER, subscriptionId: THIRD, validFrom: "2026-07-01", validTo: "2026-08-15", ...STAMPS }
+
+  test("is the subscription's, over a period that runs forwards; open is a pause until it is resumed", () => {
+    assert.deepEqual(SubscriptionPause.parse(pause), pause)
+    assert.equal(SubscriptionPause.parse({ ...pause, validTo: null }).validTo, null)
+    assert.deepEqual(refusal(SubscriptionPause.safeParse({ ...pause, validTo: "2026-07-01" })), [{ path: "validTo", message: BACKWARDS }])
+  })
+
+  test("is written as its period alone, the subscription being the path's, and moved by either bound; a cancel takes nothing", () => {
+    assert.deepEqual(SubscriptionPauseCreate.parse({ validFrom: "2026-07-01" }), { validFrom: "2026-07-01" })
+    assert.match(refusal(SubscriptionPauseCreate.safeParse({ validFrom: "2026-07-01", subscriptionId: THIRD }))[0].message, /subscriptionId/)
+    refusesWhatTheServerOwns(SubscriptionPauseCreate, { validFrom: "2026-07-01" })
+    assert.deepEqual(SubscriptionPausePatch.parse({ validTo: null }), { validTo: null })
+    refusesAnEmptyPatch(SubscriptionPausePatch)
+    assert.deepEqual(refusal(SubscriptionPausePatch.safeParse({ validFrom: "2026-08-01", validTo: "2026-07-01" })), [{ path: "validTo", message: BACKWARDS }])
+    assert.equal(SubscriptionPauseCancel.safeParse({ note: "x" }).success, false)
+    assert.deepEqual(SubscriptionPauseListQuery.parse({ subscriptionId: THIRD, validOn: "2026-07-04" }), { subscriptionId: THIRD, validOn: "2026-07-04", limit: 50 })
   })
 })
 

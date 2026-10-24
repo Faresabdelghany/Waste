@@ -34,8 +34,17 @@ import { formatOccurrenceShortDate, SHIFT_SEARCH_DAYS, type HolidayPolicy, type 
 import { addDays, serviceDayOf, type SchemeRecurrence } from "../route-schemes/recurrence"
 import { planRoutes, skippedHoliday, type ExistingRoute, type GenerationGroup, type GenerationWindow } from "./generation"
 
-/** A container a group collects at the property: its fraction's name, and its placement's period (`validTo` the first day out of force). */
-export type ServedContainer = { fraction: string; validFrom: string; validTo: string | null }
+/** A period, half-open: `validTo` the first day out of force, null while it runs. */
+type Period = { validFrom: string; validTo: string | null }
+
+/**
+ * A container a group collects at the property: its fraction's name, its
+ * placement's period, and the pauses of the subscription it serves (#291),
+ * on whose days generation plans it no stop — none where it has no pause.
+ */
+export type ServedContainer = Period & { fraction: string; pauses?: readonly Period[] }
+
+const covers = (period: Period, day: string): boolean => period.validFrom <= day && (period.validTo === null || period.validTo > day)
 
 /** A group that collects at least one of the property's containers. */
 export type ServingGroup = GenerationGroup & { containers: readonly ServedContainer[] }
@@ -79,9 +88,9 @@ export const movedByOffice = (date: string): string => `Moved to ${formatOccurre
 
 const byName = (a: string, b: string): number => a.localeCompare(b)
 
-/** The fractions of a group's containers in force on the service date, by name, once each. */
+/** The fractions of a group's containers in force and not paused on the service date, by name, once each. */
 function fractionsOn(group: ServingGroup, serviceDate: string): string[] {
-  const inForce = group.containers.filter((container) => container.validFrom <= serviceDate && (container.validTo === null || container.validTo > serviceDate))
+  const inForce = group.containers.filter((container) => covers(container, serviceDate) && !(container.pauses ?? []).some((pause) => covers(pause, serviceDate)))
   return [...new Set(inForce.map((container) => container.fraction))].sort(byName)
 }
 

@@ -8,7 +8,9 @@
 //
 // The containers are the property's placements in force on some day the plan
 // walks — from the lookback a shift can reach into the window, to its end —
-// each with its period, so the domain counts a bin only while it is placed;
+// each with its period and the pauses of the subscription it serves (#291),
+// so the domain counts a bin only while it is placed and not paused, as
+// generation's matcher does;
 // through the subscriptions the property holds (a shared collection point's
 // members are not followed yet). The groups that collect them are a manual group's
 // listed stops and a rule group's latest match (`generation_match`, the set
@@ -27,7 +29,7 @@ import { and, arrayOverlaps, asc, desc, eq, gte, ilike, inArray, lte, sql } from
 import type { PgColumn } from "drizzle-orm/pg-core"
 
 import type { Tx } from "../client"
-import { subscription } from "../schema/agreements"
+import { subscription, subscriptionPause } from "../schema/agreements"
 import { wasteFraction } from "../schema/catalogue"
 import { collectionCalendarHoliday } from "../schema/collection-calendars"
 import { containerServicePlacement } from "../schema/containers"
@@ -117,6 +119,7 @@ export async function readCollectionDayInputs(tx: Tx, scope: ScopedProject, prop
   const placements = await tx
     .select({
       containerId: containerServicePlacement.containerId,
+      subscriptionId: containerServicePlacement.subscriptionId,
       fraction: wasteFraction.name,
       validFrom: containerServicePlacement.validFrom,
       validTo: containerServicePlacement.validTo,
@@ -132,8 +135,29 @@ export async function readCollectionDayInputs(tx: Tx, scope: ScopedProject, prop
         sql`(${containerServicePlacement.validTo} is null or ${containerServicePlacement.validTo} > ${walkFrom})`,
       ),
     )
+  // The pauses of those subscriptions over the walk: a paused day plans no stop for the bins serving it.
+  const subscriptionIds = [...new Set(placements.map((row) => row.subscriptionId))]
+  const pauses =
+    subscriptionIds.length === 0
+      ? []
+      : await tx
+          .select({ subscriptionId: subscriptionPause.subscriptionId, validFrom: subscriptionPause.validFrom, validTo: subscriptionPause.validTo })
+          .from(subscriptionPause)
+          .where(
+            and(
+              fenced(subscriptionPause),
+              inArray(subscriptionPause.subscriptionId, subscriptionIds),
+              lte(subscriptionPause.validFrom, window.to),
+              sql`(${subscriptionPause.validTo} is null or ${subscriptionPause.validTo} > ${walkFrom})`,
+            ),
+          )
+  const pausesOf = new Map<string, { validFrom: string; validTo: string | null }[]>()
+  for (const pause of pauses) pausesOf.set(pause.subscriptionId, [...(pausesOf.get(pause.subscriptionId) ?? []), { validFrom: pause.validFrom, validTo: pause.validTo }])
   const placementsOf = new Map<string, ServedContainer[]>()
-  for (const row of placements) placementsOf.set(row.containerId, [...(placementsOf.get(row.containerId) ?? []), { fraction: row.fraction, validFrom: row.validFrom, validTo: row.validTo }])
+  for (const row of placements) {
+    const served: ServedContainer = { fraction: row.fraction, validFrom: row.validFrom, validTo: row.validTo, pauses: pausesOf.get(row.subscriptionId) ?? [] }
+    placementsOf.set(row.containerId, [...(placementsOf.get(row.containerId) ?? []), served])
+  }
   if (placementsOf.size === 0) return { calendar, schemes: [] }
   const containerIds = [...placementsOf.keys()]
 

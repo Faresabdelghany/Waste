@@ -81,6 +81,7 @@ export const AUDITED_TABLES = [
   "service_provider_price",
   "settlement",
   "sorting_guide_item",
+  "subscription_pause",
 ] as const
 export type AuditedTable = (typeof AUDITED_TABLES)[number]
 

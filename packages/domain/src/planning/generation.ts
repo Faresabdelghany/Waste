@@ -328,6 +328,8 @@ export type StopCandidate = {
   located: boolean
   /** Whether the location is inside the scheme's boundary in force that day; false where there is no location, no boundary or no planning area. */
   contained: boolean
+  /** Whether a pause of its subscription is in force that day (#291): no group plans it, and it is not unlocated, since nobody wants it collected. */
+  paused: boolean
 }
 
 /** A Stop Matching Rule by ids: the fractions it matches, the container types it is restricted to (none is no restriction), the vehicle type it asks for. */
@@ -396,7 +398,10 @@ const stopOf = (candidate: StopCandidate, position: number): PlannedStop => ({
  * Every group's stops on one service date with the tie-breaks applied:
  * `groups` are the ones that run that day, in any order. Manual groups claim
  * first in position order, then rule groups in position order take what is
- * left; a container is on one route a day.
+ * left; a container is on one route a day. A container whose subscription is
+ * paused that day (#291) is passed over by both: no stop, no claim, and not
+ * unlocated. What a rule matches (`ruleMatchSet`, the drift stamp) still
+ * counts it, since a pause is not drift.
  */
 export function resolveStops(groups: readonly StopGroup[], candidates: readonly StopCandidate[], compatible: ReadonlySet<string>): ResolvedStops {
   const byId = new Map(candidates.map((candidate) => [candidate.containerId, candidate]))
@@ -415,6 +420,7 @@ export function resolveStops(groups: readonly StopGroup[], candidates: readonly 
         unlocated.add(containerId)
         continue
       }
+      if (candidate.paused) continue
       claimed.add(containerId)
       planned.push(stopOf(candidate, planned.length + 1))
     }
@@ -425,14 +431,14 @@ export function resolveStops(groups: readonly StopGroup[], candidates: readonly 
     const planned: PlannedStop[] = []
     if (group.rule !== null) {
       for (const candidate of candidates) {
-        if (candidate.located || !ruleMatches(candidate, group.rule, compatible)) continue
+        if (candidate.located || candidate.paused || !ruleMatches(candidate, group.rule, compatible)) continue
         // A manual group planned it already, its place looked up by the pick and not by geometry: it has a stop, and is not unlocated for a rule that would have wanted it too.
         if (claimed.has(candidate.containerId)) continue
         // The rule wants it and nobody can say where it is.
         unlocated.add(candidate.containerId)
       }
       for (const candidate of ruleMatchSet(candidates, group.rule, compatible)) {
-        if (claimed.has(candidate.containerId)) continue
+        if (candidate.paused || claimed.has(candidate.containerId)) continue
         claimed.add(candidate.containerId)
         planned.push(stopOf(candidate, planned.length + 1))
       }
