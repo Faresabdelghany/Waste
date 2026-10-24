@@ -35,6 +35,10 @@
 // drizzle-kit writes it now onto what 0004 says, and
 // waste-code-rendering.test.ts pins the two ALTER TABLE statements.
 //
+// Migration 0037 (#291 C4) gave `customer` its own payment terms, with the
+// range the project's are held to: `CHANGED_IN_0037` maps its CREATE TABLE
+// onto 0004's, and finance-settings-rendering.test.ts pins the statements.
+//
 // This is also what makes a change to the vocabulary a migration: the values
 // are spelled here as the file spells them, so adding one to a list in
 // @waste/domain/registry/vocabulary fails this test until a migration replaces
@@ -212,6 +216,28 @@ const pointTable = (instructions: boolean): string =>
     oneOfCheck("shared_collection_point", "status", "draft", "open", "restricted", "closed"),
   ])
 
+/** customer as drizzle-kit writes it today, and as it wrote it as of 0004, before 0037 gave it its own payment terms (#291 C4). */
+const customerTable = (terms: boolean): string =>
+  createTable("customer", "tenant", [
+    '"kind" text NOT NULL',
+    '"name" text NOT NULL',
+    '"registration_number" text',
+    '"email" text',
+    '"phone" text',
+    '"billing_address" text',
+    '"service_messages_allowed" boolean DEFAULT true NOT NULL',
+    ...(terms ? ['"payment_terms_days" integer'] : []),
+    '"status" text NOT NULL',
+    uniqueKey("customer_tenant_key", "company_id", "id"),
+    oneOfCheck("customer", "kind", "person", "organisation"),
+    oneOfCheck("customer", "status", "active", "inactive"),
+    lowercaseCheck("customer", "email"),
+    ...(terms ? [`CONSTRAINT "customer_payment_terms_range" CHECK (${ref("customer", "payment_terms_days")} between 0 and 365)`] : []),
+  ])
+
+/** What 0037 changed on one table 0004 created: the statement as drizzle-kit generates it now, and as it generated it as of 0004. */
+const CHANGED_IN_0037 = new Map([[customerTable(true), customerTable(false)]])
+
 /** What 0022 changed on two tables 0004 created: the statement as drizzle-kit generates it now, and as it generated it as of 0004. */
 const CHANGED_IN_0022 = new Map([
   [propertyTable(true), propertyTable(false)],
@@ -257,20 +283,7 @@ const expected = [
     `CONSTRAINT "service_frequency_shape" CHECK ((${ref("service_frequency", "collections_per_week")} is not null or (${ref("service_frequency", "weeks_between")} is null and ${ref("service_frequency", "days_between")} is null)) and (${ref("service_frequency", "weeks_between")} is null or ${ref("service_frequency", "days_between")} is null))`,
   ]),
   productTable(true),
-  createTable("customer", "tenant", [
-    '"kind" text NOT NULL',
-    '"name" text NOT NULL',
-    '"registration_number" text',
-    '"email" text',
-    '"phone" text',
-    '"billing_address" text',
-    '"service_messages_allowed" boolean DEFAULT true NOT NULL',
-    '"status" text NOT NULL',
-    uniqueKey("customer_tenant_key", "company_id", "id"),
-    oneOfCheck("customer", "kind", "person", "organisation"),
-    oneOfCheck("customer", "status", "active", "inactive"),
-    lowercaseCheck("customer", "email"),
-  ]),
+  customerTable(true),
   propertyTable(true),
   createTable("property_party", "project", [
     '"property_id" uuid NOT NULL',
@@ -424,7 +437,7 @@ describe("the Registry tables as drizzle-kit writes them", () => {
   const generatedHead = async (): Promise<string[]> => [
     ...(await statementsFor(tables))
       .filter((statement) => !ADDED_IN_0010.includes(statement))
-      .map((statement) => CHANGED_IN_0007.get(statement) ?? CHANGED_IN_0010.get(statement) ?? CHANGED_IN_0022.get(statement) ?? CHANGED_IN_0029.get(statement) ?? statement),
+      .map((statement) => CHANGED_IN_0007.get(statement) ?? CHANGED_IN_0010.get(statement) ?? CHANGED_IN_0022.get(statement) ?? CHANGED_IN_0029.get(statement) ?? CHANGED_IN_0037.get(statement) ?? statement),
     ...DROPPED_IN_0007,
   ]
 
@@ -438,6 +451,7 @@ describe("the Registry tables as drizzle-kit writes them", () => {
     for (const statement of CHANGED_IN_0010.keys()) assert.ok(today.includes(statement), statement.split("\n")[0])
     for (const statement of CHANGED_IN_0022.keys()) assert.ok(today.includes(statement), statement.split("\n")[0])
     for (const statement of CHANGED_IN_0029.keys()) assert.ok(today.includes(statement), statement.split("\n")[0])
+    for (const statement of CHANGED_IN_0037.keys()) assert.ok(today.includes(statement), statement.split("\n")[0])
     for (const statement of ADDED_IN_0010) assert.ok(today.includes(statement), statement)
     for (const statement of DROPPED_IN_0007) assert.equal(today.includes(statement), false, statement)
   })

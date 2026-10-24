@@ -36,7 +36,7 @@ const NOW = new Date("2026-09-30T12:00:00Z")
 const STAMPS = { createdAt: "2026-09-24T09:00:00.000Z", updatedAt: "2026-09-25T09:30:00.000Z" }
 const HARBOR = "01a0d2a4-a280-7002-8000-000000000002"
 
-const copenhagen: Project = { id: "01a0d2a4-a280-7002-8000-000000000001", ...STAMPS, name: "Copenhagen Central", kind: "Municipality", language: "da", currency: "DKK", timezone: "Europe/Copenhagen", status: "active", weekend: ["saturday", "sunday"], holidayList: "Danish public holidays", publicSlug: null }
+const copenhagen: Project = { id: "01a0d2a4-a280-7002-8000-000000000001", ...STAMPS, name: "Copenhagen Central", kind: "Municipality", language: "da", currency: "DKK", timezone: "Europe/Copenhagen", status: "active", weekend: ["saturday", "sunday"], holidayList: "Danish public holidays", publicSlug: null, paymentTermsDays: 30, paymentReferenceScheme: "none" }
 const square = (west: number, south: number, east: number, north: number): PlanningAreaBoundary["boundary"] => ({
   type: "Polygon",
   coordinates: [
@@ -58,7 +58,7 @@ const parkvejBlock: PlanningArea = { ...osterbroArea, id: "01a0d2a4-a280-7016-80
 
 const residual: WasteFraction = { id: "01a0d2a4-a280-7007-8000-000000000001", ...STAMPS, key: "residual", name: "Residual", wasteCode: null }
 const bin240: ContainerType = { id: "01a0d2a4-a280-7008-8000-000000000002", ...STAMPS, name: "Two-wheel bin · 240 L", volumeLitres: 240 }
-const osterbro: Customer = { id: "01a0d2a4-a280-700b-8000-000000000002", ...STAMPS, kind: "organisation", name: "Østerbro Housing", registrationNumber: "38112009", email: null, phone: null, billingAddress: null, serviceMessagesAllowed: true, status: "active" }
+const osterbro: Customer = { id: "01a0d2a4-a280-700b-8000-000000000002", ...STAMPS, kind: "organisation", name: "Østerbro Housing", registrationNumber: "38112009", email: null, phone: null, billingAddress: null, serviceMessagesAllowed: true, paymentTermsDays: null, status: "active" }
 const parkvej: Property = { id: "01a0d2a4-a280-700c-8000-000000000001", ...STAMPS, projectId: copenhagen.id, name: "Parkvej 18", address: "Parkvej 18, 2100 København Ø", registryId: null, kind: "residential", location: { type: "Point", coordinates: [12.5709, 55.7012] }, notes: null, driverInstructions: null, status: "active", parties: [] }
 const dock4: Property = { ...parkvej, id: "01a0d2a4-a280-700c-8000-000000000002", name: "Dock 4 · Harbor Offices", address: "Dock 4, Nordhavn", location: null }
 const kongens: SharedCollectionPoint = { id: "01a0d2a4-a280-7010-8000-000000000001", ...STAMPS, projectId: copenhagen.id, name: "Kongens Nytorv Shared Point", kind: "underground", address: "Kongens Nytorv, 1050 København K", location: { type: "Point", coordinates: [12.5855, 55.6805] }, eligibilityDistanceM: 350, operatingModel: "municipal", accessMode: "open", accessConditions: null, availability: "24/7", driverInstructions: null, billingMode: "municipal", responsibleCustomerId: null, status: "open", members: [] }

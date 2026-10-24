@@ -35,9 +35,9 @@ const organisationFixtures = getModuleDefinition({ workspaceId: "configure", mod
 const customerFixtures = getModuleDefinition({ workspaceId: "customers", moduleId: "contacts" })?.records ?? []
 
 // The seeded rows as the API answers them (packages/db/src/seed/registry.ts), in the seed's id scheme.
-const copenhagen: Project = { id: "01a0d2a4-a280-7002-8000-000000000001", ...STAMPS, name: "Copenhagen Central", kind: "Municipality", language: "da", currency: "DKK", timezone: "Europe/Copenhagen", status: "active", weekend: ["saturday", "sunday"], holidayList: "Danish public holidays", publicSlug: null }
+const copenhagen: Project = { id: "01a0d2a4-a280-7002-8000-000000000001", ...STAMPS, name: "Copenhagen Central", kind: "Municipality", language: "da", currency: "DKK", timezone: "Europe/Copenhagen", status: "active", weekend: ["saturday", "sunday"], holidayList: "Danish public holidays", publicSlug: null, paymentTermsDays: 30, paymentReferenceScheme: "none" }
 const HARBOR = "01a0d2a4-a280-7002-8000-000000000002"
-const mikkel: Customer = { id: "01a0d2a4-a280-700b-8000-000000000001", ...STAMPS, kind: "person", name: "Mikkel Sørensen", registrationNumber: null, email: "mikkel.sorensen@example.dk", phone: null, billingAddress: null, serviceMessagesAllowed: true, status: "active" }
+const mikkel: Customer = { id: "01a0d2a4-a280-700b-8000-000000000001", ...STAMPS, kind: "person", name: "Mikkel Sørensen", registrationNumber: null, email: "mikkel.sorensen@example.dk", phone: null, billingAddress: null, serviceMessagesAllowed: true, paymentTermsDays: null, status: "active" }
 const osterbro: Customer = { ...mikkel, id: "01a0d2a4-a280-700b-8000-000000000002", kind: "organisation", name: "Østerbro Housing", registrationNumber: "38112009", email: null }
 const kab: Customer = { ...osterbro, id: "01a0d2a4-a280-700b-8000-000000000004", name: "KAB Bolig", registrationNumber: null, status: "inactive" }
 const PRODUCT = "01a0d2a4-a280-700a-8000-000000000001"

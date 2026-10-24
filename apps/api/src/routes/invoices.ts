@@ -291,6 +291,8 @@ export function invoiceRoutes(guard: MiddlewareHandler<AuthEnv>, { now = () => n
             creditReason: body.reason,
             creditNote: body.note ?? null,
             issuedBy: principal.user.id,
+            // Nobody pays a credit note, so it carries no reference (#291 C4).
+            paymentReferenceScheme: "none",
           },
           lines: drafts,
           newId,

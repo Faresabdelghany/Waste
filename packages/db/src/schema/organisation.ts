@@ -50,6 +50,8 @@
 // The series is the company's because the legal entity's is; it arrived with
 // migration 0010.
 import { PUBLIC_SLUG_LENGTH, PUBLIC_SLUG_PATTERN } from "@waste/domain/access/public-slug"
+import { BIC_PATTERN, DEFAULT_PAYMENT_TERMS_DAYS, FIK_CREDITOR_PATTERN, IBAN_PATTERN, PAYMENT_TERMS_MAX, VAT_NUMBER_PATTERN } from "@waste/domain/finance/payment"
+import { PAYMENT_REFERENCE_SCHEMES } from "@waste/domain/finance/vocabulary"
 import { DEFAULT_WEEKEND, SERVICE_DAYS } from "@waste/domain/planning/vocabulary"
 import { sql } from "drizzle-orm"
 import { check, integer, text } from "drizzle-orm/pg-core"
@@ -84,10 +86,20 @@ export const company = wms.table(
     nextTicketNumber: integer().notNull().default(1000),
     /** The invoice-number counter (Issue #112): the next document number this company mints, `INV-<n>` or `CN-<n>` on the wire, one per invoice or credit note under the same row lock, held for the rest of the transaction so a run that fails leaves no gap. */
     nextInvoiceNumber: integer().notNull().default(1000),
+    /** The invoice identity (#291 C4): what an invoice document prints beside the legal name and the registration — the VAT registration, the bank account a payment goes to, and the creditor number a FI card names; each null until the company sets it. */
+    vatNumber: text(),
+    bankIban: text(),
+    bankBic: text(),
+    fikCreditorNumber: text(),
   },
   (t) => [
     // The registration is the one identity a registry gives a company: once per country.
     uniqueOn(t.country, t.registrationNumber),
+    // The invoice identity's shapes, @waste/domain/finance/payment's one spelling; a null passes.
+    check(tableObjectName(t.id.table, "vat_number_shape", "company"), sql`${t.vatNumber} ~ ${sql.raw(`'${VAT_NUMBER_PATTERN}'`)}`),
+    check(tableObjectName(t.id.table, "bank_iban_shape", "company"), sql`${t.bankIban} ~ ${sql.raw(`'${IBAN_PATTERN}'`)}`),
+    check(tableObjectName(t.id.table, "bank_bic_shape", "company"), sql`${t.bankBic} ~ ${sql.raw(`'${BIC_PATTERN}'`)}`),
+    check(tableObjectName(t.id.table, "fik_creditor_number_shape", "company"), sql`${t.fikCreditorNumber} ~ ${sql.raw(`'${FIK_CREDITOR_PATTERN}'`)}`),
     // The company is its own tenant. There is no helper for a check this
     // table alone needs, so the label the refusal would print names the check
     // itself, the way every other call here names the helper that built it.
@@ -126,6 +138,10 @@ export const project = wms.table(
      * company, since one public address names one project.
      */
     publicSlug: text(),
+    /** How many days after issue the project's invoices are due (#291 C4), unless a customer has terms of its own. */
+    paymentTermsDays: integer().notNull().default(DEFAULT_PAYMENT_TERMS_DAYS),
+    /** How its invoices are referenced for payment (#291 C4): none, or a FI card, which needs the company's creditor number. */
+    paymentReferenceScheme: text().notNull().default("none"),
   },
   (t) => [
     companyReference(t, company),
@@ -138,6 +154,9 @@ export const project = wms.table(
     // other table has it; the label names the check itself.
     check(tableObjectName(t.id.table, "weekend_not_every_day", "project"), sql`cardinality(${t.weekend}) < ${sql.raw(String(SERVICE_DAYS.length))}`),
     uniqueOn(t.publicSlug),
+    oneOf(t.paymentReferenceScheme, PAYMENT_REFERENCE_SCHEMES),
+    // Due on issue at the soonest, within the domain's longest terms.
+    check(tableObjectName(t.id.table, "payment_terms_range", "project"), sql`${t.paymentTermsDays} between 0 and ${sql.raw(String(PAYMENT_TERMS_MAX))}`),
     // The slug's shape, `@waste/domain/access/public-slug`'s one spelling:
     // lowercase words joined by single hyphens, within the lengths. No helper
     // spells it because no other table has it; the label names the check.

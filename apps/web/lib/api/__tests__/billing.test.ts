@@ -51,8 +51,8 @@ const eventFixtures = fixturesOf("commercial", "events")
 const runFixtures = fixturesOf("commercial", "billing")
 const invoiceFixtures = fixturesOf("commercial", "invoices")
 
-const copenhagen: Project = { id: "01a0d2a4-a280-7002-8000-000000000001", ...STAMPS, name: "Copenhagen Central", kind: "Municipality", language: "da", currency: "DKK", timezone: "Europe/Copenhagen", status: "active", weekend: ["saturday", "sunday"], holidayList: "Danish public holidays", publicSlug: null }
-const osterbro: Customer = { id: "01a0d2a4-a280-700b-8000-000000000002", ...STAMPS, kind: "organisation", name: "Østerbro Housing", registrationNumber: "38112009", email: null, phone: null, billingAddress: null, serviceMessagesAllowed: true, status: "active" }
+const copenhagen: Project = { id: "01a0d2a4-a280-7002-8000-000000000001", ...STAMPS, name: "Copenhagen Central", kind: "Municipality", language: "da", currency: "DKK", timezone: "Europe/Copenhagen", status: "active", weekend: ["saturday", "sunday"], holidayList: "Danish public holidays", publicSlug: null, paymentTermsDays: 30, paymentReferenceScheme: "none" }
+const osterbro: Customer = { id: "01a0d2a4-a280-700b-8000-000000000002", ...STAMPS, kind: "organisation", name: "Østerbro Housing", registrationNumber: "38112009", email: null, phone: null, billingAddress: null, serviceMessagesAllowed: true, paymentTermsDays: null, status: "active" }
 const agr2408: Agreement = { id: "01a0d2a4-a280-7012-8000-000000000001", ...STAMPS, projectId: copenhagen.id, number: "AGR-2408", customerId: osterbro.id, payerCustomerId: osterbro.id, status: "active", billingCadence: "monthly", currency: "DKK", notes: null, priceListId: null, validFrom: "2026-01-01", validTo: null }
 // An agreement of one party billed to another (#256), as the seed's AGR-2607 is.
 const kab: Customer = { ...osterbro, id: "01a0d2a4-a280-700b-8000-000000000003", name: "KAB Bolig", registrationNumber: "38112010" }
@@ -407,7 +407,7 @@ describe("the billing runs module", () => {
 })
 
 describe("the invoices module", () => {
-  const invoice: Invoice = { ...RECORDED, id: "01a0d2a4-a280-7080-8000-000000000001", projectId: copenhagen.id, number: 26007188, label: "INV-26007188", kind: "invoice", customerId: osterbro.id, currency: "DKK", issuedOn: "2026-09-30", dueOn: "2026-10-30", periodFrom: "2026-09-01", periodTo: "2026-09-30", billingRunId: "01a0d2a4-a280-7070-8000-000000000001", creditsInvoiceId: null, creditReason: null, creditNote: null, netMinor: 66650, vatMinor: 16663, grossMinor: 83313, issuedBy: ADMIN }
+  const invoice: Invoice = { ...RECORDED, id: "01a0d2a4-a280-7080-8000-000000000001", projectId: copenhagen.id, number: 26007188, label: "INV-26007188", kind: "invoice", customerId: osterbro.id, currency: "DKK", issuedOn: "2026-09-30", dueOn: "2026-10-30", periodFrom: "2026-09-01", periodTo: "2026-09-30", billingRunId: "01a0d2a4-a280-7070-8000-000000000001", creditsInvoiceId: null, creditReason: null, creditNote: null, netMinor: 66650, vatMinor: 16663, grossMinor: 83313, issuedBy: ADMIN , paymentReference: null}
   const creditNote: Invoice = { ...invoice, id: "01a0d2a4-a280-7080-8000-000000000002", number: 26007189, label: "CN-26007189", kind: "credit-note", dueOn: "2026-09-30", periodFrom: null, periodTo: null, billingRunId: null, creditsInvoiceId: invoice.id, creditReason: "quantity-correction", creditNote: "One sofa", netMinor: -30000, vatMinor: -7500, grossMinor: -37500 }
   const line: InvoiceLine = { ...RECORDED, id: "01a0d2a4-a280-7081-8000-000000000001", invoiceId: invoice.id, position: 1, billableEventId: manual.id, creditsLineId: null, description: "Bulky waste pickup 2026-09-29", productId: bulky.id, serviceDate: "2026-09-29", quantity: 2, unitPriceMinor: 30000, netMinor: 60000, vatPercent: 25, vatMinor: 15000 }
 

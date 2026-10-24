@@ -765,6 +765,35 @@ describe("the Finance & Contracting tables against a fresh database", { skip: da
       await assert.rejects(tx.transaction((savepoint) => savepoint.insert(billableEvent).values(charge({ id: a.third }))), refusedWith("23505", /billable_event_subscription_charge_idx/), "a period charged twice")
     }))
 
+  test("finance settings (#291 C4): the company's invoice identity by its shapes, a project's and a customer's terms in range, a project's scheme of the vocabulary, and an invoice's reference by its shape and an invoice's alone (23514)", () =>
+    seeded(async (tx) => {
+      // Each refusal in a savepoint of its own, so the transaction goes on past it.
+      const refused = (statement: (savepoint: Tx) => Promise<unknown>, constraint: RegExp, why: string) => assert.rejects(tx.transaction((savepoint) => statement(savepoint)), refusedWith("23514", constraint), why)
+      const companySet = (values: Partial<typeof company.$inferInsert>) => (savepoint: Tx) => savepoint.update(company).set(values).where(eq(company.id, a.company))
+      await tx.update(company).set({ vatNumber: "DK12345678", bankIban: "DK5000400440116243", bankBic: "DABADKKK", fikCreditorNumber: "85123456" }).where(eq(company.id, a.company))
+      await refused(companySet({ vatNumber: "12345678" }), /company_vat_number_shape/, "a VAT number without its country")
+      await refused(companySet({ bankIban: "DK50 0040 0440 1162 43" }), /company_bank_iban_shape/, "an IBAN with the spaces a person reads it by")
+      await refused(companySet({ bankBic: "DABA" }), /company_bank_bic_shape/, "a BIC too short")
+      await refused(companySet({ fikCreditorNumber: "8512345" }), /company_fik_creditor_number_shape/, "seven digits")
+      await tx.update(company).set({ vatNumber: null, bankIban: null, bankBic: null, fikCreditorNumber: null }).where(eq(company.id, a.company))
+
+      const [defaults] = await tx.select({ terms: project.paymentTermsDays, scheme: project.paymentReferenceScheme }).from(project).where(eq(project.id, a.project))
+      assert.deepEqual(defaults, { terms: 30, scheme: "none" }, "a project the migration found keeps its invoices as they were")
+      const projectSet = (values: Partial<typeof project.$inferInsert>) => (savepoint: Tx) => savepoint.update(project).set(values).where(eq(project.id, a.project))
+      await refused(projectSet({ paymentTermsDays: 366 }), /project_payment_terms_range/, "past a year")
+      await refused(projectSet({ paymentTermsDays: -1 }), /project_payment_terms_range/, "before issue")
+      await refused(projectSet({ paymentReferenceScheme: "kid" }), /project_payment_reference_scheme_one_of/, "a scheme outside the vocabulary")
+      await tx.update(project).set({ paymentTermsDays: 0, paymentReferenceScheme: "fik-75" }).where(eq(project.id, a.project))
+      await refused((savepoint) => savepoint.update(customer).set({ paymentTermsDays: 400 }).where(eq(customer.id, a.customer)), /customer_payment_terms_range/, "a customer's past a year")
+      await tx.update(customer).set({ paymentTermsDays: 8 }).where(eq(customer.id, a.customer))
+
+      const invoiceSet = (id: string, values: Partial<typeof invoice.$inferInsert>) => (savepoint: Tx) => savepoint.update(invoice).set(values).where(eq(invoice.id, id))
+      await refused(invoiceSet(a.invoice, { paymentReference: "26007188" }), /invoice_payment_reference_shape/, "a reference of neither length")
+      await refused(invoiceSet(a.invoice, { paymentReference: "+71<000000260071882" }), /invoice_payment_reference_shape/, "the printed line is no reference")
+      await tx.update(invoice).set({ paymentReference: "000000000010006" }).where(eq(invoice.id, a.invoice))
+      await assert.rejects(tx.transaction((savepoint) => savepoint.insert(invoice).values(creditNote({ id: a.other, number: 1100, paymentReference: "000000000011006" }))), refusedWith("23514", /invoice_payment_reference_shape/), "a credit note is paid by nobody")
+    }))
+
   test("the domain's vatOf agrees with the two _vat_shape checks over odd amounts of both signs: every row the domain computed lands, and an øre off is refused", () =>
     seeded(async (tx) => {
       let rows = 0

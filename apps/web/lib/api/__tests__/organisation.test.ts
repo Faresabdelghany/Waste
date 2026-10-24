@@ -46,7 +46,7 @@ const context = (fixtures: readonly BusinessRecord[], resolve: Resolver = NOTHIN
 
 // The seeded demo company as the API answers it (packages/db/src/seed/demo.ts).
 const COMPANY_ID = "01a0d2a4-a280-7001-8000-000000000001"
-const company: Company = { id: COMPANY_ID, ...STAMPS, name: "Kystbyen Renovation", legalName: "Kystbyen Renovation A/S", registrationNumber: "12345678", country: "DK", status: "active" }
+const company: Company = { id: COMPANY_ID, ...STAMPS, name: "Kystbyen Renovation", legalName: "Kystbyen Renovation A/S", registrationNumber: "12345678", country: "DK", status: "active", vatNumber: null, bankIban: null, bankBic: null, fikCreditorNumber: null }
 const copenhagen: Project = {
   id: "01a0d2a4-a280-7002-8000-000000000001",
   ...STAMPS,
@@ -58,7 +58,7 @@ const copenhagen: Project = {
   status: "active",
   weekend: ["saturday", "sunday"],
   holidayList: "Danish public holidays",
-  publicSlug: null,
+  publicSlug: null, paymentTermsDays: 30, paymentReferenceScheme: "none",
 }
 const harbor: Project = { ...copenhagen, id: "01a0d2a4-a280-7002-8000-000000000002", name: "Harbor Commercial", kind: "Business unit", status: "onboarding", holidayList: null }
 const aarhus: Project = { ...copenhagen, id: "019995e0-0000-7000-8000-00000000abcd", name: "Aarhus North", kind: "Contract", weekend: ["friday", "saturday"], holidayList: null }
@@ -150,7 +150,7 @@ describe("the company", () => {
     assert.ok(isCompanyRecord(tenant))
     const customerFixtures = getModuleDefinition({ workspaceId: "customers", moduleId: "contacts" })?.records ?? []
     const osterbro = customerAdapter.toRecord(
-      { id: "01a0d2a4-a280-700b-8000-000000000002", ...STAMPS, kind: "organisation", name: "Østerbro Housing", registrationNumber: "38112009", email: null, phone: null, billingAddress: null, serviceMessagesAllowed: true, status: "active" },
+      { id: "01a0d2a4-a280-700b-8000-000000000002", ...STAMPS, kind: "organisation", name: "Østerbro Housing", registrationNumber: "38112009", email: null, phone: null, billingAddress: null, serviceMessagesAllowed: true, paymentTermsDays: null, status: "active" },
       context(customerFixtures),
     )
     assert.equal(osterbro.id, "company-osterbro-housing", "the customer organisation's fixture id carries company- too")

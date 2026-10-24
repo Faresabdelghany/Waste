@@ -178,7 +178,7 @@ describe("finance.record-billable-events against Postgres", { skip }, () => {
         .returning({ id: billingRun.id })
       await issueInvoice(tx, {
         companyId: tenant.companyId,
-        draft: { projectId: tenant.projects.copenhagen.id, kind: "invoice", customerId: tenant.customers.housing.id, currency: "DKK", issuedOn: "2026-10-06", dueOn: "2026-11-05", periodFrom: event.serviceDate, periodTo: event.serviceDate, billingRunId: run.id, creditsInvoiceId: null, creditReason: null, creditNote: null, issuedBy: tenant.users.olivia.id },
+        draft: { projectId: tenant.projects.copenhagen.id, kind: "invoice", customerId: tenant.customers.housing.id, currency: "DKK", issuedOn: "2026-10-06", dueOn: "2026-11-05", periodFrom: event.serviceDate, periodTo: event.serviceDate, billingRunId: run.id, creditsInvoiceId: null, creditReason: null, creditNote: null, issuedBy: tenant.users.olivia.id, paymentReferenceScheme: "none" },
         lines: [{ billableEventId: event.id, creditsLineId: null, description: `Restaffald 240 L · ${event.serviceDate}`, productId: event.productId, serviceDate: event.serviceDate, quantity: event.quantity, unitPriceMinor: event.unitPriceMinor ?? 0, netMinor: event.netMinor ?? 0, vatPercent: event.vatPercent ?? 0, vatMinor: event.vatMinor ?? 0 }],
         newId,
         now: () => NOON,

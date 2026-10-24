@@ -16,18 +16,14 @@
 // off, the magnitude rounded, the sign put back, and a `-0` made `0` so an
 // assertion by `Object.is` reads it as the zero it is.
 //
-// `PAYMENT_TERMS_DAYS` is the one number here no table holds (§7.24): an
-// invoice is due thirty days after it is issued until `configure.finance`
-// lands, and a credit note is due on issue.
+// When an invoice is due is a project's terms, or its customer's (#291 C4,
+// finance/payment.ts).
 
 /** The most an amount in minor units may be: the `integer` column it is stored in. A price past it is `amount-too-large` (#291 C2), never a failed write. */
 export const MINOR_MAX = 2_147_483_647
 
 /** Whether an amount fits the column it is stored in, either sign. */
 export const fitsMinor = (value: number): boolean => Number.isInteger(value) && value >= -MINOR_MAX - 1 && value <= MINOR_MAX
-
-/** How many days after issue an invoice is due, until a project configures its own terms. */
-export const PAYMENT_TERMS_DAYS = 30
 
 /** The one rounding: half away from zero, as Postgres's `round(numeric)` rounds, never `-0`. */
 export function roundHalfAwayFromZero(value: number): number {

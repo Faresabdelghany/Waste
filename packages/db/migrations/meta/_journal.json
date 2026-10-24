@@ -260,6 +260,13 @@
       "when": 1792913386367,
       "tag": "0036_recurring_charges",
       "breakpoints": true
+    },
+    {
+      "idx": 37,
+      "version": "7",
+      "when": 1792915809470,
+      "tag": "0037_finance_settings",
+      "breakpoints": true
     }
   ]
 }

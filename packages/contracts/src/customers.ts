@@ -49,6 +49,7 @@ import {
 } from "@waste/domain/registry/vocabulary"
 import * as z from "zod"
 
+import { PaymentTermsDays } from "./finance"
 import { FlatPoint } from "./geojson"
 import { Id } from "./ids"
 import { ProjectScopedListQuery } from "./queries"
@@ -139,6 +140,8 @@ export const Customer = z.object({
   /** Whether the Customer may be written to about their service at all. */
   serviceMessagesAllowed: z.boolean(),
   status: CustomerStatus,
+  /** Its own payment terms (#291 C4), which its invoices are due by instead of their project's; null keeps the project's. */
+  paymentTermsDays: PaymentTermsDays.nullable(),
 })
 export type Customer = z.infer<typeof Customer>
 
@@ -154,6 +157,7 @@ export const CustomerCreate = z.strictObject({
     .default(true)
     .describe("Defaults to true when absent: a customer is written to about their own service until they say not to."),
   status: CustomerStatus.default("active").describe("Defaults to active when absent: a customer is registered in order to be served."),
+  paymentTermsDays: PaymentTermsDays.nullable().optional().describe("Null or absent keeps its projects' terms."),
 })
 export type CustomerCreate = z.infer<typeof CustomerCreate>
 
@@ -167,6 +171,8 @@ export const CustomerPatch = z
     billingAddress: Paragraph.nullable().optional(),
     serviceMessagesAllowed: z.boolean().optional(),
     status: CustomerStatus.optional(),
+    /** Null gives the project's terms back. */
+    paymentTermsDays: PaymentTermsDays.nullable().optional(),
   })
   .refine(changesSomething, somethingToChange)
 export type CustomerPatch = z.infer<typeof CustomerPatch>

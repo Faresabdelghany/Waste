@@ -663,10 +663,18 @@ column wms.company 9 status text not-null
 column wms.company 10 next_route_number integer not-null default=1000
 column wms.company 11 next_ticket_number integer not-null default=1000
 column wms.company 12 next_invoice_number integer not-null default=1000
+column wms.company 13 vat_number text
+column wms.company 14 bank_iban text
+column wms.company 15 bank_bic text
+column wms.company 16 fik_creditor_number text
+constraint wms.company company_bank_bic_shape CHECK ((bank_bic ~ '^[A-Z]{6}[A-Z0-9]{2}([A-Z0-9]{3})?$'::text))
+constraint wms.company company_bank_iban_shape CHECK ((bank_iban ~ '^[A-Z]{2}[0-9]{2}[A-Z0-9]{11,30}$'::text))
 constraint wms.company company_country_registration_number_key UNIQUE (country, registration_number)
+constraint wms.company company_fik_creditor_number_shape CHECK ((fik_creditor_number ~ '^[0-9]{8}$'::text))
 constraint wms.company company_pkey PRIMARY KEY (id)
 constraint wms.company company_self CHECK ((company_id = id))
 constraint wms.company company_status_one_of CHECK ((status = ANY (ARRAY['active'::text, 'onboarding'::text])))
+constraint wms.company company_vat_number_shape CHECK ((vat_number ~ '^[A-Z]{2}[0-9A-Z]{2,13}$'::text))
 index wms.company company_country_registration_number_key CREATE UNIQUE INDEX company_country_registration_number_key ON wms.company USING btree (country, registration_number)
 index wms.company company_pkey CREATE UNIQUE INDEX company_pkey ON wms.company USING btree (id)
 trigger wms.company company_audit_trail enabled=O CREATE TRIGGER company_audit_trail AFTER INSERT OR DELETE OR UPDATE ON wms.company FOR EACH ROW EXECUTE FUNCTION wms.audit_row('', '', 'next_route_number', 'next_ticket_number', 'next_invoice_number')
@@ -782,9 +790,11 @@ column wms.customer 9 phone text
 column wms.customer 10 billing_address text
 column wms.customer 11 service_messages_allowed boolean not-null default=true
 column wms.customer 12 status text not-null
+column wms.customer 13 payment_terms_days integer
 constraint wms.customer customer_company_id_fk FOREIGN KEY (company_id) REFERENCES wms.company(id)
 constraint wms.customer customer_email_lowercase CHECK ((email = lower(email)))
 constraint wms.customer customer_kind_one_of CHECK ((kind = ANY (ARRAY['person'::text, 'organisation'::text])))
+constraint wms.customer customer_payment_terms_range CHECK (((payment_terms_days >= 0) AND (payment_terms_days <= 365)))
 constraint wms.customer customer_pkey PRIMARY KEY (id)
 constraint wms.customer customer_status_one_of CHECK ((status = ANY (ARRAY['active'::text, 'inactive'::text])))
 constraint wms.customer customer_tenant_key UNIQUE (company_id, id)
@@ -1166,6 +1176,7 @@ column wms.invoice 17 net_minor bigint not-null
 column wms.invoice 18 vat_minor bigint not-null
 column wms.invoice 19 gross_minor bigint not-null
 column wms.invoice 20 issued_by uuid
+column wms.invoice 21 payment_reference text
 constraint wms.invoice invoice_billing_run_id_fk FOREIGN KEY (company_id, project_id, billing_run_id) REFERENCES wms.billing_run(company_id, project_id, id)
 constraint wms.invoice invoice_company_id_fk FOREIGN KEY (company_id) REFERENCES wms.company(id)
 constraint wms.invoice invoice_credit_reason_one_of CHECK ((credit_reason = ANY (ARRAY['service-not-delivered'::text, 'quantity-correction'::text, 'price-correction'::text, 'duplicate'::text, 'other'::text])))
@@ -1177,6 +1188,7 @@ constraint wms.invoice invoice_issued_by_fk FOREIGN KEY (company_id, issued_by) 
 constraint wms.invoice invoice_kind_one_of CHECK ((kind = ANY (ARRAY['invoice'::text, 'credit-note'::text])))
 constraint wms.invoice invoice_kind_shape CHECK ((((kind = 'invoice'::text) = (billing_run_id IS NOT NULL)) AND ((kind = 'credit-note'::text) = (credits_invoice_id IS NOT NULL)) AND ((kind = 'credit-note'::text) = (credit_reason IS NOT NULL))))
 constraint wms.invoice invoice_number_key UNIQUE (company_id, number)
+constraint wms.invoice invoice_payment_reference_shape CHECK (((payment_reference IS NULL) OR ((kind = 'invoice'::text) AND (payment_reference ~ '^[0-9]{15,16}$'::text))))
 constraint wms.invoice invoice_period_shape CHECK ((((period_from IS NULL) = (period_to IS NULL)) AND ((kind = 'invoice'::text) = (period_from IS NOT NULL))))
 constraint wms.invoice invoice_pkey PRIMARY KEY (id)
 constraint wms.invoice invoice_project_id_fk FOREIGN KEY (company_id, project_id) REFERENCES wms.project(company_id, id)
@@ -1588,8 +1600,12 @@ column wms.project 10 status text not-null
 column wms.project 11 weekend text[] not-null default='{saturday,sunday}'::text[] acl=[wms_public=SELECT/<owner>]
 column wms.project 12 holiday_list text acl=[wms_public=SELECT/<owner>]
 column wms.project 13 public_slug text acl=[wms_public=SELECT/<owner>]
+column wms.project 14 payment_terms_days integer not-null default=30
+column wms.project 15 payment_reference_scheme text not-null default='none'::text
 constraint wms.project project_company_id_fk FOREIGN KEY (company_id) REFERENCES wms.company(id)
 constraint wms.project project_name_key UNIQUE (company_id, name)
+constraint wms.project project_payment_reference_scheme_one_of CHECK ((payment_reference_scheme = ANY (ARRAY['none'::text, 'fik-71'::text, 'fik-75'::text])))
+constraint wms.project project_payment_terms_range CHECK (((payment_terms_days >= 0) AND (payment_terms_days <= 365)))
 constraint wms.project project_pkey PRIMARY KEY (id)
 constraint wms.project project_public_slug_key UNIQUE (public_slug)
 constraint wms.project project_public_slug_shape CHECK (((public_slug ~ '^[a-z0-9]+(-[a-z0-9]+)*$'::text) AND ((char_length(public_slug) >= 3) AND (char_length(public_slug) <= 63))))
@@ -3180,4 +3196,5 @@ journal 1792906810423 ddf063e560d278c8dd992e167b9e832f15a7274b0aea5d3697a24032d4
 journal 1792910180662 bdf348f115765c8b7211582f89fb81398b265de911665adda8a6b14839cc99c6
 journal 1792911868439 ba0c23715adea091b0deb7cd195c022dd79454d665aa735400c2650e8638cb94
 journal 1792913386367 34a2cb79512e125e0463843dee394e142036f4dae9407646089ec12466c60342
+journal 1792915809470 e17c776f51a992baef9c8594f1ff2b410b37bcb23c15e78c96b74b886a583522
 pgboss-version 42

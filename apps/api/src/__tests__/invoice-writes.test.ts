@@ -69,6 +69,7 @@ const draft: InvoiceDraft = {
   creditReason: null,
   creditNote: null,
   issuedBy: OLIVIA,
+  paymentReferenceScheme: "none",
 }
 
 const line = (billableEventId: string, quantity: number, unitPriceMinor: number, sign: 1 | -1 = 1): LineDraft => {

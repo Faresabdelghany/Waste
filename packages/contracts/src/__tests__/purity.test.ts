@@ -33,7 +33,10 @@
 // runs @waste/domain/resources/drop-off-points's opening rules as its refines
 // (M3), so a form and the public map judge hours alike. O4 of #290
 // added @waste/domain/resolution/sla: ticket-sla.ts reads the longest target
-// and the rule a set names a kind and a priority once by.
+// and the rule a set names a kind and a priority once by. #291 C4 added one:
+// finance.ts reads the invoice identity's shapes and the payment terms' range
+// from @waste/domain/finance/payment, the patterns the database's checks read
+// too.
 import path from "node:path"
 import { fileURLToPath } from "node:url"
 
@@ -48,6 +51,7 @@ definePurityTests({
     "@waste/domain/execution/proof-shapes",
     "@waste/domain/execution/vocabulary",
     "@waste/domain/execution/work-orders",
+    "@waste/domain/finance/payment",
     "@waste/domain/finance/vocabulary",
     "@waste/domain/imports/vocabulary",
     "@waste/domain/insight/vocabulary",

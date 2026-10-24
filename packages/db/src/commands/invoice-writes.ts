@@ -28,7 +28,8 @@
 // answers as such.
 import type { InvoiceDetail } from "@waste/contracts/invoices"
 import { vatOf } from "@waste/domain/finance/money"
-import type { CreditReason, InvoiceKind } from "@waste/domain/finance/vocabulary"
+import { paymentReference } from "@waste/domain/finance/payment"
+import type { CreditReason, InvoiceKind, PaymentReferenceScheme } from "@waste/domain/finance/vocabulary"
 
 import type { Tx } from "../client"
 import type { IdMinter } from "../ids"
@@ -61,6 +62,8 @@ export type InvoiceDraft = {
   creditNote: string | null
   /** The caller; null for the worker's run. */
   issuedBy: string | null
+  /** How the number is referenced for payment (#291 C4): the project's scheme on an invoice, none on a credit note, which nobody pays. */
+  paymentReferenceScheme: PaymentReferenceScheme
 }
 
 /** One line as a door composes it: its source, its frozen text, and its amounts; the position is its place in the list. */
@@ -105,7 +108,9 @@ export type IssueInvoiceInput = {
 
 /**
  * Issues one document: the lines' shapes checked, the number taken, the row
- * written with its totals summed from the lines, the lines written 1..n in
+ * written with its totals summed from the lines and its payment reference
+ * frozen from the number under the draft's scheme (#291 C4) — the number is the
+ * company's one series, so the reference is too — the lines written 1..n in
  * the order given, the `invoice-issued` event emitted with the detail as the
  * read answers it — in the caller's transaction, so a refusal anywhere leaves
  * nothing behind, the counter's step included. Answers that detail, which is
@@ -121,9 +126,10 @@ export async function issueInvoice(tx: Tx, input: IssueInvoiceInput): Promise<In
   const netMinor = lines.reduce((sum, line) => sum + line.netMinor, 0)
   const vatMinor = lines.reduce((sum, line) => sum + line.vatMinor, 0)
   const number = await nextNumber(tx, companyId, "nextInvoiceNumber")
+  const { paymentReferenceScheme, ...columns } = draft
   const [row] = await tx
     .insert(invoice)
-    .values({ id: input.newId(), companyId, ...draft, number, netMinor, vatMinor, grossMinor: netMinor + vatMinor })
+    .values({ id: input.newId(), companyId, ...columns, number, netMinor, vatMinor, grossMinor: netMinor + vatMinor, paymentReference: draft.kind === "invoice" ? paymentReference(paymentReferenceScheme, number) : null })
     .returning(invoiceColumns)
   const written = await refuseDuplicate({ [EVENT_ON_ONE_LINE]: INVOICED_BY_ANOTHER_RUN }, () =>
     tx

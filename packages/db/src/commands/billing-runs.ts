@@ -26,8 +26,9 @@
 // transaction), groups the
 // rest by payer (`agreement.payer_customer_id`) and currency, and for each
 // group issues one invoice through invoice-writes.ts: the next number of the
-// company's series, `issued_on` today on the project's clock, `due_on`
-// thirty days on (`PAYMENT_TERMS_DAYS`), the lines in a fixed order —
+// company's series, `issued_on` today on the project's clock, `due_on` the
+// payer's terms on — its own, else the project's (#291 C4) — the payment
+// reference under the project's scheme, the lines in a fixed order —
 // agreement number, service date, product name, event id — each one event,
 // its description the product's invoice name (or its name) and the service
 // date, a reversal a negative line, and one `invoice-issued` per document in
@@ -57,15 +58,17 @@
 // plans the charges and writes none, folding the plan into what it counts,
 // so it answers what the run would.
 import type { BillingRunPreview } from "@waste/contracts/billing"
-import { PAYMENT_TERMS_DAYS } from "@waste/domain/finance/money"
+import { dueOn, termsOf } from "@waste/domain/finance/payment"
+import type { PaymentReferenceScheme } from "@waste/domain/finance/vocabulary"
 import { addDays } from "@waste/domain/route-schemes/recurrence"
-import { and, asc, count, eq, getTableColumns, gt, gte, isNotNull, isNull, lte, ne, notExists, or, sql, type SQL } from "drizzle-orm"
+import { and, asc, count, eq, getTableColumns, gt, gte, inArray, isNotNull, isNull, lte, ne, notExists, or, sql, type SQL } from "drizzle-orm"
 import { alias, type PgColumn } from "drizzle-orm/pg-core"
 
 import type { Tx } from "../client"
 import type { IdMinter } from "../ids"
 import { agreement } from "../schema/agreements"
 import { product } from "../schema/catalogue"
+import { customer } from "../schema/customers"
 import { billableEvent, billingRun, billingRunExclusion, invoiceLine } from "../schema/finance"
 import { project } from "../schema/organisation"
 import { exclusionColumns, runColumns, type EventRow, type ExclusionRow, type RunRow } from "./billing-shapes"
@@ -286,7 +289,13 @@ export async function runBilling(tx: Tx, input: RunBillingInput): Promise<{ run:
   const selection = await selectBilling(tx, scope, input, { lock: true })
   const at = input.now()
   const issuedOn = await projectToday(tx, scope, () => at)()
-  const dueOn = addDays(issuedOn, PAYMENT_TERMS_DAYS)
+  // The project's terms and scheme, and each payer's own terms (#291 C4): a payer's invoice is due by its own where it has them.
+  const [settings] = await tx.select({ terms: project.paymentTermsDays, scheme: project.paymentReferenceScheme }).from(project).where(and(eq(project.companyId, companyId), eq(project.id, projectId)))
+  if (settings === undefined) throw new Error(`runBilling: project ${projectId} is not in company ${companyId}`)
+  const payers = [...new Set(selection.groups.map((group) => group.payerCustomerId))]
+  const payerTerms = new Map(
+    payers.length === 0 ? [] : (await tx.select({ id: customer.id, terms: customer.paymentTermsDays }).from(customer).where(and(eq(customer.companyId, companyId), inArray(customer.id, payers)))).map((row) => [row.id, row.terms]),
+  )
   const [run] = await tx
     .insert(billingRun)
     .values({
@@ -316,7 +325,7 @@ export async function runBilling(tx: Tx, input: RunBillingInput): Promise<{ run:
         customerId: group.payerCustomerId,
         currency: group.currency,
         issuedOn,
-        dueOn,
+        dueOn: dueOn(issuedOn, termsOf(payerTerms.get(group.payerCustomerId) ?? null, settings.terms)),
         periodFrom: input.periodFrom,
         periodTo: input.periodTo,
         billingRunId: run.id,
@@ -324,6 +333,7 @@ export async function runBilling(tx: Tx, input: RunBillingInput): Promise<{ run:
         creditReason: null,
         creditNote: null,
         issuedBy: input.requestedBy,
+        paymentReferenceScheme: settings.scheme as PaymentReferenceScheme,
       },
       lines: group.events.map(lineOfEvent),
       newId: input.newId,
