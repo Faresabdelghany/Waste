@@ -254,6 +254,16 @@ describe("a route", () => {
     assert.equal(record.submittedValues?.trailerId, trailerRecord.id)
   })
 
+  test("held by the office's move, says so on its row and in its details, and what ends the hold (#209)", () => {
+    const held = routeAdapter.toRecord({ ...planned, heldAt: "2026-09-30T08:15:00.000Z" }, context())
+    assert.equal(held.description, "Generated from its route scheme for 2026-10-01. Held by the office since 2026-09-30 10:15.", "the row's line, on the project's clock")
+    assert.equal(held.facts.Hold, "Moved by the office 2026-09-30 10:15: generation runs keep its day, its start and its Planned Assignment, and still refresh its stops")
+    assert.equal(held.facts["Hold released by"], "An edit of its scheme's start, depot, unloading station or days, or of its group's vehicle, driver, provider or days; a dispatch or a cancel ends it")
+    const free = routeAdapter.toRecord(planned, context())
+    assert.deepEqual([free.facts.Hold, free.facts["Hold released by"]], [undefined, undefined])
+    assert.doesNotMatch(free.description, /Held/)
+  })
+
   test("carries the active Plan the read gives it, as JSON under the key the map reads, and nothing when the read says nothing", () => {
     assert.equal(routeAdapter.toRecord(planned, context()).submittedValues?.[ROUTE_ACTIVE_PLAN_KEY], undefined, "GET /routes carries no activePlan yet (#173 adds it)")
     assert.equal(routeAdapter.toRecord(detailOf(planned), context()).submittedValues?.[ROUTE_ACTIVE_PLAN_KEY], "null")
@@ -298,6 +308,13 @@ describe("the route's commands", () => {
     const trailerOnly = assign?.toBody?.({ ...record.submittedValues, trailerId: trailerRecord.id }, record, context())
     assert.deepEqual(trailerOnly, { trailerId: trailer.id })
     assert.ok(RouteAssign.safeParse(trailerOnly).success)
+  })
+
+  test("a field the input does not name is left as the route stands: a scheme's one-off names only what it moves (#209)", () => {
+    assert.deepEqual(assign?.toBody?.({ driverId: frejaRecord.id }, record, context()), { driverId: freja.id })
+    assert.deepEqual(assign?.toBody?.({ depotId: "" }, record, context()), { depotId: null }, "a field named empty is cleared, as the dialog clears it")
+    assert.deepEqual(reschedule?.toBody?.({ plannedStartTime: "08:15" }, record, context()), { plannedStartTime: "08:15" })
+    assert.deepEqual(reschedule?.toBody?.({ plannedStartTime: "06:30" }, record, context()), { path: "operatingDate", message: "Nothing to reschedule: move the day it runs or its planned start" })
   })
 
   test("assign is refused here when nothing moved, or a field names no row of its kind the API holds", () => {
