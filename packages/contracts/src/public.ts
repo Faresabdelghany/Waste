@@ -3,9 +3,12 @@
 // project's ids never leave the door; its slug is its public name.
 import * as z from "zod"
 
-import { IsoDate } from "./dates"
+import { IsoDate, IsoTime } from "./dates"
+import { FlatPoint } from "./geojson"
 import { Id } from "./ids"
 import { PublicSlug } from "./organisation"
+import { DropOffPointKind } from "./resources"
+import { Slug } from "./text"
 
 /** `/public/:slug`: the project published under the slug. */
 export const PublicSlugParam = z.object({ slug: PublicSlug })
@@ -76,3 +79,50 @@ export const PublicCollectionDays = z.object({
   days: z.array(PublicCollectionDay),
 })
 export type PublicCollectionDays = z.infer<typeof PublicCollectionDays>
+
+/** How many days of opening a public drop-off point carries: this week, from today on the project's clock. */
+export const DROP_OFF_WEEK_DAYS = 7
+
+/** The public map's question: the fraction a resident brings, by the key the Sorting Guide names it by; every point on the map when absent. */
+export const DropOffPointsQuery = z.object({ fraction: Slug().optional() })
+export type DropOffPointsQuery = z.infer<typeof DropOffPointsQuery>
+
+/** One day's opening at a point: its windows, or open all day, and why it is not the usual (an exception's note, a holiday's name). */
+export const PublicOpeningDay = z.object({
+  date: IsoDate,
+  windows: z.array(z.object({ opensAt: IsoTime, closesAt: IsoTime })),
+  allDay: z.boolean(),
+  note: z.string().nullable(),
+})
+export type PublicOpeningDay = z.infer<typeof PublicOpeningDay>
+
+/** A Drop-off Point as the public map draws it: never its code or the office's notes. */
+export const PublicDropOffPoint = z.object({
+  id: Id,
+  name: z.string(),
+  kind: DropOffPointKind,
+  address: z.string(),
+  location: FlatPoint,
+  /** The fractions it takes, by name, as the guide names them. */
+  fractions: z.array(z.string()),
+  publicNote: z.string().nullable(),
+  /** The next `DROP_OFF_WEEK_DAYS` days from today, with exceptions and the project's holidays applied. */
+  week: z.array(PublicOpeningDay),
+})
+export type PublicDropOffPoint = z.infer<typeof PublicDropOffPoint>
+
+/**
+ * A published project's drop-off points on the map, by name: the project, the
+ * fraction asked for as the guide names it (null when none was asked, or the
+ * key names no fraction of the company's, which finds no point), the first
+ * day of the week read, and the points.
+ */
+export const PublicDropOffPoints = z.object({
+  project: PublishedProject,
+  fraction: z.object({ key: z.string(), name: z.string() }).nullable(),
+  from: IsoDate,
+  points: z.array(PublicDropOffPoint),
+  /** More points stood than one read carries (a city's bring banks past a thousand), the first by name answered: ask by fraction to see the rest. */
+  truncated: z.boolean(),
+})
+export type PublicDropOffPoints = z.infer<typeof PublicDropOffPoints>

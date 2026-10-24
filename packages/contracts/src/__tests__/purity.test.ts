@@ -25,11 +25,13 @@
 // direction is sound — the innermost ring
 // depends on nothing — and listing the subpath,
 // not the package, keeps every further reach into the domain a deliberate
-// line here. Issue #293 added two: organisation.ts reads the public slug's
-// shape from @waste/domain/access/public-slug, and sorting-guide.ts the
-// Sorting Guide's statuses from @waste/domain/sorting-guide/vocabulary and
-// the search's `normalise` from @waste/domain/sorting-guide/search, so a
-// synonym is "each once" by the spelling the search compares. O4 of #290
+// line here. Issue #293 added three: organisation.ts reads the public slug's
+// shape from @waste/domain/access/public-slug, sorting-guide.ts the Sorting
+// Guide's statuses from @waste/domain/sorting-guide/vocabulary and the
+// search's `normalise` from @waste/domain/sorting-guide/search, so a synonym
+// is "each once" by the spelling the search compares, and drop-off-points.ts
+// runs @waste/domain/resources/drop-off-points's opening rules as its refines
+// (M3), so a form and the public map judge hours alike. O4 of #290
 // added @waste/domain/resolution/sla: ticket-sla.ts reads the longest target
 // and the rule a set names a kind and a priority once by.
 import path from "node:path"
@@ -53,6 +55,7 @@ definePurityTests({
     "@waste/domain/resolution/event-shapes",
     "@waste/domain/resolution/sla",
     "@waste/domain/resolution/vocabulary",
+    "@waste/domain/resources/drop-off-points",
     "@waste/domain/resources/vocabulary",
     "@waste/domain/routing/vocabulary",
     "@waste/domain/sorting-guide/search",

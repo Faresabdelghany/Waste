@@ -2,7 +2,8 @@
 // project that publishes itself, with no token. `GET /public/:slug` names the
 // project as its public pages do, and `GET /public/:slug/sorting-guide?q=`
 // answers a resident's search of its Sorting Guide; the addresses' routes
-// answer its Collection Days. Every one runs behind `publicDoor`
+// answer its Collection Days, and `GET /public/:slug/drop-off-points` its
+// Drop-off Points on the map (M3). Every one runs behind `publicDoor`
 // (auth/public-door.ts): counted against the client's minute — an address's
 // feed against an allowance of its own, by client and address — then read as
 // the public role, whose column grants and policies are what
@@ -19,16 +20,21 @@ import {
   AddressMatches,
   AddressSearch,
   CollectionDaysQuery,
+  DROP_OFF_WEEK_DAYS,
+  DropOffPointsQuery,
   PublicAddressParam,
   PublicCollectionDays,
+  PublicDropOffPoints,
   PublicSlugParam,
   PublishedProject,
 } from "@waste/contracts/public"
 import { SortingGuideAnswer, SortingGuideSearch, type SortingGuideMatch } from "@waste/contracts/sorting-guide"
 import { wasteFraction } from "@waste/db/schema/catalogue"
 import { findCollectedProperty, readCollectionDayInputs, searchAddresses } from "@waste/db/query/collection-days"
+import { readDropOffMap } from "@waste/db/query/drop-off-points"
 import { sortingGuideItem } from "@waste/db/schema/sorting-guide"
 import { collectionDaysOf } from "@waste/domain/planning/collection-days"
+import { openingDaysOf } from "@waste/domain/resources/drop-off-points"
 import { addDays } from "@waste/domain/route-schemes/recurrence"
 import { searchGuide } from "@waste/domain/sorting-guide/search"
 import { PUBLISHED_ITEM } from "@waste/domain/sorting-guide/vocabulary"
@@ -240,6 +246,42 @@ export function publicRoutes({ door, feedDoor }: PublicDoors, { now }: PublicRou
           })),
         })
         return c.body(feed, 200, { "Content-Type": CALENDAR_MEDIA_TYPE, "Cache-Control": PUBLIC_CACHE })
+      },
+    )
+    .get(
+      "/public/:slug/drop-off-points",
+      describeRoute({
+        operationId: "getPublicDropOffPoints",
+        summary: "A published project's drop-off points on its public map",
+        description:
+          "The project, as `GET /public/:slug` names it, and its active Drop-off Points — its recycling centres and bring banks — by name: each with its kind, address and point, the fractions it takes by name, the note it shows, and its opening over the next " +
+          DROP_OFF_WEEK_DAYS +
+          " days from today on the project's clock, each day its windows or open all day, with a dated exception's note or the holiday that closes it. `fraction` asks for the points taking one fraction, by the key the Sorting Guide names it by; a key the company has no fraction for finds no point and answers `fraction: null`. Never a point's code or the office's notes. No token is needed; each address has an allowance a minute. The answer may be cached for a minute.",
+        responses: {
+          200: describeJson("The project's drop-off points on the map, by name.", PublicDropOffPoints),
+          400: describeProblem("`fraction` is not a key's shape (a lowercase slug)."),
+          404: describeProblem(NOT_PUBLISHED),
+          429: describeProblem(TOO_MANY),
+        },
+      }),
+      door,
+      validate("param", PublicSlugParam),
+      validate("query", DropOffPointsQuery),
+      async (c) => {
+        const { fraction: fractionKey } = c.req.valid("query")
+        const published = c.get("published")
+        const from = dayInTimezone(now(), published.timezone)
+        const to = addDays(from, DROP_OFF_WEEK_DAYS - 1)
+        const map = await readDropOffMap(c.get("tx"), { companyId: published.companyId, projectId: published.id }, { fractionKey, from, to })
+        const { slug, name, language, timezone } = published
+        const body: PublicDropOffPoints = {
+          project: { slug, name, language, timezone },
+          fraction: map.fraction === null || map.fraction === "unknown" ? null : { key: map.fraction.key, name: map.fraction.name },
+          from,
+          truncated: map.truncated,
+          points: map.points.map(({ opening, ...point }) => ({ ...point, week: openingDaysOf(opening, { from, days: DROP_OFF_WEEK_DAYS }, map.holidays) })),
+        }
+        return c.json(body, 200, { "Cache-Control": PUBLIC_CACHE })
       },
     )
 }

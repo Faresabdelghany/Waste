@@ -14,6 +14,8 @@ import {
   DEPOT_OWNERSHIPS,
   DEPOT_STATUSES,
   DRIVER_STATUSES,
+  DROP_OFF_POINT_KINDS,
+  DROP_OFF_POINT_STATUSES,
   EMPLOYMENT_TYPES,
   FUEL_TYPES,
   LICENCE_CLASSES,
@@ -95,3 +97,11 @@ export type AllocationStatus = z.infer<typeof AllocationStatus>
 /** What was done to an allocation, each appending one event. */
 export const AllocationAction = z.enum(ALLOCATION_ACTIONS)
 export type AllocationAction = z.infer<typeof AllocationAction>
+
+/** A Drop-off Point's kind: a staffed recycling centre or a bring bank on a street (#293 M3). */
+export const DropOffPointKind = z.enum(DROP_OFF_POINT_KINDS)
+export type DropOffPointKind = z.infer<typeof DropOffPointKind>
+
+/** Whether a Drop-off Point is the office's draft, on the public map, or closed. */
+export const DropOffPointStatus = z.enum(DROP_OFF_POINT_STATUSES)
+export type DropOffPointStatus = z.infer<typeof DropOffPointStatus>

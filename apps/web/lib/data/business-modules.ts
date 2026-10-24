@@ -3507,6 +3507,24 @@ const resources: WorkspaceDefinition = {
         },
       ],
     },
+    {
+      // The Drop-off Points (Issue #293, M3): on the API only, so no fixture records; the office's pane and the public map are M3b's.
+      id: "drop-off-points",
+      label: "Drop-off Points",
+      title: "Drop-off Points",
+      description: "The recycling centres and bring banks residents bring waste to themselves: the fractions each takes, its weekly hours and exceptions, on the project's public map.",
+      entityLabel: "Drop-off point",
+      contextLabel: "Kind · project",
+      valueLabel: "Opening",
+      primaryAction: "New drop-off point",
+      metrics: [],
+      lifecycle: ["Draft", "Active", "Closed"],
+      rules: [
+        "Only an active point of a published project reaches the public map.",
+        "A point is closed, never deleted.",
+      ],
+      records: [],
+    },
   ],
 }
 

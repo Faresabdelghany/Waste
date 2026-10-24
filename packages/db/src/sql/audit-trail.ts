@@ -53,6 +53,7 @@ import { auditEvent } from "../schema/audit"
 import { containerType, product, serviceFrequency, wasteFraction } from "../schema/catalogue"
 import { collectionCalendar, collectionCalendarHoliday } from "../schema/collection-calendars"
 import { container, containerServicePlacement } from "../schema/containers"
+import { dropOffPoint, dropOffPointException, dropOffPointFraction, dropOffPointHours } from "../schema/drop-off-points"
 import { customer, property, propertyGroup, propertyGroupMember, propertyParty, sharedCollectionPoint, sharedCollectionPointMember } from "../schema/customers"
 import { driverCommand, outboxEvent, pickup, proofOfService, route, session, unload } from "../schema/execution"
 import {
@@ -181,8 +182,16 @@ export const SUBSCRIPTION_PAUSE_AUDITED: readonly Audited[] = [
 /** The ticket SLA's (O4 of #290): Resolution's configuration, the SLA a ticket is due by, a set the project's targets are replaced through. Its triggers are in the migration that creates `ticket_sla`. */
 export const TICKET_SLA_AUDITED: readonly Audited[] = [{ table: ticketSla, module: "configure.templates", parent: setOf(project, ticketSla.projectId) }]
 
+/** The Drop-off Points (#293 M3): where residents bring waste themselves, and the three sets a point is replaced through; their migration writes these triggers. */
+export const DROP_OFF_AUDITED: readonly Audited[] = [
+  { table: dropOffPoint, module: "resources.drop-off-points" },
+  { table: dropOffPointFraction, module: "resources.drop-off-points", parent: setOf(dropOffPoint, dropOffPointFraction.dropOffPointId) },
+  { table: dropOffPointHours, module: "resources.drop-off-points", parent: setOf(dropOffPoint, dropOffPointHours.dropOffPointId) },
+  { table: dropOffPointException, module: "resources.drop-off-points", parent: setOf(dropOffPoint, dropOffPointException.dropOffPointId) },
+]
+
 /** Every audited table: 0019's, then each later migration's, in the order they were written. */
-export const AUDITED: readonly Audited[] = [...AUDITED_AT_0019, ...SUBSCRIPTION_PAUSE_AUDITED, ...TICKET_SLA_AUDITED]
+export const AUDITED: readonly Audited[] = [...AUDITED_AT_0019, ...SUBSCRIPTION_PAUSE_AUDITED, ...TICKET_SLA_AUDITED, ...DROP_OFF_AUDITED]
 
 /** The audited tables by name, for a test that reads a migrated database's triggers. */
 export const AUDITED_TABLE_NAMES: ReadonlySet<string> = new Set(AUDITED.map((entry) => getTableName(entry.table)))

@@ -187,6 +187,8 @@ export const SYSTEM_ROLES: readonly SystemRole[] = [
       only("configure.sorting-guide", VIEW_EDIT_CREATE),
       only("configure.organization", VIEW),
       only("configure.master", VIEW),
+      // The Drop-off Points residents bring waste to (#293, M3): it keeps their hours and fractions up to date, as it keeps the guide that points to them.
+      only("resources.drop-off-points", VIEW_EDIT_CREATE),
     ),
   },
   {

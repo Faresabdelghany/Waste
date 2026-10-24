@@ -23,7 +23,8 @@
 // what `pnpm db:generate` sees — the CSV import's run and its rows (#291
 // slice 12, migration 0018) last — and what the hand-written gate
 // (__tests__/hand-written.test.ts) holds to its fence and trigger, or to its
-// fence and revoke for a ledger.
+// fence and revoke for a ledger. The Drop-off Points (Issue #293, M3) come
+// last: four tables over the project, the fractions and nothing later.
 export * from "./wms"
 export * from "./organisation"
 export * from "./access"
@@ -47,3 +48,4 @@ export * from "./routing"
 export * from "./sorting-guide"
 export * from "./audit"
 export * from "./imports"
+export * from "./drop-off-points"

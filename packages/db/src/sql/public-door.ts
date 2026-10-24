@@ -20,6 +20,7 @@
 // inside that company, an item only while it is published and its project
 // is too. Granted to the owner as well, so a test can look through its eyes.
 import { PUBLISHED_ITEM } from "@waste/domain/sorting-guide/vocabulary"
+import { ON_THE_MAP } from "@waste/domain/resources/drop-off-points"
 import type { PgColumn, PgTable } from "drizzle-orm/pg-core"
 
 import { columnName, qualifiedTable, quoted, tableObjectName } from "../names"
@@ -27,6 +28,7 @@ import { API_ROLE, PUBLIC_ROLE } from "../roles"
 import { subscription, subscriptionPause } from "../schema/agreements"
 import { wasteFraction } from "../schema/catalogue"
 import { collectionCalendarHoliday } from "../schema/collection-calendars"
+import { dropOffPoint, dropOffPointException, dropOffPointFraction, dropOffPointHours } from "../schema/drop-off-points"
 import { containerServicePlacement } from "../schema/containers"
 import { property } from "../schema/customers"
 import { route } from "../schema/execution"
@@ -153,6 +155,59 @@ export const COLLECTION_DAYS_DOOR: readonly PublicDoorTable[] = [
   },
 ]
 
+/** A set's rows of a point on the public map: the point itself is, so a draft's hours are no more readable than the draft. */
+const ofPointOnTheMap = (table: string) =>
+  `${inPublishedProject(table)} and exists (select 1 from "wms"."drop_off_point" "point" where "point"."company_id" = ${quoted(table)}.${quoted("company_id")} and "point"."id" = ${quoted(table)}.${quoted("drop_off_point_id")} and "point"."status" = '${ON_THE_MAP}')`
+
+/**
+ * What the Drop-off Points (#293 M3) opened: an active point of a published
+ * project as the public map draws it — its name, kind, address and point,
+ * the fractions it takes, its hours and exceptions, and the note it shows —
+ * never its code or the office's notes.
+ */
+export const DROP_OFF_DOOR: readonly PublicDoorTable[] = [
+  {
+    table: dropOffPoint,
+    columns: [
+      dropOffPoint.id,
+      dropOffPoint.companyId,
+      dropOffPoint.projectId,
+      dropOffPoint.name,
+      dropOffPoint.kind,
+      dropOffPoint.address,
+      dropOffPoint.location,
+      dropOffPoint.openAlways,
+      dropOffPoint.closedOnHolidays,
+      dropOffPoint.publicNote,
+      dropOffPoint.status,
+    ],
+    rows: `${inPublishedProject("drop_off_point")} and ${quoted("status")} = '${ON_THE_MAP}'`,
+  },
+  {
+    table: dropOffPointFraction,
+    columns: [dropOffPointFraction.companyId, dropOffPointFraction.projectId, dropOffPointFraction.dropOffPointId, dropOffPointFraction.wasteFractionId],
+    rows: ofPointOnTheMap("drop_off_point_fraction"),
+  },
+  {
+    table: dropOffPointHours,
+    columns: [dropOffPointHours.companyId, dropOffPointHours.projectId, dropOffPointHours.dropOffPointId, dropOffPointHours.weekday, dropOffPointHours.opensAt, dropOffPointHours.closesAt],
+    rows: ofPointOnTheMap("drop_off_point_hours"),
+  },
+  {
+    table: dropOffPointException,
+    columns: [
+      dropOffPointException.companyId,
+      dropOffPointException.projectId,
+      dropOffPointException.dropOffPointId,
+      dropOffPointException.day,
+      dropOffPointException.opensAt,
+      dropOffPointException.closesAt,
+      dropOffPointException.note,
+    ],
+    rows: ofPointOnTheMap("drop_off_point_exception"),
+  },
+]
+
 /** Every table and column the public role may read, and nothing else, as the migrations together grant them: the test that holds the database to them reads this. */
 /**
  * What a subscription's pause (#291, slice 10b) opens to the collection days:
@@ -170,7 +225,7 @@ export const SUBSCRIPTION_PAUSE_DOOR: readonly PublicDoorTable[] = [
 
 export const PUBLIC_DOOR_TABLES: readonly { table: PgTable; columns: readonly PgColumn[] }[] = (() => {
   const merged = new Map<PgTable, PgColumn[]>()
-  for (const { table, columns } of [...SORTING_GUIDE_DOOR, ...COLLECTION_DAYS_DOOR, ...SUBSCRIPTION_PAUSE_DOOR]) merged.set(table, [...(merged.get(table) ?? []), ...columns])
+  for (const { table, columns } of [...SORTING_GUIDE_DOOR, ...COLLECTION_DAYS_DOOR, ...SUBSCRIPTION_PAUSE_DOOR, ...DROP_OFF_DOOR]) merged.set(table, [...(merged.get(table) ?? []), ...columns])
   return [...merged].map(([table, columns]) => ({ table, columns }))
 })()
 
@@ -226,3 +281,6 @@ export const collectionDaysDoorStatements = (): string[] => [...publicGrantState
 
 /** What the subscription pause's migration carries for the door (#291 slice 10b), below the table's own statements: its grant, then its policy. */
 export const subscriptionPauseDoorStatements = (): string[] => [...publicGrantStatements(SUBSCRIPTION_PAUSE_DOOR), ...publicPolicyStatements(SUBSCRIPTION_PAUSE_DOOR)]
+
+/** What the Drop-off Points' migration writes: the grants, then the policies. */
+export const dropOffDoorStatements = (): string[] => [...publicGrantStatements(DROP_OFF_DOOR), ...publicPolicyStatements(DROP_OFF_DOOR)]

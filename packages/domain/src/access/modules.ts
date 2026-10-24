@@ -43,6 +43,7 @@ export const MODULE_KEYS = [
   "resources.inventory",
   "resources.warehouses",
   "resources.depots",
+  "resources.drop-off-points",
   // Service providers
   "service-providers.service-providers",
   "service-providers.service-areas",

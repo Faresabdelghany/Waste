@@ -126,6 +126,10 @@ _Avoid_: Warehouse, unloading station
 A destination where a route unloads collected material and records weight or disposal evidence.
 _Avoid_: Depot, warehouse
 
+**Drop-off Point**:
+A place residents bring waste to themselves, on a project's public map: a recycling centre (staffed, with opening hours, many fractions) or a bring bank (bins on a street, usually open always). It carries the fractions it takes, weekly hours, dated exceptions, and whether the project's holidays close it.
+_Avoid_: Unloading Station (where the operation's own vehicles empty), Depot, container (a bring bank's bins are not the platform's Containers), genbrugsstation in copy that is not Danish
+
 **Stock Movement**:
 An append-only record of receipt, issue, return, transfer, adjustment, or decommission.
 _Avoid_: Inventory quantity, balance edit

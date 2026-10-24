@@ -16,8 +16,9 @@
 // resources/licence.ts spells the implication between them. The statuses of a
 // depot and of an unloading station are the same four, so
 // `UNLOADING_STATION_STATUSES` is `DEPOT_STATUSES` under a second name — one
-// tuple, two readers — which is why the walking test counts seventeen names
-// over sixteen lists.
+// tuple, two readers — which is why the walking test counts nineteen names
+// over eighteen lists. A Drop-off Point (Issue #293, M3) is a place residents
+// bring waste to themselves, of the two kinds the glossary names.
 //
 // A value is a kebab-case token: it goes into a migration as a SQL literal
 // and onto the wire as an enum member, and those are the same string. A list
@@ -58,6 +59,10 @@ export const ASSET_STATUSES = ["in-warehouse", "in-service", "in-maintenance", "
 export const ALLOCATION_STATUSES = ["planned", "confirmed", "released"] as const
 /** What was done to an allocation, each appending one event: the prototype's `allocationAction`, verbatim. */
 export const ALLOCATION_ACTIONS = ["allocate", "change", "confirm", "release"] as const
+/** A Drop-off Point's two kinds: a staffed recycling centre, and a bring bank of bins on a street. */
+export const DROP_OFF_POINT_KINDS = ["recycling-centre", "bring-bank"] as const
+/** Where a Drop-off Point stands: a draft is the office's alone, an active one is on the public map, a closed one is no longer used. */
+export const DROP_OFF_POINT_STATUSES = ["draft", "active", "closed"] as const
 
 /**
  * The places a container stands in while in stock — a warehouse, or
@@ -88,6 +93,8 @@ export type StockPlaceKind = (typeof STOCK_PLACE_KINDS)[number]
 export type AssetStatus = (typeof ASSET_STATUSES)[number]
 export type AllocationStatus = (typeof ALLOCATION_STATUSES)[number]
 export type AllocationAction = (typeof ALLOCATION_ACTIONS)[number]
+export type DropOffPointKind = (typeof DROP_OFF_POINT_KINDS)[number]
+export type DropOffPointStatus = (typeof DROP_OFF_POINT_STATUSES)[number]
 
 /** Every list of this module by its name, for a test that walks them and for a reader looking for the whole vocabulary at once. */
 export const RESOURCES_VOCABULARIES = {
@@ -108,4 +115,6 @@ export const RESOURCES_VOCABULARIES = {
   ASSET_STATUSES,
   ALLOCATION_STATUSES,
   ALLOCATION_ACTIONS,
+  DROP_OFF_POINT_KINDS,
+  DROP_OFF_POINT_STATUSES,
 } as const satisfies Record<string, readonly [string, ...string[]]>
