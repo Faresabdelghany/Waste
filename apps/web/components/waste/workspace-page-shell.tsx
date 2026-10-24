@@ -42,12 +42,14 @@ export function WorkspacePageShell({
         {/* Suspense above useSearchParams: under Cache Components the URL is request
             data, so the workspace streams in after the static shell. */}
         <Suspense fallback={null}>
+          {/* The Export button: a CSV of the module's rows as the table shows them, on the Pilot and in fixture mode alike (#292); Map Planning draws a map and no table, so it offers none. */}
           <BusinessWorkspace
             workspaceId={workspaceId}
             initialModuleId={initialModuleId}
             allowedModuleIds={
               allowedModuleIds ?? publicModuleIdsByWorkspace[workspaceId]
             }
+            showExportAction={workspaceId !== "plan"}
           />
         </Suspense>
       </SidebarInset>

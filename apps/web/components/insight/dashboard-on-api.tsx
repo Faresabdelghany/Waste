@@ -1,0 +1,155 @@
+"use client"
+
+// The Dashboard on the Pilot (#292, #291 slice 27, #290 O12): `/performance`
+// reads the API's reports for the person's projects, in place of the fixture
+// control room the prototype shows without the API. Its two tabs are
+// Improve's two modules, Performance and Analytics, each shown to a role
+// that views it (`/me`'s grants). One row of filters scopes everything below
+// it — the project (one of `/me`'s, or every one) and the period (the last
+// 7, 30 or 90 days, ending today on the project's clock) — and every change
+// is told against the period of the same length before it (`previousWindow`).
+// A tab, once opened, stays mounted and keeps its reads, so going back to it
+// asks nothing again.
+
+import { useMemo, useState } from "react"
+
+import { Breadcrumbs } from "@/components/projects/Breadcrumbs"
+import { Select, SelectContent, SelectItem, SelectTrigger, SelectValue } from "@/components/ui/select"
+import { SidebarTrigger } from "@/components/ui/sidebar"
+import { Tabs, TabsContent, TabsList, TabsTrigger } from "@/components/ui/tabs"
+import { useApiSession } from "@/components/waste/api-session-store"
+import { useBusinessRecordStore } from "@/components/waste/business-record-store"
+import { projectWebIdOf } from "@/lib/api/records/me-projects"
+import type { ReportWindowQuery } from "@/lib/api/reports"
+import { getModuleDefinition } from "@/lib/data/business-modules"
+import { projectToday, timezoneOfProject } from "@/lib/data/route-schemes"
+import {
+  DASHBOARD_RANGES,
+  DASHBOARD_TABS,
+  DEFAULT_RANGE,
+  intervalLabel,
+  previousWindow,
+  rangeOf,
+  viewedModules,
+  windowEnding,
+  type DashboardRangeId,
+  type DashboardTabId,
+} from "@/lib/insight/dashboard"
+
+import { AnalyticsTab } from "./analytics-tab"
+import { PerformanceTab } from "./performance-tab"
+import { ReportNotice } from "./report-card"
+
+const ALL = "all"
+
+export function DashboardOnApi() {
+  const { me } = useApiSession()
+  const { getRecords } = useBusinessRecordStore()
+  const [projectChoice, setProjectChoice] = useState<string>(ALL)
+  const [rangeId, setRangeId] = useState<DashboardRangeId>(DEFAULT_RANGE)
+  const [tabChoice, setTabChoice] = useState<DashboardTabId | null>(null)
+  const [visited, setVisited] = useState<ReadonlySet<DashboardTabId>>(() => new Set())
+
+  const projects = useMemo(() => me?.projects ?? [], [me])
+  const viewed = useMemo(() => viewedModules(me?.role.grants), [me])
+  const tabs = DASHBOARD_TABS.filter((tab) => viewed.has(tab.moduleKey))
+  const tab = tabs.find((candidate) => candidate.id === tabChoice) ?? tabs[0]
+  const projectId = projects.some((candidate) => candidate.id === projectChoice) ? projectChoice : undefined
+  const projectName = (id: string) => projects.find((candidate) => candidate.id === id)?.name ?? id
+
+  // Today on the project's clock where the store holds its timezone — the one asked for, else the person's first — and the browser's otherwise.
+  const organisation = getModuleDefinition({ workspaceId: "configure", moduleId: "organization" })?.records ?? []
+  const clockProject = projects.find((candidate) => candidate.id === projectId) ?? projects[0]
+  const timezone = clockProject === undefined ? undefined : timezoneOfProject(getRecords("configure", "organization", organisation), projectWebIdOf(clockProject, organisation))
+  const today = projectToday(timezone)
+
+  const range = rangeOf(rangeId)
+  const window = windowEnding(today, range.days)
+  const before = previousWindow(window, range.interval)
+  const current: ReportWindowQuery = { projectId, ...window, interval: range.interval }
+  const previous: ReportWindowQuery = { projectId, ...before, interval: range.interval }
+  const against = intervalLabel(before)
+  const fileStem = `${projectId === undefined ? "all-projects" : projectName(projectId)} ${window.from} ${window.to}`
+
+  const choose = (id: DashboardTabId) => {
+    setTabChoice(id)
+    setVisited((opened) => new Set(opened).add(id))
+  }
+  const mounted = (id: DashboardTabId) => tab?.id === id || visited.has(id)
+
+  return (
+    <Tabs value={tab?.id ?? ""} onValueChange={(value) => choose(value as DashboardTabId)} className="m-2 flex min-w-0 flex-1 flex-col gap-0 overflow-hidden rounded-lg border border-sidebar bg-background" data-testid="dashboard-on-api">
+      <header className="shrink-0 border-b border-border/70">
+        <div className="flex min-h-14 items-center gap-3 border-b border-border/70 px-3 sm:px-4">
+          <SidebarTrigger className="h-8 w-8 shrink-0 rounded-md text-muted-foreground hover:bg-accent" />
+          <div className="min-w-0">
+            <Breadcrumbs items={[{ label: "Dashboard" }]} />
+            <p className="hidden text-[11px] text-muted-foreground sm:block">Service, tickets, tonnage and invoicing, counted by the API</p>
+          </div>
+        </div>
+        <div className="flex flex-col gap-2.5 px-3 py-3 sm:px-4 lg:flex-row lg:items-center lg:justify-between">
+          <div className="flex flex-wrap items-center gap-2">
+            <Select value={rangeId} onValueChange={(value) => setRangeId(value as DashboardRangeId)}>
+              <SelectTrigger className="h-8 w-[150px] bg-transparent text-xs" aria-label="Period">
+                <SelectValue />
+              </SelectTrigger>
+              <SelectContent>
+                {DASHBOARD_RANGES.map((option) => (
+                  <SelectItem key={option.id} value={option.id}>
+                    {option.label}
+                  </SelectItem>
+                ))}
+              </SelectContent>
+            </Select>
+            <Select value={projectId ?? ALL} onValueChange={setProjectChoice}>
+              <SelectTrigger className="h-8 w-[200px] bg-transparent text-xs" aria-label="Project">
+                <SelectValue />
+              </SelectTrigger>
+              <SelectContent>
+                <SelectItem value={ALL}>All projects</SelectItem>
+                {projects.map((candidate) => (
+                  <SelectItem key={candidate.id} value={candidate.id}>
+                    {candidate.name}
+                  </SelectItem>
+                ))}
+              </SelectContent>
+            </Select>
+            {tabs.length > 1 && (
+              <TabsList className="h-8">
+                {tabs.map((candidate) => (
+                  <TabsTrigger key={candidate.id} value={candidate.id} className="text-xs">
+                    {candidate.label}
+                  </TabsTrigger>
+                ))}
+              </TabsList>
+            )}
+          </div>
+          <p className="text-[11px] text-muted-foreground" data-testid="dashboard-window">
+            {intervalLabel(window)}, {window.to.slice(0, 4)} · against {against}
+          </p>
+        </div>
+      </header>
+
+      <main className="min-w-0 flex-1 overflow-y-auto">
+        {me === null ? (
+          <ReportNotice />
+        ) : tab === undefined ? (
+          <ReportNotice notGranted="Dashboard's modules" />
+        ) : (
+          <>
+            {tabs.some((candidate) => candidate.id === "performance") && (
+              <TabsContent value="performance" forceMount hidden={tab.id !== "performance"} className="mt-0">
+                {mounted("performance") && <PerformanceTab current={current} previous={previous} against={against} viewed={viewed} projectName={projectName} fileStem={fileStem} />}
+              </TabsContent>
+            )}
+            {tabs.some((candidate) => candidate.id === "analytics") && (
+              <TabsContent value="analytics" forceMount hidden={tab.id !== "analytics"} className="mt-0">
+                {mounted("analytics") && <AnalyticsTab current={current} previous={previous} against={against} viewed={viewed} projectName={projectName} fileStem={fileStem} />}
+              </TabsContent>
+            )}
+          </>
+        )}
+      </main>
+    </Tabs>
+  )
+}
