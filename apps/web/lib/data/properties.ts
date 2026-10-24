@@ -178,6 +178,14 @@ const latitude = (required: boolean, description?: string): BusinessFormField =>
 const longitude = (required: boolean): BusinessFormField => ({ id: "longitude", label: "Longitude", type: "number", required, min: -180, max: 180 })
 const responsibleCustomer = (label: string): BusinessFormField => ({ id: "responsibleCustomerId", label, type: "select", relation: CONTACTS_MODULE })
 const members = (label: string): BusinessFormField => ({ id: MEMBERS_KEY, label, type: "multiselect", relation: PROPERTIES_MODULE, description: "Properties of the same project." })
+/** What the driver is told at a property or a point: the Driver App's stop shows it. */
+const DRIVER_INSTRUCTIONS: BusinessFormField = {
+  id: "driverInstructions",
+  label: "Driver instructions",
+  type: "textarea",
+  placeholder: "Gate code 4711; the bins stand behind the garage",
+  description: "Shown to the driver at the stop.",
+}
 const memberRole = (tokens: readonly string[], labels: Readonly<Record<string, string>>): BusinessFormField => ({
   id: MEMBER_ROLE_KEY,
   label: "Role for new members",
@@ -214,7 +222,10 @@ const propertyFields = (projectField: BusinessFormField): BusinessFormSchema["se
   {
     id: "operating-context",
     title: "Operating context",
-    fields: [{ id: "specialConditions", label: "Special service conditions", type: "textarea" }],
+    fields: [
+      { id: "specialConditions", label: "Special service conditions", type: "textarea", description: "The office's own; never shown to a driver." },
+      DRIVER_INSTRUCTIONS,
+    ],
   },
 ]
 
@@ -307,6 +318,7 @@ const pointSections = (projectField: BusinessFormField, withStatus: boolean): Bu
       { id: "availability", label: "Availability", type: "text", placeholder: "24/7 or Mon–Fri 06:00–20:00" },
       { id: "accessMode", label: "Access mode", type: "select", required: true, options: optionsOf(SHARED_COLLECTION_POINT_ACCESS_MODES, ACCESS_MODE_LABELS) },
       { id: "accessConditions", label: "Access conditions", type: "textarea" },
+      DRIVER_INSTRUCTIONS,
       { id: "billingMode", label: "Billing responsibility", type: "select", required: true, options: optionsOf(SHARED_COLLECTION_POINT_BILLING_MODES, BILLING_MODE_LABELS) },
       responsibleCustomer("Responsible customer or payer"),
     ],

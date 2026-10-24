@@ -211,6 +211,7 @@ export const propertyAdapter: ResourceAdapter<Property> = {
         Address: property.address,
         ...(property.registryId === null ? {} : { "Registry identifier": property.registryId }),
         ...(property.location === null ? {} : { Coordinates: coordinatesFact(property.location) }),
+        ...(property.driverInstructions ? { "Driver instructions": property.driverInstructions } : {}),
         ...(project.name === undefined ? {} : { Project: project.name }),
         ...roleFacts(parties, PROPERTY_PARTY_ROLES, PARTY_ROLE_LABELS),
       },
@@ -227,6 +228,7 @@ export const propertyAdapter: ResourceAdapter<Property> = {
         propertyType: property.kind,
         ...coordinatesOf(property.location),
         specialConditions: property.notes ?? "",
+        driverInstructions: property.driverInstructions ?? "",
         ...Object.fromEntries(PROPERTY_PARTY_ROLES.map((role) => [PARTY_FIELDS[role], parties.filter((party) => party.role === role).map((party) => party.webId).join(",")])),
       },
     }
@@ -248,6 +250,7 @@ export const propertyAdapter: ResourceAdapter<Property> = {
     if (isLocalRefusal(status)) return status
     const registryId = typed(record, "registryId")
     const notes = typed(record, "specialConditions")
+    const driverInstructions = typed(record, "driverInstructions")
     return {
       projectId,
       name,
@@ -256,6 +259,7 @@ export const propertyAdapter: ResourceAdapter<Property> = {
       kind,
       ...(location === null ? {} : { location }),
       ...(notes === undefined ? {} : { notes }),
+      ...(driverInstructions === undefined ? {} : { driverInstructions }),
       ...(status === undefined ? {} : { status }),
       parties,
     }
@@ -280,6 +284,7 @@ export const propertyAdapter: ResourceAdapter<Property> = {
           kind: typed(record, "propertyType"),
           location: isLocalRefusal(point) ? undefined : point,
           notes: typed(record, "specialConditions") ?? null,
+          driverInstructions: typed(record, "driverInstructions") ?? null,
         }
       }),
       before,
@@ -505,6 +510,7 @@ export const sharedPointAdapter: ResourceAdapter<SharedCollectionPoint> = {
         Access: ACCESS_MODE_LABELS[point.accessMode],
         ...(point.accessConditions === null ? {} : { "Access conditions": point.accessConditions }),
         ...(point.availability === null ? {} : { Availability: point.availability }),
+        ...(point.driverInstructions ? { "Driver instructions": point.driverInstructions } : {}),
         Billing: BILLING_MODE_LABELS[point.billingMode],
         ...(point.eligibilityDistanceM === null ? {} : { Eligibility: `Within ${point.eligibilityDistanceM} m` }),
         ...(responsible === undefined ? {} : { "Responsible customer": responsible.name ?? responsible.webId }),
@@ -528,6 +534,7 @@ export const sharedPointAdapter: ResourceAdapter<SharedCollectionPoint> = {
         availability: point.availability ?? "",
         accessMode: point.accessMode,
         accessConditions: point.accessConditions ?? "",
+        driverInstructions: point.driverInstructions ?? "",
         billingMode: point.billingMode,
         responsibleCustomerId: responsible?.webId ?? "",
         ...memberValues(members, SHARED_COLLECTION_POINT_MEMBER_ROLES[0]),
@@ -562,6 +569,7 @@ export const sharedPointAdapter: ResourceAdapter<SharedCollectionPoint> = {
     if (isLocalRefusal(members)) return members
     const accessConditions = typed(record, "accessConditions")
     const availability = typed(record, "availability")
+    const driverInstructions = typed(record, "driverInstructions")
     return {
       projectId,
       name,
@@ -573,6 +581,7 @@ export const sharedPointAdapter: ResourceAdapter<SharedCollectionPoint> = {
       accessMode,
       ...(accessConditions === undefined ? {} : { accessConditions }),
       ...(availability === undefined ? {} : { availability }),
+      ...(driverInstructions === undefined ? {} : { driverInstructions }),
       billingMode,
       ...(responsibleCustomerId === null ? {} : { responsibleCustomerId }),
       ...(status === undefined ? {} : { status }),
@@ -616,6 +625,7 @@ export const sharedPointAdapter: ResourceAdapter<SharedCollectionPoint> = {
           accessMode: typed(record, "accessMode"),
           accessConditions: typed(record, "accessConditions") ?? null,
           availability: typed(record, "availability") ?? null,
+          driverInstructions: typed(record, "driverInstructions") ?? null,
           billingMode: typed(record, "billingMode"),
           responsibleCustomerId: isLocalRefusal(customer) ? undefined : customer,
         }

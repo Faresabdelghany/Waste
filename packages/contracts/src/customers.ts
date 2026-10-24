@@ -198,7 +198,10 @@ export const Property = z.object({
   kind: PropertyKind,
   /** Geocoded, null until it is. */
   location: FlatPoint.nullable(),
+  /** The office's own, never shown to a driver. */
   notes: Paragraph.nullable(),
+  /** What the driver is told at the place — the gate code, where the bins stand: the Driver App's stop shows it. */
+  driverInstructions: Paragraph.nullable(),
   status: PropertyStatus,
   /** Who the property's customers are and as what; replaced whole through its own route. */
   parties: Parties,
@@ -214,6 +217,7 @@ export const PropertyCreate = z
     kind: PropertyKind,
     location: FlatPoint.nullable().optional(),
     notes: Paragraph.nullable().optional(),
+    driverInstructions: Paragraph.nullable().optional(),
     status: PropertyStatus.default("active").describe("Defaults to active when absent: a property is registered in order to be served."),
     parties: PartiesBody.default([]).describe("The parties the property starts with; none when absent."),
   })
@@ -229,6 +233,7 @@ export const PropertyPatch = z
     kind: PropertyKind.optional(),
     location: FlatPoint.nullable().optional(),
     notes: Paragraph.nullable().optional(),
+    driverInstructions: Paragraph.nullable().optional(),
     status: PropertyStatus.optional(),
   })
   .refine(changesSomething, somethingToChange)
@@ -331,6 +336,8 @@ export const SharedCollectionPoint = z.object({
   accessConditions: Paragraph.nullable(),
   /** When it is open, in words; opening hours as data are Planning's. */
   availability: Label.nullable(),
+  /** What the driver is told at the point: the Driver App's stop shows it. */
+  driverInstructions: Paragraph.nullable(),
   billingMode: SharedCollectionPointBillingMode,
   responsibleCustomerId: Id.nullable(),
   status: SharedCollectionPointStatus,
@@ -350,6 +357,7 @@ export const SharedCollectionPointCreate = z
     accessMode: SharedCollectionPointAccessMode,
     accessConditions: Paragraph.nullable().optional(),
     availability: Label.nullable().optional(),
+    driverInstructions: Paragraph.nullable().optional(),
     billingMode: SharedCollectionPointBillingMode,
     responsibleCustomerId: Id.nullable().optional(),
     status: SharedCollectionPointStatus.default("draft").describe("Defaults to draft when absent: a point is planned before it takes waste."),
@@ -369,6 +377,7 @@ export const SharedCollectionPointPatch = z
     accessMode: SharedCollectionPointAccessMode.optional(),
     accessConditions: Paragraph.nullable().optional(),
     availability: Label.nullable().optional(),
+    driverInstructions: Paragraph.nullable().optional(),
     billingMode: SharedCollectionPointBillingMode.optional(),
     responsibleCustomerId: Id.nullable().optional(),
     status: SharedCollectionPointStatus.optional(),

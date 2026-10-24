@@ -103,6 +103,19 @@ describe("the proofs' Storage", () => {
     }
   })
 
+  test("ensures the bucket as its migration makes it: made where Storage lacks it, held private with its limits where it has it", async () => {
+    const settings = { public: false, file_size_limit: 2_097_152, allowed_mime_types: ["image/jpeg", "image/png", "image/webp"] }
+    const fresh = scripted(() => json(200, { name: "proofs" }))
+    assert.equal(await fresh.storage.ensureBucket(), "made")
+    assert.deepEqual([fresh.calls[0].method, fresh.calls[0].url, fresh.calls[0].body], ["POST", `${BASE}/storage/v1/bucket`, { id: "proofs", name: "proofs", ...settings }])
+    // Storage answers a bucket it holds already 400, its code saying so (probed on a local stack).
+    const held = scripted(() => json(400, { statusCode: "409", error: "Duplicate", message: "The resource already exists", code: "BucketAlreadyExists" }), () => json(200, { message: "Successfully updated" }))
+    assert.equal(await held.storage.ensureBucket(), "kept")
+    assert.deepEqual([held.calls[1].method, held.calls[1].url, held.calls[1].body], ["PUT", `${BASE}/storage/v1/bucket/proofs`, settings], "a bucket made public by hand is made private again")
+    const refusing = scripted(() => json(400, { statusCode: "403", error: "Unauthorized", message: "Invalid Compact JWS", code: "AccessDenied" }))
+    await assert.rejects(refusing.storage.ensureBucket(), StorageRefused)
+  })
+
   test("Storage's refusal — a bucket not there, a key it does not take, a 400 with the real status in its body — is StorageRefused: the deployment's state, not its silence", async () => {
     const { storage } = scripted(
       () => json(400, { statusCode: "404", error: "InvalidRequest", message: "The related resource does not exist", code: "InvalidRequest" }),

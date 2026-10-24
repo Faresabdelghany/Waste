@@ -1512,6 +1512,7 @@ column wms.property 9 kind text not-null
 column wms.property 10 location extensions.geometry(Point,4326)
 column wms.property 11 notes text
 column wms.property 12 status text not-null
+column wms.property 13 driver_instructions text
 constraint wms.property property_company_id_fk FOREIGN KEY (company_id) REFERENCES wms.company(id)
 constraint wms.property property_kind_one_of CHECK ((kind = ANY (ARRAY['residential'::text, 'commercial'::text, 'public'::text, 'mixed'::text, 'other'::text])))
 constraint wms.property property_location_valid CHECK ((extensions.st_isvalid(location) AND (NOT extensions.st_isempty(location)) AND (extensions.st_xmin((location)::extensions.box3d) >= ('-180'::integer)::double precision) AND (extensions.st_xmax((location)::extensions.box3d) <= (180)::double precision) AND (extensions.st_ymin((location)::extensions.box3d) >= ('-90'::integer)::double precision) AND (extensions.st_ymax((location)::extensions.box3d) <= (90)::double precision)))
@@ -2138,6 +2139,7 @@ column wms.shared_collection_point 14 availability text
 column wms.shared_collection_point 15 billing_mode text not-null
 column wms.shared_collection_point 16 responsible_customer_id uuid
 column wms.shared_collection_point 17 status text not-null
+column wms.shared_collection_point 18 driver_instructions text
 constraint wms.shared_collection_point shared_collection_point_access_mode_one_of CHECK ((access_mode = ANY (ARRAY['open'::text, 'member'::text, 'credential'::text, 'restricted'::text])))
 constraint wms.shared_collection_point shared_collection_point_billing_mode_one_of CHECK ((billing_mode = ANY (ARRAY['municipal'::text, 'single-payer'::text, 'member-share'::text, 'usage'::text])))
 constraint wms.shared_collection_point shared_collection_point_company_id_fk FOREIGN KEY (company_id) REFERENCES wms.company(id)
@@ -2877,4 +2879,5 @@ journal 1792835336131 c86420c3cc9a06fd3e215602bb6c79af70edbd8854f0abdc53abfc3922
 journal 1792842805965 03e5b0cdd4ad64f14d6df90763efe8d132a29e1ee8dfa5edc4bed61351df9c7c
 journal 1792844427520 568a78e8675f7282fecf6e292fb296a798c969f76ec89a679200fabe694a0e65
 journal 1792846267723 3c3b26a595add00ba051ae7cde46c1a2ed17b90c8576e94b77158085ab540718
+journal 1792849026873 2533f2d6782a4fa23496fd449cf6e420ae0d6b1c8031c6ef6398faa8878edf60
 pgboss-version 42

@@ -267,6 +267,8 @@ export type DriverMe = z.infer<typeof DriverMe>
 export const DriverPickup = Pickup.extend({
   /** The service address as one text, the property's or the point's. */
   address: Paragraph,
+  /** What the driver is told at the place, the property's or the point's; never the office's own notes. */
+  driverInstructions: Paragraph.nullable(),
   location: FlatPoint.nullable(),
   containerLabel: Label.nullable(),
   wasteFractionName: Label,

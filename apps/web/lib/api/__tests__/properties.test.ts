@@ -66,6 +66,7 @@ const parkvej: Property = {
   kind: "residential",
   location: { type: "Point", coordinates: [12.5709, 55.7012] },
   notes: "Locked yard access.",
+  driverInstructions: "Gate code 4711; the bins stand behind the garage.",
   status: "active",
   parties: [
     { customerId: osterbro.id, role: "owner" },
@@ -89,7 +90,7 @@ const dock4: Property = {
     { customerId: kab.id, role: "tenant" },
   ],
 }
-const ryesgade: Property = { ...parkvej, id: "01a0d2a4-a280-700c-8000-000000000004", name: "Ryesgade 3", address: "Ryesgade 3, 2200 København N", registryId: "CPH-91000", location: null, notes: null, parties: [] }
+const ryesgade: Property = { ...parkvej, id: "01a0d2a4-a280-700c-8000-000000000004", name: "Ryesgade 3", address: "Ryesgade 3, 2200 København N", registryId: "CPH-91000", location: null, notes: null, driverInstructions: null, parties: [] }
 const jagtvej: Property = { ...ryesgade, id: "01a0d2a4-a280-700c-8000-000000000006", name: "Jagtvej 17", address: "Jagtvej 17, 2200 København N", registryId: "CPH-91002" }
 
 const osterbroEast: PropertyGroup = {
@@ -118,6 +119,7 @@ const kongens: SharedCollectionPoint = {
   accessMode: "open",
   accessConditions: null,
   availability: "24/7",
+  driverInstructions: null,
   billingMode: "municipal",
   responsibleCustomerId: null,
   status: "open",
@@ -214,6 +216,7 @@ describe("a property", () => {
       Address: "Parkvej 18, 2100 København Ø",
       "Registry identifier": "CPH-001882",
       Coordinates: "55.7012, 12.5709",
+      "Driver instructions": "Gate code 4711; the bins stand behind the garage.",
       Project: "Copenhagen Central",
       Owners: "Østerbro Housing",
       Payers: "Østerbro Housing",
@@ -230,6 +233,7 @@ describe("a property", () => {
       latitude: "55.7012",
       longitude: "12.5709",
       specialConditions: "Locked yard access.",
+      driverInstructions: "Gate code 4711; the bins stand behind the garage.",
       ownerIds: "company-osterbro-housing",
       payerIds: "company-osterbro-housing",
       tenantIds: "",
@@ -289,6 +293,9 @@ describe("a property", () => {
     assert.equal(bare.location, undefined, "no point is no location: the API's null until geocoded")
     assert.equal(bare.registryId, "CPH-7")
     assert.equal(bare.notes, "Gate code 4411")
+    assert.equal(bare.driverInstructions, undefined, "the office's conditions are never the driver's instructions")
+    const instructed = propertyAdapter.toCreateBody?.(createPropertyRecord({ ...PROPERTY_VALUES, driverInstructions: "Bins behind the garage" }, { now: MINTED }), context()) as Record<string, unknown>
+    assert.equal(instructed.driverInstructions, "Bins behind the garage")
     assert.deepEqual(bare.parties, [{ customerId: HARBOR_PROPERTIES, role: "owner" }], "a customer's id chip names the customer")
     assert.ok(PropertyCreate.safeParse(bare).success)
   })
@@ -312,6 +319,8 @@ describe("a property", () => {
     const renamed = propertyAdapter.toPatchBody(record, edit({ displayName: "Parkvej 18A", registryId: "", specialConditions: "" }), context())
     assert.deepEqual(renamed, { property: { name: "Parkvej 18A", registryId: null, notes: null } })
     assert.ok(PropertyPatch.safeParse((renamed as { property: unknown }).property).success)
+    assert.deepEqual(propertyAdapter.toPatchBody(record, edit({ driverInstructions: "Gate code 9001" }), context()), { property: { driverInstructions: "Gate code 9001" } }, "the driver's instructions move on their own")
+    assert.deepEqual(propertyAdapter.toPatchBody(record, edit({ driverInstructions: "" }), context()), { property: { driverInstructions: null } }, "and a cleared one is a null")
     assert.deepEqual(propertyAdapter.toPatchBody(record, edit({ latitude: "", longitude: "" }), context()), { property: { location: null } })
     assert.deepEqual(propertyAdapter.toPatchBody(record, edit({}, "Inactive"), context()), { property: { status: "inactive" } })
     const tenanted = propertyAdapter.toPatchBody(record, edit({ tenantIds: `company-${kab.id}` }), context())
@@ -540,6 +549,7 @@ describe("a shared collection point", () => {
       availability: "24/7",
       accessMode: "open",
       accessConditions: "",
+      driverInstructions: "",
       billingMode: "municipal",
       responsibleCustomerId: "",
       memberPropertyIds: "",
@@ -570,6 +580,7 @@ describe("a shared collection point", () => {
       availability: "Business hours",
       accessMode: "member",
       accessConditions: "Invited members",
+      driverInstructions: "Ring the caretaker at the gate",
       billingMode: "member-share",
       responsibleCustomerId: "company-osterbro-housing",
       status: "draft",
@@ -589,6 +600,7 @@ describe("a shared collection point", () => {
       accessMode: "member",
       accessConditions: "Invited members",
       availability: "Business hours",
+      driverInstructions: "Ring the caretaker at the gate",
       billingMode: "member-share",
       responsibleCustomerId: osterbro.id,
       status: "draft",
@@ -623,6 +635,7 @@ describe("a shared collection point", () => {
     const moved = sharedPointAdapter.toPatchBody(record, edit({ eligibilityDistance: "", availability: "", accessConditions: "Key from the caretaker", latitude: "55.681" }), contextAll())
     assert.deepEqual(moved, { point: { location: { type: "Point", coordinates: [12.5855, 55.681] }, eligibilityDistanceM: null, accessConditions: "Key from the caretaker", availability: null } })
     assert.ok(SharedCollectionPointPatch.safeParse((moved as { point: unknown }).point).success)
+    assert.deepEqual(sharedPointAdapter.toPatchBody(record, edit({ driverInstructions: "Code 2210 on the enclosure" }), contextAll()), { point: { driverInstructions: "Code 2210 on the enclosure" } })
     const joined = sharedPointAdapter.toPatchBody(record, edit({ memberPropertyIds: `property-${parkvej.id}`, memberRole: "notification-contact" }), contextAll())
     assert.deepEqual(joined, { members: [{ propertyId: parkvej.id, role: "notification-contact" }] })
     assert.ok(SharedCollectionPointMembersSet.safeParse(joined).success)
