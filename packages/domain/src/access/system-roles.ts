@@ -45,6 +45,13 @@ export const systemRoleKept = (name: string): string => `${name} is a system rol
 /** What a change to a system role's scope is refused with (#291). */
 export const systemRoleScopeKept = (name: string): string => `${name} is a system role, whose scope every seed restores to its charter; make a custom role for another scope`
 
+/**
+ * The scope label of a role a Service Provider's account holds (#291 slice
+ * 23b): the two provider charters carry it, and the provider's team door
+ * gives a role only when its scope says it (apps/api/src/routes/users.ts).
+ */
+export const PROVIDER_ROLE_SCOPE = "Own service provider"
+
 /** A seeded role: its key, the copy Settings shows, and the grants it starts with. */
 export type SystemRole = {
   key: SystemRoleKey
@@ -208,7 +215,7 @@ export const SYSTEM_ROLES: readonly SystemRole[] = [
   {
     key: "service-provider-manager",
     name: "Service Provider Manager",
-    scope: "Own service provider",
+    scope: PROVIDER_ROLE_SCOPE,
     description: "Service provider users, fleet, routes, and settlements",
     system: true,
     grants: charter(
@@ -218,8 +225,11 @@ export const SYSTEM_ROLES: readonly SystemRole[] = [
       workspace("operate", VIEW),
       // The restricted service provider workspace reads these grants live:
       // fleet is fully self-managed, tickets can be raised, and service
-      // provider users are fully administered by the manager — while routes
-      // stay read-only.
+      // provider users are fully administered by the manager. The routes it
+      // runs it crews (#291 slice 23b): `edit` on the routes reaches only
+      // `assign` and `dispatch` from a provider's account, naming its own
+      // vehicles and drivers — every other route command stays the office's.
+      only("route-studio.routes", VIEW_EDIT),
       only("fleet.vehicles", ALL),
       only("fleet.drivers", ALL),
       only("operate.tickets", ["view", "create"]),
@@ -234,7 +244,7 @@ export const SYSTEM_ROLES: readonly SystemRole[] = [
     // like the rest — a company may still delete or re-grant it.
     key: "service-provider-foreman",
     name: "Service Provider Foreman",
-    scope: "Own service provider",
+    scope: PROVIDER_ROLE_SCOPE,
     description: "Service provider routes, vehicles, and drivers",
     system: true,
     grants: charter(

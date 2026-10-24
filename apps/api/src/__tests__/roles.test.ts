@@ -6,7 +6,10 @@ import { Role } from "@waste/contracts/access"
 import { Id } from "@waste/contracts/ids"
 import { Page } from "@waste/contracts/pagination"
 import { createDb, type Database } from "@waste/db/client"
-import { systemRoleKept, systemRoleScopeKept } from "@waste/domain/access/system-roles"
+import { roleGrant } from "@waste/db/schema/access"
+import { withCompany } from "@waste/db/tenant"
+import { PROVIDER_ROLE_SCOPE, systemRoleKept, systemRoleScopeKept } from "@waste/domain/access/system-roles"
+import { and, eq } from "drizzle-orm"
 
 import { createApp } from "../app"
 import { callingAs, type Call } from "./calls"
@@ -129,9 +132,18 @@ describe("the role endpoints", { skip: database.skip }, () => {
 
     test("lets a role with configure.access view list, refuses one without the module, and refuses no token at all", async () => {
       assert.equal((await viewer("/roles")).status, 200)
-      const refused = await lars("/roles")
+      // A Service Provider's account reads under its own team's module (#291 slice 23b): the roles of a provider's team alone.
+      const his = await lars("/roles?limit=200")
+      assert.equal(his.status, 200)
+      const listed = (await his.json()) as { items: { scope: string }[] }
+      assert.ok(listed.items.length > 0 && listed.items.every((given) => given.scope === PROVIDER_ROLE_SCOPE))
+      // Without that module — the third company's manager, its grant taken away — it is refused in the module's name.
+      await withCompany(pool.db, c.companyId, async (tx) => {
+        await tx.delete(roleGrant).where(and(eq(roleGrant.companyId, c.companyId), eq(roleGrant.roleId, c.roles.providerManager.id), eq(roleGrant.moduleKey, "service-providers.service-provider-workspace")))
+      })
+      const refused = await callingAs(app, keys, c.users.lars, c.companyId)("/roles")
       assert.equal(refused.status, 403)
-      assert.match((await readProblem(refused)).detail ?? "", /view on configure\.access/)
+      assert.match((await readProblem(refused)).detail ?? "", /view on service-providers\.service-provider-workspace/)
       assert.equal((await app.request("/roles")).status, 401)
     })
   })

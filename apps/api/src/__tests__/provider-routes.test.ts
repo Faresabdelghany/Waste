@@ -4,9 +4,12 @@
 // a Service Area assigned to NordRen, the assignment and the area in force on
 // the route's operating date (`servesRoute`) — and their stops, Plans, device
 // log and proof objects, each as the office reads it, and nothing else; and
-// he commands none of them, under his charter (a 403 at the grant) or on a
-// role granted `edit` (the family's 404, the settlements' precedent). The
-// office's reads and commands keep `inProjects`, which their own suites hold.
+// he commands none of them but the two he crews them with, `assign` and
+// `dispatch` (#291 slice 23b, provider-doors.test.ts) — a route command finds
+// no row for him (the family's 404, the settlements' precedent) and the
+// pickups' and weights' are refused at the grant his charter does not give.
+// The office's reads and commands keep `inProjects`, which their own suites
+// hold.
 import assert from "node:assert/strict"
 import { after, before, describe, test } from "node:test"
 
@@ -330,33 +333,38 @@ describe("a Service Provider's reach on the routes and the pickups", { skip: dat
   })
 
   describe("the commands", () => {
-    /** Every command of the two families, with a body each validator takes, on a route and a stop NordRen runs. */
+    /**
+     * Every command of the two families a provider does not crew with, with a body each validator takes, on a route and a stop NordRen
+     * runs, and the module whose grant it asks. `assign` and `dispatch`, the two a provider crews its routes with (#291 slice 23b), are
+     * provider-doors.test.ts's.
+     */
     const commands = () => {
       const planned = ex.routes.planned
       const completed = ex.routes.completed
       return [
-        { path: `/routes/${planned.id}/assign`, method: "POST", body: { depotId: null }, family: "route" },
-        { path: `/routes/${planned.id}/dispatch`, method: "POST", body: undefined, family: "route" },
-        { path: `/routes/${planned.id}/reschedule`, method: "POST", body: { plannedStartTime: "07:00" }, family: "route" },
-        { path: `/routes/${planned.id}/release-hold`, method: "POST", body: {}, family: "route" },
-        { path: `/routes/${planned.id}/cancel`, method: "POST", body: { reasonCode: "other", reason: "Not ours" }, family: "route" },
-        { path: `/routes/${planned.id}/pickup-order`, method: "PUT", body: { pickupIds: [...planned.pickupIds] }, family: "route" },
-        { path: `/routes/${planned.id}/optimise`, method: "POST", body: undefined, family: "route" },
-        { path: `/routes/${planned.id}/pickups`, method: "POST", body: { containerId: ex.containers.bin1.id }, family: "route" },
-        { path: `/routes/${completed.id}/unloads`, method: "POST", body: { unloadingStationId: fleet.stations.amager.id, wasteFractionId: ex.fractions.residual.id, netKg: 4_200, occurredAt: "2026-10-05T07:00:00Z" }, family: "route" },
-        { path: `/pickups/${planned.pickupIds[0]}/remove`, method: "POST", body: { reason: "Not ours" }, family: "pickup" },
-        { path: `/pickups/${completed.pickupIds[1]}/correct-outcome`, method: "POST", body: { outcome: "completed", note: "We emptied it after all" }, family: "pickup" },
+        { path: `/routes/${planned.id}/reschedule`, method: "POST", body: { plannedStartTime: "07:00" }, family: "route", module: "routes" },
+        { path: `/routes/${planned.id}/release-hold`, method: "POST", body: {}, family: "route", module: "routes" },
+        { path: `/routes/${planned.id}/cancel`, method: "POST", body: { reasonCode: "other", reason: "Not ours" }, family: "route", module: "routes" },
+        { path: `/routes/${planned.id}/pickup-order`, method: "PUT", body: { pickupIds: [...planned.pickupIds] }, family: "route", module: "routes" },
+        { path: `/routes/${planned.id}/optimise`, method: "POST", body: undefined, family: "route", module: "routes" },
+        { path: `/routes/${planned.id}/pickups`, method: "POST", body: { containerId: ex.containers.bin1.id }, family: "route", module: "pickups" },
+        { path: `/routes/${completed.id}/unloads`, method: "POST", body: { unloadingStationId: fleet.stations.amager.id, wasteFractionId: ex.fractions.residual.id, netKg: 4_200, occurredAt: "2026-10-05T07:00:00Z" }, family: "route", module: "weights" },
+        { path: `/pickups/${planned.pickupIds[0]}/remove`, method: "POST", body: { reason: "Not ours" }, family: "pickup", module: "pickups" },
+        { path: `/pickups/${completed.pickupIds[1]}/correct-outcome`, method: "POST", body: { outcome: "completed", note: "We emptied it after all" }, family: "pickup", module: "pickups" },
       ] as const
     }
 
-    test("under the charter, which grants the routes and the pickups `view` alone, every command is refused at the grant", async () => {
-      for (const { path, method, body } of commands()) {
-        const problem = await refused(await lars(path, { method, body }), 403)
-        assert.match(problem.detail ?? "", /does not allow (edit|create) on route-studio\.(routes|pickups|weights)/, path)
+    test("under the charter, which grants the routes `edit` for crewing and the pickups and the weights `view`, a route command finds no row and the rest are refused at the grant", async () => {
+      for (const { path, method, body, module } of commands()) {
+        if (module === "routes") {
+          assert.match((await refused(await lars(path, { method, body }), 404)).detail ?? "", /^No route .* in the projects this account works in$/, path)
+        } else {
+          assert.match((await refused(await lars(path, { method, body }), 403)).detail ?? "", new RegExp(`does not allow (edit|create) on route-studio\\.${module}`), path)
+        }
       }
     })
 
-    test("on a role granted `edit`, every command on a route NordRen runs is the family's 404, nothing is written, and the route still reads", async () => {
+    test("on a role granted `edit` everywhere, every command on a route NordRen runs is the family's 404, nothing is written, and the route still reads", async () => {
       const before = await Promise.all([ex.routes.planned.id, ex.routes.completed.id].map(async (id) => RouteDetail.parse(await ok(await olivia(`/routes/${id}`)))))
       for (const { path, method, body, family } of commands()) {
         const problem = await refused(await nora(path, { method, body }), 404)

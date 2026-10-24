@@ -469,7 +469,7 @@ describe("the Resolution tables against a fresh database", { skip: database.skip
           rows += 1
         }
       }
-      assert.equal(rows, 76, "four kinds, nineteen rows each")
+      assert.equal(rows, 80, "four kinds, twenty rows each: the provider's thread is the third visibility (#291 slice 23b)")
       await assert.rejects(tx.transaction((savepoint) => savepoint.insert(ticketEvent).values(comment({ kind: "edited" }))), refusedWith("23514", /ticket_event_kind_one_of|ticket_event_kind_shape/), "the history of a field edit is the audit log's")
     }))
 

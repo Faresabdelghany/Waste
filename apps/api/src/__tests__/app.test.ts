@@ -614,7 +614,7 @@ describe("GET /openapi.json", () => {
 
     // The rules a client must know are in the prose, not only in the code.
     const list = document.paths["/tickets"].get.description ?? ""
-    assert.match(list, /an account that works in none[^.]*reads an empty page/)
+    assert.match(list, /for a Service Provider's account, which works in none, the tickets about a route its provider runs/)
     assert.match(list, /both ends inclusive, on the UTC calendar day, so `to=2026-10-05` takes the whole of the 5th/)
     assert.match(list, /`customerId` is the citizen portal's read model/)
     const create = document.paths["/tickets"].post.description ?? ""
@@ -1480,7 +1480,7 @@ describe("GET /openapi.json", () => {
     assert.match(document.paths["/vehicles"].post.description ?? "", /a powered vehicle has at least one, a trailer may have none/)
     assert.match(document.paths["/vehicles"].post.description ?? "", /unique across the company, not inside a project/)
     assert.match(document.paths["/vehicles"].post.description ?? "", /an unknown class passes nobody/)
-    assert.match(document.paths["/vehicles"].get.description ?? "", /an account that works in none[^.]*reads an empty page/)
+    assert.match(document.paths["/vehicles"].get.description ?? "", /for a Service Provider's account, which works in none, the vehicles its provider owns, wherever they are based/)
     assert.match(document.paths["/vehicles/{id}"].patch.description ?? "", /a powered vehicle does not become a trailer/)
     assert.match(document.paths["/vehicles/{id}"].patch.description ?? "", /refused \(409\) counting them — release the allocations, reassign the groups, and retire it then/)
     assert.match(document.paths["/vehicles/{id}/compartments"].put.description ?? "", /Replaces the whole list/)

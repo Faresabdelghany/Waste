@@ -36,14 +36,15 @@ import { Page, PageRequest } from "@waste/contracts/pagination"
 import type { Grant } from "@waste/contracts/permissions"
 import type { Tx } from "@waste/db/client"
 import { role, roleGrant } from "@waste/db/schema/access"
-import { systemRoleKept, systemRoleScopeKept } from "@waste/domain/access/system-roles"
+import { PROVIDER_ROLE_SCOPE, systemRoleKept, systemRoleScopeKept } from "@waste/domain/access/system-roles"
 import { and, asc, eq, gt, inArray, sql } from "drizzle-orm"
 import { Hono, type MiddlewareHandler } from "hono"
 import { describeRoute } from "hono-openapi"
 
 import { grantsOfRows, normalisedGrants } from "../access-shape"
-import { BEARER_SECURITY, type AuthEnv } from "../auth/principal"
-import { requireGrant } from "../auth/require"
+import { BEARER_SECURITY, type AuthEnv, type Principal } from "../auth/principal"
+import { accessModuleOf, providerIdOf } from "../auth/provider"
+import { requireGrant, requireGrantOf } from "../auth/require"
 import { newId } from "../ids"
 import { afterCursor, fetchLimit, pageOf } from "../pagination"
 import { describeProblem, problem, validate } from "../problem"
@@ -111,6 +112,14 @@ const nameTaken = (name: string) => `This company already has a role called ${JS
 
 const noSuchRole = (id: string) => problem(404, { detail: `No role ${id} in this company` })
 
+/**
+ * The roles of this company the caller reads: every one for the office, and
+ * for a Service Provider's account the roles of a provider's team
+ * (`PROVIDER_ROLE_SCOPE`), the ones its team door may give (#291 slice 23b,
+ * routes/users.ts holds the rest of that rule when one is given).
+ */
+const roleScope = (principal: Principal) => and(eq(role.companyId, principal.companyId), providerIdOf(principal) === null ? undefined : eq(role.scope, PROVIDER_ROLE_SCOPE))
+
 /** The role of the path, or the family's 404. */
 async function findRole(tx: Tx, companyId: string, id: string): Promise<Row> {
   const [row] = await tx
@@ -130,27 +139,28 @@ export function roleRoutes(guard: MiddlewareHandler<AuthEnv>) {
         operationId: "listRoles",
         summary: "The company's roles",
         description:
-          "One page of the company's roles, oldest first (ids are time-ordered), each with its whole matrix. Hand `nextCursor` back as `cursor` for the next page; `nextCursor` is null on the last one.",
+          "One page of the company's roles, oldest first (ids are time-ordered), each with its whole matrix — or, for a Service Provider's account, under `service-providers.service-provider-workspace`, the roles of a provider's team (scope `Own service provider`), the ones it may give its own accounts where they allow no more than its own. Hand `nextCursor` back as `cursor` for the next page; `nextCursor` is null on the last one.",
         security: BEARER_SECURITY,
         responses: {
           200: describeJson("One page of roles.", RolePage),
           400: describeProblem("The page size is outside 1..200, or the cursor is not one this API wrote."),
           401: describeProblem("No usable token (see WWW-Authenticate)."),
-          403: describeProblem("No active account here, or the caller's role does not allow `view` on `configure.access`."),
+          403: describeProblem("No active account here, or the caller's role does not allow `view` on `configure.access` (on `service-providers.service-provider-workspace` for a Service Provider's account)."),
         },
       }),
       guard,
-      requireGrant(MODULE, "view"),
+      requireGrantOf(accessModuleOf, "view"),
       validate("query", PageRequest),
       async (c) => {
         const { limit, cursor } = c.req.valid("query")
         const after = afterCursor(cursor)
         const tx = c.get("tx")
-        const { companyId } = c.get("principal")
+        const principal = c.get("principal")
+        const { companyId } = principal
         const rows = await tx
           .select(columns)
           .from(role)
-          .where(and(eq(role.companyId, companyId), after === undefined ? undefined : gt(role.id, after)))
+          .where(and(roleScope(principal), after === undefined ? undefined : gt(role.id, after)))
           .orderBy(asc(role.id))
           .limit(fetchLimit(limit))
         // Paged first, so the row that only proves there is a next page is not
@@ -200,27 +210,28 @@ export function roleRoutes(guard: MiddlewareHandler<AuthEnv>) {
       describeRoute({
         operationId: "getRole",
         summary: "One role",
-        description: "One role of the caller's company, with its whole matrix. Another company's role is a role that does not exist here.",
+        description: "One role of the caller's company, with its whole matrix — for a Service Provider's account, a role of a provider's team. Another company's role, or for a provider's account any other, is a role that does not exist here.",
         security: BEARER_SECURITY,
         responses: {
           200: describeJson("The role.", Role),
           400: describeProblem("The path does not hold an id."),
           401: describeProblem("No usable token (see WWW-Authenticate)."),
-          403: describeProblem("No active account here, or the caller's role does not allow `view` on `configure.access`."),
+          403: describeProblem("No active account here, or the caller's role does not allow `view` on `configure.access` (on `service-providers.service-provider-workspace` for a Service Provider's account)."),
           404: describeProblem("No role with that id in this company."),
         },
       }),
       guard,
-      requireGrant(MODULE, "view"),
+      requireGrantOf(accessModuleOf, "view"),
       validate("param", IdParam),
       async (c) => {
         const { id } = c.req.valid("param")
         const tx = c.get("tx")
-        const { companyId } = c.get("principal")
+        const principal = c.get("principal")
+        const { companyId } = principal
         const [row] = await tx
           .select(columns)
           .from(role)
-          .where(and(eq(role.companyId, companyId), eq(role.id, id)))
+          .where(and(roleScope(principal), eq(role.id, id)))
           .limit(1)
         if (row === undefined) throw noSuchRole(id)
         return c.json(await roleWithGrants(tx, companyId, row))

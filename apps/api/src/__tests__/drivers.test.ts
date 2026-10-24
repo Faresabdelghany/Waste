@@ -188,7 +188,7 @@ describe("the driver endpoints", { skip: database.skip }, () => {
       const foreign = await refused(await post(body("Theirs", { projectId: b.projects.copenhagen.id })), 400)
       assert.deepEqual(foreign.errors, [{ path: "projectId", message: "Not a project this account works in" }])
       const provider = await refused(await lars("/drivers", { method: "POST", body: body("Lars's hire") }), 400)
-      assert.deepEqual(provider.errors, [{ path: "projectId", message: "Not a project this account works in" }], "a service provider's account works in no project, whatever its charter grants")
+      assert.deepEqual(provider.errors, [{ path: "projectId", message: "Not a project NordRen ApS holds a Service Area in" }], "a service provider's account registers its fleet where its provider holds an award, and this suite awards none (#291 slice 23b)")
       const owned = await refused(await post(body("Client minted", { id: testId() })), 400)
       assert.ok(owned.errors?.some((error) => /id/.test(error.message)), JSON.stringify(owned.errors))
     })
@@ -240,7 +240,10 @@ describe("the driver endpoints", { skip: database.skip }, () => {
       assert.ok(!seen.some((row) => row.id === elsewhere.id))
       for (const row of seen) assert.equal(row.projectId, a.projects.copenhagen.id)
 
-      assert.deepEqual(await page(lars, "?limit=200"), { items: [], nextCursor: null })
+      // A service provider's account reads its own fleet, wherever it is based, and none of the office's (#291 slice 23b).
+      const his = (await page(lars, "?limit=200")).items
+      assert.ok(his.every((row) => row.serviceProviderId === a.serviceProviders.nordren.id), JSON.stringify(his.map((row) => row.serviceProviderId)))
+      assert.ok(!his.some((row) => row.id === here.id))
       await refused(await lars(`/drivers/${here.id}`), 404)
 
       const problem = await refused(await viewer(`/drivers?projectId=${a.projects.harbor.id}`), 400)

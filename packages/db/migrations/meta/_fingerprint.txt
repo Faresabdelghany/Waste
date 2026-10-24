@@ -2525,7 +2525,7 @@ constraint wms.ticket ticket_resolution_shape CHECK (((status = 'completed'::tex
 constraint wms.ticket ticket_route_id_fk FOREIGN KEY (company_id, project_id, route_id) REFERENCES wms.route(company_id, project_id, id)
 constraint wms.ticket ticket_route_id_pickup_id_fk FOREIGN KEY (company_id, project_id, route_id, pickup_id) REFERENCES wms.pickup(company_id, project_id, route_id, id)
 constraint wms.ticket ticket_shared_collection_point_id_fk FOREIGN KEY (company_id, project_id, shared_collection_point_id) REFERENCES wms.shared_collection_point(company_id, project_id, id)
-constraint wms.ticket ticket_source_one_of CHECK ((source = ANY (ARRAY['office'::text, 'phone'::text, 'email'::text, 'portal'::text, 'driver-app'::text, 'dispatch'::text, 'import'::text, 'integration'::text])))
+constraint wms.ticket ticket_source_one_of CHECK ((source = ANY (ARRAY['office'::text, 'phone'::text, 'email'::text, 'portal'::text, 'driver-app'::text, 'dispatch'::text, 'import'::text, 'integration'::text, 'service-provider'::text])))
 constraint wms.ticket ticket_status_one_of CHECK ((status = ANY (ARRAY['open'::text, 'in-progress'::text, 'pending'::text, 'on-hold'::text, 'completed'::text, 'rejected'::text])))
 index wms.ticket ticket_agreement_id_idx CREATE INDEX ticket_agreement_id_idx ON wms.ticket USING btree (company_id, agreement_id)
 index wms.ticket ticket_assignee_user_account_id_status_idx CREATE INDEX ticket_assignee_user_account_id_status_idx ON wms.ticket USING btree (company_id, assignee_user_account_id, status)
@@ -2579,7 +2579,7 @@ constraint wms.ticket_event ticket_event_recorded_by_fk FOREIGN KEY (company_id,
 constraint wms.ticket_event ticket_event_resolution_one_of CHECK ((resolution = ANY (ARRAY['recollected'::text, 'serviced'::text, 'answered'::text, 'no-action'::text, 'duplicate'::text])))
 constraint wms.ticket_event ticket_event_status_one_of CHECK ((status = ANY (ARRAY['open'::text, 'in-progress'::text, 'pending'::text, 'on-hold'::text, 'completed'::text, 'rejected'::text])))
 constraint wms.ticket_event ticket_event_ticket_id_fk FOREIGN KEY (company_id, project_id, ticket_id) REFERENCES wms.ticket(company_id, project_id, id)
-constraint wms.ticket_event ticket_event_visibility_one_of CHECK ((visibility = ANY (ARRAY['internal'::text, 'customer'::text])))
+constraint wms.ticket_event ticket_event_visibility_one_of CHECK ((visibility = ANY (ARRAY['internal'::text, 'customer'::text, 'service-provider'::text])))
 index wms.ticket_event ticket_event_assignee_user_account_id_idx CREATE INDEX ticket_event_assignee_user_account_id_idx ON wms.ticket_event USING btree (company_id, assignee_user_account_id)
 index wms.ticket_event ticket_event_pkey CREATE UNIQUE INDEX ticket_event_pkey ON wms.ticket_event USING btree (id)
 index wms.ticket_event ticket_event_project_id_idx CREATE INDEX ticket_event_project_id_idx ON wms.ticket_event USING btree (company_id, project_id)
@@ -3099,4 +3099,5 @@ journal 1792865708689 34a95f7c352373cd3eb625466c5610a65b46b791a1b940ba4e02ccf528
 journal 1792867065800 f8212d9d9ad7d0d5e457e9772d762f6453b4ca8b3d68bd81d86470274b6d25bf
 journal 1792868216557 6775a033d267b5b88bf3f92f2efd3f695a1039822f38c8c2c49e9e7b24ee0e56
 journal 1792869628829 b505b3c7d5a7facb5ef7d48d8c936b335c3a626fdce876f9866e5ee49bc273e8
+journal 1792871277838 b4492acfde0d00f5427e247e23084a6456b437ce0e06448a61d0ceac1110b9bd
 pgboss-version 42

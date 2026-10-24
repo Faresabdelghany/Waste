@@ -55,12 +55,15 @@ import type { Tx } from "@waste/db/client"
 import { validOn } from "@waste/db/query/valid-on"
 import { route } from "@waste/db/schema/execution"
 import { serviceArea, serviceAreaAssignment, serviceAreaPlanningArea } from "@waste/db/schema/finance"
+import { project } from "@waste/db/schema/organisation"
 import { routeScheme } from "@waste/db/schema/route-schemes"
+import type { ModuleKey } from "@waste/domain/access/modules"
 import { and, eq, exists, sql, type SQL } from "drizzle-orm"
 import { alias, type PgColumn } from "drizzle-orm/pg-core"
 
+import { invalidRequest } from "../problem"
 import type { Principal } from "./principal"
-import { inProjects } from "./projects"
+import { inProjects, requireProject } from "./projects"
 
 /** The Service Provider Access's provider, or null for an office account. */
 export function providerIdOf(principal: Principal): string | null {
@@ -189,3 +192,98 @@ export function reachesThroughAssignments(tx: Tx, principal: Principal, on: Assi
       .where(and(eq(serviceAreaAssignment.companyId, principal.companyId), named, reachesAssignments(principal))),
   )
 }
+
+/** The columns of a fleet row the reach reads: a vehicle's or a driver's project, and the provider that owns or employs it. */
+export type FleetColumns = { projectId: PgColumn; serviceProviderId: PgColumn }
+
+/**
+ * The `where` fragment that keeps a statement over the fleet — a vehicle, a
+ * driver — to the rows the caller reaches (#291 slice 23b): `inProjects` for
+ * an office account, and for an account with a provider the rows naming its
+ * provider as their owner or employer, in whichever project they are based —
+ * its own fleet, which a provider's manager reads and keeps whole (its
+ * charter grants every action on both). Never both widened. Unlike the
+ * routes, the fleet's writes carry it too: a provider changes its own trucks
+ * and drivers, and no other.
+ */
+export function reachesFleet(principal: Principal, on: FleetColumns): SQL {
+  const providerId = providerIdOf(principal)
+  if (providerId !== null) return eq(on.serviceProviderId, providerId)
+  return inProjects(on.projectId, principal)
+}
+
+/** What a provider's account naming a project it holds no award in is told, its provider named. */
+export const notAHeldProject = (provider: string): string => `Not a project ${provider} holds a Service Area in`
+
+/**
+ * Holds a project a request names to the ones the caller may name there:
+ * for an office account the projects it works in (`requireProject`); for a
+ * provider's account, which works in none, a project in which its provider
+ * holds a Service Area Assignment in force on the project's today, its
+ * Service Area in force too, as `servesRoute` judges an award — the
+ * request's instant rendered on the project's clock — where its fleet is
+ * based and its work is. A 400 at `path` otherwise, in the provider's name.
+ */
+export async function requireReachedProject(tx: Tx, principal: Principal, projectId: string, now: () => Date, path = "projectId", target: "body" | "query" = "body"): Promise<void> {
+  const providerId = providerIdOf(principal)
+  if (providerId === null) return requireProject(principal, projectId, path, target)
+  const today = sql`(${now().toISOString()}::timestamptz at time zone ${project.timezone})::date`
+  const [held] = await tx
+    .select({ one: sql`1` })
+    .from(serviceAreaAssignment)
+    .innerJoin(project, and(eq(project.companyId, serviceAreaAssignment.companyId), eq(project.id, serviceAreaAssignment.projectId)))
+    .innerJoin(serviceArea, and(eq(serviceArea.companyId, serviceAreaAssignment.companyId), eq(serviceArea.id, serviceAreaAssignment.serviceAreaId)))
+    .where(
+      and(
+        eq(serviceAreaAssignment.companyId, principal.companyId),
+        eq(serviceAreaAssignment.projectId, projectId),
+        eq(serviceAreaAssignment.serviceProviderId, providerId),
+        // In force as `servesRoute` judges an award: the assignment and the area both.
+        validOn(serviceAreaAssignment, today),
+        validOn(serviceArea, today),
+      ),
+    )
+    .limit(1)
+  if (held === undefined) throw invalidRequest(target, [{ path, message: notAHeldProject(providerNameOf(principal)) }])
+}
+
+/** What a provider's account naming a fleet row of anyone else's is told: its own fleet, named. */
+export const notOwnFleet = (what: "vehicle" | "trailer" | "driver", provider: string): string => `Not a ${what} of ${provider}`
+
+/** The name a provider's account's sentences call its provider by. */
+export const providerNameOf = (principal: Principal): string => principal.serviceProvider?.legalName ?? "This account's service provider"
+
+/** What a provider's vehicle or driver is told when a body would make it anyone else's. */
+export const ownFleetKind = (provider: string, what: "vehicle" | "driver"): string =>
+  what === "vehicle" ? `${provider}'s vehicles are its own: their ownership is service-provider` : `${provider}'s drivers are its own: their employment is service-provider`
+export const ownFleetProvider = (provider: string, what: "vehicle" | "driver"): string => `${provider}'s ${what}s name ${provider} as their provider`
+
+/** The two halves of a fleet row's owner a body carries: the kind — a vehicle's ownership, a driver's employment — and the provider. */
+export type FleetOwner = { kind: string | undefined; serviceProviderId: string | null | undefined }
+
+/**
+ * A provider's account writes its own fleet and nobody else's (#291 slice
+ * 23b): a create's ownership (a vehicle) or employment (a driver) is
+ * `service-provider` and its provider the caller's, and a patch that names
+ * either names those. Each a 400 at its field in the provider's name, the two
+ * listed together; nothing for an office account, whose rule is the
+ * contracts' pair rule alone. A create carries both halves (the contracts
+ * default the kind); a patch only the ones it moves.
+ */
+export function requireOwnFleet(principal: Principal, owner: FleetOwner, what: "vehicle" | "driver", mode: "create" | "patch"): void {
+  const providerId = providerIdOf(principal)
+  if (providerId === null) return
+  const provider = providerNameOf(principal)
+  const kindPath = what === "vehicle" ? "ownership" : "employment"
+  const issues: { path: string; message: string }[] = []
+  if ((mode === "create" || owner.kind !== undefined) && owner.kind !== "service-provider") issues.push({ path: kindPath, message: ownFleetKind(provider, what) })
+  if ((mode === "create" || owner.serviceProviderId !== undefined) && owner.serviceProviderId !== providerId) issues.push({ path: "serviceProviderId", message: ownFleetProvider(provider, what) })
+  if (issues.length > 0) throw invalidRequest("body", issues)
+}
+
+/** A Service Provider's own team: the module its manager administers the team's accounts, and reads the roles it may give, under (#291 slice 23b). */
+export const TEAM_MODULE: ModuleKey = "service-providers.service-provider-workspace"
+
+/** The module a caller reaches the company's accounts and roles through: the office's access settings, or for a provider's account its own team. */
+export const accessModuleOf = (principal: Principal): ModuleKey => (providerIdOf(principal) === null ? "configure.access" : TEAM_MODULE)
+

@@ -357,6 +357,20 @@ export async function requireUserAccount(tx: Tx, companyId: string, id: string |
   await requireRow(tx, userAccount, { companyId, id, also: isNull(userAccount.deactivatedAt) }, { path, message: NOT_A_USER_ACCOUNT })
 }
 
+/** What a provider's account naming a login outside its own team is told. */
+export const notAnAccountOf = (provider: string): string => `Not a user account of ${provider}`
+
+/**
+ * The login a provider's account names for its own driver (#291 slice 23b):
+ * an account of the same provider, active or invited — so a provider binds
+ * its own people to its drivers, and never an office account. The office's
+ * rule is `requireUserAccount` above.
+ */
+export async function requireProviderAccount(tx: Tx, scope: { companyId: string; serviceProviderId: string; provider: string }, id: string | null | undefined, path = "userAccountId"): Promise<void> {
+  if (id == null) return
+  await requireRow(tx, userAccount, { companyId: scope.companyId, id, also: and(isNull(userAccount.deactivatedAt), eq(userAccount.serviceProviderId, scope.serviceProviderId)) }, { path, message: notAnAccountOf(scope.provider) })
+}
+
 // Execution (Issue #104): a route, a pickup and a session are named
 // by the office's list filters (`?routeId=` on the pickups, sessions and
 // unloads lists) and by the driver door's commands, so their checks are here

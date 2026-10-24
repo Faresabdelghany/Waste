@@ -4,11 +4,12 @@
 // `origin` backfilled by the default, and the ticket's re-collection stop
 // with its key through the route, its index and its check — eleven ALTER
 // TABLE and CREATE INDEX statements diffed from 0015's spelling of the three
-// tables (route-as-of.ts and the two below) to 0016's — the pickup as 0016
-// left it (pickup-as-of.ts, since 0023 gave it its service) and the route as
-// 0016 left it (since 0024 gave it the cancel's reason code, O5 of #290) —
-// since an applied file is never
-// edited; execution-rendering.test.ts and resolution-rendering.test.ts map
+// tables (route-as-of.ts, ticket-as-of.ts and the pickup below) to 0016's —
+// the pickup as 0016 left it (pickup-as-of.ts, since 0023 gave it its
+// service), the route as 0016 left it (since 0024 gave it the cancel's
+// reason code, O5 of #290) and the ticket as 0016 left it (ticket-as-of.ts,
+// since 0025 grew its sources, #291 slice 23b) — since an applied file is
+// never edited; execution-rendering.test.ts and resolution-rendering.test.ts map
 // today's tables back (`CHANGED_IN_0016`). Then migration 0016, which is
 // exactly those statements: no table is new, so nothing is hand-written —
 // the fences and the triggers are the tables', and stand as 0008 and 0009
@@ -20,29 +21,26 @@ import { join } from "node:path"
 import { describe, test } from "node:test"
 
 import { PICKUP_ORIGINS, PICKUP_REASONS, PICKUP_STATUSES } from "@waste/domain/execution/vocabulary"
-import { TICKET_KINDS, TICKET_PRIORITIES, TICKET_RESOLUTIONS, TICKET_SOURCES, TICKET_STATUSES } from "@waste/domain/resolution/vocabulary"
 import { sql } from "drizzle-orm"
-import { check, integer, text, timestamp, uniqueIndex, uuid } from "drizzle-orm/pg-core"
+import { check, integer, text, timestamp, uuid } from "drizzle-orm/pg-core"
 
 import { MIGRATIONS_FOLDER } from "../migrate"
 import { tableObjectName } from "../names"
-import { userAccount } from "../schema/access"
-import { agreement } from "../schema/agreements"
 import { wasteFraction } from "../schema/catalogue"
 import { exactlyOne, oneOf, positive } from "../schema/checks"
 import { id, projectScoped, timestamps } from "../schema/columns"
 import { container } from "../schema/containers"
-import { customer, property, sharedCollectionPoint } from "../schema/customers"
+import { property, sharedCollectionPoint } from "../schema/customers"
 import { pickup, route } from "../schema/execution"
-import { driver } from "../schema/fleet"
 import { company, project } from "../schema/organisation"
-import { companyReference, projectKey, projectReference, tenantIndex, tenantReference, tenantUnique, type ProjectTable } from "../schema/references"
+import { companyReference, projectKey, projectReference, tenantIndex, tenantReference, tenantUnique } from "../schema/references"
 import { ticket } from "../schema/resolution"
 import { wms } from "../schema/wms"
 import { normalised, statementsOf } from "../sql/hand-written"
 import { checksOf, list, ref } from "./rendering"
 import { pickupAsOf0016 } from "./pickup-as-of"
 import { routeAsOf } from "./route-as-of"
+import { ticketAsOf } from "./ticket-as-of"
 import { statementsBetween } from "./specimen"
 
 const MIGRATION = "0016_ad_hoc_routes.sql"
@@ -93,83 +91,6 @@ const pickupAsOf0015 = wms.table(
   ],
 )
 
-/** ticket as 0009 left it and 0015 still had it: the re-collection's route, and no stop of it. */
-const ticketAsOf0015 = wms.table(
-  "ticket",
-  {
-    ...id,
-    ...projectScoped,
-    ...timestamps,
-    number: integer().notNull(),
-    kind: text().notNull(),
-    status: text().notNull().default("open"),
-    priority: text().notNull().default("none"),
-    source: text().notNull(),
-    subject: text().notNull(),
-    description: text().notNull(),
-    occurredAt: instant().notNull(),
-    dueAt: instant(),
-    assigneeUserAccountId: uuid(),
-    createdBy: uuid(),
-    sourceEventId: uuid(),
-    routeId: uuid(),
-    pickupId: uuid(),
-    containerId: uuid(),
-    propertyId: uuid(),
-    sharedCollectionPointId: uuid(),
-    agreementId: uuid(),
-    driverId: uuid(),
-    customerId: uuid(),
-    parentTicketId: uuid(),
-    resolution: text(),
-    recollectionRouteId: uuid(),
-    closedAt: instant(),
-  },
-  (t) => [
-    companyReference(t, company),
-    tenantReference(t, [t.projectId], project),
-    tenantReference(t, [t.assigneeUserAccountId], userAccount),
-    tenantReference(t, [t.createdBy], userAccount),
-    projectReference(t, [t.routeId], route),
-    projectReference(t, [t.routeId, t.pickupId], pickup, [pickup.routeId, pickup.id]),
-    projectReference(t, [t.containerId], container),
-    projectReference(t, [t.propertyId], property),
-    projectReference(t, [t.sharedCollectionPointId], sharedCollectionPoint),
-    projectReference(t, [t.agreementId], agreement),
-    projectReference(t, [t.driverId], driver),
-    tenantReference(t, [t.customerId], customer),
-    projectReference(t, [t.parentTicketId], t as ProjectTable),
-    projectReference(t, [t.recollectionRouteId], route),
-    tenantUnique(t, t.number),
-    projectKey(t),
-    oneOf(t.kind, TICKET_KINDS),
-    oneOf(t.status, TICKET_STATUSES),
-    oneOf(t.priority, TICKET_PRIORITIES),
-    oneOf(t.source, TICKET_SOURCES),
-    oneOf(t.resolution, TICKET_RESOLUTIONS),
-    check(tableObjectName(t.id.table, "origin_shape", "ticket"), sql`(${t.createdBy} is null) = (${t.sourceEventId} is not null)`),
-    check(tableObjectName(t.id.table, "pickup_shape", "ticket"), sql`${t.pickupId} is null or ${t.routeId} is not null`),
-    check(tableObjectName(t.id.table, "parent_shape", "ticket"), sql`${t.parentTicketId} <> ${t.id}`),
-    check(tableObjectName(t.id.table, "resolution_shape", "ticket"), sql`(${t.status} = 'completed') = (${t.resolution} is not null)`),
-    check(tableObjectName(t.id.table, "recollection_shape", "ticket"), sql`${t.recollectionRouteId} is null or ${t.resolution} is not distinct from 'recollected'`),
-    check(tableObjectName(t.id.table, "closed_shape", "ticket"), sql`(${t.status} in ('completed', 'rejected')) = (${t.closedAt} is not null)`),
-    uniqueIndex(tableObjectName(t.companyId.table, "source_event_id_idx", "ticket")).on(t.companyId, t.sourceEventId).where(sql`${t.sourceEventId} is not null`),
-    tenantIndex(t, t.projectId, t.status),
-    tenantIndex(t, t.assigneeUserAccountId, t.status),
-    tenantIndex(t, t.createdBy),
-    tenantIndex(t, t.routeId),
-    tenantIndex(t, t.pickupId),
-    tenantIndex(t, t.containerId),
-    tenantIndex(t, t.propertyId),
-    tenantIndex(t, t.sharedCollectionPointId),
-    tenantIndex(t, t.agreementId),
-    tenantIndex(t, t.driverId),
-    tenantIndex(t, t.customerId),
-    tenantIndex(t, t.parentTicketId),
-    tenantIndex(t, t.recollectionRouteId),
-  ],
-)
-
 /** The scheme shape as the route's check spells it: the scheme and the group together, or neither and no run's. */
 const SCHEME_SHAPE = `(${ref("route", "route_scheme_id")} is null) = (${ref("route", "collection_group_id")} is null) and (${ref("route", "route_scheme_id")} is not null or (${ref("route", "generation_run_id")} is null and not ${ref("route", "cancelled_by_generation")}))`
 
@@ -189,7 +110,7 @@ const altered = [
 ]
 
 /** The statements as drizzle-kit writes them: the three tables from 0015's spelling to today's, in the order its loader takes a module's exports, sorted. */
-const generatedAlterations = (): Promise<string[]> => statementsBetween({ pickup: pickupAsOf0015, route: routeAsOf("0015"), ticket: ticketAsOf0015 }, { pickup: pickupAsOf0016, route: routeAsOf("0016"), ticket })
+const generatedAlterations = (): Promise<string[]> => statementsBetween({ pickup: pickupAsOf0015, route: routeAsOf("0015"), ticket: ticketAsOf("0015") }, { pickup: pickupAsOf0016, route: routeAsOf("0016"), ticket: ticketAsOf("0016") })
 
 const fileStatements = async (): Promise<string[]> => statementsOf(await readFile(join(MIGRATIONS_FOLDER, MIGRATION), "utf8"))
 

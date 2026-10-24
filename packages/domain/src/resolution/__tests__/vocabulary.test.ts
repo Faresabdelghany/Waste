@@ -30,13 +30,13 @@ describe("the Resolution vocabulary's own rules", () => {
     assert.deepEqual([...vocabulary.TICKET_RESOLUTIONS], ["recollected", "serviced", "answered", "no-action", "duplicate"])
   })
 
-  test("the sources spell the driver as Execution does, and the dispatcher beside; the history has no edited kind and two readerships", () => {
-    assert.deepEqual([...vocabulary.TICKET_SOURCES], ["office", "phone", "email", "portal", "driver-app", "dispatch", "import", "integration"])
+  test("the sources spell the driver as Execution does, the dispatcher beside, and a Service Provider's workspace last (#291 slice 23b); the history has no edited kind and three readerships, the provider's last", () => {
+    assert.deepEqual([...vocabulary.TICKET_SOURCES], ["office", "phone", "email", "portal", "driver-app", "dispatch", "import", "integration", "service-provider"])
     for (const source of ["driver-app", "dispatch"] as const) assert.ok((EXECUTION_SOURCES as readonly string[]).includes(source), `${source} is Execution's spelling`)
     assert.equal((vocabulary.TICKET_SOURCES as readonly string[]).includes("driver"), false)
     assert.deepEqual([...vocabulary.TICKET_EVENT_KINDS], ["created", "assigned", "status-changed", "comment"])
     assert.equal((vocabulary.TICKET_EVENT_KINDS as readonly string[]).includes("edited"), false, "the history of a field edit is the audit log's (ADR-0005)")
-    assert.deepEqual([...vocabulary.TICKET_VISIBILITIES], ["internal", "customer"])
+    assert.deepEqual([...vocabulary.TICKET_VISIBILITIES], ["internal", "customer", "service-provider"])
   })
 
   test("an alert's kinds are the prototype's six, its sources leave the later three their token, and its statuses leave out the linked reading", () => {

@@ -20,10 +20,12 @@
 import type { Tx } from "@waste/db/client"
 import { alertColumns, alertOf, eventColumns, eventOf, labelOf, linksOf, ticketColumns, ticketOf, type AlertRow, type TicketEventRow, type TicketRow } from "@waste/db/commands/resolution-rows"
 import { alert, ticket, ticketEvent } from "@waste/db/schema/resolution"
+import type { TicketVisibility } from "@waste/domain/resolution/vocabulary"
 import { and, asc, eq, type SQL } from "drizzle-orm"
 
 import type { Principal } from "../auth/principal"
 import { inProjects } from "../auth/projects"
+import { providerIdOf, reachesThroughRoute } from "../auth/provider"
 import { problem } from "../problem"
 
 export { alertColumns, alertOf, eventColumns, eventOf, labelOf, linksOf, ticketColumns, ticketOf, type AlertRow, type TicketEventRow, type TicketRow }
@@ -34,7 +36,7 @@ export const noSuchAlert = (id: string) => problem(404, { detail: `No alert ${id
 /** The tickets of this company, in the projects the caller works in: what every ticket statement is bounded by. */
 export const ticketScope = (principal: Principal): SQL | undefined => and(eq(ticket.companyId, principal.companyId), inProjects(ticket.projectId, principal))
 
-/** One ticket of this company by id, inside the caller's projects; undefined when it is neither. */
+/** One ticket of this company by id, inside the caller's projects; undefined when it is neither. What a command reads. */
 export async function findTicket(tx: Tx, principal: Principal, id: string): Promise<TicketRow | undefined> {
   const [row] = await tx
     .select(ticketColumns)
@@ -44,14 +46,47 @@ export async function findTicket(tx: Tx, principal: Principal, id: string): Prom
   return row
 }
 
-/** One ticket's history in recording order: a cursor over time-ordered ids is a cursor over recording order. */
-export async function eventsOfTicket(tx: Tx, companyId: string, ticketId: string): Promise<TicketEventRow[]> {
+/**
+ * The tickets of this company the caller reads (#291 slice 23b): its
+ * projects' for an office account, and for a Service Provider's account the
+ * tickets about a route its provider runs (`reachesThroughRoute` over the
+ * ticket's route — a ticket about a stop names the stop's route too,
+ * `ticket_pickup_shape`). A ticket about no route is the office's alone.
+ */
+export const ticketReach = (tx: Tx, principal: Principal): SQL | undefined =>
+  and(eq(ticket.companyId, principal.companyId), reachesThroughRoute(tx, principal, { companyId: ticket.companyId, projectId: ticket.projectId, routeId: ticket.routeId }))
+
+/** One ticket of this company by id that the caller reads (`ticketReach`); undefined when it is not one. What a read and a comment read. */
+export async function findReachedTicket(tx: Tx, principal: Principal, id: string): Promise<TicketRow | undefined> {
+  const [row] = await tx
+    .select(ticketColumns)
+    .from(ticket)
+    .where(and(ticketReach(tx, principal), eq(ticket.id, id)))
+    .limit(1)
+  return row
+}
+
+/** One ticket's history in recording order: a cursor over time-ordered ids is a cursor over recording order. `readable` narrows it to what the caller may read (`historyReadable`). */
+export async function eventsOfTicket(tx: Tx, companyId: string, ticketId: string, readable?: SQL): Promise<TicketEventRow[]> {
   return await tx
     .select(eventColumns)
     .from(ticketEvent)
-    .where(and(eq(ticketEvent.companyId, companyId), eq(ticketEvent.ticketId, ticketId)))
+    .where(and(eq(ticketEvent.companyId, companyId), eq(ticketEvent.ticketId, ticketId), readable))
     .orderBy(asc(ticketEvent.id))
 }
+
+/** The thread a Service Provider reads and writes on a ticket about its route (#291 slice 23b): the history's `service-provider` comments. */
+export const PROVIDER_THREAD = "service-provider" satisfies TicketVisibility
+
+/**
+ * The rows of a ticket's history the caller reads: every one for the office,
+ * and for a Service Provider's account the comments of its thread alone
+ * (`PROVIDER_THREAD`) — the office's internal notes, the customer's thread
+ * and the notes a command carried are the office's, and the ticket's own row
+ * says where the case stands. Undefined, and so no condition, for the office.
+ */
+export const historyReadable = (principal: Principal): SQL | undefined =>
+  providerIdOf(principal) === null ? undefined : and(eq(ticketEvent.kind, "comment"), eq(ticketEvent.visibility, PROVIDER_THREAD))
 
 /** The alerts of this company, in the projects the caller works in: what every alert statement is bounded by. */
 export const alertScope = (principal: Principal): SQL | undefined => and(eq(alert.companyId, principal.companyId), inProjects(alert.projectId, principal))

@@ -39,9 +39,19 @@
 // request's transaction with the `Ticket` as answered (outbox.ts); Finance
 // is their consumer.
 //
-// Every statement carries the tenant and `inProjects`; the grant is
-// `operate.tickets`, `view` to read, `create` to open a ticket and to
-// comment, `edit` for the patch and the seven commands.
+// Every command and the patch carry the tenant and `inProjects`; the reads —
+// the list, a ticket's read and its history — and the comment carry the
+// tenant and the reach (`ticketReach`): the office's projects, or, for a
+// Service Provider's account, the tickets about a route its provider runs
+// (#291 slice 23b). Such an account raises a ticket only about a route it
+// runs, in that route's project, from its workspace — the row's source is
+// `service-provider`, its assignee and its alert the office's to give — and
+// reads and writes the ticket's `service-provider` thread of the history
+// alone, never the office's internal notes, the customer's thread or the
+// alerts; the patch and the seven commands find no row for it, the family's
+// 404. The
+// grant is `operate.tickets`, `view` to read, `create` to open a ticket and
+// to comment, `edit` for the patch and the seven commands.
 import { Page } from "@waste/contracts/pagination"
 import {
   PICKUP_WITH_ITS_ROUTE,
@@ -77,12 +87,13 @@ import { describeRoute } from "hono-openapi"
 
 import { BEARER_SECURITY, type AuthEnv, type Principal } from "../auth/principal"
 import { requireProject } from "../auth/projects"
+import { providerIdOf, providerNameOf } from "../auth/provider"
 import { requireGrant } from "../auth/require"
 import { newId } from "../ids"
 import { emit } from "../outbox"
 import { afterCursor, fetchLimit, pageOf } from "../pagination"
 import { describeProblem, invalidRequest, problem, validate } from "../problem"
-import { labelOf as routeLabelOf } from "./execution-shapes"
+import { findReachedRoute, labelOf as routeLabelOf } from "./execution-shapes"
 import {
   NOT_A_PICKUP,
   NOT_A_ROUTE,
@@ -98,7 +109,7 @@ import {
   requireTicket,
   type Scope,
 } from "./references"
-import { alertOf, alertsNamingTicket, eventColumns, eventOf, eventsOfTicket, findTicket, labelOf, linksOf, noSuchTicket, ticketColumns, ticketOf, ticketScope, type TicketRow } from "./resolution-shapes"
+import { alertOf, alertsNamingTicket, eventColumns, eventOf, eventsOfTicket, findReachedTicket, findTicket, historyReadable, labelOf, linksOf, noSuchTicket, PROVIDER_THREAD, ticketColumns, ticketOf, ticketReach, ticketScope, type TicketRow } from "./resolution-shapes"
 import type { ClockOptions } from "./scheme-groups"
 import { created, dayWindow, describeCreated, describeJson, IdParam, lockRow, requireNotAhead } from "./shared"
 import { recordCustomerReply, replyBody, stopEvidenceFor } from "./ticket-evidence"
@@ -111,6 +122,39 @@ const EventPage = Page(TicketEvent)
 
 /** What a body naming the ticket as its own parent is told, at `links.parentTicketId`. */
 export const NOT_ITS_OWN_PARENT = "A ticket is not its own parent"
+
+/** What a Service Provider's account is told when its ticket names no route it runs, at `links.routeId`. */
+export const namesARouteItRuns = (provider: string): string => `A ticket ${provider} raises names a route ${provider} runs`
+export const notARouteItRuns = (provider: string): string => `Not a route ${provider} runs`
+/** What a provider's ticket in another project than its route's is told, at `projectId`. */
+export const notTheRoutesProject = (route: string): string => `Not the project of route ${route}`
+/** What a provider's ticket naming a source of the office's is told, at `source`. */
+export const fromItsWorkspace = (provider: string): string => `A ticket ${provider} raises comes from its workspace: its source is service-provider`
+export const OFFICE_ASSIGNS = "The office assigns a ticket"
+export const OFFICE_LINKS_ALERTS = "The office links an alert to a ticket"
+/** What a provider's comment meant for the customer is told, at `visibility`. */
+export const OFFICE_SPEAKS_TO_CUSTOMERS = "The office speaks to the customer: a service provider's comment is for the office and the provider"
+
+/**
+ * A ticket a Service Provider's account raises (#291 slice 23b): about a
+ * route its provider runs (`links.routeId`, as `GET /routes` reaches it), in
+ * that route's project, from its workspace — the default source, which the
+ * API writes as `service-provider`, and no other — with no assignee and no
+ * alert, which are the office's. Every refusal a 400 at its field, listed
+ * together in the body's order.
+ */
+async function requireProviderTicket(tx: Tx, principal: Principal, body: TicketCreate): Promise<void> {
+  const provider = providerNameOf(principal)
+  const issues: { path: string; message: string }[] = []
+  const routeId = body.links?.routeId ?? null
+  const named = routeId === null ? undefined : await findReachedRoute(tx, principal, routeId)
+  if (named !== undefined && named.projectId !== body.projectId) issues.push({ path: "projectId", message: notTheRoutesProject(routeLabelOf(named)) })
+  if (body.source !== "office") issues.push({ path: "source", message: fromItsWorkspace(provider) })
+  if (body.assigneeUserAccountId != null) issues.push({ path: "assigneeUserAccountId", message: OFFICE_ASSIGNS })
+  if (named === undefined) issues.push({ path: "links.routeId", message: routeId === null ? namesARouteItRuns(provider) : notARouteItRuns(provider) })
+  if (body.alertId !== undefined) issues.push({ path: "alertId", message: OFFICE_LINKS_ALERTS })
+  if (issues.length > 0) throw invalidRequest("body", issues)
+}
 
 /** What a completion naming a route that has ended is told: the #79 gate on the one reference a ticket makes that asks its row to run. */
 export const routeHasEnded = (label: string, status: "completed" | "cancelled"): string => `Route ${label} is ${status}; a re-collection rides on a route that has not ended`
@@ -220,9 +264,11 @@ function requireOpen(current: TicketRow): void {
   if (isClosedTicketStatus(status)) throw problem(409, { detail: closedTicket(labelOf(current), status) })
 }
 
-/** The ticket with its history in recording order and the alerts naming it: what the read answers. */
-async function detailOf(tx: Tx, companyId: string, row: TicketRow): Promise<TicketDetail> {
-  const [events, alerts] = await Promise.all([eventsOfTicket(tx, companyId, row.id), alertsNamingTicket(tx, companyId, row.id)])
+/** The ticket with its history in recording order and the alerts naming it: what the read answers. A Service Provider's account reads its own thread of the history and no alert, both being the office's otherwise (#291 slice 23b). */
+async function detailOf(tx: Tx, principal: Principal, row: TicketRow): Promise<TicketDetail> {
+  const companyId = principal.companyId
+  const office = providerIdOf(principal) === null
+  const [events, alerts] = await Promise.all([eventsOfTicket(tx, companyId, row.id, historyReadable(principal)), office ? alertsNamingTicket(tx, companyId, row.id) : []])
   return { ...ticketOf(row), events: events.map(eventOf), alerts: alerts.map(alertOf) }
 }
 
@@ -246,7 +292,11 @@ const OPEN_AGAIN: Closing = { resolution: null, recollectionRouteId: null, recol
 const commandProblems = (action: "view" | "edit" | "create") => ({
   401: describeProblem("No usable token (see WWW-Authenticate)."),
   403: describeProblem(`No active account here, or the caller's role does not allow \`${action}\` on \`${MODULE}\`.`),
-  404: describeProblem("No ticket with that id in the projects this account works in."),
+  404: describeProblem(
+    action === "edit"
+      ? "No ticket with that id in the projects this account works in: a Service Provider's account reads, raises and comments, and moves no ticket."
+      : "No ticket with that id in the projects this account works in, or, for a Service Provider's account, none about a route its provider runs.",
+  ),
 })
 
 const CLOSED = "A completed or rejected ticket is refused (409, `Ticket T-8831 is completed; reopen it first`)."
@@ -312,7 +362,7 @@ export function ticketRoutes(guard: MiddlewareHandler<AuthEnv>, { now = () => ne
         operationId: "listTickets",
         summary: "The tickets of the caller's projects",
         description:
-          "One page of tickets, oldest first (ids are time-ordered, so a cursor over them is a cursor over time), from the projects the caller works in — an account that works in none, such as a service provider's, reads an empty page. `projectId` narrows it to one of those projects; naming another is refused. `status` is one of the six, `open=true` the four open statuses and `open=false` the two closed (the two combine with `status`), `overdue=true` the open tickets whose `dueAt` has passed on the request's clock and `overdue=false` every other — closed, without a due date, or not due yet — `kind`, `priority` and `source` one each, `assigneeUserAccountId` one account's tickets, `propertyId`, `routeId`, `pickupId`, `containerId` and `driverId` the tickets naming that row, and `from` and `to` the tickets whose `occurredAt` falls in a window of days — both ends inclusive, on the UTC calendar day, so `to=2026-10-05` takes the whole of the 5th (`to` on or after `from`). `customerId` is the citizen portal's read model: the tickets naming the customer, or naming a property a party row names them on in any role — one row per ticket however many roles they hold — held to a customer of this company (400 on the query); its fence on the portal's own login is the portal issue's. Hand `nextCursor` back as `cursor` for the next page.",
+          "One page of tickets, oldest first (ids are time-ordered, so a cursor over them is a cursor over time), from the projects the caller works in — or, for a Service Provider's account, which works in none, the tickets about a route its provider runs (as `GET /routes` reaches it). `projectId` narrows it to one of those projects; naming another is refused. `status` is one of the six, `open=true` the four open statuses and `open=false` the two closed (the two combine with `status`), `overdue=true` the open tickets whose `dueAt` has passed on the request's clock and `overdue=false` every other — closed, without a due date, or not due yet — `kind`, `priority` and `source` one each, `assigneeUserAccountId` one account's tickets, `propertyId`, `routeId`, `pickupId`, `containerId` and `driverId` the tickets naming that row, and `from` and `to` the tickets whose `occurredAt` falls in a window of days — both ends inclusive, on the UTC calendar day, so `to=2026-10-05` takes the whole of the 5th (`to` on or after `from`). `customerId` is the citizen portal's read model: the tickets naming the customer, or naming a property a party row names them on in any role — one row per ticket however many roles they hold — held to a customer of this company (400 on the query); its fence on the portal's own login is the portal issue's. Hand `nextCursor` back as `cursor` for the next page.",
         security: BEARER_SECURITY,
         responses: {
           200: describeJson("One page of tickets.", TicketPage),
@@ -336,7 +386,7 @@ export function ticketRoutes(guard: MiddlewareHandler<AuthEnv>, { now = () => ne
           .from(ticket)
           .where(
             and(
-              ticketScope(principal),
+              ticketReach(tx, principal),
               projectId === undefined ? undefined : eq(ticket.projectId, projectId),
               status === undefined ? undefined : eq(ticket.status, status),
               open === undefined ? undefined : inArray(ticket.status, [...(open ? OPEN_TICKET_STATUSES : CLOSED_TICKET_STATUSES)]),
@@ -366,7 +416,7 @@ export function ticketRoutes(guard: MiddlewareHandler<AuthEnv>, { now = () => ne
         operationId: "createTicket",
         summary: "Open a ticket",
         description:
-          "Opens a case in a project the caller works in (400 at `projectId` otherwise): the number is taken from the company's counter (`T-<n>`, never renumbered), the row is written `open`, and a `created` event is appended with the assignee if one and the caller as its recorder. `source` is one of the office's doors and defaults to `office`; `driver-app` and `dispatch` are the outbox consumer's and are refused. `occurredAt` is when the issue or request happened, the request's clock when absent, and may run at most five minutes ahead of it (400) — with no lower bound, since the office records a complaint made yesterday. `dueAt` is the due date, null for none; absent, it is the project's SLA target of the ticket's kind and priority counted from `occurredAt` (`GET /projects/:id/ticket-sla`: the kind's own target, else every kind's), and none where the project sets neither. Every link named is held to the ticket's project (400 at `links.<field>`): a route of the project, a pickup of that route (a pickup is named with its route, 400 at `links.pickupId`), a container, a property, a shared collection point, an agreement, a driver and a parent ticket of the project, a customer of the company; no status gates a link — a ticket is about whatever it is about. `assigneeUserAccountId` is an account of this company that is not deactivated and works in the project (400). `alertId` is an alert of the project (400) that is not resolved (409, `This alert is resolved and does not change`) and not linked to another ticket (409, `This alert is linked to ticket T-8831; an alert links to one ticket`); its `ticketId` is set in the same transaction. The `ticket-opened` event is written in the same transaction, carrying the ticket as answered. A `missed-collection` naming an emptying whose driver recorded the bin was not presented — skipped or failed, reason `not-presented`, and not since corrected by the office — is answered by that record as it opens, unless `answerFromRecord` is false: a customer-visible `comment` quoting the record (as `GET /tickets/{id}/evidence` writes it) is appended, the case is completed `answered`, and `ticket-completed` follows `ticket-opened`; the 201 answers it completed. The reply is recorded, not sent: sending is the communications slice's, and a reply recorded before it is never sent after it.",
+          "Opens a case in a project the caller works in (400 at `projectId` otherwise): the number is taken from the company's counter (`T-<n>`, never renumbered), the row is written `open`, and a `created` event is appended with the assignee if one and the caller as its recorder. `source` is one of the office's doors and defaults to `office`; `driver-app` and `dispatch` are the outbox consumer's and are refused. `occurredAt` is when the issue or request happened, the request's clock when absent, and may run at most five minutes ahead of it (400) — with no lower bound, since the office records a complaint made yesterday. `dueAt` is the due date, null for none; absent, it is the project's SLA target of the ticket's kind and priority counted from `occurredAt` (`GET /projects/:id/ticket-sla`: the kind's own target, else every kind's), and none where the project sets neither. Every link named is held to the ticket's project (400 at `links.<field>`): a route of the project, a pickup of that route (a pickup is named with its route, 400 at `links.pickupId`), a container, a property, a shared collection point, an agreement, a driver and a parent ticket of the project, a customer of the company; no status gates a link — a ticket is about whatever it is about. `assigneeUserAccountId` is an account of this company that is not deactivated and works in the project (400). `alertId` is an alert of the project (400) that is not resolved (409, `This alert is resolved and does not change`) and not linked to another ticket (409, `This alert is linked to ticket T-8831; an alert links to one ticket`); its `ticketId` is set in the same transaction. The `ticket-opened` event is written in the same transaction, carrying the ticket as answered. A Service Provider's account opens a ticket about a route its provider runs alone: `links.routeId` names one (as `GET /routes` reaches it), `projectId` is that route's project, the source is left to its default — the API writes `service-provider` — and neither an assignee nor an alert is named, those being the office's; each refused (400) at its field. A `missed-collection` naming an emptying whose driver recorded the bin was not presented — skipped or failed, reason `not-presented`, and not since corrected by the office — is answered by that record as it opens, unless `answerFromRecord` is false: a customer-visible `comment` quoting the record (as `GET /tickets/{id}/evidence` writes it) is appended, the case is completed `answered`, and `ticket-completed` follows `ticket-opened`; the 201 answers it completed. The reply is recorded, not sent: sending is the communications slice's, and a reply recorded before it is never sent after it.",
         security: BEARER_SECURITY,
         responses: {
           201: describeCreated("The ticket as opened, or completed `answered` where the stop's record answered it.", Ticket),
@@ -383,7 +433,9 @@ export function ticketRoutes(guard: MiddlewareHandler<AuthEnv>, { now = () => ne
         const body: TicketCreate = c.req.valid("json")
         const tx = c.get("tx")
         const principal = c.get("principal")
-        requireProject(principal, body.projectId)
+        const fromProvider = providerIdOf(principal) !== null
+        if (fromProvider) await requireProviderTicket(tx, principal, body)
+        else requireProject(principal, body.projectId)
         const scope: Scope = { companyId: principal.companyId, projectId: body.projectId }
         const at = now()
         const occurredAt = body.occurredAt === undefined ? at : new Date(body.occurredAt)
@@ -398,7 +450,7 @@ export function ticketRoutes(guard: MiddlewareHandler<AuthEnv>, { now = () => ne
             projectId: body.projectId,
             kind: body.kind,
             priority: body.priority,
-            source: body.source,
+            source: fromProvider ? "service-provider" : body.source,
             subject: body.subject,
             description: body.description,
             occurredAt,
@@ -430,7 +482,7 @@ export function ticketRoutes(guard: MiddlewareHandler<AuthEnv>, { now = () => ne
         operationId: "getTicket",
         summary: "One ticket with its history and the alerts naming it",
         description:
-          "One ticket of a project the caller works in, as it now stands: the case, its history in recording order — the `created` row, every assignment and status change with its note, every comment with its visibility and attachment key — and the alerts linked to it. A ticket of another company, or of a project this account does not work in, is a ticket that does not exist here.",
+          "One ticket of a project the caller works in, or about a route a Service Provider's account runs (as `GET /tickets` reaches it), as it now stands: the case, its history in recording order — the `created` row, every assignment and status change with its note, every comment with its visibility and attachment key — and the alerts linked to it. A ticket of another company, or one outside that reach, is a ticket that does not exist here.",
         security: BEARER_SECURITY,
         responses: {
           200: describeJson("The ticket, its history and its alerts.", TicketDetail),
@@ -445,9 +497,9 @@ export function ticketRoutes(guard: MiddlewareHandler<AuthEnv>, { now = () => ne
         const { id } = c.req.valid("param")
         const tx = c.get("tx")
         const principal = c.get("principal")
-        const row = await findTicket(tx, principal, id)
+        const row = await findReachedTicket(tx, principal, id)
         if (row === undefined) throw noSuchTicket(id)
-        return c.json(await detailOf(tx, principal.companyId, row))
+        return c.json(await detailOf(tx, principal, row))
       },
     )
     .patch(
@@ -771,7 +823,7 @@ export function ticketRoutes(guard: MiddlewareHandler<AuthEnv>, { now = () => ne
         await recordCustomerReply(tx, { companyId: principal.companyId, projectId: current.projectId, id: current.id }, { status: current.status as TicketStatus, assigneeUserAccountId: current.assigneeUserAccountId }, replyBody(evidence, note), principal.user.id)
         const row = complete ? (await moved(tx, principal, id, "complete", ANSWERED_BY_RECORD, async () => ({ resolution: "answered", recollectionRouteId: null, recollectionPickupId: null, closedAt: at }))).row : current
         if (complete) await emit(tx, principal, { aggregate: "ticket", aggregateId: row.id, kind: "ticket-completed", payload: ticketOf(row), projectId: row.projectId, occurredAt: at })
-        return c.json(await detailOf(tx, principal.companyId, row), 201)
+        return c.json(await detailOf(tx, principal, row), 201)
       },
     )
     .get(
@@ -780,7 +832,7 @@ export function ticketRoutes(guard: MiddlewareHandler<AuthEnv>, { now = () => ne
         operationId: "listTicketEvents",
         summary: "One ticket's history",
         description:
-          "One page of the ticket's history, oldest first — a cursor over time-ordered ids is a cursor over recording order — each row a snapshot of the status and the assignee after it: the `created` row, every `assigned` and `status-changed` with its note or reason, every `comment` with its body, who may read it and its attachment key. `kind` narrows it to one kind, `visibility` to the rows the office alone may read or to the customer's — `visibility=customer` is the thread the portal reads, and leaves every internal row out. A ticket of another company, or of a project this account does not work in, is a ticket that does not exist here. Hand `nextCursor` back as `cursor` for the next page.",
+          "One page of the ticket's history, oldest first — a cursor over time-ordered ids is a cursor over recording order — each row a snapshot of the status and the assignee after it: the `created` row, every `assigned` and `status-changed` with its note or reason, every `comment` with its body, who may read it and its attachment key. `kind` narrows it to one kind, `visibility` to the rows the office alone may read or to the customer's — `visibility=customer` is the thread the portal reads, and leaves every internal row out; `visibility=service-provider` the thread of the provider that runs the ticket's route. A Service Provider's account reads that thread alone. A ticket of another company, or one outside the caller's reach — its projects, or the tickets about a route a Service Provider's account runs — is a ticket that does not exist here. Hand `nextCursor` back as `cursor` for the next page.",
         security: BEARER_SECURITY,
         responses: {
           200: describeJson("One page of the ticket's history, oldest first.", EventPage),
@@ -798,7 +850,7 @@ export function ticketRoutes(guard: MiddlewareHandler<AuthEnv>, { now = () => ne
         const after = afterCursor(cursor)
         const tx = c.get("tx")
         const principal = c.get("principal")
-        if ((await findTicket(tx, principal, id)) === undefined) throw noSuchTicket(id)
+        if ((await findReachedTicket(tx, principal, id)) === undefined) throw noSuchTicket(id)
         const rows = await tx
           .select(eventColumns)
           .from(ticketEvent)
@@ -806,6 +858,7 @@ export function ticketRoutes(guard: MiddlewareHandler<AuthEnv>, { now = () => ne
             and(
               eq(ticketEvent.companyId, principal.companyId),
               eq(ticketEvent.ticketId, id),
+              historyReadable(principal),
               kind === undefined ? undefined : eq(ticketEvent.kind, kind),
               visibility === undefined ? undefined : eq(ticketEvent.visibility, visibility),
               after === undefined ? undefined : gt(ticketEvent.id, after),
@@ -822,7 +875,7 @@ export function ticketRoutes(guard: MiddlewareHandler<AuthEnv>, { now = () => ne
         operationId: "commentTicket",
         summary: "Comment on a ticket",
         description:
-          "Appends a `comment` to the ticket's history: the `body`, who may read it (`internal`, the office's, unless `customer` is said — the row the portal then reads), and the Storage key of an attachment if one was uploaded. The key is `<companyId>/<ticketId>/<objectId>.<jpg|jpeg|png|webp|pdf>` in the bucket `ticket-attachments`: `<objectId>` is a UUID the client minted for the object before uploading it, and the first two segments are held to this ticket's company and id, so a caller cannot name another tenant's object or another ticket's (400 at `objectKey`, `The attachment key names another company or another ticket`). Taken on a closed ticket too — a note after the fact is a note — and touches the ticket's row not at all: nothing of the case moves, and `updatedAt` stays. Its snapshot, the status and the assignee after it, is read under the ticket's row lock, so a comment and a command on one ticket take turns and the history never shows a comment stamped with a status the row had already left. Answers 201 with the event and no `Location`, like the ledger's commands: a history row has no single-row read (`GET /tickets/{id}/events` is a list), and `Location` names where a row is read.",
+          "Appends a `comment` to the ticket's history: the `body`, who may read it (`internal`, the office's, unless `customer` is said — the row the portal then reads), and the Storage key of an attachment if one was uploaded. The key is `<companyId>/<ticketId>/<objectId>.<jpg|jpeg|png|webp|pdf>` in the bucket `ticket-attachments`: `<objectId>` is a UUID the client minted for the object before uploading it, and the first two segments are held to this ticket's company and id, so a caller cannot name another tenant's object or another ticket's (400 at `objectKey`, `The attachment key names another company or another ticket`). Taken on a closed ticket too — a note after the fact is a note — and touches the ticket's row not at all: nothing of the case moves, and `updatedAt` stays. Its snapshot, the status and the assignee after it, is read under the ticket's row lock, so a comment and a command on one ticket take turns and the history never shows a comment stamped with a status the row had already left. Answers 201 with the event and no `Location`, like the ledger's commands: a history row has no single-row read (`GET /tickets/{id}/events` is a list), and `Location` names where a row is read. `service-provider` is the thread the office and the Service Provider running the ticket's route read. A Service Provider's account comments on a ticket it reads (as `GET /tickets/{id}` reaches it) in that thread alone — the default is written as it — and `customer` is refused (400), since the office speaks to the customer.",
         security: BEARER_SECURITY,
         responses: {
           201: describeJson("The comment as it was appended.", TicketEvent),
@@ -839,19 +892,24 @@ export function ticketRoutes(guard: MiddlewareHandler<AuthEnv>, { now = () => ne
         const { body, visibility, objectKey } = c.req.valid("json")
         const tx = c.get("tx")
         const principal = c.get("principal")
-        // The row's lock, though the row is not written: the snapshot below is read under it, so a `start` in flight is waited for and the comment carries the status it wrote, never one the row has left.
-        const current = await lockedTicket(tx, principal, id)
+        // The row's lock, though the row is not written: the snapshot below is read under it, so a `start` in flight is waited for and the comment carries the status it wrote, never one the row has left. Read through the reach: a provider comments on the tickets it reads.
+        await lockRow(tx, ticket, { companyId: principal.companyId, id })
+        const current = await findReachedTicket(tx, principal, id)
+        if (current === undefined) throw noSuchTicket(id)
+        // A provider's comment is its thread's (the contracts default the visibility to `internal`, which from a provider's account is that thread too); the customer's is the office's to write.
+        const fromProvider = providerIdOf(principal) !== null
+        if (fromProvider && visibility === "customer") throw invalidRequest("body", [{ path: "visibility", message: OFFICE_SPEAKS_TO_CUSTOMERS }])
         // The key's first two segments are this row's company and ticket; its third is the object's id, a UUID the client minted before the upload, held to its shape by the contracts and to nothing else here. As specified (#109 §7.23) the third segment was the comment's event id, which the server mints, so no client could ever have posted a matching key and only the 400 was reachable; the rule was corrected at integration.
         if (objectKey !== undefined && !objectKey.startsWith(`${principal.companyId}/${current.id}/`)) {
           throw invalidRequest("body", [{ path: "objectKey", message: KEY_NAMES_ANOTHER }])
         }
         const ref = { companyId: principal.companyId, projectId: current.projectId, id: current.id }
         const snapshot = { status: current.status as TicketStatus, assigneeUserAccountId: current.assigneeUserAccountId }
-        // A comment the customer reads is a reply, written the one way a reply is (ticket-evidence.ts), where its sending will be.
+        // A provider's comment is its thread (the contracts refuse it the customer's); a comment the customer reads is a reply, written the one way a reply is (ticket-evidence.ts), where its sending will be.
         const row =
-          visibility === "customer"
+          visibility === "customer" && !fromProvider
             ? await recordCustomerReply(tx, ref, snapshot, body, principal.user.id, objectKey ?? null)
-            : await appendTicketEvent(tx, ref, { kind: "comment", ...snapshot, resolution: null, body, visibility, objectKey: objectKey ?? null, recordedBy: principal.user.id, sourceEventId: null })
+            : await appendTicketEvent(tx, ref, { kind: "comment", ...snapshot, resolution: null, body, visibility: fromProvider ? PROVIDER_THREAD : visibility, objectKey: objectKey ?? null, recordedBy: principal.user.id, sourceEventId: null })
         return c.json(eventOf(row), 201)
       },
     )

@@ -48,18 +48,34 @@
 // primary administrator alone, because the flag usually moves when its holder
 // has left, and whoever is left must be able to move it before they can
 // deactivate them.
+//
+// A Service Provider's own team (#291 slice 23b) comes through the same
+// routes under another grant, `service-providers.service-provider-workspace`
+// (`requireGrantOf`): a provider's manager lists, reads, invites, changes,
+// switches off and on again the accounts of its provider and no other —
+// every statement carries `service_provider_id = <its provider>`, so another
+// account is the family's 404 — and what it gives cannot widen anyone. The
+// access is its provider's alone (a 400 at the field naming anything else);
+// the role is a provider's (`PROVIDER_ROLE_SCOPE`) and allows nothing the
+// manager's own does not (a 400 at `roleId` naming the first action beyond
+// it), so a manager never makes an account above itself; and its own
+// account is not its to move to another role or to switch off (409), which
+// another manager or the office does. The primary administrator's command
+// stays the office's.
 import { User, UserInvite, UserPatch } from "@waste/contracts/access"
 import { Page, PageRequest } from "@waste/contracts/pagination"
 import type { Tx } from "@waste/db/client"
-import { projectAccess, role, serviceProviderAccess, userAccount } from "@waste/db/schema/access"
+import { projectAccess, role, roleGrant, serviceProviderAccess, userAccount } from "@waste/db/schema/access"
 import { company, project, serviceProvider } from "@waste/db/schema/organisation"
+import { PROVIDER_ROLE_SCOPE } from "@waste/domain/access/system-roles"
 import { and, asc, eq, gt, inArray, sql } from "drizzle-orm"
 import { Hono, type MiddlewareHandler } from "hono"
 import { describeRoute } from "hono-openapi"
 
-import { accessColumns, accessOf, uniqueIds, userStatus, type AccessShape } from "../access-shape"
-import { BEARER_SECURITY, type AuthEnv } from "../auth/principal"
-import { requireGrant } from "../auth/require"
+import { accessColumns, accessOf, grantsOfRows, uniqueIds, userStatus, type AccessShape } from "../access-shape"
+import { BEARER_SECURITY, type AuthEnv, type Principal } from "../auth/principal"
+import { accessModuleOf, providerIdOf, providerNameOf } from "../auth/provider"
+import { allows, requireGrant, requireGrantOf } from "../auth/require"
 import { newId } from "../ids"
 import { afterCursor, fetchLimit, pageOf } from "../pagination"
 import { describeProblem, problem, validate } from "../problem"
@@ -135,14 +151,64 @@ const emailTaken = (email: string) => `This company already has a user with the 
 
 const noSuchUser = (id: string) => problem(404, { detail: `No user ${id} in this company` })
 
-/** One account of this company by id, or undefined; the read every route here starts with. */
-async function findUser(tx: Tx, companyId: string, id: string): Promise<Row | undefined> {
+/** The accounts of this company the caller reaches: every one for the office, its own provider's for a Service Provider's account (#291 slice 23b). */
+function userScope(principal: Principal) {
+  const providerId = providerIdOf(principal)
+  return and(eq(userAccount.companyId, principal.companyId), providerId === null ? undefined : eq(userAccount.serviceProviderId, providerId))
+}
+
+/** One account of this company by id inside the caller's reach, or undefined; the read every route here starts with. */
+async function findUser(tx: Tx, principal: Principal, id: string): Promise<Row | undefined> {
   const [row] = await tx
     .select(columns)
     .from(userAccount)
-    .where(and(eq(userAccount.companyId, companyId), eq(userAccount.id, id)))
+    .where(and(userScope(principal), eq(userAccount.id, id)))
     .limit(1)
   return row
+}
+
+/** What a provider's manager is told when an access names anything but its own provider. */
+export const teamReachesItsProvider = (provider: string): string => `${provider}'s team reaches ${provider} alone`
+/** What a provider's manager giving a role outside a provider's team is told. */
+export const notATeamRole = (name: string): string => `${name} is not a role for a service provider's team: give one whose scope is ${PROVIDER_ROLE_SCOPE}`
+/** What a provider's manager giving a role wider than its own is told, naming the first action beyond it. */
+export const widerThanYours = (name: string, action: string, moduleKey: string): string => `${name} allows ${action} on ${moduleKey}, which this account does not: a role given here allows no more than the account giving it`
+export const TEAM_SELF_ROLE = "A service provider's manager cannot move their own account to another role; another manager or the office can"
+export const TEAM_SELF_DEACTIVATE = "A service provider's manager cannot switch their own account off; another manager or the office can"
+
+/**
+ * A provider's team reaches its provider and nothing else (#291 slice 23b):
+ * an access a provider's manager gives is its own provider's, or a 400 at
+ * the field that names something else. Nothing for the office.
+ */
+function requireTeamAccess(principal: Principal, shape: AccessShape | undefined): void {
+  const providerId = providerIdOf(principal)
+  if (providerId === null || shape === undefined) return
+  if (shape.kind === "provider" && shape.serviceProviderId === providerId) return
+  const path = shape.kind === "all-projects" ? "allProjects" : shape.kind === "projects" ? "projectIds" : "serviceProviderId"
+  throw unknownReference([{ path, message: teamReachesItsProvider(providerNameOf(principal)) }])
+}
+
+/**
+ * The role a provider's manager gives (#291 slice 23b): a provider's — its
+ * scope `PROVIDER_ROLE_SCOPE` — and allowing nothing the manager's own grants
+ * do not, so a manager never makes an account above itself. A 400 at
+ * `roleId` otherwise; nothing for the office. `given` is the role as
+ * `requireRole` read it, this company's.
+ */
+async function requireTeamRole(tx: Tx, principal: Principal, given: { id: string; name: string; scope: string }): Promise<void> {
+  if (providerIdOf(principal) === null) return
+  if (given.scope !== PROVIDER_ROLE_SCOPE) throw unknownReference([{ path: "roleId", message: notATeamRole(given.name) }])
+  const grants = grantsOfRows(
+    await tx
+      .select({ moduleKey: roleGrant.moduleKey, action: roleGrant.action })
+      .from(roleGrant)
+      .where(and(eq(roleGrant.companyId, principal.companyId), eq(roleGrant.roleId, given.id))),
+  )
+  for (const grant of grants) {
+    const beyond = grant.actions.find((action) => !allows(principal.grants, grant.moduleKey, action))
+    if (beyond !== undefined) throw unknownReference([{ path: "roleId", message: widerThanYours(given.name, beyond, grant.moduleKey) }])
+  }
 }
 
 // The three refusals state the rule and stop there: which account should hold
@@ -164,13 +230,15 @@ const TARGET_NARROW = "The primary administrator reaches every project: give the
 /** A 400 in the shape the validator's would have, for what only the database could tell us. */
 const unknownReference = (errors: { path: string; message: string }[]) => problem(400, { detail: "The request body is invalid", errors })
 
-async function requireRole(tx: Tx, companyId: string, roleId: string): Promise<void> {
+/** The role a body names, this company's, read for what the team door asks of it: its name and its scope. */
+async function requireRole(tx: Tx, companyId: string, roleId: string): Promise<{ id: string; name: string; scope: string }> {
   const [found] = await tx
-    .select({ id: role.id })
+    .select({ id: role.id, name: role.name, scope: role.scope })
     .from(role)
     .where(and(eq(role.companyId, companyId), eq(role.id, roleId)))
     .limit(1)
   if (found === undefined) throw unknownReference([{ path: "roleId", message: `No role ${roleId} in this company` }])
+  return found
 }
 
 /** Every project the body named must be this company's; the ones that are not are named by their place in the list. */
@@ -238,27 +306,28 @@ export function userRoutes(guard: MiddlewareHandler<AuthEnv>) {
         operationId: "listUsers",
         summary: "The company's users",
         description:
-          "One page of the company's user accounts, oldest first (ids are time-ordered), each with its derived status and the projects it works in. Hand `nextCursor` back as `cursor` for the next page; `nextCursor` is null on the last one.",
+          "One page of the company's user accounts, oldest first (ids are time-ordered), each with its derived status and the projects it works in — or, for a Service Provider's account, under `service-providers.service-provider-workspace`, the accounts of its own provider. Hand `nextCursor` back as `cursor` for the next page; `nextCursor` is null on the last one.",
         security: BEARER_SECURITY,
         responses: {
           200: describeJson("One page of users.", UserPage),
           400: describeProblem("The page size is outside 1..200, or the cursor is not one this API wrote."),
           401: describeProblem("No usable token (see WWW-Authenticate)."),
-          403: describeProblem("No active account here, or the caller's role does not allow `view` on `configure.access`."),
+          403: describeProblem("No active account here, or the caller's role does not allow `view` on `configure.access` (on `service-providers.service-provider-workspace` for a Service Provider's account)."),
         },
       }),
       guard,
-      requireGrant(MODULE, "view"),
+      requireGrantOf(accessModuleOf, "view"),
       validate("query", PageRequest),
       async (c) => {
         const { limit, cursor } = c.req.valid("query")
         const after = afterCursor(cursor)
         const tx = c.get("tx")
-        const { companyId } = c.get("principal")
+        const principal = c.get("principal")
+        const { companyId } = principal
         const rows = await tx
           .select(columns)
           .from(userAccount)
-          .where(and(eq(userAccount.companyId, companyId), after === undefined ? undefined : gt(userAccount.id, after)))
+          .where(and(userScope(principal), after === undefined ? undefined : gt(userAccount.id, after)))
           .orderBy(asc(userAccount.id))
           .limit(fetchLimit(limit))
         // Paged first, so the row that only proves there is a next page is not
@@ -274,28 +343,30 @@ export function userRoutes(guard: MiddlewareHandler<AuthEnv>) {
         operationId: "inviteUser",
         summary: "Invite a user",
         description:
-          "Creates an account in the caller's company with no login bound, so its status is `invited` until the person first signs in. No e-mail is sent: the login is created separately, with the same address, and the access token hook binds it to this account on its first sign-in. The body names exactly one of `allProjects: true`, `projectIds` or `serviceProviderId`: a company user takes Project Access and no provider, a provider user the reverse. The e-mail is stored lowercase. The server mints the id; a body that carries one is refused.",
+          "Creates an account in the caller's company with no login bound, so its status is `invited` until the person first signs in. No e-mail is sent: the login is created separately, with the same address, and the access token hook binds it to this account on its first sign-in. The body names exactly one of `allProjects: true`, `projectIds` or `serviceProviderId`: a company user takes Project Access and no provider, a provider user the reverse. The e-mail is stored lowercase. A Service Provider's account invites under `service-providers.service-provider-workspace` and into its own team alone: the access names its own provider (400 at the field otherwise), and the role is a provider's — scope `Own service provider` — allowing nothing the inviter's own role does not (400 at `roleId`, naming the first action beyond it). The server mints the id; a body that carries one is refused.",
         security: BEARER_SECURITY,
         responses: {
           201: describeCreated("The account as it was written.", User),
           400: describeProblem(
-            "The body is missing a field, names none or more than one way of reaching something, or names a role, project or service provider that is not this company's.",
+            "The body is missing a field, names none or more than one way of reaching something, or names a role, project or service provider that is not this company's — or, from a Service Provider's account, an access other than its own provider's, or a role that is not a provider's or allows more than its own.",
           ),
           401: describeProblem("No usable token (see WWW-Authenticate)."),
-          403: describeProblem("No active account here, or the caller's role does not allow `create` on `configure.access`."),
+          403: describeProblem("No active account here, or the caller's role does not allow `create` on `configure.access` (on `service-providers.service-provider-workspace` for a Service Provider's account)."),
           409: describeProblem("The company already has a user with that e-mail address."),
         },
       }),
       guard,
-      requireGrant(MODULE, "create"),
+      requireGrantOf(accessModuleOf, "create"),
       validate("json", UserInvite),
       async (c) => {
         const values = c.req.valid("json")
         const tx = c.get("tx")
-        const { companyId } = c.get("principal")
+        const principal = c.get("principal")
+        const { companyId } = principal
         const shape = accessOf(values)
         if (shape === undefined) throw new Error("an invitation names one way of reaching something: the contracts hold it to that")
-        await requireRole(tx, companyId, values.roleId)
+        await requireTeamRole(tx, principal, await requireRole(tx, companyId, values.roleId))
+        requireTeamAccess(principal, shape)
         await requireAccess(tx, companyId, shape)
 
         const email = values.email.toLowerCase()
@@ -323,24 +394,25 @@ export function userRoutes(guard: MiddlewareHandler<AuthEnv>) {
       describeRoute({
         operationId: "getUser",
         summary: "One user",
-        description: "One account of the caller's company. Another company's account is an account that does not exist here.",
+        description: "One account of the caller's company — for a Service Provider's account, of its own provider. Another company's account, or another provider's, is an account that does not exist here.",
         security: BEARER_SECURITY,
         responses: {
           200: describeJson("The user.", User),
           400: describeProblem("The path does not hold an id."),
           401: describeProblem("No usable token (see WWW-Authenticate)."),
-          403: describeProblem("No active account here, or the caller's role does not allow `view` on `configure.access`."),
-          404: describeProblem("No user with that id in this company."),
+          403: describeProblem("No active account here, or the caller's role does not allow `view` on `configure.access` (on `service-providers.service-provider-workspace` for a Service Provider's account)."),
+          404: describeProblem("No user with that id in this company (in its own provider's team, for a Service Provider's account)."),
         },
       }),
       guard,
-      requireGrant(MODULE, "view"),
+      requireGrantOf(accessModuleOf, "view"),
       validate("param", IdParam),
       async (c) => {
         const { id } = c.req.valid("param")
         const tx = c.get("tx")
-        const { companyId } = c.get("principal")
-        const row = await findUser(tx, companyId, id)
+        const principal = c.get("principal")
+        const { companyId } = principal
+        const row = await findUser(tx, principal, id)
         if (row === undefined) throw noSuchUser(id)
         return c.json(await userWithAccess(tx, companyId, row))
       },
@@ -351,7 +423,7 @@ export function userRoutes(guard: MiddlewareHandler<AuthEnv>) {
         operationId: "patchUser",
         summary: "Change a user",
         description:
-          "Changes the account's name, its role, or what it reaches; every field is optional and at least one must be given. An access change names exactly one of `allProjects: true`, `projectIds` or `serviceProviderId` and replaces the whole shape: the old Project Access or Service Provider Access rows go and the new ones arrive in the same transaction. A patch that names none of the three leaves the access alone. The e-mail is the invitation's and the status is derived, so neither can be patched. The primary administrator cannot be moved to another role or narrowed (409).",
+          "Changes the account's name, its role, or what it reaches; every field is optional and at least one must be given. An access change names exactly one of `allProjects: true`, `projectIds` or `serviceProviderId` and replaces the whole shape: the old Project Access or Service Provider Access rows go and the new ones arrive in the same transaction. A patch that names none of the three leaves the access alone. The e-mail is the invitation's and the status is derived, so neither can be patched. The primary administrator cannot be moved to another role or narrowed (409). A Service Provider's account changes its own provider's accounts alone, under `service-providers.service-provider-workspace`: an access names its own provider and a role is a provider's allowing no more than its own (400 at the field), and its own account it does not move to another role (409).",
         security: BEARER_SECURITY,
         responses: {
           200: describeJson("The user as it now stands.", User),
@@ -359,20 +431,21 @@ export function userRoutes(guard: MiddlewareHandler<AuthEnv>) {
             "The path does not hold an id, or the patch is empty, names a field the caller does not own, names two ways of reaching something, or names a role, project or service provider that is not this company's.",
           ),
           401: describeProblem("No usable token (see WWW-Authenticate)."),
-          403: describeProblem("No active account here, or the caller's role does not allow `edit` on `configure.access`."),
-          404: describeProblem("No user with that id in this company."),
-          409: describeProblem("The account is the primary administrator: its role and its reach over every project stand."),
+          403: describeProblem("No active account here, or the caller's role does not allow `edit` on `configure.access` (on `service-providers.service-provider-workspace` for a Service Provider's account)."),
+          404: describeProblem("No user with that id in this company (in its own provider's team, for a Service Provider's account)."),
+          409: describeProblem("The account is the primary administrator: its role and its reach over every project stand; or a provider's manager moves its own account to another role."),
         },
       }),
       guard,
-      requireGrant(MODULE, "edit"),
+      requireGrantOf(accessModuleOf, "edit"),
       validate("param", IdParam),
       validate("json", UserPatch),
       async (c) => {
         const { id } = c.req.valid("param")
         const patch = c.req.valid("json")
         const tx = c.get("tx")
-        const { companyId } = c.get("principal")
+        const principal = c.get("principal")
+        const { companyId } = principal
 
         // The primary administrator's rules are the API's, read first and
         // written after, so the row is locked before the read: a transfer in
@@ -380,7 +453,7 @@ export function userRoutes(guard: MiddlewareHandler<AuthEnv>) {
         // and the account is refused as the primary administrator it now is
         // (routes/shared.ts on why a rule the API holds needs the lock).
         await lockRow(tx, userAccount, { companyId, id })
-        const current = await findUser(tx, companyId, id)
+        const current = await findUser(tx, principal, id)
         if (current === undefined) throw noSuchUser(id)
 
         const shape = accessOf(patch)
@@ -388,7 +461,10 @@ export function userRoutes(guard: MiddlewareHandler<AuthEnv>) {
           if (patch.roleId !== undefined && patch.roleId !== current.roleId) throw problem(409, { detail: PRIMARY_ROLE })
           if (shape !== undefined && shape.kind !== "all-projects") throw problem(409, { detail: PRIMARY_ACCESS })
         }
-        if (patch.roleId !== undefined) await requireRole(tx, companyId, patch.roleId)
+        // A provider's manager keeps the role it was given: another manager or the office moves it.
+        if (providerIdOf(principal) !== null && current.id === principal.user.id && patch.roleId !== undefined && patch.roleId !== current.roleId) throw problem(409, { detail: TEAM_SELF_ROLE })
+        if (patch.roleId !== undefined) await requireTeamRole(tx, principal, await requireRole(tx, companyId, patch.roleId))
+        requireTeamAccess(principal, shape)
         if (shape !== undefined) await requireAccess(tx, companyId, shape)
 
         // The old rows first, then the account's own columns, then the new
@@ -414,29 +490,31 @@ export function userRoutes(guard: MiddlewareHandler<AuthEnv>) {
         operationId: "deactivateUser",
         summary: "Switch a user off",
         description:
-          "Stamps `deactivatedAt`, so the account's status is `deactivated` and the next request it makes is refused — the API looks a caller up on every call, so the refusal is immediate. Its role, its grants and its access rows are left as they are, and reactivating gives them back. An account that is already deactivated answers 200 with the instant it was switched off, unchanged. The primary administrator cannot be deactivated (409).",
+          "Stamps `deactivatedAt`, so the account's status is `deactivated` and the next request it makes is refused — the API looks a caller up on every call, so the refusal is immediate. Its role, its grants and its access rows are left as they are, and reactivating gives them back. An account that is already deactivated answers 200 with the instant it was switched off, unchanged. The primary administrator cannot be deactivated (409). A Service Provider's account switches off its own provider's accounts alone, under `service-providers.service-provider-workspace`, and never its own (409).",
         security: BEARER_SECURITY,
         responses: {
           200: describeJson("The user, deactivated.", User),
           400: describeProblem("The path does not hold an id."),
           401: describeProblem("No usable token (see WWW-Authenticate)."),
-          403: describeProblem("No active account here, or the caller's role does not allow `edit` on `configure.access`."),
-          404: describeProblem("No user with that id in this company."),
-          409: describeProblem("The account is the primary administrator: it is the company's last way in."),
+          403: describeProblem("No active account here, or the caller's role does not allow `edit` on `configure.access` (on `service-providers.service-provider-workspace` for a Service Provider's account)."),
+          404: describeProblem("No user with that id in this company (in its own provider's team, for a Service Provider's account)."),
+          409: describeProblem("The account is the primary administrator: it is the company's last way in; or a provider's manager switches its own account off."),
         },
       }),
       guard,
-      requireGrant(MODULE, "edit"),
+      requireGrantOf(accessModuleOf, "edit"),
       validate("param", IdParam),
       async (c) => {
         const { id } = c.req.valid("param")
         const tx = c.get("tx")
-        const { companyId } = c.get("principal")
+        const principal = c.get("principal")
+        const { companyId } = principal
         // Locked before it is read, for the same reason as the patch above.
         await lockRow(tx, userAccount, { companyId, id })
-        const current = await findUser(tx, companyId, id)
+        const current = await findUser(tx, principal, id)
         if (current === undefined) throw noSuchUser(id)
         if (current.primaryAdministrator) throw problem(409, { detail: PRIMARY_DEACTIVATE })
+        if (providerIdOf(principal) !== null && current.id === principal.user.id) throw problem(409, { detail: TEAM_SELF_DEACTIVATE })
         if (current.deactivatedAt !== null) return c.json(await userWithAccess(tx, companyId, current))
 
         const [row] = await tx
@@ -454,24 +532,25 @@ export function userRoutes(guard: MiddlewareHandler<AuthEnv>) {
         operationId: "reactivateUser",
         summary: "Switch a user on again",
         description:
-          "Clears `deactivatedAt`. The account is `active` again, or `invited` if nobody ever signed in as it; its role and access rows were never touched. An account that is already active answers 200 unchanged.",
+          "Clears `deactivatedAt`. The account is `active` again, or `invited` if nobody ever signed in as it; its role and access rows were never touched. An account that is already active answers 200 unchanged. A Service Provider's account switches its own provider's accounts on again alone, under `service-providers.service-provider-workspace`.",
         security: BEARER_SECURITY,
         responses: {
           200: describeJson("The user, active again.", User),
           400: describeProblem("The path does not hold an id."),
           401: describeProblem("No usable token (see WWW-Authenticate)."),
-          403: describeProblem("No active account here, or the caller's role does not allow `edit` on `configure.access`."),
-          404: describeProblem("No user with that id in this company."),
+          403: describeProblem("No active account here, or the caller's role does not allow `edit` on `configure.access` (on `service-providers.service-provider-workspace` for a Service Provider's account)."),
+          404: describeProblem("No user with that id in this company (in its own provider's team, for a Service Provider's account)."),
         },
       }),
       guard,
-      requireGrant(MODULE, "edit"),
+      requireGrantOf(accessModuleOf, "edit"),
       validate("param", IdParam),
       async (c) => {
         const { id } = c.req.valid("param")
         const tx = c.get("tx")
-        const { companyId } = c.get("principal")
-        const current = await findUser(tx, companyId, id)
+        const principal = c.get("principal")
+        const { companyId } = principal
+        const current = await findUser(tx, principal, id)
         if (current === undefined) throw noSuchUser(id)
         if (current.deactivatedAt === null) return c.json(await userWithAccess(tx, companyId, current))
 
@@ -518,7 +597,7 @@ export function userRoutes(guard: MiddlewareHandler<AuthEnv>) {
         // before the flag moves (both take that same lock before they read).
         await lockRow(tx, company, { companyId, id: companyId })
         await lockRow(tx, userAccount, { companyId, id })
-        const current = await findUser(tx, companyId, id)
+        const current = await findUser(tx, c.get("principal"), id)
         if (current === undefined) throw noSuchUser(id)
         if (current.primaryAdministrator) return c.json(await userWithAccess(tx, companyId, current))
         if (current.deactivatedAt !== null) throw problem(409, { detail: TARGET_DEACTIVATED })

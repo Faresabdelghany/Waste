@@ -31,13 +31,21 @@
 // commands the worker runs (part B: the scheduled billing run asks the same
 // question with no request in hand) and are re-exported here, so the routes
 // read them from the path they did.
+//
+// A Service Provider's account crews the routes it runs with its own fleet
+// (#291 slice 23b): `ownedBy` holds a row read for it to its provider as
+// well, refused in the provider's words (`notOwnFleet`), at the same field.
 import type { Tx } from "@waste/db/client"
 import { driver, vehicle } from "@waste/db/schema/fleet"
 import type { DriverStatus, LicenceClass, VehicleKind, VehicleStatus } from "@waste/domain/resources/vocabulary"
 import { and, eq } from "drizzle-orm"
 
+import { notOwnFleet } from "../auth/provider"
 import { invalidRequest } from "../problem"
 import { NOT_A_DRIVER, notAVehicleOf, type Scope } from "./references"
+
+/** The provider a provider's account's fleet must belong to, and the name its sentences call it by. */
+export type OwnedBy = { serviceProviderId: string; provider: string }
 
 export { projectCurrency, projectTimezone, projectToday, type Today } from "@waste/db/commands/project-clock"
 
@@ -70,13 +78,21 @@ export const vehicleColumns = {
  * project comes from the scope and never from the body: a vehicle of another
  * project is a vehicle that is not here.
  */
-export async function findVehicle(tx: Tx, scope: Scope, id: string, kind: VehicleKind, path: string): Promise<VehicleRow> {
+export async function findVehicle(tx: Tx, scope: Scope, id: string, kind: VehicleKind, path: string, ownedBy?: OwnedBy): Promise<VehicleRow> {
   const [row] = await tx
     .select(vehicleColumns)
     .from(vehicle)
-    .where(and(eq(vehicle.companyId, scope.companyId), eq(vehicle.projectId, scope.projectId), eq(vehicle.id, id), eq(vehicle.kind, kind)))
+    .where(
+      and(
+        eq(vehicle.companyId, scope.companyId),
+        eq(vehicle.projectId, scope.projectId),
+        eq(vehicle.id, id),
+        eq(vehicle.kind, kind),
+        ownedBy === undefined ? undefined : eq(vehicle.serviceProviderId, ownedBy.serviceProviderId),
+      ),
+    )
     .limit(1)
-  if (row === undefined) throw invalidRequest("body", [{ path, message: notAVehicleOf(kind) }])
+  if (row === undefined) throw invalidRequest("body", [{ path, message: ownedBy === undefined ? notAVehicleOf(kind) : notOwnFleet(kind === "trailer" ? "trailer" : "vehicle", ownedBy.provider) }])
   // The coded columns are text with a CHECK in the database and a vocabulary here.
   return row as VehicleRow
 }
@@ -95,12 +111,19 @@ export type DriverRow = {
 export const driverColumns = { id: driver.id, name: driver.name, status: driver.status, licenceClass: driver.licenceClass, licenceExpiry: driver.licenceExpiry }
 
 /** One driver of the project, read for the licence rule, or a 400 at `path`. */
-export async function findDriver(tx: Tx, scope: Scope, id: string, path = "driverId"): Promise<DriverRow> {
+export async function findDriver(tx: Tx, scope: Scope, id: string, path = "driverId", ownedBy?: OwnedBy): Promise<DriverRow> {
   const [row] = await tx
     .select(driverColumns)
     .from(driver)
-    .where(and(eq(driver.companyId, scope.companyId), eq(driver.projectId, scope.projectId), eq(driver.id, id)))
+    .where(
+      and(
+        eq(driver.companyId, scope.companyId),
+        eq(driver.projectId, scope.projectId),
+        eq(driver.id, id),
+        ownedBy === undefined ? undefined : eq(driver.serviceProviderId, ownedBy.serviceProviderId),
+      ),
+    )
     .limit(1)
-  if (row === undefined) throw invalidRequest("body", [{ path, message: NOT_A_DRIVER }])
+  if (row === undefined) throw invalidRequest("body", [{ path, message: ownedBy === undefined ? NOT_A_DRIVER : notOwnFleet("driver", ownedBy.provider) }])
   return row as DriverRow
 }
