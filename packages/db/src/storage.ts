@@ -10,7 +10,9 @@
 // its body — is the deployment's state and `StorageRefused`; Storage not
 // answering, within `STORAGE_TIMEOUT_MS` or at all, or answering 5xx, is
 // `StorageSilent`, which a retry may get past.
-import { PROOF_BUCKET } from "@waste/contracts/proof-objects"
+import { PROOF_BUCKET, PROOF_OBJECT_MAX_BYTES } from "@waste/contracts/proof-objects"
+
+import { PROOF_MIME_TYPES } from "./sql/proof-storage"
 
 /** A signed upload URL lasts two hours: Storage's own term, not a choice here. */
 export const UPLOAD_URL_TTL_MS = 2 * 60 * 60 * 1000
@@ -25,6 +27,8 @@ export type ProofStorage = {
   signReads(keys: readonly string[], seconds: number): Promise<Map<string, string | null>>
   /** Removes the objects and answers how many Storage held; a key no longer there is nothing to remove. */
   remove(keys: readonly string[]): Promise<number>
+  /** The bucket as its migration makes it (`proof-storage.ts`), for a database that gained Storage after the migration ran: made where Storage lacks it, or kept private with its limits; answers which. */
+  ensureBucket(): Promise<"made" | "kept">
 }
 
 /** Storage did not answer, in time or at all, or answered 5xx: nothing was signed or removed, and the request may be asked again. */
@@ -49,6 +53,9 @@ export type SupabaseStorageOptions = {
 
 /** Supabase Storage's answer to a key it holds already. */
 const KEY_ALREADY_EXISTS = "KeyAlreadyExists"
+
+/** And to a bucket it holds already, which it answers 400. */
+const BUCKET_ALREADY_EXISTS = "BucketAlreadyExists"
 
 export function supabaseStorage({ url, serviceKey, bucket = PROOF_BUCKET, fetch = globalThis.fetch, now = () => new Date(), timeoutMs = STORAGE_TIMEOUT_MS }: SupabaseStorageOptions): ProofStorage {
   const base = `${url.replace(/\/+$/, "")}/storage/v1`
@@ -112,6 +119,18 @@ export function supabaseStorage({ url, serviceKey, bucket = PROOF_BUCKET, fetch 
       // Storage answers the objects it removed, none for a key it no longer held.
       if (status !== 200 || !Array.isArray(answer)) throw refused("DELETE", path, status, answer)
       return answer.length
+    },
+
+    async ensureBucket() {
+      const settings = { public: false, file_size_limit: PROOF_OBJECT_MAX_BYTES, allowed_mime_types: [...PROOF_MIME_TYPES] }
+      const made = await call("POST", "/bucket", { id: bucket, name: bucket, ...settings })
+      if (made.status === 200) return "made"
+      if (made.status !== 409 && (made.answer as { code?: unknown } | null)?.code !== BUCKET_ALREADY_EXISTS) throw refused("POST", "/bucket", made.status, made.answer)
+      // Held already: kept private with its limits, as the migration's ON CONFLICT does, so one made public by hand is private again.
+      const path = `/bucket/${bucket}`
+      const kept = await call("PUT", path, settings)
+      if (kept.status !== 200) throw refused("PUT", path, kept.status, kept.answer)
+      return "kept"
     },
   }
 }

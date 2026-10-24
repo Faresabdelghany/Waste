@@ -25,6 +25,7 @@ import { createRemoteJWKSet } from "jose"
 
 import { createApp } from "./app"
 import { Allowance, PUBLIC_REQUESTS_PER_MINUTE } from "./auth/public-door"
+import { ensureProofBucket } from "./routes/proof-objects"
 import { PREVIEW_CALLS_PER_MINUTE } from "./routes/routing-preview"
 import { createVerifier, supabaseAuth } from "./auth/verify"
 import { readBuildInfo } from "./build-info"
@@ -50,6 +51,7 @@ const publicAllowance = new Allowance(env.PUBLIC_REQUESTS_PER_MINUTE ?? PUBLIC_R
 
 // The proofs' Storage (O1 of #290), where the deployment holds Supabase's service-role key; none, and the photo routes answer 503.
 const storage = env.SUPABASE_SERVICE_ROLE_KEY === undefined ? null : supabaseStorage({ url: env.SUPABASE_URL, serviceKey: env.SUPABASE_SERVICE_ROLE_KEY })
+if (storage !== null) void ensureProofBucket(storage, (line) => console.log(`@waste/api: ${line}`))
 
 const listening = await listen(
   createApp({
