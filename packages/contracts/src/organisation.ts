@@ -38,6 +38,7 @@
 // policy shifts a collection to the next working day, and a project with none
 // would send it two months out (`shiftToWorkingDay` walks sixty steps and then
 // gives up); the contract bounds it at six, the database at fewer than seven.
+import { PUBLIC_SLUG_LENGTH, PUBLIC_SLUG_PATTERN } from "@waste/domain/access/public-slug"
 import { DEFAULT_WEEKEND } from "@waste/domain/planning/vocabulary"
 import * as z from "zod"
 
@@ -61,6 +62,13 @@ export const Currency = z.string().regex(/^[A-Z]{3}$/, "a three-letter uppercase
 
 /** A BCP 47 language tag by shape (`da`, `en-GB`, `zh-Hans-CN`). */
 const Language = z.string().regex(/^[a-z]{2,3}(-[A-Za-z0-9]{2,8})*$/, "a BCP 47 language tag, such as da or en-GB")
+
+/** The name a project publishes itself under on the public door (ADR-0010): `@waste/domain/access/public-slug`'s shape, unique across every company. */
+export const PublicSlug = z
+  .string()
+  .min(PUBLIC_SLUG_LENGTH.min)
+  .max(PUBLIC_SLUG_LENGTH.max)
+  .regex(new RegExp(PUBLIC_SLUG_PATTERN), "a lowercase slug of letters, digits and single hyphens, such as kystbyen or kystbyen-nord")
 
 /** An IANA timezone name by shape (`Europe/Copenhagen`, `Etc/GMT+2`), or `UTC`. */
 const Timezone = z
@@ -111,6 +119,8 @@ export const Project = z.object({
   weekend: Weekend,
   /** The name its holidays are looked up under (`Danish public holidays`); null is no list, and then the project rests on its weekend only. */
   holidayList: Label.nullable(),
+  /** The name it publishes itself under on the public door, `/public/<slug>` (ADR-0010); null is unpublished. */
+  publicSlug: PublicSlug.nullable(),
 })
 export type Project = z.infer<typeof Project>
 
@@ -137,6 +147,8 @@ export const ProjectPatch = z
     weekend: Weekend.optional(),
     /** Null drops the list; a name sets it. */
     holidayList: Label.nullable().optional(),
+    /** A slug publishes the project under it; null unpublishes it, and its public pages answer 404 from the next request (an answer cached before runs out within the minute). */
+    publicSlug: PublicSlug.nullable().optional(),
   })
   .refine(changesSomething, somethingToChange)
 export type ProjectPatch = z.infer<typeof ProjectPatch>

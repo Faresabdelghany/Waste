@@ -32,13 +32,11 @@ import { sql } from "drizzle-orm"
 import { check, getTableConfig, text } from "drizzle-orm/pg-core"
 
 import { MIGRATIONS_FOLDER } from "../migrate"
-import { nonEmpty, oneOf, subsetOf } from "../schema/checks"
+import { nonEmpty, subsetOf } from "../schema/checks"
 import { collectionCalendar, collectionCalendarHoliday } from "../schema/collection-calendars"
-import { id, tenant, timestamps } from "../schema/columns"
+import { id, tenant } from "../schema/columns"
 import { tableObjectName } from "../names"
-import { company, project, PROJECT_STATUSES } from "../schema/organisation"
 import { planningArea, planningAreaBoundary } from "../schema/planning-areas"
-import { companyReference, tenantKey, tenantUnique } from "../schema/references"
 import { collectionGroup, collectionGroupContainer, collectionGroupContainerType, collectionGroupFraction, routeScheme } from "../schema/route-schemes"
 import { wms } from "../schema/wms"
 import { excludeOverlapping } from "../sql/exclude-overlapping"
@@ -64,6 +62,7 @@ import {
   uniqueKey,
   validityCheck,
 } from "./rendering"
+import { projectAsOf } from "./project-as-of"
 import { statementsBetween, statementsFor } from "./specimen"
 
 /** The nine tables in the order src/schema/index.ts exports them; drizzle-kit's own loader sorts a module's exports, which the migration test allows for. */
@@ -80,28 +79,6 @@ const tables = {
 }
 
 const MIGRATION = "0006_planning.sql"
-
-/**
- * The project table as 0005 left it, so `statementsBetween` can write the
- * ALTER TABLE of 0006: the same name and columns as src/schema/organisation.ts
- * had before Issue #97, less `weekend` and `holiday_list`. Another table
- * object of the same name is fine here, since nothing connects to a database.
- */
-const projectAsOf0005 = wms.table(
-  "project",
-  {
-    ...id,
-    ...tenant,
-    ...timestamps,
-    name: text().notNull(),
-    kind: text().notNull(),
-    language: text().notNull(),
-    currency: text().notNull(),
-    timezone: text().notNull(),
-    status: text().notNull(),
-  },
-  (t) => [companyReference(t, company), tenantUnique(t, t.name), tenantKey(t), oneOf(t.status, PROJECT_STATUSES)],
-)
 
 const DAYS = ["monday", "tuesday", "wednesday", "thursday", "friday", "saturday", "sunday"]
 
@@ -291,7 +268,7 @@ const handWritten = [
 
 /** Everything drizzle-kit wrote at the head of 0006: the altered project and the nine tables, as they were generated as of 0006 — the two tables 0007 changed in their earlier spelling, and what 0007 added left out. */
 const generatedHead = async (): Promise<string[]> => [
-  ...(await statementsBetween({ project: projectAsOf0005 }, { project })),
+  ...(await statementsBetween({ project: projectAsOf("0005") }, { project: projectAsOf("0006") })),
   ...(await statementsFor(tables)).filter((statement) => !ADDED_IN_0007.includes(statement)).map((statement) => CHANGED_IN_0007.get(statement) ?? statement),
 ]
 
@@ -301,7 +278,7 @@ describe("the Planning tables as drizzle-kit writes them", () => {
   })
 
   test("the project gains its working week as two columns and a subset check, in ALTER TABLE statements", async () => {
-    assert.deepEqual(await statementsBetween({ project: projectAsOf0005 }, { project }), projectAltered)
+    assert.deepEqual(await statementsBetween({ project: projectAsOf("0005") }, { project: projectAsOf("0006") }), projectAltered)
   })
 
   test("migration 0006 begins with exactly what drizzle-kit generated for the schema as of 0006: 54 statements", async () => {

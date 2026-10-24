@@ -33,3 +33,4 @@ The domain glossary is `CONTEXT.md` at the repository root, not here. Every term
 - [ADR-0007 Hosting the API, the worker and Valhalla](adr/0007-hosting-api-worker-valhalla.md) — deferred (ADR-0008)
 - [ADR-0008 Zero-cost hosting for the Pilot](adr/0008-zero-cost-hosting-for-the-pilot.md) — proposed
 - [ADR-0009 The pilot Plan](adr/0009-the-pilot-plan.md) — proposed
+- [ADR-0010 The public door](adr/0010-the-public-door.md) — proposed

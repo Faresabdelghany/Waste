@@ -30,7 +30,9 @@
         "ROUTING_PROVIDER",
         "OPENROUTESERVICE_API_KEY",
         "ROUTING_PREVIEW_CALLS_PER_MINUTE",
-        "DATABASE_POOL_MAX"
+        "DATABASE_POOL_MAX",
+        "PUBLIC_REQUESTS_PER_MINUTE",
+        "PUBLIC_TRUSTED_PROXIES"
       ]
     },
     "@waste/worker#dev": {

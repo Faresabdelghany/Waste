@@ -40,7 +40,7 @@ const STAMPS = { createdAt: "2026-09-24T09:00:00.000Z", updatedAt: "2026-09-25T0
 const priceFixtures = getModuleDefinition(PROVIDER_PRICES_MODULE)?.records ?? []
 const settlementFixtures = getModuleDefinition(SETTLEMENTS_MODULE)?.records ?? []
 
-const copenhagen: Project = { id: "01a0d2a4-a280-7002-8000-000000000001", ...STAMPS, name: "Copenhagen Central", kind: "Municipality", language: "da", currency: "DKK", timezone: "Europe/Copenhagen", status: "active", weekend: ["saturday", "sunday"], holidayList: "Danish public holidays" }
+const copenhagen: Project = { id: "01a0d2a4-a280-7002-8000-000000000001", ...STAMPS, name: "Copenhagen Central", kind: "Municipality", language: "da", currency: "DKK", timezone: "Europe/Copenhagen", status: "active", weekend: ["saturday", "sunday"], holidayList: "Danish public holidays", publicSlug: null }
 const residual: Product = { id: "01a0d2a4-a280-700a-8000-000000000001", ...STAMPS, projectId: copenhagen.id, name: "Residual waste · 240L bin", kind: "container-collection", status: "active", unit: "pickup", containerTypeId: null, wasteFractionId: null, serviceFrequencyId: null, invoiceName: null, invoiceCode: null, vatPercent: 25 }
 const ASSIGNMENT = "01a0d2a4-a280-7091-8000-000000000001"
 const EVENT = "01a0d2a4-a280-7050-8000-000000000001"

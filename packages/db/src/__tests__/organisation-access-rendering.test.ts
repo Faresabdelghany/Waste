@@ -50,9 +50,14 @@ const STATUS = "in ('active', 'onboarding')"
 /** The days a project may rest on, as 0006's check spells them (Issue #97). */
 const WEEKEND = "<@ ARRAY['monday', 'tuesday', 'wednesday', 'thursday', 'friday', 'saturday', 'sunday']::text[]"
 
-/** The project table as drizzle-kit writes it today, and as it wrote it as of 0002, before 0006 gave it the working week. */
-const projectTable = (planning: boolean): string =>
-  createTable("project", [
+/** The public slug's shape, as 0017's check spells it (Issue #293). */
+const PUBLIC_SLUG = `${ref("project", "public_slug")} ~ '^[a-z0-9]+(-[a-z0-9]+)*$' and char_length(${ref("project", "public_slug")}) between 3 and 63`
+
+/** The project table as drizzle-kit writes it today, and as it wrote it as of 0002, before 0006 gave it the working week and 0017 the public slug. */
+const projectTable = (era: "0002" | "today"): string => {
+  const planning = era === "today"
+  const published = era === "today"
+  return createTable("project", [
     '\t"name" text NOT NULL,',
     '\t"kind" text NOT NULL,',
     '\t"language" text NOT NULL,',
@@ -60,16 +65,20 @@ const projectTable = (planning: boolean): string =>
     '\t"timezone" text NOT NULL,',
     '\t"status" text NOT NULL,',
     ...(planning ? ['\t"weekend" text[] DEFAULT \'{saturday,sunday}\' NOT NULL,', '\t"holiday_list" text,'] : []),
+    ...(published ? ['\t"public_slug" text,'] : []),
     '\tCONSTRAINT "project_name_key" UNIQUE("company_id","name"),',
     '\tCONSTRAINT "project_tenant_key" UNIQUE("company_id","id"),',
+    ...(published ? ['\tCONSTRAINT "project_public_slug_key" UNIQUE("public_slug"),'] : []),
     `\tCONSTRAINT "project_status_one_of" CHECK (${ref("project", "status")} ${STATUS})${planning ? "," : ""}`,
     ...(planning
       ? [
           `\tCONSTRAINT "project_weekend_subset_of" CHECK (${ref("project", "weekend")} ${WEEKEND}),`,
-          `\tCONSTRAINT "project_weekend_not_every_day" CHECK (cardinality(${ref("project", "weekend")}) < 7)`,
+          `\tCONSTRAINT "project_weekend_not_every_day" CHECK (cardinality(${ref("project", "weekend")}) < 7)${published ? "," : ""}`,
         ]
       : []),
+    ...(published ? [`\tCONSTRAINT "project_public_slug_shape" CHECK (${PUBLIC_SLUG})`] : []),
   ])
+}
 
 /** The company table as drizzle-kit writes it today, and as it wrote it as of 0002, before 0008 gave it the route-number counter (Issue #104), 0009 the ticket-number counter (Issue #109) and 0010 the invoice-number counter (Issue #112). */
 const companyTable = (counters: boolean): string =>
@@ -87,7 +96,9 @@ const companyTable = (counters: boolean): string =>
 
 /**
  * What later files changed on tables 0002 created (Issue #97: `project` gained
- * `weekend` and `holiday_list` in 0006, which planning-rendering.test.ts pins;
+ * `weekend` and `holiday_list` in 0006, which planning-rendering.test.ts pins,
+ * and Issue #293 its `public_slug` in 0017, which
+ * sorting-guide-rendering.test.ts pins;
  * Issue #104: `company` gained `next_route_number` in 0008, which
  * execution-rendering.test.ts pins; Issue #109: `company` gained
  * `next_ticket_number` in 0009, which resolution-rendering.test.ts pins;
@@ -98,13 +109,13 @@ const companyTable = (counters: boolean): string =>
  * spelling.
  */
 const CHANGED_LATER = new Map([
-  [projectTable(true), projectTable(false)],
+  [projectTable("today"), projectTable("0002")],
   [companyTable(true), companyTable(false)],
 ])
 
 const expected = [
   companyTable(true),
-  projectTable(true),
+  projectTable("today"),
   createTable("service_provider", [
     '\t"legal_name" text NOT NULL,',
     '\t"registration_number" text NOT NULL,',

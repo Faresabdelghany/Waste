@@ -15,12 +15,15 @@
 // a key it has not seen, so key rotation needs no restart. The build /healthz
 // names is the image's own file, read once here (build-info.ts): an image
 // whose file says nothing usable stops before it binds.
+import { getConnInfo } from "@hono/node-server/conninfo"
 import { createDb, DEFAULT_POOL_MAX } from "@waste/db/client"
 import { QuotaEngine, quotaKnobs } from "@waste/routing/quota"
 import { providerFromEnv } from "@waste/routing/select"
+import type { Context } from "hono"
 import { createRemoteJWKSet } from "jose"
 
 import { createApp } from "./app"
+import { Allowance, PUBLIC_REQUESTS_PER_MINUTE } from "./auth/public-door"
 import { PREVIEW_CALLS_PER_MINUTE } from "./routes/routing-preview"
 import { createVerifier, supabaseAuth } from "./auth/verify"
 import { readBuildInfo } from "./build-info"
@@ -40,10 +43,25 @@ const routingEngine = new QuotaEngine(providerFromEnv({ ROUTING_PROVIDER: env.RO
   ...quotaKnobs({ callsPerMinute: env.ROUTING_PREVIEW_CALLS_PER_MINUTE ?? PREVIEW_CALLS_PER_MINUTE }),
   waits: false,
 })
-const listening = await listen(createApp({ probe, pool, verifier, databaseTimeoutMs: DATABASE_CHECK_TIMEOUT_MS, build, routing: { name: routingEngine.name }, routingEngine }), {
-  host: env.HOST,
-  port: env.PORT,
-})
+// The public door's client where no trusted proxy names one: the socket's peer (auth/public-door.ts).
+const peer = (c: Context): string | undefined => getConnInfo(c).remote.address
+const publicAllowance = new Allowance(env.PUBLIC_REQUESTS_PER_MINUTE ?? PUBLIC_REQUESTS_PER_MINUTE, () => new Date())
+
+const listening = await listen(
+  createApp({
+    probe,
+    pool,
+    verifier,
+    databaseTimeoutMs: DATABASE_CHECK_TIMEOUT_MS,
+    build,
+    routing: { name: routingEngine.name },
+    routingEngine,
+    publicAllowance,
+    peer,
+    trustedProxies: env.PUBLIC_TRUSTED_PROXIES ?? 0,
+  }),
+  { host: env.HOST, port: env.PORT },
+)
 console.log(`@waste/api listening on ${listening.url}, verifying tokens from ${auth.issuer}, build ${build?.commit ?? "none"}, request pool max ${env.DATABASE_POOL_MAX ?? DEFAULT_POOL_MAX}`)
 
 // Shutdown: the listener drains and the probe pool closes together, since a

@@ -102,6 +102,25 @@ export const Env = z.object({
     .pipe(z.int().min(1))
     .optional(),
   DATABASE_POOL_MAX: PoolMax,
+  /** Each public client's requests a minute on the public door (ADR-0010): PUBLIC_REQUESTS_PER_MINUTE, 60, unless set. */
+  PUBLIC_REQUESTS_PER_MINUTE: z
+    .string()
+    .regex(/^\d+$/, { error: "must be a whole number of requests a minute, at least 1" })
+    .transform(Number)
+    .pipe(z.int().min(1))
+    .optional(),
+  /**
+   * How many proxies in front of the API append to X-Forwarded-For (ADR-0010):
+   * the public door counts a client by the entry the outermost one wrote. Unset
+   * is 0, which ignores the header and counts the socket's peer, since a header
+   * no trusted proxy wrote is whatever the client says.
+   */
+  PUBLIC_TRUSTED_PROXIES: z
+    .string()
+    .regex(/^\d+$/, { error: "must be a whole number of proxies, 0 or more" })
+    .transform(Number)
+    .pipe(z.int().min(0))
+    .optional(),
 })
 export type Env = z.infer<typeof Env>
 

@@ -48,6 +48,7 @@ import { driver, vehicle, vehicleCompartment, vehicleCompartmentFraction } from 
 import { containerTypeVehicleType, vehicleType } from "@waste/db/schema/fleet-types"
 import { generationMatch, generationRun } from "@waste/db/schema/generation"
 import { plan, planLeg, planStop, routingQuota } from "@waste/db/schema/routing"
+import { sortingGuideItem } from "@waste/db/schema/sorting-guide"
 import { depot, unloadingStation, unloadingStationFraction, warehouse } from "@waste/db/schema/places"
 import { stockMovement } from "@waste/db/schema/stock"
 import {
@@ -334,6 +335,7 @@ export async function dropTenant(pool: Database, companyId: string, owner?: Data
     await tx.delete(ticket).where(eq(ticket.companyId, companyId))
     await tx.delete(outboxEvent).where(eq(outboxEvent.companyId, companyId))
     await tx.delete(routingQuota).where(eq(routingQuota.companyId, companyId))
+    await tx.delete(sortingGuideItem).where(eq(sortingGuideItem.companyId, companyId))
     await tx.delete(plan).where(eq(plan.companyId, companyId))
     await tx.delete(session).where(eq(session.companyId, companyId))
     await tx.delete(pickup).where(eq(pickup.companyId, companyId))

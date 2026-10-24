@@ -123,6 +123,19 @@ describe("parseEnv", () => {
     })
   })
 
+  test("reads the public door's two knobs (ADR-0010): PUBLIC_REQUESTS_PER_MINUTE at least one, PUBLIC_TRUSTED_PROXIES zero or more, each absent unless set", () => {
+    assert.deepEqual(parseEnv({ ...base, PUBLIC_REQUESTS_PER_MINUTE: "", PUBLIC_TRUSTED_PROXIES: "" }), expected, "empty: not set")
+    assert.equal(parseEnv({ ...base, PUBLIC_REQUESTS_PER_MINUTE: "120" }).PUBLIC_REQUESTS_PER_MINUTE, 120)
+    assert.equal(parseEnv({ ...base, PUBLIC_TRUSTED_PROXIES: "0" }).PUBLIC_TRUSTED_PROXIES, 0)
+    assert.equal(parseEnv({ ...base, PUBLIC_TRUSTED_PROXIES: "1" }).PUBLIC_TRUSTED_PROXIES, 1)
+    for (const value of ["0", "-1", "2.5", "many"]) {
+      assert.throws(() => parseEnv({ ...base, PUBLIC_REQUESTS_PER_MINUTE: value }), (error: unknown) => error instanceof Error && /PUBLIC_REQUESTS_PER_MINUTE/.test(error.message), value)
+    }
+    for (const value of ["-1", "1.5", "one"]) {
+      assert.throws(() => parseEnv({ ...base, PUBLIC_TRUSTED_PROXIES: value }), (error: unknown) => error instanceof Error && /PUBLIC_TRUSTED_PROXIES/.test(error.message), value)
+    }
+  })
+
   test("reads ROUTING_PREVIEW_CALLS_PER_MINUTE, the preview's own pacing (#173), as a whole number of at least one, absent — the preview's 10 — unless set; the worker's ROUTING_CALLS_PER_MINUTE is not the API's", () => {
     assert.deepEqual(parseEnv({ ...base, ROUTING_PREVIEW_CALLS_PER_MINUTE: "" }), expected, "empty: not set")
     assert.equal(parseEnv({ ...base, ROUTING_PREVIEW_CALLS_PER_MINUTE: "5" }).ROUTING_PREVIEW_CALLS_PER_MINUTE, 5)
