@@ -12,10 +12,11 @@
 // from this server to the API, which appends its own.
 //
 // An answer is one of four: the body, a project nobody publishes under the
-// slug (the page's 404), the visitor's allowance spent for the minute, or the
-// door not reachable — no origin configured, a refusal the page has no words
-// for, or no answer at all. A public page never shows an API's sentence.
-import type { PublishedProject } from "@waste/contracts/public"
+// slug or an address it collects nothing at (the page's 404), the visitor's
+// allowance spent for the minute, or the door not reachable — no origin
+// configured, a refusal the page has no words for, or no answer at all. A
+// public page never shows an API's sentence.
+import type { AddressMatches, PublicCollectionDays, PublishedProject } from "@waste/contracts/public"
 import type { SortingGuideAnswer } from "@waste/contracts/sorting-guide"
 
 export type DoorAnswer<T> = { kind: "ok"; body: T } | { kind: "not-published" } | { kind: "too-many"; retryAfterSeconds: number } | { kind: "unavailable" }
@@ -28,6 +29,9 @@ export type DoorOptions = {
   /** The fetch to ask with; a test hands its own. */
   fetch?: typeof fetch
 }
+
+/** The door as a page or the feed asks it for the request in hand: the API's origin, and the visitor as this server's own proxy named them. */
+export const doorFor = (incoming: Pick<Headers, "get">): DoorOptions => ({ origin: process.env.WASTE_API_ORIGIN, forwardedFor: incoming.get("x-forwarded-for") })
 
 /** How long a page waits for the door before it says the guide cannot be reached. */
 export const DOOR_TIMEOUT_MS = 5_000
@@ -49,14 +53,17 @@ export function visitorOf(forwardedFor: string | null): string | null {
 }
 
 /** Asks the public door for `path` (`<slug>` or `<slug>/sorting-guide?q=…`), answering one of the four. */
-export async function readDoor<T>(path: string, { origin, forwardedFor, fetch: fetching = fetch }: DoorOptions): Promise<DoorAnswer<T>> {
+export const readDoor = <T>(path: string, options: DoorOptions): Promise<DoorAnswer<T>> => askDoor(path, options, "application/json", (response) => response.json() as Promise<T>)
+
+/** Asks the door for `path` in `accept`, the body read by `read`; a body `read` cannot read is the door unreachable. */
+async function askDoor<T>(path: string, { origin, forwardedFor, fetch: fetching = fetch }: DoorOptions, accept: string, read: (response: Response) => Promise<T>): Promise<DoorAnswer<T>> {
   const base = origin?.replace(/\/+$/, "")
   if (base === undefined || base === "") return { kind: "unavailable" }
   const visitor = visitorOf(forwardedFor)
   let response: Response
   try {
     response = await fetching(`${base}/public/${path}`, {
-      headers: { accept: "application/json", ...(visitor === null ? {} : { "x-forwarded-for": visitor }) },
+      headers: { accept, ...(visitor === null ? {} : { "x-forwarded-for": visitor }) },
       signal: AbortSignal.timeout(DOOR_TIMEOUT_MS),
     })
   } catch {
@@ -66,7 +73,7 @@ export async function readDoor<T>(path: string, { origin, forwardedFor, fetch: f
   if (response.status === 429) return { kind: "too-many", retryAfterSeconds: retryAfterOf(response) }
   if (!response.ok) return { kind: "unavailable" }
   try {
-    return { kind: "ok", body: (await response.json()) as T }
+    return { kind: "ok", body: await read(response) }
   } catch {
     return { kind: "unavailable" }
   }
@@ -78,3 +85,15 @@ export const readPublishedProject = (slug: string, options: DoorOptions) => read
 /** A search of the project's sorting guide. */
 export const searchSortingGuide = (slug: string, query: string, options: DoorOptions) =>
   readDoor<SortingGuideAnswer>(`${encodeURIComponent(slug)}/sorting-guide?q=${encodeURIComponent(query)}`, options)
+
+/** The published project's addresses that hold `query`. */
+export const searchAddresses = (slug: string, query: string, options: DoorOptions) =>
+  readDoor<AddressMatches>(`${encodeURIComponent(slug)}/addresses?q=${encodeURIComponent(query)}`, options)
+
+/** An address's collection days, `weeks` weeks from today. */
+export const readCollectionDays = (slug: string, addressId: string, weeks: number, options: DoorOptions) =>
+  readDoor<PublicCollectionDays>(`${encodeURIComponent(slug)}/addresses/${encodeURIComponent(addressId)}/collection-days?weeks=${weeks}`, options)
+
+/** An address's collection days as the API's iCalendar feed, `weeks` weeks from today. */
+export const readCollectionFeed = (slug: string, addressId: string, weeks: number, options: DoorOptions) =>
+  askDoor(`${encodeURIComponent(slug)}/addresses/${encodeURIComponent(addressId)}/collection-days.ics?weeks=${weeks}`, options, "text/calendar", (response) => response.text())

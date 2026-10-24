@@ -5,16 +5,13 @@ import type { PublishedProject } from "@waste/contracts/public"
 import type { SortingGuideAnswer, SortingGuideMatch } from "@waste/contracts/sorting-guide"
 
 import type { DoorAnswer } from "./door"
+import { searchQueryOf } from "./search-query"
 
 /** The longest query the door takes (the contracts' SEARCH_MAX), spelled again since the web imports the contracts as types only. */
 export const SEARCH_MAX = 100
 
 /** The query the address asks for: the first `q`, trimmed and cut to the door's length; null for none or blank. */
-export function queryOf(q: string | string[] | undefined): string | null {
-  const first = Array.isArray(q) ? q[0] : q
-  const trimmed = first?.trim().slice(0, SEARCH_MAX).trim() ?? ""
-  return trimmed === "" ? null : trimmed
-}
+export const queryOf = (q: string | string[] | undefined): string | null => searchQueryOf(q, SEARCH_MAX)
 
 /** What the page shows below the search box. */
 export type GuideView = { kind: "prompt" } | { kind: "matches"; query: string; matches: SortingGuideMatch[] } | { kind: "nothing"; query: string }
