@@ -61,7 +61,7 @@ export function publicRoutes(door: MiddlewareHandler<PublicEnv>) {
         operationId: "searchSortingGuide",
         summary: "Search a published project's sorting guide",
         description:
-          "The published items of the project's sorting guide that `q` finds, best first: an exact name, then a compound typed as words (`pizza bakke` finds `Pizzabakke`), the start of the name or of a later word, the query anywhere inside it, and a typo or two in a longer word. Each synonym is searched like the name and ranks just below it; `matched` says which spelling matched. The Danish letters match their two-letter spellings (`aal` finds `Ål`). `limit` is 1..20 and defaults to 10. A query of punctuation alone finds nothing. No token is needed; each address has an allowance a minute. The answer may be cached for a minute.",
+          "The project searched, as `GET /public/:slug` names it, so a page that searches asks once; then the published items of its sorting guide that `q` finds, best first: an exact name, then a compound typed as words (`pizza bakke` finds `Pizzabakke`), the start of the name or of a later word, the query anywhere inside it, and a typo or two in a longer word. Each synonym is searched like the name and ranks just below it; `matched` says which spelling matched. The Danish letters match their two-letter spellings (`aal` finds `Ål`). `limit` is 1..20 and defaults to 10. A query of punctuation alone finds nothing. No token is needed; each address has an allowance a minute. The answer may be cached for a minute.",
         responses: {
           200: describeJson("The items the search found, best first.", SortingGuideAnswer),
           400: describeProblem("`q` is missing, empty or longer than 100 characters, or `limit` is outside 1..20."),
@@ -96,7 +96,8 @@ export function publicRoutes(door: MiddlewareHandler<PublicEnv>) {
           fraction: entry.fractionKey === null || entry.fractionName === null ? null : { key: entry.fractionKey, name: entry.fractionName },
           instructions: entry.instructions,
         }))
-        const body: SortingGuideAnswer = { query: q, matches }
+        const { slug, name, language, timezone } = published
+        const body: SortingGuideAnswer = { project: { slug, name, language, timezone }, query: q, matches }
         return c.json(body, 200, { "Cache-Control": PUBLIC_CACHE })
       },
     )

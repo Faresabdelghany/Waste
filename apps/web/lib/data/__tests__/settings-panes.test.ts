@@ -9,6 +9,7 @@ import { describe, test } from "node:test"
 
 import { MASTER_DATA_SETTINGS_PANE_ID } from "../business-links"
 import { ASSET_MANAGEMENT_SETTINGS_PANE_ID, FINANCE_SETTINGS_PANE_ID, settingsPaneOffered, settingsPaneOpened } from "../settings-panes"
+import { SORTING_GUIDE_SETTINGS_PANE_ID } from "../sorting-guide"
 
 describe("the Settings panes offered", () => {
   test("Master data on the Pilot only, Asset management in fixture mode only, every other pane in both", () => {
@@ -18,6 +19,11 @@ describe("the Settings panes offered", () => {
     assert.equal(settingsPaneOffered(ASSET_MANAGEMENT_SETTINGS_PANE_ID, false), true)
     assert.equal(settingsPaneOffered("company", true), true)
     assert.equal(settingsPaneOffered("company", false), true)
+  })
+
+  test("the Sorting Guide on the Pilot only (#293): its items are the API's alone, with no fixtures", () => {
+    assert.equal(settingsPaneOffered(SORTING_GUIDE_SETTINGS_PANE_ID, true), true)
+    assert.equal(settingsPaneOffered(SORTING_GUIDE_SETTINGS_PANE_ID, false), false)
   })
 
   test("Finance & invoicing in fixture mode only: configure.finance is hidden on the Pilot (#148)", () => {

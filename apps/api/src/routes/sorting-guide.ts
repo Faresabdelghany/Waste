@@ -11,8 +11,7 @@
 // project. The fraction is the company's catalogue's (400 on
 // `wasteFractionId` otherwise). What a resident reads is public.ts's, through
 // the public door and its own role (ADR-0010); nothing here is anonymous. The
-// grant is `configure.portals`: the guide is content the citizen-facing pages
-// publish, beside their branding.
+// grant is `configure.sorting-guide`, the guide's own surface in Settings.
 import { Page } from "@waste/contracts/pagination"
 import { SortingGuideItem, SortingGuideItemCreate, SortingGuideItemListQuery, SortingGuideItemPatch, type SortingGuideItemStatus } from "@waste/contracts/sorting-guide"
 import type { Tx } from "@waste/db/client"
@@ -30,7 +29,7 @@ import { describeProblem, problem, validate } from "../problem"
 import { requireWasteFraction } from "./references"
 import { created, describeCreated, describeJson, IdParam, refuseDuplicate, stampsOf } from "./shared"
 
-const MODULE = "configure.portals"
+const MODULE = "configure.sorting-guide"
 const SortingGuideItemPage = Page(SortingGuideItem)
 
 const columns = {
@@ -93,7 +92,7 @@ export function sortingGuideRoutes(guard: MiddlewareHandler<AuthEnv>) {
           200: describeJson("One page of sorting guide items.", SortingGuideItemPage),
           400: describeProblem("The page size is outside 1..200, the cursor is not one this API wrote, `status` is not one of the three, or `projectId` is not a project this account works in."),
           401: describeProblem("No usable token (see WWW-Authenticate)."),
-          403: describeProblem("No active account here, or the caller's role does not allow `view` on `configure.portals`."),
+          403: describeProblem("No active account here, or the caller's role does not allow `view` on `configure.sorting-guide`."),
         },
       }),
       guard,
@@ -133,7 +132,7 @@ export function sortingGuideRoutes(guard: MiddlewareHandler<AuthEnv>) {
           201: describeCreated("The item as it was written.", SortingGuideItem),
           400: describeProblem("The body is missing a field, names a member the server owns, names a project this account does not work in, names a synonym twice, or names a fraction that is not this company's."),
           401: describeProblem("No usable token (see WWW-Authenticate)."),
-          403: describeProblem("No active account here, or the caller's role does not allow `create` on `configure.portals`."),
+          403: describeProblem("No active account here, or the caller's role does not allow `create` on `configure.sorting-guide`."),
           409: describeProblem("The project's guide already has an item with that name."),
         },
       }),
@@ -166,7 +165,7 @@ export function sortingGuideRoutes(guard: MiddlewareHandler<AuthEnv>) {
           200: describeJson("The item.", SortingGuideItem),
           400: describeProblem("The path does not hold an id."),
           401: describeProblem("No usable token (see WWW-Authenticate)."),
-          403: describeProblem("No active account here, or the caller's role does not allow `view` on `configure.portals`."),
+          403: describeProblem("No active account here, or the caller's role does not allow `view` on `configure.sorting-guide`."),
           404: describeProblem("No sorting guide item with that id in the projects this account works in."),
         },
       }),
@@ -192,7 +191,7 @@ export function sortingGuideRoutes(guard: MiddlewareHandler<AuthEnv>) {
           200: describeJson("The item as it now stands.", SortingGuideItem),
           400: describeProblem("The path does not hold an id, or the patch is empty, names a field the caller does not own (the project included), names a synonym twice, or names a fraction that is not this company's."),
           401: describeProblem("No usable token (see WWW-Authenticate)."),
-          403: describeProblem("No active account here, or the caller's role does not allow `edit` on `configure.portals`."),
+          403: describeProblem("No active account here, or the caller's role does not allow `edit` on `configure.sorting-guide`."),
           404: describeProblem("No sorting guide item with that id in the projects this account works in."),
           409: describeProblem("The project's guide already has another item with that name."),
         },

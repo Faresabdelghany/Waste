@@ -87,7 +87,11 @@ describe("the public door's shapes", () => {
   })
 
   test("an answer carries what a resident reads: no status, no stamps, no project", () => {
-    const answer = { query: "pizza", matches: [{ id: ID, name: "Pizzabakke", synonyms: ["pizza box"], matched: "Pizzabakke", fraction: { key: "cardboard", name: "Pap" }, instructions: null }] }
+    const answer = {
+      project: { slug: "kystbyen", name: "Kystbyen", language: "da", timezone: "Europe/Copenhagen" },
+      query: "pizza",
+      matches: [{ id: ID, name: "Pizzabakke", synonyms: ["pizza box"], matched: "Pizzabakke", fraction: { key: "cardboard", name: "Pap" }, instructions: null }],
+    }
     assert.deepEqual(SortingGuideAnswer.parse(answer), answer)
     assert.deepEqual(Object.keys(SortingGuideAnswer.shape.matches.element.shape).sort(), ["fraction", "id", "instructions", "matched", "name", "synonyms"])
   })

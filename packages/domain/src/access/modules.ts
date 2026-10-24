@@ -72,6 +72,8 @@ export const MODULE_KEYS = [
   "configure.finance",
   "configure.integrations",
   "configure.portals",
+  // The Sorting Guide (Issue #293, M1): what a published project tells residents about where a thing goes.
+  "configure.sorting-guide",
   "configure.privacy",
   "configure.control-center",
   "configure.calendars",

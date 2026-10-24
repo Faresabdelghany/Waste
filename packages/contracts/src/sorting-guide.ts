@@ -8,6 +8,7 @@ import { SORTING_GUIDE_ITEM_STATUSES } from "@waste/domain/sorting-guide/vocabul
 import * as z from "zod"
 
 import { Id } from "./ids"
+import { PublishedProject } from "./public"
 import { ProjectScopedListQuery } from "./queries"
 import { changesSomething, eachOnce, eachOnceSentence, somethingToChange, stamped } from "./resource"
 import { Label, Paragraph } from "./text"
@@ -97,8 +98,9 @@ export const SortingGuideMatch = z.object({
 })
 export type SortingGuideMatch = z.infer<typeof SortingGuideMatch>
 
-/** A search's answer: the query as the door read it, and the matches, best first. */
+/** A search's answer: the project it searched, so a page that searches asks the door once, the query as the door read it, and the matches, best first. */
 export const SortingGuideAnswer = z.object({
+  project: PublishedProject,
   query: z.string(),
   matches: z.array(SortingGuideMatch),
 })

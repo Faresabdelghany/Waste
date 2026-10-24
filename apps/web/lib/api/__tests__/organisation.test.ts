@@ -243,6 +243,21 @@ describe("the projects", () => {
     assert.ok(ProjectPatch.safeParse(body).success)
   })
 
+  test("Settings › Sorting guide publishes a project under a slug and takes it down again (#293): the public address reads back as a fact and a typed value", () => {
+    const before = projectAdapter.toRecord(copenhagen, context(fixtures))
+    assert.equal(before.submittedValues?.publicSlug, undefined)
+    const published = { ...before, submittedValues: { ...before.submittedValues, publicSlug: "kystbyen" } }
+    const body = projectAdapter.toPatchBody(before, published, context(fixtures))
+    assert.deepEqual(body, { publicSlug: "kystbyen" })
+    assert.ok(ProjectPatch.safeParse(body).success)
+    const read = projectAdapter.toRecord({ ...copenhagen, publicSlug: "kystbyen" }, context(fixtures))
+    assert.equal(read.facts["Public address"], "/p/kystbyen")
+    assert.equal(read.submittedValues?.publicSlug, "kystbyen")
+    const unpublished = { ...read, submittedValues: { ...read.submittedValues } }
+    delete unpublished.submittedValues.publicSlug
+    assert.deepEqual(projectAdapter.toPatchBody(read, unpublished, context(fixtures)), { publicSlug: null })
+  })
+
   test("a controlled action that moved the status is a status patch; the adapter lists exactly the statuses the wire has, so the store refuses the rest before a patch is built", () => {
     const before = projectAdapter.toRecord(harbor, context(fixtures))
     const body = projectAdapter.toPatchBody(before, { ...before, status: "Active" }, context(fixtures))

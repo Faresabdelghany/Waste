@@ -166,6 +166,7 @@ describe("the sorting guide and the public door", { skip: database.skip }, () =>
 
     test("a search finds the project's published items, best first, with the fraction, the instructions and the spelling that matched", async () => {
       const answer = await search(slug, "glasflaske")
+      assert.deepEqual(answer.project, { slug, name: a.projects.copenhagen.name, language: "da", timezone: "Europe/Copenhagen" }, "the project searched, so a page asks once")
       assert.equal(answer.query, "glasflaske")
       assert.deepEqual(answer.matches, [
         {

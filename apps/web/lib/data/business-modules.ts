@@ -6175,6 +6175,24 @@ const configure: WorkspaceDefinition = {
       ],
     },
     {
+      // The Sorting Guide (Issue #293, M1): on the API only, so no fixture records; Settings › Sorting guide edits it.
+      id: "sorting-guide",
+      label: "Sorting Guide",
+      title: "Sorting Guide",
+      description: "What a published project tells residents about where a thing goes: items, the words they are known by, their fraction and how to hand them in.",
+      entityLabel: "Item",
+      contextLabel: "Fraction · project",
+      valueLabel: "Known as",
+      primaryAction: "New item",
+      metrics: [],
+      lifecycle: ["Draft", "Published", "Withdrawn"],
+      rules: [
+        "Only a published item of a published project reaches the public page.",
+        "An item is withdrawn, never deleted.",
+      ],
+      records: [],
+    },
+    {
       id: "privacy",
       label: "Privacy, Audit & Retention",
       title: "Privacy, Audit, History, and Retention",

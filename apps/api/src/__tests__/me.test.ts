@@ -8,6 +8,7 @@ import { createDb, type Database } from "@waste/db/client"
 import { driver } from "@waste/db/schema/fleet"
 import { company, project } from "@waste/db/schema/organisation"
 import { withCompany } from "@waste/db/tenant"
+import { MODULE_KEYS } from "@waste/domain/access/modules"
 import { and, eq, inArray } from "drizzle-orm"
 import { Hono } from "hono"
 
@@ -99,7 +100,7 @@ describe("the request path against the database", { skip: database.skip }, () =>
         serviceProvider: null,
         driver: null,
       })
-      assert.equal(body.role.grants.length, 50, "the administrator's charter names every module")
+      assert.equal(body.role.grants.length, MODULE_KEYS.length, "the administrator's charter names every module")
     })
 
     test("answers Lars's shape: provider manager, his provider, no projects", async () => {
@@ -257,7 +258,7 @@ describe("the request path against the database", { skip: database.skip }, () =>
           assert.equal(olivia.companyId, a.companyId)
           assert.deepEqual(olivia.company, { id: a.companyId, name: a.name })
           assert.deepEqual(olivia.projects, [a.projects.cairo, a.projects.copenhagen, a.projects.harbor], "A's three projects and none of B's")
-          assert.equal(olivia.grants.length, 50)
+          assert.equal(olivia.grants.length, MODULE_KEYS.length)
           assert.equal(olivia.driver, null)
 
           const lars = await resolvePrincipal(tx, { userId: login(a.users.lars), companyId: a.companyId })

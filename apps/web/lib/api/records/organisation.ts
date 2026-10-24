@@ -142,6 +142,9 @@ export const projectAdapter: ResourceAdapter<Project> = {
     }
     if (project.holidayList === null) delete facts["Holiday list"]
     else facts["Holiday list"] = project.holidayList
+    // The public address a published project's pages are read at (ADR-0010, #293).
+    if (project.publicSlug === null) delete facts["Public address"]
+    else facts["Public address"] = `/p/${project.publicSlug}`
     const submittedValues: Record<string, string> = {
       name: project.name,
       kind: project.kind,
@@ -151,6 +154,7 @@ export const projectAdapter: ResourceAdapter<Project> = {
       weekend: project.weekend.join(", "),
     }
     if (project.holidayList !== null) submittedValues.holidayList = project.holidayList
+    if (project.publicSlug !== null) submittedValues.publicSlug = project.publicSlug
     return {
       id,
       name: project.name,
@@ -199,6 +203,8 @@ export const projectAdapter: ResourceAdapter<Project> = {
       // A controlled action moves the record's status; the wire's two are what a patch may say.
       status: PROJECT_STATUSES.find((candidate) => candidate === statusToken(record.status)),
       ...projectCalendarBody(record),
+      // Settings › Sorting guide publishes the project under a slug and takes it down again (#293); no slug is unpublished.
+      publicSlug: typed(record, "publicSlug") ?? null,
     })),
   create: (client, body) => create<Project>(client, "/projects", body).then((created) => created.body),
   update: (client, serverId, body) => patch<Project>(client, `/projects/${serverId}`, body),

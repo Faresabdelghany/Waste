@@ -17,6 +17,7 @@ import {
   MapTrifold,
   Package,
   PaintBrush,
+  Recycle,
   Receipt,
   ShieldCheck,
   SlidersHorizontal,
@@ -50,11 +51,13 @@ import { CommercialDefaultsExtras, CommercialSectionPane } from "@/components/se
 import { PlanningAreasSettings } from "@/components/settings/planning-areas-settings"
 import { CollectionCalendarsSettings } from "@/components/settings/collection-calendars-settings"
 import { HolidayListsSettings } from "@/components/settings/holiday-lists-settings"
+import { SortingGuideSettings } from "@/components/settings/sorting-guide-settings"
 import { MasterDataSettings } from "@/components/settings/master-data-settings"
 import { useApiConfigured, useApiSession } from "@/components/waste/api-session-store"
 import { profileOf, type AccountProfile } from "@/lib/data/account-profile"
 import { HOLIDAY_LISTS_SETTINGS_PANE_ID, MASTER_DATA_SETTINGS_PANE_ID } from "@/lib/data/business-links"
 import { ASSET_MANAGEMENT_SETTINGS_PANE_ID, settingsPaneOffered, settingsPaneOpened } from "@/lib/data/settings-panes"
+import { SORTING_GUIDE_SETTINGS_PANE_ID } from "@/lib/data/sorting-guide"
 import { PLANNING_AREAS_SETTINGS_PANE_ID } from "@/lib/data/planning-areas"
 import { COLLECTION_CALENDARS_SETTINGS_PANE_ID } from "@/lib/data/collection-calendars"
 import { migrateLegacyId } from "@/lib/data/legacy-ids"
@@ -161,6 +164,8 @@ const settingsSections: Array<{
       { id: "pricing", label: "Commercial defaults", icon: Tag },
       { id: "integrations", label: "Integrations", icon: LinkSimple },
       { id: "portals", label: "Portals & branding", icon: PaintBrush },
+      // The Sorting Guide on the API (#293): offered with the adapter configured, since it has no fixtures.
+      { id: SORTING_GUIDE_SETTINGS_PANE_ID, label: "Sorting guide", icon: Recycle },
       { id: "privacy", label: "Privacy, audit & retention", icon: ShieldCheck },
     ],
   },
@@ -1315,6 +1320,11 @@ const visiblePaneDefinitions: Record<string, SettingsPaneDefinition> = {
       "Each project's holiday list: its name, the weekend the project rests on, and the dated holidays of every year.",
     groups: [],
   },
+  [SORTING_GUIDE_SETTINGS_PANE_ID]: {
+    title: "Sorting guide",
+    description: "What residents find when they search where a thing goes, on the project's public page.",
+    groups: [],
+  },
   [MASTER_DATA_SETTINGS_PANE_ID]: {
     title: "Master data",
     description:
@@ -1407,6 +1417,7 @@ function isFullPanelPane(paneId: string): boolean {
     paneId === PLANNING_AREAS_SETTINGS_PANE_ID ||
     paneId === COLLECTION_CALENDARS_SETTINGS_PANE_ID ||
     paneId === MASTER_DATA_SETTINGS_PANE_ID ||
+    paneId === SORTING_GUIDE_SETTINGS_PANE_ID ||
     paneId.startsWith("commercial-")
   )
 }
@@ -1812,6 +1823,8 @@ function SettingsPane({
         <HolidayListsSettings />
       ) : paneId === MASTER_DATA_SETTINGS_PANE_ID ? (
         <MasterDataSettings />
+      ) : paneId === SORTING_GUIDE_SETTINGS_PANE_ID ? (
+        <SortingGuideSettings />
       ) : paneId.startsWith("commercial-") ? (
         <CommercialSectionPane paneId={paneId} />
       ) : (
