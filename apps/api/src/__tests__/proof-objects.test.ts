@@ -8,7 +8,7 @@ import assert from "node:assert/strict"
 import { after, before, describe, test } from "node:test"
 
 import { CommandOutcomeRow, DriverCommandBatchOutcome } from "@waste/contracts/driver-commands"
-import { NO_PROOF_STORAGE } from "@waste/contracts/problem"
+import { NO_PROOF_STORAGE, type ProblemKind } from "@waste/contracts/problem"
 import { ProofObjectLinks, ProofUpload } from "@waste/contracts/proof-objects"
 import { createDb, type Database } from "@waste/db/client"
 import { StorageSilent, type ProofStorage } from "@waste/db/storage"
@@ -116,9 +116,9 @@ describe("proof objects", { skip: database.skip || owner.skip }, () => {
     assert.equal(response.status, 200, JSON.stringify(await response.clone().json()))
     return await response.json()
   }
-  const refused = async (response: Response, status: number) => {
+  const refused = async (response: Response, status: number, kind?: ProblemKind) => {
     assert.equal(response.status, status, JSON.stringify(await response.clone().json()))
-    return await readProblem(response)
+    return await readProblem(response, kind)
   }
   const send = async (commands: unknown[]): Promise<CommandOutcomeRow[]> => DriverCommandBatchOutcome.parse(await ok(await mads("/driver/commands", { method: "POST", body: { commands } }))).outcomes
   const command = (kind: string, routeId: string, body: unknown, id = mint()) => ({ id, kind, routeId, occurredAt: `${FIXTURE_DAY}T07:00:00.000Z`, deviceId: "device-mads-01", body })
@@ -175,9 +175,7 @@ describe("proof objects", { skip: database.skip || owner.skip }, () => {
 
     test("a deployment without Storage's key stores no photo: 503, typed so a device tells it from an outage", async () => {
       const route = await routeFor(pool, a, fleet, fixtures, { driver: fleet.drivers.mads })
-      const answer = await refused(await madsWithout("/driver/uploads", { method: "POST", body: { routeId: route.id, commandId: mint(), extension: "jpg" } }), 503)
-      assert.equal(answer.detail, NO_PROOF_STORAGE_DETAIL)
-      assert.equal(answer.type, NO_PROOF_STORAGE.type)
+      assert.equal((await refused(await madsWithout("/driver/uploads", { method: "POST", body: { routeId: route.id, commandId: mint(), extension: "jpg" } }), 503, NO_PROOF_STORAGE)).detail, NO_PROOF_STORAGE_DETAIL)
     })
   })
 
@@ -227,7 +225,7 @@ describe("proof objects", { skip: database.skip || owner.skip }, () => {
 
     test("a deployment without Storage's key: 503", async () => {
       const { stop } = await stopWithObjects()
-      assert.equal((await refused(await oliviaWithout(`/pickups/${stop}/proof-objects`), 503)).detail, NO_PROOF_STORAGE_DETAIL)
+      assert.equal((await refused(await oliviaWithout(`/pickups/${stop}/proof-objects`), 503, NO_PROOF_STORAGE)).detail, NO_PROOF_STORAGE_DETAIL)
     })
   })
 })
