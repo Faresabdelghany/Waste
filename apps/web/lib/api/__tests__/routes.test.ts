@@ -13,7 +13,7 @@ import type { WasteFraction } from "@waste/contracts/catalogue"
 import type { Driver, Vehicle } from "@waste/contracts/fleet"
 import type { Project } from "@waste/contracts/organisation"
 import type { Depot, UnloadingStation } from "@waste/contracts/places"
-import { PickupOrderSet, Route, RouteAssign, RouteCancel, RouteDetail, RouteReschedule } from "@waste/contracts/routes"
+import { PickupOrderSet, Route, RouteAssign, RouteCancel, RouteDetail, RouteReleaseHold, RouteReschedule } from "@waste/contracts/routes"
 import type { ActivePlan } from "@waste/contracts/plans"
 
 import { FIXTURE_COMPANY_ID, getModuleDefinition, type BusinessRecord } from "../../data/business-modules"
@@ -28,6 +28,8 @@ import {
   ASSIGN_ROUTE,
   CANCEL_ROUTE,
   DISPATCH_ROUTE,
+  isHeldRoute,
+  RELEASE_HOLD,
   REORDER_ROUTE,
   RESCHEDULE_ROUTE,
   ROUTES_MODULE,
@@ -190,6 +192,7 @@ describe("a route", () => {
       depotId: depotRecord.id,
       unloadingStationId: stationRecord.id,
       status: "planned",
+      heldAt: "",
     })
   })
 
@@ -258,9 +261,11 @@ describe("a route", () => {
     const held = routeAdapter.toRecord({ ...planned, heldAt: "2026-09-30T08:15:00.000Z" }, context())
     assert.equal(held.description, "Generated from its route scheme for 2026-10-01. Held by the office since 2026-09-30 10:15.", "the row's line, on the project's clock")
     assert.equal(held.facts.Hold, "Moved by the office 2026-09-30 10:15: generation runs keep its day, its start and its Planned Assignment, and still refresh its stops")
-    assert.equal(held.facts["Hold released by"], "An edit of its scheme's start, depot, unloading station or days, or of its group's vehicle, driver, provider or days; a dispatch or a cancel ends it")
+    assert.equal(held.facts["Hold released by"], "Release hold; an edit of its scheme's start, depot or unloading station, or of its group's vehicle, driver or provider; a day taken from its collection; a dispatch or a cancel")
+    assert.ok(isHeldRoute(held))
     const free = routeAdapter.toRecord(planned, context())
     assert.deepEqual([free.facts.Hold, free.facts["Hold released by"]], [undefined, undefined])
+    assert.ok(!isHeldRoute(free))
     assert.doesNotMatch(free.description, /Held/)
   })
 
@@ -348,6 +353,20 @@ describe("the route's commands", () => {
     assert.equal(outcome.kind, "done")
     if (outcome.kind !== "done") return
     assert.equal(outcome.record.status, "Ready")
+  })
+
+  test("release-hold posts its empty body and answers the route back on its scheme, its hold cleared (#226)", async () => {
+    const { fetch, calls } = scripted([() => json(detailOf(planned))])
+    const heldRecord = routeAdapter.toRecord({ ...planned, heldAt: "2026-09-30T08:15:00.000Z" }, context())
+    const outcome = await commandRecord(clientOver(fetch), routesModule, current, heldRecord, RELEASE_HOLD, undefined, options)
+    assert.equal(calls[0].url, `http://api.test/routes/${planned.id}/release-hold`)
+    assert.equal(calls[0].init.method, "POST")
+    assert.deepEqual(bodyOf(calls[0]), {})
+    assert.ok(RouteReleaseHold.safeParse(bodyOf(calls[0])).success)
+    assert.equal(outcome.kind, "done")
+    if (outcome.kind !== "done") return
+    assert.ok(!isHeldRoute(outcome.record))
+    assert.deepEqual(routeAdapter.commands?.[RELEASE_HOLD]?.touches, ["route-studio.live"])
   })
 
   test("the API's 409 on a dispatch without a planned driver comes back as its sentence, under the route's name", async () => {

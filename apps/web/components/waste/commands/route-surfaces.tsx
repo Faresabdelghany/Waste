@@ -28,7 +28,7 @@ import { shownOn } from "@/lib/api/records/clock"
 import { CONTAINERS_MODULE } from "@/lib/api/records/containers"
 import { LIVE_MODULE, routeSessions, whileWatched } from "@/lib/api/records/live"
 import { CORRECT_PICKUP, PICKUPS_MODULE, pickupProofs, REMOVE_PICKUP } from "@/lib/api/records/pickups"
-import { ASSIGN_ROUTE, callsignOf, CANCEL_ROUTE, DISPATCH_ROUTE, REORDER_ROUTE, RESCHEDULE_ROUTE, routeCommandLog, routeDetail, ROUTES_MODULE } from "@/lib/api/records/routes"
+import { ASSIGN_ROUTE, callsignOf, CANCEL_ROUTE, DISPATCH_ROUTE, isHeldRoute, RELEASE_HOLD, REORDER_ROUTE, RESCHEDULE_ROUTE, routeCommandLog, routeDetail, ROUTES_MODULE } from "@/lib/api/records/routes"
 import { DRIVERS_MODULE, VEHICLES_MODULE } from "@/lib/data/allocations"
 import type { BusinessFormValues } from "@/lib/data/business-form-types"
 import { PICKUP_COMMAND_FORMS, pickupReasonLabel, ROUTE_COMMAND_FORMS, routeCommandValues, type PickupCommandWithForm, type RouteCommandWithForm } from "@/lib/data/routes"
@@ -59,6 +59,12 @@ const DONE: Readonly<Record<string, (name: string) => string>> = {
   [RESCHEDULE_ROUTE]: (name) => `${name} rescheduled`,
   [CANCEL_ROUTE]: (name) => `${name} cancelled`,
   [REORDER_ROUTE]: (name) => `The stops of ${name} are reordered`,
+  [RELEASE_HOLD]: (name) => `${name} handed back to its scheme`,
+}
+
+/** What each command's toast says beneath its title: where it now stands, or, for a hand-back, what is still to come (#226). */
+const DONE_SAYS: Readonly<Record<string, string>> = {
+  [RELEASE_HOLD]: "The next generation run brings back the scheme's day, start and assignment.",
 }
 
 type RouteOpen = { kind: "form"; name: RouteCommandWithForm; values: BusinessFormValues } | { kind: "reorder"; order: string[] }
@@ -83,7 +89,7 @@ export function RouteCommandsSurface({ record }: RowSurfaceProps) {
   const run = (name: string, input?: CommandInput) =>
     send(name, input, (outcome) => {
       setOpen(null)
-      toast.success(DONE[name]?.(outcome.record.name) ?? `${outcome.record.name} updated`, { description: `Status: ${outcome.record.status}` })
+      toast.success(DONE[name]?.(outcome.record.name) ?? `${outcome.record.name} updated`, { description: DONE_SAYS[name] ?? `Status: ${outcome.record.status}` })
     })
 
   const offered = moduleReady && !busy
@@ -104,6 +110,12 @@ export function RouteCommandsSurface({ record }: RowSurfaceProps) {
         <Button variant="outline" size="sm" disabled={!offered} onClick={() => openForm("reschedule")}>
           Reschedule
         </Button>
+        {/* A route the office holds goes back to its scheme on a word: the next generation run brings back its day, start and assignment (#226). */}
+        {isHeldRoute(record) && record.submittedValues?.status === "planned" && (
+          <Button variant="outline" size="sm" disabled={!offered} onClick={() => run(RELEASE_HOLD)}>
+            Release hold
+          </Button>
+        )}
         <Button variant="outline" size="sm" disabled={!offered || detail === undefined || openStops.length < 2} onClick={() => setOpen({ kind: "reorder", order: openStops.map((pickup) => pickup.id) })}>
           Reorder stops
         </Button>
