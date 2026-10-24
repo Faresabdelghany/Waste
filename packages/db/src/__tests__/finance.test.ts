@@ -382,6 +382,10 @@ const VAT_CASES: readonly [netMinor: number, vatPercent: number][] = [
   [-999, 7],
   [1_000, 0],
   [1_000, 100],
+  // A net past what `net * pct` holds as an `integer` (about 85.9 million øre at 25 %), which the VAT checks read since 0021 with the net cast first (#314); the largest net a line holds, at the largest rate, too.
+  [100_000_000, 25],
+  [-100_000_000, 25],
+  [2_147_483_647, 100],
 ]
 
 describe("the Finance & Contracting tables against a fresh database", { skip: database.skip }, () => {
@@ -741,6 +745,30 @@ describe("the Finance & Contracting tables against a fresh database", { skip: da
       await assert.rejects(tx.transaction((savepoint) => savepoint.insert(invoiceLine).values(creditLine({ invoiceId: a.invoice, position: 2, quantity: 1, unitPriceMinor: 10, netMinor: -10, vatPercent: 25, vatMinor: -2 }))), refusedWith("23514", /invoice_line_vat_shape/))
       assert.equal(vatOf(10, 25), 3)
       assert.equal(vatOf(-10, 25), -3)
+    }))
+
+  test("the amounts checks hold a net at the column's bound, the products a bigint since 0021 (#314): a reversal and a credit line of -2 147 483 648, and a unit price times a quantity past an integer refused as the check and not as 22003", () =>
+    seeded(async (tx) => {
+      // 2^30 × 2 is 2^31, one past an integer; negated it is the column's least, which the net holds.
+      const least = -2_147_483_648
+      const unitPriceMinor = 1_073_741_824
+      const vatMinor = vatOf(least, 25)
+      await tx.transaction(async (savepoint) => {
+        await savepoint.insert(billableEvent).values(manual({ kind: "reversal", createdBy: null, sourceEventId: a.other, reversesEventId: a.event, priceListRowId: null, quantity: 2, unitPriceMinor, netMinor: least, vatPercent: 25, vatMinor }))
+        await savepoint.insert(invoiceLine).values(creditLine({ id: a.other, invoiceId: a.invoice, position: 2, creditsLineId: a.line, quantity: 2, unitPriceMinor, netMinor: least, vatPercent: 25, vatMinor }))
+        throw new Landed()
+      }).catch((error: unknown) => {
+        if (!(error instanceof Landed)) throw error
+      })
+      // A net that is not the product is the check's refusal even where the product passes an integer: 23514, never 22003.
+      await assert.rejects(
+        tx.transaction((savepoint) => savepoint.insert(billableEvent).values(manual({ priceListRowId: null, overrideReason: "Too many", quantity: 4, unitPriceMinor, netMinor: 1, vatPercent: 25, vatMinor: 0 }))),
+        refusedWith("23514", /billable_event_amounts_shape/),
+      )
+      await assert.rejects(
+        tx.transaction((savepoint) => savepoint.insert(invoiceLine).values(creditLine({ invoiceId: a.invoice, position: 2, quantity: 4, unitPriceMinor, netMinor: -1, vatPercent: 25, vatMinor: 0 }))),
+        refusedWith("23514", /invoice_line_amounts_shape/),
+      )
     }))
 
   test("an invoice's totals agree, a credit note's net is zero or less where an invoice's takes either sign, its period and its credit go with the kind, it does not credit itself, and a line charges for an event or credits a line (23514)", () =>

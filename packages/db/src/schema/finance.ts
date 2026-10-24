@@ -47,9 +47,12 @@
 // and its five columns null together or none (`_priced_shape`), the net the
 // unit price times the quantity with a reversal's sign (`_amounts_shape`),
 // the VAT the domain's `vatOf` as SQL (`_vat_shape`, `round(net * pct /
-// 100.0)`, held to the domain by a test), the winning row traceable unless
-// blocked or a manual or a reversal (`_row_shape`), a manual event with a
-// person's price carrying the reason (`_override_shape`), a pickup naming its
+// 100.0)`, held to the domain by a test) — both cast before they multiply
+// since 0028, the amounts to bigint and the VAT's net to numeric, so a row
+// whose amounts fit their columns never overflows an `integer` product in
+// its own check (#314) — the winning row traceable unless blocked or a
+// manual or a reversal (`_row_shape`), a manual event with a person's price
+// carrying the reason (`_override_shape`), a pickup naming its
 // route (`_pickup_shape`, since Postgres leaves a composite key with a null
 // member unchecked), what each kind names (`_kind_shape`, one CASE), a
 // person's or an event's (`_origin_shape`), a cancellation's stamps together
@@ -388,10 +391,10 @@ export const billableEvent = wms.table(
       tableObjectName(t.id.table, "priced_shape", "billableEvent"),
       sql`(${t.blockReason} is null) = (${t.netMinor} is not null) and (${t.netMinor} is null) = (${t.unitPriceMinor} is null) and (${t.netMinor} is null) = (${t.vatPercent} is null) and (${t.netMinor} is null) = (${t.vatMinor} is null) and (${t.netMinor} is null) = (${t.currency} is null)`,
     ),
-    // The net is the unit price times the quantity, negated on a reversal.
-    check(tableObjectName(t.id.table, "amounts_shape", "billableEvent"), sql`${t.netMinor} is null or ${t.netMinor} = (case ${t.kind} when 'reversal' then -1 else 1 end) * ${t.unitPriceMinor} * ${t.quantity}`),
-    // The VAT is the domain's vatOf as SQL: half away from zero, per line.
-    check(tableObjectName(t.id.table, "vat_shape", "billableEvent"), sql`${t.vatMinor} is null or ${t.vatMinor} = round(${t.netMinor} * ${t.vatPercent} / 100.0)`),
+    // The net is the unit price times the quantity, negated on a reversal; the product is a bigint, so a net at the column's bound is held to it rather than overflowing (#314).
+    check(tableObjectName(t.id.table, "amounts_shape", "billableEvent"), sql`${t.netMinor} is null or ${t.netMinor} = (case ${t.kind} when 'reversal' then -1 else 1 end) * ${t.unitPriceMinor}::bigint * ${t.quantity}`),
+    // The VAT is the domain's vatOf as SQL: half away from zero, per line. The net is cast first, so the product is numeric and never an `integer` that overflows (#314).
+    check(tableObjectName(t.id.table, "vat_shape", "billableEvent"), sql`${t.vatMinor} is null or ${t.vatMinor} = round(${t.netMinor}::numeric * ${t.vatPercent} / 100.0)`),
     // The winning row is traceable unless the event is blocked, a person's, or a reversal.
     check(tableObjectName(t.id.table, "row_shape", "billableEvent"), sql`${t.priceListRowId} is not null or ${t.blockReason} is not null or ${t.kind} in ('manual', 'reversal')`),
     // A manual event with a person's price and no row carries the reason, and nothing else does.
@@ -587,10 +590,10 @@ export const invoiceLine = wms.table(
     positive(t.quantity),
     // A line charges for an event or credits a line, never both and never neither.
     exactlyOne(t, "source", [t.billableEventId, t.creditsLineId]),
-    // The net's magnitude is the unit price times the quantity; a credit line is never positive, and an event's line may be negative, since a reversal is one.
-    check(tableObjectName(t.id.table, "amounts_shape", "invoiceLine"), sql`abs(${t.netMinor}) = ${t.unitPriceMinor} * ${t.quantity} and (${t.creditsLineId} is null or ${t.netMinor} <= 0)`),
-    // The VAT is the domain's vatOf as SQL, per line.
-    check(tableObjectName(t.id.table, "vat_shape", "invoiceLine"), sql`${t.vatMinor} = round(${t.netMinor} * ${t.vatPercent} / 100.0)`),
+    // The net's magnitude is the unit price times the quantity, both sides a bigint so neither overflows at the column's bound (#314); a credit line is never positive, and an event's line may be negative, since a reversal is one.
+    check(tableObjectName(t.id.table, "amounts_shape", "invoiceLine"), sql`abs(${t.netMinor}::bigint) = ${t.unitPriceMinor}::bigint * ${t.quantity} and (${t.creditsLineId} is null or ${t.netMinor} <= 0)`),
+    // The VAT is the domain's vatOf as SQL, per line, over the net cast first (#314).
+    check(tableObjectName(t.id.table, "vat_shape", "invoiceLine"), sql`${t.vatMinor} = round(${t.netMinor}::numeric * ${t.vatPercent} / 100.0)`),
     // An event is on one line of one invoice: the database's word behind the run's selection.
     uniqueIndex(tableObjectName(t.companyId.table, "billable_event_id_idx", "invoiceLine")).on(t.companyId, t.billableEventId).where(sql`${t.billableEventId} is not null`),
     tenantIndex(t, t.creditsLineId),
