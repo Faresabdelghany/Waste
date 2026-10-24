@@ -9,11 +9,11 @@ import { join } from "node:path"
 import { describe, test } from "node:test"
 
 import { OBJECT_EXTENSIONS } from "@waste/contracts/execution"
-import { PROOF_BUCKET } from "@waste/contracts/proof-objects"
+import { PROOF_BUCKET, PROOF_OBJECT_MAX_BYTES } from "@waste/contracts/proof-objects"
 
 import { MIGRATIONS_FOLDER } from "../migrate"
 import { normalised, statementsOf } from "../sql/hand-written"
-import { PROOF_MIME_TYPES, PROOF_OBJECT_MAX_BYTES, proofBucketStatement } from "../sql/proof-storage"
+import { PROOF_MIME_TYPES, proofBucketStatement } from "../sql/proof-storage"
 
 const MIGRATION = "0016_proof_storage.sql"
 

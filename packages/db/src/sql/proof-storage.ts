@@ -11,10 +11,7 @@
 // gets the private bucket without them. The owner runs it, as every file:
 // locally the superuser, on the Pilot `postgres`, which Supabase grants the
 // `storage` tables to.
-import { PROOF_BUCKET } from "@waste/contracts/proof-objects"
-
-/** The largest object the bucket takes: a phone's photo as the Driver App sends it, about 1600 px of JPEG, with room to spare; a signature is a few kilobytes. */
-export const PROOF_OBJECT_MAX_BYTES = 2 * 1024 * 1024
+import { PROOF_BUCKET, PROOF_OBJECT_MAX_BYTES } from "@waste/contracts/proof-objects"
 
 /** The formats the bucket takes: the four extensions of an object key (`OBJECT_EXTENSIONS`), jpg and jpeg being one. */
 export const PROOF_MIME_TYPES = ["image/jpeg", "image/png", "image/webp"] as const
