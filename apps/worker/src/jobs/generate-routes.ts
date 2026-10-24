@@ -48,7 +48,9 @@
 // stamp in apps/api) is refreshed like any other — its pickups and its note
 // are the run's — but keeps the operating date, the planned start and the
 // Planned Assignment it stands on, the office's by hand; its ends are among
-// them, so a hold alone never reshapes its Plan. A `cancel` still cancels it,
+// them, so a hold alone never reshapes its Plan. A holiday the scheme skips
+// spares a held route the office moved off it, which the run then keeps there
+// with a note saying so (#226, the planner's rule). A `cancel` still cancels it,
 // since the scheme no longer runs that collection, and clears the hold with
 // the status (`route_hold_shape`: a hold is a planned route's), so a route a
 // later run brings back returns to the scheme.
@@ -245,7 +247,7 @@ async function generate(tx: Tx, runId: string, companyId: string, at: Date): Pro
     calendar: { holidays, weekend: calendar.weekend as ServiceDay[] },
     window,
     groups: planningGroups,
-    existingRoutes: existingRoutes.map((row) => ({ id: row.id, collectionGroupId: row.collectionGroupId, serviceDate: row.serviceDate, status: row.status as RouteStatus, cancelledByGeneration: row.cancelledByGeneration })),
+    existingRoutes: existingRoutes.map((row) => ({ id: row.id, collectionGroupId: row.collectionGroupId, serviceDate: row.serviceDate, status: row.status as RouteStatus, cancelledByGeneration: row.cancelledByGeneration, held: row.heldAt !== null, operatingDate: row.operatingDate })),
   })
   counts.holidaysSkipped = plan.holidaysSkipped
 

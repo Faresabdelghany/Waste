@@ -25,7 +25,9 @@
 // planned again → `refresh` with `resurrect`, back to planned; `ready` and
 // beyond, and a route a person cancelled → `leave`. A holiday the policy
 // skips writes nothing (`omit`, counted) and cancels a `planned` route that
-// stood on the date. Then the cleanup: every `planned` route of the scheme
+// stood on the date, but one the office held on another day (#209) →
+// `refresh` there, its note saying so, the collection run and nothing skipped
+// (#226). Then the cleanup: every `planned` route of the scheme
 // inside the walk whose identity was not planned → `cancel` with one of the
 // three sentences the prototype spells. Nothing here reads `edit_policy`.
 //
@@ -64,7 +66,7 @@ import type { PickupReason, PickupStatus, RouteStatus } from "../execution/vocab
 import { ruleSignature } from "../route-schemes/container-drift"
 import { WALK_CAP_DAYS } from "../route-schemes/generation"
 import { holidayLabel, holidayNamesFor, withCarriedNames } from "../route-schemes/holiday-names"
-import { generateOccurrences, NO_HOLIDAYS, shiftedNote, type HolidayList, type HolidayPolicy, type Occurrence, type SchemeCalendar } from "../route-schemes/occurrences"
+import { formatOccurrenceShortDate, generateOccurrences, NO_HOLIDAYS, shiftedNote, type HolidayList, type HolidayPolicy, type Occurrence, type SchemeCalendar } from "../route-schemes/occurrences"
 import { addDays, serviceDayOf, type SchemeRecurrence } from "../route-schemes/recurrence"
 import type { RecurrenceFrequency, ServiceDay, StopSource, WeekRotation } from "./vocabulary"
 
@@ -147,6 +149,10 @@ export const NO_PLANNING_AREA = "The scheme has no planning area, so its rule gr
 /** The third sentence, and the holiday's name: "Skipped · Christmas Day". */
 export const skippedHoliday = (holiday: string | undefined): string => `Skipped · ${holiday ?? "Holiday"}`
 
+/** A collection the policy skips that the office held on another day (#226): "Kept on Fri 9 Oct by the office, off Christmas Day". */
+export const keptOffHoliday = (operatingDate: string, holiday: string | undefined): string =>
+  `Kept on ${formatOccurrenceShortDate(operatingDate)} by the office, off ${holiday ?? "Holiday"}`
+
 /** The run's warning for a day with no boundary of the scheme's planning area in force: rule groups match nothing that day. */
 export const noBoundaryInForce = (serviceDate: string): string => `No planning area boundary in force on ${serviceDate}; rule groups match no containers that day`
 
@@ -174,6 +180,9 @@ export type ExistingRoute = {
   serviceDate: string
   status: RouteStatus
   cancelledByGeneration: boolean
+  /** The office holds its day, start and assignment (#209); its operating date the day it runs on. */
+  held: boolean
+  operatingDate: string
 }
 
 export type RouteDecision =
@@ -245,6 +254,12 @@ export function planRoutes(input: PlanRoutesInput): RoutePlan {
       const route = existing.get(identity)
 
       if (occurrence.status === "skipped") {
+        // A route the office held on another day than its holiday stands (#226): the office already moved the collection
+        // off it, so the run refreshes it where the hold keeps it, and no holiday is skipped. One still on the holiday goes.
+        if (route !== undefined && route.status === "planned" && route.held && route.operatingDate !== serviceDate) {
+          decisions.push({ kind: "refresh", routeId: route.id, groupId: group.id, serviceDate, operatingDate: route.operatingDate, note: keptOffHoliday(route.operatingDate, occurrence.note), resurrect: false })
+          continue
+        }
         holidaysSkipped += 1
         const note = skippedHoliday(occurrence.note)
         if (route === undefined) decisions.push({ kind: "omit", groupId: group.id, serviceDate, note })

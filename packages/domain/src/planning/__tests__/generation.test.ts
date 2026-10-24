@@ -14,6 +14,7 @@ import type { SchemeRecurrence } from "../../route-schemes/recurrence"
 import {
   compatibilityKey,
   holidayListOf,
+  keptOffHoliday,
   matchStampOf,
   NO_LONGER_PLANS_GROUP,
   NO_LONGER_SERVES_DATE,
@@ -52,6 +53,8 @@ const route = (values: Partial<ExistingRoute> & Pick<ExistingRoute, "id" | "serv
   collectionGroupId: residual.id,
   status: "planned",
   cancelledByGeneration: false,
+  held: false,
+  operatingDate: values.serviceDate,
   ...values,
 })
 
@@ -133,6 +136,17 @@ describe("planRoutes", () => {
     assert.equal(skippedHoliday(undefined), "Skipped · Holiday")
     const ready = planRoutes({ recurrence: weekly, holidayPolicy: "skip", calendar: withHoliday, window: { from: "2026-10-08", to: "2026-10-08" }, groups: [residual], existingRoutes: [route({ id: "r2", serviceDate: "2026-10-08", status: "ready" })] })
     assert.deepEqual(ready.decisions, [{ kind: "leave", routeId: "r2", groupId: residual.id, serviceDate: "2026-10-08", status: "ready" }])
+  })
+
+  test("under skip, a route the office held off its holiday stays on the day it was moved to, its note saying so; one held on the holiday, or moved without a hold, is cancelled (#226)", () => {
+    const skip = (existing: ExistingRoute) => planRoutes({ recurrence: weekly, holidayPolicy: "skip", calendar: withHoliday, window: { from: "2026-10-08", to: "2026-10-08" }, groups: [residual], existingRoutes: [existing] })
+    const kept = skip(route({ id: "r2", serviceDate: "2026-10-08", operatingDate: "2026-10-09", held: true }))
+    assert.deepEqual(kept.decisions, [{ kind: "refresh", routeId: "r2", groupId: residual.id, serviceDate: "2026-10-08", operatingDate: "2026-10-09", note: "Kept on Fri 9 Oct by the office, off Test Day", resurrect: false }])
+    assert.equal(kept.holidaysSkipped, 0, "the collection runs on the office's day: no holiday skipped")
+    assert.equal(keptOffHoliday("2026-10-09", undefined), "Kept on Fri 9 Oct by the office, off Holiday")
+    for (const existing of [route({ id: "r2", serviceDate: "2026-10-08", held: true }), route({ id: "r2", serviceDate: "2026-10-08", operatingDate: "2026-10-09" })]) {
+      assert.deepEqual(skip(existing).decisions, [{ kind: "cancel", routeId: "r2", groupId: residual.id, serviceDate: "2026-10-08", note: "Skipped · Test Day" }], JSON.stringify(existing))
+    }
   })
 
   test("a ready, active or completed route is left; a route a person cancelled is left; one an earlier run cancelled is resurrected when its identity is planned again", () => {
