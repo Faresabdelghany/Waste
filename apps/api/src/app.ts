@@ -52,6 +52,7 @@ import { depotRoutes } from "./routes/depots"
 import { driverDoorRoutes } from "./routes/driver"
 import { driverRoutes } from "./routes/drivers"
 import { generationRoutes } from "./routes/generation"
+import { importRoutes } from "./routes/imports"
 import { invoiceRoutes } from "./routes/invoices"
 import { lifecycleRoutes } from "./routes/lifecycle"
 import { FakeProvider } from "@waste/routing/fake"
@@ -268,6 +269,8 @@ export function createApp({
   app.route("/", weightControlRoutes(guard))
   // The reports (#292): reads that count the rows above and store nothing. The ticket report reads "open now" and "overdue" at the request's clock, so the module takes `now`.
   app.route("/", reportRoutes(guard, { now }))
+  // The CSV import (#291 slice 12): a preview, then a run written a batch at a time through the families' own writes.
+  app.route("/", importRoutes(guard))
 
   app.get(
     "/openapi.json",
