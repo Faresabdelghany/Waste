@@ -60,7 +60,7 @@ A Free Supabase project is paused after a week without activity. When a connecti
 
 CI rehearses the whole round trip on every run (`pnpm --filter @waste/db rehearse-restore`, then every suite against the restored database), so a change that would break a restore fails the merge.
 
-**Storage is not backed up.** The drivers' photos and signatures live in the private `proofs` Storage bucket (O1 of #290), which no dump carries and the Free plan does not back up — accepted for the Pilot. A restore brings back every proof's row and its object key; an object lost since is answered as a null read URL (`GET /pickups/:id/proof-objects`), the same as one the nightly purge removed after `PROOF_RETENTION_DAYS` (`apps/pilot/README.md`). The bucket itself is made by `0016_proof_storage.sql`; a restore carries the journal that says it ran, so a database restored into a project without the bucket needs that file's one statement run there by hand.
+**Storage is not backed up.** The drivers' photos and signatures live in the private `proofs` Storage bucket (O1 of #290), which no dump carries and the Free plan does not back up — accepted for the Pilot. A restore brings back every proof's row and its object key; an object lost since is answered as a null read URL (`GET /pickups/:id/proof-objects`), the same as one the nightly purge removed after `PROOF_RETENTION_DAYS` (`apps/pilot/README.md`). The bucket itself is made by `0018_proof_storage.sql`; a restore carries the journal that says it ran, so a database restored into a project without the bucket needs that file's one statement run there by hand.
 
 ## A restore
 

@@ -127,6 +127,13 @@
       "when": 1792833996415,
       "tag": "0017_sorting_guide",
       "breakpoints": true
+    },
+    {
+      "idx": 18,
+      "version": "7",
+      "when": 1792835336131,
+      "tag": "0018_proof_storage",
+      "breakpoints": true
     }
   ]
 }

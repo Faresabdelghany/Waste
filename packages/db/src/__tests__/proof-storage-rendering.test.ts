@@ -1,4 +1,4 @@
-// Migration 0016 pinned without a database (O1 of #290): the file is
+// Migration 0018 pinned without a database (O1 of #290): the file is
 // hand-written whole, so the test holds it to the one spelling in
 // sql/proof-storage.ts — the private `proofs` bucket, made or kept private,
 // its limits where Storage has the columns, nothing at all where there is no
@@ -15,7 +15,7 @@ import { MIGRATIONS_FOLDER } from "../migrate"
 import { normalised, statementsOf } from "../sql/hand-written"
 import { PROOF_MIME_TYPES, proofBucketStatement } from "../sql/proof-storage"
 
-const MIGRATION = "0016_proof_storage.sql"
+const MIGRATION = "0018_proof_storage.sql"
 
 describe("the proofs' bucket", () => {
   test("the file is the one statement, as sql/proof-storage.ts spells it", async () => {
