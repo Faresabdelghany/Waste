@@ -67,6 +67,16 @@
 // the status (`route_hold_shape`: a hold is a planned route's), so a route a
 // later run brings back returns to the scheme.
 //
+// The crew on the day (O6 of #290): the absences of the groups' drivers and
+// the unavailability of their vehicles over the operating dates the run
+// writes are one read each. A route created or refreshed while planned and
+// unheld is written without a driver absent, or a vehicle out of use, on its
+// operating date, with the run's warning naming them (`crewOnDay`,
+// @waste/domain/resources/availability); the group keeps them, so once the
+// period is gone the next run writes them back. A held route keeps the crew
+// the office set, its trailer among it, and the run only warns when one of
+// them is away on its day.
+//
 // The clock in what is written is the run's stamps, a cancellation's and a
 // skip's instant (which the table's checks demand beside the status), and
 // nothing else, so identical inputs give identical rows (ADR-0002).
@@ -88,7 +98,11 @@
 // the office's button in apps/api sends the same job as the nightly sweep.
 import type { Tx } from "@waste/db/client"
 import { GENERATE_ROUTES_QUEUE, type GenerateRoutesData } from "@waste/db/commands/generation"
+import { validOver } from "@waste/db/query/valid-on"
+import { routeLabel } from "@waste/contracts/execution"
+import { driverAbsence, vehicleUnavailability } from "@waste/db/schema/availability"
 import { collectionCalendarHoliday } from "@waste/db/schema/collection-calendars"
+import { driver, vehicle } from "@waste/db/schema/fleet"
 import { containerTypeVehicleType } from "@waste/db/schema/fleet-types"
 import { pickup, route } from "@waste/db/schema/execution"
 import { generationMatch, generationRun } from "@waste/db/schema/generation"
@@ -116,6 +130,7 @@ import {
   type StopGroup,
 } from "@waste/domain/planning/generation"
 import type { HolidayPolicy, RecurrenceFrequency, ServiceDay, StopSource, WeekRotation } from "@waste/domain/planning/vocabulary"
+import { crewLeftOff, crewOnDay, heldCrewAway, type AwayPeriod } from "@waste/domain/resources/availability"
 import { SHIFT_SEARCH_DAYS } from "@waste/domain/route-schemes/occurrences"
 import { addDays } from "@waste/domain/route-schemes/recurrence"
 import { and, asc, desc, eq, gte, inArray, lte, sql } from "drizzle-orm"
@@ -361,6 +376,9 @@ async function generate(tx: Tx, runId: string, companyId: string, at: Date): Pro
     unloadingStationId: row.unloadingStationId,
   })
 
+  // The crew on each route's day (O6 of #290): the periods touching the operating dates written, read once.
+  const crewOnRoute = crewOnRouteDay(await awayPeriods(tx, scope, groups, existingRoutes, writing, existingRouteOf))
+
   const numbers = { next: await takeNumbers(tx, companyId, plan.decisions.filter((decision) => decision.kind === "create").length) }
 
   /** Skips open stops the scheme no longer plans, by regeneration with the sentence: a cancel's every open stop, a trim's own. Deletes nothing. */
@@ -405,6 +423,8 @@ async function generate(tx: Tx, runId: string, companyId: string, at: Date): Pro
     if (decision.kind === "create") {
       const number = numbers.next
       numbers.next += 1
+      const crew = crewOnRoute(assignment, decision.operatingDate, routeLabel(number), false)
+      counts.warnings.push(...crew.warnings)
       const [created] = await tx
         .insert(route)
         .values({
@@ -418,6 +438,8 @@ async function generate(tx: Tx, runId: string, companyId: string, at: Date): Pro
           number,
           generationRunId: run.id,
           ...assignment,
+          plannedDriverId: crew.driverId,
+          plannedVehicleId: crew.vehicleId,
         })
         .returning({ id: route.id })
       if (stops.length > 0) {
@@ -433,7 +455,11 @@ async function generate(tx: Tx, runId: string, companyId: string, at: Date): Pro
     const current = existingRouteOf.get(decision.routeId)!
     const held = current.heldAt !== null
     const operatingDate = held ? current.operatingDate : decision.operatingDate
-    const refreshed = held ? keptAssignmentOf(current) : assignment
+    // The crew on its day: an unheld route's the group's less whoever is away, a held one's the office's as it stands, each with the run's warning.
+    const kept = held ? keptAssignmentOf(current) : assignment
+    const crew = crewOnRoute(held ? { ...kept, plannedTrailerId: current.plannedTrailerId } : kept, operatingDate, routeLabel(current.number), held)
+    counts.warnings.push(...crew.warnings)
+    const refreshed = { ...kept, plannedDriverId: crew.driverId, plannedVehicleId: crew.vehicleId }
     const changes = pickupChanges(pickupsOf(decision.routeId), stops)
     const endsMoved = current.depotId !== refreshed.depotId || current.unloadingStationId !== refreshed.unloadingStationId
     const routeMoved =
@@ -492,6 +518,103 @@ async function generate(tx: Tx, runId: string, companyId: string, at: Date): Pro
   }
 
   return { kind: "succeeded", counts, projectId: run.projectId, reshaped }
+}
+
+/** A period away, with the owner it belongs to and the name a warning gives them. */
+type AwayRow = AwayPeriod & { ownerId: string; name: string }
+type AwayPeriods = { driver: ReadonlyMap<string, readonly AwayRow[]>; vehicle: ReadonlyMap<string, readonly AwayRow[]> }
+
+/**
+ * The absences and the unavailability touching the operating dates the run
+ * writes (O6 of #290), of the drivers and the vehicles it could write: its
+ * groups', and the crew a held route keeps, its trailer among it. One read
+ * each over the span of those dates (`validOver`), in the scheme's project, by
+ * owner, with the name a warning gives: a driver's, a vehicle's callsign else
+ * its registration.
+ */
+async function awayPeriods(
+  tx: Tx,
+  scope: { companyId: string; projectId: string },
+  groups: readonly { driverId: string | null; vehicleId: string | null }[],
+  existingRoutes: readonly { heldAt: Date | null; plannedDriverId: string | null; plannedVehicleId: string | null; plannedTrailerId: string | null }[],
+  writing: readonly Extract<RouteDecision, { kind: "create" | "refresh" }>[],
+  existingRouteOf: ReadonlyMap<string, { heldAt: Date | null; operatingDate: string }>,
+): Promise<AwayPeriods> {
+  const operating = writing.map((decision) => {
+    const current = decision.kind === "refresh" ? existingRouteOf.get(decision.routeId) : undefined
+    return current !== undefined && current.heldAt !== null ? current.operatingDate : decision.operatingDate
+  })
+  if (operating.length === 0) return { driver: new Map(), vehicle: new Map() }
+  const span = { validFrom: operating.reduce((a, b) => (a < b ? a : b)), validTo: addDays(operating.reduce((a, b) => (a > b ? a : b)), 1) }
+  const held = existingRoutes.filter((row) => row.heldAt !== null)
+  const present = (ids: readonly (string | null)[]): string[] => [...new Set(ids.filter((id): id is string => id !== null))]
+  const driverIds = present([...groups.map((group) => group.driverId), ...held.map((row) => row.plannedDriverId)])
+  const vehicleIds = present([...groups.map((group) => group.vehicleId), ...held.flatMap((row) => [row.plannedVehicleId, row.plannedTrailerId])])
+
+  const drivers =
+    driverIds.length === 0
+      ? []
+      : await tx
+          .select({ ownerId: driverAbsence.driverId, validFrom: driverAbsence.validFrom, validTo: driverAbsence.validTo, reason: driverAbsence.reason, name: driver.name })
+          .from(driverAbsence)
+          .innerJoin(driver, and(eq(driver.companyId, driverAbsence.companyId), eq(driver.id, driverAbsence.driverId)))
+          .where(and(eq(driverAbsence.companyId, scope.companyId), eq(driverAbsence.projectId, scope.projectId), inArray(driverAbsence.driverId, driverIds), validOver(driverAbsence, span)))
+  const vehicles =
+    vehicleIds.length === 0
+      ? []
+      : await tx
+          .select({
+            ownerId: vehicleUnavailability.vehicleId,
+            validFrom: vehicleUnavailability.validFrom,
+            validTo: vehicleUnavailability.validTo,
+            reason: vehicleUnavailability.reason,
+            name: sql<string>`coalesce(${vehicle.callsign}, ${vehicle.registration})`,
+          })
+          .from(vehicleUnavailability)
+          .innerJoin(vehicle, and(eq(vehicle.companyId, vehicleUnavailability.companyId), eq(vehicle.id, vehicleUnavailability.vehicleId)))
+          .where(
+            and(
+              eq(vehicleUnavailability.companyId, scope.companyId),
+              eq(vehicleUnavailability.projectId, scope.projectId),
+              inArray(vehicleUnavailability.vehicleId, vehicleIds),
+              validOver(vehicleUnavailability, span),
+            ),
+          )
+  const byOwner = (rows: readonly AwayRow[]): Map<string, AwayRow[]> => {
+    const map = new Map<string, AwayRow[]>()
+    for (const row of rows) map.set(row.ownerId, [...(map.get(row.ownerId) ?? []), row])
+    return map
+  }
+  return { driver: byOwner(drivers), vehicle: byOwner(vehicles) }
+}
+
+/** A crew as a route carries it; generation writes no trailer, so only a held route's has one. */
+type RouteCrew = { plannedDriverId: string | null; plannedVehicleId: string | null; plannedTrailerId?: string | null }
+
+/** The crew a route is written with on its day, and the run's warnings about it. */
+type CrewWritten = { driverId: string | null; vehicleId: string | null; warnings: string[] }
+
+/**
+ * What the run writes of a crew on a route's day (`crewOnDay`), and its
+ * warnings: on an unheld route the group's less whoever is away, each one
+ * left off told; on a held one the office's as it stands, each one away
+ * told. The vehicle, then the trailer, then the driver: the order a
+ * command's refusals take.
+ */
+function crewOnRouteDay(periods: AwayPeriods) {
+  const nameOf = (rows: AwayPeriods["driver"], id: string): string => rows.get(id)?.[0]?.name ?? ""
+  return (crew: RouteCrew, day: string, label: string, held: boolean): CrewWritten => {
+    const trailerId = crew.plannedTrailerId ?? null
+    const found = crewOnDay({ driverId: crew.plannedDriverId, vehicleId: crew.plannedVehicleId, trailerId }, day, periods)
+    const say = held ? heldCrewAway : crewLeftOff
+    const members = [
+      ["vehicle", crew.plannedVehicleId, found.vehicleAway, periods.vehicle],
+      ["trailer", trailerId, found.trailerAway, periods.vehicle],
+      ["driver", crew.plannedDriverId, found.driverAway, periods.driver],
+    ] as const
+    const warnings = members.flatMap(([role, id, away, rows]) => (id === null || away === undefined ? [] : [say(role, nameOf(rows, id), day, away, label)]))
+    return held ? { driverId: crew.plannedDriverId, vehicleId: crew.plannedVehicleId, warnings } : { driverId: found.driverId, vehicleId: found.vehicleId, warnings }
+  }
 }
 
 /**

@@ -177,6 +177,11 @@ export async function post<Body>(client: ApiClient, path: string, body: unknown)
   return { status: response.status, body: (await readBody(response)) as Body }
 }
 
+/** `DELETE path`: the API's one removal, a period recorded wrongly (O6 of #290: a driver's absence, a vehicle's unavailability), answering 204 and no body. */
+export async function remove(client: ApiClient, path: string): Promise<void> {
+  await request(client, "DELETE", path)
+}
+
 /** `POST path` with no body: the API's commands (`/users/:id/deactivate`), which answer 200 and no `Location`. */
 export async function command<Body>(client: ApiClient, path: string, body?: unknown): Promise<Body> {
   const response = await request(client, "POST", path, body)

@@ -6,7 +6,7 @@ import { date, integer, text, uuid } from "drizzle-orm/pg-core"
 
 import { createDb, type Database } from "../client"
 import { migrateDatabase } from "../migrate"
-import { validOn } from "../query/valid-on"
+import { validOn, validOver } from "../query/valid-on"
 import { id, tenant, validity, validPeriod } from "../schema/columns"
 import { wms } from "../schema/wms"
 import { excludeOverlapping } from "../sql/exclude-overlapping"
@@ -169,6 +169,31 @@ describe("effective dating against the database", { skip: database.skip }, () =>
     assert.throws(() => validOn(specimen, "2026-00-10"), /validOn: "2026-00-10" is not a YYYY-MM-DD day/)
     assert.ok(validOn(specimen, "2028-02-29"), "a leap day is a day")
   })
+
+  test("validOver returns the rows valid on any day of a half-open period: one that ends on its first day or starts on its first day out is not, an open end reaches every later day (O6 of #290)", () =>
+    inSpecimen(async (tx) => {
+      await tx.insert(specimen).values([
+        period("q1", "2026-01-01", "2026-04-01"),
+        period("q2", "2026-04-01", "2026-07-01"),
+        period("onwards", "2026-07-01", null),
+      ])
+      const labelsOver = async (validFrom: string, validTo: string | null): Promise<string[]> => {
+        const rows = await tx
+          .select({ label: specimen.label })
+          .from(specimen)
+          .where(and(eq(specimen.containerId, bin), validOver(specimen, { validFrom, validTo })))
+          .orderBy(specimen.validFrom)
+        return rows.map((row) => row.label)
+      }
+      assert.deepEqual(await labelsOver("2025-12-01", "2026-01-01"), [], "ends on q1's first day")
+      assert.deepEqual(await labelsOver("2025-12-31", "2026-01-02"), ["q1"])
+      assert.deepEqual(await labelsOver("2026-03-31", "2026-04-02"), ["q1", "q2"], "across the boundary")
+      assert.deepEqual(await labelsOver("2026-04-01", "2026-04-02"), ["q2"], "q1's first day out is not q1's")
+      assert.deepEqual(await labelsOver("2026-06-01", null), ["q2", "onwards"], "an open period reaches every later row")
+      assert.deepEqual(await labelsOver("2099-01-01", "2099-01-02"), ["onwards"])
+      assert.throws(() => validOver(specimen, { validFrom: "2026-02-30", validTo: null }), /validOver: "2026-02-30" is not a YYYY-MM-DD day/)
+      assert.throws(() => validOver(specimen, { validFrom: "2026-02-01", validTo: "Mar 1" }), /validOver: "Mar 1" is not a YYYY-MM-DD day/)
+    }))
 
   test("the validity columns travel as YYYY-MM-DD strings through the Drizzle face", () =>
     inSpecimen(async (tx) => {

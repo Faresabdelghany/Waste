@@ -16,9 +16,12 @@
 // resources/licence.ts spells the implication between them. The statuses of a
 // depot and of an unloading station are the same four, so
 // `UNLOADING_STATION_STATUSES` is `DEPOT_STATUSES` under a second name — one
-// tuple, two readers — which is why the walking test counts nineteen names
-// over eighteen lists. A Drop-off Point (Issue #293, M3) is a place residents
+// tuple, two readers — which is why the walking test counts twenty-one names
+// over twenty lists. A Drop-off Point (Issue #293, M3) is a place residents
 // bring waste to themselves, of the two kinds the glossary names.
+// `DRIVER_ABSENCE_REASONS` and
+// `VEHICLE_UNAVAILABILITY_REASONS` (O6 of #290) say why a driver is away or a
+// vehicle out of use over a dated period (resources/availability.ts).
 //
 // A value is a kebab-case token: it goes into a migration as a SQL literal
 // and onto the wire as an enum member, and those are the same string. A list
@@ -63,6 +66,10 @@ export const ALLOCATION_ACTIONS = ["allocate", "change", "confirm", "release"] a
 export const DROP_OFF_POINT_KINDS = ["recycling-centre", "bring-bank"] as const
 /** Where a Drop-off Point stands: a draft is the office's alone, an active one is on the public map, a closed one is no longer used. */
 export const DROP_OFF_POINT_STATUSES = ["draft", "active", "closed"] as const
+/** Why a driver is away over a dated period (O6 of #290). */
+export const DRIVER_ABSENCE_REASONS = ["holiday", "sick", "training", "leave", "other"] as const
+/** Why a vehicle or a trailer is out of use over a dated period (O6 of #290). */
+export const VEHICLE_UNAVAILABILITY_REASONS = ["maintenance", "repair", "inspection", "breakdown", "other"] as const
 
 /**
  * The places a container stands in while in stock — a warehouse, or
@@ -95,6 +102,8 @@ export type AllocationStatus = (typeof ALLOCATION_STATUSES)[number]
 export type AllocationAction = (typeof ALLOCATION_ACTIONS)[number]
 export type DropOffPointKind = (typeof DROP_OFF_POINT_KINDS)[number]
 export type DropOffPointStatus = (typeof DROP_OFF_POINT_STATUSES)[number]
+export type DriverAbsenceReason = (typeof DRIVER_ABSENCE_REASONS)[number]
+export type VehicleUnavailabilityReason = (typeof VEHICLE_UNAVAILABILITY_REASONS)[number]
 
 /** Every list of this module by its name, for a test that walks them and for a reader looking for the whole vocabulary at once. */
 export const RESOURCES_VOCABULARIES = {
@@ -117,4 +126,6 @@ export const RESOURCES_VOCABULARIES = {
   ALLOCATION_ACTIONS,
   DROP_OFF_POINT_KINDS,
   DROP_OFF_POINT_STATUSES,
+  DRIVER_ABSENCE_REASONS,
+  VEHICLE_UNAVAILABILITY_REASONS,
 } as const satisfies Record<string, readonly [string, ...string[]]>

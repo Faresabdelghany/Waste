@@ -684,6 +684,8 @@ describe("the pilot's configuration against a fresh database", { skip: database.
       "stock_movement",
       "vehicle_allocation",
       "vehicle_allocation_event",
+      "driver_absence",
+      "vehicle_unavailability",
       "service_area",
       "service_area_planning_area",
       "service_area_waste_fraction",

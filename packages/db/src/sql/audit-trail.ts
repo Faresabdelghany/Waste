@@ -49,6 +49,7 @@ import { ACTOR_SETTING, REASON_SETTING } from "../tenant"
 import { projectAccess, role, roleGrant, serviceProviderAccess, userAccount } from "../schema/access"
 import { agreement, subscription, subscriptionPause } from "../schema/agreements"
 import { vehicleAllocation, vehicleAllocationEvent } from "../schema/allocations"
+import { driverAbsence, vehicleUnavailability } from "../schema/availability"
 import { auditEvent } from "../schema/audit"
 import { containerType, product, serviceFrequency, wasteFraction } from "../schema/catalogue"
 import { collectionCalendar, collectionCalendarHoliday } from "../schema/collection-calendars"
@@ -190,8 +191,14 @@ export const DROP_OFF_AUDITED: readonly Audited[] = [
   { table: dropOffPointException, module: "resources.drop-off-points", parent: setOf(dropOffPoint, dropOffPointException.dropOffPointId) },
 ]
 
+/** When a driver or a vehicle is not there (O6 of #290): each a set of its driver's or vehicle's, whose history reads it, triggered in the migration that creates the two tables. */
+export const ABSENCES_AUDITED: readonly Audited[] = [
+  { table: driverAbsence, module: "fleet.drivers", parent: setOf(driver, driverAbsence.driverId) },
+  { table: vehicleUnavailability, module: "fleet.vehicles", parent: setOf(vehicle, vehicleUnavailability.vehicleId) },
+]
+
 /** Every audited table: 0019's, then each later migration's, in the order they were written. */
-export const AUDITED: readonly Audited[] = [...AUDITED_AT_0019, ...SUBSCRIPTION_PAUSE_AUDITED, ...TICKET_SLA_AUDITED, ...DROP_OFF_AUDITED]
+export const AUDITED: readonly Audited[] = [...AUDITED_AT_0019, ...SUBSCRIPTION_PAUSE_AUDITED, ...TICKET_SLA_AUDITED, ...DROP_OFF_AUDITED, ...ABSENCES_AUDITED]
 
 /** The audited tables by name, for a test that reads a migrated database's triggers. */
 export const AUDITED_TABLE_NAMES: ReadonlySet<string> = new Set(AUDITED.map((entry) => getTableName(entry.table)))

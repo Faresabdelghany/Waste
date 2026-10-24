@@ -28,15 +28,21 @@
 // office held (#209) keeps its day, start and Planned Assignment through a
 // run that still refreshes its pickups and its note, the hold alone writing
 // nothing, and a cancel still cancels it and clears the hold — but under a
-// skipped holiday a route the office held on another day stays (#226).
+// skipped holiday a route the office held on another day stays (#226); a
+// route created or refreshed on a day its group's driver is absent, or its
+// vehicle out of use, is written without them with the run's warning, a held
+// one keeps the office's crew and only warns, and the period gone, the next
+// run writes the group's crew back (O6 of #290).
 import assert from "node:assert/strict"
 import { after, before, describe, test } from "node:test"
 
+import { routeLabel } from "@waste/contracts/execution"
 import type { Point, Polygon } from "@waste/contracts/geojson"
 import { createDb, type Database, type Tx } from "@waste/db/client"
 import { GENERATE_ROUTES_QUEUE } from "@waste/db/commands/generation"
 import { migrateDatabase } from "@waste/db/migrate"
 import { agreement, subscription, subscriptionPause } from "@waste/db/schema/agreements"
+import { driverAbsence, vehicleUnavailability } from "@waste/db/schema/availability"
 import { containerType, product, wasteFraction } from "@waste/db/schema/catalogue"
 import { collectionCalendar, collectionCalendarHoliday } from "@waste/db/schema/collection-calendars"
 import { container, containerServicePlacement } from "@waste/db/schema/containers"
@@ -119,6 +125,14 @@ const ids = (n: "a" | "b") => ({
   depot: `018f7c36-${n}000-7000-8000-000000000054`,
   station: `018f7c36-${n}000-7000-8000-000000000055`,
   provider: `018f7c36-${n}000-7000-8000-000000000056`,
+  /** The residual group's crew while O6's test runs (#290), and their periods away. */
+  crewVehicle: `018f7c36-${n}000-7000-8000-000000000061`,
+  crewDriver: `018f7c36-${n}000-7000-8000-000000000062`,
+  absence: `018f7c36-${n}000-7000-8000-000000000063`,
+  unavailability: `018f7c36-${n}000-7000-8000-000000000064`,
+  /** A trailer the office hangs on a held route, and its time in for repair. */
+  crewTrailer: `018f7c36-${n}000-7000-8000-000000000065`,
+  trailerRepair: `018f7c36-${n}000-7000-8000-000000000066`,
 })
 const a = ids("a")
 const b = ids("b")
@@ -482,6 +496,73 @@ describe("generation against a migrated database", { skip }, () => {
     } finally {
       // The scheme shifts holidays again: the route comes back, the scheme's, for the tests after.
       await ownerPool.db.update(routeScheme).set({ holidayPolicy: "shift-next" }).where(eq(routeScheme.id, a.scheme))
+      await generateA()
+    }
+  })
+
+  test("a group's driver absent or its vehicle out of use on a route's day (O6 of #290): the run writes the route without them and warns; a held route keeps the office's crew and only warns; the period gone, the next run writes the group's crew back", async () => {
+    const scoped = { companyId: a.company, projectId: a.project }
+    const rowOf = async (id: string) => (await ownerPool.db.select().from(route).where(eq(route.id, id)))[0]
+    const crewOf = (row: typeof route.$inferSelect) => [row.plannedVehicleId, row.plannedDriverId]
+    await ownerPool.db.insert(vehicleType).values({ id: a.vehicleType, companyId: a.company, key: "rear-loader", name: "Rear loader" }).onConflictDoNothing()
+    await ownerPool.db.insert(vehicle).values({ id: a.crewVehicle, ...scoped, registration: "CK 74 305", callsign: "NR-12", kind: "powered-vehicle", vehicleTypeId: a.vehicleType, ownership: "company", status: "active", requiredLicenceClass: "c" })
+    await ownerPool.db.insert(vehicle).values({ id: a.crewTrailer, ...scoped, registration: "TR 12 012", kind: "trailer", vehicleTypeId: a.vehicleType, ownership: "company", status: "active", requiredLicenceClass: "b" })
+    await ownerPool.db.insert(driver).values({ id: a.crewDriver, ...scoped, name: "Freja Nielsen", employment: "employee", licenceClass: "ce", licenceExpiry: "2030-12-31", status: "active" })
+    await ownerPool.db.update(collectionGroup).set({ vehicleId: a.crewVehicle, driverId: a.crewDriver }).where(eq(collectionGroup.id, a.residualGroup))
+    try {
+      // Nobody away: both of the residual group's routes carry its crew, and the run warns of nothing.
+      const crewed = await generateA()
+      assert.deepEqual(crewed.run.warnings, [])
+      const residual = (await routesOfA()).filter((row) => row.collectionGroupId === a.residualGroup)
+      const [monday, thursday] = residual
+      assert.deepEqual(
+        residual.map((row) => [row.serviceDate, row.operatingDate, row.status, row.heldAt]),
+        [
+          ["2026-10-05", "2026-10-05", "planned", null],
+          ["2026-10-08", "2026-10-09", "planned", null],
+        ],
+      )
+      assert.deepEqual(residual.map(crewOf), [[a.crewVehicle, a.crewDriver], [a.crewVehicle, a.crewDriver]])
+
+      // Freja is on holiday on the Monday, and NR-12 goes into the workshop from the Friday the holiday moved Thursday's collection to.
+      await ownerPool.db.insert(driverAbsence).values({ id: a.absence, ...scoped, driverId: a.crewDriver, validFrom: "2026-10-05", validTo: "2026-10-06", reason: "holiday" })
+      await ownerPool.db.insert(vehicleUnavailability).values({ id: a.unavailability, ...scoped, vehicleId: a.crewVehicle, validFrom: "2026-10-09", reason: "maintenance" })
+      const away = await generateA()
+      assert.deepEqual(away.run.warnings, [
+        `Freja Nielsen is absent on Mon 5 Oct (holiday): ${routeLabel(monday.number)} is written without a planned driver`,
+        `NR-12 is unavailable on Fri 9 Oct (maintenance): ${routeLabel(thursday.number)} is written without a planned vehicle`,
+      ])
+      assert.deepEqual(crewOf(await rowOf(monday.id)), [a.crewVehicle, null], "the Monday's route without Freja, still with NR-12")
+      assert.deepEqual(crewOf(await rowOf(thursday.id)), [null, a.crewDriver], "the Friday's without NR-12, still with Freja")
+      assert.deepEqual([(await rowOf(monday.id)).status, (await rowOf(thursday.id)).status], ["planned", "planned"])
+
+      // The office holds the Friday's route on NR-12 with the trailer, as an assign made before the workshop was booked: the run keeps both and says so.
+      await ownerPool.db.insert(vehicleUnavailability).values({ id: a.trailerRepair, ...scoped, vehicleId: a.crewTrailer, validFrom: "2026-10-09", validTo: "2026-10-10", reason: "repair" })
+      await ownerPool.db.update(route).set({ plannedVehicleId: a.crewVehicle, plannedTrailerId: a.crewTrailer, heldAt: NOW }).where(eq(route.id, thursday.id))
+      const held = await generateA()
+      assert.deepEqual(held.run.warnings, [
+        `Freja Nielsen is absent on Mon 5 Oct (holiday): ${routeLabel(monday.number)} is written without a planned driver`,
+        `NR-12 is unavailable on Fri 9 Oct (maintenance), and ${routeLabel(thursday.number)}, which the office holds, still names it`,
+        `TR 12 012 is unavailable on Fri 9 Oct (repair), and ${routeLabel(thursday.number)}, which the office holds, still names it`,
+      ])
+      assert.deepEqual(crewOf(await rowOf(thursday.id)), [a.crewVehicle, a.crewDriver], "the office's word stands")
+      assert.equal((await rowOf(thursday.id)).plannedTrailerId, a.crewTrailer)
+
+      // The periods gone and the hold released: the next run writes the group's crew back on both.
+      await ownerPool.db.delete(driverAbsence).where(eq(driverAbsence.id, a.absence))
+      await ownerPool.db.delete(vehicleUnavailability).where(eq(vehicleUnavailability.id, a.unavailability))
+      await ownerPool.db.delete(vehicleUnavailability).where(eq(vehicleUnavailability.id, a.trailerRepair))
+      await ownerPool.db.update(route).set({ heldAt: null, plannedTrailerId: null }).where(eq(route.id, thursday.id))
+      const back = await generateA()
+      assert.deepEqual(back.run.warnings, [])
+      assert.deepEqual([crewOf(await rowOf(monday.id)), crewOf(await rowOf(thursday.id))], [[a.crewVehicle, a.crewDriver], [a.crewVehicle, a.crewDriver]])
+    } finally {
+      // The group crewless again, for the tests after: its routes go back to the scheme's, with no crew.
+      await ownerPool.db.delete(driverAbsence).where(eq(driverAbsence.id, a.absence))
+      await ownerPool.db.delete(vehicleUnavailability).where(eq(vehicleUnavailability.id, a.unavailability))
+      await ownerPool.db.delete(vehicleUnavailability).where(eq(vehicleUnavailability.id, a.trailerRepair))
+      await ownerPool.db.update(collectionGroup).set({ vehicleId: null, driverId: null }).where(eq(collectionGroup.id, a.residualGroup))
+      await ownerPool.db.update(route).set({ heldAt: null, plannedTrailerId: null }).where(eq(route.routeSchemeId, a.scheme))
       await generateA()
     }
   })

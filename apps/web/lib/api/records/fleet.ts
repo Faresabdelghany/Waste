@@ -36,8 +36,10 @@
 // and the wizard's readers ask it. The form's "Enable Driver App access" and
 // "Linked user account" are the wire's `userAccountId`: on with an account,
 // off is null. Statuses are the wire's, the lifecycle's Invited and Absent
-// being an account's word and a dated window; a create under the form's
-// default Invited says no status, so the API's default stands.
+// being an account's word and a dated window — the window a driver's absence
+// (records/availability.ts, O6 of #290), recorded from the driver's details;
+// a create under the form's default Invited says no status, so the API's
+// default stands.
 import type { Driver, Vehicle, VehicleCompartment } from "@waste/contracts/fleet"
 import { displayLicenceClass, isLicenceClassToken } from "@waste/domain/resources/licence"
 import { DRIVER_STATUSES, EMPLOYMENT_TYPES, FUEL_TYPES, LICENCE_CLASSES, VEHICLE_KINDS, VEHICLE_OWNERSHIPS, VEHICLE_STATUSES } from "@waste/domain/resources/vocabulary"
@@ -49,6 +51,7 @@ import { fuelLabel } from "@/lib/data/resources-vocabulary"
 
 import { create, get, listAll, patch, put } from "../client"
 import { hasPrefix, inheritedPresentation, isLocalRefusal, ofKind, patchOf, stampFacts, statusLabel, typed, typedFlag, webIdOf, type Client, type LocalRefusal, type MappingContext, type ResourceAdapter, type ServerModule } from "./adapter"
+import { DRIVER_AVAILABILITY_ACTIONS, VEHICLE_AVAILABILITY_ACTIONS } from "./availability"
 import { userAdapter } from "./organisation"
 import {
   createStatusOf,
@@ -357,6 +360,8 @@ export const vehicleAdapter: ResourceAdapter<Vehicle> = {
     if (write.compartments !== undefined) vehicle = await put<Vehicle>(client, `/vehicles/${serverId}/compartments`, { compartments: write.compartments })
     return vehicle ?? (await get<Vehicle>(client, `/vehicles/${serverId}`))
   },
+  // When it is out of use (O6 of #290): periods of its own, recorded and removed from its details.
+  actions: VEHICLE_AVAILABILITY_ACTIONS,
 }
 
 // ---------------------------------------------------------------------------
@@ -521,6 +526,8 @@ export const driverAdapter: ResourceAdapter<Driver> = {
   },
   create: (client, body) => create<Driver>(client, "/drivers", body).then((created) => created.body),
   update: (client, serverId, body) => patch<Driver>(client, `/drivers/${serverId}`, body),
+  // When the driver is away (O6 of #290): absences of their own, recorded and removed from the driver's details.
+  actions: DRIVER_AVAILABILITY_ACTIONS,
 }
 
 // ---------------------------------------------------------------------------

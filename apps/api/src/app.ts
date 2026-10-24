@@ -56,6 +56,7 @@ import { customerRoutes } from "./routes/customers"
 import { depotRoutes } from "./routes/depots"
 import { dropOffPointRoutes } from "./routes/drop-off-points"
 import { driverDoorRoutes } from "./routes/driver"
+import { availabilityRoutes } from "./routes/availability"
 import { driverRoutes } from "./routes/drivers"
 import { generationRoutes } from "./routes/generation"
 import { importRoutes } from "./routes/imports"
@@ -252,6 +253,7 @@ export function createApp({
   app.route("/", vehicleAllocationRoutes(guard))
   app.route("/", vehicleRoutes(guard))
   app.route("/", driverRoutes(guard))
+  app.route("/", availabilityRoutes(guard))
   // Execution's office (Issue #104, slice 3). The live read goes on before the
   // route module: Hono runs handlers in registration order, and `/routes/live`
   // would otherwise be caught by `/routes/:id`, whose path validator refuses

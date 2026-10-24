@@ -24,6 +24,7 @@ import { agreement, subscription, subscriptionPause } from "@waste/db/schema/agr
 import { containerType, product, serviceFrequency, wasteFraction } from "@waste/db/schema/catalogue"
 import { collectionCalendar, collectionCalendarHoliday } from "@waste/db/schema/collection-calendars"
 import { vehicleAllocation, vehicleAllocationEvent } from "@waste/db/schema/allocations"
+import { driverAbsence, vehicleUnavailability } from "@waste/db/schema/availability"
 import { container, containerServicePlacement } from "@waste/db/schema/containers"
 import { driverCommand, outboxEvent, pickup, proofOfService, route, session, unload } from "@waste/db/schema/execution"
 import {
@@ -307,6 +308,8 @@ export async function grantRole(pool: Database, companyId: string, roleId: strin
  * the run that wrote it) and before `route_scheme` (a run names its scheme).
  * The CSV import's two (#291 slice 12) go first: `import_run_row`, a ledger,
  * as the owner, then `import_run`, which names a project and an account.
+ * A driver's absences and a vehicle's unavailability (O6 of #290) go before
+ * the drivers and the vehicles they name.
  */
 export async function dropTenant(pool: Database, companyId: string, owner?: Database): Promise<void> {
   if (owner !== undefined) {
@@ -359,6 +362,8 @@ export async function dropTenant(pool: Database, companyId: string, owner?: Data
     await tx.delete(collectionGroupFraction).where(eq(collectionGroupFraction.companyId, companyId))
     await tx.delete(collectionGroup).where(eq(collectionGroup.companyId, companyId))
     await tx.delete(routeScheme).where(eq(routeScheme.companyId, companyId))
+    await tx.delete(driverAbsence).where(eq(driverAbsence.companyId, companyId))
+    await tx.delete(vehicleUnavailability).where(eq(vehicleUnavailability.companyId, companyId))
     await tx.delete(vehicleAllocation).where(eq(vehicleAllocation.companyId, companyId))
     await tx.delete(vehicleCompartmentFraction).where(eq(vehicleCompartmentFraction.companyId, companyId))
     await tx.delete(vehicleCompartment).where(eq(vehicleCompartment.companyId, companyId))

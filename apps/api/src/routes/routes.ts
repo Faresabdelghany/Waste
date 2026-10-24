@@ -116,6 +116,7 @@ import { askGeneration } from "./generation"
 import { handBackWindow } from "./route-holds"
 import { created, describeCreated, describeJson, IdParam, lockRow, lockRows, nextNumber, stamp, timeOf } from "./shared"
 import { refuseUnavailableDriver } from "./statuses"
+import { oneDay, refuseCrewAway, refuseDispatchAway } from "./availability-rules"
 
 const MODULE = "route-studio.routes"
 
@@ -292,6 +293,8 @@ async function dispatchRoute(tx: Tx, principal: Principal, id: string, at: Date)
   if (transition.kind === "refuse") throw problem(409, { detail: transition.sentence })
   if (transition.kind === "stay") return await detailOf(tx, principal.companyId, current)
   if (current.plannedDriverId === null) throw problem(409, { detail: noPlannedDriver(labelOf(current)) })
+  // The crew it goes out with is there on its day (O6 of #290): a period recorded after the assign stops the dispatch, each route of a bulk one its own.
+  await refuseDispatchAway(tx, { companyId: principal.companyId, projectId: current.projectId }, { vehicleId: current.plannedVehicleId, trailerId: current.plannedTrailerId, driverId: current.plannedDriverId }, current.operatingDate)
   const [row] = await tx
     .update(route)
     .set({ status: transition.to, dispatchedAt: at, heldAt: null })
@@ -434,14 +437,14 @@ export function routeRoutes(guard: MiddlewareHandler<AuthEnv>, { now = () => new
         operationId: "createRoute",
         summary: "Make an ad-hoc route",
         description:
-          "The office's ad-hoc route (#111): a route with no scheme and no group — `routeSchemeId` and `collectionGroupId` null — on one of the caller's projects, running on `operatingDate`, which is its `serviceDate` too, `planned`, numbered from the company's route counter (`RC-1100`), with the depot, the unloading station, the planned vehicle and the planned driver where the body names them and the note it gives. No generation run reads it: it is never refreshed, cancelled or held, its stops are the ones `POST /routes/{id}/pickups` adds, and from here every command of a generated route moves it, `release-hold` excepted. The vehicle is a powered vehicle of the project, the driver one of its drivers, the depot one of its depots and the station one of this company's — each refused (400) at its field — and where the body names both a driver and a vehicle, the driver holds the licence class the vehicle requires on the operating date, refused at `driverId` with the reason; then, after every 400, a vehicle that is not active and an inactive or a suspended driver are refused (409) naming the row and its status, as `assign` refuses them. The `route-reassigned` event is written in the same transaction when the body names a driver or a vehicle, carrying the route as answered here, as `assign` writes it when either moves.",
+          "The office's ad-hoc route (#111): a route with no scheme and no group — `routeSchemeId` and `collectionGroupId` null — on one of the caller's projects, running on `operatingDate`, which is its `serviceDate` too, `planned`, numbered from the company's route counter (`RC-1100`), with the depot, the unloading station, the planned vehicle and the planned driver where the body names them and the note it gives. No generation run reads it: it is never refreshed, cancelled or held, its stops are the ones `POST /routes/{id}/pickups` adds, and from here every command of a generated route moves it, `release-hold` excepted. The vehicle is a powered vehicle of the project, the driver one of its drivers, the depot one of its depots and the station one of this company's — each refused (400) at its field — and where the body names both a driver and a vehicle, the driver holds the licence class the vehicle requires on the operating date, refused at `driverId` with the reason; then, after every 400, a vehicle that is not active and an inactive or a suspended driver are refused (409) naming the row and its status, as `assign` refuses them, and then a vehicle out of use or a driver absent on the operating date (O6 of #290), naming the period. The `route-reassigned` event is written in the same transaction when the body names a driver or a vehicle, carrying the route as answered here, as `assign` writes it when either moves.",
         security: BEARER_SECURITY,
         responses: {
           201: describeCreated("The route, planned, with no stops yet.", RouteDetail),
           400: describeProblem("The body is missing the project or the day, names a member the command does not take, names a project this account does not work in, or names a vehicle, driver, depot or station the rules above refuse — each at the field that is wrong."),
           401: describeProblem("No usable token (see WWW-Authenticate)."),
           403: describeProblem(`No active account here, or the caller's role does not allow \`create\` on \`${MODULE}\`.`),
-          409: describeProblem("A vehicle the body names is not active, or a driver it names is inactive or suspended; the detail says which."),
+          409: describeProblem("A vehicle the body names is not active or is out of use on the day, or a driver it names is inactive, suspended or absent on the day; the detail says which."),
         },
       }),
       guard,
@@ -462,9 +465,10 @@ export function routeRoutes(guard: MiddlewareHandler<AuthEnv>, { now = () => new
         const driver = named.plannedDriverId === null ? null : await findDriver(tx, scope, named.plannedDriverId, "driverId")
         await requireLicenceOn(tx, scope, named, body.operatingDate, "driverId", { vehicle: vehicle ?? undefined, driver: driver ?? undefined })
 
-        // The statuses last, 409s after every 400.
+        // The statuses last, 409s after every 400; then whether the crew named is there on the day (O6 of #290).
         if (vehicle !== null) refuseVehicleNotActive(vehicle.status, vehicleLabel(vehicle))
         if (driver !== null) refuseUnavailableDriver(driver.status, driver.name, "a route")
+        await refuseCrewAway(tx, scope, { vehicleId: named.plannedVehicleId, driverId: named.plannedDriverId }, oneDay(body.operatingDate), "a route")
 
         const at = now()
         const number = await nextNumber(tx, principal.companyId, "nextRouteNumber")
@@ -513,7 +517,7 @@ export function routeRoutes(guard: MiddlewareHandler<AuthEnv>, { now = () => new
         description:
           "The `assign` command: moves the planned vehicle, driver, trailer, service provider, depot or unloading station of a route that has not started, any of them cleared with null; at least one field must be given. Under the route's row lock. A `planned` route stays `planned` and a `ready` one stays `ready` — a route already running is refused (409): the session's driver and vehicle are its actual assignment, and a swap mid-route is a Ticket's outcome later; a completed or cancelled route does not change. A `ready` route keeps a driver: it was dispatched to one, and a dispatched route without a driver would reach no device, so clearing `driverId` on it is refused (409, `Route RC-1042 is dispatched; assign another driver or cancel it`) where moving it to another driver is not. " +
           ASSIGN_RULES +
-          " " +
+          " A vehicle or trailer out of use, or a driver absent, on the operating date (O6 of #290) is refused (409) naming the period, after the statuses and for what the body names afresh alone. " +
           HOLDS +
           " The `route-reassigned` event is written in the same transaction when the driver, the vehicle or the service provider moved, carrying the route as answered here.",
         security: BEARER_SECURITY,
@@ -523,7 +527,7 @@ export function routeRoutes(guard: MiddlewareHandler<AuthEnv>, { now = () => new
             "The path does not hold an id, or the body changes nothing, names a member the command does not take, or names a vehicle, trailer, driver, service provider, depot or station the rules above refuse — each at the field that is wrong.",
           ),
           ...commandProblems("edit"),
-          409: describeProblem("The route is active, completed or cancelled, the body clears the driver of a ready route, or a vehicle or trailer named afresh is not active or a driver named afresh is inactive or suspended; the detail says which."),
+          409: describeProblem("The route is active, completed or cancelled, the body clears the driver of a ready route, or a vehicle or trailer named afresh is not active or is out of use on the operating date, or a driver named afresh is inactive, suspended or absent on it; the detail says which."),
         },
       }),
       guard,
@@ -560,10 +564,11 @@ export function routeRoutes(guard: MiddlewareHandler<AuthEnv>, { now = () => new
         if (moved.depot) await requireDepot(tx, scope, after.depotId)
         if (moved.station && after.unloadingStationId !== null) await requireStationAccepting(tx, principal.companyId, current.id, after.unloadingStationId)
 
-        // The statuses last, 409s after every 400: what the body named afresh is in service.
+        // The statuses last, 409s after every 400: what the body named afresh is in service, then there on the operating date (O6 of #290).
         if (vehicle !== null) refuseVehicleNotActive(vehicle.status, vehicleLabel(vehicle))
         if (trailer !== null) refuseVehicleNotActive(trailer.status, vehicleLabel(trailer), "trailer")
         if (driver !== null) refuseUnavailableDriver(driver.status, driver.name, "a route")
+        await refuseCrewAway(tx, scope, { vehicleId: vehicle?.id, trailerId: trailer?.id, driverId: driver?.id }, oneDay(current.operatingDate), "a route")
 
         const at = now()
         const changed = (Object.keys(after) as Array<keyof Assignment>).some((key) => after[key] !== current[key])
@@ -586,7 +591,7 @@ export function routeRoutes(guard: MiddlewareHandler<AuthEnv>, { now = () => new
         operationId: "dispatchRoutes",
         summary: "Dispatch a day of routes, or a selection",
         description:
-          "The `dispatch` command over many routes at once (O5 of #290): the body names one to fifty routes — a day's, or a selection of them; a larger day goes in several requests, since each route is a savepoint of the request's transaction — and each is judged exactly as `POST /routes/{id}/dispatch` judges it, in a savepoint of its own under its own row lock: `planned` becomes `ready` with `dispatchedAt` stamped and its hold cleared, and `route-dispatched` is written for it; a route already `ready` is answered as it stands; a route with no planned driver, an active, completed or cancelled one, and an id that is not a route of the caller's projects are refused, each on its own, and leave the others to go ahead. The answer is one result per id, in the body's order: `dispatched` with the route as it now stands, or `refused` with the status (404 or 409) and the sentence its own dispatch would have answered. The routes are locked first, in one statement in id order whatever the body's — the order a generation run locks a scheme's routes in — so a bulk dispatch and a run, or two bulk dispatches, over the same routes never wait on each other's second row. 200 whenever the body is well-formed, however many were refused.",
+          "The `dispatch` command over many routes at once (O5 of #290): the body names one to fifty routes — a day's, or a selection of them; a larger day goes in several requests, since each route is a savepoint of the request's transaction — and each is judged exactly as `POST /routes/{id}/dispatch` judges it, in a savepoint of its own under its own row lock: `planned` becomes `ready` with `dispatchedAt` stamped and its hold cleared, and `route-dispatched` is written for it; a route already `ready` is answered as it stands; a route with no planned driver, one whose planned crew is away on its day (O6 of #290: a driver absent, a vehicle or trailer out of use), an active, completed or cancelled one, and an id that is not a route of the caller's projects are refused, each on its own, and leave the others to go ahead. The answer is one result per id, in the body's order: `dispatched` with the route as it now stands, or `refused` with the status (404 or 409) and the sentence its own dispatch would have answered. The routes are locked first, in one statement in id order whatever the body's — the order a generation run locks a scheme's routes in — so a bulk dispatch and a run, or two bulk dispatches, over the same routes never wait on each other's second row. 200 whenever the body is well-formed, however many were refused.",
         security: BEARER_SECURITY,
         responses: {
           200: describeJson("One result per route, in the body's order: dispatched with the route, or refused with the status and why.", RouteDispatchResults),
@@ -626,13 +631,13 @@ export function routeRoutes(guard: MiddlewareHandler<AuthEnv>, { now = () => new
         operationId: "dispatchRoute",
         summary: "Dispatch a route to its driver",
         description:
-          "The `dispatch` command: `planned` becomes `ready`, `dispatchedAt` is stamped, and the route is frozen against regeneration (#97's rule) and reaches its driver's device; a hold `assign` or `reschedule` put on it (`heldAt`) is cleared, since the route is now frozen whole. A route without a planned driver is refused (409): the driver door's scope is the assignment, so a route without one reaches nobody — assign one first. A route already `ready` answers 200 as it stands, without a write; an active one is refused, and a completed or cancelled one does not change. Takes no body. Under the route's row lock; the `route-dispatched` event is written in the same transaction, carrying the route as answered here.",
+          "The `dispatch` command: `planned` becomes `ready`, `dispatchedAt` is stamped, and the route is frozen against regeneration (#97's rule) and reaches its driver's device; a hold `assign` or `reschedule` put on it (`heldAt`) is cleared, since the route is now frozen whole. A route without a planned driver is refused (409): the driver door's scope is the assignment, so a route without one reaches nobody — assign one first. A planned driver absent, or a planned vehicle or trailer out of use, on the operating date (O6 of #290) — a period recorded after the assign — is refused (409) naming the period: the route goes out with a crew that is there. A route already `ready` answers 200 as it stands, without a write; an active one is refused, and a completed or cancelled one does not change. Takes no body. Under the route's row lock; the `route-dispatched` event is written in the same transaction, carrying the route as answered here.",
         security: BEARER_SECURITY,
         responses: {
           200: describeJson("The route, dispatched.", RouteDetail),
           400: describeProblem("The path does not hold an id."),
           ...commandProblems("edit"),
-          409: describeProblem("The route has no planned driver, is already active, or is completed or cancelled; the detail says which."),
+          409: describeProblem("The route has no planned driver, its planned driver is absent or its planned vehicle or trailer out of use on the operating date, it is already active, or it is completed or cancelled; the detail says which."),
         },
       }),
       guard,
@@ -649,7 +654,7 @@ export function routeRoutes(guard: MiddlewareHandler<AuthEnv>, { now = () => new
         operationId: "rescheduleRoute",
         summary: "Move the day a route runs, or its start",
         description:
-          "The `reschedule` command: moves `operatingDate`, the day the route runs, or `plannedStartTime`, a time on the project's clock (null clears it); at least one must be given. The `serviceDate` never moves: with the scheme and the group it is the route's identity (ADR-0002). A route that has started is refused (409): the day it runs is fixed; a completed or cancelled one does not change. Where the route names both a planned driver and a planned vehicle, moving the day judges the driver's licence again on the new operating date, refused at `operatingDate` with the reason. Then the new day is judged against the project's calendar (O5 of #290), the rule generation keeps: a holiday on the project's list is a day the route does not run on unless its scheme collects on holidays, and a day of the project's weekend unless its scheme serves that weekday — for the office's ad-hoc route, which has no scheme, every holiday and weekend day. A move onto such a day is refused (409, `Sat 10 Oct is a Saturday of the project's weekend; confirm the move to run route RC-1042 on a non-working day`) until the body says `acceptNonWorkingDay: true`; the flag alone moves nothing, and a move onto a working day ignores it. " +
+          "The `reschedule` command: moves `operatingDate`, the day the route runs, or `plannedStartTime`, a time on the project's clock (null clears it); at least one must be given. The `serviceDate` never moves: with the scheme and the group it is the route's identity (ADR-0002). A route that has started is refused (409): the day it runs is fixed; a completed or cancelled one does not change. Where the route names both a planned driver and a planned vehicle, moving the day judges the driver's licence again on the new operating date, refused at `operatingDate` with the reason. A planned vehicle or trailer out of use, or a planned driver absent, on the new day (O6 of #290) is refused (409) naming the period, and the override below never takes that back. Then the new day is judged against the project's calendar (O5 of #290), the rule generation keeps: a holiday on the project's list is a day the route does not run on unless its scheme collects on holidays, and a day of the project's weekend unless its scheme serves that weekday — for the office's ad-hoc route, which has no scheme, every holiday and weekend day. A move onto such a day is refused (409, `Sat 10 Oct is a Saturday of the project's weekend; confirm the move to run route RC-1042 on a non-working day`) until the body says `acceptNonWorkingDay: true`; the flag alone moves nothing, and a move onto a working day ignores it. " +
           HOLDS +
           " Under the route's row lock.",
         security: BEARER_SECURITY,
@@ -657,7 +662,7 @@ export function routeRoutes(guard: MiddlewareHandler<AuthEnv>, { now = () => new
           200: describeJson("The route as it now stands.", RouteDetail),
           400: describeProblem("The path does not hold an id, or the body changes nothing, names a member the command does not take, or moves the day to one the planned driver may not take the planned vehicle on."),
           ...commandProblems("edit"),
-          409: describeProblem("The route is active, completed or cancelled, or the body moves it onto a holiday or a weekend day it does not run on without saying so; the detail says which."),
+          409: describeProblem("The route is active, completed or cancelled, the crew it names is away on the new day, or the body moves it onto a holiday or a weekend day it does not run on without saying so; the detail says which."),
         },
       }),
       guard,
@@ -674,6 +679,10 @@ export function routeRoutes(guard: MiddlewareHandler<AuthEnv>, { now = () => new
         const scope: Scope = { companyId: principal.companyId, projectId: current.projectId }
         const operatingDate = body.operatingDate ?? current.operatingDate
         if (body.operatingDate !== undefined) await requireLicenceOn(tx, scope, current, operatingDate, "operatingDate")
+        // A new day asks whether the crew the route names is there on it (O6 of #290), as the licence is judged again.
+        if (operatingDate !== current.operatingDate) {
+          await refuseCrewAway(tx, scope, { vehicleId: current.plannedVehicleId, trailerId: current.plannedTrailerId, driverId: current.plannedDriverId }, oneDay(operatingDate), "a route")
+        }
         // The 409 that needs the body, after its 400s: a day the route does not run on by its calendar is taken knowingly or not at all.
         if (operatingDate !== current.operatingDate && body.acceptNonWorkingDay !== true) {
           const reading = await operatingDayOf(tx, scope, current, operatingDate)

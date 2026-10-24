@@ -211,6 +211,13 @@
       "when": 1792868216557,
       "tag": "0029_waste_code",
       "breakpoints": true
+    },
+    {
+      "idx": 30,
+      "version": "7",
+      "when": 1792869628829,
+      "tag": "0030_absences",
+      "breakpoints": true
     }
   ]
 }
