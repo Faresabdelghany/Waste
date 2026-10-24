@@ -12,7 +12,7 @@
 // about, each from its switched module — and a closed list by the wire's
 // token, shown as a person reads it.
 import { singleFilterValue, type FilterValueReaders } from "@waste/domain/business-filters"
-import { TICKET_KINDS, TICKET_PRIORITIES, TICKET_RESOLUTIONS } from "@waste/domain/resolution/vocabulary"
+import { BILLABLE_RESOLUTIONS, TICKET_KINDS, TICKET_PRIORITIES, TICKET_RESOLUTIONS } from "@waste/domain/resolution/vocabulary"
 
 import { statusLabel, statusToken } from "../api/records/adapter"
 import { CONTAINERS_MODULE } from "../api/records/containers"
@@ -24,6 +24,7 @@ import { AGREEMENTS_MODULE } from "./agreements"
 import { DRIVERS_MODULE } from "./allocations"
 import type { BusinessFormField, BusinessFormOption, BusinessFormSchema, BusinessFormValues } from "./business-form-types"
 import type { BusinessRecord, ModuleLocation } from "./business-modules"
+import { PRODUCTS_MODULE } from "./commercial"
 import { mintedRecord, ORGANISATION_MODULE } from "./containers"
 import { CONTACTS_MODULE, NO_ONE, PROPERTIES_MODULE, SHARED_POINTS_MODULE } from "./properties"
 
@@ -121,16 +122,19 @@ const commandForm = (title: string, description: string, submitLabel: string, fi
 
 const note = (label: string, required: boolean): BusinessFormField => ({ id: "note", label, type: "textarea", required })
 const RECOLLECTED = { fieldId: "resolution", oneOf: ["recollected"] } as const
+/** The resolutions whose work Finance charges for (#291 C3): what a completion's product goes with. */
+const BILLABLE = { fieldId: "resolution", oneOf: [...BILLABLE_RESOLUTIONS] } as const
 
 /** Each command's dialog, its fields the keys its `toBody` reads. */
 export const TICKET_COMMAND_FORMS: Readonly<Record<TicketCommandWithForm, BusinessFormSchema>> = {
   assign: commandForm("Assign", "Who works the case: an account working in the ticket's project. None takes it off everyone.", "Assign", [assignee(), note("Note", false)]),
   wait: commandForm("Waiting for the customer", "The case waits on the customer; say for what.", "Set waiting", [note("Waiting for", true)]),
   hold: commandForm("Put on hold", "The case waits on the office; say for what.", "Put on hold", [note("Held for", true)]),
-  complete: commandForm("Complete", "What the case ended in. A re-collection rides on a route of the project that has not ended, and may name the stop of it the office added for it — both made in Route Studio, never here.", "Complete", [
+  complete: commandForm("Complete", "What the case ended in. A re-collection rides on a route of the project that has not ended, and may name the stop of it the office added for it — both made in Route Studio, never here. A re-collection or a service may name the product its work is charged at.", "Complete", [
     { id: "resolution", label: "Resolution", type: "select", required: true, options: tokenOptions(TICKET_RESOLUTIONS) },
     { id: "recollectionRouteId", label: "Re-collection route", type: "select", relation: ROUTES_MODULE, visibleWhen: RECOLLECTED, requiredWhen: RECOLLECTED, description: "The routes that have not ended." },
     { id: "recollectionPickupId", label: "Re-collection stop", type: "select", relation: PICKUPS_MODULE, visibleWhen: RECOLLECTED, description: "A stop on that route, planned or collected: the one the office added for it. None names the route alone." },
+    { id: "productId", label: "Charged at", type: "select", relation: PRODUCTS_MODULE, visibleWhen: BILLABLE, description: "A product of the ticket's project, never one sold by the month. None leaves the project's charge for the ticket's kind to stand in (Settings › Commercial › Ticket charges)." },
     note("How it was resolved", true),
   ]),
   reject: commandForm("Reject", "The case is not taken; the reason goes into its history.", "Reject", [{ id: "reason", label: "Reason", type: "textarea", required: true }]),

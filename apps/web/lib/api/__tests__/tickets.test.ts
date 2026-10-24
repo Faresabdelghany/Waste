@@ -427,6 +427,21 @@ describe("the ticket's commands", () => {
     assert.deepEqual(body("complete", { resolution: "serviced", note: "x", recollectionRouteId: rc1042.id, recollectionPickupId: `pickup-${pickupId}` }), { resolution: "serviced", note: "x" }, "a stop rides with recollected alone, as its route does")
   })
 
+  test("complete may name the product a re-collection's or a service's work is charged at, by server id; None leaves the kind's charge to stand in (#291 C3)", () => {
+    const productId = "01a0d2a4-a280-700a-8000-000000000005"
+    const bulky = { ...row(`product-${productId}`, "Bulky pickup", "Product"), submittedValues: { priceUnit: "job" } }
+    const withProduct: ServerRecordsState = new Map([...state, ["commercial.products", loaded({ records: [bulky], serverIds: serverIdsOf([bulky], [productId]) }, 1)]])
+    const complete = (input: Record<string, unknown>) => commands.complete?.toBody?.({ note: "Emptied again", ...input }, record, context(resolverOver(withProduct)))
+    const serviced = complete({ resolution: "serviced", productId: bulky.id })
+    assert.deepEqual(serviced, { resolution: "serviced", note: "Emptied again", productId })
+    assert.ok(TicketComplete.safeParse(serviced).success)
+    const recollected = complete({ resolution: "recollected", recollectionRouteId: rc1042.id, productId: bulky.id })
+    assert.deepEqual(recollected, { resolution: "recollected", note: "Emptied again", recollectionRouteId: routeId, productId }, "beside the route the re-collection rides on")
+    assert.deepEqual(complete({ resolution: "serviced", productId: NO_ONE }), { resolution: "serviced", note: "Emptied again" }, "None: the kind's charge stands in")
+    assert.deepEqual(complete({ resolution: "answered", productId: bulky.id }), { resolution: "answered", note: "Emptied again" }, "a product rides with a resolution Finance charges for alone")
+    assert.deepEqual(complete({ resolution: "serviced", productId: "Bulky pickup" }), { path: "productId", message: "Pick a product the API holds" })
+  })
+
   test("complete · recollected refuses a loaded stop of another route — picked before the route was changed — at the stop", () => {
     const stop = { ...row(`pickup-${pickupId}`, "Stop 4 · Parkvej 18", "Pickup"), submittedValues: { routeId: rc1042.id } }
     const withStop: ServerRecordsState = new Map([...state, ["route-studio.pickups", loaded({ records: [stop], serverIds: serverIdsOf([stop], [pickupId]) }, 1)]])

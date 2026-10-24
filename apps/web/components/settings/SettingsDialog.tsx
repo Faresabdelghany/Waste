@@ -23,6 +23,7 @@ import {
   SlidersHorizontal,
   SquaresFour,
   Tag,
+  Ticket,
   Timer,
   UserCircle,
   UsersThree,
@@ -181,6 +182,7 @@ const settingsSections: Array<{
     items: [
       { id: "commercial-products", label: "Products", icon: Package },
       { id: "commercial-price-lists", label: "Price lists", icon: Receipt },
+      { id: "commercial-ticket-charges", label: "Ticket charges", icon: Ticket },
     ],
   },
 ]
@@ -1403,6 +1405,11 @@ const visiblePaneDefinitions: Record<string, SettingsPaneDefinition> = {
   "commercial-products": {
     title: "Products",
     description: "The sellable catalogue — add and edit products here. Prices are managed in Price Engine.",
+    groups: [],
+  },
+  "commercial-ticket-charges": {
+    title: "Ticket charges",
+    description: "The product each ticket kind's re-collection or service is charged at when its completion names none (#291 C3).",
     groups: [],
   },
   "commercial-price-lists": {

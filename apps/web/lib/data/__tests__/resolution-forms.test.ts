@@ -39,6 +39,7 @@ const ids = {
   vehicle: "01a0d2a4-a280-7013-8000-000000000001",
   ticket: "01a0d2a4-a280-7040-8000-000000000001",
   alert: "01a0d2a4-a280-7041-8000-000000000001",
+  product: "01a0d2a4-a280-700a-8000-000000000005",
 }
 const row = (id: string, recordKind: string): BusinessRecord => ({ ...projectRecord, id, name: id, recordKind, facts: {}, submittedValues: {} })
 const rows: Array<[string, BusinessRecord, string]> = [
@@ -56,6 +57,7 @@ const rows: Array<[string, BusinessRecord, string]> = [
   ["fleet.vehicles", row(`vehicle-${ids.vehicle}`, "Vehicle"), ids.vehicle],
   ["operate.tickets", row(`ticket-${ids.ticket}`, "Ticket"), ids.ticket],
   ["operate.exceptions", row(`alert-${ids.alert}`, "Alert"), ids.alert],
+  ["commercial.products", row(`product-${ids.product}`, "Product"), ids.product],
 ]
 const state: ServerRecordsState = new Map(rows.map(([key, record, serverId]) => [key, loaded({ records: [record], serverIds: new Map([[record.id, serverId]]) }, 1)]))
 const context: MappingContext = { fixtures: [], resolve: resolverOver(state), companyRecordId: FIXTURE_COMPANY_ID, now: NOW }
@@ -112,7 +114,7 @@ describe("the ticket's command dialogs", () => {
     assign: [{ assigneeUserAccountId: web("configure.access"), note: "Taking it" }, TicketAssign],
     wait: [{ note: "The gate code" }, TicketWait],
     hold: [{ note: "A crane" }, TicketHold],
-    complete: [{ resolution: "recollected", recollectionRouteId: web("route-studio.routes"), recollectionPickupId: web("route-studio.pickups"), note: "On tomorrow's route" }, TicketComplete],
+    complete: [{ resolution: "recollected", recollectionRouteId: web("route-studio.routes"), recollectionPickupId: web("route-studio.pickups"), productId: web("commercial.products"), note: "On tomorrow's route" }, TicketComplete],
     reject: [{ reason: "Not ours" }, TicketReject],
     reopen: [{ note: "Came back" }, TicketReopen],
   }
