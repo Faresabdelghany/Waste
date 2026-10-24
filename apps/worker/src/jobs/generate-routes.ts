@@ -49,9 +49,9 @@
 //
 // A stop the office added (#111, `origin = office`) is read with the route's
 // others and left as it stands: `pickupChanges` never skips or moves it, and
-// never plans its container onto the route a second time. Which planned
-// routes carry an open one is one statement over the walk's routes, read
-// under their lock, so the domain can trim them rather than cancel them. A
+// never plans its container onto the route a second time. Which of the
+// walk's planned routes carry an open one is one statement, read under their
+// lock, so the domain can trim them rather than cancel them. A
 // route the office made, with no scheme, is never among a scheme's routes:
 // no run reads, refreshes or cancels it.
 //
@@ -258,16 +258,17 @@ async function generate(tx: Tx, runId: string, companyId: string, at: Date): Pro
     .from(route)
     .where(and(eq(route.companyId, companyId), eq(route.routeSchemeId, scheme.id), gte(route.serviceDate, walk.from), lte(route.serviceDate, walk.to)))
     .for("update")
-  // The planned routes among them that carry an open stop the office added (#111): trimmed, never cancelled under it.
+  // The planned routes among them that carry an open stop the office added (#111): trimmed, never cancelled under it. Only a planned route is the run's to cancel, so only those are asked.
+  const plannedIds = existingRoutes.filter((row) => row.status === "planned").map((row) => row.id)
   const officeStops =
-    existingRoutes.length === 0
+    plannedIds.length === 0
       ? new Set<string>()
       : new Set(
           (
             await tx
               .selectDistinct({ routeId: pickup.routeId })
               .from(pickup)
-              .where(and(eq(pickup.companyId, companyId), inArray(pickup.routeId, existingRoutes.map((row) => row.id)), eq(pickup.origin, "office"), eq(pickup.status, "planned")))
+              .where(and(eq(pickup.companyId, companyId), inArray(pickup.routeId, plannedIds), eq(pickup.origin, "office"), eq(pickup.status, "planned")))
           ).map((row) => row.routeId),
         )
   const plan = planRoutes({
@@ -359,6 +360,12 @@ async function generate(tx: Tx, runId: string, companyId: string, at: Date): Pro
 
   const numbers = { next: await takeNumbers(tx, companyId, plan.decisions.filter((decision) => decision.kind === "create").length) }
 
+  /** Skips open stops the scheme no longer plans, by regeneration with the sentence: a cancel's every open stop, a trim's own. Deletes nothing. */
+  const skipOpen = async (ids: readonly string[], note: string): Promise<void> => {
+    if (ids.length === 0) return
+    await tx.update(pickup).set({ status: "skipped", reason: "regeneration", note, outcomeAt: at }).where(and(eq(pickup.companyId, companyId), inArray(pickup.id, [...ids])))
+  }
+
   for (const decision of plan.decisions) {
     if (decision.kind === "leave" || decision.kind === "omit") continue
 
@@ -367,10 +374,12 @@ async function generate(tx: Tx, runId: string, companyId: string, at: Date): Pro
         .update(route)
         .set({ status: "cancelled", cancelledAt: at, cancelledByGeneration: true, note: decision.note, generationRunId: run.id, heldAt: null })
         .where(and(eq(route.companyId, companyId), eq(route.id, decision.routeId)))
-      const open = pickupsOf(decision.routeId).filter((row) => row.status === "planned").map((row) => row.id)
-      if (open.length > 0) {
-        await tx.update(pickup).set({ status: "skipped", reason: "regeneration", note: decision.note, outcomeAt: at }).where(and(eq(pickup.companyId, companyId), inArray(pickup.id, open)))
-      }
+      await skipOpen(
+        pickupsOf(decision.routeId)
+          .filter((row) => row.status === "planned")
+          .map((row) => row.id),
+        decision.note,
+      )
       counts.routesCancelled += 1
       continue
     }
@@ -381,10 +390,8 @@ async function generate(tx: Tx, runId: string, companyId: string, at: Date): Pro
       const current = existingRouteOf.get(decision.routeId)!
       if (own.length === 0 && current.note === decision.note) continue
       await tx.update(route).set({ note: decision.note, generationRunId: run.id }).where(and(eq(route.companyId, companyId), eq(route.id, decision.routeId)))
-      if (own.length > 0) {
-        await tx.update(pickup).set({ status: "skipped", reason: "regeneration", note: decision.note, outcomeAt: at }).where(and(eq(pickup.companyId, companyId), inArray(pickup.id, own)))
-        reshaped.push({ id: decision.routeId, operatingDate: current.operatingDate })
-      }
+      await skipOpen(own, decision.note)
+      if (own.length > 0) reshaped.push({ id: decision.routeId, operatingDate: current.operatingDate })
       counts.routesRefreshed += 1
       continue
     }

@@ -27,6 +27,7 @@ import { and, asc, eq } from "drizzle-orm"
 
 import { createApp } from "../app"
 import { NOT_A_PICKUP } from "../routes/references"
+import { stopWasMissed } from "../routes/tickets"
 import { alreadyAStop, NOT_A_CONTAINER, notPlacedOn } from "../routes/pickups"
 import { adHocNeverHeld, ORDER_IS_FROZEN } from "../routes/routes"
 import { callingAs, type Call } from "./calls"
@@ -67,6 +68,8 @@ describe("the ad-hoc route and the extra pickup", { skip: database.skip || owner
   let other: Call
   /** BIN-9, placed at Parkvej 18 as glass since January: the container the office's stop names. */
   let placed: { id: string; label: string }
+  /** BIN-8, whose placement and subscription stand while the agreement over them ended on 1 October: placed nowhere in force on Tuesday. */
+  let lapsed: { id: string; label: string }
   /** A shared collection point of Copenhagen Central, open. */
   let point: { id: string }
   /** A property of Copenhagen Central that is inactive. */
@@ -87,6 +90,7 @@ describe("the ad-hoc route and the extra pickup", { skip: database.skip || owner
       { moduleKey: "operate.driver-app", actions: ["view", "edit"] },
     ])
     placed = { id: testId(), label: "BIN-9" }
+    lapsed = { id: testId(), label: "BIN-8" }
     point = { id: testId() }
     inactive = { id: testId() }
     const scoped = { companyId: a.companyId, projectId: a.projects.copenhagen.id }
@@ -105,6 +109,13 @@ describe("the ad-hoc route and the extra pickup", { skip: database.skip || owner
         { id: testId(), ...scoped, validFrom: "2026-01-01", containerId: placed.id, subscriptionId, wasteFractionId: ex.fractions.glass.id },
         { id: testId(), ...scoped, validFrom: "2026-01-01", containerId: ex.containers.bin1.id, subscriptionId, wasteFractionId: ex.fractions.residual.id },
       ])
+      // An agreement that ended on 1 October over a subscription and a placement left open, as an import may leave them: generation would not plan BIN-8 on Tuesday, and neither may the office.
+      const endedId = testId()
+      const endedSubscriptionId = testId()
+      await tx.insert(agreement).values({ id: endedId, ...scoped, validFrom: "2026-01-01", validTo: "2026-10-01", number: "AGR-110", customerId, payerCustomerId: customerId, status: "active", billingCadence: "monthly", currency: "DKK" })
+      await tx.insert(subscription).values({ id: endedSubscriptionId, ...scoped, validFrom: "2026-01-01", agreementId: endedId, productId, propertyId: ex.properties.norrebrogade.id })
+      await tx.insert(container).values({ id: lapsed.id, ...scoped, label: lapsed.label, containerTypeId: ex.containerTypes.bin.id, ownership: "company" })
+      await tx.insert(containerServicePlacement).values({ id: testId(), ...scoped, validFrom: "2026-01-01", containerId: lapsed.id, subscriptionId: endedSubscriptionId, wasteFractionId: ex.fractions.residual.id })
       await tx.insert(sharedCollectionPoint).values({ id: point.id, ...scoped, name: "Miljøstation Nord", kind: "surface", address: "Parkvej 20, 2100 København Ø", location: TOWN_HALL, operatingModel: "municipal", accessMode: "open", billingMode: "municipal", status: "open" })
       await tx.insert(property).values({ id: inactive.id, ...scoped, name: "Gammel Kongevej 1", address: "Gammel Kongevej 1, 1610 København V", kind: "residential", location: TOWN_HALL, status: "inactive" })
     })
@@ -254,7 +265,8 @@ describe("the ad-hoc route and the extra pickup", { skip: database.skip || owner
       assert.deepEqual((await refused(await add(planned, { propertyId: ex.properties.harbor.id, wasteFractionId: ex.fractions.residual.id }), 400)).errors, [{ path: "propertyId", message: "Not a property of this project" }])
       assert.deepEqual((await refused(await add(planned, { propertyId: ex.properties.parkvej.id, wasteFractionId: testId() }), 400)).errors?.map((error) => error.path), ["wasteFractionId"])
       assert.equal((await refused(await add(planned, { containerId: ex.containers.bin2.id }), 409)).detail, notPlacedOn("BIN-2"))
-      assert.equal((await refused(await add(planned, { containerId: ex.containers.bin1.id }), 409)).detail, alreadyAStop("BIN-1", ex.routes.planned.label), "a container is one stop of a route, generation's or the office's")
+      assert.equal((await refused(await add(planned, { containerId: lapsed.id }), 409)).detail, notPlacedOn("BIN-8"), "its placement stands, its agreement does not: not in force, as generation judges a stop")
+      assert.equal((await refused(await add(planned, { containerId: ex.containers.bin1.id }), 409)).detail, alreadyAStop("BIN-1", ex.routes.planned.label, "planned"), "a container is one stop of a route, generation's or the office's")
       assert.equal((await refused(await add(planned, { propertyId: inactive.id, wasteFractionId: ex.fractions.residual.id }), 409)).detail, "The property is inactive; a stop needs an active property")
       // Nothing written by any of them.
       assert.equal((await read(planned)).pickups.filter((pickup) => pickup.origin === "office").length, 1, "the one stop the first test added")
@@ -264,7 +276,11 @@ describe("the ad-hoc route and the extra pickup", { skip: database.skip || owner
       const route = await made({})
       const stop = await added(route.id, { containerId: placed.id }, viewer)
       assert.deepEqual([stop.position, stop.origin], [1, "office"])
-      assert.equal((await refused(await add(route.id, { containerId: placed.id }, viewer), 409)).detail, alreadyAStop(placed.label, route.label))
+      assert.equal((await refused(await add(route.id, { containerId: placed.id }, viewer), 409)).detail, alreadyAStop(placed.label, route.label, "planned"))
+      // Taken off again, it is still the route's one stop of that container, and the refusal says what it stands at.
+      const removed = await olivia(`/pickups/${stop.id}/remove`, { method: "POST", body: { reason: "Added by mistake" } })
+      assert.equal(removed.status, 200, JSON.stringify(await removed.clone().json()))
+      assert.equal((await refused(await add(route.id, { containerId: placed.id }, viewer), 409)).detail, alreadyAStop(placed.label, route.label, "skipped"))
       // The ad-hoc route's service date is its day: the placement valid on Tuesday is the one read.
       assert.equal(stop.wasteFractionId, ex.fractions.glass.id)
     })
@@ -278,6 +294,10 @@ describe("the ad-hoc route and the extra pickup", { skip: database.skip || owner
       const complete = (values: Record<string, unknown>) => olivia(`/tickets/${ticket.id}/complete`, { method: "POST", body: { resolution: "recollected", note: "On Tuesday's extra stop", ...values } })
       assert.deepEqual((await refused(await complete({ recollectionRouteId: route.id, recollectionPickupId: ex.routes.planned.pickupIds[0] }), 400)).errors, [{ path: "recollectionPickupId", message: NOT_A_PICKUP }])
       assert.deepEqual((await refused(await complete({ recollectionPickupId: stop.id }), 400)).errors?.map((error) => error.path), ["recollectionPickupId"], "never without its route")
+      // A stop that was missed is no re-collection: one taken off the route is refused after the 400s.
+      const takenOff = await added(route.id, { propertyId: ex.properties.havnegade.id, wasteFractionId: ex.fractions.residual.id })
+      assert.equal((await olivia(`/pickups/${takenOff.id}/remove`, { method: "POST", body: { reason: "Wrong address" } })).status, 200)
+      assert.equal((await refused(await complete({ recollectionRouteId: route.id, recollectionPickupId: takenOff.id }), 409)).detail, stopWasMissed(takenOff.position, route.label, "skipped"))
       const response = await complete({ recollectionRouteId: route.id, recollectionPickupId: stop.id })
       assert.equal(response.status, 200, JSON.stringify(await response.clone().json()))
       const completed = Ticket.parse(await response.json())

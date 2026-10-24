@@ -10,17 +10,23 @@
 // record.
 //
 // The office's stop (#111) is `origin = office`, which generation's refresh
-// leaves where it is put, and it goes after the route's last position, so
-// the generated baseline before it stands; on a `ready` route the driver's
+// leaves where it is put, and it goes after the route's last position as the
+// route stands — generation never moves it, so a later refresh that grows the
+// plan may number its own stops past it, and the dispatcher's order (a
+// manual Plan) is how the office puts it elsewhere; on a `ready` route the driver's
 // device sees it through the sync and the driver door, and an active Plan
 // that does not name it reads stale and keeps it at the end of the order
-// until the next measurement. It names a container — whose placement and its
-// subscription valid on the route's service date give the place and the
-// fraction, the way generation resolves a stop — or an address of the
+// until the next measurement. It names a container — whose placement in
+// force on the route's service date, the placement, its subscription and its
+// agreement each valid that day, gives the place and the fraction, the way
+// generation resolves a stop — or an address of the
 // route's project, a property or a shared collection point served as a
 // subscription's is (routes/statuses.ts), with the fraction collected there:
 // an address-only stop, with no container. A container is one stop of a
-// route (`pickup_route_id_container_id_key`), whoever put it there. No event
+// route (`pickup_route_id_container_id_key`), whoever put it there and
+// whatever it now stands at, which the refusal says; the route's row lock,
+// which generation takes on the routes it reads too, serialises every writer
+// of a route's stops, so the stop is looked for before the insert. No event
 // is written: no consumer reads a stop's arrival, and Resolution and Finance
 // hear of it at its outcome like any other.
 //
@@ -53,7 +59,7 @@ import { Page } from "@waste/contracts/pagination"
 import { PickupAdd, PickupCorrection, PickupDetail, PickupListItem, PickupListQuery, PickupRemove } from "@waste/contracts/pickups"
 import type { Tx } from "@waste/db/client"
 import { validOn } from "@waste/db/query/valid-on"
-import { subscription } from "@waste/db/schema/agreements"
+import { agreement, subscription } from "@waste/db/schema/agreements"
 import { container, containerServicePlacement } from "@waste/db/schema/containers"
 import { pickup, proofOfService, route } from "@waste/db/schema/execution"
 import { pickupCorrection, pickupTransition } from "@waste/domain/execution/transitions"
@@ -74,7 +80,7 @@ import { sequenceIn, sequencesOfRoutes } from "./plan-shapes"
 import { requireProperty, requireRoute, requireSharedCollectionPoint, requireWasteFraction, type Scope } from "./references"
 import { lockedRoute, ORDER_IS_FROZEN, requireNotStarted, requireRan } from "./routes"
 import type { ClockOptions } from "./scheme-groups"
-import { created, describeCreated, describeJson, IdParam, lockRow, refuseDuplicate, stamp } from "./shared"
+import { created, describeCreated, describeJson, IdParam, lockRow, stamp } from "./shared"
 import { placeOf, refuseUnservedPlace } from "./statuses"
 
 const MODULE = "route-studio.pickups"
@@ -88,21 +94,23 @@ const A_STOP_IS_THE_DRIVERS = "a stop is skipped by the driver"
 export const NOT_A_CONTAINER = "Not a container of this project"
 
 /** What a container placed nowhere on the route's service date is told: there is no place to collect it at, and no fraction to say what it holds. */
-export const notPlacedOn = (container: string): string => `Container ${container} has no placement on the route's service date, so no place to collect it at`
+export const notPlacedOn = (container: string): string => `Container ${container} has no placement in force on the route's service date, so no place to collect it at`
 
-/** What a container already a stop of the route is told: one stop per container on a route, whoever put it there. */
-export const alreadyAStop = (container: string, route: string): string => `Container ${container} is a stop of route ${route} already`
+/** What a container already a stop of the route is told, with what that stop now stands at: one stop per container on a route, whoever put it there. */
+export const alreadyAStop = (container: string, route: string, status: PickupStatus): string => `Container ${container} is a stop of route ${route} already (${status}); a route has one stop per container`
 
 /** Where and what a stop the office adds collects: the place, one of the two, and the fraction. */
 type StopPlace = { propertyId: string | null; sharedCollectionPointId: string | null; wasteFractionId: string }
 
 /**
  * The place and the fraction of a container's stop on the route's service
- * date: the placement valid that day and its subscription valid that day,
- * the place the subscription names and the fraction the placement holds —
- * what generation writes a stop with. The container is the project's (400 at
- * `containerId`); a container with no such placement is a 409 naming it,
- * after the body's 400s, since the id is right and the row is there.
+ * date: the placement in force that day — the placement, its subscription and
+ * its agreement each valid that day, generation's own eligibility
+ * (apps/worker's stop matching) — the place the subscription names and the
+ * fraction the placement holds, what generation writes a stop with. The
+ * container is the project's (400 at `containerId`); a container with no such
+ * placement is a 409 naming it, after the body's 400s, since the id is right
+ * and the row is there.
  */
 async function containerStop(tx: Tx, scope: Scope, containerId: string, serviceDate: string): Promise<{ label: string; place: StopPlace | undefined }> {
   const [found] = await tx
@@ -118,6 +126,7 @@ async function containerStop(tx: Tx, scope: Scope, containerId: string, serviceD
       subscription,
       and(eq(subscription.companyId, containerServicePlacement.companyId), eq(subscription.projectId, containerServicePlacement.projectId), eq(subscription.id, containerServicePlacement.subscriptionId), validOn(subscription, serviceDate)),
     )
+    .innerJoin(agreement, and(eq(agreement.companyId, subscription.companyId), eq(agreement.projectId, subscription.projectId), eq(agreement.id, subscription.agreementId), validOn(agreement, serviceDate)))
     .where(and(eq(containerServicePlacement.companyId, scope.companyId), eq(containerServicePlacement.projectId, scope.projectId), eq(containerServicePlacement.containerId, containerId), validOn(containerServicePlacement, serviceDate)))
     .limit(1)
   return { label: found.label, place }
@@ -276,7 +285,7 @@ export function pickupRoutes(guard: MiddlewareHandler<AuthEnv>, { now = () => ne
         operationId: "addRoutePickup",
         summary: "Add a stop to a route that has not started",
         description:
-          "The office's stop (#111): a `planned` pickup with `origin` office, appended after the route's last position, on a `planned` or `ready` route — on a `ready` one the driver's device sees it through the existing reads, and an active Plan that does not name it reads stale and keeps it at the end of the order until the route is measured again. The body names a container of the route's project (400 at `containerId`), whose placement and its subscription valid on the route's service date give the stop its place and its fraction, as generation's would — a container with no such placement is refused (409, `Container BIN-82014 has no placement on the route's service date, so no place to collect it at`), and one already a stop of the route, whoever put it there, is refused (409) — or an address-only stop: a property or a shared collection point of the project (400 at its field) that is served as a subscription's place is, an active property or an open or restricted point (409 naming the status otherwise), with the waste fraction collected there (400 at `wasteFractionId` for one that is not this company's), and no container. The note is what the driver reads at the stop. Generation's refresh never skips or moves the stop, and never plans the container a second time onto the route. A route that has started is refused (409): its order is frozen; a completed or cancelled one does not change. Under the route's row lock; the route's `updatedAt` moves, since its stops are part of it on the wire. No event is written: Resolution and Finance hear of the stop at its outcome, as of any other.",
+          "The office's stop (#111): a `planned` pickup with `origin` office, appended after the route's last position as the route stands, on a `planned` or `ready` route — on a `ready` one the driver's device sees it through the existing reads, and an active Plan that does not name it reads stale and keeps it at the end of the order until the route is measured again. Generation never moves it, so a later refresh that grows the plan may number its own stops past it; the dispatcher's order is how it goes elsewhere. The body names a container of the route's project (400 at `containerId`), whose placement in force on the route's service date — the placement, its subscription and its agreement each valid that day, as generation judges a stop — gives the stop its place and its fraction: a container with no such placement is refused (409, `Container BIN-82014 has no placement in force on the route's service date, so no place to collect it at`), and one already a stop of the route, whoever put it there and whatever that stop stands at, is refused (409, naming its status) — or an address-only stop: a property or a shared collection point of the project (400 at its field) that is served as a subscription's place is, an active property or an open or restricted point (409 naming the status otherwise), with the waste fraction collected there (400 at `wasteFractionId` for one that is not this company's), and no container. The note is what the driver reads at the stop. Generation's refresh never skips or moves the stop, and never plans the container a second time onto the route. A route that has started is refused (409): its order is frozen; a completed or cancelled one does not change. Under the route's row lock; the route's `updatedAt` moves, since its stops are part of it on the wire. No event is written: Resolution and Finance hear of the stop at its outcome, as of any other.",
         security: BEARER_SECURITY,
         responses: {
           201: describeCreated("The stop, planned, with its `sequence` in the route's order and no proofs yet.", PickupDetail),
@@ -304,13 +313,19 @@ export function pickupRoutes(guard: MiddlewareHandler<AuthEnv>, { now = () => ne
           .select({ position: max(pickup.position) })
           .from(pickup)
           .where(and(eq(pickup.companyId, principal.companyId), eq(pickup.routeId, parent.id)))
-        // One stop per container on a route, the key's rule; an address-only stop names none and meets nothing.
-        const [row] = await refuseDuplicate(stop.label === null ? {} : { pickup_route_id_container_id_key: alreadyAStop(stop.label, labelOf(parent)) }, () =>
-          tx
-            .insert(pickup)
-            .values({ id: newId(), ...scope, routeId: parent.id, position: (last?.position ?? 0) + 1, origin: "office", note: body.note ?? null, ...stop.at })
-            .returning(pickupColumns),
-        )
+        // One stop per container on a route, the key's rule, whatever the stop now stands at; under the route's lock nobody adds one meanwhile. An address-only stop names none and meets nothing.
+        if (stop.label !== null && stop.at.containerId !== null) {
+          const [standing] = await tx
+            .select({ status: pickup.status })
+            .from(pickup)
+            .where(and(eq(pickup.companyId, principal.companyId), eq(pickup.routeId, parent.id), eq(pickup.containerId, stop.at.containerId)))
+            .limit(1)
+          if (standing !== undefined) throw problem(409, { detail: alreadyAStop(stop.label, labelOf(parent), standing.status as PickupStatus) })
+        }
+        const [row] = await tx
+          .insert(pickup)
+          .values({ id: newId(), ...scope, routeId: parent.id, position: (last?.position ?? 0) + 1, origin: "office", note: body.note ?? null, ...stop.at })
+          .returning(pickupColumns)
         await tx
           .update(route)
           .set(stamp())

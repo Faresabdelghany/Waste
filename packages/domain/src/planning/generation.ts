@@ -485,7 +485,12 @@ const samePlace = (existing: ExistingPickup, stop: PlannedStop): boolean =>
  * or with an outcome — is left as it stands, in or out of the plan. A stop
  * the office added (#111) is the office's whatever it holds: never skipped,
  * never moved, and a container it holds is the office's stop already, so the
- * plan's stop for that container is not inserted beside it.
+ * plan's stop for that container is not inserted beside it — a route has one
+ * stop per container, and the container is collected at the office's. That
+ * holds whatever the office's stop now stands at: one the dispatcher removed
+ * keeps the container off the route, as any stop a person decided does, and
+ * how a collection both planned and asked for by the office is charged is
+ * Finance's follow-up to decide.
  */
 export function pickupChanges(existing: readonly ExistingPickup[], planned: readonly PlannedStop[]): PickupChanges {
   const changes: PickupChanges = { insert: [], update: [], skip: [], unchanged: 0 }
