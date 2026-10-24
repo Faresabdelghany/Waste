@@ -77,6 +77,16 @@ describe("the seeded system roles", () => {
     assert.deepEqual(holders, ["company-administrator", "customer-service"])
   })
 
+  test("Customer Service reads the stops a ticket is about (M6 of #293): view on the stops, whose photos are the evidence a missed-collection dispute is answered with, and nothing else of Route Studio", () => {
+    const service = SYSTEM_ROLES.find((role) => role.key === "customer-service")
+    assert.ok(service)
+    const routeStudio = service.grants.filter((grant) => grant.moduleKey.startsWith("route-studio."))
+    assert.deepEqual(
+      routeStudio.map((grant) => [grant.moduleKey, grant.actions]),
+      [["route-studio.pickups", ["view"]]],
+    )
+  })
+
   test("every role that may move a route may make one: edit on route-studio.routes comes with create, the ad-hoc route being a dispatcher's daily job (#111)", () => {
     const routes = (key: string) => SYSTEM_ROLES.find((role) => role.key === key)?.grants.find((grant) => grant.moduleKey === "route-studio.routes")?.actions ?? []
     const editors = SYSTEM_ROLES.filter((role) => routes(role.key).includes("edit")).map((role) => role.key)
