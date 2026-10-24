@@ -135,6 +135,8 @@ export function toRouteRecord(route: RouteRead, context: MappingContext): Busine
   if (route.planned.depotId !== null) facts.Depot = nameVia(context, "depot", route.planned.depotId)
   if (route.planned.unloadingStationId !== null) facts.Unloading = nameVia(context, "station", route.planned.unloadingStationId)
   facts.Deviation = route.note ?? "None"
+  // Every stop it has, decided or not, as a generated route's fact in fixture mode: the scheme's routes table reads it (#252).
+  facts.Stops = String(route.progress.total)
   // A route the office moved by hand is held (#209): generation keeps what the office moved until an edit of the same releases it.
   const held = at(route.heldAt)
   if (held !== undefined) {

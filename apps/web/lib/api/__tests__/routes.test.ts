@@ -177,6 +177,7 @@ describe("a route", () => {
       Depot: "Nordhavn Depot",
       Unloading: "ARC Amager",
       Deviation: "None",
+      Stops: "3",
     })
     assert.deepEqual(record.submittedValues, {
       projectId: projectRecord.id,
@@ -234,6 +235,13 @@ describe("a route", () => {
     assert.equal(valueOf({ planned: 1, completed: 1, skipped: 1, failed: 0, total: 3, fraction: 2 / 3 }), "2/3 stops")
     assert.equal(valueOf({ planned: 0, completed: 3, skipped: 0, failed: 0, total: 3, fraction: 1 }), "3/3 stops")
     assert.equal(valueOf({ planned: 0, completed: 0, skipped: 0, failed: 0, total: 0, fraction: 0 }), "0 stops")
+  })
+
+  test("its Stops fact counts every stop it has, decided or not, as a generated route's does in fixture mode: the scheme's routes table reads it (#252)", () => {
+    const stopsOf = (progress: Route["progress"]) => routeAdapter.toRecord({ ...planned, progress }, context()).facts.Stops
+    assert.equal(stopsOf({ planned: 4, completed: 0, skipped: 0, failed: 0, total: 4, fraction: 0 }), "4")
+    assert.equal(stopsOf({ planned: 0, completed: 2, skipped: 1, failed: 1, total: 4, fraction: 1 }), "4")
+    assert.equal(stopsOf({ planned: 0, completed: 0, skipped: 0, failed: 0, total: 0, fraction: 0 }), "0")
   })
 
   test("says what moved it: the dispatch, the start, the actual assignment, a cancellation's reason", () => {
