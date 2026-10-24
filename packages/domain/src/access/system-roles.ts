@@ -165,6 +165,9 @@ export const SYSTEM_ROLES: readonly SystemRole[] = [
     grants: charter(
       workspace("customers", VIEW_EDIT_CREATE),
       workspace("operate", VIEW_EDIT_CREATE),
+      // The catalogue it sells from (#291): the products a subscription names and the price lists an agreement is priced under, read and never set.
+      only("commercial.products", VIEW),
+      only("commercial.price-rows", VIEW),
       only("commercial.invoices", VIEW),
       only("configure.templates", VIEW_EDIT),
     ),

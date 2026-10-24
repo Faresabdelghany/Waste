@@ -55,6 +55,17 @@ describe("the seeded system roles", () => {
     for (const grant of administrator.grants) assert.deepEqual([...grant.actions], [...ACTIONS])
   })
 
+  test("Customer Service reads the catalogue it sells from: the products a subscription names and the price lists an agreement is priced under, to view and nothing more (#291)", () => {
+    const service = SYSTEM_ROLES.find((role) => role.key === "customer-service")
+    assert.ok(service)
+    const actionsOn = (moduleKey: string) => service.grants.find((grant) => grant.moduleKey === moduleKey)?.actions
+    assert.deepEqual(actionsOn("commercial.products"), ["view"])
+    assert.deepEqual(actionsOn("commercial.price-rows"), ["view"])
+    assert.deepEqual(actionsOn("commercial.invoices"), ["view"])
+    assert.equal(actionsOn("commercial.events"), undefined, "the money the work makes stays Finance's")
+    assert.deepEqual(actionsOn("customers.agreements"), ["view", "edit", "create"])
+  })
+
   test("a hand-spelled role carries exactly its own modules: the driver's one, the driver door (#179)", () => {
     const driver = SYSTEM_ROLES.find((role) => role.key === "driver")
     assert.ok(driver)
