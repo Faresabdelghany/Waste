@@ -48,6 +48,10 @@ _Avoid_: Waste wizard, recycling dictionary, A–Z list
 One thing a Sorting Guide knows, such as a pizza box or a battery: its name, the other words it is known by, its waste fraction where it has one, and its instructions. It is a draft until published, and withdrawn rather than deleted.
 _Avoid_: Article, product (a Product is what is sold), entry
 
+**Collection Day**:
+A day a property's containers are collected, as generation plans it: the route that stands keeps its own day, and the rest follow the scheme's recurrence and holiday policy, a skipped holiday shown as such. What a published project's calendar by address and its feed tell a resident.
+_Avoid_: Pickup day (a Pickup is one stop on a route), bin day, tømmedag in copy that is not Danish
+
 **Customer**:
 A person or organization that receives or finances a service.
 _Avoid_: Property, payer, account

@@ -300,11 +300,12 @@ describe("the Execution tables against a fresh database", { skip: database.skip 
     })
 
   test("0008 created the seven tables in wms, each fenced, four with the updated_at trigger and the three ledgers with none, and gave company its counter at 1000", async () => {
+    // The API role's policies alone: the public door's own (0018) are public-door.test.ts's question.
     const names = Object.values(tables).map(getTableName).sort()
     assert.equal(names.length, 7)
     const rows = await owner.sql<{ table: string; enabled: boolean; forced: boolean; policies: string[]; triggers: string[] | null }[]>`
       select c.relname as table, c.relrowsecurity as enabled, c.relforcerowsecurity as forced,
-        (select array_agg(p.policyname order by p.policyname) from pg_policies p where p.schemaname = 'wms' and p.tablename = c.relname) as policies,
+        (select array_agg(p.policyname order by p.policyname) from pg_policies p where p.schemaname = 'wms' and p.tablename = c.relname and 'wms_api' = any (p.roles)) as policies,
         (select array_agg(t.tgname order by t.tgname) from pg_trigger t where t.tgrelid = c.oid and not t.tgisinternal) as triggers
       from pg_class c join pg_namespace n on n.oid = c.relnamespace
       where n.nspname = 'wms' and c.relkind = 'r' and c.relname = any (${names}::text[])

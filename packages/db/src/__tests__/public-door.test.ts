@@ -1,4 +1,4 @@
-// Migration 0017 against Postgres (Issue #293, ADR-0010), on a fresh database
+// Migrations 0017 and 0021 against Postgres (Issue #293, ADR-0010), on a fresh database
 // of this file's own: the public role as the catalog shows it, the exact
 // columns it may read and the nothing else it may do, and what a public
 // transaction (`withPublishedProject`) sees — a published project's own
@@ -119,6 +119,22 @@ describe("migration 0017, the public door's role", { skip: database.skip }, () =
       assert.deepEqual(later, { select: false })
       await tx`drop table wms.public_door_specimen_later`
     })
+  })
+
+  test("reads no column of a table about people, agreements, money or tickets: customers, parties, contacts, accounts, agreements, prices, events, invoices, tickets and alerts stay the office's (#293)", async () => {
+    const forbidden = await owner.sql<{ column: string }[]>`
+      select c.relname || '.' || a.attname as column
+      from pg_class c
+      join pg_namespace n on n.oid = c.relnamespace
+      join pg_attribute a on a.attrelid = c.oid and a.attnum > 0 and not a.attisdropped
+      where n.nspname = 'wms' and c.relkind in ('r', 'p')
+        and (c.relname in ('customer', 'user_account', 'agreement', 'product', 'billable_event', 'billing_run', 'invoice', 'invoice_line', 'ticket', 'ticket_event', 'alert', 'service_provider', 'settlement', 'proof_of_service', 'session', 'driver')
+          or c.relname like '%party%' or c.relname like '%contact%' or c.relname like 'price%')
+        and has_column_privilege(${PUBLIC_ROLE}, c.oid, a.attnum, 'SELECT')`
+    assert.deepEqual(forbidden.map((row) => row.column), [])
+    const property = await owner.sql<{ column: string }[]>`
+      select a.attname as column from pg_attribute a where a.attrelid = 'wms.property'::regclass and a.attnum > 0 and not a.attisdropped and has_column_privilege(${PUBLIC_ROLE}, a.attrelid, a.attnum, 'SELECT') order by 1`
+    assert.deepEqual(property.map((row) => row.column), ["address", "company_id", "id", "project_id"], "a property's address and keys, never its name, notes or location")
   })
 
   test("a published project's slug opens its own published items and its company's fractions, and nothing of a draft, a withdrawn item, an unpublished project or the other company", async () => {
