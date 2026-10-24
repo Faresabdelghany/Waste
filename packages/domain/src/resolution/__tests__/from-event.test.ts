@@ -25,6 +25,8 @@ const CONTAINER = "container"
 const PROPERTY = "property"
 const MADS = "mads"
 const KAREN = "karen"
+const CUSTOMER = "customer"
+const AGREEMENT = "agreement"
 
 /** A pickup's event with everything the worker could read, but for what a test overrides: Mads ran the route Karen was planned for. */
 const pickupEvent = (kind: PickupEventKind, values: Partial<PickupEventFacts> = {}): PickupEventFacts => ({
@@ -40,13 +42,15 @@ const pickupEvent = (kind: PickupEventKind, values: Partial<PickupEventFacts> = 
   address: "Parkvej 18",
   actualDriverId: MADS,
   plannedDriverId: KAREN,
+  agreementId: AGREEMENT,
+  customerId: CUSTOMER,
   ...values,
 })
 
 const rejection = (values: Partial<CommandRejectedFacts> = {}): CommandRejectedFacts => ({ kind: "command-rejected", routeId: ROUTE, pickupId: PICKUP, driverId: MADS, detail: "Pickup 12 is already completed", ...values })
 
-/** The links a pickup event's ticket carries: the stop's, with the driver given. */
-const stopLinks = (driverId: string | null) => ({ routeId: ROUTE, pickupId: PICKUP, containerId: CONTAINER, propertyId: PROPERTY, sharedCollectionPointId: null, driverId })
+/** The links a pickup event's ticket carries: the stop's, with the driver given, and the customer and agreement it served under. */
+const stopLinks = (driverId: string | null) => ({ routeId: ROUTE, pickupId: PICKUP, containerId: CONTAINER, propertyId: PROPERTY, sharedCollectionPointId: null, driverId, customerId: CUSTOMER, agreementId: AGREEMENT })
 
 describe("ticketFor", () => {
   test("a failed pickup is a high missed collection from the driver's device, naming the stop and the driver who ran the route", () => {
@@ -119,7 +123,7 @@ describe("ticketFor", () => {
     }
     // On the route alone: no stop, so no container and no place either — §3's "container and place then" — even where the facts carry them, and the subject says where only if the worker found an address.
     const onRoute = ticketFor(pickupEvent("pickup-problem-reported", { pickupId: null, containerId: CONTAINER, propertyId: PROPERTY, sharedCollectionPointId: "point", containerLabel: null, address: null, reason: "safety", note: "Road closed" }))
-    assert.deepEqual(onRoute?.links, { routeId: ROUTE, pickupId: null, containerId: null, propertyId: null, sharedCollectionPointId: null, driverId: MADS })
+    assert.deepEqual(onRoute?.links, { routeId: ROUTE, pickupId: null, containerId: null, propertyId: null, sharedCollectionPointId: null, driverId: MADS, customerId: null, agreementId: null }, "no stop, so no customer or agreement either")
     assert.equal(onRoute?.subject, "Problem reported: safety")
     // Named a stop, the three travel with it.
     assert.deepEqual(ticketFor(pickupEvent("pickup-problem-reported", { sharedCollectionPointId: "point" }))?.links, { ...stopLinks(MADS), sharedCollectionPointId: "point" })
@@ -132,11 +136,11 @@ describe("ticketFor", () => {
       source: "driver-app",
       subject: "Rejected command: Pickup 12 is already completed",
       description: "The driver's device sent a command the server refused. Note: Pickup 12 is already completed",
-      links: { routeId: ROUTE, pickupId: PICKUP, containerId: null, propertyId: null, sharedCollectionPointId: null, driverId: MADS },
+      links: { routeId: ROUTE, pickupId: PICKUP, containerId: null, propertyId: null, sharedCollectionPointId: null, driverId: MADS, customerId: null, agreementId: null },
     })
     // A command refused because no such route is assigned to the driver names no route and no pickup, and is still the driver's case.
     const noRoute = ticketFor(rejection({ routeId: null, pickupId: null, detail: "No route x assigned to this driver" }))
-    assert.deepEqual(noRoute?.links, { routeId: null, pickupId: null, containerId: null, propertyId: null, sharedCollectionPointId: null, driverId: MADS })
+    assert.deepEqual(noRoute?.links, { routeId: null, pickupId: null, containerId: null, propertyId: null, sharedCollectionPointId: null, driverId: MADS, customerId: null, agreementId: null })
   })
 
   test("every other kind is news and not a case: the route's own events, the completions, the corrections and the unloads answer nothing", () => {

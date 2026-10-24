@@ -22,8 +22,9 @@
 // worker is a bug and not a fact to swallow. Then one transaction as
 // `wms_api` under `withCompany(event.companyId)`, the job's tenant, in which
 // the worker's cross-tenant role reads nothing, since the job carries its
-// company: the container's label, the place's address and the route's two
-// drivers are read beside the payload in one statement each, the plain facts
+// company: the container's label, the place's address, the route's two
+// drivers and the agreement and customer the container served under on the
+// route's service date are read beside the payload in one statement each, the plain facts
 // go to the domain's `ticketFor`, and where it answers a draft the ticket is
 // opened through the same `openTicket` the office's create runs
 // (`@waste/db/commands/open-ticket`) with `createdBy` null and
@@ -97,7 +98,8 @@ import { emit } from "@waste/db/commands/outbox"
 import { ticketColumns, ticketOf, type TicketRow } from "@waste/db/commands/resolution-rows"
 import { newId } from "@waste/db/ids"
 import { tableObjectName } from "@waste/db/names"
-import { container } from "@waste/db/schema/containers"
+import { agreement, subscription } from "@waste/db/schema/agreements"
+import { container, containerServicePlacement } from "@waste/db/schema/containers"
 import { property, sharedCollectionPoint } from "@waste/db/schema/customers"
 import { route } from "@waste/db/schema/execution"
 import { ticket, ticketEvent } from "@waste/db/schema/resolution"
@@ -107,7 +109,7 @@ import type { OutboxKind } from "@waste/domain/execution/vocabulary"
 import { caseRuleOf, superseding, supersededNote, supersedingNote, type CaseRule, type Superseding } from "@waste/domain/resolution/cases"
 import { ticketFor, type EventFacts, type OtherEventFacts, type TicketDraft as DomainDraft } from "@waste/domain/resolution/from-event"
 import { OPEN_TICKET_STATUSES, type TicketKind, type TicketStatus } from "@waste/domain/resolution/vocabulary"
-import { and, asc, eq, inArray, sql } from "drizzle-orm"
+import { and, asc, eq, gt, inArray, isNull, lte, or, sql } from "drizzle-orm"
 import * as z from "zod"
 
 import { defineOutboxConsumer, RelayedEvent } from "../outbox/subscribe"
@@ -180,6 +182,25 @@ async function addressOf(tx: Tx, companyId: string, place: { propertyId: string 
   return null
 }
 
+/**
+ * The agreement the container served under on the route's service date, and
+ * its customer: the container's placement valid that day — the one
+ * generation named the stop's place from — through its subscription. Nulls
+ * for a container placed under none that day.
+ */
+async function servedUnder(tx: Tx, companyId: string, routeId: string, containerId: string): Promise<{ agreementId: string | null; customerId: string | null }> {
+  const placed = containerServicePlacement
+  const [found] = await tx
+    .select({ agreementId: agreement.id, customerId: agreement.customerId })
+    .from(route)
+    .innerJoin(placed, and(eq(placed.companyId, route.companyId), eq(placed.containerId, containerId), lte(placed.validFrom, route.serviceDate), or(isNull(placed.validTo), gt(placed.validTo, route.serviceDate))))
+    .innerJoin(subscription, and(eq(subscription.companyId, placed.companyId), eq(subscription.id, placed.subscriptionId)))
+    .innerJoin(agreement, and(eq(agreement.companyId, subscription.companyId), eq(agreement.id, subscription.agreementId)))
+    .where(and(eq(route.companyId, companyId), eq(route.id, routeId)))
+    .limit(1)
+  return found ?? { agreementId: null, customerId: null }
+}
+
 /** The route's Actual Assignment driver — null while nobody started it — and its Planned one. */
 async function driversOf(tx: Tx, companyId: string, routeId: string): Promise<{ actualDriverId: string | null; plannedDriverId: string | null }> {
   const [found] = await tx.select({ actualDriverId: route.actualDriverId, plannedDriverId: route.plannedDriverId }).from(route).where(and(eq(route.companyId, companyId), eq(route.id, routeId))).limit(1)
@@ -200,7 +221,7 @@ async function factsOf(tx: Tx, event: OutboxJob): Promise<EventFacts> {
     case "pickup-skipped": {
       const pickup = PickupPayload.parse(event.payload)
       const proof = pickup.proofs?.[0]
-      const [label, address, drivers] = [await containerLabel(tx, companyId, pickup.containerId), await addressOf(tx, companyId, pickup), await driversOf(tx, companyId, pickup.routeId)]
+      const [label, address, drivers, served] = [await containerLabel(tx, companyId, pickup.containerId), await addressOf(tx, companyId, pickup), await driversOf(tx, companyId, pickup.routeId), await servedUnder(tx, companyId, pickup.routeId, pickup.containerId)]
       return {
         kind: event.kind,
         routeId: pickup.routeId,
@@ -213,17 +234,18 @@ async function factsOf(tx: Tx, event: OutboxJob): Promise<EventFacts> {
         containerLabel: label,
         address,
         ...drivers,
+        ...served,
       }
     }
     case "pickup-problem-reported": {
       if (event.aggregateKind === "route") {
         const found = RoutePayload.parse(event.payload)
         const problem = found.proofs[0]
-        return { kind: event.kind, routeId: found.id, pickupId: null, containerId: null, propertyId: null, sharedCollectionPointId: null, reason: problem?.reason ?? null, note: problem?.note ?? null, containerLabel: null, address: null, ...(await driversOf(tx, companyId, found.id)) }
+        return { kind: event.kind, routeId: found.id, pickupId: null, containerId: null, propertyId: null, sharedCollectionPointId: null, reason: problem?.reason ?? null, note: problem?.note ?? null, containerLabel: null, address: null, ...(await driversOf(tx, companyId, found.id)), agreementId: null, customerId: null }
       }
       const pickup = PickupPayload.parse(event.payload)
       const problem = pickup.proofs?.[0]
-      const [label, address, drivers] = [await containerLabel(tx, companyId, pickup.containerId), await addressOf(tx, companyId, pickup), await driversOf(tx, companyId, pickup.routeId)]
+      const [label, address, drivers, served] = [await containerLabel(tx, companyId, pickup.containerId), await addressOf(tx, companyId, pickup), await driversOf(tx, companyId, pickup.routeId), await servedUnder(tx, companyId, pickup.routeId, pickup.containerId)]
       return {
         kind: event.kind,
         routeId: pickup.routeId,
@@ -236,6 +258,7 @@ async function factsOf(tx: Tx, event: OutboxJob): Promise<EventFacts> {
         containerLabel: label,
         address,
         ...drivers,
+        ...served,
       }
     }
     case "command-rejected": {
@@ -248,7 +271,7 @@ async function factsOf(tx: Tx, event: OutboxJob): Promise<EventFacts> {
   }
 }
 
-/** The domain's draft as `openTicket` takes it: the event's project and instant, no due date, nobody assigned, the nine links with the three the consumer never names null, no alert. */
+/** The domain's draft as `openTicket` takes it: the event's project and instant, no due date, nobody assigned, the nine links with the parent the consumer never names null, no alert. */
 const asTicketDraft = (event: OutboxJob, draft: DomainDraft): TicketDraft => ({
   projectId: event.projectId,
   kind: draft.kind,
@@ -259,7 +282,7 @@ const asTicketDraft = (event: OutboxJob, draft: DomainDraft): TicketDraft => ({
   occurredAt: new Date(event.occurredAt),
   dueAt: null,
   assigneeUserAccountId: null,
-  links: { ...draft.links, customerId: null, agreementId: null, parentTicketId: null },
+  links: { ...draft.links, parentTicketId: null },
   alertId: null,
 })
 

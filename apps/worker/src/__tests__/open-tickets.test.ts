@@ -106,8 +106,8 @@ describe("resolution.open-tickets", { skip: api.skip || owner.skip }, () => {
     )
     assert.deepEqual(
       [row.routeId, row.pickupId, row.containerId, row.propertyId, row.sharedCollectionPointId, row.driverId, row.customerId, row.agreementId, row.parentTicketId],
-      [seeded.id, failedId, tenant.containers.bin1.id, tenant.properties.parkvej.id, null, tenant.driverId, null, null, null],
-      "the links the event named, the driver the route's actual one",
+      [seeded.id, failedId, tenant.containers.bin1.id, tenant.properties.parkvej.id, null, tenant.driverId, tenant.customerId, tenant.agreementId, null],
+      "the links the event named, the driver the route's actual one, and the customer and agreement BIN-1 served under on the service date",
     )
     assert.deepEqual([row.createdBy, row.sourceEventId, row.assigneeUserAccountId, row.dueAt, row.projectId], [null, event.id, null, null, tenant.projectId], "an event's ticket: nobody's, the event's id, no SLA")
     assert.equal(row.occurredAt.toISOString(), event.occurredAt, "when it happened is the event's instant")
@@ -137,6 +137,7 @@ describe("resolution.open-tickets", { skip: api.skip || owner.skip }, () => {
     assert.equal((await openTicketFor(endedEvent, context())).outcome, "opened")
     const [byEnd] = await ticketsFrom(endedEvent.id)
     assert.deepEqual([byEnd.kind, byEnd.priority, byEnd.source, byEnd.subject, byEnd.driverId, byEnd.containerId, byEnd.propertyId], ["missed-collection", "medium", "driver-app", "Missed collection: BIN-2 at Havnegade 3, 1058 København K", tenant.driverId, tenant.containers.bin2.id, tenant.properties.havnegade.id])
+    assert.deepEqual([byEnd.customerId, byEnd.agreementId], [null, null], "BIN-2 served under no agreement that day")
     assert.equal(byEnd.description, "The route ended before this stop was collected. Reason: route-ended.")
 
     const cancelled = await seedRoute(pool, tenant, { status: "cancelled", pickups: [{ container: "bin1", status: "skipped", reason: "route-cancelled" }] })
@@ -187,6 +188,12 @@ describe("resolution.open-tickets", { skip: api.skip || owner.skip }, () => {
       [routeTicket.kind, routeTicket.subject, routeTicket.routeId, routeTicket.pickupId, routeTicket.containerId, routeTicket.propertyId, routeTicket.sharedCollectionPointId, routeTicket.driverId],
       ["reported-problem", "Problem reported: safety", seeded.id, null, null, null, null, tenant.driverId],
       "on the route alone: no stop, so no container and no place",
+    )
+    assert.deepEqual([routeTicket.customerId, routeTicket.agreementId], [null, null], "nor a customer or an agreement")
+    assert.deepEqual(
+      [stopTicket.customerId, stopTicket.agreementId],
+      [tenant.customerId, tenant.agreementId],
+      "a problem on a stop names whom the stop served",
     )
     assert.equal(routeTicket.description, "The driver reported a problem. Reason: safety. Note: Road closed at the harbour")
 

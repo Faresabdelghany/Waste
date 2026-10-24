@@ -25,6 +25,8 @@ const pickupEvent = (kind: PickupEventKind, values: Partial<PickupEventFacts> = 
   address: "Parkvej 18",
   actualDriverId: "mads",
   plannedDriverId: "karen",
+  agreementId: "agreement",
+  customerId: "customer",
   ...values,
 })
 const rejection: CommandRejectedFacts = { kind: "command-rejected", routeId: "route", pickupId: "pickup", driverId: "mads", detail: "Pickup 12 is already completed" }
