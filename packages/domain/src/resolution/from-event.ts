@@ -17,8 +17,9 @@
 // that the proof or the note records, and makes nothing. A
 // `pickup-problem-reported` is a `reported-problem`, on the stop it named or
 // on the route alone; a `command-rejected` is a `rejected-command`, the
-// driver's, and the worker folds it into the driver's open one where there is
-// one (§3). The route's own events, the completions, the corrections and the
+// driver's. Which case the ticket then belongs to — the driver's open one a
+// rejection folds into, the stop's open one a stop's event folds into or
+// supersedes — is `cases.ts` (§3, #258). The route's own events, the completions, the corrections and the
 // unloads are news nobody has to act on here — a `route-cancelled` makes
 // nothing of its own, since its closed stops each arrive as `pickup-skipped ·
 // route-cancelled` (#104 §5) — and Finance reads three of them.

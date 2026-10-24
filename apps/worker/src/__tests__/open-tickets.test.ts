@@ -7,7 +7,12 @@
 // skip (`not-presented`) completes with nothing written; a replay of the same
 // event opens no second ticket, through the read and through the key alike;
 // two rejections of one driver are one ticket and one comment, in either
-// order and under two workers at once; a problem on the route alone links no
+// order and under two workers at once, and a stop's events are one case
+// the same way whatever order they arrive in (#258) — a problem folds into
+// the stop's open case, never into a rejected command naming the stop, and a
+// missed collection supersedes the stop's open problem: its duplicate while
+// nobody has touched it, named from both sides when the office works it; a
+// case the office closes meanwhile is never written on; a problem on the route alone links no
 // container and no place; a payload that does not parse throws, so pg-boss
 // fails the job. The rule itself (`ticketFor`) is the domain's and proved
 // there over every kind and reason; here the question is whether the job
@@ -27,7 +32,8 @@ import { outboxEvent } from "@waste/db/schema/execution"
 import { driver } from "@waste/db/schema/fleet"
 import { ticket, ticketEvent } from "@waste/db/schema/resolution"
 import { withCompany } from "@waste/db/tenant"
-import { and, asc, eq } from "drizzle-orm"
+import { OPEN_TICKET_STATUSES } from "@waste/domain/resolution/vocabulary"
+import { and, asc, eq, inArray } from "drizzle-orm"
 
 import { JOBS } from "../jobs"
 import { OPEN_TICKETS_QUEUE_OPTIONS, openTicketFor, openTickets, RESOLUTION_KINDS, type OpenTicketsOutcome } from "../jobs/open-tickets"
@@ -253,7 +259,7 @@ describe("resolution.open-tickets", { skip: api.skip || owner.skip }, () => {
     assert.deepEqual((await outboxAbout(ticketId)).map((entry) => entry.kind), ["ticket-opened"], "one ticket-opened for the case, and none for a comment")
   })
 
-  test("two rejections of one driver arriving together, under two workers, make one ticket and one comment: the second waits on the driver's lock and reads what the first committed", async () => {
+  test("two rejections of one driver arriving together, under two workers, make one ticket and one comment: the second waits on the driver's key and reads what the first committed", async () => {
     const other = createDb(api.url, { max: 2 })
     try {
       const seeded = await seedRoute(pool, tenant, { status: "active", pickups: [{ container: "bin1", status: "planned" }] })
@@ -277,6 +283,227 @@ describe("resolution.open-tickets", { skip: api.skip || owner.skip }, () => {
         [events[first.outcome === "opened" ? 1 : 0].id],
         "the comment carries the loser's event id; the winner's is the ticket's",
       )
+    } finally {
+      await other.close()
+    }
+  })
+
+  /** A driver of the tenant's with no ticket yet, so a rejection of theirs opens one. */
+  const driverOfItsOwn = async (name: string) => {
+    const id = testId()
+    await withCompany(pool.db, tenant.companyId, async (tx) => {
+      await tx.insert(driver).values({ id, companyId: tenant.companyId, projectId: tenant.projectId, name, employment: "employee", licenceClass: "ce", licenceExpiry: "2030-12-31", status: "active" })
+    })
+    return id
+  }
+  /** The stop's open cases, oldest first. */
+  const openCasesOf = async (pickupId: string) =>
+    withCompany(pool.db, tenant.companyId, (tx) =>
+      tx.select().from(ticket).where(and(eq(ticket.companyId, tenant.companyId), eq(ticket.pickupId, pickupId), inArray(ticket.status, [...OPEN_TICKET_STATUSES]))).orderBy(asc(ticket.id)),
+    )
+
+  /** A problem the driver reports on a stop, with the problem proof the command made. */
+  const problemOn = (seeded: { id: string }, stop: string, container: "bin1" | "bin2", note: string, status: "planned" | "failed" = "failed") =>
+    outboxJob(tenant, {
+      kind: "pickup-problem-reported",
+      aggregateKind: "pickup",
+      aggregateId: stop,
+      payload: pickupPayload(tenant, seeded.id, stop, { container, status }, [proofPayload(tenant, seeded.id, stop, "problem", { reason: "inaccessible", note, recordedBy: testId() })]),
+    })
+  const failureOn = (seeded: { id: string }, stop: string, container: "bin1" | "bin2") =>
+    outboxJob(tenant, {
+      kind: "pickup-failed",
+      aggregateKind: "pickup",
+      aggregateId: stop,
+      payload: pickupPayload(tenant, seeded.id, stop, { container, status: "failed", reason: "inaccessible", note: "Gate locked" }, [proofPayload(tenant, seeded.id, stop, "failure", { reason: "inaccessible", note: "Gate locked", recordedBy: testId() })]),
+    })
+
+  // #258: a stop the driver fails and then reports a problem on, to ask for a recollection, is one case — the problem
+  // folds into the stop's open case as a comment, as a rejection folds into the driver's.
+  test("a problem reported on a stop whose failure is an open case folds into it, a comment carrying the reason and the note: one case per stop", async () => {
+    const seeded = await seedRoute(pool, tenant, { status: "active", pickups: [{ container: "bin1", status: "failed", reason: "inaccessible", note: "Gate locked" }] })
+    const [stop] = seeded.pickupIds
+    const failed = failureOn(seeded, stop, "bin1")
+    const opened = await openTicketFor(failed, context())
+    assert.equal(opened.outcome, "opened")
+    const ticketId = (opened as { ticketId: string }).ticketId
+
+    const problems = [problemOn(seeded, stop, "bin1", "Please send someone back today"), problemOn(seeded, stop, "bin1", "The gate is open now")]
+    for (const problem of problems) assert.deepEqual(await openTicketFor(problem, context()), { outcome: "commented", ticketId })
+    for (const problem of problems) assert.deepEqual(await ticketsFrom(problem.id), [], "the problem opened nothing of its own")
+    const history = await historyOf(ticketId)
+    assert.deepEqual(
+      history.map((entry) => [entry.kind, entry.status, entry.visibility, entry.recordedBy, entry.sourceEventId, entry.body]),
+      [
+        ["created", "open", "internal", null, null, null],
+        ["comment", "open", "internal", null, problems[0].id, "The driver reported a problem. Reason: inaccessible. Note: Please send someone back today"],
+        ["comment", "open", "internal", null, problems[1].id, "The driver reported a problem. Reason: inaccessible. Note: The gate is open now"],
+      ],
+    )
+    const row = await ticketById(ticketId)
+    assert.deepEqual([row.kind, row.subject], ["missed-collection", "Missed collection: BIN-1 at Parkvej 18, 2100 København Ø"], "the case is the failure's; a comment moves nothing of the row")
+    assert.deepEqual((await outboxAbout(ticketId)).map((entry) => entry.kind), ["ticket-opened"], "one ticket-opened for the case, and none for a comment")
+    assert.match(lines.at(-1)!, new RegExp(`^resolution\\.open-tickets: pickup-problem-reported ${problems[1].id} → commented \\(ticket ${ticketId}\\)$`))
+    assert.deepEqual(await openTicketFor(problems[0], context()), { outcome: "replayed", ticketId }, "a folded problem delivered again comments no second time")
+    assert.equal((await historyOf(ticketId)).length, 3)
+  })
+
+  test("a problem on a stop with no open case of its own opens one: the stop's case closed, another stop's case, or a rejected command naming the stop", async () => {
+    const seeded = await seedRoute(pool, tenant, { status: "active", pickups: [{ container: "bin1", status: "failed", reason: "inaccessible" }, { container: "bin2", status: "planned" }] })
+    const [failedStop, otherStop] = seeded.pickupIds
+    const failed = await openTicketFor(failureOn(seeded, failedStop, "bin1"), context())
+    const failedTicket = (failed as { ticketId: string }).ticketId
+
+    const elsewhere = await openTicketFor(problemOn(seeded, otherStop, "bin2", "Bin behind a locked fence", "planned"), context())
+    assert.equal(elsewhere.outcome, "opened", "another stop's case is not this one's")
+    assert.notEqual((elsewhere as { ticketId: string }).ticketId, failedTicket)
+
+    await withCompany(pool.db, tenant.companyId, (tx) => tx.update(ticket).set({ status: "rejected", closedAt: NOW }).where(and(eq(ticket.companyId, tenant.companyId), eq(ticket.id, failedTicket))))
+    const afterClosed = await openTicketFor(problemOn(seeded, failedStop, "bin1", "Still locked"), context())
+    assert.equal(afterClosed.outcome, "opened", "a closed case is closed: the problem is a case of its own")
+    assert.equal((await ticketById((afterClosed as { ticketId: string }).ticketId)).kind, "reported-problem")
+
+    // A rejected command naming a stop is the driver's device case, never the stop's: a driver of its own, so the rejection opens a ticket naming the stop.
+    const rejectedStop = await seedRoute(pool, tenant, { status: "active", pickups: [{ container: "bin2", status: "planned" }] })
+    const [stop] = rejectedStop.pickupIds
+    const device = await driverOfItsOwn("Device Driver")
+    const receipt = receiptPayload(tenant, { routeId: rejectedStop.id, pickupId: stop, detail: "Pickup 1 is already completed", driverId: device })
+    await seedReceipt(pool, tenant, receipt)
+    const rejection = await openTicketFor(outboxJob(tenant, { kind: "command-rejected", aggregateKind: "command", aggregateId: receipt.id, payload: receipt }), context())
+    assert.equal(rejection.outcome, "opened")
+    assert.deepEqual([(await ticketById((rejection as { ticketId: string }).ticketId)).kind, (await ticketById((rejection as { ticketId: string }).ticketId)).pickupId], ["rejected-command", stop])
+    const problem = await openTicketFor(problemOn(rejectedStop, stop, "bin2", "Container stuck in the ice", "planned"), context())
+    assert.equal(problem.outcome, "opened")
+    assert.notEqual((problem as { ticketId: string }).ticketId, (rejection as { ticketId: string }).ticketId)
+  })
+
+  test("a failure on a stop whose problem nobody has touched opens the missed collection and completes the problem as its duplicate, as the office's complete writes it, the problem's words copied over", async () => {
+    const seeded = await seedRoute(pool, tenant, { status: "active", pickups: [{ container: "bin1", status: "failed", reason: "inaccessible" }] })
+    const [stop] = seeded.pickupIds
+    const reported = await openTicketFor(problemOn(seeded, stop, "bin1", "Gate locked, please come back"), context())
+    assert.equal(reported.outcome, "opened")
+    const problemId = (reported as { ticketId: string }).ticketId
+    const problem = await ticketById(problemId)
+
+    const failed = await openTicketFor(failureOn(seeded, stop, "bin1"), context())
+    assert.equal(failed.outcome, "opened")
+    const missedId = (failed as { ticketId: string }).ticketId
+    assert.deepEqual((failed as { superseded?: unknown }).superseded, { ticketId: problemId, as: "duplicate" })
+    const missed = await ticketById(missedId)
+    assert.equal(missed.kind, "missed-collection", "the missed collection leads: its kind and its priority")
+
+    const closed = await ticketById(problemId)
+    assert.deepEqual([closed.status, closed.resolution, closed.closedAt?.toISOString()], ["completed", "duplicate", NOW.toISOString()])
+    assert.deepEqual(
+      (await historyOf(problemId)).map((entry) => [entry.kind, entry.status, entry.resolution, entry.recordedBy, entry.sourceEventId, entry.body]),
+      [
+        ["created", "open", null, null, null, null],
+        ["status-changed", "completed", "duplicate", null, null, `The stop was not collected: this problem is part of T-${missed.number}, its missed collection.`],
+      ],
+      "a status change nobody recorded, as the office's complete shapes it",
+    )
+    assert.deepEqual((await outboxAbout(problemId)).map((entry) => entry.kind), ["ticket-opened", "ticket-completed"], "ticket-completed emitted, as for the office's")
+    assert.deepEqual(
+      (await historyOf(missedId)).map((entry) => [entry.kind, entry.recordedBy, entry.body]),
+      [
+        ["created", null, null],
+        ["comment", null, `From T-${problem.number}, completed as a duplicate of this case: The driver reported a problem. Reason: inaccessible. Note: Gate locked, please come back`],
+      ],
+    )
+    assert.match(lines.at(-1)!, new RegExp(`→ opened \\(ticket ${missedId}, ticket ${problemId} its duplicate\\)$`))
+    assert.deepEqual((await openCasesOf(stop)).map((row) => row.id), [missedId], "one open case for the stop")
+    assert.deepEqual(await openTicketFor(problemOn(seeded, stop, "bin1", "Still locked"), context()), { outcome: "commented", ticketId: missedId }, "a later problem folds into the missed collection")
+  })
+
+  // Who the office assigned is the domain's table (cases.test.ts); here, the cases it moved.
+  test("a failure on a stop whose problem the office already works opens the missed collection and leaves the problem as the office left it, each case naming the other: never close a case someone is working", async () => {
+    for (const touched of ["in-progress", "on-hold"] as const) {
+      const seeded = await seedRoute(pool, tenant, { status: "active", pickups: [{ container: "bin2", status: "failed", reason: "inaccessible" }] })
+      const [stop] = seeded.pickupIds
+      const problemId = ((await openTicketFor(problemOn(seeded, stop, "bin2", "Blocked by scaffolding"), context())) as { ticketId: string }).ticketId
+      await withCompany(pool.db, tenant.companyId, (tx) =>
+        tx
+          .update(ticket)
+          .set({ status: touched })
+          .where(and(eq(ticket.companyId, tenant.companyId), eq(ticket.id, problemId))),
+      )
+      const before = await ticketById(problemId)
+
+      const failed = await openTicketFor(failureOn(seeded, stop, "bin2"), context())
+      const missedId = (failed as { ticketId: string }).ticketId
+      assert.deepEqual((failed as { superseded?: unknown }).superseded, { ticketId: problemId, as: "named" }, touched)
+      const missed = await ticketById(missedId)
+      const after = await ticketById(problemId)
+      assert.deepEqual([after.status, after.assigneeUserAccountId, after.resolution, after.closedAt], [before.status, before.assigneeUserAccountId, null, null], `${touched}: as the office left it`)
+      assert.deepEqual(
+        (await historyOf(problemId)).map((entry) => [entry.kind, entry.status, entry.body]).slice(1),
+        [["comment", before.status, `The stop was not collected: T-${missed.number} is its missed collection.`]],
+      )
+      assert.deepEqual((await historyOf(missedId)).map((entry) => [entry.kind, entry.body]).slice(1), [["comment", `T-${before.number} is a problem reported on this stop, which the office is working.`]])
+      assert.deepEqual((await outboxAbout(problemId)).map((entry) => entry.kind), ["ticket-opened"], "nothing completed")
+    }
+  })
+
+  test("a failure and a problem on one stop arriving together, under two workers, leave one open case whichever goes first: the problem folds into the missed collection, or the missed collection supersedes it", async () => {
+    const other = createDb(api.url, { max: 2 })
+    try {
+      for (let round = 0; round < 3; round++) {
+        const seeded = await seedRoute(pool, tenant, { status: "active", pickups: [{ container: "bin1", status: "failed", reason: "inaccessible" }] })
+        const [stop] = seeded.pickupIds
+        const [failed, reported] = await Promise.all([openTicketFor(failureOn(seeded, stop, "bin1"), context()), openTicketFor(problemOn(seeded, stop, "bin1", "Please come back"), { ...context(), api: other })])
+        const open = await openCasesOf(stop)
+        assert.deepEqual(open.map((row) => row.kind), ["missed-collection"], `round ${round}: one open case, the missed collection`)
+        assert.equal(open[0].id, (failed as { ticketId: string }).ticketId)
+        if (reported.outcome === "commented") assert.equal(reported.ticketId, open[0].id)
+        else assert.deepEqual((failed as { superseded?: unknown }).superseded, { ticketId: (reported as { ticketId: string }).ticketId, as: "duplicate" })
+      }
+    } finally {
+      await other.close()
+    }
+  })
+
+  test("a problem whose stop's case the office closes while the fold waits on the case's row is a case of its own, never a comment on a closed case", async () => {
+    const office = createDb(api.url, { max: 1 })
+    try {
+      const seeded = await seedRoute(pool, tenant, { status: "active", pickups: [{ container: "bin1", status: "failed", reason: "inaccessible" }] })
+      const [stop] = seeded.pickupIds
+      const caseId = ((await openTicketFor(failureOn(seeded, stop, "bin1"), context())) as { ticketId: string }).ticketId
+      let held!: () => void
+      const holding = new Promise<void>((resolve) => (held = resolve))
+      let release!: () => void
+      const released = new Promise<void>((resolve) => (release = resolve))
+      // The office's complete: the case's row lock, then the closing, committed once the job is waiting on it.
+      const closing = withCompany(office.db, tenant.companyId, async (tx) => {
+        await tx.select({ id: ticket.id }).from(ticket).where(and(eq(ticket.companyId, tenant.companyId), eq(ticket.id, caseId))).for("update")
+        held()
+        await released
+        await tx.update(ticket).set({ status: "completed", resolution: "recollected", closedAt: NOW }).where(and(eq(ticket.companyId, tenant.companyId), eq(ticket.id, caseId)))
+      })
+      await holding
+      const job = openTicketFor(problemOn(seeded, stop, "bin1", "Please come back"), context())
+      await new Promise((resolve) => setTimeout(resolve, 500))
+      release()
+      await closing
+      const outcome = await job
+      assert.equal(outcome.outcome, "opened", "the closed case is not the stop's open case any more")
+      assert.notEqual((outcome as { ticketId: string }).ticketId, caseId)
+      assert.deepEqual((await historyOf(caseId)).map((entry) => entry.kind), ["created"], "nothing written on the case the office closed")
+    } finally {
+      await office.close()
+    }
+  })
+
+  test("two problems on one stop arriving together, under two workers, are one case: the second waits on the stop's key and reads what the first committed", async () => {
+    const other = createDb(api.url, { max: 2 })
+    try {
+      const seeded = await seedRoute(pool, tenant, { status: "active", pickups: [{ container: "bin2", status: "planned" }] })
+      const [stop] = seeded.pickupIds
+      const events = [problemOn(seeded, stop, "bin2", "Blocked by a van", "planned"), problemOn(seeded, stop, "bin2", "Still blocked", "planned")]
+      const [first, second] = await Promise.all([openTicketFor(events[0], context()), openTicketFor(events[1], { ...context(), api: other })])
+      assert.deepEqual([first.outcome, second.outcome].sort(), ["commented", "opened"], "one opened, one commented, whichever went first")
+      const ticketId = (first as { ticketId: string }).ticketId
+      assert.equal((second as { ticketId: string }).ticketId, ticketId)
+      assert.deepEqual((await historyOf(ticketId)).map((entry) => entry.kind), ["created", "comment"])
     } finally {
       await other.close()
     }

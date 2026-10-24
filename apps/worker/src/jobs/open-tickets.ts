@@ -34,17 +34,37 @@
 // event named — a problem on the route alone names no stop and so no
 // container and no place, whatever was read.
 //
-// A `command-rejected` folds (§7.9): under the driver's row lock the
-// driver's open `rejected-command` ticket is looked up, and where there is
-// one a `comment` is appended to it — the draft's description as the body,
-// the words a ticket of its own would have carried, `source_event_id` the
-// event's id under `ticket_event_source_event_id_idx`, the second key — so a
-// device back after three days uploading a hundred and fifty rejections is
-// one case with a hundred and fifty lines and not a hundred and fifty cases;
-// where there is none the ticket is opened as above. The lock is what makes
-// two rejections of one driver arriving together, under two workers, one
-// ticket and one comment: the second waits on the first's lock and then
-// reads the ticket the first committed.
+// Which case an event's ticket belongs to is the domain's (`caseRuleOf`,
+// `@waste/domain/resolution/cases`, #258): one case per driver's device and
+// one per stop. A `command-rejected` folds (§7.9) into the driver's open
+// `rejected-command` ticket: a `comment` appended to it — the draft's
+// description as the body, the words a ticket of its own would have carried,
+// `source_event_id` the event's id under `ticket_event_source_event_id_idx`,
+// the second key — so a device back after three days uploading a hundred and
+// fifty rejections is one case with a hundred and fifty lines and not a
+// hundred and fifty cases. A problem reported on a stop folds the same way
+// into the stop's open missed collection or earlier problem, and a missed
+// collection into the stop's open missed collection; where there is none the
+// ticket is opened as above. A missed collection that opens leads the stop's
+// case whatever order its events arrived in: the stop's open reported problem
+// is completed as its `duplicate` — a `status-changed` with `recordedBy`
+// null, the row's `resolution` and `closedAt`, and `ticket-completed`
+// emitted, as the office's `complete` shapes them — while nobody has touched
+// it, `open` and unassigned, and the problem's words are copied onto the
+// missed collection; a problem the office works stays as the office left it,
+// and each case gets a comment naming the other. A comment moves nothing of
+// the case it lands on: a pending or on-hold case stays so.
+//
+// The events of one driver or one stop meet their case one at a time: each
+// takes a transaction advisory lock on the rule's key, the driver's or the
+// stop's, and reads the case under the case's own row lock (`for no key
+// update`, which the office's commands wait on and a foreign key's check
+// does not), so two rejections of one driver, or a failure and a problem on
+// one stop, arriving together under two workers are one case — the second
+// waits on the first's key and reads what it committed — and a case the
+// office closes meanwhile is not one written on. An advisory lock and not the
+// driver's or the pickup's row, which the API's commands take after the
+// route's and before rows that check a key to them, the other way round.
 //
 // pg-boss delivers at least once, so every job is idempotent by the event's
 // id: before the write, the event is looked for among the tickets and the
@@ -62,30 +82,32 @@
 // The retry policy: three retries with a short backoff, since what fails a
 // handler here is the database not answering or a payload that will never
 // parse — the first is over in seconds and the second is a failed job after
-// a minute, which is what the readiness count is for. Jobs are worked one
-// at a time in this process; a batch would put two events in one handler
-// and their failures together.
+// a minute, which is what the readiness count is for. Each queue's jobs are
+// worked one at a time — a batch would put two events in one handler and
+// their failures together — and each of the four queues has a loop of its
+// own, so events of one stop on two queues can meet: the key above is for
+// that.
 import { DriverCommandReceipt } from "@waste/contracts/driver-commands"
 import { Pickup } from "@waste/contracts/pickups"
 import { ProofOfService } from "@waste/contracts/proofs"
 import { routeFields } from "@waste/contracts/routes"
 import type { Database, Tx } from "@waste/db/client"
-import { appendTicketEvent, openTicket, type TicketDraft } from "@waste/db/commands/open-ticket"
-import { ticketColumns, type TicketRow } from "@waste/db/commands/resolution-rows"
-import { lockRow } from "@waste/db/commands/shared"
+import { appendTicketEvent, openTicket, type TicketDraft, type TicketEventDraft } from "@waste/db/commands/open-ticket"
+import { emit } from "@waste/db/commands/outbox"
+import { ticketColumns, ticketOf, type TicketRow } from "@waste/db/commands/resolution-rows"
 import { newId } from "@waste/db/ids"
 import { tableObjectName } from "@waste/db/names"
 import { container } from "@waste/db/schema/containers"
 import { property, sharedCollectionPoint } from "@waste/db/schema/customers"
 import { route } from "@waste/db/schema/execution"
-import { driver } from "@waste/db/schema/fleet"
 import { ticket, ticketEvent } from "@waste/db/schema/resolution"
 import { uniqueConstraintOf } from "@waste/db/sqlstate"
 import { withCompany } from "@waste/db/tenant"
 import type { OutboxKind } from "@waste/domain/execution/vocabulary"
+import { caseRuleOf, superseding, supersededNote, supersedingNote, type CaseRule, type Superseding } from "@waste/domain/resolution/cases"
 import { ticketFor, type EventFacts, type OtherEventFacts, type TicketDraft as DomainDraft } from "@waste/domain/resolution/from-event"
-import { OPEN_TICKET_STATUSES, type TicketStatus } from "@waste/domain/resolution/vocabulary"
-import { and, asc, eq, inArray } from "drizzle-orm"
+import { OPEN_TICKET_STATUSES, type TicketKind, type TicketStatus } from "@waste/domain/resolution/vocabulary"
+import { and, asc, eq, inArray, sql } from "drizzle-orm"
 import * as z from "zod"
 
 import { defineOutboxConsumer, RelayedEvent } from "../outbox/subscribe"
@@ -114,7 +136,10 @@ const TICKET_SOURCE_INDEX = tableObjectName(ticket, "source_event_id_idx", "open
 const EVENT_SOURCE_INDEX = tableObjectName(ticketEvent, "source_event_id_idx", "openTickets")
 
 /** What one job did, for its output. */
-export type OpenTicketsOutcome = { outcome: "opened" | "commented" | "replayed"; ticketId: string } | { outcome: "nothing" }
+export type OpenTicketsOutcome =
+  | { outcome: "opened"; ticketId: string; superseded?: { ticketId: string; as: Superseding } }
+  | { outcome: "commented" | "replayed"; ticketId: string }
+  | { outcome: "nothing" }
 
 /** The ticket already made from an event, or the ticket a comment already made from it was appended to. */
 async function handled(tx: Tx, companyId: string, eventId: string): Promise<string | undefined> {
@@ -238,42 +263,88 @@ const asTicketDraft = (event: OutboxJob, draft: DomainDraft): TicketDraft => ({
   alertId: null,
 })
 
-/** The driver's open `rejected-command` ticket in the event's project, the oldest where there are several; read under the driver's lock. */
-async function openRejectedCommandTicket(tx: Tx, companyId: string, projectId: string, driverId: string): Promise<TicketRow | undefined> {
+/** The rule's key, held to the end of the transaction: the events of one driver or one stop meet their case one at a time. */
+async function serialise(tx: Tx, rule: CaseRule): Promise<void> {
+  await tx.execute(sql`select pg_advisory_xact_lock(hashtextextended(${`resolution.open-tickets:${rule.by}:${rule.id}`}, 0))`)
+}
+
+/** The oldest open case of `kinds` that is the rule's — the driver's, or the stop's — in the event's project, under its row lock. */
+async function openCaseOf(tx: Tx, companyId: string, projectId: string, rule: CaseRule, kinds: readonly TicketKind[]): Promise<TicketRow | undefined> {
+  if (kinds.length === 0) return undefined
   const [found] = await tx
     .select(ticketColumns)
     .from(ticket)
-    .where(and(eq(ticket.companyId, companyId), eq(ticket.projectId, projectId), eq(ticket.driverId, driverId), eq(ticket.kind, "rejected-command"), inArray(ticket.status, [...OPEN_TICKET_STATUSES])))
+    .where(and(eq(ticket.companyId, companyId), eq(ticket.projectId, projectId), eq(rule.by === "driver" ? ticket.driverId : ticket.pickupId, rule.id), inArray(ticket.kind, [...kinds]), inArray(ticket.status, [...OPEN_TICKET_STATUSES])))
     .orderBy(asc(ticket.id))
     .limit(1)
+    .for("no key update")
   return found
 }
 
-/** One event, in one transaction as the tenant: the reads, the rule, the fold or the ticket. */
+/** A comment on a case, nobody's, as the history's snapshot of the case. */
+const commentOn = (row: TicketRow, body: string, sourceEventId: string | null): TicketEventDraft => ({
+  kind: "comment",
+  status: row.status as TicketStatus,
+  assigneeUserAccountId: row.assigneeUserAccountId,
+  resolution: null,
+  body,
+  visibility: "internal",
+  objectKey: null,
+  recordedBy: null,
+  sourceEventId,
+})
+
+const refOf = (companyId: string, row: TicketRow) => ({ companyId, projectId: row.projectId, id: row.id })
+const labelOf = (row: TicketRow) => `T-${row.number}`
+
+/**
+ * A stop's new missed collection over the stop's open reported problem: the
+ * problem completed as its duplicate while nobody has touched it — the row,
+ * a `status-changed` nobody recorded and `ticket-completed`, as the office's
+ * `complete` writes them — and its words copied onto the missed collection;
+ * otherwise each case names the other in a comment.
+ */
+async function supersede(tx: Tx, companyId: string, problem: TicketRow, missed: TicketRow, at: Date): Promise<Superseding> {
+  const how = superseding({ status: problem.status as TicketStatus, assigneeUserAccountId: problem.assigneeUserAccountId })
+  if (how === "duplicate") {
+    const [completed] = await tx.update(ticket).set({ status: "completed", resolution: "duplicate", closedAt: at }).where(and(eq(ticket.companyId, companyId), eq(ticket.id, problem.id))).returning(ticketColumns)
+    await appendTicketEvent(
+      tx,
+      refOf(companyId, completed),
+      { kind: "status-changed", status: "completed", assigneeUserAccountId: completed.assigneeUserAccountId, resolution: "duplicate", body: supersededNote(how, labelOf(missed)), visibility: "internal", objectKey: null, recordedBy: null, sourceEventId: null },
+      newId,
+    )
+    await emit(tx, { companyId }, { aggregate: "ticket", aggregateId: completed.id, kind: "ticket-completed", payload: ticketOf(completed), projectId: completed.projectId, occurredAt: at })
+  } else {
+    await appendTicketEvent(tx, refOf(companyId, problem), commentOn(problem, supersededNote(how, labelOf(missed)), null), newId)
+  }
+  await appendTicketEvent(tx, refOf(companyId, missed), commentOn(missed, supersedingNote(how, { label: labelOf(problem), description: problem.description }), null), newId)
+  return how
+}
+
+/** One event, in one transaction as the tenant: the reads, the rule, the fold or the ticket, and what the ticket supersedes. */
 async function consume(api: Database, event: OutboxJob, now: () => Date): Promise<OpenTicketsOutcome> {
   return await withCompany(api.db, event.companyId, async (tx) => {
-    const { companyId } = event
+    const { companyId, projectId } = event
     const facts = await factsOf(tx, event)
     const draft = ticketFor(facts)
     if (draft === undefined) return { outcome: "nothing" }
-    const folds = facts.kind === "command-rejected" ? facts.driverId : null
-    if (folds !== null) await lockRow(tx, driver, { companyId, id: folds })
+    const rule = caseRuleOf(facts, draft)
+    if (rule !== undefined) await serialise(tx, rule)
     const before = await handled(tx, companyId, event.id)
     if (before !== undefined) return { outcome: "replayed", ticketId: before }
-    if (folds !== null) {
-      const open = await openRejectedCommandTicket(tx, companyId, event.projectId, folds)
+    if (rule !== undefined) {
+      const open = await openCaseOf(tx, companyId, projectId, rule, rule.foldsInto)
       if (open !== undefined) {
-        await appendTicketEvent(
-          tx,
-          { companyId, projectId: open.projectId, id: open.id },
-          { kind: "comment", status: open.status as TicketStatus, assigneeUserAccountId: open.assigneeUserAccountId, resolution: null, body: draft.description, visibility: "internal", objectKey: null, recordedBy: null, sourceEventId: event.id },
-          newId,
-        )
+        await appendTicketEvent(tx, refOf(companyId, open), commentOn(open, draft.description, event.id), newId)
         return { outcome: "commented", ticketId: open.id }
       }
     }
     const { row } = await openTicket(tx, { companyId, draft: asTicketDraft(event, draft), createdBy: null, sourceEventId: event.id, newId, now })
-    return { outcome: "opened", ticketId: row.id }
+    // The case opened first, then the one it supersedes locked: the counter before a case's row, as the office's create takes them.
+    const superseded = rule === undefined ? undefined : await openCaseOf(tx, companyId, projectId, rule, rule.supersedes)
+    if (superseded === undefined) return { outcome: "opened", ticketId: row.id }
+    return { outcome: "opened", ticketId: row.id, superseded: { ticketId: superseded.id, as: await supersede(tx, companyId, superseded, row, now()) } }
   })
 }
 
@@ -287,7 +358,8 @@ export async function openTicketFor(data: unknown, { api, now, log }: Pick<JobCo
   const event: OutboxJob = RelayedEvent.parse(data)
   try {
     const outcome = await consume(api, event, now)
-    log(`resolution.open-tickets: ${event.kind} ${event.id} → ${outcome.outcome}${"ticketId" in outcome ? ` (ticket ${outcome.ticketId})` : ""}`)
+    const superseded = outcome.outcome === "opened" && outcome.superseded !== undefined ? `, ticket ${outcome.superseded.ticketId} ${outcome.superseded.as === "duplicate" ? "its duplicate" : "named"}` : ""
+    log(`resolution.open-tickets: ${event.kind} ${event.id} → ${outcome.outcome}${"ticketId" in outcome ? ` (ticket ${outcome.ticketId}${superseded})` : ""}`)
     return outcome
   } catch (error) {
     const constraint = uniqueConstraintOf(error)
@@ -305,7 +377,7 @@ export const OPEN_TICKETS_QUEUE_OPTIONS = { retryLimit: 3, retryDelay: 5, retryB
 /** The four registry entries, one per kind on `outbox.<kind>`; spread into `JOBS`. */
 export const openTickets = defineOutboxConsumer({
   kinds: RESOLUTION_KINDS,
-  description: "Opens a Ticket from each execution event that is a case — a failed stop, a stop closed unserved, a reported problem, a rejected command — one per event, a rejection folding into the driver's open one.",
+  description: "Opens a Ticket from each execution event that is a case — a failed stop, a stop closed unserved, a reported problem, a rejected command — one case per stop and per driver's device: a rejection folds into the driver's open one, a stop's event into the stop's, and a missed collection supersedes the stop's open problem.",
   queueOptions: OPEN_TICKETS_QUEUE_OPTIONS,
   handler: (event, context) => openTicketFor(event, context),
 })
