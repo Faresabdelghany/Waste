@@ -20,7 +20,8 @@
 // part B, migration 0012), one file of two tables that reference Planning's
 // scheme and group, and whose run Execution's `route` names back, which is
 // an import in execution.ts and no reordering here. What is exported here is
-// what `pnpm db:generate` sees and what the hand-written gate
+// what `pnpm db:generate` sees — the CSV import's run and its rows (#291
+// slice 12, migration 0018) last — and what the hand-written gate
 // (__tests__/hand-written.test.ts) holds to its fence and trigger, or to its
 // fence and revoke for a ledger.
 export * from "./wms"
@@ -44,3 +45,4 @@ export * from "./finance"
 export * from "./generation"
 export * from "./routing"
 export * from "./sorting-guide"
+export * from "./imports"

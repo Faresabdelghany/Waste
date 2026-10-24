@@ -51,7 +51,9 @@
 // the wire.
 //
 // The grant is `customers.agreements` throughout, subscriptions included: a
-// subscription is a line of an agreement and not a surface of its own.
+// subscription is a line of an agreement and not a surface of its own. The
+// four writes are the exported functions above `agreementRoutes`, which the
+// CSV import runs too.
 import {
   Agreement,
   AgreementCreate,
@@ -72,7 +74,7 @@ import { validOn } from "@waste/db/query/valid-on"
 import { agreement, subscription } from "@waste/db/schema/agreements"
 import { containerServicePlacement } from "@waste/db/schema/containers"
 import { count } from "@waste/domain/text"
-import { and, asc, eq, gt, or } from "drizzle-orm"
+import { and, asc, eq, gt, isNull, or } from "drizzle-orm"
 import type { PgColumn, PgTable } from "drizzle-orm/pg-core"
 import { Hono, type MiddlewareHandler } from "hono"
 import { describeRoute } from "hono-openapi"
@@ -286,6 +288,168 @@ async function requireAgreementList(tx: Tx, within: Scope, priceListId: string |
   if (list !== undefined && list.currency !== currency) throw invalidRequest("body", [{ path: "priceListId", message: listCurrencyDiffers(list.currency, currency) }])
 }
 
+// The writes, the one spelling these routes and the CSV import (#291 slice 12)
+// run, so an imported agreement is held to every rule a form's is. Each takes
+// the request's transaction, or a savepoint of it, and the caller; the grant
+// is the caller's to have checked.
+
+/** Writes an agreement in one of the caller's projects. */
+export async function createAgreement(tx: Tx, principal: Principal, values: AgreementCreate): Promise<Agreement> {
+  requireProject(principal, values.projectId)
+  const parties = await partyStatuses(tx, principal.companyId, values.customerId, values.payerCustomerId)
+  await requireAgreementList(tx, { companyId: principal.companyId, projectId: values.projectId }, values.priceListId, values.currency)
+  refuseInactiveParties(parties)
+  const [row] = await refuseOverlap({ [NUMBER_RUNNING]: numberRunning(values.number) }, () =>
+    tx
+      .insert(agreement)
+      .values({ ...values, id: newId(), companyId: principal.companyId })
+      .returning(columns),
+  )
+  return agreementOf(row)
+}
+
+/** Amends one agreement of the caller's projects; a 404 for one they do not reach. */
+export async function patchAgreement(tx: Tx, principal: Principal, id: string, patch: AgreementPatch): Promise<Agreement> {
+  // The row this patch counts children against, locked before it is
+  // read: a shortening and a subscription being added to it are the
+  // two halves of one rule, and they serialise here (routes/shared.ts).
+  await lockRow(tx, agreement, { companyId: principal.companyId, id })
+  const current = await findAgreement(tx, principal, id)
+  if (current === undefined) throw noSuchAgreement(id)
+  const parties = await partyStatuses(
+    tx,
+    principal.companyId,
+    changed(patch.customerId, current.customerId),
+    changed(patch.payerCustomerId, current.payerCustomerId),
+  )
+  const period = patch.validFrom !== undefined || patch.validTo !== undefined ? periodAfter(current, patch) : undefined
+  if (period !== undefined) requireOrdered(period)
+  // The list the patch leaves the agreement priced under, in the currency it leaves it billed in: judged when either moved, so a currency changed under a stored list is refused too.
+  if (patch.priceListId !== undefined || patch.currency !== undefined) {
+    await requireAgreementList(tx, { companyId: principal.companyId, projectId: current.projectId }, patch.priceListId === undefined ? current.priceListId : patch.priceListId, patch.currency ?? current.currency)
+  }
+
+  // Every 400 above, every 409 below (routes/statuses.ts).
+  refuseInactiveParties(parties)
+  if (period !== undefined) {
+    await refuseStranded(tx, subscription, strandedChildren(subscription, subscription.agreementId, { companyId: principal.companyId, id }, period), strandedSubscriptions)
+  }
+
+  const [row] = await refuseOverlap({ [NUMBER_RUNNING]: numberRunning(patch.number ?? current.number) }, () =>
+    tx
+      .update(agreement)
+      .set(patch)
+      .where(and(scope(principal), eq(agreement.id, id)))
+      .returning(columns),
+  )
+  if (row === undefined) throw noSuchAgreement(id)
+  return agreementOf(row)
+}
+
+/** Writes a subscription on one agreement of the caller's projects; a 404 for an agreement they do not reach. */
+export async function createSubscription(tx: Tx, principal: Principal, id: string, values: SubscriptionCreate): Promise<Subscription> {
+  // The agreement this subscription is held inside, locked before it
+  // is read, so a patch shortening it cannot commit between the two.
+  await lockRow(tx, agreement, { companyId: principal.companyId, id })
+  const parent = await findAgreement(tx, principal, id)
+  if (parent === undefined) throw noSuchAgreement(id)
+  const within = { companyId: principal.companyId, projectId: parent.projectId }
+  const productStatus = await requireProduct(tx, within, values.productId)
+  const propertyStatus = await requireProperty(tx, within, values.propertyId)
+  const pointStatus = await requireSharedCollectionPoint(tx, within, values.sharedCollectionPointId)
+  requireWithin(parent, periodOf(values), OUTSIDE_AGREEMENT)
+
+  // Every 400 above, every 409 below (routes/statuses.ts).
+  refuseUnofferedProduct(productStatus)
+  refuseUnservedPlace(placeOf(propertyStatus, pointStatus), "subscription")
+
+  const [row] = await refuseOverlap({ [PLACE_SUBSCRIBED]: PLACE_SUBSCRIBED_SENTENCE }, () =>
+    tx
+      .insert(subscription)
+      .values({
+        ...values,
+        id: newId(),
+        companyId: principal.companyId,
+        projectId: parent.projectId,
+        agreementId: parent.id,
+        propertyId: values.propertyId ?? null,
+        sharedCollectionPointId: values.sharedCollectionPointId ?? null,
+      })
+      .returning(subscriptionColumns),
+  )
+  return subscriptionOf(row)
+}
+
+/** Amends one subscription of the caller's projects; a 404 for one they do not reach. */
+export async function patchSubscription(tx: Tx, principal: Principal, id: string, patch: SubscriptionPatch): Promise<Subscription> {
+  let current = await findSubscription(tx, principal, id)
+  if (current === undefined) throw noSuchSubscription(id)
+
+  if (patch.validFrom !== undefined || patch.validTo !== undefined) {
+    // This patch is both a child of its agreement and the parent of
+    // its placements, so it takes both row locks — top down, the
+    // agreement first — and reads again underneath them, since the
+    // read above only said which agreement to lock.
+    await lockRow(tx, agreement, { companyId: principal.companyId, id: current.agreementId })
+    await lockRow(tx, subscription, { companyId: principal.companyId, id })
+    current = await findSubscription(tx, principal, id)
+    if (current === undefined) throw noSuchSubscription(id)
+
+    const period = periodAfter(current, patch)
+    requireWithin(current.agreement, period, OUTSIDE_AGREEMENT)
+    await refuseStranded(
+      tx,
+      containerServicePlacement,
+      strandedChildren(containerServicePlacement, containerServicePlacement.subscriptionId, { companyId: principal.companyId, id }, period),
+      strandedPlacements,
+    )
+  }
+
+  const [row] = await refuseOverlap({ [PLACE_SUBSCRIBED]: PLACE_SUBSCRIBED_SENTENCE }, () =>
+    tx
+      .update(subscription)
+      .set(patch)
+      .where(and(subscriptionScope(principal), eq(subscription.id, id)))
+      .returning(subscriptionColumns),
+  )
+  if (row === undefined) throw noSuchSubscription(id)
+  return subscriptionOf(row)
+}
+
+/** The agreement of one of the caller's projects with this number that starts on this day: the key a file names an agreement by. */
+export async function agreementStarting(tx: Tx, principal: Principal, projectId: string, number: string, validFrom: string): Promise<Agreement | undefined> {
+  const [row] = await tx
+    .select(columns)
+    .from(agreement)
+    .where(and(scope(principal), eq(agreement.projectId, projectId), eq(agreement.number, number), eq(agreement.validFrom, validFrom)))
+    .limit(1)
+  return row === undefined ? undefined : agreementOf(row)
+}
+
+/** The agreement's subscription to this product at this place that starts on this day: the key a file names a subscription by. */
+export async function subscriptionStarting(
+  tx: Tx,
+  principal: Principal,
+  agreementId: string,
+  key: { productId: string; propertyId: string | null; sharedCollectionPointId: string | null; validFrom: string },
+): Promise<Subscription | undefined> {
+  const [row] = await tx
+    .select(subscriptionColumns)
+    .from(subscription)
+    .where(
+      and(
+        subscriptionScope(principal),
+        eq(subscription.agreementId, agreementId),
+        eq(subscription.productId, key.productId),
+        key.propertyId === null ? isNull(subscription.propertyId) : eq(subscription.propertyId, key.propertyId),
+        key.sharedCollectionPointId === null ? isNull(subscription.sharedCollectionPointId) : eq(subscription.sharedCollectionPointId, key.sharedCollectionPointId),
+        eq(subscription.validFrom, key.validFrom),
+      ),
+    )
+    .limit(1)
+  return row === undefined ? undefined : subscriptionOf(row)
+}
+
 export function agreementRoutes(guard: MiddlewareHandler<AuthEnv>) {
   return new Hono<AuthEnv>()
     .get(
@@ -351,22 +515,7 @@ export function agreementRoutes(guard: MiddlewareHandler<AuthEnv>) {
       guard,
       requireGrant(MODULE, "create"),
       validate("json", AgreementCreate),
-      async (c) => {
-        const values = c.req.valid("json")
-        const tx = c.get("tx")
-        const principal = c.get("principal")
-        requireProject(principal, values.projectId)
-        const parties = await partyStatuses(tx, principal.companyId, values.customerId, values.payerCustomerId)
-        await requireAgreementList(tx, { companyId: principal.companyId, projectId: values.projectId }, values.priceListId, values.currency)
-        refuseInactiveParties(parties)
-        const [row] = await refuseOverlap({ [NUMBER_RUNNING]: numberRunning(values.number) }, () =>
-          tx
-            .insert(agreement)
-            .values({ ...values, id: newId(), companyId: principal.companyId })
-            .returning(columns),
-        )
-        return created(c, "/agreements", agreementOf(row))
-      },
+      async (c) => created(c, "/agreements", await createAgreement(c.get("tx"), c.get("principal"), c.req.valid("json"))),
     )
     .get(
       "/agreements/:id",
@@ -417,47 +566,7 @@ export function agreementRoutes(guard: MiddlewareHandler<AuthEnv>) {
       requireGrant(MODULE, "edit"),
       validate("param", IdParam),
       validate("json", AgreementPatch),
-      async (c) => {
-        const { id } = c.req.valid("param")
-        const patch = c.req.valid("json")
-        const tx = c.get("tx")
-        const principal = c.get("principal")
-
-        // The row this patch counts children against, locked before it is
-        // read: a shortening and a subscription being added to it are the
-        // two halves of one rule, and they serialise here (routes/shared.ts).
-        await lockRow(tx, agreement, { companyId: principal.companyId, id })
-        const current = await findAgreement(tx, principal, id)
-        if (current === undefined) throw noSuchAgreement(id)
-        const parties = await partyStatuses(
-          tx,
-          principal.companyId,
-          changed(patch.customerId, current.customerId),
-          changed(patch.payerCustomerId, current.payerCustomerId),
-        )
-        const period = patch.validFrom !== undefined || patch.validTo !== undefined ? periodAfter(current, patch) : undefined
-        if (period !== undefined) requireOrdered(period)
-        // The list the patch leaves the agreement priced under, in the currency it leaves it billed in: judged when either moved, so a currency changed under a stored list is refused too.
-        if (patch.priceListId !== undefined || patch.currency !== undefined) {
-          await requireAgreementList(tx, { companyId: principal.companyId, projectId: current.projectId }, patch.priceListId === undefined ? current.priceListId : patch.priceListId, patch.currency ?? current.currency)
-        }
-
-        // Every 400 above, every 409 below (routes/statuses.ts).
-        refuseInactiveParties(parties)
-        if (period !== undefined) {
-          await refuseStranded(tx, subscription, strandedChildren(subscription, subscription.agreementId, { companyId: principal.companyId, id }, period), strandedSubscriptions)
-        }
-
-        const [row] = await refuseOverlap({ [NUMBER_RUNNING]: numberRunning(patch.number ?? current.number) }, () =>
-          tx
-            .update(agreement)
-            .set(patch)
-            .where(and(scope(principal), eq(agreement.id, id)))
-            .returning(columns),
-        )
-        if (row === undefined) throw noSuchAgreement(id)
-        return c.json(agreementOf(row))
-      },
+      async (c) => c.json(await patchAgreement(c.get("tx"), c.get("principal"), c.req.valid("param").id, c.req.valid("json"))),
     )
     .get(
       "/agreements/:id/subscriptions",
@@ -525,43 +634,7 @@ export function agreementRoutes(guard: MiddlewareHandler<AuthEnv>) {
       requireGrant(MODULE, "create"),
       validate("param", IdParam),
       validate("json", SubscriptionCreate),
-      async (c) => {
-        const { id } = c.req.valid("param")
-        const values = c.req.valid("json")
-        const tx = c.get("tx")
-        const principal = c.get("principal")
-
-        // The agreement this subscription is held inside, locked before it
-        // is read, so a patch shortening it cannot commit between the two.
-        await lockRow(tx, agreement, { companyId: principal.companyId, id })
-        const parent = await findAgreement(tx, principal, id)
-        if (parent === undefined) throw noSuchAgreement(id)
-        const within = { companyId: principal.companyId, projectId: parent.projectId }
-        const productStatus = await requireProduct(tx, within, values.productId)
-        const propertyStatus = await requireProperty(tx, within, values.propertyId)
-        const pointStatus = await requireSharedCollectionPoint(tx, within, values.sharedCollectionPointId)
-        requireWithin(parent, periodOf(values), OUTSIDE_AGREEMENT)
-
-        // Every 400 above, every 409 below (routes/statuses.ts).
-        refuseUnofferedProduct(productStatus)
-        refuseUnservedPlace(placeOf(propertyStatus, pointStatus), "subscription")
-
-        const [row] = await refuseOverlap({ [PLACE_SUBSCRIBED]: PLACE_SUBSCRIBED_SENTENCE }, () =>
-          tx
-            .insert(subscription)
-            .values({
-              ...values,
-              id: newId(),
-              companyId: principal.companyId,
-              projectId: parent.projectId,
-              agreementId: parent.id,
-              propertyId: values.propertyId ?? null,
-              sharedCollectionPointId: values.sharedCollectionPointId ?? null,
-            })
-            .returning(subscriptionColumns),
-        )
-        return created(c, "/subscriptions", subscriptionOf(row))
-      },
+      async (c) => created(c, "/subscriptions", await createSubscription(c.get("tx"), c.get("principal"), c.req.valid("param").id, c.req.valid("json"))),
     )
     .get(
       "/subscriptions",
@@ -653,44 +726,6 @@ export function agreementRoutes(guard: MiddlewareHandler<AuthEnv>) {
       requireGrant(MODULE, "edit"),
       validate("param", IdParam),
       validate("json", SubscriptionPatch),
-      async (c) => {
-        const { id } = c.req.valid("param")
-        const patch = c.req.valid("json")
-        const tx = c.get("tx")
-        const principal = c.get("principal")
-
-        let current = await findSubscription(tx, principal, id)
-        if (current === undefined) throw noSuchSubscription(id)
-
-        if (patch.validFrom !== undefined || patch.validTo !== undefined) {
-          // This patch is both a child of its agreement and the parent of
-          // its placements, so it takes both row locks — top down, the
-          // agreement first — and reads again underneath them, since the
-          // read above only said which agreement to lock.
-          await lockRow(tx, agreement, { companyId: principal.companyId, id: current.agreementId })
-          await lockRow(tx, subscription, { companyId: principal.companyId, id })
-          current = await findSubscription(tx, principal, id)
-          if (current === undefined) throw noSuchSubscription(id)
-
-          const period = periodAfter(current, patch)
-          requireWithin(current.agreement, period, OUTSIDE_AGREEMENT)
-          await refuseStranded(
-            tx,
-            containerServicePlacement,
-            strandedChildren(containerServicePlacement, containerServicePlacement.subscriptionId, { companyId: principal.companyId, id }, period),
-            strandedPlacements,
-          )
-        }
-
-        const [row] = await refuseOverlap({ [PLACE_SUBSCRIBED]: PLACE_SUBSCRIBED_SENTENCE }, () =>
-          tx
-            .update(subscription)
-            .set(patch)
-            .where(and(subscriptionScope(principal), eq(subscription.id, id)))
-            .returning(subscriptionColumns),
-        )
-        if (row === undefined) throw noSuchSubscription(id)
-        return c.json(subscriptionOf(row))
-      },
+      async (c) => c.json(await patchSubscription(c.get("tx"), c.get("principal"), c.req.valid("param").id, c.req.valid("json"))),
     )
 }
