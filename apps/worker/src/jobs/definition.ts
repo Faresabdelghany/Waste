@@ -10,6 +10,7 @@
 // context, so a test runs it with pools of its own.
 import type { Database } from "@waste/db/client"
 import type { Complete, Send } from "@waste/db/jobs"
+import type { ProofStorage } from "@waste/db/storage"
 import type { QuotaEngine } from "@waste/routing/quota"
 import type { Job, Queue, QueueOptions, ScheduleOptions, WorkOptions } from "pg-boss"
 
@@ -70,6 +71,10 @@ export type JobContext = {
    * needs, means the code's own defaults.
    */
   pollingIntervalSeconds?: number
+  /** The proofs' Storage (O1 of #290), where the deployment holds Supabase's URL and service-role key; undefined, the purge removes nothing. main.ts builds it; a test hands in a fake. */
+  proofStorage?: ProofStorage
+  /** How many days a photo or a signature is kept, `PROOF_RETENTION_DAYS`: a Pilot setting, never a code default; undefined, the purge removes nothing. */
+  proofRetentionDays?: number
 }
 
 /**

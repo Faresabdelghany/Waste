@@ -42,6 +42,8 @@ Only the account holder can do these (tracking issue #191 lists them). The value
    | `OPENROUTESERVICE_API_KEY` | the account's key, from the password manager; the worker's jobs and the API's guided-setup preview (#173) call the provider with it, and with the provider named and no key each refuses to start |
    | `ROUTING_PREVIEW_CALLS_PER_MINUTE` | unset, the API's 10; with the worker's `ROUTING_CALLS_PER_MINUTE` (unset, 30) the Standard plan's 40 a minute, so a change to one is a change to the other (#173) |
    | `PUBLIC_TRUSTED_PROXIES` | `1` once Suga's proxy is known to append exactly one `X-Forwarded-For` entry (ADR-0010); until then unset, and every public reader counts as Suga's proxy, one allowance for all |
+   | `SUPABASE_SERVICE_ROLE_KEY` | the project's service-role key, from the dashboard's API settings, into the password manager; the API signs proof photos' and signatures' uploads and reads with it and the worker's purge removes old ones (O1 of #290). Server-side only, never the web's; unset, the photo routes answer 503 and nothing is purged |
+   | `PROOF_RETENTION_DAYS` | `90`: a photo or a signature older than this leaves Storage at the nightly purge, unless an open ticket names its stop |
 
    `HOST`, `WORKER_HOST`, `WORKER_PORT` and `NODE_EXTRA_CA_CERTS` are the image's own. The three secrets are the `pilot` environment's `PILOT_DATABASE_URL`, `PILOT_WORKER_DATABASE_URL` and the project's origin, and go nowhere else (`supabase/README.md`).
 4. **The repository variable** `PILOT_API_URL`: the service's `https://<name>.suga.run`, which the release's proof reads.
@@ -65,5 +67,7 @@ Each is read once in the app's `env.ts` and applied in one place; absent means t
 | `ROUTING_PREVIEW_CALLS_PER_MINUTE` | the API | 10 | each routing family's calls a minute from the guided setup's preview (#173), which never waits for the minute and answers the estimate instead |
 | `PUBLIC_REQUESTS_PER_MINUTE` | the API | 60 | each public client's requests a minute on the public door (ADR-0010) |
 | `PUBLIC_TRUSTED_PROXIES` | the API | 0 | how many proxies in front append to `X-Forwarded-For`; 0 ignores the header and counts the socket's peer (`apps/api/src/auth/public-door.ts`) |
+| `SUPABASE_SERVICE_ROLE_KEY` | the API and the worker | no Storage | the API signs a proof's upload and its read URLs (`@waste/db/storage`), and without it `POST /driver/uploads` and `GET /pickups/:id/proof-objects` answer 503; the worker's purge removes nothing |
+| `PROOF_RETENTION_DAYS` | the worker | no purge | how many days a photo or a signature is kept before the nightly purge (`apps/worker/src/jobs/purge-proof-objects.ts`) removes it from Storage, unless an open ticket names its stop |
 
 The two defaults sum to the Standard plan's 40 calls a minute on the one key both processes call with, so raising one means lowering the other.
