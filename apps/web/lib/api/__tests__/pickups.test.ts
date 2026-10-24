@@ -86,6 +86,9 @@ const pickupOf = (id: string, containerId: string, position: number, over: Parti
   propertyId: "01a0d2a4-a280-7011-8000-000000000001",
   sharedCollectionPointId: null,
   wasteFractionId: residual.id,
+  subscriptionId: null,
+  warehouseId: null,
+  replacementContainerId: null,
   arrivedAt: null,
   outcomeAt: null,
   ...over,
@@ -188,6 +191,19 @@ describe("a pickup", () => {
     const officeContainer = pickupAdapter.toRecord({ ...second, origin: "office" }, context())
     assert.deepEqual([officeContainer.name, officeContainer.facts["Added by"], officeContainer.facts.Address], ["Stop 2 · BIN-66420", "The office", undefined])
     assert.equal(pickupAdapter.toRecord(second, context()).facts["Added by"], undefined, "a generated stop says nothing of the kind")
+  })
+
+  test("a delivery says its subscription, a removal its warehouse, a swap its replacement and its warehouse, by id chip until their modules load (O3b of #290)", () => {
+    const subscription = "01a0d2a4-a280-7021-8000-000000000001"
+    const warehouse = "01a0d2a4-a280-7009-8000-000000000001"
+    const office = { ...second, origin: "office" } as const
+    const delivery = pickupAdapter.toRecord({ ...office, service: "deliver", subscriptionId: subscription }, context())
+    assert.deepEqual([delivery.facts.Type, delivery.facts.Subscription, delivery.facts["Back to warehouse"], delivery.facts.Replacement], ["Delivery", `subscription-${subscription}`, undefined, undefined])
+    const removal = pickupAdapter.toRecord({ ...office, service: "remove", warehouseId: warehouse }, context())
+    assert.deepEqual([removal.facts.Type, removal.facts.Subscription, removal.facts["Back to warehouse"]], ["Removal", undefined, `warehouse-${warehouse}`])
+    const swap = pickupAdapter.toRecord({ ...office, service: "swap", warehouseId: warehouse, replacementContainerId: bin44831.id }, context())
+    assert.deepEqual([swap.facts.Type, swap.facts.Replacement, swap.facts["Back to warehouse"]], ["Swap", "BIN-44831", `warehouse-${warehouse}`])
+    assert.equal(pickupAdapter.toRecord({ ...office, service: "swap", warehouseId: warehouse, replacementContainerId: subscription }, context()).facts.Replacement, `asset-${subscription}`, "a replacement the store has not loaded is its id chip")
   })
 
   test("a decided stop says when, on the project's clock, and why it was missed", () => {

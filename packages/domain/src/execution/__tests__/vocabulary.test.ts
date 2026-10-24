@@ -33,9 +33,9 @@ describe("the Execution vocabulary's own rules", () => {
     assert.deepEqual([...vocabulary.PICKUP_ORIGINS], ["generation", "office"])
   })
 
-  test("a stop empties its container, or is one of the office's work orders; the office books an emptying, a repair or a wash, each a service of the list (O3 of #290)", () => {
+  test("a stop empties its container, or is one of the office's work orders; the office books every service of the list, a delivery, a removal and a swap with their ledger moves (O3 of #290)", () => {
     assert.deepEqual([...vocabulary.PICKUP_SERVICES], ["empty", "deliver", "remove", "swap", "repair", "wash"])
-    assert.deepEqual([...vocabulary.OFFICE_STOP_SERVICES], ["empty", "repair", "wash"])
+    assert.deepEqual([...vocabulary.OFFICE_STOP_SERVICES], ["empty", "deliver", "remove", "swap", "repair", "wash"])
     for (const service of vocabulary.OFFICE_STOP_SERVICES) assert.ok((vocabulary.PICKUP_SERVICES as readonly string[]).includes(service), service)
   })
 

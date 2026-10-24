@@ -77,6 +77,7 @@ import { uniqueOn } from "../schema/references"
 import { wms } from "../schema/wms"
 import { handWrittenStatements, normalised, statementsOf } from "../sql/hand-written"
 import { PUBLICATION, powersyncStatements, publicationStatement, SYNCED_TABLES, syncedTableNames, syncGrantStatements, syncRoleStatements } from "../sql/publication"
+import { BOOKED_SHAPES, RESERVED_CONTAINER, TAKEN_CONTAINER } from "./execution-shapes"
 import { checksOf, companyFk, createTable, foreignKey, geometryCheck, ID, index, list, oneOfCheck, partialUniqueIndex, positiveCheck, projectFk, projectFkTo, ref, tenantFk, uniqueKey } from "./rendering"
 import { statementsBetween, statementsFor } from "./specimen"
 
@@ -260,7 +261,7 @@ const routeTable = (asOf: "0008" | "0012" | "0013" | "0015" | "0016" | "0024"): 
   ])
 
 /** pickup as drizzle-kit wrote it as of 0008; as of 0016 (#111), the container nullable, the stop's origin, and the two checks over them; and as it writes it since 0023 (O3 of #290), the service with its three checks and the one-stop-per-container key a partial index of its own. */
-const pickupTable = (asOf: "0008" | "0016" | "0023"): string =>
+const pickupTable = (asOf: "0008" | "0016" | "0023" | "0032"): string =>
   createTable("pickup", "project", [
     '"route_id" uuid NOT NULL',
     asOf >= "0016" ? '"container_id" uuid' : '"container_id" uuid NOT NULL',
@@ -275,6 +276,7 @@ const pickupTable = (asOf: "0008" | "0016" | "0023"): string =>
     `"arrived_at" ${INSTANT}`,
     `"outcome_at" ${INSTANT}`,
     '"reason" text',
+    ...(asOf >= "0032" ? ['"subscription_id" uuid', '"warehouse_id" uuid', '"replacement_container_id" uuid', `"reserved_container_id" uuid GENERATED ALWAYS AS (${RESERVED_CONTAINER}) STORED`, `"taken_container_id" uuid GENERATED ALWAYS AS (${TAKEN_CONTAINER}) STORED`] : []),
     ...(asOf < "0023" ? [uniqueKey("pickup_route_id_container_id_key", "company_id", "route_id", "container_id")] : []),
     uniqueKey("pickup_route_id_project_key", "company_id", "project_id", "route_id", "id"),
     oneOfCheck("pickup", "status", ...STATUSES),
@@ -286,6 +288,7 @@ const pickupTable = (asOf: "0008" | "0016" | "0023"): string =>
           `CONSTRAINT "pickup_service_container_shape" CHECK (${ref("pickup", "service")} = 'empty' or ${ref("pickup", "container_id")} is not null)`,
         ]
       : []),
+    ...(asOf >= "0032" ? BOOKED_SHAPES : []),
     oneOfCheck("pickup", "reason", ...REASONS),
     positiveCheck("pickup", "position"),
     `CONSTRAINT "pickup_place_exactly_one" CHECK ((${ref("pickup", "property_id")} is not null)::int + (${ref("pickup", "shared_collection_point_id")} is not null)::int = 1)`,
@@ -294,10 +297,25 @@ const pickupTable = (asOf: "0008" | "0016" | "0023"): string =>
     `CONSTRAINT "pickup_reason_shape" CHECK ((${ref("pickup", "status")} in ('skipped', 'failed')) = (${ref("pickup", "reason")} is not null))`,
   ])
 
+/** What 0032 changed on one of the seven (O3b of #290): the pickup's CREATE TABLE as drizzle-kit generates it now onto what it generated as of 0023. Applied first, one file at a time. */
+const CHANGED_IN_0032 = new Map([[pickupTable("0032"), pickupTable("0023")]])
+
+/** What 0032 added to the pickup beside the columns and the checks: the three keys, one planned stop per reserved container and per taken one, the three indexes. */
+const ADDED_IN_0032 = [
+  projectFkTo("pickup", "subscription_id", "subscription"),
+  projectFkTo("pickup", "warehouse_id", "warehouse"),
+  projectFkTo("pickup", "replacement_container_id", "container"),
+  partialUniqueIndex("pickup", "pickup_reserved_container_id_key", ["company_id", "reserved_container_id"], `${ref("pickup", "reserved_container_id")} is not null`),
+  partialUniqueIndex("pickup", "pickup_taken_container_id_key", ["company_id", "taken_container_id"], `${ref("pickup", "taken_container_id")} is not null`),
+  index("pickup", "pickup_subscription_id_idx", "company_id", "subscription_id"),
+  index("pickup", "pickup_warehouse_id_idx", "company_id", "warehouse_id"),
+  index("pickup", "pickup_replacement_container_id_idx", "company_id", "replacement_container_id"),
+]
+
 /** What 0024 changed on one of the seven (O5 of #290): the route's CREATE TABLE as drizzle-kit generates it now onto what it generated as of 0016. Applied first, one file at a time. */
 const CHANGED_IN_0024 = new Map([[routeTable("0024"), routeTable("0016")]])
 
-/** What 0023 changed on one of the seven (O3 of #290): the pickup's CREATE TABLE as drizzle-kit generates it now onto what it generated as of 0016. Applied first, one file at a time. */
+/** What 0023 changed on one of the seven (O3 of #290): the pickup's CREATE TABLE as drizzle-kit generated it as of 0023 onto what it generated as of 0016. Applied after `CHANGED_IN_0032`, one file at a time. */
 const CHANGED_IN_0023 = new Map([[pickupTable("0023"), pickupTable("0016")]])
 
 /** What 0023 added to the pickup beside the column: the one-stop-per-container key as a unique index over generation's stops alone. */
@@ -326,7 +344,7 @@ const ADDED_IN_0012 = [projectFkTo("route", "generation_run_id", "generation_run
 
 const expected = [
   routeTable("0024"),
-  pickupTable("0023"),
+  pickupTable("0032"),
   createTable("session", "project", [
     '"route_id" uuid NOT NULL',
     '"driver_id" uuid NOT NULL',
@@ -405,6 +423,7 @@ const expected = [
   projectFk("pickup"),
   projectFkTo("pickup", "route_id", "route"),
   projectFkTo("pickup", "container_id", "container"),
+  ...ADDED_IN_0032.slice(0, 3),
   projectFkTo("pickup", "property_id", "property"),
   projectFkTo("pickup", "shared_collection_point_id", "shared_collection_point"),
   tenantFk("pickup", "waste_fraction_id", "waste_fraction"),
@@ -450,11 +469,14 @@ const expected = [
   index("route", "route_generation_run_id_idx", "company_id", "generation_run_id"),
   index("route", "route_active_plan_id_idx", "company_id", "active_plan_id"),
   ...ADDED_IN_0023,
+  ADDED_IN_0032[3],
+  ADDED_IN_0032[4],
   index("pickup", "pickup_project_id_idx", "company_id", "project_id"),
   index("pickup", "pickup_container_id_idx", "company_id", "container_id"),
   index("pickup", "pickup_property_id_idx", "company_id", "property_id"),
   index("pickup", "pickup_shared_collection_point_id_idx", "company_id", "shared_collection_point_id"),
   index("pickup", "pickup_waste_fraction_id_idx", "company_id", "waste_fraction_id"),
+  ...ADDED_IN_0032.slice(5),
   index("pickup", "pickup_route_id_position_idx", "company_id", "route_id", "position"),
   // One live session per route and one per driver: the open rows alone are in the index.
   partialUniqueIndex("session", "session_route_open_idx", ["company_id", "route_id"], `${ref("session", "ended_at")} is null`),
@@ -530,7 +552,8 @@ const handWritten = [...Object.values(tables).flatMap((table) => handWrittenStat
 /** Everything drizzle-kit wrote at the head of 0008: the seven tables as they were generated as of 0008 — the outbox and the unload in their earlier spelling, the route without the run that last wrote it, what 0012 added left out — and the company altered from 0002's spelling to 0008's. */
 const generatedHead = async (): Promise<string[]> => [
   ...(await statementsFor(tables))
-    .filter((statement) => !ADDED_IN_0023.includes(statement) && !ADDED_IN_0013.includes(statement) && !ADDED_IN_0012.includes(statement))
+    .filter((statement) => !ADDED_IN_0032.includes(statement) && !ADDED_IN_0023.includes(statement) && !ADDED_IN_0013.includes(statement) && !ADDED_IN_0012.includes(statement))
+    .map((statement) => CHANGED_IN_0032.get(statement) ?? statement)
     .map((statement) => CHANGED_IN_0024.get(statement) ?? statement)
     .map((statement) => CHANGED_IN_0023.get(statement) ?? statement)
     .map((statement) => CHANGED_IN_0016.get(statement) ?? statement)
@@ -559,10 +582,12 @@ describe("the Execution tables as drizzle-kit writes them", () => {
     const generated = (await generatedHead()).map(normalised).sort()
     assert.equal(generated.length, 98, "seven CREATE TABLE, one ADD COLUMN, forty-seven foreign keys, forty-three indexes")
     assert.deepEqual([...statements.slice(0, generated.length)].sort(), generated)
-    // The statements 0024 and 0023 changed are ones the schema generates today, the ones 0016 changed are what 0024 maps the route back to and 0023 the pickup, the one 0015 changed is what 0016 maps the route back to, the one 0013 changed is what 0015 maps back to, and the one 0012 changed is what 0013 maps back to — each mapping maps something, one file at a time; the same chain for 0010 and 0009.
+    // The statements 0032 and 0024 changed are ones the schema generates today, the one 0023 changed is what 0032 maps the pickup back to, the ones 0016 changed are what 0024 maps the route back to and 0023 the pickup, the one 0015 changed is what 0016 maps the route back to, the one 0013 changed is what 0015 maps back to, and the one 0012 changed is what 0013 maps back to — each mapping maps something, one file at a time; the same chain for 0010 and 0009.
     const today = await statementsFor(tables)
     for (const statement of CHANGED_IN_0024.keys()) assert.ok(today.includes(statement), statement.split("\n")[0])
-    for (const statement of CHANGED_IN_0023.keys()) assert.ok(today.includes(statement), statement.split("\n")[0])
+    for (const statement of CHANGED_IN_0032.keys()) assert.ok(today.includes(statement), statement.split("\n")[0])
+    for (const statement of ADDED_IN_0032) assert.ok(today.includes(statement), statement)
+    for (const statement of CHANGED_IN_0023.keys()) assert.ok([...CHANGED_IN_0032.values()].includes(statement), statement.split("\n")[0])
     for (const statement of ADDED_IN_0023) assert.ok(today.includes(statement), statement)
     for (const statement of CHANGED_IN_0016.keys()) assert.ok(today.includes(statement) || [...CHANGED_IN_0024.values(), ...CHANGED_IN_0023.values()].includes(statement), statement.split("\n")[0])
     for (const statement of CHANGED_IN_0015.keys()) assert.ok([...CHANGED_IN_0016.values()].includes(statement), statement.split("\n")[0])
@@ -579,6 +604,7 @@ describe("the Execution tables as drizzle-kit writes them", () => {
     assert.equal(CHANGED_IN_0016.size, 2, "the ad-hoc route and the extra pickup")
     assert.equal(CHANGED_IN_0023.size, 1, "the stop's service")
     assert.equal(CHANGED_IN_0024.size, 1, "the cancel's reason code")
+    assert.equal(CHANGED_IN_0032.size, 1, "the stop's ledger bookings")
   })
 
   test("and carries below them the fence and trigger, or revoke, of each table, then the sync role, its grants and the publication: 7 x 3 + 3 + 17 + 1 = 42 statements", async () => {
@@ -660,6 +686,9 @@ describe("the checks of this context", () => {
       "pickup_service_one_of",
       "pickup_service_origin_shape",
       "pickup_service_container_shape",
+      "pickup_subscription_shape",
+      "pickup_warehouse_shape",
+      "pickup_replacement_shape",
       "pickup_reason_one_of",
       "pickup_position_positive",
       "pickup_place_exactly_one",

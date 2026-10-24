@@ -70,6 +70,9 @@ const pickup = {
   wasteFractionId: THIRD,
   arrivedAt: null,
   outcomeAt: null,
+  subscriptionId: null,
+  warehouseId: null,
+  replacementContainerId: null,
   ...STAMPS,
 }
 

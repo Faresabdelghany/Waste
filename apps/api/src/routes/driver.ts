@@ -146,6 +146,7 @@ import { alreadyActive, closingReasonOf } from "@waste/domain/execution/transiti
 import type { DriverCommandKind, OutboxAggregate, OutboxKind } from "@waste/domain/execution/vocabulary"
 import type { LicenceClass, VehicleKind, VehicleStatus } from "@waste/domain/resources/vocabulary"
 import { and, asc, eq, gt, inArray, isNull, ne, or, sql, type SQL } from "drizzle-orm"
+import { alias } from "drizzle-orm/pg-core"
 import { Hono, type MiddlewareHandler } from "hono"
 import { describeRoute } from "hono-openapi"
 import { isDeepStrictEqual } from "node:util"
@@ -188,6 +189,7 @@ import { vehicleColumns, vehicleLabel } from "./fleet-lookups"
 import { idsColumn } from "./id-sets"
 import { COMMAND_BACKDATE_MS, describeJson, IdParam, lockRow, OCCURRED_AT_SKEW_MS, primaryKeyOf, replayed } from "./shared"
 import { fractions as stationFractions } from "./unloading-stations"
+import { recordLedgerWork } from "./work-orders"
 
 const MODULE = "operate.driver-app"
 const RoutePage = Page(Route)
@@ -331,6 +333,8 @@ async function openSessionOf(tx: Tx, companyId: string, profile: DriverProfile):
  * names none, and is on the list with its address and a null label.
  */
 async function driverPickupsOfRoute(tx: Tx, companyId: string, routeId: string): Promise<DriverPickup[]> {
+  // A swap's replacement, by its label (O3b of #290): what the driver brings.
+  const replacement = alias(container, "replacement")
   const rows = await tx
     .select({
       ...pickupColumns,
@@ -341,23 +345,25 @@ async function driverPickupsOfRoute(tx: Tx, companyId: string, routeId: string):
       pointLocation: sharedCollectionPoint.location,
       pointInstructions: sharedCollectionPoint.driverInstructions,
       containerLabel: container.label,
+      replacementContainerLabel: replacement.label,
       wasteFractionName: wasteFraction.name,
     })
     .from(pickup)
     .leftJoin(container, and(eq(container.companyId, pickup.companyId), eq(container.id, pickup.containerId)))
+    .leftJoin(replacement, and(eq(replacement.companyId, pickup.companyId), eq(replacement.id, pickup.replacementContainerId)))
     .innerJoin(wasteFraction, and(eq(wasteFraction.companyId, pickup.companyId), eq(wasteFraction.id, pickup.wasteFractionId)))
     .leftJoin(property, and(eq(property.companyId, pickup.companyId), eq(property.id, pickup.propertyId)))
     .leftJoin(sharedCollectionPoint, and(eq(sharedCollectionPoint.companyId, pickup.companyId), eq(sharedCollectionPoint.id, pickup.sharedCollectionPointId)))
     .where(and(eq(pickup.companyId, companyId), eq(pickup.routeId, routeId)))
     .orderBy(asc(pickup.position), asc(pickup.id))
-  return rows.map(({ propertyAddress, propertyLocation, propertyInstructions, pointAddress, pointLocation, pointInstructions, containerLabel, wasteFractionName, ...stop }) => {
+  return rows.map(({ propertyAddress, propertyLocation, propertyInstructions, pointAddress, pointLocation, pointInstructions, containerLabel, replacementContainerLabel, wasteFractionName, ...stop }) => {
     const address = propertyAddress ?? pointAddress
     if (address === null) throw new Error(`pickup ${stop.id} names no place that is there`)
     // The columns are `geometry(Point, 4326)`, flat: what they hold is the contracts' `FlatPoint`, however the column's type spells the altitude as optional.
     const location = (propertyLocation ?? pointLocation) as FlatPoint | null
     // The place's own words for the driver; a property's `notes` are the office's and never reach a phone.
     const driverInstructions = propertyInstructions ?? pointInstructions
-    return { ...pickupOf(stop), address, driverInstructions, location, containerLabel, wasteFractionName }
+    return { ...pickupOf(stop), address, driverInstructions, location, containerLabel, wasteFractionName, replacementContainerLabel }
   })
 }
 
@@ -752,6 +758,8 @@ async function runEffects(tx: Tx, applier: Applier, envelope: DriverCommandEnvel
           .update(pickup)
           .set({ status: effect.status, reason: effect.reason, outcomeAt: new Date(effect.at) })
           .where(and(eq(pickup.companyId, companyId), eq(pickup.id, effect.pickupId)))
+        // A delivery, a removal or a swap moves its container as the stop completes (O3b of #290): in a savepoint, a refusal becoming the office's task and never the driver's rejection.
+        if (effect.status === "completed") await recordLedgerWork(tx, applier.principal, effect.pickupId, effect.at, applier.now, "driver")
         break
       case "append-unload": {
         const { unload: draft } = effect

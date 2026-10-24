@@ -44,6 +44,14 @@ describe("the stops", () => {
     assert.equal(stopServices([removed, extra]).has(extra.id), false)
   })
 
+  test("say a delivery, a removal, and a swap with the container the driver brings, by its label (O3b of #290)", () => {
+    const delivery = pickup(1, { origin: "office", service: "deliver" })
+    const removal = pickup(2, { origin: "office", service: "remove" })
+    const swap = pickup(3, { origin: "office", service: "swap", replacementContainerLabel: "BIN-7" })
+    const older = pickup(4, { origin: "office", service: "swap" })
+    assert.deepEqual(Object.fromEntries(stopServices([delivery, removal, swap, older])), { [delivery.id]: "Delivery", [removal.id]: "Removal", [swap.id]: "Swap for BIN-7", [older.id]: "Swap" }, "a swap read without its replacement's label says Swap alone")
+  })
+
   test("open in Maps over the pickup's own point, and not at all without one", () => {
     assert.equal(mapsHref({ type: "Point", coordinates: [12.5683, 55.6761] }), "https://www.google.com/maps/search/?api=1&query=55.6761%2C12.5683")
     assert.equal(mapsHref(null), null)

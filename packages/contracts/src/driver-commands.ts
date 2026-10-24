@@ -272,6 +272,8 @@ export const DriverPickup = Pickup.extend({
   location: FlatPoint.nullable(),
   containerLabel: Label.nullable(),
   wasteFractionName: Label,
+  /** A swap's replacement by its label (O3b of #290): what the driver brings; null for any other service. Absent from an answer before it, read as null. */
+  replacementContainerLabel: Label.nullable().default(null),
 })
 export type DriverPickup = z.infer<typeof DriverPickup>
 

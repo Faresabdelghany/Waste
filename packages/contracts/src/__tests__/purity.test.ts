@@ -47,6 +47,7 @@ definePurityTests({
     "@waste/domain/audit/vocabulary",
     "@waste/domain/execution/proof-shapes",
     "@waste/domain/execution/vocabulary",
+    "@waste/domain/execution/work-orders",
     "@waste/domain/finance/vocabulary",
     "@waste/domain/imports/vocabulary",
     "@waste/domain/insight/vocabulary",

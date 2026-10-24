@@ -225,6 +225,13 @@
       "when": 1792871277838,
       "tag": "0031_provider_tickets",
       "breakpoints": true
+    },
+    {
+      "idx": 32,
+      "version": "7",
+      "when": 1792881799168,
+      "tag": "0032_stop_ledger",
+      "breakpoints": true
     }
   ]
 }

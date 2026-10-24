@@ -47,10 +47,11 @@ import type { DriverCommandReceipt } from "@waste/contracts/driver-commands"
 import type { PickupDetail } from "@waste/contracts/pickups"
 import type { OptimiseAnswer, Plan } from "@waste/contracts/plans"
 import type { Route, RouteDetail, RouteDispatchResults } from "@waste/contracts/routes"
-import { OFFICE_CANCEL_REASON_CODES, OFFICE_STOP_SERVICES } from "@waste/domain/execution/vocabulary"
+import { OFFICE_CANCEL_REASON_CODES, OFFICE_STOP_SERVICES, type OfficeStopService } from "@waste/domain/execution/vocabulary"
+import { BOOKED_WITH, type BookedField } from "@waste/domain/execution/work-orders"
 
 import { FIXTURE_COMPANY_ID, type BusinessRecord, type ModuleLocation } from "@/lib/data/business-modules"
-import { PROPERTY_PREFIX, SHARED_POINT_PREFIX } from "@/lib/data/agreements"
+import { isSubscriptionRecord, PROPERTY_PREFIX, SHARED_POINT_PREFIX, SUBSCRIPTION_PREFIX } from "@/lib/data/agreements"
 import { masterDataKindOf } from "@/lib/data/master-data"
 import { A_WORK_ORDER_IS_OF_A_CONTAINER } from "@/lib/data/pickup-services"
 import { isPropertyRecord, isSharedPointRecord } from "@/lib/data/properties"
@@ -63,7 +64,7 @@ import { FLEET_AND_DEPOT_PICKS } from "./allocations"
 import { shownOn } from "./clock"
 import { containerAdapter } from "./containers"
 import { serviceProviderAdapter } from "./organisation"
-import { projectServerIdOf, referenced, refusal, unloadingStationAdapter } from "./places"
+import { projectServerIdOf, referenced, refusal, unloadingStationAdapter, warehouseAdapter } from "./places"
 import { nameVia, referencedServerId, webIdVia, type ReferenceRule } from "./references"
 
 /** The workspace module the routes are the rows of. */
@@ -345,6 +346,8 @@ export const ROUTE_COMMANDS = {
   },
 } satisfies Record<string, RecordCommand<Route>>
 
+const isOfficeStopService = (value: string): value is OfficeStopService => (OFFICE_STOP_SERVICES as readonly string[]).includes(value)
+
 /** What a stop's fraction is held to when the store holds the row: a waste fraction of the master data. */
 const FRACTION_RULE: ReferenceRule = { owns: (record) => masterDataKindOf(record) === "waste-fraction" }
 
@@ -354,25 +357,52 @@ const STOP_PLACES: Readonly<Record<string, readonly [string, string, ReferenceRu
   [STOP_AT_POINT]: ["sharedCollectionPointId", SHARED_POINT_PREFIX, { owns: isSharedPointRecord }, "Pick a shared collection point the API holds"],
 }
 
+/** What a ledger work order books beside its container (O3b of #290), by the field the form names it in: the web id's prefix, the kind, the sentence for none and for one the API does not hold. */
+const BOOKINGS: Readonly<Record<BookedField, readonly [string, ReferenceRule, string, string]>> = {
+  subscriptionId: [SUBSCRIPTION_PREFIX, { owns: isSubscriptionRecord }, "Pick the subscription it will serve under", "Pick a subscription the API holds"],
+  replacementContainerId: ["asset", { owns: containerAdapter.owns }, "Pick the container that replaces it", "Pick a container the API holds"],
+  warehouseId: ["warehouse", { owns: warehouseAdapter.owns }, "Pick the warehouse it goes back to", "Pick a warehouse the API holds"],
+}
+
+/** The bookings the service names (`BOOKED_WITH`), each by server id, and a delivery's fraction where the form names one; a refusal at the first field that will not do. */
+function bookedWith(service: OfficeStopService, input: Record<string, unknown>, context: MappingContext): Record<string, string> | ReturnType<typeof refusal> {
+  const body: Record<string, string> = {}
+  for (const field of BOOKED_WITH[service]) {
+    const [prefix, rule, none, unheld] = BOOKINGS[field]
+    const picked = said(input, field)
+    if (picked === undefined) return refusal(field, none)
+    const serverId = referencedServerId(picked, prefix, context, rule)
+    if (serverId === undefined) return refusal(field, unheld)
+    body[field] = serverId
+  }
+  const fraction = service === "deliver" ? said(input, "deliveryFractionId") : undefined
+  if (fraction === undefined) return body
+  const wasteFractionId = referencedServerId(fraction, "fraction", context, FRACTION_RULE)
+  return wasteFractionId === undefined ? refusal("deliveryFractionId", "Pick a waste fraction the API holds") : { ...body, wasteFractionId }
+}
+
 /**
- * The body of an added stop (`PickupAdd`): the container alone, or the one
- * place the form collects at with its fraction, each by server id, and the
- * note where there is one. A field the form hides for another choice is not
- * read, whatever it still holds.
+ * The body of an added stop (`PickupAdd`): the container alone — with what a
+ * delivery, a removal or a swap books beside it — or the one place the form
+ * collects at with its fraction, each by server id, and the note where there
+ * is one. A field the form hides for another choice is not read, whatever it
+ * still holds.
  */
 export function addedStopBody(input: Record<string, unknown>, context: MappingContext): Record<string, string> | ReturnType<typeof refusal> {
   const at = said(input, "stopAt") ?? STOP_AT_CONTAINER
   const note = said(input, "note")
   // An emptying is the API's default, so a body says a service only where it is a work order (O3 of #290).
   const service = said(input, "service") ?? "empty"
-  if (!(OFFICE_STOP_SERVICES as readonly string[]).includes(service)) return refusal("service", "Book an emptying, a repair or a wash")
+  if (!isOfficeStopService(service)) return refusal("service", "Book an emptying or one of the work orders offered")
   if (service !== "empty" && at !== STOP_AT_CONTAINER) return refusal("stopAt", A_WORK_ORDER_IS_OF_A_CONTAINER)
   const withNote = (body: Record<string, string>) => ({ ...(service === "empty" ? {} : { service }), ...body, ...(note === undefined ? {} : { note }) })
   if (at === STOP_AT_CONTAINER) {
     const picked = said(input, "containerId")
     if (picked === undefined) return refusal("containerId", "Pick the container to collect")
     const containerId = referencedServerId(picked, "asset", context, { owns: containerAdapter.owns })
-    return containerId === undefined ? refusal("containerId", "Pick a container the API holds") : withNote({ containerId })
+    if (containerId === undefined) return refusal("containerId", "Pick a container the API holds")
+    const booked = bookedWith(service, input, context)
+    return isLocalRefusal(booked) ? booked : withNote({ containerId, ...booked })
   }
   const place = STOP_PLACES[at]
   if (place === undefined) return refusal("stopAt", "Collect at a container, a property or a shared collection point")

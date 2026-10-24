@@ -37,10 +37,10 @@ import { command, get, listAll } from "../client"
 import { inheritedPresentation, moduleKeyOf, ofKind, said, stampFacts, statusLabel, typed, webIdOf, type Client, type MappingContext, type RecordCommand, type ResourceAdapter, type ServerModule } from "./adapter"
 import { shownOn, wallClockIn } from "./clock"
 import { LIVE_MODULE } from "./live"
-import { PROPERTY_PREFIX, SHARED_POINT_PREFIX } from "@/lib/data/agreements"
+import { PROPERTY_PREFIX, SHARED_POINT_PREFIX, SUBSCRIPTION_PREFIX } from "@/lib/data/agreements"
 
 import { referenced, refusal } from "./places"
-import { webIdVia } from "./references"
+import { nameVia, webIdVia } from "./references"
 import { ROUTES_MODULE, routesWindowFrom } from "./routes"
 
 /** The workspace module the pickups are the rows of. */
@@ -101,6 +101,13 @@ export function toPickupRecord(pickup: Pickup, context: MappingContext): Busines
   if (label !== undefined) facts["Container ID"] = label
   // An address-only stop is collected at its place, which names it.
   if (container === undefined && place !== undefined) facts.Address = place.address ?? place.name
+  // What a delivery, a removal or a swap books beside its container (O3b of #290): the ledger moves it so when the driver completes the stop.
+  if (pickup.subscriptionId != null) facts.Subscription = nameVia(context, SUBSCRIPTION_PREFIX, pickup.subscriptionId)
+  if (pickup.replacementContainerId != null) {
+    const replacement = context.resolve.byServerId(pickup.replacementContainerId)
+    facts.Replacement = replacement?.facts["Container ID"] ?? replacement?.name ?? referenced(context, "asset", pickup.replacementContainerId).webId
+  }
+  if (pickup.warehouseId != null) facts["Back to warehouse"] = nameVia(context, "warehouse", pickup.warehouseId)
   if (byTheOffice) facts["Added by"] = ADDED_BY_THE_OFFICE
   if (pickup.arrivedAt !== null) facts["Arrived at"] = clockOn(pickup.arrivedAt, timezone)
   if (pickup.status === "completed" && pickup.outcomeAt !== null) facts["Completed at"] = clockOn(pickup.outcomeAt, timezone)

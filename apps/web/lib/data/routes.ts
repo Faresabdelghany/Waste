@@ -33,7 +33,8 @@ import { DRIVER_REASON_LABELS } from "../driver/route-view"
 import { DEPOTS_MODULE, DRIVERS_MODULE, VEHICLES_MODULE } from "./allocations"
 import type { BusinessRecord } from "./business-modules"
 import type { BusinessFormField, BusinessFormOption, BusinessFormSchema, BusinessFormValues } from "./business-form-types"
-import { mintedRecord, ORGANISATION_MODULE } from "./containers"
+import { AGREEMENTS_MODULE } from "./agreements"
+import { mintedRecord, ORGANISATION_MODULE, WAREHOUSES_MODULE } from "./containers"
 import { MASTER_DATA_MODULE } from "./master-data"
 import { OFFICE_STOP_SERVICE_OPTIONS } from "./pickup-services"
 import { PROPERTIES_MODULE, SHARED_POINTS_MODULE } from "./properties"
@@ -71,6 +72,10 @@ const AT_A_CONTAINER = { fieldId: "stopAt", equals: STOP_AT_CONTAINER } as const
 const AT_A_PROPERTY = { fieldId: "stopAt", equals: STOP_AT_PROPERTY } as const
 const AT_A_POINT = { fieldId: "stopAt", equals: STOP_AT_POINT } as const
 const AT_AN_ADDRESS = { fieldId: "stopAt", oneOf: [STOP_AT_PROPERTY, STOP_AT_POINT] } as const
+/** What a ledger work order books beside its container (O3b of #290): a delivery its subscription, a swap its replacement, a removal and a swap the warehouse. */
+const A_DELIVERY = { fieldId: "service", equals: "deliver" } as const
+const A_SWAP = { fieldId: "service", equals: "swap" } as const
+const BACK_TO_STOCK = { fieldId: "service", oneOf: ["remove", "swap"] } as const
 const pickupForm = (title: string, description: string, submitLabel: string, fields: readonly BusinessFormField[]) => commandForm("route-studio.pickups", "Pickup", title, description, submitLabel, fields)
 
 /** The office's cancel reason codes as a select offers them (O5 of #290): "Vehicle breakdown" for `vehicle-breakdown`. */
@@ -103,12 +108,16 @@ export const ROUTE_COMMAND_FORMS: Readonly<Record<RouteCommandWithForm, Business
   ]),
   "add-stop": routeForm(
     "Add stop",
-    "A stop the office adds after the route's last one, on a route that has not started. A container is collected where it is placed on the route's service date, and may be one the route stops at already — an extra emptying, or a repair or a wash beside its collection; an address is collected with the fraction you name. Generation never moves or skips it.",
+    "A stop the office adds after the route's last one, on a route that has not started. A container is collected where it is placed on the route's service date, and may be one the route stops at already — an extra emptying, or a repair or a wash beside its collection; an address is collected with the fraction you name. A delivery, a removal or a swap moves the container in its ledger when the driver completes the stop. Generation never moves or skips it.",
     "Add stop",
     [
-      { id: "service", label: "Service", type: "select", required: true, defaultValue: "empty", options: OFFICE_STOP_SERVICE_OPTIONS, description: "A repair or a wash is of a container." },
+      { id: "service", label: "Service", type: "select", required: true, defaultValue: "empty", options: OFFICE_STOP_SERVICE_OPTIONS, description: "Every work order is of a container." },
       { id: "stopAt", label: "Collect", type: "select", required: true, defaultValue: STOP_AT_CONTAINER, options: STOP_AT_OPTIONS },
-      { id: "containerId", label: "Container", type: "select", relation: CONTAINERS_MODULE, visibleWhen: AT_A_CONTAINER, requiredWhen: AT_A_CONTAINER, description: "Its place and fraction are its placement's on the route's service date." },
+      { id: "containerId", label: "Container", type: "select", relation: CONTAINERS_MODULE, visibleWhen: AT_A_CONTAINER, requiredWhen: AT_A_CONTAINER, description: "Its place and fraction are its placement's on the route's service date; a delivery's, its subscription's." },
+      { id: "subscriptionId", label: "Subscription", type: "select", relation: AGREEMENTS_MODULE, visibleWhen: A_DELIVERY, requiredWhen: A_DELIVERY, description: "The subscription the container serves under once delivered, at the place it is delivered at." },
+      { id: "deliveryFractionId", label: "Waste fraction", type: "select", relation: MASTER_DATA_MODULE, visibleWhen: A_DELIVERY, description: "Blank takes the subscription's product's." },
+      { id: "replacementContainerId", label: "Replacement", type: "select", relation: CONTAINERS_MODULE, visibleWhen: A_SWAP, requiredWhen: A_SWAP, description: "The container from stock the driver brings in its place." },
+      { id: "warehouseId", label: "Back to warehouse", type: "select", relation: WAREHOUSES_MODULE, visibleWhen: BACK_TO_STOCK, requiredWhen: BACK_TO_STOCK, description: "Where the container taken goes back into stock." },
       { id: "propertyId", label: "Property", type: "select", relation: PROPERTIES_MODULE, visibleWhen: AT_A_PROPERTY, requiredWhen: AT_A_PROPERTY },
       { id: "sharedCollectionPointId", label: "Shared collection point", type: "select", relation: SHARED_POINTS_MODULE, visibleWhen: AT_A_POINT, requiredWhen: AT_A_POINT },
       { id: "wasteFractionId", label: "Waste fraction", type: "select", relation: MASTER_DATA_MODULE, visibleWhen: AT_AN_ADDRESS, requiredWhen: AT_AN_ADDRESS },
