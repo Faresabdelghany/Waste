@@ -89,6 +89,10 @@ export const RICH_MODULE_TABLES: Readonly<Record<string, RichModuleTable>> = {
   // need the rich view's edit and delete paths.
   vehicles: { seededFactColumns: ["Ownership", "Capacity", "Fractions", "Fuel"] },
   drivers: { seededFactColumns: ["Licence", "AppAccess", "Employer"] },
+  // The Drop-off Points (#293 M3c): the office keeps their hours and
+  // exceptions current, so they join the rich view for its row Edit; a point
+  // is closed, never deleted, which the API holds.
+  "drop-off-points": { seededFactColumns: ["Kind", "Opening", "Takes"], excludedColumnFacts: new Set(["Project"]) },
   // Service provider users render Full name, Email, Phone number, Role,
   // Status and Updated as a fixed column set; membership still unlocks
   // edit/delete.

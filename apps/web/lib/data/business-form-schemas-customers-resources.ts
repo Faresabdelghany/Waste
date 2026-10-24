@@ -1,4 +1,5 @@
 import type { BusinessFormSchema } from "@/lib/data/business-form-types"
+import { DROP_OFF_KIND_OPTIONS } from "@/lib/data/drop-off-points"
 import { WAREHOUSE_STATUS_OPTIONS } from "@/lib/data/resources-vocabulary"
 import { SERVICE_FREQUENCIES } from "@waste/domain/service-frequencies"
 
@@ -1784,6 +1785,84 @@ export const customerResourceBusinessFormSchemas: readonly BusinessFormSchema[] 
               moduleId: "warehouses",
             },
           },
+        ],
+      },
+    ],
+  },
+  {
+    // The Drop-off Points (#293 M3c): a project's recycling centres and bring
+    // banks, on the API. The weekly hours and the exceptions are typed as text
+    // and read by lib/data/drop-off-points.ts in the domain's words.
+    key: "resources.drop-off-points",
+    mode: "create",
+    recordKind: "Drop-off Point",
+    title: "New drop-off point",
+    description: "A place residents bring waste to themselves: a staffed recycling centre or a bring bank on a street. An active point of a published project is on its public map.",
+    submitLabel: "Save drop-off point",
+    nameField: "name",
+    contextFieldIds: ["projectId", "kind"],
+    sections: [
+      {
+        id: "identity-location",
+        title: "Identity and location",
+        fields: [
+          { id: "projectId", label: "Project", type: "select", required: true, relation: projectRelation },
+          {
+            id: "kind",
+            label: "Kind",
+            type: "select",
+            required: true,
+            defaultValue: "recycling-centre",
+            options: DROP_OFF_KIND_OPTIONS,
+          },
+          { id: "name", label: "Name", type: "text", required: true },
+          { id: "code", label: "Code", type: "text", required: true, description: "The reference a person quotes, such as GS-AMAGER. Set once." },
+          {
+            id: "status",
+            label: "Status",
+            type: "select",
+            required: true,
+            defaultValue: "draft",
+            options: [
+              { value: "draft", label: "Draft — the office's alone" },
+              { value: "active", label: "Active — on the public map" },
+              { value: "closed", label: "Closed" },
+            ],
+          },
+          { id: "address", label: "Address", type: "textarea", required: true },
+          { id: "latitude", label: "Latitude", type: "number", required: true, min: -90, max: 90 },
+          { id: "longitude", label: "Longitude", type: "number", required: true, min: -180, max: 180 },
+        ],
+      },
+      {
+        id: "what-and-when",
+        title: "What it takes and when it is open",
+        fields: [
+          {
+            id: "acceptedFractionIds",
+            label: "Takes",
+            type: "multiselect",
+            description: "The fractions a resident may hand in here; the Sorting Guide links an item to the points that take its fraction.",
+            relation: { workspaceId: "configure", moduleId: "master" },
+          },
+          { id: "openAlways", label: "Open always", type: "checkbox", description: "A bring bank on a street: no hours to keep." },
+          {
+            id: "weeklyHours",
+            label: "Weekly hours",
+            type: "textarea",
+            placeholder: "Mon–Fri 10:00–18:00\nSat 09:00–12:00, 13:00–17:00",
+            description: "A line a day or a run of days, then its windows on the project's clock. Several windows a day are allowed, never overlapping.",
+          },
+          { id: "closedOnHolidays", label: "Closed on the project's holidays", type: "checkbox" },
+          {
+            id: "openingExceptions",
+            label: "Exceptions",
+            type: "textarea",
+            placeholder: "2026-12-24 09:00–12:00 Christmas Eve\n2026-12-25 closed Christmas Day",
+            description: "A line a date: closed or its hours, then a note residents read. An exception wins over the week and the holidays; a day gone by is dropped when you save.",
+          },
+          { id: "publicNote", label: "Note on the public map", type: "textarea", placeholder: "Bring ID. Vans need a permit." },
+          { id: "notes", label: "Office notes", type: "textarea", description: "Never shown on the public map." },
         ],
       },
     ],

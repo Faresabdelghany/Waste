@@ -29,6 +29,7 @@ import { collectionCalendarsModule, planningAreasModule } from "./planning"
 import { priceRowsModule, productsModule } from "./pricing"
 import { propertiesModule, propertyGroupsModule, sharedPointsModule } from "./properties"
 import { customersModule } from "./registry"
+import { dropOffPointsModule } from "./drop-off-points"
 import { providerPricesModule, settlementsModule } from "./provider-money"
 import { routeSchemesModule } from "./route-schemes"
 import { serviceAreasModule } from "./service-areas"
@@ -44,7 +45,8 @@ import { weightsModule } from "./weights"
  * their project; the Sorting Guide's items after both, since an item names
  * its project and its fraction (#293); the places after the master data, since a station names
  * its fractions, and the warehouses after the depots one may share a yard
- * with; the fleet after the master data (a vehicle's type and fractions),
+ * with; the Drop-off Points after the places, since a point names its
+ * project and its fractions (#293 M3); the fleet after the master data (a vehicle's type and fractions),
  * the access module (a driver's login) and the depots (a home base) (#180);
  * the properties after the customers their parties name, and the groups and
  * the shared points after the properties they gather (#184); the Price
@@ -81,6 +83,7 @@ export const SERVER_MODULES: readonly ServerModule[] = [
   sortingGuideModule,
   placesModule,
   warehousesModule,
+  dropOffPointsModule,
   fleetVehiclesModule,
   fleetDriversModule,
   propertiesModule,

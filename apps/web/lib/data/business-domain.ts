@@ -272,7 +272,7 @@ export const publicWorkspaceDomains: readonly PublicWorkspaceDomain[] = [
       "Control physical service assets, individually tracked units, stock, and warehouses.",
     blueprintModules: ["M06", "M07", "M08"],
     personas: ["Asset manager", "Warehouse staff", "Technician", "Operations planner"],
-    moduleIds: ["containers", "inventory", "warehouses", "depots"],
+    moduleIds: ["containers", "inventory", "warehouses", "depots", "drop-off-points"],
     boundaryNote:
       "Resources should become Assets & Inventory. Depot records belong to Fleet; warehouses remain separate even when colocated.",
   },
@@ -649,6 +649,19 @@ export const publicModuleDomains: readonly PublicModuleDomain[] = [
     downstream: ["M08", "M09", "M10", "M11", "M12", "M18"],
     boundaryNote:
       "The current mixed tab must be split: Depot belongs under Fleet planning; Unloading Station belongs to route operational master data.",
+  },
+  {
+    key: "resources.drop-off-points",
+    workspaceId: "resources",
+    moduleId: "drop-off-points",
+    primaryBlueprintModule: "M08",
+    supportingBlueprintModules: ["M02"],
+    canonicalOwner: "Resources · Drop-off Points, on the public map",
+    personas: ["Operations administrator", "Customer service"],
+    upstream: ["M01", "M02"],
+    downstream: ["M02"],
+    boundaryNote:
+      "A Drop-off Point is where residents bring waste themselves: not a Depot or an Unloading Station, which are the operation's own.",
   },
   {
     key: "commercial.products",
