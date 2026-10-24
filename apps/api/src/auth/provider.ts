@@ -131,10 +131,13 @@ const reachedRoute = alias(route, "reached_route")
  * account — the fence those statements always carried — and for an account
  * with a provider `exists` the route the row names, served by the provider
  * on its operating date (`servesRoute`). The route is an alias of its own, so
- * a statement that joins `route` itself keeps its join apart from this one.
+ * a statement that joins `route` itself keeps its join apart from this one;
+ * such a statement may hand its joined route as `joined` instead, and the
+ * provider's fence is then `servesRoute` over it, with no second read.
  */
-export function reachesThroughRoute(tx: Tx, principal: Principal, on: RouteChildColumns): SQL {
+export function reachesThroughRoute(tx: Tx, principal: Principal, on: RouteChildColumns, joined?: RouteColumns): SQL {
   if (providerIdOf(principal) === null) return inProjects(on.projectId, principal)
+  if (joined !== undefined) return servesRoute(tx, principal, joined)
   return exists(
     tx
       .select({ one: sql`1` })

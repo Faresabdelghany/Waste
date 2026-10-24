@@ -50,11 +50,11 @@ import { and, asc, count, eq, inArray, isNull, sql, type SQL } from "drizzle-orm
 import { assignedTo, type DriverProfile } from "../auth/driver"
 import type { Principal } from "../auth/principal"
 import { inProjects } from "../auth/projects"
-import { reachesRoute, reachesThroughRoute } from "../auth/provider"
-import { invalidRequest, problem } from "../problem"
+import { reachesRoute, reachesThroughRoute, type ReachedRouteColumns } from "../auth/provider"
+import { problem } from "../problem"
 import { planContextOf, sequencedPickups } from "./plan-shapes"
 import { NOT_A_ROUTE } from "./references"
-import { instantOf, stampsOf, timeOf } from "./shared"
+import { instantOf, requireRow, stampsOf, timeOf } from "./shared"
 
 export const noSuchRoute = (id: string) => problem(404, { detail: `No route ${id} in the projects this account works in` })
 export const noSuchPickup = (id: string) => problem(404, { detail: `No pickup ${id} in the projects this account works in` })
@@ -166,12 +166,7 @@ export async function findReachedRoute(tx: Tx, principal: Principal, id: string)
  * route its provider serves; an office account a route of its projects.
  */
 export async function requireReachedRoute(tx: Tx, principal: Principal, id: string, projectId: string | undefined, path = "routeId"): Promise<void> {
-  const [row] = await tx
-    .select({ id: route.id })
-    .from(route)
-    .where(and(routeReach(tx, principal), eq(route.id, id), projectId === undefined ? undefined : eq(route.projectId, projectId)))
-    .limit(1)
-  if (row === undefined) throw invalidRequest("query", [{ path, message: NOT_A_ROUTE }])
+  await requireRow(tx, route, { companyId: principal.companyId, id, also: and(reachesRoute(tx, principal), projectId === undefined ? undefined : eq(route.projectId, projectId)) }, { path, message: NOT_A_ROUTE }, "query")
 }
 
 /**
@@ -262,8 +257,14 @@ export function pickupOf(row: PickupRow): Pickup {
 /** The pickups of this company, in the projects the caller works in: what a pickup command is bounded by. */
 export const pickupScope = (principal: Principal): SQL | undefined => and(eq(pickup.companyId, principal.companyId), inProjects(pickup.projectId, principal))
 
-/** The pickups of this company the caller reads: its projects' for an office account, the stops of the routes its provider serves for a Service Provider's (`reachesThroughRoute`). */
-export const pickupReach = (tx: Tx, principal: Principal): SQL | undefined => and(eq(pickup.companyId, principal.companyId), reachesThroughRoute(tx, principal, pickup))
+/**
+ * The pickups of this company the caller reads: its projects' for an office
+ * account, the stops of the routes its provider serves for a Service
+ * Provider's (`reachesThroughRoute`). A statement that joins the stop's
+ * route already hands it as `joined`, so a provider's fence is the predicate
+ * over that join rather than a second read of the same route.
+ */
+export const pickupReach = (tx: Tx, principal: Principal, joined?: ReachedRouteColumns): SQL | undefined => and(eq(pickup.companyId, principal.companyId), reachesThroughRoute(tx, principal, pickup, joined))
 
 /** One route's pickups, by position and then by id: the stop list in order. */
 export async function pickupsOfRoute(tx: Tx, companyId: string, routeId: string): Promise<PickupRow[]> {

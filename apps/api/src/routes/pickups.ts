@@ -252,7 +252,8 @@ export function pickupRoutes(guard: MiddlewareHandler<AuthEnv>, { now = () => ne
           .innerJoin(route, and(eq(route.companyId, pickup.companyId), eq(route.id, pickup.routeId)))
           .where(
             and(
-              pickupReach(tx, principal),
+              // The stop's route is joined above, so a provider's fence reads it there.
+              pickupReach(tx, principal, route),
               projectId === undefined ? undefined : eq(pickup.projectId, projectId),
               routeId === undefined ? undefined : eq(pickup.routeId, routeId),
               containerId === undefined ? undefined : eq(pickup.containerId, containerId),
