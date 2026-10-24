@@ -1,9 +1,11 @@
 import type { Page } from "@playwright/test"
+import type { Plan, PlanDetail } from "@waste/contracts/plans"
 
-import { dayIn } from "./dispatched-route"
+import { formatDistance, formatDuration } from "../lib/map-planning/format"
+import { addDays, dayIn } from "./dispatched-route"
 import { chainLanded, expect, test } from "./fixtures"
 import { uniqueName } from "./env"
-import { routeRead, schemeWithRoutes } from "./routes-support"
+import { routeRead, schemeWithRoutes, type ApiRoute } from "./routes-support"
 import { listAll } from "./tester"
 
 // Map Planning's routes on the Pilot (Issue #179, slice 6 of #81): the
@@ -11,15 +13,23 @@ import { listAll } from "./tester"
 // rows, ported from the fixture suite's map-planning.spec.ts, whose seeded
 // browser routes they replace, onto the routes generation wrote through the
 // API. The map places an API route's stops at its containers, which stand
-// where their placements in force deliver (#184). No
-// road geometry is asserted here: how a route's line is measured is the legs
-// layer's (#173), and roads come through the API alone (#214), so the suite
-// asks no routing server; every route is drawn as the dashed estimate.
+// where their placements in force deliver (#184).
+//
+// The last test is the lane's generation scenario (#151): generation asks a
+// Plan of every route it made inside the horizon (#172), the worker measures
+// it with the fake provider — the lane's only one, since no credential
+// exists on the public repository — and the Routes layer draws the Plan's
+// legs as the road (#173), a route beyond the horizon as the dashed estimate.
+// The other tests assert no geometry: a route of theirs inside the horizon is
+// drawn dashed until its Plan is ready and as the road after.
 
 const MARKERS = '[data-testid="planning-map-markers"]'
 const DRAW = '[data-testid="planning-map-draw"]'
 
 type Container = { id: string; label: string }
+
+/** The seeded depot the generation scenario's scheme starts from, so the horizon asks the optimiser. */
+const DEPOT = "Nordhavn Depot"
 
 /** The map without its tiles, which the suite never asks for. */
 async function showMapPlanning(page: Page): Promise<void> {
@@ -214,4 +224,62 @@ test("a route row in the Selected area panel plays without the Routes layer, and
   await expect(page.getByTestId("playback-bar")).toBeVisible()
   await expect(line).toBeVisible()
   await expect(page.getByTestId("playback-vehicle")).toBeVisible()
+})
+
+test("generation asks a Plan of each route inside the horizon, the fake provider measures it, and the Routes layer draws its legs as the road, a route beyond the horizon dashed (#151)", async ({ api, page }) => {
+  // Fourteen days from tomorrow. The horizon is tomorrow through today + 7 on the project's clock, read by the worker once the run commits; a day at either edge is left out, so a midnight between that reading and this one moves no route across.
+  const today = dayIn("Europe/Copenhagen")
+  const { scheme, routes } = await schemeWithRoutes(api, uniqueName("E2E Map legs"), 14, { depot: DEPOT })
+  const inside = routes.filter((route) => route.operatingDate >= addDays(today, 2) && route.operatingDate <= addDays(today, 7))
+  const beyond = routes.filter((route) => route.operatingDate > addDays(today, 8))
+  expect(inside.length, "the run made routes inside the horizon").toBeGreaterThan(0)
+  expect(beyond.length, "the run made routes beyond the horizon").toBeGreaterThan(0)
+
+  // The worker asks once the run has committed and measures at the quota's pace, about two seconds a call. An optimiser Plan becomes the route's active one only once ready (#124 §2), so until then the route's newest Plan says how it stands: calculating, or failed with its sentence.
+  let listed = new Map<string, ApiRoute>()
+  const standing = async (route: ApiRoute) => {
+    if (listed.get(route.id)?.activePlan?.status === "ready") return `${route.operatingDate} ready`
+    const newest = (await listAll<Plan>(api, `/routes/${route.id}/plans`)).at(-1)
+    return `${route.operatingDate} ${newest === undefined ? "asked no Plan" : `${newest.solver} ${newest.status}${newest.failureReason ? `: ${newest.failureReason}` : ""}`}`
+  }
+  await expect
+    .poll(
+      async () => {
+        listed = new Map((await listAll<ApiRoute>(api, "/routes", { routeSchemeId: scheme.id })).map((route) => [route.id, route]))
+        return Promise.all(inside.map(standing))
+      },
+      { message: "every route inside the horizon reads a ready Plan", timeout: 30_000 },
+    )
+    .toEqual(inside.map((route) => `${route.operatingDate} ready`))
+  // Generation asks the routes inside the horizon alone, every one before its job ends: one beyond it was never asked.
+  for (const route of beyond) expect(await listAll<Plan>(api, `/routes/${route.id}/plans`), `the Plans of ${route.label} on ${route.operatingDate}`).toEqual([])
+
+  const [nearest] = inside
+  const active = listed.get(nearest.id)?.activePlan
+  expect(active?.solver, `${nearest.progress.total} open stops from a depot: the optimiser's, at fifty or fewer`).toBe("optimiser")
+  const answer = await api.get(`/plans/${active?.id}`)
+  expect(answer.status(), `GET /plans/${active?.id}`).toBe(200)
+  const plan = (await answer.json()) as PlanDetail
+  expect([plan.provider, plan.status]).toEqual(["fake", "ready"])
+  expect(plan.legs.length).toBeGreaterThan(0)
+  expect(plan.legs.map((leg) => leg.position)).toEqual(plan.legs.map((_, index) => index + 1))
+  expect([plan.distanceMetres, plan.durationSeconds]).toEqual([plan.legs.reduce((sum, leg) => sum + leg.metres, 0), plan.legs.reduce((sum, leg) => sum + leg.seconds, 0)])
+
+  await openMapPlanning(page)
+  await (await routesLayer(page)).getByRole("checkbox", { name: /Routes in the collection window/ }).click()
+  await page.keyboard.press("Escape")
+  // Each ready Plan's legs are fetched once (`GET /plans/:id`), four at a time, for every route the map draws: the tenant's earlier runs' too.
+  for (const route of inside) await expect(page.locator(`[data-route-line="route-${route.id}"]`)).toHaveAttribute("data-route-geometry", "road", { timeout: 20_000 })
+  await expect(page.locator(`[data-route-road="route-${nearest.id}"]`)).toBeVisible()
+  for (const route of beyond) await expect(page.locator(`[data-route-line="route-${route.id}"]`)).toHaveAttribute("data-route-geometry", "straight")
+  // The fake's straight legs are nobody's data, so the map owes them none of the attribution OpenRouteService's roads carry (lib/routing/readings.ts).
+  await expect(page.getByTestId("routing-attribution")).toHaveCount(0)
+
+  // The card reads the Plan's totals, without "Not optimised": the optimiser ordered the trip.
+  await clickRouteLine(page, `route-${nearest.id}`)
+  const card = page.getByTestId("route-card")
+  await expect(card).toContainText(nearest.label)
+  const routing = card.getByTestId("route-card-routing")
+  await expect(routing).toHaveAttribute("data-reading", "measured")
+  await expect(routing).toHaveText(`${formatDistance(plan.distanceMetres ?? 0)} · ${formatDuration(plan.durationSeconds ?? 0)}`)
 })
