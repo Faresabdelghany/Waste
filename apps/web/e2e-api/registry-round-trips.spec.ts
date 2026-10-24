@@ -131,6 +131,11 @@ test("Service Providers: created in the browser with Location, read back, change
   expect(refused.status()).toBe(409)
   await expect(page.getByText(`${otherName} was not saved`)).toBeVisible()
   await expect(page.getByText(`This company already has a service provider with the registration number ${taken} in DK`)).toBeVisible()
+  // The dialog waited for the answer and stays open with what was typed, its submit free again, to correct the number (#239).
+  const kept = page.getByRole("dialog").filter({ has: page.getByRole("heading", { name: "Add service provider" }) })
+  await expect(kept.getByLabel("Legal company name")).toHaveValue(otherName)
+  await expect(kept.getByLabel("Registration number")).toHaveValue(taken)
+  await expect(kept.getByRole("button", { name: "Add service provider" })).toBeEnabled()
   await openLoaded(page, "/service-providers", "/service-providers")
   await expect(await rowNamed(page, legalName)).toBeVisible()
   await expect(await rowNamed(page, elsewhere.legalName)).toBeVisible()

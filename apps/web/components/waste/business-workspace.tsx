@@ -273,6 +273,7 @@ import { SchemePlanAheadRunner } from "@/components/waste/scheme-plan-ahead"
 import { useBusinessRecordStore, useServerModuleState, whenSaved } from "@/components/waste/business-record-store"
 import { useApiConfigured, useApiSession } from "@/components/waste/api-session-store"
 import { commandSurfaceFor, initialFiltersOf, listShows, primaryOf } from "@/components/waste/commands/command-surfaces"
+import { writeGate } from "@/lib/api/records/write-gate"
 import { offersRowsOf } from "@/components/waste/pickable-records"
 import { projectScopeOfMe } from "@/lib/api/records/me-projects"
 import { isServerBacked, serverModuleOf } from "@/lib/api/records/modules"
@@ -1191,6 +1192,8 @@ export function BusinessWorkspace({
   const [pendingAction, setPendingAction] = useState<PendingAction | null>(null)
   // A governed action's write out to the API: its dialog's confirm waits (#210).
   const [actionSaving, setActionSaving] = useState(false)
+  // A generic form's create or edit out to the API: its dialog waits, open, its submit held (#239).
+  const [formSaving, setFormSaving] = useState(false)
   const [isCreateOpen, setIsCreateOpen] = useState(false)
   const [generateSchemeRecord, setGenerateSchemeRecord] =
     useState<BusinessRecord | null>(null)
@@ -1344,6 +1347,13 @@ export function BusinessWorkspace({
   const canOpenBusinessForm =
     Boolean(activeModuleFormSchema?.execution) &&
     activeModuleFormSchema?.mode !== "disabled"
+  // The module the open form writes to, as handleFormSubmit resolves it, and its read on the Pilot: a write waits for it (#239).
+  const formWriteRequest = formSchema?.execution?.target ?? {
+    workspaceId: relatedCreateModule?.workspaceId ?? workspace.id,
+    moduleId: relatedCreateModule?.module.id ?? activeModule.id,
+  }
+  const formWriteTarget = resolveFormModule(formWriteRequest.workspaceId, formWriteRequest.moduleId)
+  const formTargetOnApi = useServerModuleState(formWriteTarget?.workspaceId ?? workspace.id, formWriteTarget?.module.id ?? activeModule.id)
   // Routes get a chooser between Quick create and the Guided Setup wizard.
   const isRouteCreateFlow =
     activeModuleFormSchema?.key === "route-studio.routes"
@@ -2227,10 +2237,9 @@ export function BusinessWorkspace({
     // its load failed — has nowhere to send the change: the store would keep
     // it in the browser, which a switched module never shows. Say so and keep
     // the dialog, rather than report an action that went nowhere (#210).
-    if (apiConfigured && activeModuleOnApi !== null && activeModuleOnApi.status !== "ready") {
-      toast.error(`${record.name} was not changed`, {
-        description: `${activeModule.label} are not read from the API yet; the action can be confirmed once they are.`,
-      })
+    const gate = writeGate(apiConfigured, activeModuleOnApi, activeModule.label, "the action can be confirmed")
+    if (gate.kind === "held") {
+      toast.error(`${record.name} was not changed`, { description: gate.description })
       return
     }
     const nextStatus = actionOutcome(activeModule, action, record.status)
@@ -3359,6 +3368,13 @@ export function BusinessWorkspace({
       toast.error("This workflow target is not available.")
       return
     }
+    // On the Pilot a switched module the API has not read yet has nowhere to
+    // send the write: the dialog stays open and says when it can be saved (#239, as #210).
+    const gate = writeGate(apiConfigured, formTargetOnApi, resolvedTarget.module.label, "the form can be saved")
+    if (gate.kind === "held") {
+      toast.error(`The ${formSchema.recordKind.toLowerCase()} was not saved`, { description: gate.description })
+      return
+    }
 
     const fields = formSchema.sections.flatMap((section) => section.fields)
     const fieldById = new Map(fields.map((field) => [field.id, field]))
@@ -3953,35 +3969,39 @@ export function BusinessWorkspace({
         )} scope validated`,
       }
 
-      upsertRecord(
-        resolvedTarget.workspaceId,
-        resolvedTarget.module.id,
-        updatedRecord,
+      // On a switched module the dialog waits for the API's answer, its
+      // submit held, and stays open with what was typed on a refusal, which
+      // is the store's toast in the API's words; fixture mode lands at once (#239).
+      const edited = editingRecord
+      setFormSaving(true)
+      whenSaved(
+        upsertRecord(resolvedTarget.workspaceId, resolvedTarget.module.id, updatedRecord),
+        () => {
+          if (resolvedTarget.module.id === "price-rows") {
+            // A row moved to another product leaves the old product's derived
+            // facts behind unless that product is re-synced with the row
+            // excluded (issue #22); the new product then takes it up.
+            const previousProductId = productIdOfPriceRow(edited)
+            if (previousProductId && previousProductId !== productIdOfPriceRow(updatedRecord)) {
+              syncProductForRow(edited, { exclude: true })
+            }
+            syncProductForRow(updatedRecord)
+          }
+          if (resolvedTarget.module.id === "containers") {
+            syncAgreementsForContainer(updatedRecord)
+          }
+          setAuditEvents((current) => ({
+            ...current,
+            [updatedRecord.id]: [editEvent, ...(current[updatedRecord.id] ?? [])],
+          }))
+          setSelectedRecord((current) => (current?.id === updatedRecord.id ? updatedRecord : current))
+          setEditingRecord(null)
+          toast.success(`${formSchema.recordKind} updated`, {
+            description: `${updatedRecord.name} was updated and its audit history extended.`,
+          })
+        },
+        () => setFormSaving(false),
       )
-      if (resolvedTarget.module.id === "price-rows") {
-        // A row moved to another product leaves the old product's derived
-        // facts behind unless that product is re-synced with the row
-        // excluded (issue #22); the new product then takes it up.
-        const previousProductId = productIdOfPriceRow(editingRecord)
-        if (previousProductId && previousProductId !== productIdOfPriceRow(updatedRecord)) {
-          syncProductForRow(editingRecord, { exclude: true })
-        }
-        syncProductForRow(updatedRecord)
-      }
-      if (resolvedTarget.module.id === "containers") {
-        syncAgreementsForContainer(updatedRecord)
-      }
-      setAuditEvents((current) => ({
-        ...current,
-        [updatedRecord.id]: [editEvent, ...(current[updatedRecord.id] ?? [])],
-      }))
-      if (selectedRecord?.id === updatedRecord.id) {
-        setSelectedRecord(updatedRecord)
-      }
-      setEditingRecord(null)
-      toast.success(`${formSchema.recordKind} updated`, {
-        description: `${updatedRecord.name} was updated and its audit history extended.`,
-      })
       return
     }
 
@@ -4063,43 +4083,50 @@ export function BusinessWorkspace({
       )} scope validated`,
     }
 
-    upsertRecord(resolvedTarget.workspaceId, resolvedTarget.module.id, newRecord)
-    if (resolvedTarget.module.id === "price-rows") {
-      const createdRow = recordToPriceRow(newRecord)
-      syncProductForRow(newRecord, {
-        historyWhat: createdRow?.negotiatedCustomer
-          ? `Negotiated deal added for ${createdRow.negotiatedCustomer}`
-          : "Variation added",
-      })
+    // On a switched module the dialog waits for the API's answer, its submit
+    // held: the row is opened and said to be made only once the API has
+    // taken it, and a refusal — the store's toast, in the API's words —
+    // leaves the dialog open with what was typed. Fixture mode lands at once (#239).
+    const createdIn = { workspaceId: resolvedTarget.workspaceId, moduleId: resolvedTarget.module.id }
+    const completion = {
+      title: formSchema.mode === "action" ? `${formSchema.recordKind} recorded` : `${formSchema.recordKind} created`,
+      description: formSchema.execution.completionMessage,
     }
-    setAuditEvents((current) => ({
-      ...current,
-      [newRecord.id]: [creationEvent],
-    }))
-    setIsCreateOpen(false)
-    setRelatedCreateTarget(null)
+    setFormSaving(true)
+    whenSaved(
+      upsertRecord(createdIn.workspaceId, createdIn.moduleId, newRecord),
+      () => {
+        if (createdIn.moduleId === "price-rows") {
+          const createdRow = recordToPriceRow(newRecord)
+          syncProductForRow(newRecord, {
+            historyWhat: createdRow?.negotiatedCustomer
+              ? `Negotiated deal added for ${createdRow.negotiatedCustomer}`
+              : "Variation added",
+          })
+        }
+        setAuditEvents((current) => ({
+          ...current,
+          [newRecord.id]: [creationEvent],
+        }))
+        setIsCreateOpen(false)
+        setRelatedCreateTarget(null)
 
-    if (
-      resolvedTarget.workspaceId === workspace.id &&
-      resolvedTarget.module.id === activeModule.id
-    ) {
-      setSelectedRecord(newRecord)
-      router.push(
-        getWorkspaceNavigationHref(
-          navigationBasePath,
-          workspace.id,
-          activeModule.id,
-          newRecord.id,
-        ),
-        { scroll: false },
-      )
-    }
+        if (createdIn.workspaceId === workspace.id && createdIn.moduleId === activeModule.id) {
+          setSelectedRecord(newRecord)
+          router.push(
+            getWorkspaceNavigationHref(
+              navigationBasePath,
+              workspace.id,
+              activeModule.id,
+              newRecord.id,
+            ),
+            { scroll: false },
+          )
+        }
 
-    toast.success(
-      formSchema.mode === "action"
-        ? `${formSchema.recordKind} recorded`
-        : `${formSchema.recordKind} created`,
-      { description: formSchema.execution.completionMessage },
+        toast.success(completion.title, { description: completion.description })
+      },
+      () => setFormSaving(false),
     )
   }
 
@@ -5800,6 +5827,7 @@ export function BusinessWorkspace({
           initialValueOverrides={formInitialValues}
           validateValues={validateFormValues}
           reviewSummary={getFormReviewSummary}
+          submitting={formSaving}
         />
       )}
       {relatedCreateTarget &&
@@ -5816,6 +5844,7 @@ export function BusinessWorkspace({
             initialValueOverrides={formInitialValues}
             validateValues={validateFormValues}
             reviewSummary={getFormReviewSummary}
+            submitting={formSaving}
           />
         )}
       {editingRecord && editFormSchema && (
@@ -5830,6 +5859,7 @@ export function BusinessWorkspace({
           initialValueOverrides={editInitialValues}
           validateValues={validateFormValues}
           reviewSummary={getFormReviewSummary}
+          submitting={formSaving}
         />
       )}
       <Suspense fallback={null}>
