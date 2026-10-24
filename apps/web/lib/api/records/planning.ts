@@ -501,10 +501,12 @@ export const collectionCalendarAdapter: ResourceAdapter<CollectionCalendar> = {
 // ---------------------------------------------------------------------------
 
 /** Settings → Areas & Zones, and the map's outlines. */
+// The boundary version in force on the project's day is the one a record carries: read again once that day turns (#232).
 export const planningAreasModule: ServerModule = {
   workspaceId: PLANNING_AREAS_MODULE.workspaceId,
   moduleId: PLANNING_AREAS_MODULE.moduleId,
   resources: [planningAreaAdapter],
+  readsTheDay: true,
 }
 
 /** Settings → Collection calendars, and what the wizard and generation read a project's holidays from. */

@@ -17,25 +17,34 @@ import { NOTHING_RESOLVED, type MappingContext, type Resource, type ResourceAdap
 import {
   adapterFor,
   companyRecordIdOf,
+  dayTurned,
+  dayTurnRereads,
+  derivedFromChanged,
+  derivedSourcesNow,
   IDLE,
   loadFailed,
   loadModule,
   loaded,
   loading,
+  mappedAgainstOf,
   moduleState,
   notGranted,
   paneAnswerOf,
+  projectTimezonesOf,
   readModuleInto,
   recordsOf,
   refusalProblem,
   rereadsOf,
   resolverOver,
+  sameSources,
   spellsStatus,
+  untilDayTurns,
   withCreated,
   withNotGranted,
   withRecord,
   withoutRecord,
   writeRecord,
+  type ModuleState,
   type ServerRecordsState,
 } from "../records/server-records"
 
@@ -541,5 +550,108 @@ describe("writing a record", () => {
     const outcome = await writeRecord(client, module(resource), loaded({ records: [], serverIds: new Map() }, 1), record("t-mint", "New"), options(state))
     assert.equal(outcome.kind, "created")
     assert.deepEqual((resource as ReturnType<typeof thingAdapter>).calls, ['create {"name":"New","parent":"p1"}'])
+  })
+})
+
+// A derived module (#232): one whose records are read through others' — a container's place, areas and serving period
+// through the agreements, the properties, the points, the areas and the master data — is stamped, when its read lands,
+// with those modules' rows as the snapshot its read began with held them, and is read again once one of them has new
+// rows since, or its projects' day has turned since it was read.
+describe("a module read through others", () => {
+  const agreementRows = [record("agreement-1", "AGR-1")]
+  const areaRows = [record("area-1", "Indre By")]
+  const ready = (records: BusinessRecord[]) => loaded({ records, serverIds: new Map() }, 1)
+  const derivedModule = (answer: () => Promise<Thing[]>): ServerModule => ({
+    workspaceId: "resources",
+    moduleId: "containers",
+    resources: [{ ...thingAdapter("t", []), list: answer }],
+    derivedFrom: ["customers.agreements", "configure.areas", "customers.shared"],
+  })
+
+  test("is stamped with those modules' rows as the snapshot it was mapped against held them, null where one was not ready", () => {
+    const state: ServerRecordsState = new Map([
+      ["customers.agreements", ready(agreementRows)],
+      ["configure.areas", loading(IDLE)],
+      ["customers.shared", notGranted("customers.shared")],
+    ])
+    assert.deepEqual(mappedAgainstOf(derivedModule(async () => []), state), new Map([["customers.agreements", agreementRows], ["configure.areas", null], ["customers.shared", null]]))
+    assert.equal(mappedAgainstOf({ workspaceId: "resources", moduleId: "inventory", resources: [] }, state), undefined, "a module read through none")
+  })
+
+  test("its read is stamped from the snapshot it began with: a change landing while it is out is still new once it lands", async () => {
+    const store = createExternalStore<ServerRecordsState>(new Map([["customers.agreements", ready(agreementRows)], ["configure.areas", ready(areaRows)]]))
+    const written = [...agreementRows, record("agreement-2", "AGR-2")]
+    const module = derivedModule(async () => {
+      store.set((state) => new Map(state).set("customers.agreements", ready(written)))
+      return []
+    })
+    await readModuleInto(store, client, module, { fixtures: [], alive: () => true })
+    const derived = store.getSnapshot().get("resources.containers")
+    assert.equal(derived?.mappedAgainst?.get("customers.agreements"), agreementRows, "the rows its mapping read")
+    assert.deepEqual(derivedFromChanged(derived, store.getSnapshot()), ["customers.agreements"], "so it is read again")
+    await readModuleInto(store, client, derivedModule(async () => []), { fixtures: [], alive: () => true })
+    assert.deepEqual(derivedFromChanged(store.getSnapshot().get("resources.containers"), store.getSnapshot()), [], "and once it is, it is current")
+  })
+
+  test("a module it is read through with new rows is a change: a write, a read again, one ready after it was read", () => {
+    const derived = { ...ready([]), mappedAgainst: new Map([["customers.agreements", agreementRows], ["configure.areas", null]]) }
+    const state = (agreements: BusinessRecord[], areas: ModuleState) => new Map([["customers.agreements", ready(agreements)], ["configure.areas", areas]]) as ServerRecordsState
+    assert.deepEqual(derivedFromChanged(derived, state(agreementRows, loading(IDLE))), [], "nothing new")
+    assert.deepEqual(derivedFromChanged(derived, state([record("agreement-1", "AGR-1 renamed")], loading(IDLE))), ["customers.agreements"])
+    assert.deepEqual(derivedFromChanged(derived, state(agreementRows, ready(areaRows))), ["configure.areas"])
+  })
+
+  test("one not ready never counts and never loops: not granted, failed, read again and still out; nor while it is not ready itself", () => {
+    const derived = { ...ready([]), mappedAgainst: new Map([["customers.agreements", agreementRows], ["customers.shared", null]]) }
+    const failedOnce = loadFailed(loading(IDLE), genericProblem(503))
+    for (const shared of [notGranted("customers.shared"), failedOnce, loading(IDLE)]) {
+      assert.deepEqual(derivedFromChanged(derived, new Map([["customers.agreements", ready(agreementRows)], ["customers.shared", shared]])), [], shared.status)
+    }
+    const keptRows = loadFailed(ready(agreementRows), genericProblem(503))
+    assert.deepEqual(derivedFromChanged({ ...derived, mappedAgainst: new Map([["customers.agreements", keptRows.records]]) }, new Map([["customers.agreements", keptRows]])), [], "a failed read again keeps its rows: nothing new")
+    assert.deepEqual(derivedFromChanged({ ...derived, status: "loading" }, new Map([["customers.agreements", ready([])]])), [], "not ready itself")
+    assert.deepEqual(derivedFromChanged(ready([]), new Map([["customers.agreements", ready([])]])), [], "never stamped")
+  })
+
+  test("a read again is asked for once per change of its sources: a failed one is not asked for again until they change once more", () => {
+    const derived = { ...ready([]), mappedAgainst: new Map([["customers.agreements", agreementRows], ["configure.areas", null]]) }
+    const written: ServerRecordsState = new Map([["customers.agreements", ready([record("agreement-2", "AGR-2")])]])
+    const asked = derivedSourcesNow(derived, written)
+    assert.equal(sameSources(asked, derivedSourcesNow(derived, written)), true, "the same change: asked for already")
+    assert.equal(sameSources(asked, derivedSourcesNow(derived, new Map([["customers.agreements", ready([record("agreement-3", "AGR-3")])]]))), false, "a new one")
+    assert.equal(sameSources(undefined, asked), false, "never asked")
+  })
+
+  test("the projects' clocks are the organisation's projects' timezones", () => {
+    const organisation = ready([record("company-1", "Kystbyen"), record("project-1", "Copenhagen", { submittedValues: { timezone: "Europe/Copenhagen" } }), record("project-2", "Aarhus", { submittedValues: { timezone: "Europe/Copenhagen" } })])
+    assert.deepEqual(projectTimezonesOf(new Map([["configure.organization", organisation]])), ["Europe/Copenhagen"])
+    assert.deepEqual(projectTimezonesOf(new Map()), [], "none loaded: the browser's clock")
+  })
+
+  test("at the day's turn the modules read on the day are read again, one read through another that is followed by it", () => {
+    const areas: ServerModule = { workspaceId: "configure", moduleId: "areas", resources: [], readsTheDay: true }
+    const containers: ServerModule = { workspaceId: "resources", moduleId: "containers", resources: [], derivedFrom: ["configure.areas"], readsTheDay: true }
+    const yesterday = Date.parse("2026-10-24T12:00:00Z")
+    const now = Date.parse("2026-10-25T08:00:00Z")
+    const readAt = (at: number) => ({ ...ready([]), loadedAt: at })
+    const keys = (modules: ServerModule[]) => modules.map((module) => `${module.workspaceId}.${module.moduleId}`)
+    const both = new Map([["configure.areas", readAt(yesterday)], ["resources.containers", readAt(yesterday)]])
+    assert.deepEqual(keys(dayTurnRereads(both, [areas, containers], now, ["Europe/Copenhagen"])), ["configure.areas"], "the containers follow the areas' new rows")
+    const areasNotGranted = new Map([["configure.areas", notGranted("configure.areas")], ["resources.containers", readAt(yesterday)]])
+    assert.deepEqual(keys(dayTurnRereads(areasNotGranted, [areas, containers], now, ["Europe/Copenhagen"])), ["resources.containers"], "nothing to follow: read on their own")
+    const today = new Map([["configure.areas", readAt(now)], ["resources.containers", readAt(now)]])
+    assert.deepEqual(dayTurnRereads(today, [areas, containers], now, ["Europe/Copenhagen"]), [], "read today already")
+    assert.deepEqual(dayTurnRereads(both, [{ ...areas, readsTheDay: undefined }], now, ["Europe/Copenhagen"]), [], "a module not read on the day")
+  })
+
+  test("a project's day has turned between two instants on its own clock, and the next turn is the first of its projects'", () => {
+    const before = Date.parse("2026-10-24T21:59:00Z") // 23:59 in Copenhagen (summer time)
+    const after = Date.parse("2026-10-24T22:01:00Z")
+    assert.equal(dayTurned(before, after, ["Europe/Copenhagen"]), true)
+    assert.equal(dayTurned(before, after, ["UTC"]), false)
+    assert.equal(dayTurned(before, after, ["UTC", "Europe/Copenhagen"]), true)
+    const nine = Date.parse("2026-10-24T21:00:00Z")
+    assert.ok(Math.abs(untilDayTurns(nine, ["Europe/Copenhagen"]) - 60 * 60 * 1000) <= 1000, "an hour to Copenhagen's midnight")
+    assert.ok(Math.abs(untilDayTurns(nine, ["UTC", "Europe/Copenhagen"]) - 60 * 60 * 1000) <= 1000, "the first of them")
   })
 })

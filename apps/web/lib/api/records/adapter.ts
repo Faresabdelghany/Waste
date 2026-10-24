@@ -171,6 +171,17 @@ export type ServerModule = {
   moduleId: string
   // eslint-disable-next-line @typescript-eslint/no-explicit-any -- a module composes adapters of different resources; each is typed on its own
   resources: ResourceAdapter<any>[]
+  /**
+   * The modules, by key, whose rows its records are read through (#232): a
+   * container's place, areas and serving period through the agreements, the
+   * places and the areas. The store stamps each read of it with their rows
+   * as the read began (`mappedAgainst`) and reads it again once one of them
+   * has new rows since, or its projects' day has turned since it was read.
+   * None names itself or another such module (modules.ts' test).
+   */
+  derivedFrom?: readonly string[]
+  /** Whether its records are read on the project's day (a boundary in force, a container's serving): the store reads it again once that day turns (#232). */
+  readsTheDay?: true
 }
 
 /** The client the adapters call through; the type is client.ts's, named here so records/ imports one thing. */

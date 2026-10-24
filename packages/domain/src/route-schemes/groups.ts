@@ -424,6 +424,8 @@ export function resolveCollectionGroupPlans(input: {
   serviceDays: readonly ServiceDay[]
   areaId: string | undefined
   projectIds?: readonly string[]
+  /** The scheme's first day, which the rule matches judge a container's serving period on where it is still ahead (#232). */
+  from?: string | undefined
   containers: readonly ContainerRecordLike[]
 }): CollectionGroupResolution {
   const plans: CollectionGroupDayPlan[] = []
@@ -450,6 +452,8 @@ export function resolveCollectionGroupPlans(input: {
         },
         areaId: input.areaId,
         projectIds: input.projectIds,
+        from: input.from,
+        days: group.days,
         containers: input.containers,
       }),
     )
@@ -569,6 +573,7 @@ export function schemeGroupPlans(
     serviceDays,
     areaId: stringValue(scheme.submittedValues ?? {}, "planningAreaId"),
     projectIds: scheme.projectIds,
+    from: stringValue(scheme.submittedValues ?? {}, "effectiveFrom"),
     containers,
   })
   return { groups, resolution }

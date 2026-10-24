@@ -59,6 +59,7 @@ import type { ApiClient } from "../client"
 import { ApiProblem, genericProblem, isAccountRefusal, type Problem } from "../problem"
 import { isLocalRefusal, moduleKeyOf, PartialWrite, statusToken, webIdOf, type CommandInput, type MappingContext, type Resolver, type Resource, type ResourceAdapter, type ServerModule } from "./adapter"
 import { isCompanyRecord } from "./organisation"
+import { dayIn } from "./planning"
 
 export type ModuleStatus = "idle" | "not-granted" | "loading" | "ready" | "failed"
 
@@ -72,6 +73,8 @@ export type ModuleState = {
   problem: Problem | null
   /** The clock of the last successful read. */
   loadedAt: number | null
+  /** A module read through others (`ServerModule.derivedFrom`, #232): their rows, by key, as the snapshot its last read began with held them, null where one was not ready. */
+  mappedAgainst?: ReadonlyMap<string, readonly BusinessRecord[] | null>
 }
 
 export type ServerRecordsState = ReadonlyMap<string, ModuleState>
@@ -259,9 +262,91 @@ export function loading(module: ModuleState): ModuleState {
   return { ...module, status: module.status === "ready" ? "ready" : "loading", problem: null }
 }
 
-/** The state after a read answered. */
-export function loaded(result: LoadResult, now: number): ModuleState {
-  return { status: "ready", records: result.records, serverIds: result.serverIds, problem: null, loadedAt: now }
+/** The state after a read answered, stamped with what a module read through others was mapped against. */
+export function loaded(result: LoadResult, now: number, mappedAgainst?: ReadonlyMap<string, readonly BusinessRecord[] | null>): ModuleState {
+  return { status: "ready", records: result.records, serverIds: result.serverIds, problem: null, loadedAt: now, ...(mappedAgainst === undefined ? {} : { mappedAgainst }) }
+}
+
+const readyRowsOf = (module: ModuleState | undefined): readonly BusinessRecord[] | null => (module?.status === "ready" ? module.records : null)
+
+/** What a read of a module read through others is mapped against (#232): their rows, by key, in `state` — the snapshot the read began with — null where one is not ready; undefined for any other module. */
+export function mappedAgainstOf(module: ServerModule, state: ServerRecordsState): ReadonlyMap<string, readonly BusinessRecord[] | null> | undefined {
+  if (module.derivedFrom === undefined) return undefined
+  return new Map(module.derivedFrom.map((key) => [key, readyRowsOf(state.get(key))]))
+}
+
+/**
+ * The modules a derived module is read through that have new rows since it
+ * was mapped (#232): a write, a read again, one ready after it was read. The
+ * rows' identity says so, never a module state's, so one not ready now —
+ * loading, failed, not granted — says nothing new: it never counts, and a
+ * read again of the derived module stamped with it unready never asks for
+ * another. Nothing while the derived module is not ready or was never
+ * stamped.
+ */
+export function derivedFromChanged(derived: ModuleState | undefined, state: ServerRecordsState): string[] {
+  if (derived?.status !== "ready" || derived.mappedAgainst === undefined) return []
+  return [...derived.mappedAgainst].filter(([key, rows]) => {
+    const now = readyRowsOf(state.get(key))
+    return now !== null && now !== rows
+  }).map(([key]) => key)
+}
+
+/**
+ * The rows a derived module's sources hold now, in its stamp's order: what
+ * the store remembers a read again was asked for at, so a read that failed
+ * is not asked for again until a source changes once more.
+ */
+export function derivedSourcesNow(derived: ModuleState | undefined, state: ServerRecordsState): readonly (readonly BusinessRecord[] | null)[] {
+  return [...(derived?.mappedAgainst?.keys() ?? [])].map((key) => readyRowsOf(state.get(key)))
+}
+
+/** Whether two readings of the sources are the same rows. */
+export function sameSources(a: readonly (readonly BusinessRecord[] | null)[] | undefined, b: readonly (readonly BusinessRecord[] | null)[]): boolean {
+  return a !== undefined && a.length === b.length && a.every((rows, index) => rows === b[index])
+}
+
+/** The timezones of the projects the organisation module holds, the clocks a derived module's day turns on. */
+export function projectTimezonesOf(state: ServerRecordsState): string[] {
+  const zones = (readyRowsOf(state.get("configure.organization")) ?? []).map((record) => record.submittedValues?.timezone)
+  return [...new Set(zones.filter((zone): zone is string => typeof zone === "string" && zone !== ""))]
+}
+
+const zonesOr = (timezones: readonly (string | undefined)[]) => (timezones.length === 0 ? [undefined] : timezones)
+
+/** Whether a project's day has turned between `then` and `now`, on any of the projects' clocks (the browser's without one). */
+export function dayTurned(then: number, now: number, timezones: readonly (string | undefined)[]): boolean {
+  return zonesOr(timezones).some((zone) => dayIn(new Date(then), zone) !== dayIn(new Date(now), zone))
+}
+
+/**
+ * The modules to read again at the turn of a project's day (#232): each
+ * ready one that reads the day (`readsTheDay`) and was read before it turned
+ * — but not one read through another that is read again too, since that
+ * read's new rows bring it after (`derivedFromChanged`), mapped against the
+ * day's readings rather than yesterday's.
+ */
+export function dayTurnRereads(state: ServerRecordsState, modules: readonly ServerModule[], now: number, timezones: readonly (string | undefined)[]): ServerModule[] {
+  const keyOf = (module: ServerModule) => moduleKeyOf(module.workspaceId, module.moduleId)
+  const turned = modules.filter((module) => {
+    const current = state.get(keyOf(module))
+    return module.readsTheDay === true && current?.status === "ready" && current.loadedAt !== null && dayTurned(current.loadedAt, now, timezones)
+  })
+  const again = new Set(turned.map(keyOf))
+  return turned.filter((module) => !(module.derivedFrom ?? []).some((source) => again.has(source)))
+}
+
+/** How long from `now` until the first of the projects' days turns, to the second. */
+export function untilDayTurns(now: number, timezones: readonly (string | undefined)[]): number {
+  const DAY = 26 * 60 * 60 * 1000
+  let low = 0
+  let high = DAY
+  while (high - low > 1000) {
+    const middle = Math.floor((low + high) / 2)
+    if (dayTurned(now, now + middle, timezones)) high = middle
+    else low = middle
+  }
+  return high
 }
 
 /** The state after a read failed: a module that was ready keeps its rows and notes the problem; one that was not is `failed`. */
@@ -299,8 +384,9 @@ export async function readModuleInto(store: ServerStore, client: ApiClient, modu
   const key = moduleKeyOf(module.workspaceId, module.moduleId)
   store.set((state) => new Map(state).set(key, loading(state.get(key) ?? IDLE)))
   try {
-    const result = await loadModule(client, module, { fixtures, state: store.getSnapshot() })
-    if (alive()) store.set((state) => new Map(state).set(key, loaded(result, now())))
+    const started = store.getSnapshot()
+    const result = await loadModule(client, module, { fixtures, state: started })
+    if (alive()) store.set((state) => new Map(state).set(key, loaded(result, now(), mappedAgainstOf(module, started))))
     return null
   } catch (error) {
     const problem = problemOfError(error)

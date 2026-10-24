@@ -51,7 +51,7 @@ import { MASTER_DATA_KIND_DETAILS } from "@/lib/data/master-data-kinds"
 import { command, create, get, listAll, patch } from "../client"
 import { inheritedPresentation, isLocalRefusal, moduleKeyOf, ofKind, patchOf, said, stampFacts, statusLabel, typed, webIdOf, type Client, type CommandInput, type LocalRefusal, type MappingContext, type RecordCommand, type ResourceAdapter, type ServerModule } from "./adapter"
 import { instantOn, projectTimezoneOf, shownOn } from "./clock"
-import { containerPlace, servesOn } from "./container-places"
+import { CONTAINER_PLACE_MODULES, containerPlace, servesOn } from "./container-places"
 import { projectMoved, projectServerIdOf, refusal, warehouseAdapter } from "./places"
 import { dayIn } from "./planning"
 import { nameVia, referencedServerId, typedReference, webIdVia, type ReferenceRule } from "./references"
@@ -347,7 +347,7 @@ export const containerAdapter: ResourceAdapter<ContainerResource> = {
       if (placement.effectiveServiceFrequencyId !== null) facts["Service frequency"] = nameVia(context, "frequency", placement.effectiveServiceFrequencyId)
     }
     if (resource.notes !== null) facts.Notes = resource.notes
-    const place = containerPlace(placement, projectWebId, timezone, context)
+    const place = containerPlace(placement, resource.placements, projectWebId, timezone, context)
     Object.assign(facts, place.facts)
     return {
       id: webIdOf(CONTAINER_PREFIX, resource.id),
@@ -443,11 +443,14 @@ export const containerAdapter: ResourceAdapter<ContainerResource> = {
   commands: CONTAINER_COMMANDS,
 }
 
-/** Resources › Containers: the registry's containers, each with where it serves. */
+/** Resources › Containers: the registry's containers, each with where it serves, read again once a module its place is read through changes (#232). */
 export const containersModule: ServerModule = {
   workspaceId: CONTAINERS_MODULE.workspaceId,
   moduleId: CONTAINERS_MODULE.moduleId,
   resources: [containerAdapter],
+  // The organisation too: a project's timezone is the day its containers' serving is read on.
+  derivedFrom: ["configure.organization", ...CONTAINER_PLACE_MODULES.map((location) => moduleKeyOf(location.workspaceId, location.moduleId))],
+  readsTheDay: true,
 }
 
 // ---------------------------------------------------------------------------

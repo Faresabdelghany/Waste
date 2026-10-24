@@ -401,6 +401,30 @@ async function receivedContainerThroughApi(api: APIRequestContext, projectId: st
   return container
 }
 
+test("a write to a module the containers are read through has them read again, once, after it (#232)", async ({ page, api }) => {
+  const customer = await customerThroughApi(api, uniqueName("E2E Readings"))
+  // The containers' first page, each time they are read: a container's place, areas and serving are read with it.
+  const containersRead = (request: { method: () => string; url: () => string }) => {
+    const url = new URL(request.url())
+    return request.method() === "GET" && url.pathname === "/waste-api/containers" && !url.searchParams.has("cursor")
+  }
+  const reads: number[] = []
+  page.on("request", (request) => {
+    if (containersRead(request)) reads.push(Date.now())
+  })
+  // The store's own first read of them, after the agreements': only what follows the write is counted.
+  const loaded = page.waitForResponse((response) => containersRead(response.request()), { timeout: 30_000 })
+  await openAgreementsLoaded(page)
+  await loaded
+  const first = reads.length
+  const created = await createAgreement(page, { number: uniqueName("E2E-RDG").replace(/\s+/g, "-").toUpperCase(), customer: customer.name, payer: customer.name })
+  expect(created.status()).toBe(201)
+  await expect.poll(() => reads.length - first, { timeout: 15_000, message: "the containers are read again" }).toBe(1)
+  // A burst collapses into one read: nothing more follows it.
+  await page.waitForTimeout(3_000)
+  expect(reads.length - first).toBe(1)
+})
+
 test("Properties: created in the browser with its owner and its point, read back, its parties replaced whole beside a rename, set Inactive, and a subscription there refused in #79's sentence", async ({ page, api }) => {
   const project = await projectNamed(api, TESTER_PROJECT)
   const owner = await customerThroughApi(api, uniqueName("E2E Owner"))

@@ -113,6 +113,8 @@ export function SchemeRuleEditor({
   areaId,
   areaName,
   projectIds,
+  from,
+  days,
   rule,
   onChange,
 }: {
@@ -120,6 +122,9 @@ export function SchemeRuleEditor({
   areaId?: string
   areaName?: string
   projectIds?: string[]
+  /** The scheme's first day and the group's days: a container the API holds is judged in service on the first collection where that is still ahead (#232). */
+  from?: string
+  days?: readonly ServiceDay[]
   rule: StopMatchRule
   onChange: (rule: StopMatchRule) => void
 }) {
@@ -146,8 +151,8 @@ export function SchemeRuleEditor({
   }
 
   const result = useMemo(
-    () => resolveStopMatches({ rule, areaId, projectIds, containers }),
-    [rule, areaId, projectIds, containers],
+    () => resolveStopMatches({ rule, areaId, projectIds, from, days, containers }),
+    [rule, areaId, projectIds, from, days, containers],
   )
 
   return (
@@ -266,7 +271,7 @@ export function SchemeRuleEditor({
                     </span>
                   </p>
                   <p className="truncate text-xs text-muted-foreground">
-                    {container?.facts?.Address ?? container?.context ?? ""}
+                    {profile.place ?? container?.facts?.Address ?? container?.facts?.["Serves at"] ?? container?.context ?? ""}
                     {profile.containerType ? ` · ${profile.containerType}` : ""}
                   </p>
                 </div>
@@ -529,6 +534,7 @@ export function CollectionGroupsEditor({
   serviceDays,
   planningAreaId,
   projectId,
+  effectiveFrom,
   issues = [],
 }: {
   groups: CollectionGroup[]
@@ -536,6 +542,8 @@ export function CollectionGroupsEditor({
   serviceDays: readonly ServiceDay[]
   planningAreaId?: string
   projectId?: string
+  /** The scheme's first day, which the rule matches judge a container's serving period on where it is still ahead (#232). */
+  effectiveFrom?: string
   /** Live validation issues — the ones naming a group show on its row. */
   issues?: readonly string[]
 }) {
@@ -563,9 +571,10 @@ export function CollectionGroupsEditor({
         serviceDays: days,
         areaId: planningAreaId,
         projectIds: projectId ? [projectId] : undefined,
+        from: effectiveFrom,
         containers,
       }),
-    [containers, days, groups, planningAreaId, projectId],
+    [containers, days, effectiveFrom, groups, planningAreaId, projectId],
   )
   const coverage = collectionGroupCoverage(days, groups)
   const attributedIssues = useMemo(() => issuesByGroup(groups, issues), [groups, issues])
@@ -728,6 +737,7 @@ export function CollectionGroupsEditor({
           areaId={planningAreaId}
           areaName={areas.find((area) => area.id === planningAreaId)?.name}
           projectIds={projectId ? [projectId] : undefined}
+          from={effectiveFrom}
           projectName={projects.find((project) => project.id === projectId)?.name}
           onChange={(updates) => updateGroup(selected.id, updates)}
         />
@@ -749,6 +759,7 @@ function CollectionGroupSpoke({
   areaId,
   areaName,
   projectIds,
+  from,
   projectName,
   onChange,
 }: {
@@ -763,6 +774,7 @@ function CollectionGroupSpoke({
   areaId?: string
   areaName?: string
   projectIds?: string[]
+  from?: string
   projectName?: string
   onChange: (updates: Partial<CollectionGroup>) => void
 }) {
@@ -887,6 +899,8 @@ function CollectionGroupSpoke({
           areaId={areaId}
           areaName={areaName}
           projectIds={projectIds}
+          from={from}
+          days={group.days}
           rule={rule}
           onChange={(next) =>
             onChange({
@@ -987,6 +1001,8 @@ function CollectionGroupsEditorDialogBody({
       : undefined
   const projectId =
     typeof values.projectId === "string" && values.projectId ? values.projectId : undefined
+  const effectiveFrom =
+    typeof values.effectiveFrom === "string" && values.effectiveFrom ? values.effectiveFrom : undefined
 
   return (
     <>
@@ -1002,6 +1018,7 @@ function CollectionGroupsEditorDialogBody({
         onChange={setGroups}
         serviceDays={serviceDays}
         planningAreaId={planningAreaId}
+        effectiveFrom={effectiveFrom}
         projectId={projectId}
         issues={preview?.issues ?? []}
       />

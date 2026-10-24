@@ -31,13 +31,19 @@ import { organisationModule } from "@/lib/api/records/organisation"
 import {
   actOnRecord,
   commandRecord,
+  dayTurnRereads,
+  derivedFromChanged,
+  derivedSourcesNow,
   IDLE,
   paneAnswerOf,
   problemOfError,
+  projectTimezonesOf,
   readModuleInto,
   recordsOf,
   rereadRecord,
   rereadsOf,
+  sameSources,
+  untilDayTurns,
   withCreated,
   withNotGranted,
   withRecord,
@@ -422,6 +428,94 @@ export function BusinessRecordStoreProvider({
       controller.abort()
     }
   }, [identity, stores, loadMe])
+
+  // A module read through others (`derivedFrom`, #232) is read again once
+  // one of them has new rows since its read began (`derivedFromChanged`),
+  // and a module read on the project's day once that day turns
+  // (`dayTurnRereads`), checked again when the page comes back, since a timer
+  // sleeps with the machine. A burst collapses into one read a second after
+  // its last change, after any write still out (its answer is the change
+  // that counts), queued as every read is (`rereadModule`). A read that
+  // failed is asked for again half a minute on, not at once. The write, read
+  // and command paths are as they were; this only watches what they leave.
+  useEffect(() => {
+    const derived = SERVER_MODULES.filter((module) => module.derivedFrom !== undefined)
+    const timers = new Set<ReturnType<typeof setTimeout>>()
+    const after = (ms: number, run: () => void) => {
+      const timer = setTimeout(() => {
+        timers.delete(timer)
+        run()
+      }, ms)
+      timers.add(timer)
+      return timer
+    }
+    const due = new Map<string, ReturnType<typeof setTimeout>>()
+    const asked = new Map<string, ReturnType<typeof derivedSourcesNow>>()
+    const readAgain = (module: ServerModule) => {
+      const key = moduleKey(module.workspaceId, module.moduleId)
+      const pending = due.get(key)
+      if (pending !== undefined) {
+        clearTimeout(pending)
+        timers.delete(pending)
+      }
+      const send = () => {
+        if (stores.pendingWrites.size > 0) {
+          due.set(key, after(1_000, send))
+          return
+        }
+        due.delete(key)
+        const client = stores.client.getSnapshot()
+        if (client === null) return
+        const generation = stores.generation.getSnapshot()
+        void rereadModule(stores, module, () => stores.generation.getSnapshot() !== generation, client).finally(() => {
+          if (stores.server.getSnapshot().get(key)?.problem == null) return
+          after(30_000, () => {
+            asked.delete(key)
+            check(false)
+          })
+        })
+      }
+      due.set(key, after(1_000, send))
+    }
+    let zones = ""
+    let midnight: ReturnType<typeof setTimeout> | undefined
+    const check = (dayToo: boolean) => {
+      const state = stores.server.getSnapshot()
+      const timezones = projectTimezonesOf(state)
+      for (const module of derived) {
+        const key = moduleKey(module.workspaceId, module.moduleId)
+        const current = state.get(key)
+        if (derivedFromChanged(current, state).length === 0) continue
+        const sources = derivedSourcesNow(current, state)
+        if (sameSources(asked.get(key), sources)) continue
+        asked.set(key, sources)
+        readAgain(module)
+      }
+      if (dayToo) for (const module of dayTurnRereads(state, SERVER_MODULES, Date.now(), timezones)) readAgain(module)
+      // The next turn of the projects' day, armed again whenever their clocks are first known or change.
+      if (dayToo || timezones.join() !== zones) {
+        zones = timezones.join()
+        if (midnight !== undefined) {
+          clearTimeout(midnight)
+          timers.delete(midnight)
+        }
+        midnight = after(untilDayTurns(Date.now(), timezones) + 1_000, () => check(true))
+      }
+    }
+    const unsubscribe = stores.server.subscribe(() => check(false))
+    const onReturn = () => {
+      if (document.visibilityState === "visible") check(true)
+    }
+    document.addEventListener("visibilitychange", onReturn)
+    window.addEventListener("focus", onReturn)
+    check(true)
+    return () => {
+      unsubscribe()
+      document.removeEventListener("visibilitychange", onReturn)
+      window.removeEventListener("focus", onReturn)
+      for (const timer of timers) clearTimeout(timer)
+    }
+  }, [stores])
 
   return (
     <BusinessRecordStoreContext.Provider value={stores}>

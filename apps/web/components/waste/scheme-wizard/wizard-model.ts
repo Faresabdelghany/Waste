@@ -168,7 +168,7 @@ export function buildWizardModel(data: GuidedSchemeData, records: WizardRecords)
   const driverById = (id: string | undefined) => (id ? drivers.get(id) ?? null : null)
 
   const profiles = new Map(
-    records.containers.map((record) => [record.id, containerMatchProfile(record)]),
+    records.containers.map((record) => [record.id, containerMatchProfile(record, data.effectiveFrom)]),
   )
   const containerProfile = (id: string) => profiles.get(id)
   const profilesOf = (ids: readonly string[]) =>
@@ -194,6 +194,8 @@ export function buildWizardModel(data: GuidedSchemeData, records: WizardRecords)
             },
             areaId: data.planningAreaId,
             projectIds,
+            from: data.effectiveFrom,
+            days: group.days,
             containers: records.containers,
           }).matched
         : profilesOf(group.containerIds)
