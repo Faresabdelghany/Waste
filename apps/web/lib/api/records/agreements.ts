@@ -45,7 +45,18 @@
 // `subscription-<uuid>` from the start: no fixture lends its id, since the
 // tickets that named agreements by the fixtures' ids read the API's now
 // (#182, the plan on #81, fixture ids (b)).
-import type { Agreement, AgreementStatus, Subscription } from "@waste/contracts/agreements"
+import type {
+  Agreement,
+  AgreementStatus,
+  AgreementTerminated,
+  AgreementTermination,
+  Subscription,
+  SubscriptionChange,
+  SubscriptionPause,
+  SubscriptionPauseCreate,
+  SubscriptionPaused,
+  SubscriptionPausePatch,
+} from "@waste/contracts/agreements"
 import { AGREEMENT_STATUSES as WIRE_AGREEMENT_STATUSES, BILLING_CADENCES } from "@waste/domain/registry/vocabulary"
 
 import {
@@ -66,9 +77,10 @@ import {
 } from "@/lib/data/agreements"
 import { FIXTURE_COMPANY_ID, type BusinessRecord } from "@/lib/data/business-modules"
 
-import { create, listAll, patch } from "../client"
-import { inheritedPresentation, patchOf, stampFacts, statusLabel, statusToken, typed, webIdOf, type Client, type LocalRefusal, type MappingContext, type ResourceAdapter, type ServerModule } from "./adapter"
+import { command, create, listAll, patch, post } from "../client"
+import { inheritedPresentation, patchOf, stampFacts, statusLabel, statusToken, typed, webIdOf, type Client, type CommandInput, type LocalRefusal, type MappingContext, type RecordAction, type ResourceAdapter, type ServerModule } from "./adapter"
 import { dayIn, firstDayOut, lastDayIn } from "./planning"
+import type { ActionOutcome, SendAction } from "./server-records"
 
 const refusal = (path: string, message: string): LocalRefusal => ({ path, message })
 
@@ -107,6 +119,114 @@ function referenced(context: MappingContext, serverId: string, prefix: string): 
 /** The server id a chip or a web id stands for: the store's row first, then the chip's own id, so a switched module resolves and an unswitched one is named by id. */
 const chipServerId = (value: string | undefined, prefix: string, context: MappingContext): string | undefined =>
   (value === undefined ? undefined : context.resolve.serverIdOf(value)) ?? referencedId(value, prefix)
+
+// ---------------------------------------------------------------------------
+// The lifecycle (#291, slice 10): a change of service, a pause, a termination
+// ---------------------------------------------------------------------------
+
+/** The actions, by name: each answers another resource than the row, so the surface re-reads what it changed (`refreshModule`). */
+export const CHANGE_SERVICE = "change-service"
+export const PAUSE = "pause"
+export const MOVE_PAUSE = "move-pause"
+export const CANCEL_PAUSE = "cancel-pause"
+export const TERMINATE = "terminate"
+
+/** What a change naming neither a product nor a quantity is refused with, before the API sees it. */
+export const CHANGE_NAMES_NOTHING = "Pick the product or the quantity the new service takes"
+
+/** A day as a date field holds it, `YYYY-MM-DD`; undefined for anything else. */
+const dayOf = (value: unknown): string | undefined => (typeof value === "string" && /^\d{4}-\d{2}-\d{2}$/.test(value) ? value : undefined)
+/** A field's text, undefined where it is blank. */
+const textOf = (value: unknown): string | undefined => (typeof value === "string" && value.trim() !== "" ? value.trim() : undefined)
+
+/** The change: its first day is the wire's `on`, the product the products module's row, a blank field the subscription's own. */
+const changeServiceAction: RecordAction<Subscription> = {
+  toBody: (input, _record, context) => {
+    const on = dayOf(input.from)
+    if (on === undefined) return refusal("from", "Pick the first day of the new service")
+    const picked = textOf(input.productId)
+    const productId = picked === undefined ? undefined : chipServerId(picked, PRODUCT_PREFIX, context)
+    if (picked !== undefined && productId === undefined) return refusal("productId", "Pick a product the API holds")
+    const quantity = countOf(textOf(input.quantity))
+    if (Number.isNaN(quantity)) return refusal("quantity", QUANTITY_REFUSAL)
+    if (productId === undefined && quantity === undefined) return refusal("productId", CHANGE_NAMES_NOTHING)
+    return { on, ...(productId === undefined ? {} : { productId }), ...(quantity === undefined ? {} : { quantity }) } satisfies SubscriptionChange
+  },
+  run: (client, serverId, body) => create<Subscription>(client, `/subscriptions/${serverId}/change`, body).then((created) => created.body),
+  refused: (record) => `${record.name}'s service was not changed`,
+}
+
+/** The pause: its first day as the wire's, its last day in as the form spells every end, blank for a pause until it is resumed. */
+const pauseAction: RecordAction<SubscriptionPaused> = {
+  toBody: (input) => {
+    const validFrom = dayOf(input.from)
+    if (validFrom === undefined) return refusal("from", "Pick the first day paused")
+    const last = textOf(input.lastDay)
+    const lastDay = last === undefined ? undefined : dayOf(last)
+    if (last !== undefined && lastDay === undefined) return refusal("lastDay", "Pick the last day paused, or leave it blank")
+    return { validFrom, ...(lastDay === undefined ? {} : { validTo: firstDayOut(lastDay) }) } satisfies SubscriptionPauseCreate
+  },
+  run: (client, serverId, body) => create<SubscriptionPaused>(client, `/subscriptions/${serverId}/pauses`, body).then((created) => created.body),
+  refused: (record) => `${record.name} was not paused`,
+}
+
+/** A pause is not a record of the module: an action of its subscription names it by the server's id, as the subscription's pause list read it. */
+type PauseWrite = { pauseId: string; values: SubscriptionPausePatch }
+
+/** A pause's end moved — to today, to resume it now: `resumeOn` is the day collections resume, the wire's `validTo`. */
+const movePauseAction: RecordAction<SubscriptionPaused> = {
+  toBody: (input) => {
+    const pauseId = textOf(input.pauseId)
+    if (pauseId === undefined) return refusal("pauseId", "Pick a pause")
+    const resumeOn = dayOf(input.resumeOn)
+    if (resumeOn === undefined) return refusal("resumeOn", "Pick the day collections resume")
+    return { pauseId, values: { validTo: resumeOn } } satisfies PauseWrite
+  },
+  run: (client, _serverId, body) => {
+    const write = body as PauseWrite
+    return patch<SubscriptionPaused>(client, `/subscription-pauses/${write.pauseId}`, write.values)
+  },
+  refused: (record) => `${record.name}'s pause was not moved`,
+}
+
+/** A pause that has not begun, cancelled. */
+const cancelPauseAction: RecordAction<SubscriptionPause> = {
+  toBody: (input) => {
+    const pauseId = textOf(input.pauseId)
+    return pauseId === undefined ? refusal("pauseId", "Pick a pause") : { pauseId }
+  },
+  run: (client, _serverId, body) => command<SubscriptionPause>(client, `/subscription-pauses/${(body as { pauseId: string }).pauseId}/cancel`, {}),
+  refused: (record) => `${record.name}'s pause was not cancelled`,
+}
+
+/** The termination: the agreement's last day in, as the form spells every end; the wire's `on` is the day after. */
+const terminateAction: RecordAction<AgreementTerminated> = {
+  toBody: (input) => {
+    const lastDay = dayOf(input.lastDay)
+    if (lastDay === undefined) return refusal("lastDay", "Pick the agreement's last day")
+    return { on: firstDayOut(lastDay) } satisfies AgreementTermination
+  },
+  run: (client, serverId, body) => post<AgreementTerminated>(client, `/agreements/${serverId}/terminate`, body).then((answer) => answer.body),
+  refused: (record) => `${record.name} was not terminated`,
+}
+
+/** One of the lifecycle's actions through the store's `sendAction`, its answer typed: the one way a surface asks for one. */
+const lifecycle = <Answer>(sendAction: SendAction, recordId: string, name: string, input: CommandInput): Promise<ActionOutcome<Answer>> =>
+  sendAction(AGREEMENTS_MODULE.workspaceId, AGREEMENTS_MODULE.moduleId, recordId, name, input) as Promise<ActionOutcome<Answer>>
+
+/** A subscription's change of service; the answer is the subscription replacing it. */
+export const changeService = (sendAction: SendAction, recordId: string, input: CommandInput) => lifecycle<Subscription>(sendAction, recordId, CHANGE_SERVICE, input)
+/** A subscription's pause; the answer carries the stops left to remove by hand. */
+export const pauseSubscription = (sendAction: SendAction, recordId: string, input: CommandInput) => lifecycle<SubscriptionPaused>(sendAction, recordId, PAUSE, input)
+/** A pause of the subscription resumed on a day, today's to resume it now. */
+export const resumePause = (sendAction: SendAction, recordId: string, pauseId: string, resumeOn: string) => lifecycle<SubscriptionPaused>(sendAction, recordId, MOVE_PAUSE, { pauseId, resumeOn })
+/** A pause of the subscription that has not begun, cancelled. */
+export const cancelPause = (sendAction: SendAction, recordId: string, pauseId: string) => lifecycle<SubscriptionPause>(sendAction, recordId, CANCEL_PAUSE, { pauseId })
+/** An agreement's termination; the answer carries the stops left to remove by hand. */
+export const terminateAgreement = (sendAction: SendAction, recordId: string, input: CommandInput) => lifecycle<AgreementTerminated>(sendAction, recordId, TERMINATE, input)
+
+/** A subscription's pauses, oldest first: what its details list, with what each offers. */
+export const subscriptionPauses = (client: Client, serverId: string): Promise<SubscriptionPause[]> => listAll<SubscriptionPause>(client, "/subscription-pauses", { subscriptionId: serverId })
 
 // ---------------------------------------------------------------------------
 // Agreements
@@ -239,6 +359,7 @@ export const agreementAdapter: ResourceAdapter<Agreement> = {
   },
   create: (client, body) => create<Agreement>(client, "/agreements", body).then((created) => created.body),
   update: (client, serverId, body) => patch<Agreement>(client, `/agreements/${serverId}`, body),
+  actions: { [TERMINATE]: terminateAction },
 }
 
 // ---------------------------------------------------------------------------
@@ -380,6 +501,7 @@ export const subscriptionAdapter: ResourceAdapter<Subscription> = {
     return create<Subscription>(client, `/agreements/${write.agreementId}/subscriptions`, write.body).then((created) => created.body)
   },
   update: (client, serverId, body) => patch<Subscription>(client, `/subscriptions/${serverId}`, body),
+  actions: { [CHANGE_SERVICE]: changeServiceAction, [PAUSE]: pauseAction, [MOVE_PAUSE]: movePauseAction, [CANCEL_PAUSE]: cancelPauseAction },
 }
 
 // ---------------------------------------------------------------------------
