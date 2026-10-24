@@ -227,7 +227,8 @@ export function createApp({
   app.route("/", propertyRoutes(guard))
   app.route("/", propertyGroupRoutes(guard))
   app.route("/", sharedCollectionPointRoutes(guard))
-  app.route("/", agreementRoutes(guard))
+  // A termination asks generation runs of the schemes whose planned routes stop at its containers (#291), so it takes the clock and the job sender.
+  app.route("/", agreementRoutes(guard, { now, jobs }))
   app.route("/", containerRoutes(guard, { now }))
   app.route("/", lifecycleRoutes(guard, { now }))
   app.route("/", planningAreaRoutes(guard))

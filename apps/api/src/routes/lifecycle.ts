@@ -54,8 +54,10 @@
 //                 placement is written by the route that owns those
 //                 statements (containers.ts, handed in as `open`), and a
 //                 return's or a decommission's placement is ended here by
-//                 `endPlacement`, under the subscription's lock and inside its
-//                 period, with the sentences the placement patch answers;
+//                 `endPlacement` — the Registry's placement in force for the
+//                 container, not the issue's (#291) — under the
+//                 subscription's lock and inside its period, with the
+//                 sentences the placement patch answers;
 //   append      — the row, `id: newId()`, `recordedBy` the caller's account,
 //                 `occurredAt` the instant `hold` settled. Nothing is read
 //                 back from the projection: the row just written is, by
@@ -81,9 +83,9 @@
 // This module cannot import containers.ts, which imports `move`, so the two
 // things both need of a container — its scope and its 404 — are spelled here
 // and read from there: `containerScope`, `noSuchContainer`, and the two
-// sentences a placement's end can earn, `OUTSIDE_SUBSCRIPTION` and
-// `alreadyPlaced`, since a return ends one here and the patch corrects one
-// there. A warehouse a body or a query names is `requireWarehouse` in
+// sentences a placement's end can earn, `OUTSIDE_SUBSCRIPTION`, which a
+// return's end here and the patch there both answer, and `alreadyPlaced`, the
+// patch's. A warehouse a body or a query names is `requireWarehouse` in
 // routes/references.ts, the containers list's helper too.
 import { Page, PageRequest } from "@waste/contracts/pagination"
 import {
@@ -97,6 +99,7 @@ import {
   type AdjustmentTarget,
   type StockPlace,
 } from "@waste/contracts/stock"
+import { ENDS_AFTER_IT_STARTS } from "@waste/contracts/validity"
 import type { Tx } from "@waste/db/client"
 import { ASSET_STATE_COLUMNS } from "@waste/db/query/asset-state"
 import { subscription } from "@waste/db/schema/agreements"
@@ -105,7 +108,7 @@ import { warehouse } from "@waste/db/schema/places"
 import { stockMovement } from "@waste/db/schema/stock"
 import { assetStateOf as stateAfter, movementShape } from "@waste/domain/resources/asset-state"
 import type { AssetStatus, StockMovementKind, StockPlaceKind } from "@waste/domain/resources/vocabulary"
-import { and, asc, desc, eq, gt, gte, lte, or } from "drizzle-orm"
+import { and, asc, desc, eq, gt, gte, lt, lte, or } from "drizzle-orm"
 import { Hono, type MiddlewareHandler } from "hono"
 import { describeRoute } from "hono-openapi"
 
@@ -117,7 +120,7 @@ import { afterCursor, fetchLimit, pageOf } from "../pagination"
 import { describeProblem, invalidRequest, problem, validate } from "../problem"
 import { requireWithin } from "./periods"
 import { requireWarehouse, type Scope } from "./references"
-import { describeJson, IdParam, lockRow, refuseOverlap, requireNotAhead } from "./shared"
+import { describeJson, IdParam, lockRow, requireNotAhead } from "./shared"
 import { requireWarehouseTakesStock } from "./statuses"
 
 const MODULE = "resources.containers"
@@ -166,17 +169,13 @@ const alreadyRetired = (label: string) => `Container ${label} is already retired
 const noAdjustmentInService = (label: string) =>
   `Container ${label} is in service; return or decommission it, an adjustment does not touch a placement`
 /**
- * A return or a decommission of a container the ledger has in service at a
- * placement the Registry says already ended: a row from before the ledger, or
- * an import, since a create carries no end and the patch sets none on an open
- * placement. The two disagree, and no command settles it from here — an
- * adjustment does not leave service (the domain's shape table and the
- * database's check both say so) and the patch does not reopen a placement —
- * so the sentence names the disagreement and promises no door; it is the
- * import's to correct. A 409 like the other states, not a 500: the body is
- * fine and the container is really there.
+ * A return or a decommission ending service before a placement of the
+ * container that begins later — a change of service planned for that day —
+ * which would then stand after the container had left (#291). The later
+ * placement is the Registry's to end first; the body is fine, so a 409 like
+ * the other states.
  */
-export const placementAlreadyEnded = (label: string, day: string) => `Container ${label}'s placement already ended on ${day}; the ledger disagrees`
+export const placedAgainFrom = (label: string, day: string) => `Container ${label} is placed again from ${day}; end that placement before returning it earlier`
 
 // The 400s: a body that says something the ledger cannot take.
 
@@ -300,26 +299,34 @@ async function departure(tx: Tx, principal: Principal, subject: ContainerRef, re
 }
 
 /**
- * Ends the placement a container is in service at, on `validTo`: the Registry
- * half of a return and of a decommission in service. Under the subscription's
- * lock, taken after the container's (top down), and read again underneath it,
- * since the read before only said which subscription to lock. The new end is
- * held inside the subscription's period (400 on `validTo`, naming the bound;
- * the ordering rule with it, routes/periods.ts) and may not run the placement
- * into the next one (the exclusion constraint, a 409). A placement the
- * reading names and the table does not have is a broken invariant, not a
- * client's doing, and is thrown. One that already has an end is a row from
- * before the ledger or an import — a create carries none and the patch sets
- * none on an open placement — and is a 409 naming the day and the
- * disagreement (`placementAlreadyEnded`), like every other state a command
- * is refused by, since the body is fine and the container is really there;
- * the body's own 400s come before it, as they do on every route.
+ * Ends the container's placement in force on `validTo`: the Registry half of
+ * a return and of a decommission in service. The placement is the
+ * Registry's — the container's latest to begin before `validTo` — and never
+ * the one the ledger's issue named (#291, slice 10): a change of service
+ * hands a container on to the subscription replacing its own without a
+ * movement, since nothing moved, and a termination ends the placement while
+ * the bin stays where it is until someone removes it. Under its
+ * subscription's lock, taken after the container's (top down), and read again
+ * underneath it — once more should a change have handed the container on
+ * meanwhile, whose replacement's lock is then taken too. One that already
+ * ended on or before `validTo` — a terminated agreement's, an import's — ends
+ * nothing more, and the movement records it. Otherwise the new end is held
+ * inside the subscription's period (400 on `validTo`, naming the bound; the
+ * ordering rule with it, routes/periods.ts). A placement of the container
+ * beginning on or after `validTo` — a change planned for a later day — would
+ * stand after the container had left it, and is refused (409, naming its
+ * day), after the body's 400s as on every route. An end on or before every
+ * placement's start is the ordering 400; a container the ledger has in
+ * service with no placement at all is a broken invariant, not a client's
+ * doing, and is thrown. Answers the placement the movement records.
  */
-async function endPlacement(tx: Tx, principal: Principal, subject: ContainerRef, placementId: string, validTo: string): Promise<void> {
+async function endPlacement(tx: Tx, principal: Principal, subject: ContainerRef, validTo: string): Promise<string> {
   const { companyId } = principal
-  const held = () =>
-    tx
+  const ofContainer = and(eq(containerServicePlacement.companyId, companyId), eq(containerServicePlacement.containerId, subject.id))
+  const inForce = async () => {
+    const [row] = await tx
       .select({
+        id: containerServicePlacement.id,
         subscriptionId: containerServicePlacement.subscriptionId,
         validFrom: containerServicePlacement.validFrom,
         validTo: containerServicePlacement.validTo,
@@ -328,29 +335,42 @@ async function endPlacement(tx: Tx, principal: Principal, subject: ContainerRef,
       })
       .from(containerServicePlacement)
       .innerJoin(subscription, and(eq(subscription.companyId, companyId), eq(subscription.id, containerServicePlacement.subscriptionId)))
-      .where(
-        and(
-          eq(containerServicePlacement.companyId, companyId),
-          eq(containerServicePlacement.containerId, subject.id),
-          eq(containerServicePlacement.id, placementId),
-        ),
-      )
+      .where(and(ofContainer, lt(containerServicePlacement.validFrom, validTo)))
+      .orderBy(desc(containerServicePlacement.validFrom))
       .limit(1)
-  const missing = () => new Error(`container ${subject.id} is in service at placement ${placementId}, which is not there to end`)
-  const [before] = await held()
-  if (before === undefined) throw missing()
-  await lockRow(tx, subscription, { companyId, id: before.subscriptionId })
-  const [current] = await held()
-  if (current === undefined) throw missing()
+    return row
+  }
+
+  let current = await inForce()
+  const locked = new Set<string>()
+  while (current !== undefined && !locked.has(current.subscriptionId)) {
+    await lockRow(tx, subscription, { companyId, id: current.subscriptionId })
+    locked.add(current.subscriptionId)
+    current = await inForce()
+  }
+  if (current === undefined) {
+    const [any] = await tx.select({ id: containerServicePlacement.id }).from(containerServicePlacement).where(ofContainer).limit(1)
+    if (any === undefined) throw new Error(`container ${subject.id} is in service at no placement`)
+    throw invalidRequest("body", [{ path: "validTo", message: ENDS_AFTER_IT_STARTS }])
+  }
+
+  const ends = current.validTo === null || current.validTo > validTo
   // The body's 400s first — the end after the start, and inside the subscription's period — then the state's 409, the order every route keeps.
-  requireWithin({ validFrom: current.subscriptionValidFrom, validTo: current.subscriptionValidTo }, { validFrom: current.validFrom, validTo }, OUTSIDE_SUBSCRIPTION)
-  if (current.validTo !== null) throw problem(409, { detail: placementAlreadyEnded(subject.label, current.validTo) })
-  await refuseOverlap({ [ALREADY_PLACED]: alreadyPlaced(subject.label) }, () =>
-    tx
+  if (ends) requireWithin({ validFrom: current.subscriptionValidFrom, validTo: current.subscriptionValidTo }, { validFrom: current.validFrom, validTo }, OUTSIDE_SUBSCRIPTION)
+  const [later] = await tx
+    .select({ validFrom: containerServicePlacement.validFrom })
+    .from(containerServicePlacement)
+    .where(and(ofContainer, gte(containerServicePlacement.validFrom, validTo)))
+    .orderBy(asc(containerServicePlacement.validFrom))
+    .limit(1)
+  if (later !== undefined) throw problem(409, { detail: placedAgainFrom(subject.label, later.validFrom) })
+  if (ends) {
+    await tx
       .update(containerServicePlacement)
       .set({ validTo })
-      .where(and(eq(containerServicePlacement.companyId, companyId), eq(containerServicePlacement.id, placementId))),
-  )
+      .where(and(eq(containerServicePlacement.companyId, companyId), eq(containerServicePlacement.id, current.id)))
+  }
+  return current.id
 }
 
 /** The movement an adjustment says it corrects: one of this container's, or a 400 naming the field. */
@@ -376,7 +396,7 @@ async function arrivalWarehouse(tx: Tx, within: Scope, id: string | null): Promi
 }
 
 /** Where the intent arrives, held to the container's project, and the Registry half where service opens or ends. */
-async function arrival(tx: Tx, principal: Principal, subject: ContainerRef, reading: Reading | null, from: Place, intent: Intent): Promise<{ to: Place; placementId: string | null }> {
+async function arrival(tx: Tx, principal: Principal, subject: ContainerRef, from: Place, intent: Intent): Promise<{ to: Place; placementId: string | null }> {
   const within = { companyId: principal.companyId, projectId: subject.projectId }
   switch (intent.kind) {
     case "receipt":
@@ -387,9 +407,7 @@ async function arrival(tx: Tx, principal: Principal, subject: ContainerRef, read
     case "return":
       await arrivalWarehouse(tx, within, intent.to.warehouseId)
       // `departure` let a return through only in service, and service is a placement.
-      if (reading?.placementId == null) throw new Error(`container ${subject.id} is in service at no placement`)
-      await endPlacement(tx, principal, subject, reading.placementId, intent.validTo)
-      return { to: intent.to, placementId: reading.placementId }
+      return { to: intent.to, placementId: await endPlacement(tx, principal, subject, intent.validTo) }
     case "transfer":
       await arrivalWarehouse(tx, within, intent.to.warehouseId)
       if (intent.to.kind === from.kind && intent.to.warehouseId === from.warehouseId) {
@@ -399,9 +417,7 @@ async function arrival(tx: Tx, principal: Principal, subject: ContainerRef, read
     case "decommission":
       if (from.kind === "service") {
         if (intent.validTo === undefined) throw invalidRequest("body", [{ path: "validTo", message: GIVE_VALID_TO }])
-        if (reading?.placementId == null) throw new Error(`container ${subject.id} is in service at no placement`)
-        await endPlacement(tx, principal, subject, reading.placementId, intent.validTo)
-        return { to: SCRAP, placementId: reading.placementId }
+        return { to: SCRAP, placementId: await endPlacement(tx, principal, subject, intent.validTo) }
       }
       if (intent.validTo !== undefined) throw invalidRequest("body", [{ path: "validTo", message: VALID_TO_SAYS_NOTHING }])
       return { to: SCRAP, placementId: null }
@@ -520,7 +536,7 @@ export async function move(tx: Tx, principal: Principal, subject: ContainerRef, 
   const reading = await lockedReading(tx, principal, subject)
   const from = await departure(tx, principal, subject, reading, intent)
   const occurredAt = hold(intent.kind, from, destinationKind(intent), intent)
-  const { to, placementId } = await arrival(tx, principal, subject, reading, from, intent)
+  const { to, placementId } = await arrival(tx, principal, subject, from, intent)
   return await append(
     tx,
     principal,
@@ -582,7 +598,7 @@ export function lifecycleRoutes(guard: MiddlewareHandler<AuthEnv>, { now = () =>
         operationId: "returnContainer",
         summary: "Take a container out of service into stock",
         description:
-          "Ends the placement the container is in service at on `validTo` — the first day it no longer serves, held inside the subscription's period (400 naming the bound) and off the next placement (409) — and appends the return in the same transaction: from that placement into a warehouse of its project, or into maintenance at one when `toKind` says so. Either both change or neither. A container that is not in service is refused (409), and so is a warehouse that is closed or a draft (409 naming the status). A placement the ledger has the container in service at but which already carries an end — a row from before the ledger, or an import — is refused too (409 naming the day): the two disagree, and that is the import's to correct. `occurredAt` and `reference` are the movement's, the instant at most five minutes ahead of the request's clock; `reason` says why it came back.",
+          "Ends the container's placement in force on `validTo` — the first day it no longer serves, held inside the subscription's period (400 naming the bound) — and appends the return in the same transaction: from that placement into a warehouse of its project, or into maintenance at one when `toKind` says so. Either both change or neither. The placement is the Registry's, the container's latest to begin before `validTo`, whichever the issue named (#291): after a subscription's change it is the replacement's; one that already ended on or before `validTo` — a terminated agreement's, whose bin stayed until collected, or an import's — ends nothing more, and the return records it. A container that is not in service is refused (409), and so is a warehouse that is closed or a draft (409 naming the status), and a container placed again from a later day, a change planned for then, whose placement would stand after the bin had left (409 naming the day). `occurredAt` and `reference` are the movement's, the instant at most five minutes ahead of the request's clock; `reason` says why it came back.",
         security: BEARER_SECURITY,
         responses: {
           201: describeJson("The return as it was appended; the placement now ends on `validTo`.", StockMovement),
@@ -590,7 +606,7 @@ export function lifecycleRoutes(guard: MiddlewareHandler<AuthEnv>, { now = () =>
             "The path does not hold an id, or the body is missing the warehouse or `validTo`, names a member the ledger owns, names a warehouse that is not this container's project's, ends the placement on or before the day it started or outside the subscription's period, or dates the return more than five minutes after the request.",
           ),
           ...commandProblems("create"),
-          409: describeProblem("The container is not in service, the warehouse is closed or a draft and takes no stock, the placement it is in service at already ended (the ledger disagrees), or the new end would run its placement into the next one."),
+          409: describeProblem("The container is not in service, the warehouse is closed or a draft and takes no stock, or the container is placed again from a later day."),
         },
       }),
       guard,
@@ -642,7 +658,7 @@ export function lifecycleRoutes(guard: MiddlewareHandler<AuthEnv>, { now = () =>
         operationId: "decommissionContainer",
         summary: "Scrap a container",
         description:
-          "Appends the decommission: from wherever the container stands to scrap, with the reason. In service, `validTo` is required (400) and ends the placement in the same transaction, as a return does — a placement that already carries an end, a row from before the ledger or an import, is refused (409 naming the day), since the ledger and the Registry disagree; out of service, `validTo` is refused (400), since there is no placement to end. A container with no stock record (409) or already retired (409) is refused. A retired container never comes back through `receive`; a wrong decommission is corrected through `adjust`.",
+          "Appends the decommission: from wherever the container stands to scrap, with the reason. In service, `validTo` is required (400) and ends the container's placement in force in the same transaction, as a return does — one that already ended on or before it ends nothing more, and one placed again from a later day is refused (409 naming the day); out of service, `validTo` is refused (400), since there is no placement to end. A container with no stock record (409) or already retired (409) is refused. A retired container never comes back through `receive`; a wrong decommission is corrected through `adjust`.",
         security: BEARER_SECURITY,
         responses: {
           201: describeJson("The decommission as it was appended; a placement it ended now ends on `validTo`.", StockMovement),
@@ -650,7 +666,7 @@ export function lifecycleRoutes(guard: MiddlewareHandler<AuthEnv>, { now = () =>
             "The path does not hold an id, or the body is missing the reason, names a member the ledger owns, gives `validTo` out of service or withholds it in service, ends the placement on or before the day it started or outside the subscription's period, or dates the decommission more than five minutes after the request.",
           ),
           ...commandProblems("create"),
-          409: describeProblem("The container has no stock record, is already retired, is in service at a placement that already ended (the ledger disagrees), or the placement's new end would run it into the next one."),
+          409: describeProblem("The container has no stock record, is already retired, or is placed again from a later day than the placement's new end."),
         },
       }),
       guard,

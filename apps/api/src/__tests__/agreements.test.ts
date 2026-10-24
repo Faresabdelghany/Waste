@@ -1,16 +1,18 @@
 import assert from "node:assert/strict"
 import { after, before, describe, test } from "node:test"
 
-import { Agreement, Subscription } from "@waste/contracts/agreements"
+import { Agreement, AgreementTerminated, CHANGE_NAMES_SOMETHING, Subscription } from "@waste/contracts/agreements"
 import { ContainerType, Product, WasteFraction } from "@waste/contracts/catalogue"
 import { ContainerServicePlacement } from "@waste/contracts/containers"
 import { Customer, Property, SharedCollectionPoint } from "@waste/contracts/customers"
 import { Id } from "@waste/contracts/ids"
 import { Project } from "@waste/contracts/organisation"
 import { Page } from "@waste/contracts/pagination"
+import { StockMovement } from "@waste/contracts/stock"
 import { createDb, type Database } from "@waste/db/client"
 
 import { createApp } from "../app"
+import { CHANGES_NOTHING, INSIDE_AGREEMENT, INSIDE_SUBSCRIPTION, placementsBeginLater, subscriptionsBeginLater } from "../routes/agreements"
 import { callingAs, type Call } from "./calls"
 import { created } from "./created"
 import { databaseUnderTest, ownerUnderTest } from "./database"
@@ -771,4 +773,138 @@ describe("the agreement and subscription endpoints", { skip: database.skip || ow
       assert.deepEqual((await readProblem(patched)).errors?.map((error) => error.path), ["quantity"])
     })
   })
+
+  describe("POST /subscriptions/:id/change (#291, slice 10)", () => {
+    /** A bin received into a warehouse of the project and issued under the subscription from the day given: a container serving it. */
+    const placedUnder = async (subscription: Subscription, label: string, validFrom = JANUARY) => {
+      const container = await stocked(olivia, { projectId: a.projects.copenhagen.id, label, containerTypeId: bin.id }, await warehouseIn(pool, a.companyId, a.projects.copenhagen.id, `WH-${label}`))
+      const placement = await create(olivia, `/containers/${container.id}/placements`, { subscriptionId: subscription.id, wasteFractionId: residualWaste.id, validFrom }, ContainerServicePlacement)
+      return { container, placement }
+    }
+    const placementsOf = async (containerId: string) =>
+      Page(ContainerServicePlacement)
+        .parse(await (await olivia(`/placements?containerId=${containerId}`)).json())
+        .items.map((placement) => [placement.subscriptionId, placement.wasteFractionId, placement.validFrom, placement.validTo])
+    const change = (call: Call, id: string, values: unknown) => call(`/subscriptions/${id}/change`, { method: "POST", body: values })
+
+    test("ends the subscription on the day and writes its replacement there — the product and the quantity named, the place, the agreement and the end its own — and hands its containers on without a movement", async () => {
+      const signed = await agreement("AGR-2580")
+      const written = await subscribe(signed.id)
+      const { container } = await placedUnder(written, "BIN-2580")
+      const bulky = await productIn("active", "Bulky collection 2580")
+
+      const response = await change(olivia, written.id, { on: APRIL, productId: bulky.id, quantity: 2 })
+      // Read where a subscription is read, not under the command's path.
+      const replacement = await created(olivia, `/subscriptions/${written.id}/change`, response, Subscription, "/subscriptions")
+      assert.deepEqual(
+        [replacement.agreementId, replacement.projectId, replacement.productId, replacement.propertyId, replacement.sharedCollectionPointId, replacement.quantity, replacement.validFrom, replacement.validTo],
+        [signed.id, signed.projectId, bulky.id, parkvej.id, null, 2, APRIL, null],
+      )
+      assert.deepEqual([(await oneSubscription(olivia, written.id)).validTo, (await oneSubscription(olivia, written.id)).productId], [APRIL, residual.id], "the one it replaces ends on the day, as it was")
+      assert.deepEqual(await placementsOf(container.id), [[written.id, residualWaste.id, JANUARY, APRIL], [replacement.id, residualWaste.id, APRIL, null]], "the same container, the same fraction, from the day")
+      const movements = Page(StockMovement).parse(await (await olivia(`/containers/${container.id}/movements`)).json()).items
+      assert.deepEqual(movements.map((movement) => movement.kind), ["receipt", "issue"], "nothing moved physically, so the ledger is as it was")
+
+      const strandvej = await create(olivia, "/properties", { projectId: a.projects.copenhagen.id, name: "Strandvej 2580", address: "Strandvej 2580, 2100 København Ø", kind: "residential" }, Property)
+      const bounded = await subscribe(signed.id, { productId: bulky.id, propertyId: strandvej.id, validFrom: JANUARY, validTo: OCTOBER })
+      const quantityOnly = await created(olivia, `/subscriptions/${bounded.id}/change`, await change(olivia, bounded.id, { on: JULY, quantity: 4 }), Subscription, "/subscriptions")
+      assert.deepEqual([quantityOnly.productId, quantityOnly.quantity, quantityOnly.validFrom, quantityOnly.validTo], [bulky.id, 4, JULY, OCTOBER], "the quantity alone, until the subscription's own end")
+    })
+
+    test("holds the day after the subscription's first day and before its end, the product to the project, and refuses a change that changes nothing (400)", async () => {
+      const created = await agreement("AGR-2581")
+      const written = await subscribe(created.id, { validTo: OCTOBER })
+      for (const on of [JANUARY, "2025-12-01", OCTOBER, NEXT_YEAR]) {
+        const problem = await refused(await change(olivia, written.id, { on, quantity: 2 }), 400)
+        assert.deepEqual(problem.errors, [{ path: "on", message: INSIDE_SUBSCRIPTION }], on)
+      }
+      const elsewhere = await refused(await change(olivia, written.id, { on: APRIL, productId: harborResidual.id }), 400)
+      assert.deepEqual(elsewhere.errors?.map((error) => error.path), ["productId"])
+      for (const same of [{ quantity: 1 }, { productId: residual.id }, { productId: residual.id, quantity: 1 }]) {
+        const problem = await refused(await change(olivia, written.id, { on: APRIL, ...same }), 400)
+        assert.deepEqual(problem.errors, [{ path: "", message: CHANGES_NOTHING }], JSON.stringify(same))
+      }
+      assert.deepEqual((await refused(await change(olivia, written.id, { on: APRIL }), 400)).errors, [{ path: "", message: CHANGE_NAMES_SOMETHING }])
+      const stored = await oneSubscription(olivia, written.id)
+      assert.deepEqual([stored.validTo, stored.updatedAt], [OCTOBER, written.updatedAt], "nothing written")
+    })
+
+    test("refuses a draft product, a placement that begins on or after the day, and a product the agreement already subscribes to there (409)", async () => {
+      const created = await agreement("AGR-2582")
+      const written = await subscribe(created.id)
+      const draft = await productIn("draft", "Draft collection 2582")
+      assert.match((await refused(await change(olivia, written.id, { on: APRIL, productId: draft.id }), 409)).detail ?? "", /draft/)
+
+      await placedUnder(written, "BIN-2582", JULY)
+      assert.equal((await refused(await change(olivia, written.id, { on: APRIL, quantity: 2 }), 409)).detail, placementsBeginLater(1))
+      assert.equal(placementsBeginLater(1), "1 placement begins on or after that day; end it first")
+
+      const bulky = await productIn("active", "Bulky collection 2582")
+      const crowded = await agreement("AGR-2583")
+      const first = await subscribe(crowded.id)
+      await subscribe(crowded.id, { productId: bulky.id })
+      assert.equal((await refused(await change(olivia, first.id, { on: APRIL, productId: bulky.id }), 409)).detail, "The agreement already subscribes to that product at that place over part of that period")
+      assert.equal((await oneSubscription(olivia, first.id)).validTo, null, "the refusal rolled the end back with it")
+    })
+
+    test("answers 404 outside the caller's reach and 403 to a role that may not edit", async () => {
+      const created = await agreement("AGR-2584")
+      const written = await subscribe(created.id)
+      await refused(await change(olivia, testId(), { on: APRIL, quantity: 2 }), 404)
+      assert.match((await refused(await change(lars, written.id, { on: APRIL, quantity: 2 }), 403)).detail ?? "", /edit on customers\.agreements/)
+    })
+  })
+
+  describe("POST /agreements/:id/terminate (#291, slice 10)", () => {
+    const terminate = (call: Call, id: string, values: unknown) => call(`/agreements/${id}/terminate`, { method: "POST", body: values })
+
+    test("ends the agreement, every subscription in force past the day and the placements serving them on the day; one that ended before stays as it was, and the containers stay in service", async () => {
+      const created = await agreement("AGR-2590")
+      const open = await subscribe(created.id)
+      const ended = await subscribe(created.id, { productId: (await productIn("active", "Garden collection 2590")).id, validTo: APRIL })
+      const container = await stocked(olivia, { projectId: a.projects.copenhagen.id, label: "BIN-2590", containerTypeId: bin.id }, await warehouseIn(pool, a.companyId, a.projects.copenhagen.id, "WH-2590"))
+      const placement = await create(olivia, `/containers/${container.id}/placements`, { subscriptionId: open.id, wasteFractionId: residualWaste.id, validFrom: JANUARY }, ContainerServicePlacement)
+
+      const response = await terminate(olivia, created.id, { on: JULY })
+      assert.equal(response.status, 200, JSON.stringify(await response.clone().json()))
+      const answer = AgreementTerminated.parse(await response.json())
+      assert.deepEqual([answer.agreement.id, answer.agreement.validTo, answer.agreement.status], [created.id, JULY, created.status], "the period says it ended; the status is not a reading of it")
+      assert.deepEqual(answer.stopsToRemove, [], "no route stops at its containers")
+      assert.equal((await one(olivia, created.id)).validTo, JULY)
+      assert.equal((await oneSubscription(olivia, open.id)).validTo, JULY)
+      assert.equal((await oneSubscription(olivia, ended.id)).validTo, APRIL, "already ended before the day")
+      const placed = ContainerServicePlacement.parse(await (await olivia(`/placements/${placement.id}`)).json())
+      assert.equal(placed.validTo, JULY)
+      const reading = (await (await olivia(`/containers/${container.id}`)).json()) as { assetState: { status: string } | null }
+      assert.equal(reading.assetState?.status, "in-service", "the bin stays until someone removes it")
+    })
+
+    test("holds the day after the agreement's first day and before its end (400), and refuses a subscription or a placement that begins on or after it (409), writing nothing", async () => {
+      const bounded = await agreement("AGR-2591", { validTo: OCTOBER })
+      for (const on of [JANUARY, OCTOBER, NEXT_YEAR]) {
+        assert.deepEqual((await refused(await terminate(olivia, bounded.id, { on }), 400)).errors, [{ path: "on", message: INSIDE_AGREEMENT }], on)
+      }
+      assert.equal((await refused(await terminate(olivia, bounded.id, {}), 400)).errors?.[0]?.path, "on")
+
+      const later = await agreement("AGR-2592")
+      await subscribe(later.id, { validFrom: JULY })
+      assert.equal((await refused(await terminate(olivia, later.id, { on: APRIL }), 409)).detail, subscriptionsBeginLater(1))
+      assert.equal(subscriptionsBeginLater(2), "2 subscriptions begin on or after that day; end them first")
+
+      const placedLater = await agreement("AGR-2593")
+      const written = await subscribe(placedLater.id)
+      const container = await stocked(olivia, { projectId: a.projects.copenhagen.id, label: "BIN-2593", containerTypeId: bin.id }, await warehouseIn(pool, a.companyId, a.projects.copenhagen.id, "WH-2593"))
+      await create(olivia, `/containers/${container.id}/placements`, { subscriptionId: written.id, wasteFractionId: residualWaste.id, validFrom: JULY }, ContainerServicePlacement)
+      assert.equal((await refused(await terminate(olivia, placedLater.id, { on: APRIL }), 409)).detail, placementsBeginLater(1))
+      assert.deepEqual([(await one(olivia, placedLater.id)).validTo, (await oneSubscription(olivia, written.id)).validTo], [null, null], "nothing written")
+    })
+
+    test("answers 404 outside the caller's reach and 403 to a role that may not edit", async () => {
+      const created = await agreement("AGR-2594")
+      await refused(await terminate(olivia, testId(), { on: APRIL }), 404)
+      await refused(await terminate(other, created.id, { on: APRIL }), 404)
+      assert.match((await refused(await terminate(lars, created.id, { on: APRIL }), 403)).detail ?? "", /edit on customers\.agreements/)
+    })
+  })
+
 })

@@ -4,7 +4,16 @@
 // off the agreement it belongs to: `GET`/`POST /agreements/:id/subscriptions`
 // and `GET`/`PATCH /subscriptions/:id`. No delete anywhere: an agreement is
 // terminated by giving it a `validTo`, which is what a period is for, and the
-// audit log is its history.
+// audit log is its history. Two commands do in one request what the periods
+// alone take several for (#291, slice 10): `POST /subscriptions/:id/change`
+// ends a subscription on a day and writes the one replacing it there, its
+// containers handed on to it, and `POST /agreements/:id/terminate` ends the
+// agreement, its subscriptions and their placements together on a day. A
+// container stays in service through both — nothing moved, or the bin stays
+// until someone removes it — so neither writes a stock movement, and a return
+// closes whichever placement is in force (routes/lifecycle.ts). A termination
+// asks generation runs of the schemes whose planned routes stop at its
+// containers and names the stops no run will take away.
 //
 // These are the first effective-dated resources the API answers, so three
 // things are new here and will be the same in every family that follows.
@@ -64,30 +73,42 @@ import {
   SubscriptionListQuery,
   SubscriptionPatch,
   SubscriptionsQuery,
+  AgreementTerminated,
+  AgreementTermination,
+  SubscriptionChange,
+  type StopToRemove,
   type AgreementStatus,
   type BillingCadence,
 } from "@waste/contracts/agreements"
 import type { CustomerStatus } from "@waste/contracts/customers"
+import { routeLabel } from "@waste/contracts/execution"
 import { Page } from "@waste/contracts/pagination"
 import type { Tx } from "@waste/db/client"
 import { validOn } from "@waste/db/query/valid-on"
 import { agreement, subscription } from "@waste/db/schema/agreements"
 import { containerServicePlacement } from "@waste/db/schema/containers"
+import { pickup, route } from "@waste/db/schema/execution"
+import { QueueMissing, type JobSender } from "@waste/db/jobs"
+import { WALK_CAP_DAYS } from "@waste/domain/route-schemes/generation"
+import { addDays } from "@waste/domain/route-schemes/recurrence"
 import { count } from "@waste/domain/text"
-import { and, asc, eq, gt, isNull, or } from "drizzle-orm"
+import { and, asc, eq, gt, gte, inArray, isNull, lt, or } from "drizzle-orm"
 import type { PgColumn, PgTable } from "drizzle-orm/pg-core"
 import { Hono, type MiddlewareHandler } from "hono"
 import { describeRoute } from "hono-openapi"
 
 import { BEARER_SECURITY, type AuthEnv, type Principal } from "../auth/principal"
 import { inProjects, requireProject } from "../auth/projects"
-import { requireGrant } from "../auth/require"
+import { allows, requireGrant } from "../auth/require"
 import { newId } from "../ids"
 import { afterCursor, fetchLimit, pageOf } from "../pagination"
 import { describeProblem, invalidRequest, problem, validate } from "../problem"
 import { notWithin, periodAfter, periodOf, refuseStranded, requireOrdered, requireWithin, type Period } from "./periods"
 import { requireCustomer, requirePriceList, requireProduct, requireProperty, requireSharedCollectionPoint, type Scope } from "./references"
-import { created, describeCreated, describeJson, IdParam, lockRow, refuseOverlap, stampsOf } from "./shared"
+import { projectToday } from "./fleet-lookups"
+import { askGeneration } from "./generation"
+import { created, describeCreated, describeJson, IdParam, lockRow, lockRows, refuseOverlap, stampsOf } from "./shared"
+import { findScheme, MODULE as SCHEMES_MODULE, type ClockOptions } from "./scheme-groups"
 import { placeOf, refuseInactiveCustomer, refuseUnofferedProduct, refuseUnservedPlace, type Party } from "./statuses"
 
 const MODULE = "customers.agreements"
@@ -450,7 +471,115 @@ export async function subscriptionStarting(
   return row === undefined ? undefined : subscriptionOf(row)
 }
 
-export function agreementRoutes(guard: MiddlewareHandler<AuthEnv>) {
+/** What a day of a change or a termination outside the period is told: it falls after the first day and before the end. */
+export const INSIDE_SUBSCRIPTION = "After the subscription's first day and before its end"
+export const INSIDE_AGREEMENT = "After the agreement's first day and before its end"
+
+/** What a change that leaves the product and the quantity as they are is told. */
+export const CHANGES_NOTHING = "The subscription already has that product and that quantity"
+
+/** What a change or a termination is refused with where a row begins on or after its day, which ending on that day would strand. */
+export const placementsBeginLater = (rows: number) => `${count(rows, "placement")} ${rows === 1 ? "begins" : "begin"} on or after that day; end ${them(rows)} first`
+export const subscriptionsBeginLater = (rows: number) => `${count(rows, "subscription")} ${rows === 1 ? "begins" : "begin"} on or after that day; end ${them(rows)} first`
+
+/** The day of a change or a termination: after the period's first day and before its end, so both halves it leaves are periods (400 at `on`). */
+function requireStrictlyInside(period: Period, on: string, message: string): void {
+  if (period.validFrom < on && (period.validTo === null || on < period.validTo)) return
+  throw invalidRequest("body", [{ path: "on", message }])
+}
+
+/** A placement of these subscriptions in force past `on`: begun before it, ending after it or open. */
+const placementsPast = (companyId: string, subscriptionIds: readonly string[], on: string) =>
+  and(
+    eq(containerServicePlacement.companyId, companyId),
+    inArray(containerServicePlacement.subscriptionId, [...subscriptionIds]),
+    lt(containerServicePlacement.validFrom, on),
+    or(isNull(containerServicePlacement.validTo), gt(containerServicePlacement.validTo, on)),
+  )
+
+/** The routes a stop at a container can still be standing on: not yet completed or cancelled. */
+const OPEN_ROUTES = ["planned", "ready", "active"] as const
+
+/**
+ * The planned stops at these containers from `on`, the day they left
+ * service (#291): those no generation run will take away — on a dispatched
+ * or running route, which generation never refreshes, or the office's own,
+ * which it never touches — for the office to remove by hand, and, by scheme,
+ * the last service date of the planned routes whose generated stops a run of
+ * the scheme will drop. Read by service date, the day generation matches a
+ * container on; within the project, which is the containers'.
+ */
+async function stopsFrom(tx: Tx, scope: Scope, containerIds: readonly string[], on: string): Promise<{ toRemove: StopToRemove[]; runsUntil: Map<string, string> }> {
+  const toRemove: StopToRemove[] = []
+  const runsUntil = new Map<string, string>()
+  if (containerIds.length === 0) return { toRemove, runsUntil }
+  const rows = await tx
+    .select({
+      routeId: route.id,
+      number: route.number,
+      status: route.status,
+      routeSchemeId: route.routeSchemeId,
+      serviceDate: route.serviceDate,
+      operatingDate: route.operatingDate,
+      pickupId: pickup.id,
+      containerId: pickup.containerId,
+      origin: pickup.origin,
+    })
+    .from(pickup)
+    .innerJoin(route, and(eq(route.companyId, pickup.companyId), eq(route.id, pickup.routeId)))
+    .where(
+      and(
+        eq(pickup.companyId, scope.companyId),
+        eq(pickup.projectId, scope.projectId),
+        inArray(pickup.containerId, [...containerIds]),
+        eq(pickup.status, "planned"),
+        inArray(route.status, [...OPEN_ROUTES]),
+        gte(route.serviceDate, on),
+      ),
+    )
+    .orderBy(asc(route.operatingDate), asc(route.number), asc(pickup.id))
+  for (const row of rows) {
+    if (row.status === "planned" && row.origin === "generation" && row.routeSchemeId !== null) {
+      const until = runsUntil.get(row.routeSchemeId)
+      if (until === undefined || row.serviceDate > until) runsUntil.set(row.routeSchemeId, row.serviceDate)
+    } else if (row.containerId !== null) {
+      toRemove.push({ routeId: row.routeId, routeLabel: routeLabel(row.number), operatingDate: row.operatingDate, pickupId: row.pickupId, containerId: row.containerId })
+    }
+  }
+  return { toRemove, runsUntil }
+}
+
+/**
+ * Asks one generation run of each scheme whose planned routes stop at a
+ * container that left service on `on`, from `on` — or the project's today,
+ * or the scheme's first day, whichever is latest — through the last such
+ * route's service date, capped at the walk's days, so the run drops the
+ * stops. Best effort, as `release-hold` asks one (#245): only where the
+ * caller may ask a run of the scheme (Generate's grant), only of a validated
+ * scheme, absorbed by a run already queued, and never a refusal of the
+ * command — where no worker has made the queue yet nothing is asked and the
+ * next run, the nightly plan-ahead's or the next Generate's, drops them.
+ */
+async function askRuns(tx: Tx, principal: Principal, jobs: JobSender, scope: Scope, runsUntil: ReadonlyMap<string, string>, on: string, now: () => Date): Promise<void> {
+  if (runsUntil.size === 0 || !allows(principal.grants, SCHEMES_MODULE, "edit")) return
+  const today = await projectToday(tx, scope, now)()
+  for (const [schemeId, until] of runsUntil) {
+    const scheme = await findScheme(tx, principal, schemeId)
+    if (scheme === undefined || scheme.status !== "validated") continue
+    const from = [on, today, scheme.validFrom].reduce((latest, day) => (day > latest ? day : latest))
+    const capped = addDays(from, WALK_CAP_DAYS)
+    const to = until > capped ? capped : until
+    if (to < from) continue
+    try {
+      await askGeneration(tx, principal, jobs.send, scheme, { from, to })
+    } catch (error) {
+      if (!(error instanceof QueueMissing)) throw error
+      return
+    }
+  }
+}
+
+export function agreementRoutes(guard: MiddlewareHandler<AuthEnv>, { now = () => new Date(), jobs }: ClockOptions & { jobs: JobSender }) {
   return new Hono<AuthEnv>()
     .get(
       "/agreements",
@@ -727,5 +856,168 @@ export function agreementRoutes(guard: MiddlewareHandler<AuthEnv>) {
       validate("param", IdParam),
       validate("json", SubscriptionPatch),
       async (c) => c.json(await patchSubscription(c.get("tx"), c.get("principal"), c.req.valid("param").id, c.req.valid("json"))),
+    )
+    .post(
+      "/subscriptions/:id/change",
+      describeRoute({
+        operationId: "changeSubscription",
+        summary: "Change a subscription's service from a day",
+        description:
+          "A change of service (#291): the subscription ends on `on` and the one replacing it begins there, at the same place under the same agreement, with the product or the quantity the body names — what it leaves out is the subscription's — until the subscription's own end. Every container serving the subscription on `on` serves the replacement from then: its placement ends on `on` and the same container's placement under the replacement begins there, with the same fraction and frequency override, so the container stays in service and no stock movement is written, since nothing moved. `on` lies after the subscription's first day and before its end (400 on `on`), a product the body names must be this project's (400 on `productId`), and a change that leaves both the product and the quantity as they are is refused (400). Then no placement of the subscription may begin on or after `on` (409, counting them), and the replacement is written as any subscription is — the CSV import's writer too — so its product must be active and its place served (409 naming the status) and the agreement may not already subscribe to that product at that place from `on` (409). Answers the replacement, with its `Location`; the subscription it replaces is read again at its own address. Under the agreement's lock and then the subscription's, as its patch takes them.",
+        security: BEARER_SECURITY,
+        responses: {
+          201: describeCreated("The subscription replacing it, from `on`.", Subscription),
+          400: describeProblem("The path does not hold an id, or the body names neither the product nor the quantity, names a member it does not own, puts `on` outside the subscription's period or on its first day, names a product that is not the project's, or changes nothing."),
+          401: describeProblem("No usable token (see WWW-Authenticate)."),
+          403: describeProblem("No active account here, or the caller's role does not allow `edit` on `customers.agreements`."),
+          404: describeProblem("No subscription with that id in the projects this account works in."),
+          409: describeProblem("A placement of the subscription begins on or after `on`, the product is draft or inactive or the place is not served, or the agreement already subscribes to that product at that place from `on`."),
+        },
+      }),
+      guard,
+      requireGrant(MODULE, "edit"),
+      validate("param", IdParam),
+      validate("json", SubscriptionChange),
+      async (c) => {
+        const { id } = c.req.valid("param")
+        const { on, productId, quantity } = c.req.valid("json")
+        const tx = c.get("tx")
+        const principal = c.get("principal")
+        const { companyId } = principal
+
+        // The agreement first and then the subscription, top down, as its patch takes them, and the row read again underneath.
+        const found = await findSubscription(tx, principal, id)
+        if (found === undefined) throw noSuchSubscription(id)
+        await lockRow(tx, agreement, { companyId, id: found.agreementId })
+        await lockRow(tx, subscription, { companyId, id })
+        const current = await findSubscription(tx, principal, id)
+        if (current === undefined) throw noSuchSubscription(id)
+
+        requireStrictlyInside(current, on, INSIDE_SUBSCRIPTION)
+        const named = productId === undefined ? undefined : changed(productId, current.productId)
+        const productStatus = await requireProduct(tx, { companyId, projectId: current.projectId }, named)
+        const takes = { productId: named ?? current.productId, quantity: quantity ?? current.quantity }
+        if (named === undefined && takes.quantity === current.quantity) throw invalidRequest("body", [{ path: "", message: CHANGES_NOTHING }])
+
+        // Every 400 above, every 409 below (routes/statuses.ts).
+        refuseUnofferedProduct(productStatus)
+        await refuseStranded(
+          tx,
+          containerServicePlacement,
+          and(eq(containerServicePlacement.companyId, companyId), eq(containerServicePlacement.subscriptionId, id), gte(containerServicePlacement.validFrom, on)),
+          placementsBeginLater,
+        )
+
+        // The containers serving it on the day, read before their placements end, since each one's replacement keeps its end.
+        const serving = await tx
+          .select({
+            id: containerServicePlacement.id,
+            containerId: containerServicePlacement.containerId,
+            wasteFractionId: containerServicePlacement.wasteFractionId,
+            serviceFrequencyId: containerServicePlacement.serviceFrequencyId,
+            validTo: containerServicePlacement.validTo,
+          })
+          .from(containerServicePlacement)
+          .where(placementsPast(companyId, [id], on))
+          .orderBy(asc(containerServicePlacement.id))
+
+        // Each half ends before the other begins, so no exclusion constraint sees two at once. The placements end first, so the
+        // subscription's own patch strands none; the replacement is written as any subscription is (`createSubscription`, the CSV
+        // import's writer too): an active product and a served place, a period inside the agreement's, no second of it at the place.
+        if (serving.length > 0) {
+          await tx
+            .update(containerServicePlacement)
+            .set({ validTo: on })
+            .where(and(eq(containerServicePlacement.companyId, companyId), inArray(containerServicePlacement.id, serving.map((placement) => placement.id))))
+        }
+        await patchSubscription(tx, principal, id, { validTo: on })
+        const replacement = await createSubscription(tx, principal, current.agreementId, {
+          productId: takes.productId,
+          propertyId: current.propertyId,
+          sharedCollectionPointId: current.sharedCollectionPointId,
+          quantity: takes.quantity,
+          validFrom: on,
+          validTo: current.validTo,
+        })
+        if (serving.length > 0) {
+          await tx.insert(containerServicePlacement).values(
+            serving.map((placement) => ({
+              id: newId(),
+              companyId,
+              projectId: current.projectId,
+              containerId: placement.containerId,
+              subscriptionId: replacement.id,
+              wasteFractionId: placement.wasteFractionId,
+              serviceFrequencyId: placement.serviceFrequencyId,
+              validFrom: on,
+              validTo: placement.validTo,
+            })),
+          )
+        }
+        return created(c, "/subscriptions", replacement)
+      },
+    )
+    .post(
+      "/agreements/:id/terminate",
+      describeRoute({
+        operationId: "terminateAgreement",
+        summary: "Terminate an agreement on a day",
+        description:
+          "A termination (#291): the agreement, every one of its subscriptions in force past `on`, and every placement serving them end together on `on`, the first day none of them is in force. A container stays in service — the bin stays where it is until it is returned, and its return then records the placement that ended without ending it again. `on` lies after the agreement's first day and before its end (400 on `on`). A subscription or a placement that begins on or after `on` would be stranded, and is refused (409, counting them) so it is ended first. Generation's planned routes from `on` stop at those containers no more once a run has read them again: a run of each scheme whose planned routes do is asked in the same transaction, from `on` (or the project's today, or the scheme's first day, if later) through the last such route — where the caller may ask one (`edit` on `route-studio.schemes`), of a validated scheme, absorbed by one already queued, and never a refusal: where no worker has made the queue yet, the next run drops them. Stops no run will take away — on a dispatched or running route, which generation never refreshes, or the office's own — are answered in `stopsToRemove`, for the office to remove by hand. Under the agreement's lock and then its subscriptions', in id order.",
+        security: BEARER_SECURITY,
+        responses: {
+          200: describeJson("The agreement as it now stands, and the stops left to remove by hand.", AgreementTerminated),
+          400: describeProblem("The path does not hold an id, or the body is not one `on`, or `on` is outside the agreement's period or its first day."),
+          401: describeProblem("No usable token (see WWW-Authenticate)."),
+          403: describeProblem("No active account here, or the caller's role does not allow `edit` on `customers.agreements`."),
+          404: describeProblem("No agreement with that id in the projects this account works in."),
+          409: describeProblem("A subscription of the agreement, or a placement serving one, begins on or after `on`."),
+        },
+      }),
+      guard,
+      requireGrant(MODULE, "edit"),
+      validate("param", IdParam),
+      validate("json", AgreementTermination),
+      async (c) => {
+        const { id } = c.req.valid("param")
+        const { on } = c.req.valid("json")
+        const tx = c.get("tx")
+        const principal = c.get("principal")
+        const { companyId } = principal
+
+        await lockRow(tx, agreement, { companyId, id })
+        const current = await findAgreement(tx, principal, id)
+        if (current === undefined) throw noSuchAgreement(id)
+        requireStrictlyInside(current, on, INSIDE_AGREEMENT)
+
+        // Every 400 above, every 409 below: what begins on or after the day cannot end on it.
+        const ofAgreement = and(eq(subscription.companyId, companyId), eq(subscription.agreementId, id))
+        await refuseStranded(tx, subscription, and(ofAgreement, gte(subscription.validFrom, on)), subscriptionsBeginLater)
+        const subscriptionIds = (await tx.select({ id: subscription.id }).from(subscription).where(ofAgreement)).map((row) => row.id)
+        if (subscriptionIds.length > 0) {
+          await refuseStranded(
+            tx,
+            containerServicePlacement,
+            and(eq(containerServicePlacement.companyId, companyId), inArray(containerServicePlacement.subscriptionId, subscriptionIds), gte(containerServicePlacement.validFrom, on)),
+            placementsBeginLater,
+          )
+        }
+
+        const ending = (await tx.select({ id: subscription.id }).from(subscription).where(and(ofAgreement, or(isNull(subscription.validTo), gt(subscription.validTo, on))))).map((row) => row.id)
+        let containerIds: string[] = []
+        if (ending.length > 0) {
+          await lockRows(tx, subscription, companyId, ending)
+          const ended = await tx.update(containerServicePlacement).set({ validTo: on }).where(placementsPast(companyId, ending, on)).returning({ containerId: containerServicePlacement.containerId })
+          containerIds = [...new Set(ended.map((placement) => placement.containerId))]
+          // Through each one's own patch, its placements ended first so it strands none, and then the agreement's, which then strands none.
+          for (const subscriptionId of ending) await patchSubscription(tx, principal, subscriptionId, { validTo: on })
+        }
+        const terminated = await patchAgreement(tx, principal, id, { validTo: on })
+
+        const within = { companyId, projectId: current.projectId }
+        const { toRemove, runsUntil } = await stopsFrom(tx, within, containerIds, on)
+        await askRuns(tx, principal, jobs, within, runsUntil, on, now)
+        return c.json({ agreement: terminated, stopsToRemove: toRemove } satisfies AgreementTerminated)
+      },
     )
 }

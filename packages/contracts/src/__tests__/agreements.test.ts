@@ -9,8 +9,12 @@ import {
   AgreementListQuery,
   AgreementPatch,
   AgreementStatus,
+  AgreementTerminated,
+  AgreementTermination,
   BillingCadence,
+  CHANGE_NAMES_SOMETHING,
   Subscription,
+  SubscriptionChange,
   SubscriptionCreate,
   SubscriptionListQuery,
   SubscriptionPatch,
@@ -201,6 +205,31 @@ describe("SubscriptionPatch", () => {
       assert.match(refusal(SubscriptionPatch.safeParse({ quantity: 1, [key]: THIRD }))[0].message, new RegExp(key))
     }
     assert.deepEqual(refusal(SubscriptionPatch.safeParse({ validFrom: "2026-02-01", validTo: "2026-02-01" })), [{ path: "validTo", message: BACKWARDS }])
+  })
+})
+
+describe("SubscriptionChange and AgreementTermination (#291, slice 10)", () => {
+  test("a change names its day and the product, the quantity or both the replacement takes; the place, the agreement and the period are the subscription's", () => {
+    assert.deepEqual(SubscriptionChange.parse({ on: "2026-11-01", productId: THIRD }), { on: "2026-11-01", productId: THIRD })
+    assert.deepEqual(SubscriptionChange.parse({ on: "2026-11-01", quantity: 3 }), { on: "2026-11-01", quantity: 3 })
+    assert.deepEqual(refusal(SubscriptionChange.safeParse({ on: "2026-11-01" })), [{ path: "", message: CHANGE_NAMES_SOMETHING }])
+    assert.deepEqual(refusal(SubscriptionChange.safeParse({ quantity: 3 })).map((issue) => issue.path), ["on"])
+    assert.equal(SubscriptionChange.safeParse({ on: "2026-11-01T00:00:00Z", quantity: 3 }).success, false, "a day, not an instant")
+    assert.equal(SubscriptionChange.safeParse({ on: "2026-11-01", quantity: 0 }).success, false)
+    for (const key of ["propertyId", "sharedCollectionPointId", "agreementId", "validTo"]) {
+      assert.match(refusal(SubscriptionChange.safeParse({ on: "2026-11-01", quantity: 1, [key]: THIRD }))[0].message, new RegExp(key))
+    }
+  })
+
+  test("a termination names its day and nothing else", () => {
+    assert.deepEqual(AgreementTermination.parse({ on: "2026-11-01" }), { on: "2026-11-01" })
+    assert.equal(AgreementTermination.safeParse({}).success, false)
+    assert.match(refusal(AgreementTermination.safeParse({ on: "2026-11-01", status: "cancelled" }))[0].message, /status/)
+  })
+
+  test("a termination answers the agreement and the stops left to remove by hand", () => {
+    const stop = { routeId: ID, routeLabel: "RC-1042", operatingDate: "2026-11-03", pickupId: OTHER, containerId: THIRD }
+    assert.deepEqual(AgreementTerminated.parse({ agreement: { ...agreement, validTo: "2026-11-01" }, stopsToRemove: [stop] }).stopsToRemove, [stop])
   })
 })
 
