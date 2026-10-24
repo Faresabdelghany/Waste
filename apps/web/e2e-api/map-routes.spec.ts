@@ -46,13 +46,32 @@ async function openMapPlanning(page: Page): Promise<void> {
   await chainLanded(page)
 }
 
+/** The button that opens the Layers popover, and takes focus back once it closes. */
+const layersTrigger = (page: Page) => page.getByRole("button", { name: /^Layers/ })
+
 async function routesLayer(page: Page) {
-  await page.getByRole("button", { name: /^Layers/ }).click()
+  await layersTrigger(page).click()
   return page.getByRole("dialog", { name: "Layers" }).getByTestId("routes-layer")
+}
+
+/**
+ * Closes the Layers popover and waits for it to hand focus back to its
+ * trigger, which Radix does a tick after the popover unmounts. A click on the
+ * map landing in that tick — a loaded runner lets the next action in first —
+ * opens the route card, and the focus coming back then dismisses it as a
+ * focus outside: no card, the Layers button focused.
+ */
+async function closeLayers(page: Page): Promise<void> {
+  await page.keyboard.press("Escape")
+  // The unmount first, for a clearer failure: the trigger is focused only after it.
+  await expect(page.getByRole("dialog", { name: "Layers" })).toHaveCount(0)
+  await expect(layersTrigger(page)).toBeFocused()
 }
 
 /** Opens a route's card from its line: the click lands on the route's own hit stroke, on its first leg, since a route of another day may run the same streets over it. */
 async function clickRouteLine(page: Page, routeId: string): Promise<void> {
+  // Its first leg drawn: the stops are placed once the modules the containers are read through have landed.
+  await expect.poll(() => page.locator(`[data-route-line="${routeId}"] circle`).count(), { message: `route ${routeId} has a drawn leg` }).toBeGreaterThanOrEqual(2)
   const point = await page.evaluate((id) => {
     const circles = Array.from(document.querySelectorAll(`[data-route-line="${id}"] circle`)).slice(0, 2)
     if (circles.length < 2) return null
@@ -136,7 +155,7 @@ test("a click on an API route's line opens its card with the route's own facts, 
 
   await openMapPlanning(page)
   await (await routesLayer(page)).getByRole("checkbox", { name: /Routes in the collection window/ }).click()
-  await page.keyboard.press("Escape")
+  await closeLayers(page)
   await expect(page.locator(`[data-route-line="route-${route.id}"]`)).toBeVisible()
 
   await clickRouteLine(page, `route-${route.id}`)
@@ -165,12 +184,12 @@ test("Play route replays an API route stop by stop, from its card", async ({ api
   // The replay walks the stops the map can place: a container stands where its placement in force today delivers (#184); one without is no stop on the map.
   const placed = new Set(placements.map((placement) => placement.containerId))
   const stops = detail.pickups.filter((pickup) => placed.has(pickup.containerId))
-  expect(stops.length, "the rule matched placed containers").toBeGreaterThan(0)
+  expect(stops.length, "the rule matched placed containers, two at least: the line is clicked on its first leg").toBeGreaterThan(1)
   const first = containers.find((container) => container.id === stops[0]?.containerId)?.label
 
   await openMapPlanning(page)
   await (await routesLayer(page)).getByRole("checkbox", { name: /Routes in the collection window/ }).click()
-  await page.keyboard.press("Escape")
+  await closeLayers(page)
   await clickRouteLine(page, `route-${route.id}`)
   await page.getByTestId("route-card").getByRole("button", { name: "Play route" }).click()
   const bar = page.getByTestId("playback-bar")
@@ -267,7 +286,7 @@ test("generation asks a Plan of each route inside the horizon, the fake provider
 
   await openMapPlanning(page)
   await (await routesLayer(page)).getByRole("checkbox", { name: /Routes in the collection window/ }).click()
-  await page.keyboard.press("Escape")
+  await closeLayers(page)
   // Each ready Plan's legs are fetched once (`GET /plans/:id`), four at a time, for every route the map draws: the tenant's earlier runs' too.
   for (const route of inside) await expect(page.locator(`[data-route-line="route-${route.id}"]`)).toHaveAttribute("data-route-geometry", "road", { timeout: 20_000 })
   await expect(page.locator(`[data-route-road="route-${nearest.id}"]`)).toBeVisible()

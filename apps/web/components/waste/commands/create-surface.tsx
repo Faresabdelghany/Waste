@@ -62,7 +62,9 @@ export function CreateSurface({
       () => setSaving(false),
     )
     void outcome?.then((result) => {
-      if (result.kind === "created") onCreated?.(record, result.serverId)
+      // A create the API took whose answer could not be shown has landed as well (#243), once it names its row.
+      const serverId = result.kind === "created" || result.kind === "landed" ? result.serverId : undefined
+      if (serverId !== undefined) onCreated?.(record, serverId)
     })
   }
 

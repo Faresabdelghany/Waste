@@ -68,7 +68,18 @@ test("the wizard is a labelled dialog whose first step offers the API's rows and
 
   await expect(nextButton(page)).toBeDisabled()
   await root.getByLabel("Route scheme name").fill(uniqueName("E2E Gate"))
+  // The planning areas are the picked project's alone (#249), and a project changed away from the area clears it.
+  const areas = await listAll<Named & { projectId: string }>(api, "/planning-areas")
+  const areasOf = async (project: string) => {
+    const { id } = await projectNamed(api, project)
+    return areas.filter((area) => area.projectId === id).map((area) => area.name).sort()
+  }
+  await pick(page, root, "Project", "Harbor Commercial")
+  expect((await optionTexts(page, root, "Operational planning area")).sort()).toEqual(await areasOf("Harbor Commercial"))
+  await pick(page, root, "Operational planning area", "Nordhavn Harbor Area")
   await pick(page, root, "Project", "Copenhagen Central")
+  await expect(root.getByLabel("Operational planning area", { exact: true })).toContainText("Select planning area")
+  expect((await optionTexts(page, root, "Operational planning area")).sort()).toEqual(await areasOf("Copenhagen Central"))
   await pick(page, root, "Operational planning area", "Indre By Operations")
   await expect(nextButton(page)).toBeDisabled()
   await pick(page, root, "Waste fraction", "Residual")
@@ -118,6 +129,29 @@ test("step 3's group names the API's fleet, and a driver whose licence ran out b
   await expect(own).not.toHaveAttribute("aria-disabled", "true")
   await own.click()
   await expect(editor.getByLabel("Default driver", { exact: true })).toContainText(fleet.driver.name)
+})
+
+test("a day step 2 takes off the scheme leaves its group too, so step 3 names the group to fix and its editor can (#250)", async ({ api, page }) => {
+  const fleet = await fleetOfItsOwn(api)
+  await openSchemes(page)
+  await toGroups(page, uniqueName("E2E Days"))
+  await addGroup(page, fleet)
+  await wizard(page).getByRole("button", { name: "Back", exact: true }).click()
+  await expect(stepHeading(page)).toHaveText("When does this scheme collect?")
+  await wizard(page).getByRole("button", { name: "Monday", exact: true }).click()
+  await wizard(page).getByRole("button", { name: "Thursday", exact: true }).click()
+  await nextButton(page).click()
+  await expect(stepHeading(page)).toHaveText("Who collects what on which service days?")
+  await expect(wizard(page)).toContainText("Residual · bins runs on no service day")
+  await expect(wizard(page)).not.toContainText("which is not a service day")
+
+  await wizard(page).getByRole("button", { name: "Edit Residual · bins" }).click()
+  const editor = page.getByRole("dialog", { name: "Edit collection group" })
+  await editor.getByRole("button", { name: "Thursday", exact: true }).click()
+  await editor.getByRole("button", { name: "Save group" }).click()
+  await expect(editor).toBeHidden()
+  await expect(wizard(page)).not.toContainText("runs on no service day")
+  await expect(wizard(page)).not.toContainText("has no collection group")
 })
 
 test("the scheme is created at step 5 in one POST the API takes, a validated scheme of the API's rows", async ({ api, page }) => {

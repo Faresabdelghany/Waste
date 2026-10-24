@@ -1,8 +1,9 @@
 import assert from "node:assert/strict"
 import { describe, test } from "node:test"
 
-import { candidateIssue, draftGroups, validateGuidedScheme } from "../draft"
+import { candidateIssue, draftGroups, patchGuidedDraft, validateGuidedScheme } from "../draft"
 import type { CollectionGroup } from "../groups"
+import type { ServiceDay } from "../recurrence"
 import { quickSchemeDraftFromValues, type GuidedSchemeData } from "../quick-create"
 import { recurrenceIssues } from "../validation"
 
@@ -130,6 +131,46 @@ describe("a route scheme plans one waste fraction", () => {
         false,
       )
     }
+  })
+})
+
+describe("a patch to the guided draft (#250)", () => {
+  const on = (id: string, days: ServiceDay[]): CollectionGroup => ({ ...group(id, []), days })
+  const mondaysAndThursdays = (groups: CollectionGroup[]): GuidedSchemeData => ({ ...draft("Residual", groups), serviceDays: ["monday", "thursday"] })
+
+  test("a change of the scheme's service days takes the days it drops off every group, which keeps the rest: the group editor offers only the scheme's days, and could not", () => {
+    const after = patchGuidedDraft(mondaysAndThursdays([on("a", ["monday", "thursday"]), on("b", ["monday"])]), { serviceDays: ["thursday", "saturday"] })
+    assert.deepEqual(after.serviceDays, ["thursday", "saturday"])
+    assert.deepEqual(
+      after.groups.map((candidate) => [candidate.id, candidate.days]),
+      [
+        ["a", ["thursday"]],
+        ["b", []],
+      ],
+      "a group left on no day stays, for the person to give it one or remove it",
+    )
+  })
+
+  test("a day added gives no group that day: which group runs it is the person's to say", () => {
+    const after = patchGuidedDraft(mondaysAndThursdays([on("a", ["monday"])]), { serviceDays: ["monday", "thursday", "saturday"] })
+    assert.deepEqual(after.groups[0]?.days, ["monday"])
+  })
+
+  test("groups the patch brings are held to the days it leaves too", () => {
+    const after = patchGuidedDraft(mondaysAndThursdays([]), { serviceDays: ["monday"], groups: [on("a", ["monday", "thursday"])] })
+    assert.deepEqual(after.groups[0]?.days, ["monday"])
+  })
+
+  test("a patch that leaves the days alone leaves the groups as they are", () => {
+    const before = mondaysAndThursdays([on("a", ["monday", "saturday"])])
+    const after = patchGuidedDraft(before, { schemeName: "Renamed" })
+    assert.equal(after.schemeName, "Renamed")
+    assert.equal(after.groups, before.groups, "the same groups, a day off the scheme's included: only a change of the days clips them")
+  })
+
+  test("a group on no day blocks creation by name, as a stray day does", () => {
+    const issues = validateGuidedScheme(mondaysAndThursdays([on("a", ["monday", "thursday"]), on("b", [])]), [], [], [], []).issues
+    assert.ok(issues.includes("b runs on no service day"), issues.join("\n"))
   })
 })
 

@@ -5,6 +5,7 @@
 import { Input } from "@/components/ui/input"
 import { Separator } from "@/components/ui/separator"
 import type { BusinessRecord } from "@/lib/data/business-modules"
+import { recordsForProject } from "@/lib/data/project-scope"
 import type { GuidedSchemeData } from "@waste/domain/route-schemes/quick-create"
 
 import type { WizardRecords } from "./use-wizard-records"
@@ -23,6 +24,12 @@ export function StepScope({
   update: (patch: Partial<GuidedSchemeData>) => void
   records: WizardRecords
 }) {
+  // The picked project's planning areas, never another project's (#249): a project changed away from the area clears it.
+  const areas = recordsForProject(records.areas, data.projectId)
+  const pickProject = (projectId: string) => {
+    const kept = recordsForProject(records.areas, projectId).some((area) => area.id === data.planningAreaId)
+    update(kept ? { projectId } : { projectId, planningAreaId: "" })
+  }
   return (
     <div className="max-w-4xl space-y-6">
       <div className="grid gap-6 md:grid-cols-2">
@@ -39,7 +46,7 @@ export function StepScope({
           <SimpleSelect
             id="scheme-project"
             value={data.projectId}
-            onChange={(projectId) => update({ projectId })}
+            onChange={pickProject}
             options={toOptions(records.projects)}
             placeholder="Select project"
           />
@@ -49,7 +56,7 @@ export function StepScope({
             id="scheme-area"
             value={data.planningAreaId}
             onChange={(planningAreaId) => update({ planningAreaId })}
-            options={toOptions(records.areas)}
+            options={toOptions(areas)}
             placeholder="Select planning area"
           />
         </Field>

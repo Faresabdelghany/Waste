@@ -61,6 +61,19 @@ export function isInProjectScope(
 }
 
 /**
+ * What a picker offers once a form has picked a project (#249): that
+ * project's records and the company-wide ones, by `isInProjectScope`'s
+ * rule, never another project's; every record before a project is picked.
+ */
+export function recordsForProject<T extends Pick<BusinessRecord, "projectIds">>(
+  records: readonly T[],
+  projectId: string | undefined,
+): T[] {
+  const scope: ProjectScope = isProjectRecordId(projectId) ? projectId : ALL_PROJECTS
+  return records.filter((record) => isInProjectScope(record, scope))
+}
+
+/**
  * The project ids a record made under a scope carries: the project the form
  * chose, whichever scope the workspace runs in; else the pinned project; else
  * every project record.

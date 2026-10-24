@@ -55,7 +55,8 @@ export function SimpleSelect({
   disabled?: boolean
 }) {
   return (
-    <Select value={value || undefined} onValueChange={onChange} disabled={disabled}>
+    // Controlled throughout: a value cleared to "" shows the placeholder again (#249), where undefined would leave Radix holding the last pick.
+    <Select value={value ?? ""} onValueChange={onChange} disabled={disabled}>
       <SelectTrigger id={id} className="h-10 w-full rounded-xl">
         <SelectValue placeholder={placeholder} />
       </SelectTrigger>
