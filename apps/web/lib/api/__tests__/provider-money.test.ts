@@ -26,6 +26,7 @@ import {
   providerPricesModule,
   settlementAdapter,
   settlementCommandsOffered,
+  settlementHeldBack,
   settlementHistory,
   settlementsModule,
 } from "../records/provider-money"
@@ -191,10 +192,32 @@ describe("the settlements module", () => {
     assert.ok(!spellsStatus(settlementsModule, record, "Closed"), "the status moves by command alone")
   })
 
-  test("offers each command only where the machine moves the settlement: never a stay, never a refusal", () => {
-    assert.deepEqual(settlementCommandsOffered("open"), ["calculate"])
-    assert.deepEqual(settlementCommandsOffered("calculated"), ["calculate", "close"])
-    assert.deepEqual(settlementCommandsOffered("closed"), ["reopen"])
+  test("offers each command only where the machine moves the settlement on the project's day it was read on: never a stay, never a refusal (#260)", () => {
+    /** September's settlement in a status, read on the clock `now`: what its details offer. */
+    const offered = (status: SettlementDetail["status"], now: Date) => settlementCommandsOffered(settlementAdapter.toRecord({ ...settlement, status }, { ...context(settlementFixtures), now }))
+    const october = new Date("2026-10-01T08:00:00Z")
+    assert.deepEqual(offered("open", october), ["calculate"], "once the period has ended")
+    assert.deepEqual(offered("calculated", october), ["calculate", "close"])
+    assert.deepEqual(offered("closed", october), ["reopen"])
+    assert.deepEqual(offered("calculated", NOW), ["calculate"], "on its last day the period has not ended: a calculation, no close")
+    const august = new Date("2026-08-31T12:00:00Z")
+    for (const status of ["open", "calculated"] as const) assert.deepEqual(offered(status, august), [], `${status} before the period has begun: nothing to calculate`)
+    assert.deepEqual(offered("closed", august), ["reopen"], "reopen reads no day")
+    // 22:30 UTC on its last day is the first of October in Copenhagen, the project's clock.
+    assert.deepEqual(offered("calculated", new Date("2026-09-30T22:30:00Z")), ["calculate", "close"])
+    assert.deepEqual(settlementCommandsOffered({ ...settlementAdapter.toRecord(settlement, context(settlementFixtures)), submittedValues: {} }), [], "a record that does not say its period and day is offered nothing")
+  })
+
+  test("says why the day holds a command back, in the API's sentence; nothing where only the status does (#260)", () => {
+    const heldBack = (status: SettlementDetail["status"], now: Date) => settlementHeldBack(settlementAdapter.toRecord({ ...settlement, status }, { ...context(settlementFixtures), now }))
+    const august = new Date("2026-08-31T12:00:00Z")
+    assert.equal(heldBack("open", august), "Settlement NordRen ApS · 2026-09-01 – 2026-09-30 has not begun; calculate it from its first day")
+    assert.equal(heldBack("calculated", NOW), "Settlement NordRen ApS · 2026-09-01 – 2026-09-30 has not ended; close it after its last day")
+    assert.equal(heldBack("calculated", august), "Settlement NordRen ApS · 2026-09-01 – 2026-09-30 has not begun; calculate it from its first day", "the first held back, in the commands' order")
+    const october = new Date("2026-10-01T08:00:00Z")
+    for (const status of ["open", "calculated", "closed"] as const) assert.equal(heldBack(status, october), undefined, `${status} once the period has ended`)
+    assert.equal(heldBack("open", NOW), undefined, "an open settlement's close waits for its calculation, not the day")
+    assert.equal(heldBack("closed", august), undefined, "a closed one waits for its reopening")
   })
 
   test("opens a settlement on an assignment over a period, its end the first day out", () => {

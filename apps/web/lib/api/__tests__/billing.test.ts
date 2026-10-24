@@ -25,6 +25,8 @@ import {
   billingModule,
   billingRunAdapter,
   billingRunBody,
+  eventPricedByList,
+  eventQuestion,
   eventsModule,
   invoiceAdapter,
   invoicesModule,
@@ -51,6 +53,10 @@ const invoiceFixtures = fixturesOf("commercial", "invoices")
 const copenhagen: Project = { id: "01a0d2a4-a280-7002-8000-000000000001", ...STAMPS, name: "Copenhagen Central", kind: "Municipality", language: "da", currency: "DKK", timezone: "Europe/Copenhagen", status: "active", weekend: ["saturday", "sunday"], holidayList: "Danish public holidays" }
 const osterbro: Customer = { id: "01a0d2a4-a280-700b-8000-000000000002", ...STAMPS, kind: "organisation", name: "Østerbro Housing", registrationNumber: "38112009", email: null, phone: null, billingAddress: null, serviceMessagesAllowed: true, status: "active" }
 const agr2408: Agreement = { id: "01a0d2a4-a280-7012-8000-000000000001", ...STAMPS, projectId: copenhagen.id, number: "AGR-2408", customerId: osterbro.id, payerCustomerId: osterbro.id, status: "active", billingCadence: "monthly", currency: "DKK", notes: null, priceListId: null, validFrom: "2026-01-01", validTo: null }
+// An agreement of one party billed to another (#256), as the seed's AGR-2607 is.
+const kab: Customer = { ...osterbro, id: "01a0d2a4-a280-700b-8000-000000000003", name: "KAB Bolig", registrationNumber: "38112010" }
+const kommune: Customer = { ...osterbro, id: "01a0d2a4-a280-700b-8000-000000000004", name: "Københavns Kommune", registrationNumber: "64942212" }
+const agr2607: Agreement = { ...agr2408, id: "01a0d2a4-a280-7012-8000-000000000002", number: "AGR-2607", customerId: kab.id, payerCustomerId: kommune.id }
 const res240: Product = { id: "01a0d2a4-a280-700a-8000-000000000001", ...STAMPS, projectId: copenhagen.id, name: "Residual waste · 240L bin", kind: "container-collection", status: "active", unit: "pickup", containerTypeId: null, wasteFractionId: null, serviceFrequencyId: null, invoiceName: "Residual waste collection 240L", invoiceCode: "RES-240", vatPercent: 25 }
 const bulky: Product = { ...res240, id: "01a0d2a4-a280-700a-8000-000000000005", name: "Bulky waste pickup", kind: "additional-service", unit: "job" }
 const ROUTE = "01a0d2a4-a280-7030-8000-000000000001"
@@ -92,13 +98,15 @@ const manual: BillableEvent = { ...ready, id: "01a0d2a4-a280-7050-8000-000000000
 const NO_CONTEXT = (fixtures: readonly BusinessRecord[]): MappingContext => ({ fixtures, resolve: NOTHING_RESOLVED, companyRecordId: FIXTURE_COMPANY_ID, now: NOW })
 const copenhagenRecord = projectAdapter.toRecord(copenhagen, NO_CONTEXT(fixturesOf("configure", "organization")))
 const osterbroRecord = customerAdapter.toRecord(osterbro, NO_CONTEXT(fixturesOf("customers", "contacts")))
+const [kabRecord, kommuneRecord] = [kab, kommune].map((customer) => customerAdapter.toRecord(customer, NO_CONTEXT([])))
 const moduleOf = (records: BusinessRecord[], ids: string[]) => loaded({ records, serverIds: new Map(records.map((record, index) => [record.id, ids[index]])) }, 1)
 const base: ServerRecordsState = new Map([
   ["configure.organization", moduleOf([copenhagenRecord], [copenhagen.id])],
   ["configure.access", moduleOf([{ ...copenhagenRecord, id: `user-${ADMIN}`, name: "Fares Abdelghany", recordKind: "User" }], [ADMIN])],
-  ["customers.contacts", moduleOf([osterbroRecord], [osterbro.id])],
+  ["customers.contacts", moduleOf([osterbroRecord, kabRecord, kommuneRecord], [osterbro.id, kab.id, kommune.id])],
 ])
-const withAgreement = new Map([...base, ["customers.agreements", moduleOf([agreementAdapter.toRecord(agr2408, { ...NO_CONTEXT(fixturesOf("customers", "agreements")), resolve: resolverOver(base) })], [agr2408.id])]])
+const agreementRecords = [agr2408, agr2607].map((agreement) => agreementAdapter.toRecord(agreement, { ...NO_CONTEXT(fixturesOf("customers", "agreements")), resolve: resolverOver(base) }))
+const withAgreement = new Map([...base, ["customers.agreements", moduleOf(agreementRecords, [agr2408.id, agr2607.id])]])
 const productRecords = [res240, bulky].map((product) => productAdapter.toRecord(product, { ...NO_CONTEXT([]), resolve: resolverOver(withAgreement) }))
 const routeRecord: BusinessRecord = { ...copenhagenRecord, id: `route-${ROUTE}`, name: "RC-1042 · 2026-09-29", recordKind: "Route" }
 const state: ServerRecordsState = new Map([
@@ -122,7 +130,7 @@ describe("the billable events module", () => {
     assert.deepEqual(eventsModule.resources, [billableEventAdapter])
   })
 
-  test("shows a priced event with its agreement, payer, product and route by name, its money in its own currency", () => {
+  test("shows a priced event with its agreement, customer, payer, product and route by name, its money in its own currency", () => {
     const record = billableEventAdapter.toRecord(ready, context(eventFixtures))
     assert.equal(record.id, `event-${ready.id}`)
     assert.equal(record.name, "Pickup · Residual waste · 240L bin")
@@ -133,12 +141,35 @@ describe("the billable events module", () => {
     assert.equal(record.recordKind, "Billable event")
     assert.equal(record.facts.Agreement, "AGR-2408")
     assert.equal(record.facts.Customer, "Østerbro Housing")
+    assert.equal(record.facts.Payer, "Østerbro Housing", "the agreement's customer pays for itself")
     assert.equal(record.facts.Route, "RC-1042 · 2026-09-29")
     assert.equal(record.facts["Unit price"], "DKK 16.50")
     assert.equal(record.facts.VAT, "25% · DKK 4.13")
     assert.equal(record.facts.Origin, "Completed pickup")
     assert.equal(record.facts.Invoiced, "Not yet")
-    assert.deepEqual(record.submittedValues, { projectId: "project-copenhagen", kind: "pickup", agreementId: agreementWebId, payerId: osterbroRecord.id, productId: `product-${res240.id}`, routeId: `route-${ROUTE}`, quantity: "1", serviceDate: "2026-09-29" })
+    assert.deepEqual(record.submittedValues, {
+      projectId: "project-copenhagen",
+      kind: "pickup",
+      agreementId: agreementWebId,
+      customerId: osterbroRecord.id,
+      payerId: osterbroRecord.id,
+      productId: `product-${res240.id}`,
+      routeId: `route-${ROUTE}`,
+      pickupId: `pickup-${PICKUP}`,
+      priceListRowId: `price-row-${ready.priceListRowId}`,
+      quantity: "1",
+      serviceDate: "2026-09-29",
+    })
+  })
+
+  test("names the agreement's customer and its payer each by their own fact, the customer leading the row (#256)", () => {
+    const record = billableEventAdapter.toRecord({ ...ready, agreementId: agr2607.id }, context(eventFixtures))
+    assert.equal(record.facts.Agreement, "AGR-2607")
+    assert.equal(record.facts.Customer, "KAB Bolig")
+    assert.equal(record.facts.Payer, "Københavns Kommune", "invoiced to the payer, and said so under its own name")
+    assert.equal(record.context, "KAB Bolig · 2026-09-29", "the Customer · origin column")
+    assert.equal(record.submittedValues?.customerId, kabRecord.id)
+    assert.equal(record.submittedValues?.payerId, kommuneRecord.id)
   })
 
   test("shows a blocked event by what blocks it, and a manual one with the person's price and reason", () => {
@@ -211,6 +242,76 @@ describe("the billable events module", () => {
     const unsaid = await commandRecord(clientOver(fetch), eventsModule, current, record, "cancel", { reason: "pickup-corrected" }, options)
     assert.equal(unsaid.kind, "refused", "the consumer's reason is never a person's")
     assert.equal(calls.length, 3)
+  })
+})
+
+describe("Explain price on a billable event's own question (#259)", () => {
+  const OWN_LIST = "01a0d2a4-a280-7028-8000-000000000002"
+  const DEFAULT_LIST = "01a0d2a4-a280-7028-8000-000000000001"
+  const agreement = state.get("customers.agreements")!.records[0]
+  // The rows the question is read through, as their adapters make them: the row that won and its list, the project's default list, the route's scheme in its area, the pickup's container of its type.
+  const winningRow = made(`price-row-${ready.priceListRowId}`, "Price row", { priceListId: `price-list-${OWN_LIST}`, productId: `product-${res240.id}` })
+  const ownList = made(`price-list-${OWN_LIST}`, "Price list", { isDefault: false })
+  const defaultList = made(`price-list-${DEFAULT_LIST}`, "Price list", { isDefault: true })
+  const route = made(`route-${ROUTE}`, "Route", { schemeId: "scheme-01a0d2a4-a280-7022-8000-000000000001" })
+  const scheme = made("scheme-01a0d2a4-a280-7022-8000-000000000001", "Route scheme", { planningAreaId: "area-01a0d2a4-a280-7009-8000-000000000001" })
+  const pickup = made(`pickup-${PICKUP}`, "Pickup", { containerId: "asset-01a0d2a4-a280-7020-8000-000000000001", wasteFractionId: "waste-fraction-01a0d2a4-a280-7007-8000-000000000001" })
+  const container = made("asset-01a0d2a4-a280-7020-8000-000000000001", "Container", { containerType: "container-type-01a0d2a4-a280-7008-8000-000000000001" })
+  const everything = [agreement, osterbroRecord, winningRow, ownList, defaultList, route, scheme, pickup, container]
+  /** The store holding `rows`, each under the server id its web id carries, as the surface's resolver reads it. */
+  const holding = (rows: readonly BusinessRecord[]) => resolverOver(new Map([["held", moduleOf([...rows], rows.map((row) => row.id.slice(-36)))]]))
+  const pricedEvent = billableEventAdapter.toRecord(ready, context(eventFixtures))
+  const manualEvent = billableEventAdapter.toRecord({ ...manual, overrideReason: null }, context(eventFixtures))
+
+  test("a priced pickup's: the list its row won in, its product and service date, its agreement's customer and kind, its route's zone and its pickup's fraction and container type", () => {
+    assert.deepEqual(eventQuestion(pricedEvent, holding(everything)), {
+      priceListId: ownList.id,
+      productId: `product-${res240.id}`,
+      on: "2026-09-29",
+      planningAreaId: "area-01a0d2a4-a280-7009-8000-000000000001",
+      customerKind: "organisation",
+      containerType: "container-type-01a0d2a4-a280-7008-8000-000000000001",
+      wasteFraction: "waste-fraction-01a0d2a4-a280-7007-8000-000000000001",
+      customerId: osterbroRecord.id,
+    })
+  })
+
+  test("the winning row's conditions first, which the event matched: an event whose route and pickup are no longer read still names its winner", () => {
+    const zoned = { ...winningRow, submittedValues: { ...winningRow.submittedValues, planningAreaId: "area-01a0d2a4-a280-7009-8000-000000000002", wasteFraction: "waste-fraction-01a0d2a4-a280-7007-8000-000000000002" } }
+    assert.deepEqual(eventQuestion(pricedEvent, holding([agreement, osterbroRecord, zoned, ownList])), {
+      priceListId: ownList.id,
+      productId: `product-${res240.id}`,
+      on: "2026-09-29",
+      planningAreaId: "area-01a0d2a4-a280-7009-8000-000000000002",
+      customerKind: "organisation",
+      wasteFraction: "waste-fraction-01a0d2a4-a280-7007-8000-000000000002",
+      customerId: osterbroRecord.id,
+    })
+    assert.equal(eventQuestion(pricedEvent, holding([...everything.filter((row) => row !== winningRow), zoned])).planningAreaId, "area-01a0d2a4-a280-7009-8000-000000000002", "over what its rows say now")
+  })
+
+  test("an event no row priced asks its agreement's own list, else its project's default, and none while its agreement is not read; a ticket's event asks no product", () => {
+    assert.deepEqual(eventQuestion(manualEvent, holding(everything)), { priceListId: defaultList.id, productId: `product-${bulky.id}`, on: "2026-09-29", customerKind: "organisation", customerId: osterbroRecord.id }, "AGR-2408 names no list of its own: the project's default")
+    const pricedUnder = { ...agreement, facts: { ...agreement.facts, "Price list": ownList.id } }
+    assert.equal(eventQuestion(manualEvent, holding([pricedUnder, ownList, defaultList])).priceListId, ownList.id, "the agreement's own list, by the id chip its fact names it by")
+    const named = { ...agreement, facts: { ...agreement.facts, "Price list": "PL-Østerbro-2026" } }
+    const otherProjects = { ...ownList, id: "price-list-01a0d2a4-a280-7028-8000-000000000003", name: "PL-Østerbro-2026", projectIds: ["project-harbor"] }
+    assert.equal(eventQuestion(manualEvent, holding([named, otherProjects, { ...ownList, name: "PL-Østerbro-2026" }, defaultList])).priceListId, ownList.id, "or by its name, among its project's lists")
+    assert.equal(eventQuestion(manualEvent, holding([ownList, defaultList])).priceListId, undefined, "the agreement not read: no list guessed")
+    const ticketEvent = billableEventAdapter.toRecord(blocked, context(eventFixtures))
+    assert.equal(eventQuestion(ticketEvent, holding(everything)).productId, undefined)
+  })
+
+  test("asks only what the store holds the rows of: nothing loaded leaves the product and the day", () => {
+    assert.deepEqual(eventQuestion(pricedEvent, NOTHING_RESOLVED), { productId: `product-${res240.id}`, on: "2026-09-29" })
+  })
+
+  test("is offered where the event's price is a list's: priced or blocked, never a person's own price nor a reversal's copy", () => {
+    assert.ok(eventPricedByList(pricedEvent))
+    assert.ok(eventPricedByList(billableEventAdapter.toRecord(blocked, context(eventFixtures))))
+    assert.ok(eventPricedByList(manualEvent), "a manual event the list priced")
+    assert.ok(!eventPricedByList(billableEventAdapter.toRecord(manual, context(eventFixtures))), "a manual event at a price of the person's own, with its reason")
+    assert.ok(!eventPricedByList(billableEventAdapter.toRecord({ ...ready, kind: "reversal", priceListRowId: null }, context(eventFixtures))))
   })
 })
 

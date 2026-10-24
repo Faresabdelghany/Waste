@@ -10,8 +10,10 @@ import { listAll } from "./tester"
 // API, against the seeded tenant — an award edited in its details and moved
 // to another provider by ending its assignment and adding the next; a
 // provider price added under an assignment and indexed, the chain's first
-// row ended the day before; a settlement opened over an assignment's period,
-// calculated, closed and reopened with the reason its history keeps; an
+// row ended the day before; a settlement opened over an assignment's ended
+// period, calculated, closed once asked (#257) and reopened with the reason
+// its history keeps, and one whose period has not ended calculated but not
+// closed, one not begun offered nothing (#260); an
 // unload the office captured on a running route, reviewed from the weights
 // desk's queue — approved, rejected with why, corrected. The map's Create
 // service area is e2e-api/map-planning.spec.ts'. The seed holds no award, so
@@ -240,10 +242,10 @@ test("Service provider prices: Add price under an assignment, then Apply index �
   await expect(page.getByRole("table").locator("tr", { hasText: productName }).filter({ hasText: "11.76" })).toHaveCount(1)
 })
 
-test("Settlements: one opened over an assignment's period is calculated, closed and reopened with why, each move offered only where its status moves", async ({ page, api }) => {
+test("Settlements: one opened over an assignment's ended period is calculated, closed once asked and reopened with why, each move offered only where its status and the day move it", async ({ page, api }) => {
   const project = await copenhagen(api)
   const cityhaul = await providerNamed(api, "CityHaul")
-  const award = await newAward(api, project, cityhaul, { validFrom: "2027-01-01", validTo: "2028-01-01" })
+  const award = await newAward(api, project, cityhaul, { validFrom: "2026-01-01", validTo: "2028-01-01" })
   const assignment = assignmentOf(award)
 
   const loaded = answerOf(page, "GET", /^\/settlements$/)
@@ -253,11 +255,12 @@ test("Settlements: one opened over an assignment's period is calculated, closed 
   await page.getByRole("button", { name: "Open settlement" }).click()
   const dialog = dialogTitled(page, "Open settlement")
   await pick(dialog, page, /^Service area assignment/, new RegExp(`^${award.code} · CityHaul`))
-  await dialog.getByLabel(/^First day/).fill("2027-02-01")
-  await dialog.getByLabel(/^Last day/).fill("2027-02-28")
+  // February 2026, which has ended: it is calculated and closed (#260).
+  await dialog.getByLabel(/^First day/).fill("2026-02-01")
+  await dialog.getByLabel(/^Last day/).fill("2026-02-28")
   const [created] = await Promise.all([answerOf(page, "POST", /^\/settlements$/), dialog.getByRole("button", { name: "Open settlement" }).click()])
   expect(created.status(), await created.text()).toBe(201)
-  expect(created.request().postDataJSON()).toEqual({ serviceAreaAssignmentId: assignment.id, validFrom: "2027-02-01", validTo: "2027-03-01" })
+  expect(created.request().postDataJSON()).toEqual({ serviceAreaAssignmentId: assignment.id, validFrom: "2026-02-01", validTo: "2026-03-01" })
   const settlement = (await created.json()) as Settlement
   await expect(dialog).toBeHidden()
 
@@ -269,9 +272,22 @@ test("Settlements: one opened over an assignment's period is calculated, closed 
 
   const [calculated] = await Promise.all([answerOf(page, "POST", new RegExp(`^/settlements/${settlement.id}/calculate$`)), commands.getByRole("button", { name: "Calculate" }).click()])
   expect(calculated.status(), await calculated.text()).toBe(200)
-  await expect.poll(offered).toEqual(["Calculate", "Close"])
-  const [closed] = await Promise.all([answerOf(page, "POST", new RegExp(`^/settlements/${settlement.id}/close$`)), commands.getByRole("button", { name: "Close" }).click()])
+  // Close settlement, named apart from the drawer's own Close, and asked before it is sent (#257).
+  await expect.poll(offered).toEqual(["Calculate", "Close settlement"])
+  const closes: string[] = []
+  page.on("request", (request) => {
+    if (request.method() === "POST" && request.url().endsWith(`/settlements/${settlement.id}/close`)) closes.push(request.url())
+  })
+  await commands.getByRole("button", { name: "Close settlement" }).click()
+  const confirm = dialogTitled(page, "Close settlement")
+  await expect(confirm).toContainText("what CityHaul")
+  await confirm.getByRole("button", { name: "Cancel" }).click()
+  await expect(confirm).toBeHidden()
+  expect(closes, "nothing is sent until the close is confirmed").toEqual([])
+  await commands.getByRole("button", { name: "Close settlement" }).click()
+  const [closed] = await Promise.all([answerOf(page, "POST", new RegExp(`^/settlements/${settlement.id}/close$`)), confirm.getByRole("button", { name: "Close settlement" }).click()])
   expect(closed.status(), await closed.text()).toBe(200)
+  await expect(confirm).toBeHidden()
   await expect.poll(offered).toEqual(["Reopen"])
 
   await commands.getByRole("button", { name: "Reopen" }).click()
@@ -290,6 +306,38 @@ test("Settlements: one opened over an assignment's period is calculated, closed 
   const events = await listAll<SettlementEvent>(api, `/settlements/${settlement.id}/events`)
   expect(events.map((event) => event.kind)).toEqual(["calculated", "closed", "reopened"])
   expect(((await (await api.get(`/settlements/${settlement.id}`)).json()) as Settlement).status).toBe("open")
+
+  // A period that has not ended on the project's day is calculated, never closed; one not begun offers nothing, and the API says why in its own words (#260). A day either side of today's UTC date holds on Copenhagen's clock too.
+  const today = new Date().toISOString().slice(0, 10)
+  const opened = async (validFrom: string, lastDay: string) => {
+    const response = await api.post("/settlements", { data: { serviceAreaAssignmentId: assignment.id, validFrom, validTo: plus(lastDay, 1) } })
+    expect(response.status(), await response.text()).toBe(201)
+    return (await response.json()) as Settlement
+  }
+  const shown = async (row: Settlement) => {
+    await page.goto(`/commercial?module=settlements&record=settlement-${row.id}`)
+    // Its history read, so its offers are the record's as the store holds it.
+    await expect(details.getByText("Nothing yet: it was opened.")).toBeVisible()
+  }
+  const running = await opened(plus(today, -1), plus(today, 1))
+  await shown(running)
+  await expect.poll(offered).toEqual(["Calculate"])
+  const [partial] = await Promise.all([answerOf(page, "POST", new RegExp(`^/settlements/${running.id}/calculate$`)), commands.getByRole("button", { name: "Calculate" }).click()])
+  expect(partial.status(), await partial.text()).toBe(200)
+  await expect(details.getByTestId("settlement-history").getByRole("listitem")).toHaveCount(1)
+  await expect.poll(offered).toEqual(["Calculate"])
+  await expect(details.getByTestId("settlement-held-back")).toContainText("has not ended; close it after its last day")
+  const early = await api.post(`/settlements/${running.id}/close`, { data: {} })
+  expect(early.status()).toBe(409)
+  expect(((await early.json()) as { detail: string }).detail).toMatch(new RegExp(`^Settlement CityHaul.* · ${plus(today, -1)}–${plus(today, 1)} has not ended; close it after its last day$`))
+
+  const ahead = await opened(plus(today, 40), plus(today, 69))
+  await shown(ahead)
+  await expect.poll(offered).toEqual([])
+  await expect(details.getByTestId("settlement-held-back")).toContainText(`${plus(today, 40)} – ${plus(today, 69)} has not begun; calculate it from its first day`)
+  const unbegun = await api.post(`/settlements/${ahead.id}/calculate`, { data: {} })
+  expect(unbegun.status()).toBe(409)
+  expect(((await unbegun.json()) as { detail: string }).detail).toMatch(new RegExp(`^Settlement CityHaul.* · ${plus(today, 40)}–${plus(today, 69)} has not begun; calculate it from its first day$`))
 })
 
 test("Weight review: an unload captured on a running route opens in the desk's queue, is approved, rejected with why and corrected, and the corrected one names the row to review", async ({ page, api, browser }) => {

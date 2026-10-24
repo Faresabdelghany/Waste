@@ -8,7 +8,7 @@ import { ENDS_AFTER_IT_STARTS } from "@waste/contracts/validity"
 import { createDb, type Database, type Tx } from "@waste/db/client"
 import { outboxEvent } from "@waste/db/schema/execution"
 import { withCompany } from "@waste/db/tenant"
-import { closedSettlement, notCalculated } from "@waste/domain/finance/transitions"
+import { closedSettlement, notCalculated, periodNotBegun, periodNotEnded } from "@waste/domain/finance/transitions"
 import { and, asc, eq } from "drizzle-orm"
 
 import { createApp } from "../app"
@@ -36,6 +36,11 @@ const MORNING = new Date("2026-11-03T09:00:00Z")
 const PERIOD = { validFrom: "2026-06-01", validTo: "2026-11-01" }
 /** How the machine's sentences name it: the provider and the period as a person reads it. */
 const LABEL = "NordRen ApS · 2026-06-01–2026-10-31"
+/** NordRen's next settlement, November, which has begun on the morning's clock and not ended. */
+const NOVEMBER = "NordRen ApS · 2026-11-01–2026-11-30"
+/** Two clocks beside the morning's, on Copenhagen's day: before November has begun, and once it has ended. */
+const OCTOBER_MORNING = new Date("2026-10-20T09:00:00Z")
+const DECEMBER_MORNING = new Date("2026-12-02T09:00:00Z")
 
 describe("the settlement endpoints", { skip: database.skip || owner.skip }, () => {
   let pool: Database
@@ -49,6 +54,9 @@ describe("the settlement endpoints", { skip: database.skip || owner.skip }, () =
   let fx: SettlementFixtures
   let app: ReturnType<typeof createApp>
   let olivia: Call
+  /** Olivia on October's clock and on December's, for a period not begun and one ended. */
+  let oliviaInOctober: Call
+  let oliviaInDecember: Call
   /** The custom role, granted view, create and edit, with Project Access to Copenhagen Central only. */
   let viewer: Call
   /** The Service Provider Manager at NordRen: `commercial.settlements` view by charter, no project. */
@@ -75,6 +83,8 @@ describe("the settlement endpoints", { skip: database.skip || owner.skip }, () =
     await grantRole(pool, a.companyId, a.roles.viewer.id, [{ moduleKey: MODULE, actions: ["view", "create", "edit"] }])
     app = createApp({ probe: pool, pool, verifier: keys.verifier, now: () => MORNING })
     olivia = callingAs(app, keys, a.users.olivia, a.companyId)
+    oliviaInOctober = callingAs(createApp({ probe: pool, pool, verifier: keys.verifier, now: () => OCTOBER_MORNING }), keys, a.users.olivia, a.companyId)
+    oliviaInDecember = callingAs(createApp({ probe: pool, pool, verifier: keys.verifier, now: () => DECEMBER_MORNING }), keys, a.users.olivia, a.companyId)
     viewer = callingAs(app, keys, a.users.viewer, a.companyId)
     lars = callingAs(app, keys, a.users.lars, a.companyId)
     other = callingAs(app, keys, b.users.olivia, b.companyId)
@@ -241,25 +251,42 @@ describe("the settlement endpoints", { skip: database.skip || owner.skip }, () =
       assert.deepEqual((await detail(s.id)).lines, closed.lines, "an event recorded after the close moves nothing on the closed settlement")
     })
 
+    test("refuses to calculate a settlement whose period has not begun and to close one whose period has not ended, naming the period, and writes nothing for either (#260)", async () => {
+      // November's settlement, opened above. On October's clock nothing of it has been delivered: no calculation, no history row.
+      assert.equal((await refused(await command(next.id, "calculate", {}, oliviaInOctober), 409)).detail, periodNotBegun(NOVEMBER))
+      assert.equal(periodNotBegun(NOVEMBER), "Settlement NordRen ApS · 2026-11-01–2026-11-30 has not begun; calculate it from its first day")
+      assert.deepEqual([(await detail(next.id)).status, await kindsOf(next.id)], ["open", []])
+      // On the morning's clock it has begun: a calculation is a partial one, and a close waits for the period's end, the lines and the status left as calculated and nothing published.
+      const calculated = await ok(await command(next.id, "calculate"))
+      assert.equal(calculated.status, "calculated")
+      assert.equal((await refused(await command(next.id, "close"), 409)).detail, periodNotEnded(NOVEMBER))
+      assert.equal(periodNotEnded(NOVEMBER), "Settlement NordRen ApS · 2026-11-01–2026-11-30 has not ended; close it after its last day")
+      assert.deepEqual(await detail(next.id), calculated, "a refused close leaves the settlement as calculated")
+      assert.deepEqual(await kindsOf(next.id), ["calculated"])
+      assert.deepEqual(await eventsAbout(next.id), [])
+      // The status is judged before the day: a closed settlement is reopened first, whatever its period (s, June to October, closed above).
+      assert.equal((await refused(await command(s.id, "calculate", {}, oliviaInOctober), 409)).detail, closedSettlement(LABEL))
+    })
+
     test("refuses a close whose lines name an event no longer served — one cancelled since the calculation — counting them, and takes it once recalculated", async () => {
-      // November's settlement, opened above and empty: one event served under the assignment, calculated onto a line, then cancelled by the office. Without the gate the line would stand and the provider be paid for a collection the office says did not happen.
+      // November's settlement, calculated above with nothing to settle: one event served under the assignment, calculated onto a line, then cancelled by the office. Without the gate the line would stand and the provider be paid for a collection the office says did not happen. The closes are asked on December's clock, once November has ended.
       const served = await recordServedEvent(pool, a, fleet, ex, fx, "2026-11-09")
       const calculated = await ok(await command(next.id, "calculate"))
       assert.deepEqual([calculated.lineCount, calculated.netMinor], [1, 5500], "the one November event, at the indexed fee")
       assert.deepEqual(lineFor(calculated, served.id), { serviceProviderPriceId: fx.prices.indexed.id, quantity: 1, unitPriceMinor: 5500, netMinor: 5500 })
       const cancelled = await olivia(`/billable-events/${served.id}/cancel`, { method: "POST", body: { reason: "not-delivered" } })
       assert.equal(cancelled.status, 200, JSON.stringify(await cancelled.clone().json()))
-      assert.equal((await refused(await command(next.id, "close"), 409)).detail, linesStale(1))
+      assert.equal((await refused(await command(next.id, "close", {}, oliviaInDecember), 409)).detail, linesStale(1))
       assert.equal(linesStale(1), "1 line names an event no longer served in the period; calculate again")
       assert.equal(linesStale(2), "2 lines name events no longer served in the period; calculate again")
       assert.deepEqual((await detail(next.id)).lines, calculated.lines, "a refused close leaves the lines as calculated")
       const recalculated = await ok(await command(next.id, "calculate"))
       assert.deepEqual([recalculated.lineCount, recalculated.netMinor, recalculated.lines], [0, 0, []], "the cancelled event leaves the calculation")
-      const closed = await ok(await command(next.id, "close"))
+      const closed = await ok(await command(next.id, "close", {}, oliviaInDecember))
       assert.deepEqual([closed.status, closed.lineCount, closed.netMinor], ["closed", 0, 0], "nothing served, nothing owed, and the period closes")
       // Reopened, so the list below reads November's settlement open, as it was opened.
       assert.equal((await ok(await command(next.id, "reopen", { reason: "Kept open for the reads below" }))).status, "open")
-      assert.deepEqual(await kindsOf(next.id), ["calculated", "calculated", "closed", "reopened"])
+      assert.deepEqual(await kindsOf(next.id), ["calculated", "calculated", "calculated", "closed", "reopened"])
     })
   })
 

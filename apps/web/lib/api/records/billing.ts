@@ -9,8 +9,11 @@
 //
 // An event names its agreement (customers.agreements), its product (the
 // products above it), its route (route-studio.routes) and the ticket it came
-// of, by web id on the record; its payer is the agreement's, and its money is
-// frozen in its own currency once priced. Its status is a reading the server
+// of, by web id on the record; its customer and its payer are the
+// agreement's, each under a fact of its own (#256), and its money is frozen in
+// its own currency once priced. Explain price asks an event's own question
+// (`eventQuestion`, #259): the list its row won in, its product, its service
+// date and the conditions it was priced on, read through the rows it names. Its status is a reading the server
 // answers on every read and takes on no write, so the adapter lists no
 // `statuses`, refuses every patch, and the event moves by its two commands:
 // `reprice`, the resolver again over a blocked event (a ticket's event taking
@@ -68,8 +71,10 @@ import {
   isBillingRunRecord,
   isEventRecord,
   isInvoiceDocument,
+  isPriceListRecord,
   isProductRecord,
   OFFICE_CANCEL_REASONS,
+  PRICE_ROW_PREFIX,
   PRODUCT_PREFIX,
 } from "@/lib/data/commercial"
 
@@ -77,7 +82,8 @@ import { command, create, get, listAll } from "../client"
 import { inheritedPresentation, NOTHING_RESOLVED, said, stampFacts, statusLabel, typed, webIdOf, type Client, type LocalRefusal, type MappingContext, type Resolver, type ResourceAdapter, type ServerModule } from "./adapter"
 import { shownOn } from "./clock"
 import { referenced, refusal } from "./places"
-import { nameVia, referencedServerId } from "./references"
+import { nameVia, referencedServerId, webIdVia } from "./references"
+import { customerKindOf } from "./registry"
 
 /** What a body giving a price of its own without a reason, or a reason without a price, is told (`@waste/contracts/billable-events`, `OVERRIDE_WITH_A_REASON`). */
 export const OVERRIDE_WITH_A_REASON = "Give the reason with a price of your own, and neither without the other"
@@ -138,6 +144,69 @@ function originOf(event: BillableEvent, context: MappingContext): string {
   }
 }
 
+/** A price row's conditions, by the keys Explain price's form names them under: what an event its row won matched. */
+const ROW_CONDITIONS = ["planningAreaId", "customerKind", "containerType", "wasteFraction", "customerId"] as const
+
+/**
+ * Whether an event's price is a list's, so Explain price answers why it costs
+ * what it costs (#259): a priced event, or a blocked one waiting for a price —
+ * not a person's own price with its reason, nor a reversal's copy of the
+ * event it undoes.
+ */
+export const eventPricedByList = (event: BusinessRecord): boolean => typed(event, "kind") !== "reversal" && typed(event, "overrideReason") === undefined
+
+/**
+ * The price question an event is the answer to, as Explain price opens on it
+ * (#259), read through the rows `resolve` holds. The list it was priced in:
+ * the winning row's, else — its agreement read — the agreement's own, else
+ * its project's default, as the resolver chose (`priceListIdFor`), and none
+ * while the agreement is not read. Its product and its service date. The
+ * conditions it was priced on: the winning row's, which the event matched,
+ * then what the rows it names say of the rest — its agreement's customer and
+ * that customer's kind, its route's scheme's planning area, its pickup's
+ * waste fraction and its container's type — so an event whose route is no
+ * longer read still names its winner. A condition nothing says is left for
+ * the person.
+ */
+export function eventQuestion(event: BusinessRecord, resolve: Resolver): BusinessFormValues {
+  const rowOf = (webId: string | undefined) => {
+    const serverId = webId === undefined ? undefined : resolve.serverIdOf(webId)
+    return serverId === undefined ? undefined : resolve.byServerId(serverId)
+  }
+  const valueOf = (record: BusinessRecord | undefined, key: string) => (record === undefined ? undefined : typed(record, key))
+  const winner = rowOf(typed(event, "priceListRowId"))
+  const agreement = rowOf(typed(event, "agreementId"))
+  const customerId = valueOf(agreement, "customerId")
+  const customer = rowOf(customerId)
+  const scheme = rowOf(valueOf(rowOf(typed(event, "routeId")), "schemeId"))
+  const pickup = rowOf(typed(event, "pickupId"))
+  const projectId = typed(event, "projectId")
+  const ofProject = (record: BusinessRecord) => isPriceListRecord(record) && projectId !== undefined && (record.projectIds ?? []).includes(projectId)
+  // The agreement names its own list in a fact: by the id chip it read before the lists loaded, or by the list's name.
+  const agreementList = agreement?.facts["Price list"]
+  const list =
+    valueOf(winner, "priceListId") ??
+    (agreement === undefined
+      ? undefined
+      : agreementList === undefined
+        ? resolve.find((record) => ofProject(record) && record.submittedValues?.isDefault === true)?.id
+        : resolve.find((record) => ofProject(record) && (record.id === agreementList || record.name === agreementList))?.id)
+  const read: Record<(typeof ROW_CONDITIONS)[number], string | undefined> = {
+    planningAreaId: valueOf(scheme, "planningAreaId"),
+    customerKind: customer === undefined ? undefined : customerKindOf(customer),
+    containerType: valueOf(rowOf(valueOf(pickup, "containerId")), "containerType"),
+    wasteFraction: valueOf(pickup, "wasteFractionId"),
+    customerId,
+  }
+  const question: Record<string, string | undefined> = {
+    priceListId: list,
+    productId: typed(event, "productId"),
+    on: typed(event, "serviceDate"),
+    ...Object.fromEntries(ROW_CONDITIONS.map((key) => [key, valueOf(winner, key) ?? read[key]])),
+  }
+  return Object.fromEntries(Object.entries(question).filter((entry): entry is [string, string] => entry[1] !== undefined))
+}
+
 export const billableEventAdapter: ResourceAdapter<BillableEvent> = {
   prefix: EVENT_PREFIX,
   owns: isEventRecord,
@@ -147,10 +216,12 @@ export const billableEventAdapter: ResourceAdapter<BillableEvent> = {
   read: (client, serverId) => get<BillableEvent>(client, `/billable-events/${serverId}`),
   toRecord: (event, context) => {
     const project = projectOf(context, event.projectId)
-    // The agreement's row, from the module loaded before; its payer is the event's customer.
+    // The agreement's row, from the module loaded before: its customer and its payer, each by its own name, since an agreement of one party is often billed to another (#256).
     const agreement = event.agreementId === null ? undefined : context.resolve.byServerId(event.agreementId)
     const agreementId = event.agreementId === null ? undefined : (agreement?.id ?? webIdOf("agreement", event.agreementId))
     const agreementNumber = agreement === undefined ? agreementId : (typed(agreement, "agreementNumber") ?? agreement.name)
+    const customerName = agreement?.facts.Customer
+    const customerId = agreement === undefined ? undefined : typed(agreement, "customerId")
     const payerName = agreement?.facts.Payer
     const payerId = agreement === undefined ? undefined : typed(agreement, "payerId")
     const product = named(context, PRODUCT_PREFIX, event.productId)
@@ -163,7 +234,7 @@ export const billableEventAdapter: ResourceAdapter<BillableEvent> = {
     return {
       id: webIdOf(EVENT_PREFIX, event.id),
       name: `${EVENT_KIND_LABELS[event.kind]} · ${product?.name ?? "no product"}`,
-      context: `${payerName ?? agreementNumber ?? "No agreement"} · ${event.serviceDate}`,
+      context: `${customerName ?? agreementNumber ?? "No agreement"} · ${event.serviceDate}`,
       status: statusLabel(event.status),
       ...inheritedPresentation(undefined),
       ...stampFacts(event, context.now),
@@ -173,7 +244,8 @@ export const billableEventAdapter: ResourceAdapter<BillableEvent> = {
         Kind: EVENT_KIND_LABELS[event.kind],
         "Service date": event.serviceDate,
         ...(agreementNumber === undefined ? {} : { Agreement: agreementNumber }),
-        ...(payerName === undefined ? {} : { Customer: payerName }),
+        ...(customerName === undefined ? {} : { Customer: customerName }),
+        ...(payerName === undefined ? {} : { Payer: payerName }),
         ...(product === undefined ? {} : { Product: product.name }),
         Quantity: String(event.quantity),
         ...(money(event.unitPriceMinor) === undefined ? {} : { "Unit price": money(event.unitPriceMinor)! }),
@@ -198,13 +270,18 @@ export const billableEventAdapter: ResourceAdapter<BillableEvent> = {
         projectId: project.webId,
         kind: event.kind,
         ...(agreementId === undefined ? {} : { agreementId }),
+        ...(customerId === undefined ? {} : { customerId }),
         ...(payerId === undefined ? {} : { payerId }),
         ...(product === undefined ? {} : { productId: product.id }),
         ...(route === undefined ? {} : { routeId: route.id }),
+        // The pickup and the row that won, for the event's own price question (`eventQuestion`).
+        ...(event.links.pickupId === null ? {} : { pickupId: webIdVia(context, "pickup", event.links.pickupId) }),
+        ...(event.priceListRowId === null ? {} : { priceListRowId: webIdVia(context, PRICE_ROW_PREFIX, event.priceListRowId) }),
         ...(ticket === undefined ? {} : { ticketId: ticket.id }),
         ...(event.blockReason === null ? {} : { blockReason: event.blockReason }),
         quantity: String(event.quantity),
         serviceDate: event.serviceDate,
+        ...(event.overrideReason === null ? {} : { overrideReason: event.overrideReason }),
         ...(event.note === null ? {} : { note: event.note }),
       },
     }

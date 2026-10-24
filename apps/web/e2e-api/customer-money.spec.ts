@@ -8,7 +8,9 @@ import { uniqueName } from "./env"
 // with its invoice fields; a price added to Copenhagen's default list and
 // edited, and Explain price showing why Østerbro Housing's negotiated row
 // wins; a manual billable event blocked for want of a price row, repriced
-// once the row is there, and cancelled; a billing run previewed, run, its
+// once the row is there, explained on its own question (#259) and cancelled;
+// an event under an agreement billed to another party naming its customer
+// and its payer each (#256); a billing run previewed, run, its
 // invoice read with the event's line and partially credited. Nothing here is
 // a fixture scenario ported: no fixture spec covered the Commercial modules.
 // Records are uniquely named and never cleaned up; a run is over a day of
@@ -16,7 +18,7 @@ import { uniqueName } from "./env"
 type Project = { id: string; name: string }
 type Product = { id: string; name: string; projectId: string; status: string; kind: string; unit: string; invoiceCode: string | null; vatPercent: number | null }
 type PriceList = { id: string; code: string; projectId: string; isDefault: boolean }
-type Agreement = { id: string; number: string; projectId: string }
+type Agreement = { id: string; number: string; projectId: string; customerId: string }
 type BillableEvent = { id: string; status: string; blockReason: string | null; netMinor: number | null; invoiceLineId: string | null; cancelReason: string | null }
 type InvoiceLine = { id: string; position: number; billableEventId: string | null; creditsLineId: string | null; quantity: number; description: string }
 type InvoiceDetail = { id: string; label: string; kind: string; lines: InvoiceLine[]; creditNotes: { id: string; label: string }[] }
@@ -53,9 +55,10 @@ async function defaultList(api: APIRequestContext, project: Project): Promise<Pr
   return list
 }
 
-async function agreement2408(api: APIRequestContext): Promise<Agreement> {
-  const agreement = (await itemsOf<Agreement>(api, "/agreements?limit=200")).find((candidate) => candidate.number === "AGR-2408")
-  if (agreement === undefined) throw new Error("the seed has no AGR-2408")
+/** A seeded agreement by its number: AGR-2408, Østerbro Housing's own; AGR-2603, DEAS Ejendomme's, billed to Københavns Kommune. */
+async function agreementNumbered(api: APIRequestContext, number: string): Promise<Agreement> {
+  const agreement = (await itemsOf<Agreement>(api, "/agreements?limit=200")).find((candidate) => candidate.number === number)
+  if (agreement === undefined) throw new Error(`the seed has no ${number}`)
   return agreement
 }
 
@@ -77,6 +80,9 @@ function dayOfItsOwn(): string {
   const offset = Math.floor(Date.now() / 1000) % 1460
   return new Date(Date.UTC(2028, 0, 1) + offset * 86_400_000).toISOString().slice(0, 10)
 }
+
+/** A fact of a record's details, the row its label heads (`StatRow`). */
+const factOf = (details: Locator, label: string) => details.getByText(label, { exact: true }).locator("xpath=../..")
 
 /** Opens a Price Engine module and waits for its list read. */
 async function openModule(page: Page, moduleId: string, listPath: RegExp) {
@@ -199,6 +205,26 @@ test("Billable events: open on the blocked and the ready; a manual event blocked
   expect(repriced.status()).toBe(200)
   expect((await repriced.json()) as BillableEvent).toMatchObject({ status: "ready", blockReason: null, netMinor: 7500 })
   await expect(details.getByText("DKK 75.00").first()).toBeVisible()
+  // AGR-2408's customer pays for itself: one party under both its facts (#256).
+  await expect(factOf(details, "Customer")).toContainText("Østerbro Housing")
+  await expect(factOf(details, "Payer")).toContainText("Østerbro Housing")
+
+  // Why it costs DKK 75.00: Explain price, the price rows' own dialog, opened on the event's question (#259).
+  const agreement = await agreementNumbered(api, "AGR-2408")
+  await details.getByRole("button", { name: "Explain price" }).click()
+  const question = dialogTitled(page, "Explain price")
+  await expect(question.getByRole("combobox", { name: /^Price list/ })).toContainText(list.code)
+  await expect(question.getByRole("combobox", { name: /^Product/ })).toContainText(product.name)
+  await expect(question.getByLabel(/^On/)).toHaveValue("2026-10-05")
+  await expect(question.getByRole("combobox", { name: /^Customer type/ })).toContainText("Organisation")
+  await expect(question.getByRole("combobox", { name: /^Customer$/ })).toContainText("Østerbro Housing")
+  const [resolved] = await Promise.all([answerOf(page, "GET", new RegExp(`^/price-lists/${list.id}/resolve$`)), question.getByRole("button", { name: "Explain" }).click()])
+  expect(resolved.status()).toBe(200)
+  const asked = new URL(resolved.url()).searchParams
+  expect([asked.get("productId"), asked.get("on"), asked.get("customerKind"), asked.get("customerId")]).toEqual([product.id, "2026-10-05", "organisation", agreement.customerId])
+  const answer = page.getByTestId("explain-price")
+  await expect(answer.getByText(/wins at DKK 75\.00/)).toBeVisible()
+  await answer.getByRole("button", { name: "Done" }).click()
 
   await details.getByRole("button", { name: "Cancel event" }).click()
   const cancel = dialogTitled(page, "Cancel event")
@@ -209,9 +235,27 @@ test("Billable events: open on the blocked and the ready; a manual event blocked
   expect((await cancelled.json()) as BillableEvent).toMatchObject({ status: "cancelled", cancelReason: "duplicate" })
 })
 
+test("Billable events: an event under an agreement billed to another party names its customer and its payer, each by its own fact (#256)", async ({ page, api }) => {
+  const project = await copenhagen(api)
+  const agreement = await agreementNumbered(api, "AGR-2603")
+  const product = await newProduct(api, project, "E2E Bin wash")
+  // Blocked for want of a price row, as the manual event above is before its row: what is asked here is whom it names.
+  const created = await api.post("/billable-events", { data: { projectId: project.id, agreementId: agreement.id, productId: product.id, quantity: 1, serviceDate: "2026-10-06" } })
+  expect(created.status(), await created.text()).toBe(201)
+  const event = (await created.json()) as BillableEvent
+
+  const loaded = answerOf(page, "GET", /^\/billable-events$/)
+  await page.goto(`/commercial?module=events&record=event-${event.id}`)
+  expect((await loaded).status()).toBe(200)
+  const details = page.getByRole("dialog").filter({ has: page.getByTestId("event-commands") })
+  await expect(factOf(details, "Customer")).toContainText("DEAS Ejendomme")
+  await expect(factOf(details, "Payer")).toContainText("Københavns Kommune")
+  await expect(factOf(details, "Agreement")).toContainText("AGR-2603")
+})
+
 test("Billing Runs: a run previewed, then run over a day of its own; its invoice read with the event's line and partially credited", async ({ page, api }) => {
   const project = await copenhagen(api)
-  const agreement = await agreement2408(api)
+  const agreement = await agreementNumbered(api, "AGR-2408")
   const bulky = (await itemsOf<Product>(api, `/products?limit=200&projectId=${project.id}`)).find((candidate) => candidate.name === "Bulky waste pickup")
   if (bulky === undefined) throw new Error("the seed has no Bulky waste pickup in Copenhagen")
   const day = dayOfItsOwn()

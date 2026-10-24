@@ -1,14 +1,25 @@
 import assert from "node:assert/strict"
 import { describe, test } from "node:test"
 
-import { closedSettlement, correctedUnload, notCalculated, SETTLEMENT_COMMANDS, settlementTransition, weightReviewTransition, type SettlementCommand, type Transition } from "../transitions"
+import { closedSettlement, correctedUnload, notCalculated, periodNotBegun, periodNotEnded, SETTLEMENT_COMMANDS, settlementTransition, weightReviewTransition, type SettlementCommand, type Transition } from "../transitions"
 import { SETTLEMENT_STATUSES, WEIGHT_REVIEW_DECISIONS, WEIGHT_REVIEW_STATUSES, type SettlementStatus, type WeightReviewDecision, type WeightReviewStatus } from "../vocabulary"
 
 const LABEL = "NordRen · July 2026"
 const NOT_CALCULATED = "Settlement NordRen · July 2026 has not been calculated; calculate it first"
 const CLOSED = "Settlement NordRen · July 2026 is closed; reopen it first"
+const NOT_BEGUN = "Settlement NordRen · July 2026 has not begun; calculate it from its first day"
+const NOT_ENDED = "Settlement NordRen · July 2026 has not ended; close it after its last day"
 
-/** The settlement machine spelled out, status by status and command by command, so the function is pinned in words and not only in itself. */
+/** July 2026, by its first and last day in. */
+const JULY = { label: LABEL, firstDay: "2026-07-01", lastDay: "2026-07-31" }
+/** The project's days the machine is asked on: before the period, its first day, its last day, and the day after it. */
+const BEFORE = "2026-06-30"
+const FIRST = "2026-07-01"
+const LAST = "2026-07-31"
+const AFTER = "2026-08-01"
+const july = (status: SettlementStatus, command: SettlementCommand, today: string) => settlementTransition({ ...JULY, status }, command, today)
+
+/** The settlement machine spelled out once the period has ended, status by status and command by command, so the function is pinned in words and not only in itself. */
 const settlementTable: Record<SettlementStatus, Record<SettlementCommand, Transition<SettlementStatus>>> = {
   open: {
     calculate: { kind: "move", to: "calculated" },
@@ -28,11 +39,11 @@ const settlementTable: Record<SettlementStatus, Record<SettlementCommand, Transi
 }
 
 describe("settlementTransition", () => {
-  test("every status under every command, as the table spells it: nine pairs", () => {
+  test("every status under every command once the period has ended, as the table spells it: nine pairs", () => {
     let pairs = 0
     for (const status of SETTLEMENT_STATUSES) {
       for (const command of SETTLEMENT_COMMANDS) {
-        assert.deepEqual(settlementTransition(status, command, LABEL), settlementTable[status][command], `${status} under ${command}`)
+        assert.deepEqual(july(status, command, AFTER), settlementTable[status][command], `${status} under ${command}`)
         pairs += 1
       }
     }
@@ -41,14 +52,42 @@ describe("settlementTransition", () => {
   })
 
   test("a recalculation is a move, since the lines change; a close needs a calculation; a closed settlement is reopened first, and reopening an open one is nothing to do", () => {
-    assert.deepEqual(settlementTransition("calculated", "calculate", LABEL), { kind: "move", to: "calculated" })
-    assert.deepEqual(settlementTransition("open", "close", LABEL), { kind: "refuse", sentence: notCalculated(LABEL) })
-    assert.deepEqual(settlementTransition("closed", "calculate", LABEL), { kind: "refuse", sentence: closedSettlement(LABEL) })
-    assert.deepEqual(settlementTransition("closed", "reopen", LABEL), { kind: "move", to: "open" })
-    for (const status of ["open", "calculated"] as const) assert.deepEqual(settlementTransition(status, "reopen", LABEL), { kind: "stay" }, status)
-    assert.deepEqual(settlementTransition("closed", "close", LABEL), { kind: "stay" })
+    assert.deepEqual(july("calculated", "calculate", AFTER), { kind: "move", to: "calculated" })
+    assert.deepEqual(july("open", "close", AFTER), { kind: "refuse", sentence: notCalculated(LABEL) })
+    assert.deepEqual(july("closed", "calculate", AFTER), { kind: "refuse", sentence: closedSettlement(LABEL) })
+    assert.deepEqual(july("closed", "reopen", AFTER), { kind: "move", to: "open" })
+    for (const status of ["open", "calculated"] as const) assert.deepEqual(july(status, "reopen", AFTER), { kind: "stay" }, status)
+    assert.deepEqual(july("closed", "close", AFTER), { kind: "stay" })
     assert.equal(notCalculated("CityHaul · Q3 2026"), "Settlement CityHaul · Q3 2026 has not been calculated; calculate it first")
     assert.equal(closedSettlement("CityHaul · Q3 2026"), "Settlement CityHaul · Q3 2026 is closed; reopen it first")
+  })
+
+  test("a period not begun takes no calculation and one not ended no close, each naming the period: it is calculated from its first day and closed the day after its last (#260)", () => {
+    for (const status of ["open", "calculated"] as const) {
+      assert.deepEqual(july(status, "calculate", BEFORE), { kind: "refuse", sentence: NOT_BEGUN }, `${status}, the day before`)
+      for (const today of [FIRST, LAST, AFTER]) assert.deepEqual(july(status, "calculate", today), { kind: "move", to: "calculated" }, `${status} on ${today}`)
+    }
+    for (const today of [BEFORE, FIRST, LAST]) assert.deepEqual(july("calculated", "close", today), { kind: "refuse", sentence: NOT_ENDED }, `closed on ${today}`)
+    assert.deepEqual(july("calculated", "close", AFTER), { kind: "move", to: "closed" })
+    assert.equal(periodNotBegun(LABEL), NOT_BEGUN)
+    assert.equal(periodNotEnded(LABEL), NOT_ENDED)
+  })
+
+  test("the status is judged before the day: an open settlement is calculated first, a closed one reopened first; a closed one closed again stays, and reopen reads no day", () => {
+    for (const today of [BEFORE, FIRST, LAST]) {
+      assert.deepEqual(july("open", "close", today), { kind: "refuse", sentence: NOT_CALCULATED }, `open, closed on ${today}`)
+      assert.deepEqual(july("closed", "calculate", today), { kind: "refuse", sentence: CLOSED }, `closed, calculated on ${today}`)
+      assert.deepEqual(july("closed", "close", today), { kind: "stay" }, `closed again on ${today}`)
+      assert.deepEqual(july("closed", "reopen", today), { kind: "move", to: "open" }, `reopened on ${today}`)
+      for (const status of ["open", "calculated"] as const) assert.deepEqual(july(status, "reopen", today), { kind: "stay" }, `${status} reopened on ${today}`)
+    }
+  })
+
+  test("a period of one day is begun and not ended on that day, and ended the day after", () => {
+    const day = { label: LABEL, firstDay: FIRST, lastDay: FIRST }
+    assert.deepEqual(settlementTransition({ ...day, status: "open" }, "calculate", FIRST), { kind: "move", to: "calculated" })
+    assert.deepEqual(settlementTransition({ ...day, status: "calculated" }, "close", FIRST), { kind: "refuse", sentence: NOT_ENDED })
+    assert.deepEqual(settlementTransition({ ...day, status: "calculated" }, "close", "2026-07-02"), { kind: "move", to: "closed" })
   })
 })
 
