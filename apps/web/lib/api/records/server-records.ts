@@ -19,8 +19,10 @@
 //   id is kept beside it in `serverIds`; a write looks the server id up by
 //   the web id, so a patch goes to the row's own route. A record the
 //   workspace has just made keeps the id it minted for the session
-//   (`withCreated`), since the address bar and the selection already carry
-//   it, and takes the adapter's id on the next load.
+//   (`withCreated`), since the address bar, the selection and its links
+//   already carry it, across every read again of its module (`mapModule`,
+//   #240), as every row keeps the id it was first read under; the adapter's
+//   id is the next session's.
 //
 //   A write is optimistic and reconciled: the record the workspace handed
 //   over replaces the row at once, so a form closes on a list that already
@@ -152,7 +154,9 @@ export function adapterFor(module: ServerModule, record: BusinessRecord): Resour
  * read from the API, which only a full scan would otherwise rule out; the
  * rows a load is still mapping come indexed by the load (`byServerId`), which
  * files each as it is mapped — a route's stops ask for their route and its
- * container by the hundred, and most of those miss.
+ * container by the hundred, and most of those miss. By server id the load's
+ * row comes first: a module read again holds the row in the store as well,
+ * under the same web id (#240), and the load's is the one just listed.
  */
 export function resolverOver(state: ServerRecordsState, extra?: { records: readonly BusinessRecord[]; serverIds: ReadonlyMap<string, string>; byServerId: ReadonlyMap<string, BusinessRecord> }): Resolver {
   const modules = [...state.values()].filter((module) => module.status === "ready")
@@ -170,9 +174,9 @@ export function resolverOver(state: ServerRecordsState, extra?: { records: reado
   }
   return {
     byServerId: (serverId) => {
-      const loaded = indexOfLoaded()
-      if (loaded.has(serverId)) return loaded.get(serverId)
-      return extra?.byServerId.get(serverId)
+      const mapping = extra?.byServerId.get(serverId)
+      if (mapping !== undefined) return mapping
+      return indexOfLoaded().get(serverId)
     },
     serverIdOf: (webId) => {
       for (const source of sources) {
@@ -226,18 +230,44 @@ export type LoadOptions = {
   now?: Date
 }
 
+/** Each adapter's list, in the module's order: null for one that lists nothing. */
+export type ModuleLists = readonly (readonly Resource[] | null)[]
+
+/** Every list of a module, sent together; only the mapping runs in the module's order. */
+export function listModule(client: ApiClient, module: ServerModule): Promise<ModuleLists> {
+  return Promise.all(module.resources.map((adapter) => (adapter.list === null ? null : adapter.list(client))))
+}
+
 /**
- * Every row of a module, listed adapter by adapter and mapped in list order,
- * each mapping resolving against what is loaded and what this load has
- * mapped before it.
+ * The web ids the store holds a module's rows under, by server id, for the
+ * rows its lists hold again (#240): the first where it holds two, as the
+ * resolver answers.
  */
-export async function loadModule(client: ApiClient, module: ServerModule, { fixtures, state, now }: LoadOptions): Promise<LoadResult> {
+function heldIdsOf(held: ModuleState | undefined, lists: ModuleLists): Map<string, string> {
+  const ids = new Map<string, string>()
+  if (held === undefined || held.serverIds.size === 0) return ids
+  const listed = new Set(lists.flatMap((resources) => (resources ?? []).map((resource) => resource.id)))
+  for (const [webId, serverId] of held.serverIds) if (listed.has(serverId) && !ids.has(serverId)) ids.set(serverId, webId)
+  return ids
+}
+
+/**
+ * A module's lists mapped adapter by adapter, in list order, each mapping
+ * resolving against what is loaded and what this mapping has mapped before
+ * it. A row the store already holds keeps the web id it holds it under
+ * (#240): a row made this session stays under the id it was minted (the
+ * address bar, the selection and every link that names it hold that id), and
+ * a row read before stays under the one it was read under, whatever the
+ * mapping derives now. Those ids are claimed before any row is mapped, so
+ * which one a row keeps never hangs on the list's order; a session's first
+ * read takes the adapter's.
+ */
+export function mapModule(module: ServerModule, lists: ModuleLists, { fixtures, state, now }: LoadOptions): LoadResult {
   const records: BusinessRecord[] = []
   const serverIds = new Map<string, string>()
   const byServerId = new Map<string, BusinessRecord>()
-  // The lists go out together; only the mapping runs in the module's order,
-  // so an adapter listed after another still sees that one's rows.
-  const lists = await Promise.all(module.resources.map((adapter) => (adapter.list === null ? null : adapter.list(client))))
+  const heldIds = heldIdsOf(state.get(moduleKeyOf(module.workspaceId, module.moduleId)), lists)
+  const claimed = new Set(heldIds.values())
   for (const [index, adapter] of module.resources.entries()) {
     const resources = lists[index]
     if (resources === null) continue
@@ -245,16 +275,23 @@ export async function loadModule(client: ApiClient, module: ServerModule, { fixt
     for (const resource of resources) {
       const mapped = adapter.toRecord(resource, context)
       // A fixture lends its id to one row. A second row the mapping matches
-      // onto the same fixture (two accounts with one full name) keeps the
-      // server's id instead, so no two rows share a web id — a write or a
-      // command looks the server id up by it and would reach the wrong row.
-      const record = serverIds.has(mapped.id) ? { ...mapped, id: webIdOf(adapter.prefix, resource.id) } : mapped
+      // onto the same fixture (two accounts with one full name), or onto an
+      // id another row is held under, keeps the server's id instead, so no
+      // two rows share a web id — a write or a command looks the server id
+      // up by it and would reach the wrong row.
+      const id = heldIds.get(resource.id) ?? (serverIds.has(mapped.id) || claimed.has(mapped.id) ? webIdOf(adapter.prefix, resource.id) : mapped.id)
+      const record = id === mapped.id ? mapped : { ...mapped, id }
       records.push(record)
       serverIds.set(record.id, resource.id)
       byServerId.set(resource.id, record)
     }
   }
   return { records, serverIds }
+}
+
+/** Every row of a module: its lists, then their mapping against `state`. */
+export async function loadModule(client: ApiClient, module: ServerModule, options: LoadOptions): Promise<LoadResult> {
+  return mapModule(module, await listModule(client, module), options)
 }
 
 /** The state after a read began. */
@@ -385,8 +422,14 @@ export async function readModuleInto(store: ServerStore, client: ApiClient, modu
   store.set((state) => new Map(state).set(key, loading(state.get(key) ?? IDLE)))
   try {
     const started = store.getSnapshot()
-    const result = await loadModule(client, module, { fixtures, state: started })
-    if (alive()) store.set((state) => new Map(state).set(key, loaded(result, now(), mappedAgainstOf(module, started))))
+    const lists = await listModule(client, module)
+    if (!alive()) return null
+    // Mapped against the store as the answer lands, so a row made while the
+    // read was out keeps the id it was minted under and the rows that name it
+    // name that one (#240). The stamp is the snapshot the read began with:
+    // the server's answer is no newer.
+    const result = mapModule(module, lists, { fixtures, state: store.getSnapshot() })
+    store.set((state) => new Map(state).set(key, loaded(result, now(), mappedAgainstOf(module, started))))
     return null
   } catch (error) {
     const problem = problemOfError(error)
@@ -431,13 +474,16 @@ export function withoutRecord(module: ModuleState, recordId: string): ModuleStat
  * mapped, under the web id the workspace minted for it. The id stays the
  * minted one for the rest of the session — the workspace has already put it
  * in the address bar, selected it and may have linked to it, and the
- * prototype treats a minted id as canonical — and the adapter's own id (a
- * fixture's, or `<prefix>-<uuid>`) takes over on the next load, when the
- * row is read back from the server. The server id is what the row is
- * written under either way.
+ * prototype treats a minted id as canonical — across every read again of the
+ * module in the session (`mapModule`, #240); the adapter's own id (a
+ * fixture's, or `<prefix>-<uuid>`) is the next session's. The server id is
+ * what the row is written under either way. A read that landed before the
+ * answer holds the row already, under the adapter's id: the minted one takes
+ * its place, so one server row is one row here.
  */
 export function withCreated(module: ModuleState, optimisticId: string, written: BusinessRecord, serverId: string): ModuleState {
-  return withRecord(module, { ...written, id: optimisticId }, serverId)
+  const readFirst = [...module.serverIds].filter(([webId, id]) => id === serverId && webId !== optimisticId).map(([webId]) => webId)
+  return withRecord(readFirst.reduce(withoutRecord, module), { ...written, id: optimisticId }, serverId)
 }
 
 export type WriteOutcome =

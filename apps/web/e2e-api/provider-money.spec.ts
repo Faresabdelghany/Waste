@@ -183,7 +183,7 @@ test("Create service area in the module: the new award's details list the first 
   await end.getByLabel(/^Holds until/).fill(start)
   const [ended] = await Promise.all([answerOf(page, "PATCH", new RegExp(`^/service-area-assignments/${held.id}$`)), end.getByRole("button", { name: "Save" }).click()])
   expect(ended.status(), await ended.text()).toBe(200)
-  // One row read back, never the module: the details stay on the award.
+  // The assignment's row read back: the details stay on the award.
   await expect(end).toBeHidden()
   await expect(details.getByTestId("service-area-commands")).toBeVisible()
   await expect(assignments).toContainText(`${start} – ${start}`)

@@ -338,7 +338,7 @@ export function inviteRecord(invite: Invite, id: string): BusinessRecord {
   }
 }
 
-/** The id an invitation carries until the next load: the generic create path's shape, `access-user-<random>`. */
+/** The id an invitation is minted under, the generic create path's shape, `access-user-<random>`: on the API it keeps it through the session's reads (#240). */
 export function mintInviteId(): string {
   const random = typeof crypto !== "undefined" && "randomUUID" in crypto ? crypto.randomUUID() : `${Date.now()}-${Math.random().toString(36).slice(2, 9)}`
   return `access-user-${random}`

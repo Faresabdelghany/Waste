@@ -369,6 +369,12 @@ describe("the resolver", () => {
     assert.equal(NOTHING_RESOLVED.byServerId("1"), undefined)
   })
 
+  test("by server id, answers the row a load is mapping before the store's: the module read again holds both, the load's as just listed (#240)", () => {
+    const state: ServerRecordsState = new Map([["a", loaded({ records: [record("x-1", "X")], serverIds: new Map([["x-1", "1"]]) }, 1)]])
+    const extra = { records: [record("x-1", "X again")], serverIds: new Map([["x-1", "1"]]), byServerId: new Map([["1", record("x-1", "X again")]]) }
+    assert.equal(resolverOver(state, extra).byServerId("1")?.name, "X again")
+  })
+
   test("answers a miss on the rows a load is mapping by their index, never by walking them: a load of thousands asks once per row (#179)", () => {
     const walked = new Map([["y-2", "2"]])
     walked.entries = () => {
@@ -587,7 +593,7 @@ describe("a module read through others", () => {
     })
     await readModuleInto(store, client, module, { fixtures: [], alive: () => true })
     const derived = store.getSnapshot().get("resources.containers")
-    assert.equal(derived?.mappedAgainst?.get("customers.agreements"), agreementRows, "the rows its mapping read")
+    assert.equal(derived?.mappedAgainst?.get("customers.agreements"), agreementRows, "the rows the read began with: the answer is no newer")
     assert.deepEqual(derivedFromChanged(derived, store.getSnapshot()), ["customers.agreements"], "so it is read again")
     await readModuleInto(store, client, derivedModule(async () => []), { fixtures: [], alive: () => true })
     assert.deepEqual(derivedFromChanged(store.getSnapshot().get("resources.containers"), store.getSnapshot()), [], "and once it is, it is current")
@@ -653,5 +659,98 @@ describe("a module read through others", () => {
     const nine = Date.parse("2026-10-24T21:00:00Z")
     assert.ok(Math.abs(untilDayTurns(nine, ["Europe/Copenhagen"]) - 60 * 60 * 1000) <= 1000, "an hour to Copenhagen's midnight")
     assert.ok(Math.abs(untilDayTurns(nine, ["UTC", "Europe/Copenhagen"]) - 60 * 60 * 1000) <= 1000, "the first of them")
+  })
+})
+
+// A row keeps the web id the store holds it under across the session's reads of its module (#240): the address bar,
+// the selection and every link that names a row made this session hold the id it was minted under, and a read again
+// — a command's touches, the Live board's, a derived module's — maps it afresh under the adapter's id. So the mapping
+// keeps the id the store holds the same server row under, and a session's first read takes the adapter's.
+describe("a module read again", () => {
+  const thing = (id: string, name: string, parentId?: string): Thing => ({ id, createdAt: "", updatedAt: "", name, ...(parentId === undefined ? {} : { parentId }) })
+  const inventory = (...resources: ResourceAdapter<Thing>[]): ServerModule => ({ workspaceId: "resources", moduleId: "inventory", resources })
+  const holding = (records: BusinessRecord[], serverIds: [string, string][]): ServerRecordsState => new Map([["resources.inventory", loaded({ records, serverIds: new Map(serverIds) }, 1)]])
+  const minted = (): ServerRecordsState => {
+    const [, ready] = [...holding([record("t-1", "One")], [["t-1", "1"]])][0]
+    return new Map([["resources.inventory", withCreated(ready, "mint-1", record("t-new-1", "New"), "new-1")]])
+  }
+  const ids = (result: { serverIds: ReadonlyMap<string, string> }) => [...result.serverIds].map(([webId, serverId]) => `${serverId}:${webId}`).sort()
+  /** Rows whose mapped id the test names by thing name, as a fixture lends its id by name. */
+  const named = (things: Thing[], idOf: Record<string, string>): ResourceAdapter<Thing> => ({ ...thingAdapter("t", things), toRecord: (candidate) => record(idOf[candidate.name] ?? `t-${candidate.id}`, candidate.name) })
+  /** Children naming their parent by the web id the resolver answers for its server id. */
+  const children = (things: Thing[]): ResourceAdapter<Thing> => ({
+    ...thingAdapter("c", things),
+    toRecord: (candidate, context) => {
+      const parent = candidate.parentId === undefined ? undefined : context.resolve.byServerId(candidate.parentId)
+      return record(`c-${candidate.id}`, candidate.name, { facts: parent === undefined ? {} : { Parent: parent.name }, submittedValues: { parentId: parent?.id ?? "" } })
+    },
+  })
+
+  test("keeps the web id the store holds each server row under: a row made this session stays under the id it was minted", async () => {
+    const module = inventory(thingAdapter("t", [thing("1", "One"), thing("new-1", "New")]))
+    const result = await loadModule(client, module, options(minted()))
+    assert.deepEqual(result.records.map((row) => row.id), ["t-1", "mint-1"])
+    assert.deepEqual(ids(result), ["1:t-1", "new-1:mint-1"])
+    assert.deepEqual((await loadModule(client, module, options())).records.map((row) => row.id), ["t-1", "t-new-1"], "a first read takes the adapter's ids")
+  })
+
+  test("an id held for one row is never lent to another: the row it names keeps it, and a row the mapping now matches onto it takes the server's", async () => {
+    // Row 1 was the fixture's by name, and is renamed; row 2 is now named as the fixture is.
+    const held = holding([record("f-1", "Fixture")], [["f-1", "1"]])
+    for (const order of [[thing("1", "Renamed"), thing("2", "Fixture")], [thing("2", "Fixture"), thing("1", "Renamed")]]) {
+      const result = await loadModule(client, inventory(named(order, { Fixture: "f-1" })), options(held))
+      assert.deepEqual(ids(result), ["1:f-1", "2:t-2"], `an open details or edit on f-1 stays on row 1 (${order.map((row) => row.id).join(",")})`)
+    }
+  })
+
+  test("which id a row keeps never hangs on the list's order", async () => {
+    // A swap: row 1 now maps to row 2's id, and row 2 to row 1's fixture id.
+    const held = holding([record("f-1", "A"), record("t-2", "B")], [["f-1", "1"], ["t-2", "2"]])
+    for (const order of [[thing("1", "B"), thing("2", "A")], [thing("2", "A"), thing("1", "B")]]) {
+      const result = await loadModule(client, inventory(named(order, { A: "f-1", B: "t-2" })), options(held))
+      assert.deepEqual(ids(result), ["1:f-1", "2:t-2"], order.map((row) => row.id).join(","))
+    }
+  })
+
+  test("a row naming another of the read names it by the id it keeps, and as the read lists it", async () => {
+    const held = holding([record("mint-p", "Parent"), record("c-c1", "Child")], [["mint-p", "p1"], ["c-c1", "c1"]])
+    const module = inventory(thingAdapter("p", [thing("p1", "Parent renamed")]), children([thing("c1", "Child", "p1")]))
+    const result = await loadModule(client, module, options(held))
+    assert.equal(result.records[0].id, "mint-p")
+    assert.equal(result.records[1].submittedValues?.parentId, "mint-p")
+    assert.equal(result.records[1].facts.Parent, "Parent renamed", "the load's row, not the store's")
+  })
+
+  test("a row made while the read is out keeps its minted id, and a row of the read naming it names that id", async () => {
+    const store = createExternalStore<ServerRecordsState>(holding([record("p-p1", "One")], [["p-p1", "p1"]]))
+    const parents: ResourceAdapter<Thing> = {
+      ...thingAdapter("p", []),
+      list: async () => {
+        // The create's answer lands while the read is out.
+        store.set((state) => new Map(state).set("resources.inventory", withCreated(state.get("resources.inventory") ?? IDLE, "mint-p2", record("p-p2", "Two"), "p2")))
+        return [thing("p1", "One"), thing("p2", "Two")]
+      },
+    }
+    await readModuleInto(store, client, inventory(parents, children([thing("c1", "Child", "p2")])), { fixtures: [], alive: () => true })
+    const read = store.getSnapshot().get("resources.inventory")
+    assert.deepEqual(read?.records.map((row) => row.id), ["p-p1", "mint-p2", "c-c1"])
+    assert.equal(read?.records[2].submittedValues?.parentId, "mint-p2")
+  })
+
+  test("a create answered after a read that already holds its row takes that row's place: one server row is one row", () => {
+    const [, readFirst] = [...holding([record("t-1", "One"), record("t-new-1", "New")], [["t-1", "1"], ["t-new-1", "new-1"]])][0]
+    const created = withCreated(readFirst, "mint-1", record("t-new-1", "New"), "new-1")
+    assert.deepEqual(created.records.map((row) => row.id), ["mint-1", "t-1"])
+    assert.deepEqual([...created.serverIds].sort(), [["mint-1", "new-1"], ["t-1", "1"]])
+  })
+
+  test("after a create and a read again, the row is found by its minted id and a link naming it resolves", async () => {
+    const store = createExternalStore<ServerRecordsState>(minted())
+    await readModuleInto(store, client, inventory(thingAdapter("t", [thing("1", "One"), thing("new-1", "New")])), { fixtures: [], alive: () => true })
+    const state = store.getSnapshot()
+    assert.deepEqual(state.get("resources.inventory")?.records.map((row) => row.id), ["t-1", "mint-1"])
+    const resolve = resolverOver(state)
+    assert.equal(resolve.serverIdOf("mint-1"), "new-1", "a picker value naming it still names the server's row")
+    assert.equal(resolve.byServerId("new-1")?.id, "mint-1", "a row read after, linking to it by server id, names it by the minted id")
   })
 })

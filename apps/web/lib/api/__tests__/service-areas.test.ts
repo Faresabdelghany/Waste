@@ -85,6 +85,8 @@ function withAreas(at: ServerRecordsState = state): ServerRecordsState {
 const loadedState = withAreas()
 
 const pageOf = (items: unknown[]) => json({ items, nextCursor: null })
+/** The id an award made this session was minted under. */
+const MINTED = "service-areas-service-area-1700000000000"
 
 function made(id: string, recordKind: string, values: Record<string, string>): BusinessRecord {
   return { id, name: values.areaName ?? id, context: "", status: "Active", owner: "", value: "", updated: "Now", description: "", facts: {}, related: [], source: "Waste API", freshness: "Now", companyId: FIXTURE_COMPANY_ID, projectIds: ["project-copenhagen"], recordKind, submittedValues: values }
@@ -120,13 +122,22 @@ describe("the service areas module", () => {
     assert.equal(result.records[0].facts["Service provider"], "NordRen ApS")
   })
 
-  test("read again over an award made this session, files its assignments under the award's own id, the one the read gives it", async () => {
-    const minted = { ...serviceAreaAdapter.toRecord({ ...area, assignments: [held] }, context()), id: "service-areas-service-area-1700000000000" }
+  test("read again over an award made this session, files its assignments under the id it was made under, the one the read keeps (#240)", async () => {
+    const minted = { ...serviceAreaAdapter.toRecord({ ...area, assignments: [held] }, context()), id: MINTED }
     const before_ = new Map([...state, ["service-providers.service-areas", moduleOf([minted], [area.id])]])
     const { fetch } = scripted([() => pageOf([area]), () => pageOf([held])])
     const result = await loadModule(clientOver(fetch), serviceAreasModule, { fixtures, state: before_, now: NOW })
-    assert.equal(result.records[0].id, `service-area-${area.id}`)
-    assert.equal(result.records[1].submittedValues?.serviceAreaId, `service-area-${area.id}`, "never the session's id the read replaces")
+    assert.equal(result.records[0].id, MINTED)
+    assert.equal(result.records[1].submittedValues?.serviceAreaId, MINTED, "never the adapter's id")
+  })
+
+  test("an award made this session and edited holds its provider: an answer without its assignments finds them by the award's server id", () => {
+    const minted = { ...serviceAreaAdapter.toRecord({ ...area, assignments: [held] }, context()), id: MINTED }
+    const listed = new Map([...state, ["service-providers.service-areas", moduleOf([minted], [area.id])]])
+    const assignmentRecord = assignmentAdapter.toRecord(held, context(listed))
+    const at = new Map([...state, ["service-providers.service-areas", moduleOf([minted, assignmentRecord], [area.id, held.id])]])
+    // A patch's answer is the bare area; the holder comes from the assignments the store holds under the session's id.
+    assert.equal(serviceAreaAdapter.toRecord(area, context(at)).facts["Service provider"], "NordRen ApS")
   })
 
   test("shows an area as the set of planning areas and fractions it covers, its period a reading of the day, its fields the form's", () => {
