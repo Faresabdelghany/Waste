@@ -54,6 +54,7 @@ import { companyRoutes } from "./routes/company"
 import { containerRoutes } from "./routes/containers"
 import { customerRoutes } from "./routes/customers"
 import { depotRoutes } from "./routes/depots"
+import { dropOffPointRoutes } from "./routes/drop-off-points"
 import { driverDoorRoutes } from "./routes/driver"
 import { driverRoutes } from "./routes/drivers"
 import { generationRoutes } from "./routes/generation"
@@ -246,6 +247,7 @@ export function createApp({
   app.route("/", vehicleTypeRoutes(guard))
   app.route("/", warehouseRoutes(guard))
   app.route("/", depotRoutes(guard))
+  app.route("/", dropOffPointRoutes(guard))
   app.route("/", unloadingStationRoutes(guard))
   app.route("/", vehicleAllocationRoutes(guard))
   app.route("/", vehicleRoutes(guard))

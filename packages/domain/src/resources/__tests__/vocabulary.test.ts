@@ -3,7 +3,7 @@
 // six movement kinds and four asset states verbatim, the licence classes
 // lowest first as route-schemes/fleet-profiles.ts orders its display tuple
 // (which the adapter maps onto these), and an unloading station's statuses
-// being a depot's under a second name — seventeen names over sixteen lists.
+// being a depot's under a second name — nineteen names over eighteen lists.
 import assert from "node:assert/strict"
 import { describe, test } from "node:test"
 
@@ -11,7 +11,7 @@ import { defineVocabularyTests } from "../../__tests__/vocabulary"
 import { LICENCE_CLASSES as DISPLAY_LICENCE_CLASSES } from "../../route-schemes/fleet-profiles"
 import * as vocabulary from "../vocabulary"
 
-defineVocabularyTests("Resources", vocabulary, vocabulary.RESOURCES_VOCABULARIES, 17, ["STOCK_PLACES", "ADJUSTMENT_TARGETS"])
+defineVocabularyTests("Resources", vocabulary, vocabulary.RESOURCES_VOCABULARIES, 19, ["STOCK_PLACES", "ADJUSTMENT_TARGETS"])
 
 describe("the Resources vocabulary's own rules", () => {
   test("the stock places and the adjustment targets are places of the place list, and never a service placement", () => {
@@ -34,6 +34,6 @@ describe("the Resources vocabulary's own rules", () => {
 
   test("an unloading station's statuses are a depot's: the same tuple, not a copy", () => {
     assert.equal(vocabulary.UNLOADING_STATION_STATUSES, vocabulary.DEPOT_STATUSES)
-    assert.equal(new Set(Object.values(vocabulary.RESOURCES_VOCABULARIES)).size, 16, "sixteen lists under seventeen names")
+    assert.equal(new Set(Object.values(vocabulary.RESOURCES_VOCABULARIES)).size, 18, "eighteen lists under nineteen names")
   })
 })

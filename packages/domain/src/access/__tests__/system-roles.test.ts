@@ -87,6 +87,16 @@ describe("the seeded system roles", () => {
     )
   })
 
+  test("the Drop-off Points (#293, M3) are a place the operation runs: the resources workspace's roles hold them as they hold the depots, and Customer Service keeps them beside the guide", () => {
+    const actionsOn = (key: string) => SYSTEM_ROLES.find((role) => role.key === key)?.grants.find((grant) => grant.moduleKey === "resources.drop-off-points")?.actions
+    const depotsOn = (key: string) => SYSTEM_ROLES.find((role) => role.key === key)?.grants.find((grant) => grant.moduleKey === "resources.depots")?.actions
+    const holders = SYSTEM_ROLES.filter((role) => actionsOn(role.key) !== undefined).map((role) => role.key)
+    for (const key of holders.filter((holder) => holder !== "customer-service")) assert.deepEqual(actionsOn(key), depotsOn(key), key)
+    assert.deepEqual(actionsOn("customer-service"), ["view", "edit", "create"])
+    assert.deepEqual(actionsOn("company-administrator"), ["view", "edit", "create", "delete"])
+    assert.deepEqual(actionsOn("operations-manager"), ["view", "edit"])
+  })
+
   test("every role that may move a route may make one: edit on route-studio.routes comes with create, the ad-hoc route being a dispatcher's daily job (#111)", () => {
     const routes = (key: string) => SYSTEM_ROLES.find((role) => role.key === key)?.grants.find((grant) => grant.moduleKey === "route-studio.routes")?.actions ?? []
     const editors = SYSTEM_ROLES.filter((role) => routes(role.key).includes("edit")).map((role) => role.key)

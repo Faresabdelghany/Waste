@@ -1,4 +1,4 @@
-// Migrations 0017 and 0021 against Postgres (Issue #293, ADR-0010), on a fresh database
+// The public door's migrations — the Sorting Guide's 0017, the Collection Days' 0021 and the Drop-off Points' — against Postgres (Issue #293, ADR-0010), on a fresh database
 // of this file's own: the public role as the catalog shows it, the exact
 // columns it may read and the nothing else it may do, and what a public
 // transaction (`withPublishedProject`) sees — a published project's own
@@ -14,6 +14,7 @@ import { withPublishedProject } from "../public-door"
 import { API_ROLE, PUBLIC_ROLE } from "../roles"
 import { wasteFraction } from "../schema/catalogue"
 import { company, project } from "../schema/organisation"
+import { dropOffPoint, dropOffPointHours } from "../schema/drop-off-points"
 import { sortingGuideItem } from "../schema/sorting-guide"
 import { PUBLIC_DOOR_TABLES } from "../sql/public-door"
 import { databaseUnderTest, freshDatabase, type FreshDatabase } from "./database"
@@ -28,6 +29,7 @@ const companyId = (n: "a" | "b") => `018f7c34-${n}000-7000-8000-000000000001`
 const projectId = (n: "a" | "b", m: 1 | 2) => `018f7c34-${n}00${m}-7000-8000-000000000002`
 const fractionId = (n: "a" | "b") => `018f7c34-${n}000-7000-8000-000000000003`
 const itemId = (n: "a" | "b", m: number) => `018f7c34-${n}00${m}-7000-8000-000000000004`
+const pointId = (n: "a" | "b", m: number) => `018f7c34-${n}00${m}-7000-8000-000000000005`
 
 /** The columns the door names, as `table.column`, sorted: what the role must read and all it may. */
 const allowedColumns = (): string[] =>
@@ -70,6 +72,22 @@ describe("migration 0017, the public door's role", { skip: database.skip }, () =
       status,
     })
     await owner.db.insert(sortingGuideItem).values([item("a", 1, 1, "published"), item("a", 2, 1, "draft"), item("a", 3, 1, "withdrawn"), item("a", 4, 2, "published"), item("b", 1, 1, "published")])
+    const point = (n: "a" | "b", m: number, p: 1 | 2, status: string) => ({
+      id: pointId(n, m),
+      companyId: companyId(n),
+      projectId: projectId(n, p),
+      code: `GS-${n}${m}`,
+      name: `Point ${n}${m}`,
+      kind: "recycling-centre",
+      address: "Vej 1",
+      location: { type: "Point" as const, coordinates: [12.5683, 55.6761] as [number, number] },
+      status,
+      notes: "The office's own",
+    })
+    await owner.db.insert(dropOffPoint).values([point("a", 1, 1, "active"), point("a", 2, 1, "draft"), point("a", 3, 1, "closed"), point("a", 4, 2, "active"), point("b", 1, 1, "active")])
+    await owner.db.insert(dropOffPointHours).values(
+      [pointId("a", 1), pointId("a", 2), pointId("a", 4)].map((id) => ({ companyId: companyId("a"), projectId: id === pointId("a", 4) ? projectId("a", 2) : projectId("a", 1), dropOffPointId: id, weekday: "monday", opensAt: "10:00", closesAt: "18:00" })),
+    )
   })
 
   after(async () => {
@@ -135,6 +153,13 @@ describe("migration 0017, the public door's role", { skip: database.skip }, () =
     const property = await owner.sql<{ column: string }[]>`
       select a.attname as column from pg_attribute a where a.attrelid = 'wms.property'::regclass and a.attnum > 0 and not a.attisdropped and has_column_privilege(${PUBLIC_ROLE}, a.attrelid, a.attnum, 'SELECT') order by 1`
     assert.deepEqual(property.map((row) => row.column), ["address", "company_id", "id", "project_id"], "a property's address and keys, never its name, notes or location")
+    const point = await owner.sql<{ column: string }[]>`
+      select a.attname as column from pg_attribute a where a.attrelid = 'wms.drop_off_point'::regclass and a.attnum > 0 and not a.attisdropped and has_column_privilege(${PUBLIC_ROLE}, a.attrelid, a.attnum, 'SELECT') order by 1`
+    assert.deepEqual(
+      point.map((row) => row.column),
+      ["address", "closed_on_holidays", "company_id", "id", "kind", "location", "name", "open_always", "project_id", "public_note", "status"],
+      "a drop-off point as the map draws it, never its code or the office's notes (#293 M3)",
+    )
   })
 
   test("a published project's slug opens its own published items and its company's fractions, and nothing of a draft, a withdrawn item, an unpublished project or the other company", async () => {
@@ -152,6 +177,15 @@ describe("migration 0017, the public door's role", { skip: database.skip }, () =
       projects: [projectId("a", 1), projectId("b", 1)],
       role: PUBLIC_ROLE,
     })
+  })
+
+  test("a published project's slug opens its own active drop-off points and their hours, and nothing of a draft or closed point, an unpublished project or the other company (#293 M3)", async () => {
+    const seen = await withPublishedProject(owner.db, "door-a", async (tx) => {
+      const points = await tx.select({ id: dropOffPoint.id }).from(dropOffPoint).orderBy(dropOffPoint.id)
+      const hours = await tx.select({ id: dropOffPointHours.dropOffPointId }).from(dropOffPointHours).orderBy(dropOffPointHours.dropOffPointId)
+      return { points: points.map((row) => row.id), hours: hours.map((row) => row.id) }
+    })
+    assert.deepEqual(seen, { points: [pointId("a", 1)], hours: [pointId("a", 1)] }, "not the draft's hours, not the unpublished project's point")
   })
 
   test("a slug no project publishes under opens nothing, and the transaction never runs", async () => {

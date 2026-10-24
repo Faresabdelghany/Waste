@@ -49,6 +49,7 @@ import { containerTypeVehicleType, vehicleType } from "@waste/db/schema/fleet-ty
 import { generationMatch, generationRun } from "@waste/db/schema/generation"
 import { importRun, importRunRow } from "@waste/db/schema/imports"
 import { plan, planLeg, planStop, routingQuota } from "@waste/db/schema/routing"
+import { dropOffPoint, dropOffPointException, dropOffPointFraction, dropOffPointHours } from "@waste/db/schema/drop-off-points"
 import { sortingGuideItem } from "@waste/db/schema/sorting-guide"
 import { depot, unloadingStation, unloadingStationFraction, warehouse } from "@waste/db/schema/places"
 import { stockMovement } from "@waste/db/schema/stock"
@@ -342,6 +343,11 @@ export async function dropTenant(pool: Database, companyId: string, owner?: Data
     await tx.delete(routingQuota).where(eq(routingQuota.companyId, companyId))
     await tx.delete(sortingGuideItem).where(eq(sortingGuideItem.companyId, companyId))
     await tx.delete(ticketSla).where(eq(ticketSla.companyId, companyId))
+    // The Drop-off Points (#293 M3): the three sets, then the point, before the fractions and the project they name.
+    await tx.delete(dropOffPointFraction).where(eq(dropOffPointFraction.companyId, companyId))
+    await tx.delete(dropOffPointHours).where(eq(dropOffPointHours.companyId, companyId))
+    await tx.delete(dropOffPointException).where(eq(dropOffPointException.companyId, companyId))
+    await tx.delete(dropOffPoint).where(eq(dropOffPoint.companyId, companyId))
     await tx.delete(plan).where(eq(plan.companyId, companyId))
     await tx.delete(session).where(eq(session.companyId, companyId))
     await tx.delete(pickup).where(eq(pickup.companyId, companyId))

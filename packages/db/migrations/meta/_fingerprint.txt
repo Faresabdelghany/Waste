@@ -886,6 +886,116 @@ index wms.driver_command driver_command_project_id_idx CREATE INDEX driver_comma
 index wms.driver_command driver_command_route_id_idx CREATE INDEX driver_command_route_id_idx ON wms.driver_command USING btree (company_id, route_id)
 index wms.driver_command driver_command_session_id_idx CREATE INDEX driver_command_session_id_idx ON wms.driver_command USING btree (company_id, session_id, id)
 policy wms.driver_command driver_command_tenant_fence permissive ALL to=wms_api using=(company_id = ( SELECT wms.current_company_id() AS current_company_id)) check=(company_id = ( SELECT wms.current_company_id() AS current_company_id))
+relation wms.drop_off_point kind=table owner=<owner> persistence=p rls=true force-rls=true replica-identity=d acl=[<owner>=DELETE,INSERT,MAINTAIN,REFERENCES,SELECT,TRIGGER,TRUNCATE,UPDATE/<owner> wms_api=DELETE,INSERT,SELECT,UPDATE/<owner> wms_worker=SELECT/<owner>]
+column wms.drop_off_point 1 id uuid not-null default=wms.uuidv7() acl=[wms_public=SELECT/<owner>]
+column wms.drop_off_point 2 company_id uuid not-null acl=[wms_public=SELECT/<owner>]
+column wms.drop_off_point 3 project_id uuid not-null acl=[wms_public=SELECT/<owner>]
+column wms.drop_off_point 4 created_at timestamp with time zone not-null default=now()
+column wms.drop_off_point 5 updated_at timestamp with time zone not-null default=now()
+column wms.drop_off_point 6 code text not-null
+column wms.drop_off_point 7 name text not-null acl=[wms_public=SELECT/<owner>]
+column wms.drop_off_point 8 kind text not-null acl=[wms_public=SELECT/<owner>]
+column wms.drop_off_point 9 address text not-null acl=[wms_public=SELECT/<owner>]
+column wms.drop_off_point 10 location extensions.geometry(Point,4326) not-null acl=[wms_public=SELECT/<owner>]
+column wms.drop_off_point 11 open_always boolean not-null default=false acl=[wms_public=SELECT/<owner>]
+column wms.drop_off_point 12 closed_on_holidays boolean not-null default=false acl=[wms_public=SELECT/<owner>]
+column wms.drop_off_point 13 public_note text acl=[wms_public=SELECT/<owner>]
+column wms.drop_off_point 14 status text not-null acl=[wms_public=SELECT/<owner>]
+column wms.drop_off_point 15 notes text
+constraint wms.drop_off_point drop_off_point_company_id_fk FOREIGN KEY (company_id) REFERENCES wms.company(id)
+constraint wms.drop_off_point drop_off_point_kind_one_of CHECK ((kind = ANY (ARRAY['recycling-centre'::text, 'bring-bank'::text])))
+constraint wms.drop_off_point drop_off_point_location_valid CHECK ((extensions.st_isvalid(location) AND (NOT extensions.st_isempty(location)) AND (extensions.st_xmin((location)::extensions.box3d) >= ('-180'::integer)::double precision) AND (extensions.st_xmax((location)::extensions.box3d) <= (180)::double precision) AND (extensions.st_ymin((location)::extensions.box3d) >= ('-90'::integer)::double precision) AND (extensions.st_ymax((location)::extensions.box3d) <= (90)::double precision)))
+constraint wms.drop_off_point drop_off_point_pkey PRIMARY KEY (id)
+constraint wms.drop_off_point drop_off_point_project_id_code_key UNIQUE (company_id, project_id, code)
+constraint wms.drop_off_point drop_off_point_project_id_fk FOREIGN KEY (company_id, project_id) REFERENCES wms.project(company_id, id)
+constraint wms.drop_off_point drop_off_point_project_id_name_key UNIQUE (company_id, project_id, name)
+constraint wms.drop_off_point drop_off_point_project_key UNIQUE (company_id, project_id, id)
+constraint wms.drop_off_point drop_off_point_status_one_of CHECK ((status = ANY (ARRAY['draft'::text, 'active'::text, 'closed'::text])))
+index wms.drop_off_point drop_off_point_pkey CREATE UNIQUE INDEX drop_off_point_pkey ON wms.drop_off_point USING btree (id)
+index wms.drop_off_point drop_off_point_project_id_code_key CREATE UNIQUE INDEX drop_off_point_project_id_code_key ON wms.drop_off_point USING btree (company_id, project_id, code)
+index wms.drop_off_point drop_off_point_project_id_name_key CREATE UNIQUE INDEX drop_off_point_project_id_name_key ON wms.drop_off_point USING btree (company_id, project_id, name)
+index wms.drop_off_point drop_off_point_project_key CREATE UNIQUE INDEX drop_off_point_project_key ON wms.drop_off_point USING btree (company_id, project_id, id)
+trigger wms.drop_off_point drop_off_point_audit_trail enabled=O CREATE TRIGGER drop_off_point_audit_trail AFTER INSERT OR DELETE OR UPDATE ON wms.drop_off_point FOR EACH ROW EXECUTE FUNCTION wms.audit_row('', '')
+trigger wms.drop_off_point drop_off_point_touch_updated_at enabled=O CREATE TRIGGER drop_off_point_touch_updated_at BEFORE UPDATE ON wms.drop_off_point FOR EACH ROW EXECUTE FUNCTION wms.touch_updated_at()
+policy wms.drop_off_point drop_off_point_public_door permissive SELECT to=wms_public using=((company_id = ( SELECT wms.current_company_id() AS current_company_id)) AND (EXISTS ( SELECT 1
+   FROM wms.project published
+  WHERE ((published.company_id = drop_off_point.company_id) AND (published.id = drop_off_point.project_id) AND (published.public_slug IS NOT NULL)))) AND (status = 'active'::text)) check=none
+policy wms.drop_off_point drop_off_point_tenant_fence permissive ALL to=wms_api using=(company_id = ( SELECT wms.current_company_id() AS current_company_id)) check=(company_id = ( SELECT wms.current_company_id() AS current_company_id))
+relation wms.drop_off_point_exception kind=table owner=<owner> persistence=p rls=true force-rls=true replica-identity=d acl=[<owner>=DELETE,INSERT,MAINTAIN,REFERENCES,SELECT,TRIGGER,TRUNCATE,UPDATE/<owner> wms_api=DELETE,INSERT,SELECT,UPDATE/<owner> wms_worker=SELECT/<owner>]
+column wms.drop_off_point_exception 1 id uuid not-null default=wms.uuidv7()
+column wms.drop_off_point_exception 2 company_id uuid not-null acl=[wms_public=SELECT/<owner>]
+column wms.drop_off_point_exception 3 project_id uuid not-null acl=[wms_public=SELECT/<owner>]
+column wms.drop_off_point_exception 4 created_at timestamp with time zone not-null default=now()
+column wms.drop_off_point_exception 5 updated_at timestamp with time zone not-null default=now()
+column wms.drop_off_point_exception 6 drop_off_point_id uuid not-null acl=[wms_public=SELECT/<owner>]
+column wms.drop_off_point_exception 7 day date not-null acl=[wms_public=SELECT/<owner>]
+column wms.drop_off_point_exception 8 opens_at time without time zone acl=[wms_public=SELECT/<owner>]
+column wms.drop_off_point_exception 9 closes_at time without time zone acl=[wms_public=SELECT/<owner>]
+column wms.drop_off_point_exception 10 note text acl=[wms_public=SELECT/<owner>]
+constraint wms.drop_off_point_exception drop_off_point_exception_company_id_fk FOREIGN KEY (company_id) REFERENCES wms.company(id)
+constraint wms.drop_off_point_exception drop_off_point_exception_day_key UNIQUE (company_id, drop_off_point_id, day)
+constraint wms.drop_off_point_exception drop_off_point_exception_drop_off_point_id_fk FOREIGN KEY (company_id, project_id, drop_off_point_id) REFERENCES wms.drop_off_point(company_id, project_id, id)
+constraint wms.drop_off_point_exception drop_off_point_exception_pkey PRIMARY KEY (id)
+constraint wms.drop_off_point_exception drop_off_point_exception_window_shape CHECK ((((opens_at IS NULL) = (closes_at IS NULL)) AND ((opens_at IS NULL) OR (opens_at < closes_at))))
+index wms.drop_off_point_exception drop_off_point_exception_day_key CREATE UNIQUE INDEX drop_off_point_exception_day_key ON wms.drop_off_point_exception USING btree (company_id, drop_off_point_id, day)
+index wms.drop_off_point_exception drop_off_point_exception_pkey CREATE UNIQUE INDEX drop_off_point_exception_pkey ON wms.drop_off_point_exception USING btree (id)
+trigger wms.drop_off_point_exception drop_off_point_exception_audit_trail enabled=O CREATE TRIGGER drop_off_point_exception_audit_trail AFTER INSERT OR DELETE OR UPDATE ON wms.drop_off_point_exception FOR EACH ROW EXECUTE FUNCTION wms.audit_row('drop_off_point', 'drop_off_point_id')
+trigger wms.drop_off_point_exception drop_off_point_exception_touch_updated_at enabled=O CREATE TRIGGER drop_off_point_exception_touch_updated_at BEFORE UPDATE ON wms.drop_off_point_exception FOR EACH ROW EXECUTE FUNCTION wms.touch_updated_at()
+policy wms.drop_off_point_exception drop_off_point_exception_public_door permissive SELECT to=wms_public using=((company_id = ( SELECT wms.current_company_id() AS current_company_id)) AND (EXISTS ( SELECT 1
+   FROM wms.project published
+  WHERE ((published.company_id = drop_off_point_exception.company_id) AND (published.id = drop_off_point_exception.project_id) AND (published.public_slug IS NOT NULL)))) AND (EXISTS ( SELECT 1
+   FROM wms.drop_off_point point
+  WHERE ((point.company_id = drop_off_point_exception.company_id) AND (point.id = drop_off_point_exception.drop_off_point_id) AND (point.status = 'active'::text))))) check=none
+policy wms.drop_off_point_exception drop_off_point_exception_tenant_fence permissive ALL to=wms_api using=(company_id = ( SELECT wms.current_company_id() AS current_company_id)) check=(company_id = ( SELECT wms.current_company_id() AS current_company_id))
+relation wms.drop_off_point_fraction kind=table owner=<owner> persistence=p rls=true force-rls=true replica-identity=d acl=[<owner>=DELETE,INSERT,MAINTAIN,REFERENCES,SELECT,TRIGGER,TRUNCATE,UPDATE/<owner> wms_api=DELETE,INSERT,SELECT,UPDATE/<owner> wms_worker=SELECT/<owner>]
+column wms.drop_off_point_fraction 1 id uuid not-null default=wms.uuidv7()
+column wms.drop_off_point_fraction 2 company_id uuid not-null acl=[wms_public=SELECT/<owner>]
+column wms.drop_off_point_fraction 3 project_id uuid not-null acl=[wms_public=SELECT/<owner>]
+column wms.drop_off_point_fraction 4 created_at timestamp with time zone not-null default=now()
+column wms.drop_off_point_fraction 5 updated_at timestamp with time zone not-null default=now()
+column wms.drop_off_point_fraction 6 drop_off_point_id uuid not-null acl=[wms_public=SELECT/<owner>]
+column wms.drop_off_point_fraction 7 waste_fraction_id uuid not-null acl=[wms_public=SELECT/<owner>]
+constraint wms.drop_off_point_fraction drop_off_point_fraction_company_id_fk FOREIGN KEY (company_id) REFERENCES wms.company(id)
+constraint wms.drop_off_point_fraction drop_off_point_fraction_drop_off_point_id_fk FOREIGN KEY (company_id, project_id, drop_off_point_id) REFERENCES wms.drop_off_point(company_id, project_id, id)
+constraint wms.drop_off_point_fraction drop_off_point_fraction_membership_key UNIQUE (company_id, drop_off_point_id, waste_fraction_id)
+constraint wms.drop_off_point_fraction drop_off_point_fraction_pkey PRIMARY KEY (id)
+constraint wms.drop_off_point_fraction drop_off_point_fraction_waste_fraction_id_fk FOREIGN KEY (company_id, waste_fraction_id) REFERENCES wms.waste_fraction(company_id, id)
+index wms.drop_off_point_fraction drop_off_point_fraction_membership_key CREATE UNIQUE INDEX drop_off_point_fraction_membership_key ON wms.drop_off_point_fraction USING btree (company_id, drop_off_point_id, waste_fraction_id)
+index wms.drop_off_point_fraction drop_off_point_fraction_pkey CREATE UNIQUE INDEX drop_off_point_fraction_pkey ON wms.drop_off_point_fraction USING btree (id)
+index wms.drop_off_point_fraction drop_off_point_fraction_waste_fraction_id_idx CREATE INDEX drop_off_point_fraction_waste_fraction_id_idx ON wms.drop_off_point_fraction USING btree (company_id, waste_fraction_id)
+trigger wms.drop_off_point_fraction drop_off_point_fraction_audit_trail enabled=O CREATE TRIGGER drop_off_point_fraction_audit_trail AFTER INSERT OR DELETE OR UPDATE ON wms.drop_off_point_fraction FOR EACH ROW EXECUTE FUNCTION wms.audit_row('drop_off_point', 'drop_off_point_id')
+trigger wms.drop_off_point_fraction drop_off_point_fraction_touch_updated_at enabled=O CREATE TRIGGER drop_off_point_fraction_touch_updated_at BEFORE UPDATE ON wms.drop_off_point_fraction FOR EACH ROW EXECUTE FUNCTION wms.touch_updated_at()
+policy wms.drop_off_point_fraction drop_off_point_fraction_public_door permissive SELECT to=wms_public using=((company_id = ( SELECT wms.current_company_id() AS current_company_id)) AND (EXISTS ( SELECT 1
+   FROM wms.project published
+  WHERE ((published.company_id = drop_off_point_fraction.company_id) AND (published.id = drop_off_point_fraction.project_id) AND (published.public_slug IS NOT NULL)))) AND (EXISTS ( SELECT 1
+   FROM wms.drop_off_point point
+  WHERE ((point.company_id = drop_off_point_fraction.company_id) AND (point.id = drop_off_point_fraction.drop_off_point_id) AND (point.status = 'active'::text))))) check=none
+policy wms.drop_off_point_fraction drop_off_point_fraction_tenant_fence permissive ALL to=wms_api using=(company_id = ( SELECT wms.current_company_id() AS current_company_id)) check=(company_id = ( SELECT wms.current_company_id() AS current_company_id))
+relation wms.drop_off_point_hours kind=table owner=<owner> persistence=p rls=true force-rls=true replica-identity=d acl=[<owner>=DELETE,INSERT,MAINTAIN,REFERENCES,SELECT,TRIGGER,TRUNCATE,UPDATE/<owner> wms_api=DELETE,INSERT,SELECT,UPDATE/<owner> wms_worker=SELECT/<owner>]
+column wms.drop_off_point_hours 1 id uuid not-null default=wms.uuidv7()
+column wms.drop_off_point_hours 2 company_id uuid not-null acl=[wms_public=SELECT/<owner>]
+column wms.drop_off_point_hours 3 project_id uuid not-null acl=[wms_public=SELECT/<owner>]
+column wms.drop_off_point_hours 4 created_at timestamp with time zone not-null default=now()
+column wms.drop_off_point_hours 5 updated_at timestamp with time zone not-null default=now()
+column wms.drop_off_point_hours 6 drop_off_point_id uuid not-null acl=[wms_public=SELECT/<owner>]
+column wms.drop_off_point_hours 7 weekday text not-null acl=[wms_public=SELECT/<owner>]
+column wms.drop_off_point_hours 8 opens_at time without time zone not-null acl=[wms_public=SELECT/<owner>]
+column wms.drop_off_point_hours 9 closes_at time without time zone not-null acl=[wms_public=SELECT/<owner>]
+constraint wms.drop_off_point_hours drop_off_point_hours_company_id_fk FOREIGN KEY (company_id) REFERENCES wms.company(id)
+constraint wms.drop_off_point_hours drop_off_point_hours_drop_off_point_id_fk FOREIGN KEY (company_id, project_id, drop_off_point_id) REFERENCES wms.drop_off_point(company_id, project_id, id)
+constraint wms.drop_off_point_hours drop_off_point_hours_pkey PRIMARY KEY (id)
+constraint wms.drop_off_point_hours drop_off_point_hours_weekday_one_of CHECK ((weekday = ANY (ARRAY['monday'::text, 'tuesday'::text, 'wednesday'::text, 'thursday'::text, 'friday'::text, 'saturday'::text, 'sunday'::text])))
+constraint wms.drop_off_point_hours drop_off_point_hours_window_shape CHECK ((opens_at < closes_at))
+index wms.drop_off_point_hours drop_off_point_hours_drop_off_point_id_idx CREATE INDEX drop_off_point_hours_drop_off_point_id_idx ON wms.drop_off_point_hours USING btree (company_id, drop_off_point_id)
+index wms.drop_off_point_hours drop_off_point_hours_pkey CREATE UNIQUE INDEX drop_off_point_hours_pkey ON wms.drop_off_point_hours USING btree (id)
+trigger wms.drop_off_point_hours drop_off_point_hours_audit_trail enabled=O CREATE TRIGGER drop_off_point_hours_audit_trail AFTER INSERT OR DELETE OR UPDATE ON wms.drop_off_point_hours FOR EACH ROW EXECUTE FUNCTION wms.audit_row('drop_off_point', 'drop_off_point_id')
+trigger wms.drop_off_point_hours drop_off_point_hours_touch_updated_at enabled=O CREATE TRIGGER drop_off_point_hours_touch_updated_at BEFORE UPDATE ON wms.drop_off_point_hours FOR EACH ROW EXECUTE FUNCTION wms.touch_updated_at()
+policy wms.drop_off_point_hours drop_off_point_hours_public_door permissive SELECT to=wms_public using=((company_id = ( SELECT wms.current_company_id() AS current_company_id)) AND (EXISTS ( SELECT 1
+   FROM wms.project published
+  WHERE ((published.company_id = drop_off_point_hours.company_id) AND (published.id = drop_off_point_hours.project_id) AND (published.public_slug IS NOT NULL)))) AND (EXISTS ( SELECT 1
+   FROM wms.drop_off_point point
+  WHERE ((point.company_id = drop_off_point_hours.company_id) AND (point.id = drop_off_point_hours.drop_off_point_id) AND (point.status = 'active'::text))))) check=none
+policy wms.drop_off_point_hours drop_off_point_hours_tenant_fence permissive ALL to=wms_api using=(company_id = ( SELECT wms.current_company_id() AS current_company_id)) check=(company_id = ( SELECT wms.current_company_id() AS current_company_id))
 relation wms.generation_match kind=table owner=<owner> persistence=p rls=true force-rls=true replica-identity=d acl=[<owner>=DELETE,INSERT,MAINTAIN,REFERENCES,SELECT,TRIGGER,TRUNCATE,UPDATE/<owner> wms_api=DELETE,INSERT,SELECT,UPDATE/<owner> wms_worker=SELECT/<owner>]
 column wms.generation_match 1 id uuid not-null default=wms.uuidv7() acl=[wms_public=SELECT/<owner>]
 column wms.generation_match 2 company_id uuid not-null acl=[wms_public=SELECT/<owner>]
@@ -2935,4 +3045,5 @@ journal 1792850584864 668e5896a05fba6d4a1237e565f8688e46aa923d1f1de3b921ba58baee
 journal 1792852172844 5b8ae15e560cf82f9d1d4aab8e4dd4c3a48405fb2ed3dba507b5c9b0caccac08
 journal 1792855994902 ed271976c254711aed17a7b7aab7841cb2251fa343ec29a4de366b49f61f876c
 journal 1792864456446 3eb735d6ee46445f2225b160768a05e288b7db43da18d83c06c7b05582b9bfd5
+journal 1792865708689 34a95f7c352373cd3eb625466c5610a65b46b791a1b940ba4e02ccf528f490a9
 pgboss-version 42

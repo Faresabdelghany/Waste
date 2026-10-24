@@ -83,6 +83,10 @@ export const AUDITED_TABLES = [
   "sorting_guide_item",
   "subscription_pause",
   "ticket_sla",
+  "drop_off_point",
+  "drop_off_point_fraction",
+  "drop_off_point_hours",
+  "drop_off_point_exception",
 ] as const
 export type AuditedTable = (typeof AUDITED_TABLES)[number]
 
