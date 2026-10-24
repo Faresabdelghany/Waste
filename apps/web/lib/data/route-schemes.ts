@@ -22,6 +22,16 @@ import type { BusinessRecord, ModuleLocation } from "./business-modules"
 export const ROUTE_SCHEMES_MODULE = { workspaceId: "route-studio", moduleId: "schemes" } as const satisfies ModuleLocation
 
 /**
+ * "1 route", "1.5 routes", "0.3 routes": the guided setup's routes a week
+ * (`draftRoutesPerWeek`, #280), an average over the recurrence's rotation and
+ * so rarely whole, at one decimal — the singular for what reads as one.
+ */
+export function routesPerWeekLabel(count: number): string {
+  const shown = Math.round(count * 10) / 10
+  return `${shown.toLocaleString("en-GB")} route${shown === 1 ? "" : "s"}`
+}
+
+/**
  * The status a scheme edit asks the API for on the Pilot, where the API holds
  * the structural rules and generates the routes: the stored one — the web's
  * own validation never lowers a Validated scheme, the API's 409 speaks for

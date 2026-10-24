@@ -1,7 +1,7 @@
 import assert from "node:assert/strict"
 import { describe, test } from "node:test"
 
-import { candidateIssue, draftGroups, patchGuidedDraft, validateGuidedScheme } from "../draft"
+import { candidateIssue, draftGroups, draftRoutesPerWeek, patchGuidedDraft, validateGuidedScheme } from "../draft"
 import type { CollectionGroup } from "../groups"
 import type { ServiceDay } from "../recurrence"
 import { quickSchemeDraftFromValues, type GuidedSchemeData } from "../quick-create"
@@ -209,5 +209,36 @@ describe("a step 2 simulation's candidate (issue #40)", () => {
     assert.deepEqual(validateGuidedScheme(ended, [], [], [], []).issues.slice(0, 1), [
       "Effective to must be on or after effective from",
     ])
+  })
+})
+
+describe("the guided setup's routes per week (#280)", () => {
+  const on = (id: string, days: ServiceDay[]): CollectionGroup => ({ ...group(id, []), days })
+  const scheme = (frequency: GuidedSchemeData["frequency"], serviceDays: ServiceDay[], groups: CollectionGroup[]) => ({
+    ...draft("Residual", groups),
+    frequency,
+    serviceDays,
+  })
+
+  test("weekly: a route for each group on each of its days", () => {
+    assert.equal(draftRoutesPerWeek(scheme("weekly", ["monday", "thursday"], [on("a", ["monday", "thursday"]), on("b", ["thursday"])])), 3)
+  })
+
+  test("every 2 weeks: the same groups are half as many routes a week, over the fortnight", () => {
+    assert.equal(draftRoutesPerWeek(scheme("every-2-weeks", ["monday", "thursday"], [on("a", ["monday", "thursday"]), on("b", ["thursday"])])), 1.5)
+  })
+
+  test("daily: a group on the whole week is seven routes, one on two days two", () => {
+    const week: ServiceDay[] = ["monday", "tuesday", "wednesday", "thursday", "friday", "saturday", "sunday"]
+    assert.equal(draftRoutesPerWeek(scheme("daily", week, [on("a", week), on("b", ["monday", "tuesday"])])), 9)
+  })
+
+  test("every 3 weeks and once a month: a third, and twelve over the weekly rates' 52 weeks, a day", () => {
+    assert.equal(draftRoutesPerWeek(scheme("every-3-weeks", ["tuesday", "friday"], [on("a", ["tuesday", "friday"]), on("b", ["friday"])])), 1)
+    assert.equal(draftRoutesPerWeek(scheme("monthly", ["monday"], [on("a", ["monday"]), on("b", ["monday"])])), 24 / 52)
+  })
+
+  test("a group's day the scheme no longer serves is no route", () => {
+    assert.equal(draftRoutesPerWeek(scheme("weekly", ["monday"], [on("a", ["monday", "friday"])])), 1)
   })
 })

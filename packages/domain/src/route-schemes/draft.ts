@@ -20,7 +20,7 @@ import { schemesInPlanning } from "./lifecycle"
 import { vehicleTypeOfRecord } from "./matching"
 import type { OccurrencePreviewInput, SchemeCalendar } from "./occurrences"
 import type { GuidedSchemeData } from "./quick-create"
-import { isIsoDate, type SchemeRecurrence } from "./recurrence"
+import { isIsoDate, occurrencesPerWeek, type SchemeRecurrence } from "./recurrence"
 import {
   allocationConflictSources,
   recurrenceIssues,
@@ -164,6 +164,18 @@ export type DraftRecurrenceFields = Pick<
   | "plannedStartTime"
   | "holidayPolicy"
 >
+
+/**
+ * The routes a week the draft generates (#280): each group's days the scheme
+ * serves, at its recurrence's average over one full rotation — so a
+ * fortnight's Mon and Thu group is one route a week, not two.
+ */
+export function draftRoutesPerWeek(data: Pick<GuidedSchemeData, "frequency" | "serviceDays" | "groups">): number {
+  return data.groups.reduce(
+    (sum, group) => sum + occurrencesPerWeek(data.frequency, group.days.filter((day) => data.serviceDays.includes(day))),
+    0,
+  )
+}
 
 /** The draft's recurrence, or null while it has no service days or start date. */
 export function draftRecurrence(data: DraftRecurrenceFields): SchemeRecurrence | null {

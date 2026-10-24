@@ -127,7 +127,7 @@ export function StepReview({
         ))}
       </ReviewSection>
       <ReviewSection title="Routes" step={4} go={go}>
-        <ReviewRow label="Per week" value={`${model.routesPerWeek} route${model.routesPerWeek === 1 ? "" : "s"}`} />
+        <ReviewRow label="Per week" value={model.routesPerWeek} />
         <ReviewRow label="Attention" value={attention.length > 0 ? attention.join(", ") : "None"} />
       </ReviewSection>
       <WhatChanged data={data} initial={initial} reviewed={reviewed} model={model} records={records} />

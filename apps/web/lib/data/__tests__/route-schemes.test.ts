@@ -13,7 +13,27 @@ import type { GuidedSchemeData } from "@waste/domain/route-schemes/quick-create"
 import { statusLabel } from "../../api/records/adapter"
 import { IDLE, type ModuleState, type ModuleStatus } from "../../api/records/server-records"
 import type { BusinessRecord } from "../business-modules"
-import { containersPlaced, licenceDayOf, ONE_OFF_ALREADY, ONE_OFF_NO_ROUTE, ONE_OFF_ONLY, ONE_OFF_SPLIT, ONE_OFF_UNREAD, PREVIEW_UNPLACED, projectToday, ROUTES_NOT_READ, schemeEditOnApi, schemeEditStatusOnApi, schemeOneOffOnApi, STORED_ONE_OFF, validationWhenUnplaced } from "../route-schemes"
+import { containersPlaced, licenceDayOf, ONE_OFF_ALREADY, ONE_OFF_NO_ROUTE, ONE_OFF_ONLY, ONE_OFF_SPLIT, ONE_OFF_UNREAD, PREVIEW_UNPLACED, projectToday, ROUTES_NOT_READ, routesPerWeekLabel, schemeEditOnApi, schemeEditStatusOnApi, schemeOneOffOnApi, STORED_ONE_OFF, validationWhenUnplaced } from "../route-schemes"
+
+describe("the guided setup's routes a week, as it says them (#280)", () => {
+  test("whole counts as they are, one route in the singular", () => {
+    assert.equal(routesPerWeekLabel(0), "0 routes")
+    assert.equal(routesPerWeekLabel(1), "1 route")
+    assert.equal(routesPerWeekLabel(12), "12 routes")
+  })
+
+  test("a rotation's average at one decimal: a fortnight's Wednesday, three weeks' Tuesday, a month's first Monday", () => {
+    assert.equal(routesPerWeekLabel(0.5), "0.5 routes")
+    assert.equal(routesPerWeekLabel(1 / 3), "0.3 routes")
+    assert.equal(routesPerWeekLabel(12 / 52), "0.2 routes")
+    assert.equal(routesPerWeekLabel(1.5), "1.5 routes")
+  })
+
+  test("what reads as one is one route", () => {
+    assert.equal(routesPerWeekLabel(0.97), "1 route")
+    assert.equal(routesPerWeekLabel(3 * (1 / 3)), "1 route")
+  })
+})
 
 describe("the status a scheme edit asks the API for", () => {
   test("a Validated scheme stays Validated, whatever the web's own validation says: the API's 409 speaks for the rules it holds", () => {

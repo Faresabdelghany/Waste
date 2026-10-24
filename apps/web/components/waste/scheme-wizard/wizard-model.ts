@@ -8,7 +8,7 @@
 // step fetched for it (Issue #39) — the estimate's basis says which it got.
 
 import type { BusinessRecord } from "@/lib/data/business-modules"
-import { licenceDayOf, timezoneOfProject, validationWhenUnplaced } from "@/lib/data/route-schemes"
+import { licenceDayOf, routesPerWeekLabel, timezoneOfProject, validationWhenUnplaced } from "@/lib/data/route-schemes"
 import { FIXTURE_GAZETTEER } from "@/lib/data/street-gazetteer"
 import { routePreview, type RoutePreview } from "@waste/domain/map-planning/route-preview"
 import {
@@ -20,6 +20,7 @@ import {
   draftGroups,
   draftOccurrenceInput,
   draftRecurrence,
+  draftRoutesPerWeek,
   resolvedDraftGroups,
   validateGuidedScheme,
 } from "@waste/domain/route-schemes/draft"
@@ -121,7 +122,8 @@ export type WizardModel = {
   /** What stands in for the zero-match sentence where the API's containers are not placed (lib/data/route-schemes.ts `validationWhenUnplaced`); null otherwise. */
   notice: string | null
   totalContainers: number
-  routesPerWeek: number
+  /** The routes a week the draft generates, averaged over its rotation (`draftRoutesPerWeek`), as the steps say it: "1 route", "1.5 routes". */
+  routesPerWeek: string
   serviceDays: ServiceDay[]
   step1Ok: boolean
   step2Ok: boolean
@@ -309,10 +311,7 @@ export function buildWizardModel(data: GuidedSchemeData, records: WizardRecords)
   ]
 
   const totalContainers = groups.reduce((sum, summary) => sum + summary.stops, 0)
-  const routesPerWeek = data.groups.reduce(
-    (sum, group) => sum + group.days.filter((day) => serviceDays.includes(day)).length,
-    0,
-  )
+  const routesPerWeek = routesPerWeekLabel(draftRoutesPerWeek(data))
 
   const step1Ok = Boolean(
     data.schemeName.trim() &&
@@ -340,7 +339,7 @@ export function buildWizardModel(data: GuidedSchemeData, records: WizardRecords)
       groups.length > 0
         ? `${groups.length} group${groups.length === 1 ? "" : "s"} · ${totalContainers.toLocaleString("en-GB")} container${totalContainers === 1 ? "" : "s"}`
         : "",
-    4: groups.length > 0 ? `${routesPerWeek} route${routesPerWeek === 1 ? "" : "s"} per week` : "",
+    4: groups.length > 0 ? `${routesPerWeek} per week` : "",
   }
 
   return {
