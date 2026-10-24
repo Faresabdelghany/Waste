@@ -1,4 +1,4 @@
-// Migrations 0017 and 0018 against Postgres (Issue #293, ADR-0010), on a fresh database
+// Migrations 0017 and 0021 against Postgres (Issue #293, ADR-0010), on a fresh database
 // of this file's own: the public role as the catalog shows it, the exact
 // columns it may read and the nothing else it may do, and what a public
 // transaction (`withPublishedProject`) sees — a published project's own

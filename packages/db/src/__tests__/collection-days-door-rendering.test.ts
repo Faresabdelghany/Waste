@@ -1,4 +1,4 @@
-// The collection days' door (Issue #293, M2) as migration 0018 writes it:
+// The collection days' door (Issue #293, M2) as migration 0021 writes it:
 // exactly the grants and policies src/sql/public-door.ts spells for
 // `COLLECTION_DAYS_DOOR` — no table, no column, nothing else. What the role
 // then reads, column by column, is public-door.test.ts's. No database.
@@ -11,9 +11,9 @@ import { MIGRATIONS_FOLDER } from "../migrate"
 import { normalised, statementsOf } from "../sql/hand-written"
 import { collectionDaysDoorStatements, COLLECTION_DAYS_DOOR } from "../sql/public-door"
 
-const MIGRATION = "0018_collection_days_door.sql"
+const MIGRATION = "0021_collection_days_door.sql"
 
-describe("the collection days' door as migration 0018 writes it", () => {
+describe("the collection days' door as migration 0021 writes it", () => {
   test("is exactly the door's grants and policies, in order", async () => {
     const statements = statementsOf(await readFile(join(MIGRATIONS_FOLDER, MIGRATION), "utf8"))
     assert.deepEqual(statements, collectionDaysDoorStatements().map(normalised))
