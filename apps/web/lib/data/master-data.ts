@@ -2,9 +2,12 @@
 // #81): the `configure.master` module — the prototype's "Operational Master
 // Data", whose two fixture records are coarse master-data sets that only the
 // fixture pickers point at — becomes, on the API, the company's own
-// catalogue vocabulary in four kinds: waste fractions, container types,
-// service frequencies and vehicle types (`@waste/contracts/catalogue`,
-// `vehicle-types`). Settings › Operations › Master data reads and writes the
+// catalogue vocabulary in five kinds: waste fractions, container types,
+// service frequencies, vehicle types (`@waste/contracts/catalogue`,
+// `vehicle-types`) and, since M5 of #293, contaminant codes
+// (`@waste/contracts/pickup-exceptions`) — the company's names for the wrong
+// waste in a bin, each for every fraction or the ones it names, retired by its
+// status rather than deleted. Settings › Operations › Master data reads and writes the
 // module through the record store (components/settings/master-data-settings.tsx),
 // and the adapters that speak to the API are lib/api/records/master-data.ts.
 //
@@ -126,12 +129,18 @@ export type MasterDataFields = {
   daysBetween?: number | null
   /** A vehicle type's container types, by web id. */
   containerTypeIds?: string[]
+  /** A contaminant code's state: in use, or retired from new tags. */
+  status?: "active" | "inactive"
+  /** A contaminant code's fractions, by web id; none is every fraction. */
+  wasteFractionIds?: string[]
 }
 
 /** The names a row's facts show for the rows it names. */
 export type MasterDataLookups = {
   projectName: (projectId: string) => string | undefined
   containerTypeName: (containerTypeId: string) => string | undefined
+  /** A contaminant code's fractions by name; absent where the caller has none to name. */
+  wasteFractionName?: (wasteFractionId: string) => string | undefined
 }
 
 /** The form's own field ids per kind: what the typed values carry, in the form's order. */
@@ -140,6 +149,7 @@ const KIND_FIELD_IDS: Readonly<Record<MasterDataKind, readonly string[]>> = {
   "container-type": ["name", "volumeLitres"],
   "service-frequency": ["name", "projectId", "description", "collectionsPerWeek", "weeksBetween", "daysBetween"],
   "vehicle-type": ["name", "key", "description", "containerTypeIds"],
+  "contaminant-code": ["name", "key", "status", "wasteFractionIds"],
 }
 
 const text = (values: BusinessFormValues | SubmittedValues | undefined, key: string): string | undefined => {
@@ -179,6 +189,10 @@ export function masterDataFieldsOf(kind: MasterDataKind, values: BusinessFormVal
       const ids = text(values, "containerTypeIds")
       return { kind, name, key: text(values, "key") ?? "", description: text(values, "description") ?? null, containerTypeIds: ids === undefined ? [] : splitMultiValue(ids) }
     }
+    case "contaminant-code": {
+      const ids = text(values, "wasteFractionIds")
+      return { kind, name, key: text(values, "key") ?? "", status: text(values, "status") === "inactive" ? "inactive" : "active", wasteFractionIds: ids === undefined ? [] : splitMultiValue(ids) }
+    }
   }
 }
 
@@ -201,7 +215,7 @@ export function masterDataFieldErrors(kind: MasterDataKind, values: BusinessForm
   const fields = masterDataFieldsOf(kind, values)
   const errors: Record<string, string> = {}
   if (!fields.name) errors.name = nameRefusal(kind)
-  if ((kind === "waste-fraction" || kind === "vehicle-type") && !isKey(fields.key)) errors.key = KEY_REFUSAL
+  if ((kind === "waste-fraction" || kind === "vehicle-type" || kind === "contaminant-code") && !isKey(fields.key)) errors.key = KEY_REFUSAL
   if (kind === "waste-fraction" && fields.wasteCode != null && !isWasteCode(fields.wasteCode)) errors.wasteCode = WASTE_CODE_REFUSAL
   if (kind === "container-type" && Number.isNaN(fields.volumeLitres)) errors.volumeLitres = VOLUME_REFUSAL
   if (kind === "service-frequency") {
@@ -279,6 +293,18 @@ export function presentMasterData(fields: MasterDataFields, lookups: MasterDataL
         facts: { Kind: details.label, Key: key, ...(fields.description ? { Description: fields.description } : {}), ...(names.length === 0 ? {} : { "Container types": names.join(", ") }) },
       }
     }
+    case "contaminant-code": {
+      const key = fields.key ?? ""
+      const ids = fields.wasteFractionIds ?? []
+      const fractions = ids.length === 0 ? "Every fraction" : ids.map((id) => lookups.wasteFractionName?.(id) ?? id).join(", ")
+      const state = fields.status === "inactive" ? "Retired" : "Active"
+      return {
+        ...base,
+        context: `${details.label} · ${key}`,
+        value: fields.status === "inactive" ? "Retired" : fractions,
+        facts: { Kind: details.label, Code: key, Status: state, Fractions: fractions },
+      }
+    }
   }
 }
 
@@ -294,6 +320,22 @@ export function masterDataSchema(kind: MasterDataKind): BusinessFormSchema {
     { id: "name", label: "Name", type: "text", required: true },
     ...(kind === "waste-fraction" || kind === "vehicle-type" ? [{ id: "key", label: "Key", type: "text" as const, required: true, placeholder: kind === "waste-fraction" ? "hard-plastic" : "rear-loader" }] : []),
     ...(kind === "waste-fraction" ? [{ id: "wasteCode", label: "Waste code", type: "text" as const, placeholder: "20 03 01" }] : []),
+    ...(kind === "contaminant-code"
+      ? [
+          { id: "key", label: "Code", type: "text" as const, required: true, placeholder: "plastic-in-organic" },
+          {
+            id: "status",
+            label: "Status",
+            type: "select" as const,
+            defaultValue: "active",
+            options: [
+              { value: "active", label: "Active" },
+              { value: "inactive", label: "Retired: tags nothing new" },
+            ],
+          },
+          { id: "wasteFractionIds", label: "Waste fractions", type: "multiselect" as const, relation: MASTER_DATA_MODULE, description: "The fractions it is found in; none is every fraction." },
+        ]
+      : []),
     ...(kind === "container-type" ? [{ id: "volumeLitres", label: "Volume", type: "number" as const, min: 1, unit: "L" }] : []),
     ...(kind === "service-frequency"
       ? [
@@ -316,7 +358,10 @@ export function masterDataSchema(kind: MasterDataKind): BusinessFormSchema {
     mode: "create",
     recordKind: details.recordKind,
     title: `Create ${lower}`,
-    description: `A ${lower} of the company's own vocabulary${kind === "service-frequency" ? ", offered on one project" : ""}.`,
+    description:
+      kind === "contaminant-code"
+        ? "A name for the wrong waste in a bin, which a stop is tagged with. Retire it rather than delete it: the stops tagged with it keep it."
+        : `A ${lower} of the company's own vocabulary${kind === "service-frequency" ? ", offered on one project" : ""}.`,
     submitLabel: `Create ${lower}`,
     nameField: "name",
     contextFieldIds: kind === "service-frequency" ? ["projectId"] : kind === "container-type" ? ["volumeLitres"] : ["key"],
@@ -396,7 +441,7 @@ export function updateMasterDataRecord(existing: BusinessRecord, values: Busines
   const fields = masterDataFieldsOf(kind, merged)
   const shown = presentMasterData(fields, lookups)
   const facts = { ...existing.facts }
-  for (const key of ["Key", "Waste code", "Volume", "Project", "Cadence", "Description", "Container types"]) delete facts[key]
+  for (const key of ["Key", "Waste code", "Volume", "Project", "Cadence", "Description", "Container types", "Code", "Status", "Fractions"]) delete facts[key]
   return {
     ...existing,
     name: fields.name || existing.name,

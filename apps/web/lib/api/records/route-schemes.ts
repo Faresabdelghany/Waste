@@ -137,7 +137,7 @@ function masterName(context: MappingContext, kind: MasterDataKind, serverId: str
   return context.resolve.byServerId(serverId)?.name ?? webIdOf(MASTER_DATA_KIND_DETAILS[kind].prefix, serverId)
 }
 
-const MASTER_WORDS: Record<MasterDataKind, string> = { "waste-fraction": "waste fraction", "container-type": "container type", "service-frequency": "service frequency", "vehicle-type": "vehicle type" }
+const MASTER_WORDS: Record<MasterDataKind, string> = { "waste-fraction": "waste fraction", "container-type": "container type", "service-frequency": "service frequency", "vehicle-type": "vehicle type", "contaminant-code": "contaminant code" }
 
 /**
  * The server id of the master data row a rule names by name — the row of

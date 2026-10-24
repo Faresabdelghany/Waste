@@ -23,13 +23,14 @@ import {
   type WasteFraction,
 } from "@waste/contracts/catalogue"
 import type { Project } from "@waste/contracts/organisation"
+import type { ContaminantCode } from "@waste/contracts/pickup-exceptions"
 import { VehicleTypeContainerTypesSet, VehicleTypeCreate, VehicleTypePatch, type VehicleType } from "@waste/contracts/vehicle-types"
 
 import { FIXTURE_COMPANY_ID, FIXTURE_PROJECT_IDS, getModuleDefinition, type BusinessRecord } from "../../data/business-modules"
-import { createMasterDataRecord, MASTER_DATA_MODULE, masterDataKindOf, WASTE_CODE_REFUSAL } from "../../data/master-data"
+import { createMasterDataRecord, KEY_REFUSAL, MASTER_DATA_MODULE, masterDataKindOf, WASTE_CODE_REFUSAL } from "../../data/master-data"
 import { problemSentence } from "../problem"
 import { NOTHING_RESOLVED, type MappingContext, type Resolver } from "../records/adapter"
-import { containerTypeAdapter, masterDataModule, ONE_CADENCE as LOCAL_ONE_CADENCE, serviceFrequencyAdapter, vehicleTypeAdapter, wasteFractionAdapter } from "../records/master-data"
+import { containerTypeAdapter, contaminantCodeAdapter, masterDataModule, ONE_CADENCE as LOCAL_ONE_CADENCE, serviceFrequencyAdapter, vehicleTypeAdapter, wasteFractionAdapter } from "../records/master-data"
 import { isServerBacked, SERVER_MODULE_KEYS } from "../records/modules"
 import { projectAdapter } from "../records/organisation"
 import { loaded, loadModule, resolverOver, writeRecord, type ServerRecordsState } from "../records/server-records"
@@ -57,6 +58,8 @@ const monthly: ServiceFrequency = { ...weekly, id: "01a0d2a4-a280-7007-8000-0000
 const onDemand: ServiceFrequency = { ...weekly, id: "01a0d2a4-a280-7007-8000-000000000004", name: "On demand", description: null, collectionsPerWeek: null, weeksBetween: null, daysBetween: null }
 const twiceWeekly: ServiceFrequency = { ...weekly, id: "01a0d2a4-a280-7007-8000-000000000005", name: "Twice a week", description: null, collectionsPerWeek: 2, weeksBetween: null, daysBetween: 3 }
 const rearLoader: VehicleType = { id: "01a0d2a4-a280-7008-8000-000000000001", ...STAMPS, key: "rear-loader", name: "Rear loader", description: null, containerTypeIds: [bin240.id], consumption: [] }
+const foodInGlass: ContaminantCode = { id: "01a0d2a4-a280-702a-8000-000000000001", ...STAMPS, code: "food-in-glass", name: "Food in glass", status: "active", wasteFractionIds: [glass.id] }
+const hazardous: ContaminantCode = { ...foodInGlass, id: "01a0d2a4-a280-702a-8000-000000000002", code: "hazardous", name: "Hazardous waste", status: "inactive", wasteFractionIds: [] }
 const glassCrane: VehicleType = { ...rearLoader, id: "01a0d2a4-a280-7008-8000-000000000004", key: "glass-crane", name: "Glass crane", description: "Crane over the igloo", containerTypeIds: [igloo.id] }
 const trailer: VehicleType = { ...rearLoader, id: "01a0d2a4-a280-7008-8000-000000000006", key: "closed-trailer", name: "Closed trailer", description: null, containerTypeIds: [] }
 
@@ -69,7 +72,7 @@ const pageOf = (items: unknown[]) => json({ items, nextCursor: null })
 
 /** The module loaded over the four seeded lists, in the module's own order. */
 async function loadedMaster() {
-  const { fetch, calls } = scripted([() => pageOf([residual, glass]), () => pageOf([bin240, igloo, unmeasured]), () => pageOf([weekly, monthly, onDemand, twiceWeekly]), () => pageOf([rearLoader, glassCrane, trailer])])
+  const { fetch, calls } = scripted([() => pageOf([residual, glass]), () => pageOf([bin240, igloo, unmeasured]), () => pageOf([weekly, monthly, onDemand, twiceWeekly]), () => pageOf([rearLoader, glassCrane, trailer]), () => pageOf([foodInGlass, hazardous])])
   const result = await loadModule(clientOver(fetch), masterDataModule, { fixtures: masterFixtures, state, now: NOW })
   return { result, calls }
 }
@@ -80,11 +83,11 @@ describe("the master data module", () => {
     assert.ok(SERVER_MODULE_KEYS.indexOf("configure.master") > SERVER_MODULE_KEYS.indexOf("configure.organization"))
   })
 
-  test("loads the four lists in one order — container types before the vehicle types that name them — and files every row under its own prefix", async () => {
+  test("loads the five lists in one order — container types before the vehicle types that name them, the fractions before the contaminant codes — and files every row under its own prefix", async () => {
     const { result, calls } = await loadedMaster()
     assert.deepEqual(
       calls.map((call) => call.url),
-      ["http://api.test/waste-fractions?limit=200", "http://api.test/container-types?limit=200", "http://api.test/service-frequencies?limit=200", "http://api.test/vehicle-types?limit=200"],
+      ["http://api.test/waste-fractions?limit=200", "http://api.test/container-types?limit=200", "http://api.test/service-frequencies?limit=200", "http://api.test/vehicle-types?limit=200", "http://api.test/contaminant-codes?limit=200"],
     )
     assert.deepEqual(result.records.map((record) => masterDataKindOf(record)), [
       "waste-fraction",
@@ -99,11 +102,48 @@ describe("the master data module", () => {
       "vehicle-type",
       "vehicle-type",
       "vehicle-type",
+      "contaminant-code",
+      "contaminant-code",
     ])
-    assert.equal(result.records.length, 12, "the fixture master-data sets lend nothing: no row is one of them")
+    assert.equal(result.records.length, 14, "the fixture master-data sets lend nothing: no row is one of them")
     assert.equal(result.serverIds.get(`fraction-${residual.id}`), residual.id)
     const crane = result.records.find((record) => record.name === "Glass crane")
     assert.equal(crane?.facts["Container types"], "Igloo · 2,500 L", "a vehicle type names its container types by the rows loaded before it")
+    const food = result.records.find((record) => record.name === "Food in glass")
+    assert.deepEqual([food?.facts.Code, food?.facts.Fractions, food?.facts.Status], ["food-in-glass", "Glass", "Active"], "a code names its fractions by the rows loaded before it")
+    const retired = result.records.find((record) => record.name === "Hazardous waste")
+    assert.deepEqual([retired?.facts.Fractions, retired?.facts.Status, retired?.value], ["Every fraction", "Retired", "Retired"])
+  })
+})
+
+describe("a contaminant code (M5 of #293)", () => {
+  const withFractions: ServerRecordsState = new Map([
+    ["configure.master", loaded({ records: [wasteFractionAdapter.toRecord(residual, context()), wasteFractionAdapter.toRecord(glass, context())], serverIds: new Map([[`fraction-${residual.id}`, residual.id], [`fraction-${glass.id}`, glass.id]]) }, 1)],
+  ])
+  const over = () => context(resolverOver(withFractions))
+  const record = contaminantCodeAdapter.toRecord(foodInGlass, over())
+
+  test("is a record under its own prefix, its code the key, its status and its fractions by web id", () => {
+    assert.equal(record.id, `contaminant-code-${foodInGlass.id}`)
+    assert.deepEqual(record.submittedValues, { kind: "contaminant-code", name: "Food in glass", key: "food-in-glass", status: "active", wasteFractionIds: `fraction-${glass.id}` })
+  })
+
+  test("is created with its code, name, status and fractions by server id; a code that is no slug is refused here", () => {
+    const made = { ...record, id: "contaminant-code-1700000000000", submittedValues: { kind: "contaminant-code", name: "Plastic in organic", key: "plastic-in-organic", status: "active", wasteFractionIds: `fraction-${residual.id}` } }
+    assert.deepEqual(contaminantCodeAdapter.toCreateBody?.(made, over()), { code: "plastic-in-organic", name: "Plastic in organic", status: "active", wasteFractionIds: [residual.id] })
+    assert.deepEqual(contaminantCodeAdapter.toCreateBody?.({ ...made, submittedValues: { ...made.submittedValues, key: "Plastic In Organic" } }, over()), { path: "key", message: KEY_REFUSAL })
+  })
+
+  test("a patch moves the name or the status and puts the fractions whole when they moved; the code never moves", async () => {
+    const retired = { ...record, submittedValues: { ...record.submittedValues, status: "inactive", wasteFractionIds: `fraction-${glass.id},fraction-${residual.id}` } }
+    const body = contaminantCodeAdapter.toPatchBody(record, retired, over())
+    assert.deepEqual(body, { code: { status: "inactive" }, wasteFractionIds: [glass.id, residual.id] })
+    assert.equal(contaminantCodeAdapter.toPatchBody(record, { ...record }, over()), null, "nothing moved")
+    assert.deepEqual(contaminantCodeAdapter.toPatchBody(record, { ...record, submittedValues: { ...record.submittedValues, key: "glass-food" } }, over()), { path: "key", message: "The code is set once: a contaminant code that needs another code is another contaminant code" })
+    const { fetch, calls } = scripted([() => json({ ...foodInGlass, status: "inactive" }), () => json({ ...foodInGlass, status: "inactive", wasteFractionIds: [glass.id, residual.id] })])
+    const answered = await contaminantCodeAdapter.update(clientOver(fetch), foodInGlass.id, body)
+    assert.deepEqual(calls.map((call) => [call.init.method, call.url]), [["PATCH", `http://api.test/contaminant-codes/${foodInGlass.id}`], ["PUT", `http://api.test/contaminant-codes/${foodInGlass.id}/fractions`]])
+    assert.deepEqual(answered.wasteFractionIds, [glass.id, residual.id])
   })
 })
 

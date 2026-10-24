@@ -1,6 +1,7 @@
 // Master data on the prototype's records (Issue #176, slice 2 of #81): the
-// four catalogue resources — waste fractions, container types, service
-// frequencies, vehicle types — as the rows of one module, `configure.master`,
+// five catalogue resources — waste fractions, container types, service
+// frequencies, vehicle types and, since M5 of #293, contaminant codes — as the
+// rows of one module, `configure.master`,
 // which Settings › Operations › Master data reads and writes and the fixture
 // pickers point at. The wire shapes are the contracts'
 // (`@waste/contracts/catalogue`, `vehicle-types`), imported as types so no
@@ -26,6 +27,7 @@
 // pane shows at the field before a submit; the adapter reads them again
 // here, so a body reaches the API only when it can be accepted.
 import type { ContainerType, ServiceFrequency, WasteFraction } from "@waste/contracts/catalogue"
+import type { ContaminantCode } from "@waste/contracts/pickup-exceptions"
 import type { VehicleType } from "@waste/contracts/vehicle-types"
 
 import { FIXTURE_COMPANY_ID, type BusinessRecord } from "@/lib/data/business-modules"
@@ -51,6 +53,7 @@ export { ONE_CADENCE } from "@/lib/data/master-data"
 const refusal = (path: string, message: string): LocalRefusal => ({ path, message })
 
 const CONTAINER_TYPE_PREFIX = MASTER_DATA_KIND_DETAILS["container-type"].prefix
+const WASTE_FRACTION_PREFIX = MASTER_DATA_KIND_DETAILS["waste-fraction"].prefix
 
 /** The first rule the record breaks, as a refusal naming the field; undefined when the body can be accepted. */
 function firstRefusal(kind: MasterDataKind, record: BusinessRecord): LocalRefusal | undefined {
@@ -67,6 +70,10 @@ function lookupsOver(context: MappingContext): MasterDataLookups {
     projectName: (projectWebId) => context.resolve.byServerId(context.resolve.serverIdOf(projectWebId) ?? "")?.name,
     containerTypeName: (webId) => {
       const serverId = context.resolve.serverIdOf(webId) ?? webId.slice(`${CONTAINER_TYPE_PREFIX}-`.length)
+      return context.resolve.byServerId(serverId)?.name
+    },
+    wasteFractionName: (webId) => {
+      const serverId = context.resolve.serverIdOf(webId) ?? webId.slice(`${WASTE_FRACTION_PREFIX}-`.length)
       return context.resolve.byServerId(serverId)?.name
     },
   }
@@ -320,14 +327,95 @@ export const vehicleTypeAdapter: ResourceAdapter<VehicleType> = {
 }
 
 // ---------------------------------------------------------------------------
+// Contaminant codes (M5 of #293)
+// ---------------------------------------------------------------------------
+
+/** What a code's update carries: a patch of its name or status, the whole set of fractions, or both, each to its own route. */
+type ContaminantCodeWrite = {
+  code?: { name?: string; status?: "active" | "inactive" }
+  wasteFractionIds?: string[]
+}
+
+/** The server ids the form's fractions stand for, or a refusal for one the store does not hold. */
+function fractionServerIds(webIds: readonly string[], context: MappingContext): string[] | LocalRefusal {
+  const ids: string[] = []
+  for (const webId of webIds) {
+    const serverId = context.resolve.serverIdOf(webId)
+    if (serverId === undefined) return refusal("wasteFractionIds", "Pick waste fractions the API holds")
+    ids.push(serverId)
+  }
+  return ids
+}
+
+export const contaminantCodeAdapter: ResourceAdapter<ContaminantCode> = {
+  prefix: MASTER_DATA_KIND_DETAILS["contaminant-code"].prefix,
+  auditTable: "contaminant_code",
+  owns: (record) => masterDataKindOf(record) === "contaminant-code",
+  // The status is a field of the form, not a lifecycle move: retiring a code is an edit.
+  statuses: undefined,
+  list: (client) => listAll<ContaminantCode>(client, "/contaminant-codes"),
+  toRecord: (code, context) =>
+    recordOf(
+      "contaminant-code",
+      code,
+      {
+        name: code.name,
+        key: code.code,
+        status: code.status,
+        // By the web id the store knows each fraction under: one made this session keeps its minted one.
+        wasteFractionIds: code.wasteFractionIds.map((id) => context.resolve.byServerId(id)?.id ?? webIdOf(WASTE_FRACTION_PREFIX, id)).join(","),
+      },
+      context,
+    ),
+  toCreateBody: (record, context) => {
+    const refused = firstRefusal("contaminant-code", record)
+    if (refused) return refused
+    const fields = fieldsOf("contaminant-code", record)
+    const wasteFractionIds = fractionServerIds(fields.wasteFractionIds ?? [], context)
+    if ("path" in wasteFractionIds) return wasteFractionIds
+    return { code: fields.key, name: fields.name, status: fields.status ?? "active", wasteFractionIds }
+  },
+  toPatchBody: (before, after, context) => {
+    if (rekinded("contaminant-code", after)) return refusal("kind", "A row keeps its kind")
+    const was = fieldsOf("contaminant-code", before)
+    const is = fieldsOf("contaminant-code", after)
+    if (was.key !== is.key) return refusal("key", "The code is set once: a contaminant code that needs another code is another contaminant code")
+    const refused = firstRefusal("contaminant-code", after)
+    if (refused) return refused
+    const code = patchOf(before, after, (record) => {
+      const read = fieldsOf("contaminant-code", record)
+      return { name: read.name || record.name, status: read.status ?? "active" }
+    })
+    let wasteFractionIds: string[] | undefined
+    if (!sameSet(was.wasteFractionIds ?? [], is.wasteFractionIds ?? [])) {
+      const ids = fractionServerIds(is.wasteFractionIds ?? [], context)
+      if ("path" in ids) return ids
+      wasteFractionIds = ids
+    }
+    if (code === null && wasteFractionIds === undefined) return null
+    const write: ContaminantCodeWrite = { ...(code === null ? {} : { code }), ...(wasteFractionIds === undefined ? {} : { wasteFractionIds }) }
+    return write
+  },
+  create: (client, body) => create<ContaminantCode>(client, "/contaminant-codes", body).then((created) => created.body),
+  // The code first, then the whole set through its own route, as a vehicle type's; two requests are two (#263).
+  update: async (client, serverId, body) => {
+    const write = body as ContaminantCodeWrite
+    let code: ContaminantCode | undefined
+    if (write.code !== undefined) code = await patch<ContaminantCode>(client, `/contaminant-codes/${serverId}`, write.code)
+    if (write.wasteFractionIds !== undefined) code = await put<ContaminantCode>(client, `/contaminant-codes/${serverId}/fractions`, { wasteFractionIds: write.wasteFractionIds })
+    return code ?? (await get<ContaminantCode>(client, `/contaminant-codes/${serverId}`))
+  },
+}
+
+// ---------------------------------------------------------------------------
 // The module
 // ---------------------------------------------------------------------------
 
-/** Settings → Operations → Master data, and the module the fixture pickers point at: the container types before the vehicle types that name them. */
+/** Settings → Operations → Master data, and the module the fixture pickers point at: the container types before the vehicle types that name them, the fractions before the contaminant codes that name them. */
 export const masterDataModule: ServerModule = {
   workspaceId: MASTER_DATA_MODULE.workspaceId,
   moduleId: MASTER_DATA_MODULE.moduleId,
-  resources: [wasteFractionAdapter, containerTypeAdapter, serviceFrequencyAdapter, vehicleTypeAdapter],
+  resources: [wasteFractionAdapter, containerTypeAdapter, serviceFrequencyAdapter, vehicleTypeAdapter, contaminantCodeAdapter],
 }
 
 export type { Client }
