@@ -46,6 +46,7 @@ Dependencies point inward: `domain` depends on nothing, `contracts` on zod and t
   - Money is integer minor units, rounded only through `finance/money.ts`, whose half-away-from-zero rule matches Postgres's `round(numeric)`.
 - `packages/contracts` — the zod 4 wire schemas the web and the API share, written `import * as z from "zod"`. Its purity test lists exactly which domain modules it may import.
   - Write bodies are `z.strictObject`, so a member the server owns is refused by name. A patch is all-optional under `changesSomething`. Codes such as country, currency and timezone are checked by shape.
+  - A whole number a body writes is `PositiveInt`, `NonNegativeInt` or `Int4` (`resource.ts`), bounded to Postgres's `integer`; `__tests__/int4.test.ts` walks every write body, and a new module joins its `MODULES`.
   - The web imports these schemas as types only, since a runtime zod import would add about 90 KB gzipped to every workspace route; zod itself runs only in the web's tests.
 - `packages/db` — Drizzle over postgres.js, server-only: schema, migrations, seed, and the write statements the API and the worker share. Its rules are in `packages/db/CLAUDE.md`.
 - `packages/tooling` — development-only: the purity gate, and `databaseUnderTest`, the skip-or-fail rule every database suite goes through.
