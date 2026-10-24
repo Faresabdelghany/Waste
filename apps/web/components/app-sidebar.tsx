@@ -49,8 +49,9 @@ import {
   routeDayFixtures,
   useActiveRoutes,
 } from "@/components/waste/active-routes-store"
+import { ROUTES_MODULE } from "@/lib/api/records/routes"
 import { TICKETS_MODULE } from "@/lib/api/records/tickets"
-import { footerItems, navItems, type NavItem, type NavItemId, type SidebarFooterItemId } from "@/lib/data/sidebar"
+import { footerItems, navBadgeOf, navItems, type NavItem, type NavItemId, type SidebarFooterItemId } from "@/lib/data/sidebar"
 import { opennessOf } from "@/lib/data/tickets"
 
 const navItemIcons: Record<NavItemId, React.ComponentType<{ className?: string }>> = {
@@ -77,19 +78,22 @@ export function AppSidebar() {
   const apiConfigured = useApiConfigured()
   const { starredRouteIds } = useActiveRoutes("operator")
   const { getRecords } = useBusinessRecordStore()
-  // On the Pilot the Tickets badge is the open tickets the store has loaded, and none until it has (#147); fixture mode keeps the registry's number.
+  // On the Pilot the Tickets badge is the open tickets the store has loaded, and none until it has (#147); no other item carries the registry's number there (#248).
   const ticketsOnApi = useServerModuleState(TICKETS_MODULE.workspaceId, TICKETS_MODULE.moduleId)
   const badgeOf = (item: NavItem): number | undefined =>
-    item.id === "operate" && apiConfigured && ticketsOnApi !== null ? (ticketsOnApi.status === "ready" ? ticketsOnApi.records.filter((record) => opennessOf(record) === "Open").length : undefined) : item.badge
+    navBadgeOf(item, apiConfigured ? { openTickets: ticketsOnApi?.status === "ready" ? ticketsOnApi.records.filter((record) => opennessOf(record) === "Open").length : undefined } : null)
 
+  // On the Pilot a pin is a starred route the API holds, read from its rows alone: no fixture route is shown as active (#248).
+  const routesOnApi = useServerModuleState(ROUTES_MODULE.workspaceId, ROUTES_MODULE.moduleId)
   const activeRouteItems = useMemo(
     () =>
       resolveActiveRouteSummaries(
         starredRouteIds,
-        getRecords("route-studio", "routes", routeDayFixtures),
+        apiConfigured ? (routesOnApi?.status === "ready" ? routesOnApi.records : []) : getRecords("route-studio", "routes", routeDayFixtures),
         "operator",
+        apiConfigured,
       ),
-    [getRecords, starredRouteIds],
+    [apiConfigured, getRecords, routesOnApi, starredRouteIds],
   )
 
   const isItemActive = (id: NavItemId): boolean => {

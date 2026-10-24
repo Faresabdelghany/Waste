@@ -42,7 +42,8 @@ import {
 import { ProgressCircle } from "@/components/progress-circle"
 import { AccountMenu } from "@/components/auth/account-menu"
 import { useApiConfigured } from "@/components/waste/api-session-store"
-import { useBusinessRecordStore } from "@/components/waste/business-record-store"
+import { useBusinessRecordStore, useServerModuleState } from "@/components/waste/business-record-store"
+import { ROUTES_MODULE } from "@/lib/api/records/routes"
 import {
   resolveActiveRouteSummaries,
   routeDayFixtures,
@@ -115,14 +116,17 @@ function ServiceProviderManagerSidebar() {
   const { starredRouteIds } = useActiveRoutes("service-provider")
   const { getRecords } = useBusinessRecordStore()
 
+  // On the Pilot a pin is a starred route the API holds, read from its rows alone (#248).
+  const routesOnApi = useServerModuleState(ROUTES_MODULE.workspaceId, ROUTES_MODULE.moduleId)
   const activeRouteItems = useMemo(
     () =>
       resolveActiveRouteSummaries(
         starredRouteIds,
-        getRecords("route-studio", "routes", routeDayFixtures),
+        apiConfigured ? (routesOnApi?.status === "ready" ? routesOnApi.records : []) : getRecords("route-studio", "routes", routeDayFixtures),
         "service-provider",
+        apiConfigured,
       ),
-    [getRecords, starredRouteIds],
+    [apiConfigured, getRecords, routesOnApi, starredRouteIds],
   )
 
   const isItemActive = (href: string): boolean =>
