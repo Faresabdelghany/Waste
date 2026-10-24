@@ -19,7 +19,7 @@ import type { Project } from "@waste/contracts/organisation"
 import type { PlanningArea, PlanningAreaBoundary } from "@waste/contracts/planning-areas"
 import { FIXTURE_GAZETTEER } from "@waste/domain/fixtures/gazetteer"
 import { containerLocation } from "@waste/domain/map-planning/positions"
-import { PLANNING_AREA_IDS_KEY, resolveStopMatches, SERVING_PERIOD_KEY, servingPeriodOf } from "@waste/domain/route-schemes/matching"
+import { PLANNING_AREA_IDS_KEY, resolveStopMatches, servingPeriodOf } from "@waste/domain/route-schemes/matching"
 
 import { FIXTURE_COMPANY_ID, FIXTURE_PROJECT_IDS, getModuleDefinition, type BusinessRecord } from "../../data/business-modules"
 import { NOTHING_RESOLVED, type MappingContext, type ResourceAdapter, type Resource } from "../records/adapter"

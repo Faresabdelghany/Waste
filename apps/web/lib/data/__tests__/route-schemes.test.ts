@@ -13,7 +13,7 @@ import type { GuidedSchemeData } from "@waste/domain/route-schemes/quick-create"
 import { statusLabel } from "../../api/records/adapter"
 import { IDLE, type ModuleState, type ModuleStatus } from "../../api/records/server-records"
 import type { BusinessRecord } from "../business-modules"
-import { containersPlaced, licenceDayOf, ONE_OFF_ALREADY, ONE_OFF_NO_ROUTE, ONE_OFF_ONLY, ONE_OFF_SPLIT, ONE_OFF_UNREAD, PREVIEW_UNPLACED, projectToday, ROUTES_NOT_READ, schemeEditOnApi, schemeEditStatusOnApi, schemeOneOffOnApi, STORED_ONE_OFF, validationWhenUnplaced } from "../route-schemes"
+import { containersPlaced, licenceDayOf, placeBasis, placesChanged, readingDayPassed, ONE_OFF_ALREADY, ONE_OFF_NO_ROUTE, ONE_OFF_ONLY, ONE_OFF_SPLIT, ONE_OFF_UNREAD, PREVIEW_UNPLACED, projectToday, ROUTES_NOT_READ, schemeEditOnApi, schemeEditStatusOnApi, schemeOneOffOnApi, STORED_ONE_OFF, validationWhenUnplaced } from "../route-schemes"
 
 describe("the status a scheme edit asks the API for", () => {
   test("a Validated scheme stays Validated, whatever the web's own validation says: the API's 409 speaks for the rules it holds", () => {
@@ -437,5 +437,52 @@ describe("This collection only on the Pilot", () => {
     const days = schemeEditOnApi(before, edited(before, { serviceDays: "monday, friday", collectionGroups: withGroup("group-south", { days: ["friday"] }) }), routes, TODAY)
     assert.equal(days.kind === "ask" ? days.question.options.single.unavailable : null, ONE_OFF_ONLY)
     assert.equal(days.kind === "ask" ? days.question.nextCollectionDate : null, "2026-10-05", "the scheme's next route after today")
+  })
+})
+
+// The containers' readings kept current (#232 b): the API's containers are read again once a module their records
+// are read through has new rows after they were read — a write, a read again, a module that became ready — or the
+// project's day has turned since. The rule is the rows' identity, never a module state's: a status flip, the
+// containers' own read among them, changes nothing.
+describe("when the API's containers are read again", () => {
+  const row = (id: string, values: BusinessRecord["submittedValues"] = {}): BusinessRecord => ({ id, name: id, context: "", status: "", owner: "", value: "", updated: "", description: "", facts: {}, related: [], source: "Waste API", freshness: "", projectIds: ["project-copenhagen"], submittedValues: values })
+  const ready = (records: BusinessRecord[]): ModuleState => ({ ...IDLE, status: "ready", records })
+  const loading = (records: BusinessRecord[]): ModuleState => ({ ...IDLE, status: "loading", records })
+  const containers = [row("container-1")]
+  const areas = [row("area-1")]
+  const agreements = [row("agreement-1")]
+
+  test("the basis is what the containers' rows were read against, taken anew only when their rows are new", () => {
+    const first = placeBasis(null, ready(containers), [ready(agreements), ready(areas)])
+    assert.deepEqual(first, { containers, through: [agreements, areas] })
+    assert.equal(placeBasis(first, ready(containers), [ready([row("agreement-2")]), ready(areas)]), first, "the same rows: the basis they were read against")
+    assert.equal(placeBasis(first, loading(containers), [ready(agreements), ready(areas)]), first, "a read in flight keeps it")
+    const read = [row("container-1")]
+    assert.equal(placeBasis(first, ready(read), [ready([row("agreement-2")]), ready(areas)])?.through[0]?.[0]?.id, "agreement-2", "new rows: read against the modules as they stand")
+    assert.equal(placeBasis(null, IDLE, [ready(agreements)]), null)
+  })
+
+  test("a place module's new rows are a change: a write, a read again, a module ready after the containers were read", () => {
+    const notGranted: ModuleState = { ...IDLE, status: "not-granted" }
+    const basis = placeBasis(null, ready(containers), [ready(agreements), null, notGranted])
+    assert.equal(placesChanged(basis, [ready(agreements), null, notGranted]), false, "nothing new")
+    assert.equal(placesChanged(basis, [ready([...agreements, row("agreement-2")]), null, notGranted]), true, "an agreement written")
+    assert.equal(placesChanged(basis, [ready(agreements), null, ready(areas)]), true, "the areas ready after the containers were read")
+  })
+
+  test("a status flip is no change: a place module read again and still in flight, the containers' own read", () => {
+    const basis = placeBasis(null, ready(containers), [ready(agreements), ready(areas)])
+    assert.equal(placesChanged(basis, [loading(agreements), ready(areas)]), false, "in flight: its rows are not new yet")
+    assert.equal(placesChanged(basis, [{ ...IDLE, status: "failed" }, ready(areas)]), false, "a failed read says nothing new")
+    assert.equal(placesChanged(placeBasis(basis, loading(containers), [ready(agreements), ready(areas)]), [ready(agreements), ready(areas)]), false, "the containers' own read in flight")
+    assert.equal(placesChanged(null, [ready(agreements)]), false, "no reading yet")
+  })
+
+  test("the day has turned since a container was read when its reading is of a day before its project's today; a fixture's never", () => {
+    const readOn = (asOf: string) => row("container-1", { [SERVING_PERIOD_KEY]: JSON.stringify({ from: "2026-01-01", until: null, asOf }) })
+    const today = () => "2026-10-02"
+    assert.equal(readingDayPassed([readOn("2026-10-01")], today), true)
+    assert.equal(readingDayPassed([readOn("2026-10-02")], today), false)
+    assert.equal(readingDayPassed([row("c9", { wasteFraction: "glass" })], today), false)
   })
 })

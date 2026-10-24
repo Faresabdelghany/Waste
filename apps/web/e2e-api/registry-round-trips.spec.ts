@@ -401,6 +401,23 @@ async function receivedContainerThroughApi(api: APIRequestContext, projectId: st
   return container
 }
 
+test("a write to a module the containers are read through has them read again, once, after it (#232)", async ({ page, api }) => {
+  const customer = await customerThroughApi(api, uniqueName("E2E Readings"))
+  await openAgreementsLoaded(page)
+  // The containers' first page, each time they are read: a container's place, areas and serving period are read with it.
+  const reads: number[] = []
+  page.on("request", (request) => {
+    const url = new URL(request.url())
+    if (request.method() === "GET" && url.pathname === "/waste-api/containers" && !url.searchParams.has("cursor")) reads.push(Date.now())
+  })
+  const created = await createAgreement(page, { number: uniqueName("E2E-RDG").replace(/\s+/g, "-").toUpperCase(), customer: customer.name, payer: customer.name })
+  expect(created.status()).toBe(201)
+  await expect.poll(() => reads.length, { timeout: 15_000, message: "the containers are read again" }).toBe(1)
+  // A burst collapses into one read: nothing more follows it.
+  await page.waitForTimeout(3_000)
+  expect(reads).toHaveLength(1)
+})
+
 test("Properties: created in the browser with its owner and its point, read back, its parties replaced whole beside a rename, set Inactive, and a subscription there refused in #79's sentence", async ({ page, api }) => {
   const project = await projectNamed(api, TESTER_PROJECT)
   const owner = await customerThroughApi(api, uniqueName("E2E Owner"))
