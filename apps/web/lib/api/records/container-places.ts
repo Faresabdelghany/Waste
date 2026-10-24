@@ -205,7 +205,8 @@ export function containerPlace(shown: ContainerServicePlacement | undefined, pla
       ...(kind === undefined ? {} : { "Property type": kind }),
       // As the fixtures spell it, which the Selected area's count of active agreements reads.
       Agreement: `${typed(agreement, "agreementNumber") ?? agreement.name} · ${agreement.status.toLowerCase()}`,
-      ...(areas.length === 0 ? {} : { "Planning area": areas[0].name }),
+      // Every area it lies in, as multi-valued facts are joined; the map's readers split it (#232).
+      ...(areas.length === 0 ? {} : { "Planning area": areas.map((area) => area.name).join(" · ") }),
     },
     values: { latitude, longitude, ...values, ...(areas.length === 0 ? {} : { planningAreaId: areas[0].id }) },
   }

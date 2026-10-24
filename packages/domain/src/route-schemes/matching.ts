@@ -153,6 +153,28 @@ function outOfService(periods: readonly ServingPeriod[], day: string): string | 
   return last === undefined ? "No placement serves it" : `Served until ${addDays(last, -1)}`
 }
 
+/**
+ * The planning areas a container lies in on the day its reading was made —
+ * every one the placement serving it then lies in, for one the API holds —
+ * or its one `planningAreaId`, for a fixture's (#232): the map's readers of
+ * where a container is today read it here, as the rule preview reads a
+ * scheme's day.
+ */
+export function containerAreaIds(record: Pick<BusinessRecord, "submittedValues">): string[] {
+  const reading = servingReadingOf(record)
+  if (reading === undefined) {
+    const areaId = stringValue(record.submittedValues ?? {}, "planningAreaId")
+    return areaId === undefined ? [] : [areaId]
+  }
+  return [...new Set(reading.periods.filter((period) => periodHolds(period, reading.asOf)).flatMap((period) => period.areaIds))]
+}
+
+/** Whether a container is in service on the day its reading was made: a placement serves it then, for one the API holds; its status, for a fixture's (#232). */
+export function containerInService(record: Pick<BusinessRecord, "submittedValues" | "status">): boolean {
+  const reading = servingReadingOf(record)
+  return reading === undefined ? ELIGIBLE_CONTAINER_STATUSES.has(record.status) : reading.periods.some((period) => periodHolds(period, reading.asOf))
+}
+
 /** The container form's enum ids mapped onto the fixture display vocabulary. */
 const FORM_FRACTION_LABELS: Readonly<Record<string, string>> = {
   residual: "Residual",

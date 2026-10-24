@@ -13,9 +13,10 @@
 // fixtures, which hold only as long as those copies do (registry.ts says
 // what keeps them together).
 
+import { splitFilterValues } from "../business-filters"
 import type { BusinessRecord } from "../prototype-record"
-import { cleanFact, typedString } from "../record-values"
 import { isSoftDeleted } from "../record-visibility"
+import { containerAreaIds } from "../route-schemes/matching"
 import {
   boundsFromPolygon,
   boundsPolygon,
@@ -52,11 +53,12 @@ const HULL_MARGIN_METRES = 80
 /** Half-width of the box drawn around one or two containers. */
 const POINT_BOX_METRES = 120
 
+/** Whether a container lies in the area today: by id (`containerAreaIds`, every area its serving placement lies in), else by the names its fact gives. */
 function belongsTo(container: BusinessRecord, area: BusinessRecord): boolean {
-  const typed = typedString(container.submittedValues, "planningAreaId")
-  if (typed) return typed === area.id
-  const fact = cleanFact(container.facts["Planning area"])
-  return Boolean(fact && fact.toLowerCase() === area.name.trim().toLowerCase())
+  const ids = containerAreaIds(container)
+  if (ids.length > 0) return ids.includes(area.id)
+  const name = area.name.trim().toLowerCase()
+  return splitFilterValues(container.facts["Planning area"]).some((fact) => fact.toLowerCase() === name)
 }
 
 /**

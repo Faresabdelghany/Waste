@@ -8,6 +8,8 @@ import {
   resolveCollectionGroupPlans,
 } from "../groups"
 import {
+  containerAreaIds,
+  containerInService,
   containerMatchProfile,
   containerTypeShortLabel,
   matchPlansFromValues,
@@ -246,11 +248,19 @@ describe("a container the API holds (#207, #232)", () => {
     assert.deepEqual(result({ from: "2026-11-02", until: "2026-12-01" }, "2026-12-01"), ["Served until 2026-11-30 — not in service"])
   })
 
+  test("where and whether it serves today is the placement serving on the day read, for the map's readers (#232)", () => {
+    const today = server("asset-12", [{ from: "2026-01-01", until: "2026-11-01", areas: ["area-indreby", "area-osterbro"] }, { from: "2026-11-01", areas: ["area-amager"] }])
+    assert.deepEqual([containerAreaIds(today), containerInService(today)], [["area-indreby", "area-osterbro"], true])
+    const later = server("asset-13", [{ from: "2026-11-02", areas: ["area-amager"] }])
+    assert.deepEqual([containerAreaIds(later), containerInService(later)], [[], false], "not yet in any area today, nor in service")
+  })
+
   test("a fixture's container keeps its readings: its status the gate, its one area, its form tokens", () => {
     const fixture = { id: "c9", name: "C9", status: "Available", facts: {}, submittedValues: { wasteFraction: "glass", containerType: "two-wheel-240", planningAreaId: "area-indreby" }, projectIds: [] }
     const profile = containerMatchProfile(fixture)
     assert.deepEqual([profile.inService, profile.areaIds, profile.fractions, profile.containerType], [true, ["area-indreby"], ["Glass"], "Two-wheel bin · 240 L"])
     assert.equal(containerMatchProfile({ ...fixture, status: "Defect" }).inService, false)
+    assert.deepEqual([containerAreaIds(fixture), containerInService(fixture), containerInService({ ...fixture, status: "Defect" })], [["area-indreby"], true, false], "the map's readers read it the same")
     // A typed value the form labels do not know is read as it is typed, as the asset catalogue's tokens are.
     assert.deepEqual(containerMatchProfile({ ...fixture, submittedValues: { ...fixture.submittedValues, wasteFraction: "paper", secondaryWasteFraction: "glass" } }).fractions, ["paper", "Glass"])
   })

@@ -7,9 +7,11 @@
 // Routes over a selection live in routes.ts. Pure data logic for the
 // Selected area panel.
 
+import { splitFilterValues } from "../business-filters"
 import type { BusinessRecord } from "../prototype-record"
-import { EMPTY_FACT, cleanFact, typedString } from "../record-values"
+import { EMPTY_FACT, cleanFact } from "../record-values"
 import { isSoftDeleted } from "../record-visibility"
+import { containerAreaIds } from "../route-schemes/matching"
 import { pointInPolygon } from "./geo"
 import { containerLocation, type Gazetteer } from "./positions"
 import { serviceAreaPolygon, serviceAreaZoneIds } from "./service-areas"
@@ -53,10 +55,9 @@ export function serviceAreasForSelection(
         const spot = containerLocation(container, gazetteer)
         if (spot && pointInPolygon(spot, polygon)) return true
       }
-      const typed = typedString(container.submittedValues, "planningAreaId")
-      if (typed) return zones.ids.has(typed)
-      const fact = cleanFact(container.facts["Planning area"])
-      return fact ? zones.names.has(lower(fact)) : false
+      const ids = containerAreaIds(container)
+      if (ids.length > 0) return ids.some((id) => zones.ids.has(id))
+      return splitFilterValues(container.facts["Planning area"]).some((name) => zones.names.has(lower(name)))
     }).length
     if (count === 0) continue
     rows.push({

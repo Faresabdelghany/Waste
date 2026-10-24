@@ -134,7 +134,7 @@ describe("a container placed today", () => {
     assert.equal(record.facts.Property, "Parkvej 18")
     assert.equal(record.facts.Address, "Parkvej 18, 2100 København Ø")
     assert.deepEqual(readingOf(record), serving({ from: "2026-01-01", until: null, areaIds: [areaId, blockId], place: PARKVEJ }), "placement, subscription and agreement all from 2026-01-01, open; the areas of its own project, not another project's that covers the same street")
-    assert.equal(record.facts["Planning area"], "Østerbro Zone 2", "the first, the one area the map's readers take")
+    assert.equal(record.facts["Planning area"], "Østerbro Zone 2 · Parkvej Block", "every area, joined, which the map's readers split (#232)")
     assert.equal(record.submittedValues?.planningAreaId, areaId)
     assert.equal(record.submittedValues?.latitude, "55.7012")
     assert.equal(record.submittedValues?.longitude, "12.5709")

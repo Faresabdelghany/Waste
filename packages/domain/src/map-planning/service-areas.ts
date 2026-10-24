@@ -12,9 +12,11 @@
 // decide, since the form schema lives there — apps/web/lib/data/service-areas.ts
 // maps it. Pure data logic.
 
+import { splitFilterValues } from "../business-filters"
 import type { BusinessRecord } from "../prototype-record"
 import { cleanFact, typedString, uniform } from "../record-values"
 import { isSoftDeleted } from "../record-visibility"
+import { containerAreaIds } from "../route-schemes/matching"
 import { count } from "../text"
 import { storedOutline } from "./areas"
 import { boundsFromPolygon, type LngLat, type LngLatBounds } from "./geo"
@@ -77,20 +79,21 @@ export function serviceAreaPolygon(area: BusinessRecord): LngLat[] | null {
   }
 }
 
-/** The planning-area ids the selected containers name — typed id first, display fact second. */
+/** The planning-area ids the selected containers lie in — by id first (`containerAreaIds`), their fact's names second. */
 function planningAreaIds(selected: readonly BusinessRecord[], planningAreas: readonly BusinessRecord[]): string[] {
   const byName = new Map(planningAreas.map((area) => [area.name.trim().toLowerCase(), area.id]))
   const known = new Set(planningAreas.map((area) => area.id))
   const named = new Set<string>()
   for (const container of selected) {
-    const typed = typedString(container.submittedValues, "planningAreaId")
-    if (typed && known.has(typed)) {
-      named.add(typed)
+    const ids = containerAreaIds(container).filter((id) => known.has(id))
+    if (ids.length > 0) {
+      for (const id of ids) named.add(id)
       continue
     }
-    const fact = cleanFact(container.facts["Planning area"])
-    const id = fact ? byName.get(fact.toLowerCase()) : undefined
-    if (id) named.add(id)
+    for (const name of splitFilterValues(container.facts["Planning area"])) {
+      const id = byName.get(name.toLowerCase())
+      if (id) named.add(id)
+    }
   }
   return planningAreas.map((area) => area.id).filter((id) => named.has(id))
 }

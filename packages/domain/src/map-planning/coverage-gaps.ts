@@ -11,7 +11,7 @@
 import type { BusinessRecord } from "../prototype-record"
 import { effectiveStopPlans } from "../route-schemes/groups"
 import { effectiveSchemeStatus, schemesInPlanning } from "../route-schemes/lifecycle"
-import { ELIGIBLE_CONTAINER_STATUSES } from "../route-schemes/matching"
+import { containerInService } from "../route-schemes/matching"
 import { recurrenceFromValues } from "../route-schemes/recurrence"
 
 export type CoverageGaps = {
@@ -31,9 +31,9 @@ export type CoverageCounts = { needing: number; covered: number; uncovered: numb
 
 const INACTIVE_AGREEMENT = /·\s*(ended|paused|future|cancelled|terminated)\b/i
 
-/** Available, and the agreement fact — when there is one — does not say the service is off. */
-export function needsService(container: Pick<BusinessRecord, "status" | "facts">): boolean {
-  if (!ELIGIBLE_CONTAINER_STATUSES.has(container.status)) return false
+/** In service today (`containerInService`: a placement serving it, for one the API holds; Available, for a fixture's), and the agreement fact — when there is one — does not say the service is off. */
+export function needsService(container: Pick<BusinessRecord, "status" | "facts" | "submittedValues">): boolean {
+  if (!containerInService(container)) return false
   return !INACTIVE_AGREEMENT.test(container.facts.Agreement ?? "")
 }
 

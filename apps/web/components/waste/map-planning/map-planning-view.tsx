@@ -52,7 +52,7 @@ import { fractionColor } from "@/lib/map-planning/colors"
 import { serviceAreasForSelection } from "@waste/domain/map-planning/coverage"
 import { UNCOVERED_COLOR, coverageGaps, coverageInSelection } from "@waste/domain/map-planning/coverage-gaps"
 import { COMPARE_COLORS, compareSchemes, schemeStopSets } from "@waste/domain/map-planning/scheme-compare"
-import { MAP_FILTER_READERS } from "@waste/domain/map-planning/filters"
+import { MAP_FILTER_READERS, withRouteSchemeNames } from "@waste/domain/map-planning/filters"
 import { formatDateRange, formatShortDate } from "@/lib/map-planning/format"
 import { boundsFromPolygon, pointInPolygon, type LngLat } from "@waste/domain/map-planning/geo"
 import { containerPoints, type MapPoint } from "@waste/domain/map-planning/points"
@@ -72,6 +72,7 @@ import {
   collectionWindowRange,
   inCollectionWindow,
   nextCollectionDate,
+  routeSchemeIndex,
   routeStopIndex,
   type CollectionWindow,
 } from "@waste/domain/map-planning/schedule"
@@ -207,10 +208,16 @@ export function MapPlanningView({
 
   /* ------------------------------ derived data ----------------------------- */
 
-  // The registry the map can place: in service, visible, and located.
+  // The registry the map can place: in service, visible, and located; one
+  // the API holds named by the schemes whose routes stop at it, for the
+  // Route scheme filter (#232).
   const inServiceContainers = useMemo(
-    () => containers.filter((record) => !isSoftDeleted(record) && containerLocation(record, FIXTURE_GAZETTEER) !== null),
-    [containers],
+    () =>
+      withRouteSchemeNames(
+        containers.filter((record) => !isSoftDeleted(record) && containerLocation(record, FIXTURE_GAZETTEER) !== null),
+        routeSchemeIndex(routes, pickups, containers),
+      ),
+    [containers, pickups, routes],
   )
   const stopIndex = useMemo(() => routeStopIndex(routes, pickups, containers), [containers, routes, pickups])
   // The containers a filter set and window leave on the map — the live view
