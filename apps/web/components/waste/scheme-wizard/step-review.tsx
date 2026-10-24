@@ -122,12 +122,12 @@ export function StepReview({
             label={group.name}
             value={`${serviceDaysRangeLabel(group.days)} · ${vehicle?.callsign ?? group.vehicleId ?? DASH} · ${
               driver?.name ?? "Unassigned"
-            } · ${stops.toLocaleString("en-GB")} containers · ${estimate.loadT} t / ${estimate.capacityT} t`}
+            } · ${stops.toLocaleString("en-GB")} container${stops === 1 ? "" : "s"} · ${estimate.loadT} t / ${estimate.capacityT} t`}
           />
         ))}
       </ReviewSection>
       <ReviewSection title="Routes" step={4} go={go}>
-        <ReviewRow label="Per week" value={`${model.routesPerWeek} routes`} />
+        <ReviewRow label="Per week" value={`${model.routesPerWeek} route${model.routesPerWeek === 1 ? "" : "s"}`} />
         <ReviewRow label="Attention" value={attention.length > 0 ? attention.join(", ") : "None"} />
       </ReviewSection>
       <WhatChanged data={data} initial={initial} reviewed={reviewed} model={model} records={records} />

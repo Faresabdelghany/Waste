@@ -90,13 +90,13 @@ describe("the sign-in gate", () => {
 
   test("after a sign-out or a refused account, sends to /login alone, so the next person lands by their own /me", () => {
     assert.equal(signInTarget({ reason: "signed-out" }, "/operate"), "/login")
-    assert.equal(signInTarget({ reason: "refused", detail: "This account is deactivated" }, "/operate"), "/login")
+    assert.equal(signInTarget({ reason: "refused", detail: "This account is deactivated", by: "auth" }, "/operate"), "/login")
   })
 
   test("only a visitor on the way somewhere carries next: /login drops the one in its address when a session ends there", () => {
     assert.equal(carriesNext(null), true)
     assert.equal(carriesNext({ reason: "expired" }), true)
     assert.equal(carriesNext({ reason: "signed-out" }), false)
-    assert.equal(carriesNext({ reason: "refused", detail: "No active account in this company is bound to this login" }), false)
+    assert.equal(carriesNext({ reason: "refused", detail: "No active account in this company is bound to this login", by: "api" }), false)
   })
 })

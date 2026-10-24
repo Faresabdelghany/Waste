@@ -87,14 +87,14 @@ describe("the session-ending rule", () => {
     await assert.rejects(() => get(client, "/projects"), (error: unknown) => error instanceof ApiProblem && error.status === 403)
     const state = session.store.getSnapshot()
     assert.equal(state.session, null)
-    assert.deepEqual(state.ended, { reason: "refused", detail: "No active account in this company is bound to this login" })
+    assert.deepEqual(state.ended, { reason: "refused", detail: "No active account in this company is bound to this login", by: "api" })
     assert.equal(session.client(), null, "nothing calls the API as the refused account again")
   })
 
   test("the same refusal from /me ends it, and the next sign-in clears why the last session ended", async () => {
     const { session } = await signedIn([() => accountRefused("The token names no company: this login has no account here"), () => tokens("a2")])
     await assert.rejects(() => session.loadMe())
-    assert.deepEqual(session.store.getSnapshot().ended, { reason: "refused", detail: "The token names no company: this login has no account here" })
+    assert.deepEqual(session.store.getSnapshot().ended, { reason: "refused", detail: "The token names no company: this login has no account here", by: "api" })
     await session.signIn(EMAIL, "again")
     assert.equal(session.store.getSnapshot().ended, null)
     assert.equal(session.store.getSnapshot().session?.accessToken, "a2")
@@ -127,7 +127,7 @@ describe("the session-ending rule", () => {
     assert.equal(script.calls[0].url, "https://project.supabase.co/auth/v1/token?grant_type=refresh_token")
     const state = session.store.getSnapshot()
     assert.equal(state.session, null)
-    assert.deepEqual(state.ended, { reason: "refused", detail: "This account is deactivated" })
+    assert.deepEqual(state.ended, { reason: "refused", detail: "This account is deactivated", by: "auth" }, "Auth's refusal at a refresh, told apart from the API's")
   })
 
   test("a refresh the network lost keeps the session and is tried again; a token not yet due is left alone", async () => {

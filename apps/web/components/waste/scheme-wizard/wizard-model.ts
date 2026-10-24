@@ -338,9 +338,9 @@ export function buildWizardModel(data: GuidedSchemeData, records: WizardRecords)
         : "",
     3:
       groups.length > 0
-        ? `${groups.length} group${groups.length === 1 ? "" : "s"} · ${totalContainers.toLocaleString("en-GB")} containers`
+        ? `${groups.length} group${groups.length === 1 ? "" : "s"} · ${totalContainers.toLocaleString("en-GB")} container${totalContainers === 1 ? "" : "s"}`
         : "",
-    4: groups.length > 0 ? `${routesPerWeek} routes per week` : "",
+    4: groups.length > 0 ? `${routesPerWeek} route${routesPerWeek === 1 ? "" : "s"} per week` : "",
   }
 
   return {
