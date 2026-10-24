@@ -59,6 +59,10 @@ test("the seeded schemes are the API's: listed under their derived status, opene
 
   await openSchemes(page)
   await expect(page.getByRole("button", { name: "Open RS-Central · Week A" })).toBeVisible()
+  // The scope column starts every row with its project, then the area where the scheme has one (#254).
+  await expect(page.getByRole("columnheader", { name: "Project · area · service days" })).toBeVisible()
+  await expect(page.getByRole("button", { name: "Open RS-Central · Week A" })).toContainText("Copenhagen Central · Indre By Operations · Mon–Fri")
+  await expect(page.getByRole("button", { name: "Open RS-Østerbro · Organic B" })).toContainText("Copenhagen Central · Tue/Thu")
   const occurrences = page.waitForResponse((response) => new URL(response.url()).pathname === `/waste-api/route-schemes/${osterbro?.id}/occurrences`)
   await openScheme(page, "RS-Østerbro · Organic B")
   // No fixture lends a scheme its id: the page is the server's row.
