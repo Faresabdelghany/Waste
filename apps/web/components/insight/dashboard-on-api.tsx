@@ -1,15 +1,17 @@
 "use client"
 
-// The Dashboard on the Pilot (#292, #291 slice 27, #290 O12): `/performance`
-// reads the API's reports for the person's projects, in place of the fixture
-// control room the prototype shows without the API. Its two tabs are
-// Improve's two modules, Performance and Analytics, each shown to a role
-// that views it (`/me`'s grants). One row of filters scopes everything below
-// it — the project (one of `/me`'s, or every one) and the period (the last
-// 7, 30 or 90 days, ending today on the project's clock) — and every change
-// is told against the period of the same length before it (`previousWindow`).
-// A tab, once opened, stays mounted and keeps its reads, so going back to it
-// asks nothing again.
+// The Dashboard on the Pilot (#292, #291 slices 27 and 29, #290 O12):
+// `/performance` reads the API's reports for the person's projects, in place
+// of the fixture control room the prototype shows without the API. Its tabs
+// are Improve's modules, Performance, Analytics and Compliance, each shown to
+// a role that views it (`/me`'s grants). One row of filters scopes everything
+// below it — the project (one of `/me`'s, or every one) and, for Performance
+// and Analytics, the period (the last 7, 30 or 90 days, ending today on the
+// project's clock), every change told against the period of the same length
+// before it (`previousWindow`). Compliance asks for a filing's period of its
+// own (compliance-tab.tsx), so the header offers it no period. A tab, once
+// opened, stays mounted and keeps its reads, so going back to it asks
+// nothing again.
 
 import { useMemo, useState } from "react"
 import Link from "next/link"
@@ -29,11 +31,11 @@ import { mayView as mayViewImports } from "@/lib/imports/import-file"
 import { projectToday, timezoneOfProject } from "@/lib/data/route-schemes"
 import {
   DASHBOARD_RANGES,
-  DASHBOARD_TABS,
   DEFAULT_RANGE,
   intervalLabel,
   previousWindow,
   rangeOf,
+  tabsShown,
   viewedModules,
   windowEnding,
   type DashboardRangeId,
@@ -41,6 +43,7 @@ import {
 } from "@/lib/insight/dashboard"
 
 import { AnalyticsTab } from "./analytics-tab"
+import { ComplianceTab } from "./compliance-tab"
 import { PerformanceTab } from "./performance-tab"
 import { ReportNotice } from "./report-card"
 
@@ -56,7 +59,7 @@ export function DashboardOnApi() {
 
   const projects = useMemo(() => me?.projects ?? [], [me])
   const viewed = useMemo(() => viewedModules(me?.role.grants), [me])
-  const tabs = DASHBOARD_TABS.filter((tab) => viewed.has(tab.moduleKey))
+  const tabs = tabsShown(viewed)
   const tab = tabs.find((candidate) => candidate.id === tabChoice) ?? tabs[0]
   const projectId = projects.some((candidate) => candidate.id === projectChoice) ? projectChoice : undefined
   const projectName = (id: string) => projects.find((candidate) => candidate.id === id)?.name ?? id
@@ -80,6 +83,8 @@ export function DashboardOnApi() {
     setVisited((opened) => new Set(opened).add(id))
   }
   const mounted = (id: DashboardTabId) => tab?.id === id || visited.has(id)
+  // Compliance's period is its own: the header's is Performance's and Analytics'.
+  const windowed = tab?.id !== "compliance"
 
   return (
     <Tabs value={tab?.id ?? ""} onValueChange={(value) => choose(value as DashboardTabId)} className="m-2 flex min-w-0 flex-1 flex-col gap-0 overflow-hidden rounded-lg border border-sidebar bg-background" data-testid="dashboard-on-api">
@@ -88,7 +93,7 @@ export function DashboardOnApi() {
           <SidebarTrigger className="h-8 w-8 shrink-0 rounded-md text-muted-foreground hover:bg-accent" />
           <div className="min-w-0 flex-1">
             <Breadcrumbs items={[{ label: "Dashboard" }]} />
-            <p className="hidden text-[11px] text-muted-foreground sm:block">Service, tickets, tonnage and invoicing, counted by the API</p>
+            <p className="hidden text-[11px] text-muted-foreground sm:block">Service, tickets, tonnage, invoicing and the waste-data filing, counted by the API</p>
           </div>
           {/* Improve's Imports (#291 slice 12), for a role that reads them. */}
           {mayViewImports(me?.role.grants) && (
@@ -102,18 +107,20 @@ export function DashboardOnApi() {
         </div>
         <div className="flex flex-col gap-2.5 px-3 py-3 sm:px-4 lg:flex-row lg:items-center lg:justify-between">
           <div className="flex flex-wrap items-center gap-2">
-            <Select value={rangeId} onValueChange={(value) => setRangeId(value as DashboardRangeId)}>
-              <SelectTrigger className="h-8 w-[150px] bg-transparent text-xs" aria-label="Period">
-                <SelectValue />
-              </SelectTrigger>
-              <SelectContent>
-                {DASHBOARD_RANGES.map((option) => (
-                  <SelectItem key={option.id} value={option.id}>
-                    {option.label}
-                  </SelectItem>
-                ))}
-              </SelectContent>
-            </Select>
+            {windowed && (
+              <Select value={rangeId} onValueChange={(value) => setRangeId(value as DashboardRangeId)}>
+                <SelectTrigger className="h-8 w-[150px] bg-transparent text-xs" aria-label="Period">
+                  <SelectValue />
+                </SelectTrigger>
+                <SelectContent>
+                  {DASHBOARD_RANGES.map((option) => (
+                    <SelectItem key={option.id} value={option.id}>
+                      {option.label}
+                    </SelectItem>
+                  ))}
+                </SelectContent>
+              </Select>
+            )}
             <Select value={projectId ?? ALL} onValueChange={setProjectChoice}>
               <SelectTrigger className="h-8 w-[200px] bg-transparent text-xs" aria-label="Project">
                 <SelectValue />
@@ -137,9 +144,11 @@ export function DashboardOnApi() {
               </TabsList>
             )}
           </div>
-          <p className="text-[11px] text-muted-foreground" data-testid="dashboard-window">
-            {intervalLabel(window)}, {window.to.slice(0, 4)} · against {against}
-          </p>
+          {windowed && (
+            <p className="text-[11px] text-muted-foreground" data-testid="dashboard-window">
+              {intervalLabel(window)}, {window.to.slice(0, 4)} · against {against}
+            </p>
+          )}
         </div>
       </header>
 
@@ -158,6 +167,11 @@ export function DashboardOnApi() {
             {tabs.some((candidate) => candidate.id === "analytics") && (
               <TabsContent value="analytics" forceMount hidden={tab.id !== "analytics"} className="mt-0">
                 {mounted("analytics") && <AnalyticsTab current={current} previous={previous} against={against} viewed={viewed} projectName={projectName} fileStem={fileStem} />}
+              </TabsContent>
+            )}
+            {tabs.some((candidate) => candidate.id === "compliance") && (
+              <TabsContent value="compliance" forceMount hidden={tab.id !== "compliance"} className="mt-0">
+                {mounted("compliance") && <ComplianceTab projectId={projectId} today={today} viewed={viewed} />}
               </TabsContent>
             )}
           </>

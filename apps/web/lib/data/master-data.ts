@@ -23,12 +23,20 @@
 // read twice: by the pane's form, inline at the field before a submit, and by
 // the adapter, which refuses the same body by name before the API sees it.
 //
+// A waste fraction carries its waste code (#291 slice 29), the European List
+// of Waste entry the waste-data report files it under: typed as the list
+// prints it (`20 03 01`), kept compact (`wasteCodeOf`), held to the domain's
+// shape (`@waste/domain/registry/waste-code`, the one the contracts and the
+// database read), and cleared by leaving the field blank.
+//
 // The four forms are the pane's own, not the generic registry's: the
 // registry's `configure.master` schema stays disabled, since the prototype
 // never had a create button for the module and fixture mode gains none. A
 // key (a fraction's, a vehicle type's) is set once and a frequency stays in
 // its project, so the edit forms hold those read-only; what a person may
 // change is what the wire patches.
+import { isWasteCode, WASTE_CODE_SHAPE, wasteCodeOf } from "@waste/domain/registry/waste-code"
+
 import type { BusinessFormSchema, BusinessFormValues } from "./business-form-types"
 import { splitMultiValue } from "./business-form-records"
 import { settingsModuleDomains } from "./business-domain"
@@ -73,6 +81,9 @@ export const ONE_CADENCE = "Give collectionsPerWeek with at most one of weeksBet
 
 export const VOLUME_REFUSAL = "A volume is a whole number of litres"
 
+/** The domain's sentence for a waste code of another shape (`@waste/domain/registry/waste-code`). */
+export const WASTE_CODE_REFUSAL = WASTE_CODE_SHAPE
+
 export const COUNT_LABELS = { collectionsPerWeek: "Collections per week", weeksBetween: "Weeks between", daysBetween: "Days between" } as const
 export type CountKey = keyof typeof COUNT_LABELS
 const COUNT_KEYS = Object.keys(COUNT_LABELS) as CountKey[]
@@ -103,6 +114,8 @@ export type MasterDataFields = {
   name: string
   /** A fraction's or a vehicle type's stable slug. */
   key?: string
+  /** A fraction's waste code, compact (`200301`); null where it has none. */
+  wasteCode?: string | null
   /** A container type's volume; null where nobody recorded one. */
   volumeLitres?: number | null
   /** A frequency's project, by web id. */
@@ -123,7 +136,7 @@ export type MasterDataLookups = {
 
 /** The form's own field ids per kind: what the typed values carry, in the form's order. */
 const KIND_FIELD_IDS: Readonly<Record<MasterDataKind, readonly string[]>> = {
-  "waste-fraction": ["name", "key"],
+  "waste-fraction": ["name", "key", "wasteCode"],
   "container-type": ["name", "volumeLitres"],
   "service-frequency": ["name", "projectId", "description", "collectionsPerWeek", "weeksBetween", "daysBetween"],
   "vehicle-type": ["name", "key", "description", "containerTypeIds"],
@@ -146,8 +159,10 @@ const count = (values: BusinessFormValues | SubmittedValues | undefined, key: st
 export function masterDataFieldsOf(kind: MasterDataKind, values: BusinessFormValues | SubmittedValues | undefined): MasterDataFields {
   const name = text(values, "name") ?? ""
   switch (kind) {
-    case "waste-fraction":
-      return { kind, name, key: text(values, "key") ?? "" }
+    case "waste-fraction": {
+      const code = text(values, "wasteCode")
+      return { kind, name, key: text(values, "key") ?? "", wasteCode: code === undefined ? null : wasteCodeOf(code) }
+    }
     case "container-type":
       return { kind, name, volumeLitres: count(values, "volumeLitres") }
     case "service-frequency":
@@ -187,6 +202,7 @@ export function masterDataFieldErrors(kind: MasterDataKind, values: BusinessForm
   const errors: Record<string, string> = {}
   if (!fields.name) errors.name = nameRefusal(kind)
   if ((kind === "waste-fraction" || kind === "vehicle-type") && !isKey(fields.key)) errors.key = KEY_REFUSAL
+  if (kind === "waste-fraction" && fields.wasteCode != null && !isWasteCode(fields.wasteCode)) errors.wasteCode = WASTE_CODE_REFUSAL
   if (kind === "container-type" && Number.isNaN(fields.volumeLitres)) errors.volumeLitres = VOLUME_REFUSAL
   if (kind === "service-frequency") {
     if (!fields.projectId) errors.projectId = "Pick a project"
@@ -227,7 +243,8 @@ export function presentMasterData(fields: MasterDataFields, lookups: MasterDataL
   switch (fields.kind) {
     case "waste-fraction": {
       const key = fields.key ?? ""
-      return { ...base, context: `${details.label} · ${key}`, value: key, facts: { Kind: details.label, Key: key } }
+      const code = fields.wasteCode ?? null
+      return { ...base, context: `${details.label} · ${key}`, value: key, facts: { Kind: details.label, Key: key, ...(code === null ? {} : { "Waste code": code }) } }
     }
     case "container-type": {
       const volume = fields.volumeLitres ?? null
@@ -276,6 +293,7 @@ export function masterDataSchema(kind: MasterDataKind): BusinessFormSchema {
   const fields: BusinessFormSchema["sections"][number]["fields"] = [
     { id: "name", label: "Name", type: "text", required: true },
     ...(kind === "waste-fraction" || kind === "vehicle-type" ? [{ id: "key", label: "Key", type: "text" as const, required: true, placeholder: kind === "waste-fraction" ? "hard-plastic" : "rear-loader" }] : []),
+    ...(kind === "waste-fraction" ? [{ id: "wasteCode", label: "Waste code", type: "text" as const, placeholder: "20 03 01" }] : []),
     ...(kind === "container-type" ? [{ id: "volumeLitres", label: "Volume", type: "number" as const, min: 1, unit: "L" }] : []),
     ...(kind === "service-frequency"
       ? [
@@ -378,7 +396,7 @@ export function updateMasterDataRecord(existing: BusinessRecord, values: Busines
   const fields = masterDataFieldsOf(kind, merged)
   const shown = presentMasterData(fields, lookups)
   const facts = { ...existing.facts }
-  for (const key of ["Key", "Volume", "Project", "Cadence", "Description", "Container types"]) delete facts[key]
+  for (const key of ["Key", "Waste code", "Volume", "Project", "Cadence", "Description", "Container types"]) delete facts[key]
   return {
     ...existing,
     name: fields.name || existing.name,
