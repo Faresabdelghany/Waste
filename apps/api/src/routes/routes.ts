@@ -2,9 +2,13 @@
 // ADR-0002, ADR-0004): `GET /routes` lists them, `GET /routes/:id` reads one
 // with its pickups, sessions and unloads, `POST /routes` makes the office's
 // ad-hoc route (#111), and six commands move a route —
-// `assign` (the Planned Assignment), `dispatch` (`planned → ready`),
-// `reschedule` (the operating day and the start), `release-hold` (the
-// office's hold handed back, #226), `cancel` and the order of its stops
+// `assign` (the Planned Assignment, its service provider too since O5 of
+// #290), `dispatch` (`planned → ready`, one route or, through
+// `POST /routes/dispatch`, a day or a selection, each in its own savepoint),
+// `reschedule` (the operating day and the start, a day the project's
+// calendar rests on taken only knowingly), `release-hold` (the
+// office's hold handed back, #226), `cancel` (a reason code and the free
+// reason) and the order of its stops
 // (`PUT /routes/:id/pickup-order`) — while `GET /routes/:id/commands`
 // is the log of what the device said, rejections included. No patch: a
 // route is written by generation (#97 B) or made by the office, and no
@@ -73,14 +77,21 @@
 // the family's 404, the way a settlement's commands answer it.
 import { DriverCommandReceipt } from "@waste/contracts/driver-commands"
 import { Page, PageRequest } from "@waste/contracts/pagination"
-import { PickupOrderSet, RouteAssign, RouteCancel, RouteCreate, RouteDetail, RouteListItem, RouteListQuery, RouteReleaseHold, RouteReschedule } from "@waste/contracts/routes"
+import { PickupOrderSet, RouteAssign, RouteCancel, RouteCreate, RouteDetail, RouteDispatchMany, RouteDispatchResults, RouteListItem, RouteListQuery, RouteReleaseHold, RouteReschedule, type Route, type RouteDispatchResult } from "@waste/contracts/routes"
 import type { Tx } from "@waste/db/client"
+import { collectionCalendarHoliday } from "@waste/db/schema/collection-calendars"
 import { driverCommand, pickup, route, session } from "@waste/db/schema/execution"
+import { project } from "@waste/db/schema/organisation"
 import { unloadingStation, unloadingStationFraction } from "@waste/db/schema/places"
+import { routeScheme } from "@waste/db/schema/route-schemes"
 import { notInService, THE_OPERATING_DATE } from "@waste/domain/execution/commands"
+import { confirmNonWorkingDay, operatingDayReading, type OperatingDayReading } from "@waste/domain/execution/operating-day"
 import { activeAnd, doesNotChange, hasNotRun, openPickupsClose, orderIsOpen, routeCancellation, routeTransition } from "@waste/domain/execution/transitions"
 import type { PickupStatus, RouteStatus } from "@waste/domain/execution/vocabulary"
+import type { HolidayPolicy } from "@waste/domain/planning/vocabulary"
+import { holidayListOf } from "@waste/domain/planning/generation"
 import { licenceRefusal, licenceSentence } from "@waste/domain/resources/licence"
+import type { ServiceDay } from "@waste/domain/route-schemes/recurrence"
 import type { VehicleStatus } from "@waste/domain/resources/vocabulary"
 import { count } from "@waste/domain/text"
 import type { RoutingIdentity } from "@waste/routing/provider"
@@ -94,16 +105,16 @@ import { allows, requireGrant } from "../auth/require"
 import { newId } from "../ids"
 import { emit } from "../outbox"
 import { afterCursor, fetchLimit, pageOf } from "../pagination"
-import { describeProblem, invalidRequest, problem, validate } from "../problem"
+import { describeProblem, invalidRequest, problem, ProblemError, validate } from "../problem"
 import { detailOf, findReachedRoute, findRoute, labelOf, noSuchRoute, pickupColumns, pickupOf, pickupsOfRoute, receiptColumns, receiptOf, routeColumns, routeReach, routeScope, routesOf, type RouteRow } from "./execution-shapes"
 import { findDriver, findVehicle, projectToday, vehicleLabel, type DriverRow, type VehicleRow } from "./fleet-lookups"
 import { activePlansByRoute, ensurePlan } from "./plan-shapes"
 import { QueueMissing, type JobSender } from "@waste/db/jobs"
-import { NOT_AN_UNLOADING_STATION, requireDepot, requireUnloadingStation, type Scope } from "./references"
+import { NOT_AN_UNLOADING_STATION, requireDepot, requireServiceProvider, requireUnloadingStation, type Scope } from "./references"
 import { findScheme, MODULE as SCHEMES_MODULE, type ClockOptions } from "./scheme-groups"
 import { askGeneration } from "./generation"
 import { handBackWindow } from "./route-holds"
-import { created, describeCreated, describeJson, IdParam, lockRow, nextNumber, stamp, timeOf } from "./shared"
+import { created, describeCreated, describeJson, IdParam, lockRow, lockRows, nextNumber, stamp, timeOf } from "./shared"
 import { refuseUnavailableDriver } from "./statuses"
 
 const MODULE = "route-studio.routes"
@@ -259,7 +270,80 @@ const HOLDS =
   "On a `planned` route a command that changes something stamps `heldAt` with its instant: the route is held, and the next generation run keeps its operating date, its planned start and its Planned Assignment — vehicle, driver, provider, trailer, depot and unloading station — as the office left them, still refreshing its pickups and its note, until `release-hold` hands it back, `dispatch` or `cancel` clears the hold, or an edit of the scheme or of the route's collection group releases it: one that moves the start, the depot, the station, the vehicle, the driver or the provider, or that takes the route's own service day away. A command that changes nothing holds nothing, and on a `ready` route, frozen against regeneration already, the command holds nothing either; nor on the office's ad-hoc route, which no generation run reads."
 
 /** The Planned Assignment as a write leaves it: the body's fields over the stored ones, a null given clearing. */
-type Assignment = Pick<RouteRow, "plannedVehicleId" | "plannedDriverId" | "plannedTrailerId" | "depotId" | "unloadingStationId">
+type Assignment = Pick<RouteRow, "plannedVehicleId" | "plannedDriverId" | "plannedTrailerId" | "plannedServiceProviderId" | "depotId" | "unloadingStationId">
+
+/** A route as a command and the outbox carry it: the detail without what hangs off it. */
+function routeOfDetail(detail: RouteDetail): Route {
+  const { pickups: _pickups, session: _session, sessions: _sessions, unloads: _unloads, activePlan: _activePlan, ...answered } = detail
+  return answered
+}
+
+/**
+ * The `dispatch` command on one route, under its row lock: what
+ * `POST /routes/:id/dispatch` answers, and what `POST /routes/dispatch`
+ * judges each route of a day or a selection by, in a savepoint of its own.
+ * `planned` becomes `ready` with `dispatchedAt` and the hold cleared, and
+ * `route-dispatched` is written; a `ready` route stays as it is; the
+ * machine's refusal, and a route with no planned driver, are the 409.
+ */
+async function dispatchRoute(tx: Tx, principal: Principal, id: string, at: Date): Promise<RouteDetail> {
+  const current = await lockedRoute(tx, principal, id)
+  const transition = routeTransition(current.status as RouteStatus, "dispatch", labelOf(current))
+  if (transition.kind === "refuse") throw problem(409, { detail: transition.sentence })
+  if (transition.kind === "stay") return await detailOf(tx, principal.companyId, current)
+  if (current.plannedDriverId === null) throw problem(409, { detail: noPlannedDriver(labelOf(current)) })
+  const [row] = await tx
+    .update(route)
+    .set({ status: transition.to, dispatchedAt: at, heldAt: null })
+    .where(and(routeScope(principal), eq(route.id, id)))
+    .returning(routeColumns)
+  if (row === undefined) throw noSuchRoute(id)
+  const detail = await detailOf(tx, principal.companyId, row)
+  await emit(tx, principal, { aggregate: "route", aggregateId: row.id, kind: "route-dispatched", payload: routeOfDetail(detail), projectId: row.projectId, occurredAt: at })
+  return detail
+}
+
+/** A route's own refusal in a bulk dispatch: the status and the sentence its dispatch answers — a 404 for a route not here, a 409 for one its state refuses — or undefined for anything else, which fails the request. */
+function refusalOf(error: unknown): { status: 404 | 409; detail: string } | undefined {
+  if (!(error instanceof ProblemError)) return undefined
+  const { status, detail } = error.body
+  return (status === 404 || status === 409) && detail !== undefined ? { status, detail } : undefined
+}
+
+/**
+ * What `day` is to the route by its project's calendar (O5 of #290): the
+ * project's weekend, its holiday list's holiday on that day where it names
+ * a list, and, for a generated route, its scheme's holiday policy and
+ * service days, read through the domain's one rule (execution/operating-day).
+ */
+async function operatingDayOf(tx: Tx, scope: Scope, current: RouteRow, day: string): Promise<OperatingDayReading> {
+  const [calendar] = await tx
+    .select({ weekend: project.weekend, holidayList: project.holidayList })
+    .from(project)
+    .where(and(eq(project.companyId, scope.companyId), eq(project.id, scope.projectId)))
+    .limit(1)
+  if (calendar === undefined) throw noSuchRoute(current.id)
+  const holidays =
+    calendar.holidayList === null
+      ? []
+      : await tx
+          .select({ day: collectionCalendarHoliday.day, name: collectionCalendarHoliday.name })
+          .from(collectionCalendarHoliday)
+          .where(and(eq(collectionCalendarHoliday.companyId, scope.companyId), eq(collectionCalendarHoliday.projectId, scope.projectId), eq(collectionCalendarHoliday.day, day)))
+  const [scheme] =
+    current.routeSchemeId === null
+      ? []
+      : await tx
+          .select({ holidayPolicy: routeScheme.holidayPolicy, serviceDays: routeScheme.serviceDays })
+          .from(routeScheme)
+          .where(and(eq(routeScheme.companyId, scope.companyId), eq(routeScheme.id, current.routeSchemeId)))
+          .limit(1)
+  return operatingDayReading(
+    { weekend: calendar.weekend as ServiceDay[], holidays: holidayListOf(holidays, calendar.holidayList) },
+    day,
+    scheme === undefined ? null : { holidayPolicy: scheme.holidayPolicy as HolidayPolicy, serviceDays: scheme.serviceDays as ServiceDay[] },
+  )
+}
 
 /**
  * The licence rule over a route's planned pair on a day: a driver who may not
@@ -279,7 +363,7 @@ async function requireLicenceOn(tx: Tx, scope: Scope, pair: { plannedVehicleId: 
 }
 
 const ASSIGN_RULES =
-  "The vehicle is a powered vehicle of the route's project, the trailer a trailer of it, the driver one of its drivers, the depot one of its depots, and the unloading station one of this company's that accepts at least one of the waste fractions the route's pickups carry (a route with no pickups yet names any station) — each refused (400) at its field. Where the route ends up naming both a driver and a vehicle, the driver holds the licence class the vehicle requires on the operating date, refused at `driverId` with the reason. Then, after every such 400, the statuses of what the body named afresh: a vehicle or a trailer that is not active — retired, unavailable or in maintenance, the rule a route's start holds — and an inactive or a suspended driver are refused (409) naming the row and its status, while a stored one the body did not move is not asked."
+  "The vehicle is a powered vehicle of the route's project, the trailer a trailer of it, the driver one of its drivers, the service provider one of this company's, the depot one of its depots, and the unloading station one of this company's that accepts at least one of the waste fractions the route's pickups carry (a route with no pickups yet names any station) — each refused (400) at its field. Where the route ends up naming both a driver and a vehicle, the driver holds the licence class the vehicle requires on the operating date, refused at `driverId` with the reason. Then, after every such 400, the statuses of what the body named afresh: a vehicle or a trailer that is not active — retired, unavailable or in maintenance, the rule a route's start holds — and an inactive or a suspended driver are refused (409) naming the row and its status, while a stored one the body did not move is not asked."
 
 const commandProblems = (action: "view" | "edit") => ({
   401: describeProblem("No usable token (see WWW-Authenticate)."),
@@ -390,8 +474,7 @@ export function routeRoutes(guard: MiddlewareHandler<AuthEnv>, { now = () => new
           .returning(routeColumns)
         const detail = await detailOf(tx, principal.companyId, row)
         if (row.plannedDriverId !== null || row.plannedVehicleId !== null) {
-          const { pickups: _pickups, session: _session, sessions: _sessions, unloads: _unloads, activePlan: _activePlan, ...answered } = detail
-          await emit(tx, principal, { aggregate: "route", aggregateId: row.id, kind: "route-reassigned", payload: answered, projectId: row.projectId, occurredAt: at })
+          await emit(tx, principal, { aggregate: "route", aggregateId: row.id, kind: "route-reassigned", payload: routeOfDetail(detail), projectId: row.projectId, occurredAt: at })
         }
         return created(c, "/routes", detail)
       },
@@ -428,16 +511,16 @@ export function routeRoutes(guard: MiddlewareHandler<AuthEnv>, { now = () => new
         operationId: "assignRoute",
         summary: "Move a route's Planned Assignment",
         description:
-          "The `assign` command: moves the planned vehicle, driver, trailer, depot or unloading station of a route that has not started, any of them cleared with null; at least one field must be given. Under the route's row lock. A `planned` route stays `planned` and a `ready` one stays `ready` — a route already running is refused (409): the session's driver and vehicle are its actual assignment, and a swap mid-route is a Ticket's outcome later; a completed or cancelled route does not change. A `ready` route keeps a driver: it was dispatched to one, and a dispatched route without a driver would reach no device, so clearing `driverId` on it is refused (409, `Route RC-1042 is dispatched; assign another driver or cancel it`) where moving it to another driver is not. " +
+          "The `assign` command: moves the planned vehicle, driver, trailer, service provider, depot or unloading station of a route that has not started, any of them cleared with null; at least one field must be given. Under the route's row lock. A `planned` route stays `planned` and a `ready` one stays `ready` — a route already running is refused (409): the session's driver and vehicle are its actual assignment, and a swap mid-route is a Ticket's outcome later; a completed or cancelled route does not change. A `ready` route keeps a driver: it was dispatched to one, and a dispatched route without a driver would reach no device, so clearing `driverId` on it is refused (409, `Route RC-1042 is dispatched; assign another driver or cancel it`) where moving it to another driver is not. " +
           ASSIGN_RULES +
           " " +
           HOLDS +
-          " The `route-reassigned` event is written in the same transaction when the driver or the vehicle moved, carrying the route as answered here.",
+          " The `route-reassigned` event is written in the same transaction when the driver, the vehicle or the service provider moved, carrying the route as answered here.",
         security: BEARER_SECURITY,
         responses: {
           200: describeJson("The route as it now stands.", RouteDetail),
           400: describeProblem(
-            "The path does not hold an id, or the body changes nothing, names a member the command does not take, or names a vehicle, trailer, driver, depot or station the rules above refuse — each at the field that is wrong.",
+            "The path does not hold an id, or the body changes nothing, names a member the command does not take, or names a vehicle, trailer, driver, service provider, depot or station the rules above refuse — each at the field that is wrong.",
           ),
           ...commandProblems("edit"),
           409: describeProblem("The route is active, completed or cancelled, the body clears the driver of a ready route, or a vehicle or trailer named afresh is not active or a driver named afresh is inactive or suspended; the detail says which."),
@@ -460,10 +543,11 @@ export function routeRoutes(guard: MiddlewareHandler<AuthEnv>, { now = () => new
           plannedVehicleId: body.vehicleId === undefined ? current.plannedVehicleId : body.vehicleId,
           plannedDriverId: body.driverId === undefined ? current.plannedDriverId : body.driverId,
           plannedTrailerId: body.trailerId === undefined ? current.plannedTrailerId : body.trailerId,
+          plannedServiceProviderId: body.serviceProviderId === undefined ? current.plannedServiceProviderId : body.serviceProviderId,
           depotId: body.depotId === undefined ? current.depotId : body.depotId,
           unloadingStationId: body.unloadingStationId === undefined ? current.unloadingStationId : body.unloadingStationId,
         }
-        const moved = { vehicle: body.vehicleId !== undefined, driver: body.driverId !== undefined, trailer: body.trailerId !== undefined, depot: body.depotId !== undefined, station: body.unloadingStationId !== undefined }
+        const moved = { vehicle: body.vehicleId !== undefined, driver: body.driverId !== undefined, trailer: body.trailerId !== undefined, provider: body.serviceProviderId !== undefined, depot: body.depotId !== undefined, station: body.unloadingStationId !== undefined }
         // The route's own state, judged with `requireNotStarted` before the body's references: a dispatched route keeps a driver (dispatch demanded one), so clearing it is refused where moving it is not.
         if (current.status === "ready" && moved.driver && after.plannedDriverId === null) throw problem(409, { detail: dispatchedNeedsADriver(labelOf(current)) })
 
@@ -472,6 +556,7 @@ export function routeRoutes(guard: MiddlewareHandler<AuthEnv>, { now = () => new
         const driver = moved.driver && after.plannedDriverId !== null ? await findDriver(tx, scope, after.plannedDriverId, "driverId") : null
         const trailer = moved.trailer && after.plannedTrailerId !== null ? await findVehicle(tx, scope, after.plannedTrailerId, "trailer", "trailerId") : null
         if (moved.vehicle || moved.driver) await requireLicenceOn(tx, scope, after, current.operatingDate, "driverId", { vehicle: vehicle ?? undefined, driver: driver ?? undefined })
+        if (moved.provider && after.plannedServiceProviderId !== null) await requireServiceProvider(tx, principal.companyId, after.plannedServiceProviderId, "serviceProviderId")
         if (moved.depot) await requireDepot(tx, scope, after.depotId)
         if (moved.station && after.unloadingStationId !== null) await requireStationAccepting(tx, principal.companyId, current.id, after.unloadingStationId)
 
@@ -489,11 +574,50 @@ export function routeRoutes(guard: MiddlewareHandler<AuthEnv>, { now = () => new
           .returning(routeColumns)
         if (row === undefined) throw noSuchRoute(id)
         const detail = await detailOf(tx, principal.companyId, row)
-        if (row.plannedDriverId !== current.plannedDriverId || row.plannedVehicleId !== current.plannedVehicleId) {
-          const { pickups: _pickups, session: _session, sessions: _sessions, unloads: _unloads, activePlan: _activePlan, ...answered } = detail
-          await emit(tx, principal, { aggregate: "route", aggregateId: row.id, kind: "route-reassigned", payload: answered, projectId: row.projectId, occurredAt: at })
+        if (row.plannedDriverId !== current.plannedDriverId || row.plannedVehicleId !== current.plannedVehicleId || row.plannedServiceProviderId !== current.plannedServiceProviderId) {
+          await emit(tx, principal, { aggregate: "route", aggregateId: row.id, kind: "route-reassigned", payload: routeOfDetail(detail), projectId: row.projectId, occurredAt: at })
         }
         return c.json(detail)
+      },
+    )
+    .post(
+      "/routes/dispatch",
+      describeRoute({
+        operationId: "dispatchRoutes",
+        summary: "Dispatch a day of routes, or a selection",
+        description:
+          "The `dispatch` command over many routes at once (O5 of #290): the body names one to fifty routes — a day's, or a selection of them; a larger day goes in several requests, since each route is a savepoint of the request's transaction — and each is judged exactly as `POST /routes/{id}/dispatch` judges it, in a savepoint of its own under its own row lock: `planned` becomes `ready` with `dispatchedAt` stamped and its hold cleared, and `route-dispatched` is written for it; a route already `ready` is answered as it stands; a route with no planned driver, an active, completed or cancelled one, and an id that is not a route of the caller's projects are refused, each on its own, and leave the others to go ahead. The answer is one result per id, in the body's order: `dispatched` with the route as it now stands, or `refused` with the status (404 or 409) and the sentence its own dispatch would have answered. The routes are locked first, in one statement in id order whatever the body's — the order a generation run locks a scheme's routes in — so a bulk dispatch and a run, or two bulk dispatches, over the same routes never wait on each other's second row. 200 whenever the body is well-formed, however many were refused.",
+        security: BEARER_SECURITY,
+        responses: {
+          200: describeJson("One result per route, in the body's order: dispatched with the route, or refused with the status and why.", RouteDispatchResults),
+          400: describeProblem("The body names no route, more than fifty, one twice, or a member the command does not take."),
+          401: describeProblem("No usable token (see WWW-Authenticate)."),
+          403: describeProblem(`No active account here, or the caller's role does not allow \`edit\` on \`${MODULE}\`.`),
+        },
+      }),
+      guard,
+      requireGrant(MODULE, "edit"),
+      validate("json", RouteDispatchMany),
+      async (c) => {
+        const { routeIds } = c.req.valid("json")
+        const tx = c.get("tx")
+        const principal = c.get("principal")
+        const at = now()
+        const results = new Map<string, RouteDispatchResult>()
+        // Every named route locked first, in one statement in id order (`lockRows`), the order a generation run locks its scheme's routes in too, so neither waits on the other's second row;
+        // then each judged in its own savepoint, so a refusal rolls back that route alone.
+        await lockRows(tx, route, principal.companyId, routeIds)
+        for (const id of [...routeIds].sort()) {
+          try {
+            const detail = await tx.transaction((savepoint) => dispatchRoute(savepoint, principal, id, at))
+            results.set(id, { routeId: id, outcome: "dispatched", route: routeOfDetail(detail) })
+          } catch (error) {
+            const refusal = refusalOf(error)
+            if (refusal === undefined) throw error
+            results.set(id, { routeId: id, outcome: "refused", ...refusal })
+          }
+        }
+        return c.json({ results: routeIds.map((id) => results.get(id) as RouteDispatchResult) })
       },
     )
     .post(
@@ -516,24 +640,7 @@ export function routeRoutes(guard: MiddlewareHandler<AuthEnv>, { now = () => new
       validate("param", IdParam),
       async (c) => {
         const { id } = c.req.valid("param")
-        const tx = c.get("tx")
-        const principal = c.get("principal")
-        const current = await lockedRoute(tx, principal, id)
-        const transition = routeTransition(current.status as RouteStatus, "dispatch", labelOf(current))
-        if (transition.kind === "refuse") throw problem(409, { detail: transition.sentence })
-        if (transition.kind === "stay") return c.json(await detailOf(tx, principal.companyId, current))
-        if (current.plannedDriverId === null) throw problem(409, { detail: noPlannedDriver(labelOf(current)) })
-        const at = now()
-        const [row] = await tx
-          .update(route)
-          .set({ status: transition.to, dispatchedAt: at, heldAt: null })
-          .where(and(routeScope(principal), eq(route.id, id)))
-          .returning(routeColumns)
-        if (row === undefined) throw noSuchRoute(id)
-        const detail = await detailOf(tx, principal.companyId, row)
-        const { pickups: _pickups, session: _session, sessions: _sessions, unloads: _unloads, activePlan: _activePlan, ...answered } = detail
-        await emit(tx, principal, { aggregate: "route", aggregateId: row.id, kind: "route-dispatched", payload: answered, projectId: row.projectId, occurredAt: at })
-        return c.json(detail)
+        return c.json(await dispatchRoute(c.get("tx"), c.get("principal"), id, now()))
       },
     )
     .post(
@@ -542,7 +649,7 @@ export function routeRoutes(guard: MiddlewareHandler<AuthEnv>, { now = () => new
         operationId: "rescheduleRoute",
         summary: "Move the day a route runs, or its start",
         description:
-          "The `reschedule` command: moves `operatingDate`, the day the route runs, or `plannedStartTime`, a time on the project's clock (null clears it); at least one must be given. The `serviceDate` never moves: with the scheme and the group it is the route's identity (ADR-0002). A route that has started is refused (409): the day it runs is fixed; a completed or cancelled one does not change. Where the route names both a planned driver and a planned vehicle, moving the day judges the driver's licence again on the new operating date, refused at `operatingDate` with the reason. " +
+          "The `reschedule` command: moves `operatingDate`, the day the route runs, or `plannedStartTime`, a time on the project's clock (null clears it); at least one must be given. The `serviceDate` never moves: with the scheme and the group it is the route's identity (ADR-0002). A route that has started is refused (409): the day it runs is fixed; a completed or cancelled one does not change. Where the route names both a planned driver and a planned vehicle, moving the day judges the driver's licence again on the new operating date, refused at `operatingDate` with the reason. Then the new day is judged against the project's calendar (O5 of #290), the rule generation keeps: a holiday on the project's list is a day the route does not run on unless its scheme collects on holidays, and a day of the project's weekend unless its scheme serves that weekday — for the office's ad-hoc route, which has no scheme, every holiday and weekend day. A move onto such a day is refused (409, `Sat 10 Oct is a Saturday of the project's weekend; confirm the move to run route RC-1042 on a non-working day`) until the body says `acceptNonWorkingDay: true`; the flag alone moves nothing, and a move onto a working day ignores it. " +
           HOLDS +
           " Under the route's row lock.",
         security: BEARER_SECURITY,
@@ -550,7 +657,7 @@ export function routeRoutes(guard: MiddlewareHandler<AuthEnv>, { now = () => new
           200: describeJson("The route as it now stands.", RouteDetail),
           400: describeProblem("The path does not hold an id, or the body changes nothing, names a member the command does not take, or moves the day to one the planned driver may not take the planned vehicle on."),
           ...commandProblems("edit"),
-          409: describeProblem("The route is active, completed or cancelled."),
+          409: describeProblem("The route is active, completed or cancelled, or the body moves it onto a holiday or a weekend day it does not run on without saying so; the detail says which."),
         },
       }),
       guard,
@@ -567,6 +674,11 @@ export function routeRoutes(guard: MiddlewareHandler<AuthEnv>, { now = () => new
         const scope: Scope = { companyId: principal.companyId, projectId: current.projectId }
         const operatingDate = body.operatingDate ?? current.operatingDate
         if (body.operatingDate !== undefined) await requireLicenceOn(tx, scope, current, operatingDate, "operatingDate")
+        // The 409 that needs the body, after its 400s: a day the route does not run on by its calendar is taken knowingly or not at all.
+        if (operatingDate !== current.operatingDate && body.acceptNonWorkingDay !== true) {
+          const reading = await operatingDayOf(tx, scope, current, operatingDate)
+          if (reading.kind !== "working") throw problem(409, { detail: confirmNonWorkingDay(labelOf(current), operatingDate, reading) })
+        }
         // The stored start is Postgres's `HH:MM:SS`, the body's the wire's `HH:MM`.
         const startMoved = body.plannedStartTime !== undefined && body.plannedStartTime !== (current.plannedStartTime === null ? null : timeOf(current.plannedStartTime))
         const [row] = await tx
@@ -629,11 +741,11 @@ export function routeRoutes(guard: MiddlewareHandler<AuthEnv>, { now = () => new
         operationId: "cancelRoute",
         summary: "Cancel a route",
         description:
-          "The `cancel` command: a `planned`, `ready` or `active` route becomes `cancelled` with the reason as its `note` and `cancelledAt` stamped; every `planned` pickup of it is closed as `skipped` with the reason `route-cancelled` and its `outcomeAt`, since nobody will attempt it, and an open session is ended, since the route is no longer being driven. A pickup with an outcome already keeps it. A hold on the route (`heldAt`) is cleared, since a hold is a planned route's; generation's own cancel of a route the scheme no longer runs clears it the same way, so a route generation cancelled and later brings back returns to its scheme's day, start and Planned Assignment, not to what the office had held. A completed route does not change (409); one already cancelled answers 200 as it stands, without a write. Under the route's row lock; the `route-cancelled` event and one `pickup-skipped` per pickup closed are written in the same transaction.",
+          "The `cancel` command: a `planned`, `ready` or `active` route becomes `cancelled` with the body's reason code as its `cancelReasonCode` — one of the office's eight (O5 of #290; `regeneration` is a generation run's to write) — the free reason as its `note`, and `cancelledAt` stamped; every `planned` pickup of it is closed as `skipped` with the reason `route-cancelled` and its `outcomeAt`, since nobody will attempt it, and an open session is ended, since the route is no longer being driven. A pickup with an outcome already keeps it. A hold on the route (`heldAt`) is cleared, since a hold is a planned route's; generation's own cancel of a route the scheme no longer runs clears it the same way, so a route generation cancelled and later brings back returns to its scheme's day, start and Planned Assignment, not to what the office had held. A completed route does not change (409); one already cancelled answers 200 as it stands, without a write. Under the route's row lock; the `route-cancelled` event and one `pickup-skipped` per pickup closed are written in the same transaction.",
         security: BEARER_SECURITY,
         responses: {
           200: describeJson("The route, cancelled, with its pickups as the cancellation left them.", RouteDetail),
-          400: describeProblem("The path does not hold an id, or the body has no reason or carries a member the command does not take."),
+          400: describeProblem("The path does not hold an id, or the body has no reason code of the office's, no reason, or carries a member the command does not take."),
           ...commandProblems("edit"),
           409: describeProblem("The route is completed and does not change."),
         },
@@ -644,7 +756,7 @@ export function routeRoutes(guard: MiddlewareHandler<AuthEnv>, { now = () => new
       validate("json", RouteCancel),
       async (c) => {
         const { id } = c.req.valid("param")
-        const { reason } = c.req.valid("json")
+        const { reasonCode, reason } = c.req.valid("json")
         const tx = c.get("tx")
         const principal = c.get("principal")
         const current = await lockedRoute(tx, principal, id)
@@ -654,7 +766,7 @@ export function routeRoutes(guard: MiddlewareHandler<AuthEnv>, { now = () => new
         const at = now()
         const [row] = await tx
           .update(route)
-          .set({ status: transition.to, note: reason, cancelledAt: at, heldAt: null })
+          .set({ status: transition.to, note: reason, cancelReasonCode: reasonCode, cancelledAt: at, heldAt: null })
           .where(and(routeScope(principal), eq(route.id, id)))
           .returning(routeColumns)
         if (row === undefined) throw noSuchRoute(id)
@@ -686,8 +798,7 @@ export function routeRoutes(guard: MiddlewareHandler<AuthEnv>, { now = () => new
             .where(and(eq(session.companyId, principal.companyId), eq(session.routeId, row.id), isNull(session.endedAt)))
         }
         const detail = await detailOf(tx, principal.companyId, row)
-        const { pickups: _pickups, session: _session, sessions: _sessions, unloads: _unloads, activePlan: _activePlan, ...answered } = detail
-        await emit(tx, principal, { aggregate: "route", aggregateId: row.id, kind: "route-cancelled", payload: answered, projectId: row.projectId, occurredAt: at })
+        await emit(tx, principal, { aggregate: "route", aggregateId: row.id, kind: "route-cancelled", payload: routeOfDetail(detail), projectId: row.projectId, occurredAt: at })
         for (const stop of closed) {
           await emit(tx, principal, { aggregate: "pickup", aggregateId: stop.id, kind: "pickup-skipped", payload: pickupOf(stop), projectId: stop.projectId, occurredAt: at })
         }

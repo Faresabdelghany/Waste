@@ -375,7 +375,7 @@ describe("generation against a migrated database", { skip }, () => {
     const shrunk = await generateA()
     assert.deepEqual([shrunk.run.routesCreated, shrunk.run.routesRefreshed, shrunk.run.routesCancelled], [0, 0, 1])
     const [cancelled] = await ownerPool.db.select().from(route).where(eq(route.id, thursdayResidual.id))
-    assert.deepEqual([cancelled.status, cancelled.cancelledByGeneration, cancelled.note, cancelled.cancelledAt?.toISOString()], ["cancelled", true, NO_LONGER_SERVES_DATE, NOW.toISOString()])
+    assert.deepEqual([cancelled.status, cancelled.cancelledByGeneration, cancelled.cancelReasonCode, cancelled.note, cancelled.cancelledAt?.toISOString()], ["cancelled", true, "regeneration", NO_LONGER_SERVES_DATE, NOW.toISOString()], "the run's own code beside its sentence (O5 of #290)")
     assert.deepEqual((await pickupsOf(thursdayResidual.id)).map((row) => [row.containerId, row.status, row.reason, row.note]), [
       [a.bin1, "skipped", "regeneration", NO_LONGER_SERVES_DATE],
       [a.bin3, "skipped", "regeneration", REMOVED_FROM_DAY_PLAN],
@@ -389,7 +389,7 @@ describe("generation against a migrated database", { skip }, () => {
     const back = await generateA()
     assert.deepEqual([back.run.routesCreated, back.run.routesRefreshed, back.run.routesCancelled], [0, 1, 0])
     const [resurrected] = await ownerPool.db.select().from(route).where(eq(route.id, thursdayResidual.id))
-    assert.deepEqual([resurrected.status, resurrected.cancelledByGeneration, resurrected.cancelledAt, resurrected.number, resurrected.generationRunId], ["planned", false, null, 1001, back.runId], "the same route, the same number")
+    assert.deepEqual([resurrected.status, resurrected.cancelledByGeneration, resurrected.cancelReasonCode, resurrected.cancelledAt, resurrected.number, resurrected.generationRunId], ["planned", false, null, null, 1001, back.runId], "the same route, the same number, its code cleared")
     assert.deepEqual((await pickupsOf(thursdayResidual.id)).map((row) => [row.containerId, row.status, row.reason]), [
       [a.bin1, "planned", null],
       [a.bin3, "skipped", "regeneration"],

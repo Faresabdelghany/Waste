@@ -177,7 +177,7 @@ describe("the driver door", { skip: database.skip || owner.skip }, () => {
   const minted = (options: Partial<RouteOptions> = {}) => routeFor(pool, a, fleet, fixtures, { driver: fleet.drivers.mads, ...options })
   /** The office's cancel (`POST /routes/:id/cancel`) as the dispatcher sends it: the route cancelled with the reason as its note, its open session ended, its open pickups closed. */
   const cancelled = async (routeId: string, reason: string, dispatcher = olivia): Promise<void> => {
-    const response = await dispatcher(`/routes/${routeId}/cancel`, { method: "POST", body: { reason } })
+    const response = await dispatcher(`/routes/${routeId}/cancel`, { method: "POST", body: { reasonCode: "other", reason } })
     assert.equal(response.status, 200, JSON.stringify(await response.clone().json()))
   }
   /** The driver's route read, parsed with its own contract: the pickups carry their places. */

@@ -42,7 +42,7 @@ export const QUEUE_MODULE_IDS: ReadonlySet<string> = new Set(["exceptions"])
  */
 export const RICH_MODULE_TABLES: Readonly<Record<string, RichModuleTable>> = {
   routes: {
-    seededFactColumns: ["Vehicle", "Driver"],
+    seededFactColumns: ["Vehicle", "Driver", "Distance", "Duration"],
     // Project and Area are dedicated table columns.
     excludedColumnFacts: new Set(["Project", "Area"]),
   },

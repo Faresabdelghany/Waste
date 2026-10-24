@@ -4,8 +4,10 @@
 // `origin` backfilled by the default, and the ticket's re-collection stop
 // with its key through the route, its index and its check — eleven ALTER
 // TABLE and CREATE INDEX statements diffed from 0015's spelling of the three
-// tables (route-as-of.ts and the two below) to the pickup as 0016 left it
-// (pickup-as-of.ts, since 0023 gave it its service), since an applied file is never
+// tables (route-as-of.ts and the two below) to 0016's — the pickup as 0016
+// left it (pickup-as-of.ts, since 0023 gave it its service) and the route as
+// 0016 left it (since 0024 gave it the cancel's reason code, O5 of #290) —
+// since an applied file is never
 // edited; execution-rendering.test.ts and resolution-rendering.test.ts map
 // today's tables back (`CHANGED_IN_0016`). Then migration 0016, which is
 // exactly those statements: no table is new, so nothing is hand-written —
@@ -187,7 +189,7 @@ const altered = [
 ]
 
 /** The statements as drizzle-kit writes them: the three tables from 0015's spelling to today's, in the order its loader takes a module's exports, sorted. */
-const generatedAlterations = (): Promise<string[]> => statementsBetween({ pickup: pickupAsOf0015, route: routeAsOf("0015"), ticket: ticketAsOf0015 }, { pickup: pickupAsOf0016, route, ticket })
+const generatedAlterations = (): Promise<string[]> => statementsBetween({ pickup: pickupAsOf0015, route: routeAsOf("0015"), ticket: ticketAsOf0015 }, { pickup: pickupAsOf0016, route: routeAsOf("0016"), ticket })
 
 const fileStatements = async (): Promise<string[]> => statementsOf(await readFile(join(MIGRATIONS_FOLDER, MIGRATION), "utf8"))
 

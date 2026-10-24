@@ -339,7 +339,7 @@ describe("a Service Provider's reach on the routes and the pickups", { skip: dat
         { path: `/routes/${planned.id}/dispatch`, method: "POST", body: undefined, family: "route" },
         { path: `/routes/${planned.id}/reschedule`, method: "POST", body: { plannedStartTime: "07:00" }, family: "route" },
         { path: `/routes/${planned.id}/release-hold`, method: "POST", body: {}, family: "route" },
-        { path: `/routes/${planned.id}/cancel`, method: "POST", body: { reason: "Not ours" }, family: "route" },
+        { path: `/routes/${planned.id}/cancel`, method: "POST", body: { reasonCode: "other", reason: "Not ours" }, family: "route" },
         { path: `/routes/${planned.id}/pickup-order`, method: "PUT", body: { pickupIds: [...planned.pickupIds] }, family: "route" },
         { path: `/routes/${planned.id}/optimise`, method: "POST", body: undefined, family: "route" },
         { path: `/routes/${planned.id}/pickups`, method: "POST", body: { containerId: ex.containers.bin1.id }, family: "route" },

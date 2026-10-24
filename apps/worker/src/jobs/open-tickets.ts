@@ -133,9 +133,10 @@ const PickupPayload = Pickup.extend({ proofs: z.array(ProofOfService).optional()
  * A problem reported on the route alone: the `Route` with the problem proof
  * beside it (`readRouteWithProofs`, the applier's). The hold arrived on the
  * wire with #209, so a payload the outbox took before then carries no
- * `heldAt` and reads as a route the scheme's, never a dead letter.
+ * `heldAt` and reads as a route the scheme's, never a dead letter; so with
+ * the cancel's reason code (O5 of #290), which one taken before reads as none.
  */
-const RoutePayload = z.object({ ...routeFields, heldAt: routeFields.heldAt.default(null), proofs: z.array(ProofOfService) })
+const RoutePayload = z.object({ ...routeFields, heldAt: routeFields.heldAt.default(null), cancelReasonCode: routeFields.cancelReasonCode.default(null), proofs: z.array(ProofOfService) })
 
 /** The two partial unique indexes that are the consumer's idempotency keys; a 23505 on either is an event handled before. */
 const TICKET_SOURCE_INDEX = tableObjectName(ticket, "source_event_id_idx", "openTickets")

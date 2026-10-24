@@ -8,7 +8,7 @@ import { describe, test } from "node:test"
 import type { Driver } from "@waste/contracts/fleet"
 import { A_WORK_ORDER_OF_A_CONTAINER, PickupAdd, PickupCorrection, PickupRemove, type Pickup } from "@waste/contracts/pickups"
 import { RouteAssign, RouteCancel, RouteReschedule, type Route } from "@waste/contracts/routes"
-import { PICKUP_OUTCOMES } from "@waste/domain/execution/vocabulary"
+import { OFFICE_CANCEL_REASON_CODES, PICKUP_OUTCOMES } from "@waste/domain/execution/vocabulary"
 
 import { NOTHING_RESOLVED, type MappingContext } from "../../api/records/adapter"
 import { driverAdapter } from "../../api/records/fleet"
@@ -20,9 +20,11 @@ import { DEPOTS_MODULE, DRIVERS_MODULE, isTrailerRecord, VEHICLES_MODULE } from 
 import { FIXTURE_COMPANY_ID, type BusinessRecord } from "../business-modules"
 import type { BusinessFormSchema } from "../business-form-types"
 import { MASTER_DATA_MODULE } from "../master-data"
+import { ORGANISATION_MODULE } from "../containers"
 import { PROPERTIES_MODULE, SHARED_POINTS_MODULE } from "../properties"
 import { A_WORK_ORDER_IS_OF_A_CONTAINER } from "../pickup-services"
-import { createRouteRecord, PICKUP_COMMAND_FORMS, ROUTE_COMMAND_FORMS, ROUTE_CREATE_FORM, routeCommandValues } from "../routes"
+import { SERVICE_PROVIDERS_MODULE } from "../provider-money"
+import { createRouteRecord, DISPATCH_DAY_FORM, dispatchDayRows, PICKUP_COMMAND_FORMS, ROUTE_COMMAND_FORMS, ROUTE_CREATE_FORM, routeCommandValues } from "../routes"
 
 const NOW = new Date("2026-09-30T12:00:00Z")
 const STAMPS = { createdAt: "2026-09-29T02:00:00.000Z", updatedAt: "2026-09-29T02:00:00.000Z" }
@@ -38,6 +40,7 @@ const route: Route = {
   label: "RC-1042",
   status: "planned",
   note: null,
+  cancelReasonCode: null,
   cancelledByGeneration: false,
   generationRunId: null,
   plannedStartTime: "06:30",
@@ -72,9 +75,10 @@ describe("the vehicle pickers", () => {
 })
 
 describe("the route's dialogs", () => {
-  test("assign names the Planned Assignment's five fields, each a picker of the module that holds it, none required", () => {
+  test("assign names the Planned Assignment's six fields, each a picker of the module that holds it, none required — the service provider since O5 of #290", () => {
     const form = ROUTE_COMMAND_FORMS[ASSIGN_ROUTE]
-    assert.deepEqual(fieldIdsOf(form), ["vehicleId", "driverId", "trailerId", "depotId", "unloadingStationId"])
+    assert.deepEqual(fieldIdsOf(form), ["vehicleId", "driverId", "trailerId", "serviceProviderId", "depotId", "unloadingStationId"])
+    assert.deepEqual(fieldOf(form, "serviceProviderId")?.relation, SERVICE_PROVIDERS_MODULE)
     assert.deepEqual(requiredOf(form), [])
     assert.deepEqual(fieldOf(form, "vehicleId")?.relation, VEHICLES_MODULE)
     assert.deepEqual(fieldOf(form, "driverId")?.relation, DRIVERS_MODULE)
@@ -89,6 +93,7 @@ describe("the route's dialogs", () => {
       vehicleId: `vehicle-${route.planned.vehicleId}`,
       driverId: `driver-${route.planned.driverId}`,
       trailerId: "",
+      serviceProviderId: "",
       depotId: "",
       unloadingStationId: "",
       operatingDate: "2026-10-01",
@@ -99,9 +104,12 @@ describe("the route's dialogs", () => {
     assert.ok(RouteAssign.safeParse(body).success)
   })
 
-  test("reschedule names the day it runs, required, and its planned start", () => {
+  test("reschedule names the day it runs, required, its planned start, and whether a non-working day is meant (O5 of #290)", () => {
     const form = ROUTE_COMMAND_FORMS[RESCHEDULE_ROUTE]
-    assert.deepEqual(fieldIdsOf(form), ["operatingDate", "plannedStartTime"])
+    assert.deepEqual(fieldIdsOf(form), ["operatingDate", "plannedStartTime", "acceptNonWorkingDay"])
+    assert.deepEqual([fieldOf(form, "acceptNonWorkingDay")?.type, fieldOf(form, "acceptNonWorkingDay")?.defaultValue], ["checkbox", false])
+    const knowingly = routeAdapter.commands?.[RESCHEDULE_ROUTE]?.toBody?.({ ...routeCommandValues(record), operatingDate: "2026-10-03", acceptNonWorkingDay: true }, record, context)
+    assert.ok(RouteReschedule.safeParse(knowingly).success, JSON.stringify(knowingly))
     assert.deepEqual(requiredOf(form), ["operatingDate"])
     assert.equal(fieldOf(form, "operatingDate")?.type, "date")
     assert.equal(fieldOf(form, "plannedStartTime")?.type, "time")
@@ -149,12 +157,32 @@ describe("the route's dialogs", () => {
     assert.deepEqual(toBody({ ...atAProperty, service: "deliver" }), { path: "service", message: "Book an emptying, a repair or a wash" })
   })
 
-  test("cancel asks why, and the reason is the body", () => {
+  test("cancel asks why as one of the office's codes, and in words; the two are the body (O5 of #290)", () => {
     const form = ROUTE_COMMAND_FORMS[CANCEL_ROUTE]
-    assert.deepEqual(fieldIdsOf(form), ["reason"])
-    assert.deepEqual(requiredOf(form), ["reason"])
-    const body = routeAdapter.commands?.[CANCEL_ROUTE]?.toBody?.({ reason: "Road closed" }, record, context)
+    assert.deepEqual(fieldIdsOf(form), ["reasonCode", "reason"])
+    assert.deepEqual(requiredOf(form), ["reasonCode", "reason"])
+    assert.deepEqual(fieldOf(form, "reasonCode")?.options?.map((option) => option.value), [...OFFICE_CANCEL_REASON_CODES])
+    assert.equal(fieldOf(form, "reasonCode")?.options?.[0]?.label, "Vehicle breakdown")
+    const body = routeAdapter.commands?.[CANCEL_ROUTE]?.toBody?.({ reasonCode: "road-closure", reason: "Road closed" }, record, context)
     assert.ok(RouteCancel.safeParse(body).success)
+  })
+
+  test("Dispatch day asks for the project and the day, then offers the project's planned routes of that day by number (O5 of #290)", () => {
+    assert.deepEqual(fieldIdsOf(DISPATCH_DAY_FORM), ["projectId", "operatingDate"])
+    assert.deepEqual(requiredOf(DISPATCH_DAY_FORM), ["projectId", "operatingDate"])
+    assert.deepEqual(fieldOf(DISPATCH_DAY_FORM, "projectId")?.relation, ORGANISATION_MODULE)
+    const projectId = record.projectIds?.[0] ?? ""
+    const at = (name: string, values: Record<string, string>, projectIds = [projectId]): BusinessRecord => ({ ...record, id: `route-${name}`, name, projectIds, submittedValues: { ...record.submittedValues, ...values } })
+    const rows = [
+      at("RC-1010", { operatingDate: "2026-10-01", status: "planned" }),
+      at("RC-1002", { operatingDate: "2026-10-01", status: "planned" }),
+      at("RC-1003", { operatingDate: "2026-10-01", status: "ready" }),
+      at("RC-1004", { operatingDate: "2026-10-02", status: "planned" }),
+      at("RC-1005", { operatingDate: "2026-10-01", status: "planned" }, ["project-elsewhere"]),
+    ]
+    assert.deepEqual(dispatchDayRows(rows, projectId, "2026-10-01").map((row) => row.name), ["RC-1002", "RC-1010"], "a ready one is dispatched already, another day's and another project's are not this day's")
+    assert.deepEqual(dispatchDayRows(rows, undefined, "2026-10-01"), [])
+    assert.deepEqual(dispatchDayRows(rows, projectId, ""), [])
   })
 })
 

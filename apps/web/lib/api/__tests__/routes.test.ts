@@ -15,8 +15,8 @@ import type { Driver, Vehicle } from "@waste/contracts/fleet"
 import type { Project } from "@waste/contracts/organisation"
 import type { Depot, UnloadingStation } from "@waste/contracts/places"
 import { PickupAdd } from "@waste/contracts/pickups"
-import { PickupOrderSet, Route, RouteAssign, RouteCancel, RouteCreate, RouteDetail, RouteReleaseHold, RouteReschedule } from "@waste/contracts/routes"
-import type { ActivePlan } from "@waste/contracts/plans"
+import { DISPATCH_MANY_MAX, PickupOrderSet, Route, RouteAssign, RouteCancel, RouteCreate, RouteDetail, RouteDispatchMany, RouteReleaseHold, RouteReschedule } from "@waste/contracts/routes"
+import type { ActivePlan, Plan } from "@waste/contracts/plans"
 
 import { FIXTURE_COMPANY_ID, getModuleDefinition, type BusinessRecord } from "../../data/business-modules"
 import { createRouteRecord, ROUTE_ACTIVE_PLAN_KEY } from "../../data/routes"
@@ -31,9 +31,13 @@ import {
   addedStopBody,
   ASSIGN_ROUTE,
   CANCEL_ROUTE,
+  DISPATCH_BATCH,
   DISPATCH_ROUTE,
+  dispatchRoutes,
   isHeldRoute,
   MADE_BY_THE_OFFICE,
+  OPTIMISE_ROUTE,
+  planLine,
   RELEASE_HOLD,
   REORDER_ROUTE,
   RESCHEDULE_ROUTE,
@@ -42,6 +46,7 @@ import {
   routeAdapter,
   routeCommandLog,
   routeDetail,
+  routePlans,
   routesModule,
   routesWindowFrom,
 } from "../records/routes"
@@ -82,6 +87,7 @@ const planned: Route = {
   label: "RC-1042",
   status: "planned",
   note: null,
+  cancelReasonCode: null,
   cancelledByGeneration: false,
   generationRunId: "01a0d2a4-a280-7031-8000-000000000001",
   plannedStartTime: "06:30",
@@ -195,9 +201,11 @@ describe("a route", () => {
       vehicleId: wh24Record.id,
       driverId: madsRecord.id,
       trailerId: "",
+      serviceProviderId: "",
       depotId: depotRecord.id,
       unloadingStationId: stationRecord.id,
       status: "planned",
+      cancelReasonCode: "",
       heldAt: "",
     })
   })
@@ -292,7 +300,7 @@ describe("a route", () => {
     assert.equal(routeAdapter.statuses, undefined, "a route's status moves by command alone")
     const record = routeAdapter.toRecord(planned, context())
     const edited: BusinessRecord = { ...record, submittedValues: { ...record.submittedValues, plannedStartTime: "07:00" } }
-    assert.deepEqual(routeAdapter.toPatchBody(record, edited, context()), { path: "", message: "A route is changed by its commands: assign, dispatch, reschedule, release its hold, cancel, add a stop or reorder its stops" })
+    assert.deepEqual(routeAdapter.toPatchBody(record, edited, context()), { path: "", message: "A route is changed by its commands: assign, dispatch, reschedule, release its hold, cancel, add a stop, optimise or reorder its stops" })
     const { fetch, calls } = scripted([])
     const current = loaded({ records: [record], serverIds: new Map([[record.id, planned.id]]) }, 1)
     const moved = await writeRecord(clientOver(fetch), routesModule, current, { ...record, status: "Ready" }, options)
@@ -427,7 +435,7 @@ describe("the route's commands", () => {
   })
 
   test("assign is refused here when nothing moved, or a field names no row of its kind the API holds", () => {
-    assert.deepEqual(assign?.toBody?.({ ...record.submittedValues }, record, context()), { path: "vehicleId", message: "Nothing to assign: pick another vehicle, driver, trailer, depot or unloading station" })
+    assert.deepEqual(assign?.toBody?.({ ...record.submittedValues }, record, context()), { path: "vehicleId", message: "Nothing to assign: pick another vehicle, driver, trailer, service provider, depot or unloading station" })
     assert.deepEqual(assign?.toBody?.({ ...record.submittedValues, vehicleId: "vehicle-wh-24" }, record, context()), { path: "vehicleId", message: "Pick a vehicle the API holds" })
     assert.deepEqual(assign?.toBody?.({ ...record.submittedValues, driverId: wh31Record.id }, record, context()), { path: "driverId", message: "Pick a driver the API holds" })
     assert.deepEqual(assign?.toBody?.({ ...record.submittedValues, depotId: stationRecord.id }, record, context()), { path: "depotId", message: "Pick a depot the API holds" })
@@ -507,18 +515,21 @@ describe("the route's commands", () => {
     assert.equal(outcome.record.facts["Service date"], "2026-10-01")
   })
 
-  test("cancel carries its reason, which becomes the route's deviation; without one it is refused here", async () => {
-    const body = cancel?.toBody?.({ reason: "Road closed on Nørrebrogade" }, record, context())
-    assert.deepEqual(body, { reason: "Road closed on Nørrebrogade" })
+  test("cancel carries its reason code and its reason, which becomes the route's deviation; without either it is refused here (O5 of #290)", async () => {
+    const body = cancel?.toBody?.({ reasonCode: "road-closure", reason: "Road closed on Nørrebrogade" }, record, context())
+    assert.deepEqual(body, { reasonCode: "road-closure", reason: "Road closed on Nørrebrogade" })
     assert.ok(RouteCancel.safeParse(body).success)
-    assert.deepEqual(cancel?.toBody?.({ reason: "  " }, record, context()), { path: "reason", message: "Say why the route is cancelled" })
-    const { fetch, calls } = scripted([() => json(detailOf({ ...planned, status: "cancelled", note: "Road closed on Nørrebrogade", cancelledAt: "2026-10-01T06:02:00.000Z" }))])
-    const outcome = await commandRecord(clientOver(fetch), routesModule, current, record, CANCEL_ROUTE, { reason: "Road closed on Nørrebrogade" }, options)
+    assert.deepEqual(cancel?.toBody?.({ reasonCode: "road-closure", reason: "  " }, record, context()), { path: "reason", message: "Say why the route is cancelled" })
+    assert.deepEqual(cancel?.toBody?.({ reason: "Road closed" }, record, context()), { path: "reasonCode", message: "Pick why the route is cancelled" })
+    assert.deepEqual(cancel?.toBody?.({ reasonCode: "regeneration", reason: "Road closed" }, record, context()), { path: "reasonCode", message: "Pick why the route is cancelled" }, "a run's code is not the office's")
+    const { fetch, calls } = scripted([() => json(detailOf({ ...planned, status: "cancelled", note: "Road closed on Nørrebrogade", cancelReasonCode: "road-closure", cancelledAt: "2026-10-01T06:02:00.000Z" }))])
+    const outcome = await commandRecord(clientOver(fetch), routesModule, current, record, CANCEL_ROUTE, { reasonCode: "road-closure", reason: "Road closed on Nørrebrogade" }, options)
     assert.equal(calls[0].url, `http://api.test/routes/${planned.id}/cancel`)
     assert.equal(outcome.kind, "done")
     if (outcome.kind !== "done") return
     assert.equal(outcome.record.status, "Cancelled")
     assert.equal(outcome.record.facts.Deviation, "Road closed on Nørrebrogade")
+    assert.equal(outcome.record.facts["Cancel reason"], "Road closure")
   })
 
   test("the stop order is PUT whole, every open pickup once by server id, and the answer carries the new Plan", async () => {
@@ -542,6 +553,14 @@ describe("the route's commands", () => {
     assert.equal(JSON.parse(String(outcome.record.submittedValues?.[ROUTE_ACTIVE_PLAN_KEY])).solver, "manual")
   })
 
+  test("reschedule says a day the project rests on is meant only when the dialog does, and only on a move of the day (O5 of #290)", () => {
+    const knowingly = reschedule?.toBody?.({ operatingDate: "2026-10-03", plannedStartTime: "06:30", acceptNonWorkingDay: true }, record, context())
+    assert.deepEqual(knowingly, { operatingDate: "2026-10-03", acceptNonWorkingDay: true })
+    assert.ok(RouteReschedule.safeParse(knowingly).success)
+    assert.deepEqual(reschedule?.toBody?.({ operatingDate: "2026-10-03", plannedStartTime: "06:30", acceptNonWorkingDay: false }, record, context()), { operatingDate: "2026-10-03" }, "unticked, the flag is left out")
+    assert.deepEqual(reschedule?.toBody?.({ operatingDate: "2026-10-01", plannedStartTime: "07:00", acceptNonWorkingDay: true }, record, context()), { plannedStartTime: "07:00" }, "a start moved on the same day asks no calendar")
+  })
+
   test("the route's own read gives its stops in sequence, its sessions and its unloads; its command log is the device's", async () => {
     const detail = detailOf({ ...planned, status: "ready" })
     const receipts = { items: [], nextCursor: null }
@@ -552,5 +571,102 @@ describe("the route's commands", () => {
       calls.map((call) => call.url),
       [`http://api.test/routes/${planned.id}`, `http://api.test/routes/${planned.id}/commands?limit=200`],
     )
+  })
+})
+
+describe("the dispatch day's tooling (O5 of #290)", () => {
+  const record = routeAdapter.toRecord(planned, context())
+  const current = loaded({ records: [record], serverIds: new Map([[record.id, planned.id]]) }, 1)
+  const providerId = "01a0d2a4-a280-7003-8000-000000000009"
+  const nordren: BusinessRecord = { ...projectRecord, id: `service-provider-${providerId}`, name: "NordRen ApS", recordKind: "Service provider company", facts: {}, submittedValues: {} }
+  const withProvider: ServerRecordsState = new Map([...state, ["service-providers.service-providers", loaded({ records: [nordren], serverIds: serverIdsOf([nordren], [providerId]) }, 1)]])
+
+  test("a route measured by its active Plan says its distance and duration; one unmeasured says neither", () => {
+    const measured = routeAdapter.toRecord(detailOf(planned, { activePlan: plan }), context())
+    assert.deepEqual([measured.facts.Distance, measured.facts.Duration], ["18.4 km", "45 min"])
+    const calculating = routeAdapter.toRecord(detailOf(planned, { activePlan: { ...plan, status: "calculating", distanceMetres: null, durationSeconds: null } }), context())
+    assert.deepEqual([calculating.facts.Distance, calculating.facts.Duration], [undefined, undefined])
+    assert.deepEqual([record.facts.Distance, record.facts.Duration], [undefined, undefined], "a list row without a Plan reading says nothing")
+  })
+
+  test("assign names the service provider by server id, a cleared one as null, and the route reads it back", () => {
+    const assign = routeAdapter.commands?.[ASSIGN_ROUTE]
+    const named = assign?.toBody?.({ serviceProviderId: nordren.id }, record, context(resolverOver(withProvider)))
+    assert.deepEqual(named, { serviceProviderId: providerId })
+    assert.ok(RouteAssign.safeParse(named).success)
+    assert.deepEqual(assign?.toBody?.({ serviceProviderId: "NordRen" }, record, context(resolverOver(withProvider))), { path: "serviceProviderId", message: "Pick a service provider the API holds" })
+    const provided = routeAdapter.toRecord({ ...planned, planned: { ...planned.planned, serviceProviderId: providerId } }, context(resolverOver(withProvider)))
+    assert.deepEqual([provided.submittedValues?.serviceProviderId, provided.facts["Service provider"]], [nordren.id, "NordRen ApS"])
+    assert.deepEqual(assign?.toBody?.({ serviceProviderId: "" }, provided, context(resolverOver(withProvider))), { serviceProviderId: null })
+    assert.equal(record.submittedValues?.serviceProviderId, "", "none planned")
+  })
+
+  test("optimise posts no body, then reads the route back for its active Plan, and touches what a new order touches", async () => {
+    const optimise = routeAdapter.commands?.[OPTIMISE_ROUTE]
+    assert.equal(optimise?.toBody, undefined)
+    assert.deepEqual(optimise?.touches, ["route-studio.pickups", "route-studio.live"])
+    const answer: Plan & { fallback: null } = { id: "01a0d2a4-a280-7032-8000-000000000002", ...STAMPS, projectId: copenhagen.id, routeId: planned.id, solver: "optimiser", status: "calculating", trip: "full", distanceMetres: null, durationSeconds: null, deferredUntil: null, failureReason: null, provider: "fake", engineVersion: null, graphDate: null, fallback: null }
+    const { fetch, calls } = scripted([() => json(answer, 202), () => json(detailOf(planned, { activePlan: plan }))])
+    const outcome = await commandRecord(clientOver(fetch), routesModule, current, record, OPTIMISE_ROUTE, undefined, options)
+    assert.deepEqual(
+      calls.map((call) => [call.init.method, call.url]),
+      [
+        ["POST", `http://api.test/routes/${planned.id}/optimise`],
+        ["GET", `http://api.test/routes/${planned.id}`],
+      ],
+    )
+    assert.equal(outcome.kind, "done")
+    if (outcome.kind !== "done") return
+    assert.equal(outcome.record.facts.Distance, "18.4 km")
+  })
+
+  test("a Plan's line in the route's history: when, who ordered it, where it stands, its measure, and whether it is the active one", () => {
+    const base = { id: plan.id, createdAt: "2026-10-01T04:00:00.000Z", distanceMetres: 18_400, durationSeconds: 3_900, failureReason: null }
+    assert.equal(planLine({ ...base, solver: "optimiser", status: "ready" }, { activePlanId: plan.id, timezone: "Europe/Copenhagen" }), "2026-10-01 06:00 · Optimised · Ready · 18.4 km · 1 h 05 min · Active")
+    assert.equal(planLine({ ...base, solver: "manual", status: "calculating", distanceMetres: null, durationSeconds: null }, { activePlanId: null, timezone: "Europe/Copenhagen" }), "2026-10-01 06:00 · The dispatcher's order · Calculating")
+    assert.equal(planLine({ ...base, solver: "baseline", status: "failed", failureReason: "superseded" }, { activePlanId: "another", timezone: "Europe/Copenhagen" }), "2026-10-01 06:00 · Generated order, not optimised · Failed · superseded")
+  })
+
+  test("the route's Plans are its history, read page after page; a day's routes go out in one bulk dispatch the contract accepts", async () => {
+    const listed = { items: [], nextCursor: null }
+    const results = { results: [{ routeId: planned.id, outcome: "refused", status: 409, detail: "Route RC-1042 has no planned driver; assign one first" }] }
+    const { fetch, calls } = scripted([() => json(listed), () => json(results)])
+    assert.deepEqual(await routePlans(clientOver(fetch), planned.id), [])
+    assert.deepEqual(await dispatchRoutes(clientOver(fetch), [planned.id]), results)
+    assert.deepEqual(
+      calls.map((call) => [call.init.method ?? "GET", call.url]),
+      [
+        ["GET", `http://api.test/routes/${planned.id}/plans?limit=200`],
+        ["POST", "http://api.test/routes/dispatch"],
+      ],
+    )
+    assert.ok(RouteDispatchMany.safeParse(bodyOf(calls[1])).success)
+  })
+
+  test("a day of more routes than one request takes goes out in batches the contract accepts, the results in the order given; nothing to dispatch asks nothing", async () => {
+    assert.equal(DISPATCH_BATCH, DISPATCH_MANY_MAX, "the web spells the contracts' bound again")
+    const ids = Array.from({ length: DISPATCH_BATCH + 1 }, (_, index) => `01a0d2a4-a280-7030-8000-${String(index).padStart(12, "0")}`)
+    const answer = (call: { url: string; init: RequestInit }) => json({ results: (bodyOf(call) as { routeIds: string[] }).routeIds.map((routeId) => ({ routeId, outcome: "refused", status: 404, detail: `No route ${routeId}` })) })
+    const { fetch, calls } = scripted([answer, answer])
+    const { results } = await dispatchRoutes(clientOver(fetch), ids)
+    assert.deepEqual(
+      calls.map((call) => (bodyOf(call) as { routeIds: string[] }).routeIds.length),
+      [DISPATCH_BATCH, 1],
+    )
+    for (const call of calls) assert.ok(RouteDispatchMany.safeParse(bodyOf(call)).success)
+    assert.deepEqual(
+      results.map((result) => result.routeId),
+      ids,
+    )
+    const none = scripted([])
+    assert.deepEqual(await dispatchRoutes(clientOver(none.fetch), []), { results: [] })
+    assert.equal(none.calls.length, 0)
+  })
+
+  test("a route is read back as its details read it, for the row's measure once a Plan is ready", async () => {
+    const { fetch, calls } = scripted([() => json(detailOf(planned, { activePlan: plan }))])
+    const read = await routeAdapter.read?.(clientOver(fetch), planned.id)
+    assert.equal(calls[0].url, `http://api.test/routes/${planned.id}`)
+    assert.equal(routeAdapter.toRecord(read as Route, context()).facts.Distance, "18.4 km")
   })
 })

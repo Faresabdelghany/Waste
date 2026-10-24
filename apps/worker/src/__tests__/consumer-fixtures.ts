@@ -291,6 +291,7 @@ export function routePayload(tenant: ConsumerTenant, seeded: SeededRoute, status
     label: seeded.label,
     status,
     note: null,
+    cancelReasonCode: null,
     cancelledByGeneration: false,
     generationRunId: null,
     plannedStartTime: null,

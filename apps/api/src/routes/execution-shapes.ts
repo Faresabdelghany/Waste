@@ -43,7 +43,7 @@ import { reviewStatus, weightReviewOf } from "@waste/db/query/weight-review"
 import { driverCommand, pickup, proofOfService, route, session, unload } from "@waste/db/schema/execution"
 import { noRouteAssigned } from "@waste/domain/execution/commands"
 import { progressOf, type PickupCounts } from "@waste/domain/execution/progress"
-import type { CommandOutcome, DriverCommandKind, ExecutionSource, PickupOrigin, PickupOutcome, PickupReason, PickupService, PickupStatus, ProofKind, RouteStatus } from "@waste/domain/execution/vocabulary"
+import type { CommandOutcome, DriverCommandKind, ExecutionSource, PickupOrigin, PickupOutcome, PickupReason, PickupService, PickupStatus, ProofKind, RouteCancelReasonCode, RouteStatus } from "@waste/domain/execution/vocabulary"
 import type { WeightReviewStatus } from "@waste/domain/finance/vocabulary"
 import { and, asc, count, eq, inArray, isNull, sql, type SQL } from "drizzle-orm"
 
@@ -71,6 +71,7 @@ export const routeColumns = {
   number: route.number,
   status: route.status,
   note: route.note,
+  cancelReasonCode: route.cancelReasonCode,
   cancelledByGeneration: route.cancelledByGeneration,
   generationRunId: route.generationRunId,
   activePlanId: route.activePlanId,
@@ -111,6 +112,7 @@ export function routeOf(row: RouteRow, progress: RouteProgress): Route {
     label: labelOf(row),
     status: row.status as RouteStatus,
     note: row.note,
+    cancelReasonCode: row.cancelReasonCode as RouteCancelReasonCode | null,
     cancelledByGeneration: row.cancelledByGeneration,
     generationRunId: row.generationRunId,
     plannedStartTime: row.plannedStartTime === null ? null : timeOf(row.plannedStartTime),

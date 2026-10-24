@@ -34,6 +34,7 @@ export function route(overrides: Partial<Route> = {}): Route {
     label: "RC-1042",
     status: "ready",
     note: null,
+    cancelReasonCode: null,
     cancelledByGeneration: false,
     generationRunId: null,
     plannedStartTime: "06:00",

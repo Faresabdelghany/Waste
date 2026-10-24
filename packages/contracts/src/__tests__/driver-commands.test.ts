@@ -278,6 +278,7 @@ describe("what the door answers and stores", () => {
       label: "RC-1042",
       status: "ready",
       note: null,
+      cancelReasonCode: null,
       cancelledByGeneration: false,
       generationRunId: null,
       plannedStartTime: "06:30",

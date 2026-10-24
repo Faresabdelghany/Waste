@@ -2,11 +2,12 @@
 // that diff an applied file's ALTER TABLEs from one era's spelling to the
 // next: 0008 bare (Issue #104), 0012 with the run that last wrote it (Issue
 // #97 part B), 0013 with the active Plan too (#169), 0015 with the hold too
-// (#209), and today's with the scheme and the group nullable together (#111,
-// migration 0016 — that one is src/schema/execution.ts itself). One spelling
-// here, so generation-rendering.test.ts, routing-rendering.test.ts,
-// route-hold-rendering.test.ts and ad-hoc-rendering.test.ts cannot drift on
-// what an era said. Another table object of the same name is fine, since
+// (#209), and 0016 with the scheme and the group nullable together (#111);
+// today's, with the cancel's reason code too (O5 of #290, migration 0024), is
+// src/schema/execution.ts itself. One spelling here, so
+// generation-rendering.test.ts, routing-rendering.test.ts,
+// route-hold-rendering.test.ts, ad-hoc-rendering.test.ts and
+// route-cancel-reason-rendering.test.ts cannot drift on what an era said. Another table object of the same name is fine, since
 // nothing connects to a database. Not a suite of its own: only ever imported.
 import { sql } from "drizzle-orm"
 import { boolean, check, date, integer, text, time, timestamp, unique, uuid, type PgTable } from "drizzle-orm/pg-core"
@@ -27,7 +28,7 @@ import { wms } from "../schema/wms"
 const instant = () => timestamp({ withTimezone: true })
 
 /** The eras an applied file left the route in. */
-type Era = "0008" | "0012" | "0013" | "0015"
+type Era = "0008" | "0012" | "0013" | "0015" | "0016"
 
 /** Whether the era is the given file's or a later one's: the eras are four-digit file numbers, so their text orders as they do. */
 const since = (asOf: Era, file: Era): boolean => asOf >= file
@@ -44,8 +45,8 @@ const routeTableAsOf = (asOf: Era) =>
       ...id,
       ...projectScoped,
       ...timestamps,
-      routeSchemeId: uuid().notNull(),
-      collectionGroupId: uuid().notNull(),
+      routeSchemeId: since(asOf, "0016") ? uuid() : uuid().notNull(),
+      collectionGroupId: since(asOf, "0016") ? uuid() : uuid().notNull(),
       serviceDate: date().notNull(),
       operatingDate: date().notNull(),
       status: text().notNull().default("planned"),
@@ -97,6 +98,14 @@ const routeTableAsOf = (asOf: Era) =>
         sql`case ${t.status} when 'planned' then ${t.dispatchedAt} is null and ${t.startedAt} is null and ${t.completedAt} is null and ${t.cancelledAt} is null when 'ready' then ${t.dispatchedAt} is not null and ${t.startedAt} is null and ${t.completedAt} is null and ${t.cancelledAt} is null when 'active' then ${t.dispatchedAt} is not null and ${t.startedAt} is not null and ${t.completedAt} is null and ${t.cancelledAt} is null when 'completed' then ${t.dispatchedAt} is not null and ${t.startedAt} is not null and ${t.completedAt} is not null and ${t.cancelledAt} is null when 'cancelled' then ${t.cancelledAt} is not null and ${t.completedAt} is null and (${t.startedAt} is null or ${t.dispatchedAt} is not null) else false end`,
       ),
       ...(since(asOf, "0015") ? [check(tableObjectName(t.id.table, "hold_shape", "route"), sql`${t.heldAt as (typeof t)["startedAt"]} is null or ${t.status} = 'planned'`)] : []),
+      ...(since(asOf, "0016")
+        ? [
+            check(
+              tableObjectName(t.id.table, "scheme_shape", "route"),
+              sql`(${t.routeSchemeId} is null) = (${t.collectionGroupId} is null) and (${t.routeSchemeId} is not null or (${t.generationRunId as (typeof t)["id"]} is null and not ${t.cancelledByGeneration}))`,
+            ),
+          ]
+        : []),
       ...(since(asOf, "0012") ? [projectReference(t, [t.generationRunId as (typeof t)["id"]], generationRun)] : []),
       tenantIndex(t, t.collectionGroupId),
       tenantIndex(t, t.projectId, t.operatingDate),
