@@ -14,8 +14,8 @@
 // what keeps them together).
 
 import type { BusinessRecord } from "../prototype-record"
-import { cleanFact, typedString } from "../record-values"
 import { isSoftDeleted } from "../record-visibility"
+import { containerAreaRefs } from "../route-schemes/matching"
 import {
   boundsFromPolygon,
   boundsPolygon,
@@ -52,11 +52,11 @@ const HULL_MARGIN_METRES = 80
 /** Half-width of the box drawn around one or two containers. */
 const POINT_BOX_METRES = 120
 
-function belongsTo(container: BusinessRecord, area: BusinessRecord): boolean {
-  const typed = typedString(container.submittedValues, "planningAreaId")
-  if (typed) return typed === area.id
-  const fact = cleanFact(container.facts["Planning area"])
-  return Boolean(fact && fact.toLowerCase() === area.name.trim().toLowerCase())
+/** Whether a container, by its areas today (`containerAreaRefs`), lies in the area: by id, else by name. */
+function belongsTo(refs: { ids: readonly string[]; names: readonly string[] }, area: BusinessRecord): boolean {
+  if (refs.ids.length > 0) return refs.ids.includes(area.id)
+  const name = area.name.trim().toLowerCase()
+  return refs.names.some((candidate) => candidate.toLowerCase() === name)
 }
 
 /**
@@ -144,13 +144,13 @@ export function planningAreaLayers(
 ): PlanningAreaLayer[] {
   const located = containers
     .filter((container) => !isSoftDeleted(container))
-    .map((container) => ({ container, spot: containerLocation(container, gazetteer) }))
-    .filter((entry): entry is { container: BusinessRecord; spot: LngLat } => entry.spot !== null)
+    .map((container) => ({ refs: containerAreaRefs(container), spot: containerLocation(container, gazetteer) }))
+    .filter((entry): entry is { refs: ReturnType<typeof containerAreaRefs>; spot: LngLat } => entry.spot !== null)
 
   return areas
     .filter((area) => !isSoftDeleted(area))
     .map((area, index) => {
-      const spots = located.filter(({ container }) => belongsTo(container, area)).map(({ spot }) => spot)
+      const spots = located.filter(({ refs }) => belongsTo(refs, area)).map(({ spot }) => spot)
       const polygon = storedOutline(area) ?? planningAreaOutline(spots)
       return {
         id: area.id,

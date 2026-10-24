@@ -5,6 +5,7 @@
 // numbers live in statistics.ts. Pure data logic.
 
 import { typedString, uniform } from "../record-values"
+import { containerAreaIds } from "../route-schemes/matching"
 import type { GuidedSchemeData } from "../route-schemes/quick-create"
 import type { LngLat } from "./geo"
 import type { MapPoint } from "./points"
@@ -51,8 +52,9 @@ export function schemeDraftFromSelection(
   )
   if (fraction) draft.wasteFraction = fraction
 
-  const area = uniform(selected.map((point) => typedString(point.record.submittedValues, "planningAreaId")))
-  if (area) draft.planningAreaId = area
+  // The one area every selected container lies in today (#232: one the API holds may lie in several).
+  const shared = selected.map((point) => containerAreaIds(point.record)).reduce<string[] | null>((common, ids) => (common === null ? ids : common.filter((id) => ids.includes(id))), null)
+  if (shared !== null && shared.length === 1) draft.planningAreaId = shared[0]
 
   const project = uniform(
     selected.map(

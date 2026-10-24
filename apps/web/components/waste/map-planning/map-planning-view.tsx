@@ -52,7 +52,7 @@ import { fractionColor } from "@/lib/map-planning/colors"
 import { serviceAreasForSelection } from "@waste/domain/map-planning/coverage"
 import { UNCOVERED_COLOR, coverageGaps, coverageInSelection } from "@waste/domain/map-planning/coverage-gaps"
 import { COMPARE_COLORS, compareSchemes, schemeStopSets } from "@waste/domain/map-planning/scheme-compare"
-import { MAP_FILTER_READERS } from "@waste/domain/map-planning/filters"
+import { mapFilterReaders } from "@waste/domain/map-planning/filters"
 import { formatDateRange, formatShortDate } from "@/lib/map-planning/format"
 import { boundsFromPolygon, pointInPolygon, type LngLat } from "@waste/domain/map-planning/geo"
 import { containerPoints, type MapPoint } from "@waste/domain/map-planning/points"
@@ -72,6 +72,7 @@ import {
   collectionWindowRange,
   inCollectionWindow,
   nextCollectionDate,
+  routeSchemeIndex,
   routeStopIndex,
   type CollectionWindow,
 } from "@waste/domain/map-planning/schedule"
@@ -212,15 +213,20 @@ export function MapPlanningView({
     () => containers.filter((record) => !isSoftDeleted(record) && containerLocation(record, FIXTURE_GAZETTEER) !== null),
     [containers],
   )
+  // The filters' readers: a container that names no scheme of its own — one the API holds — read by the schemes whose routes stop at it from today on (#232).
+  const filterReaders = useMemo(() => {
+    const names = new Map(schemes.map((scheme) => [scheme.id, scheme.name]))
+    return mapFilterReaders(routeSchemeIndex(routes, pickups, containers, { today, nameOf: (id) => names.get(id) }))
+  }, [containers, pickups, routes, schemes, today])
   const stopIndex = useMemo(() => routeStopIndex(routes, pickups, containers), [containers, routes, pickups])
   // The containers a filter set and window leave on the map — the live view
   // reads the current pair; loading a saved selection reads the saved one.
   const containersFor = useCallback(
     (activeFilters: BusinessFilters, activeWindow: CollectionWindow) =>
-      applyBusinessFilters(inServiceContainers, activeFilters, MAP_FILTER_READERS).filter((record) =>
+      applyBusinessFilters(inServiceContainers, activeFilters, filterReaders).filter((record) =>
         inCollectionWindow(nextCollectionDate(record, stopIndex, today), activeWindow, today),
       ),
-    [inServiceContainers, stopIndex, today],
+    [filterReaders, inServiceContainers, stopIndex, today],
   )
   const filteredContainers = useMemo(() => containersFor(filters, window), [containersFor, filters, window])
   const points = useMemo(() => containerPoints(filteredContainers, FIXTURE_GAZETTEER), [filteredContainers])
@@ -365,7 +371,8 @@ export function MapPlanningView({
   const hasSelection = shape !== null || selectedContainerIds.size > 0
 
   // Coverage resolves every counting scheme's stops against the registry as it is now.
-  const gaps = useMemo(() => coverageGaps(containers, schemes, today), [containers, schemes, today])
+  // Over the containers the map places: one not located yet has no marker to ring, and no area a rule could match it in.
+  const gaps = useMemo(() => coverageGaps(inServiceContainers, schemes, today), [inServiceContainers, schemes, today])
   const selectionCoverage = useMemo(
     () => coverageInSelection(gaps, selectedContainerIds),
     [gaps, selectedContainerIds],
@@ -538,6 +545,7 @@ export function MapPlanningView({
       <div className="px-4 py-3">
         <MapToolbar
           records={inServiceContainers}
+          readers={filterReaders}
           filters={filters}
           onFiltersChange={setFilters}
           window={window}

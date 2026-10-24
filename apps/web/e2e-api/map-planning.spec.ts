@@ -1,6 +1,8 @@
 import type { Page } from "@playwright/test"
 
+import { uniqueName } from "./env"
 import { chainLanded, expect, test } from "./fixtures"
+import { schemeWithRoutes } from "./routes-support"
 
 // Map Planning on the API (slice 9b of #81, Issue #184): the map places the
 // server's containers where their placements in force today are delivered
@@ -88,6 +90,26 @@ test("the Containers list mirrors the selection of the server's placed container
   const label = await firstRow.locator("span.font-medium").innerText()
   await firstRow.click()
   await expect(page.getByRole("dialog")).toContainText(label)
+})
+
+test("the filters offer each scheme whose routes stop at a container, a name holding ' · ' whole, and narrow the map to its stops (#232)", async ({ api, page }) => {
+  // A scheme of the run's own, generated: its routes stop at the seeded Residual containers in Indre By Operations.
+  const { scheme } = await schemeWithRoutes(api, `${uniqueName("E2E Map scheme")} · Week A`, 7)
+  await openMapPlanning(page)
+  // Every seeded placed container across the tenant's areas, before the filter.
+  const markers = page.locator("[data-marker]")
+  const before = await markers.count()
+  await page.getByRole("button", { name: "Filter", exact: true }).click()
+  const popover = page.getByRole("dialog").filter({ has: page.getByPlaceholder("Find a filter") })
+  await popover.getByRole("button", { name: /^Route scheme\b/ }).click()
+  const option = popover.locator("label").filter({ hasText: scheme.name })
+  await expect(option).toHaveCount(1)
+  await option.getByRole("checkbox").check()
+  await popover.getByRole("button", { name: "Apply filters" }).click()
+  await expect(page.getByText(`Route scheme: ${scheme.name}`, { exact: true })).toBeVisible()
+  // The scheme's stops alone: some, and fewer than the tenant's every container (Amager's and Nordhavn's are no stops of it).
+  await expect.poll(() => markers.count(), { message: "the map narrows to the scheme's stops" }).toBeLessThan(before)
+  expect(await markers.count()).toBeGreaterThan(0)
 })
 
 type ServiceAreaCreated = { id: string; name: string; code: string; planningAreaIds: string[]; wasteFractionIds: string[]; validFrom: string; validTo: string | null; assignment: { serviceProviderId: string } | null }

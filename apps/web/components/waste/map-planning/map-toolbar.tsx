@@ -21,6 +21,7 @@ import {
   businessFilterChips,
   removeBusinessFilterValue,
   type BusinessFilters,
+  type FilterValueReaders,
 } from "@waste/domain/business-filters"
 import type { BusinessRecord } from "@/lib/data/business-modules"
 import { MAP_FILTER_READERS } from "@waste/domain/map-planning/filters"
@@ -35,6 +36,8 @@ import { cn } from "@/lib/utils"
 export type MapToolbarProps = {
   /** The records the filter popover offers values from. */
   records: BusinessRecord[]
+  /** The readers the popover offers values by: the map's own (`mapFilterReaders`), else MAP_FILTER_READERS. */
+  readers?: FilterValueReaders
   filters: BusinessFilters
   onFiltersChange: (filters: BusinessFilters) => void
   window: CollectionWindow
@@ -47,6 +50,7 @@ export type MapToolbarProps = {
 
 export function MapToolbar({
   records,
+  readers,
   filters,
   onFiltersChange,
   window,
@@ -65,7 +69,7 @@ export function MapToolbar({
           records={records}
           value={filters}
           onChange={onFiltersChange}
-          readers={MAP_FILTER_READERS}
+          readers={readers ?? MAP_FILTER_READERS}
         />
         <Select
           value={window}

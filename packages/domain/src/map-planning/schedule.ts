@@ -52,47 +52,81 @@ export function collectionWindowRange(
 const DEAD_STATUSES: ReadonlySet<string> = new Set(["Cancelled", "Skipped", "Failed"])
 
 /**
+ * Each live stop of a live route, by the containers it collects: a stop
+ * names its container by id, and by its `Container ID` label — given the
+ * containers, a stop whose label is one of theirs counts for that container
+ * too, as routes.ts links them (#179).
+ */
+function* liveStops(
+  routes: readonly BusinessRecord[],
+  pickups: readonly BusinessRecord[],
+  containers: readonly BusinessRecord[],
+): Generator<{ containerIds: string[]; route: BusinessRecord }> {
+  const live = new Map(routes.filter((route) => !isSoftDeleted(route) && !DEAD_STATUSES.has(route.status)).map((route) => [route.id, route]))
+  const containerIdsByLabel = new Map<string, string>()
+  for (const container of containers) {
+    const label = cleanFact(container.facts["Container ID"])
+    if (label) containerIdsByLabel.set(label.toLowerCase(), container.id)
+  }
+  for (const pickup of pickups) {
+    if (isSoftDeleted(pickup) || DEAD_STATUSES.has(pickup.status)) continue
+    const containerId = typedString(pickup.submittedValues, "containerId")
+    const route = live.get(typedString(pickup.submittedValues, "routeId") ?? "")
+    if (!containerId || route === undefined) continue
+    const label = cleanFact(pickup.facts["Container ID"])?.toLowerCase()
+    const labelled = label === undefined ? undefined : containerIdsByLabel.get(label)
+    yield { containerIds: labelled === undefined || labelled === containerId ? [containerId] : [containerId, labelled], route }
+  }
+}
+
+/** Container id → each value `of` its live stops' routes give, sorted and once. */
+function indexStops(stops: Iterable<{ containerIds: string[]; route: BusinessRecord }>, of: (route: BusinessRecord) => string | undefined): Map<string, string[]> {
+  const index = new Map<string, Set<string>>()
+  for (const { containerIds, route } of stops) {
+    const value = of(route)
+    if (value === undefined) continue
+    for (const key of containerIds) index.set(key, (index.get(key) ?? new Set<string>()).add(value))
+  }
+  return new Map(Array.from(index.entries()).map(([containerId, values]) => [containerId, [...values].sort()]))
+}
+
+/**
  * Container id → sorted ISO dates on which a generated route collects it.
  * The date is the route's actual (possibly shifted) date, falling back to
- * the pickup's own service date. A stop names its container by id, and by
- * its `Container ID` label: given the containers, a stop whose label is one
- * of theirs counts for that container too, as routes.ts links them (#179).
+ * the pickup's own service date.
  */
 export function routeStopIndex(
   routes: readonly BusinessRecord[],
   pickups: readonly BusinessRecord[],
   containers: readonly BusinessRecord[] = [],
 ): Map<string, string[]> {
-  const routeDates = new Map<string, string>()
-  for (const route of routes) {
-    if (isSoftDeleted(route) || DEAD_STATUSES.has(route.status)) continue
+  return indexStops(liveStops(routes, pickups, containers), (route) => {
     const date = typedString(route.submittedValues, "actualDate") ?? typedString(route.submittedValues, "serviceDate")
-    if (date && isIsoDate(date)) routeDates.set(route.id, date)
-  }
-  const containerIdsByLabel = new Map<string, string>()
-  for (const container of containers) {
-    const label = cleanFact(container.facts["Container ID"])
-    if (label) containerIdsByLabel.set(label.toLowerCase(), container.id)
-  }
-  const index = new Map<string, Set<string>>()
-  for (const pickup of pickups) {
-    if (isSoftDeleted(pickup) || DEAD_STATUSES.has(pickup.status)) continue
-    const containerId = typedString(pickup.submittedValues, "containerId")
-    const routeId = typedString(pickup.submittedValues, "routeId")
-    if (!containerId || !routeId) continue
-    const date = routeDates.get(routeId)
-    if (!date) continue
-    const label = cleanFact(pickup.facts["Container ID"])?.toLowerCase()
-    const labelled = label === undefined ? undefined : containerIdsByLabel.get(label)
-    for (const key of labelled === undefined || labelled === containerId ? [containerId] : [containerId, labelled]) {
-      const dates = index.get(key) ?? new Set<string>()
-      dates.add(date)
-      index.set(key, dates)
-    }
-  }
-  return new Map(
-    Array.from(index.entries()).map(([containerId, dates]) => [containerId, [...dates].sort()]),
-  )
+    return date && isIsoDate(date) ? date : undefined
+  })
+}
+
+/**
+ * Container id → the names of the schemes whose live routes stop at it from
+ * `today` on, sorted (#232): the Route scheme filter's values for a container
+ * the API holds, which names no scheme of its own. A route counts while it is
+ * still to run — not completed, not before today — so a container a scheme
+ * no longer collects drops out with its last route; the name is the scheme's
+ * own, by the route's scheme id (`nameOf`), and a scheme not known gives none.
+ */
+export function routeSchemeIndex(
+  routes: readonly BusinessRecord[],
+  pickups: readonly BusinessRecord[],
+  containers: readonly BusinessRecord[],
+  { today, nameOf }: { today: string; nameOf: (schemeId: string) => string | undefined },
+): Map<string, string[]> {
+  return indexStops(liveStops(routes, pickups, containers), (route) => {
+    if (route.status === "Completed") return undefined
+    const date = typedString(route.submittedValues, "actualDate") ?? typedString(route.submittedValues, "serviceDate")
+    if (date === undefined || date < today) return undefined
+    const schemeId = typedString(route.submittedValues, "schemeId")
+    return schemeId === undefined ? undefined : nameOf(schemeId)
+  })
 }
 
 const MONTHS: Readonly<Record<string, string>> = {

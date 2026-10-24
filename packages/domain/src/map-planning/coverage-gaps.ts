@@ -1,8 +1,11 @@
 // Coverage gaps (2026-09-16): which containers that need service no Route
 // Scheme lists, and which scheme stops fall on containers that cannot be
-// served. A container needs service when it is Available and its Agreement
-// fact does not say ended, paused, or future (no fact at all is not a reason
-// to skip it). A container is covered when a scheme that still takes part in
+// served. A container needs service when it is in service today
+// (`containerInService`: a placement serving it, for one the API holds;
+// Available, for a fixture's, #232) and its Agreement fact does not say
+// ended, paused, or future (no fact at all is not a reason to skip it). A
+// stop on one that serves only from a later day is no unservable stop
+// (`containerServesAhead`): a scheme starting then plans it. A container is covered when a scheme that still takes part in
 // planning and is Validated, Scheduled, or Effective resolves it as a stop on
 // any service day — through @waste/domain/route-schemes/groups, the one seam every
 // consumer resolves a scheme's stops through. Drafts promise nothing and
@@ -11,7 +14,7 @@
 import type { BusinessRecord } from "../prototype-record"
 import { effectiveStopPlans } from "../route-schemes/groups"
 import { effectiveSchemeStatus, schemesInPlanning } from "../route-schemes/lifecycle"
-import { ELIGIBLE_CONTAINER_STATUSES } from "../route-schemes/matching"
+import { containerInService, containerServesAhead } from "../route-schemes/matching"
 import { recurrenceFromValues } from "../route-schemes/recurrence"
 
 export type CoverageGaps = {
@@ -31,9 +34,9 @@ export type CoverageCounts = { needing: number; covered: number; uncovered: numb
 
 const INACTIVE_AGREEMENT = /·\s*(ended|paused|future|cancelled|terminated)\b/i
 
-/** Available, and the agreement fact — when there is one — does not say the service is off. */
-export function needsService(container: Pick<BusinessRecord, "status" | "facts">): boolean {
-  if (!ELIGIBLE_CONTAINER_STATUSES.has(container.status)) return false
+/** In service today (`containerInService`: a placement serving it, for one the API holds; Available, for a fixture's), and the agreement fact — when there is one — does not say the service is off. */
+export function needsService(container: Pick<BusinessRecord, "status" | "facts" | "submittedValues">): boolean {
+  if (!containerInService(container)) return false
   return !INACTIVE_AGREEMENT.test(container.facts.Agreement ?? "")
 }
 
@@ -63,7 +66,14 @@ export function coverageGaps(
 
   const covered = new Set([...needing].filter((id) => planned.has(id)))
   const uncovered = new Set([...needing].filter((id) => !planned.has(id)))
-  const unservable = new Set([...planned].filter((id) => !needing.has(id)))
+  const byId = new Map(containers.map((container) => [container.id, container]))
+  const unservable = new Set(
+    [...planned].filter((id) => {
+      if (needing.has(id)) return false
+      const container = byId.get(id)
+      return container === undefined || !containerServesAhead(container) || INACTIVE_AGREEMENT.test(container.facts.Agreement ?? "")
+    }),
+  )
   return { needing, covered, uncovered, unservable, schemesConsidered }
 }
 
