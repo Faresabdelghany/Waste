@@ -30,6 +30,11 @@
 // CREATE TABLEs as drizzle-kit writes them now onto what 0004 says, and
 // driver-instructions-rendering.test.ts pins the ALTER TABLE statements.
 //
+// Migration 0029 (#291 slice 29) gave `waste_fraction` its `waste_code` and
+// the check on its shape: `CHANGED_IN_0029` maps the CREATE TABLE as
+// drizzle-kit writes it now onto what 0004 says, and
+// waste-code-rendering.test.ts pins the two ALTER TABLE statements.
+//
 // This is also what makes a change to the vocabulary a migration: the values
 // are spelled here as the file spells them, so adding one to a list in
 // @waste/domain/registry/vocabulary fails this test until a migration replaces
@@ -39,6 +44,7 @@ import { readFile } from "node:fs/promises"
 import { join } from "node:path"
 import { describe, test } from "node:test"
 
+import { WASTE_CODE_PATTERN } from "@waste/domain/registry/waste-code"
 import { getTableConfig, integer, text, uuid } from "drizzle-orm/pg-core"
 
 import { MIGRATIONS_FOLDER } from "../migrate"
@@ -212,15 +218,24 @@ const CHANGED_IN_0022 = new Map([
   [pointTable(true), pointTable(false)],
 ])
 
-const expected = [
+/** waste_fraction as drizzle-kit writes it today — with the waste code 0029 added and its shape check — and as it wrote it as of 0004, without. */
+const fractionTable = (wasteCode: boolean): string =>
   createTable("waste_fraction", "tenant", [
     '"key" text NOT NULL',
     '"name" text NOT NULL',
+    ...(wasteCode ? ['"waste_code" text'] : []),
     uniqueKey("waste_fraction_key_key", "company_id", "key"),
     uniqueKey("waste_fraction_name_key", "company_id", "name"),
     uniqueKey("waste_fraction_tenant_key", "company_id", "id"),
     lowercaseCheck("waste_fraction", "key"),
-  ]),
+    ...(wasteCode ? [`CONSTRAINT "waste_fraction_waste_code_shape" CHECK (${ref("waste_fraction", "waste_code")} ~ '${WASTE_CODE_PATTERN}')`] : []),
+  ])
+
+/** What 0029 changed: the fraction's CREATE TABLE as drizzle-kit generates it now onto what 0004 says. */
+const CHANGED_IN_0029 = new Map([[fractionTable(true), fractionTable(false)]])
+
+const expected = [
+  fractionTable(true),
   createTable("container_type", "tenant", [
     '"name" text NOT NULL',
     '"volume_litres" integer',
@@ -409,7 +424,7 @@ describe("the Registry tables as drizzle-kit writes them", () => {
   const generatedHead = async (): Promise<string[]> => [
     ...(await statementsFor(tables))
       .filter((statement) => !ADDED_IN_0010.includes(statement))
-      .map((statement) => CHANGED_IN_0007.get(statement) ?? CHANGED_IN_0010.get(statement) ?? CHANGED_IN_0022.get(statement) ?? statement),
+      .map((statement) => CHANGED_IN_0007.get(statement) ?? CHANGED_IN_0010.get(statement) ?? CHANGED_IN_0022.get(statement) ?? CHANGED_IN_0029.get(statement) ?? statement),
     ...DROPPED_IN_0007,
   ]
 
@@ -422,6 +437,7 @@ describe("the Registry tables as drizzle-kit writes them", () => {
     for (const statement of CHANGED_IN_0007.keys()) assert.ok(today.includes(statement), statement.split("\n")[0])
     for (const statement of CHANGED_IN_0010.keys()) assert.ok(today.includes(statement), statement.split("\n")[0])
     for (const statement of CHANGED_IN_0022.keys()) assert.ok(today.includes(statement), statement.split("\n")[0])
+    for (const statement of CHANGED_IN_0029.keys()) assert.ok(today.includes(statement), statement.split("\n")[0])
     for (const statement of ADDED_IN_0010) assert.ok(today.includes(statement), statement)
     for (const statement of DROPPED_IN_0007) assert.equal(today.includes(statement), false, statement)
   })

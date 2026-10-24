@@ -115,4 +115,11 @@ describe("importTemplate", () => {
     assert.equal(csvField('say "hi"', ","), '"say ""hi"""')
     assert.equal(csvField("two\nlines", ";"), '"two\nlines"')
   })
+
+  test("guards a field a spreadsheet would run as a formula, and the reader takes the guard off again", () => {
+    assert.equal(csvField("=SUM(A1)", ","), "'=SUM(A1)")
+    assert.equal(csvField("@cmd,x", ","), '"\'@cmd,x"')
+    const file = importRows("customers", `kind,name\nperson,${csvField("=Anna", ",")}\n`)
+    assert.equal(file.rows[0]?.values.name, "=Anna")
+  })
 })

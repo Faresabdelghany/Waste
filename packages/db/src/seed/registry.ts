@@ -179,17 +179,24 @@ const projectIdOf = (project: RegistryProject): string => DEMO_PROJECT_IDS[proje
 // The seven fractions the seeded containers rotate through, then the two only
 // the explicit containers carry (BIN-66420 takes "Residual · Mixed", BIN-11862
 // wastewater). The key is the container form's option value where the form
-// has one; the name is the display vocabulary the fixtures spell.
+// has one; the name is the display vocabulary the fixtures spell. The waste
+// code (#291 slice 29) is the European List of Waste's entry a household
+// collection of the fraction is reported under — mixed municipal waste,
+// separately collected kitchen waste, paper, and the packaging codes of
+// chapter 15 where the fraction is packaging — which the seed owns as it
+// owns the name, so a seeded database migrated past the column gains the
+// codes on its next seed; "Mixed" and "Wastewater" have none, which the
+// waste-data report names with a warning.
 const WASTE_FRACTIONS = [
-  ["residual", "Residual"],
-  ["organic", "Organic"],
-  ["paper", "Paper"],
-  ["cardboard", "Cardboard"],
-  ["glass", "Glass"],
-  ["plastic", "Plastic"],
-  ["metal", "Metal"],
-  ["mixed", "Mixed"],
-  ["wastewater", "Wastewater"],
+  ["residual", "Residual", "200301"],
+  ["organic", "Organic", "200108"],
+  ["paper", "Paper", "200101"],
+  ["cardboard", "Cardboard", "150101"],
+  ["glass", "Glass", "150107"],
+  ["plastic", "Plastic", "150102"],
+  ["metal", "Metal", "150104"],
+  ["mixed", "Mixed", null],
+  ["wastewater", "Wastewater", null],
 ] as const
 type WasteFractionKey = (typeof WASTE_FRACTIONS)[number][0]
 
@@ -924,7 +931,7 @@ function build(): { ids: RegistryIds; rows: RegistryRows } {
   const productOf = (key: string) => requiredSpec(productByKey, key, "product")
 
   const rows: RegistryRows = {
-    wasteFractions: WASTE_FRACTIONS.map(([key, name]) => ({ id: wasteFractionId(key), companyId: COMPANY_ID, key, name })),
+    wasteFractions: WASTE_FRACTIONS.map(([key, name, wasteCode]) => ({ id: wasteFractionId(key), companyId: COMPANY_ID, key, name, wasteCode })),
     containerTypes: CONTAINER_TYPES.map(([key, name, volumeLitres]) => ({ id: containerTypeId(key), companyId: COMPANY_ID, name, volumeLitres })),
     serviceFrequencies: REGISTRY_PROJECTS.flatMap((project) =>
       SERVICE_FREQUENCIES.map(([key, name, description, collectionsPerWeek, weeksBetween, daysBetween]) => ({
@@ -1218,7 +1225,7 @@ export async function applyRegistry(tx: Tx): Promise<number> {
   const rows = REGISTRY_ROWS
   let changed = 0
   // `key` is set once (catalogue.ts): the seed spells it on insert and never rewrites it.
-  changed += await upsertOwned(tx, wasteFraction, rows.wasteFractions, [wasteFraction.name])
+  changed += await upsertOwned(tx, wasteFraction, rows.wasteFractions, [wasteFraction.name, wasteFraction.wasteCode])
   changed += await upsertOwned(tx, containerType, rows.containerTypes, [containerType.name, containerType.volumeLitres])
   changed += await upsertOwned(tx, serviceFrequency, rows.serviceFrequencies, [
     serviceFrequency.name,

@@ -9,7 +9,12 @@
 // `waste_fraction.key` is the stable slug the rest of the system quotes
 // (`residual`, `food`, `paper`); the name is what a person reads and may be
 // renamed without breaking anything. Both are unique per company, and the key
-// is held lowercase so two rows cannot differ by case alone.
+// is held lowercase so two rows cannot differ by case alone. Its
+// `waste_code` (#291 slice 29, migration 0029) is the entry of the European
+// List of Waste the national waste-data system keys the fraction by, held to
+// @waste/domain/registry/waste-code's one shape by `waste_fraction_waste_code_shape`;
+// nullable, since a fraction is collected before anyone files it, and the
+// waste-data report names a fraction without one with a warning.
 //
 // `service_frequency` is the domain's `ServiceFrequencyDefinition` as a table,
 // and `service_frequency_shape` is its rule: a null `collections_per_week` is
@@ -36,6 +41,7 @@
 // nullable, so no guard: a product without a rate makes a `no-vat-rate`
 // event, which is the actionable reason.
 import { PRODUCT_KINDS, PRODUCT_STATUSES, PRODUCT_UNITS } from "@waste/domain/registry/vocabulary"
+import { WASTE_CODE_PATTERN } from "@waste/domain/registry/waste-code"
 import { sql } from "drizzle-orm"
 import { check, integer, text, uniqueIndex, uuid } from "drizzle-orm/pg-core"
 
@@ -55,8 +61,18 @@ export const wasteFraction = wms.table(
     /** The stable slug the rest of the system quotes: `residual`, `food`, `glass`. */
     key: text().notNull(),
     name: text().notNull(),
+    /** The European List of Waste entry it is reported under, `200301`; null where nobody has set one. */
+    wasteCode: text(),
   },
-  (t) => [companyReference(t, company), tenantUnique(t, t.key), tenantUnique(t, t.name), tenantKey(t), lowercase(t.key)],
+  (t) => [
+    companyReference(t, company),
+    tenantUnique(t, t.key),
+    tenantUnique(t, t.name),
+    tenantKey(t),
+    lowercase(t.key),
+    // The code's shape, the domain's one spelling; a null passes: no code is not a wrong one.
+    check(tableObjectName(t.id.table, "waste_code_shape", "wasteFraction"), sql`${t.wasteCode} ~ ${sql.raw(`'${WASTE_CODE_PATTERN}'`)}`),
+  ],
 )
 
 export const containerType = wms.table(

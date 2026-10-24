@@ -2,6 +2,7 @@ import assert from "node:assert/strict"
 import { describe, test } from "node:test"
 
 import { PRODUCT_KINDS, PRODUCT_STATUSES, PRODUCT_UNITS } from "@waste/domain/registry/vocabulary"
+import { WASTE_CODE_SHAPE } from "@waste/domain/registry/waste-code"
 
 import {
   ContainerType,
@@ -27,7 +28,7 @@ const ID = "01a0d3a5-e5e0-7000-8000-000000000001"
 const OTHER = "01a0d3a5-e5e0-7000-8000-000000000002"
 const STAMPS = { createdAt: "2026-09-24T13:41:00.000Z", updatedAt: "2026-09-24T13:41:00.000Z" }
 
-const fraction = { id: ID, key: "hard-plastic", name: "Hard plastic", ...STAMPS }
+const fraction = { id: ID, key: "hard-plastic", name: "Hard plastic", wasteCode: "150102", ...STAMPS }
 const containerType = { id: ID, name: "240 L two-wheeled", volumeLitres: 240, ...STAMPS }
 const frequency = {
   id: ID,
@@ -96,6 +97,17 @@ describe("WasteFractionCreate and WasteFractionPatch", () => {
     refusesAnEmptyPatch(WasteFractionPatch)
     assert.match(refusal(WasteFractionPatch.safeParse({ name: "Food", key: "food-waste" }))[0].message, /key/)
     assert.equal(WasteFractionPatch.safeParse({ name: "  " }).success, false)
+  })
+
+  test("take the waste code as the European List of Waste prints it compact, or none, and a patch clears it with a null (#291 slice 29)", () => {
+    assert.deepEqual(WasteFractionCreate.parse({ key: "food", name: "Food waste", wasteCode: "200108" }), { key: "food", name: "Food waste", wasteCode: "200108" })
+    assert.deepEqual(WasteFractionPatch.parse({ wasteCode: "200121*" }), { wasteCode: "200121*" })
+    assert.deepEqual(WasteFractionPatch.parse({ wasteCode: null }), { wasteCode: null })
+    assert.equal(WasteFraction.parse({ ...fraction, wasteCode: null }).wasteCode, null)
+    for (const wasteCode of ["20 01 08", "2001080", "210101", "food"]) {
+      const refused = refusal(WasteFractionPatch.safeParse({ wasteCode }))
+      assert.deepEqual([refused[0]?.path, refused[0]?.message], ["wasteCode", WASTE_CODE_SHAPE], wasteCode)
+    }
   })
 })
 

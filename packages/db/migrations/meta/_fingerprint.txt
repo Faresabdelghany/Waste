@@ -2945,12 +2945,14 @@ column wms.waste_fraction 3 created_at timestamp with time zone not-null default
 column wms.waste_fraction 4 updated_at timestamp with time zone not-null default=now()
 column wms.waste_fraction 5 key text not-null acl=[wms_public=SELECT/<owner>]
 column wms.waste_fraction 6 name text not-null acl=[wms_public=SELECT/<owner>]
+column wms.waste_fraction 7 waste_code text
 constraint wms.waste_fraction waste_fraction_company_id_fk FOREIGN KEY (company_id) REFERENCES wms.company(id)
 constraint wms.waste_fraction waste_fraction_key_key UNIQUE (company_id, key)
 constraint wms.waste_fraction waste_fraction_key_lowercase CHECK ((key = lower(key)))
 constraint wms.waste_fraction waste_fraction_name_key UNIQUE (company_id, name)
 constraint wms.waste_fraction waste_fraction_pkey PRIMARY KEY (id)
 constraint wms.waste_fraction waste_fraction_tenant_key UNIQUE (company_id, id)
+constraint wms.waste_fraction waste_fraction_waste_code_shape CHECK ((waste_code ~ '^(0[1-9]|1[0-9]|20)[0-9]{4}\*?$'::text))
 index wms.waste_fraction waste_fraction_key_key CREATE UNIQUE INDEX waste_fraction_key_key ON wms.waste_fraction USING btree (company_id, key)
 index wms.waste_fraction waste_fraction_name_key CREATE UNIQUE INDEX waste_fraction_name_key ON wms.waste_fraction USING btree (company_id, name)
 index wms.waste_fraction waste_fraction_pkey CREATE UNIQUE INDEX waste_fraction_pkey ON wms.waste_fraction USING btree (id)
@@ -3047,4 +3049,5 @@ journal 1792855994902 ed271976c254711aed17a7b7aab7841cb2251fa343ec29a4de366b49f6
 journal 1792864456446 3eb735d6ee46445f2225b160768a05e288b7db43da18d83c06c7b05582b9bfd5
 journal 1792865708689 34a95f7c352373cd3eb625466c5610a65b46b791a1b940ba4e02ccf528f490a9
 journal 1792867065800 f8212d9d9ad7d0d5e457e9772d762f6453b4ca8b3d68bd81d86470274b6d25bf
+journal 1792868216557 6775a033d267b5b88bf3f92f2efd3f695a1039822f38c8c2c49e9e7b24ee0e56
 pgboss-version 42

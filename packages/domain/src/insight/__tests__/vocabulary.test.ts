@@ -7,7 +7,7 @@ import { describe, test } from "node:test"
 import { defineVocabularyTests } from "../../__tests__/vocabulary"
 import * as vocabulary from "../vocabulary"
 
-defineVocabularyTests("Insight", vocabulary, vocabulary.INSIGHT_VOCABULARIES, 1)
+defineVocabularyTests("Insight", vocabulary, vocabulary.INSIGHT_VOCABULARIES, 2)
 
 describe("the Insight vocabulary's own rules", () => {
   test("a series is cut by the day, the ISO week or the calendar month, finest first", () => {

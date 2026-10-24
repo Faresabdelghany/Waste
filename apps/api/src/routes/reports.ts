@@ -9,6 +9,8 @@
 //   GET /reports/tickets  `improve.performance` + `operate.tickets`
 //   GET /reports/revenue  `improve.analytics`   + `commercial.invoices`
 //   GET /reports/tonnage  `improve.analytics`   + `route-studio.weights`
+//   GET /reports/waste-data and /reports/waste-data.csv
+//                         `improve.compliance`  + `route-studio.weights`
 //
 // Two grants each, both `view`: the Improve module the report is read in —
 // Performance's operational service, Analytics' period analysis — and the
@@ -36,12 +38,30 @@
 // window is at most a year (`REPORT_WINDOW_MAX_DAYS`), and what grows with
 // the data — routes, pickups, documents, unloads — is counted, never listed.
 // Names sort in one collation, English's, whatever the server's locale.
+//
+// The waste-data report (#291 slice 29, C29) is the regulatory one: a
+// period's reviewed Unloads — those whose latest weight review approved them
+// — as net kilograms per municipality (the project they were collected for),
+// unloading station and waste fraction, each fraction with its waste code,
+// for the office to file with the national waste-data system by hand; no
+// series, since a filing is one period's. It is read under Improve's
+// Compliance, the module a report that leaves the company is read in, and
+// the weights' own grant. An unload nobody has reviewed is a warning and not
+// a row, a rejected one is counted nowhere, a corrected one through its
+// correction once that is approved; a fraction without a code keeps its
+// rows, the code blank, beside a warning, and so does a project whose kind
+// is not a municipality, its name in the municipality's place. Those two
+// warnings are of the rows filed: a fraction or a project with unreviewed
+// loads alone is in the not-reviewed warning and no other. The `.csv` read
+// is the same report as the file @waste/domain/insight/waste-data writes, an
+// attachment the office downloads; on demand, never on a schedule.
 import type { PickupReason, PickupStatus, RouteStatus } from "@waste/domain/execution/vocabulary"
 import { PICKUP_REASONS } from "@waste/domain/execution/vocabulary"
 import type { WeightReviewStatus } from "@waste/domain/finance/vocabulary"
 import { intervalOf, intervalsOver, type DayInterval } from "@waste/domain/insight/intervals"
 import { ON_TIME_GRACE_MINUTES, pickupStanding, rate, unloadStanding } from "@waste/domain/insight/readings"
 import type { ReportInterval as Interval } from "@waste/domain/insight/vocabulary"
+import { isMunicipality, wasteDataCsv, wasteDataWarningSentence, type WasteDataWarning as DomainWarning } from "@waste/domain/insight/waste-data"
 import type { ModuleKey } from "@waste/domain/access/modules"
 import { OPEN_TICKET_STATUSES, TICKET_KINDS, type TicketKind, type TicketStatus } from "@waste/domain/resolution/vocabulary"
 import {
@@ -55,6 +75,9 @@ import {
   TicketReportQuery,
   TonnageReport,
   TonnageReportQuery,
+  WasteDataFileQuery,
+  WasteDataReport,
+  WasteDataReportQuery,
   type MissedReason,
   type PickupStandings,
   type PickupWeightRow,
@@ -67,6 +90,8 @@ import {
   type ServiceScheme,
   type TicketKindCounts,
   type TonnageRow,
+  type WasteDataRow,
+  type WasteDataWarning,
 } from "@waste/contracts/reports"
 import type { Tx } from "@waste/db/client"
 import { reviewStatus, weightReviewOf } from "@waste/db/query/weight-review"
@@ -91,9 +116,13 @@ import { describeJson } from "./shared"
 
 const PERFORMANCE = "improve.performance"
 const ANALYTICS = "improve.analytics"
+const COMPLIANCE = "improve.compliance"
 
 /** What every report's 400 says beyond its own filters. */
 const WINDOW_REFUSED = `a parameter is one the report does not read, \`from\` or \`to\` is missing, not a day or before ${REPORT_FIRST_DAY}, the window runs backwards or is longer than ${REPORT_WINDOW_MAX_DAYS} days, \`interval\` is not \`day\`, \`week\` or \`month\`, or \`projectId\` is not a project this account works in`
+
+/** What the waste-data report's 400 says: a filing is one period, so no `interval` is read. */
+const PERIOD_REFUSED = `a parameter is one the report does not read (\`interval\` among them, since a filing is one period with no series), \`from\` or \`to\` is missing, not a day or before ${REPORT_FIRST_DAY}, the period runs backwards or is longer than ${REPORT_WINDOW_MAX_DAYS} days, or \`projectId\` is not a project this account works in`
 
 /** What a report's window and filters say in every description. */
 const WINDOW_SENTENCE = `\`from\` and \`to\` are the window's first and last day, both inclusive, at most ${REPORT_WINDOW_MAX_DAYS} days, from ${REPORT_FIRST_DAY} on; \`interval\` (\`day\` when absent) cuts it into the series — days, ISO weeks from Monday, calendar months, the first and last clipped to the window. \`projectId\` narrows the report to one of the caller's projects, and absent it spans every project the caller works in; an account that works in none reads zeros. The query is strict: a parameter this report does not read is refused by name.`
@@ -544,13 +573,94 @@ async function tonnageReport(tx: Tx, principal: Principal, query: TonnageReportQ
   }
 }
 
-/** A report's handler: the project the query names held to the caller's, then the report read inside the request's transaction. */
-function answer<Query extends WindowQuery, Report>(read: (tx: Tx, principal: Principal, query: Query) => Promise<Report>) {
-  return async (c: Context<AuthEnv>, query: Query) => {
+/** The warning as the wire carries it: the domain's, with its sentence. */
+const withSentence = (warning: DomainWarning): WasteDataWarning => ({ ...warning, sentence: wasteDataWarningSentence(warning) })
+
+async function wasteDataReport(tx: Tx, principal: Principal, query: WasteDataReportQuery): Promise<WasteDataReport> {
+  const { projectId } = query
+  const window = { from: query.from, to: query.to }
+  const review = weightReviewOf(tx, principal.companyId, unload.id)
+  const status = reviewStatus(review.decision)
+  const groups = await tx
+    .select({
+      projectId: unload.projectId,
+      municipality: project.name,
+      projectKind: project.kind,
+      unloadingStationId: unload.unloadingStationId,
+      unloadingStationName: unloadingStation.name,
+      wasteFractionId: unload.wasteFractionId,
+      wasteFractionName: wasteFraction.name,
+      wasteCode: wasteFraction.wasteCode,
+      status,
+      netKg: total(unload.netKg),
+      n: count(),
+    })
+    .from(unload)
+    .innerJoin(project, projectOf(unload))
+    .innerJoin(wasteFraction, and(eq(wasteFraction.companyId, unload.companyId), eq(wasteFraction.id, unload.wasteFractionId)))
+    .innerJoin(unloadingStation, and(eq(unloadingStation.companyId, unload.companyId), eq(unloadingStation.id, unload.unloadingStationId)))
+    .leftJoinLateral(review, sql`true`)
+    .where(and(fenced(unload, principal, projectId), instantInWindow(unload.occurredAt, window)))
+    .groupBy(unload.projectId, project.name, project.kind, unload.unloadingStationId, unloadingStation.name, unload.wasteFractionId, wasteFraction.name, wasteFraction.wasteCode, status)
+
+  const rows: WasteDataRow[] = []
+  const unreviewed: Extract<DomainWarning, { kind: "not-reviewed" }>[] = []
+  const uncoded: Extract<DomainWarning, { kind: "no-waste-code" }>[] = []
+  const notMunicipal: Extract<DomainWarning, { kind: "not-a-municipality" }>[] = []
+  for (const group of groups) {
+    const standing = unloadStanding(group.status as WeightReviewStatus)
+    // A rejected weight is filed nowhere, and a corrected one through its correction.
+    if (standing === "rejected" || standing === "superseded") continue
+    const place = { projectId: group.projectId, municipality: group.municipality, unloadingStationId: group.unloadingStationId, unloadingStationName: group.unloadingStationName, wasteFractionId: group.wasteFractionId, wasteFractionName: group.wasteFractionName }
+    if (standing !== "approved") {
+      unreviewed.push({ kind: "not-reviewed", ...place, unloads: group.n, netKg: group.netKg })
+      continue
+    }
+    rows.push({ ...place, wasteCode: group.wasteCode, netKg: group.netKg, unloads: group.n })
+    // What the rows filed are warned of, once each.
+    if (group.wasteCode === null && !uncoded.some((warning) => warning.wasteFractionId === group.wasteFractionId)) {
+      uncoded.push({ kind: "no-waste-code", wasteFractionId: group.wasteFractionId, wasteFractionName: group.wasteFractionName })
+    }
+    if (!isMunicipality(group.projectKind) && !notMunicipal.some((warning) => warning.projectId === group.projectId)) {
+      notMunicipal.push({ kind: "not-a-municipality", projectId: group.projectId, municipality: group.municipality, projectKind: group.projectKind })
+    }
+  }
+  // By name, then by id, so two names the collation holds equal still come in one order.
+  const byPlace = (a: WasteDataRow | (typeof unreviewed)[number], b: typeof a) =>
+    byName(a.municipality, b.municipality) ||
+    a.projectId.localeCompare(b.projectId) ||
+    byName(a.unloadingStationName, b.unloadingStationName) ||
+    a.unloadingStationId.localeCompare(b.unloadingStationId) ||
+    byName(a.wasteFractionName, b.wasteFractionName) ||
+    a.wasteFractionId.localeCompare(b.wasteFractionId)
+  rows.sort(byPlace)
+  unreviewed.sort(byPlace)
+  uncoded.sort((a, b) => byName(a.wasteFractionName, b.wasteFractionName) || a.wasteFractionId.localeCompare(b.wasteFractionId))
+  notMunicipal.sort((a, b) => byName(a.municipality, b.municipality) || a.projectId.localeCompare(b.projectId))
+  return {
+    window: { projectId: projectId ?? null, from: query.from, to: query.to },
+    rows,
+    totals: { netKg: rows.reduce((sum, row) => sum + row.netKg, 0), unloads: rows.reduce((sum, row) => sum + row.unloads, 0) },
+    warnings: [...uncoded, ...notMunicipal, ...unreviewed].map(withSentence),
+  }
+}
+
+/** The file's separators by the query's names. */
+const SEPARATORS = { comma: ",", semicolon: ";" } as const
+
+/** A report as a request reads it: the project the query names held to the caller's, then the report read inside the request's transaction. */
+function reading<Query extends { projectId?: string }, Report>(read: (tx: Tx, principal: Principal, query: Query) => Promise<Report>) {
+  return (c: Context<AuthEnv>, query: Query): Promise<Report> => {
     const principal = c.get("principal")
     if (query.projectId !== undefined) requireProject(principal, query.projectId, "projectId", "query")
-    return c.json(await read(c.get("tx"), principal, query))
+    return read(c.get("tx"), principal, query)
   }
+}
+
+/** A report's handler: the report `reading` reads, answered as JSON. */
+function answer<Query extends { projectId?: string }, Report>(read: (tx: Tx, principal: Principal, query: Query) => Promise<Report>) {
+  const readFor = reading(read)
+  return async (c: Context<AuthEnv>, query: Query) => c.json(await readFor(c, query))
 }
 
 export function reportRoutes(guard: MiddlewareHandler<AuthEnv>, { now = () => new Date() }: ClockOptions = {}) {
@@ -558,6 +668,8 @@ export function reportRoutes(guard: MiddlewareHandler<AuthEnv>, { now = () => ne
   const tickets = answer((tx, principal, query: TicketReportQuery) => ticketReport(tx, principal, query, now()))
   const revenue = answer(revenueReport)
   const tonnage = answer(tonnageReport)
+  const wasteData = answer(wasteDataReport)
+  const wasteDataFor = reading(wasteDataReport)
   return new Hono<AuthEnv>()
     .get(
       "/reports/service",
@@ -638,5 +750,52 @@ export function reportRoutes(guard: MiddlewareHandler<AuthEnv>, { now = () => ne
       requireGrant("route-studio.weights", "view"),
       validate("query", TonnageReportQuery),
       (c) => tonnage(c, c.req.valid("query")),
+    )
+    .get(
+      "/reports/waste-data",
+      describeRoute({
+        operationId: "getWasteDataReport",
+        summary: "The waste-data report for the national system",
+        description: `The unloads of the period whose latest weight review approved them — recorded at a station on one of its days, on the project's clock — as net kilograms per municipality (the project they were collected for), unloading station and waste fraction, each fraction with its waste code; a combination without an approved unload is absent, and there is no series. Beside the rows, the warnings of what they file — a fraction without a waste code (its rows carry the code null) and a project whose kind is not \`Municipality\` (its rows carry its name as the municipality) — then the unloads nobody has reviewed, per municipality, station and fraction, which no row counts. A rejected unload is counted nowhere, a corrected one through its correction once that is approved. \`from\` and \`to\` are the period's first and last day, both inclusive, at most ${REPORT_WINDOW_MAX_DAYS} days, from ${REPORT_FIRST_DAY} on; \`projectId\` narrows it to one of the caller's projects, and absent it spans every project the caller works in. \`GET /reports/waste-data.csv\` is the same report as a file.`,
+        security: BEARER_SECURITY,
+        responses: {
+          200: describeJson("The waste-data report.", WasteDataReport),
+          400: describeProblem(`The query does not parse: ${PERIOD_REFUSED}.`),
+          401: DESCRIBE_401,
+          403: describe403(COMPLIANCE, "route-studio.weights"),
+        },
+      }),
+      guard,
+      requireGrant(COMPLIANCE, "view"),
+      requireGrant("route-studio.weights", "view"),
+      validate("query", WasteDataReportQuery),
+      (c) => wasteData(c, c.req.valid("query")),
+    )
+    .get(
+      "/reports/waste-data.csv",
+      describeRoute({
+        operationId: "getWasteDataFile",
+        summary: "The waste-data report as a file",
+        description: `The waste-data report as a plain CSV of our own, for the office to file with the national waste-data system by hand: UTF-8 behind a byte-order mark, CRLF records, the columns \`period_from\`, \`period_to\`, \`municipality\`, \`unloading_station\`, \`fraction\`, \`waste_code\` (blank where the fraction has none), \`kg\` and \`warning\`; a data row per municipality, station and fraction, then a warning row each, its sentence in \`warning\` and \`kg\` blank. It is not the national system's own import layout. \`separator=semicolon\` writes it for a spreadsheet under a Danish locale. The query is the report's.`,
+        security: BEARER_SECURITY,
+        responses: {
+          200: { description: "The file, as an attachment.", content: { "text/csv": { schema: { type: "string" as const } } } },
+          400: describeProblem(`The query does not parse: ${PERIOD_REFUSED}, or \`separator\` is neither \`comma\` nor \`semicolon\`.`),
+          401: DESCRIBE_401,
+          403: describe403(COMPLIANCE, "route-studio.weights"),
+        },
+      }),
+      guard,
+      requireGrant(COMPLIANCE, "view"),
+      requireGrant("route-studio.weights", "view"),
+      validate("query", WasteDataFileQuery),
+      async (c) => {
+        const { separator, ...query } = c.req.valid("query")
+        const report = await wasteDataFor(c, query)
+        return c.body(wasteDataCsv({ from: report.window.from, to: report.window.to, rows: report.rows, warnings: report.warnings }, SEPARATORS[separator]), 200, {
+          "content-type": "text/csv; charset=utf-8",
+          "content-disposition": `attachment; filename="waste-data-${query.from}-${query.to}.csv"`,
+        })
+      },
     )
 }

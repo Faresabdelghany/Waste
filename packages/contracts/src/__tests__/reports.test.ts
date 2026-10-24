@@ -20,6 +20,9 @@ import {
   TicketReportQuery,
   TonnageReport,
   TonnageReportQuery,
+  WasteDataFileQuery,
+  WasteDataReport,
+  WasteDataReportQuery,
 } from "../reports"
 import { refusal } from "./expect"
 
@@ -140,5 +143,34 @@ describe("the report answers", () => {
     }
     assert.deepEqual(TonnageReport.parse(report), report)
     assert.deepEqual(refusal(TonnageReport.safeParse({ ...report, totals: { ...report.totals, netKg: 1.5 } })).map((issue) => issue.path), ["totals.netKg"])
+  })
+})
+
+describe("the waste-data report (#291 slice 29)", () => {
+  test("is asked for a period of one project or all of them, with no series, and its file for a separator", () => {
+    assert.deepEqual(WasteDataReportQuery.parse({ from: "2026-01-01", to: "2026-03-31" }), { from: "2026-01-01", to: "2026-03-31" })
+    assert.deepEqual(refusal(WasteDataReportQuery.safeParse({ from: "2026-01-01", to: "2026-03-31", interval: "month" })).map((issue) => issue.path), [""])
+    assert.deepEqual(refusal(WasteDataReportQuery.safeParse({ from: "2026-03-31", to: "2026-01-01" })).map((issue) => issue.message), [DAY_WINDOW_ORDERED])
+    assert.deepEqual(refusal(WasteDataReportQuery.safeParse({ from: "2025-01-01", to: "2026-03-31" })).map((issue) => issue.message), [REPORT_WINDOW_TOO_LONG])
+    assert.equal(WasteDataFileQuery.parse({ projectId: PROJECT, from: "2026-01-01", to: "2026-01-31" }).separator, "comma")
+    assert.equal(WasteDataFileQuery.parse({ from: "2026-01-01", to: "2026-01-31", separator: "semicolon" }).separator, "semicolon")
+    assert.equal(WasteDataFileQuery.safeParse({ from: "2026-01-01", to: "2026-01-31", separator: "tab" }).success, false)
+  })
+
+  test("answers rows with their codes, the totals, and its warnings each with a sentence", () => {
+    const place = { projectId: PROJECT, municipality: "Copenhagen Central", unloadingStationId: STATION, unloadingStationName: "ARC Amager Bakke", wasteFractionId: FRACTION, wasteFractionName: "Residual waste" }
+    const report = {
+      window: { projectId: null, from: "2026-01-01", to: "2026-03-31" },
+      rows: [{ ...place, wasteCode: "200301", netKg: 8_000, unloads: 1 }, { ...place, wasteCode: null, netKg: 1_200, unloads: 1 }],
+      totals: { netKg: 9_200, unloads: 2 },
+      warnings: [
+        { kind: "no-waste-code", wasteFractionId: FRACTION, wasteFractionName: "Glass", sentence: "Glass has no waste code" },
+        { kind: "not-a-municipality", projectId: PROJECT, municipality: "Harbor Commercial", projectKind: "Business unit", sentence: "Harbor Commercial is not a municipality" },
+        { kind: "not-reviewed", ...place, unloads: 2, netKg: 6_800, sentence: "2 unloads" },
+      ],
+    }
+    assert.deepEqual(WasteDataReport.parse(report), report)
+    assert.equal(WasteDataReport.safeParse({ ...report, rows: [{ ...report.rows[0], wasteCode: "20 03 01" }] }).success, false, "a code on the wire is compact")
+    assert.equal(WasteDataReport.safeParse({ ...report, warnings: [{ kind: "late", sentence: "?" }] }).success, false)
   })
 })

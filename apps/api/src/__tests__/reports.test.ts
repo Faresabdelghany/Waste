@@ -24,13 +24,26 @@ import { after, before, describe, test } from "node:test"
 import { BillableEvent } from "@waste/contracts/billable-events"
 import { BillingRunDetail } from "@waste/contracts/billing"
 import { InvoiceDetail } from "@waste/contracts/invoices"
-import { REPORT_WINDOW_TOO_LONG, RevenueReport, ServiceReport, TicketReport, TonnageReport, type PickupStandings, type RouteCounts } from "@waste/contracts/reports"
+import {
+  REPORT_WINDOW_TOO_LONG,
+  RevenueReport,
+  ServiceReport,
+  TicketReport,
+  TonnageReport,
+  WasteDataReport,
+  type PickupStandings,
+  type RouteCounts,
+  type WasteDataRow,
+  type WasteDataWarning,
+} from "@waste/contracts/reports"
 import { Unload } from "@waste/contracts/unloads"
 import { createDb, type Database, type Tx } from "@waste/db/client"
 import { route } from "@waste/db/schema/execution"
 import { unloadingStation } from "@waste/db/schema/places"
 import { ticket } from "@waste/db/schema/resolution"
 import { withCompany } from "@waste/db/tenant"
+import { WASTE_DATA_COLUMNS, wasteDataWarningSentence, type WasteDataRow as DomainRow, type WasteDataWarning as DomainWarning } from "@waste/domain/insight/waste-data"
+import { csvRecords } from "@waste/domain/imports/csv"
 import type { TicketKind, TicketResolution, TicketStatus } from "@waste/domain/resolution/vocabulary"
 import { and, eq } from "drizzle-orm"
 
@@ -58,6 +71,15 @@ const WEEK = "from=2026-10-05&to=2026-10-11"
 
 const routeCounts = (counts: Partial<RouteCounts> = {}): RouteCounts => ({ total: 0, planned: 0, ready: 0, active: 0, completed: 0, cancelled: 0, started: 0, onTime: 0, late: 0, unjudged: 0, ...counts })
 const pickupStandings = (counts: Partial<PickupStandings> = {}): PickupStandings => ({ due: 0, completed: 0, missed: 0, skipped: 0, failed: 0, open: 0, withdrawn: 0, ...counts })
+
+/** True when two types are each other's: a field one of them gains alone makes it false. */
+type Same<A, B> = [A] extends [B] ? ([B] extends [A] ? true : false) : false
+
+test("the waste-data report's wire rows and warnings are the domain's, each warning with its sentence (#291 slice 29)", () => {
+  // A compile-time check: the typecheck refuses this line when the two drift.
+  const agree: [Same<WasteDataRow, DomainRow>, Same<WasteDataWarning, DomainWarning & { sentence: string }>] = [true, true]
+  assert.deepEqual(agree, [true, true])
+})
 
 describe("the report endpoints", { skip: database.skip || owner.skip }, () => {
   let pool: Database
@@ -544,6 +566,98 @@ describe("the report endpoints", { skip: database.skip || owner.skip }, () => {
       assert.match((await refused(await ungranted(`/reports/tonnage?${WEEK}`), 403)).detail ?? "", /improve\.analytics/, "Analytics is not held")
       assert.match((await refused(await ungranted("/reports/revenue?from=2026-10-01&to=2026-10-31"), 403)).detail ?? "", /improve\.analytics/)
       assert.equal(running.projectId, copenhagen)
+    })
+
+    // The regulatory report over the same week (#291 slice 29): after the tonnage tests above, since it adds an approved glass load and the residual's code.
+    describe("GET /reports/waste-data and its file", () => {
+      const wasteData = (call: Call, query = WEEK) => read(call, `/reports/waste-data?${query}`, WasteDataReport)
+
+      before(async () => {
+        const coded = await olivia(`/waste-fractions/${ex.fractions.residual.id}`, { method: "PATCH", body: { wasteCode: "200301" } })
+        assert.equal(coded.status, 200, JSON.stringify(await coded.clone().json()))
+        // Monday at Amager: 1,200 kg of glass, approved — a fraction with no code yet.
+        await decide((await capture(ex.routes.completed.id, { wasteFractionId: ex.fractions.glass.id, netKg: 1_200, occurredAt: at("2026-10-05", "14:00").toISOString() })).id, "approve")
+        // And Harbor's 500 kg, approved: a business unit's, filed under its name.
+        await decide((await capture(harborRoute.id, { netKg: 500, occurredAt: at("2026-10-05", "15:00").toISOString() })).id, "approve")
+        await grantRole(pool, a.companyId, a.roles.viewer.id, [{ moduleKey: "improve.compliance", actions: ["view"] }])
+      })
+
+      const harborRow = (): WasteDataRow => ({
+        projectId: harbor,
+        municipality: "Harbor Commercial",
+        unloadingStationId: fleet.stations.amager.id,
+        unloadingStationName: "ARC Amager Bakke",
+        wasteFractionId: ex.fractions.residual.id,
+        wasteFractionName: "Residual waste",
+        wasteCode: "200301",
+        netKg: 500,
+        unloads: 1,
+      })
+
+      test("files the approved loads by municipality, station and fraction with their codes, and warns of a fraction without one, of a project that is no municipality, and of the loads nobody has reviewed", async () => {
+        const report = await wasteData(olivia)
+        assert.deepEqual(report.window, { projectId: null, from: "2026-10-05", to: "2026-10-11" })
+        const place = { projectId: copenhagen, municipality: "Copenhagen Central", unloadingStationId: fleet.stations.amager.id, unloadingStationName: "ARC Amager Bakke" }
+        assert.deepEqual(report.rows, [
+          { ...place, wasteFractionId: ex.fractions.glass.id, wasteFractionName: "Glass", wasteCode: null, netKg: 1_200, unloads: 1 },
+          // 8,000 approved; 2,000 nobody has looked at and the correction's 4,800 are warned of, the rejected glass at Vestforbrænding counted nowhere, Sunday's 700 outside the week.
+          { ...place, wasteFractionId: ex.fractions.residual.id, wasteFractionName: "Residual waste", wasteCode: "200301", netKg: 8_000, unloads: 1 },
+          harborRow(),
+        ])
+        assert.deepEqual(report.totals, { netKg: 9_700, unloads: 3 })
+        const noCode = { kind: "no-waste-code" as const, wasteFractionId: ex.fractions.glass.id, wasteFractionName: "Glass" }
+        const harborNotMunicipal = { kind: "not-a-municipality" as const, projectId: harbor, municipality: "Harbor Commercial", projectKind: "Business unit" }
+        const copenhagenUnreviewed = { kind: "not-reviewed" as const, ...place, wasteFractionId: ex.fractions.residual.id, wasteFractionName: "Residual waste", unloads: 2, netKg: 6_800 }
+        const harborUnreviewed = { kind: "not-reviewed" as const, projectId: harbor, municipality: "Harbor Commercial", unloadingStationId: fleet.stations.amager.id, unloadingStationName: "ARC Amager Bakke", wasteFractionId: ex.fractions.residual.id, wasteFractionName: "Residual waste", unloads: 1, netKg: 3_000 }
+        assert.deepEqual(report.warnings, [noCode, harborNotMunicipal, copenhagenUnreviewed, harborUnreviewed].map((warning) => ({ ...warning, sentence: wasteDataWarningSentence(warning) })))
+      })
+
+      test("downloads as the documented file, with commas or semicolons", async () => {
+        const response = await olivia(`/reports/waste-data.csv?${WEEK}`)
+        assert.equal(response.status, 200)
+        assert.equal(response.headers.get("content-type"), "text/csv; charset=utf-8")
+        assert.equal(response.headers.get("content-disposition"), 'attachment; filename="waste-data-2026-10-05-2026-10-11.csv"')
+        const text = await response.text()
+        const records = csvRecords(text).map((record) => record.fields)
+        assert.deepEqual(records[0], [...WASTE_DATA_COLUMNS])
+        assert.deepEqual(records.slice(1, 3), [
+          ["2026-10-05", "2026-10-11", "Copenhagen Central", "ARC Amager Bakke", "Glass", "", "1200", ""],
+          ["2026-10-05", "2026-10-11", "Copenhagen Central", "ARC Amager Bakke", "Residual waste", "200301", "8000", ""],
+        ])
+        assert.deepEqual(records[3], ["2026-10-05", "2026-10-11", "Harbor Commercial", "ARC Amager Bakke", "Residual waste", "200301", "500", ""])
+        assert.equal(records.length, 8, "the header, three rows and four warning rows")
+        assert.equal(records[4]?.[7], "Glass has no waste code: set it under the fraction in Settings › Master data before the report is filed")
+        assert.deepEqual(records[5]?.slice(2, 7), ["Harbor Commercial", "", "", "", ""], "a project's warning row names the project alone")
+        const semicolons = await (await olivia(`/reports/waste-data.csv?${WEEK}&separator=semicolon`)).text()
+        assert.equal(semicolons.replace(/^\uFEFF/, "").split("\r\n")[0], WASTE_DATA_COLUMNS.join(";"))
+      })
+
+      test("counts only the caller's projects, is held by Improve's Compliance and the weights' grant, and refuses what it does not read", async () => {
+        const viewed = await wasteData(viewer)
+        assert.deepEqual([viewed.totals, viewed.warnings.map((warning) => warning.kind)], [{ netKg: 9_200, unloads: 2 }, ["no-waste-code", "not-reviewed"]], "the viewer works in Copenhagen alone")
+        assert.deepEqual((await wasteData(olivia, `${WEEK}&projectId=${harbor}`)).rows, [harborRow()])
+        assert.deepEqual((await wasteData(other)).rows, [])
+        assert.match((await refused(await lars(`/reports/waste-data?${WEEK}`), 403)).detail ?? "", /improve\.compliance/)
+        assert.match((await refused(await ungranted(`/reports/waste-data.csv?${WEEK}`), 403)).detail ?? "", /improve\.compliance/)
+        assert.equal((await refused(await olivia(`/reports/waste-data?${WEEK}&interval=week`), 400)).errors?.[0]?.path, "interval", "a filing is one period's, with no series")
+        assert.equal((await refused(await viewer(`/reports/waste-data?${WEEK}&projectId=${harbor}`), 400)).errors?.[0]?.path, "projectId")
+        assert.equal((await refused(await olivia(`/reports/waste-data.csv?${WEEK}&separator=tab`), 400)).errors?.[0]?.path, "separator")
+      })
+
+      // Last, since it adds a load to the week the tests above count.
+      test("warns only of the rows it files: a fraction without a code whose loads nobody has reviewed is in the not-reviewed warning alone", async () => {
+        // Tuesday at Amager: 400 kg of glass nobody has reviewed, on a day of its own.
+        await capture(ex.routes.completed.id, { wasteFractionId: ex.fractions.glass.id, netKg: 400, occurredAt: at("2026-10-06", "14:00").toISOString() })
+        const tuesday = await wasteData(olivia, "from=2026-10-06&to=2026-10-06")
+        assert.deepEqual(tuesday.rows, [])
+        assert.deepEqual(
+          tuesday.warnings.map((warning) => [warning.kind, warning.kind === "not-reviewed" ? warning.wasteFractionName : null]),
+          [
+            ["not-reviewed", "Glass"],
+            ["not-reviewed", "Residual waste"],
+          ],
+        )
+      })
     })
   })
 
