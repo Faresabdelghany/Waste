@@ -3,10 +3,14 @@
 // (components/auth/login-view.tsx) ask these, so what they do is tested here
 // and not in a browser.
 //
-//   the landing — `/me` decides it (`Me.driver`): a driver lands on the
-//                 driver's app, everyone else on operations; never a grant,
-//                 never a probe of the driver door. `/driver` is the Driver
-//                 App (#145, components/waste/driver/);
+//   the landing — `/me` decides it (`Me.driver`, `Me.serviceProvider`): a
+//                 driver lands on the driver's app, a Service Provider's
+//                 account on its workspace (#291 slice 23), everyone else on
+//                 operations; never a grant, never a probe of the driver door.
+//                 A provider's driver is a driver first: the phone is where
+//                 the work is. `/driver` is the Driver App (#145,
+//                 components/waste/driver/), `/service-provider-workspace`
+//                 the provider's restricted shell;
 //   the gate    — with the adapter on, every page but /login and the public
 //                 pages under /p/ (ADR-0010: a published project's, for
 //                 anyone, no account) needs a session:
@@ -32,13 +36,21 @@ export const PUBLIC_PATH_PREFIX = "/p/"
 /** Whether a path is one of the public pages, which need no session. */
 export const isPublicPath = (pathname: string): boolean => pathname.startsWith(PUBLIC_PATH_PREFIX)
 
+/** Where each kind of account lands. */
+export type Landing = "/driver" | "/service-provider-workspace" | "/operate"
+
 /**
- * Where a signed-in person lands when they were going nowhere in particular.
- * A body with no `driver` at all — an API from before it — is no driver's:
- * `/me` is read as a type and not checked, so the fact is read defensively.
+ * Where a signed-in person lands when they were going nowhere in particular:
+ * a driver on the Driver App, then a Service Provider's account on its
+ * workspace, then everyone else on operations. A body with no `driver` or no
+ * `serviceProvider` at all — an API from before it — is no driver's and no
+ * provider's: `/me` is read as a type and not checked, so the facts are read
+ * defensively.
  */
-export function landingOf(me: Pick<Me, "driver">): "/driver" | "/operate" {
-  return me.driver?.id === undefined ? "/operate" : "/driver"
+export function landingOf(me: Pick<Me, "driver" | "serviceProvider">): Landing {
+  if (me.driver?.id !== undefined) return "/driver"
+  if (me.serviceProvider?.id !== undefined) return "/service-provider-workspace"
+  return "/operate"
 }
 
 // Only to parse a relative `next` against: a value that resolves anywhere
@@ -71,7 +83,7 @@ export function returnPath(next: string | null | undefined): string | null {
 }
 
 /** Where sign-in sends the person: back to `next` when it is one of ours, else their landing. */
-export function afterSignIn(me: Pick<Me, "driver">, next: string | null | undefined): string {
+export function afterSignIn(me: Pick<Me, "driver" | "serviceProvider">, next: string | null | undefined): string {
   return returnPath(next) ?? landingOf(me)
 }
 

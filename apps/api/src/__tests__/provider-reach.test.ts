@@ -3,21 +3,22 @@
 // planning area is in a service area assigned to the account's provider on
 // the route's operating date, and is a SQL `false` for an office account;
 // `reachesAssignments` is a provider's own assignments, an office account's
-// projects', and `false` for an account with neither. Built here, wired into
-// nothing (§7.21): the follow-up issues put it on each family's list and
-// single read.
+// projects', and `false` for an account with neither; `reachesRoute` and
+// `reachesThroughRoute`, the choice the routes' and the pickups' reads make
+// between the two fences (#291 slice 23, provider-routes.test.ts over HTTP),
+// are an office account's projects and a provider's served routes, never both.
 import assert from "node:assert/strict"
 import { after, before, describe, test } from "node:test"
 
 import { createDb, type Database, type Tx } from "@waste/db/client"
-import { route } from "@waste/db/schema/execution"
+import { pickup, route } from "@waste/db/schema/execution"
 import { serviceAreaAssignment } from "@waste/db/schema/finance"
 import { routeScheme } from "@waste/db/schema/route-schemes"
 import { withCompany } from "@waste/db/tenant"
 import { and, asc, eq } from "drizzle-orm"
 
 import type { Principal } from "../auth/principal"
-import { providerIdOf, reachesAssignments, servesRoute } from "../auth/provider"
+import { providerIdOf, reachesAssignments, reachesRoute, reachesThroughRoute, servesRoute } from "../auth/provider"
 import { databaseUnderTest, ownerUnderTest } from "./database"
 import { seedExecution, seedRoute, type ExecutionFixtures } from "./execution-fixtures"
 import { FINANCE_YEAR, NORDREN_ASSIGNED_FROM, seedFinance, seedServiceArea, type FinanceFixtures } from "./finance-fixtures"
@@ -142,6 +143,37 @@ describe("the provider predicate", { skip: database.skip || owner.skip }, () => 
     await seedServiceArea(pool, tenant, { projectId: tenant.projects.cairo.id, code: "CA-MAADI", planningAreaIds: [planning.areas.cairo.id], validFrom: "2026-01-01", validTo: null, assignment: { serviceProviderId: tenant.serviceProviders.cityhaul.id } })
     assert.deepEqual(await served(cityhaul), [routes.unheld])
     assert.equal((await served(principalOf(tenant.serviceProviders.nordren, []))).includes(routes.unheld), false)
+  })
+
+  /** The routes the principal reads through `reachesRoute`, and the routes whose pickups it reads through `reachesThroughRoute`. */
+  const reachedRoutes = (principal: Principal): Promise<{ routes: string[]; pickupRoutes: string[] }> =>
+    withCompany(pool.db, tenant.companyId, async (tx) => ({
+      routes: (
+        await tx
+          .select({ id: route.id })
+          .from(route)
+          .where(and(eq(route.companyId, tenant.companyId), reachesRoute(tx, principal)))
+          .orderBy(asc(route.id))
+      ).map((row) => row.id),
+      pickupRoutes: (
+        await tx
+          .selectDistinct({ id: pickup.routeId })
+          .from(pickup)
+          .where(and(eq(pickup.companyId, tenant.companyId), reachesThroughRoute(tx, principal, pickup)))
+          .orderBy(asc(pickup.routeId))
+      ).map((row) => row.id),
+    }))
+
+  test("reachesRoute and reachesThroughRoute are the provider's served routes for an account with a provider, whatever projects it holds, and the projects' for an office account", async () => {
+    const nordren = await reachedRoutes(principalOf(tenant.serviceProviders.nordren, []))
+    assert.deepEqual(nordren.routes, await served(principalOf(tenant.serviceProviders.nordren, [])))
+    // Every route NordRen serves is a Copenhagen route with stops, so its stops reach exactly those routes.
+    assert.deepEqual(nordren.pickupRoutes, nordren.routes, "a stop is reached through the route it names")
+    // Never both widened: an account with a provider is bounded to it whatever projects it holds.
+    assert.deepEqual(await reachedRoutes(principalOf(tenant.serviceProviders.nordren, [tenant.projects.harbor, tenant.projects.cairo])), nordren)
+    const office = await reachedRoutes(principalOf(null, [tenant.projects.harbor]))
+    assert.deepEqual(office.routes, [routes.noArea], "the office reads its project's routes, whoever serves them or nobody")
+    assert.deepEqual(await reachedRoutes(principalOf(null, [])), { routes: [], pickupRoutes: [] }, "an account with neither reaches nothing")
   })
 
   test("servesRoute is a SQL false for an office account, whatever projects it works in", async () => {

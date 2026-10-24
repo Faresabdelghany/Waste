@@ -12,7 +12,10 @@
 // `calculating` Plan, `deferredUntil` beside it once #171's engine defers —
 // and a Route without a Plan stays complete: nothing routing gates dispatch
 // (#132). The grant is `route-studio.routes`, `view` to read and `edit` to
-// ask, the module the decisions name for Plans and legs (#124 §5).
+// ask, the module the decisions name for Plans and legs (#124 §5). The two
+// reads carry the reach of the routes family (`routeReach` and `planReach`,
+// #291 slice 23), so a Service Provider's account reads the Plans of the
+// routes it runs; asking for one is the office's, under `inProjects`.
 import { Page, PageRequest } from "@waste/contracts/pagination"
 import { OptimiseAnswer, Plan, PlanDetail, type OptimiseFallback } from "@waste/contracts/plans"
 import { plan } from "@waste/db/schema/routing"
@@ -26,8 +29,8 @@ import { BEARER_SECURITY, type AuthEnv } from "../auth/principal"
 import { requireGrant } from "../auth/require"
 import { afterCursor, fetchLimit, pageOf } from "../pagination"
 import { describeProblem, problem, validate } from "../problem"
-import { findRoute, labelOf, noSuchRoute, pickupsOfRoute } from "./execution-shapes"
-import { ensurePlan, findPlan, legsOfPlan, noSuchPlan, planColumns, planOf, planScope, type PlanRow } from "./plan-shapes"
+import { findReachedRoute, labelOf, noSuchRoute, pickupsOfRoute } from "./execution-shapes"
+import { ensurePlan, findPlan, findReachedPlan, legsOfPlan, noSuchPlan, planColumns, planOf, planReach, type PlanRow } from "./plan-shapes"
 import type { JobSender } from "@waste/db/jobs"
 import { lockedRoute, ORDER_IS_FROZEN, requireNotStarted } from "./routes"
 import { describeJson, IdParam } from "./shared"
@@ -57,14 +60,14 @@ export function planRoutes(guard: MiddlewareHandler<AuthEnv>, { routing, jobs }:
         operationId: "listRoutePlans",
         summary: "The Plans of one route",
         description:
-          "One page of the route's Plans, oldest first (ids are time-ordered) — every calculation ever asked for over this route, whoever ordered it: the optimiser, a dispatcher's reorder (`manual`), or the generated order measured (`baseline`). A re-optimisation is a new Plan and the previous rows stay, so this is the history; the route's own read says which one is active. Legs are `GET /plans/{id}`'s, fetched only when a map draws. Hand `nextCursor` back as `cursor` for the next page.",
+          "One page of the route's Plans, oldest first (ids are time-ordered) — every calculation ever asked for over this route, whoever ordered it: the optimiser, a dispatcher's reorder (`manual`), or the generated order measured (`baseline`). A re-optimisation is a new Plan and the previous rows stay, so this is the history; the route's own read says which one is active. Legs are `GET /plans/{id}`'s, fetched only when a map draws. The route is one `GET /routes/{id}` reaches: of the caller's projects, or one a Service Provider's account runs. Hand `nextCursor` back as `cursor` for the next page.",
         security: BEARER_SECURITY,
         responses: {
           200: describeJson("One page of the route's Plans.", PlanPage),
           400: describeProblem("The path does not hold an id, the page size is outside 1..200, or the cursor is not one this API wrote."),
           401: describeProblem("No usable token (see WWW-Authenticate)."),
           403: describeProblem(`No active account here, or the caller's role does not allow \`view\` on \`${MODULE}\`.`),
-          404: describeProblem("No route with that id in the projects this account works in."),
+          404: describeProblem("No route with that id in the projects this account works in, or, for a Service Provider's account, none its provider runs."),
         },
       }),
       guard,
@@ -77,11 +80,11 @@ export function planRoutes(guard: MiddlewareHandler<AuthEnv>, { routing, jobs }:
         const after = afterCursor(cursor)
         const tx = c.get("tx")
         const principal = c.get("principal")
-        if ((await findRoute(tx, principal, id)) === undefined) throw noSuchRoute(id)
+        if ((await findReachedRoute(tx, principal, id)) === undefined) throw noSuchRoute(id)
         const rows = await tx
           .select(planColumns)
           .from(plan)
-          .where(and(planScope(principal), eq(plan.routeId, id), after === undefined ? undefined : gt(plan.id, after)))
+          .where(and(planReach(tx, principal), eq(plan.routeId, id), after === undefined ? undefined : gt(plan.id, after)))
           .orderBy(asc(plan.id))
           .limit(fetchLimit(limit))
         return c.json(pageOf(rows.map(planOf), limit))
@@ -93,14 +96,14 @@ export function planRoutes(guard: MiddlewareHandler<AuthEnv>, { routing, jobs }:
         operationId: "getPlan",
         summary: "One Plan with its legs",
         description:
-          "One Plan of a project the caller works in, with its legs in driving order — each a stored LineString with its metres and seconds, written by the measurement and never patched (#124). A `calculating` or `failed` Plan has no legs yet, or ever. A Plan of another company, or of a project this account does not work in, is a Plan that does not exist here.",
+          "One Plan of a project the caller works in, with its legs in driving order — each a stored LineString with its metres and seconds, written by the measurement and never patched (#124). A `calculating` or `failed` Plan has no legs yet, or ever. A Plan of another company, or of a project this account does not work in — for a Service Provider's account, of a route its provider does not run — is a Plan that does not exist here.",
         security: BEARER_SECURITY,
         responses: {
           200: describeJson("The Plan and its legs.", PlanDetail),
           400: describeProblem("The path does not hold an id."),
           401: describeProblem("No usable token (see WWW-Authenticate)."),
           403: describeProblem(`No active account here, or the caller's role does not allow \`view\` on \`${MODULE}\`.`),
-          404: describeProblem("No plan with that id in the projects this account works in."),
+          404: describeProblem("No plan with that id in the projects this account works in, or, for a Service Provider's account, on no route its provider runs."),
         },
       }),
       guard,
@@ -110,7 +113,7 @@ export function planRoutes(guard: MiddlewareHandler<AuthEnv>, { routing, jobs }:
         const { id } = c.req.valid("param")
         const tx = c.get("tx")
         const principal = c.get("principal")
-        const row = await findPlan(tx, principal, id)
+        const row = await findReachedPlan(tx, principal, id)
         if (row === undefined) throw noSuchPlan(id)
         return c.json({ ...planOf(row), legs: await legsOfPlan(tx, principal.companyId, id) })
       },

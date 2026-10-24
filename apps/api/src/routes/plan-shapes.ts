@@ -24,6 +24,7 @@ import { and, asc, eq, inArray, type SQL } from "drizzle-orm"
 
 import type { Principal } from "../auth/principal"
 import { inProjects } from "../auth/projects"
+import { reachesThroughRoute } from "../auth/provider"
 import { problem } from "../problem"
 import { WORKER_QUEUE_MISSING } from "./generation"
 import { stampsOf } from "./shared"
@@ -70,8 +71,11 @@ export function planOf(row: PlanRow): Plan {
   }
 }
 
-/** The plans of this company, in the projects the caller works in. */
+/** The plans of this company, in the projects the caller works in: what a command's Plan is read through. */
 export const planScope = (principal: Principal): SQL | undefined => and(eq(plan.companyId, principal.companyId), inProjects(plan.projectId, principal))
+
+/** The plans of this company the caller reads: its projects' for an office account, the Plans of the routes its provider serves for a Service Provider's (`reachesThroughRoute`, #291 slice 23). */
+export const planReach = (tx: Tx, principal: Principal): SQL | undefined => and(eq(plan.companyId, principal.companyId), reachesThroughRoute(tx, principal, plan))
 
 /** One plan of this company by id, inside the caller's projects; undefined when it is neither. */
 export async function findPlan(tx: Tx, principal: Principal, id: string): Promise<PlanRow | undefined> {
@@ -79,6 +83,16 @@ export async function findPlan(tx: Tx, principal: Principal, id: string): Promis
     .select(planColumns)
     .from(plan)
     .where(and(planScope(principal), eq(plan.id, id)))
+    .limit(1)
+  return row
+}
+
+/** One plan of this company by id that the caller reads (`planReach`); undefined when it is not one. */
+export async function findReachedPlan(tx: Tx, principal: Principal, id: string): Promise<PlanRow | undefined> {
+  const [row] = await tx
+    .select(planColumns)
+    .from(plan)
+    .where(and(planReach(tx, principal), eq(plan.id, id)))
     .limit(1)
   return row
 }
@@ -151,6 +165,9 @@ export async function planContextOf(tx: Tx, companyId: string, routeRef: { activ
  * stops a page holds, and the stops the route's active Plan names, in its
  * order, through the route's own `active_plan_id` in the same statement. A
  * route without a Plan, or whose Plan names nothing, keeps its baseline.
+ * Both statements carry the reach (`reachesThroughRoute`), the office's
+ * projects or the routes a provider serves, so a stop a provider reads
+ * carries the sequence the office reads for it.
  */
 export async function sequencesOfRoutes(tx: Tx, principal: Principal, routeIds: readonly string[]): Promise<Map<string, number>> {
   const sequences = new Map<string, number>()
@@ -160,12 +177,12 @@ export async function sequencesOfRoutes(tx: Tx, principal: Principal, routeIds: 
     tx
       .select({ id: pickup.id, routeId: pickup.routeId, position: pickup.position })
       .from(pickup)
-      .where(and(eq(pickup.companyId, principal.companyId), inProjects(pickup.projectId, principal), inArray(pickup.routeId, ids))),
+      .where(and(eq(pickup.companyId, principal.companyId), reachesThroughRoute(tx, principal, pickup), inArray(pickup.routeId, ids))),
     tx
       .select({ routeId: planStop.routeId, pickupId: planStop.pickupId })
       .from(planStop)
       .innerJoin(route, and(eq(route.companyId, planStop.companyId), eq(route.activePlanId, planStop.planId)))
-      .where(and(eq(planStop.companyId, principal.companyId), inProjects(planStop.projectId, principal), inArray(route.id, ids)))
+      .where(and(eq(planStop.companyId, principal.companyId), reachesThroughRoute(tx, principal, planStop), inArray(route.id, ids)))
       .orderBy(asc(planStop.position)),
   ])
   const stopsByRoute = Map.groupBy(stops, (stop) => stop.routeId)

@@ -23,7 +23,8 @@ const FIXTURE_SIGNED_IN_HOME = DEMO_ACCOUNTS[0].homePath
 
 // Two faces. With the adapter on — the Pilot (Issue #150) — the password form
 // is all there is: the person lands where `/me` says (a driver on the
-// driver's app, everyone else on operations) or back on the page the gate
+// driver's app, a Service Provider's account on its workspace, everyone else
+// on operations) or back on the page the gate
 // sent them from (`?next=`), and a session the account's refusal ended is
 // explained here in the words of whoever refused it. With the adapter off,
 // the account picker stays as it was: a demo account signs in without a
