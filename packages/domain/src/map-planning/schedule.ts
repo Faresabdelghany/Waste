@@ -107,17 +107,26 @@ export function routeStopIndex(
 }
 
 /**
- * Container id → the names of the schemes whose live routes stop at it, as
- * the routes name them (`Route scheme`), sorted (#232): the Route scheme
- * filter's values for a container the API holds, which names no scheme of
- * its own.
+ * Container id → the names of the schemes whose live routes stop at it from
+ * `today` on, sorted (#232): the Route scheme filter's values for a container
+ * the API holds, which names no scheme of its own. A route counts while it is
+ * still to run — not completed, not before today — so a container a scheme
+ * no longer collects drops out with its last route; the name is the scheme's
+ * own, by the route's scheme id (`nameOf`), and a scheme not known gives none.
  */
 export function routeSchemeIndex(
   routes: readonly BusinessRecord[],
   pickups: readonly BusinessRecord[],
-  containers: readonly BusinessRecord[] = [],
+  containers: readonly BusinessRecord[],
+  { today, nameOf }: { today: string; nameOf: (schemeId: string) => string | undefined },
 ): Map<string, string[]> {
-  return indexStops(liveStops(routes, pickups, containers), (route) => cleanFact(route.facts["Route scheme"]))
+  return indexStops(liveStops(routes, pickups, containers), (route) => {
+    if (route.status === "Completed") return undefined
+    const date = typedString(route.submittedValues, "actualDate") ?? typedString(route.submittedValues, "serviceDate")
+    if (date === undefined || date < today) return undefined
+    const schemeId = typedString(route.submittedValues, "schemeId")
+    return schemeId === undefined ? undefined : nameOf(schemeId)
+  })
 }
 
 const MONTHS: Readonly<Record<string, string>> = {

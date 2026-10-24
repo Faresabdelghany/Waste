@@ -11,7 +11,7 @@
 // exercised without a browser.
 
 import type { BusinessRecord } from "../prototype-record"
-import { splitList } from "../record-values"
+import { cleanFact, splitList, typedString } from "../record-values"
 import { schemeLicenceDay } from "../planning/checks"
 import { addDays, isIsoDate, SERVICE_DAYS, serviceDayOf, sortServiceDays, type ServiceDay } from "./recurrence"
 import { stringValue } from "./validation"
@@ -83,7 +83,17 @@ export const SERVING_KEY = "serving"
  * place lies in, the fraction it serves (each placement names its own), and
  * where it serves, as a person reads the place.
  */
-export type ServingPeriod = { from: string; until: string | null; areaIds: readonly string[]; fractions: readonly string[]; place?: string }
+export type ServingPeriod = {
+  from: string
+  until: string | null
+  areaIds: readonly string[]
+  /** The areas' names, in `areaIds`' order: what the map's filter offers (a name may hold " · ", so no joined fact). */
+  areaNames?: readonly string[]
+  fractions: readonly string[]
+  place?: string
+  /** The placement the record shows, whose place the map's marker stands at. */
+  shown?: true
+}
 
 /** A container's serving as read on `asOf`, the project's day. */
 export type ServingReading = { asOf: string; periods: readonly ServingPeriod[] }
@@ -109,12 +119,22 @@ function parseReading(raw: string): ServingReading {
     const asOf = day(parsed.asOf)
     if (asOf !== null && Array.isArray(parsed.periods)) {
       const strings = (value: unknown) => (Array.isArray(value) ? value.filter((item): item is string => typeof item === "string") : [])
-      const periods = parsed.periods.flatMap((entry: { from?: unknown; until?: unknown; areaIds?: unknown; fractions?: unknown; place?: unknown }): ServingPeriod[] => {
+      const periods = parsed.periods.flatMap((entry: { from?: unknown; until?: unknown; areaIds?: unknown; areaNames?: unknown; fractions?: unknown; place?: unknown; shown?: unknown }): ServingPeriod[] => {
         const from = day(entry?.from)
         const until = entry?.until === null || entry?.until === undefined ? null : day(entry.until)
         // A period it cannot read serves nowhere: an end it cannot read is no open end.
         if (from === null || (until === null && entry.until !== null && entry.until !== undefined)) return []
-        return [{ from, until, areaIds: strings(entry.areaIds), fractions: strings(entry.fractions), ...(typeof entry.place === "string" ? { place: entry.place } : {}) }]
+        return [
+          {
+            from,
+            until,
+            areaIds: strings(entry.areaIds),
+            areaNames: strings(entry.areaNames),
+            fractions: strings(entry.fractions),
+            ...(typeof entry.place === "string" ? { place: entry.place } : {}),
+            ...(entry.shown === true ? { shown: true as const } : {}),
+          },
+        ]
       })
       return { asOf, periods }
     }
@@ -154,25 +174,46 @@ function outOfService(periods: readonly ServingPeriod[], day: string): string | 
 }
 
 /**
- * The planning areas a container lies in on the day its reading was made —
- * every one the placement serving it then lies in, for one the API holds —
- * or its one `planningAreaId`, for a fixture's (#232): the map's readers of
- * where a container is today read it here, as the rule preview reads a
- * scheme's day.
+ * The planning areas a container lies in today, by id and by name (#232):
+ * the map's readers of where a container is read them here. For one the API
+ * holds, the areas of the placement serving it on the day its reading was
+ * made — the one the record shows, whose place its marker stands at, where
+ * that one serves; any serving then otherwise. For a fixture's, its one typed
+ * `planningAreaId` and its one `Planning area` fact. The rule preview reads
+ * every period's areas instead (`containerMatchProfile`), since it judges a
+ * scheme's first collection, not today.
  */
-export function containerAreaIds(record: Pick<BusinessRecord, "submittedValues">): string[] {
+export function containerAreaRefs(record: Pick<BusinessRecord, "submittedValues" | "facts">): { ids: string[]; names: string[] } {
   const reading = servingReadingOf(record)
   if (reading === undefined) {
-    const areaId = stringValue(record.submittedValues ?? {}, "planningAreaId")
-    return areaId === undefined ? [] : [areaId]
+    const id = typedString(record.submittedValues, "planningAreaId")
+    const name = cleanFact(record.facts?.["Planning area"])
+    return { ids: id === undefined ? [] : [id], names: name === undefined ? [] : [name] }
   }
-  return [...new Set(reading.periods.filter((period) => periodHolds(period, reading.asOf)).flatMap((period) => period.areaIds))]
+  const today = reading.periods.filter((period) => periodHolds(period, reading.asOf))
+  const shown = today.filter((period) => period.shown === true)
+  const serving = shown.length > 0 ? shown : today
+  return {
+    ids: [...new Set(serving.flatMap((period) => period.areaIds))],
+    names: [...new Set(serving.flatMap((period) => period.areaNames ?? []))],
+  }
 }
 
-/** Whether a container is in service on the day its reading was made: a placement serves it then, for one the API holds; its status, for a fixture's (#232). */
+/** The planning-area ids a container lies in today (`containerAreaRefs`). */
+export function containerAreaIds(record: Pick<BusinessRecord, "submittedValues" | "facts">): string[] {
+  return containerAreaRefs(record).ids
+}
+
+/** Whether a container is in service on the day its reading was made: a placement serves it then, for one the API holds (the rule `containerMatchProfile` judges a day by); its status, for a fixture's (#232). */
 export function containerInService(record: Pick<BusinessRecord, "submittedValues" | "status">): boolean {
   const reading = servingReadingOf(record)
-  return reading === undefined ? ELIGIBLE_CONTAINER_STATUSES.has(record.status) : reading.periods.some((period) => periodHolds(period, reading.asOf))
+  return reading === undefined ? ELIGIBLE_CONTAINER_STATUSES.has(record.status) : outOfService(reading.periods, reading.asOf) === undefined
+}
+
+/** Whether a container serves today or from a later day: a placement not ended, for one the API holds; in service, for a fixture's — a stop a scheme plans on it is no unservable one (#232). */
+export function containerServesAhead(record: Pick<BusinessRecord, "submittedValues" | "status">): boolean {
+  const reading = servingReadingOf(record)
+  return reading === undefined ? ELIGIBLE_CONTAINER_STATUSES.has(record.status) : reading.periods.some((period) => period.until === null || period.until > reading.asOf)
 }
 
 /** The container form's enum ids mapped onto the fixture display vocabulary. */

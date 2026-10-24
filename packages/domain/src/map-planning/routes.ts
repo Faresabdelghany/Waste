@@ -11,10 +11,10 @@
 // that address when its street is in the gazetteer. Cancelled routes are
 // never counted. Pure data logic.
 
-import { splitFilterValues } from "../business-filters"
 import type { BusinessRecord } from "../prototype-record"
 import { cleanFact, typedString } from "../record-values"
 import { isSoftDeleted } from "../record-visibility"
+import { containerAreaRefs } from "../route-schemes/matching"
 import { isIsoDate } from "../route-schemes/recurrence"
 import type { LngLat } from "./geo"
 import { containerLocation, knownAddressLocation, type Gazetteer } from "./positions"
@@ -258,8 +258,8 @@ export function routesInSelection(
   if (selected.length === 0) return empty
 
   const selectedIds = new Set(selected.map((container) => container.id))
-  // Every area a selected container lies in: one the API holds names each it lies in (#232).
-  const selectedAreas = new Set(selected.flatMap((container) => splitFilterValues(container.facts["Planning area"]).map((name) => name.toLowerCase())))
+  // Every area a selected container lies in today, by name (`containerAreaRefs`, #232).
+  const selectedAreas = new Set(selected.flatMap((container) => containerAreaRefs(container).names.map((name) => name.toLowerCase())))
 
   const rows = linkRoutes(routes, pickups, allContainers)
     .filter(

@@ -20,10 +20,13 @@
 // record never shows one placement's subscription beside another's place:
 // the point as typed `latitude`/`longitude`, the name (`Property` or `Shared
 // collection point`), the `Address`, the `Property type` and the `Agreement`
-// as facts, and the first planning area containing the point, in load order,
-// as `planningAreaId` and the `Planning area` fact. The map places a record
-// by exactly those, and its statistics and filters read the facts. One that
-// serves later says where and from when (`Serves at`).
+// as facts. The map places a record by exactly those, and its statistics
+// read the facts; where it lies and whether it serves today the map reads
+// from the serving, through `containerAreaRefs` and `containerInService`
+// (#232), the period the record shows marked `shown`. The `Planning area`
+// fact names every area for a person, and `planningAreaId` is the first, as
+// a fixture's carries its one. One that serves later says where and from
+// when (`Serves at`).
 //
 // This is a display derivation for the map and the preview. At generation
 // the worker's PostGIS matcher (apps/worker/src/jobs/stop-matching.ts) is the
@@ -181,8 +184,10 @@ export function containerPlace(shown: ContainerServicePlacement | undefined, pla
       {
         ...chain.period,
         areaIds: areas.map((area) => area.id),
+        areaNames: areas.map((area) => area.name),
         fractions: [nameVia(context, "fraction", placement.wasteFractionId)],
         ...(chain.place === undefined ? {} : { place: placeLabel(chain.place, addressOf(chain, chain.place)) }),
+        ...(placement.id === shown?.id ? { shown: true as const } : {}),
       },
     ]
   })
@@ -205,7 +210,7 @@ export function containerPlace(shown: ContainerServicePlacement | undefined, pla
       ...(kind === undefined ? {} : { "Property type": kind }),
       // As the fixtures spell it, which the Selected area's count of active agreements reads.
       Agreement: `${typed(agreement, "agreementNumber") ?? agreement.name} · ${agreement.status.toLowerCase()}`,
-      // Every area it lies in, as multi-valued facts are joined; the map's readers split it (#232).
+      // Every area it lies in, for a person to read; the map's readers read the serving's ids and names (`containerAreaRefs`, #232).
       ...(areas.length === 0 ? {} : { "Planning area": areas.map((area) => area.name).join(" · ") }),
     },
     values: { latitude, longitude, ...values, ...(areas.length === 0 ? {} : { planningAreaId: areas[0].id }) },

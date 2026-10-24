@@ -96,6 +96,9 @@ test("the filters offer each scheme whose routes stop at a container, a name hol
   // A scheme of the run's own, generated: its routes stop at the seeded Residual containers in Indre By Operations.
   const { scheme } = await schemeWithRoutes(api, `${uniqueName("E2E Map scheme")} · Week A`, 7)
   await openMapPlanning(page)
+  // Every seeded placed container across the tenant's areas, before the filter.
+  const markers = page.locator("[data-marker]")
+  const before = await markers.count()
   await page.getByRole("button", { name: "Filter", exact: true }).click()
   const popover = page.getByRole("dialog").filter({ has: page.getByPlaceholder("Find a filter") })
   await popover.getByRole("button", { name: /^Route scheme\b/ }).click()
@@ -104,7 +107,9 @@ test("the filters offer each scheme whose routes stop at a container, a name hol
   await option.getByRole("checkbox").check()
   await popover.getByRole("button", { name: "Apply filters" }).click()
   await expect(page.getByText(`Route scheme: ${scheme.name}`, { exact: true })).toBeVisible()
-  await expect(page.locator("[data-marker]").first()).toBeVisible()
+  // The scheme's stops alone: some, and fewer than the tenant's every container (Amager's and Nordhavn's are no stops of it).
+  await expect.poll(() => markers.count(), { message: "the map narrows to the scheme's stops" }).toBeLessThan(before)
+  expect(await markers.count()).toBeGreaterThan(0)
 })
 
 type ServiceAreaCreated = { id: string; name: string; code: string; planningAreaIds: string[]; wasteFractionIds: string[]; validFrom: string; validTo: string | null; assignment: { serviceProviderId: string } | null }
