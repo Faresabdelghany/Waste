@@ -13,7 +13,7 @@ import type { BusinessRecord } from "../../data/business-modules"
 import { createExternalStore } from "../../external-store"
 import type { ApiClient } from "../client"
 import { ApiProblem, genericProblem, NO_ACTIVE_ACCOUNT_PROBLEM_TYPE } from "../problem"
-import { NOTHING_RESOLVED, type MappingContext, type Resource, type ResourceAdapter, type ServerModule } from "../records/adapter"
+import { NOTHING_RESOLVED, PartialWrite, type MappingContext, type Resource, type ResourceAdapter, type ServerModule } from "../records/adapter"
 import {
   adapterFor,
   companyRecordIdOf,
@@ -41,6 +41,7 @@ import {
   untilDayTurns,
   withCreated,
   withNotGranted,
+  withOutcome,
   withRecord,
   withoutRecord,
   writeRecord,
@@ -752,5 +753,84 @@ describe("a module read again", () => {
     const resolve = resolverOver(state)
     assert.equal(resolve.serverIdOf("mint-1"), "new-1", "a picker value naming it still names the server's row")
     assert.equal(resolve.byServerId("new-1")?.id, "mint-1", "a row read after, linking to it by server id, names it by the minted id")
+  })
+})
+
+// A write the API took whose answer could not be mapped into a record (#243) has landed: a resubmit would make the
+// row a second time. So it is neither a refusal nor a rejection — the row stays as typed, under the server id the
+// answer named, so a second save is a patch; the store reads the module again and says it was saved.
+describe("a write the API took", () => {
+  const unmappable = (): ResourceAdapter<Thing> & { calls: string[] } => ({
+    ...thingAdapter("t", []),
+    toRecord: () => {
+      throw new TypeError("Cannot read properties of undefined (reading 'name')")
+    },
+  })
+  const module = (resource: ResourceAdapter<Thing>): ServerModule => ({ workspaceId: "configure", moduleId: "organization", resources: [resource] })
+  const typed = record("t-mint-1", "New thing")
+
+  test("a create the API answered 201 whose answer cannot be mapped has landed, under the server id it named, never a refusal", async () => {
+    const resource = unmappable()
+    const outcome = await writeRecord(client, module(resource), loaded({ records: [], serverIds: new Map() }, 1), typed, options())
+    assert.equal(outcome.kind, "landed")
+    if (outcome.kind !== "landed") return
+    assert.deepEqual([outcome.recordId, outcome.serverId], ["t-mint-1", "new-1"])
+    assert.match(outcome.problem.detail ?? "", /reading 'name'/)
+    assert.deepEqual(resource.calls, ['create {"name":"New thing"}'])
+  })
+
+  test("a create the API answered with no row id has landed, and the store drops its row for the module's read again to bring", async () => {
+    const resource: ResourceAdapter<Thing> = { ...thingAdapter("t", []), create: async () => undefined as unknown as Thing }
+    const outcome = await writeRecord(client, module(resource), loaded({ records: [], serverIds: new Map() }, 1), typed, options())
+    assert.deepEqual(outcome.kind === "landed" ? [outcome.recordId, outcome.serverId] : outcome.kind, ["t-mint-1", undefined])
+    const settled = withOutcome(withRecord(loaded({ records: [], serverIds: new Map() }, 1), typed), outcome, typed, undefined)
+    assert.deepEqual(settled.records, [], "kept as typed with no server id, a second save would create it again")
+  })
+
+  test("a patch the API answered whose answer cannot be mapped has landed too", async () => {
+    const current = loaded({ records: [record("t-1", "One")], serverIds: new Map([["t-1", "1"]]) }, 1)
+    const outcome = await writeRecord(client, module(unmappable()), current, record("t-1", "One renamed"), options())
+    assert.deepEqual(outcome.kind === "landed" ? [outcome.recordId, outcome.serverId] : outcome.kind, ["t-1", "1"])
+  })
+
+  test("a write refused after part of it landed, whose part cannot be mapped, is still the refusal, and never throws", async () => {
+    const resource: ResourceAdapter<Thing> = {
+      ...unmappable(),
+      update: async () => {
+        throw new PartialWrite(new ApiProblem({ type: "about:blank", title: "Conflict", status: 409, detail: "The set moved" }), { id: "1", createdAt: "", updatedAt: "", name: "One renamed" })
+      },
+    }
+    const current = loaded({ records: [record("t-1", "One")], serverIds: new Map([["t-1", "1"]]) }, 1)
+    const outcome = await writeRecord(client, module(resource), current, record("t-1", "One renamed"), options())
+    assert.equal(outcome.kind, "refused")
+    if (outcome.kind !== "refused") return
+    assert.equal(outcome.problem.detail, "The set moved")
+    assert.equal(outcome.record, undefined, "the row as the server holds it could not be mapped; the module is read again for it")
+  })
+
+  test("the store keeps a landed row as typed under its own id with the server id behind it, so a second save is a patch and never a second create", async () => {
+    const current = loaded({ records: [typed], serverIds: new Map() }, 1)
+    const settled = withOutcome(current, { kind: "landed", recordId: typed.id, serverId: "new-1", problem: genericProblem(0, "boom") }, typed, undefined)
+    assert.deepEqual(settled.records.map((row) => row.id), ["t-mint-1"])
+    assert.equal(settled.serverIds.get("t-mint-1"), "new-1")
+    assert.equal(settled.problem, null, "it was saved: no problem stands against the module")
+    const resource = thingAdapter("t", [])
+    const again =await writeRecord(client, module(resource), settled, record("t-mint-1", "New thing, renamed"), options())
+    assert.equal(again.kind, "updated")
+    assert.deepEqual(resource.calls, ['update new-1 {"name":"New thing, renamed"}'])
+  })
+
+  test("the store settles every other outcome as it did: a create under its minted id, a patch in place, nothing for nothing moved, a refusal rolled back", () => {
+    const current = loaded({ records: [record("t-1", "One")], serverIds: new Map([["t-1", "1"]]) }, 1)
+    const created = withOutcome(current, { kind: "created", record: record("t-new-1", "New"), serverId: "new-1", optimisticId: "t-mint-1" }, typed, undefined)
+    assert.deepEqual(created.records.map((row) => row.id), ["t-mint-1", "t-1"])
+    const updated = withOutcome(current, { kind: "updated", record: record("t-1", "One renamed"), serverId: "1" }, record("t-1", "One renamed"), record("t-1", "One"))
+    assert.equal(updated.records[0].name, "One renamed")
+    assert.equal(withOutcome(current, { kind: "unchanged", record: record("t-1", "One") }, record("t-1", "One"), record("t-1", "One")), current)
+    const optimistic = withRecord(current, record("t-1", "One renamed"))
+    const refused = withOutcome(optimistic, { kind: "refused", recordId: "t-1", problem: genericProblem(409, "No") }, record("t-1", "One renamed"), record("t-1", "One"))
+    assert.deepEqual([refused.records[0].name, refused.problem?.detail], ["One", "No"])
+    const createRefused = withOutcome(withRecord(current, typed), { kind: "refused", recordId: "t-mint-1", problem: genericProblem(400, "No") }, typed, undefined)
+    assert.deepEqual(createRefused.records.map((row) => row.id), ["t-1"])
   })
 })

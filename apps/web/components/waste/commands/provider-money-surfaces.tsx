@@ -102,7 +102,7 @@ export function ServiceAreasRead() {
   return null
 }
 
-/** One write from a row's details: the dialog open until the API has answered, the store's toast over it on a refusal; `done` told the row the API holds. */
+/** One write from a row's details: the dialog open until the API has answered, the store's toast over it on a refusal; `done` told the row the API holds, or the row as written where the API took it but its answer could not be shown (#243). */
 function useRowWrite(module: ModuleLocation) {
   const { upsertRecord } = useBusinessRecordStore()
   const [busy, setBusy] = useState(false)
@@ -112,6 +112,7 @@ function useRowWrite(module: ModuleLocation) {
     void Promise.resolve(upsertRecord(module.workspaceId, module.moduleId, record)).then((result) => {
       setBusy(false)
       if (result?.kind === "created" || result?.kind === "updated") done(result.record)
+      else if (result?.kind === "landed") done(record)
       else if (result?.kind === "unchanged") {
         toast.info("Nothing to change", { description: "The row is as the API holds it." })
         done(result.record)
