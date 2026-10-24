@@ -500,7 +500,8 @@ describe("the drain", () => {
     device.door.always("POST /driver/commands", ({ body }) => outcomes((body as { commands: { id: string }[] }).commands))
     const app = device.open()
     await app.load()
-    await eventually(() => assert.deepEqual(app.store.getSnapshot().waiting, []), 10_000)
+    // Polled by its length: a deep-equal against two hundred waiting rows builds a diff of all of them on every miss, which starves the drain it waits on.
+    await eventually(() => assert.equal(app.store.getSnapshot().waiting.length, 0), 10_000)
     assert.deepEqual(device.door.batches().map((batch) => batch.length), [200, 1])
     assert.deepEqual(device.door.batches().flat().map((command) => command.id), ids)
   })
