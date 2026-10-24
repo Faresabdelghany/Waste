@@ -84,7 +84,7 @@ import { afterCursor, fetchLimit, pageOf } from "../pagination"
 import { describeProblem, invalidRequest, problem, validate } from "../problem"
 import { projectToday } from "./fleet-lookups"
 import { requireServiceProvider, type Scope } from "./references"
-import { groupMovesHeld, releaseHolds } from "./route-holds"
+import { groupReleases, releaseHolds } from "./route-holds"
 import {
   assembleGroups,
   findScheme,
@@ -387,8 +387,8 @@ export function collectionGroupRoutes(guard: MiddlewareHandler<AuthEnv>, { now =
             .returning(groupColumns),
         )
         if (row === undefined) throw noSuchGroup(id)
-        // A move of what the group's routes copy or run on releases their holds (#209, routes/route-holds.ts).
-        if (groupMovesHeld(current, left)) await releaseHolds(tx, principal, current.projectId, { collectionGroupIds: [id] })
+        // A move of what the group's routes copy releases their holds, a day taken away those on it (#209, #226, routes/route-holds.ts).
+        await releaseHolds(tx, principal, current.projectId, { collectionGroupIds: [id] }, groupReleases(current, left))
         return c.json(await groupWithSets(tx, principal.companyId, row))
       },
     )

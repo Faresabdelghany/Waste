@@ -161,6 +161,10 @@ export type RouteReschedule = z.infer<typeof RouteReschedule>
 export const RouteCancel = z.strictObject({ reason: Paragraph })
 export type RouteCancel = z.infer<typeof RouteCancel>
 
+/** `POST /routes/:id/release-hold` (#226): a held planned route handed back to its scheme. Takes nothing. */
+export const RouteReleaseHold = z.strictObject({})
+export type RouteReleaseHold = z.infer<typeof RouteReleaseHold>
+
 /** The most pickups an order may name: a day's route has tens, a long one hundreds, and five hundred is room for any. */
 export const PICKUP_ORDER_MAX = 500
 

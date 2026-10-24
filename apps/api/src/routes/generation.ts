@@ -60,7 +60,8 @@ import { GenerationRequest, GenerationRun, GenerationRunListQuery } from "@waste
 import { Page } from "@waste/contracts/pagination"
 import type { GenerationRunStatus, GenerationTrigger } from "@waste/contracts/planning"
 import { GENERATE_ROUTES_QUEUE } from "@waste/db/commands/generation"
-import { jobHeld, QueueMissing, sendGenerateRoutes, type JobSender } from "@waste/db/jobs"
+import type { Tx } from "@waste/db/client"
+import { jobHeld, QueueMissing, sendGenerateRoutes, type JobSender, type Send } from "@waste/db/jobs"
 import { generationRun } from "@waste/db/schema/generation"
 import { and, desc, eq, lt, sql, type SQL } from "drizzle-orm"
 import { Hono, type MiddlewareHandler } from "hono"
@@ -130,6 +131,48 @@ const runOf = (row: RunRow): GenerationRun => ({
 /** The runs of this company, in the projects the caller works in. */
 const runScope = (principal: Principal): SQL | undefined => and(eq(generationRun.companyId, principal.companyId), inProjects(generationRun.projectId, principal))
 
+/** What asking for a run answered: the run the request started; the scheme's run already queued or in flight, which it did not start; or a send refused with no held run to show for it. */
+export type AskedRun = { kind: "started"; run: GenerationRun } | { kind: "held"; run: GenerationRun } | { kind: "refused" }
+
+/**
+ * A run of the scheme over the window, asked of the worker in the caller's
+ * transaction (the header's rule): the send first, under an id minted for
+ * the run, and the run written only once pg-boss has taken its job; a send
+ * the scheme's queued run absorbs answers that run. Throws `QueueMissing` for
+ * a database no worker has started on, before anything is written in the
+ * transaction. The office's Generate asks through it, and so does a route's
+ * `release-hold` (routes/routes.ts, #226).
+ */
+export async function askGeneration(tx: Tx, principal: Principal, send: Send, scheme: { id: string; projectId: string }, window: { from: string; to: string }): Promise<AskedRun> {
+  const runId = newId()
+  const jobId = await sendGenerateRoutes(send, tx, { generationRunId: runId, companyId: principal.companyId, routeSchemeId: scheme.id })
+  if (jobId === null) {
+    // A job of the scheme is queued, active or waiting to retry: the run that job is held for — the one whose job pg-boss's table still shows live — newest should there be more than one.
+    const [inFlight] = await tx
+      .select(runColumns)
+      .from(generationRun)
+      .where(and(runScope(principal), eq(generationRun.routeSchemeId, scheme.id), jobHeld({ queue: GENERATE_ROUTES_QUEUE, id: sql`${generationRun.jobId}` })))
+      .orderBy(desc(generationRun.id))
+      .limit(1)
+    return inFlight === undefined ? { kind: "refused" } : { kind: "held", run: runOf(inFlight) }
+  }
+  const [row] = await tx
+    .insert(generationRun)
+    .values({
+      id: runId,
+      companyId: principal.companyId,
+      projectId: scheme.projectId,
+      routeSchemeId: scheme.id,
+      trigger: "on-demand",
+      windowFrom: window.from,
+      windowTo: window.to,
+      status: "queued",
+      jobId,
+    })
+    .returning(runColumns)
+  return { kind: "started", run: runOf(row) }
+}
+
 export function generationRoutes(guard: MiddlewareHandler<AuthEnv>, { jobs }: GenerationOptions) {
   return new Hono<AuthEnv>()
     .post(
@@ -166,40 +209,15 @@ export function generationRoutes(guard: MiddlewareHandler<AuthEnv>, { jobs }: Ge
         if (scheme === undefined) throw noSuchScheme(id)
         if (scheme.status !== "validated") throw problem(409, { detail: DRAFT_GENERATES_NOTHING })
 
-        const runId = newId()
-        let jobId: string | null
+        let asked: AskedRun
         try {
-          jobId = await sendGenerateRoutes(jobs.send, tx, { generationRunId: runId, companyId: principal.companyId, routeSchemeId: scheme.id })
+          asked = await askGeneration(tx, principal, jobs.send, scheme, window)
         } catch (error) {
           if (error instanceof QueueMissing) throw problem(503, { detail: WORKER_QUEUE_MISSING })
           throw error
         }
-        if (jobId === null) {
-          // A job of the scheme is queued, active or waiting to retry: answer the run that job is held for — the one whose job pg-boss's table still shows live — newest should there be more than one.
-          const [inFlight] = await tx
-            .select(runColumns)
-            .from(generationRun)
-            .where(and(runScope(principal), eq(generationRun.routeSchemeId, scheme.id), jobHeld({ queue: GENERATE_ROUTES_QUEUE, id: sql`${generationRun.jobId}` })))
-            .orderBy(desc(generationRun.id))
-            .limit(1)
-          if (inFlight === undefined) throw problem(409, { detail: GENERATION_ALREADY_QUEUED })
-          return c.json(runOf(inFlight), 200)
-        }
-        const [row] = await tx
-          .insert(generationRun)
-          .values({
-            id: runId,
-            companyId: principal.companyId,
-            projectId: scheme.projectId,
-            routeSchemeId: scheme.id,
-            trigger: "on-demand",
-            windowFrom: window.from,
-            windowTo: window.to,
-            status: "queued",
-            jobId,
-          })
-          .returning(runColumns)
-        return c.json(runOf(row), 202)
+        if (asked.kind === "refused") throw problem(409, { detail: GENERATION_ALREADY_QUEUED })
+        return c.json(asked.run, asked.kind === "started" ? 202 : 200)
       },
     )
     .get(

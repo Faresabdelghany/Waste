@@ -113,8 +113,8 @@ import { describeProblem, invalidRequest, problem, validate } from "../problem"
 import { projectToday } from "./fleet-lookups"
 import { periodAfter, requireOrdered } from "./periods"
 import { requireDepot, requirePlanningArea, requireUnloadingStation, type Scope } from "./references"
-import { releaseHolds, schemeMovesHeld } from "./route-holds"
-import { groupsMovingHeld, requireGroupEdit, writeGroupEdit } from "./scheme-edit"
+import { releaseHolds, schemeReleases } from "./route-holds"
+import { groupsReleasing, requireGroupEdit, writeGroupEdit } from "./scheme-edit"
 import {
   findScheme,
   fleetOf,
@@ -402,9 +402,12 @@ export function routeSchemeRoutes(guard: MiddlewareHandler<AuthEnv>, { now = () 
             .returning(schemeColumns),
         )
         if (row === undefined) throw noSuchScheme(id)
-        // The holds the edit releases (#209, routes/route-holds.ts): every held route of the scheme where what they all copy or run on moved, else those of the groups whose own moved.
-        if (schemeMovesHeld(current, patch)) await releaseHolds(tx, principal, current.projectId, { routeSchemeId: id })
-        else if (edit !== undefined) await releaseHolds(tx, principal, current.projectId, { collectionGroupIds: groupsMovingHeld(edit) })
+        // The holds the edit releases (#209, #226, routes/route-holds.ts): every held route of the scheme where what they all copy moved, else those on a service day taken away and those the groups' own moves release.
+        const schemeRelease = schemeReleases(current, patch)
+        await releaseHolds(tx, principal, current.projectId, { routeSchemeId: id }, schemeRelease)
+        if (schemeRelease.kind !== "all" && edit !== undefined) {
+          for (const { groupId, release } of groupsReleasing(edit)) await releaseHolds(tx, principal, current.projectId, { collectionGroupIds: [groupId] }, release)
+        }
         if (edit === undefined) return c.json(schemeOf(row, groups, (await generationsOf(tx, principal.companyId, new Map([[id, groups]]))).get(id) ?? NEVER_GENERATED))
         await writeGroupEdit(tx, scope, id, edit)
         return c.json(await schemeWithGroups(tx, principal.companyId, row))

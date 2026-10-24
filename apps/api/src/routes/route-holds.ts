@@ -15,17 +15,23 @@
 //
 // An edit of what the hold covers releases it, in the edit's transaction, so
 // the next run brings those routes back to the scheme: the scheme's planned
-// start, depot, unloading station or service days — what every route of the
-// scheme copies or runs on — release every held route of the scheme; a
-// group's vehicle, driver, provider or days — what that group's routes copy
-// or run on — release that group's alone, since another group's routes copy
-// nothing from it. The scheme's `PATCH` (with or without `collectionGroups`,
+// start, depot or unloading station — what every route of the scheme copies —
+// release every held route of the scheme; a group's vehicle, driver or
+// provider — what that group's routes copy — release that group's alone,
+// since another group's routes copy nothing from it. A change of days, the
+// scheme's or a group's, releases only the held routes whose own collection it
+// takes away, on a weekday the days no longer hold: one that adds a day
+// releases nothing, since no held route's collection changed (#226). A held
+// route on a weekday taken away is cancelled by the next run all the same,
+// which clears its hold; released here, it no longer reads as held on a
+// collection the scheme dropped. `release-hold` (routes/routes.ts) hands one
+// route back by hand. The scheme's `PATCH` (with or without `collectionGroups`,
 // routes/route-schemes.ts) and the group's `PATCH` (routes/collection-groups.ts)
 // both ask this module. Both hold the scheme's row lock, which a generation
 // run takes before it reads a route, so a release and a run take turns. A
 // held route is a planned one, so a release never writes a route that was
 // dispatched.
-import { withinServiceDays } from "@waste/contracts/route-schemes"
+import { serviceDayOf } from "@waste/domain/route-schemes/recurrence"
 import type { Tx } from "@waste/db/client"
 import { route } from "@waste/db/schema/execution"
 import { and, eq, inArray, isNotNull } from "drizzle-orm"
@@ -43,36 +49,55 @@ type SchemeCoveredPatch = Partial<SchemeCovered>
 /** A group's fields a hold covers. */
 export type GroupCovered = { vehicleId: string | null; driverId: string | null; serviceProviderId: string | null; days: readonly string[] }
 
-/** Two sets of days alike, whatever order they were given in: each within the other, in the contracts' one spelling of within. */
-const sameDays = (a: readonly string[], b: readonly string[]): boolean => withinServiceDays(a, b) && withinServiceDays(b, a)
+/** What an edit releases of the held routes it reaches: every one, those on the weekdays it takes away, or none. */
+export type HoldRelease = { kind: "all" } | { kind: "days"; left: readonly string[] } | { kind: "none" }
 
-/** Whether a scheme patch moves what every route of the scheme copies or runs on: its start, its depot, its station or its service days. */
-export function schemeMovesHeld(current: SchemeCovered, patch: SchemeCoveredPatch): boolean {
-  return (
-    (patch.plannedStartTime !== undefined && patch.plannedStartTime !== (current.plannedStartTime === null ? null : timeOf(current.plannedStartTime))) ||
-    (patch.depotId !== undefined && patch.depotId !== current.depotId) ||
-    (patch.unloadingStationId !== undefined && patch.unloadingStationId !== current.unloadingStationId) ||
-    (patch.serviceDays !== undefined && !sameDays(patch.serviceDays, current.serviceDays))
-  )
+/** The days `before` holds that `after` does not: the collections an edit of days takes away. */
+const daysTakenAway = (before: readonly string[], after: readonly string[]): string[] => before.filter((day) => !after.includes(day))
+
+/** A change of days as a release: the held routes on a weekday taken away, or none where the days only grew. */
+const daysRelease = (before: readonly string[], after: readonly string[]): HoldRelease => {
+  const left = daysTakenAway(before, after)
+  return left.length === 0 ? { kind: "none" } : { kind: "days", left }
 }
 
-/** Whether a group as an edit leaves it moves what its routes copy or run on: its vehicle, its driver, its provider or its days. */
-export function groupMovesHeld(before: GroupCovered, after: GroupCovered): boolean {
-  return before.vehicleId !== after.vehicleId || before.driverId !== after.driverId || before.serviceProviderId !== after.serviceProviderId || !sameDays(before.days, after.days)
+/** What a scheme patch releases: every held route of the scheme where it moves what they all copy — the start, the depot, the station — else those on the service days it takes away. */
+export function schemeReleases(current: SchemeCovered, patch: SchemeCoveredPatch): HoldRelease {
+  if (
+    (patch.plannedStartTime !== undefined && patch.plannedStartTime !== (current.plannedStartTime === null ? null : timeOf(current.plannedStartTime))) ||
+    (patch.depotId !== undefined && patch.depotId !== current.depotId) ||
+    (patch.unloadingStationId !== undefined && patch.unloadingStationId !== current.unloadingStationId)
+  ) {
+    return { kind: "all" }
+  }
+  return patch.serviceDays === undefined ? { kind: "none" } : daysRelease(current.serviceDays, patch.serviceDays)
+}
+
+/** What a group as an edit leaves it releases: every held route of the group where its vehicle, driver or provider moved, else those on the days it takes away. */
+export function groupReleases(before: GroupCovered, after: GroupCovered): HoldRelease {
+  if (before.vehicleId !== after.vehicleId || before.driverId !== after.driverId || before.serviceProviderId !== after.serviceProviderId) return { kind: "all" }
+  return daysRelease(before.days, after.days)
 }
 
 /**
  * Releases the holds of the scheme's routes, or of the named groups' routes,
- * in the edit's transaction: each held route goes back to being the scheme's,
+ * as `release` says — all of them, or those on a weekday taken away — in the
+ * edit's transaction: each released route goes back to being the scheme's,
  * which the next generation run then refreshes in full. Fenced like every
  * route statement (`routeScope`: the tenant and the caller's projects), and
  * to the scheme's own project.
  */
-export async function releaseHolds(tx: Tx, principal: Principal, projectId: string, of: { routeSchemeId: string } | { collectionGroupIds: readonly string[] }): Promise<void> {
+export async function releaseHolds(tx: Tx, principal: Principal, projectId: string, of: { routeSchemeId: string } | { collectionGroupIds: readonly string[] }, release: HoldRelease = { kind: "all" }): Promise<void> {
+  if (release.kind === "none") return
   const routes = "routeSchemeId" in of ? eq(route.routeSchemeId, of.routeSchemeId) : of.collectionGroupIds.length === 0 ? undefined : inArray(route.collectionGroupId, [...of.collectionGroupIds])
   if (routes === undefined) return
-  await tx
-    .update(route)
-    .set({ heldAt: null })
-    .where(and(routeScope(principal), eq(route.projectId, projectId), routes, isNotNull(route.heldAt)))
+  const held = and(routeScope(principal), eq(route.projectId, projectId), routes, isNotNull(route.heldAt))
+  if (release.kind === "all") {
+    await tx.update(route).set({ heldAt: null }).where(held)
+    return
+  }
+  // The held routes whose own collection the edit took away: on a weekday the days no longer hold, by the route's service date — its identity, which a day move by hand never changes.
+  const candidates = await tx.select({ id: route.id, serviceDate: route.serviceDate }).from(route).where(held)
+  const away = candidates.filter((row) => release.left.includes(serviceDayOf(row.serviceDate))).map((row) => row.id)
+  if (away.length > 0) await tx.update(route).set({ heldAt: null }).where(and(held, inArray(route.id, away)))
 }

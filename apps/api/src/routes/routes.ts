@@ -54,7 +54,7 @@
 // and `edit` to command; every statement carries the tenant and `inProjects`.
 import { DriverCommandReceipt } from "@waste/contracts/driver-commands"
 import { Page, PageRequest } from "@waste/contracts/pagination"
-import { PickupOrderSet, RouteAssign, RouteCancel, RouteDetail, RouteListItem, RouteListQuery, RouteReschedule } from "@waste/contracts/routes"
+import { PickupOrderSet, RouteAssign, RouteCancel, RouteDetail, RouteListItem, RouteListQuery, RouteReleaseHold, RouteReschedule } from "@waste/contracts/routes"
 import type { Tx } from "@waste/db/client"
 import { driverCommand, pickup, route, session } from "@waste/db/schema/execution"
 import { unloadingStation, unloadingStationFraction } from "@waste/db/schema/places"
@@ -78,9 +78,11 @@ import { describeProblem, invalidRequest, problem, validate } from "../problem"
 import { detailOf, findRoute, labelOf, noSuchRoute, pickupColumns, pickupOf, pickupsOfRoute, receiptColumns, receiptOf, routeColumns, routeScope, routesOf, type RouteRow } from "./execution-shapes"
 import { findDriver, findVehicle, vehicleLabel, type DriverRow, type VehicleRow } from "./fleet-lookups"
 import { activePlansByRoute, ensurePlan } from "./plan-shapes"
-import type { JobSender } from "@waste/db/jobs"
+import { QueueMissing, type JobSender } from "@waste/db/jobs"
 import { NOT_AN_UNLOADING_STATION, requireDepot, type Scope } from "./references"
 import type { ClockOptions } from "./scheme-groups"
+import { askGeneration } from "./generation"
+import { findScheme } from "./scheme-groups"
 import { describeJson, IdParam, lockRow, stamp, timeOf } from "./shared"
 import { refuseUnavailableDriver } from "./statuses"
 
@@ -88,6 +90,12 @@ const MODULE = "route-studio.routes"
 
 const RoutePage = Page(RouteListItem)
 const ReceiptPage = Page(DriverCommandReceipt)
+
+/** What a hand-back of a planned route the office did not move is told (#226). */
+export const notHeld = (label: string): string => `Route ${label} is not held; it follows its scheme`
+
+/** What a hand-back of a route past `planned` is told: a hold is a planned route's (\`route_hold_shape\`). */
+export const onlyPlannedHeld = (label: string, status: string): string => `Route ${label} is ${status}; only a planned route is held`
 
 /** What a dispatch of a route nobody is assigned to is told: the driver door's scope is the assignment, so a route without one reaches no device. */
 export const noPlannedDriver = (label: string): string => `Route ${label} has no planned driver; assign one first`
@@ -487,6 +495,47 @@ export function routeRoutes(guard: MiddlewareHandler<AuthEnv>, { now = () => new
           .where(and(routeScope(principal), eq(route.id, id)))
           .returning(routeColumns)
         if (row === undefined) throw noSuchRoute(id)
+        return c.json(await detailOf(tx, principal.companyId, row))
+      },
+    )
+    .post(
+      "/routes/:id/release-hold",
+      describeRoute({
+        operationId: "releaseRouteHold",
+        summary: "Hand a held route back to its scheme",
+        description:
+          "The `release-hold` command (#226): clears the hold `assign` or `reschedule` put on a `planned` route (`heldAt`), so the route follows its scheme again, and in the same transaction asks a generation run of the route's scheme over the route's service date — that one day, both ends of the window — which brings back the scheme's operating date, planned start and Planned Assignment. The run is asked as the scheme's Generate asks one, under the scheme's key: where a run of the scheme is already queued or in flight, that run absorbs the request, and a run that does not reach the day leaves it to the next. Where no worker has made the queue yet, or the scheme is a draft, which generates nothing, no run is asked and the route is still handed back: the next run brings it back. The answer is the route as it now stands, its hold cleared, before any run has brought it back. A planned route that is not held is refused (409), and so is a route past `planned`, which is never held. Takes no body. Under the route's row lock; no event is written, as for `reschedule`.",
+        security: BEARER_SECURITY,
+        responses: {
+          200: describeJson("The route, its hold cleared; a run of its scheme over its service date is asked.", RouteDetail),
+          400: describeProblem("The path does not hold an id, or the body names a member: the command takes none."),
+          ...commandProblems("edit"),
+          409: describeProblem("The route is planned and not held, or is past `planned` (ready, active, completed or cancelled), where no hold stands."),
+        },
+      }),
+      guard,
+      requireGrant(MODULE, "edit"),
+      validate("param", IdParam),
+      validate("json", RouteReleaseHold),
+      async (c) => {
+        const { id } = c.req.valid("param")
+        const tx = c.get("tx")
+        const principal = c.get("principal")
+        const current = await lockedRoute(tx, principal, id)
+        if (current.status !== "planned") throw problem(409, { detail: onlyPlannedHeld(labelOf(current), current.status) })
+        if (current.heldAt === null) throw problem(409, { detail: notHeld(labelOf(current)) })
+        const [row] = await tx.update(route).set({ heldAt: null }).where(and(routeScope(principal), eq(route.id, id))).returning(routeColumns)
+        if (row === undefined) throw noSuchRoute(id)
+        // The scheme's day, start and assignment come back with a run over the route's service date: asked here, never awaited, and never a refusal of the hand-back.
+        const scheme = row.routeSchemeId === null ? undefined : await findScheme(tx, principal, row.routeSchemeId)
+        if (scheme !== undefined && scheme.status === "validated") {
+          try {
+            await askGeneration(tx, principal, jobs.send, scheme, { from: row.serviceDate, to: row.serviceDate })
+          } catch (error) {
+            // No worker has made the queue yet: the hold is cleared all the same, and the next run brings the route back.
+            if (!(error instanceof QueueMissing)) throw error
+          }
+        }
         return c.json(await detailOf(tx, principal.companyId, row))
       },
     )

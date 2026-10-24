@@ -7,7 +7,12 @@
 // through `PATCH /route-schemes/:id` with or without `collectionGroups` and
 // through `PATCH /collection-groups/:id` — while an edit that moves none of
 // those releases nothing, and neither a dispatched route nor another scheme's
-// is written. What generation does with a held route is the worker's
+// is written. A change of days releases only the held routes whose own
+// collection it takes away, on a weekday the days no longer hold: one that
+// adds a day releases nothing (#226). `release-hold` hands one planned route
+// back to its scheme and asks a generation run over its service date; a send
+// the queue absorbs or cannot take still hands it back. What generation does
+// with a held route is the worker's
 // (apps/worker generation.test.ts). Each test makes its own draft scheme, so
 // no structural rule stands between an edit and what it releases, and writes
 // its routes on the scheme's groups by hand, as generation would.
@@ -16,9 +21,12 @@ import { after, before, describe, test } from "node:test"
 
 import { WasteFraction } from "@waste/contracts/catalogue"
 import { Page } from "@waste/contracts/pagination"
+import { GenerationRun } from "@waste/contracts/generation"
 import { RouteDetail, RouteListItem } from "@waste/contracts/routes"
 import { CollectionGroup, RouteScheme } from "@waste/contracts/route-schemes"
 import { createDb, type Database, type Tx } from "@waste/db/client"
+import { GENERATE_ROUTES_QUEUE } from "@waste/db/commands/generation"
+import { QueueMissing, type Send } from "@waste/db/jobs"
 import { route } from "@waste/db/schema/execution"
 import { company } from "@waste/db/schema/organisation"
 import { withCompany } from "@waste/db/tenant"
@@ -29,7 +37,7 @@ import { createApp } from "../app"
 import { callingAs, type Call } from "./calls"
 import { databaseUnderTest } from "./database"
 import { readProblem } from "./read-problem"
-import { seedFleet, seedPlanning, type FleetFixtures } from "./scheme-fixtures"
+import { seedFleet, seedPlanning, type FleetFixtures, type PlanningFixtures } from "./scheme-fixtures"
 import { dropTenant, seedTenant, testId, type Tenant } from "./tenant"
 import { signingKeys, type SigningKeys } from "./tokens"
 
@@ -49,6 +57,7 @@ describe("the hold on a route (#209)", { skip: database.skip }, () => {
   let keys: SigningKeys
   let a: Tenant
   let fleet: FleetFixtures
+  let planning: PlanningFixtures
   let app: ReturnType<typeof createApp>
   let olivia: Call
   let residual: WasteFraction
@@ -57,7 +66,8 @@ describe("the hold on a route (#209)", { skip: database.skip }, () => {
     pool = createDb(database.url, { max: 4 })
     keys = await signingKeys()
     a = await seedTenant(pool)
-    fleet = await seedFleet(pool, a, await seedPlanning(pool, a))
+    planning = await seedPlanning(pool, a)
+    fleet = await seedFleet(pool, a, planning)
     app = createApp({ probe: pool, pool, verifier: keys.verifier, now: () => clock })
     olivia = callingAs(app, keys, a.users.olivia, a.companyId)
     const response = await olivia("/waste-fractions", { method: "POST", body: { key: "residual", name: "Residual waste" } })
@@ -93,8 +103,8 @@ describe("the hold on a route (#209)", { skip: database.skip }, () => {
 
   /** A rule group on the residual fraction over the days given. */
   const ruleGroup = (name: string, days: string[]) => ({ name, days, stopSource: "rule", rule: { wasteFractionIds: [residual.id], containerTypeIds: [], vehicleTypeId: null } })
-  /** A draft scheme of Copenhagen Central over Mondays and Tuesdays, starting at six from Nordhavn and unloading at Amager, with the groups named, each on Mondays. */
-  const schemeWith = async (name: string, groups: string[]): Promise<{ scheme: RouteScheme; groups: CollectionGroup[] }> => {
+  /** A scheme of Copenhagen Central over Mondays and Tuesdays, starting at six from Nordhavn and unloading at Amager, with the groups named, each on Mondays; a draft unless `validated`, whose groups run both days. */
+  const schemeWith = async (name: string, groups: string[], validated = false): Promise<{ scheme: RouteScheme; groups: CollectionGroup[] }> => {
     const response = await olivia("/route-schemes", {
       method: "POST",
       body: {
@@ -103,12 +113,14 @@ describe("the hold on a route (#209)", { skip: database.skip }, () => {
         serviceType: "container-collection",
         frequency: "weekly",
         serviceDays: ["monday", "tuesday"],
-        status: "draft",
+        status: validated ? "validated" : "draft",
+        ...(validated ? { planningAreaId: planning.areas.centrum.id } : {}),
         validFrom: "2026-01-01",
         plannedStartTime: "06:00",
         depotId: fleet.depots.nordhavn.id,
         unloadingStationId: fleet.stations.amager.id,
-        collectionGroups: groups.map((group) => ruleGroup(group, ["monday"])),
+        // A validated scheme has a group on each of its days.
+        collectionGroups: groups.map((group) => ruleGroup(group, validated ? ["monday", "tuesday"] : ["monday"])),
       },
     })
     assert.equal(response.status, 201, JSON.stringify(await response.clone().json()))
@@ -206,7 +218,7 @@ describe("the hold on a route (#209)", { skip: database.skip }, () => {
     assert.deepEqual([gone.status, gone.heldAt], ["cancelled", null])
   })
 
-  test("a scheme patch moving the start, the depot, the station or the service days releases every held route of the scheme; one moving none of them releases nothing; a dispatched route and another scheme's are not written", async () => {
+  test("a scheme patch moving the start, the depot or the station releases every held route of the scheme; one moving none of them releases nothing; a dispatched route and another scheme's are not written", async () => {
     const { scheme, groups: [one, two] } = await schemeWith("Release Mondays", ["Round 1", "Round 2"])
     const elsewhere = await schemeWith("Elsewhere Mondays", ["Round 1"])
     const first = await routeOn(scheme, one, MONDAYS[0])
@@ -222,13 +234,31 @@ describe("the hold on a route (#209)", { skip: database.skip }, () => {
       assert.deepEqual(await holds(scheme.id), { [first]: true, [second]: true, [ready]: false }, JSON.stringify(patch))
     }
 
-    for (const patch of [{ plannedStartTime: "07:15" }, { depotId: null }, { unloadingStationId: null }, { serviceDays: ["monday"] }]) {
+    for (const patch of [{ plannedStartTime: "07:15" }, { depotId: null }, { unloadingStationId: null }]) {
       await patchScheme(scheme.id, patch)
       assert.deepEqual(await holds(scheme.id), { [first]: false, [second]: false, [ready]: false }, `${JSON.stringify(patch)} releases both groups' routes`)
       assert.equal(await heldAt(theirs), HELD, "another scheme's held route keeps its hold")
       await hold(first, second)
     }
     assert.equal((await read(ready)).updatedAt, readyBefore, "the dispatched route was never written")
+  })
+
+  test("a scheme's service days release only the held routes on a weekday they take away: an added day releases nothing, and a start moved beside it releases all (#226)", async () => {
+    const { scheme, groups: [one] } = await schemeWith("Days Mondays", ["Round 1"])
+    const both = await patchGroup(one.id, { days: ["monday", "tuesday"] })
+    const monday = await routeOn(scheme, both, MONDAYS[0])
+    const tuesday = await routeOn(scheme, both, "2026-10-13")
+    await hold(monday, tuesday)
+
+    await patchScheme(scheme.id, { serviceDays: ["monday", "tuesday", "wednesday"] })
+    assert.deepEqual(await holds(scheme.id), { [monday]: true, [tuesday]: true }, "a day added takes no held route's collection away")
+
+    await patchScheme(scheme.id, { serviceDays: ["monday"], collectionGroups: [entryOf(both, { days: ["monday"] })] })
+    assert.deepEqual(await holds(scheme.id), { [monday]: true, [tuesday]: false }, "Tuesday's collection is gone; Monday's stands")
+
+    await hold(tuesday)
+    await patchScheme(scheme.id, { serviceDays: ["monday", "tuesday"], plannedStartTime: "07:30" })
+    assert.deepEqual(await holds(scheme.id), { [monday]: false, [tuesday]: false }, "the start moved: every held route goes back")
   })
 
   test("a scheme patch whose collectionGroups moves a group's vehicle, driver, provider or days releases that group's held routes alone, a running group it parks included; a group restated as it stands releases nothing", async () => {
@@ -244,31 +274,104 @@ describe("the hold on a route (#209)", { skip: database.skip }, () => {
     await patchScheme(scheme.id, { collectionGroups: groups.map((group) => entryOf(group)) })
     assert.deepEqual(await heldOnes(), { one: true, two: true, three: true }, "every group restated as it stands")
 
-    for (const values of [{ vehicleId: fleet.vehicles.wh24.id }, { driverId: fleet.drivers.mads.id }, { serviceProviderId: a.serviceProviders.nordren.id }, { days: ["monday", "tuesday"] }]) {
+    for (const values of [{ vehicleId: fleet.vehicles.wh24.id }, { driverId: fleet.drivers.mads.id }, { serviceProviderId: a.serviceProviders.nordren.id }]) {
       const now = (await patchScheme(scheme.id, { collectionGroups: [entryOf(one, values), entryOf(two), entryOf(three)] })).collectionGroups
       assert.deepEqual(await heldOnes(), { one: false, two: true, three: true }, `${JSON.stringify(values)} moves the first group alone`)
       Object.assign(one, now.find((group) => group.id === one.id))
       await hold(routes.one)
     }
 
+    // Days: a Tuesday added to the first group takes no collection away; taken away again, its Tuesday route alone goes back (#226).
+    const added = (await patchScheme(scheme.id, { collectionGroups: [entryOf(one, { days: ["monday", "tuesday"] }), entryOf(two), entryOf(three)] })).collectionGroups
+    assert.deepEqual(await heldOnes(), { one: true, two: true, three: true }, "a day added releases nothing")
+    Object.assign(one, added.find((group) => group.id === one.id))
+    const tuesday = await routeOn(scheme, one, "2026-10-13")
+    await hold(tuesday)
+    await patchScheme(scheme.id, { collectionGroups: [entryOf(one, { days: ["monday"] }), entryOf(two), entryOf(three)] })
+    assert.deepEqual({ ...(await heldOnes()), tuesday: (await holds(scheme.id))[tuesday] }, { one: true, two: true, three: true, tuesday: false }, "Tuesday taken away: its route alone")
+
     await patchScheme(scheme.id, { collectionGroups: [entryOf(one), entryOf(two)] })
     assert.deepEqual(await heldOnes(), { one: true, two: true, three: false }, "the third, left out, is parked: its days moved")
   })
 
-  test("a group patch moving its vehicle, driver, provider or days releases its held routes alone; a rename or a move of its position releases nothing", async () => {
+  test("a group patch moving its vehicle, driver or provider releases its held routes alone, its days only those on a weekday they take away; a rename, a move of its position or an added day releases nothing", async () => {
     const { scheme, groups: [one, two] } = await schemeWith("Group door Mondays", ["Round 1", "Round 2"])
     const mine = await routeOn(scheme, one, MONDAYS[0])
     const theirs = await routeOn(scheme, two, MONDAYS[0])
     await hold(mine, theirs)
 
-    for (const values of [{ name: "Round 1 · renamed" }, { position: 9 }, { days: ["monday"] }]) {
+    for (const values of [{ name: "Round 1 · renamed" }, { position: 9 }, { days: ["monday"] }, { days: ["monday", "tuesday"] }]) {
       await patchGroup(one.id, values)
       assert.deepEqual(await holds(scheme.id), { [mine]: true, [theirs]: true }, JSON.stringify(values))
     }
-    for (const values of [{ vehicleId: fleet.vehicles.wh24.id }, { driverId: fleet.drivers.mads.id }, { serviceProviderId: a.serviceProviders.nordren.id }, { days: ["monday", "tuesday"] }]) {
+    for (const values of [{ vehicleId: fleet.vehicles.wh24.id }, { driverId: fleet.drivers.mads.id }, { serviceProviderId: a.serviceProviders.nordren.id }]) {
       await patchGroup(one.id, values)
       assert.deepEqual(await holds(scheme.id), { [mine]: false, [theirs]: true }, `${JSON.stringify(values)} releases the group's own`)
       await hold(mine)
     }
+    const tuesday = await routeOn(scheme, one, "2026-10-13")
+    await hold(tuesday)
+    await patchGroup(one.id, { days: ["monday"] })
+    assert.deepEqual(await holds(scheme.id), { [mine]: true, [theirs]: true, [tuesday]: false }, "Tuesday taken away: its route alone")
+  })
+
+  describe("release-hold (#226)", () => {
+    type Sent = { name: string; data: unknown; singletonKey: unknown }
+    /** The office, through an app whose job sender answers as `send` does, each send recorded. */
+    const officeWith = (send: (sent: Sent) => Promise<string | null>) => {
+      const sent: Sent[] = []
+      const jobs: { send: Send } = { send: (name, data, options) => send({ name, data, singletonKey: options?.singletonKey }).then((answer) => (sent.push({ name, data, singletonKey: options?.singletonKey }), answer)) }
+      return { sent, call: callingAs(createApp({ probe: pool, pool, verifier: keys.verifier, now: () => clock, jobs }), keys, a.users.olivia, a.companyId) }
+    }
+    const released = async (call: Call, id: string): Promise<RouteDetail> => {
+      const response = await call(`/routes/${id}/release-hold`, { method: "POST", body: {} })
+      return RouteDetail.parse(await ok(response))
+    }
+    const runsOf = async (schemeId: string) => Page(GenerationRun).parse(await ok(await olivia(`/route-schemes/${schemeId}/generation-runs?limit=200`))).items
+
+    test("hands a held planned route back to its scheme and asks a generation run over its service date, under the scheme's key", async () => {
+      const { scheme, groups: [one] } = await schemeWith("Hand back Mondays", ["Round 1"], true)
+      const id = await routeOn(scheme, one, MONDAYS[2])
+      await hold(id)
+      const office = officeWith(async () => testId())
+      const before = await runsOf(scheme.id)
+      const answer = await released(office.call, id)
+      assert.equal(answer.heldAt, null)
+      assert.equal((await read(id)).heldAt, null)
+      assert.deepEqual(office.sent.map((sent) => [sent.name, sent.singletonKey]), [[GENERATE_ROUTES_QUEUE, scheme.id]])
+      const asked = (await runsOf(scheme.id)).filter((run) => !before.some((earlier) => earlier.id === run.id))
+      assert.deepEqual(asked.map((run) => [run.windowFrom, run.windowTo, run.trigger, run.status]), [[MONDAYS[2], MONDAYS[2], "on-demand", "queued"]])
+    })
+
+    test("still hands the route back where a run of the scheme already holds the queue, or no worker has made the queue yet: the next run brings it back", async () => {
+      const { scheme, groups: [one] } = await schemeWith("Absorbed Mondays", ["Round 1"], true)
+      const absorbed = await routeOn(scheme, one, MONDAYS[2])
+      const unqueued = await routeOn(scheme, one, MONDAYS[3])
+      await hold(absorbed, unqueued)
+      const before = await runsOf(scheme.id)
+      assert.equal((await released(officeWith(async () => null).call, absorbed)).heldAt, null, "a queued run absorbs the send")
+      assert.equal((await released(officeWith(async () => Promise.reject(new QueueMissing(GENERATE_ROUTES_QUEUE))).call, unqueued)).heldAt, null, "no queue: the hand-back stands")
+      assert.deepEqual(await runsOf(scheme.id), before, "no run written for either")
+    })
+
+    test("asks no run of a draft scheme, which generates nothing; refuses a planned route that is not held and a route that is not planned", async () => {
+      const { scheme, groups: [one] } = await schemeWith("Draft Mondays", ["Round 1"])
+      const held = await routeOn(scheme, one, MONDAYS[0])
+      const free = await routeOn(scheme, one, MONDAYS[1])
+      const ready = await routeOn(scheme, one, MONDAYS[2], "ready")
+      await hold(held)
+      const office = officeWith(async () => testId())
+      assert.equal((await released(office.call, held)).heldAt, null)
+      assert.deepEqual(office.sent, [], "a draft scheme generates nothing: no run asked")
+
+      const notHeld = await office.call(`/routes/${free}/release-hold`, { method: "POST", body: {} })
+      assert.equal(notHeld.status, 409)
+      assert.match((await readProblem(notHeld)).detail ?? "", /is not held; it follows its scheme/)
+      const notPlanned = await office.call(`/routes/${ready}/release-hold`, { method: "POST", body: {} })
+      assert.equal(notPlanned.status, 409)
+      assert.match((await readProblem(notPlanned)).detail ?? "", /is ready; only a planned route is held/)
+      const withBody = await office.call(`/routes/${held}/release-hold`, { method: "POST", body: { note: "x" } })
+      assert.equal(withBody.status, 400)
+    })
   })
 })
