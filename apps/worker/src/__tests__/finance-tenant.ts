@@ -30,7 +30,7 @@ import { containerType, product, wasteFraction } from "@waste/db/schema/catalogu
 import { container, containerServicePlacement } from "@waste/db/schema/containers"
 import { customer, property } from "@waste/db/schema/customers"
 import { outboxEvent, pickup, route } from "@waste/db/schema/execution"
-import { billableEvent, billingRun, billingRunExclusion, invoice, invoiceLine, priceList, priceListRow } from "@waste/db/schema/finance"
+import { billableEvent, billingRun, billingRunExclusion, invoice, invoiceLine, priceList, priceListRow, ticketKindProduct } from "@waste/db/schema/finance"
 import { driver, vehicle } from "@waste/db/schema/fleet"
 import { vehicleType } from "@waste/db/schema/fleet-types"
 import { company, project } from "@waste/db/schema/organisation"
@@ -39,7 +39,7 @@ import { ticket, ticketEvent } from "@waste/db/schema/resolution"
 import { collectionGroup, routeScheme } from "@waste/db/schema/route-schemes"
 import { withCompany } from "@waste/db/tenant"
 import type { PickupOrigin, PickupStatus } from "@waste/domain/execution/vocabulary"
-import type { TicketResolution } from "@waste/domain/resolution/vocabulary"
+import type { TicketKind, TicketResolution } from "@waste/domain/resolution/vocabulary"
 import { eq, sql } from "drizzle-orm"
 
 /** A UUID version 7 for a test row: the clock in the first 48 bits, the version and variant nibbles, randomness in the rest. */
@@ -285,6 +285,10 @@ export type TicketSeed = {
   pickup?: { routeId: string; pickupId: string } | null
   /** When it closed; a completed ticket carries one, an open one none. */
   closedAt?: Date | null
+  /** The ticket's kind; a missed collection unless said. */
+  kind?: TicketKind
+  /** The product its completion named (#291 C3), with a billable resolution. */
+  chargeProductId?: string | null
 }
 
 /** A ticket as Resolution would have written it, completed with a resolution or open, on Olivia's word. */
@@ -303,7 +307,7 @@ export async function seedTicket(pool: Database, tenant: FinanceTenant, seed: Ti
       companyId,
       projectId: tenant.projects.copenhagen.id,
       number: (numbered?.next ?? 1) - 1,
-      kind: "missed-collection",
+      kind: seed.kind ?? "missed-collection",
       status: seed.resolution === null ? "open" : "completed",
       source: "phone",
       subject: "Bin not emptied",
@@ -314,6 +318,7 @@ export async function seedTicket(pool: Database, tenant: FinanceTenant, seed: Ti
       routeId: seed.pickup?.routeId ?? null,
       pickupId: seed.pickup?.pickupId ?? null,
       resolution: seed.resolution,
+      chargeProductId: seed.chargeProductId ?? null,
       closedAt,
     })
   })
@@ -330,6 +335,7 @@ export async function dropFinanceTenant(pool: Database, owner: Database, company
     await tx.delete(billingRun).where(eq(billingRun.companyId, companyId))
     await tx.delete(billableEvent).where(eq(billableEvent.companyId, companyId))
     await tx.delete(priceListRow).where(eq(priceListRow.companyId, companyId))
+    await tx.delete(ticketKindProduct).where(eq(ticketKindProduct.companyId, companyId))
     await tx.delete(ticket).where(eq(ticket.companyId, companyId))
     await tx.delete(outboxEvent).where(eq(outboxEvent.companyId, companyId))
     await tx.delete(pickup).where(eq(pickup.companyId, companyId))

@@ -6,7 +6,9 @@ import { TICKET_EVENT_KINDS, TICKET_STATUSES, TICKET_VISIBILITIES, type TicketEv
 
 import { DAY_WINDOW_ORDERED } from "../queries"
 import {
+  CHARGE_WITH_A_BILLABLE_RESOLUTION,
   EvidenceProof,
+  KIND_CHARGED_ONCE,
   REPLY_NOTE_MAX,
   StopEvidence,
   TicketEvidence,
@@ -22,6 +24,9 @@ import {
   recollectionStopWithItsRoute,
   Ticket,
   TicketAssign,
+  TicketCharges,
+  TicketChargesQuery,
+  TicketChargesSet,
   TicketComment,
   TicketComplete,
   TicketCreate,
@@ -68,6 +73,7 @@ const ticket = {
   resolution: null,
   recollectionRouteId: null,
   recollectionPickupId: null,
+  chargeProductId: null,
   closedAt: null,
   ...STAMPS,
 }
@@ -119,6 +125,10 @@ describe("Ticket", () => {
     assert.deepEqual(Ticket.parse(onItsStop), onItsStop, "the stop the office added for it (#111)")
     const { recollectionPickupId: _stop, ...before } = completed
     assert.deepEqual(Ticket.parse(before), completed, "an event the outbox took before #111 names no stop, and reads as null")
+    const charged = { ...completed, chargeProductId: OTHER }
+    assert.deepEqual(Ticket.parse(charged), charged, "the product its completion charges (#291 C3)")
+    const { chargeProductId: _product, ...beforeCharges } = completed
+    assert.deepEqual(Ticket.parse(beforeCharges), completed, "an event the outbox took before #291 C3 names no product, and reads as null")
     assert.equal(Object.keys(TicketLinks.shape).length, 9)
   })
 
@@ -291,6 +301,17 @@ describe("the seven commands and the comment", () => {
     assert.equal(recollectionRouteWithRecollected({ resolution: "no-action" }), true)
   })
 
+  test("complete may name the product its work is charged at, with a re-collection or a service alone (#291 C3)", () => {
+    for (const resolution of ["recollected", "serviced"]) {
+      const body = { resolution, note: "Emptied again on Friday", productId: OTHER }
+      assert.deepEqual(TicketComplete.parse(body), body, resolution)
+    }
+    for (const resolution of ["answered", "no-action", "duplicate"]) {
+      assert.deepEqual(refusal(TicketComplete.safeParse({ resolution, note: "x", productId: OTHER })), [{ path: "productId", message: CHARGE_WITH_A_BILLABLE_RESOLUTION }], resolution)
+    }
+    assert.deepEqual(refusal(TicketComplete.safeParse({ resolution: "serviced", note: "x", productId: "bulky" })).map((issue) => issue.path), ["productId"])
+  })
+
   test("complete may name the stop the office added for the re-collection beside its route, and never without it (#111)", () => {
     const withStop = { resolution: "recollected", note: "On the extra stop", recollectionRouteId: OTHER, recollectionPickupId: THIRD }
     assert.deepEqual(TicketComplete.parse(withStop), withStop)
@@ -347,6 +368,21 @@ describe("TicketEvent", () => {
     assert.deepEqual(refusal(TicketEvent.safeParse({ ...event("comment"), kind: "message" })).map((issue) => issue.path), ["kind"])
     assert.deepEqual(refusal(TicketEvent.safeParse({ ...event("comment"), status: "created" })).map((issue) => issue.path), ["status"])
     assert.deepEqual(refusal(TicketEvent.safeParse(event("status-changed", { ...exemplar("status-changed"), status: "completed", resolution: "rescheduled" }))).map((issue) => issue.path), ["resolution"])
+  })
+})
+
+describe("a project's ticket charges (#291 C3)", () => {
+  const set = { projectId: OTHER, charges: [{ kind: "missed-collection", productId: THIRD }, { kind: "container-request", productId: ID }] }
+
+  test("are the product each ticket kind's work is charged at, a kind at most once, the set replaced whole", () => {
+    assert.deepEqual(TicketChargesSet.parse(set), set)
+    assert.deepEqual(TicketChargesSet.parse({ projectId: OTHER, charges: [] }), { projectId: OTHER, charges: [] }, "an empty set charges no kind")
+    assert.deepEqual(refusal(TicketChargesSet.safeParse({ ...set, charges: [...set.charges, { kind: "missed-collection", productId: ID }] })), [{ path: "charges", message: KIND_CHARGED_ONCE }])
+    assert.deepEqual(refusal(TicketChargesSet.safeParse({ ...set, charges: [{ kind: "rescheduling", productId: ID }] })).map((issue) => issue.path), ["charges.0.kind"])
+    refusesWhatTheServerOwns(TicketChargesSet, set)
+    assert.deepEqual(TicketCharges.parse(set), set)
+    assert.deepEqual(TicketChargesQuery.parse({ projectId: OTHER }), { projectId: OTHER })
+    assert.deepEqual(refusal(TicketChargesQuery.safeParse({})).map((issue) => issue.path), ["projectId"])
   })
 })
 

@@ -56,6 +56,7 @@ import {
   settlement,
   settlementEvent,
   settlementLine,
+  ticketKindProduct,
   weightReview,
 } from "../schema/finance"
 import { driver, vehicle } from "../schema/fleet"
@@ -718,6 +719,28 @@ describe("the Finance & Contracting tables against a fresh database", { skip: da
       await tx.insert(billableEvent).values(manual({ id: `018f7c35-a000-7000-8000-0000000000e5`, kind: "reversal", createdBy: null, sourceEventId: a.fourth, reversesEventId: a.event, priceListRowId: null, netMinor: -PRICE.netMinor, vatMinor: -PRICE.vatMinor }))
       const [cancelled] = await tx.update(billableEvent).set({ cancelledAt: at(18), cancelReason: "pickup-corrected" }).where(eq(billableEvent.id, a.spare)).returning({ cancelledBy: billableEvent.cancelledBy })
       assert.equal(cancelled.cancelledBy, null)
+    }))
+
+  test("a ticket kind is charged at one product of its project (23505, 23503), a kind of the vocabulary (23514); a ticket's own charge is a product of its project, with recollected or serviced alone (23514 ticket_charge_shape, 23503) (#291 C3)", () =>
+    seeded(async (tx) => {
+      await seedHarbor(tx)
+      const charge = (values: Partial<typeof ticketKindProduct.$inferInsert>): typeof ticketKindProduct.$inferInsert => ({ id: a.spare, companyId: a.company, projectId: a.project, ticketKind: "overflow", productId: a.product, ...values })
+      const refused = (values: Partial<typeof ticketKindProduct.$inferInsert>, code: string, constraint: RegExp, why: string) =>
+        assert.rejects(tx.transaction((savepoint) => savepoint.insert(ticketKindProduct).values(charge({ id: a.other, ...values }))), refusedWith(code, constraint), why)
+      await tx.insert(ticketKindProduct).values(charge({}))
+      await refused({}, "23505", /ticket_kind_product_project_id_ticket_kind_key/, "a kind charged twice in a project")
+      await refused({ ticketKind: "rescheduling" }, "23514", /ticket_kind_product_ticket_kind_one_of/, "a kind outside the vocabulary")
+      await refused({ ticketKind: "complaint", productId: a.harborProduct }, "23503", /ticket_kind_product_product_id_fk/, "another project's product")
+      // The same kind in another project is that project's charge.
+      await tx.insert(ticketKindProduct).values(charge({ id: a.other, projectId: a.harbor, productId: a.harborProduct }))
+
+      // The seeded ticket stands completed with recollected: it may name its project's product, and no other's.
+      await tx.update(ticket).set({ chargeProductId: a.product }).where(eq(ticket.id, a.ticket))
+      const moved = (values: Partial<typeof ticket.$inferInsert>, id: string) => tx.transaction((savepoint) => savepoint.update(ticket).set(values).where(eq(ticket.id, id)))
+      await assert.rejects(moved({ resolution: "answered" }, a.ticket), refusedWith("23514", /ticket_charge_shape/), "a charge with a resolution nothing is charged for")
+      await assert.rejects(moved({ chargeProductId: a.harborProduct }, a.ticket), refusedWith("23503", /ticket_charge_product_id_fk/), "another project's product")
+      await assert.rejects(moved({ chargeProductId: a.harborProduct }, a.harborTicket), refusedWith("23514", /ticket_charge_shape/), "an open ticket, whose resolution is null, charges nothing")
+      await tx.update(ticket).set({ resolution: "serviced" }).where(eq(ticket.id, a.ticket))
     }))
 
   test("the domain's vatOf agrees with the two _vat_shape checks over odd amounts of both signs: every row the domain computed lands, and an øre off is refused", () =>

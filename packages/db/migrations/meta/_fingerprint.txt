@@ -2526,8 +2526,11 @@ column wms.ticket 27 resolution text
 column wms.ticket 28 recollection_route_id uuid
 column wms.ticket 29 closed_at timestamp with time zone
 column wms.ticket 30 recollection_pickup_id uuid
+column wms.ticket 31 charge_product_id uuid
 constraint wms.ticket ticket_agreement_id_fk FOREIGN KEY (company_id, project_id, agreement_id) REFERENCES wms.agreement(company_id, project_id, id)
 constraint wms.ticket ticket_assignee_user_account_id_fk FOREIGN KEY (company_id, assignee_user_account_id) REFERENCES wms.user_account(company_id, id)
+constraint wms.ticket ticket_charge_product_id_fk FOREIGN KEY (company_id, project_id, charge_product_id) REFERENCES wms.product(company_id, project_id, id)
+constraint wms.ticket ticket_charge_shape CHECK (((charge_product_id IS NULL) OR ((resolution IS NOT NULL) AND (resolution = ANY (ARRAY['recollected'::text, 'serviced'::text])))))
 constraint wms.ticket ticket_closed_shape CHECK (((status = ANY (ARRAY['completed'::text, 'rejected'::text])) = (closed_at IS NOT NULL)))
 constraint wms.ticket ticket_company_id_fk FOREIGN KEY (company_id) REFERENCES wms.company(id)
 constraint wms.ticket ticket_container_id_fk FOREIGN KEY (company_id, project_id, container_id) REFERENCES wms.container(company_id, project_id, id)
@@ -2558,6 +2561,7 @@ constraint wms.ticket ticket_source_one_of CHECK ((source = ANY (ARRAY['office':
 constraint wms.ticket ticket_status_one_of CHECK ((status = ANY (ARRAY['open'::text, 'in-progress'::text, 'pending'::text, 'on-hold'::text, 'completed'::text, 'rejected'::text])))
 index wms.ticket ticket_agreement_id_idx CREATE INDEX ticket_agreement_id_idx ON wms.ticket USING btree (company_id, agreement_id)
 index wms.ticket ticket_assignee_user_account_id_status_idx CREATE INDEX ticket_assignee_user_account_id_status_idx ON wms.ticket USING btree (company_id, assignee_user_account_id, status)
+index wms.ticket ticket_charge_product_id_idx CREATE INDEX ticket_charge_product_id_idx ON wms.ticket USING btree (company_id, charge_product_id)
 index wms.ticket ticket_container_id_idx CREATE INDEX ticket_container_id_idx ON wms.ticket USING btree (company_id, container_id)
 index wms.ticket ticket_created_by_idx CREATE INDEX ticket_created_by_idx ON wms.ticket USING btree (company_id, created_by)
 index wms.ticket ticket_customer_id_idx CREATE INDEX ticket_customer_id_idx ON wms.ticket USING btree (company_id, customer_id)
@@ -2616,6 +2620,26 @@ index wms.ticket_event ticket_event_recorded_by_idx CREATE INDEX ticket_event_re
 index wms.ticket_event ticket_event_source_event_id_idx CREATE UNIQUE INDEX ticket_event_source_event_id_idx ON wms.ticket_event USING btree (company_id, source_event_id) WHERE (source_event_id IS NOT NULL)
 index wms.ticket_event ticket_event_ticket_id_idx CREATE INDEX ticket_event_ticket_id_idx ON wms.ticket_event USING btree (company_id, ticket_id, id)
 policy wms.ticket_event ticket_event_tenant_fence permissive ALL to=wms_api using=(company_id = ( SELECT wms.current_company_id() AS current_company_id)) check=(company_id = ( SELECT wms.current_company_id() AS current_company_id))
+relation wms.ticket_kind_product kind=table owner=<owner> persistence=p rls=true force-rls=true replica-identity=d acl=[<owner>=DELETE,INSERT,MAINTAIN,REFERENCES,SELECT,TRIGGER,TRUNCATE,UPDATE/<owner> wms_api=DELETE,INSERT,SELECT,UPDATE/<owner> wms_worker=SELECT/<owner>]
+column wms.ticket_kind_product 1 id uuid not-null default=wms.uuidv7()
+column wms.ticket_kind_product 2 company_id uuid not-null
+column wms.ticket_kind_product 3 project_id uuid not-null
+column wms.ticket_kind_product 4 created_at timestamp with time zone not-null default=now()
+column wms.ticket_kind_product 5 updated_at timestamp with time zone not-null default=now()
+column wms.ticket_kind_product 6 ticket_kind text not-null
+column wms.ticket_kind_product 7 product_id uuid not-null
+constraint wms.ticket_kind_product ticket_kind_product_company_id_fk FOREIGN KEY (company_id) REFERENCES wms.company(id)
+constraint wms.ticket_kind_product ticket_kind_product_pkey PRIMARY KEY (id)
+constraint wms.ticket_kind_product ticket_kind_product_product_id_fk FOREIGN KEY (company_id, project_id, product_id) REFERENCES wms.product(company_id, project_id, id)
+constraint wms.ticket_kind_product ticket_kind_product_project_id_fk FOREIGN KEY (company_id, project_id) REFERENCES wms.project(company_id, id)
+constraint wms.ticket_kind_product ticket_kind_product_project_id_ticket_kind_key UNIQUE (company_id, project_id, ticket_kind)
+constraint wms.ticket_kind_product ticket_kind_product_ticket_kind_one_of CHECK ((ticket_kind = ANY (ARRAY['missed-collection'::text, 'overflow'::text, 'access-issue'::text, 'container-request'::text, 'container-defect'::text, 'proof-follow-up'::text, 'complaint'::text, 'reported-problem'::text, 'rejected-command'::text, 'internal-task'::text, 'other'::text])))
+index wms.ticket_kind_product ticket_kind_product_pkey CREATE UNIQUE INDEX ticket_kind_product_pkey ON wms.ticket_kind_product USING btree (id)
+index wms.ticket_kind_product ticket_kind_product_product_id_idx CREATE INDEX ticket_kind_product_product_id_idx ON wms.ticket_kind_product USING btree (company_id, product_id)
+index wms.ticket_kind_product ticket_kind_product_project_id_ticket_kind_key CREATE UNIQUE INDEX ticket_kind_product_project_id_ticket_kind_key ON wms.ticket_kind_product USING btree (company_id, project_id, ticket_kind)
+trigger wms.ticket_kind_product ticket_kind_product_audit_trail enabled=O CREATE TRIGGER ticket_kind_product_audit_trail AFTER INSERT OR DELETE OR UPDATE ON wms.ticket_kind_product FOR EACH ROW EXECUTE FUNCTION wms.audit_row('project', 'project_id')
+trigger wms.ticket_kind_product ticket_kind_product_touch_updated_at enabled=O CREATE TRIGGER ticket_kind_product_touch_updated_at BEFORE UPDATE ON wms.ticket_kind_product FOR EACH ROW EXECUTE FUNCTION wms.touch_updated_at()
+policy wms.ticket_kind_product ticket_kind_product_tenant_fence permissive ALL to=wms_api using=(company_id = ( SELECT wms.current_company_id() AS current_company_id)) check=(company_id = ( SELECT wms.current_company_id() AS current_company_id))
 relation wms.ticket_sla kind=table owner=<owner> persistence=p rls=true force-rls=true replica-identity=d acl=[<owner>=DELETE,INSERT,MAINTAIN,REFERENCES,SELECT,TRIGGER,TRUNCATE,UPDATE/<owner> wms_api=DELETE,INSERT,SELECT,UPDATE/<owner> wms_worker=SELECT/<owner>]
 column wms.ticket_sla 1 id uuid not-null default=wms.uuidv7()
 column wms.ticket_sla 2 company_id uuid not-null
@@ -3130,4 +3154,5 @@ journal 1792868216557 6775a033d267b5b88bf3f92f2efd3f695a1039822f38c8c2c49e9e7b24
 journal 1792869628829 b505b3c7d5a7facb5ef7d48d8c936b335c3a626fdce876f9866e5ee49bc273e8
 journal 1792871277838 b4492acfde0d00f5427e247e23084a6456b437ce0e06448a61d0ceac1110b9bd
 journal 1792881799168 ecb337207906f39fb071c6c0e89498db565cd57067d8d8de0648890a8bbf3e05
+journal 1792906810423 ddf063e560d278c8dd992e167b9e832f15a7274b0aea5d3697a24032d4148e3d
 pgboss-version 42

@@ -7,7 +7,10 @@
 // (#291 slice 23b) grew both lists by `service-provider`, and an applied file
 // is never edited, so the tests that diff to and from those files read the
 // tables from here — ad-hoc-rendering.test.ts from 0015 to 0016, and
-// provider-tickets-rendering.test.ts from 0016 to today.
+// provider-tickets-rendering.test.ts from 0016 to 0031. The ticket as 0031
+// left it — 0016's columns with the grown sources — is the one 0033 (#291 C3)
+// gave the product its completion charges, so ticket-charges-rendering.test.ts
+// diffs from it to today.
 import { TICKET_EVENT_KINDS, TICKET_KINDS, TICKET_PRIORITIES, TICKET_RESOLUTIONS, TICKET_STATUSES } from "@waste/domain/resolution/vocabulary"
 import { sql } from "drizzle-orm"
 import { check, getTableConfig, index, integer, text, timestamp, uniqueIndex, uuid } from "drizzle-orm/pg-core"
@@ -28,6 +31,9 @@ import { wms } from "../schema/wms"
 
 /** The sources 0009 spelled, and every file until 0031 kept. */
 export const TICKET_SOURCES_AS_OF_0009 = ["office", "phone", "email", "portal", "driver-app", "dispatch", "import", "integration"] as const
+
+/** The sources 0031 (#291 slice 23b) spelled: 0009's and the service provider's. */
+export const TICKET_SOURCES_AS_OF_0031 = [...TICKET_SOURCES_AS_OF_0009, "service-provider"] as const
 
 /** The visibilities 0009 spelled, and every file until 0031 kept. */
 export const TICKET_VISIBILITIES_AS_OF_0009 = ["internal", "customer"] as const
@@ -109,8 +115,9 @@ const ticketAsOf0015 = wms.table("ticket", { ...shared(), closedAt: instant() },
   tenantIndex(t, t.recollectionRouteId),
 ])
 
-/** ticket as 0016 (#111) left it and 0024 still had it: the re-collection's stop, its key through the route, its check and its index. */
-const ticketAsOf0016 = wms.table("ticket", { ...shared(), recollectionPickupId: uuid(), closedAt: instant() }, (t) => [
+/** ticket as 0016 (#111) left it, the re-collection's stop with its key through the route, its check and its index — with 0009's sources until 0031, and 0031's after. */
+const ticketWithStop = (sources: readonly string[]) =>
+  wms.table("ticket", { ...shared(), recollectionPickupId: uuid(), closedAt: instant() }, (t) => [
   companyReference(t, company),
   tenantReference(t, [t.projectId], project),
   tenantReference(t, [t.assigneeUserAccountId], userAccount),
@@ -131,7 +138,7 @@ const ticketAsOf0016 = wms.table("ticket", { ...shared(), recollectionPickupId: 
   oneOf(t.kind, TICKET_KINDS),
   oneOf(t.status, TICKET_STATUSES),
   oneOf(t.priority, TICKET_PRIORITIES),
-  oneOf(t.source, TICKET_SOURCES_AS_OF_0009),
+  oneOf(t.source, sources),
   oneOf(t.resolution, TICKET_RESOLUTIONS),
   check(tableObjectName(t.id.table, "origin_shape", "ticket"), sql`(${t.createdBy} is null) = (${t.sourceEventId} is not null)`),
   check(tableObjectName(t.id.table, "pickup_shape", "ticket"), sql`${t.pickupId} is null or ${t.routeId} is not null`),
@@ -157,9 +164,12 @@ const ticketAsOf0016 = wms.table("ticket", { ...shared(), recollectionPickupId: 
   tenantIndex(t, t.recollectionPickupId),
 ])
 
-/** The ticket as of an era before 0031: `0015` without the re-collection's stop, `0016` with it. */
-export function ticketAsOf(era: "0015" | "0016") {
-  return era === "0015" ? ticketAsOf0015 : ticketAsOf0016
+const ticketAsOf0016 = ticketWithStop(TICKET_SOURCES_AS_OF_0009)
+const ticketAsOf0031 = ticketWithStop(TICKET_SOURCES_AS_OF_0031)
+
+/** The ticket as of an era before today's: `0015` without the re-collection's stop, `0016` with it, `0031` with the service provider's source too. */
+export function ticketAsOf(era: "0015" | "0016" | "0031") {
+  return era === "0015" ? ticketAsOf0015 : era === "0016" ? ticketAsOf0016 : ticketAsOf0031
 }
 
 /** The history's kind CASE as the schema builds it from TICKET_EVENT_SHAPES: one SQL, which renders the same text over any table named `ticket_event`. */

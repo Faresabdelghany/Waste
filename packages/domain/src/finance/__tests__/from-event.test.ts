@@ -11,7 +11,7 @@ import { describe, test } from "node:test"
 import { OUTBOX_KINDS, PICKUP_OUTCOMES, type OutboxKind } from "../../execution/vocabulary"
 import { PRODUCT_UNITS } from "../../registry/vocabulary"
 import { TICKET_RESOLUTIONS } from "../../resolution/vocabulary"
-import { BILLABLE_RESOLUTIONS, billableFor, isBillableResolution, PICKUP_EVENT_KINDS, reversalOf, type EventFacts, type LiveEventFacts, type PickupEventFacts, type PlacementFacts, type TicketCompletedFacts } from "../from-event"
+import { BILLABLE_RESOLUTIONS, billableFor, chargesTicketWork, isBillableResolution, PICKUP_EVENT_KINDS, reversalOf, type EventFacts, type LiveEventFacts, type PickupEventFacts, type PlacementFacts, type TicketChargeFacts, type TicketCompletedFacts } from "../from-event"
 import type { PriceRow } from "../pricing"
 
 const ROUTE = "route"
@@ -67,7 +67,16 @@ const live = (values: Partial<LiveEventFacts> = {}): LiveEventFacts => ({
   ...values,
 })
 
-const completedTicket = (values: Partial<TicketCompletedFacts> = {}): TicketCompletedFacts => ({ kind: "ticket-completed", ticketId: TICKET, resolution: "recollected", agreement: { id: AGREEMENT, subscriptionId: SUBSCRIPTION }, closedOn: "2026-10-07", ...values })
+const completedTicket = (values: Partial<TicketCompletedFacts> = {}): TicketCompletedFacts => ({ kind: "ticket-completed", ticketId: TICKET, resolution: "recollected", agreement: { id: AGREEMENT, subscriptionId: SUBSCRIPTION }, closedOn: "2026-10-07", charge: null, ...values })
+
+/** The product a completed ticket charges for (#291 C3): the completion's, a per-job service at 25 %, under the reached agreement of an organisation, with the default list's two rows. */
+const charge = (values: Partial<TicketChargeFacts> = {}): TicketChargeFacts => ({
+  source: "completion",
+  product: { id: PRODUCT, status: "active", unit: "job", vatPercent: 25 },
+  agreement: { status: "active", customerKind: "organisation", customerId: CUSTOMER },
+  priceList: { id: "list", currency: "DKK", rows: [row("everyone"), row("harbor", { planningAreaId: HARBOR, unitPriceMinor: 1_500 })] },
+  ...values,
+})
 
 const links = { routeId: ROUTE, pickupId: PICKUP, ticketId: null, reversesEventId: null }
 
@@ -190,6 +199,52 @@ describe("billableFor a completed ticket", () => {
     }
     assert.deepEqual([...BILLABLE_RESOLUTIONS], ["recollected", "serviced"])
     assert.equal(isBillableResolution("toString" as never), false, "a resolution outside the list finds nothing: the lookup is the list's, not a prototype's")
+  })
+
+  test("with a product — the completion's or its kind's — is priced as a pickup is, on the day it closed, by the customer's conditions alone: no zone, no container type, no fraction (#291 C3)", () => {
+    const ticketLinks = { routeId: null, pickupId: null, ticketId: TICKET, reversesEventId: null }
+    assert.deepEqual(billableFor(completedTicket({ charge: charge() })), {
+      action: "record",
+      draft: {
+        kind: "ticket",
+        serviceDate: "2026-10-07",
+        agreementId: AGREEMENT,
+        subscriptionId: SUBSCRIPTION,
+        productId: PRODUCT,
+        quantity: 1,
+        // The harbour row asks for a zone a ticket's event never names: the row for everyone wins.
+        price: { priceListRowId: "everyone", unitPriceMinor: 1_000, netMinor: 1_000, vatPercent: 25, vatMinor: 250, currency: "DKK" },
+        blockReason: null,
+        links: ticketLinks,
+      },
+    })
+    const blocked = (facts: TicketChargeFacts) => {
+      const action = billableFor(completedTicket({ charge: facts }))
+      return action?.action === "record" ? [action.draft.productId, action.draft.blockReason, action.draft.price] : action
+    }
+    // Each block keeps the product named, so a reprice once it is put right prices it.
+    assert.deepEqual(blocked(charge({ agreement: { status: "draft", customerKind: "organisation", customerId: CUSTOMER } })), [PRODUCT, "agreement-draft", null])
+    assert.deepEqual(blocked(charge({ priceList: null })), [PRODUCT, "no-price-list", null])
+    assert.deepEqual(blocked(charge({ priceList: { id: "list", currency: "DKK", rows: [] } })), [PRODUCT, "no-price-row", null])
+    assert.deepEqual(blocked(charge({ product: { id: PRODUCT, status: "active", unit: "job", vatPercent: null } })), [PRODUCT, "no-vat-rate", null])
+    // A re-collection or a service only: an answered ticket with a product is still nothing.
+    assert.equal(billableFor(completedTicket({ resolution: "answered", charge: charge() })), undefined)
+  })
+
+  test("takes the completion's product as named, its kind's only while it is offered, and never one sold by the month: otherwise no-product, the office's to price (#291 C3)", () => {
+    const productOf = (facts: TicketChargeFacts) => {
+      const action = billableFor(completedTicket({ charge: facts }))
+      return action?.action === "record" ? [action.draft.productId, action.draft.blockReason] : action
+    }
+    const retired = { id: PRODUCT, status: "inactive" as const, unit: "job" as const, vatPercent: 25 }
+    assert.deepEqual(productOf(charge({ source: "kind", product: retired })), [null, "no-product"], "a kind's product retired since it was mapped is never a silent charge")
+    assert.deepEqual(productOf(charge({ source: "kind", product: { ...retired, status: "draft" } })), [null, "no-product"])
+    assert.deepEqual(productOf(charge({ source: "kind" })), [PRODUCT, null])
+    assert.deepEqual(productOf(charge({ source: "completion", product: retired })), [PRODUCT, null], "the person named it at completion, where the gate stood")
+    for (const source of ["completion", "kind"] as const) {
+      assert.deepEqual(productOf(charge({ source, product: { id: PRODUCT, status: "active", unit: "month", vatPercent: 25 } })), [null, "no-product"], `a month product is a recurring charge, never ticket work (${source})`)
+    }
+    assert.equal(chargesTicketWork(charge({ product: { id: PRODUCT, status: "active", unit: "pickup", vatPercent: 25 } })), true, "a per-pickup product charges a re-collection")
   })
 
   test("with no agreement reachable is nothing: a ticket about nothing billable makes no money row; an agreement without a subscription still makes one", () => {

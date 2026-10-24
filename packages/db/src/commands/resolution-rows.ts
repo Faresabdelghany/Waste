@@ -57,6 +57,7 @@ export const ticketColumns = {
   resolution: ticket.resolution,
   recollectionRouteId: ticket.recollectionRouteId,
   recollectionPickupId: ticket.recollectionPickupId,
+  chargeProductId: ticket.chargeProductId,
   closedAt: ticket.closedAt,
   createdAt: ticket.createdAt,
   updatedAt: ticket.updatedAt,
@@ -102,6 +103,7 @@ export function ticketOf(row: TicketRow): Ticket {
     resolution: row.resolution as TicketResolution | null,
     recollectionRouteId: row.recollectionRouteId,
     recollectionPickupId: row.recollectionPickupId,
+    chargeProductId: row.chargeProductId,
     closedAt: instantOf(row.closedAt),
     ...stampsOf(row),
   }

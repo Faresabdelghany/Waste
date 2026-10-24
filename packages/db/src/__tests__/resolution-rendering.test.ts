@@ -29,7 +29,11 @@
 // ticket's sources and the history's visibilities by `service-provider`, so
 // the two CREATE TABLEs as drizzle-kit writes them now carry those changes and
 // `CHANGED_LATER` maps them onto 0009's; provider-tickets-rendering.test.ts
-// pins 0031's replacements.
+// pins 0031's replacements. Migration 0033 (#291 C3) gave the ticket the
+// product its completion charges, `charge_product_id`, with its key, its
+// index and `ticket_charge_shape`: `CHANGED_LATER` maps today's spelling
+// onto 0009's, `ADDED_IN_0033` is left out with 0016's, and
+// ticket-charges-rendering.test.ts pins 0033's own statements.
 import assert from "node:assert/strict"
 import { readFile } from "node:fs/promises"
 import { join } from "node:path"
@@ -86,8 +90,8 @@ const stampsShape = (() => {
   return `CONSTRAINT "alert_stamps_shape" CHECK (case ${column("status")} when 'new' then ${column("acknowledged_at")} is null and ${column("resolved_at")} is null when 'acknowledged' then ${column("acknowledged_at")} is not null and ${column("resolved_at")} is null when 'resolved' then ${column("resolved_at")} is not null else false end)`
 })()
 
-/** ticket as drizzle-kit wrote it as of 0009, as it wrote it since 0016 (#111) — the re-collection's stop and the check that it names its route — and as it writes it since 0031 (#291 slice 23b), its sources grown by `service-provider`. */
-const ticketTable = (asOf: "0009" | "0016" | "0031"): string =>
+/** ticket as drizzle-kit wrote it as of 0009, as it wrote it since 0016 (#111) — the re-collection's stop and the check that it names its route — and as it wrote it since 0031 (#291 slice 23b), its sources grown by `service-provider`. */
+const ticketTable = (asOf: "0009" | "0016" | "0031" | "0033"): string =>
   createTable("ticket", "project", [
     '"number" integer NOT NULL',
     '"kind" text NOT NULL',
@@ -113,13 +117,14 @@ const ticketTable = (asOf: "0009" | "0016" | "0031"): string =>
     '"resolution" text',
     '"recollection_route_id" uuid',
     ...(asOf !== "0009" ? ['"recollection_pickup_id" uuid'] : []),
+    ...(asOf === "0033" ? ['"charge_product_id" uuid'] : []),
     `"closed_at" ${INSTANT}`,
     uniqueKey("ticket_number_key", "company_id", "number"),
     uniqueKey("ticket_project_key", "company_id", "project_id", "id"),
     oneOfCheck("ticket", "kind", "missed-collection", "overflow", "access-issue", "container-request", "container-defect", "proof-follow-up", "complaint", "reported-problem", "rejected-command", "internal-task", "other"),
     oneOfCheck("ticket", "status", ...STATUSES),
     oneOfCheck("ticket", "priority", "critical", "high", "medium", "low", "none"),
-    oneOfCheck("ticket", "source", "office", "phone", "email", "portal", "driver-app", "dispatch", "import", "integration", ...(asOf === "0031" ? ["service-provider"] : [])),
+    oneOfCheck("ticket", "source", "office", "phone", "email", "portal", "driver-app", "dispatch", "import", "integration", ...(asOf === "0031" || asOf === "0033" ? ["service-provider"] : [])),
     oneOfCheck("ticket", "resolution", ...RESOLUTIONS),
     `CONSTRAINT "ticket_origin_shape" CHECK ((${ref("ticket", "created_by")} is null) = (${ref("ticket", "source_event_id")} is not null))`,
     `CONSTRAINT "ticket_pickup_shape" CHECK (${ref("ticket", "pickup_id")} is null or ${ref("ticket", "route_id")} is not null)`,
@@ -128,6 +133,8 @@ const ticketTable = (asOf: "0009" | "0016" | "0031"): string =>
     // `is not distinct from`: `null = 'recollected'` is null, and a null check passes.
     `CONSTRAINT "ticket_recollection_shape" CHECK (${ref("ticket", "recollection_route_id")} is null or ${ref("ticket", "resolution")} is not distinct from 'recollected')`,
     ...(asOf !== "0009" ? [`CONSTRAINT "ticket_recollection_pickup_shape" CHECK (${ref("ticket", "recollection_pickup_id")} is null or ${ref("ticket", "recollection_route_id")} is not null)`] : []),
+    // The resolution named not null: `null in (...)` is null, and a null check passes.
+    ...(asOf === "0033" ? [`CONSTRAINT "ticket_charge_shape" CHECK (${ref("ticket", "charge_product_id")} is null or (${ref("ticket", "resolution")} is not null and ${ref("ticket", "resolution")} in ('recollected', 'serviced')))`] : []),
     `CONSTRAINT "ticket_closed_shape" CHECK ((${ref("ticket", "status")} in ('completed', 'rejected')) = (${ref("ticket", "closed_at")} is not null))`,
   ])
 
@@ -155,17 +162,24 @@ const ticketEventTable = (asOf: "0009" | "0031"): string =>
 const RECOLLECTION_PICKUP_FK = foreignKey("ticket", "ticket_recollection_route_id_recollection_pickup_id_fk", ["company_id", "project_id", "recollection_route_id", "recollection_pickup_id"], "pickup", ["company_id", "project_id", "route_id", "id"])
 const RECOLLECTION_PICKUP_INDEX = index("ticket", "ticket_recollection_pickup_id_idx", "company_id", "recollection_pickup_id")
 
-/** What 0016 (#111) and 0031 (#291 slice 23b) changed on two of the three: the ticket's and the history's CREATE TABLE as drizzle-kit generates them now onto what 0009 says. */
+/** The product a completion charges is the project's (#291 C3), and its index. */
+const CHARGE_PRODUCT_FK = foreignKey("ticket", "ticket_charge_product_id_fk", ["company_id", "project_id", "charge_product_id"], "product", ["company_id", "project_id", "id"])
+const CHARGE_PRODUCT_INDEX = index("ticket", "ticket_charge_product_id_idx", "company_id", "charge_product_id")
+
+/** What 0016 (#111), 0031 (#291 slice 23b) and 0033 (#291 C3) changed on two of the three: the ticket's and the history's CREATE TABLE as drizzle-kit generates them now onto what 0009 says. */
 const CHANGED_LATER = new Map([
-  [ticketTable("0031"), ticketTable("0009")],
+  [ticketTable("0033"), ticketTable("0009")],
   [ticketEventTable("0031"), ticketEventTable("0009")],
 ])
 
 /** What 0016 added to the ticket beside the column: the key through the route and its index. 0009 begins with the generated statements less these. */
 const ADDED_IN_0016 = [RECOLLECTION_PICKUP_FK, RECOLLECTION_PICKUP_INDEX]
 
+/** What 0033 added to the ticket beside the column: the key to its product and its index. */
+const ADDED_IN_0033 = [CHARGE_PRODUCT_FK, CHARGE_PRODUCT_INDEX]
+
 const expected = [
-  ticketTable("0031"),
+  ticketTable("0033"),
   ticketEventTable("0031"),
   createTable("alert", "project", [
     '"kind" text NOT NULL',
@@ -212,6 +226,7 @@ const expected = [
   projectFkTo("ticket", "parent_ticket_id", "ticket"),
   projectFkTo("ticket", "recollection_route_id", "route"),
   RECOLLECTION_PICKUP_FK,
+  CHARGE_PRODUCT_FK,
   companyFk("ticket_event"),
   projectFk("ticket_event"),
   projectFkTo("ticket_event", "ticket_id", "ticket"),
@@ -242,6 +257,7 @@ const expected = [
   index("ticket", "ticket_driver_id_idx", "company_id", "driver_id"),
   index("ticket", "ticket_customer_id_idx", "company_id", "customer_id"),
   index("ticket", "ticket_parent_ticket_id_idx", "company_id", "parent_ticket_id"),
+  CHARGE_PRODUCT_INDEX,
   index("ticket", "ticket_recollection_route_id_idx", "company_id", "recollection_route_id"),
   RECOLLECTION_PICKUP_INDEX,
   // The second idempotency key: one comment per outbox event.
@@ -331,9 +347,9 @@ const handWritten = Object.values(tables).flatMap((table) => handWrittenStatemen
 /** The ALTER TABLEs as drizzle-kit wrote them: the company and the outbox from 0008's spelling to 0009's — not to today's, since 0010 changed both again (Issue #112) and an applied file is never edited. */
 const generatedAlterations = (): Promise<string[]> => statementsBetween({ company: companyAsOf0008, outboxEvent: outboxEventAsOf0008 }, { company: companyAsOf0009, outboxEvent: outboxEventAsOf0009 })
 
-/** Everything drizzle-kit wrote at the head of 0009: the three tables as they were generated as of 0009 — the ticket without the re-collection's stop and with 0009's sources, what 0016 added left out — and the two altered ones. */
+/** Everything drizzle-kit wrote at the head of 0009: the three tables as they were generated as of 0009 — the ticket without the product its completion charges or the re-collection's stop and with 0009's sources, what 0033 and 0016 added left out — and the two altered ones. */
 const generatedHead = async (): Promise<string[]> => [
-  ...(await statementsFor(tables)).filter((statement) => !ADDED_IN_0016.includes(statement)).map((statement) => CHANGED_LATER.get(statement) ?? statement),
+  ...(await statementsFor(tables)).filter((statement) => !ADDED_IN_0016.includes(statement) && !ADDED_IN_0033.includes(statement)).map((statement) => CHANGED_LATER.get(statement) ?? statement),
   ...(await generatedAlterations()),
 ]
 
@@ -354,9 +370,9 @@ describe("the Resolution tables as drizzle-kit writes them", () => {
     const generated = (await generatedHead()).map(normalised).sort()
     assert.equal(generated.length, 65, "three CREATE TABLE, one ADD COLUMN, two DROP CONSTRAINT, two ADD CONSTRAINT, twenty-nine foreign keys, twenty-eight indexes")
     assert.deepEqual([...statements.slice(0, generated.length)].sort(), generated)
-    // What 0016 and 0031 changed and 0016 added is what the schema generates today: each mapping maps something.
+    // What 0016, 0031 and 0033 changed and 0016 and 0033 added is what the schema generates today: each mapping maps something.
     const today = await statementsFor(tables)
-    for (const statement of [...CHANGED_LATER.keys(), ...ADDED_IN_0016]) assert.ok(today.includes(statement), statement.split("\n")[0])
+    for (const statement of [...CHANGED_LATER.keys(), ...ADDED_IN_0016, ...ADDED_IN_0033]) assert.ok(today.includes(statement), statement.split("\n")[0])
   })
 
   test("and carries below them the fence and trigger, or revoke, of each table: 3 x 3 = 9 statements", async () => {
@@ -393,6 +409,7 @@ describe("the checks of this context", () => {
       "ticket_resolution_shape",
       "ticket_recollection_shape",
       "ticket_recollection_pickup_shape",
+      "ticket_charge_shape",
       "ticket_closed_shape",
     ])
     assert.deepEqual([...checksOf(ticketEvent).keys()], ["ticket_event_kind_one_of", "ticket_event_status_one_of", "ticket_event_resolution_one_of", "ticket_event_visibility_one_of", "ticket_event_kind_shape"])

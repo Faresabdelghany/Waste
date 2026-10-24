@@ -34,7 +34,7 @@ const MIGRATION = "0031_provider_tickets.sql"
 const referenced = { company, project, userAccount, route, pickup, container, property, sharedCollectionPoint, agreement, driver, customer }
 
 describe("a Service Provider's tickets as drizzle-kit writes them", () => {
-  const generated = statementsBetween({ ...referenced, ticket: ticketAsOf("0016"), ticketEvent: ticketEventAsOf0009 }, { ...referenced, ticket, ticketEvent })
+  const generated = statementsBetween({ ...referenced, ticket: ticketAsOf("0016"), ticketEvent: ticketEventAsOf0009 }, { ...referenced, ticket: ticketAsOf("0031"), ticketEvent })
 
   test("the ticket's source check and the history's visibility check are replaced in their grown spelling, and nothing else moves", async () => {
     assert.deepEqual(await generated, [

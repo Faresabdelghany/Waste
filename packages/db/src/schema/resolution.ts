@@ -38,6 +38,10 @@
 // `recollection_pickup_id`, a pickup *of that route* through the same
 // project key the ticket's own pickup reaches, `ticket_recollection_pickup_shape`
 // saying the stop names its route; `reopen` clears it with the route.
+// Since #291 C3 the completion may name the product its work is charged at,
+// `charge_product_id`, a product of the project, with a resolution Finance
+// charges for alone (`ticket_charge_shape`, over the domain's
+// `BILLABLE_RESOLUTIONS`); `reopen` clears it with the resolution.
 // Nothing here is effective-dated: a ticket carries a status, which is what a
 // record with no period does.
 //
@@ -78,13 +82,14 @@
 // display number, being named by its title.
 import { TICKET_EVENT_SHAPES } from "@waste/domain/resolution/event-shapes"
 import { TICKET_SLA_HOURS_MAX } from "@waste/domain/resolution/sla"
-import { ALERT_KINDS, ALERT_SEVERITIES, ALERT_SOURCES, ALERT_STATUSES, TICKET_EVENT_KINDS, TICKET_KINDS, TICKET_PRIORITIES, TICKET_RESOLUTIONS, TICKET_SOURCES, TICKET_STATUSES, TICKET_VISIBILITIES } from "@waste/domain/resolution/vocabulary"
+import { ALERT_KINDS, ALERT_SEVERITIES, ALERT_SOURCES, ALERT_STATUSES, BILLABLE_RESOLUTIONS, TICKET_EVENT_KINDS, TICKET_KINDS, TICKET_PRIORITIES, TICKET_RESOLUTIONS, TICKET_SOURCES, TICKET_STATUSES, TICKET_VISIBILITIES } from "@waste/domain/resolution/vocabulary"
 import { sql, type SQL } from "drizzle-orm"
 import { check, index, integer, text, timestamp, uniqueIndex, uuid, type PgColumn } from "drizzle-orm/pg-core"
 
 import { tableObjectName } from "../names"
 import { userAccount } from "./access"
 import { agreement } from "./agreements"
+import { product } from "./catalogue"
 import { literal, oneOf } from "./checks"
 import { id, projectScoped, recorded, timestamps } from "./columns"
 import { container } from "./containers"
@@ -141,6 +146,8 @@ export const ticket = wms.table(
     recollectionRouteId: uuid(),
     /** The stop of that route the re-collection is, where the office added one (#111, migration 0016); never without the route. */
     recollectionPickupId: uuid(),
+    /** The product its completion charges, with a re-collection or a service (#291 C3, migration 0033); cleared by reopen. */
+    chargeProductId: uuid(),
     /** When the ticket was completed or rejected; cleared by reopen. */
     closedAt: instant(),
   },
@@ -163,6 +170,7 @@ export const ticket = wms.table(
     projectReference(t, [t.recollectionRouteId], route),
     // The re-collection's stop is a stop of the route it rides on (#111): the key carries the route on both sides, as the ticket's own pickup's does.
     projectReference(t, [t.recollectionRouteId, t.recollectionPickupId], pickup, [pickup.routeId, pickup.id]),
+    projectReference(t, [t.chargeProductId], product),
     tenantUnique(t, t.number),
     projectKey(t),
     oneOf(t.kind, TICKET_KINDS),
@@ -182,6 +190,8 @@ export const ticket = wms.table(
     check(tableObjectName(t.id.table, "recollection_shape", "ticket"), sql`${t.recollectionRouteId} is null or ${t.resolution} is not distinct from 'recollected'`),
     // The re-collection's stop names its route (#111): Postgres leaves a composite key with a null member unchecked.
     check(tableObjectName(t.id.table, "recollection_pickup_shape", "ticket"), sql`${t.recollectionPickupId} is null or ${t.recollectionRouteId} is not null`),
+    // The product a completion charges goes with a resolution Finance charges for (#291 C3). The resolution is named not null, since `null in (...)` is null and a null check passes: an open ticket has none and may still not carry the product.
+    check(tableObjectName(t.id.table, "charge_shape", "ticket"), sql`${t.chargeProductId} is null or (${t.resolution} is not null and ${t.resolution} in (${sql.raw(BILLABLE_RESOLUTIONS.map(literal).join(", "))}))`),
     // A closed ticket has the instant it closed, and an open one none.
     check(tableObjectName(t.id.table, "closed_shape", "ticket"), sql`(${t.status} in ('completed', 'rejected')) = (${t.closedAt} is not null)`),
     // The consumer's idempotency key: one ticket per outbox event, the rows with one in the index and only those.
@@ -199,6 +209,7 @@ export const ticket = wms.table(
     tenantIndex(t, t.driverId),
     tenantIndex(t, t.customerId),
     tenantIndex(t, t.parentTicketId),
+    tenantIndex(t, t.chargeProductId),
     tenantIndex(t, t.recollectionRouteId),
     tenantIndex(t, t.recollectionPickupId),
   ],

@@ -32,8 +32,9 @@ import { eventOf, eventsFrom } from "@waste/db/commands/billing-shapes"
 import { issueInvoice } from "@waste/db/commands/invoice-writes"
 import { lockRow } from "@waste/db/commands/shared"
 import { newId } from "@waste/db/ids"
+import { product } from "@waste/db/schema/catalogue"
 import { pickup } from "@waste/db/schema/execution"
-import { billableEvent, billingRun } from "@waste/db/schema/finance"
+import { billableEvent, billingRun, ticketKindProduct } from "@waste/db/schema/finance"
 import { ticket } from "@waste/db/schema/resolution"
 import { withCompany } from "@waste/db/tenant"
 import type { OutboxKind } from "@waste/domain/execution/vocabulary"
@@ -423,6 +424,37 @@ describe("finance.record-billable-events against Postgres", { skip }, () => {
     const noAction = await seedTicket(pool, tenant, { resolution: "no-action", agreementId: tenant.agreements.housing.id })
     assert.equal((await handle(published("ticket-completed", noAction.id, ticketPayload(noAction.id, 4, "no-action", closedAt, { agreementId: tenant.agreements.housing.id })))).did, "nothing")
     assert.equal((await allEvents()).filter((event) => event.kind === "ticket").length, 5)
+  })
+
+  test("a ticket-completed charges the product its completion named, else its kind's while that one is offered, priced as a pickup is by the customer's rows; a retired kind's product is no-product (#291 C3)", async () => {
+    const closedAt = new Date("2026-10-07T22:30:00Z")
+    const priced = async (ticketId: string, number: number, resolution: "recollected" | "serviced", links: { agreementId: string }, kind = "missed-collection") => {
+      const payload = { ...ticketPayload(ticketId, number, resolution, closedAt, links), kind }
+      const done = await handle(published("ticket-completed", ticketId, payload))
+      const event = (await allEvents()).find((row) => row.id === done.billableEventId)
+      return [done.did, event?.status, event?.productId, event?.unitPriceMinor, event?.netMinor, event?.blockReason]
+    }
+    const { bulky, residual } = tenant.products
+    const retired = testId()
+    await withCompany(pool.db, tenant.companyId, async (tx) => {
+      await tx.insert(product).values({ id: retired, companyId: tenant.companyId, projectId: tenant.projects.copenhagen.id, name: "Old crane lift", kind: "additional-service", status: "inactive", unit: "job", vatPercent: 25 })
+      await tx.insert(ticketKindProduct).values([
+        { id: testId(), companyId: tenant.companyId, projectId: tenant.projects.copenhagen.id, ticketKind: "overflow", productId: bulky.id },
+        { id: testId(), companyId: tenant.companyId, projectId: tenant.projects.copenhagen.id, ticketKind: "container-request", productId: retired },
+      ])
+    })
+    // The completion's product: the bulky pickup at 350.00 kr for the housing association.
+    const named = await seedTicket(pool, tenant, { resolution: "serviced", agreementId: tenant.agreements.housing.id, closedAt, chargeProductId: bulky.id })
+    assert.deepEqual(await priced(named.id, 21, "serviced", { agreementId: tenant.agreements.housing.id }), ["recorded", "ready", bulky.id, 35_000, 35_000, null])
+    // The kind's: an overflow is charged at the bulky pickup.
+    const mapped = await seedTicket(pool, tenant, { resolution: "recollected", agreementId: tenant.agreements.anna.id, closedAt, kind: "overflow" })
+    assert.deepEqual(await priced(mapped.id, 22, "recollected", { agreementId: tenant.agreements.anna.id }, "overflow"), ["recorded", "ready", bulky.id, 35_000, 35_000, null])
+    // The completion's beats the kind's: residual collection for Anna, the row for everyone, since a ticket's event names no zone.
+    const both = await seedTicket(pool, tenant, { resolution: "recollected", agreementId: tenant.agreements.anna.id, closedAt, kind: "overflow", chargeProductId: residual.id })
+    assert.deepEqual(await priced(both.id, 23, "recollected", { agreementId: tenant.agreements.anna.id }, "overflow"), ["recorded", "ready", residual.id, 12_000, 12_000, null])
+    // A kind charged at a product retired since: no-product, the office's to price, never a silent charge.
+    const stale = await seedTicket(pool, tenant, { resolution: "serviced", agreementId: tenant.agreements.anna.id, closedAt, kind: "container-request" })
+    assert.deepEqual(await priced(stale.id, 24, "serviced", { agreementId: tenant.agreements.anna.id }, "container-request"), ["recorded", "blocked", null, null, null, "no-product"])
   })
 
   test("a ticket-completed for a ticket reopened since is stale news and nothing, not a failed job: the row stands open with no resolution and no closing instant, and its next completion is its own event", async () => {

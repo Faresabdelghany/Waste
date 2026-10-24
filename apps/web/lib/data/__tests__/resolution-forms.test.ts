@@ -106,7 +106,7 @@ describe("New ticket", () => {
 })
 
 describe("the ticket's command dialogs", () => {
-  const ticket: Ticket = { id: ids.ticket, ...STAMPS, projectId: copenhagen.id, number: 1001, label: "T-1001", kind: "other", status: "open", priority: "none", source: "office", subject: "A task", description: "Check the gate", occurredAt: STAMPS.createdAt, dueAt: null, assigneeUserAccountId: null, createdBy: null, sourceEventId: null, links: { routeId: null, pickupId: null, containerId: null, propertyId: null, sharedCollectionPointId: null, customerId: null, agreementId: null, driverId: null, parentTicketId: null }, resolution: null, recollectionRouteId: null, recollectionPickupId: null, closedAt: null }
+  const ticket: Ticket = { id: ids.ticket, ...STAMPS, projectId: copenhagen.id, number: 1001, label: "T-1001", kind: "other", status: "open", priority: "none", source: "office", subject: "A task", description: "Check the gate", occurredAt: STAMPS.createdAt, dueAt: null, assigneeUserAccountId: null, createdBy: null, sourceEventId: null, links: { routeId: null, pickupId: null, containerId: null, propertyId: null, sharedCollectionPointId: null, customerId: null, agreementId: null, driverId: null, parentTicketId: null }, resolution: null, recollectionRouteId: null, recollectionPickupId: null, chargeProductId: null, closedAt: null }
   const record = ticketAdapter.toRecord(ticket, context)
   const filled: Record<keyof typeof TICKET_COMMAND_FORMS, [BusinessFormValues, { safeParse: (body: unknown) => { success: boolean } }]> = {
     assign: [{ assigneeUserAccountId: web("configure.access"), note: "Taking it" }, TicketAssign],
