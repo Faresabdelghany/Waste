@@ -1,6 +1,4 @@
-import { request } from "@playwright/test"
-
-import { expect, test } from "./fixtures"
+import { expect, newApiRequestContext, test } from "./fixtures"
 import { E2E } from "./env"
 
 // Scenario 5: both processes are up against the stack the browser tests use.
@@ -10,7 +8,7 @@ import { E2E } from "./env"
 // proves its pool. The CI job waits for both before Playwright starts, so
 // here the answers are read for what they say.
 test("the API and the worker answer ready on the stack", async () => {
-  const probes = await request.newContext()
+  const probes = await newApiRequestContext()
   try {
     const api = await probes.get(`${E2E.apiUrl}/readyz`)
     expect(api.status()).toBe(200)
