@@ -75,6 +75,8 @@ describe("New ticket", () => {
     dueAt: "2026-10-01T16:00",
     assigneeUserAccountId: web("configure.access"),
     routeId: web("route-studio.routes"),
+    pickupId: web("route-studio.pickups"),
+    answerFromRecord: false,
     containerId: web("resources.containers"),
     customerId: web("customers.contacts"),
     propertyId: web("customers.properties"),
@@ -87,8 +89,9 @@ describe("New ticket", () => {
     assert.deepEqual(new Set(fieldIdsOf(TICKET_FORM)), new Set(Object.keys(filled)))
     const body = ticketAdapter.toCreateBody?.(createTicketRecord(filled, { now: 1 }), context) as Record<string, unknown>
     assert.ok(TicketCreate.safeParse(body).success, JSON.stringify(body))
-    assert.deepEqual(body.links, { routeId: ids.route, containerId: ids.container, propertyId: ids.property, sharedCollectionPointId: ids.point, customerId: ids.customer, agreementId: ids.agreement, driverId: ids.driver })
+    assert.deepEqual(body.links, { routeId: ids.route, pickupId: ids.pickup, containerId: ids.container, propertyId: ids.property, sharedCollectionPointId: ids.point, customerId: ids.customer, agreementId: ids.agreement, driverId: ids.driver })
     assert.equal(body.assigneeUserAccountId, ids.user)
+    assert.equal(body.answerFromRecord, false, "the opt-out reaches the body")
   })
 
   test("with its required fields alone is a body too: the defaults are the API's", () => {

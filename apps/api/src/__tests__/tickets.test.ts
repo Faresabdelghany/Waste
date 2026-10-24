@@ -3,7 +3,7 @@ import { after, before, describe, test } from "node:test"
 
 import { Page } from "@waste/contracts/pagination"
 import { TICKET_OBJECT_KEY_SHAPE } from "@waste/contracts/resolution"
-import { PICKUP_WITH_ITS_ROUTE, RECOLLECTION_ROUTE_WITH_RECOLLECTED, Ticket, TicketDetail, TicketEvent } from "@waste/contracts/tickets"
+import { PICKUP_WITH_ITS_ROUTE, RECOLLECTION_ROUTE_WITH_RECOLLECTED, Ticket, TicketDetail, TicketEvent, TicketEvidence } from "@waste/contracts/tickets"
 import { createDb, type Database, type Tx } from "@waste/db/client"
 import { agreement } from "@waste/db/schema/agreements"
 import { customer, property, propertyParty, sharedCollectionPoint } from "@waste/db/schema/customers"
@@ -20,7 +20,7 @@ import { callingAs, type Call } from "./calls"
 import { nextMillisecond } from "./clock"
 import { created } from "./created"
 import { databaseUnderTest, ownerUnderTest } from "./database"
-import { seedExecution, seedRoute, TOWN_HALL, type ExecutionFixtures, type SeededRoute } from "./execution-fixtures"
+import { at, seedExecution, seedRoute, TOWN_HALL, type ExecutionFixtures, type SeededRoute } from "./execution-fixtures"
 import { readProblem } from "./read-problem"
 import { seedFleet, seedPlanning, type FleetFixtures } from "./scheme-fixtures"
 import { dropTenant, grantRole, seedTenant, testId, type Tenant } from "./tenant"
@@ -228,7 +228,8 @@ describe("the ticket endpoints", { skip: database.skip || owner.skip }, () => {
 
   describe("GET /tickets", () => {
     test("lists the caller's projects' tickets in id order, filters them, pages them, and shows nothing to a foreman or across companies", async () => {
-      const first = await opened({ priority: "high", source: "phone", occurredAt: "2026-10-04T23:30:00Z", assigneeUserAccountId: a.users.olivia.id, links: { routeId: ex.routes.completed.id, pickupId: ex.routes.completed.pickupIds[1], containerId: ex.containers.bin2.id, propertyId: ex.properties.havnegade.id, driverId: fleet.drivers.mads.id } })
+      // The stop it names was recorded `not-presented`, which would answer the case as it opens (M6): this test is about the list, so the case stays open.
+      const first = await opened({ priority: "high", source: "phone", occurredAt: "2026-10-04T23:30:00Z", assigneeUserAccountId: a.users.olivia.id, answerFromRecord: false, links: { routeId: ex.routes.completed.id, pickupId: ex.routes.completed.pickupIds[1], containerId: ex.containers.bin2.id, propertyId: ex.properties.havnegade.id, driverId: fleet.drivers.mads.id } })
       const second = await opened({ kind: "overflow" })
       const everything = await page(olivia)
       const ids = everything.items.map((row) => row.id)
@@ -537,7 +538,7 @@ describe("the ticket endpoints", { skip: database.skip || owner.skip }, () => {
 
   describe("POST /tickets/:id/complete", () => {
     test("completes with the resolution, the closing instant and the event carrying both, writes ticket-completed, and takes a re-collection route that has not ended", async () => {
-      const fresh = await opened({ links: { routeId: ex.routes.completed.id, pickupId: ex.routes.completed.pickupIds[1] } })
+      const fresh = await opened({ answerFromRecord: false, links: { routeId: ex.routes.completed.id, pickupId: ex.routes.completed.pickupIds[1] } })
       await commanded(fresh.id, "start", {})
       const done = await commanded(fresh.id, "complete", { resolution: "recollected", note: "Re-collected on Tuesday's route", recollectionRouteId: ex.routes.ready.id })
       assert.deepEqual([done.status, done.resolution, done.recollectionRouteId, done.closedAt], ["completed", "recollected", ex.routes.ready.id, NOON.toISOString()])
@@ -637,6 +638,136 @@ describe("the ticket endpoints", { skip: database.skip || owner.skip }, () => {
       await refused(await viewer(`/tickets/${harbors.id}/events`), 404)
       await refused(await lars(`/tickets/${harbors.id}/events`), 404)
       assert.match((await refused(await ungranted(`/tickets/${harbors.id}/events`), 403)).detail ?? "", /view on operate\.tickets/)
+    })
+  })
+
+  describe("the stop's evidence (M6 of #293)", () => {
+    /** The completed route's three stops: collected at 06:45, failed `not-presented` at 07:12, skipped `route-ended` at 13:00. */
+    const stop = (index: number) => ({ routeId: ex.routes.completed.id, pickupId: ex.routes.completed.pickupIds[index] })
+    const NOT_PRESENTED = "Our driver was at the address at 07:12 on Monday 5 October and recorded that the bin was not put out for collection."
+    const COLLECTED = "Our driver collected the bin at 06:45 on Monday 5 October."
+    const evidenceOf = async (id: string, call = olivia): Promise<TicketEvidence> => {
+      const response = await call(`/tickets/${id}/evidence`)
+      assert.equal(response.status, 200, JSON.stringify(await response.clone().json()))
+      return TicketEvidence.parse(await response.json())
+    }
+    const reply = (id: string, values: unknown, call = olivia) => call(`/tickets/${id}/reply-with-evidence`, { method: "POST", body: values })
+
+    test("reads what the stop recorded: the outcome, when on the project's clock, where the failure stood, its proofs, the reply, and whether the record answers the case", async () => {
+      const missed = await opened({ answerFromRecord: false, links: stop(1) })
+      const evidence = await evidenceOf(missed.id)
+      assert.ok(evidence.stop !== null)
+      const { proofs, ...rest } = evidence.stop
+      assert.deepEqual(rest, {
+        pickupId: ex.routes.completed.pickupIds[1],
+        routeId: ex.routes.completed.id,
+        outcome: "failed",
+        reason: "not-presented",
+        service: "empty",
+        corrected: false,
+        at: "2026-10-05T05:12:00.000Z",
+        location: TOWN_HALL,
+        reply: NOT_PRESENTED,
+        answeredByRecord: true,
+      })
+      assert.deepEqual(
+        proofs.map((proof) => [proof.kind, proof.source, proof.reason]),
+        [
+          ["arrival", "driver-app", null],
+          ["failure", "driver-app", "not-presented"],
+        ],
+        "the stop's own proofs, in recording order",
+      )
+      assert.deepEqual(Object.keys(proofs[0]).sort(), ["id", "kind", "objectKey", "occurredAt", "outcome", "reason", "source"], "narrowed under the ticket's grant: no device, account, session, driver's note or weight")
+
+      const ended = (await evidenceOf((await opened({ answerFromRecord: false, links: stop(2) })).id)).stop
+      assert.equal(ended?.reply, "The bin was not collected: the route ended at 13:00 on Monday 5 October before our driver reached it.", "never puts the driver at an address the route never reached")
+
+      const collected = (await evidenceOf((await opened({ links: stop(0) })).id)).stop
+      assert.deepEqual([collected?.outcome, collected?.reply, collected?.answeredByRecord], ["completed", COLLECTED, false], "a collected stop answers nothing by itself")
+      const overflow = (await evidenceOf((await opened({ kind: "overflow", links: stop(1) })).id)).stop
+      assert.equal(overflow?.answeredByRecord, false, "only a missed collection is answered by the bin not being out")
+      assert.deepEqual(await evidenceOf((await opened()).id), { stop: null }, "a ticket about no stop has no evidence")
+
+      await refused(await olivia(`/tickets/${theirs.id}/evidence`), 404)
+      await refused(await viewer(`/tickets/${harbors.id}/evidence`), 404)
+      assert.match((await refused(await ungranted(`/tickets/${missed.id}/evidence`), 403)).detail ?? "", /view on operate\.tickets/)
+    })
+
+    test("answers a missed collection the record answers as it opens: the reply on the customer's thread, the case completed `answered`, ticket-completed after ticket-opened", async () => {
+      const answered = await opened({ links: stop(1) })
+      assert.deepEqual([answered.status, answered.resolution, answered.closedAt], ["completed", "answered", NOON.toISOString()], "the 201 answers it completed")
+      const detail = await read(answered.id)
+      assert.deepEqual(
+        detail.events.map((event) => [event.kind, event.status, event.visibility, event.resolution, event.body]),
+        [
+          ["created", "open", "internal", null, null],
+          ["comment", "open", "customer", null, NOT_PRESENTED],
+          ["status-changed", "completed", "internal", "answered", "Answered with the stop's record."],
+        ],
+      )
+      assert.deepEqual((await eventsAbout(answered.id)).map((event) => event.kind), ["ticket-opened", "ticket-completed"])
+      assert.deepEqual(Ticket.parse((await eventsAbout(answered.id))[1].payload), answered, "the completion carries the ticket as answered")
+
+      for (const [values, why] of [
+        [{ links: stop(0) }, "a collected stop"],
+        [{ links: stop(2) }, "a stop skipped for another reason"],
+        [{ kind: "overflow", links: stop(1) }, "another kind of case"],
+        [{ answerFromRecord: false, links: stop(1) }, "the office asked to judge it"],
+      ] as const) {
+        const left = await opened(values)
+        assert.equal(left.status, "open", `${why} opens the case`)
+        assert.deepEqual((await read(left.id)).events.map((event) => event.kind), ["created"], `${why}: no reply is written`)
+      }
+
+      // The office corrected a collected stop to not-presented: its word, not the driver's record, so the office judges the case.
+      const corrected = await seedRoute(pool, a, fleet, ex, {
+        status: "completed",
+        pickups: [{ containerId: ex.containers.bin1.id, propertyId: ex.properties.parkvej.id, status: "failed", reason: "not-presented", arrivedAt: at(ex.day, "06:40"), outcomeAt: at(ex.day, "11:00") }],
+        proofs: [
+          { kind: "completion", pickupIndex: 0, occurredAt: at(ex.day, "06:45"), location: TOWN_HALL },
+          { kind: "correction", pickupIndex: 0, occurredAt: at(ex.day, "11:00"), source: "dispatch", outcome: "failed", reason: "not-presented", note: "The resident sent a photo of an empty kerb" },
+        ],
+      })
+      const judged = await opened({ links: { routeId: corrected.id, pickupId: corrected.pickupIds[0] } })
+      assert.equal(judged.status, "open", "an outcome the office corrected answers no case by itself")
+      const review = (await (await olivia(`/tickets/${judged.id}/evidence`)).json()) as TicketEvidence
+      assert.deepEqual([review.stop?.corrected, review.stop?.answeredByRecord, review.stop?.reply], [true, false, "Our office reviewed the collection at 11:00 on Monday 5 October and recorded that the bin was not put out for collection."])
+    })
+
+    test("replies with the record and the office's note in one step, completing the case only when asked, and answers 201 with the history and no Location", async () => {
+      const fresh = await opened({ links: stop(0) })
+      await nextMillisecond()
+      const response = await reply(fresh.id, { note: "The bin was emptied on time." })
+      assert.equal(response.status, 201, JSON.stringify(await response.clone().json()))
+      assert.equal(response.headers.get("location"), null, "a reply is a history row, with no address of its own")
+      const detail = TicketDetail.parse(await response.json())
+      assert.equal(detail.status, "open", "the reply alone moves nothing")
+      assert.deepEqual([detail.events.at(-1)?.kind, detail.events.at(-1)?.visibility, detail.events.at(-1)?.body], ["comment", "customer", `${COLLECTED}\n\nThe bin was emptied on time.`])
+      assert.equal(detail.updatedAt, fresh.updatedAt, "nothing of the row moves")
+      assert.deepEqual((await eventsAbout(fresh.id)).map((event) => event.kind), ["ticket-opened"], "a reply is nobody else's news")
+
+      const done = TicketDetail.parse(await (await reply(fresh.id, { complete: true })).json())
+      assert.deepEqual([done.status, done.resolution, done.closedAt], ["completed", "answered", NOON.toISOString()])
+      assert.deepEqual(done.events.slice(-2).map((event) => [event.kind, event.status, event.body]), [["comment", "open", COLLECTED], ["status-changed", "completed", "Answered with the stop's record."]], "the reply is written before the completion, stamped with the status it met")
+      assert.deepEqual((await eventsAbout(fresh.id)).map((event) => event.kind), ["ticket-opened", "ticket-completed"])
+
+      const before = (await history(fresh.id)).length
+      assert.equal((await refused(await reply(fresh.id, { complete: true }), 409)).detail, `Ticket ${fresh.label} is completed; reopen it first`)
+      assert.equal((await history(fresh.id)).length, before, "a refused completion leaves no reply behind")
+      assert.equal((await reply(fresh.id, {})).status, 201, "the reply alone is taken on a closed ticket, as a comment is")
+    })
+
+    test("refuses a ticket about no stop, a member the body does not take, and answers 404 and 403 like every route here", async () => {
+      const nowhere = await opened()
+      assert.equal((await refused(await reply(nowhere.id, {}), 409)).detail, "This ticket names no stop, so no record answers it")
+      const fresh = await opened({ links: stop(0) })
+      assert.deepEqual((await refused(await reply(fresh.id, { complete: true, body: "x" }), 400)).errors?.map((error) => error.path), ["body"], "the reply's words are the record's")
+      assert.equal((await history(fresh.id)).length, 1, "no refused reply was appended")
+      await refused(await reply(theirs.id, {}), 404)
+      await refused(await reply(harbors.id, {}, viewer), 404)
+      assert.match((await refused(await reply(fresh.id, {}, ungranted), 403)).detail ?? "", /edit on operate\.tickets/)
+      assert.match((await refused(await reply(fresh.id, {}, lars), 403)).detail ?? "", /edit on operate\.tickets/, "the provider's manager may comment, not answer the case")
     })
   })
 

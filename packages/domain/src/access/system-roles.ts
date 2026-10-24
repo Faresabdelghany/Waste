@@ -175,6 +175,8 @@ export const SYSTEM_ROLES: readonly SystemRole[] = [
     grants: charter(
       workspace("customers", VIEW_EDIT_CREATE),
       workspace("operate", VIEW_EDIT_CREATE),
+      // The stops a ticket is about, read: their photos are the evidence a missed-collection dispute is answered with (M6 of #293).
+      only("route-studio.pickups", VIEW),
       // The catalogue it sells from (#291): the products a subscription names and the price lists an agreement is priced under, read and never set.
       only("commercial.products", VIEW),
       only("commercial.price-rows", VIEW),

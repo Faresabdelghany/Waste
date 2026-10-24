@@ -6,6 +6,11 @@ import { TICKET_EVENT_KINDS, TICKET_STATUSES, TICKET_VISIBILITIES, type TicketEv
 
 import { DAY_WINDOW_ORDERED } from "../queries"
 import {
+  EvidenceProof,
+  REPLY_NOTE_MAX,
+  StopEvidence,
+  TicketEvidence,
+  TicketReplyWithEvidence,
   LABEL_IS_THE_NUMBER,
   labelMatches,
   PICKUP_WITH_ITS_ROUTE,
@@ -151,11 +156,11 @@ describe("Ticket", () => {
 describe("TicketCreate", () => {
   const body = { projectId: OTHER, subject: "Call the customer back", description: "About the container request", kind: "internal-task" }
 
-  test("takes the case's own words and kind, defaulting the priority to none and the source to office, and may name what it is about, the assignee and an alert", () => {
-    assert.deepEqual(TicketCreate.parse(body), { ...body, priority: "none", source: "office" })
-    const whole = { ...body, priority: "high", source: "phone", occurredAt: WHEN, dueAt: "2026-10-07T12:00:00.000Z", assigneeUserAccountId: THIRD, links: { routeId: OTHER, pickupId: THIRD, customerId: ID }, alertId: OTHER }
+  test("takes the case's own words and kind, defaulting the priority to none, the source to office and answering from the record, and may name what it is about, the assignee and an alert", () => {
+    assert.deepEqual(TicketCreate.parse(body), { ...body, priority: "none", source: "office", answerFromRecord: true })
+    const whole = { ...body, priority: "high", source: "phone", occurredAt: WHEN, dueAt: "2026-10-07T12:00:00.000Z", assigneeUserAccountId: THIRD, links: { routeId: OTHER, pickupId: THIRD, customerId: ID }, alertId: OTHER, answerFromRecord: false }
     assert.deepEqual(TicketCreate.parse(whole), whole)
-    assert.deepEqual(TicketCreate.parse({ ...body, dueAt: null, assigneeUserAccountId: null, links: {} }), { ...body, priority: "none", source: "office", dueAt: null, assigneeUserAccountId: null, links: {} })
+    assert.deepEqual(TicketCreate.parse({ ...body, dueAt: null, assigneeUserAccountId: null, links: {} }), { ...body, priority: "none", source: "office", dueAt: null, assigneeUserAccountId: null, links: {}, answerFromRecord: true })
   })
 
   test("refuses what the server owns by name: the id and the stamps, the number, the status, the closing, the creator and the event", () => {
@@ -365,5 +370,25 @@ describe("the list queries", () => {
     assert.deepEqual(TicketEventListQuery.parse({ kind: "comment", visibility: "customer", limit: "20" }), { limit: 20, kind: "comment", visibility: "customer" })
     assert.deepEqual(refusal(TicketEventListQuery.safeParse({ visibility: "public" })).map((issue) => issue.path), ["visibility"])
     assert.equal("projectId" in TicketEventListQuery.shape, false, "a ticket's history is the ticket's, not a project's")
+  })
+})
+
+describe("the evidence and the reply (#293 M6)", () => {
+  test("a ticket's evidence is the stop's, or null for a ticket about no stop", () => {
+    assert.equal(TicketEvidence.parse({ stop: null }).stop, null)
+    const failure = { id: ID, kind: "failure", source: "driver-app", occurredAt: WHEN, reason: "not-presented", outcome: null, objectKey: null }
+    const stop = { pickupId: ID, routeId: OTHER, outcome: "failed", reason: "not-presented", service: "empty", corrected: false, at: WHEN, location: { type: "Point", coordinates: [12.6, 55.7] }, proofs: [failure], reply: "Our driver was at the address…", answeredByRecord: true }
+    assert.deepEqual(StopEvidence.parse(stop), stop)
+    assert.equal(StopEvidence.safeParse({ ...stop, outcome: "lost" }).success, false)
+    // Narrower than the stop's own read: no device, account, session, note or weight rides on a ticket's evidence.
+    assert.deepEqual(Object.keys(EvidenceProof.shape).sort(), ["id", "kind", "objectKey", "occurredAt", "outcome", "reason", "source"])
+  })
+
+  test("the one-step reply takes the office's note and whether to complete, and nothing else", () => {
+    assert.deepEqual(TicketReplyWithEvidence.parse({}), { complete: false })
+    assert.deepEqual(TicketReplyWithEvidence.parse({ note: "Please put the bin out by 06:00.", complete: true }), { note: "Please put the bin out by 06:00.", complete: true })
+    assert.equal(TicketReplyWithEvidence.safeParse({ body: "words" }).success, false, "the reply's words are the record's, never the client's")
+    assert.equal(TicketReplyWithEvidence.safeParse({ note: "x".repeat(REPLY_NOTE_MAX) }).success, true)
+    assert.equal(TicketReplyWithEvidence.safeParse({ note: "x".repeat(REPLY_NOTE_MAX + 1) }).success, false, "the note and the record's reply fit one comment")
   })
 })

@@ -11,6 +11,12 @@
 // its way there where its module has loaded the row, its id chip otherwise.
 // The composer writes a comment, an internal note unless said to be the
 // customer's. No attachment and no SMS: the pilot has neither (#126).
+//
+// A ticket about a stop shows what the stop recorded (M6 of #293): the
+// outcome, when, where, its proofs with their photos and signatures, and the
+// reply that quotes them, which Reply with the record writes on the
+// customer's thread — the note after it, and the case completed `answered`
+// where asked.
 import { useState, type ReactNode } from "react"
 import { ArrowLeft, ArrowSquareOut, ChatCircleText, CheckCircle, ClockCounterClockwise, LockKey, PaperPlaneTilt, PencilSimple, X } from "@phosphor-icons/react/dist/ssr"
 import Link from "next/link"
@@ -24,7 +30,9 @@ import { Popover, PopoverContent, PopoverTrigger } from "@/components/ui/popover
 import { Textarea } from "@/components/ui/textarea"
 import { BusinessRecordFormDialog } from "@/components/waste/business-record-form-dialog"
 import { useBusinessRecordStore, useServerModuleState, whenSaved } from "@/components/waste/business-record-store"
+import { ProofObject } from "@/components/waste/commands/route-surfaces"
 import { useCommandRunner, useRowHistory, useServerNames } from "@/components/waste/commands/use-command-support"
+import { useProofObjectLinks } from "@/components/waste/commands/use-proof-object-links"
 import type { ApiClient } from "@/lib/api/client"
 import { statusLabel, webIdOf } from "@/lib/api/records/adapter"
 import { ALERT_PREFIX, ALERTS_MODULE } from "@/lib/api/records/alerts"
@@ -32,16 +40,32 @@ import { shownOn } from "@/lib/api/records/clock"
 import { CONTAINERS_MODULE } from "@/lib/api/records/containers"
 import { PICKUPS_MODULE } from "@/lib/api/records/pickups"
 import { ROUTES_MODULE } from "@/lib/api/records/routes"
-import { ASSIGN_TICKET, commentOnTicket, isOpenTicketStatus, offersTicketCommand, ticketDetail, TICKET_LINKS, TICKET_MACHINE_COMMANDS, TICKET_NUMBER_FACT, TICKETS_MODULE, type TicketCommandName } from "@/lib/api/records/tickets"
+import {
+  ASSIGN_TICKET,
+  commentOnTicket,
+  evidenceOutcome,
+  evidencePlace,
+  evidenceProofLine,
+  isOpenTicketStatus,
+  offersTicketCommand,
+  REPLY_WITH_EVIDENCE,
+  ticketDetail,
+  ticketEvidence,
+  TICKET_LINKS,
+  TICKET_MACHINE_COMMANDS,
+  TICKET_NUMBER_FACT,
+  TICKETS_MODULE,
+  type TicketCommandName,
+} from "@/lib/api/records/tickets"
 import { AGREEMENTS_MODULE } from "@/lib/data/agreements"
 import { DRIVERS_MODULE } from "@/lib/data/allocations"
 import { getBusinessModuleHref } from "@/lib/data/business-links"
 import type { BusinessFormValues } from "@/lib/data/business-form-types"
 import type { BusinessRecord, ModuleLocation } from "@/lib/data/business-modules"
 import { CONTACTS_MODULE, NO_ONE, PROPERTIES_MODULE, SHARED_POINTS_MODULE } from "@/lib/data/properties"
-import { ACCESS_MODULE, TICKET_COMMAND_FORMS, TICKET_EDIT_FORM, updateTicketRecord, type TicketCommandWithForm } from "@/lib/data/tickets"
+import { ACCESS_MODULE, replyWithEvidenceForm, TICKET_COMMAND_FORMS, TICKET_EDIT_FORM, updateTicketRecord, type TicketCommandWithForm } from "@/lib/data/tickets"
 import { cn } from "@/lib/utils"
-import type { TicketDetail, TicketEvent } from "@waste/contracts/tickets"
+import type { StopEvidence, TicketDetail, TicketEvent } from "@waste/contracts/tickets"
 import { TICKET_KINDS, TICKET_PRIORITIES, type TicketStatus } from "@waste/domain/resolution/vocabulary"
 
 import { useResolutionPickers } from "./resolution-pickers"
@@ -50,6 +74,11 @@ const { workspaceId, moduleId } = TICKETS_MODULE
 
 /** The ticket's own read, as a one-row history the dialog reads again after each change. */
 const readTicket = (client: ApiClient, serverId: string) => ticketDetail(client, serverId).then((detail): TicketDetail[] => [detail])
+
+/** The ticket's evidence read as one row, null for a ticket whose stop this account does not reach. */
+const readEvidence = (client: ApiClient, serverId: string) => ticketEvidence(client, serverId).then((stop): Array<StopEvidence | null> => [stop])
+/** No read, for a ticket about no stop. */
+const NO_EVIDENCE = async (): Promise<Array<StopEvidence | null>> => []
 
 /** Where each link's rows live, by the link's key: the way to a linked row. */
 const LINK_MODULES: Readonly<Record<string, ModuleLocation>> = {
@@ -104,7 +133,7 @@ function priorityClasses(priority: string): string {
   return "border-border bg-muted/60 text-muted-foreground"
 }
 
-type Open = { kind: "command"; name: TicketCommandWithForm; values: BusinessFormValues } | { kind: "edit" }
+type Open = { kind: "command"; name: TicketCommandWithForm; values: BusinessFormValues } | { kind: "edit" } | { kind: "reply" }
 
 export function LiveTicketDetailsDialog({ record, onClose }: { record: BusinessRecord; onClose: () => void }) {
   const state = useServerModuleState(workspaceId, moduleId)
@@ -118,6 +147,11 @@ export function LiveTicketDetailsDialog({ record, onClose }: { record: BusinessR
   const [changes, setChanges] = useState(0)
   const reads = useRowHistory(workspaceId, moduleId, live, version + changes, readTicket)
   const userName = useServerNames(ACCESS_MODULE, "user")
+  const aboutAStop = typeof live.submittedValues?.pickupId === "string" && live.submittedValues.pickupId !== ""
+  const evidenceRead = useRowHistory(workspaceId, moduleId, live, `${version + changes}:${aboutAStop}`, aboutAStop ? readEvidence : NO_EVIDENCE)
+  const evidence = evidenceRead.rows === null ? undefined : evidenceRead.rows[0]
+  // The photos and signatures, where a proof names one: signed under the stops' grant, which a role reading tickets may lack.
+  const objects = useProofObjectLinks(evidence != null && evidence.proofs.some((proof) => proof.objectKey !== null) ? evidence.pickupId : null, version + changes)
   const alertsState = useServerModuleState(ALERTS_MODULE.workspaceId, ALERTS_MODULE.moduleId)
   const alertWebId = (serverId: string) => [...(alertsState?.serverIds ?? [])].find(([, id]) => id === serverId)?.[0] ?? webIdOf(ALERT_PREFIX, serverId)
   const [open, setOpen] = useState<Open | null>(null)
@@ -140,6 +174,14 @@ export function LiveTicketDetailsDialog({ record, onClose }: { record: BusinessR
     send(name, input, (outcome) => {
       setOpen(null)
       toast.success(COMMAND_DONE[name], { description: `${label} is ${outcome.record.status.toLowerCase()}.` })
+    })
+
+  /** The reply with the stop's record: a command, since it may complete the case, so the row and its history are read again. */
+  const reply = (input: BusinessFormValues) =>
+    send(REPLY_WITH_EVIDENCE, input, () => {
+      setOpen(null)
+      const completed = input.complete === true
+      toast.success(completed ? "Reply recorded and ticket completed" : "Reply recorded", { description: completed ? `${label} is answered with the stop's record.` : `The record is on ${label}'s customer thread.` })
     })
 
   const command = (name: TicketCommandName) => {
@@ -363,6 +405,51 @@ export function LiveTicketDetailsDialog({ record, onClose }: { record: BusinessR
                 )}
               </section>
 
+              {aboutAStop && (
+                <section data-testid="ticket-evidence">
+                  <div className="flex items-center justify-between gap-2">
+                    <h3 className="text-xs font-semibold uppercase tracking-wide text-muted-foreground">Evidence</h3>
+                    <Button type="button" variant="outline" size="sm" className="h-7 text-xs" disabled={!offered || evidence == null} onClick={() => setOpen({ kind: "reply" })}>
+                      <ChatCircleText className="h-3.5 w-3.5" />
+                      Reply with the record
+                    </Button>
+                  </div>
+                  {evidenceRead.problem !== null ? (
+                    <p className="mt-3 text-sm text-destructive">{evidenceRead.problem}</p>
+                  ) : evidence === undefined ? (
+                    <p className="mt-3 text-sm text-muted-foreground">Reading what the stop recorded…</p>
+                  ) : evidence === null ? (
+                    <p className="mt-3 text-sm text-muted-foreground">The stop is not one this account reaches.</p>
+                  ) : (
+                    <div className="mt-3 space-y-3">
+                      <div className="divide-y divide-border/60 border-y border-border/60">
+                        <Row label="Outcome" value={evidenceOutcome(evidence)} />
+                        <Row label="Recorded" value={evidence.at === null ? "Not yet" : shownOn(evidence.at, timezone)} />
+                        <Row label="Where" value={evidencePlace(evidence.location)} />
+                      </div>
+                      {evidence.answeredByRecord && <p className="text-xs text-muted-foreground">The record answers a missed collection: the driver recorded that the bin was not put out.</p>}
+                      {evidence.proofs.length > 0 && (
+                        <ul className="space-y-2 text-xs text-muted-foreground" aria-label="Proofs at the stop">
+                          {evidence.proofs.map((proof) => (
+                            <li key={proof.id}>
+                              {evidenceProofLine(proof, timezone)}
+                              <ProofObject proof={proof} links={objects} />
+                            </li>
+                          ))}
+                        </ul>
+                      )}
+                      {objects.problem !== null && <p className="text-xs text-muted-foreground">The photos are not shown: {objects.problem}</p>}
+                      <figure className="rounded-lg border border-blue-500/20 bg-blue-500/5 px-3 py-2">
+                        <figcaption className="text-[11px] font-medium text-blue-700 dark:text-blue-200">The reply quoting the record</figcaption>
+                        <blockquote className="mt-1 text-sm leading-6" data-testid="ticket-evidence-reply">
+                          {evidence.reply}
+                        </blockquote>
+                      </figure>
+                    </div>
+                  )}
+                </section>
+              )}
+
               {detail !== undefined && detail.alerts.length > 0 && (
                 <section>
                   <h3 className="text-xs font-semibold uppercase tracking-wide text-muted-foreground">Alerts</h3>
@@ -393,6 +480,9 @@ export function LiveTicketDetailsDialog({ record, onClose }: { record: BusinessR
           relationOptions={(field, values) => pickers.options(field, values, projectId, open.values)}
           initialValueOverrides={open.values}
         />
+      )}
+      {open?.kind === "reply" && (
+        <BusinessRecordFormDialog schema={replyWithEvidenceForm(isOpenTicketStatus(status))} open onOpenChange={(isOpen) => !isOpen && setOpen(null)} onSubmit={reply} relationOptions={() => []} />
       )}
       {open?.kind === "edit" && (
         <BusinessRecordFormDialog
@@ -435,14 +525,15 @@ function HistoryRow({ event, who, assignee, at }: { event: TicketEvent; who: str
         )}
       </span>
       <div className="min-w-0 flex-1 pt-0.5">
-        <p className="text-sm font-medium">
+        {/* A div, not a p: the badge is a div, which a paragraph may not hold. */}
+        <div className="text-sm font-medium">
           {title}
           {isComment && (
             <Badge variant="outline" className={cn("ml-2 rounded-full px-2 py-0 text-[10px] font-medium", event.visibility === "customer" ? "border-blue-500/30 bg-blue-500/10 text-blue-700 dark:text-blue-200" : "border-amber-500/30 bg-amber-500/10 text-amber-700 dark:text-amber-200")}>
               {event.visibility === "customer" ? "Customer" : "Internal"}
             </Badge>
           )}
-        </p>
+        </div>
         {event.body !== null && (
           <p className={cn("mt-1 whitespace-pre-wrap text-sm leading-6", isComment ? "rounded-lg border border-border/60 bg-muted/30 px-3 py-2 text-foreground" : "text-muted-foreground")}>{event.body}</p>
         )}

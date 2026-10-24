@@ -13,6 +13,8 @@
 // which is the reference's own rule (#126), and its stop (#111) among that
 // route's stops that are planned or collected — the API refuses a missed one
 // — and an optional pick offers None first, since a select cannot be emptied.
+// The stop a ticket is about (M6 of #293) is one of its route's, of any
+// outcome: a missed one is what a complaint is about.
 import { useModuleRecords } from "@/components/waste/business-record-store"
 import { useRelationPickers, type RelationPickers } from "@/components/waste/commands/use-command-support"
 import { moduleKeyOf } from "@/lib/api/records/adapter"
@@ -25,7 +27,7 @@ import type { BusinessFormField, BusinessFormOption, BusinessFormSchema, Busines
 import { getModuleDefinition, type BusinessRecord, type ModuleLocation } from "@/lib/data/business-modules"
 import { keptOptions, keptValue } from "@/lib/data/place-pickers"
 import { NO_ONE, SHARED_POINTS_MODULE } from "@/lib/data/properties"
-import { ACCESS_MODULE, recollectionStopOptions } from "@/lib/data/tickets"
+import { ACCESS_MODULE, recollectionStopOptions, ticketStopOptions } from "@/lib/data/tickets"
 import { isSoftDeleted } from "@waste/domain/record-visibility"
 
 const NO_RECORDS: readonly BusinessRecord[] = []
@@ -86,6 +88,9 @@ export function useResolutionPickers(): RelationPickers {
       // The stop of the picked route the re-collection is: none until a route is picked, then its stops still to collect or collected.
       case "recollectionPickupId":
         return recollectionStopOptions(pickups.records, typeof values.recollectionRouteId === "string" ? values.recollectionRouteId : undefined)
+      // The stop a ticket is about: the picked route's, whatever their outcome.
+      case "pickupId":
+        return ticketStopOptions(pickups.records, typeof values.routeId === "string" ? values.routeId : undefined)
       case "containerId":
         return optional(inProject(containers.records, projectId).map((record) => optionOf(record)))
       case "sharedCollectionPointId":
