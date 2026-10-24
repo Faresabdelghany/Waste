@@ -45,7 +45,7 @@
 import type { BillableEvent } from "@waste/contracts/billable-events"
 import type { BillingRunCreate, BillingRunDetail, BillingRun, BillingRunPreview } from "@waste/contracts/billing"
 import type { Invoice, InvoiceDetail } from "@waste/contracts/invoices"
-import { CREDIT_REASONS } from "@waste/domain/finance/vocabulary"
+import { BILLABLE_EVENT_STATUSES, CREDIT_REASONS } from "@waste/domain/finance/vocabulary"
 
 import { formatMinor, majorOf, minorOf } from "@/lib/commercial/money"
 import { isAgreementRecord } from "@/lib/data/agreements"
@@ -207,6 +207,22 @@ export function eventQuestion(event: BusinessRecord, resolve: Resolver): Busines
   return Object.fromEntries(Object.entries(question).filter((entry): entry is [string, string] => entry[1] !== undefined))
 }
 
+/**
+ * The commands an event's details offer (#281): those the API moves it by
+ * from its status, never a stay or a refusal — a reprice prices a blocked
+ * event again, and a cancellation takes a blocked or a ready one off the next
+ * run, never a reversal, which is the correction itself. An invoiced event is
+ * corrected by a credit note and a cancelled or reversed one has nothing left
+ * to do, so neither is offered either. The API's rules
+ * (apps/api/src/routes/billable-events.ts), read off the wire's status.
+ */
+export function eventCommandsOffered(record: Pick<BusinessRecord, "submittedValues">): ("reprice" | "cancel")[] {
+  const status = BILLABLE_EVENT_STATUSES.find((candidate) => candidate === record.submittedValues?.status)
+  if (status === undefined) return []
+  const cancellable = (status === "blocked" || status === "ready") && record.submittedValues?.kind !== "reversal"
+  return [...(status === "blocked" ? (["reprice"] as const) : []), ...(cancellable ? (["cancel"] as const) : [])]
+}
+
 export const billableEventAdapter: ResourceAdapter<BillableEvent> = {
   prefix: EVENT_PREFIX,
   owns: isEventRecord,
@@ -283,6 +299,8 @@ export const billableEventAdapter: ResourceAdapter<BillableEvent> = {
         serviceDate: event.serviceDate,
         ...(event.overrideReason === null ? {} : { overrideReason: event.overrideReason }),
         ...(event.note === null ? {} : { note: event.note }),
+        // The wire's status, which the commands the details offer are judged on (`eventCommandsOffered`).
+        status: event.status,
       },
     }
   },

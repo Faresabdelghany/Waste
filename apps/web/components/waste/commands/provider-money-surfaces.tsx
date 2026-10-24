@@ -12,8 +12,10 @@
 //
 // Prices: Add price is a chain's first row; a price's details offer its edit
 // (its notes and its end: the bid is locked and the fee moves by index alone)
-// and Apply index, a create of the chain's next row that ends this one the day
-// before — so the module is read again once it lands.
+// and, on a price not ended on the project's day (`providerPriceIndexOffered`,
+// #281), Apply index, a create of the chain's next row that ends this one the
+// day before — so the module is read again once it lands. An ended price says
+// why it takes none, its end named by its last day in, as its details read it.
 //
 // Settlements: Open settlement is a period of an assignment; its details offer
 // the commands the machine moves it by from its status and the project's day
@@ -45,7 +47,7 @@ import { useCommandRunner, useModuleReady, useRowHistory, useServerNames } from 
 import type { ApiClient } from "@/lib/api/client"
 import { statusLabel } from "@/lib/api/records/adapter"
 import { shownOn } from "@/lib/api/records/clock"
-import { settlementCommandsOffered, settlementDetail, settlementHeldBack, settlementHistory } from "@/lib/api/records/provider-money"
+import { providerPriceIndexHeldBack, providerPriceIndexOffered, settlementCommandsOffered, settlementDetail, settlementHeldBack, settlementHistory } from "@/lib/api/records/provider-money"
 import { weightReviewsOffered } from "@/lib/api/records/weights"
 import { formatMinor } from "@/lib/commercial/money"
 import type { BusinessFormValues } from "@/lib/data/business-form-types"
@@ -245,7 +247,7 @@ export function AddProviderPriceSurface() {
   )
 }
 
-/** A price's details: its edit, and Apply index. */
+/** A price's details: its edit, and Apply index while it has not ended. */
 export function ProviderPriceCommandsSurface({ record }: RowSurfaceProps) {
   const pickers = useCommercialPickers()
   const moduleReady = useModuleReady(PROVIDER_PRICES_MODULE)
@@ -254,6 +256,8 @@ export function ProviderPriceCommandsSurface({ record }: RowSurfaceProps) {
   const [dialog, setDialog] = useState<"edit" | "index" | null>(null)
   const edit = providerPriceEditForm(record)
   const opened = dialog === "edit" ? formValuesOf(edit, record) : {}
+  const indexOffered = providerPriceIndexOffered(record)
+  const indexHeldBack = providerPriceIndexHeldBack(record)
 
   const submit = (values: BusinessFormValues) => {
     if (dialog === "edit")
@@ -279,11 +283,16 @@ export function ProviderPriceCommandsSurface({ record }: RowSurfaceProps) {
         <Button variant="outline" size="sm" disabled={!moduleReady || busy || !pickers.readyFor(edit)} onClick={() => setDialog("edit")}>
           Edit price
         </Button>
-        <Button variant="outline" size="sm" disabled={!moduleReady || busy} onClick={() => setDialog("index")}>
-          Apply index
-        </Button>
+        {indexOffered && (
+          <Button variant="outline" size="sm" disabled={!moduleReady || busy} onClick={() => setDialog("index")}>
+            Apply index
+          </Button>
+        )}
       </div>
-      {dialog !== null && (
+      {/* Why an ended price takes no index: the API's sentence (#281). */}
+      {indexHeldBack !== undefined && <p className="text-sm text-muted-foreground" data-testid="price-index-held-back">{indexHeldBack}.</p>}
+      {/* Apply index asked only while the price still takes one: the day may have turned since. */}
+      {dialog !== null && (dialog === "edit" || indexOffered) && (
         <BusinessRecordFormDialog schema={dialog === "edit" ? edit : INDEX_FORM} open onOpenChange={(isOpen) => !isOpen && setDialog(null)} onSubmit={submit} relationOptions={(field, values) => pickers.options(field, values, record.projectIds?.[0], opened)} initialValueOverrides={opened} />
       )}
     </section>

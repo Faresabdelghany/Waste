@@ -1,7 +1,7 @@
 import assert from "node:assert/strict"
 import { describe, test } from "node:test"
 
-import { closedSettlement, correctedUnload, notCalculated, periodNotBegun, periodNotEnded, SETTLEMENT_COMMANDS, settlementTransition, weightReviewTransition, type SettlementCommand, type Transition } from "../transitions"
+import { closedSettlement, correctedUnload, notCalculated, periodNotBegun, periodNotEnded, priceEnded, priceEndedBy, SETTLEMENT_COMMANDS, settlementTransition, weightReviewTransition, type SettlementCommand, type Transition } from "../transitions"
 import { SETTLEMENT_STATUSES, WEIGHT_REVIEW_DECISIONS, WEIGHT_REVIEW_STATUSES, type SettlementStatus, type WeightReviewDecision, type WeightReviewStatus } from "../vocabulary"
 
 const LABEL = "NordRen · July 2026"
@@ -88,6 +88,20 @@ describe("settlementTransition", () => {
     assert.deepEqual(settlementTransition({ ...day, status: "open" }, "calculate", FIRST), { kind: "move", to: "calculated" })
     assert.deepEqual(settlementTransition({ ...day, status: "calculated" }, "close", FIRST), { kind: "refuse", sentence: NOT_ENDED })
     assert.deepEqual(settlementTransition({ ...day, status: "calculated" }, "close", "2026-07-02"), { kind: "move", to: "closed" })
+  })
+})
+
+describe("a provider price's indexation", () => {
+  test("a price has ended by the day its validTo, the first day out, is on or before: an open one never, one ending in March from the first of March (#281)", () => {
+    assert.equal(priceEndedBy(null, "2030-01-01"), false)
+    assert.equal(priceEndedBy("2026-03-01", "2026-02-28"), false, "its last day in")
+    assert.equal(priceEndedBy("2026-03-01", "2026-03-01"), true, "the first day out")
+    assert.equal(priceEndedBy("2026-03-01", "2026-12-01"), true)
+  })
+
+  test("an ended price is named by its last day in, the day its details read as Valid to, never the wire's first day out (#281)", () => {
+    assert.equal(priceEnded("2026-03-01"), "This price was valid to 2026-02-28; index the price in force")
+    assert.equal(priceEnded("2027-01-01"), "This price was valid to 2026-12-31; index the price in force", "across a year")
   })
 })
 

@@ -34,7 +34,16 @@
 // anything on `corrected` a refusal, "This unload was corrected by unload
 // <id>; review that one" — the correction is a new Unload row, and it is that
 // row a person reviews from here on.
+//
+// A Service Provider Price's indexation (#281): a price that has ended by the
+// day an index would apply from — its `validTo`, the first day out, on or
+// before that day — takes none, since the row in force is the one to index.
+// The API refuses it with "This price was valid to 2026-02-28; index the price
+// in force", the end named as the office reads a period, by its last day in
+// (ADR-0005); the web offers no Apply index on a price ended on the project's
+// day.
 import type { Transition } from "../execution/transitions"
+import { addDays } from "../route-schemes/recurrence"
 import { type SettlementStatus, type WeightReviewDecision, type WeightReviewStatus } from "./vocabulary"
 
 export type { Transition }
@@ -92,6 +101,12 @@ export function settlementTransition({ status, label, firstDay, lastDay }: Settl
       }
   }
 }
+
+/** Whether a provider price has ended by `day`: its `validTo`, the first day out, on or before it. An ended price takes no index from that day (#281). */
+export const priceEndedBy = (validTo: string | null, day: string): boolean => validTo !== null && validTo <= day
+
+/** An indexation asked of a provider price that has ended: named by its last day in, the day its details read as Valid to — never the wire's first day out (#281). */
+export const priceEnded = (validTo: string): string => `This price was valid to ${addDays(validTo, -1)}; index the price in force`
 
 /** A decision asked of an unload that was corrected: the new row is the one to review. */
 export const correctedUnload = (correctionUnloadId: string): string => `This unload was corrected by unload ${correctionUnloadId}; review that one`

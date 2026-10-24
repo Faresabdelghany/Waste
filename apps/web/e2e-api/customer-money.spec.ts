@@ -205,6 +205,8 @@ test("Billable events: open on the blocked and the ready; a manual event blocked
   expect(repriced.status()).toBe(200)
   expect((await repriced.json()) as BillableEvent).toMatchObject({ status: "ready", blockReason: null, netMinor: 7500 })
   await expect(details.getByText("DKK 75.00").first()).toBeVisible()
+  // A priced event is not repriced: its details offer only what the API moves a ready one by (#281).
+  await expect(details.getByRole("button", { name: "Reprice" })).toHaveCount(0)
   // AGR-2408's customer pays for itself: one party under both its facts (#256).
   await expect(factOf(details, "Customer")).toContainText("Østerbro Housing")
   await expect(factOf(details, "Payer")).toContainText("Østerbro Housing")
@@ -233,6 +235,9 @@ test("Billable events: open on the blocked and the ready; a manual event blocked
   expect(cancelled.status()).toBe(200)
   expect(cancelled.request().postDataJSON()).toEqual({ reason: "duplicate" })
   expect((await cancelled.json()) as BillableEvent).toMatchObject({ status: "cancelled", cancelReason: "duplicate" })
+  // A cancelled event has nothing left to do: no command is offered (#281).
+  await expect(details.getByRole("button", { name: "Cancel event" })).toHaveCount(0)
+  await expect(details.getByRole("button", { name: "Reprice" })).toHaveCount(0)
 })
 
 test("Billable events: an event under an agreement billed to another party names its customer and its payer, each by its own fact (#256)", async ({ page, api }) => {

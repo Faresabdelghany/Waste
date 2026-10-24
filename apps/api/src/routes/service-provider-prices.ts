@@ -56,6 +56,7 @@ import type { Tx } from "@waste/db/client"
 import { validOn } from "@waste/db/query/valid-on"
 import { serviceAreaAssignment, serviceProviderPrice } from "@waste/db/schema/finance"
 import { indexedFee } from "@waste/domain/finance/money"
+import { priceEnded, priceEndedBy } from "@waste/domain/finance/transitions"
 import { and, asc, eq, exists, gt, sql, type SQL } from "drizzle-orm"
 import { Hono, type MiddlewareHandler } from "hono"
 import { describeRoute } from "hono-openapi"
@@ -127,9 +128,6 @@ export const OUTSIDE_ASSIGNMENT = "Outside the assignment's period"
 
 /** What an indexation applied on or before the row's start is refused with, at `appliedFrom`. */
 export const INDEX_OUTSIDE_PERIOD = "The index applies inside the price's period"
-
-/** What an indexation of a row already over is refused with: the row in force is the one to index. */
-export const priceEnded = (validTo: string): string => `This price ended on ${validTo}; index the price in force`
 
 const noSuchPrice = (id: string) => problem(404, { detail: `No service provider price ${id} this account reaches` })
 
@@ -348,7 +346,7 @@ export function serviceProviderPriceRoutes(guard: MiddlewareHandler<AuthEnv>) {
         operationId: "indexServiceProviderPrice",
         summary: "Index a service provider price",
         description:
-          "Applies an indexation to one price of a project the caller works in, as a new row and never an update: this row is ended on `appliedFrom` and the next is written from it with the same assignment, product, bid and currency, the new fee — `round(base × (1 + basisPoints / 10 000))` in minor units, half away from zero, `base` the locked bid or the fee this row carries (`bid` or `current-fee`, the latter compounding earlier indexations) — `indexedFromId` naming this row, the label, the basis points (negative is a deflator) and the base, and this row's end as its own, so the fee on any day stays a read of the row in force on it and the chain through `indexedFromId` is the history. `appliedFrom` is after this row's start (400 on `appliedFrom`, `The index applies inside the price's period`); a row already ended on or before `appliedFrom` is over and not the one to index (409, `This price ended on 2026-12-31; index the price in force`). Held under the row's lock, so two indexations take turns. Answers the new row, 201 with `Location`, since a row was made.",
+          "Applies an indexation to one price of a project the caller works in, as a new row and never an update: this row is ended on `appliedFrom` and the next is written from it with the same assignment, product, bid and currency, the new fee — `round(base × (1 + basisPoints / 10 000))` in minor units, half away from zero, `base` the locked bid or the fee this row carries (`bid` or `current-fee`, the latter compounding earlier indexations) — `indexedFromId` naming this row, the label, the basis points (negative is a deflator) and the base, and this row's end as its own, so the fee on any day stays a read of the row in force on it and the chain through `indexedFromId` is the history. `appliedFrom` is after this row's start (400 on `appliedFrom`, `The index applies inside the price's period`); a row already ended on or before `appliedFrom` is over and not the one to index (409, `This price was valid to 2026-12-31; index the price in force`, its end named by its last day in, as the office reads it). Held under the row's lock, so two indexations take turns. Answers the new row, 201 with `Location`, since a row was made.",
         security: BEARER_SECURITY,
         responses: {
           201: describeCreated("The indexed price, the new row of the chain.", ServiceProviderPrice),
@@ -375,7 +373,8 @@ export function serviceProviderPriceRoutes(guard: MiddlewareHandler<AuthEnv>) {
         const current = await findPrice(tx, writable(principal), id)
         if (current === undefined) throw noSuchPrice(id)
         if (index.appliedFrom <= current.validFrom) throw invalidRequest("body", [{ path: "appliedFrom", message: INDEX_OUTSIDE_PERIOD }])
-        if (current.validTo !== null && index.appliedFrom >= current.validTo) throw problem(409, { detail: priceEnded(current.validTo) })
+        // The row in force is the one to index; the refusal names the end by its last day in, as the office reads a period (#281).
+        if (current.validTo !== null && priceEndedBy(current.validTo, index.appliedFrom)) throw problem(409, { detail: priceEnded(current.validTo) })
 
         const base = index.base === "bid" ? current.bidMinor : current.unitPriceMinor
         await tx

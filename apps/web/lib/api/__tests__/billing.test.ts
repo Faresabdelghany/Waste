@@ -25,6 +25,7 @@ import {
   billingModule,
   billingRunAdapter,
   billingRunBody,
+  eventCommandsOffered,
   eventPricedByList,
   eventQuestion,
   eventsModule,
@@ -159,6 +160,7 @@ describe("the billable events module", () => {
       priceListRowId: `price-row-${ready.priceListRowId}`,
       quantity: "1",
       serviceDate: "2026-09-29",
+      status: "ready",
     })
   })
 
@@ -216,11 +218,21 @@ describe("the billable events module", () => {
     assert.deepEqual(billableEventAdapter.toPatchBody(record, { ...record, submittedValues: { ...record.submittedValues, quantity: "3" } }, context(eventFixtures)), { path: "quantity", message: "A billable event moves by its commands: reprice a blocked one, cancel one that should not be invoiced" })
   })
 
+  test("offers a command only where the API moves the event by it: reprice a blocked one, cancel a blocked or a ready one, never a reversal (#281)", () => {
+    const offered = (event: BillableEvent) => eventCommandsOffered(billableEventAdapter.toRecord(event, context(eventFixtures)))
+    assert.deepEqual(offered(blocked), ["reprice", "cancel"])
+    assert.deepEqual(offered(ready), ["cancel"], "a priced event is not repriced")
+    for (const status of ["invoiced", "cancelled", "reversed"] as const) assert.deepEqual(offered({ ...ready, status }), [], `${status}: a credit note corrects it, or there is nothing left to do`)
+    assert.deepEqual(offered({ ...ready, kind: "reversal" }), [], "a reversal is the correction, never cancelled")
+    assert.deepEqual(eventCommandsOffered({ ...billableEventAdapter.toRecord(ready, context(eventFixtures)), submittedValues: {} }), [], "a record that does not say its status is offered nothing")
+  })
+
   test("reprices a blocked ticket's event with the product the office picked, and cancels one with the office's reason", async () => {
     const record = billableEventAdapter.toRecord(blocked, context(eventFixtures))
     const current = moduleOf([record], [blocked.id])
     const repriced: BillableEvent = { ...blocked, status: "ready", productId: bulky.id, unitPriceMinor: 4500, netMinor: 4500, vatPercent: 25, vatMinor: 1125, currency: "DKK", blockReason: null }
-    const { fetch, calls } = scripted([() => json(repriced), () => problem(409, "Billable event is ready; only a blocked event is repriced"), () => json({ ...repriced, status: "cancelled", cancelReason: "duplicate", cancelledAt: "2026-09-30T12:00:00.000Z", cancelledBy: ADMIN })])
+    // The API names the event by its id; the office is told the row by the name it reads (#281).
+    const { fetch, calls } = scripted([() => json(repriced), () => problem(409, `Billable event ${blocked.id} is ready; a priced event is not repriced — cancel it and enter it again`), () => json({ ...repriced, status: "cancelled", cancelReason: "duplicate", cancelledAt: "2026-09-30T12:00:00.000Z", cancelledBy: ADMIN })])
     const options = { fixtures: eventFixtures, state }
     const done = await commandRecord(clientOver(fetch), eventsModule, current, record, "reprice", { productId: `product-${bulky.id}` }, options)
     assert.equal(done.kind, "done")
@@ -232,7 +244,7 @@ describe("the billable events module", () => {
     assert.equal(again.kind, "refused")
     if (again.kind === "refused") {
       assert.equal(again.what, `${record.name} was not repriced`)
-      assert.equal(problemSentence(again.problem), "Billable event is ready; only a blocked event is repriced")
+      assert.equal(problemSentence(again.problem), "Billable event Ticket · no product is ready; a priced event is not repriced — cancel it and enter it again")
     }
     assert.deepEqual(bodyOf(calls[1]), {}, "a pickup's event is repriced with no product")
     const cancelled = await commandRecord(clientOver(fetch), eventsModule, current, record, "cancel", { reason: "duplicate", note: "" }, options)
