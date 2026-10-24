@@ -151,6 +151,52 @@ describe("resolution.open-tickets", { skip: api.skip || owner.skip }, () => {
     }
   })
 
+  test("a stop booked to answer a ticket, missed, is that ticket's news: a comment saying what happened and why, the event's id its key, and no case of its own (O3c of #290)", async () => {
+    const seeded = await seedRoute(pool, tenant)
+    const [stopId] = seeded.pickupIds
+    const booked = await withCompany(pool.db, tenant.companyId, async (tx) => {
+      const { row } = await openTicket(tx, {
+        companyId: tenant.companyId,
+        draft: {
+          projectId: tenant.projectId,
+          kind: "overflow",
+          priority: "medium",
+          source: "phone",
+          subject: "Overflowing at Parkvej 18",
+          description: "Bags beside BIN-1",
+          occurredAt: NOW,
+          dueAt: null,
+          assigneeUserAccountId: null,
+          links: { routeId: null, pickupId: null, containerId: tenant.containers.bin1.id, propertyId: tenant.properties.parkvej.id, sharedCollectionPointId: null, customerId: null, agreementId: null, driverId: null, parentTicketId: null },
+          alertId: null,
+        },
+        createdBy: tenant.officeUserId,
+        sourceEventId: null,
+        newId,
+        now: () => NOW,
+      })
+      await tx.update(ticket).set({ bookedRouteId: seeded.id, bookedPickupId: stopId }).where(and(eq(ticket.companyId, tenant.companyId), eq(ticket.id, row.id)))
+      return row.id
+    })
+    const event = outboxJob(tenant, { kind: "pickup-skipped", aggregateKind: "pickup", aggregateId: stopId, payload: pickupPayload(tenant, seeded.id, stopId, { container: "bin1", status: "skipped", reason: "removed-by-dispatcher" }, []) })
+
+    assert.deepEqual(await openTicketFor(event, context()), { outcome: "commented", ticketId: booked })
+    assert.equal((await ticketsFrom(event.id)).length, 0, "no case of its own")
+    const [, comment] = await historyOf(booked)
+    assert.deepEqual(
+      [comment.kind, comment.body, comment.sourceEventId, comment.recordedBy, comment.status],
+      ["comment", `The emptying at stop 1 of route ${seeded.label} was skipped: removed by dispatcher. Book another stop to answer this ticket.`, event.id, null, "open"],
+    )
+    assert.deepEqual(await openTicketFor(event, context()), { outcome: "replayed", ticketId: booked }, "a redelivery writes nothing")
+    assert.equal((await historyOf(booked)).length, 2)
+
+    // A ticket closed meanwhile hears of the miss, and is not told to book another stop it would refuse.
+    await withCompany(pool.db, tenant.companyId, (tx) => tx.update(ticket).set({ status: "rejected", closedAt: NOW }).where(and(eq(ticket.companyId, tenant.companyId), eq(ticket.id, booked))))
+    const failed = outboxJob(tenant, { kind: "pickup-failed", aggregateKind: "pickup", aggregateId: stopId, payload: pickupPayload(tenant, seeded.id, stopId, { container: "bin1", status: "failed", reason: "inaccessible" }, []) })
+    assert.deepEqual(await openTicketFor(failed, context()), { outcome: "commented", ticketId: booked })
+    assert.equal((await historyOf(booked)).at(-1)?.body, `The emptying at stop 1 of route ${seeded.label} failed: inaccessible.`)
+  })
+
   test("a pickup-failed of an address-only stop the office added, on its ad-hoc route, opens the stop's missed collection by its address — no container, no label, no placement and so no agreement — and is never a dead letter (#111)", async () => {
     const seeded = await seedRoute(pool, tenant, { adHoc: true, pickups: [{ container: null, status: "failed", reason: "inaccessible", note: "Gate locked" }] })
     const [failedId] = seeded.pickupIds

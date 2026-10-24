@@ -3,9 +3,9 @@
 // a project, its product the project's — and the ticket's own
 // `charge_product_id`, the product its completion named, with its key, its
 // index and `ticket_charge_shape` holding it to a resolution Finance charges
-// for. The ticket is diffed from its 0031 spelling (ticket-as-of.ts), since an
-// applied file is never edited and the schema module spells the table as it
-// is today. Then the migration, which has to be exactly those statements and
+// for. The ticket is diffed from its 0031 spelling to its 0033 one
+// (ticket-as-of.ts), since an applied file is never edited and the schema
+// module spells the table as it is today, with the stop O3c (#290) books. Then the migration, which has to be exactly those statements and
 // below them the new table's fence, its `updated_at` trigger and its audit
 // trigger — a set of its project, read under `commercial.products`. The file
 // is found by its name, not its number, which it takes at its turn. No
@@ -39,7 +39,7 @@ const referenced = { company, project, userAccount, agreement, product, containe
 /** The ticket's new check: the resolution named not null, since `null in (...)` is null and a null check passes. */
 const CHARGE_SHAPE = `${ref("ticket", "charge_product_id")} is null or (${ref("ticket", "resolution")} is not null and ${ref("ticket", "resolution")} in (${list(...BILLABLE_RESOLUTIONS)}))`
 
-const generated = () => statementsBetween({ ...referenced, ticket: ticketAsOf("0031") }, { ...referenced, ticket, ticketKindProduct })
+const generated = () => statementsBetween({ ...referenced, ticket: ticketAsOf("0031") }, { ...referenced, ticket: ticketAsOf("0033"), ticketKindProduct })
 
 /** The migration, by its name: it takes its number at its turn. */
 async function migration(): Promise<string[]> {

@@ -59,6 +59,8 @@ export const ticketColumns = {
   recollectionPickupId: ticket.recollectionPickupId,
   chargeProductId: ticket.chargeProductId,
   closedAt: ticket.closedAt,
+  bookedRouteId: ticket.bookedRouteId,
+  bookedPickupId: ticket.bookedPickupId,
   createdAt: ticket.createdAt,
   updatedAt: ticket.updatedAt,
 }
@@ -105,6 +107,8 @@ export function ticketOf(row: TicketRow): Ticket {
     recollectionPickupId: row.recollectionPickupId,
     chargeProductId: row.chargeProductId,
     closedAt: instantOf(row.closedAt),
+    bookedRouteId: row.bookedRouteId,
+    bookedPickupId: row.bookedPickupId,
     ...stampsOf(row),
   }
 }

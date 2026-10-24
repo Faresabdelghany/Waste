@@ -59,6 +59,15 @@
 // and each case gets a comment naming the other. A comment moves nothing of
 // the case it lands on: a pending or on-hold case stays so.
 //
+// A stop the office booked to answer a ticket (O3c of #290) — a container
+// request's delivery, an overflow's emptying, a defect's repair or swap — is
+// that ticket's to hear of when it is missed, however it was: the driver's
+// failure or skip, the route's end or cancellation, the office's removal.
+// The miss is a comment on the ticket saying what happened and why
+// (`stopMissed`), keyed by the event's id like any fold, for the office to
+// book another stop, and no case of its own; its completion reaches the
+// ticket in the completing request instead, since that event is Finance's.
+//
 // The events of one driver or one stop meet their case one at a time: each
 // takes a transaction advisory lock on the rule's key, the driver's or the
 // stop's, and reads the case under the case's own row lock (`for no key
@@ -94,6 +103,7 @@
 import { DriverCommandReceipt } from "@waste/contracts/driver-commands"
 import { Pickup } from "@waste/contracts/pickups"
 import { ProofOfService } from "@waste/contracts/proofs"
+import { routeLabel } from "@waste/contracts/execution"
 import { routeFields } from "@waste/contracts/routes"
 import type { Database, Tx } from "@waste/db/client"
 import { appendTicketEvent, BY_SLA, openTicket, type TicketDraft, type TicketEventDraft } from "@waste/db/commands/open-ticket"
@@ -109,6 +119,7 @@ import { uniqueConstraintOf } from "@waste/db/sqlstate"
 import { withCompany } from "@waste/db/tenant"
 import type { OutboxKind } from "@waste/domain/execution/vocabulary"
 import { CLOSING_REASONS } from "@waste/domain/execution/vocabulary"
+import { stopMissed } from "@waste/domain/execution/ticket-stops"
 import { caseRuleOf, copiedNote, superseding, supersededNote, supersedingNote, type CaseRule, type ProblemAsFound, type Superseding } from "@waste/domain/resolution/cases"
 import { ticketTransition } from "@waste/domain/resolution/transitions"
 import { ticketFor, type EventFacts, type OtherEventFacts, type TicketDraft as DomainDraft } from "@waste/domain/resolution/from-event"
@@ -383,10 +394,40 @@ async function supersede(tx: Tx, companyId: string, problem: TicketRow, missed: 
   return how
 }
 
+/**
+ * The ticket a missed stop was booked to answer (O3c of #290), under its row
+ * lock, with the comment its miss is; undefined for an event of another kind
+ * or a stop booked for no ticket.
+ */
+async function bookedTicketOf(tx: Tx, event: OutboxJob): Promise<{ row: TicketRow; missed: string } | undefined> {
+  if (event.kind !== "pickup-failed" && event.kind !== "pickup-skipped") return undefined
+  const stop = PickupPayload.parse(event.payload)
+  const [row] = await tx
+    .select(ticketColumns)
+    .from(ticket)
+    .where(and(eq(ticket.companyId, event.companyId), eq(ticket.bookedPickupId, stop.id)))
+    .for("update")
+    .limit(1)
+  if (row === undefined) return undefined
+  const [onRoute] = await tx.select({ number: route.number }).from(route).where(and(eq(route.companyId, event.companyId), eq(route.id, stop.routeId))).limit(1)
+  const reason = stop.reason ?? stop.proofs?.[0]?.reason ?? "other"
+  const outcome = event.kind === "pickup-failed" ? "failed" : "skipped"
+  const open = (OPEN_TICKET_STATUSES as readonly string[]).includes(row.status)
+  return { row, missed: stopMissed({ position: stop.position, route: onRoute === undefined ? stop.routeId : routeLabel(onRoute.number), service: stop.service ?? "empty", outcome, reason, open }) }
+}
+
 /** One event, in one transaction as the tenant: the reads, the rule, the fold or the ticket, and what the ticket supersedes. */
 async function consume(api: Database, event: OutboxJob, now: () => Date): Promise<OpenTicketsOutcome> {
   return await withCompany(api.db, event.companyId, async (tx) => {
     const { companyId, projectId } = event
+    // A stop booked to answer a ticket: its miss is that ticket's news, and no case of its own.
+    const booked = await bookedTicketOf(tx, event)
+    if (booked !== undefined) {
+      const before = await handled(tx, companyId, event.id)
+      if (before !== undefined) return { outcome: "replayed", ticketId: before }
+      await appendTicketEvent(tx, refOf(companyId, booked.row), commentOn(booked.row, booked.missed, event.id), newId)
+      return { outcome: "commented", ticketId: booked.row.id }
+    }
     const facts = await factsOf(tx, event)
     const draft = ticketFor(facts)
     if (draft === undefined) return { outcome: "nothing" }

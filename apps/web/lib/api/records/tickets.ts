@@ -151,6 +151,9 @@ export function toTicketRecord(ticket: Ticket, context: MappingContext): Busines
   if (ticket.resolution !== null) facts.Resolution = statusLabel(ticket.resolution)
   if (ticket.recollectionRouteId !== null) facts["Re-collection route"] = nameVia(context, "route", ticket.recollectionRouteId)
   if (ticket.recollectionPickupId !== null) facts["Re-collection stop"] = nameVia(context, "pickup", ticket.recollectionPickupId)
+  // The stop the office booked to answer it (O3c of #290): the latest booking.
+  if (ticket.bookedRouteId !== null) facts["Booked route"] = nameVia(context, "route", ticket.bookedRouteId)
+  if (ticket.bookedPickupId !== null) facts["Booked stop"] = nameVia(context, "pickup", ticket.bookedPickupId)
   if (ticket.closedAt !== null) facts.Closed = shownOn(ticket.closedAt, project.timezone)
   const linked = Object.fromEntries(TICKET_LINKS.map(([key, prefix]) => [key, ticket.links[key] === null ? "" : webIdVia(context, prefix, ticket.links[key] as string)]))
   return {
@@ -185,6 +188,8 @@ export function toTicketRecord(ticket: Ticket, context: MappingContext): Busines
       resolution: ticket.resolution ?? "",
       recollectionRouteId: ticket.recollectionRouteId === null ? "" : webIdVia(context, "route", ticket.recollectionRouteId),
       recollectionPickupId: ticket.recollectionPickupId === null ? "" : webIdVia(context, "pickup", ticket.recollectionPickupId),
+      bookedRouteId: ticket.bookedRouteId === null ? "" : webIdVia(context, "route", ticket.bookedRouteId),
+      bookedPickupId: ticket.bookedPickupId === null ? "" : webIdVia(context, "pickup", ticket.bookedPickupId),
     },
   }
 }
@@ -467,6 +472,8 @@ export const ticketAdapter: ResourceAdapter<Ticket> = {
   // Open, in progress, pending, on hold, completed and rejected move by the commands alone.
   statuses: undefined,
   list: (client) => listAll<Ticket>(client, "/tickets"),
+  // One ticket read back, for a row a command elsewhere changed: a stop booked from it (O3c of #290).
+  read: (client, serverId) => ticketDetail(client, serverId),
   toRecord: toTicketRecord,
   toCreateBody: toTicketCreateBody,
   toPatchBody: toTicketPatchBody,

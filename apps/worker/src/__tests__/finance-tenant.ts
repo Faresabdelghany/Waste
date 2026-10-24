@@ -38,7 +38,7 @@ import { planningArea } from "@waste/db/schema/planning-areas"
 import { ticket, ticketEvent } from "@waste/db/schema/resolution"
 import { collectionGroup, routeScheme } from "@waste/db/schema/route-schemes"
 import { withCompany } from "@waste/db/tenant"
-import type { PickupOrigin, PickupStatus } from "@waste/domain/execution/vocabulary"
+import type { PickupOrigin, PickupService, PickupStatus } from "@waste/domain/execution/vocabulary"
 import type { TicketKind, TicketResolution } from "@waste/domain/resolution/vocabulary"
 import { eq, sql } from "drizzle-orm"
 
@@ -192,7 +192,8 @@ export async function placeBin(pool: Database, tenant: FinanceTenant, label: str
 }
 
 /** A stop to seed: a container's, or — with `containerId` null — an address-only one, which only the office adds (#111). */
-export type StopSeed = { containerId: string | null; propertyId: string; status?: PickupStatus; wasteFractionId?: string; origin?: PickupOrigin }
+/** A stop as a test seeds it; an emptying unless it says a work order, a delivery naming the subscription it books (O3b of #290). */
+export type StopSeed = { containerId: string | null; propertyId: string; status?: PickupStatus; wasteFractionId?: string; origin?: PickupOrigin; service?: PickupService; subscriptionId?: string }
 
 export type SeededRoute = { id: string; number: number; serviceDate: string; pickupIds: string[] }
 
@@ -255,6 +256,8 @@ export async function seedCompletedRoute(pool: Database, tenant: FinanceTenant, 
           position: index + 1,
           status,
           origin: stop.origin ?? "generation",
+          service: stop.service ?? "empty",
+          subscriptionId: stop.subscriptionId ?? null,
           propertyId: stop.propertyId,
           sharedCollectionPointId: null,
           wasteFractionId: stop.wasteFractionId ?? tenant.fractions.residual.id,

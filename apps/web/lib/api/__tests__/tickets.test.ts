@@ -107,6 +107,8 @@ const missed: Ticket = {
   recollectionPickupId: null,
   chargeProductId: null,
   closedAt: null,
+  bookedRouteId: null,
+  bookedPickupId: null,
 }
 
 const record = ticketAdapter.toRecord(missed, context())
@@ -203,6 +205,8 @@ describe("a ticket", () => {
       resolution: "",
       recollectionRouteId: "",
       recollectionPickupId: "",
+      bookedRouteId: "",
+      bookedPickupId: "",
     })
   })
 
@@ -250,6 +254,20 @@ describe("a ticket", () => {
     assert.equal(onItsStop.facts["Re-collection stop"], `pickup-${pickupId}`)
     assert.equal(onItsStop.submittedValues?.recollectionPickupId, `pickup-${pickupId}`)
     assert.equal(completed.facts["Re-collection stop"], undefined)
+  })
+
+  test("is read back one ticket at a time, as its details read it: a stop booked from it names the stop on the row (O3c of #290)", async () => {
+    const { fetch, calls } = scripted([() => json({ ...missed, kind: "overflow", bookedRouteId: routeId, bookedPickupId: pickupId, events: [] })])
+    const read = await ticketAdapter.read?.(clientOver(fetch), missed.id)
+    assert.equal(calls[0].url, `http://api.test/tickets/${missed.id}`)
+    assert.equal(ticketAdapter.toRecord(read as typeof missed, context()).facts["Booked stop"], `pickup-${pickupId}`)
+  })
+
+  test("says which stop the office booked to answer it, its route by name and the stop by its id chip until the stops load (O3c of #290)", () => {
+    const booked = ticketAdapter.toRecord({ ...missed, kind: "overflow", bookedRouteId: routeId, bookedPickupId: pickupId }, context())
+    assert.deepEqual([booked.facts["Booked route"], booked.facts["Booked stop"]], ["RC-1042", `pickup-${pickupId}`])
+    assert.deepEqual([booked.submittedValues?.bookedRouteId, booked.submittedValues?.bookedPickupId], [rc1042.id, `pickup-${pickupId}`])
+    assert.equal(record.facts["Booked stop"], undefined, "a ticket no stop answers says nothing of one")
   })
 
   test("reads each status as the list and the details spell it", () => {

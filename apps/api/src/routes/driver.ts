@@ -189,6 +189,7 @@ import { vehicleColumns, vehicleLabel } from "./fleet-lookups"
 import { idsColumn } from "./id-sets"
 import { COMMAND_BACKDATE_MS, describeJson, IdParam, lockRow, OCCURRED_AT_SKEW_MS, primaryKeyOf, replayed } from "./shared"
 import { fractions as stationFractions } from "./unloading-stations"
+import { ticketHearsOfStop } from "./ticket-stops"
 import { recordLedgerWork } from "./work-orders"
 
 const MODULE = "operate.driver-app"
@@ -760,6 +761,8 @@ async function runEffects(tx: Tx, applier: Applier, envelope: DriverCommandEnvel
           .where(and(eq(pickup.companyId, companyId), eq(pickup.id, effect.pickupId)))
         // A delivery, a removal or a swap moves its container as the stop completes (O3b of #290): in a savepoint, a refusal becoming the office's task and never the driver's rejection.
         if (effect.status === "completed") await recordLedgerWork(tx, applier.principal, effect.pickupId, effect.at, applier.now, "driver")
+        // A stop booked to answer a ticket services it as it completes (O3c of #290); a miss reaches the ticket through Resolution's consumer.
+        if (effect.status === "completed") await ticketHearsOfStop(tx, applier.principal, effect.pickupId, { from: "planned", to: "completed" }, new Date(effect.at))
         break
       case "append-unload": {
         const { unload: draft } = effect

@@ -10,7 +10,9 @@
 // provider-tickets-rendering.test.ts from 0016 to 0031. The ticket as 0031
 // left it — 0016's columns with the grown sources — is the one 0033 (#291 C3)
 // gave the product its completion charges, so ticket-charges-rendering.test.ts
-// diffs from it to today.
+// diffs from it to the ticket as 0033 left it, with that product and no
+// booked stop, which is where ticket-stops-rendering.test.ts diffs from to
+// today (O3c of #290).
 import { TICKET_EVENT_KINDS, TICKET_KINDS, TICKET_PRIORITIES, TICKET_RESOLUTIONS, TICKET_STATUSES } from "@waste/domain/resolution/vocabulary"
 import { sql } from "drizzle-orm"
 import { check, getTableConfig, index, integer, text, timestamp, uniqueIndex, uuid } from "drizzle-orm/pg-core"
@@ -18,6 +20,7 @@ import { check, getTableConfig, index, integer, text, timestamp, uniqueIndex, uu
 import { tableObjectName } from "../names"
 import { userAccount } from "../schema/access"
 import { agreement } from "../schema/agreements"
+import { product } from "../schema/catalogue"
 import { oneOf } from "../schema/checks"
 import { id, projectScoped, recorded, timestamps } from "../schema/columns"
 import { container } from "../schema/containers"
@@ -26,7 +29,7 @@ import { pickup, route } from "../schema/execution"
 import { driver } from "../schema/fleet"
 import { company, project } from "../schema/organisation"
 import { companyReference, projectKey, projectReference, tenantIndex, tenantReference, tenantUnique, type ProjectTable } from "../schema/references"
-import { ticketEvent } from "../schema/resolution"
+import { ticket, ticketEvent } from "../schema/resolution"
 import { wms } from "../schema/wms"
 
 /** The sources 0009 spelled, and every file until 0031 kept. */
@@ -115,9 +118,16 @@ const ticketAsOf0015 = wms.table("ticket", { ...shared(), closedAt: instant() },
   tenantIndex(t, t.recollectionRouteId),
 ])
 
-/** ticket as 0016 (#111) left it, the re-collection's stop with its key through the route, its check and its index — with 0009's sources until 0031, and 0031's after. */
-const ticketWithStop = (sources: readonly string[]) =>
-  wms.table("ticket", { ...shared(), recollectionPickupId: uuid(), closedAt: instant() }, (t) => [
+/** The charge's check as the schema builds it over the domain's billable resolutions: one SQL, which renders the same text over any table named `ticket`. */
+const CHARGE_SHAPE = (() => {
+  const found = getTableConfig(ticket).checks.find((candidate) => candidate.name === "ticket_charge_shape")
+  if (found === undefined) throw new Error("ticket_charge_shape is not on the schema's ticket")
+  return found.value
+})()
+
+/** ticket as 0016 (#111) left it, the re-collection's stop with its key through the route, its check and its index — with 0009's sources until 0031, and 0031's after — and, `charged`, as 0033 (#291 C3) left it: the product its completion charges, its key, its check and its index. */
+const ticketWithStop = (sources: readonly string[], charged = false) =>
+  wms.table("ticket", { ...shared(), recollectionPickupId: uuid(), ...(charged ? { chargeProductId: uuid() } : {}), closedAt: instant() }, (t) => [
   companyReference(t, company),
   tenantReference(t, [t.projectId], project),
   tenantReference(t, [t.assigneeUserAccountId], userAccount),
@@ -133,6 +143,7 @@ const ticketWithStop = (sources: readonly string[]) =>
   projectReference(t, [t.parentTicketId], t as ProjectTable),
   projectReference(t, [t.recollectionRouteId], route),
   projectReference(t, [t.recollectionRouteId, t.recollectionPickupId], pickup, [pickup.routeId, pickup.id]),
+  ...(t.chargeProductId === undefined ? [] : [projectReference(t, [t.chargeProductId], product)]),
   tenantUnique(t, t.number),
   projectKey(t),
   oneOf(t.kind, TICKET_KINDS),
@@ -146,6 +157,7 @@ const ticketWithStop = (sources: readonly string[]) =>
   check(tableObjectName(t.id.table, "resolution_shape", "ticket"), sql`(${t.status} = 'completed') = (${t.resolution} is not null)`),
   check(tableObjectName(t.id.table, "recollection_shape", "ticket"), sql`${t.recollectionRouteId} is null or ${t.resolution} is not distinct from 'recollected'`),
   check(tableObjectName(t.id.table, "recollection_pickup_shape", "ticket"), sql`${t.recollectionPickupId} is null or ${t.recollectionRouteId} is not null`),
+  ...(t.chargeProductId === undefined ? [] : [check(tableObjectName(t.id.table, "charge_shape", "ticket"), CHARGE_SHAPE)]),
   check(tableObjectName(t.id.table, "closed_shape", "ticket"), sql`(${t.status} in ('completed', 'rejected')) = (${t.closedAt} is not null)`),
   uniqueIndex(tableObjectName(t.companyId.table, "source_event_id_idx", "ticket")).on(t.companyId, t.sourceEventId).where(sql`${t.sourceEventId} is not null`),
   tenantIndex(t, t.projectId, t.status),
@@ -162,14 +174,16 @@ const ticketWithStop = (sources: readonly string[]) =>
   tenantIndex(t, t.parentTicketId),
   tenantIndex(t, t.recollectionRouteId),
   tenantIndex(t, t.recollectionPickupId),
+  ...(t.chargeProductId === undefined ? [] : [tenantIndex(t, t.chargeProductId)]),
 ])
 
 const ticketAsOf0016 = ticketWithStop(TICKET_SOURCES_AS_OF_0009)
 const ticketAsOf0031 = ticketWithStop(TICKET_SOURCES_AS_OF_0031)
+const ticketAsOf0033 = ticketWithStop(TICKET_SOURCES_AS_OF_0031, true)
 
-/** The ticket as of an era before today's: `0015` without the re-collection's stop, `0016` with it, `0031` with the service provider's source too. */
-export function ticketAsOf(era: "0015" | "0016" | "0031") {
-  return era === "0015" ? ticketAsOf0015 : era === "0016" ? ticketAsOf0016 : ticketAsOf0031
+/** The ticket as of an era before today's: `0015` without the re-collection's stop, `0016` with it, `0031` with the service provider's source too, `0033` with the product its completion charges and no booked stop. */
+export function ticketAsOf(era: "0015" | "0016" | "0031" | "0033") {
+  return era === "0015" ? ticketAsOf0015 : era === "0016" ? ticketAsOf0016 : era === "0031" ? ticketAsOf0031 : ticketAsOf0033
 }
 
 /** The history's kind CASE as the schema builds it from TICKET_EVENT_SHAPES: one SQL, which renders the same text over any table named `ticket_event`. */

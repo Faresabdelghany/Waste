@@ -249,6 +249,15 @@ describe("finance.record-billable-events against Postgres", { skip }, () => {
     assert.deepEqual(await eventsOfPickup(pickupId), [])
   })
 
+  test("a delivery the office booked to answer a container request records nothing as it completes: the ticket is priced once, from its own completion (O3c of #290)", async () => {
+    const bin = await placeBin(pool, tenant, "BIN-OFF-2", { agreementId: tenant.agreements.anna.id, productId: tenant.products.residual.id })
+    const booked = await seedCompletedRoute(pool, tenant, [{ containerId: bin.containerId, propertyId: bin.propertyId, origin: "office", service: "deliver", subscriptionId: bin.subscriptionId }])
+    const [delivery] = booked.pickupIds
+    const done = await handle(published("pickup-completed", delivery, { ...pickupPayload(booked.id, delivery, bin.containerId), origin: "office", service: "deliver", subscriptionId: bin.subscriptionId }))
+    assert.deepEqual([done.did, done.billableEventId], ["nothing", null], "no pickup charge: the work order has none (D4), and the ticket it answered is the charge")
+    assert.deepEqual(await eventsOfPickup(delivery), [])
+  })
+
   test("is blocked with the actionable reason: no placement valid on the day, a draft agreement, a list with no row for the product — each a row the office reprices, none a failure", async () => {
     // A bin whose placement ended before the route's day: the stop was generated from a placement since ended.
     const ended = await placeBin(pool, tenant, "BIN-ENDED-1", { agreementId: tenant.agreements.anna.id, productId: tenant.products.residual.id, validFrom: "2026-01-01", validTo: "2026-09-01" })
