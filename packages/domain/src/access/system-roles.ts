@@ -180,6 +180,11 @@ export const SYSTEM_ROLES: readonly SystemRole[] = [
       only("commercial.price-rows", VIEW),
       only("commercial.invoices", VIEW),
       only("configure.templates", VIEW_EDIT),
+      // The citizen-facing Sorting Guide (#293): it keeps the items up to date — adds, edits, withdraws — and leaves publishing the project to the administrator.
+      // The pane reads the projects a guide is kept for and the fractions an item names, so it views both and changes neither.
+      only("configure.sorting-guide", VIEW_EDIT_CREATE),
+      only("configure.organization", VIEW),
+      only("configure.master", VIEW),
     ),
   },
   {

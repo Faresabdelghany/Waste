@@ -447,8 +447,13 @@ jobs:
           test "$api" = 200 && test "$worker" = 200
 
       # playwright.api.config.ts serves the build on port 3000 under CI and
-      # runs the suite serially with two retries.
+      # runs the suite serially with two retries. The served build reads the
+      # API's origin at request time too: a public page (ADR-0010) asks the
+      # public door from the server, where the browser's /waste-api rewrite
+      # was fixed at build.
       - run: pnpm test:e2e:api
+        env:
+          WASTE_API_ORIGIN: http://127.0.0.1:3001
 
       - uses: actions/upload-artifact@v7
         if: ${{ !cancelled() }}

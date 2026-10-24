@@ -7,7 +7,9 @@
 //                 driver's app, everyone else on operations; never a grant,
 //                 never a probe of the driver door. `/driver` is the Driver
 //                 App (#145, components/waste/driver/);
-//   the gate    — with the adapter on, every page but /login needs a session:
+//   the gate    — with the adapter on, every page but /login and the public
+//                 pages under /p/ (ADR-0010: a published project's, for
+//                 anyone, no account) needs a session:
 //                 nothing renders until the browser's session is read, and a
 //                 visitor without one is sent to /login, carrying where they
 //                 were going as `?next=`; with the adapter off (fixture mode,
@@ -23,6 +25,12 @@ import type { SessionEnding } from "./session"
 
 /** The one page the gate never stands in front of. */
 export const SIGN_IN_PATH = "/login"
+
+/** Where a published project's public pages live, `/p/<slug>/…` (ADR-0010): read by anyone, so the gate never stands in front of them. */
+export const PUBLIC_PATH_PREFIX = "/p/"
+
+/** Whether a path is one of the public pages, which need no session. */
+export const isPublicPath = (pathname: string): boolean => pathname.startsWith(PUBLIC_PATH_PREFIX)
 
 /**
  * Where a signed-in person lands when they were going nowhere in particular.
@@ -77,7 +85,7 @@ export type GateState = {
 
 /** What the gate does on a page: render it, render nothing until the stored session is read, or send the visitor to sign in. */
 export function gateOf({ configured, hydrated, signedIn }: GateState, pathname: string): "show" | "wait" | "sign-in" {
-  if (!configured || pathname === SIGN_IN_PATH) return "show"
+  if (!configured || pathname === SIGN_IN_PATH || isPublicPath(pathname)) return "show"
   if (!hydrated) return "wait"
   return signedIn ? "show" : "sign-in"
 }

@@ -9,8 +9,10 @@
 // (`configure.finance`) is hidden on the Pilot (#148, #112 deferred it): its
 // payment terms, cost centres and routing rules have no API, and the Pilot's
 // payment terms are the domain's `PAYMENT_TERMS_DAYS`. Fixture mode is
-// unchanged.
+// unchanged. The Sorting Guide (#293) is the API's alone too, so only the
+// Pilot offers it.
 import { MASTER_DATA_SETTINGS_PANE_ID } from "./business-links"
+import { SORTING_GUIDE_SETTINGS_PANE_ID } from "./sorting-guide"
 
 export const ASSET_MANAGEMENT_SETTINGS_PANE_ID = "asset-management"
 export const FINANCE_SETTINGS_PANE_ID = "finance"
@@ -19,7 +21,7 @@ export const COMMERCIAL_PRODUCTS_SETTINGS_PANE_ID = "commercial-products"
 
 /** Whether the Settings nav offers a pane, with the adapter configured or not. */
 export function settingsPaneOffered(paneId: string, configured: boolean): boolean {
-  if (paneId === MASTER_DATA_SETTINGS_PANE_ID) return configured
+  if (paneId === MASTER_DATA_SETTINGS_PANE_ID || paneId === SORTING_GUIDE_SETTINGS_PANE_ID) return configured
   if (paneId === ASSET_MANAGEMENT_SETTINGS_PANE_ID || paneId === FINANCE_SETTINGS_PANE_ID) return !configured
   return true
 }

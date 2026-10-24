@@ -39,7 +39,9 @@ const nextConfig = {
     // here as it is. The token still travels in `Authorization`; nothing is
     // a cookie. When the API's CORS lands, the public URL becomes the API's
     // origin and this rewrite goes; until then a deployment sets both
-    // variables and gets the same one door.
+    // variables and gets the same one door. WASTE_API_ORIGIN stays when the
+    // rewrite goes: the public pages (lib/public/door.ts, ADR-0010) read the
+    // public door from the server at request time through it.
     const origin = process.env.WASTE_API_ORIGIN?.replace(/\/+$/, "")
     if (!origin) return []
     return [{ source: "/waste-api/:path*", destination: `${origin}/:path*` }]

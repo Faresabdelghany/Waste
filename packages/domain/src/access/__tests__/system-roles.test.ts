@@ -66,6 +66,17 @@ describe("the seeded system roles", () => {
     assert.deepEqual(actionsOn("customers.agreements"), ["view", "edit", "create"])
   })
 
+  test("Customer Service keeps the Sorting Guide's items (#293): view, edit and create, and no delete since an item is withdrawn; it reads the projects and fractions the pane names, and publishing the project stays the administrator's", () => {
+    const service = SYSTEM_ROLES.find((role) => role.key === "customer-service")
+    assert.ok(service)
+    const actionsOn = (moduleKey: string) => service.grants.find((grant) => grant.moduleKey === moduleKey)?.actions
+    assert.deepEqual(actionsOn("configure.sorting-guide"), ["view", "edit", "create"])
+    assert.deepEqual(actionsOn("configure.organization"), ["view"], "the projects a guide is kept for, read: a project's public slug is the organisation's edit")
+    assert.deepEqual(actionsOn("configure.master"), ["view"], "the fractions an item names, read")
+    const holders = SYSTEM_ROLES.filter((role) => role.grants.some((grant) => grant.moduleKey === "configure.sorting-guide")).map((role) => role.key)
+    assert.deepEqual(holders, ["company-administrator", "customer-service"])
+  })
+
   test("every role that may move a route may make one: edit on route-studio.routes comes with create, the ad-hoc route being a dispatcher's daily job (#111)", () => {
     const routes = (key: string) => SYSTEM_ROLES.find((role) => role.key === key)?.grants.find((grant) => grant.moduleKey === "route-studio.routes")?.actions ?? []
     const editors = SYSTEM_ROLES.filter((role) => routes(role.key).includes("edit")).map((role) => role.key)

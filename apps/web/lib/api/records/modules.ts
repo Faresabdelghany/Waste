@@ -32,6 +32,7 @@ import { customersModule } from "./registry"
 import { providerPricesModule, settlementsModule } from "./provider-money"
 import { routeSchemesModule } from "./route-schemes"
 import { serviceAreasModule } from "./service-areas"
+import { sortingGuideModule } from "./sorting-guide"
 import { routesModule } from "./routes"
 import { ticketsModule } from "./tickets"
 import { weightsModule } from "./weights"
@@ -40,7 +41,8 @@ import { weightsModule } from "./weights"
  * The switched modules, in load order: a module another module resolves
  * against comes first. The planning configuration and the master data after
  * the organisation, since an area, a calendar and a service frequency name
- * their project; the places after the master data, since a station names
+ * their project; the Sorting Guide's items after both, since an item names
+ * its project and its fraction (#293); the places after the master data, since a station names
  * its fractions, and the warehouses after the depots one may share a yard
  * with; the fleet after the master data (a vehicle's type and fractions),
  * the access module (a driver's login) and the depots (a home base) (#180);
@@ -76,6 +78,7 @@ export const SERVER_MODULES: readonly ServerModule[] = [
   planningAreasModule,
   collectionCalendarsModule,
   masterDataModule,
+  sortingGuideModule,
   placesModule,
   warehousesModule,
   fleetVehiclesModule,
