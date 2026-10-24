@@ -8,17 +8,21 @@
 import assert from "node:assert/strict"
 import { describe, test } from "node:test"
 
-import { UserInvite, type Role, type User } from "@waste/contracts/access"
+import { RoleCreate, RoleGrants, UserInvite, type Role, type User } from "@waste/contracts/access"
 import type { Company, Project, ServiceProvider } from "@waste/contracts/organisation"
+import { systemRoleKept } from "@waste/domain/access/system-roles"
 
 import { FIXTURE_COMPANY_ID, FIXTURE_PROJECT_IDS, FIXTURE_SERVICE_PROVIDER_IDS, getModuleDefinition, type BusinessRecord } from "../../data/business-modules"
 import {
+  accessChanged,
   COMPANY_ADMINISTRATOR_ROLE_ID,
   coversEveryProject,
   inviteRecord,
+  newRoleRecord,
   pilotEmptyState,
   projectPickerOptions,
   providerPickerOptions,
+  roleMatrixOf,
   rolePickerOptions,
   roleRowsOf,
   userRowsOf,
@@ -27,8 +31,8 @@ import {
 } from "../../data/users-roles"
 import { problemSentence } from "../problem"
 import { NOTHING_RESOLVED, type MappingContext, type Resolver } from "../records/adapter"
-import { accessModule, companyAdapter, projectAdapter, roleAdapter, roleWebIdOf, SERVICE_PROVIDER_ACCESS, serviceProviderAdapter, userAdapter } from "../records/organisation"
-import { IDLE, loaded, loadFailed, loading, notGranted, resolverOver, writeRecord, type ServerRecordsState } from "../records/server-records"
+import { accessModule, companyAdapter, projectAdapter, REPLACE_ROLE_GRANTS, roleAdapter, roleWebIdOf, SERVICE_PROVIDER_ACCESS, serviceProviderAdapter, userAdapter } from "../records/organisation"
+import { commandRecord, IDLE, loaded, loadFailed, loading, notGranted, resolverOver, writeRecord, type ServerRecordsState } from "../records/server-records"
 import { bodyOf, clientOver, json, problem, scripted } from "./scripted-fetch"
 
 const NOW = new Date("2026-09-25T12:00:00Z")
@@ -334,6 +338,95 @@ describe("the role that covers every project", () => {
     assert.ok(!coversEveryProject(dispatcherRecord.id))
     const impostor: Role = { ...nightShift, name: "Company Administrator" }
     assert.ok(!coversEveryProject(roleAdapter.toRecord(impostor, context(accessFixtures)).id), "a custom role with the name is not it")
+  })
+})
+
+describe("a new role on the Pilot (#291)", () => {
+  const ticketDesk: Role = { ...nightShift, grants: [{ moduleKey: "operate.tickets", actions: ["view", "edit"] }] }
+  const ticketDeskRecord = roleAdapter.toRecord(ticketDesk, context(accessFixtures))
+
+  test("is a RoleCreate of its name, its scope and its description, trimmed, starting from no permission at all", () => {
+    const record = newRoleRecord({ name: " Depot Supervisor ", scope: "Assigned projects", description: " Depots and their stock " }, "access-role-1")
+    assert.equal(record.id, "access-role-1")
+    assert.equal(record.recordKind, "Role")
+    assert.ok(roleAdapter.owns(record))
+    const body = roleAdapter.toCreateBody?.(record, invitedContext())
+    assert.deepEqual(body, { name: "Depot Supervisor", scope: "Assigned projects", description: "Depots and their stock", grants: [] })
+    assert.ok(RoleCreate.safeParse(body).success)
+  })
+
+  test("may start from another role's permissions, a system role's among them: the way to change what a system role allows", () => {
+    const record = newRoleRecord({ name: "Ticket desk, nights", scope: "Assigned projects", description: "Tickets after hours", startFrom: ticketDeskRecord }, "access-role-2")
+    assert.deepEqual(roleAdapter.toCreateBody?.(record, invitedContext()), {
+      name: "Ticket desk, nights",
+      scope: "Assigned projects",
+      description: "Tickets after hours",
+      grants: [{ moduleKey: "operate.tickets", actions: ["view", "edit"] }],
+    })
+  })
+
+  test("goes out through the store's write as POST /roles with exactly that body", async () => {
+    const written: Role = { ...nightShift, id: "019995e0-0000-7000-8000-0000000000dd", name: "Depot Supervisor", description: "Depots and their stock" }
+    const { fetch, calls } = scripted([() => json(written, 201, { location: `/roles/${written.id}` })])
+    const record = newRoleRecord({ name: "Depot Supervisor", scope: "Assigned projects", description: "Depots and their stock" }, "access-role-3")
+    const outcome = await writeRecord(clientOver(fetch), accessModule, access, record, options)
+    assert.equal(calls[0].url, "http://api.test/roles")
+    assert.equal(calls[0].init.method, "POST")
+    assert.deepEqual(bodyOf(calls[0]), { name: "Depot Supervisor", scope: "Assigned projects", description: "Depots and their stock", grants: [] })
+    assert.equal(outcome.kind, "created")
+    if (outcome.kind === "created") assert.equal(outcome.record.facts.Type, "Custom")
+  })
+})
+
+describe("a role's permissions on the Pilot (#291)", () => {
+  const ticketDesk: Role = { ...nightShift, grants: [{ moduleKey: "operate.tickets", actions: ["view", "edit"] }, { moduleKey: "customers.contacts", actions: ["view"] }] }
+  const ticketDeskRecord = roleAdapter.toRecord(ticketDesk, context(accessFixtures))
+  const current = loaded({ records: [ticketDeskRecord, dispatcherRecord], serverIds: new Map([[ticketDeskRecord.id, ticketDesk.id], [dispatcherRecord.id, dispatcher.id]]) }, 1)
+
+  test("a custom role's matrix is its grants as the panel reads them, to change; a system role's is read-only in the sentence the API refuses with", () => {
+    assert.deepEqual(roleMatrixOf(ticketDeskRecord), {
+      name: "Night Dispatch",
+      access: { "operate.tickets": ["view", "edit"], "customers.contacts": ["view"] },
+      readOnlyBecause: null,
+    })
+    const system = roleMatrixOf(roleAdapter.toRecord({ ...dispatcher, name: "Disponent", grants: [{ moduleKey: "route-studio.live", actions: ["view"] }] }, context(accessFixtures)))
+    assert.deepEqual(system.access, { "route-studio.live": ["view"] })
+    assert.equal(system.readOnlyBecause, systemRoleKept("Disponent"), "named as the tenant calls it")
+  })
+
+  test("a draft has changed only where it grants something else: an emptied module and the order of the actions are no change", () => {
+    const saved = { "operate.tickets": ["view", "edit"], "customers.contacts": ["view"] } as const
+    assert.equal(accessChanged(saved, { "customers.contacts": ["view"], "operate.tickets": ["edit", "view"], "fleet.vehicles": [] }), false)
+    assert.equal(accessChanged(saved, { "operate.tickets": ["view", "edit", "create"], "customers.contacts": ["view"] }), true)
+    assert.equal(accessChanged(saved, { "operate.tickets": ["view", "edit"] }), true)
+  })
+
+  test("are saved whole: one PUT of the matrix as the panel holds it, and the row is the role the API answers", async () => {
+    const answered: Role = { ...ticketDesk, grants: [{ moduleKey: "operate.tickets", actions: ["view", "edit", "create"] }] }
+    const { fetch, calls } = scripted([() => json(answered)])
+    const outcome = await commandRecord(clientOver(fetch), accessModule, current, ticketDeskRecord, REPLACE_ROLE_GRANTS, { access: { "operate.tickets": ["view", "edit", "create"], "customers.contacts": [] } }, options)
+    assert.equal(calls.length, 1)
+    assert.equal(calls[0].init.method, "PUT")
+    assert.equal(calls[0].url, `http://api.test/roles/${ticketDesk.id}/grants`)
+    const body = bodyOf(calls[0])
+    assert.deepEqual(body, { grants: [{ moduleKey: "operate.tickets", actions: ["view", "edit", "create"] }] }, "a module granted nothing is left out")
+    assert.ok(RoleGrants.safeParse(body).success)
+    assert.equal(outcome.kind, "done")
+    if (outcome.kind === "done") assert.equal(outcome.record.value, "3 permissions")
+  })
+
+  test("the API's refusal of a save comes back in its sentence under the role's name: a system role's 409, a grant's 403", async () => {
+    const kept = scripted([() => problem(409, systemRoleKept("Dispatcher"))])
+    const system = await commandRecord(clientOver(kept.fetch), accessModule, current, dispatcherRecord, REPLACE_ROLE_GRANTS, { access: { "route-studio.live": ["view"] } }, options)
+    assert.equal(system.kind, "refused")
+    if (system.kind !== "refused") return
+    assert.equal(system.what, "Dispatcher's permissions were not saved")
+    assert.equal(problemSentence(system.problem), systemRoleKept("Dispatcher"))
+
+    const { fetch } = scripted([() => problem(403, "Your role does not allow edit on configure.access")])
+    const outcome = await commandRecord(clientOver(fetch), accessModule, current, ticketDeskRecord, REPLACE_ROLE_GRANTS, { access: {} }, options)
+    assert.equal(outcome.kind, "refused")
+    if (outcome.kind === "refused") assert.equal(problemSentence(outcome.problem), "Your role does not allow edit on configure.access")
   })
 })
 

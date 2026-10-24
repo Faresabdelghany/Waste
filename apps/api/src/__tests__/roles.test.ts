@@ -6,6 +6,7 @@ import { Role } from "@waste/contracts/access"
 import { Id } from "@waste/contracts/ids"
 import { Page } from "@waste/contracts/pagination"
 import { createDb, type Database } from "@waste/db/client"
+import { systemRoleKept, systemRoleScopeKept } from "@waste/domain/access/system-roles"
 
 import { createApp } from "../app"
 import { callingAs, type Call } from "./calls"
@@ -251,21 +252,37 @@ describe("the role endpoints", { skip: database.skip }, () => {
       assert.deepEqual(await one(olivia, created.id), patched)
     })
 
-    test("renames a system role too: only its key and its system flag are its for life", async () => {
-      const name = roleName("Provider Manager")
-      const response = await olivia(`/roles/${a.roles.providerManager.id}`, { method: "PATCH", body: { name, scope: "Own service provider" } })
+    test("renames a system role and rewrites its description, the tenant's to say; its key, its system flag and its scope are the platform's (#291)", async () => {
+      const id = a.roles.providerManager.id
+      const name = roleName("Leverandørchef")
+      // Re-stating the scope it has names nothing new, so a body sending the copy whole is taken.
+      const response = await olivia(`/roles/${id}`, { method: "PATCH", body: { name, description: "Styrer leverandørens ruter", scope: "Own service provider" } })
       assert.equal(response.status, 200)
       const patched = Role.parse(await response.json())
       assert.equal(patched.name, name)
+      assert.equal(patched.description, "Styrer leverandørens ruter")
       assert.equal(patched.key, "service-provider-manager")
       assert.equal(patched.system, true)
 
+      // Another scope is refused in the role's name as the tenant now calls it, and nothing is written.
+      const rescoped = await olivia(`/roles/${id}`, { method: "PATCH", body: { name: "Not written", scope: "Company" } })
+      assert.equal(rescoped.status, 409)
+      assert.equal((await readProblem(rescoped)).detail, systemRoleScopeKept(name))
+      assert.deepEqual(await one(olivia, id), patched)
+
       for (const owned of ["key", "system"]) {
-        const refused = await olivia(`/roles/${a.roles.providerManager.id}`, { method: "PATCH", body: { [owned]: "x" } })
+        const refused = await olivia(`/roles/${id}`, { method: "PATCH", body: { [owned]: "x" } })
         assert.equal(refused.status, 400, owned)
         assert.ok((await readProblem(refused)).errors?.some((error) => new RegExp(owned).test(error.message)), owned)
       }
-      await olivia(`/roles/${a.roles.providerManager.id}`, { method: "PATCH", body: { name: "Service Provider Manager" } })
+      await olivia(`/roles/${id}`, { method: "PATCH", body: { name: "Service Provider Manager", description: "Runs the provider's routes" } })
+    })
+
+    test("moves a custom role's scope", async () => {
+      const created = await create(olivia, { name: roleName("Rescoped"), scope: "Company", description: "d" })
+      const response = await olivia(`/roles/${created.id}`, { method: "PATCH", body: { scope: "Assigned projects" } })
+      assert.equal(response.status, 200)
+      assert.equal(Role.parse(await response.json()).scope, "Assigned projects")
     })
 
     test("refuses an empty patch, a rename onto a name in use, 404 for another company's role, and a role that may only view", async () => {
@@ -321,14 +338,17 @@ describe("the role endpoints", { skip: database.skip }, () => {
       assert.deepEqual((await one(olivia, created.id)).grants, [])
     })
 
-    test("replaces a system role's matrix too, and gives it back", async () => {
+    test("refuses a system role's matrix, which every seed restores to its charter, and writes nothing (#291)", async () => {
       const id = a.roles.providerManager.id
-      const narrowed = await setGrants(olivia, id, [{ moduleKey: "operate.tickets", actions: ["edit"] }])
-      assert.deepEqual(narrowed.grants, [{ moduleKey: "operate.tickets", actions: ["view", "edit"] }])
-      assert.equal(narrowed.key, "service-provider-manager", "its key and its system flag are untouched")
-      assert.equal(narrowed.system, true)
-      const restored = await setGrants(olivia, id, a.roles.providerManager.grants)
-      assert.deepEqual(restored.grants, a.roles.providerManager.grants)
+      const before = await one(olivia, id)
+      const response = await olivia(`/roles/${id}/grants`, { method: "PUT", body: { grants: [{ moduleKey: "operate.tickets", actions: ["edit"] }] } })
+      assert.equal(response.status, 409)
+      assert.equal((await readProblem(response)).detail, systemRoleKept("Service Provider Manager"))
+      assert.deepEqual(await one(olivia, id), before, "its matrix and its stamp as they were")
+      // The Company Administrator's too: the role that owns the tenant cannot be narrowed out from under it.
+      const administrator = await olivia(`/roles/${a.roles.administrator.id}/grants`, { method: "PUT", body: { grants: [] } })
+      assert.equal(administrator.status, 409)
+      await readProblem(administrator)
     })
 
     test("refuses a grant outside the vocabulary, a body without the matrix, and a member it does not own", async () => {

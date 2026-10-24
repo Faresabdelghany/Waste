@@ -17,7 +17,9 @@ import {
   useServerModuleState,
 } from "@/components/waste/business-record-store"
 import { InviteUserDialog } from "@/components/settings/invite-user-dialog"
+import { NewRoleDialog } from "@/components/settings/new-role-dialog"
 import { useOrganizationStore } from "@/components/settings/organization-store"
+import { PilotRolePermissionsPanel } from "@/components/settings/pilot-role-permissions"
 import { RolePermissionsPanel } from "@/components/settings/role-permissions"
 import { Badge } from "@/components/ui/badge"
 import { Button } from "@/components/ui/button"
@@ -74,6 +76,7 @@ import {
   DEACTIVATE_USER,
   isCompanyRecord,
   REACTIVATE_USER,
+  roleAdapter,
 } from "@/lib/api/records/organisation"
 import { IDLE } from "@/lib/api/records/server-records"
 import {
@@ -534,6 +537,8 @@ export function OrganizationAccessManagement() {
   // memos reads to the React Compiler as a possible mutation of a dependency,
   // and it would then skip the pane.
   const roleOptions = rolePickerOptions(accessRecords)
+  // The API's roles once the module is ready, never the fixtures `getRecords` answers until then: what a role's panel and New role's Start from read (#291).
+  const pilotRoleRecords: readonly BusinessRecord[] = configured && accessModuleState.status === "ready" ? accessRecords.filter((record) => roleAdapter.owns(record)) : NO_RECORDS
   const projectOptions = projectPickerOptions(organisationRecords)
   const providerOptions = providerPickerOptions(providerRecords)
 
@@ -950,22 +955,30 @@ export function OrganizationAccessManagement() {
           </RecordsSection>
         </PanelShell>
       ) : selectedRoleId ? (
-        <RolePermissionsPanel
-          roleId={selectedRoleId}
-          onBack={() => setSelectedRoleId(null)}
-        />
+        // On the Pilot the access module's role, its matrix saved whole and a system role's read-only (#291); in fixture mode the organisation store's.
+        configured ? (
+          <PilotRolePermissionsPanel
+            record={pilotRoleRecords.find((record) => record.id === selectedRoleId)}
+            onBack={() => setSelectedRoleId(null)}
+          />
+        ) : (
+          <RolePermissionsPanel
+            roleId={selectedRoleId}
+            onBack={() => setSelectedRoleId(null)}
+          />
+        )
       ) : (
         <PanelShell
           tabs={tabs}
-          // New role is not offered on the Pilot: the dialog asks for no
-          // description, which `POST /roles` needs, and a role written to the
-          // browser must never be one Add user can pick (Issue #163).
           action={
-            configured ? undefined : (
-              <Button size="sm" onClick={() => setNewRoleOpen(true)}>
-                <Plus className="h-4 w-4" weight="bold" /> New role
-              </Button>
-            )
+            <Button
+              size="sm"
+              onClick={() => setNewRoleOpen(true)}
+              disabled={!pilotReady}
+              title={pilotRolesEmpty?.message}
+            >
+              <Plus className="h-4 w-4" weight="bold" /> New role
+            </Button>
           }
           toolbar={
             <Toolbar
@@ -1013,25 +1026,19 @@ export function OrganizationAccessManagement() {
               </TableHeader>
               <TableBody>
                 {rolesPageRows.map((roleDefinition) => (
-                  // The permissions panel edits the organisation store's copy
-                  // of a role, which on the Pilot would be a change the API
-                  // never sees, so the rows open nothing there.
+                  // A row opens its permissions: the organisation store's in fixture mode, the API's on the Pilot (#291).
                   <TableRow
                     key={roleDefinition.id}
-                    tabIndex={configured ? undefined : 0}
-                    className={configured ? undefined : "cursor-pointer"}
-                    aria-label={configured ? undefined : `Open permissions for ${roleDefinition.name}`}
-                    onClick={configured ? undefined : () => setSelectedRoleId(roleDefinition.id)}
-                    onKeyDown={
-                      configured
-                        ? undefined
-                        : (event) => {
-                            if (event.key === "Enter" || event.key === " ") {
-                              event.preventDefault()
-                              setSelectedRoleId(roleDefinition.id)
-                            }
-                          }
-                    }
+                    tabIndex={0}
+                    className="cursor-pointer"
+                    aria-label={`Open permissions for ${roleDefinition.name}`}
+                    onClick={() => setSelectedRoleId(roleDefinition.id)}
+                    onKeyDown={(event) => {
+                      if (event.key === "Enter" || event.key === " ") {
+                        event.preventDefault()
+                        setSelectedRoleId(roleDefinition.id)
+                      }
+                    }}
                   >
                     <TableCell className="min-w-48 py-3 font-medium text-foreground">
                       {roleDefinition.name}
@@ -1278,7 +1285,22 @@ export function OrganizationAccessManagement() {
         </DialogContent>
       </Dialog>
 
-      <Dialog open={newRoleOpen} onOpenChange={handleRoleDialogOpenChange}>
+      {configured && (
+        <NewRoleDialog
+          open={newRoleOpen}
+          onOpenChange={setNewRoleOpen}
+          scopes={roleScopeOptions}
+          roles={pilotRoleRecords}
+          companyRecordId={companyRecord?.id}
+          // The dialog says a refusal itself, so the store's toast is off; a record only goes out while the module is ready.
+          create={(record) =>
+            accessModuleState.status === "ready" ? upsertRecord("configure", "access", record, { report: false }) : undefined
+          }
+          onCreated={setSelectedRoleId}
+        />
+      )}
+
+      <Dialog open={!configured && newRoleOpen} onOpenChange={handleRoleDialogOpenChange}>
         <DialogContent className="sm:max-w-lg">
           <form onSubmit={submitRole}>
             <DialogHeader>

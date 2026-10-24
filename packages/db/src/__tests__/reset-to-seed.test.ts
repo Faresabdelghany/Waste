@@ -391,8 +391,8 @@ describe("reset-to-seed against a database of its own", { skip: database.skip },
       await tx.insert(roleGrant).values({ companyId: DEMO, roleId: tester.role, moduleKey: "configure.access", action: "view" })
       await tx.insert(userAccount).values({ id: tester.id, companyId: DEMO, authUserId: randomUUID(), email: "tester@pilot.example", fullName: "Pia Tester", roleId: tester.role })
       await tx.insert(projectAccess).values({ companyId: DEMO, userAccountId: tester.id, projectId: harbor })
-      // Seeded ones moved off the seed's word: a role renamed, Mads given Harbor too.
-      await tx.update(role).set({ name: "Dispatch desk" }).where(eq(role.id, DEMO_IDS.roles.dispatcher))
+      // Seeded ones moved off the seed's word: a role renamed — the tenant's to say (#291) — and moved to another scope, which is the platform's; Mads given Harbor too.
+      await tx.update(role).set({ name: "Dispatch desk", scope: "Company" }).where(eq(role.id, DEMO_IDS.roles.dispatcher))
       await tx.insert(projectAccess).values({ companyId: DEMO, userAccountId: DEMO_IDS.users.mads, projectId: harbor })
     })
     const before = await snapshot(DEMO)
@@ -412,7 +412,9 @@ describe("reset-to-seed against a database of its own", { skip: database.skip },
     assert.deepEqual(keptRow(after, "user_account", DEMO_IDS.users.fares), keptRow(before, "user_account", DEMO_IDS.users.fares), "Fares's Login stays bound, and his row is not written")
     assert.equal(keptRow(after, "user_account", DEMO_IDS.users.fares)?.auth_user_id, login)
     assert.equal(keptRow(after, "user_account", DEMO_IDS.users.lars)?.deactivated_at, keptRow(before, "user_account", DEMO_IDS.users.lars)?.deactivated_at)
-    assert.equal(keptRow(after, "role", DEMO_IDS.roles.dispatcher)?.name, keptRow(seeded, "role", DEMO_IDS.roles.dispatcher)?.name)
+    // A system role's name is the tenant's and survives the reset; its scope is the charter's again (#291).
+    assert.equal(keptRow(after, "role", DEMO_IDS.roles.dispatcher)?.name, "Dispatch desk")
+    assert.equal(keptRow(after, "role", DEMO_IDS.roles.dispatcher)?.scope, keptRow(seeded, "role", DEMO_IDS.roles.dispatcher)?.scope)
     const madsAccess = await owner.db
       .select({ projectId: projectAccess.projectId })
       .from(projectAccess)

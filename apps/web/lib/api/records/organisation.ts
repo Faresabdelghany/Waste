@@ -28,7 +28,7 @@ import type { Company, Project, ServiceProvider } from "@waste/contracts/organis
 import type { Grant } from "@waste/contracts/permissions"
 
 import { FIXTURE_COMPANY_ID, type BusinessRecord } from "@/lib/data/business-modules"
-import type { RoleAccessMap } from "@/lib/data/role-permissions"
+import { isRoleAccessMap, type RoleAccessMap } from "@/lib/data/role-permissions"
 
 import { command, create, get, listAll, patch, put } from "../client"
 import {
@@ -45,7 +45,6 @@ import {
   statusToken,
   typed,
   webIdOf,
-  type Client,
   type LocalRefusal,
   type MappingContext,
   type ResourceAdapter,
@@ -330,6 +329,9 @@ export const roleWebIdOf = (role: Pick<Role, "id" | "key">) => (role.key === nul
 /** `Role.grants` as a record carries it: one JSON string on `submittedValues`, read back by `grantsOfRecord`. */
 export const GRANTS_KEY = "grants"
 
+/** The role adapter's command, by the name the Users & roles pane sends: the whole matrix replaced (#291). */
+export const REPLACE_ROLE_GRANTS = "replace-grants"
+
 /** The grants a role record carries, or undefined when it carries none. */
 export function grantsOfRecord(record: Pick<BusinessRecord, "submittedValues">): Grant[] | undefined {
   const raw = typed(record, GRANTS_KEY)
@@ -398,11 +400,15 @@ export const roleAdapter: ResourceAdapter<Role> = {
     })),
   create: (client, body) => create<Role>(client, "/roles", body).then((created) => created.body),
   update: (client, serverId, body) => patch<Role>(client, `/roles/${serverId}`, body),
-}
-
-/** `PUT /roles/:id/grants`: the whole matrix, replacing what the role had. */
-export function replaceRoleGrants(client: Client, serverId: string, grants: readonly Grant[]): Promise<Role> {
-  return put<Role>(client, `/roles/${serverId}/grants`, { grants })
+  commands: {
+    // `PUT /roles/:id/grants` (#291): the whole matrix as the panel holds it, one request per save. A system role's is the
+    // platform's, which the panel shows read-only (`roleMatrixOf`); the API's 409 says so to any other caller.
+    [REPLACE_ROLE_GRANTS]: {
+      toBody: (input) => ({ grants: grantsOf(isRoleAccessMap(input.access) ? input.access : {}) }),
+      run: (client, serverId, body) => put<Role>(client, `/roles/${serverId}/grants`, body),
+      refused: (record) => `${record.name}'s permissions were not saved`,
+    },
+  },
 }
 
 // ---------------------------------------------------------------------------
