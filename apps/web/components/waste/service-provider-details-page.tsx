@@ -12,6 +12,7 @@ import type {
 } from "@/lib/data/business-modules"
 import { getBusinessModuleHref } from "@/lib/data/business-links"
 import { cn } from "@/lib/utils"
+import { useApiConfigured } from "@/components/waste/api-session-store"
 import { Badge } from "@/components/ui/badge"
 import { Button } from "@/components/ui/button"
 import { SidebarTrigger } from "@/components/ui/sidebar"
@@ -287,6 +288,8 @@ export function ServiceProviderDetailsPage({
     target: "user" | "vehicle" | "driver" | "service-area" | "service-provider-price",
   ) => void
 }) {
+  // On the Pilot the door makes an award to this provider (#186), not an assignment of an existing one.
+  const apiConfigured = useApiConfigured()
   return (
     <div className="flex min-h-0 flex-1 flex-col">
       <header className="border-b border-border">
@@ -396,7 +399,7 @@ export function ServiceProviderDetailsPage({
             contextLabel="Service scope"
             valueLabel="Effective period"
             emptyLabel="No assigned service areas"
-            actionLabel="Assign service area"
+            actionLabel={apiConfigured ? "Award service area" : "Assign service area"}
             onCreate={() => onCreate("service-area")}
             workspaceId="service-providers"
             moduleId="service-areas"

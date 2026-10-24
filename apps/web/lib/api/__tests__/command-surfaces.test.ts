@@ -6,7 +6,7 @@
 import assert from "node:assert/strict"
 import { describe, test } from "node:test"
 
-import { COMMAND_SURFACES, commandSurfaceFor, initialFiltersOf, listShows, type CommandSurface, type ModuleList } from "@/components/waste/commands/command-surfaces"
+import { COMMAND_SURFACES, commandSurfaceFor, initialFiltersOf, listShows, primaryOf, type CommandSurface, type ModuleList } from "@/components/waste/commands/command-surfaces"
 import type { BusinessRecord } from "@/lib/data/business-modules"
 import { emptyBusinessFilters } from "@waste/domain/business-filters"
 
@@ -69,6 +69,28 @@ describe("a module's list on the Pilot (#147)", () => {
     const event = { status: "Blocked", facts: { Kind: "Ticket", "Block reason": "No product", Agreement: "AGR-2408", Customer: "Østerbro Housing", Route: "RC-1042", "Service date": "2026-09-29" } } as unknown as BusinessRecord
     const readers = COMMAND_SURFACES["commercial.events"].list!.readers({ accountId: null })
     assert.deepEqual([readers.blockReasons!(event), readers.agreements!(event), readers.products!(event)], [["No product"], ["AGR-2408"], []])
+  })
+
+  test("the provider-money chain's: the service areas' table lists the awards and never their assignments, the weights open on the desk's queue (#186)", () => {
+    const areas = COMMAND_SURFACES["service-providers.service-areas"].list
+    assert.equal(listShows(areas, { id: "service-area-0190", recordKind: "Service area" } as BusinessRecord), true)
+    assert.equal(listShows(areas, { id: "service-areas-service-area-1700000000000", recordKind: "Service area" } as BusinessRecord), true, "an award made this session, under its minted id")
+    assert.equal(listShows(areas, { id: "assignment-0190", recordKind: "Service area assignment" } as BusinessRecord), false)
+    assert.equal(listShows(areas, { id: "service-areas-assignment-1700000000000", recordKind: "Service area assignment" } as BusinessRecord), false)
+    const award = { status: "Active", facts: { "Planning areas": "Østerbro Zone 2 · Nordhavn" } } as unknown as BusinessRecord
+    assert.deepEqual(areas!.readers({ accountId: null }).planningAreas!(award), ["Østerbro Zone 2", "Nordhavn"])
+    assert.deepEqual(initialFiltersOf(COMMAND_SURFACES["route-studio.weights"]), { ...emptyBusinessFilters, statuses: ["Needs review"] })
+    assert.equal(COMMAND_SURFACES["route-studio.weights"].primary, null, "an unload is the Driver App's, never the office's")
+  })
+
+  test("offers a surface's own primary with the create grant alone, whatever the fixture form; the module's form only where it has one (#186)", () => {
+    const own = COMMAND_SURFACES["commercial.settlements"]
+    assert.equal(primaryOf(own, true, false), "surface", "Settlements' fixture form is disabled, and Open settlement stands")
+    assert.equal(primaryOf(own, false, true), null, "never without the create grant")
+    assert.equal(primaryOf({ primary: null }, true, true), null, "a module the wire only reads offers none")
+    assert.equal(primaryOf({ primary: "form" }, true, true), "form")
+    assert.equal(primaryOf(undefined, true, true), "form", "fixture mode: the module's form")
+    assert.equal(primaryOf(undefined, true, false), null)
   })
 
   test("opens only on categories its readers read, so no chip filters on nothing", () => {

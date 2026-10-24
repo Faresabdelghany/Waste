@@ -2,8 +2,12 @@
 // selection hands to the Service Area form (project when uniform, the
 // planning areas the containers name, a boundary line, and the drawn
 // polygon), the stored polygon read back, and the layers the Layers control
-// can switch on. Only areas created from the map carry a polygon; fixture
-// areas are covered through their planning areas (coverage.ts). The seed is
+// can switch on. Only areas created from the map in fixture mode carry a
+// polygon; every other area is its planning areas — covered through them
+// (coverage.ts), and drawn as their stored boundaries where the server gave
+// them one (#186, #127: on the Pilot the drawn polygon is a selection only,
+// never persisted), each planning area a part of the one layer, with no
+// dissolve of the edges two of them share. The seed is
 // typed (issue #58): which form field each value lands in is the web's to
 // decide, since the form schema lives there — apps/web/lib/data/service-areas.ts
 // maps it. Pure data logic.
@@ -12,6 +16,7 @@ import type { BusinessRecord } from "../prototype-record"
 import { cleanFact, typedString, uniform } from "../record-values"
 import { isSoftDeleted } from "../record-visibility"
 import { count } from "../text"
+import { storedOutline } from "./areas"
 import { boundsFromPolygon, type LngLat, type LngLatBounds } from "./geo"
 import type { SelectionShape } from "./selection"
 
@@ -40,7 +45,8 @@ export type ServiceAreaLayer = {
   serviceProvider: string
   status: string
   color: string
-  polygon: LngLat[]
+  /** The drawn polygon, or one part per planning area the area is: the union drawn part by part. */
+  polygons: LngLat[][]
   bounds: LngLatBounds
 }
 
@@ -116,21 +122,39 @@ export function serviceAreaSeedFromSelection({
   }
 }
 
-/** One layer per visible service area that carries a polygon, in record order. */
-export function serviceAreaLayers(serviceAreas: readonly BusinessRecord[]): ServiceAreaLayer[] {
+/** The planning-area ids an award covers: its typed `zoneIds`, then its relation refs to them. */
+export function serviceAreaZoneIds(area: BusinessRecord): string[] {
+  const ids = new Set(typedString(area.submittedValues, "zoneIds")?.split(",").map((id) => id.trim()).filter(Boolean) ?? [])
+  for (const ref of area.relationRefs ?? []) if (ref.fieldId === "zoneIds") ids.add(ref.recordId)
+  return [...ids]
+}
+
+/** The parts an area is drawn as: its drawn polygon, else the stored boundary of each planning area it covers that has one. */
+function serviceAreaParts(area: BusinessRecord, planningAreas: readonly BusinessRecord[]): LngLat[][] {
+  const drawn = serviceAreaPolygon(area)
+  if (drawn) return [drawn]
+  return serviceAreaZoneIds(area).flatMap((id) => {
+    const planningArea = planningAreas.find((candidate) => candidate.id === id)
+    const outline = planningArea === undefined ? null : storedOutline(planningArea)
+    return outline === null ? [] : [outline]
+  })
+}
+
+/** One layer per visible service area the map can draw — a drawn polygon, or planning areas with a stored boundary — in record order. */
+export function serviceAreaLayers(serviceAreas: readonly BusinessRecord[], planningAreas: readonly BusinessRecord[] = []): ServiceAreaLayer[] {
   const layers: ServiceAreaLayer[] = []
   for (const area of serviceAreas) {
     if (isSoftDeleted(area)) continue
-    const polygon = serviceAreaPolygon(area)
-    if (!polygon) continue
+    const polygons = serviceAreaParts(area, planningAreas)
+    if (polygons.length === 0) continue
     layers.push({
       id: area.id,
       name: area.name,
       serviceProvider: cleanFact(area.facts["Service provider"]) ?? "Unassigned",
       status: area.status,
       color: SERVICE_AREA_LAYER_PALETTE[layers.length % SERVICE_AREA_LAYER_PALETTE.length],
-      polygon,
-      bounds: boundsFromPolygon(polygon),
+      polygons,
+      bounds: boundsFromPolygon(polygons.flat()),
     })
   }
   return layers

@@ -118,7 +118,8 @@ export function LayersPanel({
           </span>
         </Button>
       </PopoverTrigger>
-      <PopoverContent side="top" align="end" className="w-80 p-0 text-sm" aria-label="Layers">
+      {/* Held to the room above the button, and scrolled: a tenant's schemes and awards can outgrow the map. */}
+      <PopoverContent side="top" align="end" className="max-h-(--radix-popover-content-available-height) w-80 overflow-y-auto p-0 text-sm" aria-label="Layers">
         <div className="border-b border-border px-3 py-3">
           <p className="mb-2 text-xs font-medium text-muted-foreground">Base map</p>
           <div role="radiogroup" aria-label="Base map" className="grid grid-cols-4 gap-2">

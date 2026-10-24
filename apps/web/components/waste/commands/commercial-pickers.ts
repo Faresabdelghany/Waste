@@ -23,6 +23,7 @@ import { ORGANISATION_MODULE } from "@/lib/data/containers"
 import { MASTER_DATA_MODULE } from "@/lib/data/master-data"
 import { keptOptions, keptValue, rowOptions } from "@/lib/data/place-pickers"
 import { PLANNING_AREAS_MODULE } from "@/lib/data/planning-areas"
+import { SERVICE_AREAS_MODULE, SERVICE_PROVIDERS_MODULE } from "@/lib/data/provider-money"
 import { CONTACTS_MODULE, NO_ONE } from "@/lib/data/properties"
 
 import { useModuleRecords, useServerModuleState } from "../business-record-store"
@@ -40,13 +41,27 @@ export function useCommercialPickers(): RelationPickers {
   const priceRows = useModuleRecords(PRICE_ROWS_MODULE.workspaceId, PRICE_ROWS_MODULE.moduleId, fixturesOf(PRICE_ROWS_MODULE))
   const areas = useModuleRecords(PLANNING_AREAS_MODULE.workspaceId, PLANNING_AREAS_MODULE.moduleId, fixturesOf(PLANNING_AREAS_MODULE))
   const agreements = useModuleRecords(AGREEMENTS_MODULE.workspaceId, AGREEMENTS_MODULE.moduleId, fixturesOf(AGREEMENTS_MODULE))
+  // The provider-money chain's (#186).
+  const providers = useModuleRecords(SERVICE_PROVIDERS_MODULE.workspaceId, SERVICE_PROVIDERS_MODULE.moduleId, fixturesOf(SERVICE_PROVIDERS_MODULE))
+  const master = useModuleRecords(MASTER_DATA_MODULE.workspaceId, MASTER_DATA_MODULE.moduleId, fixturesOf(MASTER_DATA_MODULE))
+  const serviceAreas = useModuleRecords(SERVICE_AREAS_MODULE.workspaceId, SERVICE_AREAS_MODULE.moduleId, fixturesOf(SERVICE_AREAS_MODULE))
   const byKey = new Map([
     [keyOf(PRODUCTS_MODULE), products],
     [keyOf(PRICE_ROWS_MODULE), priceRows],
     [keyOf(PLANNING_AREAS_MODULE), areas],
     [keyOf(AGREEMENTS_MODULE), agreements],
+    [keyOf(SERVICE_PROVIDERS_MODULE), providers],
+    [keyOf(SERVICE_AREAS_MODULE), serviceAreas],
   ])
-  const held = { products: live(products.records), priceRows: live(priceRows.records), areas: live(areas.records), agreements: live(agreements.records) }
+  const held = {
+    products: live(products.records),
+    priceRows: live(priceRows.records),
+    areas: live(areas.records),
+    agreements: live(agreements.records),
+    providers: live(providers.records),
+    master: live(master.records),
+    serviceAreas: live(serviceAreas.records),
+  }
   const options = (field: BusinessFormField, values: BusinessFormValues, projectId?: string, opened?: BusinessFormValues): readonly BusinessFormOption[] => {
     const rows = commercialRowsFor(field.id, values, held, projectId)
     const offered = rows === undefined ? base.options(field, values, projectId, opened) : keptOptions(field, rowOptions(rows), keptValue(field.id, values, opened))

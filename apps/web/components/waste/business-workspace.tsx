@@ -272,7 +272,7 @@ import { SchemeDetailsPage } from "@/components/waste/scheme-details-page"
 import { SchemePlanAheadRunner } from "@/components/waste/scheme-plan-ahead"
 import { useBusinessRecordStore, useServerModuleState, whenSaved } from "@/components/waste/business-record-store"
 import { useApiConfigured, useApiSession } from "@/components/waste/api-session-store"
-import { commandSurfaceFor, initialFiltersOf, listShows } from "@/components/waste/commands/command-surfaces"
+import { commandSurfaceFor, initialFiltersOf, listShows, primaryOf } from "@/components/waste/commands/command-surfaces"
 import { offersRowsOf } from "@/components/waste/pickable-records"
 import { projectScopeOfMe } from "@/lib/api/records/me-projects"
 import { isServerBacked, serverModuleOf } from "@/lib/api/records/modules"
@@ -289,6 +289,8 @@ import { ServiceProviderDetailsPage } from "@/components/waste/service-provider-
 import { ContainerDetailsSheet } from "@/components/waste/containers-assets-register"
 import { MapPlanningView } from "@/components/waste/map-planning/map-planning-view"
 import { SERVICE_AREAS_MODULE, serviceAreaFormValues } from "@/lib/data/service-areas"
+import { serviceAreaKindForField, serviceAreaKindOf } from "@/lib/data/provider-money"
+import { pilotProviderCreate, pilotServiceAreaCreate } from "@/lib/data/provider-money-forms"
 import {
   isInProjectScope,
   isProjectRecordId,
@@ -1724,6 +1726,8 @@ export function BusinessWorkspace({
     ? viewOptions.viewType
     : "table"
   const effectiveShowPrimaryAction = showPrimaryAction && hasGrant("create")
+  // A surface's own dialog stands with the create grant alone, whatever the fixture form (#186: Settlements').
+  const primary = primaryOf(commandSurface, effectiveShowPrimaryAction, canOpenBusinessForm && Boolean(formSchema))
   const canCreateFromView =
     effectiveShowPrimaryAction &&
     formIsPrimary &&
@@ -2565,6 +2569,17 @@ export function BusinessWorkspace({
             !isAgreementRecord(record)
           ) {
             return false
+          }
+          // A picker at the service areas module offers the kind its field
+          // names (slice 11 of #81): on the API the module holds the awards
+          // and their assignments, and a price names an assignment, never an award.
+          if (
+            apiConfigured &&
+            resolved.workspaceId === SERVICE_AREAS_MODULE.workspaceId &&
+            resolved.module.id === SERVICE_AREAS_MODULE.moduleId
+          ) {
+            const kind = serviceAreaKindForField(field.id)
+            if (kind !== null && serviceAreaKindOf(record) !== kind) return false
           }
           if (field.id === "projectId") {
             if (!isProjectRecordId(record.id)) return false
@@ -4660,6 +4675,13 @@ export function BusinessWorkspace({
     if (!selectedRecord) return
     const serviceProviderId = selectedRecord.id
 
+    // On the Pilot an award and a price are the API's forms (slice 11 of #81):
+    // an award to this provider, a price under one of its assignments.
+    if (apiConfigured && (target === "service-area" || target === "service-provider-price")) {
+      setRelatedCreateTarget(pilotProviderCreate(target, serviceProviderId, localDateInputValue(), getRecords(SERVICE_AREAS_MODULE.workspaceId, SERVICE_AREAS_MODULE.moduleId, [])))
+      return
+    }
+
     if (target === "user") {
       setRelatedCreateTarget({
         workspaceId: "service-providers",
@@ -4885,7 +4907,7 @@ export function BusinessWorkspace({
           </div>
           {(isContainersAssetsView ||
             showExportAction ||
-            (effectiveShowPrimaryAction && canOpenBusinessForm)) && (
+            primary !== null) && (
             <div className="flex items-center gap-2">
               {isContainersAssetsView && (
                 <Button variant="outline" size="sm" asChild>
@@ -4909,10 +4931,9 @@ export function BusinessWorkspace({
                   <span className="hidden sm:inline">Export</span>
                 </Button>
               )}
-              {effectiveShowPrimaryAction && canOpenBusinessForm && formSchema && (
-                !formIsPrimary ? (
-                  PrimarySurface ? <PrimarySurface label={activeModule.primaryAction} /> : null
-                ) : isPriceEngineProducts ? (
+              {primary === "surface" && PrimarySurface && <PrimarySurface label={activeModule.primaryAction} />}
+              {primary === "form" && formSchema && (
+                isPriceEngineProducts ? (
                   <Button
                     size="sm"
                     onClick={() =>
@@ -5102,13 +5123,20 @@ export function BusinessWorkspace({
           containersModule={containersModuleDefinition}
           canCreateScheme={hasGrant("create")}
           canCreateServiceArea={hasGrantOn(SERVICE_AREAS_MODULE.workspaceId, SERVICE_AREAS_MODULE.moduleId, "create")}
-          onCreateServiceArea={(seed) =>
+          onCreateServiceArea={(seed) => {
+            // On the Pilot the award is the planning areas the selection
+            // touches, the drawn polygon never persisted (slice 11 of #81).
+            const opened = apiConfigured ? pilotServiceAreaCreate(seed) : serviceAreaFormValues(seed)
+            if ("refused" in opened) {
+              toast.error("No service area to create", { description: opened.refused })
+              return
+            }
             setRelatedCreateTarget({
               workspaceId: SERVICE_AREAS_MODULE.workspaceId,
               moduleId: SERVICE_AREAS_MODULE.moduleId,
-              ...serviceAreaFormValues(seed),
+              ...opened,
             })
-          }
+          }}
           onCreateScheme={handleGuidedSchemeCreate}
         />
       ) : (

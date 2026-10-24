@@ -12,7 +12,7 @@ import { EMPTY_FACT, cleanFact, typedString } from "../record-values"
 import { isSoftDeleted } from "../record-visibility"
 import { pointInPolygon } from "./geo"
 import { containerLocation, type Gazetteer } from "./positions"
-import { serviceAreaPolygon } from "./service-areas"
+import { serviceAreaPolygon, serviceAreaZoneIds } from "./service-areas"
 
 export type ServiceAreaCoverage = {
   id: string
@@ -28,16 +28,9 @@ const lower = (value: string) => value.trim().toLowerCase()
 
 /** The planning-area ids a service area covers, plus the names its refs and facts carry. */
 function serviceAreaZones(area: BusinessRecord): { ids: Set<string>; names: Set<string> } {
-  const ids = new Set<string>()
+  const ids = new Set(serviceAreaZoneIds(area))
   const names = new Set<string>()
-  for (const id of typedString(area.submittedValues, "zoneIds")?.split(",") ?? []) {
-    if (id.trim()) ids.add(id.trim())
-  }
-  for (const ref of area.relationRefs ?? []) {
-    if (ref.fieldId !== "zoneIds") continue
-    ids.add(ref.recordId)
-    names.add(lower(ref.label))
-  }
+  for (const ref of area.relationRefs ?? []) if (ref.fieldId === "zoneIds") names.add(lower(ref.label))
   for (const name of cleanFact(area.facts["Planning areas"])?.split(/[·,]/) ?? []) {
     if (name.trim()) names.add(lower(name))
   }
@@ -71,7 +64,7 @@ export function serviceAreasForSelection(
       name: area.name,
       serviceProvider: cleanFact(area.facts["Service provider"]) ?? EMPTY_FACT,
       status: area.status,
-      services: cleanFact(area.facts.Services) ?? EMPTY_FACT,
+      services: cleanFact(area.facts.Services) ?? cleanFact(area.facts["Waste fractions"]) ?? EMPTY_FACT,
       containers: count,
     })
   }

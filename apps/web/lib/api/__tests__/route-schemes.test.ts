@@ -179,7 +179,7 @@ describe("the route schemes module", () => {
       assert.ok(SERVER_MODULE_KEYS.indexOf(before) < at, before)
     }
     // The routes' modules follow it at once (#179), the Live board's short read ahead of the two windowed ones, and after them only the modules that name a route — Resolution's (#182) and the money a route's work makes (#185); a module switched later that names no route goes in ahead of the schemes (the order on #191).
-    assert.deepEqual(SERVER_MODULE_KEYS.slice(at + 1), ["route-studio.live", "route-studio.routes", "route-studio.pickups", "operate.tickets", "operate.exceptions", "commercial.events", "commercial.billing", "commercial.invoices"])
+    assert.deepEqual(SERVER_MODULE_KEYS.slice(at + 1), ["route-studio.live", "route-studio.routes", "route-studio.pickups", "operate.tickets", "operate.exceptions", "commercial.events", "commercial.billing", "commercial.invoices", "commercial.settlements", "route-studio.weights"])
   })
 
   test("loads one list, and lends no fixture its id: a scheme is `scheme-<uuid>` from the start", async () => {

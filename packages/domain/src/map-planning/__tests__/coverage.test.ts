@@ -60,6 +60,11 @@ describe("serviceAreasForSelection", () => {
     assert.equal(areas[0].services, "Organic · paper")
   })
 
+  test("names an API award's waste fractions where it has no service list (#186)", () => {
+    const award = record("service-area-1", { "Service provider": "NordRen ApS", "Waste fractions": "Organic, Paper" }, { name: "Østerbro award", submittedValues: { zoneIds: "area-osterbro-contract" } })
+    assert.equal(serviceAreasForSelection(containers, [award], TEST_GAZETTEER)[0].services, "Organic, Paper")
+  })
+
   test("nothing selected, nothing covered", () => {
     assert.deepEqual(serviceAreasForSelection([], serviceAreas, TEST_GAZETTEER), [])
   })

@@ -237,6 +237,13 @@ describe("the billing runs module", () => {
     assert.deepEqual(billingRunAdapter.toRecord({ ...run, requestedBy: null, invoiceCount: 2 }, context(runFixtures)).facts["Requested by"], "The monthly schedule")
   })
 
+  test("shows no total where it cannot say the project's currency: the run's details read its invoices' totals per currency", () => {
+    const unknown = billingRunAdapter.toRecord(run, { ...context(runFixtures), resolve: resolverOver(new Map()) })
+    assert.equal(unknown.facts.Net, undefined)
+    assert.equal(unknown.facts.VAT, undefined)
+    assert.equal(unknown.value, "1 invoice")
+  })
+
   test("makes one body for the preview and the run, and refuses a period that runs backwards in the contract's words", () => {
     assert.equal(PERIOD_ORDERED, WIRE_PERIOD_ORDERED)
     const values = { projectId: "project-copenhagen", periodFrom: "2026-09-01", periodTo: "2026-09-30", note: "September" }

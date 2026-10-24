@@ -36,6 +36,8 @@ import { BILLING_LIST, EVENTS_LIST, INVOICES_LIST, PRICE_ROWS_LIST } from "./com
 import { AddContainerSurface, ContainerCommandsSurface } from "./container-surfaces"
 import { AddPropertyGroupSurface, AddPropertySurface, AddSharedPointSurface, PropertyCommandsSurface, PropertyGroupCommandsSurface, SharedPointCommandsSurface } from "./place-surfaces"
 import { PriceRowCommandsSurface, PriceRowsPrimarySurface, ProductCommandsSurface, ProductsPrimarySurface } from "./pricing-surfaces"
+import { PROVIDER_PRICES_LIST, SERVICE_AREAS_LIST, SETTLEMENTS_LIST, WEIGHTS_LIST } from "./provider-money-lists"
+import { AddProviderPriceSurface, CreateServiceAreaSurface, OpenSettlementSurface, ProviderPriceCommandsSurface, ServiceAreaCommandsSurface, ServiceAreasRead, SettlementSurface, WeightReviewSurface } from "./provider-money-surfaces"
 import { LiveBoardRefresh, LiveRouteSurface, PickupCommandsSurface, RouteCommandsSurface } from "./route-surfaces"
 
 /** What a primary surface is handed: the label the module's primary action carries. */
@@ -49,9 +51,9 @@ export type CommandSurface = {
    * What stands in for the module's primary action on the Pilot: its own
    * create form (`"form"`, the create going through the adapter as ever), a
    * dialog of the module's own, or nothing, for a module the wire only reads.
-   * It is offered where the module's fixture form offered its primary action
-   * (the workspace's own guard: a create grant and a form schema), so a
-   * module with no fixture form offers no primary surface either.
+   * A dialog of the module's own is offered with the create grant alone,
+   * whatever the fixture form (#186: Settlements' is disabled); the form,
+   * where the module's fixture form offers one (`primaryOf`).
    */
   primary: "form" | ComponentType<PrimarySurfaceProps> | null
   /** The row's commands, and what they read (a ledger, a history), in its details. */
@@ -87,6 +89,13 @@ export type ModuleList = {
 /** Whether a record is one of a module's rows on the Pilot: every record, unless its list says which (`shows`); the workspace scopes the module by it before any filter. */
 export function listShows(list: ModuleList | undefined, record: BusinessRecord): boolean {
   return list?.shows?.(record) ?? true
+}
+
+/** Which primary action a module offers: its surface's own dialog with the create grant alone, its form where the fixture form offers one (`formOffered`), or none. */
+export function primaryOf(surface: CommandSurface | undefined, granted: boolean, formOffered: boolean): "surface" | "form" | null {
+  if (!granted) return null
+  if (surface !== undefined && surface.primary !== "form") return surface.primary === null ? null : "surface"
+  return formOffered ? "form" : null
 }
 
 /** The filters a module opens with: its list's `initial` over no filter, or no filter for a module without one (every module in fixture mode). */
@@ -126,6 +135,17 @@ export const COMMAND_SURFACES: Readonly<Record<string, CommandSurface>> = {
   "commercial.events": { primary: AddManualEventSurface, rowActions: EventCommandsSurface, list: EVENTS_LIST },
   "commercial.billing": { primary: RunBillingSurface, rowActions: BillingRunSurface, list: BILLING_LIST },
   "commercial.invoices": { primary: null, rowActions: InvoiceSurface, list: INVOICES_LIST },
+  // Slice 11 (#186): an award by its own form, its assignments in its
+  // details; a price's fee moved by Apply index alone; a settlement by the
+  // commands its status moves by; an unload by its reviews, the desk's queue
+  // first. Weights are written by the Driver App, never the office. The
+  // awards are read again where their assignments are listed or picked: an
+  // award the map or the provider page made has its first assignment on the
+  // server alone.
+  "service-providers.service-areas": { primary: CreateServiceAreaSurface, rowActions: ServiceAreaCommandsSurface, list: SERVICE_AREAS_LIST, whileShown: ServiceAreasRead },
+  "commercial.service-provider-prices": { primary: AddProviderPriceSurface, rowActions: ProviderPriceCommandsSurface, list: PROVIDER_PRICES_LIST, whileShown: ServiceAreasRead },
+  "commercial.settlements": { primary: OpenSettlementSurface, rowActions: SettlementSurface, list: SETTLEMENTS_LIST, whileShown: ServiceAreasRead },
+  "route-studio.weights": { primary: null, rowActions: WeightReviewSurface, list: WEIGHTS_LIST },
 }
 
 /** The module's surface while the adapter is configured and the module switched; undefined otherwise, and always in fixture mode. */
