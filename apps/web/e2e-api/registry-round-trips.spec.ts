@@ -131,10 +131,53 @@ test("Service Providers: created in the browser with Location, read back, change
   expect(refused.status()).toBe(409)
   await expect(page.getByText(`${otherName} was not saved`)).toBeVisible()
   await expect(page.getByText(`This company already has a service provider with the registration number ${taken} in DK`)).toBeVisible()
+  // The dialog waited for the answer and stays open with what was typed, its submit free again, to correct the number (#239).
+  const kept = page.getByRole("dialog").filter({ has: page.getByRole("heading", { name: "Add service provider" }) })
+  await expect(kept.getByLabel("Legal company name")).toHaveValue(otherName)
+  await expect(kept.getByLabel("Registration number")).toHaveValue(taken)
+  await expect(kept.getByRole("button", { name: "Add service provider" })).toBeEnabled()
   await openLoaded(page, "/service-providers", "/service-providers")
   await expect(await rowNamed(page, legalName)).toBeVisible()
   await expect(await rowNamed(page, elsewhere.legalName)).toBeVisible()
   await expect(await rowNamed(page, otherName)).toHaveCount(0)
+})
+
+test("Service Providers: the dialog holds its submit while the create is out, and a late answer closes no dialog opened since (#239)", async ({ page }) => {
+  await openLoaded(page, "/service-providers", "/service-providers")
+  // The create is held at the network until the test lets it answer.
+  let release = () => undefined as void
+  const answerable = new Promise<void>((resolve) => (release = resolve))
+  await page.route("**/waste-api/service-providers", async (route) => {
+    if (route.request().method() !== "POST") return route.fallback()
+    await answerable
+    await route.continue()
+  })
+  const dialog = page.getByRole("dialog").filter({ has: page.getByRole("heading", { name: "Add service provider" }) })
+  const submit = dialog.getByRole("button", { name: "Add service provider" })
+  await page.getByRole("button", { name: "Add service provider" }).click()
+  await dialog.getByLabel("Legal company name").fill(uniqueName("E2E Held Provider"))
+  await dialog.getByLabel("Registration number").fill(registrationNumber())
+  await dialog.getByLabel("Primary contact").fill("Held")
+  await dialog.getByLabel("Contact email").fill("held@waste-e2e.example")
+  await dialog.getByLabel("Relationship starts").fill("2026-10-01")
+  const answered = answerOf(page, "POST", "/service-providers")
+  await submit.click()
+  await expect(submit).toBeDisabled()
+
+  // The person leaves while it is out and opens the form again: the new form is theirs, not held by the earlier write.
+  await dialog.getByRole("button", { name: "Cancel" }).click()
+  await expect(dialog).toBeHidden()
+  await page.getByRole("button", { name: "Add service provider" }).click()
+  await expect(dialog).toBeVisible()
+  await dialog.getByLabel("Legal company name").fill("Another provider, still typing")
+  await expect(submit).toBeEnabled()
+
+  release()
+  expect((await answered).status()).toBe(201)
+  await expect(page.getByRole("region", { name: "Notifications alt+T" })).toContainText("created")
+  // The answer closed no dialog opened since, and took the person to no row.
+  await expect(dialog.getByLabel("Legal company name")).toHaveValue("Another provider, still typing")
+  await expect(page).not.toHaveURL(/record=/)
 })
 
 async function createOrganisation(page: Page, values: { name: string; registrationNumber: string; email: string }) {

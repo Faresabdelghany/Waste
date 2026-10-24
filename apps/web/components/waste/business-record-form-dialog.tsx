@@ -81,6 +81,8 @@ type BusinessRecordFormDialogProps = {
   initialValueOverrides?: BusinessFormValues
   validateValues?: (values: BusinessFormValues) => Record<string, string>
   reviewSummary?: (values: BusinessFormValues) => readonly ReviewItem[]
+  /** A write of this dialog's is out to the API (#239): its submit is held, and the dialog waits, open, for the answer. */
+  submitting?: boolean
 }
 
 function initialValues(
@@ -423,6 +425,7 @@ export function BusinessRecordFormDialog({
   initialValueOverrides = emptyInitialValues,
   validateValues,
   reviewSummary,
+  submitting = false,
 }: BusinessRecordFormDialogProps) {
   const [values, setValues] = useState<BusinessFormValues>(() =>
     initialValues(schema, initialValueOverrides),
@@ -562,6 +565,7 @@ export function BusinessRecordFormDialog({
   }
 
   const advance = () => {
+    if (submitting) return
     setAttempted(true)
     if (Object.keys(fieldErrors).length > 0) return
     if (schema.execution?.reviewBeforeSubmit) {
@@ -573,7 +577,7 @@ export function BusinessRecordFormDialog({
   }
 
   const confirm = () => {
-    if (!reviewConfirmed) return
+    if (!reviewConfirmed || submitting) return
     onSubmit(submittedValues)
   }
 
@@ -890,7 +894,7 @@ export function BusinessRecordFormDialog({
                 <ArrowLeft className="h-4 w-4" />
                 Back
               </Button>
-              <Button onClick={confirm} disabled={!reviewConfirmed}>
+              <Button onClick={confirm} disabled={!reviewConfirmed || submitting}>
                 <CheckCircle className="h-4 w-4" />
                 {completionLabel(schema)}
               </Button>
@@ -900,7 +904,7 @@ export function BusinessRecordFormDialog({
               <Button variant="outline" onClick={() => onOpenChange(false)}>
                 Cancel
               </Button>
-              <Button onClick={advance}>
+              <Button onClick={advance} disabled={submitting}>
                 {schema.submitLabel}
               </Button>
             </>
