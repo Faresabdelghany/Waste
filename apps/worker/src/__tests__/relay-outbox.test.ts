@@ -406,9 +406,11 @@ describe("execution.relay-outbox", { skip: roles.skip }, () => {
     assert.deepEqual(event.payload, { id: id(0x230), status: "failed", reason: "safety" })
     assert.equal(event.occurredAt, "2026-10-05T06:00:00.000Z")
     assert.equal(typeof event.publishedAt, "string")
-    const [consumed] = await owner.sql.unsafe<JobRow[]>(`select id, name, state, data, start_after::text, output from ${PGBOSS_SCHEMA}.job where name = 'outbox.pickup-failed' and state = 'completed' and data->>'id' = '${a7}'`)
-    assert.ok(consumed, "the consumer's job completed")
-    assert.deepEqual(consumed.output, { events: [a7] })
+    // The handler has the event before pg-boss records its job completed, so the row is waited for rather than read at once.
+    const consumedJob = async () =>
+      (await owner.sql.unsafe<JobRow[]>(`select id, name, state, data, start_after::text, output from ${PGBOSS_SCHEMA}.job where name = 'outbox.pickup-failed' and state = 'completed' and data->>'id' = '${a7}'`))[0]
+    await until(async () => (await consumedJob()) !== undefined, 10_000, "the consumer's job completing")
+    assert.deepEqual((await consumedJob())!.output, { events: [a7] })
   })
 
   test("a consumer refuses a job of another kind on its queue, and one whose data is not a relayed event: the job fails, for the readiness count, and the handler is not reached", async () => {
