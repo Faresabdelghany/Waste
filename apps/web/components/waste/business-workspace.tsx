@@ -43,6 +43,7 @@ import {
 import { actionDecisionShape, actionRecordedSentence } from "@/lib/data/action-decision"
 import { COLLECTION_CALENDARS_MODULE } from "@/lib/data/collection-calendars"
 import { PLANNING_AREAS_MODULE } from "@/lib/data/planning-areas"
+import { readableKey } from "@/lib/data/record-key"
 import { ROUTE_SCHEMES_MODULE, schemeValuesOfDraft, validationWhenUnplaced } from "@/lib/data/route-schemes"
 import {
   clearedFactKeys,
@@ -2431,7 +2432,7 @@ export function BusinessWorkspace({
               id: `audit-companion-${Date.now()}`,
               before: "Absent",
               after: companion.status,
-              evidence: `Created from ${record.id} · ${event.evidence}`,
+              evidence: `Created from ${readableKey(record.id) ?? record.name} · ${event.evidence}`,
             },
           ],
         }))
@@ -5794,6 +5795,7 @@ export function BusinessWorkspace({
           showActions={canRunRecordActions}
           extraActions={selectedRecord ? recordExtraActions(selectedRecord) : undefined}
           commands={RowSurface && detailsRecord ? <RowSurface record={detailsRecord} /> : undefined}
+          onApi={apiConfigured && activeModuleOnApi !== null}
           attention={
             isSchemesView && selectedRecord
               ? schemeRowsById.get(selectedRecord.id)?.attention
@@ -5937,6 +5939,7 @@ function RecordDetailsDialog({
   extraActions,
   commands,
   attention,
+  onApi = false,
 }: {
   module: ModuleDefinition
   record: BusinessRecord | null
@@ -5953,7 +5956,12 @@ function RecordDetailsDialog({
   extraActions?: RecordExtraAction[]
   /** Live scheme Attention warnings; renders the amber overlay badge. */
   attention?: string[]
+  /** The module is read from the API: its statuses are the wire's, which the fixture lifecycle may not list (#261). */
+  onApi?: boolean
 }) {
+  const key = record === null ? undefined : readableKey(record.id)
+  // A status the lifecycle does not list: said alone where the module's statuses are the API's, which the strip does not walk.
+  const offLifecycle = record !== null && !module.lifecycle.includes(record.status)
   return (
     <Sheet open={Boolean(record)} onOpenChange={(open) => !open && onClose()}>
       <SheetContent className="w-full gap-0 p-0 sm:max-w-2xl">
@@ -5968,9 +5976,11 @@ function RecordDetailsDialog({
                   {record.status}
                 </Badge>
                 <SchemeAttentionBadge warnings={attention} />
-                <Badge variant="outline" className="rounded-full text-[11px] font-normal">
-                  {record.id}
-                </Badge>
+                {key !== undefined && (
+                  <Badge variant="outline" className="rounded-full text-[11px] font-normal">
+                    {key}
+                  </Badge>
+                )}
                 <RecordActionsMenu
                   record={record}
                   entityLabel={module.entityLabel}
@@ -5998,36 +6008,38 @@ function RecordDetailsDialog({
 
               <section className="space-y-4">
                 <h3 className="text-sm font-semibold">Lifecycle</h3>
-                {!module.lifecycle.includes(record.status) && (
+                {offLifecycle && (
                   <Badge
                     variant="outline"
                     className={cn("rounded-full text-[11px]", statusClasses(record.status))}
                   >
-                    Operational flag · {record.status}
+                    Current status · {record.status}
                   </Badge>
                 )}
-                <div className="flex flex-wrap items-center gap-2">
-                  {module.lifecycle.map((state, index) => {
-                    const isCurrent = state === record.status
-                    return (
-                      <div key={state} className="flex items-center gap-2">
-                        <span
-                          className={cn(
-                            "flex h-7 items-center rounded-full border px-3 text-xs",
-                            isCurrent
-                              ? "border-primary bg-primary text-primary-foreground"
-                              : "border-border text-muted-foreground",
+                {!(onApi && offLifecycle) && (
+                  <div className="flex flex-wrap items-center gap-2">
+                    {module.lifecycle.map((state, index) => {
+                      const isCurrent = state === record.status
+                      return (
+                        <div key={state} className="flex items-center gap-2">
+                          <span
+                            className={cn(
+                              "flex h-7 items-center rounded-full border px-3 text-xs",
+                              isCurrent
+                                ? "border-primary bg-primary text-primary-foreground"
+                                : "border-border text-muted-foreground",
+                            )}
+                          >
+                            {state}
+                          </span>
+                          {index < module.lifecycle.length - 1 && (
+                            <span className="h-px w-3 bg-border" />
                           )}
-                        >
-                          {state}
-                        </span>
-                        {index < module.lifecycle.length - 1 && (
-                          <span className="h-px w-3 bg-border" />
-                        )}
-                      </div>
-                    )
-                  })}
-                </div>
+                        </div>
+                      )
+                    })}
+                  </div>
+                )}
               </section>
 
               <section className="space-y-4">

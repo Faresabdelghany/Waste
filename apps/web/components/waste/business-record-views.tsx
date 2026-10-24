@@ -52,6 +52,7 @@ export function statusClasses(status: string): string {
     normalized.includes("healthy") ||
     normalized.includes("certified") ||
     normalized.includes("published") ||
+    normalized === "issued" ||
     normalized.includes("open")
   ) {
     return "bg-teal-50 text-teal-700 border-transparent dark:bg-teal-500/15 dark:text-teal-100"
@@ -64,7 +65,7 @@ export function statusClasses(status: string): string {
     normalized.includes("conflict") ||
     normalized.includes("out of stock") ||
     normalized.includes("expired") ||
-    normalized.includes("issue")
+    /\bissues?\b/.test(normalized)
   ) {
     return "bg-rose-50 text-rose-700 border-transparent dark:bg-rose-500/15 dark:text-rose-100"
   }

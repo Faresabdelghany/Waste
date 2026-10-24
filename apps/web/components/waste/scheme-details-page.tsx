@@ -134,6 +134,7 @@ import {
 } from "@/components/waste/business-record-views"
 import { RecordSearchInput } from "@/components/waste/record-search-input"
 import { useModuleRecords } from "@/components/waste/scheme-route-map"
+import { readableKey } from "@/lib/data/record-key"
 
 const GENERATED_AT_FORMAT = new Intl.DateTimeFormat("en-GB", {
   day: "numeric",
@@ -378,7 +379,7 @@ export function SchemeDetailsPage({
                 <SchemeAttentionBadge warnings={attention} />
               </div>
               <p className="mt-0.5 truncate text-xs text-muted-foreground">
-                {record.context} · {record.id}
+                {[record.context, readableKey(record.id)].filter(Boolean).join(" · ")}
               </p>
             </div>
           </div>

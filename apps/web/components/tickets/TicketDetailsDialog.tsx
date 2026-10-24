@@ -48,6 +48,7 @@ import { useOrganizationStore } from "@/components/settings/organization-store"
 import { useApiConfigured } from "@/components/waste/api-session-store"
 import { isServerBacked } from "@/lib/api/records/modules"
 import { TICKETS_MODULE } from "@/lib/api/records/tickets"
+import { readableKey } from "@/lib/data/record-key"
 
 import { LiveTicketDetailsDialog } from "./ticket-details-live"
 
@@ -555,7 +556,7 @@ function FixtureTicketDetailsDialog({
                     </Badge>
                   </div>
                   <DialogDescription className="mt-0.5 truncate text-xs sm:text-sm">
-                    {record.id} · {information.context} · Updated {informationActivities.length > 0 ? "now" : record.updated.toLowerCase()}
+                    {[readableKey(record.id), information.context, `Updated ${informationActivities.length > 0 ? "now" : record.updated.toLowerCase()}`].filter(Boolean).join(" · ")}
                   </DialogDescription>
                 </div>
               </div>

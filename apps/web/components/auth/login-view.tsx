@@ -67,6 +67,8 @@ export function LoginView() {
   }
 
   const refusal = session === null && ended?.reason === "refused" ? ended.detail : null
+  // The API's account refusal only: Auth refuses a refresh for many reasons — a token revoked by a sign-out elsewhere — and says why itself.
+  const accountRefused = session === null && ended?.reason === "refused" && ended.by === "api"
 
   return (
     <main className="flex min-h-svh items-center justify-center bg-muted/30 px-4 py-10">
@@ -87,9 +89,17 @@ export function LoginView() {
           </div>
 
           {refusal !== null && (
-            <p role="alert" className="mt-6 rounded-xl border border-destructive/30 bg-destructive/5 p-3 text-sm text-destructive">
-              {refusal}
-            </p>
+            <>
+              <p role="alert" aria-describedby={accountRefused ? "login-refusal-help" : undefined} className="mt-6 rounded-xl border border-destructive/30 bg-destructive/5 p-3 text-sm text-destructive">
+                {refusal}
+              </p>
+              {/* The API's sentence is accurate and no help on its own: a deactivated account is the office's to restore (#261). */}
+              {accountRefused && (
+                <p id="login-refusal-help" className="mt-2 text-sm text-muted-foreground">
+                  If you signed in here before, your account may have been deactivated. Ask your office to restore it.
+                </p>
+              )}
+            </>
           )}
 
           {apiConfigured && !passwordSignInAvailable && (

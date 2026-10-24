@@ -50,10 +50,11 @@ import { readStoredSession, writeStoredSession } from "./session-storage"
 
 /**
  * How the last session ended: the person signed out; the account was
- * refused — by the API (`NO_ACTIVE_ACCOUNT`) or by Auth at a refresh — with
- * the sentence /login shows; or it ran out with nobody able to refresh it.
+ * refused — by the API (`NO_ACTIVE_ACCOUNT`) or by Auth at a refresh, `by`
+ * says which — with the sentence /login shows; or it ran out with nobody
+ * able to refresh it.
  */
-export type SessionEnding = { reason: "signed-out" } | { reason: "refused"; detail: string } | { reason: "expired" }
+export type SessionEnding = { reason: "signed-out" } | { reason: "refused"; detail: string; by: "api" | "auth" } | { reason: "expired" }
 
 export type SessionState = {
   session: ApiSession | null
@@ -158,7 +159,7 @@ export function createApiSession({ api, auth, fetch: doFetch, now = Date.now }: 
   const refused = (session: ApiSession, problem: Problem) => {
     if (!isAccountRefusal(problem)) return
     const who = whoOf(session)
-    endWhen((current) => whoOf(current) === who, { reason: "refused", detail: problem.detail ?? problem.title })
+    endWhen((current) => whoOf(current) === who, { reason: "refused", detail: problem.detail ?? problem.title, by: "api" })
   }
 
   const clientFor = (session: ApiSession): ApiClient | null => {
@@ -189,7 +190,7 @@ export function createApiSession({ api, auth, fetch: doFetch, now = Date.now }: 
       (next) => store.set((state) => (state.session !== null && spent(state.session) ? { ...state, session: next } : state)),
       (error: unknown) => {
         // A refresh Auth refused ends the session; one it could not answer now is tried again on the next tick.
-        if (refusedAtRefresh(error)) endWhen(spent, { reason: "refused", detail: error.message })
+        if (refusedAtRefresh(error)) endWhen(spent, { reason: "refused", detail: error.message, by: "auth" })
       },
     )
     const settled = refreshing
