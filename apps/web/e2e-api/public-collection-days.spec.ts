@@ -1,3 +1,4 @@
+import { E2E } from "./env"
 import { expect, freshContext, test } from "./fixtures"
 
 // The public Collection Days end to end (Issue #293, M2b, ADR-0010). The
@@ -6,8 +7,12 @@ import { expect, freshContext, test } from "./fixtures"
 // Strandboulevarden 52, whose Residual bin the seeded RS-Østerbro · Organic B
 // collects on Tuesdays and Thursdays every other week, reads its days by
 // month, reads the feed the page links to, and opens the widget a
-// municipality embeds. The days are read as weekdays, never as dates: they
-// follow today. Unpublished again, the address is not found and nor is its
+// municipality embeds. The page is held to the door's own answer for the
+// address, date for date, never to a weekday pattern: the e2e database is
+// shared, and another spec generating RS-Central · Week A (whose Residual
+// rule may match the bin) or moving one of its routes onto today (the
+// dispatched-route helper) changes the days, rightly. The door's rules are
+// the API's tests'. Unpublished again, the address is not found and nor is its
 // feed; the project goes back unpublished whatever happens.
 
 type Project = { id: string; name: string }
@@ -44,9 +49,14 @@ test("a visitor with no account finds an address of a published project, reads i
 
     await expect(reader.getByRole("heading", { level: 1, name: ADDRESS })).toBeVisible()
     await expect(reader.getByText("The next 8 weeks")).toBeVisible()
+    const addressId = new URL(reader.url()).pathname.split("/").at(-1)
+    const answered = await visitor.request.get(`${E2E.apiUrl}/public/${slug}/addresses/${addressId}/collection-days`)
+    expect(answered.status()).toBe(200)
+    const doorDates = [...new Set(((await answered.json()) as { days: { date: string }[] }).days.map((day) => day.date))]
     const dates = reader.locator("li time")
     await expect(dates.first()).toBeVisible()
-    for (const label of await dates.allTextContents()) expect(label).toMatch(/^(Tuesday|Thursday) \d{1,2} [A-Z][a-z]+$/)
+    expect(await dates.evaluateAll((elements) => elements.map((element) => element.getAttribute("datetime"))), "the page shows the door's dates, each once, in order").toEqual(doorDates)
+    expect((await dates.allTextContents()).some((label) => /^(Tuesday|Thursday) /.test(label)), "Organic B's Tuesdays and Thursdays among them").toBe(true)
     await expect(reader.getByRole("listitem").filter({ hasText: "Residual" }).first()).toBeVisible()
 
     await reader.getByRole("link", { name: "26 weeks" }).click()
@@ -68,7 +78,9 @@ test("a visitor with no account finds an address of a published project, reads i
     const addressPath = feedPath!.replace(/\/calendar\.ics$/, "")
     await reader.goto(addressPath.replace("/calendar/", "/calendar/embed/"))
     await expect(reader.getByRole("heading", { level: 1, name: ADDRESS })).toBeVisible()
-    expect(await reader.locator("li time").count()).toBeLessThanOrEqual(6)
+    const widgetDates = await reader.locator("li time").evaluateAll((elements) => elements.map((element) => element.getAttribute("datetime")))
+    expect(widgetDates.length).toBeGreaterThan(0)
+    expect(widgetDates, "the widget's next dates are the door's first ones").toEqual(doorDates.slice(0, widgetDates.length))
     await expect(reader.getByRole("link", { name: "Full calendar" })).toHaveAttribute("href", addressPath)
     await expect(reader.getByRole("link", { name: "Subscribe in your calendar" })).toHaveCount(0)
 
