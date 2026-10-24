@@ -21,6 +21,7 @@ import {
   pinnedProjectId,
   projectRecordsOf,
   projectScopeLabel,
+  recordsForProject,
   selectedProjectIds,
   type ProjectScope,
 } from "../project-scope"
@@ -118,6 +119,24 @@ describe("isInProjectScope", () => {
 
   test("every permitted project shows everything", () => {
     assert.equal(isInProjectScope(scopedTo(harbor.id), ALL_PROJECTS), true)
+  })
+})
+
+describe("recordsForProject", () => {
+  const indreBy = record("area-indreby", "Indre By Operations", { projectIds: [copenhagen.id] })
+  const nordhavn = record("area-harbor", "Nordhavn Harbor Area", { projectIds: [harbor.id] })
+  const nasrCity = record("area-cairo", "Nasr City Operations", { projectIds: [cairo.id] })
+  const shared = record("area-shared", "Shared depot zone")
+  const areas = [indreBy, nordhavn, nasrCity, shared]
+
+  test("a picker under a picked project offers that project's records and the company-wide ones, never another project's (#249)", () => {
+    assert.deepEqual(recordsForProject(areas, copenhagen.id).map((area) => area.id), [indreBy.id, shared.id])
+    assert.deepEqual(recordsForProject(areas, cairo.id).map((area) => area.id), [nasrCity.id, shared.id])
+  })
+
+  test("before a project is picked, every record", () => {
+    assert.deepEqual(recordsForProject(areas, "").map((area) => area.id), areas.map((area) => area.id))
+    assert.deepEqual(recordsForProject(areas, undefined).map((area) => area.id), areas.map((area) => area.id))
   })
 })
 

@@ -35,6 +35,21 @@ const draftProjectIds = (data: GuidedSchemeData): string[] | undefined =>
   data.projectId ? [data.projectId] : undefined
 
 /**
+ * The draft with a patch applied (#250): a change of the scheme's service
+ * days takes the days it drops off every collection group — the group editor
+ * offers only the scheme's days, so a day left on a group could never be
+ * taken off there — and keeps the rest; a group left on no day stays, for
+ * the person to give it one or remove it. A day added gives no group that
+ * day. A patch that leaves the days alone leaves the groups as they are.
+ */
+export function patchGuidedDraft(draft: GuidedSchemeData, patch: Partial<GuidedSchemeData>): GuidedSchemeData {
+  const next = { ...draft, ...patch }
+  if (patch.serviceDays === undefined) return next
+  const kept = new Set(next.serviceDays)
+  return { ...next, groups: next.groups.map((group) => (group.days.every((day) => kept.has(day)) ? group : { ...group, days: group.days.filter((day) => kept.has(day)) })) }
+}
+
+/**
  * The draft's collection groups with the scheme's waste fraction applied:
  * the fraction is scoped once on the scheme (step 1) and every group
  * inherits it — the single source of truth for what the rules match. A

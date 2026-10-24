@@ -18,6 +18,7 @@ import {
   DialogDescription,
   DialogTitle,
 } from "@/components/ui/dialog"
+import { patchGuidedDraft } from "@waste/domain/route-schemes/draft"
 import type { GuidedSchemeData } from "@waste/domain/route-schemes/quick-create"
 import { cn } from "@/lib/utils"
 
@@ -69,8 +70,9 @@ export function SchemeWizard({
   const records = useWizardRecords()
   const model = useMemo(() => buildWizardModel(data, records), [data, records])
 
+  // A change of the service days takes the days it drops off the groups too (#250).
   const update = useCallback((patch: Partial<GuidedSchemeData>) => {
-    setData((current) => ({ ...current, ...patch }))
+    setData((current) => patchGuidedDraft(current, patch))
   }, [])
 
   const setStep = (target: WizardStepId) => {
