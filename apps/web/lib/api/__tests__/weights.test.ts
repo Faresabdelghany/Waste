@@ -15,6 +15,7 @@ import { WEIGHTS_MODULE } from "../../data/provider-money"
 import { problemSentence } from "../problem"
 import { NOTHING_RESOLVED, type MappingContext } from "../records/adapter"
 import { isServerBacked, SERVER_MODULE_KEYS } from "../records/modules"
+import { routesWindowFrom } from "../records/routes"
 import { commandRecord, loaded, resolverOver, spellsStatus, type ServerRecordsState } from "../records/server-records"
 import { BOTH_GROSS_AND_TARE, NET_IS_GROSS_LESS_TARE, REVIEW_LABELS, unloadAdapter, weightReviewsOffered, weightsModule } from "../records/weights"
 import { bodyOf, clientOver, json, problem, scripted } from "./scripted-fetch"
@@ -83,6 +84,7 @@ describe("the weights module", () => {
     assert.equal(record.facts.Occurred, "2026-09-29 15:05")
     assert.deepEqual(REVIEW_LABELS, { captured: "Needs review", approved: "Approved", rejected: "Rejected", corrected: "Corrected" })
     assert.equal(unloadAdapter.toRecord({ ...unload, grossKg: null, tareKg: null, weighbridgeTicket: null }, context).name, "Residual at ARC Amager")
+    assert.equal(record.description, "Residual unloaded at ARC Amager off RC-1042 · 2026-09-29.", "CONTEXT.md: an Unload, never a tip")
     assert.ok(!spellsStatus(weightsModule, record, "Approved"), "a review is a command, never a patch")
   })
 
@@ -92,6 +94,16 @@ describe("the weights module", () => {
     assert.deepEqual(offered("approved"), ["reject", "correct"])
     assert.deepEqual(offered("rejected"), ["approve", "correct"])
     assert.deepEqual(offered("corrected"), [], "the correction is the row to review")
+  })
+
+  test("reads the desk's queue whole and the reviewed over the routes' window, each unload once", async () => {
+    const reviewed = { ...raw, id: "01a0d2a4-a280-7096-8000-000000000002", weightReview: { status: "approved" as const, latestReviewId: null, correctionUnloadId: null } }
+    const { fetch, calls } = scripted([() => json({ items: [raw], nextCursor: null }), () => json({ items: [raw, reviewed], nextCursor: null })])
+    const listed = await unloadAdapter.list!(clientOver(fetch))
+    assert.deepEqual(listed.map((item) => item.id), [raw.id, reviewed.id])
+    const queries = calls.map((call) => Object.fromEntries(new URL(call.url).searchParams))
+    assert.equal(queries[0].reviewStatus, "captured")
+    assert.equal(queries[1].from, `${routesWindowFrom()}T00:00:00.000Z`, "35 days back, as the routes are read")
   })
 
   test("approves, rejects with its note and corrects with the new weights, reading the unload back after each review", async () => {

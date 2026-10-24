@@ -23,13 +23,14 @@ import type { WeightReviewCommand } from "@/lib/api/records/weights"
 import type { BusinessFormField, BusinessFormSchema, BusinessFormValues } from "./business-form-types"
 import type { BusinessRecord, WorkspaceId } from "./business-modules"
 import { PRODUCTS_MODULE } from "./commercial"
-import { blankNone, editedRecord } from "./commercial-forms"
+import { blankNone, editableOnly, editedRecord, text } from "./commercial-forms"
 import { mintedRecord, ORGANISATION_MODULE } from "./containers"
 import { MASTER_DATA_MODULE } from "./master-data"
 import { PLANNING_AREAS_MODULE } from "./planning-areas"
 import {
   ASSIGNMENT_RECORD_KIND,
   INDEXED_PRICE_RECORD_KIND,
+  isAssignmentRecord,
   PROVIDER_PRICE_RECORD_KIND,
   PROVIDER_PRICES_MODULE,
   SERVICE_AREA_RECORD_KIND,
@@ -38,15 +39,6 @@ import {
   SETTLEMENT_RECORD_KIND,
 } from "./provider-money"
 import { serviceAreaFormValues } from "./service-areas"
-
-const text = (values: BusinessFormValues, key: string) => (typeof values[key] === "string" ? (values[key] as string).trim() : "")
-
-/** A schema's fields read-only but those named. */
-const editableOnly = (schema: BusinessFormSchema, editable: readonly string[], overrides: Partial<BusinessFormSchema>): BusinessFormSchema => ({
-  ...schema,
-  ...overrides,
-  sections: schema.sections.map((section) => ({ ...section, fields: section.fields.map((field) => (editable.includes(field.id) ? field : { ...field, readOnly: true })) })),
-})
 
 const assignment: BusinessFormField = { id: "serviceAreaAssignmentId", label: "Service area assignment", type: "select", required: true, relation: SERVICE_AREAS_MODULE, description: "The provider and the area at once." }
 const lastDayIn = (label: string, description: string): BusinessFormField => ({ id: "validTo", label, type: "date", description })
@@ -100,14 +92,28 @@ export function pilotServiceAreaCreate(seed: ServiceAreaSeed): { refused: string
   return { initialValues: serviceAreaFormValues(seed).initialValues, schemaOverride: SERVICE_AREA_FORM }
 }
 
-/** The provider page's doors on the Pilot: an award to the provider, or a price under one of its assignments. */
+/**
+ * The provider page's doors on the Pilot: an award to the provider, or a
+ * price under one of its assignments — the service areas module's
+ * `serviceAreas`, of which the price's picker offers the provider's alone,
+ * its one assignment picked where it has one.
+ */
 export function pilotProviderCreate(
   target: "service-area" | "service-provider-price",
   serviceProviderId: string,
   today: string,
+  serviceAreas: readonly BusinessRecord[],
 ): { workspaceId: WorkspaceId; moduleId: string; initialValues: BusinessFormValues; schemaOverride: BusinessFormSchema } {
   if (target === "service-area") return { workspaceId: SERVICE_AREAS_MODULE.workspaceId, moduleId: SERVICE_AREAS_MODULE.moduleId, initialValues: { serviceProviderId, validFrom: today }, schemaOverride: SERVICE_AREA_FORM }
-  return { workspaceId: PROVIDER_PRICES_MODULE.workspaceId, moduleId: PROVIDER_PRICES_MODULE.moduleId, initialValues: { validFrom: today }, schemaOverride: PROVIDER_PRICE_FORM }
+  const held = serviceAreas.filter((record) => isAssignmentRecord(record) && record.submittedValues?.serviceProviderId === serviceProviderId).map((record) => record.id)
+  const schemaOverride: BusinessFormSchema = {
+    ...PROVIDER_PRICE_FORM,
+    sections: PROVIDER_PRICE_FORM.sections.map((section) => ({
+      ...section,
+      fields: section.fields.map((field) => (field.id === "serviceAreaAssignmentId" && field.relation !== undefined ? { ...field, relation: { ...field.relation, allowedRecordIds: held } } : field)),
+    })),
+  }
+  return { workspaceId: PROVIDER_PRICES_MODULE.workspaceId, moduleId: PROVIDER_PRICES_MODULE.moduleId, initialValues: { validFrom: today, ...(held.length === 1 ? { serviceAreaAssignmentId: held[0] } : {}) }, schemaOverride }
 }
 
 /** An award's edit: its name, text, sets, notes and period; its code and project held, its holders in the assignments. */

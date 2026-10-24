@@ -51,6 +51,7 @@ describe("the Price Engine's pickers", () => {
     assert.deepEqual(ids(commercialRowsFor("serviceAreaId", {}, more)), ["service-area-1"])
     assert.deepEqual(ids(commercialRowsFor("serviceAreaAssignmentId", {}, more)), ["assignment-1", "assignment-2"])
     assert.deepEqual(ids(commercialRowsFor("serviceAreaAssignmentId", {}, more, "project-harbor")), ["assignment-2"])
+    assert.deepEqual(ids(commercialRowsFor("productId", { serviceAreaAssignmentId: "assignment-2" }, more)), ["product-2"], "a price's products are its assignment's project's")
   })
 
   test("leave every other field to the command surfaces' own pickers", () => {

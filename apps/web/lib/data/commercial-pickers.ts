@@ -31,13 +31,13 @@ export type CommercialPickerRows = {
 
 const picked = (values: BusinessFormValues, key: string) => (typeof values[key] === "string" && values[key] !== "" ? (values[key] as string) : undefined)
 
-/** The project a dialog names: its list's, its agreement's, its own project field, else the surface's. */
+/** The project a dialog names: its list's, its agreement's, its assignment's, its own project field, else the surface's. */
 function projectOf(values: BusinessFormValues, rows: CommercialPickerRows, projectId: string | undefined): string | undefined {
-  const listId = picked(values, "priceListId")
-  const list = listId === undefined ? undefined : rows.priceRows.find((record) => record.id === listId)
-  const agreementId = picked(values, "agreementId")
-  const agreement = agreementId === undefined ? undefined : rows.agreements.find((record) => record.id === agreementId)
-  return list?.projectIds?.[0] ?? agreement?.projectIds?.[0] ?? picked(values, "projectId") ?? projectId
+  const named = (key: string, among: readonly BusinessRecord[] | undefined) => {
+    const id = picked(values, key)
+    return id === undefined ? undefined : among?.find((record) => record.id === id)?.projectIds?.[0]
+  }
+  return named("priceListId", rows.priceRows) ?? named("agreementId", rows.agreements) ?? named("serviceAreaAssignmentId", rows.serviceAreas) ?? picked(values, "projectId") ?? projectId
 }
 
 /** A row of the project, or of any where the dialog names none; a row of no project is everyone's. */

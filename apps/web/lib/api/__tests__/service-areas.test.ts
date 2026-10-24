@@ -120,6 +120,15 @@ describe("the service areas module", () => {
     assert.equal(result.records[0].facts["Service provider"], "NordRen ApS")
   })
 
+  test("read again over an award made this session, files its assignments under the award's own id, the one the read gives it", async () => {
+    const minted = { ...serviceAreaAdapter.toRecord({ ...area, assignments: [held] }, context()), id: "service-areas-service-area-1700000000000" }
+    const before_ = new Map([...state, ["service-providers.service-areas", moduleOf([minted], [area.id])]])
+    const { fetch } = scripted([() => pageOf([area]), () => pageOf([held]), () => pageOf([held])])
+    const result = await loadModule(clientOver(fetch), serviceAreasModule, { fixtures, state: before_, now: NOW })
+    assert.equal(result.records[0].id, `service-area-${area.id}`)
+    assert.equal(result.records[1].submittedValues?.serviceAreaId, `service-area-${area.id}`, "never the session's id the read replaces")
+  })
+
   test("shows an area as the set of planning areas and fractions it covers, its period a reading of the day, its fields the form's", () => {
     const record = loadedState.get("service-providers.service-areas")!.records[0]
     assert.equal(record.name, "Østerbro organic and paper")
@@ -210,6 +219,15 @@ describe("the service areas module", () => {
     assert.equal(calls[0].url, `http://api.test/service-areas/${area.id}/assignments`)
     assert.equal(outcome.kind, "created")
     assert.ok(bodyOf(calls[0]))
+  })
+
+  test("names the provider an award not yet in force is awarded to: its first upcoming holder", () => {
+    const upcoming = { ...area, validFrom: "2027-01-01", validTo: null }
+    const record = serviceAreaAdapter.toRecord({ ...upcoming, assignments: [{ ...held, validFrom: "2027-01-01", validTo: null }] }, context())
+    assert.equal(record.facts["Service provider"], "NordRen ApS")
+    assert.equal(record.serviceProviderId, `service-provider-${NORDREN}`)
+    const ended = serviceAreaAdapter.toRecord({ ...area, assignments: [before] }, context())
+    assert.equal(ended.facts["Service provider"], undefined, "an ended holder holds nothing")
   })
 
   test("lists an area's assignments, the first holder first, for its details", () => {

@@ -122,12 +122,18 @@ export function serviceAreaSeedFromSelection({
   }
 }
 
-/** The parts an area is drawn as: its drawn polygon, else the stored boundary of each planning area it names under `zoneIds` that has one. */
+/** The planning-area ids an award covers: its typed `zoneIds`, then its relation refs to them. */
+export function serviceAreaZoneIds(area: BusinessRecord): string[] {
+  const ids = new Set(typedString(area.submittedValues, "zoneIds")?.split(",").map((id) => id.trim()).filter(Boolean) ?? [])
+  for (const ref of area.relationRefs ?? []) if (ref.fieldId === "zoneIds") ids.add(ref.recordId)
+  return [...ids]
+}
+
+/** The parts an area is drawn as: its drawn polygon, else the stored boundary of each planning area it covers that has one. */
 function serviceAreaParts(area: BusinessRecord, planningAreas: readonly BusinessRecord[]): LngLat[][] {
   const drawn = serviceAreaPolygon(area)
   if (drawn) return [drawn]
-  const ids = typedString(area.submittedValues, "zoneIds")?.split(",").map((id) => id.trim()).filter(Boolean) ?? []
-  return ids.flatMap((id) => {
+  return serviceAreaZoneIds(area).flatMap((id) => {
     const planningArea = planningAreas.find((candidate) => candidate.id === id)
     const outline = planningArea === undefined ? null : storedOutline(planningArea)
     return outline === null ? [] : [outline]

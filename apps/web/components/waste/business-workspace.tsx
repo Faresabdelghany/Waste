@@ -4678,7 +4678,7 @@ export function BusinessWorkspace({
     // On the Pilot an award and a price are the API's forms (slice 11 of #81):
     // an award to this provider, a price under one of its assignments.
     if (apiConfigured && (target === "service-area" || target === "service-provider-price")) {
-      setRelatedCreateTarget(pilotProviderCreate(target, serviceProviderId, localDateInputValue()))
+      setRelatedCreateTarget(pilotProviderCreate(target, serviceProviderId, localDateInputValue(), getRecords(SERVICE_AREAS_MODULE.workspaceId, SERVICE_AREAS_MODULE.moduleId, [])))
       return
     }
 

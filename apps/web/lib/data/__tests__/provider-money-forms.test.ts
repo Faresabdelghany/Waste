@@ -122,8 +122,14 @@ describe("the provider-money chain's Pilot forms", () => {
   })
 
   test("the provider page's doors open the Pilot's award and price forms, the provider named on the award", () => {
-    assert.deepEqual(pilotProviderCreate("service-area", provider.id, "2026-10-24"), { workspaceId: "service-providers", moduleId: "service-areas", initialValues: { serviceProviderId: provider.id, validFrom: "2026-10-24" }, schemaOverride: SERVICE_AREA_FORM })
-    assert.deepEqual(pilotProviderCreate("service-provider-price", provider.id, "2026-10-24"), { workspaceId: "commercial", moduleId: "service-provider-prices", initialValues: { validFrom: "2026-10-24" }, schemaOverride: PROVIDER_PRICE_FORM })
+    assert.deepEqual(pilotProviderCreate("service-area", provider.id, "2026-10-24", []), { workspaceId: "service-providers", moduleId: "service-areas", initialValues: { serviceProviderId: provider.id, validFrom: "2026-10-24" }, schemaOverride: SERVICE_AREA_FORM })
+    const records = [areaRecord, assignmentRecord, plain("assignment-other", "CA-H-1 · CityHaul A/S", "Service area assignment", { serviceProviderId: "service-provider-other" })]
+    const price = pilotProviderCreate("service-provider-price", provider.id, "2026-10-24", records)
+    assert.deepEqual([price.workspaceId, price.moduleId], ["commercial", "service-provider-prices"])
+    assert.deepEqual(price.initialValues, { validFrom: "2026-10-24", serviceAreaAssignmentId: assignmentRecord.id }, "its one assignment picked")
+    const field = price.schemaOverride.sections.flatMap((section) => section.fields).find((candidate) => candidate.id === "serviceAreaAssignmentId")
+    assert.deepEqual(field?.relation?.allowedRecordIds, [assignmentRecord.id], "this provider's assignments alone")
+    assert.deepEqual(pilotProviderCreate("service-provider-price", "service-provider-none", "2026-10-24", records).initialValues, { validFrom: "2026-10-24" })
   })
 
   test("an award's edit holds its code and project, offers no provider, and moves its sets through their own routes", () => {

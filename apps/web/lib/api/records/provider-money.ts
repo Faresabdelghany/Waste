@@ -53,7 +53,8 @@ import {
 import { command, create, get, listAll, patch } from "../client"
 import { inheritedPresentation, patchOf, said, stampFacts, statusLabel, typed, webIdOf, type Client, type MappingContext, type ResourceAdapter, type ServerModule } from "./adapter"
 import { shownOn } from "./clock"
-import { dayIn, firstDayOut, lastDayIn } from "./planning"
+import { firstDayOut, lastDayIn } from "./planning"
+import { projectDay } from "./pricing"
 import { referenced, refusal } from "./places"
 import { nameVia, referencedServerId } from "./references"
 
@@ -74,12 +75,6 @@ function projectFacts(projectWebId: string | undefined, context: MappingContext)
   const serverId = projectWebId === undefined ? undefined : context.resolve.serverIdOf(projectWebId)
   const project = serverId === undefined ? undefined : context.resolve.byServerId(serverId)
   return project === undefined ? {} : { currency: typed(project, "currency"), timezone: typed(project, "timezone") }
-}
-
-/** The day a project's period is read on. */
-function projectDay(projectServerId: string, context: MappingContext): string {
-  const project = context.resolve.byServerId(projectServerId)
-  return dayIn(context.now ?? new Date(), project === undefined ? undefined : typed(project, "timezone"))
 }
 
 /** The assignment's name and provider as a row names them: "CA-Ø-2 · NordRen ApS", "NordRen ApS"; the id chip where the store holds none. */

@@ -37,7 +37,7 @@ import { AddContainerSurface, ContainerCommandsSurface } from "./container-surfa
 import { AddPropertyGroupSurface, AddPropertySurface, AddSharedPointSurface, PropertyCommandsSurface, PropertyGroupCommandsSurface, SharedPointCommandsSurface } from "./place-surfaces"
 import { PriceRowCommandsSurface, PriceRowsPrimarySurface, ProductCommandsSurface, ProductsPrimarySurface } from "./pricing-surfaces"
 import { PROVIDER_PRICES_LIST, SERVICE_AREAS_LIST, SETTLEMENTS_LIST, WEIGHTS_LIST } from "./provider-money-lists"
-import { AddProviderPriceSurface, CreateServiceAreaSurface, OpenSettlementSurface, ProviderPriceCommandsSurface, ServiceAreaCommandsSurface, SettlementSurface, WeightReviewSurface } from "./provider-money-surfaces"
+import { AddProviderPriceSurface, CreateServiceAreaSurface, OpenSettlementSurface, ProviderPriceCommandsSurface, ServiceAreaCommandsSurface, ServiceAreasRead, SettlementSurface, WeightReviewSurface } from "./provider-money-surfaces"
 import { LiveBoardRefresh, LiveRouteSurface, PickupCommandsSurface, RouteCommandsSurface } from "./route-surfaces"
 
 /** What a primary surface is handed: the label the module's primary action carries. */
@@ -138,10 +138,13 @@ export const COMMAND_SURFACES: Readonly<Record<string, CommandSurface>> = {
   // Slice 11 (#186): an award by its own form, its assignments in its
   // details; a price's fee moved by Apply index alone; a settlement by the
   // commands its status moves by; an unload by its reviews, the desk's queue
-  // first. Weights are written by the Driver App, never the office.
-  "service-providers.service-areas": { primary: CreateServiceAreaSurface, rowActions: ServiceAreaCommandsSurface, list: SERVICE_AREAS_LIST },
-  "commercial.service-provider-prices": { primary: AddProviderPriceSurface, rowActions: ProviderPriceCommandsSurface, list: PROVIDER_PRICES_LIST },
-  "commercial.settlements": { primary: OpenSettlementSurface, rowActions: SettlementSurface, list: SETTLEMENTS_LIST },
+  // first. Weights are written by the Driver App, never the office. The
+  // awards are read again where their assignments are listed or picked: an
+  // award the map or the provider page made has its first assignment on the
+  // server alone.
+  "service-providers.service-areas": { primary: CreateServiceAreaSurface, rowActions: ServiceAreaCommandsSurface, list: SERVICE_AREAS_LIST, whileShown: ServiceAreasRead },
+  "commercial.service-provider-prices": { primary: AddProviderPriceSurface, rowActions: ProviderPriceCommandsSurface, list: PROVIDER_PRICES_LIST, whileShown: ServiceAreasRead },
+  "commercial.settlements": { primary: OpenSettlementSurface, rowActions: SettlementSurface, list: SETTLEMENTS_LIST, whileShown: ServiceAreasRead },
   "route-studio.weights": { primary: null, rowActions: WeightReviewSurface, list: WEIGHTS_LIST },
 }
 

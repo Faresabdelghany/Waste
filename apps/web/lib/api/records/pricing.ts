@@ -93,7 +93,8 @@ const SLUG = /^[a-z0-9]+(-[a-z0-9]+)*$/
 const oneOf = <Token extends string>(tokens: readonly Token[], value: string | undefined): Token | undefined => tokens.find((token) => token === value)
 
 /** The record's project's day: what a period is read on. */
-function projectDay(projectServerId: string, context: MappingContext): string {
+/** The project's own day, on its clock: what a period is read against. */
+export function projectDay(projectServerId: string, context: MappingContext): string {
   const project = context.resolve.byServerId(projectServerId)
   return dayIn(context.now ?? new Date(), project === undefined ? undefined : typed(project, "timezone"))
 }

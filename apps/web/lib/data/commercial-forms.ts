@@ -54,10 +54,10 @@ export function blankNone(values: BusinessFormValues): BusinessFormValues {
   return Object.fromEntries(Object.entries(values).map(([key, value]) => [key, value === NO_ONE ? "" : value]))
 }
 
-const text = (values: BusinessFormValues, key: string) => (typeof values[key] === "string" ? (values[key] as string).trim() : "")
+export const text = (values: BusinessFormValues, key: string) => (typeof values[key] === "string" ? (values[key] as string).trim() : "")
 
 /** A schema's fields read-only but those named: an edit of what the wire keys on. */
-function editableOnly(schema: BusinessFormSchema, editable: readonly string[], overrides: Partial<BusinessFormSchema>): BusinessFormSchema {
+export function editableOnly(schema: BusinessFormSchema, editable: readonly string[], overrides: Partial<BusinessFormSchema>): BusinessFormSchema {
   return {
     ...schema,
     ...overrides,

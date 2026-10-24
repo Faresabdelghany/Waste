@@ -28,6 +28,7 @@ import { inheritedPresentation, said, stampFacts, typed, webIdOf, type Client, t
 import { shownOn } from "./clock"
 import { referenced, refusal } from "./places"
 import { nameVia } from "./references"
+import { routesWindowFrom } from "./routes"
 
 /** A review status as the desk reads it: `captured` is the queue. */
 export const REVIEW_LABELS: Readonly<Record<WeightReviewStatus, string>> = { captured: "Needs review", approved: "Approved", rejected: "Rejected", corrected: "Corrected" }
@@ -72,7 +73,12 @@ export const unloadAdapter: ResourceAdapter<UnloadResource> = {
   owns: isUnloadRecord,
   // The review status is a reading, moved by the reviews alone.
   statuses: undefined,
-  list: async (client) => (await listAll<Unload>(client, "/unloads")).map(stamped),
+  // The desk's queue whole, whatever its age; the reviewed over the routes' window, so the ledger is never read whole.
+  list: async (client) => {
+    const [queue, recent] = await Promise.all([listAll<Unload>(client, "/unloads", { reviewStatus: "captured" }), listAll<Unload>(client, "/unloads", { from: `${routesWindowFrom()}T00:00:00.000Z` })])
+    const queued = new Set(queue.map((unload) => unload.id))
+    return [...queue, ...recent.filter((unload) => !queued.has(unload.id))].map(stamped)
+  },
   read: (client, serverId) => get<Unload>(client, `/unloads/${serverId}`).then(stamped),
   toRecord: (unload, context) => {
     const project = referenced(context, "project", unload.projectId)
@@ -90,7 +96,7 @@ export const unloadAdapter: ResourceAdapter<UnloadResource> = {
       ...inheritedPresentation(undefined),
       ...stampFacts(unload, context.now),
       value: kilograms(unload.netKg),
-      description: `${fraction} tipped at ${station} off ${route}.`,
+      description: `${fraction} unloaded at ${station} off ${route}.`,
       facts: {
         Route: route,
         Station: station,

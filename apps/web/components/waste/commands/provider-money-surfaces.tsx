@@ -26,7 +26,7 @@
 // The forms are lib/data/provider-money-forms.ts', and each primary button
 // says what its form does (its submit label), not the fixture's action;
 // nothing is offered until the module reads the API's rows.
-import { useState } from "react"
+import { useEffect, useState } from "react"
 import { toast } from "sonner"
 import type { SettlementDetail, SettlementEvent } from "@waste/contracts/settlements"
 import { SETTLEMENT_STATUSES } from "@waste/domain/finance/vocabulary"
@@ -39,7 +39,7 @@ import { useCommercialPickers } from "@/components/waste/commands/commercial-pic
 import type { RowSurfaceProps } from "@/components/waste/commands/command-surfaces"
 import { CreateSurface } from "@/components/waste/commands/create-surface"
 import { ReadRows } from "@/components/waste/commands/read-rows"
-import { useCommandRunner, useModuleReady, useRowHistory, useServerNames } from "@/components/waste/commands/use-command-support"
+import { useCommandRunner, useModuleReady, useOpenRecord, useRowHistory, useServerNames } from "@/components/waste/commands/use-command-support"
 import type { ApiClient } from "@/lib/api/client"
 import { statusLabel } from "@/lib/api/records/adapter"
 import { shownOn } from "@/lib/api/records/clock"
@@ -55,6 +55,7 @@ import {
   isAssignmentRecord,
   PROVIDER_PRICE_PREFIX,
   PROVIDER_PRICES_MODULE,
+  SERVICE_AREA_PREFIX,
   SERVICE_AREAS_MODULE,
   SETTLEMENTS_MODULE,
   WEIGHTS_MODULE,
@@ -79,10 +80,29 @@ import {
 } from "@/lib/data/provider-money-forms"
 import { ACCESS_MODULE } from "@/lib/data/tickets"
 
-/** A module read again: a write that moves other rows of it (an award's holder, a chain's previous row). */
-function useReread(module: ModuleLocation): () => void {
+/**
+ * One row of a module read back: a write that moves another row of it (an
+ * award's holder, a chain's previous row). One row, never the module: a
+ * module read again gives a row made this session its adapter's id, and the
+ * details open on the old one would close.
+ */
+function useRowReread(module: ModuleLocation): (recordId: string) => void {
+  const { refreshRecord } = useBusinessRecordStore()
+  return (recordId) => void refreshRecord(module.workspaceId, module.moduleId, recordId)
+}
+
+/**
+ * Mounted beside the service areas', the prices' and the settlements'
+ * tables: the awards and their assignments read again, for an award the map
+ * or the provider page made — its first assignment is the server's, which no
+ * create here hands the store — before its assignment is picked.
+ */
+export function ServiceAreasRead() {
   const { refreshModule } = useBusinessRecordStore()
-  return () => void refreshModule(module.workspaceId, module.moduleId)
+  useEffect(() => {
+    void refreshModule(SERVICE_AREAS_MODULE.workspaceId, SERVICE_AREAS_MODULE.moduleId)
+  }, [refreshModule])
+  return null
 }
 
 /** One write from a row's details: the dialog open until the API has answered, the store's toast over it on a refusal; `done` told the row the API holds. */
@@ -111,6 +131,11 @@ function useRowWrite(module: ModuleLocation) {
 /** Create service area: the award by its own form, the planning areas it covers. */
 export function CreateServiceAreaSurface() {
   const pickers = useCommercialPickers()
+  const { refreshModule } = useBusinessRecordStore()
+  const openRecord = useOpenRecord(SERVICE_AREAS_MODULE.moduleId)
+  // The award's first assignment is the server's: the module is read again, and the award reopened under its adapter's id.
+  const readAssignment = (serverId: string) =>
+    void refreshModule(SERVICE_AREAS_MODULE.workspaceId, SERVICE_AREAS_MODULE.moduleId).then(() => openRecord(`${SERVICE_AREA_PREFIX}-${serverId}`))
   return (
     <CreateSurface
       label={SERVICE_AREA_FORM.submitLabel}
@@ -119,6 +144,7 @@ export function CreateServiceAreaSurface() {
       pickers={pickers}
       make={(values, now) => createServiceAreaRecord(values, now)}
       created={(record) => ({ title: "Service area created", description: `${record.name} covers its planning areas over its period.` })}
+      onCreated={(_, serverId) => readAssignment(serverId)}
     />
   )
 }
@@ -130,7 +156,7 @@ export function ServiceAreaCommandsSurface({ record }: RowSurfaceProps) {
   const pickers = useCommercialPickers()
   const moduleReady = useModuleReady(SERVICE_AREAS_MODULE)
   const state = useServerModuleState(SERVICE_AREAS_MODULE.workspaceId, SERVICE_AREAS_MODULE.moduleId)
-  const reread = useReread(SERVICE_AREAS_MODULE)
+  const reread = useRowReread(SERVICE_AREAS_MODULE)
   const { busy, write } = useRowWrite(SERVICE_AREAS_MODULE)
   const [dialog, setDialog] = useState<AreaDialog | null>(null)
   const isAssignment = isAssignmentRecord(record)
@@ -140,8 +166,9 @@ export function ServiceAreaCommandsSurface({ record }: RowSurfaceProps) {
   const save = (edited: BusinessRecord, said: string) =>
     write(edited, (saved) => {
       setDialog(null)
-      // An assignment moves the award's holder, and an edit may move its sets: the module is read again.
-      reread()
+      // An assignment moves the award's holder: the award is read back.
+      const award = isAssignmentRecord(edited) ? edited.submittedValues?.serviceAreaId : undefined
+      if (typeof award === "string") reread(award)
       toast.success(said, { description: `${saved.name}.` })
     })
 
@@ -224,7 +251,7 @@ export function AddProviderPriceSurface() {
 export function ProviderPriceCommandsSurface({ record }: RowSurfaceProps) {
   const pickers = useCommercialPickers()
   const moduleReady = useModuleReady(PROVIDER_PRICES_MODULE)
-  const reread = useReread(PROVIDER_PRICES_MODULE)
+  const reread = useRowReread(PROVIDER_PRICES_MODULE)
   const { busy, write } = useRowWrite(PROVIDER_PRICES_MODULE)
   const [dialog, setDialog] = useState<"edit" | "index" | null>(null)
   const edit = providerPriceEditForm(record)
@@ -239,8 +266,8 @@ export function ProviderPriceCommandsSurface({ record }: RowSurfaceProps) {
     else
       write(createIndexedPriceRecord(record, values, Date.now()), (saved) => {
         setDialog(null)
-        // The chain's previous row now ends the day before: the module is read again.
-        reread()
+        // This row now ends the day before the next: it is read back.
+        reread(record.id)
         toast.success("Index applied", { description: `${record.name} is ${saved.value} from ${String(values.appliedFrom)}.` })
       })
   }
@@ -284,6 +311,7 @@ export function OpenSettlementSurface() {
 }
 
 const COMMAND_LABELS = { calculate: "Calculate", close: "Close", reopen: "Reopen" } as const
+const COMMAND_DONE = { calculate: "Settlement calculated", close: "Settlement closed", reopen: "Settlement reopened" } as const
 
 /** The settlement's own read and its history, as a one-row read its surface reads again after each command. */
 const readSettlement = (client: ApiClient, serverId: string) =>
@@ -317,7 +345,7 @@ export function SettlementSurface({ record }: RowSurfaceProps) {
   const send = (name: "calculate" | "close" | "reopen", values?: BusinessFormValues) =>
     run(name, values === undefined ? undefined : blankNone(values), (outcome) => {
       setReopening(false)
-      toast.success(`Settlement ${outcome.record.status.toLowerCase()}`, { description: `${outcome.record.name}: ${outcome.record.value}.` })
+      toast.success(COMMAND_DONE[name], { description: `${outcome.record.name}: ${outcome.record.value}.` })
     })
 
   return (

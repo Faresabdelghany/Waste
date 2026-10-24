@@ -35,7 +35,8 @@ import { ASSIGNMENT_PREFIX, ASSIGNMENT_RECORD_KIND, isAssignmentRecord, isServic
 import { create, get, listAll, patch, put } from "../client"
 import { inheritedPresentation, isLocalRefusal, PartialWrite, patchOf, stampFacts, typed, webIdOf, type Client, type LocalRefusal, type MappingContext, type ResourceAdapter, type ServerModule } from "./adapter"
 import { serviceProviderAdapter } from "./organisation"
-import { dayIn, firstDayOut, lastDayIn, planningAreaAdapter } from "./planning"
+import { firstDayOut, lastDayIn, planningAreaAdapter } from "./planning"
+import { projectDay } from "./pricing"
 import { projectMoved, projectServerIdOf, referenced, refusal } from "./places"
 import { nameVia, referencedServerId, webIdVia } from "./references"
 
@@ -50,12 +51,6 @@ const TRANSFER = "A transfer ends this assignment and adds another"
 
 /** An area as the module reads it: the wire's, with the assignments the list read or the detail carries, or the first one a create answered. */
 export type ServiceAreaResource = (ServiceArea | ServiceAreaDetail | ServiceAreaCreated) & { assignments?: readonly ServiceAreaAssignment[] }
-
-/** The record's project's day: what a period is read on. */
-function projectDay(projectServerId: string, context: MappingContext): string {
-  const project = context.resolve.byServerId(projectServerId)
-  return dayIn(context.now ?? new Date(), project === undefined ? undefined : typed(project, "timezone"))
-}
 
 const periodLabel = (validFrom: string, validTo: string | null) => `${validFrom} – ${validTo === null ? "open" : lastDayIn(validTo)}`
 
@@ -75,14 +70,16 @@ const fractionsOf = (record: BusinessRecord, context: MappingContext) => setOf(r
 
 const sameSet = (a: readonly string[], b: readonly string[]) => [...a].sort().join(",") === [...b].sort().join(",")
 
-/** The provider holding the area on the day, by name and web id: from the assignments the resource carries, else from the ones the store holds. */
+/** The provider an area is awarded to on the day, by name and web id — the holder in force, else the first one to come; an ended holder holds nothing — from the assignments the resource carries, else from the ones the store holds. */
 function holderOf(area: ServiceAreaResource, areaWebId: string, day: string, context: MappingContext): { name: string; webId?: string } | undefined {
   const carried = area.assignments ?? ("assignment" in area && area.assignment !== null ? [area.assignment] : undefined)
   if (carried !== undefined) {
-    const current = carried.find((assignment) => periodReading(assignment.validFrom, assignment.validTo, day) === "Active")
-    return current === undefined ? undefined : { name: nameVia(context, PROVIDER_PREFIX, current.serviceProviderId), webId: webIdVia(context, PROVIDER_PREFIX, current.serviceProviderId) }
+    const reading = (assignment: ServiceAreaAssignment) => periodReading(assignment.validFrom, assignment.validTo, day)
+    const holder = carried.find((assignment) => reading(assignment) === "Active") ?? [...carried].sort((a, b) => a.validFrom.localeCompare(b.validFrom)).find((assignment) => reading(assignment) === "Upcoming")
+    return holder === undefined ? undefined : { name: nameVia(context, PROVIDER_PREFIX, holder.serviceProviderId), webId: webIdVia(context, PROVIDER_PREFIX, holder.serviceProviderId) }
   }
-  const held = context.resolve.find((record) => isAssignmentRecord(record) && record.status === "Active" && typed(record, "serviceAreaId") === areaWebId)
+  const ofArea = (status: string) => (record: BusinessRecord) => isAssignmentRecord(record) && record.status === status && typed(record, "serviceAreaId") === areaWebId
+  const held = context.resolve.find(ofArea("Active")) ?? context.resolve.find(ofArea("Upcoming"))
   const name = held?.facts["Service provider"]
   return name === undefined ? undefined : { name, webId: held === undefined ? undefined : typed(held, "serviceProviderId") }
 }
@@ -242,8 +239,10 @@ export const assignmentAdapter: ResourceAdapter<ServiceAreaAssignment> = {
   statuses: undefined,
   list: (client) => listAll<ServiceAreaAssignment>(client, "/service-area-assignments"),
   toRecord: (assignment, context) => {
-    // The area, loaded just before this row in the module's order.
-    const area = context.resolve.byServerId(assignment.serviceAreaId)
+    // The area, loaded just before this row in the module's order — by its own id first: an area lends no fixture id, and
+    // read again over one made this session, the store's state still holds that one under the session's id.
+    const ownId = webIdOf(SERVICE_AREA_PREFIX, assignment.serviceAreaId)
+    const area = context.resolve.find((record) => record.id === ownId) ?? context.resolve.byServerId(assignment.serviceAreaId)
     const areaWebId = area?.id ?? webIdOf(SERVICE_AREA_PREFIX, assignment.serviceAreaId)
     const code = area === undefined ? areaWebId : (typed(area, "areaCode") ?? area.name)
     const provider = referenced(context, PROVIDER_PREFIX, assignment.serviceProviderId)

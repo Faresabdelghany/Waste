@@ -136,9 +136,57 @@ test("Service areas: an award's details edit it and move it to another provider,
 
   // The table lists the awards, never their assignments, which are the same module's second kind.
   await page.keyboard.press("Escape")
+  // Searched, since the tenant keeps every run's awards and the table pages.
+  await page.getByPlaceholder("Search service areas").fill(award.code)
   const table = page.getByRole("table")
   await expect(table.getByText(renamed)).toBeVisible()
   await expect(table.getByText(`${award.code} · NordRen`)).toHaveCount(0)
+})
+
+test("Create service area in the module: the new award's details list the first assignment the server made, and stay open through its end", async ({ page, api }) => {
+  const project = await copenhagen(api)
+  const [planningArea] = await listAll<PlanningArea>(api, "/planning-areas", { projectId: project.id })
+  if (planningArea === undefined) throw new Error("the seed has no planning area in Copenhagen Central")
+  // The second half of this run's own days: the first test's award holds the planning area over the first.
+  const start = plus(weekOfItsOwn(), 4)
+  const loaded = answerOf(page, "GET", /^\/service-area-assignments$/)
+  await page.goto("/service-providers?module=service-areas")
+  expect((await loaded).status()).toBe(200)
+
+  await page.getByRole("button", { name: "Create service area" }).click()
+  const dialog = dialogTitled(page, "Create service area")
+  const name = uniqueName("E2E module award")
+  await dialog.getByLabel("Service area name").fill(name)
+  await dialog.getByLabel("Area code").fill(`E2E-${Date.now().toString(36)}`.toUpperCase())
+  await pick(dialog, page, /^Project/, /^Copenhagen Central/)
+  await pick(dialog, page, /^Service provider/, /^NordRen/)
+  await dialog.getByLabel("Geographic boundary").fill("As the e2e contract draws it")
+  await dialog.getByRole("combobox", { name: /^Planning areas/ }).click()
+  await page.getByRole("option", { name: new RegExp(`^${planningArea.name}`) }).click()
+  await page.keyboard.press("Escape")
+  await dialog.getByLabel(/^Starts/).fill(start)
+  await dialog.getByLabel(/^Ends/).fill(plus(start, 1))
+  const [created] = await Promise.all([answerOf(page, "POST", /^\/service-areas$/), dialog.getByRole("button", { name: "Create service area" }).click()])
+  expect(created.status(), await created.text()).toBe(201)
+  const award = (await created.json()) as ServiceAreaCreated
+  const held = assignmentOf(award)
+  await expect(dialog).toBeHidden()
+
+  // The first assignment is the server's: the module is read again and the award reopened on it.
+  const details = page.getByRole("dialog").filter({ has: page.getByTestId("service-area-commands") })
+  const assignments = details.getByTestId("service-area-assignments")
+  await expect(assignments.getByRole("listitem")).toHaveCount(1)
+  await expect(assignments).toContainText("NordRen")
+
+  await assignments.getByRole("button", { name: "End or note" }).click()
+  const end = dialogTitled(page, "End or note the assignment")
+  await end.getByLabel(/^Holds until/).fill(start)
+  const [ended] = await Promise.all([answerOf(page, "PATCH", new RegExp(`^/service-area-assignments/${held.id}$`)), end.getByRole("button", { name: "Save" }).click()])
+  expect(ended.status(), await ended.text()).toBe(200)
+  // One row read back, never the module: the details stay on the award.
+  await expect(end).toBeHidden()
+  await expect(details.getByTestId("service-area-commands")).toBeVisible()
+  await expect(assignments).toContainText(`${start} – ${start}`)
 })
 
 test("Service provider prices: Add price under an assignment, then Apply index — the chain's next row, the first ended the day before", async ({ page, api }) => {
@@ -184,8 +232,11 @@ test("Service provider prices: Add price under an assignment, then Apply index �
 
   const first = (await (await api.get(`/service-provider-prices/${price.id}`)).json()) as ProviderPrice
   expect(first.validTo).toBe("2027-03-01")
-  // The module was read again: the chain's next row is listed beside the first.
+  // The price was read back, its details still open on it: it ends the day before the next row starts.
+  await expect(details).toContainText("2027-02-28")
+  // The chain's next row is listed beside the first.
   await page.keyboard.press("Escape")
+  await page.getByPlaceholder("Search service provider prices").fill(productName)
   await expect(page.getByRole("table").locator("tr", { hasText: productName }).filter({ hasText: "11.76" })).toHaveCount(1)
 })
 
@@ -278,6 +329,7 @@ test("Weight review: an unload captured on a running route opens in the desk's q
     const loaded = answerOf(page, "GET", /^\/unloads$/)
     await page.goto("/route-studio?module=weights")
     expect((await loaded).status()).toBe(200)
+    await page.getByPlaceholder("Search weight records").fill(ticket)
     const row = page.getByRole("table").getByText(`${ticket} · Residual`)
     await expect(row).toBeVisible()
     await row.click()
