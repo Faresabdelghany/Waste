@@ -117,7 +117,10 @@ export const property = wms.table(
     kind: text().notNull(),
     /** Geocoded, null until it is. */
     location: geometry.point(),
+    /** The office's own, never shown to a driver. */
     notes: text(),
+    /** What the driver is told at the place — the gate code, where the bins stand (migration 0019): the Driver App's stop shows it. */
+    driverInstructions: text(),
     status: text().notNull(),
   },
   (t) => [
@@ -220,6 +223,8 @@ export const sharedCollectionPoint = wms.table(
     accessConditions: text(),
     /** When it is open, in words; opening hours as data are Planning's. */
     availability: text(),
+    /** What the driver is told at the point (migration 0019): the Driver App's stop shows it. */
+    driverInstructions: text(),
     billingMode: text().notNull(),
     responsibleCustomerId: uuid(),
     status: text().notNull(),

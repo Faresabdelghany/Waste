@@ -135,6 +135,13 @@ describe("the shared collection point endpoints", { skip: database.skip }, () =>
       assert.deepEqual(await one(olivia, created.id), created)
     })
 
+    test("takes what the driver is told at the point, and a patch changes or clears it", async () => {
+      const created = await create(olivia, "/shared-collection-points", { ...body(a.projects.copenhagen.id, "Kongens yard"), driverInstructions: "Code 2210 on the enclosure" }, SharedCollectionPoint)
+      assert.equal(created.driverInstructions, "Code 2210 on the enclosure")
+      assert.equal((await patch(olivia, created.id, { driverInstructions: "Code 3301" })).driverInstructions, "Code 3301")
+      assert.equal((await patch(olivia, created.id, { driverInstructions: null })).driverInstructions, null)
+    })
+
     test("takes the customer it answers to, the distance it serves, and the members it starts with", async () => {
       const created = await create(
         olivia,

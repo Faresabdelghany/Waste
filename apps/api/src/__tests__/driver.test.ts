@@ -409,10 +409,10 @@ describe("the driver door", { skip: database.skip || owner.skip }, () => {
         found.pickups.map((pickup) => [pickup.id, pickup.position, pickup.status, pickup.reason, pickup.arrivedAt, pickup.outcomeAt, pickup.propertyId, pickup.wasteFractionId]),
         route.pickupIds.map((id, index) => [id, index + 1, "planned", null, null, null, fixtures.property.id, fixtures.residual.id]),
       )
-      // The place joined: the property's address and point (none until it is geocoded), the container's label, the fraction's name — what the device shows at the stop.
+      // The place joined: the property's address and point (none until it is geocoded), its instructions (none until written), the container's label, the fraction's name — what the device shows at the stop.
       assert.deepEqual(
-        found.pickups.map((pickup) => [pickup.address, pickup.location, pickup.containerLabel, pickup.wasteFractionName]),
-        fixtures.containers.map((bin) => ["Parkvej 18, 2100 København Ø", null, bin.label, "Residual waste"]),
+        found.pickups.map((pickup) => [pickup.address, pickup.location, pickup.driverInstructions, pickup.containerLabel, pickup.wasteFractionName]),
+        fixtures.containers.map((bin) => ["Parkvej 18, 2100 København Ø", null, null, bin.label, "Residual waste"]),
       )
       assert.deepEqual(found.planned, { vehicleId: fleet.vehicles.wh24.id, driverId: fleet.drivers.mads.id, trailerId: null, serviceProviderId: null, depotId: fleet.depots.nordhavn.id, unloadingStationId: fleet.stations.amager.id })
       assert.equal(found.plannedStartTime, "06:30")
@@ -421,11 +421,14 @@ describe("the driver door", { skip: database.skip || owner.skip }, () => {
       assert.equal((await detail(planned.id)).status, "planned", "assigned is assigned, whatever the status")
     })
 
-    test("reads a geocoded property's point through the column's codec, and a shared collection point's address and point where the pickup names one", async () => {
+    test("reads a geocoded property's point through the column's codec, and a shared collection point's address, point and instructions where the pickup names one — the place's words for the driver, never the office's notes", async () => {
       const route = await minted({ pickups: 2 })
       const pointId = testId()
       await withCompany(pool.db, a.companyId, async (tx) => {
-        await tx.update(propertyTable).set({ location: TOWN_HALL }).where(and(eq(propertyTable.companyId, a.companyId), eq(propertyTable.id, fixtures.property.id)))
+        await tx
+          .update(propertyTable)
+          .set({ location: TOWN_HALL, notes: "Owner disputes the bill", driverInstructions: "Gate code 4711; the bins stand behind the garage" })
+          .where(and(eq(propertyTable.companyId, a.companyId), eq(propertyTable.id, fixtures.property.id)))
         await tx.insert(sharedCollectionPoint).values({
           id: pointId,
           companyId: a.companyId,
@@ -436,6 +439,7 @@ describe("the driver door", { skip: database.skip || owner.skip }, () => {
           location: { type: "Point", coordinates: [12.5951, 55.7089] },
           operatingModel: "municipal",
           accessMode: "open",
+          driverInstructions: "Code 2210 on the enclosure",
           billingMode: "municipal",
           status: "open",
         })
@@ -455,9 +459,19 @@ describe("the driver door", { skip: database.skip || owner.skip }, () => {
           ],
           "the property's point once geocoded, the point's address and point where the stop is one",
         )
+        assert.deepEqual(
+          found.pickups.map((pickup) => pickup.driverInstructions),
+          ["Gate code 4711; the bins stand behind the garage", "Code 2210 on the enclosure"],
+        )
+        assert.doesNotMatch(JSON.stringify(found), /Owner disputes/, "a property's notes are the office's and never reach a phone")
       } finally {
-        // The one property every other route's pickups stand at goes back to being ungeocoded, as the fixture has it.
-        await withCompany(pool.db, a.companyId, (tx) => tx.update(propertyTable).set({ location: null }).where(and(eq(propertyTable.companyId, a.companyId), eq(propertyTable.id, fixtures.property.id))))
+        // The one property every other route's pickups stand at goes back to being ungeocoded and uninstructed, as the fixture has it.
+        await withCompany(pool.db, a.companyId, (tx) =>
+          tx
+            .update(propertyTable)
+            .set({ location: null, notes: null, driverInstructions: null })
+            .where(and(eq(propertyTable.companyId, a.companyId), eq(propertyTable.id, fixtures.property.id))),
+        )
       }
     })
 

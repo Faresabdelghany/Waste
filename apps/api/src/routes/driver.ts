@@ -322,7 +322,7 @@ async function openSessionOf(tx: Tx, companyId: string, profile: DriverProfile):
  * `shared_collection_point_id`, the place on the service date (§7.11), never
  * the placement valid today, which may have moved since — and its container
  * and fraction, the address and the point read through the property's or
- * the point's column, the point's codec decoding it (@waste/db/schema/geometry)
+ * the point's column with the place's instructions to the driver, the point's codec decoding it (@waste/db/schema/geometry)
  * exactly as the Registry's own reads do. `pickup_place_exactly_one` and the
  * two project keys hold every pickup to one place that is there, so a row
  * with neither address is a broken invariant and thrown, not a client's. The
@@ -335,8 +335,10 @@ async function driverPickupsOfRoute(tx: Tx, companyId: string, routeId: string):
       ...pickupColumns,
       propertyAddress: property.address,
       propertyLocation: property.location,
+      propertyInstructions: property.driverInstructions,
       pointAddress: sharedCollectionPoint.address,
       pointLocation: sharedCollectionPoint.location,
+      pointInstructions: sharedCollectionPoint.driverInstructions,
       containerLabel: container.label,
       wasteFractionName: wasteFraction.name,
     })
@@ -347,12 +349,14 @@ async function driverPickupsOfRoute(tx: Tx, companyId: string, routeId: string):
     .leftJoin(sharedCollectionPoint, and(eq(sharedCollectionPoint.companyId, pickup.companyId), eq(sharedCollectionPoint.id, pickup.sharedCollectionPointId)))
     .where(and(eq(pickup.companyId, companyId), eq(pickup.routeId, routeId)))
     .orderBy(asc(pickup.position), asc(pickup.id))
-  return rows.map(({ propertyAddress, propertyLocation, pointAddress, pointLocation, containerLabel, wasteFractionName, ...stop }) => {
+  return rows.map(({ propertyAddress, propertyLocation, propertyInstructions, pointAddress, pointLocation, pointInstructions, containerLabel, wasteFractionName, ...stop }) => {
     const address = propertyAddress ?? pointAddress
     if (address === null) throw new Error(`pickup ${stop.id} names no place that is there`)
     // The columns are `geometry(Point, 4326)`, flat: what they hold is the contracts' `FlatPoint`, however the column's type spells the altitude as optional.
     const location = (propertyLocation ?? pointLocation) as FlatPoint | null
-    return { ...pickupOf(stop), address, location, containerLabel, wasteFractionName }
+    // The place's own words for the driver; a property's `notes` are the office's and never reach a phone.
+    const driverInstructions = propertyInstructions ?? pointInstructions
+    return { ...pickupOf(stop), address, driverInstructions, location, containerLabel, wasteFractionName }
   })
 }
 

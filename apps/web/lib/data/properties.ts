@@ -63,6 +63,15 @@ export const GROUP_PREFIX = "group"
 
 /** What the forms stamp on a row of each kind (`recordKind`), and what a new row is recognised by until the API has answered. */
 export const PROPERTY_RECORD_KIND = "Property"
+
+/** What the driver is told at a property or a point: the Driver App's stop shows it. */
+const DRIVER_INSTRUCTIONS: BusinessFormField = {
+  id: "driverInstructions",
+  label: "Driver instructions",
+  type: "textarea",
+  placeholder: "Gate code 4711; the bins stand behind the garage",
+  description: "Shown to the driver at the stop.",
+}
 export const PROPERTY_GROUP_RECORD_KIND = "Property Group"
 export const SHARED_POINT_RECORD_KIND = "Shared Collection Point"
 
@@ -214,7 +223,10 @@ const propertyFields = (projectField: BusinessFormField): BusinessFormSchema["se
   {
     id: "operating-context",
     title: "Operating context",
-    fields: [{ id: "specialConditions", label: "Special service conditions", type: "textarea" }],
+    fields: [
+      { id: "specialConditions", label: "Special service conditions", type: "textarea", description: "The office's own; never shown to a driver." },
+      DRIVER_INSTRUCTIONS,
+    ],
   },
 ]
 
@@ -307,6 +319,7 @@ const pointSections = (projectField: BusinessFormField, withStatus: boolean): Bu
       { id: "availability", label: "Availability", type: "text", placeholder: "24/7 or Mon–Fri 06:00–20:00" },
       { id: "accessMode", label: "Access mode", type: "select", required: true, options: optionsOf(SHARED_COLLECTION_POINT_ACCESS_MODES, ACCESS_MODE_LABELS) },
       { id: "accessConditions", label: "Access conditions", type: "textarea" },
+      DRIVER_INSTRUCTIONS,
       { id: "billingMode", label: "Billing responsibility", type: "select", required: true, options: optionsOf(SHARED_COLLECTION_POINT_BILLING_MODES, BILLING_MODE_LABELS) },
       responsibleCustomer("Responsible customer or payer"),
     ],

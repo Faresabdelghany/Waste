@@ -25,6 +25,11 @@
 // planning-rendering.test.ts holds 0006 to its own day;
 // finance-rendering.test.ts pins the ALTER TABLE statements themselves.
 //
+// Migration 0019 gave `property` and `shared_collection_point` the driver's
+// instructions, a nullable text column each: `CHANGED_IN_0019` maps the two
+// CREATE TABLEs as drizzle-kit writes them now onto what 0004 says, and
+// driver-instructions-rendering.test.ts pins the ALTER TABLE statements.
+//
 // This is also what makes a change to the vocabulary a migration: the values
 // are spelled here as the file spells them, so adding one to a list in
 // @waste/domain/registry/vocabulary fails this test until a migration replaces
@@ -156,6 +161,57 @@ const ADDED_IN_0010 = [
   index("agreement", "agreement_price_list_id_idx", "company_id", "price_list_id"),
 ]
 
+/** property as drizzle-kit writes it today, with the driver's instructions 0019 added, and as of 0004, without. */
+const propertyTable = (instructions: boolean): string =>
+  createTable("property", "project", [
+    '"name" text NOT NULL',
+    '"address" text NOT NULL',
+    '"registry_id" text',
+    '"kind" text NOT NULL',
+    '"location" geometry(Point, 4326)',
+    '"notes" text',
+    ...(instructions ? ['"driver_instructions" text'] : []),
+    '"status" text NOT NULL',
+    uniqueKey("property_project_id_name_key", "company_id", "project_id", "name"),
+    uniqueKey("property_project_key", "company_id", "project_id", "id"),
+    oneOfCheck("property", "kind", "residential", "commercial", "public", "mixed", "other"),
+    oneOfCheck("property", "status", "active", "inactive"),
+    geometryCheck("property", "location"),
+  ])
+
+/** shared_collection_point as drizzle-kit writes it today, with the driver's instructions 0019 added, and as of 0004, without. */
+const pointTable = (instructions: boolean): string =>
+  createTable("shared_collection_point", "project", [
+    '"name" text NOT NULL',
+    '"kind" text NOT NULL',
+    '"address" text NOT NULL',
+    '"location" geometry(Point, 4326) NOT NULL',
+    '"eligibility_distance_m" integer',
+    '"operating_model" text NOT NULL',
+    '"access_mode" text NOT NULL',
+    '"access_conditions" text',
+    '"availability" text',
+    ...(instructions ? ['"driver_instructions" text'] : []),
+    '"billing_mode" text NOT NULL',
+    '"responsible_customer_id" uuid',
+    '"status" text NOT NULL',
+    uniqueKey("shared_collection_point_project_id_name_key", "company_id", "project_id", "name"),
+    uniqueKey("shared_collection_point_project_key", "company_id", "project_id", "id"),
+    geometryCheck("shared_collection_point", "location"),
+    positiveCheck("shared_collection_point", "eligibility_distance_m"),
+    oneOfCheck("shared_collection_point", "kind", "surface", "underground", "recycling-station", "commercial", "other"),
+    oneOfCheck("shared_collection_point", "operating_model", "municipal", "member-funded", "company-operated", "service-provider-operated"),
+    oneOfCheck("shared_collection_point", "access_mode", "open", "member", "credential", "restricted"),
+    oneOfCheck("shared_collection_point", "billing_mode", "municipal", "single-payer", "member-share", "usage"),
+    oneOfCheck("shared_collection_point", "status", "draft", "open", "restricted", "closed"),
+  ])
+
+/** What 0019 changed on two tables 0004 created: the statement as drizzle-kit generates it now, and as it generated it as of 0004. */
+const CHANGED_IN_0019 = new Map([
+  [propertyTable(true), propertyTable(false)],
+  [pointTable(true), pointTable(false)],
+])
+
 const expected = [
   createTable("waste_fraction", "tenant", [
     '"key" text NOT NULL',
@@ -200,20 +256,7 @@ const expected = [
     oneOfCheck("customer", "status", "active", "inactive"),
     lowercaseCheck("customer", "email"),
   ]),
-  createTable("property", "project", [
-    '"name" text NOT NULL',
-    '"address" text NOT NULL',
-    '"registry_id" text',
-    '"kind" text NOT NULL',
-    '"location" geometry(Point, 4326)',
-    '"notes" text',
-    '"status" text NOT NULL',
-    uniqueKey("property_project_id_name_key", "company_id", "project_id", "name"),
-    uniqueKey("property_project_key", "company_id", "project_id", "id"),
-    oneOfCheck("property", "kind", "residential", "commercial", "public", "mixed", "other"),
-    oneOfCheck("property", "status", "active", "inactive"),
-    geometryCheck("property", "location"),
-  ]),
+  propertyTable(true),
   createTable("property_party", "project", [
     '"property_id" uuid NOT NULL',
     '"customer_id" uuid NOT NULL',
@@ -238,29 +281,7 @@ const expected = [
     uniqueKey("property_group_member_property_group_id_property_id_key", "company_id", "property_group_id", "property_id"),
     oneOfCheck("property_group_member", "role", "member", "administrator", "payer", "reporting"),
   ]),
-  createTable("shared_collection_point", "project", [
-    '"name" text NOT NULL',
-    '"kind" text NOT NULL',
-    '"address" text NOT NULL',
-    '"location" geometry(Point, 4326) NOT NULL',
-    '"eligibility_distance_m" integer',
-    '"operating_model" text NOT NULL',
-    '"access_mode" text NOT NULL',
-    '"access_conditions" text',
-    '"availability" text',
-    '"billing_mode" text NOT NULL',
-    '"responsible_customer_id" uuid',
-    '"status" text NOT NULL',
-    uniqueKey("shared_collection_point_project_id_name_key", "company_id", "project_id", "name"),
-    uniqueKey("shared_collection_point_project_key", "company_id", "project_id", "id"),
-    geometryCheck("shared_collection_point", "location"),
-    positiveCheck("shared_collection_point", "eligibility_distance_m"),
-    oneOfCheck("shared_collection_point", "kind", "surface", "underground", "recycling-station", "commercial", "other"),
-    oneOfCheck("shared_collection_point", "operating_model", "municipal", "member-funded", "company-operated", "service-provider-operated"),
-    oneOfCheck("shared_collection_point", "access_mode", "open", "member", "credential", "restricted"),
-    oneOfCheck("shared_collection_point", "billing_mode", "municipal", "single-payer", "member-share", "usage"),
-    oneOfCheck("shared_collection_point", "status", "draft", "open", "restricted", "closed"),
-  ]),
+  pointTable(true),
   createTable("shared_collection_point_member", "project", [
     '"shared_collection_point_id" uuid NOT NULL',
     '"property_id" uuid NOT NULL',
@@ -384,11 +405,11 @@ describe("the Registry tables as drizzle-kit writes them", () => {
     assert.deepEqual(await statementsFor(tables), expected)
   })
 
-  /** Everything drizzle-kit wrote at the head of 0004, as it was generated as of 0004: the placement, the product and the agreement in their earlier spelling, what 0010 added left out, and the index 0007 dropped back in. */
+  /** Everything drizzle-kit wrote at the head of 0004, as it was generated as of 0004: the placement, the product, the agreement and the two places in their earlier spelling, what 0010 added left out, and the index 0007 dropped back in. */
   const generatedHead = async (): Promise<string[]> => [
     ...(await statementsFor(tables))
       .filter((statement) => !ADDED_IN_0010.includes(statement))
-      .map((statement) => CHANGED_IN_0007.get(statement) ?? CHANGED_IN_0010.get(statement) ?? statement),
+      .map((statement) => CHANGED_IN_0007.get(statement) ?? CHANGED_IN_0010.get(statement) ?? CHANGED_IN_0019.get(statement) ?? statement),
     ...DROPPED_IN_0007,
   ]
 
@@ -400,6 +421,7 @@ describe("the Registry tables as drizzle-kit writes them", () => {
     const today = await statementsFor(tables)
     for (const statement of CHANGED_IN_0007.keys()) assert.ok(today.includes(statement), statement.split("\n")[0])
     for (const statement of CHANGED_IN_0010.keys()) assert.ok(today.includes(statement), statement.split("\n")[0])
+    for (const statement of CHANGED_IN_0019.keys()) assert.ok(today.includes(statement), statement.split("\n")[0])
     for (const statement of ADDED_IN_0010) assert.ok(today.includes(statement), statement)
     for (const statement of DROPPED_IN_0007) assert.equal(today.includes(statement), false, statement)
   })

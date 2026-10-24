@@ -117,6 +117,17 @@ describe("the property endpoints", { skip: database.skip }, () => {
       assert.deepEqual(await one(olivia, created.id), created)
     })
 
+    test("keeps the driver's instructions apart from the office's notes, and a patch changes or clears them", async () => {
+      const created = await create(olivia, "/properties", { ...body(a.projects.copenhagen.id, "Strandboulevarden 40"), notes: "Owner disputes the bill", driverInstructions: "Gate code 4711; the bins stand behind the garage" }, Property)
+      assert.deepEqual([created.notes, created.driverInstructions], ["Owner disputes the bill", "Gate code 4711; the bins stand behind the garage"])
+      assert.equal((await one(olivia, created.id)).driverInstructions, "Gate code 4711; the bins stand behind the garage")
+      assert.equal((await patch(olivia, created.id, { driverInstructions: "Gate code 9001" })).driverInstructions, "Gate code 9001")
+      const cleared = await patch(olivia, created.id, { driverInstructions: null })
+      assert.deepEqual([cleared.driverInstructions, cleared.notes], [null, "Owner disputes the bill"])
+      const bare = await create(olivia, "/properties", body(a.projects.copenhagen.id, "Strandboulevarden 42"), Property)
+      assert.equal(bare.driverInstructions, null, "none unless the office writes some")
+    })
+
     test("takes the location as GeoJSON and reads it back as GeoJSON", async () => {
       const created = await create(olivia, "/properties", { ...body(a.projects.copenhagen.id, "Rådhuspladsen 1"), location: townHall }, Property)
       assert.deepEqual(created.location, townHall)
