@@ -453,6 +453,7 @@ export function resolveCollectionGroupPlans(input: {
         areaId: input.areaId,
         projectIds: input.projectIds,
         from: input.from,
+        days: group.days,
         containers: input.containers,
       }),
     )

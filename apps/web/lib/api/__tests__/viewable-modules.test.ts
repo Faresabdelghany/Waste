@@ -49,11 +49,15 @@ describe("the switched modules a person's grants let the store read", () => {
 describe("a module read through others", () => {
   const derived = SERVER_MODULES.filter((module) => module.derivedFrom !== undefined)
 
-  test("the containers are one, read through their places' modules", () => {
+  test("the containers are one, read through the organisation (a project's day) and their places' modules", () => {
     assert.deepEqual(
       derived.map((module) => [moduleKeyOf(module.workspaceId, module.moduleId), module.derivedFrom]),
-      [["resources.containers", ["customers.agreements", "customers.properties", "customers.shared", "configure.areas", "configure.master"]]],
+      [["resources.containers", ["configure.organization", "customers.agreements", "customers.properties", "customers.shared", "configure.areas", "configure.master"]]],
     )
+  })
+
+  test("the modules read on the project's day are the planning areas and the containers", () => {
+    assert.deepEqual(SERVER_MODULES.filter((module) => module.readsTheDay === true).map((module) => moduleKeyOf(module.workspaceId, module.moduleId)), ["configure.areas", "resources.containers"])
   })
 
   test("names switched modules read before it, never itself nor another module read through others", () => {

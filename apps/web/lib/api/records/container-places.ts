@@ -1,31 +1,29 @@
-// Where a server container stands (Issue #184, slice 9b of #81). A container
-// carries no location on the wire: its placement names a subscription, the
-// subscription a property or a shared collection point, and the place its
-// point. So the container's record reads that chain through the store's
-// resolver — the agreements and their subscriptions, the properties and the
-// points load before the containers — and carries the place as the
-// fixtures' containers carry theirs: the point as typed `latitude`/
-// `longitude`, the name (`Property` or `Shared collection point`), the
-// `Address`, the `Property type` and the `Agreement` as facts, and the
-// planning areas of its project whose boundary in force contains the point:
-// every one under `PLANNING_AREA_IDS_KEY`, which the collection groups' rule
-// preview scopes it by (#207), and the first, in load order, as
-// `planningAreaId` and the `Planning area` fact, the one area the map's
-// readers take. The map places a record by exactly those, and its statistics
-// and filters read the facts.
+// Where a server container stands (Issue #184, slice 9b of #81) and when it
+// serves (#232). A container carries no location on the wire: its placement
+// names a subscription, the subscription a property or a shared collection
+// point, and the place its point. So the container's record reads that chain
+// through the store's resolver — the organisation, the agreements and their
+// subscriptions, the properties, the points and the areas load before the
+// containers, and the store reads the containers again once one of them
+// changes (`containersModule.derivedFrom`) — in two readings.
 //
-// The place is the one of the placement the record shows (containers.ts,
-// `placementShown`), so a record never shows one placement's subscription
-// beside another's place. The period that placement serves it in under its
-// subscription and that subscription's agreement — the three periods
-// intersected, as the worker reads eligibility — rides on the record as
-// `SERVING_PERIOD_KEY` with the project's day it was read on, which the rule
-// preview judges on the scheme's first day where that is still ahead (#232),
-// rather than the container's asset state. The map's readings — the point,
-// `planningAreaId` and the facts — are today's: they are carried only while
-// the period holds today. The areas are carried while the period has not
-// ended, so a container whose placement starts with a new scheme is in its
-// area's scope before it serves.
+// The rule preview's (`SERVING_KEY`, @waste/domain/route-schemes/matching):
+// for each placement not ended by the project's day, the period it serves
+// the container in under its subscription and that subscription's agreement
+// — the three intersected, as the worker reads eligibility — with the
+// planning areas its place lies in, its fraction and its place, read on that
+// day. The preview judges a scheme on the period holding on its first
+// collection, in its own area, rather than the container's asset state.
+//
+// The map's, as the fixtures' containers carry theirs, of the placement the
+// record shows (containers.ts, `placementShown`) while it serves today, so a
+// record never shows one placement's subscription beside another's place:
+// the point as typed `latitude`/`longitude`, the name (`Property` or `Shared
+// collection point`), the `Address`, the `Property type` and the `Agreement`
+// as facts, and the first planning area containing the point, in load order,
+// as `planningAreaId` and the `Planning area` fact. The map places a record
+// by exactly those, and its statistics and filters read the facts. One that
+// serves later says where and from when (`Serves at`).
 //
 // This is a display derivation for the map and the preview. At generation
 // the worker's PostGIS matcher (apps/worker/src/jobs/stop-matching.ts) is the
@@ -40,7 +38,7 @@
 import type { ContainerServicePlacement } from "@waste/contracts/containers"
 import { planningAreaGeometry } from "@waste/domain/map-planning/areas"
 import { pointInPolygon, type LngLat } from "@waste/domain/map-planning/geo"
-import { SERVING_KEY, type ServingPeriod, type ServingReading } from "@waste/domain/route-schemes/matching"
+import { periodHolds, SERVING_KEY, type ServingPeriod, type ServingReading } from "@waste/domain/route-schemes/matching"
 
 import { AGREEMENT_PREFIX, AGREEMENTS_MODULE, isAgreementRecord, isSubscriptionRecord, PROPERTY_PREFIX, SHARED_POINT_PREFIX } from "@/lib/data/agreements"
 import type { BusinessRecord, ModuleLocation } from "@/lib/data/business-modules"
@@ -50,7 +48,7 @@ import { isPropertyRecord, isSharedPointRecord, PROPERTIES_MODULE, SHARED_POINTS
 
 import { typed, type MappingContext, type Resolver } from "./adapter"
 import { dayIn, firstDayOut, planningAreaAdapter } from "./planning"
-import { referencedServerId } from "./references"
+import { nameVia, referencedServerId } from "./references"
 
 /**
  * The switched modules a container's record is read through beside its own:
@@ -88,8 +86,6 @@ function shared(periods: readonly (Period | undefined)[]): Period | null {
   const until = known.flatMap((period) => (period.until === null ? [] : [period.until])).sort()[0] ?? null
   return from === undefined || (until !== null && until <= from) ? null : { from, until }
 }
-
-const covers = (period: Period, day: string) => period.from <= day && (period.until === null || day < period.until)
 
 /** The loaded row a web id names, held to its kind. */
 function placeRecord(webId: string | undefined, prefix: string, owns: (record: BusinessRecord) => boolean, context: MappingContext): BusinessRecord | undefined {
@@ -135,6 +131,11 @@ function chainOf(placement: ContainerServicePlacement, context: MappingContext):
   return { agreement, property, place: property ?? point, period }
 }
 
+/** A place as a person reads it: a property is named by its address, a point by its name and its address. */
+function placeLabel(place: BusinessRecord, address: string | undefined): string {
+  return address === undefined ? place.name : address.startsWith(place.name) ? address : `${place.name}, ${address}`
+}
+
 /** The point a place is located at, or undefined while it is not. */
 function pointOf(place: BusinessRecord): { latitude: string; longitude: string; at: LngLat } | undefined {
   const latitude = typed(place, "latitude")
@@ -164,25 +165,38 @@ function areasAt(at: LngLat, projectWebId: string, context: MappingContext): Bus
  */
 export function containerPlace(shown: ContainerServicePlacement | undefined, placements: readonly ContainerServicePlacement[], projectWebId: string, timezone: string | undefined, context: MappingContext): ContainerPlace {
   const day = dayIn(context.now ?? new Date(), timezone)
+  // Each placement read through once: its chain, its point and its areas serve its period and, for the one shown, the map's readings.
+  const read = new Map(
+    placements.map((placement) => {
+      const chain = chainOf(placement, context)
+      const point = chain?.place === undefined ? undefined : pointOf(chain.place)
+      return [placement.id, { chain, point, areas: point === undefined ? [] : areasAt(point.at, projectWebId, context) }] as const
+    }),
+  )
+  const addressOf = (chain: Chain, place: BusinessRecord) => typed(place, chain.property === undefined ? "address" : "serviceAddress")
   const periods: ServingPeriod[] = placements.flatMap((placement) => {
-    const chain = chainOf(placement, context)
+    const { chain, areas } = read.get(placement.id) ?? { chain: undefined, areas: [] }
     if (chain?.period == null || (chain.period.until !== null && chain.period.until <= day)) return []
-    const point = chain.place === undefined ? undefined : pointOf(chain.place)
-    return [{ ...chain.period, areaIds: point === undefined ? [] : areasAt(point.at, projectWebId, context).map((area) => area.id) }]
+    return [
+      {
+        ...chain.period,
+        areaIds: areas.map((area) => area.id),
+        fractions: [nameVia(context, "fraction", placement.wasteFractionId)],
+        ...(chain.place === undefined ? {} : { place: placeLabel(chain.place, addressOf(chain, chain.place)) }),
+      },
+    ]
   })
   const values = { [SERVING_KEY]: JSON.stringify({ asOf: day, periods } satisfies ServingReading) }
-  const chain = shown === undefined ? undefined : chainOf(shown, context)
+  const { chain, point, areas } = (shown === undefined ? undefined : read.get(shown.id)) ?? { chain: undefined, point: undefined, areas: [] }
   if (chain?.place === undefined || chain.period === null) return { facts: {}, values }
   const { agreement, property, place, period } = chain
-  const address = typed(place, property === undefined ? "address" : "serviceAddress")
-  if (!covers(period, day)) {
+  const address = addressOf(chain, place)
+  if (!periodHolds(period, day)) {
     // Serving later: where and from when, for the preview's matched rows; the map's readings are today's.
-    return { facts: period.from > day ? { "Serves at": `${place.name}${address === undefined ? "" : `, ${address}`} — from ${period.from}` } : {}, values }
+    return { facts: period.from > day ? { "Serves at": `${placeLabel(place, address)} — from ${period.from}` } : {}, values }
   }
-  const point = pointOf(place)
   if (point === undefined) return { facts: { "Serves at": `${place.name}, not located yet` }, values }
   const { latitude, longitude } = point
-  const areas = areasAt(point.at, projectWebId, context)
   const kind = property?.facts["Property type"]
   return {
     facts: {

@@ -195,6 +195,7 @@ export function buildWizardModel(data: GuidedSchemeData, records: WizardRecords)
             areaId: data.planningAreaId,
             projectIds,
             from: data.effectiveFrom,
+            days: group.days,
             containers: records.containers,
           }).matched
         : profilesOf(group.containerIds)

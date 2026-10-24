@@ -59,6 +59,7 @@ import type { ApiClient } from "../client"
 import { ApiProblem, genericProblem, isAccountRefusal, type Problem } from "../problem"
 import { isLocalRefusal, moduleKeyOf, PartialWrite, statusToken, webIdOf, type CommandInput, type MappingContext, type Resolver, type Resource, type ResourceAdapter, type ServerModule } from "./adapter"
 import { isCompanyRecord } from "./organisation"
+import { dayIn } from "./planning"
 
 export type ModuleStatus = "idle" | "not-granted" | "loading" | "ready" | "failed"
 
@@ -311,21 +312,28 @@ export function projectTimezonesOf(state: ServerRecordsState): string[] {
   return [...new Set(zones.filter((zone): zone is string => typeof zone === "string" && zone !== ""))]
 }
 
-/** The day an instant falls on in a timezone, the browser's where it names none or one Intl does not know. */
-function dayOn(instant: number, timezone: string | undefined): string {
-  const format = (zone: string | undefined) => new Intl.DateTimeFormat("en-CA", { timeZone: zone, year: "numeric", month: "2-digit", day: "2-digit" }).format(instant)
-  try {
-    return format(timezone)
-  } catch {
-    return format(undefined)
-  }
-}
-
 const zonesOr = (timezones: readonly (string | undefined)[]) => (timezones.length === 0 ? [undefined] : timezones)
 
 /** Whether a project's day has turned between `then` and `now`, on any of the projects' clocks (the browser's without one). */
 export function dayTurned(then: number, now: number, timezones: readonly (string | undefined)[]): boolean {
-  return zonesOr(timezones).some((zone) => dayOn(then, zone) !== dayOn(now, zone))
+  return zonesOr(timezones).some((zone) => dayIn(new Date(then), zone) !== dayIn(new Date(now), zone))
+}
+
+/**
+ * The modules to read again at the turn of a project's day (#232): each
+ * ready one that reads the day (`readsTheDay`) and was read before it turned
+ * — but not one read through another that is read again too, since that
+ * read's new rows bring it after (`derivedFromChanged`), mapped against the
+ * day's readings rather than yesterday's.
+ */
+export function dayTurnRereads(state: ServerRecordsState, modules: readonly ServerModule[], now: number, timezones: readonly (string | undefined)[]): ServerModule[] {
+  const keyOf = (module: ServerModule) => moduleKeyOf(module.workspaceId, module.moduleId)
+  const turned = modules.filter((module) => {
+    const current = state.get(keyOf(module))
+    return module.readsTheDay === true && current?.status === "ready" && current.loadedAt !== null && dayTurned(current.loadedAt, now, timezones)
+  })
+  const again = new Set(turned.map(keyOf))
+  return turned.filter((module) => !(module.derivedFrom ?? []).some((source) => again.has(source)))
 }
 
 /** How long from `now` until the first of the projects' days turns, to the second. */

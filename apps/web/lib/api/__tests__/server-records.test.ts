@@ -18,6 +18,7 @@ import {
   adapterFor,
   companyRecordIdOf,
   dayTurned,
+  dayTurnRereads,
   derivedFromChanged,
   derivedSourcesNow,
   IDLE,
@@ -625,6 +626,22 @@ describe("a module read through others", () => {
     const organisation = ready([record("company-1", "Kystbyen"), record("project-1", "Copenhagen", { submittedValues: { timezone: "Europe/Copenhagen" } }), record("project-2", "Aarhus", { submittedValues: { timezone: "Europe/Copenhagen" } })])
     assert.deepEqual(projectTimezonesOf(new Map([["configure.organization", organisation]])), ["Europe/Copenhagen"])
     assert.deepEqual(projectTimezonesOf(new Map()), [], "none loaded: the browser's clock")
+  })
+
+  test("at the day's turn the modules read on the day are read again, one read through another that is followed by it", () => {
+    const areas: ServerModule = { workspaceId: "configure", moduleId: "areas", resources: [], readsTheDay: true }
+    const containers: ServerModule = { workspaceId: "resources", moduleId: "containers", resources: [], derivedFrom: ["configure.areas"], readsTheDay: true }
+    const yesterday = Date.parse("2026-10-24T12:00:00Z")
+    const now = Date.parse("2026-10-25T08:00:00Z")
+    const readAt = (at: number) => ({ ...ready([]), loadedAt: at })
+    const keys = (modules: ServerModule[]) => modules.map((module) => `${module.workspaceId}.${module.moduleId}`)
+    const both = new Map([["configure.areas", readAt(yesterday)], ["resources.containers", readAt(yesterday)]])
+    assert.deepEqual(keys(dayTurnRereads(both, [areas, containers], now, ["Europe/Copenhagen"])), ["configure.areas"], "the containers follow the areas' new rows")
+    const areasNotGranted = new Map([["configure.areas", notGranted("configure.areas")], ["resources.containers", readAt(yesterday)]])
+    assert.deepEqual(keys(dayTurnRereads(areasNotGranted, [areas, containers], now, ["Europe/Copenhagen"])), ["resources.containers"], "nothing to follow: read on their own")
+    const today = new Map([["configure.areas", readAt(now)], ["resources.containers", readAt(now)]])
+    assert.deepEqual(dayTurnRereads(today, [areas, containers], now, ["Europe/Copenhagen"]), [], "read today already")
+    assert.deepEqual(dayTurnRereads(both, [{ ...areas, readsTheDay: undefined }], now, ["Europe/Copenhagen"]), [], "a module not read on the day")
   })
 
   test("a project's day has turned between two instants on its own clock, and the next turn is the first of its projects'", () => {

@@ -13,7 +13,7 @@
 import type { BusinessRecord } from "../prototype-record"
 import { splitList } from "../record-values"
 import { schemeLicenceDay } from "../planning/checks"
-import { addDays, isIsoDate, SERVICE_DAYS, sortServiceDays, type ServiceDay } from "./recurrence"
+import { addDays, isIsoDate, SERVICE_DAYS, serviceDayOf, sortServiceDays, type ServiceDay } from "./recurrence"
 import { stringValue } from "./validation"
 
 /* ------------------------------ vocabulary -------------------------------- */
@@ -77,8 +77,13 @@ export const ELIGIBLE_CONTAINER_STATUSES = new Set(["Available"])
  */
 export const SERVING_KEY = "serving"
 
-/** One placement's serving: `from` its first day, `until` its first day out or null while open (half-open, as the wire spells periods), and the areas its place lies in. */
-export type ServingPeriod = { from: string; until: string | null; areaIds: readonly string[] }
+/**
+ * One placement's serving: `from` its first day, `until` its first day out
+ * or null while open (half-open, as the wire spells periods), the areas its
+ * place lies in, the fraction it serves (each placement names its own), and
+ * where it serves, as a person reads the place.
+ */
+export type ServingPeriod = { from: string; until: string | null; areaIds: readonly string[]; fractions: readonly string[]; place?: string }
 
 /** A container's serving as read on `asOf`, the project's day. */
 export type ServingReading = { asOf: string; periods: readonly ServingPeriod[] }
@@ -103,11 +108,13 @@ function parseReading(raw: string): ServingReading {
     const parsed = JSON.parse(raw) as { asOf?: unknown; periods?: unknown }
     const asOf = day(parsed.asOf)
     if (asOf !== null && Array.isArray(parsed.periods)) {
-      const periods = parsed.periods.flatMap((entry: { from?: unknown; until?: unknown; areaIds?: unknown }) => {
+      const strings = (value: unknown) => (Array.isArray(value) ? value.filter((item): item is string => typeof item === "string") : [])
+      const periods = parsed.periods.flatMap((entry: { from?: unknown; until?: unknown; areaIds?: unknown; fractions?: unknown; place?: unknown }): ServingPeriod[] => {
         const from = day(entry?.from)
-        if (from === null) return []
-        const areaIds = Array.isArray(entry.areaIds) ? entry.areaIds.filter((id): id is string => typeof id === "string") : []
-        return [{ from, until: day(entry.until), areaIds }]
+        const until = entry?.until === null || entry?.until === undefined ? null : day(entry.until)
+        // A period it cannot read serves nowhere: an end it cannot read is no open end.
+        if (from === null || (until === null && entry.until !== null && entry.until !== undefined)) return []
+        return [{ from, until, areaIds: strings(entry.areaIds), fractions: strings(entry.fractions), ...(typeof entry.place === "string" ? { place: entry.place } : {}) }]
       })
       return { asOf, periods }
     }
@@ -118,24 +125,31 @@ function parseReading(raw: string): ServingReading {
 }
 
 /**
- * The day a container is judged on (#232): the scheme's first day where it
- * is not behind the day the reading was made — a new scheme's first
- * collection — else that day, a running scheme's collections being from now
- * on (`schemeLicenceDay`, the day a group's driver is judged on).
+ * The day a container is judged on (#232): the first collection — the first
+ * of `days` on or after the scheme's first day where that is not behind the
+ * day the reading was made, else after that day, a running scheme's
+ * collections being from now on (`schemeLicenceDay`, the day a group's
+ * driver is judged on). Without the days, that day itself.
  */
-function judgedOn(reading: ServingReading, schemeFrom: string | undefined): string {
-  return schemeLicenceDay(schemeFrom !== undefined && isIsoDate(schemeFrom) ? schemeFrom : reading.asOf, reading.asOf).day
+function judgedOn(reading: ServingReading, schemeFrom: string | undefined, days?: readonly ServiceDay[]): string {
+  const first = schemeLicenceDay(schemeFrom !== undefined && isIsoDate(schemeFrom) ? schemeFrom : reading.asOf, reading.asOf).day
+  if (days === undefined || days.length === 0) return first
+  for (let offset = 0; offset < 7; offset += 1) {
+    const day = addDays(first, offset)
+    if (days.includes(serviceDayOf(day))) return day
+  }
+  return first
 }
 
-const covers = (period: ServingPeriod, day: string) => period.from <= day && (period.until === null || day < period.until)
+/** Whether a serving period holds on a day: half-open, as the wire spells periods. */
+export const periodHolds = (period: Pick<ServingPeriod, "from" | "until">, day: string) => period.from <= day && (period.until === null || day < period.until)
 
-/** Why a container is out of service on `day` in `areaId` — anywhere, without one — or undefined while a period there holds it. */
-function outOfService(reading: ServingReading, day: string, areaId?: string): string | undefined {
-  const here = areaId === undefined ? reading.periods : reading.periods.filter((period) => period.areaIds.includes(areaId))
-  if (here.some((period) => covers(period, day))) return undefined
-  const next = here.filter((period) => period.from > day).map((period) => period.from).sort()[0]
+/** Why none of `periods` holds on `day`, or undefined while one does. */
+function outOfService(periods: readonly ServingPeriod[], day: string): string | undefined {
+  if (periods.some((period) => periodHolds(period, day))) return undefined
+  const next = periods.filter((period) => period.from > day).map((period) => period.from).sort()[0]
   if (next !== undefined) return `Serves from ${next}`
-  const last = here.flatMap((period) => (period.until === null ? [] : [period.until])).sort().at(-1)
+  const last = periods.flatMap((period) => (period.until === null ? [] : [period.until])).sort().at(-1)
   return last === undefined ? "No placement serves it" : `Served until ${addDays(last, -1)}`
 }
 
@@ -347,6 +361,8 @@ export type ContainerMatchProfile = {
   /** Display-vocabulary container type; absent = no compatibility profile. */
   containerType?: string
   projectIds?: readonly string[]
+  /** Where a container the API holds serves on the day a rule judged it: the place of the placement serving then, which may not be today's. */
+  place?: string
 }
 
 type ContainerRecordLike = Pick<
@@ -362,6 +378,7 @@ type ContainerRecordLike = Pick<
 export function containerMatchProfile(
   record: ContainerRecordLike,
   schemeFrom?: string,
+  days?: readonly ServiceDay[],
 ): ContainerMatchProfile {
   const values = record.submittedValues ?? {}
   const facts = record.facts ?? {}
@@ -401,7 +418,7 @@ export function containerMatchProfile(
     id: record.id,
     name: record.name,
     status: record.status,
-    inService: reading !== undefined ? outOfService(reading, judgedOn(reading, schemeFrom)) === undefined : ELIGIBLE_CONTAINER_STATUSES.has(record.status),
+    inService: reading !== undefined ? outOfService(reading.periods, judgedOn(reading, schemeFrom, days)) === undefined : ELIGIBLE_CONTAINER_STATUSES.has(record.status),
     areaIds: reading !== undefined ? [...new Set(reading.periods.flatMap((period) => period.areaIds))] : areaId !== undefined ? [areaId] : [],
     fractions,
     ...(containerType ? { containerType } : {}),
@@ -450,18 +467,15 @@ const fractionsIntersect = (
     ),
   )
 
-/** Why a container is out of service for a scheme in `areaId` from `schemeFrom`: its serving there where the API holds it, its status for a fixture's; undefined while in. */
-function outOfServiceFor(record: ContainerRecordLike, profile: ContainerMatchProfile, areaId: string, schemeFrom: string | undefined): string | undefined {
-  const reading = servingReadingOf(record)
-  if (reading === undefined) return profile.inService ? undefined : profile.status
-  return outOfService(reading, judgedOn(reading, schemeFrom), areaId)
-}
 
 /**
  * Resolves one rule against the container records. Area and project bound the
- * scope; inside it, a container matches when it is in service there, a
- * fraction intersects the rule, and — when the rule names a vehicle type —
- * its container type is compatible. An empty-fraction rule matches nothing
+ * scope; inside it, a container matches when a fraction intersects the rule,
+ * it is in service, and — when the rule names a vehicle type — its container
+ * type is compatible. A container the API holds is read per placement
+ * (#232): in scope where one lies in the area, its fraction that
+ * placement's, in service where one of those holds on the first collection,
+ * whose place it is then matched at. An empty-fraction rule matches nothing
  * (the rule IS the fraction selection; validation blocks saving one).
  */
 export function resolveStopMatches(input: {
@@ -470,8 +484,10 @@ export function resolveStopMatches(input: {
   areaId: string | undefined
   /** The scheme's project scope; absent = company-wide. */
   projectIds?: readonly string[]
-  /** The scheme's first day, which a container the API holds is judged in service on where it is still ahead (#232). */
+  /** The scheme's first day, on or after which a container the API holds is judged on the first collection where that is still ahead (#232). */
   from?: string | undefined
+  /** The days the rule's group collects on, which the first collection falls on; absent, the first day itself. */
+  days?: readonly ServiceDay[] | undefined
   containers: readonly ContainerRecordLike[]
 }): StopMatchResult {
   const matched: ContainerMatchProfile[] = []
@@ -479,14 +495,19 @@ export function resolveStopMatches(input: {
   let scopeTotal = 0
 
   if (!input.areaId) return { matched, excluded, scopeTotal }
+  const areaId = input.areaId
 
   for (const record of input.containers) {
-    const profile = containerMatchProfile(record, input.from)
-    if (!profile.areaIds.includes(input.areaId)) continue
+    let profile = containerMatchProfile(record, input.from, input.days)
+    const reading = servingReadingOf(record)
+    const here = reading === undefined ? [] : reading.periods.filter((period) => period.areaIds.includes(areaId))
+    if (reading === undefined ? !profile.areaIds.includes(areaId) : here.length === 0) continue
     if (!projectsOverlap(profile.projectIds, input.projectIds)) continue
     scopeTotal += 1
 
-    if (!fractionsIntersect(input.rule.fractions, profile.fractions)) continue
+    // Each placement serves its own fraction: a container the API holds is the rule's where one of its placements here is.
+    const wanted = here.filter((period) => fractionsIntersect(input.rule.fractions, period.fractions.length > 0 ? period.fractions : profile.fractions))
+    if (reading === undefined ? !fractionsIntersect(input.rule.fractions, profile.fractions) : wanted.length === 0) continue
     // A container type outside the rule is a deliberate exclusion (the rule
     // IS the type selection), not a near-miss the planner must be shown.
     if (
@@ -499,7 +520,9 @@ export function resolveStopMatches(input: {
       continue
     }
 
-    const outOfServiceHere = outOfServiceFor(record, profile, input.areaId, input.from)
+    const day = reading === undefined ? undefined : judgedOn(reading, input.from, input.days)
+    const serving = day === undefined ? undefined : wanted.find((period) => periodHolds(period, day))
+    const outOfServiceHere = day === undefined ? (profile.inService ? undefined : profile.status) : outOfService(wanted, day)
     if (outOfServiceHere !== undefined) {
       excluded.push({
         id: profile.id,
@@ -507,6 +530,9 @@ export function resolveStopMatches(input: {
         reason: `${outOfServiceHere} — not in service`,
       })
       continue
+    }
+    if (serving !== undefined) {
+      profile = { ...profile, ...(serving.fractions.length > 0 ? { fractions: [...serving.fractions] } : {}), ...(serving.place === undefined ? {} : { place: serving.place }) }
     }
     if (input.rule.vehicleType) {
       if (!profile.containerType) {

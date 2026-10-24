@@ -114,6 +114,7 @@ export function SchemeRuleEditor({
   areaName,
   projectIds,
   from,
+  days,
   rule,
   onChange,
 }: {
@@ -121,8 +122,9 @@ export function SchemeRuleEditor({
   areaId?: string
   areaName?: string
   projectIds?: string[]
-  /** The scheme's first day, which a container the API holds is judged in service on where it is still ahead (#232). */
+  /** The scheme's first day and the group's days: a container the API holds is judged in service on the first collection where that is still ahead (#232). */
   from?: string
+  days?: readonly ServiceDay[]
   rule: StopMatchRule
   onChange: (rule: StopMatchRule) => void
 }) {
@@ -149,8 +151,8 @@ export function SchemeRuleEditor({
   }
 
   const result = useMemo(
-    () => resolveStopMatches({ rule, areaId, projectIds, from, containers }),
-    [rule, areaId, projectIds, from, containers],
+    () => resolveStopMatches({ rule, areaId, projectIds, from, days, containers }),
+    [rule, areaId, projectIds, from, days, containers],
   )
 
   return (
@@ -269,7 +271,7 @@ export function SchemeRuleEditor({
                     </span>
                   </p>
                   <p className="truncate text-xs text-muted-foreground">
-                    {container?.facts?.Address ?? container?.facts?.["Serves at"] ?? container?.context ?? ""}
+                    {profile.place ?? container?.facts?.Address ?? container?.facts?.["Serves at"] ?? container?.context ?? ""}
                     {profile.containerType ? ` · ${profile.containerType}` : ""}
                   </p>
                 </div>
@@ -898,6 +900,7 @@ function CollectionGroupSpoke({
           areaName={areaName}
           projectIds={projectIds}
           from={from}
+          days={group.days}
           rule={rule}
           onChange={(next) =>
             onChange({

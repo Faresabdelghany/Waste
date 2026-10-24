@@ -149,8 +149,9 @@ describe("a container the API holds (#207, #232)", () => {
   // its status the asset state (every seeded container has no movement yet), and its serving: for each placement not ended
   // by the day read, the period it serves the container in and the areas its place lies in.
   const ASOF = "2026-10-24"
-  type Period = { from: string; until?: string | null; areas?: string[] }
-  const serving = (...periods: Period[]) => JSON.stringify({ asOf: ASOF, periods: periods.map((period) => ({ from: period.from, until: period.until ?? null, areaIds: period.areas ?? ["area-indreby"] })) })
+  type Period = { from: string; until?: string | null; areas?: string[]; fractions?: string[]; place?: string }
+  const serving = (...periods: Period[]) =>
+    JSON.stringify({ asOf: ASOF, periods: periods.map((period) => ({ from: period.from, until: period.until ?? null, areaIds: period.areas ?? ["area-indreby"], fractions: period.fractions ?? ["Residual"], ...(period.place === undefined ? {} : { place: period.place }) })) })
   const server = (id: string, periods: Period[] = [{ from: "2026-01-01" }], over: { fraction?: string; type?: string } = {}) => ({
     id,
     name: id.toUpperCase(),
@@ -163,8 +164,8 @@ describe("a container the API holds (#207, #232)", () => {
     },
     projectIds: ["project-copenhagen"],
   })
-  const preview = (containers: ReturnType<typeof server>[], areaId = "area-indreby", from?: string) =>
-    resolveStopMatches({ rule: { fractions: ["Residual"] }, areaId, projectIds: ["project-copenhagen"], ...(from === undefined ? {} : { from }), containers })
+  const preview = (containers: ReturnType<typeof server>[], areaId = "area-indreby", from?: string, fractions = ["Residual"]) =>
+    resolveStopMatches({ rule: { fractions }, areaId, projectIds: ["project-copenhagen"], ...(from === undefined ? {} : { from }), containers })
   const matched = (result: ReturnType<typeof preview>) => result.matched.map((profile) => profile.id)
   const reasons = (result: ReturnType<typeof preview>) => result.excluded.map((exclusion) => exclusion.reason)
 
@@ -209,6 +210,30 @@ describe("a container the API holds (#207, #232)", () => {
     assert.deepEqual(matched(preview([moved], "area-osterbro", "2026-11-02")), ["asset-7"], "where it moves to, from its first day there")
     assert.deepEqual(reasons(preview([moved], "area-indreby", "2026-11-02")), ["Served until 2026-10-31 — not in service"], "where it was")
     assert.deepEqual(reasons(preview([moved], "area-osterbro")), ["Serves from 2026-11-01 — not in service"], "judged today, where it is not yet")
+  })
+
+  test("each placement serves its own fraction, and a match names the place it is matched at", () => {
+    const moved = server("asset-9", [
+      { from: "2026-01-01", until: "2026-11-01", areas: ["area-indreby"], fractions: ["Residual"], place: "Parkvej 18" },
+      { from: "2026-11-01", areas: ["area-osterbro"], fractions: ["Organic"], place: "Kongens Nytorv" },
+    ])
+    assert.deepEqual(matched(preview([moved], "area-osterbro", "2026-11-02", ["Organic"])), ["asset-9"], "its fraction there")
+    assert.deepEqual(matched(preview([moved], "area-osterbro", "2026-11-02", ["Residual"])), [], "not today's fraction where it moves to")
+    const [profile] = preview([moved], "area-osterbro", "2026-11-02", ["Organic"]).matched
+    assert.deepEqual([profile?.fractions, profile?.place], [["Organic"], "Kongens Nytorv"])
+  })
+
+  test("is judged on the first collection: the first of the group's days on or after the scheme's first day", () => {
+    // A scheme from Monday 2 November that collects on Thursdays first collects on the 5th.
+    const starting = server("asset-10", [{ from: "2026-11-05" }])
+    const onThursdays = resolveStopMatches({ rule: { fractions: ["Residual"] }, areaId: "area-indreby", from: "2026-11-02", days: ["thursday"], containers: [starting] })
+    assert.deepEqual(matched(onThursdays), ["asset-10"])
+    assert.deepEqual(reasons(preview([starting], "area-indreby", "2026-11-02")), ["Serves from 2026-11-05 — not in service"], "without the days, the first day itself")
+  })
+
+  test("a period it cannot read serves nowhere: an unreadable end is no open end", () => {
+    const record = { ...server("asset-11"), submittedValues: { ...server("asset-11").submittedValues, [SERVING_KEY]: JSON.stringify({ asOf: ASOF, periods: [{ from: "2026-01-01", until: "2026-13-01", areaIds: ["area-indreby"], fractions: ["Residual"] }] }) } }
+    assert.equal(preview([record]).scopeTotal, 0)
   })
 
   test("out of service on the day judged, it is in scope and excluded with the reason, never matched", () => {

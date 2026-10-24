@@ -161,9 +161,10 @@ export function GroupEditor({
       areaId: data.planningAreaId,
       projectIds: data.projectId ? [data.projectId] : undefined,
       from: data.effectiveFrom,
+      days: group.days,
       containers: records.containers,
     })
-  }, [fraction, containerTypes, data.effectiveFrom, data.planningAreaId, data.projectId, records.containers])
+  }, [fraction, containerTypes, data.effectiveFrom, data.planningAreaId, data.projectId, group.days, records.containers])
 
   const count = matches ? matches.matched.length : 0
   const load = matches

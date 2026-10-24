@@ -448,7 +448,9 @@ export const containersModule: ServerModule = {
   workspaceId: CONTAINERS_MODULE.workspaceId,
   moduleId: CONTAINERS_MODULE.moduleId,
   resources: [containerAdapter],
-  derivedFrom: CONTAINER_PLACE_MODULES.map((location) => moduleKeyOf(location.workspaceId, location.moduleId)),
+  // The organisation too: a project's timezone is the day its containers' serving is read on.
+  derivedFrom: ["configure.organization", ...CONTAINER_PLACE_MODULES.map((location) => moduleKeyOf(location.workspaceId, location.moduleId))],
+  readsTheDay: true,
 }
 
 // ---------------------------------------------------------------------------
