@@ -8,7 +8,7 @@
 import assert from "node:assert/strict"
 import { describe, test } from "node:test"
 
-import { caseRuleOf, superseding, supersededNote, supersedingNote, STOP_CASE_KINDS } from "../cases"
+import { caseRuleOf, copiedNote, superseding, supersededNote, supersedingNote, STOP_CASE_KINDS, type ProblemAsFound } from "../cases"
 import { ticketFor, type CommandRejectedFacts, type EventFacts, type PickupEventFacts, type PickupEventKind } from "../from-event"
 import { OPEN_TICKET_STATUSES } from "../vocabulary"
 
@@ -60,15 +60,20 @@ describe("caseRuleOf", () => {
 })
 
 describe("superseding", () => {
-  test("a stop's open reported problem is completed as a duplicate only while nobody has touched it: still open, nobody assigned", () => {
-    assert.equal(superseding({ status: "open", assigneeUserAccountId: null }), "duplicate")
+  const untouched: ProblemAsFound = { status: "open", assigneeUserAccountId: null, createdBy: null, edited: false, personInHistory: false }
+
+  test("a stop's open reported problem is completed as a duplicate only while nobody has touched it: the device's, still open, nobody assigned, never edited, no person in its history", () => {
+    assert.equal(superseding(untouched), "duplicate")
   })
 
-  test("one the office works — assigned, or moved to another open status — stays as the office left it, and each case names the other", () => {
-    assert.equal(superseding({ status: "open", assigneeUserAccountId: "lars" }), "named")
+  test("one a person made or works — assigned, moved to another open status, edited, commented on or reopened, or made by the office — stays as the office left it, and each case names the other", () => {
+    assert.equal(superseding({ ...untouched, assigneeUserAccountId: "lars" }), "named", "assigned")
+    assert.equal(superseding({ ...untouched, edited: true }), "named", "edited: its priority, its text")
+    assert.equal(superseding({ ...untouched, personInHistory: true }), "named", "a person's comment, or a reopening")
+    assert.equal(superseding({ ...untouched, createdBy: "lars" }), "named", "the office's own case")
     for (const status of OPEN_TICKET_STATUSES.filter((candidate) => candidate !== "open")) {
-      assert.equal(superseding({ status, assigneeUserAccountId: null }), "named", status)
-      assert.equal(superseding({ status, assigneeUserAccountId: "lars" }), "named", `${status}, assigned`)
+      assert.equal(superseding({ ...untouched, status }), "named", status)
+      assert.equal(superseding({ ...untouched, status, assigneeUserAccountId: "lars" }), "named", `${status}, assigned`)
     }
   })
 
@@ -80,5 +85,6 @@ describe("superseding", () => {
     assert.equal(supersedingNote("named", problem), "T-1001 is a problem reported on this stop, which the office is working.")
     const long = supersedingNote("duplicate", { label: "T-1001", description: "word ".repeat(500).trim() })
     assert.ok(long.length <= 2000, "the copied words are cut to the comment's bound")
+    assert.equal(copiedNote("T-1001", "The driver reported a problem. Reason: inaccessible. Note: Open now"), "From T-1001: The driver reported a problem. Reason: inaccessible. Note: Open now", "a problem folded into the duplicate, copied over")
   })
 })

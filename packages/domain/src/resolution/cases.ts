@@ -14,10 +14,13 @@
 // that opens leads the stop's case whatever order the events arrived in,
 // since a stop's events travel on two queues worked by two loops: the stop's
 // open reported problem is completed as a `duplicate` of it while nobody has
-// touched it — still `open`, nobody assigned — and its words are copied onto
-// the missed collection; one the office already works stays as the office
-// left it, and each case names the other. A problem on the route alone names
-// no stop and belongs to no case but its own.
+// touched it — a problem the driver's device opened, still `open`, nobody
+// assigned, never edited, nothing in its history a person recorded — and its
+// words, and the problems folded into it since, are copied onto the missed
+// collection; one a person made or works stays as the office left it, and
+// each case names the other. Where a stop has both open, its missed
+// collection is the case a later event folds into. A problem on the route
+// alone names no stop and belongs to no case but its own.
 import { boundedDescription, type EventFacts, type TicketDraft } from "./from-event"
 import type { TicketKind, TicketStatus } from "./vocabulary"
 
@@ -29,7 +32,7 @@ export type CaseRule = {
   /** What serialises the events that may meet one case: the driver, or the stop. */
   by: "driver" | "pickup"
   id: string
-  /** The kinds of open case the event folds into as a comment, the oldest first, before it opens one of its own. */
+  /** The kinds of open case the event folds into as a comment, before it opens one of its own: the first kind listed first, then the oldest. */
   foldsInto: readonly TicketKind[]
   /** The kinds of open case a ticket it opens supersedes. */
   supersedes: readonly TicketKind[]
@@ -47,14 +50,21 @@ export function caseRuleOf(facts: EventFacts, draft: TicketDraft): CaseRule | un
 /** What a stop's new missed collection does to the stop's open reported problem: a duplicate of it, or a case of its own that the two name. */
 export type Superseding = "duplicate" | "named"
 
-/** A duplicate while nobody has touched the problem — still `open`, nobody assigned; never a case someone is working. */
-export function superseding(problem: { status: TicketStatus; assigneeUserAccountId: string | null }): Superseding {
-  return problem.status === "open" && problem.assigneeUserAccountId === null ? "duplicate" : "named"
+/** The problem as the guard reads it: its status and assignee, who made it, whether its row was ever edited, and whether a person recorded anything in its history. */
+export type ProblemAsFound = { status: TicketStatus; assigneeUserAccountId: string | null; createdBy: string | null; edited: boolean; personInHistory: boolean }
+
+/** A duplicate only while nobody has touched the problem: the device's, still `open`, nobody assigned, never edited, no person in its history; never a case someone made or works. */
+export function superseding(problem: ProblemAsFound): Superseding {
+  const untouched = problem.status === "open" && problem.assigneeUserAccountId === null && problem.createdBy === null && !problem.edited && !problem.personInHistory
+  return untouched ? "duplicate" : "named"
 }
 
 /** What the problem's history says: the duplicate's status change, or a comment, naming the missed collection by its label. */
 export const supersededNote = (how: Superseding, missed: string): string =>
   how === "duplicate" ? `The stop was not collected: this problem is part of ${missed}, its missed collection.` : `The stop was not collected: ${missed} is its missed collection.`
+
+/** A problem folded into the duplicate before it was completed, copied onto the missed collection under the duplicate's label. */
+export const copiedNote = (label: string, body: string): string => boundedDescription(`From ${label}: ${body}`)
 
 /** What the missed collection's history says of the problem: its words, where it became a duplicate, or its label. */
 export const supersedingNote = (how: Superseding, problem: { label: string; description: string }): string =>

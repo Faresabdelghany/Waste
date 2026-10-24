@@ -27,13 +27,13 @@ import { after, before, describe, test } from "node:test"
 
 import { createDb, type Database } from "@waste/db/client"
 import { newId } from "@waste/db/ids"
-import { openTicket } from "@waste/db/commands/open-ticket"
+import { appendTicketEvent, openTicket } from "@waste/db/commands/open-ticket"
 import { outboxEvent } from "@waste/db/schema/execution"
 import { driver } from "@waste/db/schema/fleet"
 import { ticket, ticketEvent } from "@waste/db/schema/resolution"
 import { withCompany } from "@waste/db/tenant"
 import { OPEN_TICKET_STATUSES } from "@waste/domain/resolution/vocabulary"
-import { and, asc, eq, inArray } from "drizzle-orm"
+import { and, asc, eq, inArray, sql } from "drizzle-orm"
 
 import { JOBS } from "../jobs"
 import { OPEN_TICKETS_QUEUE_OPTIONS, openTicketFor, openTickets, RESOLUTION_KINDS, type OpenTicketsOutcome } from "../jobs/open-tickets"
@@ -295,6 +295,12 @@ describe("resolution.open-tickets", { skip: api.skip || owner.skip }, () => {
     }
   })
 
+  /** Polls `holds` until it does, or fails with `what` after five seconds. */
+  const expectEventually = async (holds: () => Promise<boolean>, what: string) => {
+    for (const started = Date.now(); Date.now() - started < 5_000; await new Promise((resolve) => setTimeout(resolve, 25))) if (await holds()) return
+    assert.fail(what)
+  }
+
   /** A driver of the tenant's with no ticket yet, so a rejection of theirs opens one. */
   const driverOfItsOwn = async (name: string) => {
     const id = testId()
@@ -391,6 +397,8 @@ describe("resolution.open-tickets", { skip: api.skip || owner.skip }, () => {
     assert.equal(reported.outcome, "opened")
     const problemId = (reported as { ticketId: string }).ticketId
     const problem = await ticketById(problemId)
+    const again = problemOn(seeded, stop, "bin1", "Gate open now, come back today")
+    assert.deepEqual(await openTicketFor(again, context()), { outcome: "commented", ticketId: problemId }, "a second problem folds into the first: still nobody's")
 
     const failed = await openTicketFor(failureOn(seeded, stop, "bin1"), context())
     assert.equal(failed.outcome, "opened")
@@ -400,11 +408,12 @@ describe("resolution.open-tickets", { skip: api.skip || owner.skip }, () => {
     assert.equal(missed.kind, "missed-collection", "the missed collection leads: its kind and its priority")
 
     const closed = await ticketById(problemId)
-    assert.deepEqual([closed.status, closed.resolution, closed.closedAt?.toISOString()], ["completed", "duplicate", NOW.toISOString()])
+    assert.deepEqual([closed.status, closed.resolution, closed.closedAt?.toISOString(), closed.parentTicketId], ["completed", "duplicate", NOW.toISOString(), missedId], "the missed collection is its parent")
     assert.deepEqual(
       (await historyOf(problemId)).map((entry) => [entry.kind, entry.status, entry.resolution, entry.recordedBy, entry.sourceEventId, entry.body]),
       [
         ["created", "open", null, null, null, null],
+        ["comment", "open", null, null, again.id, "The driver reported a problem. Reason: inaccessible. Note: Gate open now, come back today"],
         ["status-changed", "completed", "duplicate", null, null, `The stop was not collected: this problem is part of T-${missed.number}, its missed collection.`],
       ],
       "a status change nobody recorded, as the office's complete shapes it",
@@ -415,25 +424,37 @@ describe("resolution.open-tickets", { skip: api.skip || owner.skip }, () => {
       [
         ["created", null, null],
         ["comment", null, `From T-${problem.number}, completed as a duplicate of this case: The driver reported a problem. Reason: inaccessible. Note: Gate locked, please come back`],
+        ["comment", null, `From T-${problem.number}: The driver reported a problem. Reason: inaccessible. Note: Gate open now, come back today`],
       ],
+      "the problem's words, and the problem folded into it since",
     )
     assert.match(lines.at(-1)!, new RegExp(`→ opened \\(ticket ${missedId}, ticket ${problemId} its duplicate\\)$`))
     assert.deepEqual((await openCasesOf(stop)).map((row) => row.id), [missedId], "one open case for the stop")
     assert.deepEqual(await openTicketFor(problemOn(seeded, stop, "bin1", "Still locked"), context()), { outcome: "commented", ticketId: missedId }, "a later problem folds into the missed collection")
   })
 
-  // Who the office assigned is the domain's table (cases.test.ts); here, the cases it moved.
-  test("a failure on a stop whose problem the office already works opens the missed collection and leaves the problem as the office left it, each case naming the other: never close a case someone is working", async () => {
-    for (const touched of ["in-progress", "on-hold"] as const) {
+  test("a failure on a stop whose problem a person made or works opens the missed collection and leaves the problem as the office left it, each case naming the other: never close a case someone is working", async () => {
+    const touches = ["in-progress", "on-hold", "assigned", "edited", "commented", "the office's own"] as const
+    for (const touched of touches) {
       const seeded = await seedRoute(pool, tenant, { status: "active", pickups: [{ container: "bin2", status: "failed", reason: "inaccessible" }] })
       const [stop] = seeded.pickupIds
-      const problemId = ((await openTicketFor(problemOn(seeded, stop, "bin2", "Blocked by scaffolding"), context())) as { ticketId: string }).ticketId
-      await withCompany(pool.db, tenant.companyId, (tx) =>
-        tx
-          .update(ticket)
-          .set({ status: touched })
-          .where(and(eq(ticket.companyId, tenant.companyId), eq(ticket.id, problemId))),
-      )
+      const problemId =
+        touched === "the office's own"
+          ? await withCompany(pool.db, tenant.companyId, async (tx) => {
+              const links = { routeId: seeded.id, pickupId: stop, containerId: tenant.containers.bin2.id, propertyId: tenant.properties.havnegade.id, sharedCollectionPointId: null, customerId: null, agreementId: null, driverId: null, parentTicketId: null }
+              const draft = { projectId: tenant.projectId, kind: "reported-problem" as const, priority: "medium" as const, source: "phone" as const, subject: "Caller: bin blocked", description: "The customer called: the bin is blocked.", occurredAt: NOW, dueAt: null, assigneeUserAccountId: null, links, alertId: null }
+              return (await openTicket(tx, { companyId: tenant.companyId, draft, createdBy: tenant.officeUserId, sourceEventId: null, newId, now: () => NOW })).row.id
+            })
+          : ((await openTicketFor(problemOn(seeded, stop, "bin2", "Blocked by scaffolding"), context())) as { ticketId: string }).ticketId
+      await withCompany(pool.db, tenant.companyId, async (tx) => {
+        const row = and(eq(ticket.companyId, tenant.companyId), eq(ticket.id, problemId))
+        if (touched === "in-progress" || touched === "on-hold") await tx.update(ticket).set({ status: touched }).where(row)
+        if (touched === "assigned") await tx.update(ticket).set({ assigneeUserAccountId: tenant.officeUserId }).where(row)
+        if (touched === "edited") await tx.update(ticket).set({ priority: "high" }).where(row)
+        if (touched === "commented") {
+          await appendTicketEvent(tx, { companyId: tenant.companyId, projectId: tenant.projectId, id: problemId }, { kind: "comment", status: "open", assigneeUserAccountId: null, resolution: null, body: "Called the customer; someone goes at 15:00", visibility: "internal", objectKey: null, recordedBy: tenant.officeUserId, sourceEventId: null }, newId)
+        }
+      })
       const before = await ticketById(problemId)
 
       const failed = await openTicketFor(failureOn(seeded, stop, "bin2"), context())
@@ -442,12 +463,12 @@ describe("resolution.open-tickets", { skip: api.skip || owner.skip }, () => {
       const missed = await ticketById(missedId)
       const after = await ticketById(problemId)
       assert.deepEqual([after.status, after.assigneeUserAccountId, after.resolution, after.closedAt], [before.status, before.assigneeUserAccountId, null, null], `${touched}: as the office left it`)
-      assert.deepEqual(
-        (await historyOf(problemId)).map((entry) => [entry.kind, entry.status, entry.body]).slice(1),
-        [["comment", before.status, `The stop was not collected: T-${missed.number} is its missed collection.`]],
-      )
+      const named = (await historyOf(problemId)).at(-1)
+      assert.deepEqual([named?.kind, named?.status, named?.body], ["comment", before.status, `The stop was not collected: T-${missed.number} is its missed collection.`], touched)
       assert.deepEqual((await historyOf(missedId)).map((entry) => [entry.kind, entry.body]).slice(1), [["comment", `T-${before.number} is a problem reported on this stop, which the office is working.`]])
       assert.deepEqual((await outboxAbout(problemId)).map((entry) => entry.kind), ["ticket-opened"], "nothing completed")
+      // Both open now: a later problem folds into the missed collection, the case the stop's events lead to.
+      assert.deepEqual(await openTicketFor(problemOn(seeded, stop, "bin2", "Gate open now"), context()), { outcome: "commented", ticketId: missedId }, `${touched}: the missed collection first`)
     }
   })
 
@@ -488,7 +509,12 @@ describe("resolution.open-tickets", { skip: api.skip || owner.skip }, () => {
       })
       await holding
       const job = openTicketFor(problemOn(seeded, stop, "bin1", "Please come back"), context())
-      await new Promise((resolve) => setTimeout(resolve, 500))
+      // Until the job waits on the case's row lock: the read under `for no key update`, as the office holds the row.
+      const waiting = async () => {
+        const rows = (await pool.db.execute(sql`select count(*)::int as waiting from pg_stat_activity where wait_event_type = 'Lock' and query ilike '%for no key update%'`)) as unknown as { waiting: number }[]
+        return rows[0]?.waiting ?? 0
+      }
+      await expectEventually(async () => (await waiting()) > 0, "the job waits on the case's row lock")
       release()
       await closing
       const outcome = await job

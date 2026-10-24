@@ -95,24 +95,26 @@ import { routeFields } from "@waste/contracts/routes"
 import type { Database, Tx } from "@waste/db/client"
 import { appendTicketEvent, openTicket, type TicketDraft, type TicketEventDraft } from "@waste/db/commands/open-ticket"
 import { emit } from "@waste/db/commands/outbox"
-import { ticketColumns, ticketOf, type TicketRow } from "@waste/db/commands/resolution-rows"
+import { labelOf, ticketColumns, ticketOf, type TicketRow } from "@waste/db/commands/resolution-rows"
 import { newId } from "@waste/db/ids"
 import { tableObjectName } from "@waste/db/names"
-import { agreement, subscription } from "@waste/db/schema/agreements"
-import { container, containerServicePlacement } from "@waste/db/schema/containers"
+import { container } from "@waste/db/schema/containers"
 import { property, sharedCollectionPoint } from "@waste/db/schema/customers"
 import { route } from "@waste/db/schema/execution"
 import { ticket, ticketEvent } from "@waste/db/schema/resolution"
 import { uniqueConstraintOf } from "@waste/db/sqlstate"
 import { withCompany } from "@waste/db/tenant"
 import type { OutboxKind } from "@waste/domain/execution/vocabulary"
-import { caseRuleOf, superseding, supersededNote, supersedingNote, type CaseRule, type Superseding } from "@waste/domain/resolution/cases"
+import { CLOSING_REASONS } from "@waste/domain/execution/vocabulary"
+import { caseRuleOf, copiedNote, superseding, supersededNote, supersedingNote, type CaseRule, type ProblemAsFound, type Superseding } from "@waste/domain/resolution/cases"
+import { ticketTransition } from "@waste/domain/resolution/transitions"
 import { ticketFor, type EventFacts, type OtherEventFacts, type TicketDraft as DomainDraft } from "@waste/domain/resolution/from-event"
 import { OPEN_TICKET_STATUSES, type TicketKind, type TicketStatus } from "@waste/domain/resolution/vocabulary"
-import { and, asc, eq, gt, inArray, isNull, lte, or, sql } from "drizzle-orm"
+import { and, asc, eq, inArray, isNotNull, sql } from "drizzle-orm"
 import * as z from "zod"
 
 import { defineOutboxConsumer, RelayedEvent } from "../outbox/subscribe"
+import { placementOn } from "./finance-facts"
 import type { JobContext } from "./definition"
 
 /** The kinds Resolution consumes (#104 §6, #109 §3): the queues the consumer works. `route-cancelled` is not one (§7.10). */
@@ -182,29 +184,32 @@ async function addressOf(tx: Tx, companyId: string, place: { propertyId: string 
   return null
 }
 
-/**
- * The agreement the container served under on the route's service date, and
- * its customer: the container's placement valid that day — the one
- * generation named the stop's place from — through its subscription. Nulls
- * for a container placed under none that day.
- */
-async function servedUnder(tx: Tx, companyId: string, routeId: string, containerId: string): Promise<{ agreementId: string | null; customerId: string | null }> {
-  const placed = containerServicePlacement
-  const [found] = await tx
-    .select({ agreementId: agreement.id, customerId: agreement.customerId })
-    .from(route)
-    .innerJoin(placed, and(eq(placed.companyId, route.companyId), eq(placed.containerId, containerId), lte(placed.validFrom, route.serviceDate), or(isNull(placed.validTo), gt(placed.validTo, route.serviceDate))))
-    .innerJoin(subscription, and(eq(subscription.companyId, placed.companyId), eq(subscription.id, placed.subscriptionId)))
-    .innerJoin(agreement, and(eq(agreement.companyId, subscription.companyId), eq(agreement.id, subscription.agreementId)))
-    .where(and(eq(route.companyId, companyId), eq(route.id, routeId)))
-    .limit(1)
-  return found ?? { agreementId: null, customerId: null }
+/** The route's Actual Assignment driver — null while nobody started it — its Planned one, and its service date; nulls where the route is not there. */
+async function routeOf(tx: Tx, companyId: string, routeId: string): Promise<{ actualDriverId: string | null; plannedDriverId: string | null; serviceDate: string | null }> {
+  const [found] = await tx.select({ actualDriverId: route.actualDriverId, plannedDriverId: route.plannedDriverId, serviceDate: route.serviceDate }).from(route).where(and(eq(route.companyId, companyId), eq(route.id, routeId))).limit(1)
+  return found ?? { actualDriverId: null, plannedDriverId: null, serviceDate: null }
 }
 
-/** The route's Actual Assignment driver — null while nobody started it — and its Planned one. */
-async function driversOf(tx: Tx, companyId: string, routeId: string): Promise<{ actualDriverId: string | null; plannedDriverId: string | null }> {
-  const [found] = await tx.select({ actualDriverId: route.actualDriverId, plannedDriverId: route.plannedDriverId }).from(route).where(and(eq(route.companyId, companyId), eq(route.id, routeId))).limit(1)
-  return found ?? { actualDriverId: null, plannedDriverId: null }
+const NOBODY = { agreementId: null, customerId: null }
+
+/**
+ * What a stop's event reads beside its payload: the container's label, the
+ * place's address, the route's two drivers, and — where the event can open a
+ * case — the agreement the container served under on the route's service
+ * date and its customer, through Finance's reading of the container's
+ * placement valid that day, the one generation named the stop's place from.
+ */
+async function stopReads(tx: Tx, event: OutboxJob, pickup: { routeId: string; containerId: string; propertyId: string | null; sharedCollectionPointId: string | null }, opensCase: boolean) {
+  const { companyId, projectId } = event
+  const [label, address, onRoute] = [await containerLabel(tx, companyId, pickup.containerId), await addressOf(tx, companyId, pickup), await routeOf(tx, companyId, pickup.routeId)]
+  const placement = opensCase && onRoute.serviceDate !== null ? await placementOn(tx, companyId, projectId, pickup.containerId, onRoute.serviceDate) : undefined
+  return {
+    containerLabel: label,
+    address,
+    actualDriverId: onRoute.actualDriverId,
+    plannedDriverId: onRoute.plannedDriverId,
+    ...(placement === undefined ? NOBODY : { agreementId: placement.agreement.id, customerId: placement.agreement.customerId }),
+  }
 }
 
 /**
@@ -221,7 +226,9 @@ async function factsOf(tx: Tx, event: OutboxJob): Promise<EventFacts> {
     case "pickup-skipped": {
       const pickup = PickupPayload.parse(event.payload)
       const proof = pickup.proofs?.[0]
-      const [label, address, drivers, served] = [await containerLabel(tx, companyId, pickup.containerId), await addressOf(tx, companyId, pickup), await driversOf(tx, companyId, pickup.routeId), await servedUnder(tx, companyId, pickup.routeId, pickup.containerId)]
+      const reason = pickup.reason ?? proof?.reason ?? null
+      // A skip opens a case only where the route's end or its cancellation closed the stop: the driver's own skip reads no agreement for nothing.
+      const opensCase = event.kind === "pickup-failed" || (reason !== null && (CLOSING_REASONS as readonly string[]).includes(reason))
       return {
         kind: event.kind,
         routeId: pickup.routeId,
@@ -229,23 +236,20 @@ async function factsOf(tx: Tx, event: OutboxJob): Promise<EventFacts> {
         containerId: pickup.containerId,
         propertyId: pickup.propertyId,
         sharedCollectionPointId: pickup.sharedCollectionPointId,
-        reason: pickup.reason ?? proof?.reason ?? null,
+        reason,
         note: pickup.note ?? proof?.note ?? null,
-        containerLabel: label,
-        address,
-        ...drivers,
-        ...served,
+        ...(await stopReads(tx, event, pickup, opensCase)),
       }
     }
     case "pickup-problem-reported": {
       if (event.aggregateKind === "route") {
         const found = RoutePayload.parse(event.payload)
         const problem = found.proofs[0]
-        return { kind: event.kind, routeId: found.id, pickupId: null, containerId: null, propertyId: null, sharedCollectionPointId: null, reason: problem?.reason ?? null, note: problem?.note ?? null, containerLabel: null, address: null, ...(await driversOf(tx, companyId, found.id)), agreementId: null, customerId: null }
+        const { actualDriverId, plannedDriverId } = await routeOf(tx, companyId, found.id)
+        return { kind: event.kind, routeId: found.id, pickupId: null, containerId: null, propertyId: null, sharedCollectionPointId: null, reason: problem?.reason ?? null, note: problem?.note ?? null, containerLabel: null, address: null, actualDriverId, plannedDriverId, ...NOBODY }
       }
       const pickup = PickupPayload.parse(event.payload)
       const problem = pickup.proofs?.[0]
-      const [label, address, drivers, served] = [await containerLabel(tx, companyId, pickup.containerId), await addressOf(tx, companyId, pickup), await driversOf(tx, companyId, pickup.routeId), await servedUnder(tx, companyId, pickup.routeId, pickup.containerId)]
       return {
         kind: event.kind,
         routeId: pickup.routeId,
@@ -255,10 +259,7 @@ async function factsOf(tx: Tx, event: OutboxJob): Promise<EventFacts> {
         sharedCollectionPointId: pickup.sharedCollectionPointId,
         reason: problem?.reason ?? null,
         note: problem?.note ?? null,
-        containerLabel: label,
-        address,
-        ...drivers,
-        ...served,
+        ...(await stopReads(tx, event, pickup, true)),
       }
     }
     case "command-rejected": {
@@ -291,17 +292,36 @@ async function serialise(tx: Tx, rule: CaseRule): Promise<void> {
   await tx.execute(sql`select pg_advisory_xact_lock(hashtextextended(${`resolution.open-tickets:${rule.by}:${rule.id}`}, 0))`)
 }
 
-/** The oldest open case of `kinds` that is the rule's — the driver's, or the stop's — in the event's project, under its row lock. */
+/** The open case of `kinds` that is the rule's — the driver's, or the stop's — in the event's project, the first kind listed first and then the oldest, under its row lock. */
 async function openCaseOf(tx: Tx, companyId: string, projectId: string, rule: CaseRule, kinds: readonly TicketKind[]): Promise<TicketRow | undefined> {
   if (kinds.length === 0) return undefined
   const [found] = await tx
     .select(ticketColumns)
     .from(ticket)
     .where(and(eq(ticket.companyId, companyId), eq(ticket.projectId, projectId), eq(rule.by === "driver" ? ticket.driverId : ticket.pickupId, rule.id), inArray(ticket.kind, [...kinds]), inArray(ticket.status, [...OPEN_TICKET_STATUSES])))
-    .orderBy(asc(ticket.id))
+    .orderBy(sql`array_position(array[${sql.join(
+      kinds.map((kind) => sql`${kind}`),
+      sql`, `,
+    )}]::text[], ${ticket.kind})`, asc(ticket.id))
     .limit(1)
     .for("no key update")
   return found
+}
+
+/** The problem as the guard reads it: its row, and whether a person recorded anything in its history — a comment, an assignment, a status change. */
+async function asFound(tx: Tx, companyId: string, problem: TicketRow): Promise<ProblemAsFound> {
+  const [person] = await tx
+    .select({ id: ticketEvent.id })
+    .from(ticketEvent)
+    .where(and(eq(ticketEvent.companyId, companyId), eq(ticketEvent.ticketId, problem.id), isNotNull(ticketEvent.recordedBy)))
+    .limit(1)
+  return {
+    status: problem.status as TicketStatus,
+    assigneeUserAccountId: problem.assigneeUserAccountId,
+    createdBy: problem.createdBy,
+    edited: problem.updatedAt.getTime() !== problem.createdAt.getTime(),
+    personInHistory: person !== undefined,
+  }
 }
 
 /** A comment on a case, nobody's, as the history's snapshot of the case. */
@@ -318,19 +338,29 @@ const commentOn = (row: TicketRow, body: string, sourceEventId: string | null): 
 })
 
 const refOf = (companyId: string, row: TicketRow) => ({ companyId, projectId: row.projectId, id: row.id })
-const labelOf = (row: TicketRow) => `T-${row.number}`
 
 /**
  * A stop's new missed collection over the stop's open reported problem: the
  * problem completed as its duplicate while nobody has touched it — the row,
- * a `status-changed` nobody recorded and `ticket-completed`, as the office's
- * `complete` writes them — and its words copied onto the missed collection;
- * otherwise each case names the other in a comment.
+ * with the missed collection as its parent, a `status-changed` nobody
+ * recorded and `ticket-completed`, as the office's `complete` writes them —
+ * and its words, and the problems folded into it since, copied onto the
+ * missed collection; otherwise each case names the other in a comment.
  */
 async function supersede(tx: Tx, companyId: string, problem: TicketRow, missed: TicketRow, at: Date): Promise<Superseding> {
-  const how = superseding({ status: problem.status as TicketStatus, assigneeUserAccountId: problem.assigneeUserAccountId })
+  const found = superseding(await asFound(tx, companyId, problem))
+  const how = found === "duplicate" && ticketTransition(problem.status as TicketStatus, "complete", labelOf(problem)).kind === "move" ? "duplicate" : "named"
   if (how === "duplicate") {
-    const [completed] = await tx.update(ticket).set({ status: "completed", resolution: "duplicate", closedAt: at }).where(and(eq(ticket.companyId, companyId), eq(ticket.id, problem.id))).returning(ticketColumns)
+    const folded = await tx
+      .select({ body: ticketEvent.body })
+      .from(ticketEvent)
+      .where(and(eq(ticketEvent.companyId, companyId), eq(ticketEvent.ticketId, problem.id), eq(ticketEvent.kind, "comment"), isNotNull(ticketEvent.sourceEventId)))
+      .orderBy(asc(ticketEvent.id))
+    const [completed] = await tx
+      .update(ticket)
+      .set({ status: "completed", resolution: "duplicate", closedAt: at, parentTicketId: missed.id })
+      .where(and(eq(ticket.companyId, companyId), eq(ticket.id, problem.id)))
+      .returning(ticketColumns)
     await appendTicketEvent(
       tx,
       refOf(companyId, completed),
@@ -338,9 +368,11 @@ async function supersede(tx: Tx, companyId: string, problem: TicketRow, missed: 
       newId,
     )
     await emit(tx, { companyId }, { aggregate: "ticket", aggregateId: completed.id, kind: "ticket-completed", payload: ticketOf(completed), projectId: completed.projectId, occurredAt: at })
-  } else {
-    await appendTicketEvent(tx, refOf(companyId, problem), commentOn(problem, supersededNote(how, labelOf(missed)), null), newId)
+    await appendTicketEvent(tx, refOf(companyId, missed), commentOn(missed, supersedingNote(how, { label: labelOf(problem), description: problem.description }), null), newId)
+    for (const { body } of folded) if (body !== null) await appendTicketEvent(tx, refOf(companyId, missed), commentOn(missed, copiedNote(labelOf(problem), body), null), newId)
+    return how
   }
+  await appendTicketEvent(tx, refOf(companyId, problem), commentOn(problem, supersededNote(how, labelOf(missed)), null), newId)
   await appendTicketEvent(tx, refOf(companyId, missed), commentOn(missed, supersedingNote(how, { label: labelOf(problem), description: problem.description }), null), newId)
   return how
 }
@@ -363,9 +395,9 @@ async function consume(api: Database, event: OutboxJob, now: () => Date): Promis
         return { outcome: "commented", ticketId: open.id }
       }
     }
-    const { row } = await openTicket(tx, { companyId, draft: asTicketDraft(event, draft), createdBy: null, sourceEventId: event.id, newId, now })
-    // The case opened first, then the one it supersedes locked: the counter before a case's row, as the office's create takes them.
+    // The case it supersedes locked before the counter, so a wait on the office's hold of that case holds no company row the company's numbering waits on.
     const superseded = rule === undefined ? undefined : await openCaseOf(tx, companyId, projectId, rule, rule.supersedes)
+    const { row } = await openTicket(tx, { companyId, draft: asTicketDraft(event, draft), createdBy: null, sourceEventId: event.id, newId, now })
     if (superseded === undefined) return { outcome: "opened", ticketId: row.id }
     return { outcome: "opened", ticketId: row.id, superseded: { ticketId: superseded.id, as: await supersede(tx, companyId, superseded, row, now()) } }
   })
