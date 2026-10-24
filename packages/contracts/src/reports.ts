@@ -25,7 +25,7 @@
 //   GET /reports/revenue  — what was invoiced: the documents issued over the
 //                           window by currency, per interval and per product.
 //                           `improve.analytics` and `commercial.invoices`.
-//   GET /reports/tonnage  — what was tipped: the unloads' net weights by
+//   GET /reports/tonnage  — what was unloaded: the unloads' net weights by
 //                           project, fraction, station and interval, split by
 //                           weight review, and the weights recorded at the
 //                           pickups. `improve.analytics` and
@@ -126,7 +126,7 @@ export const TonnageReportQuery = z
   .strictObject({
     ...windowFields,
     wasteFractionId: Id.optional(),
-    /** The unloads tipped at one station; a pickup's weight is weighed at the kerb and is not narrowed by it. */
+    /** The unloads at one station; a pickup's weight is weighed at the kerb and is not narrowed by it. */
     unloadingStationId: Id.optional(),
   })
   .refine(dayWindowOrdered, dayWindowIsOrdered)

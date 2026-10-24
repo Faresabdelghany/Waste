@@ -612,8 +612,8 @@ export function reportRoutes(guard: MiddlewareHandler<AuthEnv>, { now = () => ne
       "/reports/tonnage",
       describeRoute({
         operationId: "getTonnageReport",
-        summary: "What was tipped and weighed",
-        description: `The unloads of the window — tipped, on the project's clock, on one of its days — by project, fraction, station and interval of the series, a combination without an unload absent: their net weight in whole kilograms by weight review, \`approvedKg\` and \`capturedKg\` (nobody has reviewed it yet) making up \`netKg\`, and a rejected unload's weight beside them and in no total; a corrected unload is not counted, its correction is. And the weights recorded at the pickups (the \`weight\` proof, a lifter's or a hand scale's reading, each pickup's latest) of the pickups collected on the window's routes, by project, fraction and the route's operating day's interval. ${WINDOW_SENTENCE} \`wasteFractionId\` narrows both to one fraction, \`unloadingStationId\` the unloads to one station.`,
+        summary: "What was unloaded and weighed",
+        description: `The unloads of the window — recorded at a station on one of its days, on the project's clock — by project, fraction, station and interval of the series, a combination without an unload absent: their net weight in whole kilograms by weight review, \`approvedKg\` and \`capturedKg\` (nobody has reviewed it yet) making up \`netKg\`, and a rejected unload's weight beside them and in no total; a corrected unload is not counted, its correction is. And the weights recorded at the pickups (the \`weight\` proof, a lifter's or a hand scale's reading, each pickup's latest) of the pickups collected on the window's routes, by project, fraction and the route's operating day's interval. ${WINDOW_SENTENCE} \`wasteFractionId\` narrows both to one fraction, \`unloadingStationId\` the unloads to one station.`,
         security: BEARER_SECURITY,
         responses: {
           200: describeJson("The tonnage report.", TonnageReport),
