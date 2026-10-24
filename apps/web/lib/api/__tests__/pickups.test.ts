@@ -13,20 +13,23 @@ import { describe, test } from "node:test"
 import type { ContainerType, WasteFraction } from "@waste/contracts/catalogue"
 import type { Container } from "@waste/contracts/containers"
 import type { Project } from "@waste/contracts/organisation"
-import { PickupCorrection, PickupRemove, REASON_WITH_A_MISS, type Pickup, type PickupDetail } from "@waste/contracts/pickups"
+import { CODE_WITH_CONTAMINATION, PickupCorrection, PickupRemove, REASON_WITH_A_MISS, type Pickup, type PickupDetail } from "@waste/contracts/pickups"
+import type { ContaminantCode } from "@waste/contracts/pickup-exceptions"
 import type { ProofOfService } from "@waste/contracts/proofs"
 import type { Route } from "@waste/contracts/routes"
 import { routesInWindow } from "@waste/domain/map-planning/routes"
 
 import { FIXTURE_COMPANY_ID, getModuleDefinition, type BusinessRecord } from "../../data/business-modules"
+import { NO_ONE } from "../../data/properties"
+import { contaminantCodeOptions } from "../../data/routes"
 import { FIXTURE_GAZETTEER } from "../../data/street-gazetteer"
 import { problemSentence } from "../problem"
 import { NOTHING_RESOLVED, type MappingContext, type Resolver } from "../records/adapter"
 import { containerAdapter } from "../records/containers"
-import { containerTypeAdapter, wasteFractionAdapter } from "../records/master-data"
+import { containerTypeAdapter, contaminantCodeAdapter, wasteFractionAdapter } from "../records/master-data"
 import { isServerBacked, SERVER_MODULE_KEYS } from "../records/modules"
 import { projectAdapter } from "../records/organisation"
-import { CORRECT_PICKUP, PICKUPS_MODULE, pickupAdapter, pickupProofObjects, pickupProofs, pickupsModule, proofLine, proofObjectNoun, REASON_WITH_A_MISS as LOCAL_REASON_WITH_A_MISS, REMOVE_PICKUP } from "../records/pickups"
+import { CODE_WITH_CONTAMINATION as LOCAL_CODE_WITH_CONTAMINATION, CORRECT_PICKUP, PICKUPS_MODULE, pickupAdapter, pickupProofObjects, pickupProofs, pickupsModule, proofLine, proofObjectNoun, REASON_WITH_A_MISS as LOCAL_REASON_WITH_A_MISS, REMOVE_PICKUP } from "../records/pickups"
 import { routeAdapter, routesWindowFrom } from "../records/routes"
 import { commandRecord, loaded, loadModule, resolverOver, writeRecord, type ServerRecordsState } from "../records/server-records"
 import { bodyOf, clientOver, json, problem, scripted } from "./scripted-fetch"
@@ -372,5 +375,44 @@ describe("the pickup's commands", () => {
     assert.equal(proofLine({ ...proof, kind: "weight", weightKg: 212 }, "Europe/Copenhagen"), "2026-10-01 06:15 · Weight · Driver app · 212 kg")
     assert.equal(proofLine({ ...proof, kind: "note", note: "Lid cracked" }, "Europe/Copenhagen"), "2026-10-01 06:15 · Note · Driver app · Lid cracked")
     assert.equal(proofLine({ ...proof, kind: "correction", source: "dispatch", outcome: "completed", note: "Driver called in" }, "Europe/Copenhagen"), "2026-10-01 06:15 · Correction · Dispatch · Completed · Driver called in")
+  })
+})
+
+describe("a stop's contaminant code (M5 of #293)", () => {
+  const plastic: ContaminantCode = { id: "01a0d2a4-a280-702a-8000-000000000001", ...STAMPS, code: "plastic-in-residual", name: "Plastic in residual", status: "active", wasteFractionIds: [residual.id] }
+  const codeRecord = contaminantCodeAdapter.toRecord(plastic, context())
+  const withCode: ServerRecordsState = new Map([
+    ...state,
+    ["configure.master", loaded({ records: [...masterRecords, codeRecord], serverIds: serverIdsOf([...masterRecords, codeRecord], [residual.id, bin240.id, plastic.id]) }, 1)],
+  ])
+  const over = () => context(resolverOver(withCode))
+  const correct = pickupAdapter.commands?.[CORRECT_PICKUP]
+
+  test("a stop tagged with a code names it by the master data's row, its web id beside its name", () => {
+    const tagged = pickupAdapter.toRecord({ ...second, status: "failed", reason: "contamination", contaminantCodeId: plastic.id, outcomeAt: "2026-10-01T05:00:00.000Z" }, over())
+    assert.deepEqual([tagged.facts["Contaminant code"], tagged.submittedValues?.contaminantCodeId], ["Plastic in residual", codeRecord.id])
+    assert.equal(pickupAdapter.toRecord(second, over()).facts["Contaminant code"], undefined, "an untagged stop says nothing")
+  })
+
+  test("a correction names the code by its server id with contamination or a completion, None untags, and absent keeps the stop's", () => {
+    const record = pickupAdapter.toRecord(second, over())
+    const tagged = correct?.toBody?.({ outcome: "failed", reason: "contamination", note: "Plastic bags", contaminantCodeId: codeRecord.id }, record, over())
+    assert.deepEqual(tagged, { outcome: "failed", reason: "contamination", note: "Plastic bags", contaminantCodeId: plastic.id })
+    assert.ok(PickupCorrection.safeParse(tagged).success)
+    assert.deepEqual(correct?.toBody?.({ outcome: "completed", note: "Emptied, plastic in it", contaminantCodeId: NO_ONE }, record, over()), { outcome: "completed", note: "Emptied, plastic in it", contaminantCodeId: null })
+    assert.deepEqual(correct?.toBody?.({ outcome: "completed", note: "x" }, record, over()), { outcome: "completed", note: "x" }, "absent keeps the stop's")
+    assert.deepEqual(correct?.toBody?.({ outcome: "failed", reason: "inaccessible", note: "x", contaminantCodeId: codeRecord.id }, record, over()), { path: "contaminantCodeId", message: CODE_WITH_CONTAMINATION })
+    assert.deepEqual(correct?.toBody?.({ outcome: "failed", reason: "contamination", note: "x", contaminantCodeId: "contaminant-code-unknown" }, record, over()), { path: "contaminantCodeId", message: "Pick a contaminant code the API holds" })
+    assert.equal(LOCAL_CODE_WITH_CONTAMINATION, CODE_WITH_CONTAMINATION, "the web quotes the contract's sentence")
+  })
+
+  test("the picker offers the active codes for the stop's fraction after None, and the stop's own code whatever it is now", () => {
+    const glassOnly = { ...codeRecord, id: "contaminant-code-glass", name: "Food in glass", submittedValues: { ...codeRecord.submittedValues, wasteFractionIds: "fraction-glass" } }
+    const everyFraction = { ...codeRecord, id: "contaminant-code-any", name: "Hazardous", submittedValues: { ...codeRecord.submittedValues, wasteFractionIds: "" } }
+    const retired = { ...codeRecord, id: "contaminant-code-old", name: "Textiles", submittedValues: { ...codeRecord.submittedValues, status: "inactive", wasteFractionIds: "" } }
+    const stop = pickupAdapter.toRecord(second, over())
+    const offered = (on: BusinessRecord) => contaminantCodeOptions([codeRecord, glassOnly, everyFraction, retired], on).map((option) => option.label)
+    assert.deepEqual(offered(stop), ["None", "Plastic in residual", "Hazardous"])
+    assert.deepEqual(offered({ ...stop, submittedValues: { ...stop.submittedValues, contaminantCodeId: retired.id } }), ["None", "Plastic in residual", "Hazardous", "Textiles · Retired"], "a stop keeps its own code")
   })
 })

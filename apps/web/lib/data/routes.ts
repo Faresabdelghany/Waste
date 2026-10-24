@@ -37,7 +37,7 @@ import { AGREEMENTS_MODULE } from "./agreements"
 import { mintedRecord, ORGANISATION_MODULE, WAREHOUSES_MODULE } from "./containers"
 import { MASTER_DATA_MODULE } from "./master-data"
 import { OFFICE_STOP_SERVICE_OPTIONS } from "./pickup-services"
-import { PROPERTIES_MODULE, SHARED_POINTS_MODULE } from "./properties"
+import { NO_ONE, PROPERTIES_MODULE, SHARED_POINTS_MODULE } from "./properties"
 import { SERVICE_PROVIDERS_MODULE } from "./provider-money"
 
 /** The route's commands that take a dialog. */
@@ -177,7 +177,32 @@ export const PICKUP_COMMAND_FORMS: Readonly<Record<PickupCommandWithForm, Busine
     { id: "outcome", label: "Outcome", type: "select", required: true, options: PICKUP_OUTCOMES.map((value) => ({ value, label: statusLabel(value) })) },
     { id: "reason", label: "Reason", type: "select", options: PICKUP_REASONS.map((value) => ({ value, label: pickupReasonLabel(value) })), visibleWhen: MISSED, requiredWhen: MISSED },
     { id: "note", label: "Why it is corrected", type: "textarea", required: true },
+    {
+      id: "contaminantCodeId",
+      label: "Contaminant code",
+      type: "select",
+      relation: MASTER_DATA_MODULE,
+      description: "The wrong waste the stop is tagged with, with contamination or a collection made all the same. None untags it.",
+    },
   ]),
+}
+
+/**
+ * The codes a stop may be tagged with (M5 of #293), after None: the active
+ * master data codes that apply to its fraction — a code for every fraction,
+ * or one naming the stop's — and the stop's own code whatever has happened to
+ * it since, since a stop keeps the code it was tagged with.
+ */
+export function contaminantCodeOptions(codes: readonly BusinessRecord[], stop: Pick<BusinessRecord, "submittedValues">): BusinessFormOption[] {
+  const fraction = stop.submittedValues?.wasteFractionId
+  const own = stop.submittedValues?.contaminantCodeId
+  const offered = codes.filter((code) => {
+    if (code.id === own) return true
+    if (code.submittedValues?.status === "inactive") return false
+    const fractions = String(code.submittedValues?.wasteFractionIds ?? "")
+    return fractions === "" || fractions.split(",").includes(String(fraction))
+  })
+  return [{ value: NO_ONE, label: "None" }, ...offered.map((code) => ({ value: code.id, label: code.submittedValues?.status === "inactive" ? `${code.name} · Retired` : code.name }))]
 }
 
 /** What the route's dialogs open on: the fields of its assign and reschedule forms as the route holds them — its Planned Assignment by web id, the day it runs and its planned start. A cancel and an added stop open empty. */

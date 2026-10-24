@@ -47,8 +47,9 @@ import { ADD_STOP, ASSIGN_ROUTE, callsignOf, CANCEL_ROUTE, DISPATCH_ROUTE, dispa
 import { DRIVERS_MODULE, VEHICLES_MODULE } from "@/lib/data/allocations"
 import type { BusinessFormValues } from "@/lib/data/business-form-types"
 import { PROPERTIES_MODULE, SHARED_POINTS_MODULE } from "@/lib/data/properties"
-import { getModuleDefinition } from "@/lib/data/business-modules"
-import { createRouteRecord, DISPATCH_DAY_FORM, dispatchDayRows, PICKUP_COMMAND_FORMS, pickupReasonLabel, ROUTE_COMMAND_FORMS, ROUTE_CREATE_FORM, routeCommandValues, type PickupCommandWithForm, type RouteCommandWithForm } from "@/lib/data/routes"
+import { getModuleDefinition, type BusinessRecord } from "@/lib/data/business-modules"
+import { MASTER_DATA_MODULE, masterDataKindOf } from "@/lib/data/master-data"
+import { contaminantCodeOptions, createRouteRecord, DISPATCH_DAY_FORM, dispatchDayRows, PICKUP_COMMAND_FORMS, pickupReasonLabel, ROUTE_COMMAND_FORMS, ROUTE_CREATE_FORM, routeCommandValues, type PickupCommandWithForm, type RouteCommandWithForm } from "@/lib/data/routes"
 import type { Pickup } from "@waste/contracts/pickups"
 import type { ProofObjectLink } from "@waste/contracts/proof-objects"
 import type { ProofOfService } from "@waste/contracts/proofs"
@@ -488,9 +489,15 @@ export function ProofObject({ proof, links }: { proof: Pick<ProofOfService, "id"
   )
 }
 
+/** No fixture lends a contaminant code: the master data's fixtures are coarse sets of no kind. */
+const NO_MASTER_FIXTURES: readonly BusinessRecord[] = []
+
 /** A stop's commands and its proofs, in its details. */
 export function PickupCommandsSurface({ record }: RowSurfaceProps) {
   const pickers = useRelationPickers()
+  // The contaminant codes a correction may tag the stop with (M5 of #293): the master data's rows of that kind.
+  const master = useModuleRecords(MASTER_DATA_MODULE.workspaceId, MASTER_DATA_MODULE.moduleId, NO_MASTER_FIXTURES)
+  const codes = master.records.filter((row) => masterDataKindOf(row) === "contaminant-code")
   const moduleReady = useModuleReady(PICKUPS_MODULE)
   const { busy, version, run: send } = useCommandRunner(PICKUPS_MODULE, record.id)
   const proofs = useRowHistory(PICKUPS_MODULE.workspaceId, PICKUPS_MODULE.moduleId, record, version, pickupProofs)
@@ -544,7 +551,17 @@ export function PickupCommandsSurface({ record }: RowSurfaceProps) {
         />
         {objects.problem !== null && proofs.rows?.some((proof) => proof.objectKey !== null) && <p className="text-xs text-muted-foreground">{objects.problem}</p>}
       </div>
-      {open !== null && <BusinessRecordFormDialog schema={PICKUP_COMMAND_FORMS[open]} open onOpenChange={(isOpen) => !isOpen && setOpen(null)} onSubmit={(values) => run(open, values)} relationOptions={pickers.options} />}
+      {open !== null && (
+        <BusinessRecordFormDialog
+          schema={PICKUP_COMMAND_FORMS[open]}
+          open
+          onOpenChange={(isOpen) => !isOpen && setOpen(null)}
+          onSubmit={(values) => run(open, values)}
+          // The correction's code is the master data's codes for the stop's fraction (M5 of #293), and opens on the stop's own.
+          relationOptions={(field, values) => (field.id === "contaminantCodeId" ? contaminantCodeOptions(codes, record) : pickers.options(field, values))}
+          initialValueOverrides={open === "correct" && typeof record.submittedValues?.contaminantCodeId === "string" ? { contaminantCodeId: record.submittedValues.contaminantCodeId } : undefined}
+        />
+      )}
     </section>
   )
 }
