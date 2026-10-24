@@ -1,8 +1,11 @@
 // What the Execution route modules share (Issue #104): the rows of `route`,
 // `pickup`, `session`, `proof_of_service`, `unload` and `driver_command` on
 // the wire, the scopes every route statement is bounded by — the office's,
-// the tenant and `inProjects`; the driver door's, the tenant and the
-// assignment — the two page-wide reads a route carries, its progress and
+// the tenant and `inProjects`, which every command carries; the reach of the
+// routes' and the pickups' reads, the tenant and `reachesRoute`, which is the
+// office's fence for an office account and `servesRoute` for a Service
+// Provider's (auth/provider.ts, #291 slice 23); the driver door's, the tenant
+// and the assignment — the two page-wide reads a route carries, its progress and
 // its open session, and the route's detail (`detailOf`, and
 // `routeWithSessions` underneath it, which the driver's read adds its own
 // pickups to), so routes/routes.ts, routes/pickups.ts, routes/live.ts,
@@ -47,9 +50,11 @@ import { and, asc, count, eq, inArray, isNull, sql, type SQL } from "drizzle-orm
 import { assignedTo, type DriverProfile } from "../auth/driver"
 import type { Principal } from "../auth/principal"
 import { inProjects } from "../auth/projects"
+import { reachesRoute, reachesThroughRoute, type ReachedRouteColumns } from "../auth/provider"
 import { problem } from "../problem"
 import { planContextOf, sequencedPickups } from "./plan-shapes"
-import { instantOf, stampsOf, timeOf } from "./shared"
+import { NOT_A_ROUTE } from "./references"
+import { instantOf, requireRow, stampsOf, timeOf } from "./shared"
 
 export const noSuchRoute = (id: string) => problem(404, { detail: `No route ${id} in the projects this account works in` })
 export const noSuchPickup = (id: string) => problem(404, { detail: `No pickup ${id} in the projects this account works in` })
@@ -128,10 +133,13 @@ export function routeOf(row: RouteRow, progress: RouteProgress): Route {
   }
 }
 
-/** The routes of this company, in the projects the caller works in: what every route statement is bounded by. */
+/** The routes of this company, in the projects the caller works in: what every route command, and every route statement outside the routes' and the pickups' reads, is bounded by. */
 export const routeScope = (principal: Principal): SQL | undefined => and(eq(route.companyId, principal.companyId), inProjects(route.projectId, principal))
 
-/** One route of this company by id, inside the caller's projects; undefined when it is neither. */
+/** The routes of this company the caller reads: its projects' for an office account, the ones its provider serves for a Service Provider's (`reachesRoute`). What the routes' and the pickups' reads are bounded by, and nothing that writes. */
+export const routeReach = (tx: Tx, principal: Principal): SQL | undefined => and(eq(route.companyId, principal.companyId), reachesRoute(tx, principal))
+
+/** One route of this company by id, inside the caller's projects; undefined when it is neither. What a command reads. */
 export async function findRoute(tx: Tx, principal: Principal, id: string): Promise<RouteRow | undefined> {
   const [row] = await tx
     .select(routeColumns)
@@ -139,6 +147,26 @@ export async function findRoute(tx: Tx, principal: Principal, id: string): Promi
     .where(and(routeScope(principal), eq(route.id, id)))
     .limit(1)
   return row
+}
+
+/** One route of this company by id that the caller reads (`routeReach`); undefined when it is not one. What a read reads. */
+export async function findReachedRoute(tx: Tx, principal: Principal, id: string): Promise<RouteRow | undefined> {
+  const [row] = await tx
+    .select(routeColumns)
+    .from(route)
+    .where(and(routeReach(tx, principal), eq(route.id, id)))
+    .limit(1)
+  return row
+}
+
+/**
+ * A route a query names, as a read takes it: one the caller reads, and of the
+ * project the query names beside it where it names one, or a 400 at the
+ * field in the references' sentence. A Service Provider's account names a
+ * route its provider serves; an office account a route of its projects.
+ */
+export async function requireReachedRoute(tx: Tx, principal: Principal, id: string, projectId: string | undefined, path = "routeId"): Promise<void> {
+  await requireRow(tx, route, { companyId: principal.companyId, id, also: and(reachesRoute(tx, principal), projectId === undefined ? undefined : eq(route.projectId, projectId)) }, { path, message: NOT_A_ROUTE }, "query")
 }
 
 /**
@@ -226,8 +254,17 @@ export function pickupOf(row: PickupRow): Pickup {
   }
 }
 
-/** The pickups of this company, in the projects the caller works in. */
+/** The pickups of this company, in the projects the caller works in: what a pickup command is bounded by. */
 export const pickupScope = (principal: Principal): SQL | undefined => and(eq(pickup.companyId, principal.companyId), inProjects(pickup.projectId, principal))
+
+/**
+ * The pickups of this company the caller reads: its projects' for an office
+ * account, the stops of the routes its provider serves for a Service
+ * Provider's (`reachesThroughRoute`). A statement that joins the stop's
+ * route already hands it as `joined`, so a provider's fence is the predicate
+ * over that join rather than a second read of the same route.
+ */
+export const pickupReach = (tx: Tx, principal: Principal, joined?: ReachedRouteColumns): SQL | undefined => and(eq(pickup.companyId, principal.companyId), reachesThroughRoute(tx, principal, pickup, joined))
 
 /** One route's pickups, by position and then by id: the stop list in order. */
 export async function pickupsOfRoute(tx: Tx, companyId: string, routeId: string): Promise<PickupRow[]> {

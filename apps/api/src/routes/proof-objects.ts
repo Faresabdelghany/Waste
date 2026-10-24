@@ -14,9 +14,10 @@
 //                                  retry after an upload whose answer was
 //                                  lost. The device puts the bytes, then
 //                                  sends `add-photo` / `add-signature`.
-//   GET /pickups/:id/proof-objects the office: read URLs for the stop's
-//                                  proofs that name an object, behind the
-//                                  grant and the project fence the stop's
+//   GET /pickups/:id/proof-objects the office, or a Service Provider's
+//                                  account on a route it runs: read URLs for
+//                                  the stop's proofs that name an object,
+//                                  behind the grant and the reach the stop's
 //                                  own read has (`GET /pickups/:id`); a key
 //                                  the bucket does not hold is a null URL.
 //
@@ -43,7 +44,7 @@ import { resolveDriver } from "../auth/driver"
 import { BEARER_SECURITY, type IdentifiedEnv } from "../auth/principal"
 import { requireGrant } from "../auth/require"
 import { describeProblem, loggable, problem, validate } from "../problem"
-import { findAssignedRoute, labelOf, noSuchAssignedRoute, noSuchPickup, pickupScope } from "./execution-shapes"
+import { findAssignedRoute, labelOf, noSuchAssignedRoute, noSuchPickup, pickupReach } from "./execution-shapes"
 import { describeJson, IdParam } from "./shared"
 
 /** The grant a stop's proofs are read under: the stop's own read's. */
@@ -137,14 +138,14 @@ export function proofObjectRoutes(guard: MiddlewareHandler<IdentifiedEnv>, { poo
       describeRoute({
         operationId: "getPickupProofObjects",
         summary: "Read URLs for a stop's photos and signatures",
-        description: `A read URL for each of the stop's Proofs of Service that names an object, in recording order, lasting ${READ_URL_TTL_SECONDS / 60} minutes; a null URL where the private \`proofs\` bucket holds no such object — never uploaded, or removed after its days. The stop is read under the grant and the project fence of \`GET /pickups/:id\`. No byte passes through the API.`,
+        description: `A read URL for each of the stop's Proofs of Service that names an object, in recording order, lasting ${READ_URL_TTL_SECONDS / 60} minutes; a null URL where the private \`proofs\` bucket holds no such object — never uploaded, or removed after its days. The stop is read under the grant and the reach of \`GET /pickups/:id\`: a pickup of the caller's projects, or of a route a Service Provider's account runs. No byte passes through the API.`,
         security: BEARER_SECURITY,
         responses: {
           200: describeJson("The stop's objects and their read URLs.", ProofObjectLinks),
           400: describeProblem("The path does not hold an id."),
           401: describeProblem("No usable token (see WWW-Authenticate)."),
           403: describeProblem(`No active account here, or the caller's role does not allow \`view\` on \`${PICKUPS}\`.`),
-          404: describeProblem("No such pickup in the projects this account works in."),
+          404: describeProblem("No such pickup in the projects this account works in, or, for a Service Provider's account, on no route its provider runs."),
           502: describeProblem(STORAGE_SILENT),
           503: describeProblem(`${NO_PROOF_STORAGE_DETAIL}; or ${STORAGE_REFUSED}`),
         },
@@ -157,7 +158,7 @@ export function proofObjectRoutes(guard: MiddlewareHandler<IdentifiedEnv>, { poo
         const { id } = c.req.valid("param")
         const principal = c.get("principal")
         const objects = await withCompany(pool.db, principal.companyId, async (tx) => {
-          const [stop] = await tx.select({ id: pickup.id }).from(pickup).where(and(pickupScope(principal), eq(pickup.id, id))).limit(1)
+          const [stop] = await tx.select({ id: pickup.id }).from(pickup).where(and(pickupReach(tx, principal), eq(pickup.id, id))).limit(1)
           if (stop === undefined) throw noSuchPickup(id)
           return await tx
             .select({ proofId: proofOfService.id, objectKey: proofOfService.objectKey })

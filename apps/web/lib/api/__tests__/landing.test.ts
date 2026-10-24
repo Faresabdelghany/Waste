@@ -6,24 +6,36 @@ import { describe, test } from "node:test"
 
 import { afterSignIn, carriesNext, gateOf, landingOf, returnPath, signInTarget, type GateState } from "../landing"
 
-const DRIVER = { driver: { id: "01a0d2a4-a280-7019-8000-000000000001" } }
-const OFFICE = { driver: null }
+const NORDREN = { id: "01a0d2a4-a280-7003-8000-000000000001", legalName: "NordRen ApS" }
+const DRIVER = { driver: { id: "01a0d2a4-a280-7019-8000-000000000001" }, serviceProvider: null }
+const OFFICE = { driver: null, serviceProvider: null }
+const PROVIDER = { driver: null, serviceProvider: NORDREN }
+/** A provider's own driver with a login: a driver profile and a Service Provider Access both. */
+const PROVIDERS_DRIVER = { driver: { id: "01a0d2a4-a280-7019-8000-000000000002" }, serviceProvider: NORDREN }
 
 describe("the landing", () => {
-  test("a driver lands on the driver's app, everyone else on operations", () => {
+  test("a driver lands on the driver's app, a Service Provider's account on its workspace, everyone else on operations", () => {
     assert.equal(landingOf(DRIVER), "/driver")
+    assert.equal(landingOf(PROVIDER), "/service-provider-workspace")
     assert.equal(landingOf(OFFICE), "/operate")
   })
 
-  test("an API from before Me.driver, which sends no driver at all, lands everyone on operations", () => {
+  test("a provider's driver is a driver first: the phone is where the work is", () => {
+    assert.equal(landingOf(PROVIDERS_DRIVER), "/driver")
+  })
+
+  test("an API from before Me.driver or Me.serviceProvider, which sends no such member at all, lands everyone on operations", () => {
     // The web can reach the Pilot before the API that answers `driver` is released.
     assert.equal(landingOf({} as typeof OFFICE), "/operate")
+    assert.equal(landingOf({ driver: null } as typeof OFFICE), "/operate")
   })
 
   test("sign-in returns the person to where they were going, and lands them by /me when they were going nowhere of ours", () => {
     assert.equal(afterSignIn(OFFICE, "/routes?module=routes&record=r-1"), "/routes?module=routes&record=r-1")
     assert.equal(afterSignIn(DRIVER, "/operate"), "/operate", "a place asked for wins over the landing")
     assert.equal(afterSignIn(DRIVER, null), "/driver")
+    assert.equal(afterSignIn(PROVIDER, null), "/service-provider-workspace")
+    assert.equal(afterSignIn(PROVIDER, "/service-provider-workspace/routes"), "/service-provider-workspace/routes")
     assert.equal(afterSignIn(OFFICE, "https://elsewhere.example/operate"), "/operate")
   })
 })

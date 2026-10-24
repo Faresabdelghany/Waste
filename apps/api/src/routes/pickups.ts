@@ -55,9 +55,13 @@
 // carries the stop's `sequence` (#219): its place in its route's execution
 // order, the one the route's detail gives it, read through plan-shapes.ts's
 // `sequencesOfRoutes` — for a page, over the page's routes at once — so a
-// stop a command answers keeps the number the list gave it. Every statement
-// carries the tenant and `inProjects`; the grant is `route-studio.pickups`,
-// `view` to read and `edit` to command.
+// stop a command answers keeps the number the list gave it. Every command
+// carries the tenant and `inProjects`; the reads — the list and a stop's
+// read — carry the tenant and the reach (`pickupReach`, auth/provider.ts):
+// the office's projects, or, for a Service Provider's account, the stops of
+// the routes its provider serves (#291 slice 23), which it reads and never
+// commands. The grant is `route-studio.pickups`, `view` to read and `edit`
+// to command.
 import { Page } from "@waste/contracts/pagination"
 import { PickupAdd, PickupCorrection, PickupDetail, PickupListItem, PickupListQuery, PickupRemove } from "@waste/contracts/pickups"
 import type { Tx } from "@waste/db/client"
@@ -72,15 +76,15 @@ import { Hono, type MiddlewareHandler } from "hono"
 import { describeRoute } from "hono-openapi"
 
 import { BEARER_SECURITY, type AuthEnv, type Principal } from "../auth/principal"
-import { projectIdsOf, requireProject } from "../auth/projects"
+import { requireProject } from "../auth/projects"
 import { requireGrant } from "../auth/require"
 import { newId } from "../ids"
 import { emit } from "../outbox"
 import { afterCursor, fetchLimit, pageOf } from "../pagination"
 import { describeProblem, invalidRequest, problem, validate } from "../problem"
-import { findRoute, labelOf, noSuchPickup, pickupColumns, pickupOf, pickupScope, proofOf, proofsOfPickup, routeScope, type PickupRow, type RouteRow } from "./execution-shapes"
+import { findRoute, labelOf, noSuchPickup, pickupColumns, pickupOf, pickupReach, pickupScope, proofOf, proofsOfPickup, requireReachedRoute, routeScope, type PickupRow, type RouteRow } from "./execution-shapes"
 import { sequenceIn, sequencesOfRoutes } from "./plan-shapes"
-import { requireProperty, requireRoute, requireSharedCollectionPoint, requireWasteFraction, type Scope } from "./references"
+import { requireProperty, requireSharedCollectionPoint, requireWasteFraction, type Scope } from "./references"
 import { lockedRoute, ORDER_IS_FROZEN, requireNotStarted, requireRan } from "./routes"
 import type { ClockOptions } from "./scheme-groups"
 import { created, describeCreated, describeJson, IdParam, lockRow, stamp } from "./shared"
@@ -159,12 +163,22 @@ async function stopOf(tx: Tx, scope: Scope, body: PickupAdd, serviceDate: string
 export const bookedAlready = (container: string, service: OfficeStopService, route: string): string =>
   `Container ${container} has a planned ${service === "empty" ? "emptying" : service} the office added to route ${route} already`
 
-/** One pickup of this company by id, inside the caller's projects; undefined when it is neither. */
+/** One pickup of this company by id, inside the caller's projects; undefined when it is neither. What a command reads. */
 async function findPickup(tx: Tx, principal: Principal, id: string): Promise<PickupRow | undefined> {
   const [row] = await tx
     .select(pickupColumns)
     .from(pickup)
     .where(and(pickupScope(principal), eq(pickup.id, id)))
+    .limit(1)
+  return row
+}
+
+/** One pickup of this company by id that the caller reads (`pickupReach`); undefined when it is not one. What the read reads. */
+async function findReachedPickup(tx: Tx, principal: Principal, id: string): Promise<PickupRow | undefined> {
+  const [row] = await tx
+    .select(pickupColumns)
+    .from(pickup)
+    .where(and(pickupReach(tx, principal), eq(pickup.id, id)))
     .limit(1)
   return row
 }
@@ -197,7 +211,11 @@ async function lockedPickup(tx: Tx, principal: Principal, id: string): Promise<{
 const commandProblems = (action: "view" | "edit") => ({
   401: describeProblem("No usable token (see WWW-Authenticate)."),
   403: describeProblem(`No active account here, or the caller's role does not allow \`${action}\` on \`${MODULE}\`.`),
-  404: describeProblem("No pickup with that id in the projects this account works in."),
+  404: describeProblem(
+    action === "view"
+      ? "No pickup with that id in the projects this account works in, or, for a Service Provider's account, on no route its provider runs."
+      : "No pickup with that id in the projects this account works in: a Service Provider's account reads the stops of the routes it runs and commands none of them.",
+  ),
 })
 
 export function pickupRoutes(guard: MiddlewareHandler<AuthEnv>, { now = () => new Date() }: ClockOptions = {}) {
@@ -208,11 +226,11 @@ export function pickupRoutes(guard: MiddlewareHandler<AuthEnv>, { now = () => ne
         operationId: "listPickups",
         summary: "The pickups of the caller's projects",
         description:
-          "One page of pickups, oldest first (ids are time-ordered), from the projects the caller works in — an account that works in none reads an empty page. `projectId` narrows it to one of those projects; naming another is refused. `routeId` is one route's stops, and must be a route of a project this account works in (400 on the query); `containerId` a container's history of stops, `status` one of the four, `propertyId` the stops at one service address, and `from` and `to` the stops of routes operating over a window of days (both inclusive, `to` on or after `from`). Each pickup carries its `sequence` (#219), its place in its route's current execution order, the one `GET /routes/{id}` gives it: the active Plan's order where the route has one, the generated baseline's otherwise, counted over the whole route whatever the page holds; `position` stays the baseline. Each pickup's proofs are `GET /pickups/{id}`. Hand `nextCursor` back as `cursor` for the next page.",
+          "One page of pickups, oldest first (ids are time-ordered), from the projects the caller works in — or, for a Service Provider's account, which works in none, the stops of the routes its provider runs, as `GET /routes` reaches them. `projectId` narrows it to one of the caller's projects; naming another, or any from a provider's account, is refused. `routeId` is one route's stops, and must be a route the caller reads — of the project named, where one is (400 on the query); `containerId` a container's history of stops, `status` one of the four, `propertyId` the stops at one service address, and `from` and `to` the stops of routes operating over a window of days (both inclusive, `to` on or after `from`). Each pickup carries its `sequence` (#219), its place in its route's current execution order, the one `GET /routes/{id}` gives it: the active Plan's order where the route has one, the generated baseline's otherwise, counted over the whole route whatever the page holds; `position` stays the baseline. Each pickup's proofs are `GET /pickups/{id}`. Hand `nextCursor` back as `cursor` for the next page.",
         security: BEARER_SECURITY,
         responses: {
           200: describeJson("One page of pickups.", PickupPage),
-          400: describeProblem("The page size is outside 1..200, the cursor is not one this API wrote, a filter is malformed, the window runs backwards, `projectId` is not a project this account works in, or `routeId` is not a route of one."),
+          400: describeProblem("The page size is outside 1..200, the cursor is not one this API wrote, a filter is malformed, the window runs backwards, `projectId` is not a project this account works in, or `routeId` is not a route the caller reads."),
           401: describeProblem("No usable token (see WWW-Authenticate)."),
           403: describeProblem(`No active account here, or the caller's role does not allow \`view\` on \`${MODULE}\`.`),
         },
@@ -226,15 +244,16 @@ export function pickupRoutes(guard: MiddlewareHandler<AuthEnv>, { now = () => ne
         const tx = c.get("tx")
         const principal = c.get("principal")
         if (projectId !== undefined) requireProject(principal, projectId, "projectId", "query")
-        // The route asked about is one the caller may see: the project named, or any the caller works in — the containers list's rule for its warehouse.
-        if (routeId !== undefined) await requireRoute(tx, { companyId: principal.companyId, projectId: projectId ?? projectIdsOf(principal) }, routeId, "routeId", "query")
+        // The route asked about is one the caller reads — of the project named, where one is: the containers list's rule for its warehouse, over the reach.
+        if (routeId !== undefined) await requireReachedRoute(tx, principal, routeId, projectId)
         const rows = await tx
           .select(pickupColumns)
           .from(pickup)
           .innerJoin(route, and(eq(route.companyId, pickup.companyId), eq(route.id, pickup.routeId)))
           .where(
             and(
-              pickupScope(principal),
+              // The stop's route is joined above, so a provider's fence reads it there.
+              pickupReach(tx, principal, route),
               projectId === undefined ? undefined : eq(pickup.projectId, projectId),
               routeId === undefined ? undefined : eq(pickup.routeId, routeId),
               containerId === undefined ? undefined : eq(pickup.containerId, containerId),
@@ -264,7 +283,7 @@ export function pickupRoutes(guard: MiddlewareHandler<AuthEnv>, { now = () => ne
         operationId: "getPickup",
         summary: "One pickup with its proofs",
         description:
-          "One pickup of a project the caller works in, with its `sequence` as `GET /pickups` carries it and its Proofs of Service in recording order — the driver's events and evidence, and any correction the office appended. A pickup of another company, or of a project this account does not work in, is a pickup that does not exist here.",
+          "One pickup of a project the caller works in, or of a route a Service Provider's account runs (as `GET /pickups` reaches it), with its `sequence` as `GET /pickups` carries it and its Proofs of Service in recording order — the driver's events and evidence, and any correction the office appended. A pickup of another company, or one outside that reach, is a pickup that does not exist here.",
         security: BEARER_SECURITY,
         responses: {
           200: describeJson("The pickup with its proofs.", PickupDetail),
@@ -279,7 +298,7 @@ export function pickupRoutes(guard: MiddlewareHandler<AuthEnv>, { now = () => ne
         const { id } = c.req.valid("param")
         const tx = c.get("tx")
         const principal = c.get("principal")
-        const row = await findPickup(tx, principal, id)
+        const row = await findReachedPickup(tx, principal, id)
         if (row === undefined) throw noSuchPickup(id)
         return c.json(await detailOf(tx, principal, row))
       },

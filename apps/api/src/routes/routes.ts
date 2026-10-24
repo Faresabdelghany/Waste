@@ -64,7 +64,13 @@
 // another context hears about writes its outbox event in the same
 // transaction (outbox.ts), the payload being the route as this module
 // answers it. The grant is `route-studio.routes` throughout, `view` to read
-// and `edit` to command; every statement carries the tenant and `inProjects`.
+// and `edit` to command. Every command carries the tenant and `inProjects`;
+// the reads — the list, a route's read and its device log — carry the tenant
+// and the reach (`routeReach`, auth/provider.ts): the office's projects, or,
+// for a Service Provider's account, the routes its provider serves on their
+// operating date (#291 slice 23). A provider reads the routes it runs and
+// commands none of them, so one whose role is granted `edit` finds no row —
+// the family's 404, the way a settlement's commands answer it.
 import { DriverCommandReceipt } from "@waste/contracts/driver-commands"
 import { Page, PageRequest } from "@waste/contracts/pagination"
 import { PickupOrderSet, RouteAssign, RouteCancel, RouteCreate, RouteDetail, RouteListItem, RouteListQuery, RouteReleaseHold, RouteReschedule } from "@waste/contracts/routes"
@@ -89,7 +95,7 @@ import { newId } from "../ids"
 import { emit } from "../outbox"
 import { afterCursor, fetchLimit, pageOf } from "../pagination"
 import { describeProblem, invalidRequest, problem, validate } from "../problem"
-import { detailOf, findRoute, labelOf, noSuchRoute, pickupColumns, pickupOf, pickupsOfRoute, receiptColumns, receiptOf, routeColumns, routeScope, routesOf, type RouteRow } from "./execution-shapes"
+import { detailOf, findReachedRoute, findRoute, labelOf, noSuchRoute, pickupColumns, pickupOf, pickupsOfRoute, receiptColumns, receiptOf, routeColumns, routeReach, routeScope, routesOf, type RouteRow } from "./execution-shapes"
 import { findDriver, findVehicle, projectToday, vehicleLabel, type DriverRow, type VehicleRow } from "./fleet-lookups"
 import { activePlansByRoute, ensurePlan } from "./plan-shapes"
 import { QueueMissing, type JobSender } from "@waste/db/jobs"
@@ -278,7 +284,11 @@ const ASSIGN_RULES =
 const commandProblems = (action: "view" | "edit") => ({
   401: describeProblem("No usable token (see WWW-Authenticate)."),
   403: describeProblem(`No active account here, or the caller's role does not allow \`${action}\` on \`${MODULE}\`.`),
-  404: describeProblem("No route with that id in the projects this account works in."),
+  404: describeProblem(
+    action === "view"
+      ? "No route with that id in the projects this account works in, or, for a Service Provider's account, none its provider runs."
+      : "No route with that id in the projects this account works in: a Service Provider's account reads the routes it runs and commands none of them.",
+  ),
 })
 
 export function routeRoutes(guard: MiddlewareHandler<AuthEnv>, { now = () => new Date(), routing, jobs }: ClockOptions & { routing: RoutingIdentity; jobs: JobSender }) {
@@ -289,7 +299,7 @@ export function routeRoutes(guard: MiddlewareHandler<AuthEnv>, { now = () => new
         operationId: "listRoutes",
         summary: "The dated routes of the caller's projects",
         description:
-          "One page of routes, oldest first (ids are time-ordered), from the projects the caller works in — an account that works in none, such as a service provider's, reads an empty page until step 7 bounds the list by the planned service provider. `projectId` narrows it to one of those projects; naming another is refused. `routeSchemeId` and `collectionGroupId` answer what a scheme or a group generated — the office's ad-hoc route (#111) carries both null, and is answered by neither — `from` and `to` the routes operating over a window of days (both inclusive, `to` on or after `from`), `serviceDate` the routes of one recurrence day, `status` one of the five, and `plannedDriverId` and `plannedVehicleId` a driver's or a vehicle's day. Every row carries its `progress`, counted from its pickups and never stored, and its active Plan's reading (`activePlan`, null while the generated order stands unmeasured), the one a map drawn over the page reads each route's measurement from (#173). Hand `nextCursor` back as `cursor` for the next page.",
+          "One page of routes, oldest first (ids are time-ordered), from the projects the caller works in — or, for a Service Provider's account, which works in none, the routes its provider runs: a route whose scheme plans inside a planning area of a Service Area assigned to the provider, the assignment and the area both in force on the route's operating date; the office's ad-hoc route and a route of a scheme with no planning area are no provider's. `projectId` narrows it to one of the caller's projects; naming another, or any from a provider's account, is refused. `routeSchemeId` and `collectionGroupId` answer what a scheme or a group generated — the office's ad-hoc route (#111) carries both null, and is answered by neither — `from` and `to` the routes operating over a window of days (both inclusive, `to` on or after `from`), `serviceDate` the routes of one recurrence day, `status` one of the five, and `plannedDriverId` and `plannedVehicleId` a driver's or a vehicle's day. Every row carries its `progress`, counted from its pickups and never stored, and its active Plan's reading (`activePlan`, null while the generated order stands unmeasured), the one a map drawn over the page reads each route's measurement from (#173). Hand `nextCursor` back as `cursor` for the next page.",
         security: BEARER_SECURITY,
         responses: {
           200: describeJson("One page of routes.", RoutePage),
@@ -312,7 +322,7 @@ export function routeRoutes(guard: MiddlewareHandler<AuthEnv>, { now = () => new
           .from(route)
           .where(
             and(
-              routeScope(principal),
+              routeReach(tx, principal),
               projectId === undefined ? undefined : eq(route.projectId, projectId),
               routeSchemeId === undefined ? undefined : eq(route.routeSchemeId, routeSchemeId),
               collectionGroupId === undefined ? undefined : eq(route.collectionGroupId, collectionGroupId),
@@ -392,7 +402,7 @@ export function routeRoutes(guard: MiddlewareHandler<AuthEnv>, { now = () => new
         operationId: "getRoute",
         summary: "One route with its pickups, sessions and unloads",
         description:
-          "One route of a project the caller works in, as it now stands: the route with its `progress`, its pickups by position, the open session or null, every session oldest first, and its unloads oldest first. A route of another company, or of a project this account does not work in, is a route that does not exist here. What the device said is `GET /routes/{id}/commands`.",
+          "One route of a project the caller works in, or one a Service Provider's account runs (as `GET /routes` reaches it), as it now stands: the route with its `progress`, its pickups by position, the open session or null, every session oldest first, and its unloads oldest first. A route of another company, or one outside that reach, is a route that does not exist here. What the device said is `GET /routes/{id}/commands`.",
         security: BEARER_SECURITY,
         responses: {
           200: describeJson("The route and what hangs off it.", RouteDetail),
@@ -407,7 +417,7 @@ export function routeRoutes(guard: MiddlewareHandler<AuthEnv>, { now = () => new
         const { id } = c.req.valid("param")
         const tx = c.get("tx")
         const principal = c.get("principal")
-        const row = await findRoute(tx, principal, id)
+        const row = await findReachedRoute(tx, principal, id)
         if (row === undefined) throw noSuchRoute(id)
         return c.json(await detailOf(tx, principal.companyId, row))
       },
@@ -739,7 +749,7 @@ export function routeRoutes(guard: MiddlewareHandler<AuthEnv>, { now = () => new
         operationId: "listRouteCommands",
         summary: "What the device said on a route",
         description:
-          "One page of the route's command receipts, oldest first — a cursor over time-ordered ids is a cursor over the order the commands were received in — each carrying the command as the device sent it, verbatim, and what became of it: `applied`, or `rejected` with the problem the server answered. The dispatcher's log of what the device said, rejections included; nothing here is ever updated or removed. A route of another company, or of a project this account does not work in, is a route that does not exist here. Hand `nextCursor` back as `cursor` for the next page.",
+          "One page of the route's command receipts, oldest first — a cursor over time-ordered ids is a cursor over the order the commands were received in — each carrying the command as the device sent it, verbatim, and what became of it: `applied`, or `rejected` with the problem the server answered. The dispatcher's log of what the device said, rejections included; nothing here is ever updated or removed. A route of another company, or one outside the caller's reach — its projects, or the routes a Service Provider's account runs, as `GET /routes` reaches them — is a route that does not exist here. Hand `nextCursor` back as `cursor` for the next page.",
         security: BEARER_SECURITY,
         responses: {
           200: describeJson("One page of the route's command receipts, oldest first.", ReceiptPage),
@@ -757,7 +767,7 @@ export function routeRoutes(guard: MiddlewareHandler<AuthEnv>, { now = () => new
         const after = afterCursor(cursor)
         const tx = c.get("tx")
         const principal = c.get("principal")
-        if ((await findRoute(tx, principal, id)) === undefined) throw noSuchRoute(id)
+        if ((await findReachedRoute(tx, principal, id)) === undefined) throw noSuchRoute(id)
         const rows = await tx
           .select(receiptColumns)
           .from(driverCommand)

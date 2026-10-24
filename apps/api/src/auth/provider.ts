@@ -15,17 +15,27 @@
 //
 // `servesRoute` is the one sentence ADR-0001 states, as SQL over a `route`
 // row: the route's scheme's planning area is in a service area assigned to
-// the account's provider on the route's operating date. It is built here,
-// described and proved against seeded rows (provider-reach.test.ts) and wired
-// into nothing (§7.21): one follow-up issue per family adds it to that
-// family's list and single read as a second fence for a provider account,
-// `inProjects` for the office and this for the provider, the way `assignedTo`
-// is the driver's. The day is the route's `operating_date`, the day the work
-// happens, which is the day a provider is on the road for it (#104 §5 and
-// #109 §5 both said "operating date"; ADR-0001's "service date" is read as
-// the day the work is done, §7.24). A route whose scheme has no planning area
-// is reached by no provider through it, and a Service Area with no planning
-// areas reaches no route.
+// the account's provider on the route's operating date. The day is the
+// route's `operating_date`, the day the work happens, which is the day a
+// provider is on the road for it (#104 §5 and #109 §5 both said "operating
+// date"; ADR-0001's "service date" is read as the day the work is done,
+// §7.24). A route whose scheme has no planning area — the office's ad-hoc
+// route among them, which has no scheme — is reached by no provider through
+// it, and a Service Area with no planning areas reaches no route. The
+// scheme's planning area is read as it stands, so a scheme moved to another
+// area moves the routes it already wrote with it.
+//
+// It fences the reads of two families (#291 slice 23, the first of §7.21's
+// follow-ups): the routes — the list, a route's read, its device log and its
+// Plans — and the pickups — the list, a stop's read and its proof objects.
+// `reachesRoute` is the choice between the two fences for a statement over
+// `route`, `inProjects` for the office and `servesRoute` for the provider,
+// the way `assignedTo` is the driver's; `reachesThroughRoute` is the same
+// choice for a row that hangs off a route — a pickup, a Plan, a Plan's stop —
+// spelled once for them. Every command of those families stays the office's
+// (`inProjects` alone, routes/execution-shapes.ts's `routeScope`), so a
+// provider's account whose role is granted `edit` finds no row to command —
+// the family's 404, as a settlement's commands answer it.
 //
 // `reachesAssignments` is what a provider's account reaches directly and
 // today (§7.22): its own assignments — the rows naming its provider — and,
@@ -47,7 +57,7 @@ import { route } from "@waste/db/schema/execution"
 import { serviceArea, serviceAreaAssignment, serviceAreaPlanningArea } from "@waste/db/schema/finance"
 import { routeScheme } from "@waste/db/schema/route-schemes"
 import { and, eq, exists, sql, type SQL } from "drizzle-orm"
-import type { PgColumn } from "drizzle-orm/pg-core"
+import { alias, type PgColumn } from "drizzle-orm/pg-core"
 
 import type { Principal } from "./principal"
 import { inProjects } from "./projects"
@@ -89,6 +99,50 @@ export function servesRoute(tx: Tx, principal: Principal, on: RouteColumns = rou
           validOn(serviceArea, on.operatingDate),
         ),
       ),
+  )
+}
+
+/** The columns of a route row the reach reads: the predicate's, and the project the office's fence reads. */
+export type ReachedRouteColumns = RouteColumns & { projectId: PgColumn }
+
+/**
+ * The `where` fragment that keeps a statement over `route` to the routes the
+ * caller reads: `inProjects` over the route's project for an office account,
+ * and for an account with a provider `servesRoute` alone — never both
+ * widened, since an account with a provider is bounded to it whatever else
+ * it holds (`reachesAssignments`' rule). The reads of the routes family carry
+ * it beside the tenant; their commands carry `inProjects` alone.
+ */
+export function reachesRoute(tx: Tx, principal: Principal, on: ReachedRouteColumns = route): SQL {
+  if (providerIdOf(principal) === null) return inProjects(on.projectId, principal)
+  return servesRoute(tx, principal, on)
+}
+
+/** The columns of a row that hangs off a route — a pickup, a Plan, a Plan's stop — as the reach reads them. */
+export type RouteChildColumns = { companyId: PgColumn; projectId: PgColumn; routeId: PgColumn }
+
+/** The route a child row's reach is judged on, apart from any `route` the caller's statement already joins. */
+const reachedRoute = alias(route, "reached_route")
+
+/**
+ * The `where` fragment that keeps a statement over a row that hangs off a
+ * route to the rows the caller reads, spelled once for the pickups, the Plans
+ * and their stops: `inProjects` over the row's own project for an office
+ * account — the fence those statements always carried — and for an account
+ * with a provider `exists` the route the row names, served by the provider
+ * on its operating date (`servesRoute`). The route is an alias of its own, so
+ * a statement that joins `route` itself keeps its join apart from this one;
+ * such a statement may hand its joined route as `joined` instead, and the
+ * provider's fence is then `servesRoute` over it, with no second read.
+ */
+export function reachesThroughRoute(tx: Tx, principal: Principal, on: RouteChildColumns, joined?: RouteColumns): SQL {
+  if (providerIdOf(principal) === null) return inProjects(on.projectId, principal)
+  if (joined !== undefined) return servesRoute(tx, principal, joined)
+  return exists(
+    tx
+      .select({ one: sql`1` })
+      .from(reachedRoute)
+      .where(and(eq(reachedRoute.companyId, on.companyId), eq(reachedRoute.id, on.routeId), servesRoute(tx, principal, reachedRoute))),
   )
 }
 
