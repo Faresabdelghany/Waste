@@ -1008,7 +1008,7 @@ column wms.pickup 3 project_id uuid not-null
 column wms.pickup 4 created_at timestamp with time zone not-null default=now()
 column wms.pickup 5 updated_at timestamp with time zone not-null default=now()
 column wms.pickup 6 route_id uuid not-null
-column wms.pickup 7 container_id uuid not-null
+column wms.pickup 7 container_id uuid
 column wms.pickup 8 position integer not-null
 column wms.pickup 9 status text not-null default='planned'::text
 column wms.pickup 10 note text
@@ -1018,8 +1018,11 @@ column wms.pickup 13 waste_fraction_id uuid not-null
 column wms.pickup 14 arrived_at timestamp with time zone
 column wms.pickup 15 outcome_at timestamp with time zone
 column wms.pickup 16 reason text
+column wms.pickup 17 origin text not-null default='generation'::text
 constraint wms.pickup pickup_company_id_fk FOREIGN KEY (company_id) REFERENCES wms.company(id)
 constraint wms.pickup pickup_container_id_fk FOREIGN KEY (company_id, project_id, container_id) REFERENCES wms.container(company_id, project_id, id)
+constraint wms.pickup pickup_container_shape CHECK (((container_id IS NOT NULL) OR (origin = 'office'::text)))
+constraint wms.pickup pickup_origin_one_of CHECK ((origin = ANY (ARRAY['generation'::text, 'office'::text])))
 constraint wms.pickup pickup_outcome_shape CHECK (((status <> 'planned'::text) = (outcome_at IS NOT NULL)))
 constraint wms.pickup pickup_pkey PRIMARY KEY (id)
 constraint wms.pickup pickup_place_exactly_one CHECK (((((property_id IS NOT NULL))::integer + ((shared_collection_point_id IS NOT NULL))::integer) = 1))
@@ -1520,8 +1523,8 @@ column wms.route 2 company_id uuid not-null
 column wms.route 3 project_id uuid not-null
 column wms.route 4 created_at timestamp with time zone not-null default=now()
 column wms.route 5 updated_at timestamp with time zone not-null default=now()
-column wms.route 6 route_scheme_id uuid not-null
-column wms.route 7 collection_group_id uuid not-null
+column wms.route 6 route_scheme_id uuid
+column wms.route 7 collection_group_id uuid
 column wms.route 8 service_date date not-null
 column wms.route 9 operating_date date not-null
 column wms.route 10 status text not-null default='planned'::text
@@ -1565,6 +1568,7 @@ constraint wms.route route_planned_vehicle_id_fk FOREIGN KEY (company_id, projec
 constraint wms.route route_project_id_fk FOREIGN KEY (company_id, project_id) REFERENCES wms.project(company_id, id)
 constraint wms.route route_project_key UNIQUE (company_id, project_id, id)
 constraint wms.route route_route_scheme_id_fk FOREIGN KEY (company_id, project_id, route_scheme_id) REFERENCES wms.route_scheme(company_id, project_id, id)
+constraint wms.route route_scheme_shape CHECK ((((route_scheme_id IS NULL) = (collection_group_id IS NULL)) AND ((route_scheme_id IS NOT NULL) OR ((generation_run_id IS NULL) AND (NOT cancelled_by_generation)))))
 constraint wms.route route_stamps_shape CHECK (
 CASE status
     WHEN 'planned'::text THEN ((dispatched_at IS NULL) AND (started_at IS NULL) AND (completed_at IS NULL) AND (cancelled_at IS NULL))
@@ -2154,6 +2158,7 @@ column wms.ticket 26 parent_ticket_id uuid
 column wms.ticket 27 resolution text
 column wms.ticket 28 recollection_route_id uuid
 column wms.ticket 29 closed_at timestamp with time zone
+column wms.ticket 30 recollection_pickup_id uuid
 constraint wms.ticket ticket_agreement_id_fk FOREIGN KEY (company_id, project_id, agreement_id) REFERENCES wms.agreement(company_id, project_id, id)
 constraint wms.ticket ticket_assignee_user_account_id_fk FOREIGN KEY (company_id, assignee_user_account_id) REFERENCES wms.user_account(company_id, id)
 constraint wms.ticket ticket_closed_shape CHECK (((status = ANY (ARRAY['completed'::text, 'rejected'::text])) = (closed_at IS NOT NULL)))
@@ -2173,7 +2178,9 @@ constraint wms.ticket ticket_priority_one_of CHECK ((priority = ANY (ARRAY['crit
 constraint wms.ticket ticket_project_id_fk FOREIGN KEY (company_id, project_id) REFERENCES wms.project(company_id, id)
 constraint wms.ticket ticket_project_key UNIQUE (company_id, project_id, id)
 constraint wms.ticket ticket_property_id_fk FOREIGN KEY (company_id, project_id, property_id) REFERENCES wms.property(company_id, project_id, id)
+constraint wms.ticket ticket_recollection_pickup_shape CHECK (((recollection_pickup_id IS NULL) OR (recollection_route_id IS NOT NULL)))
 constraint wms.ticket ticket_recollection_route_id_fk FOREIGN KEY (company_id, project_id, recollection_route_id) REFERENCES wms.route(company_id, project_id, id)
+constraint wms.ticket ticket_recollection_route_id_recollection_pickup_id_fk FOREIGN KEY (company_id, project_id, recollection_route_id, recollection_pickup_id) REFERENCES wms.pickup(company_id, project_id, route_id, id)
 constraint wms.ticket ticket_recollection_shape CHECK (((recollection_route_id IS NULL) OR (NOT (resolution IS DISTINCT FROM 'recollected'::text))))
 constraint wms.ticket ticket_resolution_one_of CHECK ((resolution = ANY (ARRAY['recollected'::text, 'serviced'::text, 'answered'::text, 'no-action'::text, 'duplicate'::text])))
 constraint wms.ticket ticket_resolution_shape CHECK (((status = 'completed'::text) = (resolution IS NOT NULL)))
@@ -2195,6 +2202,7 @@ index wms.ticket ticket_pkey CREATE UNIQUE INDEX ticket_pkey ON wms.ticket USING
 index wms.ticket ticket_project_id_status_idx CREATE INDEX ticket_project_id_status_idx ON wms.ticket USING btree (company_id, project_id, status)
 index wms.ticket ticket_project_key CREATE UNIQUE INDEX ticket_project_key ON wms.ticket USING btree (company_id, project_id, id)
 index wms.ticket ticket_property_id_idx CREATE INDEX ticket_property_id_idx ON wms.ticket USING btree (company_id, property_id)
+index wms.ticket ticket_recollection_pickup_id_idx CREATE INDEX ticket_recollection_pickup_id_idx ON wms.ticket USING btree (company_id, recollection_pickup_id)
 index wms.ticket ticket_recollection_route_id_idx CREATE INDEX ticket_recollection_route_id_idx ON wms.ticket USING btree (company_id, recollection_route_id)
 index wms.ticket ticket_route_id_idx CREATE INDEX ticket_route_id_idx ON wms.ticket USING btree (company_id, route_id)
 index wms.ticket ticket_shared_collection_point_id_idx CREATE INDEX ticket_shared_collection_point_id_idx ON wms.ticket USING btree (company_id, shared_collection_point_id)
@@ -2680,4 +2688,5 @@ journal 1790383636636 c40e0a4b47bf76a6cb1e76f9e7750ecc36ffef0e5c4bbc19ceb469061f
 journal 1790711684369 f812e571a1ed7f0eb48027fee7d2c718fb759ac55cd11d3c4e68a6fa6a281f51
 journal 1790724616960 9cd2e4ce4f8e9009bff67362f1eb73d4bcab599e52beb22311fee0e415774f05
 journal 1792792624765 fda36e0c49140a7ed394dbfec44684ac30c511a2b5f6a82bd8e5ae7ac2c0e5af
+journal 1792829657532 2890edfac120d4acd038f3a88d82884231cd5f9467d0d529e285d3f5c87d762c
 pgboss-version 42

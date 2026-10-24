@@ -96,6 +96,7 @@ const missed: Ticket = {
   links: { ...NO_LINKS, routeId, pickupId, containerId },
   resolution: null,
   recollectionRouteId: null,
+  recollectionPickupId: null,
   closedAt: null,
 }
 

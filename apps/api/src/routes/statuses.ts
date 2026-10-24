@@ -89,9 +89,9 @@ export const placeOf = (propertyStatus: PropertyStatus | undefined, sharedCollec
   sharedCollectionPointStatus: sharedCollectionPointStatus ?? null,
 })
 
-/** What names the place, and how its sentence begins: a subscription names it itself, a placement reaches it through its subscription. */
-type PlaceReference = "subscription" | "placement"
-const PLACE_OF: Readonly<Record<PlaceReference, string>> = { subscription: "The", placement: "The subscription's" }
+/** What names the place, and how its sentence begins: a subscription and a stop the office adds at an address (#111) name it themselves, a placement reaches it through its subscription. */
+type PlaceReference = "subscription" | "placement" | "stop"
+const PLACE_OF: Readonly<Record<PlaceReference, string>> = { subscription: "The", placement: "The subscription's", stop: "The" }
 
 /** A Customer an agreement names, in either field: active, or the sentence for that field. Nothing named is nothing to gate. */
 export function refuseInactiveCustomer(status: CustomerStatus | undefined, path: Party): void {
@@ -109,11 +109,12 @@ export function refuseUnofferedProduct(status: ProductStatus | undefined): void 
 }
 
 /**
- * The place a subscription is delivered at, or a placement reaches through
- * its subscription: served, or the sentence naming the status it has and
- * what the reference needs. One definition for both, so a point a
- * subscription may not be made at is a point a container may not be placed
- * at either, drafted again or closed alike.
+ * The place a subscription is delivered at, a placement reaches through its
+ * subscription, or an address-only stop is collected at (#111): served, or
+ * the sentence naming the status it has and what the reference needs. One
+ * definition for the three, so a point a subscription may not be made at is a
+ * point a container may not be placed at and a stop may not be added at
+ * either, drafted again or closed alike.
  */
 export function refuseUnservedPlace(place: Place, reference: PlaceReference): void {
   const { propertyStatus, sharedCollectionPointStatus } = place

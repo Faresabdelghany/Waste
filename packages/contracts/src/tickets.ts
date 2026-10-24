@@ -23,7 +23,9 @@
 // null, with a note), `start` (a note if any), `wait` and `hold` (a note,
 // since waiting says for what), `complete` (the resolution, the note, and the
 // re-collection's route with `recollected` alone —
-// `recollectionRouteWithRecollected`), `reject` (the reason), `reopen` (the
+// `recollectionRouteWithRecollected` — and, beside it, the stop of that route
+// the re-collection is, where the office added one: `recollectionPickupId`,
+// #111, never without its route), `reject` (the reason), `reopen` (the
 // note). A comment is appended, never a change: `TicketComment` carries the
 // body, who may read it (`internal` unless said) and an attachment's key.
 //
@@ -96,6 +98,13 @@ export const ticketFields = {
   resolution: TicketResolution.nullable(),
   /** The route the re-collection rides on, with `recollected`. */
   recollectionRouteId: Id.nullable(),
+  /**
+   * The stop of that route the re-collection is (#111), where the completion
+   * named one; null otherwise. On every answer; absent on an event the outbox
+   * took before #111, when no completion could name one, so it reads as null
+   * and never as a dead letter.
+   */
+  recollectionPickupId: Id.nullable().default(null),
   /** When the ticket was completed or rejected; null while open. */
   closedAt: IsoDateTime.nullable(),
 }
@@ -228,15 +237,25 @@ const recollectionRouteWithRecollectedAt = { message: RECOLLECTION_ROUTE_WITH_RE
 /** The re-collection's route goes with `recollected`: the table's `ticket_recollection_shape`, at the boundary. */
 export const recollectionRouteWithRecollected = (body: { resolution?: string; recollectionRouteId?: string }): boolean => body.recollectionRouteId === undefined || body.resolution === "recollected"
 
-/** `POST /tickets/:id/complete`: what the ticket ended in, the note, and — with `recollected` — the route the re-collection rides on. */
+/** What a completion naming a re-collection stop without its route is told. */
+export const RECOLLECTION_STOP_WITH_ITS_ROUTE = "Name the re-collection's stop with the route it is a stop of"
+const recollectionStopWithItsRouteAt = { message: RECOLLECTION_STOP_WITH_ITS_ROUTE, path: ["recollectionPickupId"] }
+
+/** The re-collection's stop goes with its route (#111): the table's `ticket_recollection_pickup_shape`, at the boundary. */
+export const recollectionStopWithItsRoute = (body: { recollectionRouteId?: string; recollectionPickupId?: string }): boolean => body.recollectionPickupId === undefined || body.recollectionRouteId !== undefined
+
+/** `POST /tickets/:id/complete`: what the ticket ended in, the note, and — with `recollected` — the route the re-collection rides on and the stop of it the re-collection is. */
 export const TicketComplete = z
   .strictObject({
     resolution: TicketResolution,
     note: Paragraph,
     /** A route of the project that has not ended; with `recollected` alone. */
     recollectionRouteId: Id.optional(),
+    /** A stop of that route: the one the office added for the re-collection (#111); with the route alone. */
+    recollectionPickupId: Id.optional(),
   })
   .refine(recollectionRouteWithRecollected, recollectionRouteWithRecollectedAt)
+  .refine(recollectionStopWithItsRoute, recollectionStopWithItsRouteAt)
 export type TicketComplete = z.infer<typeof TicketComplete>
 
 /** `POST /tickets/:id/reject`: the reason, which becomes the history row's body. */

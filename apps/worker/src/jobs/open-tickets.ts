@@ -33,7 +33,9 @@
 // is emitted inside it, as for the office's. `occurredAt` is the event's
 // instant, `dueAt` null (no SLA yet), and the draft's links are what the
 // event named — a problem on the route alone names no stop and so no
-// container and no place, whatever was read.
+// container and no place, whatever was read. An address-only stop the office
+// added (#111) names no container either: it reads no label and no
+// placement, so its ticket names the stop and its place, and no agreement.
 //
 // Which case an event's ticket belongs to is the domain's (`caseRuleOf`,
 // `@waste/domain/resolution/cases`, #258): one case per driver's device and
@@ -161,8 +163,9 @@ async function handled(tx: Tx, companyId: string, eventId: string): Promise<stri
   return comment?.ticketId
 }
 
-/** The container's label, where the pickup names a container the company has. */
-async function containerLabel(tx: Tx, companyId: string, containerId: string): Promise<string | null> {
+/** The container's label, where the pickup names a container the company has; none for an address-only stop (#111). */
+async function containerLabel(tx: Tx, companyId: string, containerId: string | null): Promise<string | null> {
+  if (containerId === null) return null
   const [found] = await tx.select({ label: container.label }).from(container).where(and(eq(container.companyId, companyId), eq(container.id, containerId))).limit(1)
   return found?.label ?? null
 }
@@ -199,10 +202,10 @@ const NOBODY = { agreementId: null, customerId: null }
  * date and its customer, through Finance's reading of the container's
  * placement valid that day, the one generation named the stop's place from.
  */
-async function stopReads(tx: Tx, event: OutboxJob, pickup: { routeId: string; containerId: string; propertyId: string | null; sharedCollectionPointId: string | null }, opensCase: boolean) {
+async function stopReads(tx: Tx, event: OutboxJob, pickup: { routeId: string; containerId: string | null; propertyId: string | null; sharedCollectionPointId: string | null }, opensCase: boolean) {
   const { companyId, projectId } = event
   const [label, address, onRoute] = [await containerLabel(tx, companyId, pickup.containerId), await addressOf(tx, companyId, pickup), await routeOf(tx, companyId, pickup.routeId)]
-  const placement = opensCase && onRoute.serviceDate !== null ? await placementOn(tx, companyId, projectId, pickup.containerId, onRoute.serviceDate) : undefined
+  const placement = opensCase && onRoute.serviceDate !== null && pickup.containerId !== null ? await placementOn(tx, companyId, projectId, pickup.containerId, onRoute.serviceDate) : undefined
   return {
     containerLabel: label,
     address,

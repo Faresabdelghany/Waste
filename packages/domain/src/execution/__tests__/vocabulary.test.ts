@@ -12,7 +12,7 @@ import { describe, test } from "node:test"
 import { defineVocabularyTests } from "../../__tests__/vocabulary"
 import * as vocabulary from "../vocabulary"
 
-defineVocabularyTests("Execution", vocabulary, vocabulary.EXECUTION_VOCABULARIES, 10, ["DRIVER_PICKUP_REASONS", "CLOSING_REASONS"])
+defineVocabularyTests("Execution", vocabulary, vocabulary.EXECUTION_VOCABULARIES, 11, ["DRIVER_PICKUP_REASONS", "CLOSING_REASONS"])
 
 describe("the Execution vocabulary's own rules", () => {
   test("the route and pickup statuses are #97 B's, verbatim, and the outcomes are the statuses less planned", () => {
@@ -27,6 +27,10 @@ describe("the Execution vocabulary's own rules", () => {
     assert.deepEqual(system, ["route-ended", "route-cancelled", "removed-by-dispatcher", "regeneration"])
     for (const reason of vocabulary.CLOSING_REASONS) assert.ok(system.includes(reason), reason)
     assert.deepEqual([...vocabulary.CLOSING_REASONS], ["route-ended", "route-cancelled"])
+  })
+
+  test("a stop is generation's or the office's (#111): the two who put one on a route", () => {
+    assert.deepEqual([...vocabulary.PICKUP_ORIGINS], ["generation", "office"])
   })
 
   test("the proof kinds are seven driver events — five about a stop, two about the route — four kinds of evidence and the correction", () => {

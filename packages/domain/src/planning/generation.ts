@@ -31,6 +31,15 @@
 // inside the walk whose identity was not planned → `cancel` with one of the
 // three sentences the prototype spells. Nothing here reads `edit_policy`.
 //
+// A stop the office added (#111, `origin = office`) is the office's and not
+// the run's: a refresh never skips it as no longer planned and never moves
+// it, an address-only stop included, and a container it holds is not planned
+// onto the route a second time. A `planned` route that carries an open one is
+// never cancelled under it, by the cleanup or by a skipped holiday: it is
+// `trim`med instead — the run's own open stops skipped with the sentence, the
+// route left planned for the office's. A route without a scheme, the office's
+// ad-hoc route, is never among a scheme's routes, so no run reads it.
+//
 // The stops. The database answers, per service date, every container of the
 // project under a placement, subscription and agreement valid that day, with
 // its label, type and fraction, whether its place has a location and whether
@@ -62,7 +71,7 @@
 // another set (`stampMoved`); an identical set writes nothing, so the two
 // latest rows are the two latest distinct sets, which is what
 // `containerDriftBetween` compares.
-import type { PickupReason, PickupStatus, RouteStatus } from "../execution/vocabulary"
+import type { PickupOrigin, PickupReason, PickupStatus, RouteStatus } from "../execution/vocabulary"
 import { ruleSignature } from "../route-schemes/container-drift"
 import { WALK_CAP_DAYS } from "../route-schemes/generation"
 import { holidayLabel, holidayNamesFor, withCarriedNames } from "../route-schemes/holiday-names"
@@ -182,6 +191,8 @@ export type ExistingRoute = {
   cancelledByGeneration: boolean
   /** The office holds its day, start and assignment (#209); its operating date the day it runs on. */
   held: boolean
+  /** It carries an open stop the office added (#111), which a cancellation would take with it: such a route is trimmed, never cancelled. */
+  officeStops: boolean
   operatingDate: string
 }
 
@@ -194,6 +205,8 @@ export type RouteDecision =
   | { kind: "leave"; routeId: string; groupId: string; serviceDate: string; status: RouteStatus }
   /** A `planned` route the scheme no longer plans: cancelled by generation, with the sentence. */
   | { kind: "cancel"; routeId: string; groupId: string; serviceDate: string; note: string }
+  /** A `planned` route the scheme no longer plans that carries an open stop the office added (#111): the run's own open stops skipped with the sentence, the route left planned for the office's. */
+  | { kind: "trim"; routeId: string; groupId: string; serviceDate: string; note: string }
   /** A holiday the policy skips, with no route standing on it: nothing is written; counted. */
   | { kind: "omit"; groupId: string; serviceDate: string; note: string }
 
@@ -218,6 +231,9 @@ export type PlanRoutesInput = {
 }
 
 const identityOf = (groupId: string, serviceDate: string): string => `${groupId}|${serviceDate}`
+
+/** What the scheme no longer planning a `planned` route does to it: cancelled with the sentence, or trimmed where a stop the office added would go with it (#111). */
+const unplanned = (route: ExistingRoute, groupId: string, serviceDate: string, note: string): RouteDecision => ({ kind: route.officeStops ? "trim" : "cancel", routeId: route.id, groupId, serviceDate, note })
 
 const byPosition = (a: GenerationGroup, b: GenerationGroup): number => a.position - b.position || a.id.localeCompare(b.id)
 
@@ -263,7 +279,7 @@ export function planRoutes(input: PlanRoutesInput): RoutePlan {
         holidaysSkipped += 1
         const note = skippedHoliday(occurrence.note)
         if (route === undefined) decisions.push({ kind: "omit", groupId: group.id, serviceDate, note })
-        else if (route.status === "planned") decisions.push({ kind: "cancel", routeId: route.id, groupId: group.id, serviceDate, note })
+        else if (route.status === "planned") decisions.push(unplanned(route, group.id, serviceDate, note))
         else decisions.push({ kind: "leave", routeId: route.id, groupId: group.id, serviceDate, status: route.status })
         continue
       }
@@ -289,13 +305,7 @@ export function planRoutes(input: PlanRoutesInput): RoutePlan {
   for (const [identity, route] of existing) {
     if (judged.has(identity)) continue
     if (route.status !== "planned") continue
-    decisions.push({
-      kind: "cancel",
-      routeId: route.id,
-      groupId: route.collectionGroupId,
-      serviceDate: route.serviceDate,
-      note: servedDates.has(route.serviceDate) ? NO_LONGER_PLANS_GROUP : NO_LONGER_SERVES_DATE,
-    })
+    decisions.push(unplanned(route, route.collectionGroupId, route.serviceDate, servedDates.has(route.serviceDate) ? NO_LONGER_PLANS_GROUP : NO_LONGER_SERVES_DATE))
   }
 
   decisions.sort((a, b) => a.serviceDate.localeCompare(b.serviceDate) || (positionOf.get(a.groupId) ?? Number.MAX_SAFE_INTEGER) - (positionOf.get(b.groupId) ?? Number.MAX_SAFE_INTEGER))
@@ -438,8 +448,11 @@ export function resolveStops(groups: readonly StopGroup[], candidates: readonly 
 /** A pickup of a planned route as the database has it. */
 export type ExistingPickup = {
   id: string
-  containerId: string
+  /** Null on an address-only stop, which only the office adds (#111). */
+  containerId: string | null
   position: number
+  /** Generation's, or the office's, which a refresh leaves as it stands (#111). */
+  origin: PickupOrigin
   status: PickupStatus
   reason: PickupReason | null
   propertyId: string | null
@@ -469,14 +482,27 @@ const samePlace = (existing: ExistingPickup, stop: PlannedStop): boolean =>
  * the plan holds its container again, a `planned` pickup whose container the
  * plan no longer holds is skipped with `regeneration` as the reason and
  * never deleted, and a pickup a person decided — removed by the dispatcher,
- * or with an outcome — is left as it stands, in or out of the plan.
+ * or with an outcome — is left as it stands, in or out of the plan. A stop
+ * the office added (#111) is the office's whatever it holds: never skipped,
+ * never moved, and a container it holds is the office's stop already, so the
+ * plan's stop for that container is not inserted beside it — a route has one
+ * stop per container, and the container is collected at the office's. That
+ * holds whatever the office's stop now stands at: one the dispatcher removed
+ * keeps the container off the route, as any stop a person decided does, and
+ * how a collection both planned and asked for by the office is charged is
+ * Finance's follow-up to decide.
  */
 export function pickupChanges(existing: readonly ExistingPickup[], planned: readonly PlannedStop[]): PickupChanges {
   const changes: PickupChanges = { insert: [], update: [], skip: [], unchanged: 0 }
-  const byContainer = new Map(existing.map((pickup) => [pickup.containerId, pickup]))
+  const own = existing.filter((pickup) => pickup.origin === "generation")
+  const office = existing.filter((pickup) => pickup.origin === "office")
+  changes.unchanged += office.length
+  const officeHolds = new Set(office.flatMap((pickup) => (pickup.containerId === null ? [] : [pickup.containerId])))
+  const byContainer = new Map(own.map((pickup) => [pickup.containerId, pickup]))
   const held = new Set(planned.map((stop) => stop.containerId))
 
   for (const stop of planned) {
+    if (officeHolds.has(stop.containerId)) continue
     const current = byContainer.get(stop.containerId)
     if (current === undefined) {
       changes.insert.push(stop)
@@ -489,8 +515,8 @@ export function pickupChanges(existing: readonly ExistingPickup[], planned: read
       changes.unchanged += 1
     }
   }
-  for (const pickup of existing) {
-    if (held.has(pickup.containerId)) continue
+  for (const pickup of own) {
+    if (pickup.containerId !== null && held.has(pickup.containerId)) continue
     if (pickup.status === "planned") changes.skip.push({ id: pickup.id, note: REMOVED_FROM_DAY_PLAN })
     else changes.unchanged += 1
   }

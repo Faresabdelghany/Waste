@@ -20,9 +20,11 @@
 // `RC-1042`, and every sentence of the four modules names a route by it.
 // `generationRunId` is the column since migration 0012 (#97 part B): the run
 // that last wrote the route, null on one no run has — every route of part A's
-// fixtures, and any the office will one day make by hand. `heldAt` is the
-// column since 0015 (#209): the hold `assign` and `reschedule` put on a
-// planned route, which generation's refresh keeps (routes/route-holds.ts).
+// fixtures, and the office's ad-hoc route. `heldAt` is the column since 0015
+// (#209): the hold `assign` and `reschedule` put on a planned route, which
+// generation's refresh keeps (routes/route-holds.ts). Since 0016 (#111) a
+// route's scheme and group are null together on an ad-hoc route, and a
+// pickup carries its `origin` and may name no container.
 import type { DriverCommandReceipt } from "@waste/contracts/driver-commands"
 import { routeLabel } from "@waste/contracts/execution"
 import type { WeightReviewState } from "@waste/contracts/finance"
@@ -38,7 +40,7 @@ import { reviewStatus, weightReviewOf } from "@waste/db/query/weight-review"
 import { driverCommand, pickup, proofOfService, route, session, unload } from "@waste/db/schema/execution"
 import { noRouteAssigned } from "@waste/domain/execution/commands"
 import { progressOf, type PickupCounts } from "@waste/domain/execution/progress"
-import type { CommandOutcome, DriverCommandKind, ExecutionSource, PickupOutcome, PickupReason, PickupStatus, ProofKind, RouteStatus } from "@waste/domain/execution/vocabulary"
+import type { CommandOutcome, DriverCommandKind, ExecutionSource, PickupOrigin, PickupOutcome, PickupReason, PickupStatus, ProofKind, RouteStatus } from "@waste/domain/execution/vocabulary"
 import type { WeightReviewStatus } from "@waste/domain/finance/vocabulary"
 import { and, asc, count, eq, inArray, isNull, sql, type SQL } from "drizzle-orm"
 
@@ -187,6 +189,7 @@ export const pickupColumns = {
   containerId: pickup.containerId,
   position: pickup.position,
   status: pickup.status,
+  origin: pickup.origin,
   reason: pickup.reason,
   note: pickup.note,
   propertyId: pickup.propertyId,
@@ -209,6 +212,7 @@ export function pickupOf(row: PickupRow): Pickup {
     containerId: row.containerId,
     position: row.position,
     status: row.status as PickupStatus,
+    origin: row.origin as PickupOrigin,
     reason: row.reason as PickupReason | null,
     note: row.note,
     propertyId: row.propertyId,

@@ -8,19 +8,25 @@
 //
 // A pickup is written by generation and by commands, never by a form: the
 // device's `complete-pickup`, `skip-pickup` and `fail-pickup` decide its
-// outcome (driver-commands.ts), the dispatcher removes a stop from a route
-// that has not started (`PickupRemove`, `planned → skipped ·
-// removed-by-dispatcher`) and corrects an outcome after the fact
+// outcome (driver-commands.ts), the dispatcher adds a stop to a route that
+// has not started (`PickupAdd`, #111) — a container, whose placement on the
+// route's service date gives the place and the fraction as generation's
+// would, or an address-only stop naming a property or a shared collection
+// point with the fraction collected there — and removes one (`PickupRemove`,
+// `planned → skipped · removed-by-dispatcher`) and corrects an outcome after
+// the fact
 // (`PickupCorrection`): the audited change, which appends a `correction`
 // proof and moves the status. A correction to `skipped` or `failed` says why
 // and one to `completed` does not (`REASON_WITH_A_MISS`, at `reason`), the
 // rule `pickup_reason_shape` holds in the table. The prototype's `Next` and
 // `Attention` are readings (`nextPickup`, a `failed` status) and its
-// `Rescheduled` is a Ticket's outcome, not a status here.
+// `Rescheduled` is a Ticket's outcome, not a status here. A stop the office
+// added carries `origin = office`, which generation's refresh leaves where
+// the office put it; `containerId` is null on an address-only one.
 import * as z from "zod"
 
 import { IsoDate, IsoDateTime } from "./dates"
-import { PickupOutcome, PickupReason, PickupStatus } from "./execution"
+import { PickupOrigin, PickupOutcome, PickupReason, PickupStatus } from "./execution"
 import { Id } from "./ids"
 import { ProofOfService } from "./proofs"
 import { dayWindowIsOrdered, dayWindowOrdered, ProjectScopedListQuery } from "./queries"
@@ -33,8 +39,9 @@ export const Pickup = z.object({
   ...stamped,
   projectId: Id,
   routeId: Id,
-  containerId: Id,
-  /** Stop order, 1..n: the generated baseline, never overwritten by a Plan (#124). */
+  /** The container emptied; null on an address-only stop the office added (#111), which names its place and fraction alone. */
+  containerId: Id.nullable(),
+  /** Stop order, 1..n: the generated baseline, never overwritten by a Plan (#124); a stop the office added is appended after the last. */
   position: PositiveInt,
   /**
    * The stop's place in the current execution order (#170): the active Plan's
@@ -46,6 +53,13 @@ export const Pickup = z.object({
    */
   sequence: PositiveInt.optional(),
   status: PickupStatus,
+  /**
+   * Who put the stop on the route (#111): generation, or the office, whose
+   * stop a refresh never skips or moves. On every answer; absent on an event
+   * the outbox took before #111, every one of which was generation's, so it
+   * reads as `generation` and never as a dead letter.
+   */
+  origin: PickupOrigin.default("generation"),
   /** Why a skipped or failed pickup was not collected; null otherwise. */
   reason: PickupReason.nullable(),
   note: Paragraph.nullable(),
@@ -82,6 +96,48 @@ export const PickupDetail = Pickup.extend({
   proofs: z.array(ProofOfService),
 })
 export type PickupDetail = z.infer<typeof PickupDetail>
+
+/** What a stop the office adds that names neither a container nor an address is told. */
+export const A_CONTAINER_OR_AN_ADDRESS = "Name a container, or a property or a shared collection point with the waste fraction collected there"
+/** What a container's stop naming a place or a fraction beside it is told: the placement gives both. */
+export const THE_CONTAINER_ALONE = "A container's stop takes its place and fraction from the container's placement on the route's service date; name the container alone"
+/** What an address-only stop naming two places is told. */
+export const ONE_ADDRESS = "Name a property or a shared collection point, not both"
+/** What an address-only stop without its fraction is told. */
+export const AN_ADDRESS_WITH_ITS_FRACTION = "An address-only stop names the waste fraction collected there"
+
+const given = (value: string | null | undefined): value is string => value != null
+
+/** The shape of a stop the office adds: a container alone, or one place with its fraction. A null counts as not given, as a form sends one for the field it leaves empty. */
+function addedStopIssues(body: { containerId?: string | null; propertyId?: string | null; sharedCollectionPointId?: string | null; wasteFractionId?: string | null }, context: z.RefinementCtx): void {
+  const place = [given(body.propertyId), given(body.sharedCollectionPointId)].filter(Boolean).length
+  if (given(body.containerId)) {
+    for (const path of ["propertyId", "sharedCollectionPointId", "wasteFractionId"] as const) {
+      if (given(body[path])) context.addIssue({ code: "custom", message: THE_CONTAINER_ALONE, path: [path] })
+    }
+    return
+  }
+  if (place === 0) context.addIssue({ code: "custom", message: A_CONTAINER_OR_AN_ADDRESS, path: ["containerId"] })
+  else if (place > 1) context.addIssue({ code: "custom", message: ONE_ADDRESS, path: ["sharedCollectionPointId"] })
+  else if (!given(body.wasteFractionId)) context.addIssue({ code: "custom", message: AN_ADDRESS_WITH_ITS_FRACTION, path: ["wasteFractionId"] })
+}
+
+/**
+ * `POST /routes/:id/pickups` (#111): the dispatcher adds a stop to a route
+ * that has not started — a container of the route's project, or an address
+ * of it (a property or a shared collection point) with the fraction
+ * collected there — and a note the driver reads at the stop.
+ */
+export const PickupAdd = z
+  .strictObject({
+    containerId: Id.nullable().optional(),
+    propertyId: Id.nullable().optional(),
+    sharedCollectionPointId: Id.nullable().optional(),
+    wasteFractionId: Id.nullable().optional(),
+    note: Paragraph.nullable().optional(),
+  })
+  .superRefine(addedStopIssues)
+export type PickupAdd = z.infer<typeof PickupAdd>
 
 /** `POST /pickups/:id/remove`: the dispatcher takes a stop off a route that has not started, saying why. */
 export const PickupRemove = z.strictObject({ reason: Paragraph })

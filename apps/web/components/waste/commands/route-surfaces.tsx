@@ -94,7 +94,9 @@ export function RouteCommandsSurface({ record }: RowSurfaceProps) {
 
   const offered = moduleReady && !busy
   const openForm = (name: RouteCommandWithForm) => setOpen({ kind: "form", name, values: name === "cancel" ? {} : routeCommandValues(record) })
-  const stopLine = (pickup: Pickup & { sequence?: number }) => `${pickup.sequence ?? pickup.position}. ${containerName(pickup.containerId)} · ${statusLabel(pickup.status)}${pickup.reason === null ? "" : ` · ${pickupReasonLabel(pickup.reason)}`}`
+  // An address-only stop the office added (#111) names no container.
+  const stopName = (pickup: Pickup) => (pickup.containerId === null ? "Address-only stop" : containerName(pickup.containerId))
+  const stopLine = (pickup: Pickup & { sequence?: number }) => `${pickup.sequence ?? pickup.position}. ${stopName(pickup)} · ${statusLabel(pickup.status)}${pickup.reason === null ? "" : ` · ${pickupReasonLabel(pickup.reason)}`}`
 
   return (
     <section className="space-y-4" data-testid="route-commands">
@@ -170,7 +172,7 @@ export function RouteCommandsSurface({ record }: RowSurfaceProps) {
           order={open.order}
           label={(id) => {
             const pickup = detail?.pickups.find((candidate) => candidate.id === id)
-            return pickup === undefined ? id : containerName(pickup.containerId)
+            return pickup === undefined ? id : stopName(pickup)
           }}
           busy={busy}
           onChange={(order) => setOpen({ kind: "reorder", order })}

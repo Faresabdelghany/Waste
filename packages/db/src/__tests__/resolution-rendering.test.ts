@@ -20,7 +20,12 @@
 // outbox's checks grew by Finance's two kinds and its two aggregates, and
 // `company` gained `next_invoice_number`. An applied file is never edited, so
 // 0009's ALTER TABLEs are diffed from 0008's spelling to 0009's, both spelled
-// here, and finance-rendering.test.ts pins 0010's own.
+// here, and finance-rendering.test.ts pins 0010's own. Migration 0016 (#111)
+// gave `ticket` the re-collection's stop, `recollection_pickup_id`, with its
+// key through the route, its check and its index, so `CHANGED_IN_0016` maps
+// the ticket's CREATE TABLE as drizzle-kit writes it now onto what 0009 says
+// and `ADDED_IN_0016` is left out of the comparison; ad-hoc-rendering.test.ts
+// pins the statements themselves.
 import assert from "node:assert/strict"
 import { readFile } from "node:fs/promises"
 import { join } from "node:path"
@@ -77,7 +82,8 @@ const stampsShape = (() => {
   return `CONSTRAINT "alert_stamps_shape" CHECK (case ${column("status")} when 'new' then ${column("acknowledged_at")} is null and ${column("resolved_at")} is null when 'acknowledged' then ${column("acknowledged_at")} is not null and ${column("resolved_at")} is null when 'resolved' then ${column("resolved_at")} is not null else false end)`
 })()
 
-const expected = [
+/** ticket as drizzle-kit wrote it as of 0009, and as it writes it since 0016 (#111): the re-collection's stop and the check that it names its route. */
+const ticketTable = (asOf: "0009" | "0016"): string =>
   createTable("ticket", "project", [
     '"number" integer NOT NULL',
     '"kind" text NOT NULL',
@@ -102,6 +108,7 @@ const expected = [
     '"parent_ticket_id" uuid',
     '"resolution" text',
     '"recollection_route_id" uuid',
+    ...(asOf === "0016" ? ['"recollection_pickup_id" uuid'] : []),
     `"closed_at" ${INSTANT}`,
     uniqueKey("ticket_number_key", "company_id", "number"),
     uniqueKey("ticket_project_key", "company_id", "project_id", "id"),
@@ -116,8 +123,22 @@ const expected = [
     `CONSTRAINT "ticket_resolution_shape" CHECK ((${ref("ticket", "status")} = 'completed') = (${ref("ticket", "resolution")} is not null))`,
     // `is not distinct from`: `null = 'recollected'` is null, and a null check passes.
     `CONSTRAINT "ticket_recollection_shape" CHECK (${ref("ticket", "recollection_route_id")} is null or ${ref("ticket", "resolution")} is not distinct from 'recollected')`,
+    ...(asOf === "0016" ? [`CONSTRAINT "ticket_recollection_pickup_shape" CHECK (${ref("ticket", "recollection_pickup_id")} is null or ${ref("ticket", "recollection_route_id")} is not null)`] : []),
     `CONSTRAINT "ticket_closed_shape" CHECK ((${ref("ticket", "status")} in ('completed', 'rejected')) = (${ref("ticket", "closed_at")} is not null))`,
-  ]),
+  ])
+
+/** The re-collection's stop is a stop of the route it rides on (#111): the key carries the route on both sides, as the ticket's own pickup's does. */
+const RECOLLECTION_PICKUP_FK = foreignKey("ticket", "ticket_recollection_route_id_recollection_pickup_id_fk", ["company_id", "project_id", "recollection_route_id", "recollection_pickup_id"], "pickup", ["company_id", "project_id", "route_id", "id"])
+const RECOLLECTION_PICKUP_INDEX = index("ticket", "ticket_recollection_pickup_id_idx", "company_id", "recollection_pickup_id")
+
+/** What 0016 changed on one of the three (#111): the ticket's CREATE TABLE as drizzle-kit generates it now onto what 0009 says. */
+const CHANGED_IN_0016 = new Map([[ticketTable("0016"), ticketTable("0009")]])
+
+/** What 0016 added to the ticket beside the column: the key through the route and its index. 0009 begins with the generated statements less these. */
+const ADDED_IN_0016 = [RECOLLECTION_PICKUP_FK, RECOLLECTION_PICKUP_INDEX]
+
+const expected = [
+  ticketTable("0016"),
   createLedger("ticket_event", [
     '"ticket_id" uuid NOT NULL',
     '"kind" text NOT NULL',
@@ -179,6 +200,7 @@ const expected = [
   // The parent: a ticket of the same project, through the table's own project key.
   projectFkTo("ticket", "parent_ticket_id", "ticket"),
   projectFkTo("ticket", "recollection_route_id", "route"),
+  RECOLLECTION_PICKUP_FK,
   companyFk("ticket_event"),
   projectFk("ticket_event"),
   projectFkTo("ticket_event", "ticket_id", "ticket"),
@@ -210,6 +232,7 @@ const expected = [
   index("ticket", "ticket_customer_id_idx", "company_id", "customer_id"),
   index("ticket", "ticket_parent_ticket_id_idx", "company_id", "parent_ticket_id"),
   index("ticket", "ticket_recollection_route_id_idx", "company_id", "recollection_route_id"),
+  RECOLLECTION_PICKUP_INDEX,
   // The second idempotency key: one comment per outbox event.
   partialUniqueIndex("ticket_event", "ticket_event_source_event_id_idx", ["company_id", "source_event_id"], `${ref("ticket_event", "source_event_id")} is not null`),
   // A ticket's history in recording order, leading with the ticket.
@@ -297,8 +320,11 @@ const handWritten = Object.values(tables).flatMap((table) => handWrittenStatemen
 /** The ALTER TABLEs as drizzle-kit wrote them: the company and the outbox from 0008's spelling to 0009's — not to today's, since 0010 changed both again (Issue #112) and an applied file is never edited. */
 const generatedAlterations = (): Promise<string[]> => statementsBetween({ company: companyAsOf0008, outboxEvent: outboxEventAsOf0008 }, { company: companyAsOf0009, outboxEvent: outboxEventAsOf0009 })
 
-/** Everything drizzle-kit wrote at the head of 0009: the three tables and the two altered ones. */
-const generatedHead = async (): Promise<string[]> => [...(await statementsFor(tables)), ...(await generatedAlterations())]
+/** Everything drizzle-kit wrote at the head of 0009: the three tables as they were generated as of 0009 — the ticket without the re-collection's stop, what 0016 added left out — and the two altered ones. */
+const generatedHead = async (): Promise<string[]> => [
+  ...(await statementsFor(tables)).filter((statement) => !ADDED_IN_0016.includes(statement)).map((statement) => CHANGED_IN_0016.get(statement) ?? statement),
+  ...(await generatedAlterations()),
+]
 
 const fileStatements = async (): Promise<string[]> => statementsOf(await readFile(join(MIGRATIONS_FOLDER, MIGRATION), "utf8"))
 
@@ -317,6 +343,9 @@ describe("the Resolution tables as drizzle-kit writes them", () => {
     const generated = (await generatedHead()).map(normalised).sort()
     assert.equal(generated.length, 65, "three CREATE TABLE, one ADD COLUMN, two DROP CONSTRAINT, two ADD CONSTRAINT, twenty-nine foreign keys, twenty-eight indexes")
     assert.deepEqual([...statements.slice(0, generated.length)].sort(), generated)
+    // What 0016 changed and added is what the schema generates today: each mapping maps something.
+    const today = await statementsFor(tables)
+    for (const statement of [...CHANGED_IN_0016.keys(), ...ADDED_IN_0016]) assert.ok(today.includes(statement), statement.split("\n")[0])
   })
 
   test("and carries below them the fence and trigger, or revoke, of each table: 3 x 3 = 9 statements", async () => {
@@ -352,6 +381,7 @@ describe("the checks of this context", () => {
       "ticket_parent_shape",
       "ticket_resolution_shape",
       "ticket_recollection_shape",
+      "ticket_recollection_pickup_shape",
       "ticket_closed_shape",
     ])
     assert.deepEqual([...checksOf(ticketEvent).keys()], ["ticket_event_kind_one_of", "ticket_event_status_one_of", "ticket_event_resolution_one_of", "ticket_event_visibility_one_of", "ticket_event_kind_shape"])

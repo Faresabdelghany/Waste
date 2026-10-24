@@ -325,7 +325,9 @@ async function openSessionOf(tx: Tx, companyId: string, profile: DriverProfile):
  * the point's column, the point's codec decoding it (@waste/db/schema/geometry)
  * exactly as the Registry's own reads do. `pickup_place_exactly_one` and the
  * two project keys hold every pickup to one place that is there, so a row
- * with neither address is a broken invariant and thrown, not a client's.
+ * with neither address is a broken invariant and thrown, not a client's. The
+ * container is a left join: an address-only stop the office added (#111)
+ * names none, and is on the list with its address and a null label.
  */
 async function driverPickupsOfRoute(tx: Tx, companyId: string, routeId: string): Promise<DriverPickup[]> {
   const rows = await tx
@@ -339,7 +341,7 @@ async function driverPickupsOfRoute(tx: Tx, companyId: string, routeId: string):
       wasteFractionName: wasteFraction.name,
     })
     .from(pickup)
-    .innerJoin(container, and(eq(container.companyId, pickup.companyId), eq(container.id, pickup.containerId)))
+    .leftJoin(container, and(eq(container.companyId, pickup.companyId), eq(container.id, pickup.containerId)))
     .innerJoin(wasteFraction, and(eq(wasteFraction.companyId, pickup.companyId), eq(wasteFraction.id, pickup.wasteFractionId)))
     .leftJoin(property, and(eq(property.companyId, pickup.companyId), eq(property.id, pickup.propertyId)))
     .leftJoin(sharedCollectionPoint, and(eq(sharedCollectionPoint.companyId, pickup.companyId), eq(sharedCollectionPoint.id, pickup.sharedCollectionPointId)))
@@ -968,7 +970,7 @@ export function driverDoorRoutes(guard: MiddlewareHandler<AuthEnv>, { now = () =
         operationId: "getDriverRoute",
         summary: "One of the driver's routes, with its stops and their places",
         description:
-          "The route with what hangs off it: its pickups by position, each with its place joined — the `address` and `location` (a point, or null for a property not yet geocoded) of the property or the shared collection point the pickup names on the service date, the container's `label` and the waste fraction's `name` — the open session or null, every session oldest first, and its unloads oldest first: what a device without sync reads to run the route, and the one read that denormalises for the wire what the synced device joins from its own buckets. A route not assigned to the caller's driver profile, of another company, or not there at all is answered the same way (404, `No route <id> assigned to this driver`), so the device learns nothing about routes it was not given.",
+          "The route with what hangs off it: its pickups by position, each with its place joined — the `address` and `location` (a point, or null for a property not yet geocoded) of the property or the shared collection point the pickup names on the service date, the container's `label` (null on an address-only stop the office added, which names no container) and the waste fraction's `name` — the open session or null, every session oldest first, and its unloads oldest first: what a device without sync reads to run the route, and the one read that denormalises for the wire what the synced device joins from its own buckets. A route not assigned to the caller's driver profile, of another company, or not there at all is answered the same way (404, `No route <id> assigned to this driver`), so the device learns nothing about routes it was not given.",
         security: BEARER_SECURITY,
         responses: {
           200: describeJson("The route with its pickups and their places, its sessions and its unloads.", DriverRouteDetail),

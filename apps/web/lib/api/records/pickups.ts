@@ -56,8 +56,9 @@ export function toPickupRecord(pickup: Pickup, context: MappingContext): Busines
   const timezone = projectRecord === undefined ? undefined : typed(projectRecord, "timezone")
   const route = context.resolve.byServerId(pickup.routeId)
   const routeWebId = webIdVia(context, "route", pickup.routeId)
-  const container = referenced(context, "asset", pickup.containerId)
-  const containerRecord = context.resolve.byServerId(pickup.containerId)
+  // An address-only stop the office added (#111) names no container.
+  const container = pickup.containerId === null ? undefined : referenced(context, "asset", pickup.containerId)
+  const containerRecord = pickup.containerId === null ? undefined : context.resolve.byServerId(pickup.containerId)
   const fraction = referenced(context, "fraction", pickup.wasteFractionId)
   const stop = pickup.sequence ?? pickup.position
   const status = statusLabel(pickup.status)
@@ -81,7 +82,7 @@ export function toPickupRecord(pickup: Pickup, context: MappingContext): Busines
   }
   return {
     id: webIdOf(PICKUP_PREFIX, pickup.id),
-    name: `Stop ${stop} · ${label ?? container.webId}`,
+    name: `Stop ${stop} · ${label ?? container?.webId ?? "Address-only stop"}`,
     context: [route?.name ?? routeWebId, fraction.name ?? fraction.webId].join(" · "),
     status,
     ...inheritedPresentation(undefined),
@@ -95,7 +96,7 @@ export function toPickupRecord(pickup: Pickup, context: MappingContext): Busines
     recordKind: "Pickup",
     submittedValues: {
       routeId: routeWebId,
-      containerId: container.webId,
+      ...(container === undefined ? {} : { containerId: container.webId }),
       wasteFractionId: fraction.webId,
       position: String(pickup.position),
       ...(pickup.sequence === undefined ? {} : { sequence: String(pickup.sequence) }),

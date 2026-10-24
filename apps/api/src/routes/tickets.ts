@@ -65,7 +65,7 @@ import {
 } from "@waste/contracts/tickets"
 import type { Tx } from "@waste/db/client"
 import { propertyParty } from "@waste/db/schema/customers"
-import { route } from "@waste/db/schema/execution"
+import { pickup, route } from "@waste/db/schema/execution"
 import { ticket, ticketEvent } from "@waste/db/schema/resolution"
 import { closedTicket, ticketTransition, type TicketCommand } from "@waste/domain/resolution/transitions"
 import { CLOSED_TICKET_STATUSES, isClosedTicketStatus, OPEN_TICKET_STATUSES, type TicketStatus } from "@waste/domain/resolution/vocabulary"
@@ -82,6 +82,7 @@ import { afterCursor, fetchLimit, pageOf } from "../pagination"
 import { describeProblem, invalidRequest, problem, validate } from "../problem"
 import { labelOf as routeLabelOf } from "./execution-shapes"
 import {
+  NOT_A_PICKUP,
   NOT_A_ROUTE,
   requireAccountInProject,
   requireAgreement,
@@ -110,6 +111,9 @@ export const NOT_ITS_OWN_PARENT = "A ticket is not its own parent"
 
 /** What a completion naming a route that has ended is told: the #79 gate on the one reference a ticket makes that asks its row to run. */
 export const routeHasEnded = (label: string, status: "completed" | "cancelled"): string => `Route ${label} is ${status}; a re-collection rides on a route that has not ended`
+
+/** What a re-collection naming a stop that was missed is told: the re-collection is a stop still to be collected, or one collected. */
+export const stopWasMissed = (position: number, route: string, status: "skipped" | "failed"): string => `Stop ${position} of route ${route} is ${status}; a re-collection names a stop that is planned or collected`
 
 /** What a comment's attachment key naming another company's or another ticket's prefix is told, at `objectKey`. */
 export const KEY_NAMES_ANOTHER = "The attachment key names another company or another ticket"
@@ -166,17 +170,33 @@ async function requireLinks(tx: Tx, scope: Scope, after: TicketLinks, named: Rea
  * The route a re-collection rides on: one of the project's (400 at
  * `recollectionRouteId`) that has not ended — a completed or cancelled route
  * is a 409 naming it and its status, the #79 gate on a new reference, after
- * the 400. One statement for both, as `requireStatus` reads a status with
- * the proof the row is there.
+ * the 400s. One statement for both, as `requireStatus` reads a status with
+ * the proof the row is there. The stop the completion names beside it
+ * (#111), where it names one, is a stop of that route (400 at
+ * `recollectionPickupId`), asked between the two, and one that was missed —
+ * skipped or failed, the original stop the ticket is about among them — is a
+ * 409 after the route's: the re-collection is a stop to be collected, or one
+ * collected.
  */
-async function requireRouteNotEnded(tx: Tx, scope: Scope, routeId: string): Promise<void> {
+async function requireRouteNotEnded(tx: Tx, scope: Scope, routeId: string, pickupId: string | undefined): Promise<void> {
   const [found] = await tx
     .select({ number: route.number, status: route.status })
     .from(route)
     .where(and(eq(route.companyId, scope.companyId), eq(route.projectId, scope.projectId), eq(route.id, routeId)))
     .limit(1)
   if (found === undefined) throw invalidRequest("body", [{ path: "recollectionRouteId", message: NOT_A_ROUTE }])
+  // The stop the office added for the re-collection (#111) is a stop of that route, a 400 at its field before the route's 409.
+  const [stop] =
+    pickupId === undefined
+      ? [undefined]
+      : await tx
+          .select({ position: pickup.position, status: pickup.status })
+          .from(pickup)
+          .where(and(eq(pickup.companyId, scope.companyId), eq(pickup.routeId, routeId), eq(pickup.id, pickupId)))
+          .limit(1)
+  if (pickupId !== undefined && stop === undefined) throw invalidRequest("body", [{ path: "recollectionPickupId", message: NOT_A_PICKUP }])
   if (found.status === "completed" || found.status === "cancelled") throw problem(409, { detail: routeHasEnded(routeLabelOf(found), found.status) })
+  if (stop !== undefined && (stop.status === "skipped" || stop.status === "failed")) throw problem(409, { detail: stopWasMissed(stop.position, routeLabelOf(found), stop.status) })
 }
 
 /** The ticket the path names, locked and read: every command and the patch hold a rule the API holds, so they take the row lock first and read afterwards (routes/shared.ts). */
@@ -212,9 +232,9 @@ const visibleTo = (tx: Tx, companyId: string, customerId: string) =>
   )
 
 /** The columns a machine command writes beside the status. */
-type Closing = { resolution: string | null; recollectionRouteId: string | null; closedAt: Date | null }
+type Closing = { resolution: string | null; recollectionRouteId: string | null; recollectionPickupId: string | null; closedAt: Date | null }
 
-const OPEN_AGAIN: Closing = { resolution: null, recollectionRouteId: null, closedAt: null }
+const OPEN_AGAIN: Closing = { resolution: null, recollectionRouteId: null, recollectionPickupId: null, closedAt: null }
 
 const commandProblems = (action: "view" | "edit" | "create") => ({
   401: describeProblem("No usable token (see WWW-Authenticate)."),
@@ -576,15 +596,15 @@ export function ticketRoutes(guard: MiddlewareHandler<AuthEnv>, { now = () => ne
         operationId: "completeTicket",
         summary: "Complete a ticket",
         description:
-          "The `complete` command: any open status becomes `completed` with the `resolution` — `recollected`, `serviced`, `answered`, `no-action` or `duplicate` — `closedAt` stamped with the request's clock, and a `status-changed` event carrying the resolution and the note. With `recollected`, and only then (400 at `recollectionRouteId` otherwise), the body may name the route the re-collection rides on: a route of the ticket's project (400, `Not a route of this project`) that has not ended — a completed or cancelled route is refused (409, `Route RC-1042 is completed; a re-collection rides on a route that has not ended`), the one status gate a ticket's links have, since this reference asks the route to run. Resolution makes no route and no pickup: the re-collection is Execution's, and the ticket names it. Not idempotent: a second completion is a change a person meant. Under the ticket's row lock. " +
+          "The `complete` command: any open status becomes `completed` with the `resolution` — `recollected`, `serviced`, `answered`, `no-action` or `duplicate` — `closedAt` stamped with the request's clock, and a `status-changed` event carrying the resolution and the note. With `recollected`, and only then (400 at `recollectionRouteId` otherwise), the body may name the route the re-collection rides on: a route of the ticket's project (400, `Not a route of this project`) that has not ended — a completed or cancelled route is refused (409, `Route RC-1042 is completed; a re-collection rides on a route that has not ended`), the one status gate a ticket's links have, since this reference asks the route to run. Beside the route it may name the stop of it the re-collection is — the one the office added through `POST /routes/{id}/pickups` (#111), `recollectionPickupId` — which is a stop of that route (400, `Not a pickup of this route`), never named without it (400 at `recollectionPickupId`), and not one that was missed: a skipped or failed stop — the stop the ticket is about among them — is refused (409, `Stop 3 of route RC-1042 is failed; a re-collection names a stop that is planned or collected`). Resolution makes no route and no pickup: the re-collection is Execution's, and the ticket names it. Not idempotent: a second completion is a change a person meant. Under the ticket's row lock. " +
           CLOSED +
           " The `ticket-completed` event is written in the same transaction, carrying the ticket as answered; Finance is its consumer.",
         security: BEARER_SECURITY,
         responses: {
           200: describeJson("The ticket, completed.", Ticket),
-          400: describeProblem("The path does not hold an id, or the body is missing the resolution or the note, names a member the command does not take, names a re-collection route with another resolution, or names a route that is not the project's."),
+          400: describeProblem("The path does not hold an id, or the body is missing the resolution or the note, names a member the command does not take, names a re-collection route with another resolution, a re-collection stop without its route, a route that is not the project's or a stop that is not that route's."),
           ...commandProblems("edit"),
-          409: describeProblem("The ticket is completed or rejected already, or the re-collection route has ended; the detail says which."),
+          409: describeProblem("The ticket is completed or rejected already, the re-collection route has ended, or the re-collection stop was missed; the detail says which."),
         },
       }),
       guard,
@@ -593,13 +613,13 @@ export function ticketRoutes(guard: MiddlewareHandler<AuthEnv>, { now = () => ne
       validate("json", TicketComplete),
       async (c) => {
         const { id } = c.req.valid("param")
-        const { resolution, note, recollectionRouteId } = c.req.valid("json")
+        const { resolution, note, recollectionRouteId, recollectionPickupId } = c.req.valid("json")
         const tx = c.get("tx")
         const principal = c.get("principal")
         const at = now()
         const { row } = await moved(tx, principal, id, "complete", note, async (current) => {
-          if (recollectionRouteId !== undefined) await requireRouteNotEnded(tx, { companyId: principal.companyId, projectId: current.projectId }, recollectionRouteId)
-          return { resolution, recollectionRouteId: recollectionRouteId ?? null, closedAt: at }
+          if (recollectionRouteId !== undefined) await requireRouteNotEnded(tx, { companyId: principal.companyId, projectId: current.projectId }, recollectionRouteId, recollectionPickupId)
+          return { resolution, recollectionRouteId: recollectionRouteId ?? null, recollectionPickupId: recollectionPickupId ?? null, closedAt: at }
         })
         const answered = ticketOf(row)
         await emit(tx, principal, { aggregate: "ticket", aggregateId: row.id, kind: "ticket-completed", payload: answered, projectId: row.projectId, occurredAt: at })
@@ -645,7 +665,7 @@ export function ticketRoutes(guard: MiddlewareHandler<AuthEnv>, { now = () => ne
         operationId: "reopenTicket",
         summary: "Reopen a closed ticket",
         description:
-          "The `reopen` command: `completed` or `rejected` becomes `open` with the body's note as the `status-changed` event's body, and the three closing columns — `resolution`, `recollectionRouteId` and `closedAt` — are cleared, since a reopened ticket is open; the closing stands in the history. A ticket that is open in any of the four open statuses answers 200 as it stands, without a write or an event. Under the ticket's row lock.",
+          "The `reopen` command: `completed` or `rejected` becomes `open` with the body's note as the `status-changed` event's body, and the closing columns — `resolution`, `recollectionRouteId` with `recollectionPickupId`, and `closedAt` — are cleared, since a reopened ticket is open; the closing stands in the history. A ticket that is open in any of the four open statuses answers 200 as it stands, without a write or an event. Under the ticket's row lock.",
         security: BEARER_SECURITY,
         responses: {
           200: describeJson("The ticket, open again.", Ticket),

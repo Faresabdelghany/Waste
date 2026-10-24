@@ -1,13 +1,25 @@
 // The dated Route as the dispatcher reads and moves it (Issue #104, slice 3;
 // ADR-0002, ADR-0004): `GET /routes` lists them, `GET /routes/:id` reads one
-// with its pickups, sessions and unloads, and six commands move it —
+// with its pickups, sessions and unloads, `POST /routes` makes the office's
+// ad-hoc route (#111), and six commands move a route —
 // `assign` (the Planned Assignment), `dispatch` (`planned → ready`),
 // `reschedule` (the operating day and the start), `release-hold` (the
 // office's hold handed back, #226), `cancel` and the order of its stops
 // (`PUT /routes/:id/pickup-order`) — while `GET /routes/:id/commands`
-// is the log of what the device said, rejections included. No create and no
-// patch: a route is written by generation (#97 B) and no delete, since a
-// route is cancelled and a record standing behind pickups is not removed.
+// is the log of what the device said, rejections included. No patch: a
+// route is written by generation (#97 B) or made by the office, and no
+// delete, since a route is cancelled and a record standing behind pickups is
+// not removed.
+//
+// The ad-hoc route (#111) is the office's own: a route with no scheme and no
+// group (`route_scheme_shape`), on one of the caller's projects and a day
+// that is its operating date and its service date both, numbered from the
+// company's counter one at a time (`nextNumber`, under the company's row
+// lock), `planned`, with the depot, the station and the Planned Assignment's
+// vehicle and driver the body names held as `assign` holds them. No
+// generation run reads it, so it is never held: `assign` and `reschedule`
+// move it without a hold, and `release-hold` refuses it. Its stops are the
+// office's too, added through `POST /routes/:id/pickups` (routes/pickups.ts).
 //
 // Every status change goes through the domain's `routeTransition`
 // (@waste/domain/execution/transitions), which answers the next status, a
@@ -55,7 +67,7 @@
 // and `edit` to command; every statement carries the tenant and `inProjects`.
 import { DriverCommandReceipt } from "@waste/contracts/driver-commands"
 import { Page, PageRequest } from "@waste/contracts/pagination"
-import { PickupOrderSet, RouteAssign, RouteCancel, RouteDetail, RouteListItem, RouteListQuery, RouteReleaseHold, RouteReschedule } from "@waste/contracts/routes"
+import { PickupOrderSet, RouteAssign, RouteCancel, RouteCreate, RouteDetail, RouteListItem, RouteListQuery, RouteReleaseHold, RouteReschedule } from "@waste/contracts/routes"
 import type { Tx } from "@waste/db/client"
 import { driverCommand, pickup, route, session } from "@waste/db/schema/execution"
 import { unloadingStation, unloadingStationFraction } from "@waste/db/schema/places"
@@ -73,6 +85,7 @@ import { describeRoute } from "hono-openapi"
 import { BEARER_SECURITY, type AuthEnv, type Principal } from "../auth/principal"
 import { requireProject } from "../auth/projects"
 import { allows, requireGrant } from "../auth/require"
+import { newId } from "../ids"
 import { emit } from "../outbox"
 import { afterCursor, fetchLimit, pageOf } from "../pagination"
 import { describeProblem, invalidRequest, problem, validate } from "../problem"
@@ -80,11 +93,11 @@ import { detailOf, findRoute, labelOf, noSuchRoute, pickupColumns, pickupOf, pic
 import { findDriver, findVehicle, projectToday, vehicleLabel, type DriverRow, type VehicleRow } from "./fleet-lookups"
 import { activePlansByRoute, ensurePlan } from "./plan-shapes"
 import { QueueMissing, type JobSender } from "@waste/db/jobs"
-import { NOT_AN_UNLOADING_STATION, requireDepot, type Scope } from "./references"
+import { NOT_AN_UNLOADING_STATION, requireDepot, requireUnloadingStation, type Scope } from "./references"
 import { findScheme, MODULE as SCHEMES_MODULE, type ClockOptions } from "./scheme-groups"
 import { askGeneration } from "./generation"
 import { handBackWindow } from "./route-holds"
-import { describeJson, IdParam, lockRow, stamp, timeOf } from "./shared"
+import { created, describeCreated, describeJson, IdParam, lockRow, nextNumber, stamp, timeOf } from "./shared"
 import { refuseUnavailableDriver } from "./statuses"
 
 const MODULE = "route-studio.routes"
@@ -94,6 +107,9 @@ const ReceiptPage = Page(DriverCommandReceipt)
 
 /** What a hand-back of a planned route the office did not move is told (#226). */
 export const notHeld = (label: string): string => `Route ${label} is not held; it follows its scheme`
+
+/** What a hand-back of the office's ad-hoc route is told (#111): no run reads it, so nothing ever held it. */
+export const adHocNeverHeld = (label: string): string => `Route ${label} has no scheme; the office's own route is never held`
 
 /** What a hand-back of a route past `planned` is told: a hold is a planned route's (\`route_hold_shape\`). */
 export const onlyPlannedHeld = (label: string, status: string): string => `Route ${label} is ${status}; only a planned route is held`
@@ -227,13 +243,14 @@ async function requireStationAccepting(tx: Tx, companyId: string, routeId: strin
  * the command's instant when the command changed something; one that changed
  * nothing leaves the route as it was, held or not. A `ready` route is frozen
  * against regeneration already and holds nothing, which `route_hold_shape`
- * demands besides.
+ * demands besides; nor does the office's ad-hoc route (#111), which no run
+ * reads.
  */
-const holdOf = (current: RouteRow, moved: boolean, at: Date): { heldAt?: Date } => (current.status === "planned" && moved ? { heldAt: at } : {})
+const holdOf = (current: RouteRow, moved: boolean, at: Date): { heldAt?: Date } => (current.status === "planned" && current.routeSchemeId !== null && moved ? { heldAt: at } : {})
 
 /** What a hold says on the wire, spelled once for `assign` and `reschedule`. */
 const HOLDS =
-  "On a `planned` route a command that changes something stamps `heldAt` with its instant: the route is held, and the next generation run keeps its operating date, its planned start and its Planned Assignment — vehicle, driver, provider, trailer, depot and unloading station — as the office left them, still refreshing its pickups and its note, until `release-hold` hands it back, `dispatch` or `cancel` clears the hold, or an edit of the scheme or of the route's collection group releases it: one that moves the start, the depot, the station, the vehicle, the driver or the provider, or that takes the route's own service day away. A command that changes nothing holds nothing, and on a `ready` route, frozen against regeneration already, the command holds nothing either."
+  "On a `planned` route a command that changes something stamps `heldAt` with its instant: the route is held, and the next generation run keeps its operating date, its planned start and its Planned Assignment — vehicle, driver, provider, trailer, depot and unloading station — as the office left them, still refreshing its pickups and its note, until `release-hold` hands it back, `dispatch` or `cancel` clears the hold, or an edit of the scheme or of the route's collection group releases it: one that moves the start, the depot, the station, the vehicle, the driver or the provider, or that takes the route's own service day away. A command that changes nothing holds nothing, and on a `ready` route, frozen against regeneration already, the command holds nothing either; nor on the office's ad-hoc route, which no generation run reads."
 
 /** The Planned Assignment as a write leaves it: the body's fields over the stored ones, a null given clearing. */
 type Assignment = Pick<RouteRow, "plannedVehicleId" | "plannedDriverId" | "plannedTrailerId" | "depotId" | "unloadingStationId">
@@ -272,7 +289,7 @@ export function routeRoutes(guard: MiddlewareHandler<AuthEnv>, { now = () => new
         operationId: "listRoutes",
         summary: "The dated routes of the caller's projects",
         description:
-          "One page of routes, oldest first (ids are time-ordered), from the projects the caller works in — an account that works in none, such as a service provider's, reads an empty page until step 7 bounds the list by the planned service provider. `projectId` narrows it to one of those projects; naming another is refused. `routeSchemeId` and `collectionGroupId` answer what a scheme or a group generated, `from` and `to` the routes operating over a window of days (both inclusive, `to` on or after `from`), `serviceDate` the routes of one recurrence day, `status` one of the five, and `plannedDriverId` and `plannedVehicleId` a driver's or a vehicle's day. Every row carries its `progress`, counted from its pickups and never stored, and its active Plan's reading (`activePlan`, null while the generated order stands unmeasured), the one a map drawn over the page reads each route's measurement from (#173). Hand `nextCursor` back as `cursor` for the next page.",
+          "One page of routes, oldest first (ids are time-ordered), from the projects the caller works in — an account that works in none, such as a service provider's, reads an empty page until step 7 bounds the list by the planned service provider. `projectId` narrows it to one of those projects; naming another is refused. `routeSchemeId` and `collectionGroupId` answer what a scheme or a group generated — the office's ad-hoc route (#111) carries both null, and is answered by neither — `from` and `to` the routes operating over a window of days (both inclusive, `to` on or after `from`), `serviceDate` the routes of one recurrence day, `status` one of the five, and `plannedDriverId` and `plannedVehicleId` a driver's or a vehicle's day. Every row carries its `progress`, counted from its pickups and never stored, and its active Plan's reading (`activePlan`, null while the generated order stands unmeasured), the one a map drawn over the page reads each route's measurement from (#173). Hand `nextCursor` back as `cursor` for the next page.",
         security: BEARER_SECURITY,
         responses: {
           200: describeJson("One page of routes.", RoutePage),
@@ -315,6 +332,58 @@ export function routeRoutes(guard: MiddlewareHandler<AuthEnv>, { now = () => new
         const [listed, plans] = await Promise.all([routesOf(tx, principal.companyId, items), activePlansByRoute(tx, principal.companyId, items)])
         const page: RouteListItem[] = listed.map((item) => ({ ...item, activePlan: plans.get(item.id) ?? null }))
         return c.json({ items: page, nextCursor })
+      },
+    )
+    .post(
+      "/routes",
+      describeRoute({
+        operationId: "createRoute",
+        summary: "Make an ad-hoc route",
+        description:
+          "The office's ad-hoc route (#111): a route with no scheme and no group — `routeSchemeId` and `collectionGroupId` null — on one of the caller's projects, running on `operatingDate`, which is its `serviceDate` too, `planned`, numbered from the company's route counter (`RC-1100`), with the depot, the unloading station, the planned vehicle and the planned driver where the body names them and the note it gives. No generation run reads it: it is never refreshed, cancelled or held, its stops are the ones `POST /routes/{id}/pickups` adds, and from here every command of a generated route moves it, `release-hold` excepted. The vehicle is a powered vehicle of the project, the driver one of its drivers, the depot one of its depots and the station one of this company's — each refused (400) at its field — and where the body names both a driver and a vehicle, the driver holds the licence class the vehicle requires on the operating date, refused at `driverId` with the reason; then, after every 400, a vehicle that is not active and an inactive or a suspended driver are refused (409) naming the row and its status, as `assign` refuses them. The `route-reassigned` event is written in the same transaction when the body names a driver or a vehicle, carrying the route as answered here, as `assign` writes it when either moves.",
+        security: BEARER_SECURITY,
+        responses: {
+          201: describeCreated("The route, planned, with no stops yet.", RouteDetail),
+          400: describeProblem("The body is missing the project or the day, names a member the command does not take, names a project this account does not work in, or names a vehicle, driver, depot or station the rules above refuse — each at the field that is wrong."),
+          401: describeProblem("No usable token (see WWW-Authenticate)."),
+          403: describeProblem(`No active account here, or the caller's role does not allow \`create\` on \`${MODULE}\`.`),
+          409: describeProblem("A vehicle the body names is not active, or a driver it names is inactive or suspended; the detail says which."),
+        },
+      }),
+      guard,
+      requireGrant(MODULE, "create"),
+      validate("json", RouteCreate),
+      async (c) => {
+        const body = c.req.valid("json")
+        const tx = c.get("tx")
+        const principal = c.get("principal")
+        requireProject(principal, body.projectId, "projectId")
+        const scope: Scope = { companyId: principal.companyId, projectId: body.projectId }
+        const named = { plannedVehicleId: body.vehicleId ?? null, plannedDriverId: body.driverId ?? null, depotId: body.depotId ?? null, unloadingStationId: body.unloadingStationId ?? null }
+
+        // The 400s in body order: the depot, the station, the vehicle and the driver the project's or the company's, then the pair's licence on the day, as `assign` judges it.
+        await requireDepot(tx, scope, named.depotId)
+        await requireUnloadingStation(tx, principal.companyId, named.unloadingStationId)
+        const vehicle = named.plannedVehicleId === null ? null : await findVehicle(tx, scope, named.plannedVehicleId, "powered-vehicle", "vehicleId")
+        const driver = named.plannedDriverId === null ? null : await findDriver(tx, scope, named.plannedDriverId, "driverId")
+        await requireLicenceOn(tx, scope, named, body.operatingDate, "driverId", { vehicle: vehicle ?? undefined, driver: driver ?? undefined })
+
+        // The statuses last, 409s after every 400.
+        if (vehicle !== null) refuseVehicleNotActive(vehicle.status, vehicleLabel(vehicle))
+        if (driver !== null) refuseUnavailableDriver(driver.status, driver.name, "a route")
+
+        const at = now()
+        const number = await nextNumber(tx, principal.companyId, "nextRouteNumber")
+        const [row] = await tx
+          .insert(route)
+          .values({ id: newId(), ...scope, routeSchemeId: null, collectionGroupId: null, serviceDate: body.operatingDate, operatingDate: body.operatingDate, status: "planned", note: body.note ?? null, number, ...named })
+          .returning(routeColumns)
+        const detail = await detailOf(tx, principal.companyId, row)
+        if (row.plannedDriverId !== null || row.plannedVehicleId !== null) {
+          const { pickups: _pickups, session: _session, sessions: _sessions, unloads: _unloads, activePlan: _activePlan, ...answered } = detail
+          await emit(tx, principal, { aggregate: "route", aggregateId: row.id, kind: "route-reassigned", payload: answered, projectId: row.projectId, occurredAt: at })
+        }
+        return created(c, "/routes", detail)
       },
     )
     .get(
@@ -505,13 +574,13 @@ export function routeRoutes(guard: MiddlewareHandler<AuthEnv>, { now = () => new
         operationId: "releaseRouteHold",
         summary: "Hand a held route back to its scheme",
         description:
-          "The `release-hold` command (#226): clears the hold `assign` or `reschedule` put on a `planned` route (`heldAt`), so the route follows its scheme again, and in the same transaction asks a generation run of the route's scheme from the project's today — or the scheme's first day, if later — through the route's service date, so the run's drift stamp is today's as any Generate's would be (a service date already past, or beyond the walk's 366 days, alone), which brings back the scheme's operating date, planned start and Planned Assignment. The run is asked as the scheme's Generate asks one, under the scheme's key: where a run of the scheme is already queued or in flight, that run absorbs the request, and one that does not reach the day, or that read the route before the hand-back, leaves it to the next run — the nightly plan-ahead or the next Generate. A run of the scheme is the schemes module's to ask (`edit` on `route-studio.schemes`, as Generate): for a caller without it, for a draft scheme, which generates nothing, and where no worker has made the queue yet, no run is asked and the route is still handed back, the next run bringing it back. The answer is the route as it now stands, its hold cleared, before any run has brought it back. A planned route that is not held is refused (409), and so is a route past `planned`, which is never held. Takes no body. Under the route's row lock; no event is written, as for `reschedule`.",
+          "The `release-hold` command (#226): clears the hold `assign` or `reschedule` put on a `planned` route (`heldAt`), so the route follows its scheme again, and in the same transaction asks a generation run of the route's scheme from the project's today — or the scheme's first day, if later — through the route's service date, so the run's drift stamp is today's as any Generate's would be (a service date already past, or beyond the walk's 366 days, alone), which brings back the scheme's operating date, planned start and Planned Assignment. The run is asked as the scheme's Generate asks one, under the scheme's key: where a run of the scheme is already queued or in flight, that run absorbs the request, and one that does not reach the day, or that read the route before the hand-back, leaves it to the next run — the nightly plan-ahead or the next Generate. A run of the scheme is the schemes module's to ask (`edit` on `route-studio.schemes`, as Generate): for a caller without it, for a draft scheme, which generates nothing, and where no worker has made the queue yet, no run is asked and the route is still handed back, the next run bringing it back. The answer is the route as it now stands, its hold cleared, before any run has brought it back. A planned route that is not held is refused (409), and so is a route past `planned`, which is never held, and the office's ad-hoc route, which has no scheme to hand it back to (#111). Takes no body. Under the route's row lock; no event is written, as for `reschedule`.",
         security: BEARER_SECURITY,
         responses: {
           200: describeJson("The route, its hold cleared; a run of its scheme over its service date is asked.", RouteDetail),
           400: describeProblem("The path does not hold an id, or the body names a member: the command takes none."),
           ...commandProblems("edit"),
-          409: describeProblem("The route is planned and not held, or is past `planned` (ready, active, completed or cancelled), where no hold stands."),
+          409: describeProblem("The route is planned and not held, is past `planned` (ready, active, completed or cancelled), where no hold stands, or is the office's ad-hoc route, which is never held."),
         },
       }),
       guard,
@@ -523,13 +592,15 @@ export function routeRoutes(guard: MiddlewareHandler<AuthEnv>, { now = () => new
         const tx = c.get("tx")
         const principal = c.get("principal")
         const current = await lockedRoute(tx, principal, id)
+        const schemeId = current.routeSchemeId
+        if (schemeId === null) throw problem(409, { detail: adHocNeverHeld(labelOf(current)) })
         if (current.status !== "planned") throw problem(409, { detail: onlyPlannedHeld(labelOf(current), current.status) })
         if (current.heldAt === null) throw problem(409, { detail: notHeld(labelOf(current)) })
         const [row] = await tx.update(route).set({ heldAt: null }).where(and(routeScope(principal), eq(route.id, id))).returning(routeColumns)
         if (row === undefined) throw noSuchRoute(id)
         // The scheme's day, start and assignment come back with a run over the route's service date: asked here where the caller may
         // ask a run of the scheme (Generate's grant), never awaited, and never a refusal of the hand-back.
-        const scheme = allows(principal.grants, SCHEMES_MODULE, "edit") ? await findScheme(tx, principal, row.routeSchemeId) : undefined
+        const scheme = allows(principal.grants, SCHEMES_MODULE, "edit") ? await findScheme(tx, principal, schemeId) : undefined
         if (scheme !== undefined && scheme.status === "validated") {
           try {
             const today = await projectToday(tx, { companyId: principal.companyId, projectId: row.projectId }, now)()

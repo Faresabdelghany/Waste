@@ -52,7 +52,7 @@ import { collectionGroup, collectionGroupContainer, collectionGroupFraction, rou
 import { PGBOSS_SCHEMA } from "@waste/db/sql/pgboss"
 import { withCompany } from "@waste/db/tenant"
 import { NO_LONGER_SERVES_DATE, NO_PLANNING_AREA, REMOVED_FROM_DAY_PLAN } from "@waste/domain/planning/generation"
-import { asc, eq, sql } from "drizzle-orm"
+import { and, asc, eq, sql } from "drizzle-orm"
 import { PgBoss } from "pg-boss"
 
 import { createBoss, startBoss, type Boss } from "../boss"
@@ -484,6 +484,68 @@ describe("generation against a migrated database", { skip }, () => {
       await ownerPool.db.update(routeScheme).set({ holidayPolicy: "shift-next" }).where(eq(routeScheme.id, a.scheme))
       await generateA()
     }
+  })
+
+  test("the office's stops and route are the office's (#111): a refresh never skips or moves an office stop nor plans its container twice; a route carrying an open one is trimmed, never cancelled; an ad-hoc route is never read", async () => {
+    const scoped = { companyId: a.company, projectId: a.project }
+    const rowOf = async (id: string) => (await ownerPool.db.select().from(route).where(eq(route.id, id)))[0]
+    const officeOf = async (routeId: string) => ownerPool.db.select().from(pickup).where(and(eq(pickup.routeId, routeId), eq(pickup.origin, "office"))).orderBy(asc(pickup.id))
+    const monday = (await routesOfA()).find((row) => row.serviceDate === "2026-10-05")
+    assert.ok(monday, "the Monday's route, planned and the scheme's")
+    // The office's ad-hoc route on the same day, in the same project, with a stop of its own: no run may read it.
+    const [adHoc] = await ownerPool.db.insert(route).values({ ...scoped, serviceDate: "2026-10-05", operatingDate: "2026-10-05", number: 9000, note: "Re-collections" }).returning()
+    await ownerPool.db.insert(pickup).values({ ...scoped, routeId: adHoc.id, containerId: null, position: 1, origin: "office", propertyId: a.parkvej, wasteFractionId: a.wasteFraction })
+    const [adHocStop] = await officeOf(adHoc.id)
+    // On the Monday's route: bin 4 at Amager, which the rule never plans, an address-only stop at Havnegade, and bin 3 taken as the office's at the end — a container the plan holds too.
+    await ownerPool.db.insert(pickup).values([
+      { ...scoped, routeId: monday.id, containerId: a.bin4, position: 4, origin: "office", propertyId: a.amager, wasteFractionId: a.wasteFraction },
+      { ...scoped, routeId: monday.id, containerId: null, position: 5, origin: "office", propertyId: a.havnegade, wasteFractionId: a.glassFraction },
+    ])
+    await ownerPool.db.update(pickup).set({ origin: "office", position: 9 }).where(and(eq(pickup.routeId, monday.id), eq(pickup.containerId, a.bin3)))
+    const office = await officeOf(monday.id)
+    assert.equal(office.length, 3)
+
+    // A refresh over the week: the office's three stand as they are — never skipped, never moved — and bin 3 is not planned a second time.
+    const refresh = await generateA()
+    assert.equal(refresh.run.status, "succeeded")
+    assert.deepEqual(await officeOf(monday.id), office, "the same rows, updated_at included")
+    assert.deepEqual((await pickupsOf(monday.id)).filter((row) => row.origin === "generation").map((row) => [row.position, row.containerId, row.status]), [[1, a.bin1, "planned"], [2, a.bin2, "planned"]])
+
+    // The scheme stops serving Mondays: the route carries open office stops, so it is trimmed — the run's own stops skipped with the sentence, the route still planned for the office's.
+    await ownerPool.db.update(routeScheme).set({ serviceDays: ["thursday"] }).where(eq(routeScheme.id, a.scheme))
+    await ownerPool.db.update(collectionGroup).set({ days: ["thursday"] }).where(eq(collectionGroup.id, a.residualGroup))
+    try {
+      const trimmed = await generateA()
+      assert.deepEqual([trimmed.run.routesCancelled, trimmed.run.routesRefreshed], [0, 1])
+      const kept = await rowOf(monday.id)
+      assert.deepEqual([kept.status, kept.cancelledByGeneration, kept.cancelledAt, kept.note, kept.generationRunId], ["planned", false, null, NO_LONGER_SERVES_DATE, trimmed.runId])
+      assert.deepEqual(
+        (await pickupsOf(monday.id)).filter((row) => row.origin === "generation").map((row) => [row.containerId, row.status, row.reason, row.note]),
+        [
+          [a.bin1, "skipped", "regeneration", NO_LONGER_SERVES_DATE],
+          [a.bin2, "skipped", "regeneration", NO_LONGER_SERVES_DATE],
+        ],
+      )
+      assert.deepEqual(await officeOf(monday.id), office, "the office's stops stand, open")
+      assert.ok(trimmed.outcome.kind === "succeeded" && trimmed.outcome.horizon.asked.includes(monday.id), "its stops moved: a Plan is asked for")
+      // Trimmed is what the next run would make it: nothing written.
+      const again = await generateA()
+      assert.deepEqual([again.run.routesRefreshed, again.run.routesCancelled], [0, 0])
+      assert.deepEqual(await rowOf(monday.id), kept)
+    } finally {
+      await ownerPool.db.update(routeScheme).set({ serviceDays: ["monday", "thursday"] }).where(eq(routeScheme.id, a.scheme))
+      await ownerPool.db.update(collectionGroup).set({ days: ["monday", "thursday"] }).where(eq(collectionGroup.id, a.residualGroup))
+    }
+    // Mondays again: the run's stops come back, the office's still stand.
+    const back = await generateA()
+    assert.equal(back.run.status, "succeeded")
+    assert.deepEqual([(await rowOf(monday.id)).note, (await rowOf(monday.id)).status], [null, "planned"])
+    assert.deepEqual((await pickupsOf(monday.id)).filter((row) => row.origin === "generation").map((row) => [row.containerId, row.status]), [[a.bin1, "planned"], [a.bin2, "planned"]])
+    assert.deepEqual(await officeOf(monday.id), office)
+
+    // Through every run above, the ad-hoc route and its stop were never read: not refreshed, not cancelled, not stamped.
+    assert.deepEqual(await rowOf(adHoc.id), adHoc)
+    assert.deepEqual(await officeOf(adHoc.id), [adHocStop])
   })
 
   test("a draft scheme generates nothing and says so on the run; a run already succeeded is not run again; a validated scheme with a rule group and no planning area warns", async () => {

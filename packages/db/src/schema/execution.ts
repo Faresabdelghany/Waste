@@ -30,7 +30,11 @@
 // null on a route no run has written. `held_at` arrived in 0015 (#209): the
 // instant the office last moved a planned route's day, start or Planned
 // Assignment by hand, which generation's refresh keeps; `route_hold_shape`
-// holds it to a planned route, so leaving `planned` clears it.
+// holds it to a planned route, so leaving `planned` clears it. Migration 0016
+// (#111) made the scheme and the group nullable together, the office's
+// ad-hoc route being one that names neither (`route_scheme_shape`: no run
+// wrote it or cancelled it either), so its generation key holds nulls and
+// never meets another route's.
 //
 // `pickup` carries the place and the fraction on the service date as keys
 // (#104 §7.11): a placement that moves next month must not move a pickup
@@ -41,7 +45,14 @@
 // the route it names and no other, the way the Stock Movement ledger names a
 // placement of the container it moves. `pickup_outcome_shape` and
 // `pickup_reason_shape` hold `outcome_at` to a status that has left
-// `planned` and a reason to a skip or a failure.
+// `planned` and a reason to a skip or a failure. Since 0016 (#111) a pickup
+// carries its `origin` — generation's, or the office's, which a refresh
+// leaves alone — and the office's may name no container: an address-only
+// stop, its place `pickup_place_exactly_one`'s like every other pickup's and
+// its fraction the office's word (`pickup_container_shape` keeps a stop
+// without a container to the office). `pickup_route_id_container_id_key`
+// still holds one stop per container on a route; its nulls are distinct, so
+// a route takes any number of address-only stops.
 //
 // `session` is per Route, from `start-route` to `end-route` (#104 §7.3), its
 // id the start command's; open or ended is a reading of `ended_at`, paused of
@@ -99,7 +110,7 @@
 // e-mail index, for the same reason: the relay's read is one statement in the
 // system that crosses companies.
 import { PROOF_SHAPES } from "@waste/domain/execution/proof-shapes"
-import { COMMAND_OUTCOMES, DRIVER_COMMAND_KINDS, EXECUTION_SOURCES, OUTBOX_AGGREGATES, OUTBOX_KINDS, PICKUP_OUTCOMES, PICKUP_REASONS, PICKUP_STATUSES, PROOF_KINDS, ROUTE_STATUSES } from "@waste/domain/execution/vocabulary"
+import { COMMAND_OUTCOMES, DRIVER_COMMAND_KINDS, EXECUTION_SOURCES, OUTBOX_AGGREGATES, OUTBOX_KINDS, PICKUP_ORIGINS, PICKUP_OUTCOMES, PICKUP_REASONS, PICKUP_STATUSES, PROOF_KINDS, ROUTE_STATUSES } from "@waste/domain/execution/vocabulary"
 import { sql, type SQL } from "drizzle-orm"
 import { boolean, check, date, index, integer, jsonb, text, time, timestamp, unique, uniqueIndex, uuid, type PgColumn } from "drizzle-orm/pg-core"
 
@@ -127,9 +138,10 @@ export const route = wms.table(
     ...id,
     ...projectScoped,
     ...timestamps,
-    routeSchemeId: uuid().notNull(),
-    collectionGroupId: uuid().notNull(),
-    /** The day the recurrence named: the identity, with the scheme and the group (ADR-0002). Never moves. */
+    /** The scheme and the group that generated the route, together (`route_scheme_shape`); both null on the office's ad-hoc route (#111, migration 0016), which no run reads. */
+    routeSchemeId: uuid(),
+    collectionGroupId: uuid(),
+    /** The day the recurrence named: the identity, with the scheme and the group (ADR-0002); the day it was made for on an ad-hoc route. Never moves. */
     serviceDate: date().notNull(),
     /** The day the route runs: the service date, or the day a holiday policy or a reschedule moved it to. */
     operatingDate: date().notNull(),
@@ -202,6 +214,11 @@ export const route = wms.table(
     ),
     // A hold is a planned route's (#209): generation refreshes only a planned route, so every way out of `planned` — dispatch, either cancel — clears it in the same write.
     check(tableObjectName(t.id.table, "hold_shape", "route"), sql`${t.heldAt} is null or ${t.status} = 'planned'`),
+    // A route names its scheme and its group together, or neither — the office's ad-hoc route (#111), which no run ever wrote or cancelled. The generation key's nulls are distinct, so ad-hoc routes never meet it.
+    check(
+      tableObjectName(t.id.table, "scheme_shape", "route"),
+      sql`(${t.routeSchemeId} is null) = (${t.collectionGroupId} is null) and (${t.routeSchemeId} is not null or (${t.generationRunId} is null and not ${t.cancelledByGeneration}))`,
+    ),
     tenantIndex(t, t.collectionGroupId),
     // The dispatcher's day, and the driver door's two reads.
     tenantIndex(t, t.projectId, t.operatingDate),
@@ -226,10 +243,13 @@ export const pickup = wms.table(
     ...projectScoped,
     ...timestamps,
     routeId: uuid().notNull(),
-    containerId: uuid().notNull(),
+    /** The container emptied; null on an address-only stop the office added (#111, migration 0016), which names its place and fraction alone. */
+    containerId: uuid(),
     /** Stop order, 1..n; not unique, since a refresh reorders in place and a dispatcher's reorder rewrites the run. */
     position: integer().notNull(),
     status: text().notNull().default("planned"),
+    /** Who put the stop on the route (#111): generation, or the office, whose stop a refresh never skips or moves. Every pickup before 0016 was generation's. */
+    origin: text().notNull().default("generation"),
     note: text(),
     /** The place on the service date, from the subscription the placement valid that day named: exactly one of the two. */
     propertyId: uuid(),
@@ -255,9 +275,13 @@ export const pickup = wms.table(
     // Carries the route: a proof or a receipt names a pickup of the route it names, and no other.
     projectKey(t, t.routeId),
     oneOf(t.status, PICKUP_STATUSES),
+    oneOf(t.origin, PICKUP_ORIGINS),
     oneOf(t.reason, PICKUP_REASONS),
     positive(t.position),
+    // Every pickup names its place, an address-only one included: the address the stop is at.
     exactlyOne(t, "place", [t.propertyId, t.sharedCollectionPointId]),
+    // A stop without a container is the office's (#111): generation always plans a container.
+    check(tableObjectName(t.id.table, "container_shape", "pickup"), sql`${t.containerId} is not null or ${t.origin} = 'office'`),
     check(tableObjectName(t.id.table, "outcome_shape", "pickup"), sql`(${t.status} <> 'planned') = (${t.outcomeAt} is not null)`),
     check(tableObjectName(t.id.table, "reason_shape", "pickup"), sql`(${t.status} in ('skipped', 'failed')) = (${t.reason} is not null)`),
     tenantIndex(t, t.projectId),

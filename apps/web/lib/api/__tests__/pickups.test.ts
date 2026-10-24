@@ -78,6 +78,7 @@ const pickupOf = (id: string, containerId: string, position: number, over: Parti
   containerId,
   position,
   status: "planned",
+  origin: "generation",
   reason: null,
   note: null,
   propertyId: "01a0d2a4-a280-7011-8000-000000000001",

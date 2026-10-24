@@ -130,6 +130,21 @@ describe("resolution.open-tickets", { skip: api.skip || owner.skip }, () => {
     assert.match(lines.at(-1)!, new RegExp(`^resolution\\.open-tickets: pickup-failed ${event.id} → opened \\(ticket ${row.id}\\)$`))
   })
 
+  test("a pickup-failed of an address-only stop the office added, on its ad-hoc route, opens the stop's missed collection by its address — no container, no label, no placement and so no agreement — and is never a dead letter (#111)", async () => {
+    const seeded = await seedRoute(pool, tenant, { adHoc: true, pickups: [{ container: null, status: "failed", reason: "inaccessible", note: "Gate locked" }] })
+    const [failedId] = seeded.pickupIds
+    const event = outboxJob(tenant, { kind: "pickup-failed", aggregateKind: "pickup", aggregateId: failedId, payload: pickupPayload(tenant, seeded.id, failedId, { container: null, status: "failed", reason: "inaccessible", note: "Gate locked" }, []) })
+    const outcome = await openTicketFor(event, context())
+    assert.equal(outcome.outcome, "opened")
+    const [row] = await ticketsFrom(event.id)
+    assert.deepEqual([row.kind, row.subject], ["missed-collection", "Missed collection at Havnegade 3, 1058 København K"])
+    assert.deepEqual(
+      [row.routeId, row.pickupId, row.containerId, row.propertyId, row.driverId, row.customerId, row.agreementId],
+      [seeded.id, failedId, null, tenant.properties.havnegade.id, tenant.driverId, null, null],
+      "the stop and its place; no container was there to read a placement of",
+    )
+  })
+
   test("a pickup-skipped closed by the route's end is a medium missed-collection from the driver app with the actual driver; one by the dispatcher's cancellation is from dispatch with the planned driver, since nobody started a cancelled route", async () => {
     const ended = await seedRoute(pool, tenant)
     const [, endedStop] = ended.pickupIds

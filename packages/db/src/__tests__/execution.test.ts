@@ -577,6 +577,27 @@ describe("the Execution tables against a fresh database", { skip: database.skip 
       await assert.rejects(tx.transaction((savepoint) => savepoint.insert(pickup).values(stop({ id: a.third, containerId: a.container }))), refusedWith("23505", /pickup_route_id_container_id_key/))
     }))
 
+  test("an ad-hoc route names neither scheme nor group, and no run wrote or cancelled it (23514 route_scheme_shape); an address-only stop is the office's (23514 pickup_container_shape), and a route takes several (#111)", () =>
+    seeded(async (tx) => {
+      const refuse = (values: Partial<typeof route.$inferInsert>, why: string) =>
+        assert.rejects(tx.transaction((savepoint) => savepoint.insert(route).values(planned(values))), refusedWith("23514", /route_scheme_shape/), why)
+      await refuse({ routeSchemeId: null }, "a group without its scheme")
+      await refuse({ collectionGroupId: null }, "a scheme without a group")
+      await refuse({ routeSchemeId: null, collectionGroupId: null, cancelledByGeneration: true, status: "cancelled", cancelledAt: at(4) }, "no run cancels a route without a scheme")
+      await tx.insert(route).values(planned({ routeSchemeId: null, collectionGroupId: null }))
+      // Two ad-hoc routes on one day: the generation key's nulls are distinct.
+      await tx.insert(route).values(planned({ id: a.other, number: 1101, routeSchemeId: null, collectionGroupId: null }))
+      const [origin] = await tx.insert(pickup).values(stop({ routeId: a.spare, position: 1 })).returning({ origin: pickup.origin })
+      assert.equal(origin.origin, "generation", "the default, which backfilled every pickup before 0016")
+      await assert.rejects(tx.transaction((savepoint) => savepoint.insert(pickup).values(stop({ id: a.third, routeId: a.spare, containerId: null }))), refusedWith("23514", /pickup_container_shape/), "generation always plans a container")
+      await assert.rejects(tx.transaction((savepoint) => savepoint.insert(pickup).values(stop({ id: a.third, routeId: a.spare, origin: "planner" }))), refusedWith("23514", /pickup_origin_one_of/))
+      await assert.rejects(tx.transaction((savepoint) => savepoint.insert(pickup).values(stop({ id: a.third, routeId: a.spare, containerId: null, origin: "office", propertyId: null }))), refusedWith("23514", /pickup_place_exactly_one/), "an address-only stop still names its address")
+      await tx.insert(pickup).values([
+        stop({ id: a.third, routeId: a.spare, containerId: null, origin: "office", position: 2 }),
+        stop({ id: a.fourth, routeId: a.spare, containerId: null, origin: "office", position: 3, propertyId: null, sharedCollectionPointId: a.point }),
+      ])
+    }))
+
   test("a proof names a pickup where its kind is a stop's, a session where the driver recorded it, and the kind CASE agrees with the domain's proofShape over every kind with each column set and unset (23514)", () =>
     seeded(async (tx) => {
       await assert.rejects(tx.transaction((savepoint) => savepoint.insert(proofOfService).values(proof({ pickupId: null }))), refusedWith("23514", /proof_of_service_pickup_shape/), "a completion on the route alone")

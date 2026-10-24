@@ -2,7 +2,7 @@ import assert from "node:assert/strict"
 import { describe, test } from "node:test"
 
 import { DAY_WINDOW_ORDERED, dayWindowOrdered } from "../queries"
-import { EACH_PICKUP_ONCE, LABEL_IS_THE_NUMBER, labelMatches, LiveRoute, LiveRouteQuery, PICKUP_ORDER_MAX, PickupOrderSet, Route, RouteAssign, RouteCancel, RouteDetail, RouteListItem, RouteListQuery, RouteProgress, RouteReschedule } from "../routes"
+import { EACH_PICKUP_ONCE, LABEL_IS_THE_NUMBER, labelMatches, LiveRoute, LiveRouteQuery, PICKUP_ORDER_MAX, PickupOrderSet, Route, RouteAssign, RouteCancel, RouteCreate, RouteDetail, RouteListItem, RouteListQuery, RouteProgress, RouteReschedule } from "../routes"
 import { refusal, refusesAnEmptyPatch } from "./expect"
 
 const ID = "01a0d3a5-e5e0-7000-8000-000000000001"
@@ -60,6 +60,7 @@ const pickup = {
   containerId: THIRD,
   position: 1,
   status: "planned",
+  origin: "generation",
   reason: null,
   note: null,
   propertyId: ID,
@@ -80,6 +81,8 @@ describe("Route", () => {
     assert.equal(Route.safeParse({ ...planned, heldAt: "2026-10-04" }).success, false, "the hold is an instant, not a day")
     const { heldAt: _heldAt, ...unsaid } = route
     assert.equal(Route.safeParse(unsaid).success, false, "the hold is always said, null while the route is the scheme's")
+    const adHoc = { ...planned, routeSchemeId: null, collectionGroupId: null, note: "Re-collections for Tuesday" }
+    assert.deepEqual(Route.parse(adHoc), adHoc, "the office's ad-hoc route names no scheme and no group (#111)")
     assert.equal(Object.keys(RouteProgress.shape).length, 6)
     assert.equal(RouteProgress.safeParse({ ...progress, fraction: 1.2 }).success, false)
     assert.equal(RouteProgress.safeParse({ ...progress, planned: -1 }).success, false)
@@ -98,6 +101,8 @@ describe("Route", () => {
   test("a detail carries the pickups by position, the open session, every session and the unloads; a live route its open session and three readings", () => {
     const detail = { ...route, pickups: [pickup], activePlan: null, session, sessions: [session], unloads: [] }
     assert.deepEqual(RouteDetail.parse(detail), detail)
+    const extra = { ...pickup, id: THIRD, containerId: null, origin: "office", position: 2, note: "Re-collection of T-8831" }
+    assert.deepEqual(RouteDetail.parse({ ...detail, pickups: [pickup, extra] }), { ...detail, pickups: [pickup, extra] }, "an address-only stop the office added sits beside the generated ones (#111)")
     const live = { ...route, activePlan: null, session, lastLocation: { type: "Point", coordinates: [12.5951, 55.7089] }, lastSeenAt: "2026-10-05T06:05:00.000Z", paused: false }
     assert.deepEqual(LiveRoute.parse(live), live)
     const due = { ...live, status: "ready", session: null, lastLocation: null, lastSeenAt: null, startedAt: null, actual: { vehicleId: null, driverId: null, trailerId: null } }
@@ -116,6 +121,19 @@ describe("Route", () => {
 })
 
 describe("the dispatcher's commands", () => {
+  test("create makes an ad-hoc route on a project's day, with the depot, the station, the vehicle, the driver and a note where given, and nothing the server or the scheme owns (#111)", () => {
+    assert.deepEqual(RouteCreate.parse({ projectId: OTHER, operatingDate: "2026-10-06" }), { projectId: OTHER, operatingDate: "2026-10-06" })
+    const full = { projectId: OTHER, operatingDate: "2026-10-06", depotId: ID, unloadingStationId: THIRD, vehicleId: OTHER, driverId: THIRD, note: "Re-collections" }
+    assert.deepEqual(RouteCreate.parse(full), full)
+    const fromAForm = { projectId: OTHER, operatingDate: "2026-10-06", depotId: null, unloadingStationId: null, vehicleId: null, driverId: null, note: null }
+    assert.deepEqual(RouteCreate.parse(fromAForm), fromAForm)
+    assert.deepEqual(refusal(RouteCreate.safeParse({ projectId: OTHER })).map((issue) => issue.path), ["operatingDate"])
+    assert.deepEqual(refusal(RouteCreate.safeParse({ operatingDate: "2026-10-06" })).map((issue) => issue.path), ["projectId"])
+    for (const key of ["serviceDate", "routeSchemeId", "collectionGroupId", "number", "status", "trailerId", "id"]) {
+      assert.match(refusal(RouteCreate.safeParse({ projectId: OTHER, operatingDate: "2026-10-06", [key]: OTHER }))[0].message, new RegExp(key), key)
+    }
+  })
+
   test("assign moves any field of the Planned Assignment, clears one with null, and changes something", () => {
     assert.deepEqual(RouteAssign.parse({ driverId: THIRD }), { driverId: THIRD })
     assert.deepEqual(RouteAssign.parse({ trailerId: null, unloadingStationId: OTHER, depotId: null }), { trailerId: null, unloadingStationId: OTHER, depotId: null })

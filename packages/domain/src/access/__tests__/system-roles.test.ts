@@ -66,6 +66,14 @@ describe("the seeded system roles", () => {
     assert.deepEqual(actionsOn("customers.agreements"), ["view", "edit", "create"])
   })
 
+  test("every role that may move a route may make one: edit on route-studio.routes comes with create, the ad-hoc route being a dispatcher's daily job (#111)", () => {
+    const routes = (key: string) => SYSTEM_ROLES.find((role) => role.key === key)?.grants.find((grant) => grant.moduleKey === "route-studio.routes")?.actions ?? []
+    const editors = SYSTEM_ROLES.filter((role) => routes(role.key).includes("edit")).map((role) => role.key)
+    assert.deepEqual(editors, ["company-administrator", "operations-manager", "dispatcher", "route-planner"])
+    for (const key of editors) assert.ok(routes(key).includes("create"), key)
+    assert.deepEqual([...routes("dispatcher")], ["view", "edit", "create"], "and nothing more: a dispatcher deletes no route")
+  })
+
   test("a hand-spelled role carries exactly its own modules: the driver's one, the driver door (#179)", () => {
     const driver = SYSTEM_ROLES.find((role) => role.key === "driver")
     assert.ok(driver)
