@@ -71,14 +71,18 @@ const fractionsOf = (record: BusinessRecord, context: MappingContext) => setOf(r
 const sameSet = (a: readonly string[], b: readonly string[]) => [...a].sort().join(",") === [...b].sort().join(",")
 
 /** The provider an area is awarded to on the day, by name and web id — the holder in force, else the first one to come; an ended holder holds nothing — from the assignments the resource carries, else from the ones the store holds. */
-function holderOf(area: ServiceAreaResource, areaWebId: string, day: string, context: MappingContext): { name: string; webId?: string } | undefined {
+function holderOf(area: ServiceAreaResource, day: string, context: MappingContext): { name: string; webId?: string } | undefined {
   const carried = area.assignments ?? ("assignment" in area && area.assignment !== null ? [area.assignment] : undefined)
   if (carried !== undefined) {
     const reading = (assignment: ServiceAreaAssignment) => periodReading(assignment.validFrom, assignment.validTo, day)
     const holder = carried.find((assignment) => reading(assignment) === "Active") ?? [...carried].sort((a, b) => a.validFrom.localeCompare(b.validFrom)).find((assignment) => reading(assignment) === "Upcoming")
     return holder === undefined ? undefined : { name: nameVia(context, PROVIDER_PREFIX, holder.serviceProviderId), webId: webIdVia(context, PROVIDER_PREFIX, holder.serviceProviderId) }
   }
-  const ofArea = (status: string) => (record: BusinessRecord) => isAssignmentRecord(record) && record.status === status && typed(record, "serviceAreaId") === areaWebId
+  // By the award's server id: the store holds one made this session under the id it was minted under (#240), not the adapter's.
+  const ofArea = (status: string) => (record: BusinessRecord) => {
+    const areaWebId = typed(record, "serviceAreaId")
+    return isAssignmentRecord(record) && record.status === status && areaWebId !== undefined && referencedServerId(areaWebId, SERVICE_AREA_PREFIX, context) === area.id
+  }
   const held = context.resolve.find(ofArea("Active")) ?? context.resolve.find(ofArea("Upcoming"))
   const name = held?.facts["Service provider"]
   return name === undefined ? undefined : { name, webId: held === undefined ? undefined : typed(held, "serviceProviderId") }
@@ -131,7 +135,7 @@ export const serviceAreaAdapter: ResourceAdapter<ServiceAreaResource> = {
     const day = projectDay(area.projectId, context)
     const zones = area.planningAreaIds.map((serverId) => ({ id: webIdVia(context, AREA_PREFIX, serverId), name: nameVia(context, AREA_PREFIX, serverId) }))
     const fractions = area.wasteFractionIds.map((serverId) => ({ id: webIdVia(context, FRACTION_PREFIX, serverId), name: nameVia(context, FRACTION_PREFIX, serverId) }))
-    const holder = holderOf(area, id, day, context)
+    const holder = holderOf(area, day, context)
     const lastDay = area.validTo === null ? undefined : lastDayIn(area.validTo)
     const fractionNames = fractions.map((fraction) => fraction.name).join(", ")
     return {
@@ -255,10 +259,9 @@ export const assignmentAdapter: ResourceAdapter<ServiceAreaAssignment> = {
   statuses: undefined,
   list: (client) => assignmentsOnce(client),
   toRecord: (assignment, context) => {
-    // The area, loaded just before this row in the module's order — by its own id first: an area lends no fixture id, and
-    // read again over one made this session, the store's state still holds that one under the session's id.
-    const ownId = webIdOf(SERVICE_AREA_PREFIX, assignment.serviceAreaId)
-    const area = context.resolve.find((record) => record.id === ownId) ?? context.resolve.byServerId(assignment.serviceAreaId)
+    // The area, by its server id: the one this load mapped just before this row in the module's order, under the id the
+    // store holds it under (#240), else the store's own.
+    const area = context.resolve.byServerId(assignment.serviceAreaId)
     const areaWebId = area?.id ?? webIdOf(SERVICE_AREA_PREFIX, assignment.serviceAreaId)
     const code = area === undefined ? areaWebId : (typed(area, "areaCode") ?? area.name)
     const provider = referenced(context, PROVIDER_PREFIX, assignment.serviceProviderId)

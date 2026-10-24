@@ -39,7 +39,7 @@ import { useCommercialPickers } from "@/components/waste/commands/commercial-pic
 import type { RowSurfaceProps } from "@/components/waste/commands/command-surfaces"
 import { CreateSurface } from "@/components/waste/commands/create-surface"
 import { ReadRows } from "@/components/waste/commands/read-rows"
-import { useCommandRunner, useModuleReady, useOpenRecord, useRowHistory, useServerNames } from "@/components/waste/commands/use-command-support"
+import { useCommandRunner, useModuleReady, useRowHistory, useServerNames } from "@/components/waste/commands/use-command-support"
 import type { ApiClient } from "@/lib/api/client"
 import { statusLabel } from "@/lib/api/records/adapter"
 import { shownOn } from "@/lib/api/records/clock"
@@ -55,7 +55,6 @@ import {
   isAssignmentRecord,
   PROVIDER_PRICE_PREFIX,
   PROVIDER_PRICES_MODULE,
-  SERVICE_AREA_PREFIX,
   SERVICE_AREAS_MODULE,
   SETTLEMENTS_MODULE,
   WEIGHTS_MODULE,
@@ -82,9 +81,7 @@ import { ACCESS_MODULE } from "@/lib/data/tickets"
 
 /**
  * One row of a module read back: a write that moves another row of it (an
- * award's holder, a chain's previous row). One row, never the module: a
- * module read again gives a row made this session its adapter's id, and the
- * details open on the old one would close.
+ * award's holder, a chain's previous row), and only that row.
  */
 function useRowReread(module: ModuleLocation): (recordId: string) => void {
   const { refreshRecord } = useBusinessRecordStore()
@@ -132,10 +129,6 @@ function useRowWrite(module: ModuleLocation) {
 export function CreateServiceAreaSurface() {
   const pickers = useCommercialPickers()
   const { refreshModule } = useBusinessRecordStore()
-  const openRecord = useOpenRecord(SERVICE_AREAS_MODULE.moduleId)
-  // The award's first assignment is the server's: the module is read again, and the award reopened under its adapter's id.
-  const readAssignment = (serverId: string) =>
-    void refreshModule(SERVICE_AREAS_MODULE.workspaceId, SERVICE_AREAS_MODULE.moduleId).then(() => openRecord(`${SERVICE_AREA_PREFIX}-${serverId}`))
   return (
     <CreateSurface
       label={SERVICE_AREA_FORM.submitLabel}
@@ -144,7 +137,8 @@ export function CreateServiceAreaSurface() {
       pickers={pickers}
       make={(values, now) => createServiceAreaRecord(values, now)}
       created={(record) => ({ title: "Service area created", description: `${record.name} covers its planning areas over its period.` })}
-      onCreated={(_, serverId) => readAssignment(serverId)}
+      // The award's first assignment is the server's: the module is read again, and the award keeps the id it was made under (#240).
+      onCreated={() => void refreshModule(SERVICE_AREAS_MODULE.workspaceId, SERVICE_AREAS_MODULE.moduleId)}
     />
   )
 }

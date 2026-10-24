@@ -56,7 +56,7 @@ import { shownOn } from "./clock"
 import { firstDayOut, lastDayIn } from "./planning"
 import { projectDay } from "./pricing"
 import { referenced, refusal } from "./places"
-import { nameVia, referencedServerId } from "./references"
+import { nameVia, referencedServerId, webIdVia } from "./references"
 
 /** What a change that is no index or no whole percent with at most two decimals is told. */
 export const INDEX_REFUSAL = "Give the change as a percent with at most two decimals, such as 5 or -1.25"
@@ -165,7 +165,7 @@ export const providerPriceAdapter: ResourceAdapter<ServiceProviderPrice> = {
         ...(price.notes === null ? {} : { notes: price.notes }),
         validFrom: price.validFrom,
         ...(lastDay === undefined ? {} : { validTo: lastDay }),
-        ...(price.indexedFromId === null ? {} : { indexedFromId: webIdOf(PROVIDER_PRICE_PREFIX, price.indexedFromId) }),
+        ...(price.indexedFromId === null ? {} : { indexedFromId: webIdVia(context, PROVIDER_PRICE_PREFIX, price.indexedFromId) }),
       },
     }
   },
