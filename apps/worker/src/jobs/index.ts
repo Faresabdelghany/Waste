@@ -25,17 +25,16 @@ import { alertRulesJob, ALERT_RULES_QUEUE, rulesSchedule } from "./alert-rules"
 import type { AnyJob } from "./definition"
 import { generateRoutes } from "./generate-routes"
 import { heartbeat } from "./heartbeat"
-import { openTickets } from "./open-tickets"
 import { planAheadJob } from "./plan-ahead"
 import { purgeProofObjectsJob } from "./purge-proof-objects"
-import { recordBillableEvents } from "./record-billable-events"
 import { relayOutbox } from "./relay-outbox"
 import { sweepHorizonJob } from "./routing-horizon"
 import { routingMeasure } from "./routing-measure"
 import { routingOptimise } from "./routing-optimise"
 import { runScheduledBilling } from "./run-billing"
+import { OUTBOX_CONSUMERS } from "../outbox/routes"
 
-export const JOBS: readonly AnyJob[] = [heartbeat, generateRoutes, planAheadJob, routingMeasure, routingOptimise, sweepHorizonJob, relayOutbox, ...openTickets, ...recordBillableEvents, runScheduledBilling, purgeProofObjectsJob, alertRulesJob]
+export const JOBS: readonly AnyJob[] = [heartbeat, generateRoutes, planAheadJob, routingMeasure, routingOptimise, sweepHorizonJob, relayOutbox, ...OUTBOX_CONSUMERS, runScheduledBilling, purgeProofObjectsJob, alertRulesJob]
 
 /** The registry with the alert rules on the cadence `WORKER_RULES_INTERVAL_SECONDS` sets (O4 of #290); the registry as it is where it is unset. */
 export const jobsWithRulesEvery = (seconds: number | undefined): readonly AnyJob[] =>

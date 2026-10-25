@@ -2,7 +2,8 @@
 // file's own with the process's two roles as the process runs them: the sweep
 // as `wms_worker`, the stamp and the sends as `wms_api` under `withCompany`.
 // What is proved: two companies' events published once each, in id order,
-// each on its kind's queue with the contracts' payload and the company; the
+// each on its consumer's queue of the kind, or the kind's own where none takes
+// it (#339), with the contracts' payload and the company; the
 // stamp written in the same transaction as the sends, so a send that fails
 // leaves the company's rows unstamped and its other sends unwritten, and the
 // next tick takes them; a second relay over a published outbox publishing
@@ -10,8 +11,8 @@
 // published twice (`for update skip locked`); the stale count; and the job
 // itself through pg-boss — a manual tick worked, its successor queued, a
 // second tick refused by the `short` policy — with a consumer defined through
-// `defineOutboxConsumer` receiving the event on its kind's queue and refusing
-// a job of another kind.
+// `defineOutboxConsumer` receiving the event on its own queue of the kind and
+// refusing a job of another kind.
 //
 // The database is fresh because the sweep crosses companies: a relay on the
 // shared local database would stamp every other suite's events out from
@@ -33,6 +34,7 @@ import type { PgBoss } from "pg-boss"
 import { createBoss, startBoss, type Boss } from "../boss"
 import { defineJob, type JobContext } from "../jobs"
 import { BATCH_SIZE, OUTBOX_STALE_MS, RELAY_INTERVAL_SECONDS, RELAY_QUEUE, relayOnce, relayOutbox, staleOutboxCount } from "../jobs/relay-outbox"
+import { OUTBOX_ROUTES } from "../outbox/routes"
 import { DEAD_LETTER_RETENTION_SECONDS, defineOutboxConsumer, OUTBOX_DEAD_QUEUE, OUTBOX_QUEUE_OPTIONS, OUTBOX_QUEUES, outboxQueue, RelayedEvent } from "../outbox/subscribe"
 import { rolesUnderTest, withDatabaseName } from "./database"
 import { fakeRouting, settlesNothing } from "./routing-context"
@@ -111,15 +113,16 @@ describe("execution.relay-outbox", { skip: roles.skip }, () => {
   /** Every row of the outbox, across companies, as the worker role sees it. */
   const outbox = () => worker.db.select({ id: outboxEvent.id, companyId: outboxEvent.companyId, kind: outboxEvent.kind, publishedAt: outboxEvent.publishedAt, updatedAt: outboxEvent.updatedAt }).from(outboxEvent).orderBy(asc(outboxEvent.id))
 
-  /** The jobs on the `outbox.<kind>` queues, oldest first. */
+  /** The jobs on the outbox's queues — the kinds' own, the consumers' and the dead letters — oldest first. */
   const outboxJobs = async (): Promise<JobRow[]> => owner.sql.unsafe<JobRow[]>(`select id, name, state, data, start_after::text, output from ${PGBOSS_SCHEMA}.job where name like 'outbox.%' order by created_on, id`)
 
   /** The jobs on the relay's own queue, oldest first. */
   const relayJobs = async (): Promise<JobRow[]> => owner.sql.unsafe<JobRow[]>(`select id, name, state, data, start_after::text, output from ${PGBOSS_SCHEMA}.job where name = '${RELAY_QUEUE}' order by created_on, id`)
 
-  /** The consumer of this file: takes `pickup-failed`, records what it got, and fails at once on a wrong kind so the refusal shows within the test. */
+  /** The consumer of this file: takes `pickup-failed` under Resolution's name, so the relay's route for the kind (`outbox.pickup-failed.resolution`, #339) reaches it, records what it got, and fails at once on a wrong kind so the refusal shows within the test. */
   const received: RelayedEvent<"pickup-failed">[] = []
   const testConsumer = defineOutboxConsumer({
+    name: "resolution",
     kinds: ["pickup-failed"],
     description: "Records the failed pickups this suite relays.",
     queueOptions: { retryLimit: 0 },
@@ -139,6 +142,8 @@ describe("execution.relay-outbox", { skip: roles.skip }, () => {
     boss = createBoss({ url: withDatabaseName(roles.workerUrl, name), log: (line) => void errors.push(line), monitorIntervalSeconds: 1 })
     // The relay without its schedule, so a tick runs only when this file sends one, and the consumer beside it: the wiring creates the outbox queues before either worker starts.
     running = await startBoss(boss, [defineJob({ ...relayOutbox, schedule: undefined }), ...testConsumer], context)
+    // The relay sends by the registry's routes (#339): the other consumers' queues of their kinds, which nothing of this file works, brought up as the registry's start would.
+    for (const queues of OUTBOX_ROUTES.values()) for (const queue of queues) if (!running.queues.includes(queue)) await boss.createQueue(queue, OUTBOX_QUEUE_OPTIONS)
     await seedTenant(a, "A")
     await seedTenant(b, "B")
   })
@@ -152,9 +157,9 @@ describe("execution.relay-outbox", { skip: roles.skip }, () => {
     }
   })
 
-  test("the wiring created the dead-letter queue and every outbox.<kind> queue with the relay's retry policy, before any consumer registered", async () => {
+  test("the wiring created the dead-letter queue and every outbox.<kind> queue with the relay's retry policy, and the consumer's own queue of its kind with its options over them, before any consumer registered", async () => {
     assert.deepEqual(running!.published, [OUTBOX_DEAD_QUEUE, ...OUTBOX_QUEUES.map((queue) => queue.queue)])
-    assert.deepEqual(running!.queues, [RELAY_QUEUE, "outbox.pickup-failed"])
+    assert.deepEqual(running!.queues, [RELAY_QUEUE, "outbox.pickup-failed.resolution"])
     const queues = await boss.getQueues([...running!.published])
     assert.equal(queues.length, OUTBOX_QUEUES.length + 1)
     for (const queue of queues) {
@@ -162,12 +167,13 @@ describe("execution.relay-outbox", { skip: roles.skip }, () => {
         assert.deepEqual([queue.retryLimit, queue.retentionSeconds, queue.deadLetter], [0, DEAD_LETTER_RETENTION_SECONDS, null], "the dead-letter queue: no retry, ninety days, worked by nobody")
         continue
       }
-      const expected = queue.name === "outbox.pickup-failed" ? [10, 0, OUTBOX_DEAD_QUEUE] : [10, 3, null]
-      assert.deepEqual([queue.retryDelay, queue.retryLimit, queue.deadLetter], expected, `${queue.name}: the relay's policy, the consumer's retryLimit and the seam's dead letter written over it on its own queue`)
+      assert.deepEqual([queue.retryDelay, queue.retryLimit, queue.deadLetter], [10, 3, null], `${queue.name}: the relay's policy, nobody's written over it, the consumed kind's own queue among them`)
     }
+    const [own] = await boss.getQueues(["outbox.pickup-failed.resolution"])
+    assert.deepEqual([own.retryDelay, own.retryLimit, own.deadLetter], [10, 0, OUTBOX_DEAD_QUEUE], "the consumer's own queue of the kind: the relay's policy, the consumer's retryLimit and the seam's dead letter written over it")
   })
 
-  test("publishes two companies' events exactly once, in id order per company, each on its kind's queue carrying the stamped event and the company, and stamps them as wms_api in the same instant", async () => {
+  test("publishes two companies' events exactly once, in id order per company, each on its consumer's queue of the kind or the kind's own, carrying the stamped event and the company, and stamps them as wms_api in the same instant", async () => {
     const a1 = await emit(a, "pickup-failed", { id: id(0x201), status: "failed", reason: "inaccessible" })
     const b1 = await emit(b, "pickup-completed", { id: id(0x202), status: "completed" })
     const a2 = await emit(a, "route-cancelled", { id: id(0x203), status: "cancelled" })
@@ -181,13 +187,13 @@ describe("execution.relay-outbox", { skip: roles.skip }, () => {
     assert.deepEqual(
       sent,
       [
-        { queue: "outbox.pickup-failed", id: a1 },
+        { queue: "outbox.pickup-failed.resolution", id: a1 },
         { queue: "outbox.route-cancelled", id: a2 },
-        { queue: "outbox.command-rejected", id: a3 },
-        { queue: "outbox.pickup-completed", id: b1 },
+        { queue: "outbox.command-rejected.resolution", id: a3 },
+        { queue: "outbox.pickup-completed.finance", id: b1 },
         { queue: "outbox.unload-recorded", id: b2 },
       ],
-      "each event sent to outbox.<kind>, in id order within its company",
+      "each event sent to its consumer's queue of the kind, or the kind's own where none takes it, in id order within its company",
     )
 
     const rows = await outbox()
@@ -204,13 +210,13 @@ describe("execution.relay-outbox", { skip: roles.skip }, () => {
     for (const job of jobs) {
       const event = RelayedEvent.parse(job.data)
       const row = rows.find((candidate) => candidate.id === event.id)!
-      assert.equal(job.name, outboxQueue(event.kind), "the queue is the kind's")
+      assert.ok((OUTBOX_ROUTES.get(event.kind) ?? [outboxQueue(event.kind)]).includes(job.name), "the queue is a consumer's of the kind, or the kind's own where none takes it (#339)")
       assert.equal(event.companyId, row.companyId, "the company travels with the event")
       assert.equal(event.publishedAt, row.publishedAt!.toISOString(), "the payload's stamp is the row's")
       assert.equal(event.updatedAt, row.updatedAt.toISOString())
       assert.equal(event.occurredAt, "2026-10-05T06:00:00.000Z")
     }
-    const failed = jobs.find((job) => job.name === "outbox.pickup-failed")!
+    const failed = jobs.find((job) => job.name === "outbox.pickup-failed.resolution")!
     assert.deepEqual(RelayedEvent.parse(failed.data).payload, { id: id(0x201), status: "failed", reason: "inaccessible" }, "the payload is the wire resource as the write left it")
     assert.deepEqual(errors, [])
   })
@@ -408,24 +414,24 @@ describe("execution.relay-outbox", { skip: roles.skip }, () => {
     assert.equal(typeof event.publishedAt, "string")
     // The handler has the event before pg-boss records its job completed, so the row is waited for rather than read at once.
     const consumedJob = async () =>
-      (await owner.sql.unsafe<JobRow[]>(`select id, name, state, data, start_after::text, output from ${PGBOSS_SCHEMA}.job where name = 'outbox.pickup-failed' and state = 'completed' and data->>'id' = '${a7}'`))[0]
+      (await owner.sql.unsafe<JobRow[]>(`select id, name, state, data, start_after::text, output from ${PGBOSS_SCHEMA}.job where name = 'outbox.pickup-failed.resolution' and state = 'completed' and data->>'id' = '${a7}'`))[0]
     await until(async () => (await consumedJob()) !== undefined, 10_000, "the consumer's job completing")
     assert.deepEqual((await consumedJob())!.output, { events: [a7] })
   })
 
   test("a consumer refuses a job of another kind on its queue, and one whose data is not a relayed event: the job fails, for the readiness count, and the handler is not reached", async () => {
     const handled = received.length
-    const stray = RelayedEvent.parse((await outboxJobs()).find((job) => job.name === "outbox.pickup-completed")!.data)
-    const wrong = await boss.send("outbox.pickup-failed", stray)
-    const garbage = await boss.send("outbox.pickup-failed", { not: "an event" })
+    const stray = RelayedEvent.parse((await outboxJobs()).find((job) => job.name === "outbox.pickup-completed.finance")!.data)
+    const wrong = await boss.send("outbox.pickup-failed.resolution", stray)
+    const garbage = await boss.send("outbox.pickup-failed.resolution", { not: "an event" })
     assert.ok(wrong && garbage)
     await until(async () => {
-      const rows = await boss.findJobs("outbox.pickup-failed", {})
+      const rows = await boss.findJobs("outbox.pickup-failed.resolution", {})
       return rows.filter((job) => (job.id === wrong || job.id === garbage) && job.state === "failed").length === 2
     }, 10_000, "both jobs failing")
-    const [failed] = await boss.findJobs("outbox.pickup-failed", { id: wrong })
+    const [failed] = await boss.findJobs("outbox.pickup-failed.resolution", { id: wrong })
     assert.match(JSON.stringify(failed.output), /carries a pickup-completed event/)
-    const [refused] = await boss.findJobs("outbox.pickup-failed", { id: garbage })
+    const [refused] = await boss.findJobs("outbox.pickup-failed.resolution", { id: garbage })
     assert.match(JSON.stringify(refused.output), /Invalid input|expected/i)
     assert.equal(received.length, handled, "the handler was not reached")
     // The successor tick of the test above may still be queued; stop the workers before the database goes.
@@ -452,7 +458,7 @@ describe("execution.relay-outbox", { skip: roles.skip }, () => {
     // The consumer refused two jobs with no retry (a stray kind, and no event at all): both failed, and both are on the dead-letter queue with what they carried and where they came from, for an operator to read and redrive or delete.
     const dead = await owner.sql.unsafe<{ state: string; source_name: string; data: unknown }[]>(`select state, source_name, data from ${PGBOSS_SCHEMA}.job where name = '${OUTBOX_DEAD_QUEUE}' order by created_on`)
     assert.equal(dead.length, 2)
-    assert.ok(dead.every((letter) => letter.state === "created" && letter.source_name === "outbox.pickup-failed"))
+    assert.ok(dead.every((letter) => letter.state === "created" && letter.source_name === "outbox.pickup-failed.resolution"))
     assert.ok(dead.some((letter) => RelayedEvent.safeParse(letter.data).success && RelayedEvent.parse(letter.data).kind === "pickup-completed"), "the stray event, intact")
     assert.ok(dead.some((letter) => JSON.stringify(letter.data) === JSON.stringify({ not: "an event" })), "the garbage, as sent")
   })

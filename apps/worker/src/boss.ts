@@ -32,7 +32,22 @@
 // later finds the rows already there; a consumer's own entries then work
 // those queues, and their `queueOptions` are written over the relay's.
 // pg-boss's fan-out (`subscribe`/`publish`) is not used: the relay's `send`
-// to the kind's queue is the one door, and a consumer is a worker on it.
+// to each consumer's queue of the kind is the one door, and a consumer is a
+// worker on its own queue (#339).
+//
+// Every queue is brought up before any worker starts, and then a queue some
+// job `inherits` is drained into its heirs (`drainInherited`): the jobs
+// waiting there — created, due for a retry, or left active by a process that
+// is gone, since nothing of this process works it — are copied to every heir
+// and completed in one transaction on the worker's pool, which is pg-boss's own
+// role. That is the outbox's cut-over and its inheritance: a job the old relay
+// sent to `outbox.<kind>` before the deploy is worked once, by each consumer
+// of the kind, on the Pilot's one process — the supervisor stops the old
+// worker before the new one starts, and the new one drains before it works.
+// A relay of an older process still running beside this one (a rolling deploy
+// elsewhere) would leave what it sends after the drain for the next start;
+// the consumers are idempotent by the event's id, so a job moved twice is
+// heard twice and done once.
 // Queues no job names any more are left alone: their rows are evidence and
 // pg-boss's retention removes them in time; an operator deletes the queue.
 //
@@ -56,6 +71,7 @@
 // connection after 10 s by default, so at a 30 s poll every poll reopened one
 // — a TLS handshake and a startup through the pooler each time, most of the
 // idle egress gate 2 metered. Absent, every one of them is pg-boss's default.
+import { inTransaction } from "@waste/db/jobs"
 import { PGBOSS_SCHEMA } from "@waste/db/sql/pgboss"
 import { PgBoss, type ConstructorOptions, type WorkOptions } from "pg-boss"
 
@@ -165,10 +181,45 @@ export function createBoss({ url, max = 3, log = (line) => console.error(line), 
 }
 
 /**
+ * Moves what waits on each queue some job `inherits` onto every job that
+ * inherits it: the waiting jobs (created, due for a retry, or active under a
+ * process that is gone) copied to each heir with their data and completed on
+ * the source, in one transaction on the worker's pool, so a job is moved
+ * whole or not at all. A source that does not exist is nothing to move.
+ * Answers how many jobs each source gave up.
+ */
+export async function drainInherited(boss: PgBoss, jobs: readonly AnyJob[], context: Pick<JobContext, "worker" | "log">): Promise<Map<string, number>> {
+  const heirs = new Map<string, string[]>()
+  for (const job of jobs) if (job.inherits !== undefined) heirs.set(job.inherits, [...(heirs.get(job.inherits) ?? []), job.queue])
+  const moved = new Map<string, number>()
+  for (const [source, targets] of heirs) {
+    if ((await boss.getQueue(source)) === null) continue
+    const count = await context.worker.db.transaction(async (tx) => {
+      const db = inTransaction(tx)
+      const waiting = (await boss.findJobs<object>(source, { db })).filter((job) => job.state === "created" || job.state === "retry" || job.state === "active")
+      if (waiting.length === 0) return 0
+      for (const job of waiting) for (const target of targets) await boss.send(target, job.data, { db })
+      // No output: drizzle's postgres.js driver passes a jsonb parameter through unserialised, so pg-boss's output object cannot bind over the transaction; the log line names the heirs.
+      await boss.complete(
+        source,
+        waiting.map((job) => job.id),
+        undefined,
+        { db, includeQueued: true },
+      )
+      return waiting.length
+    })
+    if (count > 0) context.log(`pg-boss: ${count} ${count === 1 ? "job" : "jobs"} of ${source} moved to ${targets.join(", ")}`)
+    moved.set(source, count)
+  }
+  return moved
+}
+
+/**
  * Starts pg-boss and registers every job: the queues the jobs publish to
- * created or brought to their options first, then, per job, the queue
- * created or brought to the job's options, the worker with the job's handler
- * over the context, and the schedule set or removed. The registry test has
+ * created or brought to their options first, then every job's queue, then
+ * each inherited queue drained into its heirs (`drainInherited`), then, per
+ * job, the worker with the job's handler over the context, and the schedule
+ * set or removed. The registry test has
  * already held the list to unique queues and valid cron expressions, so what
  * fails here is the database: the schema missing or at another version
  * (`start()` says which), or the role unable to reach it. Every queue's poll
@@ -191,9 +242,11 @@ export async function startBoss(boss: PgBoss, jobs: readonly AnyJob[], context: 
       if (!published.includes(target.queue)) published.push(target.queue)
     }
   }
+  for (const job of jobs) await bring(job.queue, job.queueOptions)
+  // Before any worker runs: what waits on a queue its heirs inherit is theirs (#339).
+  await drainInherited(boss, jobs, context)
   const queues: string[] = []
   for (const job of jobs) {
-    await bring(job.queue, job.queueOptions)
     await boss.work(job.queue, workOptionsUnder(job.workOptions, context.pollingIntervalSeconds), (batch) => job.handler(batch, context))
     if (job.schedule !== undefined) {
       await boss.schedule(job.queue, job.schedule, job.scheduleData ?? null, job.scheduleOptions)

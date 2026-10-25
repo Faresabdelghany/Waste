@@ -43,7 +43,7 @@ import { and, asc, eq } from "drizzle-orm"
 
 import type { JobContext } from "../jobs"
 import { FINANCE_EVENT_KINDS, recordBillableEvents, type PublishedEvent, type Recorded } from "../jobs/record-billable-events"
-import { outboxQueue } from "../outbox/subscribe"
+import { consumerQueue } from "../outbox/subscribe"
 import { databaseUnderTest, ownerUnderTest } from "./database"
 import { at, dropFinanceTenant, FIXTURE_DAY, movePickup, placeBin, seedCompletedRoute, seedFinanceTenant, seedTicket, testId, type FinanceTenant } from "./finance-tenant"
 import { fakeRouting, settlesNothing } from "./routing-context"
@@ -142,10 +142,10 @@ describe("finance.record-billable-events against Postgres", { skip }, () => {
     closedAt: closedAt.toISOString(),
   })
 
-  /** The registry entry that works the kind's queue: the seam's one job per kind. */
+  /** The registry entry that works Finance's queue of the kind: the seam's one job per kind. */
   const consumerOf = (kind: OutboxKind) => {
-    const found = recordBillableEvents.find((job) => job.queue === outboxQueue(kind))
-    assert.ok(found, `${kind}: no entry of Finance's consumer works ${outboxQueue(kind)}`)
+    const found = recordBillableEvents.find((job) => job.queue === consumerQueue(kind, "finance"))
+    assert.ok(found, `${kind}: no entry of Finance's consumer works ${consumerQueue(kind, "finance")}`)
     return found
   }
 
@@ -186,9 +186,9 @@ describe("finance.record-billable-events against Postgres", { skip }, () => {
     })
   }
 
-  test("works the three kinds Finance reads and no other, one entry per kind on the queue the relay publishes", () => {
+  test("works the three kinds Finance reads and no other, one entry per kind on Finance's own queue of the kind (#339)", () => {
     assert.deepEqual([...FINANCE_EVENT_KINDS], ["pickup-completed", "pickup-corrected", "ticket-completed"])
-    assert.deepEqual(recordBillableEvents.map((job) => job.queue), FINANCE_EVENT_KINDS.map(outboxQueue))
+    assert.deepEqual(recordBillableEvents.map((job) => job.queue), FINANCE_EVENT_KINDS.map((kind) => consumerQueue(kind, "finance")))
     for (const job of recordBillableEvents) assert.equal(job.schedule, undefined, "sent by the relay, never by a cron")
   })
 

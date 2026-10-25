@@ -1,14 +1,22 @@
 // The outbox's queues, spelled once for both sides (Issue #104 part C): the
 // relay (jobs/relay-outbox.ts) sends every published `outbox_event` to the
-// queue of its kind, and a consumer — Resolution's (#109 part B), Finance's
-// (#112 part B), the e-conomic export's one day — works the queues of the
-// kinds it wants and never reads the table. Nothing here dials anything: it is
-// names, one schema and one function that turns a consumer into registry
-// entries.
+// queue of each consumer of its kind, and a consumer — Resolution's (#109
+// part B), Finance's (#112 part B), the e-conomic export's one day — works its
+// own queue of each kind it wants and never reads the table. Nothing here
+// dials anything: it is names, one schema and one function that turns a
+// consumer into registry entries.
 //
-// The queue is `outbox.<kind>`, one per member of the contracts' `OutboxKind`
-// (`outbox.pickup-failed`, `outbox.pickup-completed`, `outbox.ticket-completed`,
-// …), and its job's data is `RelayedEvent`: the contracts' `OutboxEvent` — the
+// A kind fans out (#339): each consumer has a queue of its own per kind,
+// `outbox.<kind>.<consumer>` (`outbox.pickup-failed.resolution`,
+// `outbox.pickup-failed.finance`), so two contexts hear one event and a
+// failure of one never holds the other's job. The kind's own queue,
+// `outbox.<kind>`, holds an event no consumer takes yet, and it is where every
+// event went before the fan-out: a consumer's queue `inherits` it, so at
+// every start, before any worker runs, what waits there is copied to each
+// consumer of the kind and completed (boss.ts, `drainInherited`). That is the
+// cut-over — a job the old relay sent before the deploy is worked once, by
+// the consumers it was meant for — and the way a consumer added later starts
+// from the events held for it. A job's data is `RelayedEvent`: the contracts' `OutboxEvent` — the
 // row as the API would answer it, `publishedAt` stamped, `payload` the wire
 // resource as the write left it — plus `companyId`, the tenant, since a
 // consumer opens its writes with `withCompany(context.api.db, event.companyId,
@@ -21,13 +29,11 @@
 // failed, where `/readyz` counts it.
 //
 // A queue is a queue and not a topic: pg-boss hands each job to one worker,
-// so one consumer takes a kind through this door. Resolution's four and
-// Finance's three do not meet, and the registry test holds every queue to one
-// job, so a second consumer of a kind is a failing test that asks for a
-// decision and not a silent halving of the events. The relay owns the queues
-// (`OUTBOX_QUEUES`, created before any worker starts) and a job waits for
-// whoever works it, under the queue's retention: ninety days on a queue no
-// consumer works yet (`UNCONSUMED_RETENTION_SECONDS`), since the consumer a
+// so each consumer has its own, and the registry test holds every queue to one
+// job — one queue per kind and consumer. The relay owns the kinds' queues
+// (`OUTBOX_QUEUES`, created before any worker starts), where an event no
+// consumer takes waits for one under the queue's retention: ninety days
+// (`UNCONSUMED_RETENTION_SECONDS`), since the consumer a
 // kind is waiting for — the e-conomic export on `invoice-issued`, the
 // settlement component on `settlement-closed` — starts from the queue and not
 // from the table, and a fortnight would have it start blind to every invoice
@@ -63,9 +69,10 @@
 // came from; `/readyz` carries the queue's waiting count as `deadLetters`,
 // information and never a 503, and the redrive is pg-boss's own: `await
 // boss.previewRedrive("outbox.dead")` to see where the jobs would go, `await
-// boss.redrive("outbox.dead", { ids })` (or `{ sourceName: "outbox.<kind>" }`,
-// or no filter for all of them) to re-create each as a fresh job on the queue
-// it failed on, once the cause is fixed — a job that fails again is
+// boss.redrive("outbox.dead", { ids })` (or `{ sourceName:
+// "outbox.<kind>.<consumer>" }`, or no filter for all of them) to re-create
+// each as a fresh job on the queue it failed on — the one consumer's, never
+// its kind's other consumers' — once the cause is fixed; a job that fails again is
 // dead-lettered again, so a redrive is never a loss. The seam sets the dead
 // letter and not each consumer, so a consumer added later cannot forget it.
 import { Id } from "@waste/contracts/ids"
@@ -76,8 +83,14 @@ import * as z from "zod"
 
 import type { JobContext, JobDefinition, JobQueueOptions, PublishedQueue } from "../jobs/definition"
 
-/** The queue an event of this kind is published to: `outbox.<kind>`. */
+/** The kind's own queue, `outbox.<kind>`: where an event no consumer takes waits for one, and where every event went before the fan-out (#339). */
 export const outboxQueue = <Kind extends OutboxKind>(kind: Kind): `outbox.${Kind}` => `outbox.${kind}`
+
+/** A consumer's own queue of a kind, `outbox.<kind>.<consumer>`: what the relay sends the kind's events to for that consumer (#339). */
+export const consumerQueue = <Kind extends OutboxKind, Name extends string>(kind: Kind, consumer: Name): `outbox.${Kind}.${Name}` => `outbox.${kind}.${consumer}`
+
+/** A consumer's name as its queues spell it: lowercase letters and hyphens, the context it belongs to. */
+export const CONSUMER_NAME = /^[a-z]+(?:-[a-z]+)*$/
 
 /** The dead-letter queue every consumer's queue names: where a job that failed past its retries is copied, data intact, for an operator to redrive. */
 export const OUTBOX_DEAD_QUEUE = "outbox.dead"
@@ -119,7 +132,9 @@ export const OUTBOX_QUEUES: readonly PublishedQueue[] = OutboxKind.options.map((
 export const OUTBOX_DEAD: PublishedQueue = { queue: OUTBOX_DEAD_QUEUE, queueOptions: DEAD_LETTER_QUEUE_OPTIONS }
 
 export type OutboxConsumer<Kind extends OutboxKind> = {
-  /** The kinds the consumer takes, one queue each. */
+  /** Who it is, as its queues spell it (`CONSUMER_NAME`): `resolution`, `finance`. */
+  name: string
+  /** The kinds the consumer takes, a queue of its own each. */
   kinds: readonly Kind[]
   /** What the consumer does with an event, one sentence; each queue's description is this and its kind. */
   description: string
@@ -141,31 +156,38 @@ export type OutboxConsumer<Kind extends OutboxKind> = {
 
 /**
  * A consumer as registry entries: one `JobDefinition` per kind, its queue
- * `outbox.<kind>`, each spread into `JOBS` in jobs/index.ts —
+ * `outbox.<kind>.<name>`, inheriting the kind's own queue, each spread into
+ * `JOBS` in jobs/index.ts and listed in `OUTBOX_CONSUMERS` (routes.ts),
+ * which the relay sends by —
  *
  *     export const openTickets = defineOutboxConsumer({
+ *       name: "resolution",
  *       kinds: ["pickup-failed", "pickup-skipped", "pickup-problem-reported", "command-rejected"],
  *       description: "Opens a ticket where nobody decided about the address.",
  *       handler: async (event, { api }) => withCompany(api.db, event.companyId, (tx) => ...),
  *     })
  *     export const JOBS: readonly AnyJob[] = [heartbeat, relayOutbox, ...openTickets]
  *
- * — so the wiring creates or updates each queue, works it with the handler
- * and schedules nothing, exactly as for any other job. Every entry's
- * `queueOptions` are `CONSUMED_OUTBOX_QUEUE_OPTIONS` under the consumer's own.
+ * — so the wiring creates or updates each queue, moves what waits on the
+ * kind's own queue onto it, works it with the handler and schedules nothing,
+ * exactly as for any other job. Every entry's `queueOptions` are the outbox's
+ * retry policy and `CONSUMED_OUTBOX_QUEUE_OPTIONS` under the consumer's own,
+ * since the consumer's queue is its own to create.
  */
-export function defineOutboxConsumer<const Kind extends OutboxKind>({ kinds, description, handler, queueOptions, workOptions }: OutboxConsumer<Kind>): JobDefinition<RelayedEvent>[] {
+export function defineOutboxConsumer<const Kind extends OutboxKind>({ name, kinds, description, handler, queueOptions, workOptions }: OutboxConsumer<Kind>): JobDefinition<RelayedEvent>[] {
+  if (!CONSUMER_NAME.test(name)) throw new Error(`an outbox consumer's name is lowercase words joined by hyphens: ${JSON.stringify(name)}`)
   return kinds.map((kind) => ({
-    queue: outboxQueue(kind),
+    queue: consumerQueue(kind, name),
+    inherits: outboxQueue(kind),
     description: `${description} (${kind})`,
-    queueOptions: { ...CONSUMED_OUTBOX_QUEUE_OPTIONS, ...queueOptions },
+    queueOptions: { ...OUTBOX_QUEUE_OPTIONS, ...CONSUMED_OUTBOX_QUEUE_OPTIONS, ...queueOptions },
     ...(workOptions === undefined ? {} : { workOptions }),
     handler: async (jobs, context) => {
       const events: string[] = []
       for (const job of jobs) {
         const event = RelayedEvent.parse(job.data)
         if (event.kind !== kind) {
-          throw new Error(`${outboxQueue(kind)}: job ${job.id} carries a ${event.kind} event (${event.id}); the relay publishes each kind to its own queue`)
+          throw new Error(`${consumerQueue(kind, name)}: job ${job.id} carries a ${event.kind} event (${event.id}); the relay sends each kind to its own consumers' queues`)
         }
         await handler(event as RelayedEvent<Kind>, context)
         events.push(event.id)
