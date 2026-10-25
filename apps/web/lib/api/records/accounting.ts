@@ -8,12 +8,14 @@
 // the latest — and the surface previews it first (`previewAccountingExport`),
 // a read through the client as Run billing's preview is. The file is a read
 // too (`accountingExportFile`), its bytes as the API rendered them from the
-// lines the export froze.
+// lines the export froze: our CSV, or Danish SAF-T 2.1 (C7b), which the API
+// refuses with the sentence saying what to set while the company or the
+// mapping lacks what it needs.
 //
 // The project's mapping onto the office's chart is no row of a workspace's
 // table: Settings › Commercial › Accounting reads and replaces it whole
 // through the client (`readAccountingSettings`, `replaceAccountingSettings`).
-import type { AccountingExport, AccountingExportCreate, AccountingExportPreview, AccountingSettings, AccountingSettingsSet } from "@waste/contracts/accounting"
+import type { AccountingExport, AccountingExportCreate, AccountingExportPreview, AccountingFormat, AccountingSettings, AccountingSettingsSet } from "@waste/contracts/accounting"
 
 import { formatMinor } from "@/lib/commercial/money"
 import { FIXTURE_COMPANY_ID } from "@/lib/data/business-modules"
@@ -62,9 +64,10 @@ export function previewAccountingExport(client: Client, body: AccountingExportCr
   return command<AccountingExportPreview>(client, "/accounting-exports/preview", body)
 }
 
-/** `GET /accounting-exports/:id/file`: our CSV, its bytes as rendered from the export's frozen lines. */
-export function accountingExportFile(client: Client, serverId: string): Promise<ApiFile> {
-  return getFile(client, `/accounting-exports/${serverId}/file`, "text/csv")
+/** `GET /accounting-exports/:id/file`: our CSV, its bytes as rendered from the export's frozen lines; or SAF-T, made on the project's today. */
+export function accountingExportFile(client: Client, serverId: string, format: AccountingFormat = "csv"): Promise<ApiFile> {
+  const path = `/accounting-exports/${serverId}/file`
+  return format === "csv" ? getFile(client, path, "text/csv") : getFile(client, withQuery(path, { format }), "application/xml")
 }
 
 /** `GET /accounting-settings`: a project's mapping onto the office's chart. */

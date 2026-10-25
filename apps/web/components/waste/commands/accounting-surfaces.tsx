@@ -151,18 +151,19 @@ export function ExportPeriodSurface({ label }: PrimarySurfaceProps) {
   )
 }
 
-/** An export's details: its file, saved under the name the API gave it. */
+/** An export's details: its file, our CSV or SAF-T, saved under the name the API gave it. */
 export function AccountingExportSurface({ record }: RowSurfaceProps) {
   const client = useApiClient()
   const serverId = useServerModuleState(ACCOUNTING_MODULE.workspaceId, ACCOUNTING_MODULE.moduleId)?.serverIds.get(record.id)
   const [busy, setBusy] = useState(false)
 
-  const download = async () => {
+  const download = async (format: "csv" | "saf-t") => {
     if (client === null || serverId === undefined || busy) return
     setBusy(true)
     try {
-      const file = await accountingExportFile(client, serverId)
-      downloadBlob(file.fileName ?? `${record.name}.csv`, new Blob([file.bytes], { type: file.contentType ?? "text/csv" }))
+      const file = await accountingExportFile(client, serverId, format)
+      const [extension, type] = format === "csv" ? [".csv", "text/csv"] : ["-saf-t.xml", "application/xml"]
+      downloadBlob(file.fileName ?? `${record.name}${extension}`, new Blob([file.bytes], { type: file.contentType ?? type }))
     } catch (error) {
       toast.error("The file could not be read", { description: problemSentence(problemOfError(error)) })
     } finally {
@@ -173,9 +174,15 @@ export function AccountingExportSurface({ record }: RowSurfaceProps) {
   return (
     <div className="space-y-2" data-testid="accounting-export-commands">
       <p className="text-sm text-muted-foreground">Our CSV, semicolon-separated, one row per voucher line: the same file every time, whatever the mapping becomes.</p>
-      <Button size="sm" variant="outline" disabled={busy || client === null || serverId === undefined} onClick={() => void download()}>
-        Download CSV
-      </Button>
+      <p className="text-sm text-muted-foreground">SAF-T, the Danish standard file, made today from the same lines with the company&apos;s identity and the mapping&apos;s standard numbers as they now stand.</p>
+      <div className="flex flex-wrap gap-2">
+        <Button size="sm" variant="outline" disabled={busy || client === null || serverId === undefined} onClick={() => void download("csv")}>
+          Download CSV
+        </Button>
+        <Button size="sm" variant="outline" disabled={busy || client === null || serverId === undefined} onClick={() => void download("saf-t")}>
+          Download SAF-T
+        </Button>
+      </div>
     </div>
   )
 }

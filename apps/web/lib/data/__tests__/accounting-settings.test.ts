@@ -24,7 +24,7 @@ const read: AccountingSettings = {
   suspense: null,
   revenue: "1010",
   exportsFrom: "2026-10-01",
-  vatCodes: [{ vatPercent: 25, code: "U25", account: "6800" }],
+  vatCodes: [{ vatPercent: 25, code: "U25", account: "6800", standardTaxCode: "S1" }],
   productAccounts: [{ productId: PRODUCT, account: "1010" }],
 }
 
@@ -33,7 +33,7 @@ describe("the accounting mapping's draft", () => {
     const draft = draftOf(read)
     assert.deepEqual(draft.defaults, { receivable: "5600", bank: NO_ONE, suspense: NO_ONE, revenue: "1010" })
     assert.deepEqual(draft.accounts[1], { number: "5600", name: "Debitorer", standardAccount: "" })
-    assert.deepEqual(draft.vatCodes, [{ vatPercent: "25", code: "U25", account: "6800" }])
+    assert.deepEqual(draft.vatCodes, [{ vatPercent: "25", code: "U25", account: "6800", standardTaxCode: "S1" }])
     const body = accountingSettingsBody(PROJECT, draft)
     assert.deepEqual(body, read)
     assert.ok(AccountingSettingsSet.safeParse(body).success)
@@ -42,7 +42,7 @@ describe("the accounting mapping's draft", () => {
 
   test("trims what is typed: a number, a name, a code and a day", () => {
     const draft = draftOf(read)
-    const typed: AccountingDraft = { ...draft, accounts: [{ number: " 1010 ", name: " Salg af tømning ", standardAccount: " 1010 " }, ...draft.accounts.slice(1)], vatCodes: [{ vatPercent: " 25 ", code: " U25 ", account: "6800" }], exportsFrom: " 2026-10-01 " }
+    const typed: AccountingDraft = { ...draft, accounts: [{ number: " 1010 ", name: " Salg af tømning ", standardAccount: " 1010 " }, ...draft.accounts.slice(1)], vatCodes: [{ vatPercent: " 25 ", code: " U25 ", account: "6800", standardTaxCode: " S1 " }], exportsFrom: " 2026-10-01 " }
     assert.deepEqual(accountingSettingsBody(PROJECT, typed), read)
   })
 
@@ -53,10 +53,11 @@ describe("the accounting mapping's draft", () => {
     assert.deepEqual(refuse({ accounts: [...draft.accounts, { number: "5600", name: "Again", standardAccount: "" }] }), { path: "accounts.3.number", message: "Account 5600 is listed twice" })
     assert.deepEqual(refuse({ accounts: [{ number: "5600", name: " ", standardAccount: "" }] }), { path: "accounts.0.name", message: "Name account 5600" })
     assert.deepEqual(refuse({ defaults: { ...draft.defaults, bank: "5820" } }), { path: "bank", message: "Account 5820 is not listed under the accounts" })
-    assert.deepEqual(refuse({ vatCodes: [{ vatPercent: "101", code: "U101", account: "6800" }] }), { path: "vatCodes.0.vatPercent", message: "A VAT rate is a whole percent from 0 to 100" })
-    assert.deepEqual(refuse({ vatCodes: [...draft.vatCodes, { vatPercent: "25", code: "U26", account: "6800" }] }), { path: "vatCodes.1.vatPercent", message: "25 % has a code already" })
-    assert.equal((refuse({ vatCodes: [{ vatPercent: "25", code: "U 25", account: "6800" }] }) as { path: string }).path, "vatCodes.0.code")
-    assert.deepEqual(refuse({ vatCodes: [{ vatPercent: "25", code: "U25", account: NO_ONE }] }), { path: "vatCodes.0.account", message: "Pick the account 25 % VAT goes to" })
+    assert.deepEqual(refuse({ vatCodes: [{ vatPercent: "101", code: "U101", account: "6800", standardTaxCode: "" }] }), { path: "vatCodes.0.vatPercent", message: "A VAT rate is a whole percent from 0 to 100" })
+    assert.deepEqual(refuse({ vatCodes: [...draft.vatCodes, { vatPercent: "25", code: "U26", account: "6800", standardTaxCode: "" }] }), { path: "vatCodes.1.vatPercent", message: "25 % has a code already" })
+    assert.equal((refuse({ vatCodes: [{ vatPercent: "25", code: "U 25", account: "6800", standardTaxCode: "" }] }) as { path: string }).path, "vatCodes.0.code")
+    assert.deepEqual(refuse({ vatCodes: [{ vatPercent: "25", code: "U25", account: NO_ONE, standardTaxCode: "" }] }), { path: "vatCodes.0.account", message: "Pick the account 25 % VAT goes to" })
+    assert.equal((refuse({ vatCodes: [{ vatPercent: "25", code: "U25", account: "6800", standardTaxCode: "S 1" }] }) as { path: string }).path, "vatCodes.0.standardTaxCode")
     assert.deepEqual(refuse({ productAccounts: [...draft.productAccounts, { productId: PRODUCT, account: "1010" }] }), { path: "productAccounts.1.productId", message: "A product books to one account" })
     assert.deepEqual(refuse({ productAccounts: [{ productId: NO_ONE, account: "1010" }] }), { path: "productAccounts.0.productId", message: "Pick a product" })
   })

@@ -251,7 +251,7 @@ export function AccountingSettingsPane() {
           <section className="space-y-2">
             <div className="flex items-center justify-between">
               <h3 className="text-sm font-semibold">VAT codes</h3>
-              <Button size="sm" variant="outline" disabled={saving} onClick={() => edit((current) => ({ ...current, vatCodes: [...current.vatCodes, { vatPercent: "", code: "", account: NO_ONE }] }))}>
+              <Button size="sm" variant="outline" disabled={saving} onClick={() => edit((current) => ({ ...current, vatCodes: [...current.vatCodes, { vatPercent: "", code: "", account: NO_ONE, standardTaxCode: "" }] }))}>
                 <Plus className="size-4" /> Add rate
               </Button>
             </div>
@@ -260,13 +260,14 @@ export function AccountingSettingsPane() {
                 <TableRow className="bg-muted/40 hover:bg-muted/40">
                   <TableHead>Rate (%)</TableHead>
                   <TableHead>Code</TableHead>
+                  <TableHead>Standard code</TableHead>
                   <TableHead>VAT account</TableHead>
                   <TableHead className="w-12" />
                 </TableRow>
               </TableHeader>
               <TableBody>
                 {draft.vatCodes.length === 0 ? (
-                  <EmptyRow colSpan={4} message="No VAT codes yet." hint="An export books no document whose VAT rate has no code." />
+                  <EmptyRow colSpan={5} message="No VAT codes yet." hint="An export books no document whose VAT rate has no code." />
                 ) : (
                   draft.vatCodes.map((row, index) => (
                     <TableRow key={index}>
@@ -275,6 +276,9 @@ export function AccountingSettingsPane() {
                       </TableCell>
                       <TableCell>
                         <Input aria-label={`Code ${index + 1}`} className="w-32" value={row.code} disabled={saving} onChange={(event) => { const value = event.target.value; edit((current) => ({ ...current, vatCodes: current.vatCodes.map((code, at) => (at === index ? { ...code, code: value } : code)) })) }} />
+                      </TableCell>
+                      <TableCell>
+                        <Input aria-label={`Standard code ${index + 1}`} className="w-24" placeholder="S1" value={row.standardTaxCode} disabled={saving} onChange={(event) => { const value = event.target.value; edit((current) => ({ ...current, vatCodes: current.vatCodes.map((code, at) => (at === index ? { ...code, standardTaxCode: value } : code)) })) }} />
                       </TableCell>
                       <TableCell>{accountSelect(row.account, (value) => edit((current) => ({ ...current, vatCodes: current.vatCodes.map((code, at) => (at === index ? { ...code, account: value } : code)) })), `VAT account ${index + 1}`, "Pick an account")}</TableCell>
                       <TableCell>

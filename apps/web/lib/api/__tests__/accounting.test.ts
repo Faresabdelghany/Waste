@@ -100,6 +100,7 @@ describe("the accounting export module", () => {
     const { fetch, calls } = scripted([
       () => json(preview),
       () => new Response(bytes, { status: 200, headers: { "content-type": "text/csv; charset=utf-8", "content-disposition": 'attachment; filename="accounting-2026-10-01-2026-10-31-213-250.csv"' } }),
+      () => new Response("<AuditFile/>", { status: 200, headers: { "content-type": "application/xml; charset=utf-8", "content-disposition": 'attachment; filename="accounting-2026-10-01-2026-10-31-213-250-saf-t.xml"' } }),
       () => json(mapping),
       () => json(mapping),
     ])
@@ -108,13 +109,15 @@ describe("the accounting export module", () => {
     const file = await accountingExportFile(client, october.id)
     assert.deepEqual([...new Uint8Array(file.bytes)], [...bytes], "the byte-order mark kept")
     assert.equal(file.fileName, "accounting-2026-10-01-2026-10-31-213-250.csv")
+    assert.equal((await accountingExportFile(client, october.id, "saf-t")).fileName, "accounting-2026-10-01-2026-10-31-213-250-saf-t.xml")
     assert.deepEqual(await readAccountingSettings(client, copenhagen.id), mapping)
     const { projectId, ...rest } = mapping
     await replaceAccountingSettings(client, { projectId, ...rest })
     assert.deepEqual(
       calls.map((call) => `${call.init.method ?? "GET"} ${call.url}`),
-      ["POST http://api.test/accounting-exports/preview", `GET http://api.test/accounting-exports/${october.id}/file`, `GET http://api.test/accounting-settings?projectId=${copenhagen.id}`, "PUT http://api.test/accounting-settings"],
+      ["POST http://api.test/accounting-exports/preview", `GET http://api.test/accounting-exports/${october.id}/file`, `GET http://api.test/accounting-exports/${october.id}/file?format=saf-t`, `GET http://api.test/accounting-settings?projectId=${copenhagen.id}`, "PUT http://api.test/accounting-settings"],
     )
-    assert.deepEqual(bodyOf(calls[3]), mapping)
+    assert.equal(new Headers(calls[2].init.headers).get("accept"), "application/xml")
+    assert.deepEqual(bodyOf(calls[4]), mapping)
   })
 })
