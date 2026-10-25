@@ -40,6 +40,7 @@ import { BILLING_LIST, EVENTS_LIST, INVOICES_LIST, PAYMENTS_LIST, PRICE_ROWS_LIS
 import { AddContainerSurface, ContainerCommandsSurface } from "./container-surfaces"
 import { CustomerCommandsSurface } from "./customer-surfaces"
 import { PaymentCommandsSurface, PaymentsPrimarySurface } from "./payment-surfaces"
+import { AccountingExportSurface, ExportPeriodSurface } from "./accounting-surfaces"
 import { AddPropertyGroupSurface, AddPropertySurface, AddSharedPointSurface, PropertyCommandsSurface, PropertyGroupCommandsSurface, SharedPointCommandsSurface } from "./place-surfaces"
 import { PriceRowCommandsSurface, PriceRowsPrimarySurface, ProductCommandsSurface, ProductsPrimarySurface } from "./pricing-surfaces"
 import { PROVIDER_PRICES_LIST, SERVICE_AREAS_LIST, SETTLEMENTS_LIST, WEIGHTS_LIST } from "./provider-money-lists"
@@ -170,6 +171,8 @@ export const COMMAND_SURFACES: Readonly<Record<string, CommandSurface>> = {
   // lines imported; a payment matched and its match undone in its details,
   // never edited. A customer's details offer its statement beside its Edit.
   "commercial.payments": { primary: PaymentsPrimarySurface, rowActions: PaymentCommandsSurface, list: PAYMENTS_LIST },
+  // The accounting export (#291 C7): Export period previews before it books, and an export's details offer its file.
+  "commercial.accounting": { primary: ExportPeriodSurface, rowActions: AccountingExportSurface },
   "customers.contacts": { primary: "form", rowActions: CustomerCommandsSurface, genericEdit: true },
   // Slice 11 (#186): an award by its own form, its assignments in its
   // details; a price's fee moved by Apply index alone; a settlement by the

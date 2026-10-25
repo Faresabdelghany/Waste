@@ -25,6 +25,7 @@ import {
   SquaresFour,
   Tag,
   Ticket,
+  Calculator,
   Timer,
   UserCircle,
   UsersThree,
@@ -196,6 +197,8 @@ const settingsSections: Array<{
       { id: "commercial-ticket-charges", label: "Ticket charges", icon: Ticket },
       // A project's products for the office's work orders on the API (M14 of #293), as Ticket charges are.
       { id: "commercial-work-order-charges", label: "Work order charges", icon: Wrench },
+      // A project's mapping onto the office's chart, which its accounting exports book to (#291 C7).
+      { id: "commercial-accounting", label: "Accounting", icon: Calculator },
       // A project's charge rules for Pickup Exceptions on the API (M5 of #293): offered with the adapter configured.
       { id: PICKUP_EXCEPTION_CHARGES_SETTINGS_PANE_ID, label: "Exception charges", icon: Warning },
     ],
@@ -1445,6 +1448,11 @@ const visiblePaneDefinitions: Record<string, SettingsPaneDefinition> = {
   "commercial-work-order-charges": {
     title: "Work order charges",
     description: "The product each of the office's work orders — a delivery, a removal, a swap, a repair, a wash — is charged at when it is completed (M14 of #293).",
+    groups: [],
+  },
+  "commercial-accounting": {
+    title: "Accounting",
+    description: "The office's chart of accounts a project's accounting exports book to (#291 C7).",
     groups: [],
   },
   "commercial-price-lists": {

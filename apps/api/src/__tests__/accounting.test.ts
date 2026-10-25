@@ -150,7 +150,7 @@ describe("the accounting export (#291 C7)", { skip: database.skip || owner.skip 
     assert.deepEqual(preview.gaps, [{ kind: "invoice", sourceId: invoice.id, document: invoice.label, sentence: "No VAT code is set up for 25 % VAT" }])
     assert.equal(preview.voucherCount, 0)
     const problem = await refused(await olivia("/accounting-exports", { method: "POST", body: exportBody(TODAY, TODAY) }), 409)
-    assert.equal(problem.detail, `No VAT code is set up for 25 % VAT (${invoice.label}); set it up in Settings › Finance & invoicing › Accounting`)
+    assert.equal(problem.detail, `No VAT code is set up for 25 % VAT (${invoice.label}); set it up in Settings › Commercial › Accounting`)
     await ok(await putMapping({ productAccounts: [{ productId: fx.products.residual.id, account: "1010" }] }))
   })
 

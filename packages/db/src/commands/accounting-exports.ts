@@ -166,7 +166,7 @@ export async function planExport(tx: Tx, scope: Scope, period: BillingPeriod): P
 }
 
 /** The sentence an export is refused with while a gap stands: the gap's own, and the document it met. */
-export const gapRefusal = (gap: ExportGap): string => `${gap.sentence}${gap.source.document === null ? "" : ` (${gap.source.document})`}; set it up in Settings › Finance & invoicing › Accounting`
+export const gapRefusal = (gap: ExportGap): string => `${gap.sentence}${gap.source.document === null ? "" : ` (${gap.source.document})`}; set it up in Settings › Commercial › Accounting`
 
 export type RunExportInput = BillingPeriod & { companyId: string; projectId: string; note: string | null; createdBy: string | null; newId: IdMinter }
 

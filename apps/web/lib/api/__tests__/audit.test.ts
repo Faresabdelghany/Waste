@@ -25,6 +25,7 @@ describe("which kinds keep a history", () => {
     assert.deepEqual(
       kinds.filter((kind) => kind.table === undefined).map((kind) => `${kind.key} ${kind.prefix}`).sort(),
       [
+        "commercial.accounting accounting-export",
         "commercial.billing billing-run",
         "commercial.events event",
         "commercial.invoices invoice",
