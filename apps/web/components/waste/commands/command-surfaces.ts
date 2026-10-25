@@ -38,7 +38,8 @@ import { DriverAbsenceSurface, VehicleUnavailabilitySurface } from "./availabili
 import { AddManualEventSurface, BillingRunSurface, EventCommandsSurface, InvoiceSurface, RunBillingSurface } from "./billing-surfaces"
 import { BILLING_LIST, EVENTS_LIST, INVOICES_LIST, PAYMENTS_LIST, PRICE_ROWS_LIST } from "./commercial-lists"
 import { AddContainerSurface, ContainerCommandsSurface } from "./container-surfaces"
-import { CustomerStatementSurface, PaymentCommandsSurface, PaymentsPrimarySurface } from "./payment-surfaces"
+import { CustomerCommandsSurface } from "./customer-surfaces"
+import { PaymentCommandsSurface, PaymentsPrimarySurface } from "./payment-surfaces"
 import { AddPropertyGroupSurface, AddPropertySurface, AddSharedPointSurface, PropertyCommandsSurface, PropertyGroupCommandsSurface, SharedPointCommandsSurface } from "./place-surfaces"
 import { PriceRowCommandsSurface, PriceRowsPrimarySurface, ProductCommandsSurface, ProductsPrimarySurface } from "./pricing-surfaces"
 import { PROVIDER_PRICES_LIST, SERVICE_AREAS_LIST, SETTLEMENTS_LIST, WEIGHTS_LIST } from "./provider-money-lists"
@@ -169,7 +170,7 @@ export const COMMAND_SURFACES: Readonly<Record<string, CommandSurface>> = {
   // lines imported; a payment matched and its match undone in its details,
   // never edited. A customer's details offer its statement beside its Edit.
   "commercial.payments": { primary: PaymentsPrimarySurface, rowActions: PaymentCommandsSurface, list: PAYMENTS_LIST },
-  "customers.contacts": { primary: "form", rowActions: CustomerStatementSurface, genericEdit: true },
+  "customers.contacts": { primary: "form", rowActions: CustomerCommandsSurface, genericEdit: true },
   // Slice 11 (#186): an award by its own form, its assignments in its
   // details; a price's fee moved by Apply index alone; a settlement by the
   // commands its status moves by; an unload by its reviews, the desk's queue

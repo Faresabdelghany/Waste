@@ -112,13 +112,22 @@ export const factorFormOf = (factor: FuelEmissionFactor): FactorForm => ({
   lastDay: factor.validTo === null ? "" : lastDayIn(factor.validTo),
 })
 
+/** The end a factor's form spells by its last day in force, as the wire's first day out: null for none, undefined where the day will not do. The waste fractions' factors read it too (waste-emission-factors.ts). */
+export function factorEndOf(lastDay: string, validFrom: string): string | null | undefined {
+  const day = lastDay.trim()
+  if (day === "") return null
+  if (!ISO_DAY.test(day) || day < validFrom) return undefined
+  return firstDayOut(day)
+}
+
 /** The end a form spells, as the wire's first day out, or the refusal. */
 function endOf(form: FactorForm, validFrom: string): string | null | FactorRefusal {
-  const lastDay = form.lastDay.trim()
-  if (lastDay === "") return null
-  if (!ISO_DAY.test(lastDay) || lastDay < validFrom) return { field: "lastDay", message: FACTOR_LAST_DAY_SENTENCE }
-  return firstDayOut(lastDay)
+  const end = factorEndOf(form.lastDay, validFrom)
+  return end === undefined ? { field: "lastDay", message: FACTOR_LAST_DAY_SENTENCE } : end
 }
+
+/** A factor's period as a pane's table reads it: "From 2025-01-01", or its first and last day in force. */
+export const factorPeriodLabel = (factor: { validFrom: string; validTo: string | null }): string => (factor.validTo === null ? `From ${factor.validFrom}` : `${factor.validFrom} to ${lastDayIn(factor.validTo)}`)
 
 /** The body a new factor's form becomes, or the first field the API would refuse. */
 export function factorCreateBodyOf(form: FactorForm): FuelEmissionFactorCreate | FactorRefusal {

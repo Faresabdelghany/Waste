@@ -7,8 +7,9 @@
 // beside them are. A factor's fuel, number and start are its period's own:
 // the edit moves its end and its source, and a revised number is the next
 // period's factor, added from the day the old one ends. The form and the
-// bodies it becomes are lib/data/fleet-emissions.ts'. Offered on the Pilot
-// alone.
+// bodies it becomes are lib/data/fleet-emissions.ts'. Below them, the waste
+// fractions' factors (M13 of #293), which a customer's sustainability report
+// is measured by (waste-factors-section.tsx). Offered on the Pilot alone.
 
 import { useState, type FormEvent } from "react"
 import { PencilSimple, Plus } from "@phosphor-icons/react/dist/ssr"
@@ -18,6 +19,7 @@ import type { FuelEmissionFactor } from "@waste/contracts/emissions"
 import { FUEL_TYPES, type FuelType } from "@waste/domain/resources/vocabulary"
 import { useReport } from "@/components/insight/use-report"
 import { AssetPanelShell, EmptyRow, RecordsSection } from "@/components/settings/asset-management-settings"
+import { WasteFactorsSection } from "@/components/settings/waste-factors-section"
 import { Button } from "@/components/ui/button"
 import { Dialog, DialogContent, DialogDescription, DialogFooter, DialogHeader, DialogTitle } from "@/components/ui/dialog"
 import { Input } from "@/components/ui/input"
@@ -28,11 +30,12 @@ import { Textarea } from "@/components/ui/textarea"
 import { useApiClient, useApiSession } from "@/components/waste/api-session-store"
 import { create, listAll, patch } from "@/lib/api/client"
 import { problemSentence } from "@/lib/api/problem"
-import { dayIn, lastDayIn } from "@/lib/api/records/planning"
+import { dayIn } from "@/lib/api/records/planning"
 import { problemOfError } from "@/lib/api/records/server-records"
 import {
   factorAccessOf,
   factorCreateBodyOf,
+  factorPeriodLabel,
   factorFormOf,
   factorPatchBodyOf,
   factorSentence,
@@ -164,6 +167,8 @@ export function EmissionFactorsSettings() {
         </div>
       </RecordsSection>
 
+      <WasteFactorsSection />
+
       <Dialog open={editing !== null} onOpenChange={(next) => !next && !saving && setEditing(null)}>
         <DialogContent className="sm:max-w-lg">
           {editing !== null && <FactorDialogForm editing={editing} refusal={refusal} saving={saving} onChange={change} onCancel={() => setEditing(null)} onSubmit={save} />}
@@ -173,8 +178,7 @@ export function EmissionFactorsSettings() {
   )
 }
 
-/** A factor's period as the table reads it: "From 2025-01-01", or its first and last day in force. */
-const periodOf = (factor: Pick<FuelEmissionFactor, "validFrom" | "validTo">) => (factor.validTo === null ? `From ${factor.validFrom}` : `${factor.validFrom} to ${lastDayIn(factor.validTo)}`)
+const periodOf = factorPeriodLabel
 
 function FactorDialogForm({
   editing,
