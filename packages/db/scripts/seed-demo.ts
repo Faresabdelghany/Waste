@@ -49,6 +49,7 @@ const configuration = [
   count(counts.routeSchemes, "route scheme"),
   count(counts.priceLists, "price list"),
   count(counts.priceListRows, "price row"),
+  count(counts.contaminantCodes, "contaminant code"),
 ].join(", ")
 console.log(
   `@waste/db: demo company ${companyId} on ${new URL(url).hostname} holds ${held}; ` +

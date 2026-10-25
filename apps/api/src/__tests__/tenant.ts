@@ -65,6 +65,7 @@ import {
   sharedCollectionPointMember,
 } from "@waste/db/schema/customers"
 import { company, project, serviceProvider } from "@waste/db/schema/organisation"
+import { contaminantCode, contaminantCodeFraction, pickupExceptionRule, pickupExceptionRuleStep } from "@waste/db/schema/pickup-exceptions"
 import { planningArea, planningAreaBoundary } from "@waste/db/schema/planning-areas"
 import { alert, ticket, ticketEvent, ticketSla } from "@waste/db/schema/resolution"
 import { collectionGroup, collectionGroupContainer, collectionGroupContainerType, collectionGroupFraction, routeScheme } from "@waste/db/schema/route-schemes"
@@ -342,6 +343,9 @@ export async function dropTenant(pool: Database, companyId: string, owner?: Data
     await tx.delete(serviceArea).where(eq(serviceArea.companyId, companyId))
     await tx.delete(priceListRow).where(eq(priceListRow.companyId, companyId))
     await tx.delete(ticketKindProduct).where(eq(ticketKindProduct.companyId, companyId))
+    // The Pickup Exceptions' rules (M5 of #293): a step names a product, so the ladders go before the products.
+    await tx.delete(pickupExceptionRuleStep).where(eq(pickupExceptionRuleStep.companyId, companyId))
+    await tx.delete(pickupExceptionRule).where(eq(pickupExceptionRule.companyId, companyId))
     await tx.delete(alert).where(eq(alert.companyId, companyId))
     await tx.delete(ticket).where(eq(ticket.companyId, companyId))
     await tx.delete(outboxEvent).where(eq(outboxEvent.companyId, companyId))
@@ -356,6 +360,9 @@ export async function dropTenant(pool: Database, companyId: string, owner?: Data
     await tx.delete(plan).where(eq(plan.companyId, companyId))
     await tx.delete(session).where(eq(session.companyId, companyId))
     await tx.delete(pickup).where(eq(pickup.companyId, companyId))
+    // A stop and its proofs name the code they were tagged with, so the codes go after them, before the fractions they apply to.
+    await tx.delete(contaminantCodeFraction).where(eq(contaminantCodeFraction.companyId, companyId))
+    await tx.delete(contaminantCode).where(eq(contaminantCode.companyId, companyId))
     await tx.delete(generationMatch).where(eq(generationMatch.companyId, companyId))
     await tx.delete(route).where(eq(route.companyId, companyId))
     await tx.delete(generationRun).where(eq(generationRun.companyId, companyId))

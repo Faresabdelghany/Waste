@@ -21,7 +21,8 @@
 // scheme and group, and whose run Execution's `route` names back, which is
 // an import in execution.ts and no reordering here. What is exported here is
 // what `pnpm db:generate` sees — the CSV import's run and its rows (#291
-// slice 12, migration 0018) last — and what the hand-written gate
+// slice 12, migration 0018), then the Pickup Exceptions' codes and rules (M5
+// of #293), which Execution's pickup and proof name back — and what the hand-written gate
 // (__tests__/hand-written.test.ts) holds to its fence and trigger, or to its
 // fence and revoke for a ledger. The Drop-off Points (Issue #293, M3) come
 // last: four tables over the project, the fractions and nothing later.
@@ -50,3 +51,4 @@ export * from "./sorting-guide"
 export * from "./audit"
 export * from "./imports"
 export * from "./drop-off-points"
+export * from "./pickup-exceptions"

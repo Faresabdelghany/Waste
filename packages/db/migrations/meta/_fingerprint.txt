@@ -777,6 +777,46 @@ index wms.container_type_vehicle_type container_type_vehicle_type_pkey CREATE UN
 trigger wms.container_type_vehicle_type container_type_vehicle_type_audit_trail enabled=O CREATE TRIGGER container_type_vehicle_type_audit_trail AFTER INSERT OR DELETE OR UPDATE ON wms.container_type_vehicle_type FOR EACH ROW EXECUTE FUNCTION wms.audit_row('vehicle_type', 'vehicle_type_id')
 trigger wms.container_type_vehicle_type container_type_vehicle_type_touch_updated_at enabled=O CREATE TRIGGER container_type_vehicle_type_touch_updated_at BEFORE UPDATE ON wms.container_type_vehicle_type FOR EACH ROW EXECUTE FUNCTION wms.touch_updated_at()
 policy wms.container_type_vehicle_type container_type_vehicle_type_tenant_fence permissive ALL to=wms_api using=(company_id = ( SELECT wms.current_company_id() AS current_company_id)) check=(company_id = ( SELECT wms.current_company_id() AS current_company_id))
+relation wms.contaminant_code kind=table owner=<owner> persistence=p rls=true force-rls=true replica-identity=d acl=[<owner>=DELETE,INSERT,MAINTAIN,REFERENCES,SELECT,TRIGGER,TRUNCATE,UPDATE/<owner> wms_api=DELETE,INSERT,SELECT,UPDATE/<owner> wms_worker=SELECT/<owner>]
+column wms.contaminant_code 1 id uuid not-null default=wms.uuidv7()
+column wms.contaminant_code 2 company_id uuid not-null
+column wms.contaminant_code 3 created_at timestamp with time zone not-null default=now()
+column wms.contaminant_code 4 updated_at timestamp with time zone not-null default=now()
+column wms.contaminant_code 5 code text not-null
+column wms.contaminant_code 6 name text not-null
+column wms.contaminant_code 7 status text not-null default='active'::text
+constraint wms.contaminant_code contaminant_code_code_key UNIQUE (company_id, code)
+constraint wms.contaminant_code contaminant_code_code_lowercase CHECK ((code = lower(code)))
+constraint wms.contaminant_code contaminant_code_company_id_fk FOREIGN KEY (company_id) REFERENCES wms.company(id)
+constraint wms.contaminant_code contaminant_code_name_key UNIQUE (company_id, name)
+constraint wms.contaminant_code contaminant_code_pkey PRIMARY KEY (id)
+constraint wms.contaminant_code contaminant_code_status_one_of CHECK ((status = ANY (ARRAY['active'::text, 'inactive'::text])))
+constraint wms.contaminant_code contaminant_code_tenant_key UNIQUE (company_id, id)
+index wms.contaminant_code contaminant_code_code_key CREATE UNIQUE INDEX contaminant_code_code_key ON wms.contaminant_code USING btree (company_id, code)
+index wms.contaminant_code contaminant_code_name_key CREATE UNIQUE INDEX contaminant_code_name_key ON wms.contaminant_code USING btree (company_id, name)
+index wms.contaminant_code contaminant_code_pkey CREATE UNIQUE INDEX contaminant_code_pkey ON wms.contaminant_code USING btree (id)
+index wms.contaminant_code contaminant_code_tenant_key CREATE UNIQUE INDEX contaminant_code_tenant_key ON wms.contaminant_code USING btree (company_id, id)
+trigger wms.contaminant_code contaminant_code_audit_trail enabled=O CREATE TRIGGER contaminant_code_audit_trail AFTER INSERT OR DELETE OR UPDATE ON wms.contaminant_code FOR EACH ROW EXECUTE FUNCTION wms.audit_row('', '')
+trigger wms.contaminant_code contaminant_code_touch_updated_at enabled=O CREATE TRIGGER contaminant_code_touch_updated_at BEFORE UPDATE ON wms.contaminant_code FOR EACH ROW EXECUTE FUNCTION wms.touch_updated_at()
+policy wms.contaminant_code contaminant_code_tenant_fence permissive ALL to=wms_api using=(company_id = ( SELECT wms.current_company_id() AS current_company_id)) check=(company_id = ( SELECT wms.current_company_id() AS current_company_id))
+relation wms.contaminant_code_fraction kind=table owner=<owner> persistence=p rls=true force-rls=true replica-identity=d acl=[<owner>=DELETE,INSERT,MAINTAIN,REFERENCES,SELECT,TRIGGER,TRUNCATE,UPDATE/<owner> wms_api=DELETE,INSERT,SELECT,UPDATE/<owner> wms_worker=SELECT/<owner>]
+column wms.contaminant_code_fraction 1 id uuid not-null default=wms.uuidv7()
+column wms.contaminant_code_fraction 2 company_id uuid not-null
+column wms.contaminant_code_fraction 3 created_at timestamp with time zone not-null default=now()
+column wms.contaminant_code_fraction 4 updated_at timestamp with time zone not-null default=now()
+column wms.contaminant_code_fraction 5 contaminant_code_id uuid not-null
+column wms.contaminant_code_fraction 6 waste_fraction_id uuid not-null
+constraint wms.contaminant_code_fraction contaminant_code_fraction_company_id_fk FOREIGN KEY (company_id) REFERENCES wms.company(id)
+constraint wms.contaminant_code_fraction contaminant_code_fraction_contaminant_code_id_fk FOREIGN KEY (company_id, contaminant_code_id) REFERENCES wms.contaminant_code(company_id, id)
+constraint wms.contaminant_code_fraction contaminant_code_fraction_membership_key UNIQUE (company_id, contaminant_code_id, waste_fraction_id)
+constraint wms.contaminant_code_fraction contaminant_code_fraction_pkey PRIMARY KEY (id)
+constraint wms.contaminant_code_fraction contaminant_code_fraction_waste_fraction_id_fk FOREIGN KEY (company_id, waste_fraction_id) REFERENCES wms.waste_fraction(company_id, id)
+index wms.contaminant_code_fraction contaminant_code_fraction_membership_key CREATE UNIQUE INDEX contaminant_code_fraction_membership_key ON wms.contaminant_code_fraction USING btree (company_id, contaminant_code_id, waste_fraction_id)
+index wms.contaminant_code_fraction contaminant_code_fraction_pkey CREATE UNIQUE INDEX contaminant_code_fraction_pkey ON wms.contaminant_code_fraction USING btree (id)
+index wms.contaminant_code_fraction contaminant_code_fraction_waste_fraction_id_idx CREATE INDEX contaminant_code_fraction_waste_fraction_id_idx ON wms.contaminant_code_fraction USING btree (company_id, waste_fraction_id)
+trigger wms.contaminant_code_fraction contaminant_code_fraction_audit_trail enabled=O CREATE TRIGGER contaminant_code_fraction_audit_trail AFTER INSERT OR DELETE OR UPDATE ON wms.contaminant_code_fraction FOR EACH ROW EXECUTE FUNCTION wms.audit_row('contaminant_code', 'contaminant_code_id')
+trigger wms.contaminant_code_fraction contaminant_code_fraction_touch_updated_at enabled=O CREATE TRIGGER contaminant_code_fraction_touch_updated_at BEFORE UPDATE ON wms.contaminant_code_fraction FOR EACH ROW EXECUTE FUNCTION wms.touch_updated_at()
+policy wms.contaminant_code_fraction contaminant_code_fraction_tenant_fence permissive ALL to=wms_api using=(company_id = ( SELECT wms.current_company_id() AS current_company_id)) check=(company_id = ( SELECT wms.current_company_id() AS current_company_id))
 relation wms.customer kind=table owner=<owner> persistence=p rls=true force-rls=true replica-identity=d acl=[<owner>=DELETE,INSERT,MAINTAIN,REFERENCES,SELECT,TRIGGER,TRUNCATE,UPDATE/<owner> wms_api=DELETE,INSERT,SELECT,UPDATE/<owner> wms_worker=SELECT/<owner>]
 column wms.customer 1 id uuid not-null default=wms.uuidv7()
 column wms.customer 2 company_id uuid not-null
@@ -1301,9 +1341,12 @@ CASE
     WHEN ((status = 'planned'::text) AND (service = ANY (ARRAY['remove'::text, 'swap'::text]))) THEN container_id
     ELSE NULL::uuid
 END)
+column wms.pickup 24 contaminant_code_id uuid
 constraint wms.pickup pickup_company_id_fk FOREIGN KEY (company_id) REFERENCES wms.company(id)
 constraint wms.pickup pickup_container_id_fk FOREIGN KEY (company_id, project_id, container_id) REFERENCES wms.container(company_id, project_id, id)
 constraint wms.pickup pickup_container_shape CHECK (((container_id IS NOT NULL) OR (origin = 'office'::text)))
+constraint wms.pickup pickup_contaminant_code_id_fk FOREIGN KEY (company_id, contaminant_code_id) REFERENCES wms.contaminant_code(company_id, id)
+constraint wms.pickup pickup_contaminant_code_shape CHECK (((contaminant_code_id IS NULL) OR (reason = 'contamination'::text) OR (status = 'completed'::text)))
 constraint wms.pickup pickup_origin_one_of CHECK ((origin = ANY (ARRAY['generation'::text, 'office'::text])))
 constraint wms.pickup pickup_outcome_shape CHECK (((status <> 'planned'::text) = (outcome_at IS NOT NULL)))
 constraint wms.pickup pickup_pkey PRIMARY KEY (id)
@@ -1328,6 +1371,7 @@ constraint wms.pickup pickup_warehouse_id_fk FOREIGN KEY (company_id, project_id
 constraint wms.pickup pickup_warehouse_shape CHECK (((service = ANY (ARRAY['remove'::text, 'swap'::text])) = (warehouse_id IS NOT NULL)))
 constraint wms.pickup pickup_waste_fraction_id_fk FOREIGN KEY (company_id, waste_fraction_id) REFERENCES wms.waste_fraction(company_id, id)
 index wms.pickup pickup_container_id_idx CREATE INDEX pickup_container_id_idx ON wms.pickup USING btree (company_id, container_id)
+index wms.pickup pickup_contaminant_code_id_idx CREATE INDEX pickup_contaminant_code_id_idx ON wms.pickup USING btree (company_id, contaminant_code_id)
 index wms.pickup pickup_pkey CREATE UNIQUE INDEX pickup_pkey ON wms.pickup USING btree (id)
 index wms.pickup pickup_project_id_idx CREATE INDEX pickup_project_id_idx ON wms.pickup USING btree (company_id, project_id)
 index wms.pickup pickup_property_id_idx CREATE INDEX pickup_property_id_idx ON wms.pickup USING btree (company_id, property_id)
@@ -1343,6 +1387,65 @@ index wms.pickup pickup_warehouse_id_idx CREATE INDEX pickup_warehouse_id_idx ON
 index wms.pickup pickup_waste_fraction_id_idx CREATE INDEX pickup_waste_fraction_id_idx ON wms.pickup USING btree (company_id, waste_fraction_id)
 trigger wms.pickup pickup_touch_updated_at enabled=O CREATE TRIGGER pickup_touch_updated_at BEFORE UPDATE ON wms.pickup FOR EACH ROW EXECUTE FUNCTION wms.touch_updated_at()
 policy wms.pickup pickup_tenant_fence permissive ALL to=wms_api using=(company_id = ( SELECT wms.current_company_id() AS current_company_id)) check=(company_id = ( SELECT wms.current_company_id() AS current_company_id))
+relation wms.pickup_exception_rule kind=table owner=<owner> persistence=p rls=true force-rls=true replica-identity=d acl=[<owner>=DELETE,INSERT,MAINTAIN,REFERENCES,SELECT,TRIGGER,TRUNCATE,UPDATE/<owner> wms_api=DELETE,INSERT,SELECT,UPDATE/<owner> wms_worker=SELECT/<owner>]
+column wms.pickup_exception_rule 1 id uuid not-null default=wms.uuidv7()
+column wms.pickup_exception_rule 2 company_id uuid not-null
+column wms.pickup_exception_rule 3 project_id uuid not-null
+column wms.pickup_exception_rule 4 created_at timestamp with time zone not-null default=now()
+column wms.pickup_exception_rule 5 updated_at timestamp with time zone not-null default=now()
+column wms.pickup_exception_rule 6 valid_from date not-null
+column wms.pickup_exception_rule 7 valid_to date
+column wms.pickup_exception_rule 8 outcome text not-null
+column wms.pickup_exception_rule 9 reason text
+column wms.pickup_exception_rule 10 contaminant_code_id uuid
+column wms.pickup_exception_rule 11 free_count integer not-null
+column wms.pickup_exception_rule 12 window_days integer not-null
+column wms.pickup_exception_rule 13 match_key text not-null generated=(((((outcome || '/'::text) || COALESCE(reason, '*'::text)) || '/'::text) || COALESCE((contaminant_code_id)::text, '*'::text)))
+constraint wms.pickup_exception_rule pickup_exception_rule_code_shape CHECK (((contaminant_code_id IS NULL) OR (reason IS NULL) OR (reason = 'contamination'::text)))
+constraint wms.pickup_exception_rule pickup_exception_rule_company_id_fk FOREIGN KEY (company_id) REFERENCES wms.company(id)
+constraint wms.pickup_exception_rule pickup_exception_rule_contaminant_code_id_fk FOREIGN KEY (company_id, contaminant_code_id) REFERENCES wms.contaminant_code(company_id, id)
+constraint wms.pickup_exception_rule pickup_exception_rule_free_count_not_negative CHECK ((free_count >= 0))
+constraint wms.pickup_exception_rule pickup_exception_rule_no_overlap EXCLUDE USING gist (company_id WITH =, project_id WITH =, match_key WITH =, daterange(valid_from, valid_to, '[)'::text) WITH &&)
+constraint wms.pickup_exception_rule pickup_exception_rule_outcome_one_of CHECK ((outcome = ANY (ARRAY['completed'::text, 'skipped'::text, 'failed'::text])))
+constraint wms.pickup_exception_rule pickup_exception_rule_pkey PRIMARY KEY (id)
+constraint wms.pickup_exception_rule pickup_exception_rule_project_id_fk FOREIGN KEY (company_id, project_id) REFERENCES wms.project(company_id, id)
+constraint wms.pickup_exception_rule pickup_exception_rule_project_key UNIQUE (company_id, project_id, id)
+constraint wms.pickup_exception_rule pickup_exception_rule_reason_one_of CHECK ((reason = ANY (ARRAY['contamination'::text, 'not-presented'::text, 'inaccessible'::text, 'other'::text])))
+constraint wms.pickup_exception_rule pickup_exception_rule_reason_shape CHECK (((outcome <> 'completed'::text) OR (reason IS NULL)))
+constraint wms.pickup_exception_rule pickup_exception_rule_validity CHECK (((valid_to IS NULL) OR (valid_to > valid_from)))
+constraint wms.pickup_exception_rule pickup_exception_rule_window_days_range CHECK (((window_days >= 1) AND (window_days <= 3660)))
+index wms.pickup_exception_rule pickup_exception_rule_contaminant_code_id_idx CREATE INDEX pickup_exception_rule_contaminant_code_id_idx ON wms.pickup_exception_rule USING btree (company_id, contaminant_code_id)
+index wms.pickup_exception_rule pickup_exception_rule_no_overlap CREATE INDEX pickup_exception_rule_no_overlap ON wms.pickup_exception_rule USING gist (company_id, project_id, match_key, daterange(valid_from, valid_to, '[)'::text))
+index wms.pickup_exception_rule pickup_exception_rule_pkey CREATE UNIQUE INDEX pickup_exception_rule_pkey ON wms.pickup_exception_rule USING btree (id)
+index wms.pickup_exception_rule pickup_exception_rule_project_id_idx CREATE INDEX pickup_exception_rule_project_id_idx ON wms.pickup_exception_rule USING btree (company_id, project_id)
+index wms.pickup_exception_rule pickup_exception_rule_project_key CREATE UNIQUE INDEX pickup_exception_rule_project_key ON wms.pickup_exception_rule USING btree (company_id, project_id, id)
+trigger wms.pickup_exception_rule pickup_exception_rule_audit_trail enabled=O CREATE TRIGGER pickup_exception_rule_audit_trail AFTER INSERT OR DELETE OR UPDATE ON wms.pickup_exception_rule FOR EACH ROW EXECUTE FUNCTION wms.audit_row('', '')
+trigger wms.pickup_exception_rule pickup_exception_rule_touch_updated_at enabled=O CREATE TRIGGER pickup_exception_rule_touch_updated_at BEFORE UPDATE ON wms.pickup_exception_rule FOR EACH ROW EXECUTE FUNCTION wms.touch_updated_at()
+policy wms.pickup_exception_rule pickup_exception_rule_tenant_fence permissive ALL to=wms_api using=(company_id = ( SELECT wms.current_company_id() AS current_company_id)) check=(company_id = ( SELECT wms.current_company_id() AS current_company_id))
+relation wms.pickup_exception_rule_step kind=table owner=<owner> persistence=p rls=true force-rls=true replica-identity=d acl=[<owner>=DELETE,INSERT,MAINTAIN,REFERENCES,SELECT,TRIGGER,TRUNCATE,UPDATE/<owner> wms_api=DELETE,INSERT,SELECT,UPDATE/<owner> wms_worker=SELECT/<owner>]
+column wms.pickup_exception_rule_step 1 id uuid not-null default=wms.uuidv7()
+column wms.pickup_exception_rule_step 2 company_id uuid not-null
+column wms.pickup_exception_rule_step 3 project_id uuid not-null
+column wms.pickup_exception_rule_step 4 created_at timestamp with time zone not-null default=now()
+column wms.pickup_exception_rule_step 5 updated_at timestamp with time zone not-null default=now()
+column wms.pickup_exception_rule_step 6 rule_id uuid not-null
+column wms.pickup_exception_rule_step 7 position integer not-null
+column wms.pickup_exception_rule_step 8 product_id uuid not-null
+constraint wms.pickup_exception_rule_step pickup_exception_rule_step_company_id_fk FOREIGN KEY (company_id) REFERENCES wms.company(id)
+constraint wms.pickup_exception_rule_step pickup_exception_rule_step_pkey PRIMARY KEY (id)
+constraint wms.pickup_exception_rule_step pickup_exception_rule_step_position_positive CHECK (("position" > 0))
+constraint wms.pickup_exception_rule_step pickup_exception_rule_step_product_id_fk FOREIGN KEY (company_id, project_id, product_id) REFERENCES wms.product(company_id, project_id, id)
+constraint wms.pickup_exception_rule_step pickup_exception_rule_step_project_id_fk FOREIGN KEY (company_id, project_id) REFERENCES wms.project(company_id, id)
+constraint wms.pickup_exception_rule_step pickup_exception_rule_step_project_key UNIQUE (company_id, project_id, id)
+constraint wms.pickup_exception_rule_step pickup_exception_rule_step_rule_id_fk FOREIGN KEY (company_id, project_id, rule_id) REFERENCES wms.pickup_exception_rule(company_id, project_id, id)
+constraint wms.pickup_exception_rule_step pickup_exception_rule_step_rule_position_key UNIQUE (company_id, rule_id, "position")
+index wms.pickup_exception_rule_step pickup_exception_rule_step_pkey CREATE UNIQUE INDEX pickup_exception_rule_step_pkey ON wms.pickup_exception_rule_step USING btree (id)
+index wms.pickup_exception_rule_step pickup_exception_rule_step_product_id_idx CREATE INDEX pickup_exception_rule_step_product_id_idx ON wms.pickup_exception_rule_step USING btree (company_id, product_id)
+index wms.pickup_exception_rule_step pickup_exception_rule_step_project_key CREATE UNIQUE INDEX pickup_exception_rule_step_project_key ON wms.pickup_exception_rule_step USING btree (company_id, project_id, id)
+index wms.pickup_exception_rule_step pickup_exception_rule_step_rule_position_key CREATE UNIQUE INDEX pickup_exception_rule_step_rule_position_key ON wms.pickup_exception_rule_step USING btree (company_id, rule_id, "position")
+trigger wms.pickup_exception_rule_step pickup_exception_rule_step_audit_trail enabled=O CREATE TRIGGER pickup_exception_rule_step_audit_trail AFTER INSERT OR DELETE OR UPDATE ON wms.pickup_exception_rule_step FOR EACH ROW EXECUTE FUNCTION wms.audit_row('pickup_exception_rule', 'rule_id')
+trigger wms.pickup_exception_rule_step pickup_exception_rule_step_touch_updated_at enabled=O CREATE TRIGGER pickup_exception_rule_step_touch_updated_at BEFORE UPDATE ON wms.pickup_exception_rule_step FOR EACH ROW EXECUTE FUNCTION wms.touch_updated_at()
+policy wms.pickup_exception_rule_step pickup_exception_rule_step_tenant_fence permissive ALL to=wms_api using=(company_id = ( SELECT wms.current_company_id() AS current_company_id)) check=(company_id = ( SELECT wms.current_company_id() AS current_company_id))
 relation wms.plan kind=table owner=<owner> persistence=p rls=true force-rls=true replica-identity=d acl=[<owner>=DELETE,INSERT,MAINTAIN,REFERENCES,SELECT,TRIGGER,TRUNCATE,UPDATE/<owner> wms_api=DELETE,INSERT,SELECT,UPDATE/<owner> wms_worker=SELECT/<owner>]
 column wms.plan 1 id uuid not-null default=wms.uuidv7()
 column wms.plan 2 company_id uuid not-null
@@ -1658,7 +1761,10 @@ column wms.proof_of_service 16 note text
 column wms.proof_of_service 17 weight_kg integer
 column wms.proof_of_service 18 object_key text
 column wms.proof_of_service 19 outcome text
+column wms.proof_of_service 20 contaminant_code_id uuid
 constraint wms.proof_of_service proof_of_service_company_id_fk FOREIGN KEY (company_id) REFERENCES wms.company(id)
+constraint wms.proof_of_service proof_of_service_contaminant_code_id_fk FOREIGN KEY (company_id, contaminant_code_id) REFERENCES wms.contaminant_code(company_id, id)
+constraint wms.proof_of_service proof_of_service_contaminant_code_shape CHECK (((contaminant_code_id IS NULL) OR (kind = ANY (ARRAY['completion'::text, 'skip'::text, 'failure'::text, 'correction'::text]))))
 constraint wms.proof_of_service proof_of_service_kind_one_of CHECK ((kind = ANY (ARRAY['arrival'::text, 'completion'::text, 'skip'::text, 'failure'::text, 'problem'::text, 'route-started'::text, 'route-ended'::text, 'photo'::text, 'weight'::text, 'signature'::text, 'note'::text, 'correction'::text])))
 constraint wms.proof_of_service proof_of_service_kind_shape CHECK (
 CASE kind
@@ -1690,6 +1796,7 @@ constraint wms.proof_of_service proof_of_service_route_id_session_id_fk FOREIGN 
 constraint wms.proof_of_service proof_of_service_session_shape CHECK (((source = 'driver-app'::text) = (session_id IS NOT NULL)))
 constraint wms.proof_of_service proof_of_service_source_one_of CHECK ((source = ANY (ARRAY['driver-app'::text, 'dispatch'::text, 'integration'::text])))
 constraint wms.proof_of_service proof_of_service_weight_kg_positive CHECK ((weight_kg > 0))
+index wms.proof_of_service proof_of_service_contaminant_code_id_idx CREATE INDEX proof_of_service_contaminant_code_id_idx ON wms.proof_of_service USING btree (company_id, contaminant_code_id)
 index wms.proof_of_service proof_of_service_pickup_id_idx CREATE INDEX proof_of_service_pickup_id_idx ON wms.proof_of_service USING btree (company_id, pickup_id)
 index wms.proof_of_service proof_of_service_pkey CREATE UNIQUE INDEX proof_of_service_pkey ON wms.proof_of_service USING btree (id)
 index wms.proof_of_service proof_of_service_project_id_idx CREATE INDEX proof_of_service_project_id_idx ON wms.proof_of_service USING btree (company_id, project_id)
@@ -3197,4 +3304,5 @@ journal 1792910180662 bdf348f115765c8b7211582f89fb81398b265de911665adda8a6b14839
 journal 1792911868439 ba0c23715adea091b0deb7cd195c022dd79454d665aa735400c2650e8638cb94
 journal 1792913386367 34a2cb79512e125e0463843dee394e142036f4dae9407646089ec12466c60342
 journal 1792915809470 e17c776f51a992baef9c8594f1ff2b410b37bcb23c15e78c96b74b886a583522
+journal 1792917191234 447d7c013b3af5ae6b94000e86c461c3e22e215a1431d130b99c6231385dfa0b
 pgboss-version 42

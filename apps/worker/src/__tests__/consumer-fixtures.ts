@@ -243,6 +243,7 @@ export function pickupPayload(tenant: ConsumerTenant, routeId: string, pickupId:
     origin: stop.container === null ? "office" : (stop.origin ?? "generation"),
     service: "empty",
     reason: stop.reason ?? null,
+    contaminantCodeId: null,
     note: stop.note ?? null,
     propertyId: place.id,
     sharedCollectionPointId: null,
@@ -278,6 +279,7 @@ export function proofPayload(tenant: ConsumerTenant, routeId: string, pickupId: 
     weightKg: null,
     objectKey: null,
     outcome: null,
+    contaminantCodeId: null,
   }
 }
 

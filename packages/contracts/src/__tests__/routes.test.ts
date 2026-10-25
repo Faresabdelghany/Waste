@@ -64,6 +64,7 @@ const pickup = {
   origin: "generation",
   service: "empty",
   reason: null,
+  contaminantCodeId: null,
   note: null,
   propertyId: ID,
   sharedCollectionPointId: null,

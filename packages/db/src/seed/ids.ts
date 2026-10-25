@@ -30,7 +30,9 @@ const BUCKET = "01a0d2a4-a280-7"
  * them — Planning's, Resources', Finance's — one kind per table that receives
  * rows (`collection_group_container_type` receives none and has none). That
  * is not the order the seed writes them in: Resources goes first, since
- * Planning's schemes and groups name its rows (demo.ts).
+ * Planning's schemes and groups name its rows (demo.ts). The Pickup
+ * Exceptions' contaminant codes and their fractions (M5 of #293) follow
+ * Finance's.
  */
 export const DEMO_KINDS = {
   company: 0x001,
@@ -74,6 +76,8 @@ export const DEMO_KINDS = {
   driver: 0x027,
   priceList: 0x028,
   priceListRow: 0x029,
+  contaminantCode: 0x02a,
+  contaminantCodeFraction: 0x02b,
 } as const
 
 export type DemoKind = keyof typeof DEMO_KINDS

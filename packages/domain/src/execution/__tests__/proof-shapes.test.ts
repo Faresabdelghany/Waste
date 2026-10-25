@@ -2,7 +2,7 @@ import assert from "node:assert/strict"
 import { describe, test } from "node:test"
 
 import { PROOF_SHAPES, proofShape, proofShapeIssue, type ProofRow } from "../proof-shapes"
-import { EXECUTION_SOURCES, PROOF_KINDS, type ProofKind } from "../vocabulary"
+import { CODED_PROOF_KINDS, EXECUTION_SOURCES, PROOF_KINDS, type ProofKind } from "../vocabulary"
 
 /** A row with every column given, from the driver's device. */
 const full: ProofRow = { pickupId: "pickup", reason: "inaccessible", objectKey: "c/r/k.jpg", weightKg: 148, outcome: "failed", note: "Gate locked", source: "driver-app" }
@@ -62,6 +62,17 @@ describe("PROOF_SHAPES", () => {
 })
 
 describe("proofShape", () => {
+  test("a contaminant code tags the proofs that record an outcome, and no other (M5 of #293)", () => {
+    for (const kind of PROOF_KINDS) {
+      const coded = { ...exemplar(kind), contaminantCodeId: "plastic-in-organic" }
+      const tags = (CODED_PROOF_KINDS as readonly ProofKind[]).includes(kind)
+      assert.equal(proofShape(kind, coded), tags, kind)
+      if (!tags) assert.equal(proofShapeIssue(kind, coded), `A ${kind} proof carries no contaminantCodeId`)
+    }
+    assert.deepEqual([...CODED_PROOF_KINDS], ["completion", "skip", "failure", "correction"])
+  })
+
+
   test("every kind's exemplar passes, and the same row under every other kind fails unless that kind carries the same", () => {
     for (const kind of PROOF_KINDS) {
       assert.equal(proofShape(kind, exemplar(kind)), true, kind)

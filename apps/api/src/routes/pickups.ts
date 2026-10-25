@@ -97,6 +97,7 @@ import type { ClockOptions } from "./scheme-groups"
 import { created, describeCreated, describeJson, IdParam, lockRow, stamp } from "./shared"
 import { bookTicket, requireBookableTicket, requireTicketForStop, ticketHearsOfStop } from "./ticket-stops"
 import { correctLedgerWork } from "./work-orders"
+import { requireTag } from "./pickup-exceptions"
 import { placeOf, refuseUnservedPlace, requireWarehouseTakesStock, type Place } from "./statuses"
 
 const MODULE = "route-studio.pickups"
@@ -581,7 +582,7 @@ export function pickupRoutes(guard: MiddlewareHandler<AuthEnv>, { now = () => ne
         operationId: "correctPickupOutcome",
         summary: "Correct a pickup's outcome",
         description:
-          "The audited correction: on a pickup that is `completed`, `skipped` or `failed` of a route that ran (`active` or `completed`), appends a `correction` Proof of Service — `source` dispatch, the caller's account, the new `outcome`, the reason where the outcome takes one, and the `note` saying why — and moves the pickup's status, `reason` and `outcomeAt`. The original proofs stand: what the driver recorded and what the office decided are both on the record. A `reason` goes with `skipped` or `failed` and not with `completed` (400 at `reason`). A `planned` pickup has no outcome to correct (409); a route that has not run is refused (409), and a cancelled one does not change. A stop booked to answer a ticket (O3c of #290) corrected to `completed` services its open ticket, and one corrected away from `completed` leaves the ticket as it stands with a comment saying so, the reopening the office's. A delivery, a removal or a swap (O3b of #290) corrected to `completed` makes its stock movements then, as the driver's completion would have, dated by the correction, an internal task telling the office where the ledger refuses them; one corrected away from `completed` leaves the movements standing and opens an internal task saying so, for the office to put the containers back if the work did not happen. Under the route's row lock; the `pickup-corrected` event is written in the same transaction, carrying the pickup with its proofs as answered here.",
+          "The audited correction: on a pickup that is `completed`, `skipped` or `failed` of a route that ran (`active` or `completed`), appends a `correction` Proof of Service — `source` dispatch, the caller's account, the new `outcome`, the reason where the outcome takes one, and the `note` saying why — and moves the pickup's status, `reason` and `outcomeAt`. The original proofs stand: what the driver recorded and what the office decided are both on the record. A `reason` goes with `skipped` or `failed` and not with `completed` (400 at `reason`). A `planned` pickup has no outcome to correct (409); a route that has not run is refused (409), and a cancelled one does not change. A stop booked to answer a ticket (O3c of #290) corrected to `completed` services its open ticket, and one corrected away from `completed` leaves the ticket as it stands with a comment saying so, the reopening the office's. A delivery, a removal or a swap (O3b of #290) corrected to `completed` makes its stock movements then, as the driver's completion would have, dated by the correction, an internal task telling the office where the ledger refuses them; one corrected away from `completed` leaves the movements standing and opens an internal task saying so, for the office to put the containers back if the work did not happen. Under the route's row lock; the `pickup-corrected` event is written in the same transaction, carrying the pickup with its proofs as answered here. Since M5 of #293 the correction states the stop's contaminant code too, on the stop and on the correction proof: `contaminantCodeId` goes with contamination or with a completion (400 at `contaminantCodeId`) and names one of the company's codes (400); a code new to the stop applies to its fraction where the code names fractions (400) and is active (409, `The contaminant code … is retired; a tag names an active one`), while the stop's own code is kept whatever has happened to it since. Null untags; absent keeps the stop's code where the corrected outcome still takes one — contamination, or a completion — and drops it where it does not.",
         security: BEARER_SECURITY,
         responses: {
           200: describeJson("The pickup as corrected, with its proofs, the correction last.", PickupDetail),
@@ -596,7 +597,7 @@ export function pickupRoutes(guard: MiddlewareHandler<AuthEnv>, { now = () => ne
       validate("json", PickupCorrection),
       async (c) => {
         const { id } = c.req.valid("param")
-        const { outcome, reason, note } = c.req.valid("json")
+        const { outcome, reason, note, contaminantCodeId } = c.req.valid("json")
         const tx = c.get("tx")
         const principal = c.get("principal")
         const { current, parent } = await lockedPickup(tx, principal, id)
@@ -604,10 +605,13 @@ export function pickupRoutes(guard: MiddlewareHandler<AuthEnv>, { now = () => ne
         const transition = pickupCorrection(current.status as PickupStatus, outcome, current.position)
         if (transition.kind === "refuse") throw problem(409, { detail: transition.sentence })
         if (transition.kind !== "move") throw new Error(`a correction of pickup ${id} neither moved nor refused`)
+        // The code the stop is tagged with (M5 of #293): a code named is held to the company's, for its fraction, and active where it is new to the stop; null untags; absent keeps the stop's tag where the new outcome still takes one — a correction of the note or the reason leaves a tag it never mentioned — and drops it where it does not.
+        await requireTag(tx, principal.companyId, current, contaminantCodeId)
+        const tagged = contaminantCodeId !== undefined ? contaminantCodeId : outcome === "completed" || reason === "contamination" ? current.contaminantCodeId : null
         const at = now()
         const [row] = await tx
           .update(pickup)
-          .set({ status: transition.to, reason: reason ?? null, outcomeAt: at })
+          .set({ status: transition.to, reason: reason ?? null, outcomeAt: at, contaminantCodeId: tagged })
           .where(and(pickupScope(principal), eq(pickup.id, id)))
           .returning(pickupColumns)
         if (row === undefined) throw noSuchPickup(id)
@@ -625,6 +629,7 @@ export function pickupRoutes(guard: MiddlewareHandler<AuthEnv>, { now = () => ne
           reason: reason ?? null,
           note,
           outcome,
+          contaminantCodeId: tagged,
         })
         // A ledger work order's movements follow its completion (O3b of #290): a correction to completed makes them, one away from completed tells the office they stand.
         await correctLedgerWork(tx, principal, row.id, { from: current.status as PickupStatus, to: transition.to }, at)

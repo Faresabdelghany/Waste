@@ -89,6 +89,7 @@ import { applyFinance, FINANCE_COUNTS, FINANCE_IDS, type FinanceCounts } from ".
 import { DEMO_COMPANY_ID, DEMO_PROJECT_IDS, DEMO_SERVICE_PROVIDER_IDS, DEMO_USER_IDS } from "./ids"
 import { applyPlanning, PLANNING_COUNTS, PLANNING_IDS, type PlanningCounts } from "./planning"
 import { applyRegistry, REGISTRY_COUNTS, REGISTRY_IDS, type RegistryCounts } from "./registry"
+import { applyPickupExceptions, PICKUP_EXCEPTIONS_COUNTS, PICKUP_EXCEPTIONS_IDS, type PickupExceptionsCounts } from "./pickup-exceptions"
 import { applyResources, RESOURCES_COUNTS, RESOURCES_IDS, type ResourcesCounts } from "./resources"
 import { upsertOwned } from "./upsert"
 
@@ -124,6 +125,7 @@ export const DEMO_IDS = {
   },
   registry: REGISTRY_IDS,
   resources: RESOURCES_IDS,
+  pickupExceptions: PICKUP_EXCEPTIONS_IDS,
   planning: PLANNING_IDS,
   finance: FINANCE_IDS,
 } as const
@@ -295,7 +297,7 @@ const PROVIDER_ACCESS: (typeof serviceProviderAccess.$inferInsert)[] = [
   },
 ]
 
-/** What the seed says the company holds: Organisation & Access by name, then the Registry's fifteen tables and the configuration's twenty. */
+/** What the seed says the company holds: Organisation & Access by name, then the Registry's fifteen tables, the configuration's twenty, and the contaminant codes' two (M5 of #293). */
 export type DemoSeedCounts = {
   projects: number
   serviceProviders: number
@@ -307,7 +309,8 @@ export type DemoSeedCounts = {
 } & RegistryCounts &
   ResourcesCounts &
   PlanningCounts &
-  FinanceCounts
+  FinanceCounts &
+  PickupExceptionsCounts
 
 export type DemoSeedReport = {
   companyId: string
@@ -328,6 +331,7 @@ const COUNTS: DemoSeedCounts = {
   ...RESOURCES_COUNTS,
   ...PLANNING_COUNTS,
   ...FINANCE_COUNTS,
+  ...PICKUP_EXCEPTIONS_COUNTS,
 }
 
 const COMPANY_COLUMNS = [company.name, company.legalName, company.registrationNumber, company.country, company.status]
@@ -455,6 +459,8 @@ export async function applyDemo(tx: Tx): Promise<number> {
   changed += await applyResources(tx)
   changed += await applyPlanning(tx)
   changed += await applyFinance(tx)
+  // The contaminant codes (M5 of #293) name the Registry's fractions and nothing after it.
+  changed += await applyPickupExceptions(tx)
 
   return changed
 }

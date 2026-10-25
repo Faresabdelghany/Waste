@@ -58,6 +58,7 @@ import { dropOffPoint, dropOffPointException, dropOffPointFraction, dropOffPoint
 import { customer, property, propertyGroup, propertyGroupMember, propertyParty, sharedCollectionPoint, sharedCollectionPointMember } from "../schema/customers"
 import { driverCommand, outboxEvent, pickup, proofOfService, route, session, unload } from "../schema/execution"
 import { billableEvent, billingRun, billingRunExclusion, invoice, invoiceLine, priceList, priceListRow, serviceArea, serviceAreaAssignment, serviceAreaPlanningArea, serviceAreaWasteFraction, serviceProviderPrice, settlement, settlementEvent, settlementLine, ticketKindProduct, weightReview } from "../schema/finance"
+import { contaminantCode, contaminantCodeFraction, pickupExceptionRule, pickupExceptionRuleStep } from "../schema/pickup-exceptions"
 import { driver, vehicle, vehicleCompartment, vehicleCompartmentFraction } from "../schema/fleet"
 import { containerTypeVehicleType, vehicleType } from "../schema/fleet-types"
 import { generationMatch, generationRun } from "../schema/generation"
@@ -185,8 +186,16 @@ export const TICKET_CHARGE_AUDITED: readonly Audited[] = [
   { table: ticketKindProduct, module: "commercial.products", parent: setOf(project, ticketKindProduct.projectId) },
 ]
 
+/** The Pickup Exceptions (#293 M5): the company's contaminant codes with the fractions each applies to, and a project's charge rules with their ladders; their migration writes these triggers. */
+export const PICKUP_EXCEPTIONS_AUDITED: readonly Audited[] = [
+  { table: contaminantCode, module: "configure.master" },
+  { table: contaminantCodeFraction, module: "configure.master", parent: setOf(contaminantCode, contaminantCodeFraction.contaminantCodeId) },
+  { table: pickupExceptionRule, module: "commercial.price-rows" },
+  { table: pickupExceptionRuleStep, module: "commercial.price-rows", parent: setOf(pickupExceptionRule, pickupExceptionRuleStep.ruleId) },
+]
+
 /** Every audited table: 0019's, then each later migration's, in the order they were written. */
-export const AUDITED: readonly Audited[] = [...AUDITED_AT_0019, ...SUBSCRIPTION_PAUSE_AUDITED, ...TICKET_SLA_AUDITED, ...DROP_OFF_AUDITED, ...ABSENCES_AUDITED, ...TICKET_CHARGE_AUDITED]
+export const AUDITED: readonly Audited[] = [...AUDITED_AT_0019, ...SUBSCRIPTION_PAUSE_AUDITED, ...TICKET_SLA_AUDITED, ...DROP_OFF_AUDITED, ...ABSENCES_AUDITED, ...TICKET_CHARGE_AUDITED, ...PICKUP_EXCEPTIONS_AUDITED]
 
 /** The audited tables by name, for a test that reads a migrated database's triggers. */
 export const AUDITED_TABLE_NAMES: ReadonlySet<string> = new Set(AUDITED.map((entry) => getTableName(entry.table)))

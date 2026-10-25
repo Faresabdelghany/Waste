@@ -90,6 +90,10 @@ export const AUDITED_TABLES = [
   "driver_absence",
   "vehicle_unavailability",
   "ticket_kind_product",
+  "contaminant_code",
+  "contaminant_code_fraction",
+  "pickup_exception_rule",
+  "pickup_exception_rule_step",
 ] as const
 export type AuditedTable = (typeof AUDITED_TABLES)[number]
 
