@@ -35,7 +35,7 @@
 import type { EvidenceProof, StopEvidence, Ticket, TicketDetail, TicketEvent, TicketEvidence, TicketLinks } from "@waste/contracts/tickets"
 import { slaStateOf, type SlaState } from "@waste/domain/resolution/sla"
 import { ticketTransition, TICKET_COMMANDS, type TicketCommand } from "@waste/domain/resolution/transitions"
-import { OPEN_TICKET_STATUSES, TICKET_KINDS, TICKET_PRIORITIES, TICKET_RESOLUTIONS, TICKET_SOURCES, TICKET_VISIBILITIES, type TicketStatus } from "@waste/domain/resolution/vocabulary"
+import { isBillableResolution, OPEN_TICKET_STATUSES, TICKET_KINDS, TICKET_PRIORITIES, TICKET_RESOLUTIONS, TICKET_SOURCES, TICKET_VISIBILITIES, type TicketResolution, type TicketStatus } from "@waste/domain/resolution/vocabulary"
 
 import { isAgreementRecord } from "@/lib/data/agreements"
 import { FIXTURE_COMPANY_ID, type BusinessRecord, type ModuleLocation } from "@/lib/data/business-modules"
@@ -49,6 +49,7 @@ import { driverAdapter } from "./fleet"
 import { isCompanyRecord, userAdapter } from "./organisation"
 import { pickupAdapter } from "./pickups"
 import { projectServerIdOf, referenced, refusal } from "./places"
+import { productAdapter } from "./pricing"
 import { nameVia, referencedServerId, webIdVia } from "./references"
 import { customerAdapter } from "./registry"
 import { routeAdapter } from "./routes"
@@ -338,6 +339,14 @@ const onTicket = (verb: string, past: string, toBody: NonNullable<RecordCommand<
 
 const withNote = (note: string | LocalRefusal, field = "note") => (isLocalRefusal(note) ? note : { [field]: note })
 
+/** The product a completion names its work charged at (#291 C3), by server id: with a resolution Finance charges for alone, picked from the products module and never typed; nothing for None. */
+function chargeOf(input: CommandInput, resolution: TicketResolution, context: MappingContext): { productId?: string } | LocalRefusal {
+  const webId = said(input, "productId")
+  if (!isBillableResolution(resolution) || webId === undefined || webId === NO_ONE) return {}
+  const productId = referencedServerId(webId, "product", context, { owns: productAdapter.owns })
+  return productId === undefined ? refusal("productId", "Pick a product the API holds") : { productId }
+}
+
 export const TICKET_COMMANDS_BY_NAME = {
   [ASSIGN_TICKET]: onTicket("assign", "assigned", (input, _record, context) => {
     const assignee = assigneeOf(said(input, "assigneeUserAccountId"), "assigneeUserAccountId", context)
@@ -358,7 +367,10 @@ export const TICKET_COMMANDS_BY_NAME = {
     if (!(TICKET_RESOLUTIONS as readonly string[]).includes(resolution)) return refusal("resolution", RESOLUTION_SENTENCE)
     const note = needed(input, "note", "Say how the case was resolved")
     if (isLocalRefusal(note)) return note
-    if (resolution !== "recollected") return { resolution, note }
+    // The product the work is charged at, with a re-collection or a service alone (#291 C3); None leaves the project's charge for the ticket's kind to stand in.
+    const charge = chargeOf(input, resolution as TicketResolution, context)
+    if (isLocalRefusal(charge)) return charge
+    if (resolution !== "recollected") return { resolution, note, ...charge }
     // A re-collection rides on a real Route, picked from the Routes module: never a typed label (#126).
     const routeWebId = said(input, "recollectionRouteId")
     if (routeWebId === undefined) return refusal("recollectionRouteId", "Pick the route the re-collection rides on")
@@ -366,13 +378,13 @@ export const TICKET_COMMANDS_BY_NAME = {
     if (recollectionRouteId === undefined) return refusal("recollectionRouteId", "Pick a route the API holds")
     // And, where the office added one for it, the stop of that route the re-collection is (#111); None names the route alone.
     const stopWebId = said(input, "recollectionPickupId")
-    if (stopWebId === undefined || stopWebId === NO_ONE) return { resolution, note, recollectionRouteId }
+    if (stopWebId === undefined || stopWebId === NO_ONE) return { resolution, note, recollectionRouteId, ...charge }
     const recollectionPickupId = referencedServerId(stopWebId, "pickup", context, { owns: pickupAdapter.owns })
     if (recollectionPickupId === undefined) return refusal("recollectionPickupId", "Pick a stop the API holds")
     // A stop picked before the route was changed is another route's, where its row is loaded to say so: refused here as the API would (400, Not a pickup of this route).
     const stopRouteId = routeOfStop(recollectionPickupId, context)
     if (stopRouteId !== undefined && stopRouteId !== recollectionRouteId) return refusal("recollectionPickupId", "Pick a stop on the re-collection route")
-    return { resolution, note, recollectionRouteId, recollectionPickupId }
+    return { resolution, note, recollectionRouteId, recollectionPickupId, ...charge }
   }),
   reject: onTicket("reject", "rejected", (input) => withNote(needed(input, "reason", "Say why the ticket is rejected"), "reason")),
   reopen: onTicket("reopen", "reopened", (input) => withNote(needed(input, "note", "Say why the ticket is reopened"))),

@@ -12,7 +12,10 @@
 // re-collection's route is picked among the routes that have not ended,
 // which is the reference's own rule (#126), and its stop (#111) among that
 // route's stops that are planned or collected — the API refuses a missed one
-// — and an optional pick offers None first, since a select cannot be emptied.
+// — and a completion's product (#291 C3) among the project's not sold by the
+// month, a recurring charge being no ticket's work; an optional pick offers
+// None first, since a select cannot be emptied, and the product's None leaves
+// the project's charge for the ticket's kind to stand in.
 // The stop a ticket is about (M6 of #293) is one of its route's, of any
 // outcome: a missed one is what a complaint is about.
 import { useModuleRecords } from "@/components/waste/business-record-store"
@@ -23,10 +26,12 @@ import { PICKUPS_MODULE } from "@/lib/api/records/pickups"
 import { ROUTES_MODULE } from "@/lib/api/records/routes"
 import { TICKET_NUMBER_FACT, TICKETS_MODULE } from "@/lib/api/records/tickets"
 import { AGREEMENTS_MODULE, isAgreementRecord } from "@/lib/data/agreements"
+import { PRODUCTS_MODULE } from "@/lib/data/commercial"
 import type { BusinessFormField, BusinessFormOption, BusinessFormSchema, BusinessFormValues } from "@/lib/data/business-form-types"
 import { getModuleDefinition, type BusinessRecord, type ModuleLocation } from "@/lib/data/business-modules"
 import { keptOptions, keptValue } from "@/lib/data/place-pickers"
 import { NO_ONE, SHARED_POINTS_MODULE } from "@/lib/data/properties"
+import { ticketWorkProductOptions } from "@/lib/data/ticket-charges"
 import { ACCESS_MODULE, recollectionStopOptions, ticketStopOptions } from "@/lib/data/tickets"
 import { isSoftDeleted } from "@waste/domain/record-visibility"
 
@@ -57,6 +62,7 @@ export function useResolutionPickers(): RelationPickers {
   const agreements = useModuleRecords(AGREEMENTS_MODULE.workspaceId, AGREEMENTS_MODULE.moduleId, fixturesOf(AGREEMENTS_MODULE))
   const tickets = useModuleRecords(TICKETS_MODULE.workspaceId, TICKETS_MODULE.moduleId, fixturesOf(TICKETS_MODULE))
   const pickups = useModuleRecords(PICKUPS_MODULE.workspaceId, PICKUPS_MODULE.moduleId, fixturesOf(PICKUPS_MODULE))
+  const products = useModuleRecords(PRODUCTS_MODULE.workspaceId, PRODUCTS_MODULE.moduleId, fixturesOf(PRODUCTS_MODULE))
   // The modules a dialog waits on. Not the stops: the re-collection's stop is
   // optional and a recollected completion's alone, so a Complete answering
   // otherwise is never held back by the stops' read — before it lands the
@@ -91,6 +97,9 @@ export function useResolutionPickers(): RelationPickers {
       // The stop a ticket is about: the picked route's, whatever their outcome.
       case "pickupId":
         return ticketStopOptions(pickups.records, typeof values.routeId === "string" ? values.routeId : undefined)
+      // The product a re-collection's or a service's work is charged at: optional, so the dialog never waits on the products, as it never does on the stops.
+      case "productId":
+        return [{ value: NO_ONE, label: "None: the ticket kind's charge" }, ...ticketWorkProductOptions(products.records, projectId)]
       case "containerId":
         return optional(inProject(containers.records, projectId).map((record) => optionOf(record)))
       case "sharedCollectionPointId":

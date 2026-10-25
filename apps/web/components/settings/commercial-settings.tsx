@@ -17,6 +17,10 @@
 //   a zone is a planning area, a customer type a customer's kind, and a
 //   service level and a surcharge have no home on the wire.
 //
+// - Ticket charges (#291 C3) are the API's alone: the product each ticket
+//   kind's work is charged at, read and set through the client
+//   (ticket-charges-settings.tsx).
+//
 // `CommercialDefaultsExtras` and `CommercialSectionPane` are the two names
 // SettingsDialog renders; keep their exported shape stable.
 
@@ -61,6 +65,7 @@ import {
   type AssetView,
 } from "@/components/settings/asset-management-settings"
 import { PriceListsPane, ProductsOnApiPane } from "@/components/settings/commercial-catalogue-panes"
+import { TicketChargesSettings } from "@/components/settings/ticket-charges-settings"
 import {
   SERVICE_PROVIDER_PERFORMANCE,
   PRICING_REFERENCE_DATE,
@@ -252,6 +257,7 @@ export function CommercialDefaultsExtras() {
 export function CommercialSectionPane({ paneId }: { paneId: string }) {
   if (paneId === "commercial-products") return <ProductsByModePane />
   if (paneId === "commercial-price-lists") return <PriceListsPane />
+  if (paneId === "commercial-ticket-charges") return <TicketChargesSettings />
   return null
 }
 
