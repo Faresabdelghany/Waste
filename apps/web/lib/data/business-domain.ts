@@ -315,6 +315,7 @@ export const publicWorkspaceDomains: readonly PublicWorkspaceDomain[] = [
       "events",
       "billing",
       "invoices",
+      "payments",
     ],
     boundaryNote:
       "The service provider workspace must be a restricted shell, not another tab inside the full office Commercial workspace.",
@@ -810,6 +811,19 @@ export const publicModuleDomains: readonly PublicModuleDomain[] = [
     downstream: ["M17", "M18", "M20", "M21", "M23"],
     boundaryNote:
       "Invoice and Credit Note are immutable issued-document types with explicit correction relationships.",
+  },
+  {
+    key: "commercial.payments",
+    workspaceId: "commercial",
+    moduleId: "payments",
+    primaryBlueprintModule: "M16",
+    supportingBlueprintModules: ["M18", "M20"],
+    canonicalOwner: "Commercial · Payments & Reconciliation",
+    personas: ["Finance specialist", "Billing administrator", "Customer-service agent"],
+    upstream: ["M16", "M18", "M20"],
+    downstream: ["M16", "M18", "M23"],
+    boundaryNote:
+      "A Payment is money as it arrived; what it pays is its allocations, and an invoice's paid state is read from them, never stored.",
   },
   {
     key: "improve.intelligence",

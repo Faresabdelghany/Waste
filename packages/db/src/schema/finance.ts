@@ -91,7 +91,7 @@
 // the product it was priced at.
 import type { InvoiceParties } from "@waste/domain/finance/invoice-document"
 import { PAYMENT_REFERENCE_PATTERN } from "@waste/domain/finance/payment"
-import { BILLABLE_EVENT_KINDS, BILLING_RUN_STATUSES, BLOCK_REASONS, CANCEL_REASONS, CREDIT_REASONS, EXCLUSION_REASONS, INDEX_BASES, INVOICE_KINDS, SETTLEMENT_EVENT_KINDS, SETTLEMENT_STATUSES, WEIGHT_REVIEW_DECISIONS } from "@waste/domain/finance/vocabulary"
+import { BILLABLE_EVENT_KINDS, BILLING_RUN_STATUSES, BLOCK_REASONS, CANCEL_REASONS, CREDIT_REASONS, EXCLUSION_REASONS, INDEX_BASES, INVOICE_KINDS, PAYMENT_SOURCES, SETTLEMENT_EVENT_KINDS, SETTLEMENT_STATUSES, WEIGHT_REVIEW_DECISIONS } from "@waste/domain/finance/vocabulary"
 import { CUSTOMER_KINDS } from "@waste/domain/registry/vocabulary"
 import { TICKET_KINDS } from "@waste/domain/resolution/vocabulary"
 import { sql } from "drizzle-orm"
@@ -786,5 +786,91 @@ export const ticketKindProduct = wms.table(
     // A kind is charged at one product in a project.
     tenantUnique(t, t.projectId, t.ticketKind),
     tenantIndex(t, t.productId),
+  ],
+)
+
+/**
+ * A payment (#291 C6): money as it arrived, registered by the office or read
+ * from a bank statement's line. A ledger: a payment is never rewritten, and
+ * what it pays is its allocations'. The payer may be unknown — a bank line
+ * nobody's — and a line's key holds a statement imported twice to one row.
+ * `payer_text` and `reference` are what the bank said, personal data the
+ * GDPR slice (#381) keeps and erases with the customer's.
+ */
+export const payment = wms.table(
+  "payment",
+  {
+    ...id,
+    ...projectScoped,
+    ...recorded,
+    /** The payer, where known; null for a bank line nobody's yet. */
+    customerId: uuid(),
+    amountMinor: total().notNull(),
+    currency: text().notNull(),
+    paidOn: date().notNull(),
+    /** The reference the payer gave, as the bank gave it. */
+    reference: text(),
+    /** The bank's text about the payer. */
+    payerText: text(),
+    source: text().notNull(),
+    /** A bank line's key (@waste/domain/finance/payments, `bankLineKey`): what it said and how many identical lines came before it. */
+    bankLineKey: text(),
+    note: text(),
+    /** The person who registered or imported it. */
+    recordedBy: uuid(),
+  },
+  (t) => [
+    companyReference(t, company),
+    tenantReference(t, [t.projectId], project),
+    tenantReference(t, [t.customerId], customer),
+    tenantReference(t, [t.recordedBy], userAccount),
+    projectKey(t),
+    oneOf(t.source, PAYMENT_SOURCES),
+    check(tableObjectName(t.id.table, "amount_positive", "payment"), sql`${t.amountMinor} > 0`),
+    // A bank line carries its key, and only a bank line does.
+    check(tableObjectName(t.id.table, "bank_line_shape", "payment"), sql`(${t.source} = 'bank-file') = (${t.bankLineKey} is not null)`),
+    // A statement imported again adds nothing: one payment per line of the company's statements.
+    uniqueIndex(tableObjectName(t.companyId.table, "bank_line_key_idx", "payment")).on(t.companyId, t.bankLineKey).where(sql`${t.bankLineKey} is not null`),
+    tenantIndex(t, t.customerId),
+    tenantIndex(t, t.projectId, t.paidOn),
+    tenantIndex(t, t.recordedBy),
+  ],
+)
+
+/**
+ * A part of a payment applied to one invoice of the same project (#291 C6).
+ * A ledger too: a wrong match is undone by a negative row naming the one it
+ * reverses, once, never by an edit. What a payment allocates is within its
+ * amount and what an invoice is allocated within what it owes: the API holds
+ * both under the payment's and the invoice's parents' locks.
+ */
+export const paymentAllocation = wms.table(
+  "payment_allocation",
+  {
+    ...id,
+    ...projectScoped,
+    ...recorded,
+    paymentId: uuid().notNull(),
+    invoiceId: uuid().notNull(),
+    /** Positive applies, negative undoes the allocation it reverses. */
+    amountMinor: total().notNull(),
+    reversesAllocationId: uuid(),
+    recordedBy: uuid(),
+  },
+  (t) => [
+    companyReference(t, company),
+    tenantReference(t, [t.projectId], project),
+    projectReference(t, [t.paymentId], payment),
+    projectReference(t, [t.invoiceId], invoice),
+    projectReference(t, [t.reversesAllocationId], t as ProjectTable),
+    tenantReference(t, [t.recordedBy], userAccount),
+    projectKey(t),
+    // Applied money is positive and only a reversal is negative, and a reversal reverses another row.
+    check(tableObjectName(t.id.table, "amount_shape", "paymentAllocation"), sql`${t.amountMinor} <> 0 and (${t.amountMinor} < 0) = (${t.reversesAllocationId} is not null) and ${t.reversesAllocationId} <> ${t.id}`),
+    // An allocation is reversed once.
+    uniqueIndex(tableObjectName(t.companyId.table, "reverses_allocation_id_idx", "paymentAllocation")).on(t.companyId, t.reversesAllocationId).where(sql`${t.reversesAllocationId} is not null`),
+    tenantIndex(t, t.paymentId),
+    tenantIndex(t, t.invoiceId),
+    tenantIndex(t, t.recordedBy),
   ],
 )

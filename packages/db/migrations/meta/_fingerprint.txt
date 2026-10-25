@@ -1399,6 +1399,63 @@ index wms.outbox_event outbox_event_pkey CREATE UNIQUE INDEX outbox_event_pkey O
 index wms.outbox_event outbox_event_project_id_idx CREATE INDEX outbox_event_project_id_idx ON wms.outbox_event USING btree (company_id, project_id)
 trigger wms.outbox_event outbox_event_touch_updated_at enabled=O CREATE TRIGGER outbox_event_touch_updated_at BEFORE UPDATE ON wms.outbox_event FOR EACH ROW EXECUTE FUNCTION wms.touch_updated_at()
 policy wms.outbox_event outbox_event_tenant_fence permissive ALL to=wms_api using=(company_id = ( SELECT wms.current_company_id() AS current_company_id)) check=(company_id = ( SELECT wms.current_company_id() AS current_company_id))
+relation wms.payment kind=table owner=<owner> persistence=p rls=true force-rls=true replica-identity=d acl=[<owner>=DELETE,INSERT,MAINTAIN,REFERENCES,SELECT,TRIGGER,TRUNCATE,UPDATE/<owner> wms_api=INSERT,SELECT/<owner> wms_worker=SELECT/<owner>]
+column wms.payment 1 id uuid not-null default=wms.uuidv7()
+column wms.payment 2 company_id uuid not-null
+column wms.payment 3 project_id uuid not-null
+column wms.payment 4 recorded_at timestamp with time zone not-null default=now()
+column wms.payment 5 customer_id uuid
+column wms.payment 6 amount_minor bigint not-null
+column wms.payment 7 currency text not-null
+column wms.payment 8 paid_on date not-null
+column wms.payment 9 reference text
+column wms.payment 10 payer_text text
+column wms.payment 11 source text not-null
+column wms.payment 12 bank_line_key text
+column wms.payment 13 note text
+column wms.payment 14 recorded_by uuid
+constraint wms.payment payment_amount_positive CHECK ((amount_minor > 0))
+constraint wms.payment payment_bank_line_shape CHECK (((source = 'bank-file'::text) = (bank_line_key IS NOT NULL)))
+constraint wms.payment payment_company_id_fk FOREIGN KEY (company_id) REFERENCES wms.company(id)
+constraint wms.payment payment_customer_id_fk FOREIGN KEY (company_id, customer_id) REFERENCES wms.customer(company_id, id)
+constraint wms.payment payment_pkey PRIMARY KEY (id)
+constraint wms.payment payment_project_id_fk FOREIGN KEY (company_id, project_id) REFERENCES wms.project(company_id, id)
+constraint wms.payment payment_project_key UNIQUE (company_id, project_id, id)
+constraint wms.payment payment_recorded_by_fk FOREIGN KEY (company_id, recorded_by) REFERENCES wms.user_account(company_id, id)
+constraint wms.payment payment_source_one_of CHECK ((source = ANY (ARRAY['manual'::text, 'bank-file'::text])))
+index wms.payment payment_bank_line_key_idx CREATE UNIQUE INDEX payment_bank_line_key_idx ON wms.payment USING btree (company_id, bank_line_key) WHERE (bank_line_key IS NOT NULL)
+index wms.payment payment_customer_id_idx CREATE INDEX payment_customer_id_idx ON wms.payment USING btree (company_id, customer_id)
+index wms.payment payment_pkey CREATE UNIQUE INDEX payment_pkey ON wms.payment USING btree (id)
+index wms.payment payment_project_id_paid_on_idx CREATE INDEX payment_project_id_paid_on_idx ON wms.payment USING btree (company_id, project_id, paid_on)
+index wms.payment payment_project_key CREATE UNIQUE INDEX payment_project_key ON wms.payment USING btree (company_id, project_id, id)
+index wms.payment payment_recorded_by_idx CREATE INDEX payment_recorded_by_idx ON wms.payment USING btree (company_id, recorded_by)
+policy wms.payment payment_tenant_fence permissive ALL to=wms_api using=(company_id = ( SELECT wms.current_company_id() AS current_company_id)) check=(company_id = ( SELECT wms.current_company_id() AS current_company_id))
+relation wms.payment_allocation kind=table owner=<owner> persistence=p rls=true force-rls=true replica-identity=d acl=[<owner>=DELETE,INSERT,MAINTAIN,REFERENCES,SELECT,TRIGGER,TRUNCATE,UPDATE/<owner> wms_api=INSERT,SELECT/<owner> wms_worker=SELECT/<owner>]
+column wms.payment_allocation 1 id uuid not-null default=wms.uuidv7()
+column wms.payment_allocation 2 company_id uuid not-null
+column wms.payment_allocation 3 project_id uuid not-null
+column wms.payment_allocation 4 recorded_at timestamp with time zone not-null default=now()
+column wms.payment_allocation 5 payment_id uuid not-null
+column wms.payment_allocation 6 invoice_id uuid not-null
+column wms.payment_allocation 7 amount_minor bigint not-null
+column wms.payment_allocation 8 reverses_allocation_id uuid
+column wms.payment_allocation 9 recorded_by uuid
+constraint wms.payment_allocation payment_allocation_amount_shape CHECK (((amount_minor <> 0) AND ((amount_minor < 0) = (reverses_allocation_id IS NOT NULL)) AND (reverses_allocation_id <> id)))
+constraint wms.payment_allocation payment_allocation_company_id_fk FOREIGN KEY (company_id) REFERENCES wms.company(id)
+constraint wms.payment_allocation payment_allocation_invoice_id_fk FOREIGN KEY (company_id, project_id, invoice_id) REFERENCES wms.invoice(company_id, project_id, id)
+constraint wms.payment_allocation payment_allocation_payment_id_fk FOREIGN KEY (company_id, project_id, payment_id) REFERENCES wms.payment(company_id, project_id, id)
+constraint wms.payment_allocation payment_allocation_pkey PRIMARY KEY (id)
+constraint wms.payment_allocation payment_allocation_project_id_fk FOREIGN KEY (company_id, project_id) REFERENCES wms.project(company_id, id)
+constraint wms.payment_allocation payment_allocation_project_key UNIQUE (company_id, project_id, id)
+constraint wms.payment_allocation payment_allocation_recorded_by_fk FOREIGN KEY (company_id, recorded_by) REFERENCES wms.user_account(company_id, id)
+constraint wms.payment_allocation payment_allocation_reverses_allocation_id_fk FOREIGN KEY (company_id, project_id, reverses_allocation_id) REFERENCES wms.payment_allocation(company_id, project_id, id)
+index wms.payment_allocation payment_allocation_invoice_id_idx CREATE INDEX payment_allocation_invoice_id_idx ON wms.payment_allocation USING btree (company_id, invoice_id)
+index wms.payment_allocation payment_allocation_payment_id_idx CREATE INDEX payment_allocation_payment_id_idx ON wms.payment_allocation USING btree (company_id, payment_id)
+index wms.payment_allocation payment_allocation_pkey CREATE UNIQUE INDEX payment_allocation_pkey ON wms.payment_allocation USING btree (id)
+index wms.payment_allocation payment_allocation_project_key CREATE UNIQUE INDEX payment_allocation_project_key ON wms.payment_allocation USING btree (company_id, project_id, id)
+index wms.payment_allocation payment_allocation_recorded_by_idx CREATE INDEX payment_allocation_recorded_by_idx ON wms.payment_allocation USING btree (company_id, recorded_by)
+index wms.payment_allocation payment_allocation_reverses_allocation_id_idx CREATE UNIQUE INDEX payment_allocation_reverses_allocation_id_idx ON wms.payment_allocation USING btree (company_id, reverses_allocation_id) WHERE (reverses_allocation_id IS NOT NULL)
+policy wms.payment_allocation payment_allocation_tenant_fence permissive ALL to=wms_api using=(company_id = ( SELECT wms.current_company_id() AS current_company_id)) check=(company_id = ( SELECT wms.current_company_id() AS current_company_id))
 relation wms.pickup kind=table owner=<owner> persistence=p rls=true force-rls=true replica-identity=d acl=[<owner>=DELETE,INSERT,MAINTAIN,REFERENCES,SELECT,TRIGGER,TRUNCATE,UPDATE/<owner> wms_api=DELETE,INSERT,SELECT,UPDATE/<owner> wms_sync=SELECT/<owner> wms_worker=SELECT/<owner>]
 column wms.pickup 1 id uuid not-null default=wms.uuidv7()
 column wms.pickup 2 company_id uuid not-null
@@ -3422,4 +3479,5 @@ journal 1792917191234 447d7c013b3af5ae6b94000e86c461c3e22e215a1431d130b99c623138
 journal 1792921994648 578c84818d6e43060d25e4cf420cf3af21ac8d66438272d4b57d1953a464069c
 journal 1792923020897 c8b3987803dd0f8cb640d986901466c6e8d2195e7301508f475dc8592fda8e2d
 journal 1792924159748 8dcf073968a66710ff9a712367e53e2391442cc942c1aa486d6822dc43b86905
+journal 1792925242550 975c5a4be9bc2a4de746cf62d5298aa520bd272699f460571a7e527f372a785b
 pgboss-version 42

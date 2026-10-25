@@ -295,6 +295,13 @@
       "when": 1792924159748,
       "tag": "0041_invoice_parties",
       "breakpoints": true
+    },
+    {
+      "idx": 42,
+      "version": "7",
+      "when": 1792925242550,
+      "tag": "0042_payments",
+      "breakpoints": true
     }
   ]
 }

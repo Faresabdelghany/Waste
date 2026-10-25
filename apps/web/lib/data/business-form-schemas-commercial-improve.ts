@@ -1023,6 +1023,52 @@ export const commercialImproveBusinessFormSchemas = [
     ],
   },
   {
+    key: "commercial.payments",
+    mode: "create",
+    recordKind: "Payment",
+    title: "Register payment",
+    description:
+      "Record money as it arrived, paid at the counter or read off the bank's site. A bank statement's lines arrive through its import, and a payment is never edited: a wrong match is undone by its reversal.",
+    submitLabel: "Register payment",
+    nameField: "reference",
+    contextFieldIds: ["projectId", "customerId", "paidOn"],
+    sections: [
+      {
+        id: "payment",
+        title: "Payment",
+        description:
+          "Relationship: the invoice named is an invoice of the project, in the payment's currency, and its payer is the payment's. It is paid what it owes at most; the rest stays a credit on the payer's balance.",
+        fields: [
+          {
+            id: "projectId",
+            label: "Project",
+            type: "select",
+            required: true,
+            relation: { workspaceId: "configure", moduleId: "organization" },
+          },
+          {
+            id: "invoiceId",
+            label: "Invoice paid",
+            type: "select",
+            relation: { workspaceId: "commercial", moduleId: "invoices" },
+            description: "Optional: without one, the payment waits unmatched for the office.",
+          },
+          {
+            id: "customerId",
+            label: "Payer",
+            type: "select",
+            relation: { workspaceId: "customers", moduleId: "contacts" },
+            description: "Optional: the invoice's payer where an invoice is named.",
+          },
+          { id: "amount", label: "Amount", type: "number", required: true, min: 0, unit: "DKK" },
+          { id: "paidOn", label: "Paid on", type: "date", required: true },
+          { id: "reference", label: "Payer's reference", type: "text", placeholder: "+71<000000260071881+85123456<" },
+          { id: "note", label: "Note", type: "textarea" },
+        ],
+      },
+    ],
+  },
+  {
     key: "commercial.invoices",
     mode: "disabled",
     recordKind: "Issued invoice or credit-note action",

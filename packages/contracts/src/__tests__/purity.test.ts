@@ -41,6 +41,8 @@
 // database's checks read too. M7 of #293 added
 // @waste/domain/registry/applications: applications.ts holds a Decision's
 // period and appeal text to the domain's rules in the domain's sentences.
+// #291 C6 added @waste/domain/finance/payments: payments.ts reads the
+// invoice's payment statuses from it, the reading the API answers.
 import path from "node:path"
 import { fileURLToPath } from "node:url"
 
@@ -56,6 +58,7 @@ definePurityTests({
     "@waste/domain/execution/vocabulary",
     "@waste/domain/execution/work-orders",
     "@waste/domain/finance/payment",
+    "@waste/domain/finance/payments",
     "@waste/domain/finance/vocabulary",
     "@waste/domain/imports/vocabulary",
     "@waste/domain/insight/vocabulary",

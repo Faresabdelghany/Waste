@@ -32,6 +32,9 @@ const invoice = {
   grossMinor: 15_431,
   issuedBy: THIRD,
   paymentReference: null,
+  paidMinor: 0,
+  outstandingMinor: 12_500,
+  paymentStatus: "open",
 }
 
 const creditNote = {
@@ -73,6 +76,13 @@ const line = {
 const creditLine = { ...line, id: ID, invoiceId: OTHER, billableEventId: null, creditsLineId: THIRD, netMinor: -12_345, vatMinor: -3_086 }
 
 describe("Invoice", () => {
+  test("reads as its payments make it (#291 C6): paid, outstanding and a status on an invoice, none on a credit note", () => {
+    assert.deepEqual(Invoice.parse({ ...invoice, paidMinor: 12_500, outstandingMinor: 0, paymentStatus: "paid" }).paymentStatus, "paid")
+    assert.equal(Invoice.safeParse({ ...invoice, paymentStatus: "settled" }).success, false)
+    assert.equal(Invoice.safeParse({ ...invoice, outstandingMinor: -1 }).success, false, "nothing is owed below nothing")
+    assert.equal(Invoice.parse({ ...invoice, paymentStatus: null }).paymentStatus, null, "a credit note reads no standing")
+  })
+
   test("is a ledger row — an id and recordedAt, never updatedAt — carrying what an external ledger books: the number under its label, the payer, the currency, the days, the period, its run, and the totals as issued", () => {
     assert.deepEqual(Invoice.parse(invoice), invoice)
     assert.equal("updatedAt" in Invoice.shape, false)

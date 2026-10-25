@@ -31,7 +31,8 @@ import { CreditReason, InvoiceKind, invoiceLabel, PaymentReference } from "./fin
 import { Id } from "./ids"
 import { Currency } from "./organisation"
 import { dayWindowIsOrdered, dayWindowOrdered, ProjectScopedListQuery } from "./queries"
-import { eachOnce, eachOnceSentence, Minor, NonNegativeMinor, PositiveInt, recorded } from "./resource"
+import { InvoicePaymentStatus } from "./payments"
+import { eachOnce, eachOnceSentence, Minor, NonNegativeMinor, NonNegativeTotal, PositiveInt, recorded } from "./resource"
 import { Paragraph } from "./text"
 import * as z from "zod"
 
@@ -81,6 +82,11 @@ const invoiceFields = {
   issuedBy: Id.nullable(),
   /** The payment reference the payer quotes (#291 C4), frozen at issue under the project's scheme; null under none, and on a credit note. */
   paymentReference: PaymentReference.nullable(),
+  /** What its payments apply to it and what it still owes (#291 C6): a reading of its allocations, its credit notes and its due day on the project's day, never a column. */
+  paidMinor: NonNegativeTotal,
+  outstandingMinor: NonNegativeTotal,
+  /** Open, partially paid, paid, overdue or credited; null on a credit note, which nobody pays. */
+  paymentStatus: InvoicePaymentStatus.nullable(),
 }
 
 export const Invoice = z.object(invoiceFields).refine(labelMatches, labelIsTheNumber).refine(totalsAgree, grossIsNetPlusVat)

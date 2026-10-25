@@ -66,6 +66,7 @@ import { generationRoutes } from "./routes/generation"
 import { importRoutes } from "./routes/imports"
 import { invoiceRoutes } from "./routes/invoices"
 import { lifecycleRoutes } from "./routes/lifecycle"
+import { paymentRoutes } from "./routes/payments"
 import { FakeProvider } from "@waste/routing/fake"
 import type { RoutingIdentity } from "@waste/routing/provider"
 import { QuotaEngine, STANDARD_PLAN } from "@waste/routing/quota"
@@ -312,6 +313,8 @@ export function createApp({
   app.route("/", ticketChargeRoutes(guard))
   app.route("/", billingRunRoutes(guard, { now }))
   app.route("/", invoiceRoutes(guard, { now }))
+  // Payments and reconciliation (#291 C6): an invoice's standing is read on its project's day, so the module takes `now`; a payment's `recordedAt` is the database's.
+  app.route("/", paymentRoutes(guard, { now }))
   // The settlements and weight control: a settlement's `calculatedAt` and `closedAt` are the request's clock and `settlement-closed` is published with it, so the module takes `now`; weight control stamps nothing of its own (a review's `recordedAt` is the database's) and takes no clock.
   app.route("/", settlementRoutes(guard, { now }))
   app.route("/", weightControlRoutes(guard))
