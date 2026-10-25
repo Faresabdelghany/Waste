@@ -3,7 +3,8 @@
 // `GET /reports/service` and `/reports/tickets` (Improve's Performance),
 // `/reports/tonnage` (Improve's Analytics) and `/reports/revenue` (the
 // invoices' own grant) — and the waste-data report over a filing's period,
-// `/reports/waste-data` and its file (Improve's Compliance). Read-only,
+// `/reports/waste-data` and its file (Improve's Compliance), and the fleet's
+// emissions, `/reports/emissions` (M10 of #293). Read-only,
 // outside the record store: a report is an answer to a question, never a
 // module's rows. The contracts are types here; a runtime zod import would
 // land in the Dashboard's bundle.
@@ -16,6 +17,8 @@ import type {
   WasteDataFileQuery,
   WasteDataReport,
 } from "@waste/contracts/reports"
+
+import type { EmissionsReport } from "@waste/contracts/emissions"
 
 import { get, getFile, withQuery, type ApiClient, type ApiFile } from "./client"
 
@@ -74,4 +77,11 @@ export function wasteDataFile(client: ApiClient, query: WasteDataQuery, separato
 /** What was unloaded at the stations and weighed at the kerb. */
 export function tonnageReport(client: ApiClient, window: ReportWindowQuery, filters: { wasteFractionId?: string; unloadingStationId?: string } = {}): Promise<TonnageReport> {
   return get<TonnageReport>(client, withQuery("/reports/tonnage", query(window, filters)))
+}
+
+/** The fleet's planned emissions over a window (M10 of #293): no series, so the window's interval is not asked with it — the query is strict. */
+export const emissionsKey = (window: ReportWindowQuery): string => withQuery("/reports/emissions", { projectId: window.projectId, from: window.from, to: window.to })
+
+export function emissionsReport(client: ApiClient, window: ReportWindowQuery): Promise<EmissionsReport> {
+  return get<EmissionsReport>(client, emissionsKey(window))
 }

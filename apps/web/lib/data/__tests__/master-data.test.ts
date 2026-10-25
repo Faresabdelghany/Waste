@@ -79,6 +79,10 @@ describe("the four forms", () => {
     assert.deepEqual(fields("container-type"), ["name", "volumeLitres"])
     assert.deepEqual(fields("service-frequency"), ["name", "projectId", "description", "collectionsPerWeek", "weeksBetween", "daysBetween"])
     assert.deepEqual(fields("vehicle-type"), ["name", "key", "description", "containerTypeIds"])
+    // M10 of #293: the edit adds a consumption field per fuel, in a section of its own, once the type exists; a create stays one request.
+    assert.deepEqual(masterDataEditSchema("vehicle-type").sections.map((section) => section.id), ["identity", "consumption"])
+    assert.deepEqual(masterDataEditSchema("vehicle-type").sections[1].fields.map((field) => field.id), ["consumption-diesel", "consumption-hvo", "consumption-biogas", "consumption-electric", "consumption-hybrid", "consumption-other"])
+    assert.deepEqual(masterDataEditSchema("waste-fraction").sections.map((section) => section.id), ["identity"])
     const projectField = masterDataSchema("service-frequency").sections.flatMap((section) => section.fields).find((field) => field.id === "projectId")
     assert.deepEqual(projectField?.relation, { workspaceId: "configure", moduleId: "organization" })
     const typesField = masterDataSchema("vehicle-type").sections.flatMap((section) => section.fields).find((field) => field.id === "containerTypeIds")

@@ -30,6 +30,8 @@ import { FIXTURE_COMPANY_ID, FIXTURE_PROJECT_IDS, getModuleDefinition, type Busi
 import { createMasterDataRecord, KEY_REFUSAL, MASTER_DATA_MODULE, masterDataKindOf, WASTE_CODE_REFUSAL } from "../../data/master-data"
 import { problemSentence } from "../problem"
 import { NOTHING_RESOLVED, type MappingContext, type Resolver } from "../records/adapter"
+import { VehicleTypeConsumptionSet } from "@waste/contracts/emissions"
+import { CONSUMPTION_REFUSAL } from "@/lib/data/fleet-emissions"
 import { containerTypeAdapter, contaminantCodeAdapter, masterDataModule, ONE_CADENCE as LOCAL_ONE_CADENCE, serviceFrequencyAdapter, vehicleTypeAdapter, wasteFractionAdapter } from "../records/master-data"
 import { isServerBacked, SERVER_MODULE_KEYS } from "../records/modules"
 import { projectAdapter } from "../records/organisation"
@@ -409,5 +411,44 @@ describe("a vehicle type", () => {
     const setOnly = scripted([() => json(reset)])
     await vehicleTypeAdapter.update(clientOver(setOnly.fetch), rearLoader.id, { containerTypeIds: [bin240.id, unmeasured.id] })
     assert.deepEqual(setOnly.calls.map((call) => `${call.init.method} ${call.url}`), [`PUT http://api.test/vehicle-types/${rearLoader.id}/container-types`])
+  })
+
+  // M10 of #293: what a vehicle of the type burns, per fuel.
+  test("reads its consumption per fuel into the form's fields per 100 km, and says it in its facts", () => {
+    const burning = vehicleTypeAdapter.toRecord({ ...rearLoader, consumption: [{ fuel: "diesel", unit: "litre", milliUnitsPerKm: 455 }, { fuel: "electric", unit: "kwh", milliUnitsPerKm: 1300 }] }, context(resolveTypes))
+    assert.equal(burning.submittedValues?.["consumption-diesel"], "45.5")
+    assert.equal(burning.submittedValues?.["consumption-electric"], "130")
+    assert.equal(burning.facts.Consumption, "Diesel 45.5 l · Electric 130 kWh per 100 km")
+    assert.equal(vehicleTypeAdapter.toRecord(rearLoader, context(resolveTypes)).facts.Consumption, "No consumption: its routes are unmeasured")
+  })
+
+  test("a create stays one request: the consumption is the edit's, once the type exists", () => {
+    const body = vehicleTypeAdapter.toCreateBody?.(made({ name: "Side loader", key: "side-loader", "consumption-diesel": "42,5" }), context(resolveTypes)) as Record<string, unknown>
+    assert.equal("consumption" in body, false)
+    assert.ok(VehicleTypeCreate.safeParse(body).success)
+  })
+
+  test("a consumption the wire would refuse is refused at its field, before any request", () => {
+    const burning = vehicleTypeAdapter.toRecord(rearLoader, context(resolveTypes))
+    for (const typed of ["0", "-3", "45.55", "lots", "1000.1"]) {
+      const edited: BusinessRecord = { ...burning, submittedValues: { ...burning.submittedValues, "consumption-diesel": typed } }
+      assert.deepEqual(vehicleTypeAdapter.toPatchBody(burning, edited, context(resolveTypes)), { path: "consumption-diesel", message: CONSUMPTION_REFUSAL }, typed)
+    }
+  })
+
+  test("an edit puts the whole consumption set where it moved, and nothing where it did not", async () => {
+    const burning = vehicleTypeAdapter.toRecord({ ...rearLoader, consumption: [{ fuel: "diesel", unit: "litre", milliUnitsPerKm: 450 }] }, context(resolveTypes))
+    const moved: BusinessRecord = { ...burning, submittedValues: { ...burning.submittedValues, "consumption-diesel": "", "consumption-electric": "130" } }
+    const movedBody = vehicleTypeAdapter.toPatchBody(burning, moved, context(resolveTypes)) as { consumption?: unknown }
+    assert.deepEqual(movedBody, { consumption: [{ fuel: "electric", milliUnitsPerKm: 1300 }] })
+    assert.ok(VehicleTypeConsumptionSet.safeParse({ consumption: movedBody.consumption }).success)
+    const retyped: BusinessRecord = { ...burning, submittedValues: { ...burning.submittedValues, "consumption-diesel": "45.0" } }
+    assert.equal(vehicleTypeAdapter.toPatchBody(burning, retyped, context(resolveTypes)), null, "45.0 is the 45 it was")
+    const cleared: BusinessRecord = { ...burning, submittedValues: { ...burning.submittedValues, "consumption-diesel": "" } }
+    assert.deepEqual(vehicleTypeAdapter.toPatchBody(burning, cleared, context(resolveTypes)), { consumption: [] })
+    const { fetch, calls } = scripted([() => json({ ...rearLoader, consumption: [] })])
+    await vehicleTypeAdapter.update(clientOver(fetch), rearLoader.id, { consumption: [] })
+    assert.deepEqual(calls.map((call) => `${call.init.method} ${call.url}`), [`PUT http://api.test/vehicle-types/${rearLoader.id}/consumption`])
+    assert.deepEqual(bodyOf(calls[0]), { consumption: [] })
   })
 })
