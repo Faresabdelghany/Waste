@@ -316,6 +316,13 @@
       "when": 1792928027904,
       "tag": "0044_container_hire",
       "breakpoints": true
+    },
+    {
+      "idx": 45,
+      "version": "7",
+      "when": 1792945670863,
+      "tag": "0045_weighbridge",
+      "breakpoints": true
     }
   ]
 }

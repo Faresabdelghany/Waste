@@ -43,7 +43,7 @@ import { PaymentCommandsSurface, PaymentsPrimarySurface } from "./payment-surfac
 import { AddPropertyGroupSurface, AddPropertySurface, AddSharedPointSurface, PropertyCommandsSurface, PropertyGroupCommandsSurface, SharedPointCommandsSurface } from "./place-surfaces"
 import { PriceRowCommandsSurface, PriceRowsPrimarySurface, ProductCommandsSurface, ProductsPrimarySurface } from "./pricing-surfaces"
 import { PROVIDER_PRICES_LIST, SERVICE_AREAS_LIST, SETTLEMENTS_LIST, WEIGHTS_LIST } from "./provider-money-lists"
-import { AddProviderPriceSurface, CreateServiceAreaSurface, OpenSettlementSurface, ProviderPriceCommandsSurface, ServiceAreaCommandsSurface, ServiceAreasRead, SettlementSurface, WeightReviewSurface } from "./provider-money-surfaces"
+import { AddProviderPriceSurface, CreateServiceAreaSurface, OpenSettlementSurface, ProviderPriceCommandsSurface, RecordUnloadSurface, ServiceAreaCommandsSurface, ServiceAreasRead, SettlementSurface, WeightReviewSurface } from "./provider-money-surfaces"
 import { LiveBoardRefresh, LiveRouteSurface, PickupCommandsSurface, RouteCommandsSurface, RoutesPrimarySurface } from "./route-surfaces"
 
 /** What a primary surface is handed: the label the module's primary action carries. */
@@ -181,7 +181,7 @@ export const COMMAND_SURFACES: Readonly<Record<string, CommandSurface>> = {
   "service-providers.service-areas": { primary: CreateServiceAreaSurface, rowActions: ServiceAreaCommandsSurface, list: SERVICE_AREAS_LIST, whileShown: ServiceAreasRead },
   "commercial.service-provider-prices": { primary: AddProviderPriceSurface, rowActions: ProviderPriceCommandsSurface, list: PROVIDER_PRICES_LIST, whileShown: ServiceAreasRead },
   "commercial.settlements": { primary: OpenSettlementSurface, rowActions: SettlementSurface, list: SETTLEMENTS_LIST, whileShown: ServiceAreasRead },
-  "route-studio.weights": { primary: null, rowActions: WeightReviewSurface, list: WEIGHTS_LIST },
+  "route-studio.weights": { primary: RecordUnloadSurface, rowActions: WeightReviewSurface, list: WEIGHTS_LIST },
 }
 
 /** The module's surface while the adapter is configured and the module switched; undefined otherwise, and always in fixture mode. */

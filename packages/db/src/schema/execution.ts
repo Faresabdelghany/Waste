@@ -116,7 +116,7 @@
 // e-mail index, for the same reason: the relay's read is one statement in the
 // system that crosses companies.
 import { PROOF_SHAPES } from "@waste/domain/execution/proof-shapes"
-import { CODED_PROOF_KINDS, COMMAND_OUTCOMES, DRIVER_COMMAND_KINDS, EXECUTION_SOURCES, OUTBOX_AGGREGATES, OUTBOX_KINDS, PICKUP_ORIGINS, PICKUP_OUTCOMES, PICKUP_REASONS, PICKUP_SERVICES, PICKUP_STATUSES, PROOF_KINDS, ROUTE_CANCEL_REASON_CODES, ROUTE_STATUSES } from "@waste/domain/execution/vocabulary"
+import { CODED_PROOF_KINDS, COMMAND_OUTCOMES, DRIVER_COMMAND_KINDS, EXECUTION_SOURCES, OUTBOX_AGGREGATES, OUTBOX_KINDS, PICKUP_ORIGINS, PICKUP_OUTCOMES, PICKUP_REASONS, PICKUP_SERVICES, PICKUP_STATUSES, PROOF_KINDS, ROUTE_CANCEL_REASON_CODES, ROUTE_STATUSES, UNLOAD_REFUSAL_REASONS } from "@waste/domain/execution/vocabulary"
 import { sql, type SQL } from "drizzle-orm"
 import { boolean, check, date, index, integer, jsonb, text, time, timestamp, unique, uniqueIndex, uuid, type PgColumn } from "drizzle-orm/pg-core"
 
@@ -518,6 +518,10 @@ export const unload = wms.table(
     /** A photo of the ticket, under the row's own ids. */
     objectKey: text(),
     note: text(),
+    /** Why the station refused the load (O9 of #290); null for a load it took. Set with the row, a ledger's, never after. */
+    refusalReason: text(),
+    /** The refusal in words: required with `other`, and only with a reason. */
+    refusalNote: text(),
   },
   (t) => [
     companyReference(t, company),
@@ -537,6 +541,9 @@ export const unload = wms.table(
     check(tableObjectName(t.id.table, "session_shape", "unload"), sql`(${t.source} = 'driver-app') = (${t.sessionId} is not null)`),
     // The prototype's own sentence: gross and tare come together, and net is gross less tare.
     check(tableObjectName(t.id.table, "weights_shape", "unload"), sql`(${t.grossKg} is null) = (${t.tareKg} is null) and (${t.grossKg} is null or ${t.netKg} = ${t.grossKg} - ${t.tareKg})`),
+    oneOf(t.refusalReason, UNLOAD_REFUSAL_REASONS),
+    // A refusal's note goes with its reason, and `other` says it in words: `refusalIssue` (@waste/domain/execution/unloads), at the table.
+    check(tableObjectName(t.id.table, "refusal_shape", "unload"), sql`(${t.refusalNote} is null or ${t.refusalReason} is not null) and (${t.refusalReason} is distinct from 'other' or ${t.refusalNote} is not null)`),
     tenantIndex(t, t.routeId),
     tenantIndex(t, t.sessionId),
     tenantIndex(t, t.unloadingStationId),

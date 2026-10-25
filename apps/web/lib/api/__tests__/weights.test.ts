@@ -7,7 +7,7 @@
 import assert from "node:assert/strict"
 import { describe, test } from "node:test"
 
-import { BOTH_GROSS_AND_TARE as WIRE_BOTH, NET_IS_GROSS_LESS_TARE as WIRE_NET, type Unload } from "@waste/contracts/unloads"
+import { BOTH_GROSS_AND_TARE as WIRE_BOTH, NET_IS_GROSS_LESS_TARE as WIRE_NET, SAY_WHY_REFUSED as WIRE_SAY_WHY, UnloadCreate, type Unload } from "@waste/contracts/unloads"
 import { WeightApprove, WeightCorrect, WeightReject, type WeightReview } from "@waste/contracts/weight-control"
 
 import { FIXTURE_COMPANY_ID, getModuleDefinition, type BusinessRecord } from "../../data/business-modules"
@@ -16,8 +16,8 @@ import { problemSentence } from "../problem"
 import { NOTHING_RESOLVED, type MappingContext } from "../records/adapter"
 import { isServerBacked, SERVER_MODULE_KEYS } from "../records/modules"
 import { routesWindowFrom } from "../records/routes"
-import { commandRecord, loaded, resolverOver, spellsStatus, type ServerRecordsState } from "../records/server-records"
-import { BOTH_GROSS_AND_TARE, NET_IS_GROSS_LESS_TARE, REVIEW_LABELS, unloadAdapter, weightReviewsOffered, weightsModule } from "../records/weights"
+import { commandRecord, loaded, resolverOver, spellsStatus, writeRecord, type ServerRecordsState } from "../records/server-records"
+import { BOTH_GROSS_AND_TARE, differenceOf, NET_IS_GROSS_LESS_TARE, REVIEW_LABELS, SAY_WHY_REFUSED, unloadAdapter, weightReviewsOffered, weightsModule } from "../records/weights"
 import { bodyOf, clientOver, json, problem, scripted } from "./scripted-fetch"
 
 const NOW = new Date("2026-09-30T12:00:00Z")
@@ -48,6 +48,8 @@ const raw: Unload = {
   objectKey: null,
   note: null,
   weightReview: { status: "captured", latestReviewId: null, correctionUnloadId: null },
+  refusal: null,
+  load: null,
 }
 /** As the adapter lists it: a ledger row with a resource's stamps. */
 const unload = { ...raw, createdAt: raw.recordedAt, updatedAt: raw.recordedAt }
@@ -63,6 +65,45 @@ const state: ServerRecordsState = new Map([
   ["configure.master", moduleOf([plain(`fraction-${RESIDUAL}`, "Residual")], [RESIDUAL])],
 ])
 const context: MappingContext = { ...bare, resolve: resolverOver(state) }
+
+describe("the weighbridge in the office (O9 of #290)", () => {
+  test("a refused load says why, and every unload reads its load on board against the project's tolerance, the Tolerance filter's value", () => {
+    const measured = unloadAdapter.toRecord({ ...unload, refusal: { reason: "contamination", note: "Plastic bags" }, load: { onBoardKg: 6_700, deviationPercent: 7.5, withinTolerance: false } }, context)
+    assert.equal(measured.facts.Refused, "Contamination: Plastic bags")
+    assert.deepEqual([measured.facts["On board"], measured.facts.Difference, measured.facts.Tolerance], ["6,700 kg", "+7.5%", "Above tolerance"])
+    assert.equal(measured.submittedValues?.tolerance, "Above tolerance")
+    assert.equal(measured.description, "Residual refused at ARC Amager off RC-1042 · 2026-09-29: contamination.")
+    const within = unloadAdapter.toRecord({ ...unload, refusal: { reason: "overweight", note: null }, load: { onBoardKg: 7_300, deviationPercent: -1.4, withinTolerance: true } }, context)
+    assert.deepEqual([within.facts.Refused, within.facts.Difference, within.facts.Tolerance], ["Overweight", "-1.4%", "Within tolerance"])
+    const unmeasured = unloadAdapter.toRecord(unload, context)
+    assert.deepEqual([unmeasured.facts.Refused, unmeasured.facts["On board"], unmeasured.facts.Tolerance], [undefined, undefined, "Not measured"], "no stop of its fraction was weighed")
+    assert.equal(differenceOf({ onBoardKg: 1, deviationPercent: 0, withinTolerance: true }), "0.0%")
+    assert.equal(SAY_WHY_REFUSED, WIRE_SAY_WHY)
+  })
+
+  test("Record unload posts the ticket under its route, the time on the route's project's clock, with the refusal where the station turned the load away", async () => {
+    const at: ServerRecordsState = new Map([...state, ["route-studio.routes", moduleOf([plain(`route-${ROUTE}`, "RC-1042 · 2026-09-29", { submittedValues: { projectId: `project-${PROJECT}`, status: "completed" } })], [ROUTE])]])
+    const made = (values: Record<string, string>) =>
+      plain("weights-unload-1", "Unload", { recordKind: "Weight record", submittedValues: { routeId: `route-${ROUTE}`, unloadingStationId: `station-${STATION}`, wasteFractionId: `fraction-${RESIDUAL}`, occurredAt: "2026-09-29T15:05", netKg: "7200", ...values } })
+    const mapping: MappingContext = { ...bare, resolve: resolverOver(at) }
+    const full = unloadAdapter.toCreateBody!(made({ grossKg: "18400", tareKg: "11200", weighbridgeTicket: "WB-2026-3901", refusalReason: "other", refusalNote: "Gate closed early" }), mapping) as { routeId: string; body: unknown }
+    assert.deepEqual(full, {
+      routeId: ROUTE,
+      body: { unloadingStationId: STATION, wasteFractionId: RESIDUAL, netKg: 7200, grossKg: 18400, tareKg: 11200, weighbridgeTicket: "WB-2026-3901", occurredAt: "2026-09-29T13:05:00.000Z", refusal: { reason: "other", note: "Gate closed early" } },
+    })
+    assert.ok(UnloadCreate.safeParse(full.body).success)
+    assert.deepEqual(unloadAdapter.toCreateBody!(made({ refusalReason: "other" }), mapping), { path: "refusalNote", message: SAY_WHY_REFUSED })
+    assert.equal((unloadAdapter.toCreateBody!(made({ refusalNote: "Words alone" }), mapping) as { path: string }).path, "refusalReason", "the station's words go with its reason")
+    assert.deepEqual(unloadAdapter.toCreateBody!(made({ grossKg: "18400" }), mapping), { path: "tareKg", message: BOTH_GROSS_AND_TARE })
+    assert.equal((unloadAdapter.toCreateBody!(made({ occurredAt: "" }), mapping) as { path: string }).path, "occurredAt")
+
+    const { fetch, calls } = scripted([() => json({ ...raw, source: "dispatch", sessionId: null, deviceId: null }, 201, { location: `/unloads/${raw.id}` })])
+    const outcome = await writeRecord(clientOver(fetch), weightsModule, moduleOf([], []), made({}), { fixtures, state: at, now: NOW })
+    assert.deepEqual([calls[0].init.method, calls[0].url], ["POST", `http://api.test/routes/${ROUTE}/unloads`])
+    assert.deepEqual(bodyOf(calls[0]), { unloadingStationId: STATION, wasteFractionId: RESIDUAL, netKg: 7200, occurredAt: "2026-09-29T13:05:00.000Z" }, "the route is the path's, never the body's")
+    assert.equal(outcome.kind, "created")
+  })
+})
 
 describe("the weights module", () => {
   test("is switched after the routes, the stations and the fractions an unload names", () => {

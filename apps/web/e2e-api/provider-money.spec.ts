@@ -1,4 +1,4 @@
-import type { APIRequestContext, Locator, Page } from "@playwright/test"
+import type { APIRequestContext, Browser, Locator, Page } from "@playwright/test"
 import { ID_RANDOM_BYTES, mintId } from "@waste/domain/ids"
 
 import { accessTokenOf, apiAs, expect, freshContext, signIn, test } from "./fixtures"
@@ -15,7 +15,9 @@ import { listAll } from "./tester"
 // its history keeps, and one whose period has not ended calculated but not
 // closed, one not begun offered nothing (#260); an
 // unload the office captured on a running route, reviewed from the weights
-// desk's queue — approved, rejected with why, corrected. The map's Create
+// desk's queue — approved, rejected with why, corrected; and one the office
+// records itself in Record unload, the station's refusal with it (O9 of
+// #290). The map's Create
 // service area is e2e-api/map-planning.spec.ts'. The seed holds no award, so
 // each test makes its own through the API; records are uniquely named and
 // never cleaned up.
@@ -40,6 +42,31 @@ const answerOf = (page: Page, method: string, path: RegExp) =>
 async function pick(dialog: Locator, page: Page, field: RegExp, option: RegExp) {
   await dialog.getByRole("combobox", { name: field }).click()
   await page.getByRole("option", { name: option }).first().click()
+}
+
+/** An instant as the form's wall clock reads it on Copenhagen's clock, the seeded projects': `2026-10-25T09:58`. */
+const copenhagenClock = (instant: Date) => new Intl.DateTimeFormat("sv-SE", { timeZone: "Europe/Copenhagen", year: "numeric", month: "2-digit", day: "2-digit", hour: "2-digit", minute: "2-digit", hourCycle: "h23" }).format(instant).replace(" ", "T")
+
+/** The seeded driver starts the dispatched route, so the office may capture a weighbridge ticket on it. */
+async function startedByTheDriver(browser: Browser, route: { id: string; planned: { vehicleId: string | null } }, deviceId: string) {
+  if (route.planned.vehicleId === null) throw new Error(`route ${route.id} was dispatched with no vehicle`)
+  const context = await freshContext(browser)
+  try {
+    const driverPage = await context.newPage()
+    await signIn(driverPage, SEEDED_DRIVER.email, E2E.loginPassword)
+    const token = await accessTokenOf(context)
+    if (token === null) throw new Error("the driver's browser holds no API session")
+    const asDriver = await apiAs(token)
+    try {
+      const started = await asDriver.post("/driver/commands", { data: { commands: [{ id: mintId(Date.now(), crypto.getRandomValues(new Uint8Array(ID_RANDOM_BYTES))), kind: "start-route", routeId: route.id, occurredAt: new Date().toISOString(), deviceId, body: { vehicleId: route.planned.vehicleId } }] } })
+      expect(started.status()).toBe(200)
+      expect(((await started.json()) as { outcomes: { outcome: string }[] }).outcomes.map((outcome) => outcome.outcome)).toEqual(["applied"])
+    } finally {
+      await asDriver.dispose()
+    }
+  } finally {
+    await context.close()
+  }
 }
 
 /** A dialog by its heading: the details sheet and a form dialog may both be open. */
@@ -454,5 +481,50 @@ test("Weight review: an unload captured on a running route opens in the desk's q
   } finally {
     // The driver holds one open session at a time: the office ends this route for the next test.
     await api.post(`/routes/${route.id}/cancel`, { data: { reasonCode: "other", reason: "Ended by the weight review end-to-end test" } })
+  }
+})
+
+test("Record unload: the office records a load the station turned away, of a fraction it does not take, and the row says why; taken, that load is refused at its fraction (O9 of #290)", async ({ page, api, browser }) => {
+  test.setTimeout(120_000)
+  const { route } = await dispatchedRouteFor(api)
+  await startedByTheDriver(browser, route, "e2e-record-unload")
+  try {
+    const station = (await listAll<Named & { wasteFractionIds: string[] }>(api, "/unloading-stations")).find((candidate) => candidate.wasteFractionIds.length > 0)
+    if (station === undefined) throw new Error("the seed has no station that names what it takes")
+    const untaken = (await listAll<Named>(api, "/waste-fractions")).find((fraction) => !station.wasteFractionIds.includes(fraction.id))
+    if (untaken === undefined) throw new Error(`${station.name} takes every fraction of the seed`)
+
+    const loaded = answerOf(page, "GET", /^\/unloads$/)
+    await page.goto("/route-studio?module=weights")
+    expect((await loaded).status()).toBe(200)
+    await page.getByRole("button", { name: "Record unload" }).click()
+    const dialog = dialogTitled(page, "Record unload")
+    await pick(dialog, page, /^Route/, new RegExp(`^${route.label}`))
+    await pick(dialog, page, /^Unloading station/, new RegExp(`^${station.name}`))
+    await pick(dialog, page, /^Waste fraction/, new RegExp(`^${untaken.name}$`))
+    await dialog.getByLabel(/^Tipped at/).fill(copenhagenClock(new Date(Date.now() - 120_000)))
+    await dialog.getByLabel(/^Net/).fill("640")
+
+    // Taken, the load is refused at its fraction in the station's sentence, and the dialog stays open on what was typed.
+    const [taken] = await Promise.all([answerOf(page, "POST", new RegExp(`^/routes/${route.id}/unloads$`)), dialog.getByRole("button", { name: "Record unload" }).click()])
+    expect(taken.status(), await taken.text()).toBe(400)
+    await expect(page.getByText(`Station ${station.name} does not take ${untaken.name}`).first()).toBeVisible()
+    await expect(dialog).toBeVisible()
+
+    // Turned away, it is recorded with why.
+    await pick(dialog, page, /^Why it was refused/, /^Fraction not accepted/)
+    await dialog.getByLabel(/^In the station's words/).fill("Glass in the residual bay")
+    const [created] = await Promise.all([answerOf(page, "POST", new RegExp(`^/routes/${route.id}/unloads$`)), dialog.getByRole("button", { name: "Record unload" }).click()])
+    expect(created.status(), await created.text()).toBe(201)
+    expect(created.request().postDataJSON()).toMatchObject({ unloadingStationId: station.id, wasteFractionId: untaken.id, netKg: 640, refusal: { reason: "fraction-not-accepted", note: "Glass in the residual bay" } })
+    const unload = (await created.json()) as Unload & { refusal: unknown; load: unknown }
+    expect(unload.refusal).toEqual({ reason: "fraction-not-accepted", note: "Glass in the residual bay" })
+    expect(unload.load).toBeNull()
+    await expect(dialog).toBeHidden()
+    const details = page.getByRole("dialog").filter({ has: page.getByTestId("weight-review-commands") })
+    await expect(details).toContainText("Fraction not accepted: Glass in the residual bay")
+    await expect(details).toContainText("Not measured")
+  } finally {
+    await api.post(`/routes/${route.id}/cancel`, { data: { reasonCode: "other", reason: "Ended by the Record unload end-to-end test" } })
   }
 })

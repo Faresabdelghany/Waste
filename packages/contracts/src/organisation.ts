@@ -39,12 +39,13 @@
 // would send it two months out (`shiftToWorkingDay` walks sixty steps and then
 // gives up); the contract bounds it at six, the database at fewer than seven.
 import { PUBLIC_SLUG_LENGTH, PUBLIC_SLUG_PATTERN } from "@waste/domain/access/public-slug"
+import { DEFAULT_WEIGHT_TOLERANCE_PERCENT, WEIGHT_TOLERANCE_PERCENT } from "@waste/domain/execution/unloads"
 import { DEFAULT_WEEKEND } from "@waste/domain/planning/vocabulary"
 import * as z from "zod"
 
 import { Bic, DEFAULT_PAYMENT_TERMS_DAYS, FikCreditorNumber, Iban, PaymentReferenceScheme, PaymentTermsDays, VatNumber } from "./finance"
 import { ServiceDays } from "./planning"
-import { changesSomething, somethingToChange, stamped } from "./resource"
+import { changesSomething, PositiveInt, somethingToChange, stamped } from "./resource"
 import { Label, Paragraph } from "./text"
 
 /** A company's status: onboarding until its first project runs. */
@@ -120,6 +121,9 @@ export const WEEKEND_MAX = 6
 /** What a weekend of all seven days is told. The database holds the same rule as `project_weekend_not_every_day`. */
 export const A_WORKING_DAY = "A project rests on at most six days: it has to have a working day"
 
+/** A project's weighbridge tolerance, in whole percent, within the domain's bounds (O9 of #290). */
+const ProjectTolerance = PositiveInt.max(WEIGHT_TOLERANCE_PERCENT.max)
+
 /** The days a project rests on: distinct weekdays, at most six. */
 const Weekend = ServiceDays.max(WEEKEND_MAX, { error: A_WORKING_DAY })
 
@@ -142,6 +146,8 @@ export const Project = z.object({
   paymentTermsDays: PaymentTermsDays,
   /** How its invoices are referenced for payment: none, or a FI card, which needs the company's creditor number. */
   paymentReferenceScheme: PaymentReferenceScheme,
+  /** How far a weighbridge's net may differ from what the stops weighed on board, in whole percent, before an unload reads as above tolerance (O9 of #290); absent from a payload before it, read as the default. */
+  weightTolerancePercent: ProjectTolerance.default(DEFAULT_WEIGHT_TOLERANCE_PERCENT),
 })
 export type Project = z.infer<typeof Project>
 
@@ -156,6 +162,7 @@ export const ProjectCreate = z.strictObject({
   holidayList: Label.nullable().optional().describe("Null or absent is no holiday list: the project then rests on its weekend only, whatever calendars it has."),
   paymentTermsDays: PaymentTermsDays.default(DEFAULT_PAYMENT_TERMS_DAYS).describe(`Defaults to ${DEFAULT_PAYMENT_TERMS_DAYS} when absent: the days after issue the project's invoices are due, 0 to 365.`),
   paymentReferenceScheme: PaymentReferenceScheme.default("none").describe("Defaults to none when absent: a FI card's scheme needs the company's creditor number."),
+  weightTolerancePercent: ProjectTolerance.default(DEFAULT_WEIGHT_TOLERANCE_PERCENT).describe("Defaults to 5 when absent: how far a weighbridge's net may differ from the load weighed on board, in whole percent (O9 of #290)."),
 })
 export type ProjectCreate = z.infer<typeof ProjectCreate>
 
@@ -174,6 +181,8 @@ export const ProjectPatch = z
     publicSlug: PublicSlug.nullable().optional(),
     paymentTermsDays: PaymentTermsDays.optional(),
     paymentReferenceScheme: PaymentReferenceScheme.optional(),
+    /** The weighbridge's tolerance, in whole percent, 1 to 100 (O9 of #290). */
+    weightTolerancePercent: ProjectTolerance.optional(),
   })
   .refine(changesSomething, somethingToChange)
 export type ProjectPatch = z.infer<typeof ProjectPatch>

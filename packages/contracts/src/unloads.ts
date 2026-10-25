@@ -22,6 +22,16 @@
 // since every unload has a reading, and never written: the three review
 // commands append rows the reading folds. The list takes `reviewStatus`,
 // the prototype's Weight Control queue ("Needs review" is `captured`).
+//
+// The weighbridge in the office (O9 of #290): a load the station refused
+// carries its `refusal` — a reason from the domain's list, and a note,
+// which `other` needs — set at capture by either door, since the row is a
+// ledger's; and every unload reads its `load`, what the stops of its fraction
+// weighed on board since the route's last unload of it against the
+// weighbridge's net, within the project's tolerance or above it, null where no
+// stop was weighed.
+import { refusalIssue, SAY_WHY_REFUSED } from "@waste/domain/execution/unloads"
+import { UNLOAD_REFUSAL_REASONS } from "@waste/domain/execution/vocabulary"
 import * as z from "zod"
 
 import { IsoDateTime } from "./dates"
@@ -41,6 +51,27 @@ export const bothGrossAndTare = { message: BOTH_GROSS_AND_TARE, path: ["tareKg"]
 /** What a body whose net is not gross less tare is told, at the net. */
 export const NET_IS_GROSS_LESS_TARE = "netKg is grossKg less tareKg where both are given"
 export const netIsGrossLessTare = { message: NET_IS_GROSS_LESS_TARE, path: ["netKg"] }
+
+/** Why the station refused a load (O9 of #290). */
+export const UnloadRefusalReason = z.enum(UNLOAD_REFUSAL_REASONS)
+export type UnloadRefusalReason = z.infer<typeof UnloadRefusalReason>
+
+/** What a refusal for another reason is told without its words, at the note: `refusalIssue`'s sentence. */
+export { SAY_WHY_REFUSED }
+
+/** A refusal as a body gives it: the reason, and the note, which `other` needs. */
+export const UnloadRefusal = z
+  .strictObject({ reason: UnloadRefusalReason, note: Paragraph.optional() })
+  .refine((refusal) => refusalIssue({ reason: refusal.reason, note: refusal.note ?? null }) === undefined, { message: SAY_WHY_REFUSED, path: ["note"] })
+export type UnloadRefusal = z.infer<typeof UnloadRefusal>
+
+/** What the stops weighed on board against the weighbridge's net: the difference in percent of the on-board load, to one decimal, and whether it is within the project's tolerance. */
+export const LoadReading = z.object({
+  onBoardKg: PositiveInt,
+  deviationPercent: z.number(),
+  withinTolerance: z.boolean(),
+})
+export type LoadReading = z.infer<typeof LoadReading>
 
 /** The weights as any body or row carries them: net always, gross and tare together or not at all. */
 export type Weights = { netKg: number; grossKg?: number | null; tareKg?: number | null }
@@ -80,6 +111,10 @@ export const Unload = z
     note: Paragraph.nullable(),
     /** Weight control's reading over the row: the latest review's decision, or `captured` where nobody has looked (Issue #112). */
     weightReview: WeightReviewState,
+    /** The station's refusal of the load (O9 of #290), null for one it took; absent from a row the outbox carried before, read as none. */
+    refusal: z.object({ reason: UnloadRefusalReason, note: Paragraph.nullable() }).nullable().default(null),
+    /** The load on board against the weighbridge, null where no stop of its fraction was weighed; absent from a row the outbox carried before, read as none. */
+    load: LoadReading.nullable().default(null),
   })
   .refine(weightsPaired, bothGrossAndTare)
   .refine(weightsAddUp, netIsGrossLessTare)
@@ -97,6 +132,8 @@ export const UnloadCreate = z
     /** When the truck tipped, under the skew rule. */
     occurredAt: IsoDateTime,
     note: Paragraph.optional(),
+    /** The station refused the load (O9 of #290): an accepted unload's fraction is one the station takes, a refused one's any. */
+    refusal: UnloadRefusal.optional(),
   })
   .refine(weightsPaired, bothGrossAndTare)
   .refine(weightsAddUp, netIsGrossLessTare)

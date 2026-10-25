@@ -25,7 +25,9 @@
 // then its lines — each event by name and route, and the provider price that
 // priced it — and its history.
 //
-// Weights: an unload's details offer the reviews the machine moves it by
+// Weights: Record unload is the office's capture of a weighbridge ticket on a
+// route that ran (O9 of #290), its routes the active and completed ones; an
+// unload's details offer the reviews the machine moves it by
 // (`weightReviewsOffered`); a corrected one names the row to review instead.
 // The forms are lib/data/provider-money-forms.ts', and each primary button
 // says what its form does (its submit label), not the fixture's action;
@@ -38,16 +40,18 @@ import { Button } from "@/components/ui/button"
 import { Dialog, DialogContent, DialogDescription, DialogFooter, DialogHeader, DialogTitle } from "@/components/ui/dialog"
 import { Table, TableBody, TableCell, TableHead, TableHeader, TableRow } from "@/components/ui/table"
 import { BusinessRecordFormDialog } from "@/components/waste/business-record-form-dialog"
-import { savedRow, useBusinessRecordStore, useServerModuleState, whenSaved } from "@/components/waste/business-record-store"
+import { savedRow, useBusinessRecordStore, useModuleRecords, useServerModuleState, whenSaved } from "@/components/waste/business-record-store"
 import { useCommercialPickers } from "@/components/waste/commands/commercial-pickers"
 import type { RowSurfaceProps } from "@/components/waste/commands/command-surfaces"
 import { CreateSurface } from "@/components/waste/commands/create-surface"
 import { ReadRows } from "@/components/waste/commands/read-rows"
-import { useCommandRunner, useModuleReady, useRowHistory, useServerNames } from "@/components/waste/commands/use-command-support"
+import { useCommandRunner, useModuleReady, useRelationPickers, useRowHistory, useServerNames, type RelationPickers } from "@/components/waste/commands/use-command-support"
 import type { ApiClient } from "@/lib/api/client"
 import { statusLabel } from "@/lib/api/records/adapter"
 import { shownOn } from "@/lib/api/records/clock"
 import { providerPriceIndexHeldBack, providerPriceIndexOffered, settlementCommandsOffered, settlementDetail, settlementHeldBack, settlementHistory } from "@/lib/api/records/provider-money"
+import { typed } from "@/lib/api/records/adapter"
+import { ROUTES_MODULE } from "@/lib/api/records/routes"
 import { weightReviewsOffered } from "@/lib/api/records/weights"
 import { formatMinor } from "@/lib/commercial/money"
 import type { BusinessFormValues } from "@/lib/data/business-form-types"
@@ -71,6 +75,7 @@ import {
   createProviderPriceRecord,
   createServiceAreaRecord,
   createSettlementRecord,
+  createUnloadRecord,
   INDEX_FORM,
   PROVIDER_PRICE_FORM,
   providerPriceEditForm,
@@ -78,6 +83,7 @@ import {
   SERVICE_AREA_FORM,
   serviceAreaEditForm,
   SETTLEMENT_FORM,
+  UNLOAD_FORM,
   updateServiceAreaRecord,
   WEIGHT_REVIEW_FORMS,
 } from "@/lib/data/provider-money-forms"
@@ -449,6 +455,34 @@ export function SettlementSurface({ record }: RowSurfaceProps) {
 // ---------------------------------------------------------------------------
 // Weight review
 // ---------------------------------------------------------------------------
+
+const NO_ROUTES: readonly BusinessRecord[] = []
+
+/** The routes an unload is recorded on: those that ran, active or completed, the latest first. */
+export function ranRoutes(routes: readonly BusinessRecord[]): BusinessRecord[] {
+  return routes.filter((route) => ["active", "completed"].includes(typed(route, "status") ?? "")).toSorted((a, b) => (typed(b, "operatingDate") ?? "").localeCompare(typed(a, "operatingDate") ?? ""))
+}
+
+/** Record unload: the office's capture of a weighbridge ticket, on a route that ran (O9 of #290). */
+export function RecordUnloadSurface() {
+  const base = useRelationPickers()
+  const routes = useModuleRecords(ROUTES_MODULE.workspaceId, ROUTES_MODULE.moduleId, NO_ROUTES)
+  const pickers: RelationPickers = {
+    ...base,
+    readyFor: (schema) => base.readyFor(schema) && (routes.ready || routes.notGranted),
+    options: (field, values, projectId, opened) => (field.id === "routeId" ? ranRoutes(routes.records).map((route) => ({ value: route.id, label: `${route.name} · ${route.status}` })) : base.options(field, values, projectId, opened)),
+  }
+  return (
+    <CreateSurface
+      label={UNLOAD_FORM.submitLabel}
+      module={WEIGHTS_MODULE}
+      schema={UNLOAD_FORM}
+      pickers={pickers}
+      make={(values, now) => createUnloadRecord(values, now)}
+      created={() => ({ title: "Unload recorded", description: "It waits in the desk's queue for its review, with its load on board where the stops were weighed." })}
+    />
+  )
+}
 
 /** An unload's details: the reviews its status moves by; a corrected one names the row to review. */
 export function WeightReviewSurface({ record }: RowSurfaceProps) {

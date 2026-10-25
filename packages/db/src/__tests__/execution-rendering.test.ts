@@ -90,6 +90,7 @@ import { handWrittenStatements, normalised, statementsOf } from "../sql/hand-wri
 import { PUBLICATION, powersyncStatements, publicationStatement, SYNCED_TABLES, syncedTableNames, syncGrantStatements, syncRoleStatements } from "../sql/publication"
 import { BOOKED_SHAPES, RESERVED_CONTAINER, TAKEN_CONTAINER } from "./execution-shapes"
 import { checksOf, companyFk, createTable, foreignKey, geometryCheck, ID, index, list, oneOfCheck, partialUniqueIndex, positiveCheck, projectFk, projectFkTo, ref, tenantFk, uniqueKey } from "./rendering"
+import { REFUSAL_REASONS, REFUSAL_SHAPE } from "./weighbridge-shapes"
 import { statementsBetween, statementsFor } from "./specimen"
 
 /** The seven tables in the order src/schema/execution.ts defines them; drizzle-kit's own loader sorts a module's exports, which the migration test allows for. */
@@ -201,9 +202,11 @@ const outboxEventTable = (asOf: "0008" | "0009" | "0010" | "0040"): string =>
 /** What 0009 changed on a table 0008 created: the outbox's CREATE TABLE as drizzle-kit generated it as of 0009, and as it generated it as of 0008. */
 const CHANGED_IN_0009 = new Map([[outboxEventTable("0009"), outboxEventTable("0008")]])
 
-/** unload as drizzle-kit writes it today — with the project key 0010 added for the weight review to point at (Issue #112), the day something pointed at it — and as it wrote it as of 0008, without. */
-const unloadTable = (finance: boolean): string =>
-  createLedger("unload", [
+/** unload as drizzle-kit writes it today — with the refusal 0045 gave it (O9 of #290) and the project key 0010 added for the weight review to point at (Issue #112), the day something pointed at it — as it wrote it as of 0010, and as of 0008, without either. */
+const unloadTable = (asOf: "0008" | "0010" | "0045"): string => {
+  const finance = asOf >= "0010"
+  const refused = asOf >= "0045"
+  return createLedger("unload", [
     '"route_id" uuid NOT NULL',
     '"session_id" uuid',
     '"unloading_station_id" uuid NOT NULL',
@@ -219,6 +222,7 @@ const unloadTable = (finance: boolean): string =>
     '"weighbridge_ticket" text',
     '"object_key" text',
     '"note" text',
+    ...(refused ? ['"refusal_reason" text', '"refusal_note" text'] : []),
     ...(finance ? [uniqueKey("unload_project_key", "company_id", "project_id", "id")] : []),
     oneOfCheck("unload", "source", ...SOURCES),
     geometryCheck("unload", "location"),
@@ -227,7 +231,12 @@ const unloadTable = (finance: boolean): string =>
     positiveCheck("unload", "net_kg"),
     sessionShape("unload"),
     `CONSTRAINT "unload_weights_shape" CHECK ((${ref("unload", "gross_kg")} is null) = (${ref("unload", "tare_kg")} is null) and (${ref("unload", "gross_kg")} is null or ${ref("unload", "net_kg")} = ${ref("unload", "gross_kg")} - ${ref("unload", "tare_kg")}))`,
+    ...(refused ? [oneOfCheck("unload", "refusal_reason", ...REFUSAL_REASONS), `CONSTRAINT "unload_refusal_shape" CHECK (${REFUSAL_SHAPE})`] : []),
   ])
+}
+
+/** What 0045 changed on one of the seven (O9 of #290): the unload's CREATE TABLE as drizzle-kit generates it now onto what it generated as of 0010. Applied first; weighbridge-rendering.test.ts pins the statements themselves. */
+const CHANGED_IN_0045 = new Map([[unloadTable("0045"), unloadTable("0010")]])
 
 /** What 0040 changed on one of the seven (M7 of #293): the outbox's CREATE TABLE as drizzle-kit generates it now onto what it generated as of 0010. Applied first, one file at a time. */
 const CHANGED_IN_0040 = new Map([[outboxEventTable("0040"), outboxEventTable("0010")]])
@@ -235,7 +244,7 @@ const CHANGED_IN_0040 = new Map([[outboxEventTable("0040"), outboxEventTable("00
 /** What 0010 changed on two of the seven (Issue #112): the outbox's CREATE TABLE as drizzle-kit generated it as of 0010 onto what it generated as of 0009, and the unload's onto what 0008 says. Applied before `CHANGED_IN_0009`, so today's spelling is mapped back one file at a time. */
 const CHANGED_IN_0010 = new Map([
   [outboxEventTable("0010"), outboxEventTable("0009")],
-  [unloadTable(true), unloadTable(false)],
+  [unloadTable("0010"), unloadTable("0008")],
 ])
 
 /** route as drizzle-kit wrote it as of each file: 0008 bare, 0012 with the run that last wrote it (Issue #97 part B), 0013 with the active Plan too (#169), 0015 with the hold too (#209), 0016 with the scheme and the group nullable together (#111), 0024 with the cancel's reason code (O5 of #290). */
@@ -438,7 +447,7 @@ const expected = [
     uniqueKey("session_route_id_project_key", "company_id", "project_id", "route_id", "id"),
   ]),
   proofTable("0038"),
-  unloadTable(true),
+  unloadTable("0045"),
   createLedger("driver_command", [
     // Nullable: a command rejected because no such route is assigned to the driver has no route the key could check, and is still a receipt.
     '"route_id" uuid',
@@ -609,6 +618,7 @@ const handWritten = [...Object.values(tables).flatMap((table) => handWrittenStat
 const generatedHead = async (): Promise<string[]> => [
   ...(await statementsFor(tables))
     .filter((statement) => !ADDED_IN_0038.includes(statement) && !ADDED_IN_0032.includes(statement) && !ADDED_IN_0023.includes(statement) && !ADDED_IN_0013.includes(statement) && !ADDED_IN_0012.includes(statement))
+    .map((statement) => CHANGED_IN_0045.get(statement) ?? statement)
     .map((statement) => CHANGED_IN_0040.get(statement) ?? statement)
     .map((statement) => CHANGED_IN_0038.get(statement) ?? statement)
     .map((statement) => CHANGED_IN_0032.get(statement) ?? statement)
@@ -656,7 +666,8 @@ describe("the Execution tables as drizzle-kit writes them", () => {
     for (const statement of CHANGED_IN_0012.keys()) assert.ok([...CHANGED_IN_0013.values()].includes(statement), statement.split("\n")[0])
     for (const statement of ADDED_IN_0012) assert.ok(today.includes(statement), statement)
     for (const statement of CHANGED_IN_0040.keys()) assert.ok(today.includes(statement), statement.split("\n")[0])
-    for (const statement of CHANGED_IN_0010.keys()) assert.ok(today.includes(statement) || [...CHANGED_IN_0040.values()].includes(statement), statement.split("\n")[0])
+    for (const statement of CHANGED_IN_0045.keys()) assert.ok(today.includes(statement), statement.split("\n")[0])
+    for (const statement of CHANGED_IN_0010.keys()) assert.ok(today.includes(statement) || [...CHANGED_IN_0040.values(), ...CHANGED_IN_0045.values()].includes(statement), statement.split("\n")[0])
     for (const statement of CHANGED_IN_0009.keys()) assert.ok([...CHANGED_IN_0010.values()].includes(statement), statement.split("\n")[0])
     assert.equal(CHANGED_IN_0010.size, 2, "the outbox's vocabulary and the unload's key")
     assert.equal(CHANGED_IN_0012.size, 1, "the route's run")
@@ -760,7 +771,7 @@ describe("the checks of this context", () => {
       "pickup_reason_shape",
       "pickup_contaminant_code_shape",
     ])
-    assert.deepEqual([...checksOf(unload).keys()].slice(-2), ["unload_session_shape", "unload_weights_shape"])
+    assert.deepEqual([...checksOf(unload).keys()].slice(-4), ["unload_session_shape", "unload_weights_shape", "unload_refusal_reason_one_of", "unload_refusal_shape"])
     assert.deepEqual([...checksOf(driverCommand).keys()], ["driver_command_kind_one_of", "driver_command_outcome_one_of", "driver_command_problem_shape", "driver_command_route_shape"])
     assert.deepEqual([...checksOf(outboxEvent).keys()], ["outbox_event_kind_one_of", "outbox_event_aggregate_kind_one_of"])
     assert.deepEqual([...checksOf(session).keys()], [], "open and ended are readings of ended_at; a session has no status to check")

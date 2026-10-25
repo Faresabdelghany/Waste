@@ -134,7 +134,7 @@ describe("the report answers", () => {
   })
 
   test("the tonnage report: the totals, the unloads by project, fraction, station and interval, and the pickup weights", () => {
-    const weighed = { netKg: 4_200, approvedKg: 3_000, capturedKg: 1_200, unloads: 2, rejectedKg: 800, rejectedUnloads: 1 }
+    const weighed = { netKg: 4_200, approvedKg: 3_000, capturedKg: 1_200, unloads: 2, rejectedKg: 800, rejectedUnloads: 1, refusedKg: 640, refusedUnloads: 1 }
     const report = {
       window,
       totals: { ...weighed, pickupWeightKg: 96, weighedPickups: 2 },

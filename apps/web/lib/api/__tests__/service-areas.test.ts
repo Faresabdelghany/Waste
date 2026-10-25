@@ -36,7 +36,7 @@ const NOW = new Date("2026-09-30T12:00:00Z")
 const STAMPS = { createdAt: "2026-09-24T09:00:00.000Z", updatedAt: "2026-09-25T09:30:00.000Z" }
 const fixtures = getModuleDefinition(SERVICE_AREAS_MODULE)?.records ?? []
 
-const copenhagen: Project = { id: "01a0d2a4-a280-7002-8000-000000000001", ...STAMPS, name: "Copenhagen Central", kind: "Municipality", language: "da", currency: "DKK", timezone: "Europe/Copenhagen", status: "active", weekend: ["saturday", "sunday"], holidayList: "Danish public holidays", publicSlug: null, paymentTermsDays: 30, paymentReferenceScheme: "none" }
+const copenhagen: Project = { id: "01a0d2a4-a280-7002-8000-000000000001", ...STAMPS, name: "Copenhagen Central", kind: "Municipality", language: "da", currency: "DKK", timezone: "Europe/Copenhagen", status: "active", weekend: ["saturday", "sunday"], holidayList: "Danish public holidays", publicSlug: null, weightTolerancePercent: 5, paymentTermsDays: 30, paymentReferenceScheme: "none" }
 const organic: WasteFraction = { id: "01a0d2a4-a280-7005-8000-000000000002", ...STAMPS, key: "organic", name: "Organic", wasteCode: null, treatment: null }
 const paper: WasteFraction = { id: "01a0d2a4-a280-7005-8000-000000000003", ...STAMPS, key: "paper", name: "Paper", wasteCode: null, treatment: null }
 const OSTERBRO = "01a0d2a4-a280-7015-8000-000000000002"

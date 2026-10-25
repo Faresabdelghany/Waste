@@ -26,6 +26,16 @@
 // in the domain's words. The `unload-recorded` event is written in the same
 // transaction, carrying the unload as answered.
 //
+// The weighbridge in the office (O9 of #290): the capture may say the station
+// refused the load (`refusal`, a reason and a note, which `other` needs); an
+// accepted load's fraction is one the station takes, a 400 at
+// `wasteFractionId` in the station's sentence otherwise (routes/unload-writes.ts,
+// `stationTakes`), and a refused one's any. Every unload answered carries
+// `load`, what the stops of its fraction weighed on board since the route's
+// last accepted unload of it against its net, within the project's tolerance
+// or above it, null where no stop was weighed (`unloadsAnswered`,
+// routes/execution-shapes.ts).
+//
 // Every Unload answered here carries `weightReview`, the review ledger's
 // reading (Issue #112 §5): the list, the read and the capture go through
 // `unloadsFrom` (routes/execution-shapes.ts), one LATERAL probe per row for
@@ -48,13 +58,13 @@ import { projectIdsOf, requireProject } from "../auth/projects"
 import { requireGrant } from "../auth/require"
 import { emit } from "../outbox"
 import { afterCursor, fetchLimit, pageOf } from "../pagination"
-import { describeProblem, validate } from "../problem"
-import { findRoute, findUnload, noSuchRoute, noSuchUnload, unloadOf, unloadScope, unloadsFrom } from "./execution-shapes"
+import { describeProblem, invalidRequest, validate } from "../problem"
+import { findRoute, findUnload, noSuchRoute, noSuchUnload, unloadAnswered, unloadScope, unloadsAnswered, unloadsFrom } from "./execution-shapes"
 import { requireRoute, requireUnloadingStation, requireWasteFraction } from "./references"
 import { requireRan } from "./routes"
 import type { ClockOptions } from "./scheme-groups"
 import { created, describeCreated, describeJson, IdParam, lockRow, requireNotAhead } from "./shared"
-import { appendUnload } from "./unload-writes"
+import { appendUnload, notTaken, stationTakes } from "./unload-writes"
 
 const MODULE = "route-studio.weights"
 
@@ -105,7 +115,7 @@ export function unloadRoutes(guard: MiddlewareHandler<AuthEnv>, { now = () => ne
           )
           .orderBy(asc(unload.id))
           .limit(fetchLimit(limit))
-        return c.json(pageOf(rows.map(unloadOf), limit))
+        return c.json(pageOf(await unloadsAnswered(tx, principal.companyId, rows), limit))
       },
     )
     .get(
@@ -133,7 +143,7 @@ export function unloadRoutes(guard: MiddlewareHandler<AuthEnv>, { now = () => ne
         const principal = c.get("principal")
         const row = await findUnload(tx, principal, id)
         if (row === undefined) throw noSuchUnload(id)
-        return c.json(unloadOf(row))
+        return c.json(await unloadAnswered(tx, principal.companyId, row))
       },
     )
     .post(
@@ -142,12 +152,12 @@ export function unloadRoutes(guard: MiddlewareHandler<AuthEnv>, { now = () => ne
         operationId: "recordRouteUnload",
         summary: "Capture an unload the office holds the ticket for",
         description:
-          "The office's capture of a weighbridge ticket on a route that ran (`active` or `completed`; a route that has not is refused, 409, and a cancelled one does not change): appends one Unload with `source` dispatch, the caller as its recorder, no session, and a server-minted id. The station is one of this company's — any station, since a full truck unloads where it can — and the fraction one of this company's (400 at the field). `netKg` is what was tipped, whole kilograms; `grossKg` and `tareKg` come together or not at all (400 at `tareKg`), and where both are given net is gross less tare (400 at `netKg`). `occurredAt` is when the truck tipped, on the caller's word, and at most five minutes ahead of the request's clock (400). The `unload-recorded` event is written in the same transaction, carrying the unload as answered.",
+          "The office's capture of a weighbridge ticket on a route that ran (`active` or `completed`; a route that has not is refused, 409, and a cancelled one does not change): appends one Unload with `source` dispatch, the caller as its recorder, no session, and a server-minted id. The station is one of this company's — any station, since a full truck unloads where it can — and the fraction one of this company's (400 at the field). `netKg` is what was tipped, whole kilograms; `grossKg` and `tareKg` come together or not at all (400 at `tareKg`), and where both are given net is gross less tare (400 at `netKg`). `occurredAt` is when the truck tipped, on the caller's word, and at most five minutes ahead of the request's clock (400). `refusal` says the station refused the load: a reason from the list, and a note, which `other` needs (400 at `refusal.note`). An accepted load's fraction is one the station takes — a station that names none takes nothing — and any other is a 400 at `wasteFractionId` naming the station; a refused load's fraction may be any. The answer carries `load`, the stops' weights of the fraction on board against the net, as every unload does. The `unload-recorded` event is written in the same transaction, carrying the unload as answered.",
         security: BEARER_SECURITY,
         responses: {
           201: describeCreated("The unload as it was appended.", Unload),
           400: describeProblem(
-            "The path does not hold an id, or the body is missing a field, names a member the server owns, gives one of gross and tare without the other or a net that is not gross less tare, dates the unload more than five minutes after the request, or names a station or a fraction that is not this company's.",
+            "The path does not hold an id, or the body is missing a field, names a member the server owns, gives one of gross and tare without the other or a net that is not gross less tare, dates the unload more than five minutes after the request, names a station or a fraction that is not this company's, refuses the load for another reason without a note, or names, for a load the station took, a fraction the station does not take.",
           ),
           401: describeProblem("No usable token (see WWW-Authenticate)."),
           403: describeProblem(`No active account here, or the caller's role does not allow \`create\` on \`${MODULE}\`.`),
@@ -161,7 +171,7 @@ export function unloadRoutes(guard: MiddlewareHandler<AuthEnv>, { now = () => ne
       validate("json", UnloadCreate),
       async (c) => {
         const { id } = c.req.valid("param")
-        const { unloadingStationId, wasteFractionId, netKg, grossKg, tareKg, weighbridgeTicket, occurredAt, note } = c.req.valid("json")
+        const { unloadingStationId, wasteFractionId, netKg, grossKg, tareKg, weighbridgeTicket, occurredAt, note, refusal } = c.req.valid("json")
         const tx = c.get("tx")
         const principal = c.get("principal")
         // The route's lock, then the route: a cancellation and a capture on one route take turns, and the status is read under the lock.
@@ -171,6 +181,11 @@ export function unloadRoutes(guard: MiddlewareHandler<AuthEnv>, { now = () => ne
         // The body's 400s before the state's 409, the order every route keeps.
         await requireUnloadingStation(tx, principal.companyId, unloadingStationId)
         await requireWasteFraction(tx, principal.companyId, wasteFractionId)
+        // An accepted load is of a fraction the station takes (O9 of #290); a refused one may be of any.
+        if (refusal === undefined) {
+          const takes = await stationTakes(tx, principal.companyId, unloadingStationId, wasteFractionId)
+          if (!takes.takes) throw invalidRequest("body", [{ path: "wasteFractionId", message: notTaken(takes) }])
+        }
         const at = now()
         const tipped = new Date(occurredAt)
         requireNotAhead(tipped, at)
@@ -187,8 +202,10 @@ export function unloadRoutes(guard: MiddlewareHandler<AuthEnv>, { now = () => ne
           netKg,
           weighbridgeTicket: weighbridgeTicket ?? null,
           note: note ?? null,
+          refusalReason: refusal?.reason ?? null,
+          refusalNote: refusal?.note ?? null,
         })
-        const answered = unloadOf(row)
+        const answered = await unloadAnswered(tx, principal.companyId, row)
         await emit(tx, principal, { aggregate: "unload", aggregateId: row.id, kind: "unload-recorded", payload: answered, projectId: row.projectId, occurredAt: tipped })
         return created(c, "/unloads", answered)
       },

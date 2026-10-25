@@ -1866,6 +1866,7 @@ column wms.project 12 holiday_list text acl=[wms_public=SELECT/<owner>]
 column wms.project 13 public_slug text acl=[wms_public=SELECT/<owner>]
 column wms.project 14 payment_terms_days integer not-null default=30
 column wms.project 15 payment_reference_scheme text not-null default='none'::text
+column wms.project 16 weight_tolerance_percent integer not-null default=5
 constraint wms.project project_company_id_fk FOREIGN KEY (company_id) REFERENCES wms.company(id)
 constraint wms.project project_name_key UNIQUE (company_id, name)
 constraint wms.project project_payment_reference_scheme_one_of CHECK ((payment_reference_scheme = ANY (ARRAY['none'::text, 'fik-71'::text, 'fik-75'::text])))
@@ -1877,6 +1878,7 @@ constraint wms.project project_status_one_of CHECK ((status = ANY (ARRAY['active
 constraint wms.project project_tenant_key UNIQUE (company_id, id)
 constraint wms.project project_weekend_not_every_day CHECK ((cardinality(weekend) < 7))
 constraint wms.project project_weekend_subset_of CHECK ((weekend <@ ARRAY['monday'::text, 'tuesday'::text, 'wednesday'::text, 'thursday'::text, 'friday'::text, 'saturday'::text, 'sunday'::text]))
+constraint wms.project project_weight_tolerance_percent_range CHECK (((weight_tolerance_percent >= 1) AND (weight_tolerance_percent <= 100)))
 index wms.project project_name_key CREATE UNIQUE INDEX project_name_key ON wms.project USING btree (company_id, name)
 index wms.project project_pkey CREATE UNIQUE INDEX project_pkey ON wms.project USING btree (id)
 index wms.project project_public_slug_key CREATE UNIQUE INDEX project_public_slug_key ON wms.project USING btree (public_slug)
@@ -2987,6 +2989,8 @@ column wms.unload 16 net_kg integer not-null
 column wms.unload 17 weighbridge_ticket text
 column wms.unload 18 object_key text
 column wms.unload 19 note text
+column wms.unload 20 refusal_reason text
+column wms.unload 21 refusal_note text
 constraint wms.unload unload_company_id_fk FOREIGN KEY (company_id) REFERENCES wms.company(id)
 constraint wms.unload unload_gross_kg_positive CHECK ((gross_kg > 0))
 constraint wms.unload unload_location_valid CHECK ((extensions.st_isvalid(location) AND (NOT extensions.st_isempty(location)) AND (extensions.st_xmin((location)::extensions.box3d) >= ('-180'::integer)::double precision) AND (extensions.st_xmax((location)::extensions.box3d) <= (180)::double precision) AND (extensions.st_ymin((location)::extensions.box3d) >= ('-90'::integer)::double precision) AND (extensions.st_ymax((location)::extensions.box3d) <= (90)::double precision)))
@@ -2995,6 +2999,8 @@ constraint wms.unload unload_pkey PRIMARY KEY (id)
 constraint wms.unload unload_project_id_fk FOREIGN KEY (company_id, project_id) REFERENCES wms.project(company_id, id)
 constraint wms.unload unload_project_key UNIQUE (company_id, project_id, id)
 constraint wms.unload unload_recorded_by_fk FOREIGN KEY (company_id, recorded_by) REFERENCES wms.user_account(company_id, id)
+constraint wms.unload unload_refusal_reason_one_of CHECK ((refusal_reason = ANY (ARRAY['contamination'::text, 'fraction-not-accepted'::text, 'hazardous'::text, 'overweight'::text, 'other'::text])))
+constraint wms.unload unload_refusal_shape CHECK ((((refusal_note IS NULL) OR (refusal_reason IS NOT NULL)) AND ((refusal_reason IS DISTINCT FROM 'other'::text) OR (refusal_note IS NOT NULL))))
 constraint wms.unload unload_route_id_fk FOREIGN KEY (company_id, project_id, route_id) REFERENCES wms.route(company_id, project_id, id)
 constraint wms.unload unload_route_id_session_id_fk FOREIGN KEY (company_id, project_id, route_id, session_id) REFERENCES wms.session(company_id, project_id, route_id, id)
 constraint wms.unload unload_session_shape CHECK (((source = 'driver-app'::text) = (session_id IS NOT NULL)))
@@ -3538,4 +3544,5 @@ journal 1792924159748 8dcf073968a66710ff9a712367e53e2391442cc942c1aa486d6822dc43
 journal 1792925242550 975c5a4be9bc2a4de746cf62d5298aa520bd272699f460571a7e527f372a785b
 journal 1792926214973 7b4def117e8b9a90b2c9004f090fe9797125db6e60c8bb1d5c91adbb98f2e154
 journal 1792928027904 dea07fe438532044d3e47b8f1136a440e1137886a6effecd6a5584a64753f08b
+journal 1792945670863 53a1b13d2e90aa2a8f65e733cd43698ac445582226fa5aa1848c4a377c9b38d9
 pgboss-version 42

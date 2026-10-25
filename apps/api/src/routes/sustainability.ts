@@ -96,7 +96,7 @@ async function sustainabilityReport(tx: Tx, principal: Principal, query: Sustain
           .where(and(collections, inArray(pickup.routeId, routeIds), inArray(pickup.wasteFractionId, fractionIds)))
           .orderBy(asc(pickup.routeId), asc(pickup.position), asc(pickup.id))
 
-  // The routes' unloads that count: neither rejected nor superseded by a correction, whose own row counts.
+  // The routes' unloads that count: tipped — no load the station refused (O9 of #290), which stays on board — and neither rejected nor superseded by a correction, whose own row counts.
   const review = weightReviewOf(tx, companyId, unload.id)
   const unloads =
     routeIds.length === 0
@@ -105,7 +105,7 @@ async function sustainabilityReport(tx: Tx, principal: Principal, query: Sustain
           .select({ routeId: unload.routeId, wasteFractionId: unload.wasteFractionId, netKg: unload.netKg, status: reviewStatus(review.decision) })
           .from(unload)
           .leftJoinLateral(review, sql`true`)
-          .where(and(eq(unload.companyId, companyId), inProjects(unload.projectId, principal), inArray(unload.routeId, routeIds), inArray(unload.wasteFractionId, fractionIds)))
+          .where(and(eq(unload.companyId, companyId), inProjects(unload.projectId, principal), inArray(unload.routeId, routeIds), inArray(unload.wasteFractionId, fractionIds), isNull(unload.refusalReason)))
   const counted: RouteUnloaded[] = unloads.filter((row) => {
     const standing = unloadStanding(row.status as WeightReviewStatus)
     return standing !== "rejected" && standing !== "superseded"

@@ -57,6 +57,7 @@ definePurityTests({
     "@waste/domain/access/public-slug",
     "@waste/domain/audit/vocabulary",
     "@waste/domain/execution/proof-shapes",
+    "@waste/domain/execution/unloads",
     "@waste/domain/execution/vocabulary",
     "@waste/domain/execution/work-orders",
     "@waste/domain/finance/payment",

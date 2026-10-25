@@ -49,6 +49,7 @@ const project = {
   publicSlug: null,
   paymentTermsDays: 30,
   paymentReferenceScheme: "none",
+  weightTolerancePercent: 5,
   ...STAMPS,
 }
 
@@ -271,6 +272,9 @@ describe("a project's public slug (ADR-0010)", () => {
   test("a patch publishes under a slug, or unpublishes with null; a create takes none", () => {
     assert.deepEqual(ProjectPatch.parse({ publicSlug: "kystbyen" }), { publicSlug: "kystbyen" })
     assert.deepEqual(ProjectPatch.parse({ publicSlug: null }), { publicSlug: null })
+    // The weighbridge's tolerance (O9 of #290): whole percent, 1 to 100.
+    assert.deepEqual(ProjectPatch.parse({ weightTolerancePercent: 8 }), { weightTolerancePercent: 8 })
+    for (const out of [0, 101, 2.5]) assert.equal(ProjectPatch.safeParse({ weightTolerancePercent: out }).success, false, String(out))
     assert.equal(ProjectPatch.safeParse({ publicSlug: "Not A Slug" }).success, false)
     const { id: _id, createdAt: _created, updatedAt: _updated, publicSlug: _slug, ...create } = project
     assert.equal(ProjectCreate.safeParse({ ...create, publicSlug: "kystbyen" }).success, false)

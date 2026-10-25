@@ -61,7 +61,7 @@ import { ActivePlan } from "./plans"
 import { labelIsTheNumber, labelMatches, Route, routeFields } from "./routes"
 import { Session } from "./sessions"
 import { Label, Paragraph } from "./text"
-import { bothGrossAndTare, netIsGrossLessTare, Unload, weightsAddUp, weightsPaired } from "./unloads"
+import { bothGrossAndTare, netIsGrossLessTare, Unload, UnloadRefusal, weightsAddUp, weightsPaired } from "./unloads"
 
 export { OBJECT_KEY, OBJECT_KEY_SHAPE, ObjectKey }
 
@@ -119,6 +119,8 @@ export const COMMAND_BODIES = {
       weighbridgeTicket: Label.optional(),
       objectKey: ObjectKey.optional(),
       note: Paragraph.optional(),
+      /** The station refused the load (O9 of #290); a load the station does not take is recorded all the same, and the office is told. */
+      refusal: UnloadRefusal.optional(),
       ...located,
     })
     .refine(weightsPaired, bothGrossAndTare)

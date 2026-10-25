@@ -187,6 +187,8 @@ export const projectAdapter: ResourceAdapter<Project> = {
     // What its invoices are due by and the reference they carry (#291 C4).
     facts["Payment terms"] = paymentTermsLabel(project.paymentTermsDays)
     facts["Payment reference"] = paymentReferenceSchemeLabel(project.paymentReferenceScheme)
+    // How far a weighbridge's net may differ from what the stops weighed on board (O9 of #290).
+    facts["Weight tolerance"] = `${project.weightTolerancePercent}%`
     const submittedValues: Record<string, string> = {
       name: project.name,
       kind: project.kind,
@@ -196,6 +198,7 @@ export const projectAdapter: ResourceAdapter<Project> = {
       weekend: project.weekend.join(", "),
       paymentTermsDays: String(project.paymentTermsDays),
       paymentReferenceScheme: project.paymentReferenceScheme,
+      weightTolerancePercent: String(project.weightTolerancePercent),
     }
     if (project.holidayList !== null) submittedValues.holidayList = project.holidayList
     if (project.publicSlug !== null) submittedValues.publicSlug = project.publicSlug
@@ -241,6 +244,7 @@ export const projectAdapter: ResourceAdapter<Project> = {
       // A create says the terms and the scheme only where the form gave them; the API's defaults do the rest.
       ...(typeof terms === "number" ? { paymentTermsDays: terms } : {}),
       ...(scheme === undefined ? {} : { paymentReferenceScheme: scheme }),
+      ...(toleranceOf(record) === undefined ? {} : { weightTolerancePercent: toleranceOf(record) }),
     }
   },
   toPatchBody: (before, after) => {
@@ -260,6 +264,7 @@ export const projectAdapter: ResourceAdapter<Project> = {
       // Settings › Finance & invoicing (#291 C4); `before` was read with both, so an unmoved value moves nothing.
       paymentTermsDays: daysOf(typedPaymentTerms(record, "refused")),
       paymentReferenceScheme: typedScheme(record),
+      weightTolerancePercent: toleranceOf(record),
     }))
   },
   create: (client, body) => create<Project>(client, "/projects", body).then((created) => created.body),
@@ -270,6 +275,13 @@ export const projectAdapter: ResourceAdapter<Project> = {
 function typedScheme(record: BusinessRecord): Project["paymentReferenceScheme"] | undefined {
   const value = typed(record, "paymentReferenceScheme")
   return PAYMENT_REFERENCE_SCHEMES.find((scheme) => scheme === value)
+}
+
+/** The weighbridge tolerance a project record says, in whole percent; undefined where it says none, which the API answers with its default (O9 of #290). */
+function toleranceOf(record: BusinessRecord): number | undefined {
+  const text = typed(record, "weightTolerancePercent")
+  const percent = text === undefined ? Number.NaN : Number(text)
+  return Number.isInteger(percent) ? percent : undefined
 }
 
 /** `Sat–Sun`, the fixture's spelling of a weekend, from the wire's day list. */

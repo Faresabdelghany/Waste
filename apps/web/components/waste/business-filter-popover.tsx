@@ -17,6 +17,7 @@ import {
   Package,
   Path,
   Receipt,
+  Scales,
   Speedometer,
   Spinner,
   SteeringWheel,
@@ -109,6 +110,7 @@ const CATEGORY_ICONS: Readonly<Record<BusinessFilterKey, typeof Spinner>> = {
   blockReasons: Warning,
   billingRuns: Receipt,
   paymentStatuses: Coins,
+  tolerance: Scales,
 }
 
 /**

@@ -291,7 +291,7 @@ export const RevenueReport = z.object({
 })
 export type RevenueReport = z.infer<typeof RevenueReport>
 
-/** Net weights by weight review: what counts (approved and captured, apart), and what was rejected beside it. */
+/** Net weights by weight review: what counts (approved and captured, apart), what was rejected beside it, and what the station refused (O9 of #290), never in the net. */
 const weighedFields = {
   /** Approved and captured: the tonnage. */
   netKg: Kilograms,
@@ -302,6 +302,9 @@ const weighedFields = {
   unloads: Count,
   rejectedKg: Kilograms,
   rejectedUnloads: Count,
+  /** Loads the station refused, whose weight left on the truck. */
+  refusedKg: Kilograms,
+  refusedUnloads: Count,
 }
 
 /** One project's unloads of one fraction at one station over one interval; a combination without any is absent. */
