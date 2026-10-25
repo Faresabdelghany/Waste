@@ -56,6 +56,8 @@ import { containerRoutes } from "./routes/containers"
 import { customerRoutes } from "./routes/customers"
 import { depotRoutes } from "./routes/depots"
 import { dropOffPointRoutes } from "./routes/drop-off-points"
+import { emissionReportRoutes } from "./routes/emissions"
+import { fuelEmissionFactorRoutes } from "./routes/fuel-emission-factors"
 import { driverDoorRoutes } from "./routes/driver"
 import { availabilityRoutes } from "./routes/availability"
 import { driverRoutes } from "./routes/drivers"
@@ -249,6 +251,8 @@ export function createApp({
   app.route("/", collectionGroupRoutes(guard, { now }))
   app.route("/", generationRoutes(guard, { jobs }))
   app.route("/", vehicleTypeRoutes(guard))
+  // The fleet's emission factors (M10 of #293), master data beside the vehicle types whose consumption they measure.
+  app.route("/", fuelEmissionFactorRoutes(guard))
   app.route("/", warehouseRoutes(guard))
   app.route("/", depotRoutes(guard))
   app.route("/", dropOffPointRoutes(guard))
@@ -310,6 +314,8 @@ export function createApp({
   app.route("/", weightControlRoutes(guard))
   // The reports (#292): reads that count the rows above and store nothing. The ticket report reads "open now" and "overdue" at the request's clock, so the module takes `now`.
   app.route("/", reportRoutes(guard, { now }))
+  // The fleet's emissions (M10 of #293): a report of its own, read like the others.
+  app.route("/", emissionReportRoutes(guard))
   // The CSV import (#291 slice 12): a preview, then a run written a batch at a time through the families' own writes.
   app.route("/", importRoutes(guard))
 

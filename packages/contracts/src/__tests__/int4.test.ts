@@ -24,6 +24,7 @@ import * as customersModule from "../customers"
 import * as datesModule from "../dates"
 import * as driverCommandsModule from "../driver-commands"
 import * as dropOffPointsModule from "../drop-off-points"
+import * as emissionsModule from "../emissions"
 import * as executionModule from "../execution"
 import * as financeModule from "../finance"
 import * as fleetModule from "../fleet"
@@ -91,6 +92,7 @@ const MODULES: Readonly<Record<string, Record<string, unknown>>> = {
   "dates": datesModule,
   "driver-commands": driverCommandsModule,
   "drop-off-points": dropOffPointsModule,
+  "emissions": emissionsModule,
   "execution": executionModule,
   "finance": financeModule,
   "fleet": fleetModule,

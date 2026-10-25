@@ -70,6 +70,10 @@ export const DROP_OFF_POINT_STATUSES = ["draft", "active", "closed"] as const
 export const DRIVER_ABSENCE_REASONS = ["holiday", "sick", "training", "leave", "other"] as const
 /** Why a vehicle or a trailer is out of use over a dated period (O6 of #290). */
 export const VEHICLE_UNAVAILABILITY_REASONS = ["maintenance", "repair", "inspection", "breakdown", "other"] as const
+/** The unit a fuel is burnt and its emission factor given in (M10 of #293): a litre of a liquid fuel, a kilogram of gas, a kilowatt-hour of electricity. */
+export const ENERGY_UNITS = ["litre", "kg", "kwh"] as const
+/** Why a route's emissions are not measured, in the order they are judged: no active Plan, a Plan not yet measured, no vehicle planned, a vehicle with no fuel, no consumption for its type and fuel, no factor in force for its fuel. */
+export const EMISSION_GAPS = ["no-plan", "plan-unmeasured", "no-vehicle", "no-fuel", "no-consumption", "no-factor"] as const
 
 /**
  * The places a container stands in while in stock — a warehouse, or
@@ -104,6 +108,8 @@ export type DropOffPointKind = (typeof DROP_OFF_POINT_KINDS)[number]
 export type DropOffPointStatus = (typeof DROP_OFF_POINT_STATUSES)[number]
 export type DriverAbsenceReason = (typeof DRIVER_ABSENCE_REASONS)[number]
 export type VehicleUnavailabilityReason = (typeof VEHICLE_UNAVAILABILITY_REASONS)[number]
+export type EnergyUnit = (typeof ENERGY_UNITS)[number]
+export type EmissionGap = (typeof EMISSION_GAPS)[number]
 
 /** Every list of this module by its name, for a test that walks them and for a reader looking for the whole vocabulary at once. */
 export const RESOURCES_VOCABULARIES = {
@@ -128,4 +134,6 @@ export const RESOURCES_VOCABULARIES = {
   DROP_OFF_POINT_STATUSES,
   DRIVER_ABSENCE_REASONS,
   VEHICLE_UNAVAILABILITY_REASONS,
+  ENERGY_UNITS,
+  EMISSION_GAPS,
 } as const satisfies Record<string, readonly [string, ...string[]]>

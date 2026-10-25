@@ -33,12 +33,24 @@
 // answer the set they were given in read order rather than reading it back
 // (`asRead`), and an empty set is a type no typed rule matches through — the
 // prototype's "no compatibility profile → excluded with a reason", kept.
+//
+// Since M10 of #293 a type carries its consumption by fuel too — what a
+// vehicle of it burns per kilometre of each fuel it may run on, in
+// thousandths of the fuel's unit — a second set, one row per fuel, read with
+// the type in fuel order and replaced whole through `PUT
+// /vehicle-types/:id/consumption` the way the container types are. A route
+// is measured by it (routes/emissions.ts); a type with none leaves its
+// routes unmeasured.
+import { VehicleTypeConsumptionSet } from "@waste/contracts/emissions"
 import { Page } from "@waste/contracts/pagination"
 import { VehicleType, VehicleTypeContainerTypesSet, VehicleTypeCreate, VehicleTypeListQuery, VehicleTypePatch } from "@waste/contracts/vehicle-types"
 import type { Tx } from "@waste/db/client"
 import { containerType } from "@waste/db/schema/catalogue"
+import { vehicleTypeConsumption } from "@waste/db/schema/emissions"
 import { containerTypeVehicleType, vehicleType } from "@waste/db/schema/fleet-types"
-import { and, asc, eq, gt } from "drizzle-orm"
+import { FUEL_UNIT } from "@waste/domain/resources/emissions"
+import { FUEL_TYPES, type FuelType } from "@waste/domain/resources/vocabulary"
+import { and, asc, eq, gt, inArray } from "drizzle-orm"
 import { Hono, type MiddlewareHandler } from "hono"
 import { describeRoute } from "hono-openapi"
 
@@ -49,7 +61,7 @@ import { afterCursor, fetchLimit, pageOf } from "../pagination"
 import { describeProblem, problem, validate } from "../problem"
 import { asRead, idsFor, idsOf, replaceIdSet, requireEachOf, writeIds, type IdSet } from "./id-sets"
 import { requireContainerType } from "./references"
-import { created, describeCreated, describeJson, IdParam, refuseDuplicate, stampsOf } from "./shared"
+import { created, describeCreated, describeJson, IdParam, refuseDuplicate, stamp, stampsOf } from "./shared"
 
 const MODULE = "configure.master"
 const VehicleTypePage = Page(VehicleType)
@@ -74,21 +86,44 @@ const containerTypes: IdSet<typeof containerTypeVehicleType> = {
   require: requireEachOf(containerType, "containerTypeIds", requireContainerType),
 }
 
-/** The row on the wire, with the container types the page loaded for it, by id. */
-function typeOf(row: Row, containerTypeIds: readonly string[]): VehicleType {
+/** One fuel's consumption as the type carries it: the amount, and the fuel's unit it is in. */
+type Consumption = VehicleType["consumption"][number]
+
+/** A set in the vocabulary's fuel order, each entry with its fuel's unit: how a type reads its consumption and answers a PUT. */
+const consumptionOf = (entries: readonly { fuel: string; milliUnitsPerKm: number }[]): Consumption[] =>
+  [...entries]
+    .sort((a, b) => FUEL_TYPES.indexOf(a.fuel as FuelType) - FUEL_TYPES.indexOf(b.fuel as FuelType))
+    .map((entry) => ({ fuel: entry.fuel as FuelType, unit: FUEL_UNIT[entry.fuel as FuelType], milliUnitsPerKm: entry.milliUnitsPerKm }))
+
+/** The consumption of the given types, in one query, by type id. */
+async function consumptionsOf(tx: Tx, companyId: string, typeIds: readonly string[]): Promise<Map<string, Consumption[]>> {
+  if (typeIds.length === 0) return new Map()
+  const rows = await tx
+    .select({ vehicleTypeId: vehicleTypeConsumption.vehicleTypeId, fuel: vehicleTypeConsumption.fuel, milliUnitsPerKm: vehicleTypeConsumption.milliUnitsPerKm })
+    .from(vehicleTypeConsumption)
+    .where(and(eq(vehicleTypeConsumption.companyId, companyId), inArray(vehicleTypeConsumption.vehicleTypeId, [...typeIds])))
+  const byType = new Map<string, { fuel: string; milliUnitsPerKm: number }[]>()
+  for (const row of rows) byType.set(row.vehicleTypeId, [...(byType.get(row.vehicleTypeId) ?? []), row])
+  return new Map([...byType].map(([id, entries]) => [id, consumptionOf(entries)]))
+}
+
+/** The row on the wire, with the container types and the consumption the page loaded for it. */
+function typeOf(row: Row, containerTypeIds: readonly string[], consumption: readonly Consumption[]): VehicleType {
   return {
     id: row.id,
     key: row.key,
     name: row.name,
     description: row.description,
     containerTypeIds: [...containerTypeIds],
+    consumption: [...consumption],
     ...stampsOf(row),
   }
 }
 
-/** One type on the wire, its set read back the way a page reads it, so an answer equals the next read. */
+/** One type on the wire, its sets read back the way a page reads them, so an answer equals the next read. */
 async function typeWithContainerTypes(tx: Tx, companyId: string, row: Row): Promise<VehicleType> {
-  return typeOf(row, await idsFor(tx, containerTypes, companyId, row.id))
+  const [containerTypeIds, consumption] = await Promise.all([idsFor(tx, containerTypes, companyId, row.id), consumptionsOf(tx, companyId, [row.id])])
+  return typeOf(row, containerTypeIds, consumption.get(row.id) ?? [])
 }
 
 /** `unique (company_id, key)` and `unique (company_id, name)`: each is one type's inside a company, and free in the next. */
@@ -120,7 +155,7 @@ export function vehicleTypeRoutes(guard: MiddlewareHandler<AuthEnv>) {
         operationId: "listVehicleTypes",
         summary: "The company's vehicle types",
         description:
-          "One page of the vehicle types the company names, oldest first (ids are time-ordered), each with `containerTypeIds`, the container types a vehicle of the type may service, by id. A type is the company's vocabulary and no project's, so the page is the only parameter. Hand `nextCursor` back as `cursor` for the next page; `nextCursor` is null on the last one.",
+          "One page of the vehicle types the company names, oldest first (ids are time-ordered), each with `containerTypeIds`, the container types a vehicle of the type may service, by id, and `consumption`, what a vehicle of it burns of each fuel it may run on. A type is the company's vocabulary and no project's, so the page is the only parameter. Hand `nextCursor` back as `cursor` for the next page; `nextCursor` is null on the last one.",
         security: BEARER_SECURITY,
         responses: {
           200: describeJson("One page of vehicle types, each with its container types.", VehicleTypePage),
@@ -146,8 +181,9 @@ export function vehicleTypeRoutes(guard: MiddlewareHandler<AuthEnv>) {
         // Paged first, so the row that only proves there is a next page is
         // not one of the types whose container types are loaded.
         const { items, nextCursor } = pageOf(rows, limit)
-        const held = await idsOf(tx, containerTypes, principal.companyId, items.map((row) => row.id))
-        return c.json({ items: items.map((row) => typeOf(row, held.get(row.id) ?? [])), nextCursor })
+        const ids = items.map((row) => row.id)
+        const [held, consumption] = await Promise.all([idsOf(tx, containerTypes, principal.companyId, ids), consumptionsOf(tx, principal.companyId, ids)])
+        return c.json({ items: items.map((row) => typeOf(row, held.get(row.id) ?? [], consumption.get(row.id) ?? [])), nextCursor })
       },
     )
     .post(
@@ -184,7 +220,8 @@ export function vehicleTypeRoutes(guard: MiddlewareHandler<AuthEnv>) {
         )
         await writeIds(tx, containerTypes, { companyId: principal.companyId, id: row.id }, containerTypeIds)
         // The set just written is known — held to the company, each id once — so it is answered in read order and not read back.
-        return created(c, "/vehicle-types", typeOf(row, asRead(containerTypeIds)))
+        // A new type burns nothing yet: its consumption is its own route's.
+        return created(c, "/vehicle-types", typeOf(row, asRead(containerTypeIds), []))
       },
     )
     .get(
@@ -288,7 +325,47 @@ export function vehicleTypeRoutes(guard: MiddlewareHandler<AuthEnv>) {
             .returning(columns),
         )
         if (row === undefined) throw noSuchType(id)
-        return c.json(typeOf(row, asRead(containerTypeIds)))
+        // The consumption is the type's own, untouched by its container types: read with the answer.
+        return c.json(typeOf(row, asRead(containerTypeIds), (await consumptionsOf(tx, principal.companyId, [row.id])).get(row.id) ?? []))
+      },
+    )
+    .put(
+      "/vehicle-types/:id/consumption",
+      describeRoute({
+        operationId: "putVehicleTypeConsumption",
+        summary: "Replace a vehicle type's consumption",
+        description:
+          "Replaces the whole consumption set with the one in the body (M10 of #293): for each fuel a vehicle of this type may run on, what it burns per kilometre in thousandths of the fuel's unit — millilitres of a liquid fuel, grams of gas, watt-hours of electricity — from 1 to 10 000, each fuel named once (400 on `consumption`). A fuel the body leaves out has no consumption afterwards, and a route of a vehicle of this type on that fuel is unmeasured; an empty list leaves every one unmeasured. The type's `updatedAt` moves, since the set is part of the type on the wire.",
+        security: BEARER_SECURITY,
+        responses: {
+          200: describeJson("The vehicle type with the consumption it now has, in fuel order, each with its fuel's unit.", VehicleType),
+          400: describeProblem("The path does not hold an id, or the body is missing `consumption`, names a member it does not own, names a fuel twice or one the vocabulary does not hold, or gives an amount that is not a whole number from 1 to 10 000."),
+          401: describeProblem("No usable token (see WWW-Authenticate)."),
+          403: describeProblem("No active account here, or the caller's role does not allow `edit` on `configure.master`."),
+          404: describeProblem("No vehicle type with that id in this company."),
+        },
+      }),
+      guard,
+      requireGrant(MODULE, "edit"),
+      validate("param", IdParam),
+      validate("json", VehicleTypeConsumptionSet),
+      async (c) => {
+        const { id } = c.req.valid("param")
+        const { consumption } = c.req.valid("json")
+        const tx = c.get("tx")
+        const principal = c.get("principal")
+        // The type's own row first, stamped and so locked, then its set replaced under it.
+        const [row] = await tx
+          .update(vehicleType)
+          .set(stamp())
+          .where(and(scope(principal), eq(vehicleType.id, id)))
+          .returning(columns)
+        if (row === undefined) throw noSuchType(id)
+        await tx.delete(vehicleTypeConsumption).where(and(eq(vehicleTypeConsumption.companyId, principal.companyId), eq(vehicleTypeConsumption.vehicleTypeId, row.id)))
+        if (consumption.length > 0) {
+          await tx.insert(vehicleTypeConsumption).values(consumption.map((entry) => ({ id: newId(), companyId: principal.companyId, vehicleTypeId: row.id, fuel: entry.fuel, milliUnitsPerKm: entry.milliUnitsPerKm })))
+        }
+        return c.json(typeOf(row, await idsFor(tx, containerTypes, principal.companyId, row.id), consumptionOf(consumption)))
       },
     )
 }

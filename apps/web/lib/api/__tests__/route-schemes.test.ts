@@ -55,7 +55,7 @@ const indreByBoundary: PlanningAreaBoundary = { id: "01a0d2a4-a280-7017-8000-000
 const residual: WasteFraction = { id: "01a0d2a4-a280-7007-8000-000000000001", ...STAMPS, key: "residual", name: "Residual", wasteCode: null }
 const organic: WasteFraction = { ...residual, id: "01a0d2a4-a280-7007-8000-000000000002", key: "organic", name: "Organic" }
 const bin240: ContainerType = { id: "01a0d2a4-a280-7008-8000-000000000002", ...STAMPS, name: "Two-wheel bin · 240 L", volumeLitres: 240 }
-const rearLoader: VehicleType = { id: "01a0d2a4-a280-701f-8000-000000000001", ...STAMPS, key: "rear-loader", name: "Rear loader", description: null, containerTypeIds: [bin240.id] }
+const rearLoader: VehicleType = { id: "01a0d2a4-a280-701f-8000-000000000001", ...STAMPS, key: "rear-loader", name: "Rear loader", description: null, containerTypeIds: [bin240.id], consumption: [] }
 
 // Resources is still on fixtures here (slice 5a): the fleet and the places are named by the API's ids alone.
 const WH24 = "01a0d2a4-a280-7021-8000-000000000001"

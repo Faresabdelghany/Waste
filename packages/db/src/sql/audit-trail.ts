@@ -60,6 +60,7 @@ import { driverCommand, outboxEvent, pickup, proofOfService, route, session, unl
 import { billableEvent, billingRun, billingRunExclusion, invoice, invoiceLine, priceList, priceListRow, serviceArea, serviceAreaAssignment, serviceAreaPlanningArea, serviceAreaWasteFraction, serviceProviderPrice, settlement, settlementEvent, settlementLine, ticketKindProduct, weightReview } from "../schema/finance"
 import { contaminantCode, contaminantCodeFraction, pickupExceptionRule, pickupExceptionRuleStep } from "../schema/pickup-exceptions"
 import { driver, vehicle, vehicleCompartment, vehicleCompartmentFraction } from "../schema/fleet"
+import { fuelEmissionFactor, vehicleTypeConsumption } from "../schema/emissions"
 import { containerTypeVehicleType, vehicleType } from "../schema/fleet-types"
 import { generationMatch, generationRun } from "../schema/generation"
 import { importRun, importRunRow } from "../schema/imports"
@@ -194,8 +195,14 @@ export const PICKUP_EXCEPTIONS_AUDITED: readonly Audited[] = [
   { table: pickupExceptionRuleStep, module: "commercial.price-rows", parent: setOf(pickupExceptionRule, pickupExceptionRuleStep.ruleId) },
 ]
 
+/** The fleet's emissions (M10 of #293): a fuel's factor, and a vehicle type's consumption, a set under its type, both master data. */
+export const EMISSIONS_AUDITED: readonly Audited[] = [
+  { table: fuelEmissionFactor, module: "configure.master" },
+  { table: vehicleTypeConsumption, module: "configure.master", parent: setOf(vehicleType, vehicleTypeConsumption.vehicleTypeId) },
+]
+
 /** Every audited table: 0019's, then each later migration's, in the order they were written. */
-export const AUDITED: readonly Audited[] = [...AUDITED_AT_0019, ...SUBSCRIPTION_PAUSE_AUDITED, ...TICKET_SLA_AUDITED, ...DROP_OFF_AUDITED, ...ABSENCES_AUDITED, ...TICKET_CHARGE_AUDITED, ...PICKUP_EXCEPTIONS_AUDITED]
+export const AUDITED: readonly Audited[] = [...AUDITED_AT_0019, ...SUBSCRIPTION_PAUSE_AUDITED, ...TICKET_SLA_AUDITED, ...DROP_OFF_AUDITED, ...ABSENCES_AUDITED, ...TICKET_CHARGE_AUDITED, ...PICKUP_EXCEPTIONS_AUDITED, ...EMISSIONS_AUDITED]
 
 /** The audited tables by name, for a test that reads a migrated database's triggers. */
 export const AUDITED_TABLE_NAMES: ReadonlySet<string> = new Set(AUDITED.map((entry) => getTableName(entry.table)))

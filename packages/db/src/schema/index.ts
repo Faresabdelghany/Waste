@@ -25,7 +25,9 @@
 // of #293), which Execution's pickup and proof name back — and what the hand-written gate
 // (__tests__/hand-written.test.ts) holds to its fence and trigger, or to its
 // fence and revoke for a ledger. The Drop-off Points (Issue #293, M3) come
-// last: four tables over the project, the fractions and nothing later.
+// next: four tables over the project, the fractions and nothing later; then
+// the fleet's emissions (M10 of #293): a fuel's factor, and a vehicle type's
+// consumption by fuel.
 export * from "./wms"
 export * from "./organisation"
 export * from "./access"
@@ -52,3 +54,4 @@ export * from "./audit"
 export * from "./imports"
 export * from "./drop-off-points"
 export * from "./pickup-exceptions"
+export * from "./emissions"
