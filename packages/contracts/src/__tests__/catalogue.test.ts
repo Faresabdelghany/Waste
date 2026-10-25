@@ -21,6 +21,7 @@ import {
   WasteFraction,
   WasteFractionCreate,
   WasteFractionPatch,
+  WasteTreatment,
 } from "../catalogue"
 import { refusal, refusesAnEmptyPatch, refusesWhatTheServerOwns } from "./expect"
 
@@ -28,7 +29,7 @@ const ID = "01a0d3a5-e5e0-7000-8000-000000000001"
 const OTHER = "01a0d3a5-e5e0-7000-8000-000000000002"
 const STAMPS = { createdAt: "2026-09-24T13:41:00.000Z", updatedAt: "2026-09-24T13:41:00.000Z" }
 
-const fraction = { id: ID, key: "hard-plastic", name: "Hard plastic", wasteCode: "150102", ...STAMPS }
+const fraction = { id: ID, key: "hard-plastic", name: "Hard plastic", wasteCode: "150102", treatment: "recycling", ...STAMPS }
 const containerType = { id: ID, name: "240 L two-wheeled", volumeLitres: 240, ...STAMPS }
 const frequency = {
   id: ID,
@@ -104,6 +105,14 @@ describe("WasteFractionCreate and WasteFractionPatch", () => {
     assert.deepEqual(WasteFractionPatch.parse({ wasteCode: "200121*" }), { wasteCode: "200121*" })
     assert.deepEqual(WasteFractionPatch.parse({ wasteCode: null }), { wasteCode: null })
     assert.equal(WasteFraction.parse({ ...fraction, wasteCode: null }).wasteCode, null)
+  })
+
+  test("a fraction's treatment is the domain's list or none, set on create and moved or cleared by a patch (M13 of #293)", () => {
+    assert.deepEqual([...WasteTreatment.options], ["reuse", "recycling", "energy-recovery", "disposal"])
+    assert.equal(WasteFraction.parse({ ...fraction, treatment: null }).treatment, null)
+    assert.equal(WasteFractionCreate.parse({ key: "food", name: "Food waste", treatment: "recycling" }).treatment, "recycling")
+    assert.deepEqual(WasteFractionPatch.parse({ treatment: null }), { treatment: null })
+    assert.equal(WasteFractionPatch.safeParse({ treatment: "landfill" }).success, false)
     for (const wasteCode of ["20 01 08", "2001080", "210101", "food"]) {
       const refused = refusal(WasteFractionPatch.safeParse({ wasteCode }))
       assert.deepEqual([refused[0]?.path, refused[0]?.message], ["wasteCode", WASTE_CODE_SHAPE], wasteCode)

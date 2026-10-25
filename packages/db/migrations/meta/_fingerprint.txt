@@ -3363,12 +3363,14 @@ column wms.waste_fraction 4 updated_at timestamp with time zone not-null default
 column wms.waste_fraction 5 key text not-null acl=[wms_public=SELECT/<owner>]
 column wms.waste_fraction 6 name text not-null acl=[wms_public=SELECT/<owner>]
 column wms.waste_fraction 7 waste_code text
+column wms.waste_fraction 8 treatment text
 constraint wms.waste_fraction waste_fraction_company_id_fk FOREIGN KEY (company_id) REFERENCES wms.company(id)
 constraint wms.waste_fraction waste_fraction_key_key UNIQUE (company_id, key)
 constraint wms.waste_fraction waste_fraction_key_lowercase CHECK ((key = lower(key)))
 constraint wms.waste_fraction waste_fraction_name_key UNIQUE (company_id, name)
 constraint wms.waste_fraction waste_fraction_pkey PRIMARY KEY (id)
 constraint wms.waste_fraction waste_fraction_tenant_key UNIQUE (company_id, id)
+constraint wms.waste_fraction waste_fraction_treatment_one_of CHECK ((treatment = ANY (ARRAY['reuse'::text, 'recycling'::text, 'energy-recovery'::text, 'disposal'::text])))
 constraint wms.waste_fraction waste_fraction_waste_code_shape CHECK ((waste_code ~ '^(0[1-9]|1[0-9]|20)[0-9]{4}\*?$'::text))
 index wms.waste_fraction waste_fraction_key_key CREATE UNIQUE INDEX waste_fraction_key_key ON wms.waste_fraction USING btree (company_id, key)
 index wms.waste_fraction waste_fraction_name_key CREATE UNIQUE INDEX waste_fraction_name_key ON wms.waste_fraction USING btree (company_id, name)
@@ -3378,6 +3380,31 @@ trigger wms.waste_fraction waste_fraction_audit_trail enabled=O CREATE TRIGGER w
 trigger wms.waste_fraction waste_fraction_touch_updated_at enabled=O CREATE TRIGGER waste_fraction_touch_updated_at BEFORE UPDATE ON wms.waste_fraction FOR EACH ROW EXECUTE FUNCTION wms.touch_updated_at()
 policy wms.waste_fraction waste_fraction_public_door permissive SELECT to=wms_public using=(company_id = ( SELECT wms.current_company_id() AS current_company_id)) check=none
 policy wms.waste_fraction waste_fraction_tenant_fence permissive ALL to=wms_api using=(company_id = ( SELECT wms.current_company_id() AS current_company_id)) check=(company_id = ( SELECT wms.current_company_id() AS current_company_id))
+relation wms.waste_fraction_emission_factor kind=table owner=<owner> persistence=p rls=true force-rls=true replica-identity=d acl=[<owner>=DELETE,INSERT,MAINTAIN,REFERENCES,SELECT,TRIGGER,TRUNCATE,UPDATE/<owner> wms_api=DELETE,INSERT,SELECT,UPDATE/<owner> wms_worker=SELECT/<owner>]
+column wms.waste_fraction_emission_factor 1 id uuid not-null default=wms.uuidv7()
+column wms.waste_fraction_emission_factor 2 company_id uuid not-null
+column wms.waste_fraction_emission_factor 3 created_at timestamp with time zone not-null default=now()
+column wms.waste_fraction_emission_factor 4 updated_at timestamp with time zone not-null default=now()
+column wms.waste_fraction_emission_factor 5 waste_fraction_id uuid not-null
+column wms.waste_fraction_emission_factor 6 footprint_kg_per_tonne integer not-null
+column wms.waste_fraction_emission_factor 7 avoided_kg_per_tonne integer
+column wms.waste_fraction_emission_factor 8 source text not-null
+column wms.waste_fraction_emission_factor 9 valid_from date not-null
+column wms.waste_fraction_emission_factor 10 valid_to date
+constraint wms.waste_fraction_emission_factor waste_fraction_emission_factor_avoided_bounds CHECK (((avoided_kg_per_tonne >= 0) AND (avoided_kg_per_tonne <= 10000)))
+constraint wms.waste_fraction_emission_factor waste_fraction_emission_factor_company_id_fk FOREIGN KEY (company_id) REFERENCES wms.company(id)
+constraint wms.waste_fraction_emission_factor waste_fraction_emission_factor_footprint_bounds CHECK (((footprint_kg_per_tonne >= 0) AND (footprint_kg_per_tonne <= 10000)))
+constraint wms.waste_fraction_emission_factor waste_fraction_emission_factor_no_overlap EXCLUDE USING gist (company_id WITH =, waste_fraction_id WITH =, daterange(valid_from, valid_to, '[)'::text) WITH &&)
+constraint wms.waste_fraction_emission_factor waste_fraction_emission_factor_pkey PRIMARY KEY (id)
+constraint wms.waste_fraction_emission_factor waste_fraction_emission_factor_source_given CHECK ((length(btrim(source)) > 0))
+constraint wms.waste_fraction_emission_factor waste_fraction_emission_factor_validity CHECK (((valid_to IS NULL) OR (valid_to > valid_from)))
+constraint wms.waste_fraction_emission_factor waste_fraction_emission_factor_waste_fraction_id_fk FOREIGN KEY (company_id, waste_fraction_id) REFERENCES wms.waste_fraction(company_id, id)
+index wms.waste_fraction_emission_factor waste_fraction_emission_factor_no_overlap CREATE INDEX waste_fraction_emission_factor_no_overlap ON wms.waste_fraction_emission_factor USING gist (company_id, waste_fraction_id, daterange(valid_from, valid_to, '[)'::text))
+index wms.waste_fraction_emission_factor waste_fraction_emission_factor_pkey CREATE UNIQUE INDEX waste_fraction_emission_factor_pkey ON wms.waste_fraction_emission_factor USING btree (id)
+index wms.waste_fraction_emission_factor waste_fraction_emission_factor_waste_fraction_id_idx CREATE INDEX waste_fraction_emission_factor_waste_fraction_id_idx ON wms.waste_fraction_emission_factor USING btree (company_id, waste_fraction_id)
+trigger wms.waste_fraction_emission_factor waste_fraction_emission_factor_audit_trail enabled=O CREATE TRIGGER waste_fraction_emission_factor_audit_trail AFTER INSERT OR DELETE OR UPDATE ON wms.waste_fraction_emission_factor FOR EACH ROW EXECUTE FUNCTION wms.audit_row('', '')
+trigger wms.waste_fraction_emission_factor waste_fraction_emission_factor_touch_updated_at enabled=O CREATE TRIGGER waste_fraction_emission_factor_touch_updated_at BEFORE UPDATE ON wms.waste_fraction_emission_factor FOR EACH ROW EXECUTE FUNCTION wms.touch_updated_at()
+policy wms.waste_fraction_emission_factor waste_fraction_emission_factor_tenant_fence permissive ALL to=wms_api using=(company_id = ( SELECT wms.current_company_id() AS current_company_id)) check=(company_id = ( SELECT wms.current_company_id() AS current_company_id))
 relation wms.weight_review kind=table owner=<owner> persistence=p rls=true force-rls=true replica-identity=d acl=[<owner>=DELETE,INSERT,MAINTAIN,REFERENCES,SELECT,TRIGGER,TRUNCATE,UPDATE/<owner> wms_api=INSERT,SELECT/<owner> wms_worker=SELECT/<owner>]
 column wms.weight_review 1 id uuid not-null default=wms.uuidv7()
 column wms.weight_review 2 company_id uuid not-null
@@ -3480,4 +3507,5 @@ journal 1792921994648 578c84818d6e43060d25e4cf420cf3af21ac8d66438272d4b57d1953a4
 journal 1792923020897 c8b3987803dd0f8cb640d986901466c6e8d2195e7301508f475dc8592fda8e2d
 journal 1792924159748 8dcf073968a66710ff9a712367e53e2391442cc942c1aa486d6822dc43b86905
 journal 1792925242550 975c5a4be9bc2a4de746cf62d5298aa520bd272699f460571a7e527f372a785b
+journal 1792926214973 7b4def117e8b9a90b2c9004f090fe9797125db6e60c8bb1d5c91adbb98f2e154
 pgboss-version 42
