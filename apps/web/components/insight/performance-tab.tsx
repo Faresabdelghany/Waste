@@ -6,7 +6,8 @@
 // the missed pickups, the routes on time, the tickets opened — each against
 // the period before; the pickups collected per interval beside the period
 // before; the missed pickups by reason; the tickets; and the Route Schemes
-// with their numbers, downloadable as the CSV of the rows shown. A report
+// with their numbers, downloadable as the CSV of the rows shown; and the
+// fleet's planned emissions (M10 of #293, emissions-card.tsx). A report
 // whose rows the role may not read (`route-studio.routes`, `operate.tickets`)
 // is not asked for, and its cards say so. What is shown while a read is on
 // its way is the last answer, greyed; what a change is worked out from, and
@@ -34,6 +35,7 @@ import {
   throughputOf,
 } from "@/lib/insight/dashboard"
 
+import { EmissionsCard } from "./emissions-card"
 import { ReportCard, ReportNotice } from "./report-card"
 import { comparisonOf, StatRow, StatTile } from "./stat-tile"
 import { ThroughputChart } from "./throughput-chart"
@@ -277,6 +279,10 @@ export function PerformanceTab({ current, previous, against, viewed, projectName
             <ReportNotice notGranted={ticketsShown ? undefined : "tickets"} problem={tickets.problem} />
           )}
         </ReportCard>
+      </div>
+
+      <div className="px-3 pb-3 lg:px-4 lg:pb-4">
+        <EmissionsCard current={current} routesShown={routesShown} />
       </div>
     </div>
   )
