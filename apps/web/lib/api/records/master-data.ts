@@ -126,12 +126,19 @@ export const wasteFractionAdapter: ResourceAdapter<WasteFraction> = {
   owns: (record) => masterDataKindOf(record) === "waste-fraction",
   statuses: undefined,
   list: (client) => listAll<WasteFraction>(client, "/waste-fractions"),
-  toRecord: (fraction, context) => recordOf("waste-fraction", fraction, { name: fraction.name, key: fraction.key, wasteCode: fraction.wasteCode ?? "", treatment: fraction.treatment ?? "" }, context),
+  toRecord: (fraction, context) =>
+    recordOf("waste-fraction", fraction, { name: fraction.name, key: fraction.key, wasteCode: fraction.wasteCode ?? "", treatment: fraction.treatment ?? "", densityKgPerCubicMetre: spelled(fraction.densityKgPerCubicMetre) }, context),
   toCreateBody: (record) => {
     const refused = firstRefusal("waste-fraction", record)
     if (refused) return refused
     const fields = fieldsOf("waste-fraction", record)
-    return { key: fields.key, name: fields.name, ...(fields.wasteCode == null ? {} : { wasteCode: fields.wasteCode }), ...(fields.treatment == null ? {} : { treatment: fields.treatment }) }
+    return {
+      key: fields.key,
+      name: fields.name,
+      ...(fields.wasteCode == null ? {} : { wasteCode: fields.wasteCode }),
+      ...(fields.treatment == null ? {} : { treatment: fields.treatment }),
+      ...(fields.densityKgPerCubicMetre == null ? {} : { densityKgPerCubicMetre: fields.densityKgPerCubicMetre }),
+    }
   },
   toPatchBody: (before, after) => {
     if (rekinded("waste-fraction", after)) return refusal("kind", "A row keeps its kind")
@@ -140,7 +147,7 @@ export const wasteFractionAdapter: ResourceAdapter<WasteFraction> = {
     if (refused) return refused
     return patchOf(before, after, (record) => {
       const read = fieldsOf("waste-fraction", record)
-      return { name: read.name || record.name, wasteCode: read.wasteCode ?? null, treatment: read.treatment ?? null }
+      return { name: read.name || record.name, wasteCode: read.wasteCode ?? null, treatment: read.treatment ?? null, densityKgPerCubicMetre: read.densityKgPerCubicMetre ?? null }
     })
   },
   create: (client, body) => create<WasteFraction>(client, "/waste-fractions", body).then((created) => created.body),
@@ -157,12 +164,12 @@ export const containerTypeAdapter: ResourceAdapter<ContainerType> = {
   owns: (record) => masterDataKindOf(record) === "container-type",
   statuses: undefined,
   list: (client) => listAll<ContainerType>(client, "/container-types"),
-  toRecord: (type, context) => recordOf("container-type", type, { name: type.name, volumeLitres: spelled(type.volumeLitres) }, context),
+  toRecord: (type, context) => recordOf("container-type", type, { name: type.name, volumeLitres: spelled(type.volumeLitres), serviceSeconds: spelled(type.serviceSeconds) }, context),
   toCreateBody: (record) => {
     const refused = firstRefusal("container-type", record)
     if (refused) return refused
     const fields = fieldsOf("container-type", record)
-    return { name: fields.name, ...(fields.volumeLitres == null ? {} : { volumeLitres: fields.volumeLitres }) }
+    return { name: fields.name, ...(fields.volumeLitres == null ? {} : { volumeLitres: fields.volumeLitres }), ...(fields.serviceSeconds == null ? {} : { serviceSeconds: fields.serviceSeconds }) }
   },
   toPatchBody: (before, after) => {
     if (rekinded("container-type", after)) return refusal("kind", "A row keeps its kind")
@@ -170,7 +177,7 @@ export const containerTypeAdapter: ResourceAdapter<ContainerType> = {
     if (refused) return refused
     return patchOf(before, after, (record) => {
       const read = fieldsOf("container-type", record)
-      return { name: read.name || record.name, volumeLitres: read.volumeLitres ?? null }
+      return { name: read.name || record.name, volumeLitres: read.volumeLitres ?? null, serviceSeconds: read.serviceSeconds ?? null }
     })
   },
   create: (client, body) => create<ContainerType>(client, "/container-types", body).then((created) => created.body),

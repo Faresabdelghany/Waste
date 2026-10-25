@@ -716,6 +716,23 @@ describe("the demo seed against a fresh database", { skip: database.skip }, () =
     await owner.db.update(role).set({ name: charter.name, description: charter.description }).where(eq(role.id, DEMO_IDS.roles.dispatcher))
   })
 
+  test("a fraction's density and a container type's service seconds are typical figures written on insert alone: an edit and a clear both survive the next run (O10 of #290)", async () => {
+    const { registry } = DEMO_IDS
+    const figures = async () => {
+      const [glass] = await owner.db.select({ density: wasteFraction.densityKgPerCubicMetre }).from(wasteFraction).where(eq(wasteFraction.id, registry.wasteFractions.glass))
+      const [bin] = await owner.db.select({ seconds: containerType.serviceSeconds }).from(containerType).where(eq(containerType.id, registry.containerTypes["two-wheel-240"]))
+      return [glass.density, bin.seconds]
+    }
+    assert.deepEqual(await figures(), [300, 30], "the seed's typical figures")
+    await owner.db.update(wasteFraction).set({ densityKgPerCubicMetre: 340 }).where(eq(wasteFraction.id, registry.wasteFractions.glass))
+    await owner.db.update(containerType).set({ serviceSeconds: null }).where(eq(containerType.id, registry.containerTypes["two-wheel-240"]))
+    assert.equal((await seedDemo(fresh.url)).changed, 0, "the company's own figures are not the seed's")
+    assert.deepEqual(await figures(), [340, null], "an edit and a clear both stand")
+    // The seed's figures back for the tests after this one.
+    await owner.db.update(wasteFraction).set({ densityKgPerCubicMetre: 300 }).where(eq(wasteFraction.id, registry.wasteFractions.glass))
+    await owner.db.update(containerType).set({ serviceSeconds: 30 }).where(eq(containerType.id, registry.containerTypes["two-wheel-240"]))
+  })
+
   test("an access row is the pair it joins: one the API wrote back under another id is left as it is, and nothing is written", async () => {
     // What the API does whenever an account's access is edited: the rows go, and come back under new ids.
     await owner.db.delete(projectAccess).where(eq(projectAccess.userAccountId, DEMO_IDS.users.mads))

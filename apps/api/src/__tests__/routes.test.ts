@@ -3,7 +3,8 @@ import { after, before, describe, test } from "node:test"
 
 import { DriverCommandReceipt } from "@waste/contracts/driver-commands"
 import { Page } from "@waste/contracts/pagination"
-import { Route, RouteDetail, RouteDispatchResults } from "@waste/contracts/routes"
+import { Route, RouteDetail, RouteDispatchResults, RouteListItem } from "@waste/contracts/routes"
+import { containerType, wasteFraction } from "@waste/db/schema/catalogue"
 import { createDb, type Database, type Tx } from "@waste/db/client"
 import { driverCommand, outboxEvent, session } from "@waste/db/schema/execution"
 import { unloadingStation, unloadingStationFraction } from "@waste/db/schema/places"
@@ -114,7 +115,7 @@ describe("the route endpoints", { skip: database.skip || owner.skip }, () => {
     return RouteDetail.parse(await response.json())
   }
   /** The `Route` inside a detail: what an outbox payload carries. */
-  const routeOf = ({ pickups: _pickups, session: _session, sessions: _sessions, unloads: _unloads, activePlan: _activePlan, ...rest }: RouteDetail): Route => rest
+  const routeOf = ({ pickups: _pickups, session: _session, sessions: _sessions, unloads: _unloads, activePlan: _activePlan, workload: _workload, ...rest }: RouteDetail): Route => rest
   /** The outbox rows about one aggregate, oldest first, read as `wms_api` under the fence. */
   const eventsAbout = async (aggregateId: string, companyId = a.companyId) =>
     await withCompany(pool.db, companyId, async (tx: Tx) =>
@@ -193,6 +194,30 @@ describe("the route endpoints", { skip: database.skip || owner.skip }, () => {
       assert.equal(running.session?.id, active.sessionId, "the open session")
       assert.notEqual(running.session?.pausedAt, null)
       assert.deepEqual(running.actual, { driverId: fleet.drivers.mads.id, vehicleId: fleet.vehicles.wh24.id, trailerId: null })
+    })
+
+    test("answers what its stops take and weigh against the planned vehicle's payload, as the list does (O10 of #290)", async () => {
+      const set = (values: { density: number | null; seconds: number | null; capacity: number | null }) =>
+        withCompany(pool.db, a.companyId, async (tx: Tx) => {
+          await tx.update(wasteFraction).set({ densityKgPerCubicMetre: values.density }).where(eq(wasteFraction.id, ex.fractions.residual.id))
+          await tx.update(containerType).set({ serviceSeconds: values.seconds }).where(eq(containerType.id, ex.containerTypes.bin.id))
+          await tx.update(vehicle).set({ capacityKg: values.capacity }).where(eq(vehicle.id, fleet.vehicles.wh24.id))
+        })
+      const [before] = await withCompany(pool.db, a.companyId, (tx: Tx) => tx.select({ capacity: vehicle.capacityKg }).from(vehicle).where(eq(vehicle.id, fleet.vehicles.wh24.id)))
+      // Residual at 150 kg a cubic metre, a 240 L bin 30 s at the kerb, and a truck that carries 100 kg: three bins of 36 kg each are 8 kg over.
+      await set({ density: 150, seconds: 30, capacity: 100 })
+      try {
+        const route = await fresh({ ...mads() })
+        const expected = { stopSeconds: 90, expectedKg: 108, unexpectedStops: 0, capacityKg: 100, overCapacityKg: 8 }
+        assert.deepEqual((await read(route.id)).workload, expected)
+        const listed = (await (await olivia(`/routes?limit=200&plannedVehicleId=${fleet.vehicles.wh24.id}`)).json()) as { items: unknown[] }
+        assert.deepEqual(listed.items.map((item) => RouteListItem.parse(item)).find((item) => item.id === route.id)?.workload, expected)
+        // Nothing set: each bin the unknown 60 s, no weight expected, and no payload to read against.
+        await set({ density: null, seconds: null, capacity: null })
+        assert.deepEqual((await read(route.id)).workload, { stopSeconds: 180, expectedKg: null, unexpectedStops: 3, capacityKg: null, overCapacityKg: null })
+      } finally {
+        await set({ density: null, seconds: null, capacity: before.capacity })
+      }
     })
 
     test("answers 404 for another company's, for one in a project the caller does not work in, and for an id nobody minted", async () => {

@@ -53,6 +53,12 @@ export type OptimiseRequest = {
   profile: string
   depot: Position2D
   stops: readonly Position2D[]
+  /**
+   * Each stop's seconds at the kerb, by its index into `stops` (O10 of #290),
+   * where the caller knows them. The solver's cost is the drive, so they never
+   * change the order; they are its arrival times', and a leg is still the drive.
+   */
+  serviceSeconds?: readonly number[]
   /** The unloading station, visited after every stop and before the return (#124 §3), when the Route names one. */
   station?: Position2D | null
 }

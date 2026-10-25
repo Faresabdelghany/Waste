@@ -35,9 +35,9 @@ const masterFixtures = getModuleDefinition({ workspaceId: "configure", moduleId:
 // The seeded rows as the API answers them (packages/db/src/seed/registry.ts).
 const copenhagen: Project = { id: "01a0d2a4-a280-7002-8000-000000000001", ...STAMPS, name: "Copenhagen Central", kind: "Municipality", language: "da", currency: "DKK", timezone: "Europe/Copenhagen", status: "active", weekend: ["saturday", "sunday"], holidayList: "Danish public holidays", publicSlug: null, weightTolerancePercent: 5, paymentTermsDays: 30, paymentReferenceScheme: "none", holdForReview: false }
 const harbor: Project = { ...copenhagen, id: "01a0d2a4-a280-7002-8000-000000000002", name: "Harbor Commercial" }
-const residual: WasteFraction = { id: "01a0d2a4-a280-7007-8000-000000000001", ...STAMPS, key: "residual", name: "Residual", wasteCode: null, treatment: null }
+const residual: WasteFraction = { id: "01a0d2a4-a280-7007-8000-000000000001", ...STAMPS, key: "residual", name: "Residual", wasteCode: null, treatment: null, densityKgPerCubicMetre: null }
 const organic: WasteFraction = { ...residual, id: "01a0d2a4-a280-7007-8000-000000000002", key: "organic", name: "Organic" }
-const bin240: ContainerType = { id: "01a0d2a4-a280-7008-8000-000000000002", ...STAMPS, name: "Two-wheel bin · 240 L", volumeLitres: 240 }
+const bin240: ContainerType = { id: "01a0d2a4-a280-7008-8000-000000000002", ...STAMPS, name: "Two-wheel bin · 240 L", volumeLitres: 240, serviceSeconds: null }
 const bin660: ContainerType = { ...bin240, id: "01a0d2a4-a280-7008-8000-000000000003", name: "Four-wheel bin · 660 L", volumeLitres: 660 }
 const warehouseId = "01a0d2a4-a280-7021-8000-000000000001"
 const subscriptionId = "01a0d2a4-a280-7013-8000-000000000001"

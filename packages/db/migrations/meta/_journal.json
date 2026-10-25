@@ -351,6 +351,13 @@
       "when": 1792954475945,
       "tag": "0049_accounting_export",
       "breakpoints": true
+    },
+    {
+      "idx": 50,
+      "version": "7",
+      "when": 1792963337527,
+      "tag": "0050_workload",
+      "breakpoints": true
     }
   ]
 }

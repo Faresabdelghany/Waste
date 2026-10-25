@@ -1000,9 +1000,11 @@ column wms.container_type 3 created_at timestamp with time zone not-null default
 column wms.container_type 4 updated_at timestamp with time zone not-null default=now()
 column wms.container_type 5 name text not-null
 column wms.container_type 6 volume_litres integer
+column wms.container_type 7 service_seconds integer
 constraint wms.container_type container_type_company_id_fk FOREIGN KEY (company_id) REFERENCES wms.company(id)
 constraint wms.container_type container_type_name_key UNIQUE (company_id, name)
 constraint wms.container_type container_type_pkey PRIMARY KEY (id)
+constraint wms.container_type container_type_service_seconds_range CHECK (((service_seconds >= 1) AND (service_seconds <= 3600)))
 constraint wms.container_type container_type_tenant_key UNIQUE (company_id, id)
 constraint wms.container_type container_type_volume_litres_positive CHECK ((volume_litres > 0))
 index wms.container_type container_type_name_key CREATE UNIQUE INDEX container_type_name_key ON wms.container_type USING btree (company_id, name)
@@ -3572,7 +3574,9 @@ column wms.waste_fraction 5 key text not-null acl=[wms_public=SELECT/<owner>]
 column wms.waste_fraction 6 name text not-null acl=[wms_public=SELECT/<owner>]
 column wms.waste_fraction 7 waste_code text
 column wms.waste_fraction 8 treatment text
+column wms.waste_fraction 9 density_kg_per_cubic_metre integer
 constraint wms.waste_fraction waste_fraction_company_id_fk FOREIGN KEY (company_id) REFERENCES wms.company(id)
+constraint wms.waste_fraction waste_fraction_density_kg_per_cubic_metre_range CHECK (((density_kg_per_cubic_metre >= 1) AND (density_kg_per_cubic_metre <= 2000)))
 constraint wms.waste_fraction waste_fraction_key_key UNIQUE (company_id, key)
 constraint wms.waste_fraction waste_fraction_key_lowercase CHECK ((key = lower(key)))
 constraint wms.waste_fraction waste_fraction_name_key UNIQUE (company_id, name)
@@ -3742,4 +3746,5 @@ journal 1792948527917 f5e98d4bbd8a0a2efce518a64f08be8fa02b2f26022e968b2f0ee7c4bd
 journal 1792950556670 ff215726a340d783acbe6014a8515499181b8c263d03a1f84c22527b396f9e8c
 journal 1792952313199 b04f99d3f6c19ac508ebc304ce9ec2237ef28b77e48ea13664c37457ea9cd6a1
 journal 1792954475945 9314378d7dfb21885c2811e4fe94349e28f78895b02bc520bb49ff813b7abf21
+journal 1792963337527 f9d94b2631da7fd4aa199f12f7b126d912d2618f93565389dab6efc3fb32886d
 pgboss-version 42

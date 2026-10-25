@@ -46,7 +46,7 @@
 import type { DriverCommandReceipt } from "@waste/contracts/driver-commands"
 import type { PickupDetail } from "@waste/contracts/pickups"
 import type { OptimiseAnswer, Plan } from "@waste/contracts/plans"
-import type { Route, RouteDetail, RouteDispatchResults } from "@waste/contracts/routes"
+import type { Route, RouteDetail, RouteDispatchResults, RouteWorkload } from "@waste/contracts/routes"
 import { OFFICE_CANCEL_REASON_CODES, OFFICE_STOP_SERVICES, type OfficeStopService } from "@waste/domain/execution/vocabulary"
 import { BOOKED_WITH, type BookedField } from "@waste/domain/execution/work-orders"
 
@@ -110,8 +110,8 @@ const SCHEME_PREFIX = "scheme"
 const GROUP_PREFIX = "group"
 const PICKUP_PREFIX = "pickup"
 
-/** A route as a read may carry it: the list's, or the detail's and the live read's with the active Plan. */
-type RouteRead = Route & { activePlan?: RouteDetail["activePlan"] }
+/** A route as a read may carry it: the list's and the detail's with the active Plan and the workload (O10 of #290), the live read's with the Plan alone. */
+type RouteRead = Route & { activePlan?: RouteDetail["activePlan"]; workload?: RouteWorkload }
 
 /** "WH-24" for "WH-24 · CN 42 018": a vehicle as the fixtures and the map name it, its callsign; an id chip as it stands. */
 export const callsignOf = (name: string) => name.split(" · ")[0] ?? name
@@ -166,10 +166,12 @@ export function toRouteRecord(route: RouteRead, context: MappingContext): Busine
   if (route.planned.serviceProviderId !== null) facts["Service provider"] = nameVia(context, "service-provider", route.planned.serviceProviderId)
   if (route.planned.depotId !== null) facts.Depot = nameVia(context, "depot", route.planned.depotId)
   if (route.planned.unloadingStationId !== null) facts.Unloading = nameVia(context, "station", route.planned.unloadingStationId)
-  // The active Plan's measure, once it has one (O5 of #290): the road the route drives and how long it takes.
+  // The active Plan's measure, once it has one (O5 of #290): the road the route drives and how long it takes, the time at its stops added (O10).
   const plan = "activePlan" in route ? route.activePlan : undefined
+  const workload = "workload" in route ? route.workload : undefined
   if (plan?.distanceMetres != null) facts.Distance = formatDistance(plan.distanceMetres)
-  if (plan?.durationSeconds != null) facts.Duration = formatDuration(plan.durationSeconds)
+  if (plan?.durationSeconds != null) facts.Duration = formatDuration(plan.durationSeconds + (workload?.stopSeconds ?? 0))
+  if (workload !== undefined) Object.assign(facts, workloadFacts(workload))
   if (route.cancelReasonCode !== null) facts["Cancel reason"] = statusLabel(route.cancelReasonCode)
   // A generated route's note is how it deviated from its scheme; the office's own route has no scheme to deviate from, and its note is the one New route took (#111).
   facts[route.routeSchemeId === null ? "Note" : "Deviation"] = route.note ?? "None"
@@ -442,6 +444,27 @@ const SOLVER_LABELS: Readonly<Record<Plan["solver"], string>> = {
   baseline: "Generated order, not optimised",
 }
 
+const kilograms = (value: number) => `${new Intl.NumberFormat("en").format(value)} kg`
+
+/**
+ * What a route's stops take and weigh (O10 of #290), as its facts say it: the
+ * time at the kerb its Duration adds to the drive, and the load its stops are
+ * expected to weigh against the planned vehicle's payload — over it, the
+ * office plans a tip, since the optimiser is never held to it. Neither where
+ * the route has no stop to say it of.
+ */
+export function workloadFacts(workload: RouteWorkload): Record<string, string> {
+  const facts: Record<string, string> = {}
+  if (workload.stopSeconds > 0) facts["Stop time"] = formatDuration(workload.stopSeconds)
+  if (workload.expectedKg !== null) {
+    const against = workload.capacityKg === null ? kilograms(workload.expectedKg) : `${kilograms(workload.expectedKg)} of ${kilograms(workload.capacityKg)}`
+    const over = workload.overCapacityKg !== null && workload.overCapacityKg > 0 ? `: over by ${kilograms(workload.overCapacityKg)}, plan a tip` : ""
+    const uncounted = workload.unexpectedStops > 0 ? `, ${workload.unexpectedStops} ${workload.unexpectedStops === 1 ? "stop" : "stops"} not counted` : ""
+    facts["Expected load"] = `${against}${over}${uncounted}`
+  }
+  return facts
+}
+
 /**
  * One line of a route's Plan history (O5 of #290): when it was asked for on
  * the project's clock, who ordered it, where it stands — its distance and
@@ -449,7 +472,8 @@ const SOLVER_LABELS: Readonly<Record<Plan["solver"], string>> = {
  * route runs by.
  */
 export function planLine(plan: Pick<Plan, "id" | "createdAt" | "solver" | "status" | "distanceMetres" | "durationSeconds" | "failureReason">, { activePlanId, timezone }: { activePlanId: string | null | undefined; timezone: string | undefined }): string {
-  const measured = plan.status === "ready" && plan.distanceMetres !== null && plan.durationSeconds !== null ? ` · ${formatDistance(plan.distanceMetres)} · ${formatDuration(plan.durationSeconds)}` : ""
+  // A Plan measures the drive; the route's Duration adds its stops' time at the kerb (O10 of #290), so the history says which it is.
+  const measured = plan.status === "ready" && plan.distanceMetres !== null && plan.durationSeconds !== null ? ` · ${formatDistance(plan.distanceMetres)} · ${formatDuration(plan.durationSeconds)} driving` : ""
   const failed = plan.status === "failed" && plan.failureReason !== null ? ` · ${plan.failureReason}` : ""
   return `${shownOn(plan.createdAt, timezone)} · ${SOLVER_LABELS[plan.solver]} · ${statusLabel(plan.status)}${measured}${failed}${plan.id === activePlanId ? " · Active" : ""}`
 }

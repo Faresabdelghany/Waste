@@ -13,6 +13,7 @@ import { WASTE_TREATMENTS } from "@waste/domain/registry/vocabulary"
 import {
   cadenceLabel,
   createMasterDataRecord,
+  DENSITY_REFUSAL,
   MASTER_DATA_KINDS,
   MASTER_DATA_MODULE,
   masterDataEditSchema,
@@ -22,6 +23,7 @@ import {
   masterDataKindOf,
   masterDataSchema,
   NO_TREATMENT,
+  SERVICE_SECONDS_REFUSAL,
   TREATMENT_LABELS,
   updateMasterDataRecord,
   WASTE_CODE_REFUSAL,
@@ -79,8 +81,8 @@ describe("the four forms", () => {
       assert.ok(!ids.includes("kind"), "the kind is the tab, not a field")
     }
     const fields = (kind: (typeof MASTER_DATA_KINDS)[number]) => masterDataSchema(kind).sections.flatMap((section) => section.fields.map((field) => field.id))
-    assert.deepEqual(fields("waste-fraction"), ["name", "key", "wasteCode", "treatment"])
-    assert.deepEqual(fields("container-type"), ["name", "volumeLitres"])
+    assert.deepEqual(fields("waste-fraction"), ["name", "key", "wasteCode", "treatment", "densityKgPerCubicMetre"])
+    assert.deepEqual(fields("container-type"), ["name", "volumeLitres", "serviceSeconds"])
     assert.deepEqual(fields("service-frequency"), ["name", "projectId", "description", "collectionsPerWeek", "weeksBetween", "daysBetween"])
     assert.deepEqual(fields("vehicle-type"), ["name", "key", "description", "containerTypeIds"])
     // M10 of #293: the edit adds a consumption field per fuel, in a section of its own, once the type exists; a create stays one request.
@@ -139,6 +141,26 @@ describe("the records the pane writes", () => {
     assert.deepEqual(edited.submittedValues, { kind: "container-type", name: "Open skip" })
     assert.deepEqual(masterDataFormValues(edited), { name: "Open skip" })
     assert.deepEqual(masterDataFormValues(record), { name: "Skip", volumeLitres: "8000" })
+  })
+})
+
+describe("a fraction's density and a container type's seconds at the kerb (O10 of #290)", () => {
+  test("are whole numbers within the domain's bounds, blank for none, shown as facts", () => {
+    const glass = createMasterDataRecord("waste-fraction", { name: "Glass", key: "glass", densityKgPerCubicMetre: "300" }, write)
+    assert.deepEqual([glass.facts.Density, glass.submittedValues?.densityKgPerCubicMetre], ["300 kg/m³", "300"])
+    const bin = createMasterDataRecord("container-type", { name: "Two-wheel bin", volumeLitres: "240", serviceSeconds: "30" }, write)
+    assert.deepEqual([bin.facts["Service time"], bin.submittedValues?.serviceSeconds], ["30 s", "30"])
+    assert.equal(createMasterDataRecord("waste-fraction", { name: "Mixed", key: "mixed" }, write).facts.Density, undefined, "nobody has set one")
+    for (const density of ["0", "2001", "12.5", "heavy"]) assert.deepEqual(masterDataFieldErrors("waste-fraction", { name: "Glass", key: "glass", densityKgPerCubicMetre: density }), { densityKgPerCubicMetre: DENSITY_REFUSAL }, density)
+    for (const seconds of ["0", "3601"]) assert.deepEqual(masterDataFieldErrors("container-type", { name: "Bin", serviceSeconds: seconds }), { serviceSeconds: SERVICE_SECONDS_REFUSAL }, seconds)
+    assert.deepEqual(masterDataFieldErrors("waste-fraction", { name: "Glass", key: "glass", densityKgPerCubicMetre: "2000" }), {})
+  })
+
+  test("the form says the seeded figures are typical, for the company to set its own", () => {
+    const field = (kind: "waste-fraction" | "container-type", id: string) => masterDataSchema(kind).sections.flatMap((section) => section.fields).find((candidate) => candidate.id === id)
+    assert.match(field("waste-fraction", "densityKgPerCubicMetre")?.description ?? "", /^Typical figures are seeded; set your own\./)
+    assert.match(field("container-type", "serviceSeconds")?.description ?? "", /^Typical figures are seeded; set your own\./)
+    assert.deepEqual([field("waste-fraction", "densityKgPerCubicMetre")?.max, field("container-type", "serviceSeconds")?.max], [2000, 3600])
   })
 })
 

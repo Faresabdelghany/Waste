@@ -146,7 +146,7 @@ describe("the ad-hoc route and the extra pickup", { skip: database.skip || owner
   const add = (routeId: string, values: Record<string, unknown>, call = olivia) => call(`/routes/${routeId}/pickups`, { method: "POST", body: values })
   const added = async (routeId: string, values: Record<string, unknown>, call = olivia): Promise<PickupDetail> => await created(call, `/routes/${routeId}/pickups`, await add(routeId, values, call), PickupDetail, "/pickups")
   /** The `Route` inside a detail: what an outbox payload carries. */
-  const routeOf = ({ pickups: _pickups, session: _session, sessions: _sessions, unloads: _unloads, activePlan: _activePlan, ...rest }: RouteDetail): Route => rest
+  const routeOf = ({ pickups: _pickups, session: _session, sessions: _sessions, unloads: _unloads, activePlan: _activePlan, workload: _workload, ...rest }: RouteDetail): Route => rest
   const eventsAbout = async (aggregateId: string) =>
     await withCompany(pool.db, a.companyId, async (tx: Tx) =>
       tx

@@ -115,6 +115,7 @@ import { describeProblem, invalidRequest, problem, ProblemError, validate } from
 import { detailOf, findReachedRoute, findRoute, labelOf, noSuchRoute, pickupColumns, pickupOf, pickupsOfRoute, receiptColumns, receiptOf, routeColumns, routeReach, routeScope, routesOf, type RouteRow } from "./execution-shapes"
 import { findDriver, findVehicle, projectToday, vehicleLabel, type DriverRow, type OwnedBy, type VehicleRow } from "./fleet-lookups"
 import { activePlansByRoute, ensurePlan } from "./plan-shapes"
+import { NO_WORKLOAD, workloadsByRoute } from "./workload"
 import { QueueMissing, type JobSender } from "@waste/db/jobs"
 import { NOT_AN_UNLOADING_STATION, requireDepot, requireServiceProvider, requireUnloadingStation, type Scope } from "./references"
 import { findScheme, MODULE as SCHEMES_MODULE, type ClockOptions } from "./scheme-groups"
@@ -354,7 +355,7 @@ type Assignment = Pick<RouteRow, "plannedVehicleId" | "plannedDriverId" | "plann
 
 /** A route as a command and the outbox carry it: the detail without what hangs off it. */
 function routeOfDetail(detail: RouteDetail): Route {
-  const { pickups: _pickups, session: _session, sessions: _sessions, unloads: _unloads, activePlan: _activePlan, ...answered } = detail
+  const { pickups: _pickups, session: _session, sessions: _sessions, unloads: _unloads, activePlan: _activePlan, workload: _workload, ...answered } = detail
   return answered
 }
 
@@ -512,8 +513,8 @@ export function routeRoutes(guard: MiddlewareHandler<AuthEnv>, { now = () => new
           .limit(fetchLimit(limit))
         // Paged first, so the row that only proves there is a next page is not one whose progress is counted.
         const { items, nextCursor } = pageOf(rows, limit)
-        const [listed, plans] = await Promise.all([routesOf(tx, principal.companyId, items), activePlansByRoute(tx, principal.companyId, items)])
-        const page: RouteListItem[] = listed.map((item) => ({ ...item, activePlan: plans.get(item.id) ?? null }))
+        const [listed, plans, workloads] = await Promise.all([routesOf(tx, principal.companyId, items), activePlansByRoute(tx, principal.companyId, items), workloadsByRoute(tx, principal.companyId, items)])
+        const page: RouteListItem[] = listed.map((item) => ({ ...item, activePlan: plans.get(item.id) ?? null, workload: workloads.get(item.id) ?? NO_WORKLOAD }))
         return c.json({ items: page, nextCursor })
       },
     )

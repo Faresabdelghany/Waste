@@ -41,6 +41,7 @@
 // key (a fraction's, a vehicle type's) is set once and a frequency stays in
 // its project, so the edit forms hold those read-only; what a person may
 // change is what the wire patches.
+import { DENSITY_KG_PER_CUBIC_METRE, SERVICE_SECONDS } from "@waste/domain/execution/workload"
 import { WASTE_TREATMENTS, type WasteTreatment } from "@waste/domain/registry/vocabulary"
 import { isWasteCode, WASTE_CODE_SHAPE, wasteCodeOf } from "@waste/domain/registry/waste-code"
 
@@ -126,8 +127,12 @@ export type MasterDataFields = {
   wasteCode?: string | null
   /** A fraction's treatment (M13 of #293); null where nobody recorded one. */
   treatment?: WasteTreatment | null
+  /** A fraction's density, kg per cubic metre (O10 of #290); null where nobody set one, NaN where the form's is no whole number. */
+  densityKgPerCubicMetre?: number | null
   /** A container type's volume; null where nobody recorded one. */
   volumeLitres?: number | null
+  /** A container type's seconds at the kerb (O10 of #290); null where nobody set them. */
+  serviceSeconds?: number | null
   /** A frequency's project, by web id. */
   projectId?: string
   description?: string | null
@@ -156,8 +161,8 @@ export type MasterDataLookups = {
 
 /** The form's own field ids per kind: what the typed values carry, in the form's order. */
 const KIND_FIELD_IDS: Readonly<Record<MasterDataKind, readonly string[]>> = {
-  "waste-fraction": ["name", "key", "wasteCode", "treatment"],
-  "container-type": ["name", "volumeLitres"],
+  "waste-fraction": ["name", "key", "wasteCode", "treatment", "densityKgPerCubicMetre"],
+  "container-type": ["name", "volumeLitres", "serviceSeconds"],
   "service-frequency": ["name", "projectId", "description", "collectionsPerWeek", "weeksBetween", "daysBetween"],
   "vehicle-type": ["name", "key", "description", "containerTypeIds", ...CONSUMPTION_FIELDS.map((field) => field.id)],
   "contaminant-code": ["name", "key", "status", "wasteFractionIds"],
@@ -191,10 +196,17 @@ export function masterDataFieldsOf(kind: MasterDataKind, values: BusinessFormVal
   switch (kind) {
     case "waste-fraction": {
       const code = text(values, "wasteCode")
-      return { kind, name, key: text(values, "key") ?? "", wasteCode: code === undefined ? null : wasteCodeOf(code), treatment: treatmentOf(text(values, "treatment")) }
+      return {
+        kind,
+        name,
+        key: text(values, "key") ?? "",
+        wasteCode: code === undefined ? null : wasteCodeOf(code),
+        treatment: treatmentOf(text(values, "treatment")),
+        densityKgPerCubicMetre: count(values, "densityKgPerCubicMetre"),
+      }
     }
     case "container-type":
-      return { kind, name, volumeLitres: count(values, "volumeLitres") }
+      return { kind, name, volumeLitres: count(values, "volumeLitres"), serviceSeconds: count(values, "serviceSeconds") }
     case "service-frequency":
       return {
         kind,
@@ -223,6 +235,14 @@ export function masterDataFieldsOf(kind: MasterDataKind, values: BusinessFormVal
   }
 }
 
+/** What a fraction's density outside the domain's bounds is told (O10 of #290). */
+export const DENSITY_REFUSAL = `A density is a whole number of kilograms a cubic metre, ${DENSITY_KG_PER_CUBIC_METRE.min} to ${DENSITY_KG_PER_CUBIC_METRE.max.toLocaleString("en")}`
+/** What a container type's seconds at the kerb outside the domain's bounds are told (O10 of #290). */
+export const SERVICE_SECONDS_REFUSAL = `Seconds at the kerb are a whole number, ${SERVICE_SECONDS.min} to ${SERVICE_SECONDS.max.toLocaleString("en")}`
+
+/** Whether a form's optional figure is unset or a whole number within the bounds. */
+const within = (value: number | null | undefined, bounds: { min: number; max: number }) => value == null || (!Number.isNaN(value) && value >= bounds.min && value <= bounds.max)
+
 /** The typed values a row keeps: the kind, then the form's own text for the kind's fields, trimmed, blanks left out. */
 export function masterDataTypedValues(kind: MasterDataKind, values: BusinessFormValues | SubmittedValues | undefined): SubmittedValues {
   const typed: SubmittedValues = { [MASTER_DATA_KIND_KEY]: kind }
@@ -245,7 +265,9 @@ export function masterDataFieldErrors(kind: MasterDataKind, values: BusinessForm
   if (!fields.name) errors.name = nameRefusal(kind)
   if ((kind === "waste-fraction" || kind === "vehicle-type" || kind === "contaminant-code") && !isKey(fields.key)) errors.key = KEY_REFUSAL
   if (kind === "waste-fraction" && fields.wasteCode != null && !isWasteCode(fields.wasteCode)) errors.wasteCode = WASTE_CODE_REFUSAL
+  if (kind === "waste-fraction" && !within(fields.densityKgPerCubicMetre, DENSITY_KG_PER_CUBIC_METRE)) errors.densityKgPerCubicMetre = DENSITY_REFUSAL
   if (kind === "container-type" && Number.isNaN(fields.volumeLitres)) errors.volumeLitres = VOLUME_REFUSAL
+  if (kind === "container-type" && !within(fields.serviceSeconds, SERVICE_SECONDS)) errors.serviceSeconds = SERVICE_SECONDS_REFUSAL
   if (kind === "vehicle-type") Object.assign(errors, fields.consumptionErrors ?? {})
   if (kind === "service-frequency") {
     if (!fields.projectId) errors.projectId = "Pick a project"
@@ -288,21 +310,29 @@ export function presentMasterData(fields: MasterDataFields, lookups: MasterDataL
       const key = fields.key ?? ""
       const code = fields.wasteCode ?? null
       const treatment = fields.treatment ?? null
+      const density = fields.densityKgPerCubicMetre ?? null
       return {
         ...base,
         context: `${details.label} · ${key}`,
         value: key,
-        facts: { Kind: details.label, Key: key, ...(code === null ? {} : { "Waste code": code }), ...(treatment === null ? {} : { Treatment: TREATMENT_LABELS[treatment] }) },
+        facts: {
+          Kind: details.label,
+          Key: key,
+          ...(code === null ? {} : { "Waste code": code }),
+          ...(treatment === null ? {} : { Treatment: TREATMENT_LABELS[treatment] }),
+          ...(density === null || Number.isNaN(density) ? {} : { Density: `${density.toLocaleString("en")} kg/m³` }),
+        },
       }
     }
     case "container-type": {
       const volume = fields.volumeLitres ?? null
       const shown = volume === null || Number.isNaN(volume) ? undefined : volumeLabel(volume)
+      const seconds = fields.serviceSeconds ?? null
       return {
         ...base,
         context: `${details.label} · ${shown ?? "volume not recorded"}`,
         value: shown ?? "—",
-        facts: { Kind: details.label, ...(shown === undefined ? {} : { Volume: shown }) },
+        facts: { Kind: details.label, ...(shown === undefined ? {} : { Volume: shown }), ...(seconds === null || Number.isNaN(seconds) ? {} : { "Service time": `${seconds} s` }) },
       }
     }
     case "service-frequency": {
@@ -371,6 +401,15 @@ export function masterDataSchema(kind: MasterDataKind): BusinessFormSchema {
             options: [{ value: NO_TREATMENT, label: "Not recorded" }, ...WASTE_TREATMENTS.map((treatment) => ({ value: treatment, label: TREATMENT_LABELS[treatment] }))],
             description: "What the customer sustainability report counts it as: reuse and recycling are recycled, the rest not.",
           },
+          {
+            id: "densityKgPerCubicMetre",
+            label: "Density",
+            type: "number" as const,
+            min: DENSITY_KG_PER_CUBIC_METRE.min,
+            max: DENSITY_KG_PER_CUBIC_METRE.max,
+            unit: "kg/m³",
+            description: "Typical figures are seeded; set your own. A stop's expected weight is its container's litres times this.",
+          },
         ]
       : []),
     ...(kind === "contaminant-code"
@@ -389,7 +428,20 @@ export function masterDataSchema(kind: MasterDataKind): BusinessFormSchema {
           { id: "wasteFractionIds", label: "Waste fractions", type: "multiselect" as const, relation: MASTER_DATA_MODULE, description: "The fractions it is found in; none is every fraction." },
         ]
       : []),
-    ...(kind === "container-type" ? [{ id: "volumeLitres", label: "Volume", type: "number" as const, min: 1, unit: "L" }] : []),
+    ...(kind === "container-type"
+      ? [
+          { id: "volumeLitres", label: "Volume", type: "number" as const, min: 1, unit: "L" },
+          {
+            id: "serviceSeconds",
+            label: "Service time",
+            type: "number" as const,
+            min: SERVICE_SECONDS.min,
+            max: SERVICE_SECONDS.max,
+            unit: "s",
+            description: "Typical figures are seeded; set your own. The seconds an emptying takes at the kerb, which a route's duration adds to the drive.",
+          },
+        ]
+      : []),
     ...(kind === "service-frequency"
       ? [
           { id: "projectId", label: "Project", type: "select" as const, required: true, relation: { workspaceId: "configure" as const, moduleId: "organization" } },

@@ -15,7 +15,7 @@ import type { Driver, Vehicle } from "@waste/contracts/fleet"
 import type { Project } from "@waste/contracts/organisation"
 import type { Depot, UnloadingStation } from "@waste/contracts/places"
 import { PickupAdd } from "@waste/contracts/pickups"
-import { DISPATCH_MANY_MAX, PickupOrderSet, Route, RouteAssign, RouteCancel, RouteCreate, RouteDetail, RouteDispatchMany, RouteReleaseHold, RouteReschedule } from "@waste/contracts/routes"
+import { DISPATCH_MANY_MAX, PickupOrderSet, Route, RouteAssign, RouteCancel, RouteCreate, RouteDetail, RouteDispatchMany, RouteReleaseHold, RouteReschedule, type RouteWorkload } from "@waste/contracts/routes"
 import type { ActivePlan, Plan } from "@waste/contracts/plans"
 
 import { FIXTURE_COMPANY_ID, getModuleDefinition, type BusinessRecord } from "../../data/business-modules"
@@ -62,7 +62,7 @@ const fixtures = fixturesOf("route-studio", "routes")
 
 // The seeded rows the store has loaded before the routes, as the API answers them.
 const copenhagen: Project = { id: "01a0d2a4-a280-7002-8000-000000000001", ...STAMPS, name: "Copenhagen Central", kind: "Municipality", language: "da", currency: "DKK", timezone: "Europe/Copenhagen", status: "active", weekend: ["saturday", "sunday"], holidayList: "Danish public holidays", publicSlug: null, weightTolerancePercent: 5, paymentTermsDays: 30, paymentReferenceScheme: "none", holdForReview: false }
-const residual: WasteFraction = { id: "01a0d2a4-a280-7005-8000-000000000001", ...STAMPS, key: "residual", name: "Residual", wasteCode: null, treatment: null }
+const residual: WasteFraction = { id: "01a0d2a4-a280-7005-8000-000000000001", ...STAMPS, key: "residual", name: "Residual", wasteCode: null, treatment: null, densityKgPerCubicMetre: null }
 const nordhavn: Depot = { id: "01a0d2a4-a280-7010-8000-000000000001", ...STAMPS, projectId: copenhagen.id, code: "DEPOT-NORDHAVN", name: "Nordhavn Depot", address: "Kaj 14, Nordhavn", location: at(12.5958, 55.7091), ownership: "company", serviceProviderId: null, opensAt: "05:00", closesAt: "22:00", vehicleCapacity: null, status: "active", notes: null }
 const arc: UnloadingStation = { id: "01a0d2a4-a280-7012-8000-000000000001", ...STAMPS, code: "STATION-ARC", name: "ARC Amager", address: "Kraftværksvej 31", location: at(12.6186, 55.6903), ownership: "external", serviceProviderId: null, opensAt: null, closesAt: null, weighbridge: true, status: "active", notes: null, wasteFractionIds: [residual.id] }
 const compartment = { position: 1, name: null, capacityKg: null, volumeLitres: null, wasteFractionIds: [residual.id] }
@@ -101,7 +101,9 @@ const planned: Route = {
   progress: { planned: 3, completed: 0, skipped: 0, failed: 0, total: 3, fraction: 0 },
 }
 const plan: ActivePlan = { id: "01a0d2a4-a280-7032-8000-000000000001", solver: "manual", status: "ready", trip: "full", distanceMetres: 18_400, durationSeconds: 2_700, stale: false, deferredUntil: null }
-const detailOf = (route: Route, over: Partial<RouteDetail> = {}): RouteDetail => ({ ...route, pickups: [], activePlan: null, session: null, sessions: [], unloads: [], ...over })
+/** A route whose stops take and weigh nothing known (O10 of #290). */
+const NO_WORKLOAD: RouteWorkload = { stopSeconds: 0, expectedKg: null, unexpectedStops: 0, capacityKg: null, overCapacityKg: null }
+const detailOf = (route: Route, over: Partial<RouteDetail> = {}): RouteDetail => ({ ...route, pickups: [], activePlan: null, workload: NO_WORKLOAD, session: null, sessions: [], unloads: [], ...over })
 
 // What the store has loaded when the routes load: the organisation, the places, the fleet.
 const noResolve = (moduleFixtures: readonly BusinessRecord[]): MappingContext => ({ fixtures: moduleFixtures, resolve: NOTHING_RESOLVED, companyRecordId: FIXTURE_COMPANY_ID, now: NOW })
@@ -598,6 +600,18 @@ describe("the dispatch day's tooling (O5 of #290)", () => {
     assert.deepEqual([record.facts.Distance, record.facts.Duration], [undefined, undefined], "a list row without a Plan reading says nothing")
   })
 
+  test("a route's stops add their time at the kerb to the Plan's drive, and its expected load reads against the vehicle's payload (O10 of #290)", () => {
+    const loads = { stopSeconds: 5_400, expectedKg: 8_200, unexpectedStops: 0, capacityKg: 12_000, overCapacityKg: 0 }
+    const measured = routeAdapter.toRecord(detailOf(planned, { activePlan: plan, workload: loads }), context())
+    assert.deepEqual([measured.facts.Duration, measured.facts["Stop time"], measured.facts["Expected load"]], ["2 h 15 min", "1 h 30 min", "8,200 kg of 12,000 kg"])
+    const over = routeAdapter.toRecord(detailOf(planned, { activePlan: plan, workload: { ...loads, expectedKg: 14_200, overCapacityKg: 2_200 } }), context())
+    assert.equal(over.facts["Expected load"], "14,200 kg of 12,000 kg: over by 2,200 kg, plan a tip")
+    const partly = routeAdapter.toRecord(detailOf(planned, { workload: { ...loads, capacityKg: null, overCapacityKg: null, unexpectedStops: 3 } }), context())
+    assert.deepEqual([partly.facts.Duration, partly.facts["Stop time"], partly.facts["Expected load"]], [undefined, "1 h 30 min", "8,200 kg, 3 stops not counted"], "no Plan, no drive to add the stops to")
+    const unknown = routeAdapter.toRecord(detailOf(planned, { workload: NO_WORKLOAD }), context())
+    assert.deepEqual([unknown.facts["Stop time"], unknown.facts["Expected load"]], [undefined, undefined], "a route with no stops says neither")
+  })
+
   test("assign names the service provider by server id, a cleared one as null, and the route reads it back", () => {
     const assign = routeAdapter.commands?.[ASSIGN_ROUTE]
     const named = assign?.toBody?.({ serviceProviderId: nordren.id }, record, context(resolverOver(withProvider)))
@@ -631,7 +645,7 @@ describe("the dispatch day's tooling (O5 of #290)", () => {
 
   test("a Plan's line in the route's history: when, who ordered it, where it stands, its measure, and whether it is the active one", () => {
     const base = { id: plan.id, createdAt: "2026-10-01T04:00:00.000Z", distanceMetres: 18_400, durationSeconds: 3_900, failureReason: null }
-    assert.equal(planLine({ ...base, solver: "optimiser", status: "ready" }, { activePlanId: plan.id, timezone: "Europe/Copenhagen" }), "2026-10-01 06:00 · Optimised · Ready · 18.4 km · 1 h 05 min · Active")
+    assert.equal(planLine({ ...base, solver: "optimiser", status: "ready" }, { activePlanId: plan.id, timezone: "Europe/Copenhagen" }), "2026-10-01 06:00 · Optimised · Ready · 18.4 km · 1 h 05 min driving · Active")
     assert.equal(planLine({ ...base, solver: "manual", status: "calculating", distanceMetres: null, durationSeconds: null }, { activePlanId: null, timezone: "Europe/Copenhagen" }), "2026-10-01 06:00 · The dispatcher's order · Calculating")
     assert.equal(planLine({ ...base, solver: "baseline", status: "failed", failureReason: "superseded" }, { activePlanId: "another", timezone: "Europe/Copenhagen" }), "2026-10-01 06:00 · Generated order, not optimised · Failed · superseded")
   })

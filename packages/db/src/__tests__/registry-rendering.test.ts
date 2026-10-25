@@ -40,9 +40,14 @@
 // onto 0004's, and finance-settings-rendering.test.ts pins the statements.
 //
 // Migration 0043 (M13 of #293) gave `waste_fraction` its `treatment` and the
-// check over the domain's list: `CHANGED_IN_0043`, first of the fraction's
-// chain, maps today's CREATE TABLE onto 0029's spelling, and
-// sustainability-rendering.test.ts pins the two ALTER TABLE statements.
+// check over the domain's list: `CHANGED_IN_0043` maps its CREATE TABLE onto
+// 0029's spelling, and sustainability-rendering.test.ts pins the two ALTER
+// TABLE statements.
+//
+// Migration 0050 (O10 of #290) gave `waste_fraction` its density and
+// `container_type` its service seconds, each with its range:
+// `CHANGED_IN_0050`, first of both chains, maps today's CREATE TABLEs onto
+// 0043's and 0004's, and workload-rendering.test.ts pins the statements.
 //
 // Migration 0044 (M14 of #293) gave `product` the `day` unit and a hire's free
 // days with their shape: `CHANGED_IN_0010` maps the product as drizzle-kit
@@ -258,36 +263,50 @@ const CHANGED_IN_0022 = new Map([
   [pointTable(true), pointTable(false)],
 ])
 
-/** waste_fraction as drizzle-kit wrote it as of 0004; as of 0029, with the waste code and its shape check; and as it writes it since 0043, with the treatment and its check. */
-const fractionTable = (asOf: "0004" | "0029" | "0043"): string =>
+/** waste_fraction as drizzle-kit wrote it as of 0004; as of 0029, with the waste code and its shape check; as of 0043, with the treatment and its check; and as it writes it since 0050, with the density and its range. */
+const fractionTable = (asOf: "0004" | "0029" | "0043" | "0050"): string =>
   createTable("waste_fraction", "tenant", [
     '"key" text NOT NULL',
     '"name" text NOT NULL',
     ...(asOf >= "0029" ? ['"waste_code" text'] : []),
     ...(asOf >= "0043" ? ['"treatment" text'] : []),
+    ...(asOf >= "0050" ? ['"density_kg_per_cubic_metre" integer'] : []),
     uniqueKey("waste_fraction_key_key", "company_id", "key"),
     uniqueKey("waste_fraction_name_key", "company_id", "name"),
     uniqueKey("waste_fraction_tenant_key", "company_id", "id"),
     lowercaseCheck("waste_fraction", "key"),
     ...(asOf >= "0029" ? [`CONSTRAINT "waste_fraction_waste_code_shape" CHECK (${ref("waste_fraction", "waste_code")} ~ '${WASTE_CODE_PATTERN}')`] : []),
     ...(asOf >= "0043" ? [oneOfCheck("waste_fraction", "treatment", "reuse", "recycling", "energy-recovery", "disposal")] : []),
+    ...(asOf >= "0050" ? [`CONSTRAINT "waste_fraction_density_kg_per_cubic_metre_range" CHECK (${ref("waste_fraction", "density_kg_per_cubic_metre")} between 1 and 2000)`] : []),
   ])
 
-/** What 0043 changed: the fraction's CREATE TABLE as drizzle-kit generates it now onto what it generated as of 0029. Applied first, one file at a time. */
+/** container_type as drizzle-kit wrote it as of 0004, and as it writes it since 0050, with the service seconds and their range. */
+const containerTypeTable = (asOf: "0004" | "0050"): string =>
+  createTable("container_type", "tenant", [
+    '"name" text NOT NULL',
+    '"volume_litres" integer',
+    ...(asOf >= "0050" ? ['"service_seconds" integer'] : []),
+    uniqueKey("container_type_name_key", "company_id", "name"),
+    uniqueKey("container_type_tenant_key", "company_id", "id"),
+    positiveCheck("container_type", "volume_litres"),
+    ...(asOf >= "0050" ? [`CONSTRAINT "container_type_service_seconds_range" CHECK (${ref("container_type", "service_seconds")} between 1 and 3600)`] : []),
+  ])
+
+/** What 0050 changed: the fraction's and the container type's CREATE TABLEs as drizzle-kit generates them now onto what they were before it. Applied first, one file at a time. */
+const CHANGED_IN_0050 = new Map([
+  [fractionTable("0050"), fractionTable("0043")],
+  [containerTypeTable("0050"), containerTypeTable("0004")],
+])
+
+/** What 0043 changed: the fraction's CREATE TABLE as drizzle-kit generated it as of 0043 onto what it generated as of 0029. Applied after `CHANGED_IN_0050`. */
 const CHANGED_IN_0043 = new Map([[fractionTable("0043"), fractionTable("0029")]])
 
 /** What 0029 changed: the fraction's CREATE TABLE as drizzle-kit generated it as of 0029 onto what 0004 says. Applied after `CHANGED_IN_0043`. */
 const CHANGED_IN_0029 = new Map([[fractionTable("0029"), fractionTable("0004")]])
 
 const expected = [
-  fractionTable("0043"),
-  createTable("container_type", "tenant", [
-    '"name" text NOT NULL',
-    '"volume_litres" integer',
-    uniqueKey("container_type_name_key", "company_id", "name"),
-    uniqueKey("container_type_tenant_key", "company_id", "id"),
-    positiveCheck("container_type", "volume_litres"),
-  ]),
+  fractionTable("0050"),
+  containerTypeTable("0050"),
   createTable("service_frequency", "project", [
     '"name" text NOT NULL',
     '"description" text',
@@ -456,6 +475,7 @@ describe("the Registry tables as drizzle-kit writes them", () => {
   const generatedHead = async (): Promise<string[]> => [
     ...(await statementsFor(tables))
       .filter((statement) => !ADDED_IN_0010.includes(statement))
+      .map((statement) => CHANGED_IN_0050.get(statement) ?? statement)
       .map((statement) => CHANGED_IN_0043.get(statement) ?? statement)
       .map((statement) => CHANGED_IN_0007.get(statement) ?? CHANGED_IN_0010.get(statement) ?? CHANGED_IN_0022.get(statement) ?? CHANGED_IN_0029.get(statement) ?? CHANGED_IN_0037.get(statement) ?? statement),
     ...DROPPED_IN_0007,
@@ -470,7 +490,8 @@ describe("the Registry tables as drizzle-kit writes them", () => {
     for (const statement of CHANGED_IN_0007.keys()) assert.ok(today.includes(statement), statement.split("\n")[0])
     for (const statement of CHANGED_IN_0010.keys()) assert.ok(today.includes(statement), statement.split("\n")[0])
     for (const statement of CHANGED_IN_0022.keys()) assert.ok(today.includes(statement), statement.split("\n")[0])
-    for (const statement of CHANGED_IN_0043.keys()) assert.ok(today.includes(statement), statement.split("\n")[0])
+    for (const statement of CHANGED_IN_0050.keys()) assert.ok(today.includes(statement), statement.split("\n")[0])
+    for (const statement of CHANGED_IN_0043.keys()) assert.ok([...CHANGED_IN_0050.values()].includes(statement), statement.split("\n")[0])
     for (const statement of CHANGED_IN_0029.keys()) assert.ok([...CHANGED_IN_0043.values()].includes(statement), statement.split("\n")[0])
     for (const statement of CHANGED_IN_0037.keys()) assert.ok(today.includes(statement), statement.split("\n")[0])
     for (const statement of ADDED_IN_0010) assert.ok(today.includes(statement), statement)

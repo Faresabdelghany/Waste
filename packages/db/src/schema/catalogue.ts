@@ -40,6 +40,7 @@
 // priced at, held to 0..100 by `product_vat_percent_range`. All three are
 // nullable, so no guard: a product without a rate makes a `no-vat-rate`
 // event, which is the actionable reason.
+import { DENSITY_KG_PER_CUBIC_METRE, SERVICE_SECONDS } from "@waste/domain/execution/workload"
 import { FREE_DAYS_MAX } from "@waste/domain/finance/hire"
 import { PRODUCT_KINDS, PRODUCT_STATUSES, PRODUCT_UNITS, WASTE_TREATMENTS } from "@waste/domain/registry/vocabulary"
 import { WASTE_CODE_PATTERN } from "@waste/domain/registry/waste-code"
@@ -66,6 +67,8 @@ export const wasteFraction = wms.table(
     wasteCode: text(),
     /** How it is treated once collected (M13 of #293), what its recycling rate reads; null where nobody has set one. */
     treatment: text(),
+    /** What a cubic metre of it weighs in a container, kg (O10 of #290): a stop's expected weight is its container's litres times this; null where nobody has set one. */
+    densityKgPerCubicMetre: integer(),
   },
   (t) => [
     companyReference(t, company),
@@ -76,6 +79,11 @@ export const wasteFraction = wms.table(
     // The code's shape, the domain's one spelling; a null passes: no code is not a wrong one.
     check(tableObjectName(t.id.table, "waste_code_shape", "wasteFraction"), sql`${t.wasteCode} ~ ${sql.raw(`'${WASTE_CODE_PATTERN}'`)}`),
     oneOf(t.treatment, WASTE_TREATMENTS),
+    // Within the domain's bounds; a null passes: no density is not a wrong one.
+    check(
+      tableObjectName(t.id.table, "density_kg_per_cubic_metre_range", "wasteFraction"),
+      sql`${t.densityKgPerCubicMetre} between ${sql.raw(String(DENSITY_KG_PER_CUBIC_METRE.min))} and ${sql.raw(String(DENSITY_KG_PER_CUBIC_METRE.max))}`,
+    ),
   ],
 )
 
@@ -88,8 +96,20 @@ export const containerType = wms.table(
     name: text().notNull(),
     /** Null where nobody recorded one; zero is not a volume. */
     volumeLitres: integer(),
+    /** The seconds an emptying of one takes at the kerb (O10 of #290), its stop's service time; null where nobody has set one. */
+    serviceSeconds: integer(),
   },
-  (t) => [companyReference(t, company), tenantUnique(t, t.name), tenantKey(t), positive(t.volumeLitres)],
+  (t) => [
+    companyReference(t, company),
+    tenantUnique(t, t.name),
+    tenantKey(t),
+    positive(t.volumeLitres),
+    // Within the domain's bounds; a null passes, and the stop takes the unknown figure.
+    check(
+      tableObjectName(t.id.table, "service_seconds_range", "containerType"),
+      sql`${t.serviceSeconds} between ${sql.raw(String(SERVICE_SECONDS.min))} and ${sql.raw(String(SERVICE_SECONDS.max))}`,
+    ),
+  ],
 )
 
 export const serviceFrequency = wms.table(
