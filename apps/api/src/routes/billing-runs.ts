@@ -21,6 +21,7 @@
 import { BillingRun, BillingRunCreate, BillingRunDetail, BillingRunListQuery, BillingRunPreview } from "@waste/contracts/billing"
 import { Page } from "@waste/contracts/pagination"
 import { BILLING_RUN_MAX_EVENTS, grouped, previewBilling, runBilling } from "@waste/db/commands/billing-runs"
+import type { Tx } from "@waste/db/client"
 import { billingRun } from "@waste/db/schema/finance"
 import { and, asc, eq, gt, gte, lte } from "drizzle-orm"
 import { Hono, type MiddlewareHandler } from "hono"
@@ -31,8 +32,9 @@ import { requireProject } from "../auth/projects"
 import { requireGrant } from "../auth/require"
 import { newId } from "../ids"
 import { afterCursor, fetchLimit, pageOf } from "../pagination"
-import { describeProblem, validate } from "../problem"
+import { describeProblem, invalidRequest, validate } from "../problem"
 import { exclusionOf, findRun, noSuchRun, runColumns, runDetailOf, runOf, runScope } from "./billing-shapes"
+import { projectToday } from "./fleet-lookups"
 import type { ClockOptions } from "./scheme-groups"
 import { created, describeCreated, describeJson, IdParam } from "./shared"
 
@@ -47,8 +49,16 @@ const problems = (action: "view" | "create") => ({
   403: describeProblem(`No active account here, or the caller's role does not allow \`${action}\` on \`${MODULE}\`.`),
 })
 
+/** A run is for a closed period (M14 of #293): its last day is the project's today at the latest, so no charge reaches a day still to come and no month is left undue past every later run's reach. */
+export const PERIOD_ENDS_BY_TODAY = "A run's period ends by today"
+
+/** The 400 a period still running is: its last day after the project's today. */
+async function requireClosedPeriod(tx: Tx, scope: { companyId: string; projectId: string }, periodTo: string, now: () => Date): Promise<void> {
+  if (periodTo > (await projectToday(tx, scope, now)())) throw invalidRequest("body", [{ path: "periodTo", message: PERIOD_ENDS_BY_TODAY }])
+}
+
 const RUN_RULES =
-  "The selection is every `pickup`, `ticket`, `manual` and `reversal` event of the project whose `serviceDate` lies in the period, both days inclusive, and whose reading is `ready` — priced, not cancelled, on no invoice line, not reversed (a reversed original stays on its invoice; the reversal is what is selected). A blocked event is never invoiced and never re-evaluated here; `reprice` is its door. The events are grouped by payer (`agreement.payerCustomerId`) and currency, one invoice per group, and a payer whose events in the period are all blocked is an exclusion with the reason `all-events-blocked` and the count, so no customer is silently skipped. No status gates the payer: an invoice records delivered work, and a customer gone inactive is invoiced for it."
+  "A run is for a closed period: its `periodTo` is the project's today at the latest (400 at `periodTo`, `A run's period ends by today`), so a recurring charge is billed in advance from the period after a closed one, and a hire (M14 of #293) charges no day still to come. The selection is every `pickup`, `ticket`, `manual` and `reversal` event of the project whose `serviceDate` lies in the period, both days inclusive, and whose reading is `ready` — priced, not cancelled, on no invoice line, not reversed (a reversed original stays on its invoice; the reversal is what is selected). A blocked event is never invoiced and never re-evaluated here; `reprice` is its door. The events are grouped by payer (`agreement.payerCustomerId`) and currency, one invoice per group, and a payer whose events in the period are all blocked is an exclusion with the reason `all-events-blocked` and the count, so no customer is silently skipped. No status gates the payer: an invoice records delivered work, and a customer gone inactive is invoiced for it."
 
 export function billingRunRoutes(guard: MiddlewareHandler<AuthEnv>, { now = () => new Date() }: ClockOptions = {}) {
   return new Hono<AuthEnv>()
@@ -105,7 +115,7 @@ export function billingRunRoutes(guard: MiddlewareHandler<AuthEnv>, { now = () =
         security: BEARER_SECURITY,
         responses: {
           201: describeCreated("The run as completed, with its exclusions and the ids of the invoices it issued.", BillingRunDetail),
-          400: describeProblem("The body is missing a field, names a member the server owns, runs its period backwards, or names a project this account does not work in — each at the field that is wrong."),
+          400: describeProblem("The body is missing a field, names a member the server owns, runs its period backwards or past the project's today, or names a project this account does not work in — each at the field that is wrong."),
           ...problems("create"),
           409: describeProblem("More ready events fall in the period than one run takes, or another run invoiced an event of the selection; the detail says which."),
         },
@@ -118,6 +128,7 @@ export function billingRunRoutes(guard: MiddlewareHandler<AuthEnv>, { now = () =
         const tx = c.get("tx")
         const principal = c.get("principal")
         requireProject(principal, body.projectId)
+        await requireClosedPeriod(tx, { companyId: principal.companyId, projectId: body.projectId }, body.periodTo, now)
         const { run, exclusions, invoiceIds } = await runBilling(tx, {
           companyId: principal.companyId,
           projectId: body.projectId,
@@ -144,7 +155,7 @@ export function billingRunRoutes(guard: MiddlewareHandler<AuthEnv>, { now = () =
         security: BEARER_SECURITY,
         responses: {
           200: describeJson("The counts, the totals per currency and the exclusions a run would produce.", BillingRunPreview),
-          400: describeProblem("The body is missing a field, names a member the server owns, runs its period backwards, or names a project this account does not work in — each at the field that is wrong."),
+          400: describeProblem("The body is missing a field, names a member the server owns, runs its period backwards or past the project's today, or names a project this account does not work in — each at the field that is wrong."),
           ...problems("view"),
           409: describeProblem("More ready events fall in the period than one run takes."),
         },
@@ -156,7 +167,9 @@ export function billingRunRoutes(guard: MiddlewareHandler<AuthEnv>, { now = () =
         const body: BillingRunCreate = c.req.valid("json")
         const principal = c.get("principal")
         requireProject(principal, body.projectId)
-        return c.json(await previewBilling(c.get("tx"), { companyId: principal.companyId, projectId: body.projectId }, body, now))
+        const scope = { companyId: principal.companyId, projectId: body.projectId }
+        await requireClosedPeriod(c.get("tx"), scope, body.periodTo, now)
+        return c.json(await previewBilling(c.get("tx"), scope, body, now))
       },
     )
     .get(

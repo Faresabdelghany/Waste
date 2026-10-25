@@ -31,7 +31,8 @@ const InvoicePage = Page(Invoice)
 const MODULE = "commercial.invoices"
 
 /** The request's clock, pinned: noon on the fixtures' Monday. */
-const NOON = new Date("2026-10-05T12:00:00Z")
+/** The instant the suite's clock stands at: past every period it runs, since a run is for a closed period (M14 of #293). */
+const NOON = new Date("2026-10-09T12:00:00Z")
 
 describe("the invoice endpoints", { skip: database.skip || owner.skip }, () => {
   let pool: Database
@@ -158,7 +159,7 @@ describe("the invoice endpoints", { skip: database.skip || owner.skip }, () => {
       assert.ok((await page("kind=invoice&limit=200")).items.some((item) => item.id === issued.id))
       assert.deepEqual((await page(`billingRunId=${issued.billingRunId}`)).items.map((item) => item.id), [issued.id])
       assert.ok((await page(`customerId=${fx.customers.housing.id}&limit=200`)).items.every((item) => item.customerId === fx.customers.housing.id))
-      assert.ok((await page("from=2026-10-05&to=2026-10-05&limit=200")).items.every((item) => item.issuedOn === "2026-10-05"))
+      assert.ok((await page("from=2026-10-09&to=2026-10-09&limit=200")).items.every((item) => item.issuedOn === "2026-10-09"))
       assert.deepEqual((await page("from=2026-10-06&to=2026-10-06")).items, [])
       const foreignPayer = await refused(await olivia(`/invoices?customerId=${testId()}`), 400)
       assert.deepEqual(foreignPayer.errors?.map((error) => error.path), ["customerId"])
@@ -185,7 +186,7 @@ describe("the invoice endpoints", { skip: database.skip || owner.skip }, () => {
       const note = await credited(issued.id, { reason: "quantity-correction", note: "One of the two bins was not emptied", lines: [{ lineId: residualLine.id, quantity: 1 }] })
       assert.deepEqual(
         [note.kind, note.number, note.label, note.projectId, note.customerId, note.currency, note.issuedOn, note.dueOn, note.periodFrom, note.periodTo, note.billingRunId, note.creditsInvoiceId, note.creditReason, note.creditNote, note.issuedBy],
-        ["credit-note", issued.number + 1, `CN-${issued.number + 1}`, copenhagen, fx.customers.housing.id, "DKK", "2026-10-05", "2026-10-05", null, null, null, issued.id, "quantity-correction", "One of the two bins was not emptied", a.users.olivia.id],
+        ["credit-note", issued.number + 1, `CN-${issued.number + 1}`, copenhagen, fx.customers.housing.id, "DKK", "2026-10-09", "2026-10-09", null, null, null, issued.id, "quantity-correction", "One of the two bins was not emptied", a.users.olivia.id],
       )
       assert.deepEqual([note.netMinor, note.vatMinor, note.grossMinor], [-10_000, -2_500, -12_500])
       assert.deepEqual(

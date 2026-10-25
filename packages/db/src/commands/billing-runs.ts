@@ -108,7 +108,7 @@ type EventColumns = { id: PgColumn; companyId: PgColumn; projectId: PgColumn; ki
 /** The kinds a run selects by the period they charge, not by their service date. */
 const CHARGED_BY_PERIOD: BillableEventKind[] = ["subscription", "hire"]
 
-/** The events of the project in the period that were not cancelled: by service date, a recurring charge by its charge period, overlapping the period or the day after it, and a hire by its month overlapping the period (M14 of #293), since a run over part of a month charges it whole once due, its first day charged before the run's. */
+/** The events of the project in the period that were not cancelled: by service date, a recurring charge by its charge period, overlapping the period or the day after it, and a hire by its month ending on or after the period's first day (M14 of #293), since a run charges a month whole once due — one it overlaps, or the one before it — its first day charged before the run's. */
 const inPeriod = (scope: Scope, period: BillingPeriod, on: EventColumns = billableEvent): SQL | undefined =>
   and(
     eq(on.companyId, scope.companyId),
@@ -116,7 +116,8 @@ const inPeriod = (scope: Scope, period: BillingPeriod, on: EventColumns = billab
     or(
       and(notInArray(on.kind, CHARGED_BY_PERIOD), gte(on.serviceDate, period.periodFrom), lte(on.serviceDate, period.periodTo)),
       and(eq(on.kind, "subscription"), lte(on.chargePeriodFrom, addDays(period.periodTo, 1)), gt(on.chargePeriodTo, period.periodFrom)),
-      and(eq(on.kind, "hire"), lte(on.chargePeriodFrom, period.periodTo), gt(on.chargePeriodTo, period.periodFrom)),
+      // A month ending on or after the run's first day: the run's own, and the one before, which the run charges when the last left it undue.
+      and(eq(on.kind, "hire"), lte(on.chargePeriodFrom, period.periodTo), gte(on.chargePeriodTo, period.periodFrom)),
     ),
     isNull(on.cancelledAt),
   )

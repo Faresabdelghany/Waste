@@ -186,6 +186,7 @@ describe("billableFor a completed work order (M14 of #293)", () => {
     assert.deepEqual(blocked({ product: { id: JOB, status: "inactive", unit: "job", vatPercent: 25 } }), ["no-product", null, null], "a retired product")
     assert.deepEqual(blocked({ product: { id: JOB, status: "active", unit: "month", vatPercent: 25 } }), ["no-product", null, null], "one not sold by the job")
     assert.deepEqual(blocked({ agreement: null, subscriptionId: null }), ["no-subscription", JOB, null], "no agreement reachable")
+    assert.deepEqual(blocked({ agreement: null, subscriptionId: null, product: { id: JOB, status: "inactive", unit: "job", vatPercent: 25 } }), ["no-subscription", null, null], "no agreement is judged first: a product picked would price under nothing")
     assert.equal(chargesJob(job()), true)
   })
 

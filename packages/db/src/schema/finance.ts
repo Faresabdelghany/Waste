@@ -444,7 +444,7 @@ export const billableEvent = wms.table(
     uniqueIndex(tableObjectName(t.companyId.table, "source_event_id_idx", "billableEvent")).on(t.companyId, t.sourceEventId).where(sql`${t.sourceEventId} is not null`),
     // The billing run's idempotency key for a recurring charge (#291 C2): one per subscription and charge period, so a run again charges nothing twice.
     uniqueIndex(tableObjectName(t.companyId.table, "subscription_charge_idx", "billableEvent")).on(t.companyId, t.subscriptionId, t.chargePeriodFrom).where(sql`${t.kind} = 'subscription'`),
-    // The run's key for a hire (M14 of #293): one per placement and month, so a run again charges no day twice.
+    // The run's key for a hire (M14 of #293): one per placement and month, so a run again charges no day twice. A cancelled charge keeps its key, as a recurring charge's does (#291 C2): the office's cancel is never undone by the next run, and a month cancelled by mistake is entered again by hand.
     uniqueIndex(tableObjectName(t.companyId.table, "hire_charge_idx", "billableEvent")).on(t.companyId, t.placementId, t.chargePeriodFrom).where(sql`${t.kind} = 'hire'`),
     // The run's selection: a project's events by service date.
     tenantIndex(t, t.projectId, t.serviceDate),

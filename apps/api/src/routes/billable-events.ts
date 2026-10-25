@@ -108,7 +108,7 @@ export const notCancelled = (id: string, status: "invoiced" | "reversed"): strin
 export const REVERSAL_NOT_CANCELLED = "A reversal is not cancelled; it is the correction"
 
 /** What a reprice naming a product on anything but a ticket's event is told, at `productId`. */
-export const ONLY_A_TICKETS_EVENT_TAKES_A_PRODUCT = "Only a ticket's event or a work order's job takes a product here"
+export const ONLY_A_TICKET_OR_A_JOB_TAKES_A_PRODUCT = "Only a ticket's event or a work order's job takes a product here"
 
 /** A work order's job is charged at a product sold by the job (M14 of #293). */
 export const A_JOB_IS_SOLD_BY_THE_JOB = "A work order's job is charged at a product sold by the job"
@@ -379,7 +379,7 @@ export function billableEventRoutes(guard: MiddlewareHandler<AuthEnv>, { now = (
         // The row's own state first, as every command judges it.
         const status = statusOf(current)
         if (status !== "blocked") throw problem(409, { detail: notRepriced(id, status) })
-        if (body.productId !== undefined && current.kind !== "ticket" && current.kind !== "job") throw invalidRequest("body", [{ path: "productId", message: ONLY_A_TICKETS_EVENT_TAKES_A_PRODUCT }])
+        if (body.productId !== undefined && current.kind !== "ticket" && current.kind !== "job") throw invalidRequest("body", [{ path: "productId", message: ONLY_A_TICKET_OR_A_JOB_TAKES_A_PRODUCT }])
         const scope: Scope = { companyId: principal.companyId, projectId: current.projectId }
         // A product the body names is a new reference: held to the project (400), then to being offered (409). The stored one is no new reference.
         if (body.productId !== undefined) refuseUnofferedProduct(current.kind === "job" ? await requireJobProduct(tx, scope, body.productId) : await requireTicketWorkProduct(tx, scope, body.productId))
