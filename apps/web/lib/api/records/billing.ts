@@ -74,6 +74,7 @@ import {
   isPriceListRecord,
   isProductRecord,
   OFFICE_CANCEL_REASONS,
+  PAYMENT_STATUS_LABELS,
   PRICE_ROW_PREFIX,
   PRODUCT_PREFIX,
 } from "@/lib/data/commercial"
@@ -99,7 +100,7 @@ export const RUN_NEVER_CHANGES = "A billing run is a record of what it did: noth
 export const DOCUMENT_NEVER_CHANGES = "An issued document never changes: correct an invoice with a credit note"
 
 /** The key of the first typed value an edit moved — the field a refusal names — or `status` for a move of the status alone. */
-function firstMoved(before: BusinessRecord, after: BusinessRecord): string {
+export function firstMoved(before: BusinessRecord, after: BusinessRecord): string {
   const was = before.submittedValues ?? {}
   const is = after.submittedValues ?? {}
   return Object.keys({ ...was, ...is }).find((key) => JSON.stringify(was[key]) !== JSON.stringify(is[key])) ?? "status"
@@ -111,17 +112,17 @@ function countOf(value: string | undefined): number {
   return value !== undefined && Number.isInteger(number) && number > 0 ? number : Number.NaN
 }
 
-const amountRefusal = (path: string, currency: string) => refusal(path, `An amount in ${currency}, such as ${majorOf(1850, currency)}`)
+export const amountRefusal = (path: string, currency: string) => refusal(path, `An amount in ${currency}, such as ${majorOf(1850, currency)}`)
 
 /** A loaded record a server id names, its web id and name; the chip where nothing loaded carries it. */
-const named = (context: MappingContext, prefix: string, serverId: string | null) => {
+export const named = (context: MappingContext, prefix: string, serverId: string | null) => {
   if (serverId === null) return undefined
   const row = referenced(context, prefix, serverId)
   return { id: row.webId, name: row.name ?? row.webId }
 }
 
 /** The project's currency and timezone, from the organisation the store loaded. */
-function projectOf(context: MappingContext, projectServerId: string) {
+export function projectOf(context: MappingContext, projectServerId: string) {
   const project = referenced(context, "project", projectServerId)
   const record = context.resolve.byServerId(projectServerId)
   return { webId: project.webId, name: project.name ?? project.webId, currency: record === undefined ? undefined : typed(record, "currency"), timezone: record === undefined ? undefined : typed(record, "timezone") }
@@ -546,6 +547,7 @@ export const invoiceAdapter: ResourceAdapter<InvoiceResource> = {
         VAT: money(document.vatMinor),
         Gross: money(document.grossMinor),
         ...(isInvoice ? { "Credit notes": String(standing.count) } : {}),
+        ...(document.paymentStatus === null ? {} : { Payment: PAYMENT_STATUS_LABELS[document.paymentStatus], Paid: money(document.paidMinor), Outstanding: money(document.outstandingMinor) }),
         ...(document.issuedBy === null ? {} : { "Issued by": nameVia(context, "user", document.issuedBy) }),
       },
       related: [customer.name, ...(run === undefined ? [] : [run.name]), ...(credits === undefined ? [] : [credits.name])],

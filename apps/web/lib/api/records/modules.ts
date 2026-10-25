@@ -24,6 +24,7 @@ import { fleetDriversModule, fleetVehiclesModule } from "./fleet"
 import { liveModule } from "./live"
 import { masterDataModule } from "./master-data"
 import { accessModule, organisationModule, serviceProvidersModule } from "./organisation"
+import { paymentsModule } from "./payments"
 import { pickupsModule } from "./pickups"
 import { placesModule, warehousesModule } from "./places"
 import { collectionCalendarsModule, planningAreasModule } from "./planning"
@@ -71,7 +72,9 @@ import { weightsModule } from "./weights"
  * tickets they are linked to (#182); then the money the routes' work
  * makes: the billable events after the agreements, the products, the
  * routes and the tickets they name, the billing runs after the events they
- * invoice, and the invoices after the runs that issue them (#185).
+ * invoice, and the invoices after the runs that issue them (#185); and the
+ * payments after the invoices they pay and the customers who pay them
+ * (#291 C6).
  */
 export const SERVER_MODULES: readonly ServerModule[] = [
   organisationModule,
@@ -109,6 +112,7 @@ export const SERVER_MODULES: readonly ServerModule[] = [
   eventsModule,
   billingModule,
   invoicesModule,
+  paymentsModule,
   settlementsModule,
   weightsModule,
 ]

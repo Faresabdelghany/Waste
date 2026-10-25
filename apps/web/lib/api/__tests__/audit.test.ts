@@ -28,6 +28,7 @@ describe("which kinds keep a history", () => {
         "commercial.billing billing-run",
         "commercial.events event",
         "commercial.invoices invoice",
+        "commercial.payments payment",
         "fleet.vehicle-planning allocation",
         "operate.exceptions alert",
         "operate.tickets ticket",

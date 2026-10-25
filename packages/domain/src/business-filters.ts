@@ -50,6 +50,8 @@ export type BusinessFilters = {
   /** Why a billable event cannot be invoiced. */
   blockReasons: string[]
   billingRuns: string[]
+  /** What an invoice's payments make of it (#291 C6). */
+  paymentStatuses: string[]
 }
 
 export type BusinessFilterKey = keyof BusinessFilters
@@ -94,6 +96,7 @@ export const BUSINESS_FILTER_CHIP_LABELS: Readonly<Record<BusinessFilterKey, str
   agreements: "Agreement",
   blockReasons: "Block reason",
   billingRuns: "Billing run",
+  paymentStatuses: "Payment",
 }
 
 export const BUSINESS_FILTER_KEYS = Object.keys(

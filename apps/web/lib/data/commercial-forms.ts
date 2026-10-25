@@ -2,8 +2,9 @@
 // #148): what the customer-money chain's modules offer once they read the
 // API — a product's form in Settings › Commercial, a price list's in both
 // modes, Add price and a row's edit, Explain price's question, the manual
-// event and the event's two commands, Run billing's period, and a credit
-// note's dialog over an invoice's lines — for the command surfaces
+// event and the event's two commands, Run billing's period, a credit note's
+// dialog over an invoice's lines, and a payment's registration, its match
+// and a customer's statement (#291 C6) — for the command surfaces
 // (components/waste/commands/commercial-surfaces.tsx, billing-surfaces.tsx)
 // and the Settings pane to render. Fixture mode keeps the registry's forms.
 //
@@ -35,7 +36,9 @@ import {
   CREDIT_REASON_OPTIONS,
   CUSTOMER_KIND_OPTIONS,
   EVENT_RECORD_KIND,
+  INVOICES_MODULE,
   OFFICE_CANCEL_REASONS,
+  PAYMENT_RECORD_KIND,
   PRICE_LIST_RECORD_KIND,
   PRICE_ROW_RECORD_KIND,
   PRICE_ROWS_MODULE,
@@ -451,4 +454,100 @@ export function createCreditNoteRecord(invoice: BusinessRecord, values: Business
     ...mintedRecord({ id: `invoices-credit-note-${now}`, name: `Credit note for ${invoice.name}`, status: "Credit note", recordKind: CREDIT_NOTE_RECORD_KIND, values: { ...blankNone(values), creditsInvoiceId: invoice.id } }),
     projectIds: invoice.projectIds,
   }
+}
+
+// ---------------------------------------------------------------------------
+// Payments (#291 C6)
+// ---------------------------------------------------------------------------
+
+const invoicePaid = (description: string): BusinessFormField => ({ id: "invoiceId", label: "Invoice", type: "select", relation: INVOICES_MODULE, description })
+
+/** Register payment: money as it arrived, paid at the counter or read off the bank's site. */
+export const PAYMENT_FORM: BusinessFormSchema = {
+  key: "commercial.payments",
+  mode: "create",
+  recordKind: PAYMENT_RECORD_KIND,
+  title: "Register payment",
+  description: "Record money as it arrived. The invoice it pays is paid what it owes at most; the rest stays a credit on the payer's balance. A payment is never edited: undo a wrong match by its reversal.",
+  submitLabel: "Register payment",
+  sections: [
+    {
+      id: "payment",
+      title: "Payment",
+      fields: [
+        project,
+        invoicePaid("Optional: an invoice of the project. Without one, the payment waits unmatched."),
+        customer("Payer", "Optional: the invoice's payer where an invoice is named."),
+        { id: "amount", label: "Amount", type: "number", required: true, min: 0, description: "In the invoice's currency, else the project's." },
+        { id: "paidOn", label: "Paid on", type: "date", required: true },
+        { id: "reference", label: "Payer's reference", type: "text", placeholder: "+71<000000260071881+85123456<" },
+        { id: "note", label: "Note", type: "textarea" },
+      ],
+    },
+  ],
+  execution: { kind: "create-record", completionMessage: "The payment was registered." },
+}
+
+/** A payment the dialog registered, minted for the session. */
+export function createPaymentRecord(values: BusinessFormValues, now: number): BusinessRecord {
+  return mintedRecord({ id: `payments-payment-${now}`, name: "Payment", status: "Unmatched", recordKind: PAYMENT_RECORD_KIND, values: blankNone(values) })
+}
+
+/** Match: what remains of a payment, or part of it, applied to one invoice of its project. */
+export function allocateForm(payment: BusinessRecord): BusinessFormSchema {
+  const remaining = payment.facts.Unallocated ?? ""
+  return {
+    key: "commercial.payments",
+    mode: "action",
+    recordKind: PAYMENT_RECORD_KIND,
+    title: "Match to invoice",
+    description: `Apply ${remaining === "" ? "the payment" : `up to ${remaining}`} to an invoice of the payment's project, at most what it owes.`,
+    submitLabel: "Match",
+    sections: [
+      {
+        id: "allocation",
+        title: "Match",
+        fields: [
+          { ...invoicePaid("An invoice of the payment's project, in its currency."), required: true },
+          { id: "amount", label: "Amount", type: "number", min: 0, description: "Blank applies all that remains." },
+        ],
+      },
+    ],
+    execution: { kind: "append-event", completionMessage: "The payment was matched." },
+  }
+}
+
+/** Import bank statement's first question: the project the lines that match nothing land in. */
+export const BANK_IMPORT_FORM: BusinessFormSchema = {
+  key: "commercial.payments",
+  mode: "action",
+  recordKind: PAYMENT_RECORD_KIND,
+  title: "Import bank statement",
+  description: "A line that pays an invoice lands in that invoice's project; a line that matches nothing waits unmatched in the project you pick here.",
+  submitLabel: "Choose the file",
+  sections: [{ id: "import", title: "Import bank statement", fields: [project] }],
+  execution: { kind: "preview", completionMessage: "The statement was read." },
+}
+
+/** A customer's statement: one currency over a window of days. */
+export const STATEMENT_FORM: BusinessFormSchema = {
+  key: "customers.contacts",
+  mode: "action",
+  recordKind: "Statement",
+  title: "Statement",
+  description: "The customer's invoices, credit notes and payments over the days you pick, from the balance before them to the balance after.",
+  submitLabel: "Show statement",
+  sections: [
+    {
+      id: "window",
+      title: "Statement",
+      fields: [
+        { id: "currency", label: "Currency", type: "text", required: true, defaultValue: "DKK" },
+        { id: "from", label: "First day", type: "date", required: true },
+        { id: "to", label: "Last day", type: "date", required: true },
+      ],
+    },
+  ],
+  validationRules: [{ type: "date-order", startField: "from", endField: "to", message: "The last day comes on or after the first", allowSame: true }],
+  execution: { kind: "preview", completionMessage: "The statement was read." },
 }
