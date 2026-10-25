@@ -130,6 +130,14 @@ export type JobDefinition<Data extends object = object> = {
   scheduleOptions?: ScheduleOptions
   /** Queues the handler sends to and nobody in the registry works, created (and brought to their options) at start, in this order; `[]` and undefined mean none. */
   publishes?: readonly PublishedQueue[]
+  /**
+   * A queue whose waiting jobs this one takes over at every start, before any
+   * worker runs: the queue its jobs were sent to before, or where they wait
+   * for it — an outbox consumer's kind's own `outbox.<kind>` (#339). Each job
+   * waiting there is copied to every queue that inherits it and completed
+   * there, in one transaction (boss.ts, `drainInherited`).
+   */
+  inherits?: string
 }
 
 /** What a queue is created with: pg-boss's `QueueOptions` and, optionally, the `policy` and the `deadLetter`. `partition` is not offered: the role may not create a partition. */

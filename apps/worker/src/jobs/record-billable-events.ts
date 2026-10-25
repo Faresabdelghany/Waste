@@ -142,6 +142,7 @@ export const RECORD_BILLABLE_EVENTS_QUEUE_OPTIONS = { retryLimit: 5, retryDelay:
 
 /** The three registry entries, one per kind on `outbox.<kind>`; spread into `JOBS`. */
 export const recordBillableEvents = defineOutboxConsumer({
+  name: "finance",
   kinds: FINANCE_EVENT_KINDS,
   description: "Records a Billable Event from each pickup-completed, pickup-corrected and ticket-completed the relay publishes, or cancels or reverses the pickup's live event on a correction; one row per outbox event however often it is delivered.",
   queueOptions: RECORD_BILLABLE_EVENTS_QUEUE_OPTIONS,

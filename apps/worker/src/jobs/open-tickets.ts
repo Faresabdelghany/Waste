@@ -478,6 +478,7 @@ export const OPEN_TICKETS_QUEUE_OPTIONS = { retryLimit: 3, retryDelay: 5, retryB
 
 /** The four registry entries, one per kind on `outbox.<kind>`; spread into `JOBS`. */
 export const openTickets = defineOutboxConsumer({
+  name: "resolution",
   kinds: RESOLUTION_KINDS,
   description: "Opens a Ticket from each execution event that is a case — a failed stop, a stop closed unserved, a reported problem, a rejected command — one case per stop and per driver's device: a rejection folds into the driver's open one, a stop's event into the stop's, and a missed collection supersedes the stop's open problem.",
   queueOptions: OPEN_TICKETS_QUEUE_OPTIONS,

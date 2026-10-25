@@ -47,8 +47,13 @@
 // and a migration with no number reserved for it, and would have made the
 // relay the one writer in the system outside the fence.
 //
-// One door for a consumer, one spelling, `outbox.<kind>`, written in the
-// row's transaction: a job `send` to the queue of that name. The relay owns
+// One door for a consumer, written in the row's transaction: a job `send`
+// to each consumer's queue of the kind, `outbox.<kind>.<consumer>`
+// (`OUTBOX_ROUTES`, outbox/routes.ts), so every consumer of a kind hears the
+// event and their failures stay apart (#339); an event no consumer takes yet
+// goes to the kind's own `outbox.<kind>`, where it waits for one. The stamp
+// still means "handed to every consumer": the sends and the stamp commit
+// together. The relay owns
 // these queues (`publishes: [OUTBOX_DEAD, ...OUTBOX_QUEUES]` has the wiring
 // create the dead-letter queue and then one queue per kind of the vocabulary
 // before any worker starts; the dead-letter queue first, since a consumer's
@@ -111,6 +116,7 @@ import { withCompany } from "@waste/db/tenant"
 import { and, asc, eq, inArray, isNull, lt, lte, sql } from "drizzle-orm"
 import type { SendOptions } from "pg-boss"
 
+import { OUTBOX_ROUTES } from "../outbox/routes"
 import { OUTBOX_DEAD, OUTBOX_QUEUES, outboxQueue, type RelayedEvent } from "../outbox/subscribe"
 import { defineJob, type JobContext } from "./definition"
 
@@ -203,8 +209,8 @@ export async function relayCompany(context: Pick<JobContext, "api" | "send">, co
       const stamp = stamps.get(row.id)
       if (!stamp) throw new Error(`execution.relay-outbox: row ${row.id} was locked and not stamped`)
       const event = toRelayed(row, stamp)
-      // One door, one transaction: the job on the kind's own queue, which the consumer of that kind works.
-      await context.send(outboxQueue(event.kind), event, options)
+      // One door, one transaction: a job on each consumer's queue of the kind, or on the kind's own where none takes it yet.
+      for (const queue of OUTBOX_ROUTES.get(event.kind) ?? [outboxQueue(event.kind)]) await context.send(queue, event, options)
     }
     return rows.length
   })
@@ -273,7 +279,7 @@ export async function staleOutboxCount(worker: Database, now: Date, staleMs = OU
 
 export const relayOutbox = defineJob<RelayOutboxData>({
   queue: RELAY_QUEUE,
-  description: "Publishes every unpublished outbox event to its kind's queue and stamps it in the same transaction, every five seconds, one tick at a time.",
+  description: "Publishes every unpublished outbox event to each consumer's queue of its kind, or the kind's own where none takes it, and stamps it in the same transaction, every five seconds, one tick at a time.",
   schedule: "* * * * *",
   scheduleData: { source: "schedule" },
   scheduleOptions: { tz: "UTC", missed: "skip" },
