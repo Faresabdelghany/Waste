@@ -38,10 +38,10 @@ async function itemsOf<T>(api: APIRequestContext, path: string): Promise<T[]> {
 /** Today on Copenhagen's clock: the day a run issues its invoice on, and the payments' day. */
 const today = () => new Date().toLocaleDateString("en-CA", { timeZone: "Europe/Copenhagen" })
 
-/** A service date of this run's own, years ahead, inside the seeded agreement's and the default list's open periods. */
+/** A service date of this run's own, in the past — a run is for a closed period — and inside the seeded agreement's and the default list's open periods; the specs that bill keep months of their own. */
 function dayOfItsOwn(): string {
-  const offset = Math.floor(Date.now() / 1000) % 1460
-  return new Date(Date.UTC(2029, 0, 1) + offset * 86_400_000).toISOString().slice(0, 10)
+  const offset = Math.floor(Date.now() / 1000) % 60
+  return new Date(Date.UTC(2026, 6, 1) + offset * 86_400_000).toISOString().slice(0, 10)
 }
 
 /** An amount as the bank file spells it: `36,25`. */

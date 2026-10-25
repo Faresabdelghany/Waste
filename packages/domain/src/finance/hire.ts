@@ -12,11 +12,13 @@
 // both by the day after the run's period and by today — a run over a period
 // still running charges no day still to come, since a month charged is never
 // charged again, which the database's key on the placement and the month
-// holds. A billing run charges the due months that overlap its period, as a
-// recurring charge is charged for the periods its run overlaps: a month not
-// yet due falls to the next run whose period overlaps it, and a month no
-// run's period overlaps is never charged, so a project's runs are laid end to
-// end. A subscription's pause does not stop a hire: the bin is still on site.
+// holds. A billing run charges the due months that overlap its period and
+// the month before it (`hireWindowFirst`): a month a run made before it ended
+// left undue — a run over January on the 25th — is charged by the next run,
+// over February, and a run may lie anywhere after the last; a month no run's
+// period or the month after it reaches is never charged, so a project's runs
+// are laid end to end. A subscription's pause does not stop a hire: the bin
+// is still on site.
 //
 // The free days are the placement's first days, counted from its first day
 // across the months, so a hire of fourteen free days delivered on the 25th
@@ -40,17 +42,21 @@ export const monthOf = (day: string): ChargePeriod => chargePeriodContaining("mo
 /** How many days a period holds. */
 export const daysOf = (period: ChargePeriod): number => Math.round((Date.parse(period.to) - Date.parse(period.from)) / 86_400_000)
 
+/** The first month a run over `period` reaches: the one its period's day before falls in, which a run made before that month ended left undue. */
+export const hireWindowFirst = (period: BillingPeriod): ChargePeriod => monthOf(addDays(period.periodFrom, -1))
+
 /**
  * The months a billing run over `period` on `today` charges a placement for:
- * each month the placement stood on site in that overlaps the run's period
- * and is due — ended, or holding the placement's own end, by the day after
- * the period and by today — oldest first.
+ * each month the placement stood on site in, from the month before the run's
+ * period to the one its last day falls in, that is due — ended, or holding
+ * the placement's own end, by the day after the period and by today — oldest
+ * first. Which of them were charged already is the caller's to know.
  */
 export function hireMonthsDue(placement: InForce, period: BillingPeriod, today: string): ChargePeriod[] {
   const dayAfter = addDays(period.periodTo, 1)
   const dueBy = today < dayAfter ? today : dayAfter
   const months: ChargePeriod[] = []
-  for (let month = monthOf(period.periodFrom); month.from <= period.periodTo; month = monthOf(month.to)) {
+  for (let month = hireWindowFirst(period); month.from <= period.periodTo; month = monthOf(month.to)) {
     const standing = placement.validFrom < month.to && (placement.validTo === null || placement.validTo > month.from)
     if (!standing) continue
     const ended = month.to <= dueBy

@@ -14,7 +14,7 @@ import { and, eq } from "drizzle-orm"
 
 import { createApp } from "../app"
 import { uniqueConstraintOf } from "../problem"
-import { AMOUNT_TOO_LARGE, DRAFT_AGREEMENT_BY_HAND, NO_VAT_RATE_BY_HAND, notCancelled, notRepriced, ONLY_A_TICKETS_EVENT_TAKES_A_PRODUCT, REVERSAL_NOT_CANCELLED } from "../routes/billable-events"
+import { AMOUNT_TOO_LARGE, DRAFT_AGREEMENT_BY_HAND, NO_VAT_RATE_BY_HAND, notCancelled, notRepriced, ONLY_A_TICKET_OR_A_JOB_TAKES_A_PRODUCT, REVERSAL_NOT_CANCELLED } from "../routes/billable-events"
 import { NOT_AN_AGREEMENT } from "../routes/references"
 import { consumerEvent, pickupEvent, reversalEvent, seedBilling, ticketEvent, type BillingFixtures } from "./billing-fixtures"
 import { callingAs, type Call } from "./calls"
@@ -35,7 +35,8 @@ const EventPage = Page(BillableEvent)
 const MODULE = "commercial.events"
 
 /** The request's clock, pinned: noon on the fixtures' Monday, so a stamp is known. */
-const NOON = new Date("2026-10-05T12:00:00Z")
+/** The instant the suite's clock stands at: past every period it runs, since a run is for a closed period (M14 of #293). */
+const NOON = new Date("2027-02-05T12:00:00Z")
 
 describe("the billable event endpoints", { skip: database.skip || owner.skip }, () => {
   let pool: Database
@@ -257,7 +258,7 @@ describe("the billable event endpoints", { skip: database.skip || owner.skip }, 
 
       const blockedManual = await entered(manual({ agreementId: fx.agreements.draft.id }))
       const notATicket = await refused(await command(blockedManual.id, "reprice", { productId: fx.products.residual.id }), 400)
-      assert.deepEqual(notATicket.errors, [{ path: "productId", message: ONLY_A_TICKETS_EVENT_TAKES_A_PRODUCT }])
+      assert.deepEqual(notATicket.errors, [{ path: "productId", message: ONLY_A_TICKET_OR_A_JOB_TAKES_A_PRODUCT }])
     })
 
     test("answers an event blocked with no subscription as it stands: there is no agreement to price under", async () => {

@@ -75,10 +75,10 @@ async function addRow(api: APIRequestContext, list: PriceList, product: Product,
   expect(response.status()).toBe(201)
 }
 
-/** A service date of this run's own, years ahead, inside the seeded agreement's and the default list's open periods. */
+/** A service date of this run's own, in the past — a run is for a closed period — and inside the seeded agreement's and the default list's open periods; the specs that bill keep months of their own. */
 function dayOfItsOwn(): string {
-  const offset = Math.floor(Date.now() / 1000) % 1460
-  return new Date(Date.UTC(2028, 0, 1) + offset * 86_400_000).toISOString().slice(0, 10)
+  const offset = Math.floor(Date.now() / 1000) % 60
+  return new Date(Date.UTC(2026, 2, 1) + offset * 86_400_000).toISOString().slice(0, 10)
 }
 
 /** A fact of a record's details, the row its label heads (`StatRow`). */

@@ -28,11 +28,12 @@ describe("a project's ticket charges on the web (#291 C3)", () => {
     product("product-bulky", { name: "Bulky pickup" }),
     product("product-residual", { name: "Residual collection", unit: "pickup" }),
     product("product-rental", { name: "Container rental", unit: "month" }),
+    product("product-hire", { name: "Skip hire", unit: "day" }),
     product("product-retired", { name: "Old crane lift", status: "Inactive" }),
     product("product-harbor", { name: "Harbor bulky", project: "project-harbor" }),
   ]
 
-  test("offers the project's products a ticket's work may be charged at: never one sold by the month, a retired one by its status, the API's 409 saying why", () => {
+  test("offers the project's products a ticket's work may be charged at: never one sold by the month or the day, a retired one by its status, the API's 409 saying why", () => {
     assert.deepEqual(ticketWorkProductOptions(products, "project-copenhagen"), [
       { value: "product-bulky", label: "Bulky pickup" },
       { value: "product-residual", label: "Residual collection" },

@@ -29,7 +29,8 @@ const database = databaseUnderTest()
 /** The owner sweeps the invoices and lines the runs write, which `wms_api` may not delete. */
 const owner = ownerUnderTest()
 
-const NOON = new Date("2026-10-05T12:00:00Z")
+/** The instant the suite's clock stands at: past every period it runs, since a run is for a closed period (M14 of #293). */
+const NOON = new Date("2027-04-05T12:00:00Z")
 
 /** The month-sold subscriptions of the suite, each a case of the rule (#291 C2). */
 type Case = "whole" | "late" | "paused" | "quarterly" | "manual" | "cancelled" | "unpriced" | "draft" | "huge"

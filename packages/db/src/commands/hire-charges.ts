@@ -11,8 +11,8 @@
 // product is sold by the day (`HIRE_UNIT`), of an agreement with a cadence
 // that was not called off (`manual` is billed by hand, `cancelled` not at all;
 // a draft's hire is blocked `agreement-draft`, as its pickups are), that stood
-// on site on some day from the first of the run's first month to the run's
-// last day; with its container's type, its fraction and the product's free
+// on site on some day from the first of the month before the run's period
+// (`hireWindowFirst`) to the run's last day; with its container's type, its fraction and the product's free
 // days. For each month the run charges on the project's today
 // (`hireMonthsDue`: ended by then, so no day still to come) that holds no hire
 // of the placement yet, the days charged (`hireDays`, none and there is no
@@ -25,8 +25,11 @@
 // days, no person and no outbox event (the run's own). The
 // `billable_event_hire_charge_idx` index is the idempotency key — one charge
 // per placement and month — and the insert skips a conflict, the backstop
-// behind the project's lock that two runs take turns on.
-import { daysOf, HIRE_UNIT, hireDays, hireMonthsDue, monthOf } from "@waste/domain/finance/hire"
+// behind the project's lock that two runs take turns on. A cancelled charge
+// keeps its key, as a recurring charge's does (#291 C2): the next run never
+// undoes the office's cancel, and a month cancelled by mistake is entered
+// again as a manual event.
+import { daysOf, HIRE_UNIT, hireDays, hireMonthsDue, hireWindowFirst } from "@waste/domain/finance/hire"
 import type { BillingPeriod } from "@waste/domain/finance/periods"
 import type { ChargePeriod } from "@waste/domain/finance/recurring"
 import { and, asc, eq, gt, gte, inArray, isNull, lte, ne, or } from "drizzle-orm"
@@ -66,7 +69,7 @@ export async function hireConditionsOf(tx: Tx, scope: Scope, placementId: string
 
 /** The hires a run over the period on `today`, the project's day, would mint for the project, placement by placement in id order, each month in order; nothing written. */
 export async function planHireCharges(tx: Tx, scope: Scope, period: BillingPeriod, today: string): Promise<PlannedHire[]> {
-  const firstMonth = monthOf(period.periodFrom).from
+  const firstMonth = hireWindowFirst(period).from
   const placements = await tx
     .select({
       id: containerServicePlacement.id,
@@ -107,7 +110,7 @@ export async function planHireCharges(tx: Tx, scope: Scope, period: BillingPerio
       and(
         eq(billableEvent.companyId, scope.companyId),
         eq(billableEvent.kind, "hire"),
-        // A month before the run's first is none of this run's.
+        // A month before the run's first is none of this run's. A cancelled charge counts: the office's cancel stands.
         gte(billableEvent.chargePeriodFrom, firstMonth),
         inArray(
           billableEvent.placementId,

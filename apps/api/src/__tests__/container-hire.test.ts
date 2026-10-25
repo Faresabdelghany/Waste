@@ -10,7 +10,7 @@
 // placement's first seven days free across the months, at the day's price
 // for its container's type, the days the quantity; the invoice says the month
 // and the days; October again mints nothing, a run over November before it
-// has ended charges none of it, and once ended November alone; a blocked
+// has ended is refused, and once ended November alone; a blocked
 // hire is repriced as the run priced it, a hire product keeps its day, and a
 // work order's job blocked for its product takes one sold by the job, priced
 // on the office's ad-hoc route under no scheme. Skipped with the
@@ -32,6 +32,7 @@ import { withCompany } from "@waste/db/tenant"
 import { and, asc, eq, inArray, sql } from "drizzle-orm"
 
 import { createApp } from "../app"
+import { PERIOD_ENDS_BY_TODAY } from "../routes/billing-runs"
 import { A_JOB_IS_SOLD_BY_THE_JOB } from "../routes/billable-events"
 import { FREE_DAYS_KEEP_THE_DAY } from "../routes/products"
 import { MONTH_PRODUCT_IS_NOT_TICKET_WORK } from "../routes/ticket-charges"
@@ -71,11 +72,8 @@ describe("container hire in a billing run", { skip: database.skip || owner.skip 
   const skipType = testId()
   const agreements = { manual: testId(), cancelled: testId() }
   const placements = Object.fromEntries(CASES.map((name) => [name, testId()])) as Record<Case, string>
-  const caseOf = (id: string | null): Case => {
-    const found = CASES.find((name) => placements[name] === id)
-    if (found === undefined) throw new Error(`hire of placement ${id}, none of the suite's`)
-    return found
-  }
+  /** The named case a hire is of; null for a placement a test adds of its own. */
+  const caseOf = (id: string | null): Case | null => CASES.find((name) => placements[name] === id) ?? null
 
   before(async () => {
     pool = createDb(database.url, { max: 4 })
@@ -173,7 +171,7 @@ describe("container hire in a billing run", { skip: database.skip || owner.skip 
   const readings = async (from?: readonly string[]) => (await hires(from)).map(({ case: name, periodFrom, days, of, quantity, serviceDate, unit, net, vat, block }) => ({ case: name, periodFrom, days, of, quantity, serviceDate, unit, net, vat, block }))
   const priced = (name: Case, periodFrom: string, days: number, of: number, serviceDate: string, unit: number, net: number, vat: number) => ({ case: name, periodFrom, days, of, quantity: days, serviceDate, unit, net, vat, block: null })
   const blocked = (name: Case, periodFrom: string, days: number, of: number, serviceDate: string, block: string) => ({ case: name, periodFrom, days, of, quantity: days, serviceDate, unit: null, net: null, vat: null, block })
-  const byCase = <T extends { case: Case }>(rows: T[]): T[] => [...rows].sort((x, y) => CASES.indexOf(x.case) - CASES.indexOf(y.case))
+  const byCase = <T extends { case: Case | null }>(rows: T[]): T[] => [...rows].filter((row) => row.case !== null).sort((x, y) => CASES.indexOf(x.case as Case) - CASES.indexOf(y.case as Case))
 
   test("a preview plans October's hires and writes nothing; the run then mints and invoices exactly what it planned", async () => {
     const planned = await preview(october())
@@ -228,9 +226,11 @@ describe("container hire in a billing run", { skip: database.skip || owner.skip 
     const again = await run(october())
     assert.equal(again.invoiceCount, 0)
     assert.deepEqual(await hires(), before, "nothing minted")
-    // Asked on the 20th, November has not ended: no day still to come is charged, and the month waits for a run once it has.
+    // Asked on the 20th, November has not ended: a run over it is refused, since a run is for a closed period, and the month waits for a run once it has.
     clock = ON.november20
-    assert.equal((await preview(period("2026-11-01", "2026-11-30"))).eventCount, 0)
+    const early = await olivia("/billing-runs", { method: "POST", body: period("2026-11-01", "2026-11-30") })
+    assert.equal(early.status, 400)
+    assert.deepEqual((await readProblem(early)).errors, [{ path: "periodTo", message: PERIOD_ENDS_BY_TODAY }])
     clock = ON.december2
     const november = await run(period("2026-11-01", "2026-11-30"))
     assert.deepEqual(byCase(await readings(["2026-11-01"])), [
@@ -308,5 +308,37 @@ describe("container hire in a billing run", { skip: database.skip || owner.skip 
     assert.equal(response.status, 200, JSON.stringify(await response.clone().json()))
     const priced = BillableEvent.parse(await response.json())
     assert.deepEqual([priced.kind, priced.status, priced.productId, priced.unitPriceMinor, priced.netMinor, priced.vatMinor], ["job", "ready", products.wash, 30_000, 30_000, 7_500])
+  })
+
+  test("a month a run to a day before it ended left undue is charged by the next run, and a month whose charge the office cancelled is never charged again", async () => {
+    // A skip from 1 March 2027 under the housing association's hire, its free week spent on the 7th.
+    const march = { container: testId(), placement: testId() }
+    await withCompany(pool.db, a.companyId, async (tx: Tx) => {
+      const [{ subscriptionId }] = await tx.select({ subscriptionId: containerServicePlacement.subscriptionId }).from(containerServicePlacement).where(eq(containerServicePlacement.id, placements.whole))
+      await tx.insert(container).values({ id: march.container, companyId: a.companyId, projectId: copenhagen, label: "SKIP-9", containerTypeId: ex.containerTypes.bin.id, ownership: "company" })
+      await tx.insert(containerServicePlacement).values({ id: march.placement, companyId: a.companyId, projectId: copenhagen, containerId: march.container, subscriptionId, wasteFractionId: ex.fractions.residual.id, validFrom: "2027-03-01" })
+    })
+    const hiresOf = async (placementId: string) => (await hires()).filter((row) => row.placementId === placementId).map((row) => [row.periodFrom, row.days, row.net, row.block])
+    // A run to the 25th of March, on the 25th: March has not ended, so nothing of it is charged.
+    clock = new Date("2027-03-25T12:00:00Z")
+    await run(period("2027-03-01", "2027-03-25"))
+    assert.deepEqual(await hiresOf(march.placement), [])
+    // The run over the rest of March and April, asked once April has ended, charges March — left to it — and April, and invoices both.
+    clock = new Date("2027-05-01T12:00:00Z")
+    const april = await run(period("2027-03-26", "2027-04-30"))
+    assert.deepEqual(await hiresOf(march.placement), [["2027-03-01", 24, 108_000, null], ["2027-04-01", 30, 135_000, null]])
+    const invoicedHere = await withCompany(pool.db, a.companyId, (tx: Tx) =>
+      tx.execute<{ count: number }>(sql`select count(*)::int as count from wms.invoice_line l join wms.billable_event e on e.company_id = l.company_id and e.id = l.billable_event_id where l.company_id = ${a.companyId} and e.placement_id = ${march.placement}`),
+    )
+    assert.equal(invoicedHere[0].count, 2, "both on the run's invoice")
+    assert.ok(april.eventCount >= 2)
+
+    // Bo's draft January hire, blocked, cancelled by the office: the cancel stands — a run over January again keeps it, as a recurring charge's key does (#291 C2), and a month cancelled by mistake is entered again by hand.
+    const [draftJanuary] = (await hires(["2027-01-01"])).filter((row) => row.case === "draft")
+    const cancelled = await olivia(`/billable-events/${draftJanuary.id}/cancel`, { method: "POST", body: { reason: "other", note: "Days counted wrong" } })
+    assert.equal(cancelled.status, 200, JSON.stringify(await cancelled.clone().json()))
+    await run(period("2027-01-15", "2027-02-14"))
+    const draftMonths = (await hires(["2027-01-01"])).filter((row) => row.case === "draft")
+    assert.deepEqual(draftMonths.map((row) => row.id), [draftJanuary.id], "no second charge of the month")
   })
 })

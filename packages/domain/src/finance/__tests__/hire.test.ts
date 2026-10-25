@@ -11,8 +11,9 @@ const october = { periodFrom: "2026-10-01", periodTo: "2026-10-31" }
 const LATER = "2027-06-01"
 
 describe("the months a run charges", () => {
-  test("a month is due once it has ended: a run over October charges October, not November", () => {
-    assert.deepEqual(hireMonthsDue({ validFrom: "2026-09-20", validTo: null }, october, LATER), [{ from: "2026-10-01", to: "2026-11-01" }])
+  test("a month is due once it has ended: a run over October charges September, left to it by a run before September ended, and October, not November", () => {
+    assert.deepEqual(hireMonthsDue({ validFrom: "2026-09-20", validTo: null }, october, LATER), [monthOf("2026-09-01"), { from: "2026-10-01", to: "2026-11-01" }])
+    assert.deepEqual(hireMonthsDue({ validFrom: "2026-10-02", validTo: null }, october, LATER), [monthOf("2026-10-01")], "a bin that came in October")
   })
 
   test("a run over part of a month charges it only where the bin has already gone", () => {
@@ -23,15 +24,20 @@ describe("the months a run charges", () => {
   })
 
   test("a run over a period still running charges no day still to come: a month is due by today too, and a return by today closes it", () => {
-    assert.deepEqual(hireMonthsDue({ validFrom: "2026-09-20", validTo: null }, october, "2026-10-20"), [], "October has not ended on the 20th")
-    assert.deepEqual(hireMonthsDue({ validFrom: "2026-09-20", validTo: null }, october, "2026-11-01"), [monthOf("2026-10-01")], "it has on the 1st of November")
+    assert.deepEqual(hireMonthsDue({ validFrom: "2026-09-20", validTo: null }, october, "2026-10-20"), [monthOf("2026-09-01")], "October has not ended on the 20th; September has")
+    assert.deepEqual(hireMonthsDue({ validFrom: "2026-09-20", validTo: null }, october, "2026-11-01"), [monthOf("2026-09-01"), monthOf("2026-10-01")], "it has on the 1st of November")
+    // A run over January on the 25th leaves January to the run over February.
+    const january = { validFrom: "2026-12-10", validTo: null }
+    assert.deepEqual(hireMonthsDue(january, { periodFrom: "2027-01-01", periodTo: "2027-01-31" }, "2027-01-25"), [monthOf("2026-12-01")])
+    assert.deepEqual(hireMonthsDue(january, { periodFrom: "2027-02-01", periodTo: "2027-02-28" }, "2027-03-01"), [monthOf("2027-01-01"), monthOf("2027-02-01")])
     assert.deepEqual(hireMonthsDue({ validFrom: "2026-10-03", validTo: "2026-10-10" }, october, "2026-10-20"), [monthOf("2026-10-01")], "the bin went on the 10th")
     assert.deepEqual(hireMonthsDue({ validFrom: "2026-10-03", validTo: "2026-10-25" }, october, "2026-10-20"), [], "a return booked for the 25th has not happened")
   })
 
   test("a month the bin never stood in is not charged; a run over two months charges both", () => {
     assert.deepEqual(hireMonthsDue({ validFrom: "2026-11-02", validTo: null }, october, LATER), [])
-    assert.deepEqual(hireMonthsDue({ validFrom: "2026-08-01", validTo: "2026-10-01" }, october, LATER), [], "gone on the 1st of October: September's, not this run's")
+    assert.deepEqual(hireMonthsDue({ validFrom: "2026-08-01", validTo: "2026-10-01" }, october, LATER), [monthOf("2026-09-01")], "gone on the 1st of October: September, the month before the run's")
+    assert.deepEqual(hireMonthsDue({ validFrom: "2026-07-01", validTo: "2026-09-01" }, october, LATER), [], "gone before September: no month this run reaches")
     assert.deepEqual(hireMonthsDue({ validFrom: "2026-09-15", validTo: null }, { periodFrom: "2026-09-01", periodTo: "2026-10-31" }, LATER), [monthOf("2026-09-01"), monthOf("2026-10-01")])
   })
 })

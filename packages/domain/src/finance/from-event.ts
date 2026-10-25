@@ -225,8 +225,9 @@ function jobDraft<Row extends PriceRow>(facts: PickupEventFacts<Row>, labels: Pr
   if (!isWorkOrderService(facts.service) || facts.bookedForTicket || facts.job === null) return undefined
   const { job } = facts
   const base = { kind: "job" as const, serviceDate: facts.serviceDate, quantity: 1, links: { ...NO_LINKS, routeId: facts.routeId, pickupId: facts.pickupId } }
-  if (!chargesJob(job)) return { ...base, agreementId: job.agreement?.id ?? null, subscriptionId: job.subscriptionId, productId: null, price: null, blockReason: "no-product" }
-  if (job.agreement === null) return { ...base, agreementId: null, subscriptionId: null, productId: job.product.id, price: null, blockReason: "no-subscription" }
+  // The agreement first, as a pickup's placement is: with none reachable a product would price under nothing, so the block says what to fix.
+  if (job.agreement === null) return { ...base, agreementId: null, subscriptionId: null, productId: chargesJob(job) ? job.product.id : null, price: null, blockReason: "no-subscription" }
+  if (!chargesJob(job)) return { ...base, agreementId: job.agreement.id, subscriptionId: job.subscriptionId, productId: null, price: null, blockReason: "no-product" }
   const outcome = priceOccurrence(
     {
       agreement: { status: job.agreement.status },

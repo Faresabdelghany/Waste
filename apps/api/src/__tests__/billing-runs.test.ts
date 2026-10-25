@@ -17,7 +17,7 @@ import { and, asc, count, eq, inArray, sql } from "drizzle-orm"
 import { createApp } from "../app"
 import { newId, type IdMinter } from "../ids"
 import { notCancelled } from "../routes/billable-events"
-import { BILLING_RUN_MAX_EVENTS, runBilling, selectBilling, tooManyEvents } from "../routes/billing-runs"
+import { BILLING_RUN_MAX_EVENTS, PERIOD_ENDS_BY_TODAY, runBilling, selectBilling, tooManyEvents } from "../routes/billing-runs"
 import { lockRow } from "../routes/shared"
 import { pickupEvent, reversalEvent, seedBilling, type BillingFixtures } from "./billing-fixtures"
 import { callingAs, type Call } from "./calls"
@@ -37,7 +37,8 @@ const RunPage = Page(BillingRun)
 const MODULE = "commercial.billing"
 
 /** The request's clock, pinned: noon on the fixtures' Monday, so "today" on Copenhagen's clock is that Monday and every stamp is known. */
-const NOON = new Date("2026-10-05T12:00:00Z")
+/** The instant the suite's clock stands at: past every period it runs, since a run is for a closed period (M14 of #293). */
+const NOON = new Date("2027-02-05T12:00:00Z")
 
 describe("the billing run endpoints", { skip: database.skip || owner.skip }, () => {
   let pool: Database
@@ -168,6 +169,19 @@ describe("the billing run endpoints", { skip: database.skip || owner.skip }, () 
       })
     })
 
+    test("runs and previews a closed period alone: a period ending after the project's today is refused at periodTo, and one ending today is taken (M14 of #293)", async () => {
+      const before = await written()
+      // The suite's clock stands at 2027-02-05, Copenhagen's day too.
+      for (const path of ["/billing-runs", "/billing-runs/preview"]) {
+        const ahead = await olivia(path, { method: "POST", body: period("2027-02-01", "2027-02-06") })
+        assert.equal(ahead.status, 400, path)
+        assert.deepEqual((await readProblem(ahead)).errors, [{ path: "periodTo", message: PERIOD_ENDS_BY_TODAY }], path)
+      }
+      assert.deepEqual(await written(), before, "nothing run")
+      const today = await olivia("/billing-runs/preview", { method: "POST", body: period("2027-02-01", "2027-02-05") })
+      assert.equal(today.status, 200, JSON.stringify(await today.clone().json()))
+    })
+
     test("previews the counts, the totals per currency and the exclusions, and writes nothing", async () => {
       const before = await written()
       const previewed = await preview(period("2026-10-01", "2026-10-10"))
@@ -212,7 +226,7 @@ describe("the billing run endpoints", { skip: database.skip || owner.skip }, () 
       for (const issued of invoices) {
         assert.deepEqual(
           [issued.kind, issued.label, issued.projectId, issued.issuedOn, issued.dueOn, issued.periodFrom, issued.periodTo, issued.billingRunId, issued.creditsInvoiceId, issued.creditReason, issued.issuedBy, issued.grossMinor, issued.creditNotes],
-          ["invoice", `INV-${issued.number}`, copenhagen, "2026-10-05", "2026-11-04", "2026-10-01", "2026-10-10", done.id, null, null, a.users.olivia.id, issued.netMinor + issued.vatMinor, []],
+          ["invoice", `INV-${issued.number}`, copenhagen, "2027-02-05", "2027-03-07", "2026-10-01", "2026-10-10", done.id, null, null, a.users.olivia.id, issued.netMinor + issued.vatMinor, []],
         )
         assert.deepEqual(issued.lines.map((line) => line.position), issued.lines.map((_, index) => index + 1))
         const outbox = await eventsAbout(issued.id)

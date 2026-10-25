@@ -16,13 +16,13 @@ import type { BusinessRecord } from "@/lib/data/business-modules"
 import { NO_ONE } from "@/lib/data/properties"
 import { tokenOptions } from "@/lib/data/tickets"
 
-/** The unit a recurring charge is sold in: never a ticket's work. */
-const RECURRING_UNIT = "month"
+/** The units a billing run charges by their period — a recurring charge's month, a hire's day (M14 of #293): never a ticket's work. */
+const CHARGED_BY_PERIOD: readonly string[] = ["month", "day"]
 
-/** The products of the project a ticket's work may be charged at, by the products module's records: never one sold by the month, a retired one by its status. */
+/** The products of the project a ticket's work may be charged at, by the products module's records: never one sold by the month or the day, a retired one by its status. */
 export function ticketWorkProductOptions(products: readonly BusinessRecord[], projectId: string | undefined): BusinessFormOption[] {
   return products
-    .filter((record) => (projectId === undefined || (record.projectIds ?? []).includes(projectId)) && record.submittedValues?.priceUnit !== RECURRING_UNIT)
+    .filter((record) => (projectId === undefined || (record.projectIds ?? []).includes(projectId)) && !CHARGED_BY_PERIOD.includes(String(record.submittedValues?.priceUnit)))
     .map((record) => ({ value: record.id, label: record.status === "Active" ? record.name : `${record.name} · ${record.status}` }))
 }
 
