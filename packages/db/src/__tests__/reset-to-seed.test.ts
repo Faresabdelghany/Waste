@@ -188,6 +188,7 @@ async function operate(tx: Tx, ground: Ground): Promise<void> {
     vatMinor: 3_000,
     grossMinor: 15_000,
     issuedBy: by,
+    parties: { seller: { legalName: "Test Renovation A/S", registrationNumber: "12345678", vatNumber: null, postalAddress: null, bankIban: null, bankBic: null, fikCreditorNumber: null }, buyer: { name: "Test Customer", registrationNumber: null, billingAddress: null } },
   })
   // The counters, as generation, Resolution and a billing run take them.
   await tx

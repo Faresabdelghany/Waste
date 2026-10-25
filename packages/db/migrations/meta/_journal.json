@@ -288,6 +288,13 @@
       "when": 1792923020897,
       "tag": "0040_applications",
       "breakpoints": true
+    },
+    {
+      "idx": 41,
+      "version": "7",
+      "when": 1792924159748,
+      "tag": "0041_invoice_parties",
+      "breakpoints": true
     }
   ]
 }

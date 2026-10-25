@@ -737,6 +737,7 @@ column wms.company 13 vat_number text
 column wms.company 14 bank_iban text
 column wms.company 15 bank_bic text
 column wms.company 16 fik_creditor_number text
+column wms.company 17 postal_address text
 constraint wms.company company_bank_bic_shape CHECK ((bank_bic ~ '^[A-Z]{6}[A-Z0-9]{2}([A-Z0-9]{3})?$'::text))
 constraint wms.company company_bank_iban_shape CHECK ((bank_iban ~ '^[A-Z]{2}[0-9]{2}[A-Z0-9]{11,30}$'::text))
 constraint wms.company company_country_registration_number_key UNIQUE (country, registration_number)
@@ -1309,6 +1310,7 @@ column wms.invoice 18 vat_minor bigint not-null
 column wms.invoice 19 gross_minor bigint not-null
 column wms.invoice 20 issued_by uuid
 column wms.invoice 21 payment_reference text
+column wms.invoice 22 parties jsonb not-null
 constraint wms.invoice invoice_billing_run_id_fk FOREIGN KEY (company_id, project_id, billing_run_id) REFERENCES wms.billing_run(company_id, project_id, id)
 constraint wms.invoice invoice_company_id_fk FOREIGN KEY (company_id) REFERENCES wms.company(id)
 constraint wms.invoice invoice_credit_reason_one_of CHECK ((credit_reason = ANY (ARRAY['service-not-delivered'::text, 'quantity-correction'::text, 'price-correction'::text, 'duplicate'::text, 'other'::text])))
@@ -1320,6 +1322,7 @@ constraint wms.invoice invoice_issued_by_fk FOREIGN KEY (company_id, issued_by) 
 constraint wms.invoice invoice_kind_one_of CHECK ((kind = ANY (ARRAY['invoice'::text, 'credit-note'::text])))
 constraint wms.invoice invoice_kind_shape CHECK ((((kind = 'invoice'::text) = (billing_run_id IS NOT NULL)) AND ((kind = 'credit-note'::text) = (credits_invoice_id IS NOT NULL)) AND ((kind = 'credit-note'::text) = (credit_reason IS NOT NULL))))
 constraint wms.invoice invoice_number_key UNIQUE (company_id, number)
+constraint wms.invoice invoice_parties_shape CHECK (((NOT (jsonb_typeof((parties -> 'seller'::text)) IS DISTINCT FROM 'object'::text)) AND (NOT (jsonb_typeof((parties -> 'buyer'::text)) IS DISTINCT FROM 'object'::text))))
 constraint wms.invoice invoice_payment_reference_shape CHECK (((payment_reference IS NULL) OR ((kind = 'invoice'::text) AND (payment_reference ~ '^[0-9]{15,16}$'::text))))
 constraint wms.invoice invoice_period_shape CHECK ((((period_from IS NULL) = (period_to IS NULL)) AND ((kind = 'invoice'::text) = (period_from IS NOT NULL))))
 constraint wms.invoice invoice_pkey PRIMARY KEY (id)
@@ -3418,4 +3421,5 @@ journal 1792915809470 e17c776f51a992baef9c8594f1ff2b410b37bcb23c15e78c96b74b886a
 journal 1792917191234 447d7c013b3af5ae6b94000e86c461c3e22e215a1431d130b99c6231385dfa0b
 journal 1792921994648 578c84818d6e43060d25e4cf420cf3af21ac8d66438272d4b57d1953a464069c
 journal 1792923020897 c8b3987803dd0f8cb640d986901466c6e8d2195e7301508f475dc8592fda8e2d
+journal 1792924159748 8dcf073968a66710ff9a712367e53e2391442cc942c1aa486d6822dc43b86905
 pgboss-version 42

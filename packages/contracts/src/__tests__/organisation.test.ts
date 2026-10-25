@@ -32,6 +32,7 @@ const company = {
   bankIban: null,
   bankBic: null,
   fikCreditorNumber: null,
+  postalAddress: null,
   ...STAMPS,
 }
 
@@ -124,6 +125,16 @@ describe("the company's invoice identity (#291 C4)", () => {
     assert.deepEqual(CompanyPatch.parse(identity), identity)
     assert.deepEqual(CompanyPatch.parse({ bankIban: null }), { bankIban: null }, "null clears it")
     assert.deepEqual(refusal(CompanyPatch.safeParse({ fikCreditorNumber: "123" })).map((issue) => issue.path), ["fikCreditorNumber"])
+  })
+})
+
+describe("the company's postal address (#291 C5)", () => {
+  test("is the seller's address an invoice prints, its lines by newlines, null until set, and set and cleared in a patch", () => {
+    const postalAddress = "Havnegade 4\n2100 København Ø"
+    assert.equal(Company.parse({ ...company, postalAddress }).postalAddress, postalAddress)
+    assert.deepEqual(refusal(Company.safeParse({ ...company, postalAddress: "   " })).map((issue) => issue.path), ["postalAddress"], "whitespace says nothing")
+    assert.deepEqual(CompanyPatch.parse({ postalAddress }), { postalAddress })
+    assert.deepEqual(CompanyPatch.parse({ postalAddress: null }), { postalAddress: null }, "null clears it")
   })
 })
 

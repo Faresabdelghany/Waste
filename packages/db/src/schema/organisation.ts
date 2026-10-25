@@ -91,6 +91,8 @@ export const company = wms.table(
     bankIban: text(),
     bankBic: text(),
     fikCreditorNumber: text(),
+    /** Where the company is written to (#291 C5): the seller's address an invoice document prints, its lines separated by newlines; null until the company sets it. */
+    postalAddress: text(),
   },
   (t) => [
     // The registration is the one identity a registry gives a company: once per country.

@@ -59,6 +59,7 @@ COPY apps/web/package.json apps/web/
 COPY apps/worker/package.json apps/worker/
 COPY packages/contracts/package.json packages/contracts/
 COPY packages/db/package.json packages/db/
+COPY packages/documents/package.json packages/documents/
 COPY packages/domain/package.json packages/domain/
 COPY packages/routing/package.json packages/routing/
 COPY packages/tooling/package.json packages/tooling/

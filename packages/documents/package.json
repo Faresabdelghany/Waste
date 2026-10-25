@@ -1,0 +1,27 @@
+{
+  "name": "@waste/documents",
+  "version": "0.1.0",
+  "private": true,
+  "type": "module",
+  "description": "The documents the platform renders (#291 slice 5, #292 C5): an invoice's or a credit note's PDF from the model @waste/domain/finance/invoice-document makes of the ledger's rows, through pdf-lib, pure JavaScript with the PDF standard fonts, no headless browser. pdf-lib is loaded by a dynamic import inside the render, never at boot, since the Pilot runs the API and the worker in one 256 MiB cgroup (#134); its version is pinned exactly, and the renderer's golden sha256 is held to that pin, so a bump that moves a byte is a visible change. Deterministic: the same model renders the same bytes. Server-only: apps/web is fenced out in eslint.config.mjs the way @waste/db is. Ships TypeScript source for tsx consumers.",
+  "exports": {
+    "./package.json": "./package.json",
+    "./__tests__/*": null,
+    "./*": "./src/*.ts"
+  },
+  "scripts": {
+    "lint": "eslint . --max-warnings 0",
+    "typecheck": "tsc --noEmit -p tsconfig.json && tsc --noEmit -p tsconfig.test.json",
+    "test": "node --import tsx --test \"src/**/*.test.ts\""
+  },
+  "dependencies": {
+    "@waste/domain": "workspace:*",
+    "pdf-lib": "1.17.1"
+  },
+  "devDependencies": {
+    "@types/node": "^22",
+    "@typescript/native": "npm:typescript@^7.0.2",
+    "tsx": "^4.23.12",
+    "typescript": "npm:@typescript/typescript6@^6.0.2"
+  }
+}

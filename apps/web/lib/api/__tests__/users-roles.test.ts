@@ -51,7 +51,7 @@ const providerWorkspaceFixtures = fixturesOf("service-providers", "service-provi
 const context = (fixtures: readonly BusinessRecord[], resolve: Resolver = NOTHING_RESOLVED): MappingContext => ({ fixtures, resolve, now: NOW })
 
 // The seeded demo company as the API answers it.
-const company: Company = { id: "01a0d2a4-a280-7001-8000-000000000001", ...STAMPS, name: "Kystbyen Renovation", legalName: "Kystbyen Renovation A/S", registrationNumber: "12345678", country: "DK", status: "active", vatNumber: null, bankIban: null, bankBic: null, fikCreditorNumber: null }
+const company: Company = { id: "01a0d2a4-a280-7001-8000-000000000001", ...STAMPS, name: "Kystbyen Renovation", legalName: "Kystbyen Renovation A/S", registrationNumber: "12345678", country: "DK", status: "active", vatNumber: null, bankIban: null, bankBic: null, fikCreditorNumber: null, postalAddress: null }
 const copenhagen: Project = { id: "01a0d2a4-a280-7002-8000-000000000001", ...STAMPS, name: "Copenhagen Central", kind: "Municipality", language: "da", currency: "DKK", timezone: "Europe/Copenhagen", status: "active", weekend: ["saturday", "sunday"], holidayList: null, publicSlug: null, paymentTermsDays: 30, paymentReferenceScheme: "none" }
 const harbor: Project = { ...copenhagen, id: "01a0d2a4-a280-7002-8000-000000000002", name: "Harbor Commercial", kind: "Business unit", status: "onboarding" }
 const nordren: ServiceProvider = { id: "01a0d2a4-a280-7003-8000-000000000001", ...STAMPS, legalName: "NordRen ApS", registrationNumber: "40291188", country: "DK", contactName: "Lars Mikkelsen", contactEmail: "contact@nordren.example" }

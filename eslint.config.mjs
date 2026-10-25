@@ -62,6 +62,12 @@ export default defineConfig([
               group: ["@waste/routing", "@waste/routing/*"],
               message: "The routing provider is called server-side only (#39): the web reads Plans through the API in apps/api.",
             },
+            {
+              // #291 C5: a document is rendered server-side, from the ledger's rows,
+              // and pdf-lib would weigh on every page that imported it.
+              group: ["@waste/documents", "@waste/documents/*"],
+              message: "Documents are rendered server-side (#291 C5): the web downloads an invoice's file through the API in apps/api.",
+            },
           ],
         },
       ],

@@ -9,7 +9,7 @@
 # Two stages. The first installs the API's workspace closure with the pnpm
 # the root manifest pins and lets `pnpm deploy` lay the package out as one
 # self-contained directory: its source, its production dependencies, and the
-# workspace packages it runs (@waste/contracts, @waste/db, @waste/domain,
+# workspace packages it runs (@waste/contracts, @waste/db, @waste/documents, @waste/domain,
 # @waste/routing) copied in with their `src/`, since they ship source and there is nothing to
 # compile (see the root CLAUDE.md, Workspace packages). The second stage is
 # Node alone, running that directory as the unprivileged `node` user with
@@ -56,12 +56,13 @@ COPY apps/pilot/package.json apps/pilot/
 COPY apps/web/package.json apps/web/
 COPY packages/contracts/package.json packages/contracts/
 COPY packages/db/package.json packages/db/
+COPY packages/documents/package.json packages/documents/
 COPY packages/domain/package.json packages/domain/
 COPY packages/routing/package.json packages/routing/
 COPY packages/tooling/package.json packages/tooling/
 RUN pnpm install --frozen-lockfile --prod --filter @waste/api...
 
-# The API and the four packages it runs, deployed to the path the runtime
+# The API and the five packages it runs, deployed to the path the runtime
 # stage keeps, so what pnpm writes into the shims under node_modules/.bin
 # stays true. `pnpm deploy` resolves the same lockfile: the tarballs come from
 # the store the install above filled, and only pnpm's supply-chain check goes
@@ -71,6 +72,7 @@ RUN pnpm install --frozen-lockfile --prod --filter @waste/api...
 COPY apps/api apps/api
 COPY packages/contracts packages/contracts
 COPY packages/db packages/db
+COPY packages/documents packages/documents
 COPY packages/domain packages/domain
 COPY packages/routing packages/routing
 RUN pnpm --filter @waste/api deploy --prod /app/apps/api
