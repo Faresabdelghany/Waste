@@ -210,6 +210,14 @@ export function useRelationPickers(): RelationPickers {
   return { readyFor, options, timezoneOf }
 }
 
+/** A project's timezone, read from the organisation module alone: for a surface that shows times on the project's clock and picks no rows (`useRelationPickers` reads every module a picker may name). */
+export function useProjectTimezone(projectId: string | undefined): string | undefined {
+  const organisation = useModuleRecords(ORGANISATION_MODULE.workspaceId, ORGANISATION_MODULE.moduleId, fixturesOf(ORGANISATION_MODULE))
+  const project = projectId === undefined ? undefined : organisation.records.find((record) => record.id === projectId)
+  const timezone = project?.submittedValues?.timezone
+  return typeof timezone === "string" && timezone !== "" ? timezone : undefined
+}
+
 /** Whether a surface's own module reads the API's rows now: on the Pilot, nothing is written or commanded through it before, nor after its load failed. */
 export function useModuleReady(location: ModuleLocation): boolean {
   return useModuleRecords(location.workspaceId, location.moduleId, fixturesOf(location)).ready

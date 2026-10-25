@@ -15,6 +15,7 @@ import type { WorkspaceId } from "@/lib/data/business-modules"
 
 import { moduleKeyOf, type ServerModule } from "./adapter"
 import { agreementsModule } from "./agreements"
+import { applicationsModule } from "./applications"
 import { alertsModule } from "./alerts"
 import { vehiclePlanningModule } from "./allocations"
 import { billingModule, eventsModule, invoicesModule } from "./billing"
@@ -92,6 +93,8 @@ export const SERVER_MODULES: readonly ServerModule[] = [
   productsModule,
   priceRowsModule,
   agreementsModule,
+  // The Applications (M7 of #293), after the customers, the places and the agreements their subjects name.
+  applicationsModule,
   containersModule,
   inventoryModule,
   vehiclePlanningModule,

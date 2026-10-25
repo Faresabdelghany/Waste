@@ -16,6 +16,8 @@ const publicModuleIdsByWorkspace: Partial<
     "shared",
     "contacts",
     "agreements",
+    // M7 of #293: a customer's requests and the office's decisions on them.
+    "applications",
   ],
 }
 

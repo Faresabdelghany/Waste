@@ -27,10 +27,12 @@ import type { BusinessRecord, WorkspaceId } from "@/lib/data/business-modules"
 import { moduleKeyOf } from "@/lib/api/records/adapter"
 import { isServerBacked } from "@/lib/api/records/modules"
 import { ALERT_LIST_INITIAL, alertListReaders } from "@/lib/data/alerts"
+import { applicationCorrectable } from "@/lib/data/applications"
 import { TICKET_LIST_INITIAL, ticketListReaders } from "@/lib/data/tickets"
 import { emptyBusinessFilters, type BusinessFilters, type FilterValueReaders } from "@waste/domain/business-filters"
 
 import { AgreementCommandsSurface } from "./agreement-surfaces"
+import { ApplicationCommandsSurface } from "./application-surfaces"
 import { AllocateSurface, AllocationCommandsSurface } from "./allocation-surfaces"
 import { DriverAbsenceSurface, VehicleUnavailabilitySurface } from "./availability-surfaces"
 import { AddManualEventSurface, BillingRunSurface, EventCommandsSurface, InvoiceSurface, RunBillingSurface } from "./billing-surfaces"
@@ -64,9 +66,11 @@ export type CommandSurface = {
    * Whether the row keeps the generic Edit beside its surface: a surface
    * changes the row otherwise, so the workspace offers no Edit (#179). The
    * fleet's (O6 of #290) add what the row is away for and change nothing the
-   * form holds.
+   * form holds. A rule keeps it for the rows it holds for alone, offered in
+   * the row's details, where the row is known (M7 of #293: an Application
+   * while undecided, `genericEditOffered`).
    */
-  genericEdit?: true
+  genericEdit?: true | ((record: BusinessRecord) => boolean)
   /** Mounted beside the module's table while the module is shown, rendering nothing itself: the Live board's re-read. */
   whileShown?: ComponentType
   /** Which of the module's records are its rows on the Pilot, and how they are filtered, in place of the workspace's own per-module matching. */
@@ -100,6 +104,12 @@ export function listShows(list: ModuleList | undefined, record: BusinessRecord):
   return list?.shows?.(record) ?? true
 }
 
+/** Whether a row's details offer the generic Edit by its surface: every row where the surface keeps it, the rows its rule holds for where it names one, and none where it keeps none. */
+export function genericEditOffered(surface: CommandSurface | undefined, record: BusinessRecord | null | undefined): boolean {
+  if (surface?.genericEdit === true) return true
+  return typeof surface?.genericEdit === "function" && record != null && surface.genericEdit(record)
+}
+
 /** Which primary action a module offers: its surface's own dialog with the create grant alone, its form where the fixture form offers one (`formOffered`), or none. */
 export function primaryOf(surface: CommandSurface | undefined, granted: boolean, formOffered: boolean): "surface" | "form" | null {
   if (!granted) return null
@@ -128,6 +138,8 @@ export const COMMAND_SURFACES: Readonly<Record<string, CommandSurface>> = {
   "customers.shared": { primary: AddSharedPointSurface, rowActions: SharedPointCommandsSurface },
   // Slice 10 of #291: an agreement and a subscription by their forms, as ever; their lifecycle — a termination, a change of service, a pause — by command.
   "customers.agreements": { primary: "form", rowActions: AgreementCommandsSurface },
+  // M7 of #293: an Application recorded and corrected by its own form while undecided, moved by its commands, its Decisions and letter in its details.
+  "customers.applications": { primary: "form", rowActions: ApplicationCommandsSurface, genericEdit: applicationCorrectable },
   // Slice 6 (#179): generation writes routes and their stops; a route and a
   // stop move by their commands, and the Live board only reads. A route's
   // details are these, not the fixture route page. #111: New route makes the

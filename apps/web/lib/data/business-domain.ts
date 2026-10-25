@@ -261,6 +261,7 @@ export const publicWorkspaceDomains: readonly PublicWorkspaceDomain[] = [
       "shared",
       "contacts",
       "agreements",
+      "applications",
       "citizen-portal",
     ],
     boundaryNote:
@@ -584,6 +585,19 @@ export const publicModuleDomains: readonly PublicModuleDomain[] = [
     downstream: ["M06", "M09", "M11", "M13", "M16", "M18", "M21"],
     boundaryNote:
       "The customer Agreement instance lives in Customers; Product and Price master data live in Commercial.",
+  },
+  {
+    key: "customers.applications",
+    workspaceId: "customers",
+    moduleId: "applications",
+    primaryBlueprintModule: "M03",
+    supportingBlueprintModules: ["M17"],
+    canonicalOwner: "Customers · Applications and Decisions",
+    personas: ["Customer-service agent", "Operations administrator", "Finance specialist"],
+    upstream: ["M01", "M02", "M03"],
+    downstream: ["M03", "M09", "M16"],
+    boundaryNote:
+      "An Application is a customer's written request decided by the office, not a Ticket: a case is worked, an application is granted or refused, and its effect is applied in the lane that owns it.",
   },
   {
     key: "customers.citizen-portal",

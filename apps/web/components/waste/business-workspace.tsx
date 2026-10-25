@@ -278,7 +278,7 @@ import { SchemeDetailsPage } from "@/components/waste/scheme-details-page"
 import { SchemePlanAheadRunner } from "@/components/waste/scheme-plan-ahead"
 import { useBusinessRecordStore, useModuleRecords, useServerModuleState, whenSaved } from "@/components/waste/business-record-store"
 import { useApiConfigured, useApiSession } from "@/components/waste/api-session-store"
-import { commandSurfaceFor, initialFiltersOf, listShows, primaryOf } from "@/components/waste/commands/command-surfaces"
+import { commandSurfaceFor, genericEditOffered, initialFiltersOf, listShows, primaryOf } from "@/components/waste/commands/command-surfaces"
 import { answered, writeGate } from "@/lib/api/records/write-gate"
 import { offersRowsOf } from "@/components/waste/pickable-records"
 import { projectScopeOfMe } from "@/lib/api/records/me-projects"
@@ -1792,6 +1792,14 @@ export function BusinessWorkspace({
     Boolean(activeModuleFormSchema?.execution) &&
     hasGrant("edit") &&
     (RowSurface === undefined || commandSurface?.genericEdit === true)
+  // M7 of #293: a surface whose rule keeps the generic Edit for some rows (an
+  // Application while undecided) offers it in the row's details alone, where
+  // the row the rule reads is known.
+  const canEditSomeRecords =
+    offersRowActions &&
+    Boolean(activeModuleFormSchema?.execution) &&
+    hasGrant("edit") &&
+    typeof commandSurface?.genericEdit === "function"
   // The API has no delete (Issue #81): a switched module's record is
   // deactivated or moved to another status, never soft-deleted, so the
   // action is not offered there — and the store refuses one that arrives
@@ -2621,10 +2629,12 @@ export function BusinessWorkspace({
           // A picker at the agreements module offers the agreements alone
           // (slice 9a of #81): on the API the module holds the subscriptions
           // too, and a field that names an agreement names no subscription.
+          // A `subscriptionId` (M7 of #293: an Application's) names a
+          // subscription, and offers the subscriptions alone.
           if (
             resolved.workspaceId === AGREEMENTS_MODULE.workspaceId &&
             resolved.module.id === AGREEMENTS_MODULE.moduleId &&
-            !isAgreementRecord(record)
+            !(field.id === "subscriptionId" ? isSubscriptionRecord(record) : isAgreementRecord(record))
           ) {
             return false
           }
@@ -5831,7 +5841,7 @@ export function BusinessWorkspace({
             detailsRecord ? offeredTransitions(workspace.id, activeModule, detailsRecord, apiConfigured) : []
           }
           showDeepLinks={showDeepLinks}
-          onEdit={canEditRecords ? openEditRecord : undefined}
+          onEdit={canEditRecords || (canEditSomeRecords && genericEditOffered(commandSurface, detailsRecord)) ? openEditRecord : undefined}
           onDelete={canDeleteRecords ? requestRecordDelete : undefined}
           showActions={canRunRecordActions}
           extraActions={selectedRecord ? recordExtraActions(selectedRecord) : undefined}

@@ -1,4 +1,5 @@
 import type { BusinessFormSchema } from "@/lib/data/business-form-types"
+import { CHANNEL_OPTIONS as APPLICATION_CHANNEL_OPTIONS, KIND_OPTIONS as APPLICATION_KIND_OPTIONS } from "@/lib/data/applications"
 import { DROP_OFF_KIND_OPTIONS } from "@/lib/data/drop-off-points"
 import { WAREHOUSE_STATUS_OPTIONS } from "@/lib/data/resources-vocabulary"
 import { SERVICE_FREQUENCIES } from "@waste/domain/service-frequencies"
@@ -670,6 +671,36 @@ export const customerResourceBusinessFormSchemas: readonly BusinessFormSchema[] 
         ],
       },
     ],
+  },
+  {
+    // The Applications (#293 M7): a customer's written request as it reached
+    // the office, on the API; its decision is a command of its own.
+    key: "customers.applications",
+    mode: "create",
+    recordKind: "Application",
+    title: "Record application",
+    description: "A customer's written request to change how they are served or billed, as it reached the office. The office reviews and decides it; a decision is appended and never rewritten.",
+    submitLabel: "Record application",
+    // No nameField: the generic form holds a name unique in its module, and two customers may well ask in the same words; the server numbers the Application and names it.
+    contextFieldIds: ["kind", "customerId"],
+    sections: [
+      {
+        id: "application",
+        title: "Application",
+        fields: [
+          { id: "projectId", label: "Project", type: "select", required: true, relation: projectRelation },
+          { id: "kind", label: "Applies for", type: "select", required: true, options: APPLICATION_KIND_OPTIONS },
+          { id: "channel", label: "Received by", type: "select", required: true, defaultValue: "email", options: APPLICATION_CHANNEL_OPTIONS },
+          { id: "receivedOn", label: "Received on", type: "date", required: true },
+          { id: "customerId", label: "Customer", type: "select", required: true, relation: { workspaceId: "customers", moduleId: "contacts" } },
+          { id: "propertyId", label: "Property", type: "select", relation: { workspaceId: "customers", moduleId: "properties" }, description: "The address it concerns, or a shared point below; not both." },
+          { id: "sharedCollectionPointId", label: "Shared point", type: "select", relation: { workspaceId: "customers", moduleId: "shared" } },
+          { id: "subscriptionId", label: "Subscription", type: "select", relation: { workspaceId: "customers", moduleId: "agreements" } },
+          { id: "statement", label: "What the customer asks", type: "textarea", required: true },
+        ],
+      },
+    ],
+    execution: { kind: "create-record", initialStatus: "Received", completionMessage: "Application recorded." },
   },
   {
     key: "customers.agreements",
