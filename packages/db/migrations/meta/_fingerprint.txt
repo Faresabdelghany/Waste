@@ -219,6 +219,170 @@ column pgboss.warning 5 created_on timestamp with time zone not-null default=now
 constraint pgboss.warning warning_pkey PRIMARY KEY (id)
 index pgboss.warning warning_i1 CREATE INDEX warning_i1 ON pgboss.warning USING btree (created_on DESC)
 index pgboss.warning warning_pkey CREATE UNIQUE INDEX warning_pkey ON pgboss.warning USING btree (id)
+relation wms.accounting_account kind=table owner=<owner> persistence=p rls=true force-rls=true replica-identity=d acl=[<owner>=DELETE,INSERT,MAINTAIN,REFERENCES,SELECT,TRIGGER,TRUNCATE,UPDATE/<owner> wms_api=DELETE,INSERT,SELECT,UPDATE/<owner> wms_worker=SELECT/<owner>]
+column wms.accounting_account 1 id uuid not-null default=wms.uuidv7()
+column wms.accounting_account 2 company_id uuid not-null
+column wms.accounting_account 3 project_id uuid not-null
+column wms.accounting_account 4 created_at timestamp with time zone not-null default=now()
+column wms.accounting_account 5 updated_at timestamp with time zone not-null default=now()
+column wms.accounting_account 6 number text not-null
+column wms.accounting_account 7 name text not-null
+column wms.accounting_account 8 standard_account text
+constraint wms.accounting_account accounting_account_company_id_fk FOREIGN KEY (company_id) REFERENCES wms.company(id)
+constraint wms.accounting_account accounting_account_number_shape CHECK (((number ~ '^[0-9A-Za-z][0-9A-Za-z.-]{0,19}$'::text) AND ((standard_account IS NULL) OR (standard_account ~ '^[0-9A-Za-z][0-9A-Za-z.-]{0,19}$'::text))))
+constraint wms.accounting_account accounting_account_pkey PRIMARY KEY (id)
+constraint wms.accounting_account accounting_account_project_id_fk FOREIGN KEY (company_id, project_id) REFERENCES wms.project(company_id, id)
+constraint wms.accounting_account accounting_account_project_id_number_key UNIQUE (company_id, project_id, number)
+constraint wms.accounting_account accounting_account_project_key UNIQUE (company_id, project_id, id)
+index wms.accounting_account accounting_account_pkey CREATE UNIQUE INDEX accounting_account_pkey ON wms.accounting_account USING btree (id)
+index wms.accounting_account accounting_account_project_id_number_key CREATE UNIQUE INDEX accounting_account_project_id_number_key ON wms.accounting_account USING btree (company_id, project_id, number)
+index wms.accounting_account accounting_account_project_key CREATE UNIQUE INDEX accounting_account_project_key ON wms.accounting_account USING btree (company_id, project_id, id)
+trigger wms.accounting_account accounting_account_audit_trail enabled=O CREATE TRIGGER accounting_account_audit_trail AFTER INSERT OR DELETE OR UPDATE ON wms.accounting_account FOR EACH ROW EXECUTE FUNCTION wms.audit_row('project', 'project_id')
+trigger wms.accounting_account accounting_account_touch_updated_at enabled=O CREATE TRIGGER accounting_account_touch_updated_at BEFORE UPDATE ON wms.accounting_account FOR EACH ROW EXECUTE FUNCTION wms.touch_updated_at()
+policy wms.accounting_account accounting_account_tenant_fence permissive ALL to=wms_api using=(company_id = ( SELECT wms.current_company_id() AS current_company_id)) check=(company_id = ( SELECT wms.current_company_id() AS current_company_id))
+relation wms.accounting_export kind=table owner=<owner> persistence=p rls=true force-rls=true replica-identity=d acl=[<owner>=DELETE,INSERT,MAINTAIN,REFERENCES,SELECT,TRIGGER,TRUNCATE,UPDATE/<owner> wms_api=INSERT,SELECT/<owner> wms_worker=SELECT/<owner>]
+column wms.accounting_export 1 id uuid not-null default=wms.uuidv7()
+column wms.accounting_export 2 company_id uuid not-null
+column wms.accounting_export 3 project_id uuid not-null
+column wms.accounting_export 4 recorded_at timestamp with time zone not-null default=now()
+column wms.accounting_export 5 period_from date not-null
+column wms.accounting_export 6 period_to date not-null
+column wms.accounting_export 7 voucher_from integer not-null
+column wms.accounting_export 8 voucher_to integer not-null
+column wms.accounting_export 9 line_count integer not-null
+column wms.accounting_export 10 created_by uuid
+column wms.accounting_export 11 note text
+constraint wms.accounting_export accounting_export_company_id_fk FOREIGN KEY (company_id) REFERENCES wms.company(id)
+constraint wms.accounting_export accounting_export_created_by_fk FOREIGN KEY (company_id, created_by) REFERENCES wms.user_account(company_id, id)
+constraint wms.accounting_export accounting_export_pkey PRIMARY KEY (id)
+constraint wms.accounting_export accounting_export_project_id_fk FOREIGN KEY (company_id, project_id) REFERENCES wms.project(company_id, id)
+constraint wms.accounting_export accounting_export_project_key UNIQUE (company_id, project_id, id)
+constraint wms.accounting_export accounting_export_shape CHECK (((period_to >= period_from) AND (voucher_from > 0) AND (voucher_to >= voucher_from) AND (line_count > 0)))
+index wms.accounting_export accounting_export_created_by_idx CREATE INDEX accounting_export_created_by_idx ON wms.accounting_export USING btree (company_id, created_by)
+index wms.accounting_export accounting_export_pkey CREATE UNIQUE INDEX accounting_export_pkey ON wms.accounting_export USING btree (id)
+index wms.accounting_export accounting_export_project_id_period_from_idx CREATE INDEX accounting_export_project_id_period_from_idx ON wms.accounting_export USING btree (company_id, project_id, period_from)
+index wms.accounting_export accounting_export_project_key CREATE UNIQUE INDEX accounting_export_project_key ON wms.accounting_export USING btree (company_id, project_id, id)
+policy wms.accounting_export accounting_export_tenant_fence permissive ALL to=wms_api using=(company_id = ( SELECT wms.current_company_id() AS current_company_id)) check=(company_id = ( SELECT wms.current_company_id() AS current_company_id))
+relation wms.accounting_export_line kind=table owner=<owner> persistence=p rls=true force-rls=true replica-identity=d acl=[<owner>=DELETE,INSERT,MAINTAIN,REFERENCES,SELECT,TRIGGER,TRUNCATE,UPDATE/<owner> wms_api=INSERT,SELECT/<owner> wms_worker=SELECT/<owner>]
+column wms.accounting_export_line 1 id uuid not-null default=wms.uuidv7()
+column wms.accounting_export_line 2 company_id uuid not-null
+column wms.accounting_export_line 3 project_id uuid not-null
+column wms.accounting_export_line 4 recorded_at timestamp with time zone not-null default=now()
+column wms.accounting_export_line 5 voucher_id uuid not-null
+column wms.accounting_export_line 6 position integer not-null
+column wms.accounting_export_line 7 account_number text not-null
+column wms.accounting_export_line 8 account_name text not-null
+column wms.accounting_export_line 9 vat_code text
+column wms.accounting_export_line 10 amount_minor bigint not-null
+column wms.accounting_export_line 11 text text not-null
+constraint wms.accounting_export_line accounting_export_line_company_id_fk FOREIGN KEY (company_id) REFERENCES wms.company(id)
+constraint wms.accounting_export_line accounting_export_line_pkey PRIMARY KEY (id)
+constraint wms.accounting_export_line accounting_export_line_position_positive CHECK (("position" > 0))
+constraint wms.accounting_export_line accounting_export_line_project_id_fk FOREIGN KEY (company_id, project_id) REFERENCES wms.project(company_id, id)
+constraint wms.accounting_export_line accounting_export_line_voucher_id_fk FOREIGN KEY (company_id, project_id, voucher_id) REFERENCES wms.accounting_export_voucher(company_id, project_id, id)
+constraint wms.accounting_export_line accounting_export_line_voucher_id_position_key UNIQUE (company_id, voucher_id, "position")
+index wms.accounting_export_line accounting_export_line_pkey CREATE UNIQUE INDEX accounting_export_line_pkey ON wms.accounting_export_line USING btree (id)
+index wms.accounting_export_line accounting_export_line_voucher_id_position_key CREATE UNIQUE INDEX accounting_export_line_voucher_id_position_key ON wms.accounting_export_line USING btree (company_id, voucher_id, "position")
+policy wms.accounting_export_line accounting_export_line_tenant_fence permissive ALL to=wms_api using=(company_id = ( SELECT wms.current_company_id() AS current_company_id)) check=(company_id = ( SELECT wms.current_company_id() AS current_company_id))
+relation wms.accounting_export_voucher kind=table owner=<owner> persistence=p rls=true force-rls=true replica-identity=d acl=[<owner>=DELETE,INSERT,MAINTAIN,REFERENCES,SELECT,TRIGGER,TRUNCATE,UPDATE/<owner> wms_api=INSERT,SELECT/<owner> wms_worker=SELECT/<owner>]
+column wms.accounting_export_voucher 1 id uuid not-null default=wms.uuidv7()
+column wms.accounting_export_voucher 2 company_id uuid not-null
+column wms.accounting_export_voucher 3 project_id uuid not-null
+column wms.accounting_export_voucher 4 recorded_at timestamp with time zone not-null default=now()
+column wms.accounting_export_voucher 5 export_id uuid not-null
+column wms.accounting_export_voucher 6 voucher integer not-null
+column wms.accounting_export_voucher 7 booked_on date not-null
+column wms.accounting_export_voucher 8 source_kind text not-null
+column wms.accounting_export_voucher 9 source_id uuid not-null
+column wms.accounting_export_voucher 10 document text
+column wms.accounting_export_voucher 11 currency text not-null
+column wms.accounting_export_voucher 12 customer_name text
+column wms.accounting_export_voucher 13 back_dated boolean not-null
+constraint wms.accounting_export_voucher accounting_export_voucher_company_id_fk FOREIGN KEY (company_id) REFERENCES wms.company(id)
+constraint wms.accounting_export_voucher accounting_export_voucher_export_id_fk FOREIGN KEY (company_id, project_id, export_id) REFERENCES wms.accounting_export(company_id, project_id, id)
+constraint wms.accounting_export_voucher accounting_export_voucher_pkey PRIMARY KEY (id)
+constraint wms.accounting_export_voucher accounting_export_voucher_project_id_fk FOREIGN KEY (company_id, project_id) REFERENCES wms.project(company_id, id)
+constraint wms.accounting_export_voucher accounting_export_voucher_project_id_voucher_key UNIQUE (company_id, project_id, voucher)
+constraint wms.accounting_export_voucher accounting_export_voucher_project_key UNIQUE (company_id, project_id, id)
+constraint wms.accounting_export_voucher accounting_export_voucher_source_kind_one_of CHECK ((source_kind = ANY (ARRAY['invoice'::text, 'credit-note'::text, 'payment'::text, 'allocation'::text])))
+constraint wms.accounting_export_voucher accounting_export_voucher_source_kind_source_id_key UNIQUE (company_id, source_kind, source_id)
+constraint wms.accounting_export_voucher accounting_export_voucher_voucher_positive CHECK ((voucher > 0))
+index wms.accounting_export_voucher accounting_export_voucher_export_id_idx CREATE INDEX accounting_export_voucher_export_id_idx ON wms.accounting_export_voucher USING btree (company_id, export_id)
+index wms.accounting_export_voucher accounting_export_voucher_pkey CREATE UNIQUE INDEX accounting_export_voucher_pkey ON wms.accounting_export_voucher USING btree (id)
+index wms.accounting_export_voucher accounting_export_voucher_project_id_voucher_key CREATE UNIQUE INDEX accounting_export_voucher_project_id_voucher_key ON wms.accounting_export_voucher USING btree (company_id, project_id, voucher)
+index wms.accounting_export_voucher accounting_export_voucher_project_key CREATE UNIQUE INDEX accounting_export_voucher_project_key ON wms.accounting_export_voucher USING btree (company_id, project_id, id)
+index wms.accounting_export_voucher accounting_export_voucher_source_kind_source_id_key CREATE UNIQUE INDEX accounting_export_voucher_source_kind_source_id_key ON wms.accounting_export_voucher USING btree (company_id, source_kind, source_id)
+policy wms.accounting_export_voucher accounting_export_voucher_tenant_fence permissive ALL to=wms_api using=(company_id = ( SELECT wms.current_company_id() AS current_company_id)) check=(company_id = ( SELECT wms.current_company_id() AS current_company_id))
+relation wms.accounting_product_account kind=table owner=<owner> persistence=p rls=true force-rls=true replica-identity=d acl=[<owner>=DELETE,INSERT,MAINTAIN,REFERENCES,SELECT,TRIGGER,TRUNCATE,UPDATE/<owner> wms_api=DELETE,INSERT,SELECT,UPDATE/<owner> wms_worker=SELECT/<owner>]
+column wms.accounting_product_account 1 id uuid not-null default=wms.uuidv7()
+column wms.accounting_product_account 2 company_id uuid not-null
+column wms.accounting_product_account 3 project_id uuid not-null
+column wms.accounting_product_account 4 created_at timestamp with time zone not-null default=now()
+column wms.accounting_product_account 5 updated_at timestamp with time zone not-null default=now()
+column wms.accounting_product_account 6 product_id uuid not-null
+column wms.accounting_product_account 7 account_id uuid not-null
+constraint wms.accounting_product_account accounting_product_account_account_id_fk FOREIGN KEY (company_id, project_id, account_id) REFERENCES wms.accounting_account(company_id, project_id, id)
+constraint wms.accounting_product_account accounting_product_account_company_id_fk FOREIGN KEY (company_id) REFERENCES wms.company(id)
+constraint wms.accounting_product_account accounting_product_account_pkey PRIMARY KEY (id)
+constraint wms.accounting_product_account accounting_product_account_product_id_fk FOREIGN KEY (company_id, project_id, product_id) REFERENCES wms.product(company_id, project_id, id)
+constraint wms.accounting_product_account accounting_product_account_project_id_fk FOREIGN KEY (company_id, project_id) REFERENCES wms.project(company_id, id)
+constraint wms.accounting_product_account accounting_product_account_project_id_product_id_key UNIQUE (company_id, project_id, product_id)
+index wms.accounting_product_account accounting_product_account_account_id_idx CREATE INDEX accounting_product_account_account_id_idx ON wms.accounting_product_account USING btree (company_id, account_id)
+index wms.accounting_product_account accounting_product_account_pkey CREATE UNIQUE INDEX accounting_product_account_pkey ON wms.accounting_product_account USING btree (id)
+index wms.accounting_product_account accounting_product_account_product_id_idx CREATE INDEX accounting_product_account_product_id_idx ON wms.accounting_product_account USING btree (company_id, product_id)
+index wms.accounting_product_account accounting_product_account_project_id_product_id_key CREATE UNIQUE INDEX accounting_product_account_project_id_product_id_key ON wms.accounting_product_account USING btree (company_id, project_id, product_id)
+trigger wms.accounting_product_account accounting_product_account_audit_trail enabled=O CREATE TRIGGER accounting_product_account_audit_trail AFTER INSERT OR DELETE OR UPDATE ON wms.accounting_product_account FOR EACH ROW EXECUTE FUNCTION wms.audit_row('project', 'project_id')
+trigger wms.accounting_product_account accounting_product_account_touch_updated_at enabled=O CREATE TRIGGER accounting_product_account_touch_updated_at BEFORE UPDATE ON wms.accounting_product_account FOR EACH ROW EXECUTE FUNCTION wms.touch_updated_at()
+policy wms.accounting_product_account accounting_product_account_tenant_fence permissive ALL to=wms_api using=(company_id = ( SELECT wms.current_company_id() AS current_company_id)) check=(company_id = ( SELECT wms.current_company_id() AS current_company_id))
+relation wms.accounting_settings kind=table owner=<owner> persistence=p rls=true force-rls=true replica-identity=d acl=[<owner>=DELETE,INSERT,MAINTAIN,REFERENCES,SELECT,TRIGGER,TRUNCATE,UPDATE/<owner> wms_api=DELETE,INSERT,SELECT,UPDATE/<owner> wms_worker=SELECT/<owner>]
+column wms.accounting_settings 1 id uuid not-null default=wms.uuidv7()
+column wms.accounting_settings 2 company_id uuid not-null
+column wms.accounting_settings 3 project_id uuid not-null
+column wms.accounting_settings 4 created_at timestamp with time zone not-null default=now()
+column wms.accounting_settings 5 updated_at timestamp with time zone not-null default=now()
+column wms.accounting_settings 6 receivable_account_id uuid
+column wms.accounting_settings 7 bank_account_id uuid
+column wms.accounting_settings 8 suspense_account_id uuid
+column wms.accounting_settings 9 revenue_account_id uuid
+column wms.accounting_settings 10 exports_from date
+constraint wms.accounting_settings accounting_settings_bank_account_id_fk FOREIGN KEY (company_id, project_id, bank_account_id) REFERENCES wms.accounting_account(company_id, project_id, id)
+constraint wms.accounting_settings accounting_settings_company_id_fk FOREIGN KEY (company_id) REFERENCES wms.company(id)
+constraint wms.accounting_settings accounting_settings_pkey PRIMARY KEY (id)
+constraint wms.accounting_settings accounting_settings_project_id_fk FOREIGN KEY (company_id, project_id) REFERENCES wms.project(company_id, id)
+constraint wms.accounting_settings accounting_settings_project_id_key UNIQUE (company_id, project_id)
+constraint wms.accounting_settings accounting_settings_receivable_account_id_fk FOREIGN KEY (company_id, project_id, receivable_account_id) REFERENCES wms.accounting_account(company_id, project_id, id)
+constraint wms.accounting_settings accounting_settings_revenue_account_id_fk FOREIGN KEY (company_id, project_id, revenue_account_id) REFERENCES wms.accounting_account(company_id, project_id, id)
+constraint wms.accounting_settings accounting_settings_suspense_account_id_fk FOREIGN KEY (company_id, project_id, suspense_account_id) REFERENCES wms.accounting_account(company_id, project_id, id)
+index wms.accounting_settings accounting_settings_bank_account_id_idx CREATE INDEX accounting_settings_bank_account_id_idx ON wms.accounting_settings USING btree (company_id, bank_account_id)
+index wms.accounting_settings accounting_settings_pkey CREATE UNIQUE INDEX accounting_settings_pkey ON wms.accounting_settings USING btree (id)
+index wms.accounting_settings accounting_settings_project_id_key CREATE UNIQUE INDEX accounting_settings_project_id_key ON wms.accounting_settings USING btree (company_id, project_id)
+index wms.accounting_settings accounting_settings_receivable_account_id_idx CREATE INDEX accounting_settings_receivable_account_id_idx ON wms.accounting_settings USING btree (company_id, receivable_account_id)
+index wms.accounting_settings accounting_settings_revenue_account_id_idx CREATE INDEX accounting_settings_revenue_account_id_idx ON wms.accounting_settings USING btree (company_id, revenue_account_id)
+index wms.accounting_settings accounting_settings_suspense_account_id_idx CREATE INDEX accounting_settings_suspense_account_id_idx ON wms.accounting_settings USING btree (company_id, suspense_account_id)
+trigger wms.accounting_settings accounting_settings_audit_trail enabled=O CREATE TRIGGER accounting_settings_audit_trail AFTER INSERT OR DELETE OR UPDATE ON wms.accounting_settings FOR EACH ROW EXECUTE FUNCTION wms.audit_row('project', 'project_id')
+trigger wms.accounting_settings accounting_settings_touch_updated_at enabled=O CREATE TRIGGER accounting_settings_touch_updated_at BEFORE UPDATE ON wms.accounting_settings FOR EACH ROW EXECUTE FUNCTION wms.touch_updated_at()
+policy wms.accounting_settings accounting_settings_tenant_fence permissive ALL to=wms_api using=(company_id = ( SELECT wms.current_company_id() AS current_company_id)) check=(company_id = ( SELECT wms.current_company_id() AS current_company_id))
+relation wms.accounting_vat_code kind=table owner=<owner> persistence=p rls=true force-rls=true replica-identity=d acl=[<owner>=DELETE,INSERT,MAINTAIN,REFERENCES,SELECT,TRIGGER,TRUNCATE,UPDATE/<owner> wms_api=DELETE,INSERT,SELECT,UPDATE/<owner> wms_worker=SELECT/<owner>]
+column wms.accounting_vat_code 1 id uuid not-null default=wms.uuidv7()
+column wms.accounting_vat_code 2 company_id uuid not-null
+column wms.accounting_vat_code 3 project_id uuid not-null
+column wms.accounting_vat_code 4 created_at timestamp with time zone not-null default=now()
+column wms.accounting_vat_code 5 updated_at timestamp with time zone not-null default=now()
+column wms.accounting_vat_code 6 vat_percent integer not-null
+column wms.accounting_vat_code 7 code text not-null
+column wms.accounting_vat_code 8 account_id uuid not-null
+constraint wms.accounting_vat_code accounting_vat_code_account_id_fk FOREIGN KEY (company_id, project_id, account_id) REFERENCES wms.accounting_account(company_id, project_id, id)
+constraint wms.accounting_vat_code accounting_vat_code_company_id_fk FOREIGN KEY (company_id) REFERENCES wms.company(id)
+constraint wms.accounting_vat_code accounting_vat_code_pkey PRIMARY KEY (id)
+constraint wms.accounting_vat_code accounting_vat_code_project_id_fk FOREIGN KEY (company_id, project_id) REFERENCES wms.project(company_id, id)
+constraint wms.accounting_vat_code accounting_vat_code_project_id_vat_percent_key UNIQUE (company_id, project_id, vat_percent)
+constraint wms.accounting_vat_code accounting_vat_code_shape CHECK (((vat_percent >= 0) AND (vat_percent <= 100) AND (code ~ '^[0-9A-Za-z][0-9A-Za-z_-]{0,8}$'::text)))
+index wms.accounting_vat_code accounting_vat_code_account_id_idx CREATE INDEX accounting_vat_code_account_id_idx ON wms.accounting_vat_code USING btree (company_id, account_id)
+index wms.accounting_vat_code accounting_vat_code_pkey CREATE UNIQUE INDEX accounting_vat_code_pkey ON wms.accounting_vat_code USING btree (id)
+index wms.accounting_vat_code accounting_vat_code_project_id_vat_percent_key CREATE UNIQUE INDEX accounting_vat_code_project_id_vat_percent_key ON wms.accounting_vat_code USING btree (company_id, project_id, vat_percent)
+trigger wms.accounting_vat_code accounting_vat_code_audit_trail enabled=O CREATE TRIGGER accounting_vat_code_audit_trail AFTER INSERT OR DELETE OR UPDATE ON wms.accounting_vat_code FOR EACH ROW EXECUTE FUNCTION wms.audit_row('project', 'project_id')
+trigger wms.accounting_vat_code accounting_vat_code_touch_updated_at enabled=O CREATE TRIGGER accounting_vat_code_touch_updated_at BEFORE UPDATE ON wms.accounting_vat_code FOR EACH ROW EXECUTE FUNCTION wms.touch_updated_at()
+policy wms.accounting_vat_code accounting_vat_code_tenant_fence permissive ALL to=wms_api using=(company_id = ( SELECT wms.current_company_id() AS current_company_id)) check=(company_id = ( SELECT wms.current_company_id() AS current_company_id))
 relation wms.agreement kind=table owner=<owner> persistence=p rls=true force-rls=true replica-identity=d acl=[<owner>=DELETE,INSERT,MAINTAIN,REFERENCES,SELECT,TRIGGER,TRUNCATE,UPDATE/<owner> wms_api=DELETE,INSERT,SELECT,UPDATE/<owner> wms_worker=SELECT/<owner>]
 column wms.agreement 1 id uuid not-null default=wms.uuidv7()
 column wms.agreement 2 company_id uuid not-null
@@ -3577,4 +3741,5 @@ journal 1792945670863 53a1b13d2e90aa2a8f65e733cd43698ac445582226fa5aa1848c4a377c
 journal 1792948527917 f5e98d4bbd8a0a2efce518a64f08be8fa02b2f26022e968b2f0ee7c4bd85f2f7
 journal 1792950556670 ff215726a340d783acbe6014a8515499181b8c263d03a1f84c22527b396f9e8c
 journal 1792952313199 b04f99d3f6c19ac508ebc304ce9ec2237ef28b77e48ea13664c37457ea9cd6a1
+journal 1792954475945 9314378d7dfb21885c2811e4fe94349e28f78895b02bc520bb49ff813b7abf21
 pgboss-version 42

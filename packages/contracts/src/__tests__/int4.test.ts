@@ -10,6 +10,7 @@ import { join } from "node:path"
 import { describe, test } from "node:test"
 
 import * as accessModule from "../access"
+import * as accountingModule from "../accounting"
 import * as agreementsModule from "../agreements"
 import * as alertsModule from "../alerts"
 import * as allocationsModule from "../allocations"
@@ -83,6 +84,7 @@ import { ServiceProviderPriceIndex } from "../service-provider-prices"
 const MODULES: Readonly<Record<string, Record<string, unknown>>> = {
   "applications": applicationsModule,
   "access": accessModule,
+  "accounting": accountingModule,
   "agreements": agreementsModule,
   "alerts": alertsModule,
   "allocations": allocationsModule,

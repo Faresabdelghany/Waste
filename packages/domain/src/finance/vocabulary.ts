@@ -95,6 +95,14 @@ export type IndexBase = (typeof INDEX_BASES)[number]
 export type PaymentReferenceScheme = (typeof PAYMENT_REFERENCE_SCHEMES)[number]
 export type PaymentSource = (typeof PAYMENT_SOURCES)[number]
 
+/** What an accounting export books (#291 C7): an issued invoice, a credit note, a payment, and an allocation of a payment that named no customer, each once ever. */
+export const ACCOUNTING_SOURCE_KINDS = ["invoice", "credit-note", "payment", "allocation"] as const
+export type AccountingSourceKind = (typeof ACCOUNTING_SOURCE_KINDS)[number]
+
+/** The files an export downloads as (#291 C7): our own documented CSV; Danish SAF-T 2.1 is C7b's. Not stored: the file is rendered from the frozen lines on each download. */
+export const ACCOUNTING_FORMATS = ["csv"] as const
+export type AccountingFormat = (typeof ACCOUNTING_FORMATS)[number]
+
 /** The statuses a Settlement is recalculated in: open, or calculated and not yet closed. A value of `SETTLEMENT_STATUSES`, not a vocabulary. */
 export const OPEN_SETTLEMENT_STATUSES = ["open", "calculated"] as const satisfies readonly SettlementStatus[]
 export type OpenSettlementStatus = (typeof OPEN_SETTLEMENT_STATUSES)[number]
@@ -119,4 +127,6 @@ export const FINANCE_VOCABULARIES = {
   INDEX_BASES,
   PAYMENT_REFERENCE_SCHEMES,
   PAYMENT_SOURCES,
+  ACCOUNTING_SOURCE_KINDS,
+  ACCOUNTING_FORMATS,
 } as const satisfies Record<string, readonly [string, ...string[]]>

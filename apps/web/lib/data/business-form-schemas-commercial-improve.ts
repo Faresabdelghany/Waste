@@ -1069,6 +1069,36 @@ export const commercialImproveBusinessFormSchemas = [
     ],
   },
   {
+    key: "commercial.accounting",
+    mode: "create",
+    recordKind: "Accounting export",
+    title: "Export period",
+    description:
+      "Book a period's invoices, credit notes and payments to the project's chart of accounts as a file for the office's bookkeeping. Each row is booked once, ever, so a period exported again books only what arrived since.",
+    submitLabel: "Export",
+    nameField: "periodFrom",
+    contextFieldIds: ["projectId", "periodFrom", "periodTo"],
+    sections: [
+      {
+        id: "period",
+        title: "Period",
+        description: "Relationship: the period's last day is today at the latest; a row dated before its first day that no export took yet goes in back-dated.",
+        fields: [
+          {
+            id: "projectId",
+            label: "Project",
+            type: "select",
+            required: true,
+            relation: { workspaceId: "configure", moduleId: "organization" },
+          },
+          { id: "periodFrom", label: "First day", type: "date", required: true },
+          { id: "periodTo", label: "Last day", type: "date", required: true },
+          { id: "note", label: "Note", type: "textarea" },
+        ],
+      },
+    ],
+  },
+  {
     key: "commercial.invoices",
     mode: "disabled",
     recordKind: "Issued invoice or credit-note action",

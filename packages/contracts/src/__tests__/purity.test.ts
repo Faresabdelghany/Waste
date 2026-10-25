@@ -47,6 +47,9 @@
 // reads a factor's bound from it, the bound the database's check reads. M14
 // of #293 added @waste/domain/finance/hire: catalogue.ts bounds a product's
 // free days by its cap and holds them to its unit, which the database reads.
+// #291 C7 added @waste/domain/finance/accounting: accounting.ts reads the
+// account number's and the VAT code's patterns the database's checks read,
+// and the CSV's columns its file is documented by.
 import path from "node:path"
 import { fileURLToPath } from "node:url"
 
@@ -62,6 +65,7 @@ definePurityTests({
     "@waste/domain/execution/unloads",
     "@waste/domain/execution/vocabulary",
     "@waste/domain/execution/work-orders",
+    "@waste/domain/finance/accounting",
     "@waste/domain/finance/hire",
     "@waste/domain/finance/payment",
     "@waste/domain/finance/payments",
