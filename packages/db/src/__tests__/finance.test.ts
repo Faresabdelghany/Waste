@@ -41,6 +41,11 @@ import { container, containerServicePlacement } from "../schema/containers"
 import { customer, property } from "../schema/customers"
 import { outboxEvent, pickup, route, unload } from "../schema/execution"
 import {
+  accountingAccount,
+  accountingExport,
+  accountingExportLine,
+  accountingExportVoucher,
+  accountingVatCode,
   billableEvent,
   billingRun,
   billingRunExclusion,
@@ -893,6 +898,46 @@ describe("the Finance & Contracting tables against a fresh database", { skip: da
       for (const [table, id, name] of [
         [paymentAllocation, a.other, "payment_allocation"],
         [payment, a.spare, "payment"],
+      ] as const) {
+        await assert.rejects(tx.transaction((savepoint) => savepoint.delete(table).where(eq(table.id, id))), refusedWith("42501", new RegExp(`permission denied for table ${name}`)))
+      }
+    }))
+
+  test("the accounting export (#291 C7): an account's number and a VAT code have their shapes and a number is one account of a project (23514, 23505); an export books something, a row is exported once ever and a voucher number is the project's once (23514, 23505)", () =>
+    seeded(async (tx) => {
+      const refused = (statement: (savepoint: Tx) => Promise<unknown>, code: string, constraint: RegExp, why: string) => assert.rejects(tx.transaction((savepoint) => statement(savepoint)), refusedWith(code, constraint), why)
+      const fifth = "018f7c35-a000-7000-8000-0000000000e5"
+      const account = (values: Partial<typeof accountingAccount.$inferInsert> = {}): typeof accountingAccount.$inferInsert => ({ id: a.spare, companyId: a.company, projectId: a.project, number: "5600", name: "Debitorer", standardAccount: "5600", ...values })
+      await refused((savepoint) => savepoint.insert(accountingAccount).values(account({ number: "56 00" })), "23514", /accounting_account_number_shape/, "a number of no spaces")
+      await refused((savepoint) => savepoint.insert(accountingAccount).values(account({ standardAccount: "" })), "23514", /accounting_account_number_shape/, "a standard-chart number of the same shape")
+      await tx.insert(accountingAccount).values(account())
+      await refused((savepoint) => savepoint.insert(accountingAccount).values(account({ id: a.other })), "23505", /accounting_account_project_id_number_key/, "a number is one account of the project")
+      const code = (values: Partial<typeof accountingVatCode.$inferInsert> = {}): typeof accountingVatCode.$inferInsert => ({ id: a.other, companyId: a.company, projectId: a.project, vatPercent: 25, code: "U25", accountId: a.spare, ...values })
+      await refused((savepoint) => savepoint.insert(accountingVatCode).values(code({ vatPercent: 101 })), "23514", /accounting_vat_code_shape/, "a rate in whole percent up to a hundred")
+      await refused((savepoint) => savepoint.insert(accountingVatCode).values(code({ code: "U 25" })), "23514", /accounting_vat_code_shape/, "a code of no spaces")
+
+      const exported = (values: Partial<typeof accountingExport.$inferInsert> = {}): typeof accountingExport.$inferInsert => ({ id: a.third, companyId: a.company, projectId: a.project, periodFrom: "2026-10-01", periodTo: "2026-10-31", voucherFrom: 1, voucherTo: 2, lineCount: 4, createdBy: a.account, ...values })
+      await refused((savepoint) => savepoint.insert(accountingExport).values(exported({ lineCount: 0 })), "23514", /accounting_export_shape/, "an export books something")
+      await refused((savepoint) => savepoint.insert(accountingExport).values(exported({ periodTo: "2026-09-30" })), "23514", /accounting_export_shape/, "a period runs forwards")
+      await tx.insert(accountingExport).values(exported())
+      const voucher = (values: Partial<typeof accountingExportVoucher.$inferInsert> = {}): typeof accountingExportVoucher.$inferInsert => ({ id: a.fourth, companyId: a.company, projectId: a.project, exportId: a.third, voucher: 1, bookedOn: "2026-10-05", sourceKind: "invoice", sourceId: a.invoice, document: "INV-1012", currency: "DKK", customerName: "Kystbyen Boligselskab", backDated: false, ...values })
+      await tx.insert(accountingExportVoucher).values(voucher())
+      await refused((savepoint) => savepoint.insert(accountingExportVoucher).values(voucher({ id: fifth, voucher: 2 })), "23505", /accounting_export_voucher_source_kind_source_id_key/, "a row is exported once, ever")
+      await refused((savepoint) => savepoint.insert(accountingExportVoucher).values(voucher({ id: fifth, sourceKind: "payment", sourceId: a.spare })), "23505", /accounting_export_voucher_project_id_voucher_key/, "a voucher number is the project's once")
+      await refused((savepoint) => savepoint.insert(accountingExportVoucher).values(voucher({ id: fifth, voucher: 2, sourceKind: "refund", sourceId: a.spare })), "23514", /accounting_export_voucher_source_kind_one_of/, "a kind outside the vocabulary")
+      await tx.insert(accountingExportLine).values({ id: fifth, companyId: a.company, projectId: a.project, voucherId: a.fourth, position: 1, accountNumber: "5600", accountName: "Debitorer", vatCode: null, amountMinor: 125_000, text: "INV-1012 Kystbyen Boligselskab" })
+    }))
+
+  test("the accounting export (#291 C7): as the API role an export, its vouchers and their lines are appended and neither updated nor deleted (42501)", () =>
+    asCompany(a.company, async (tx) => {
+      await tx.insert(accountingExport).values({ id: a.spare, companyId: a.company, projectId: a.project, periodFrom: "2026-10-01", periodTo: "2026-10-31", voucherFrom: 1, voucherTo: 1, lineCount: 2, createdBy: a.account })
+      await tx.insert(accountingExportVoucher).values({ id: a.other, companyId: a.company, projectId: a.project, exportId: a.spare, voucher: 1, bookedOn: "2026-10-05", sourceKind: "invoice", sourceId: a.invoice, document: "INV-1012", currency: "DKK", customerName: null, backDated: false })
+      await tx.insert(accountingExportLine).values({ id: a.third, companyId: a.company, projectId: a.project, voucherId: a.other, position: 1, accountNumber: "5600", accountName: "Debitorer", vatCode: null, amountMinor: 125_000, text: "INV-1012" })
+      await assert.rejects(tx.transaction((savepoint) => savepoint.update(accountingExport).set({ note: "rewritten" }).where(eq(accountingExport.id, a.spare))), refusedWith("42501", /permission denied for table accounting_export/))
+      for (const [table, id, name] of [
+        [accountingExportLine, a.third, "accounting_export_line"],
+        [accountingExportVoucher, a.other, "accounting_export_voucher"],
+        [accountingExport, a.spare, "accounting_export"],
       ] as const) {
         await assert.rejects(tx.transaction((savepoint) => savepoint.delete(table).where(eq(table.id, id))), refusedWith("42501", new RegExp(`permission denied for table ${name}`)))
       }

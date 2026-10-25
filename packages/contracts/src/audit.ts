@@ -99,6 +99,10 @@ export const AUDITED_TABLES = [
   "application",
   "waste_fraction_emission_factor",
   "work_order_product",
+  "accounting_account",
+  "accounting_settings",
+  "accounting_vat_code",
+  "accounting_product_account",
 ] as const
 export type AuditedTable = (typeof AUDITED_TABLES)[number]
 

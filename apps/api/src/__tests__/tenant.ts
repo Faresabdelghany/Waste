@@ -28,6 +28,13 @@ import { driverAbsence, vehicleUnavailability } from "@waste/db/schema/availabil
 import { container, containerServicePlacement } from "@waste/db/schema/containers"
 import { driverCommand, outboxEvent, pickup, proofOfService, route, session, unload } from "@waste/db/schema/execution"
 import {
+  accountingAccount,
+  accountingExport,
+  accountingExportLine,
+  accountingExportVoucher,
+  accountingProductAccount,
+  accountingSettings,
+  accountingVatCode,
   billableEvent,
   billingRun,
   billingRunExclusion,
@@ -319,10 +326,16 @@ export async function grantRole(pool: Database, companyId: string, roleId: strin
  * A driver's absences and a vehicle's unavailability (O6 of #290) go before
  * the drivers and the vehicles they name. The payments' two ledgers (#291 C6)
  * go before `invoice`, as the owner: `payment_allocation` (it names
- * payments, invoices and the allocation it reverses), then `payment`.
+ * payments, invoices and the allocation it reverses), then `payment`. The
+ * accounting export's three ledgers (#291 C7) go first, as the owner, line
+ * then voucher then export, and the mapping's four before the products and
+ * the accounts they name.
  */
 export async function dropTenant(pool: Database, companyId: string, owner?: Database): Promise<void> {
   if (owner !== undefined) {
+    await owner.db.delete(accountingExportLine).where(eq(accountingExportLine.companyId, companyId))
+    await owner.db.delete(accountingExportVoucher).where(eq(accountingExportVoucher.companyId, companyId))
+    await owner.db.delete(accountingExport).where(eq(accountingExport.companyId, companyId))
     await owner.db.delete(importRunRow).where(eq(importRunRow.companyId, companyId))
     await owner.db.delete(paymentAllocation).where(eq(paymentAllocation.companyId, companyId))
     await owner.db.delete(payment).where(eq(payment.companyId, companyId))
@@ -344,6 +357,10 @@ export async function dropTenant(pool: Database, companyId: string, owner?: Data
   }
   await withCompany(pool.db, companyId, async (tx: Tx) => {
     await tx.delete(importRun).where(eq(importRun.companyId, companyId))
+    await tx.delete(accountingProductAccount).where(eq(accountingProductAccount.companyId, companyId))
+    await tx.delete(accountingVatCode).where(eq(accountingVatCode.companyId, companyId))
+    await tx.delete(accountingSettings).where(eq(accountingSettings.companyId, companyId))
+    await tx.delete(accountingAccount).where(eq(accountingAccount.companyId, companyId))
     await tx.delete(settlementLine).where(eq(settlementLine.companyId, companyId))
     await tx.delete(settlement).where(eq(settlement.companyId, companyId))
     await tx.delete(billingRun).where(eq(billingRun.companyId, companyId))

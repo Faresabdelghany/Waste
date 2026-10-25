@@ -317,6 +317,7 @@ export const publicWorkspaceDomains: readonly PublicWorkspaceDomain[] = [
       "billing",
       "invoices",
       "payments",
+      "accounting",
     ],
     boundaryNote:
       "The service provider workspace must be a restricted shell, not another tab inside the full office Commercial workspace.",
@@ -838,6 +839,19 @@ export const publicModuleDomains: readonly PublicModuleDomain[] = [
     downstream: ["M16", "M18", "M23"],
     boundaryNote:
       "A Payment is money as it arrived; what it pays is its allocations, and an invoice's paid state is read from them, never stored.",
+  },
+  {
+    key: "commercial.accounting",
+    workspaceId: "commercial",
+    moduleId: "accounting",
+    primaryBlueprintModule: "M16",
+    supportingBlueprintModules: ["M18", "M20"],
+    canonicalOwner: "Commercial · Accounting export",
+    personas: ["Finance specialist", "Billing administrator"],
+    upstream: ["M16", "M18", "M20"],
+    downstream: ["M23"],
+    boundaryNote:
+      "An accounting export is a period's invoices, credit notes and payments as a file for the office's own bookkeeping: each row booked once, ever, and the file rendered from its frozen lines.",
   },
   {
     key: "improve.intelligence",

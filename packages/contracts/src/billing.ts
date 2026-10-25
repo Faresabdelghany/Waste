@@ -26,7 +26,7 @@ import * as z from "zod"
 
 /** What a period whose last day comes before its first is told, at the end, the bound a caller can move. */
 export const PERIOD_ORDERED = "periodTo is the last day of the period, so it comes on or after periodFrom"
-const periodIsOrdered = { message: PERIOD_ORDERED, path: ["periodTo"] }
+export const periodIsOrdered = { message: PERIOD_ORDERED, path: ["periodTo"] }
 
 /** What a run or a preview whose period ends after its project's today is told, at `periodTo` (M14 of #293): a run is for a closed period. The project's clock is the server's to read, so the shared command judges it (`@waste/db/commands/billing-runs`). */
 export const PERIOD_ENDS_BY_TODAY = "A run's period ends by today"

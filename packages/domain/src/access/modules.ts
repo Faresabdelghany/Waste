@@ -61,6 +61,8 @@ export const MODULE_KEYS = [
   "commercial.invoices",
   // The payments an invoice is paid by (#291 C6): registered, imported from a bank file and matched.
   "commercial.payments",
+  // The accounting export (#291 C7): a period of invoices, credit notes and payments as a file for the office's bookkeeping.
+  "commercial.accounting",
   // Dashboard
   "improve.intelligence",
   "improve.analytics",
