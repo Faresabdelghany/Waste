@@ -1,8 +1,9 @@
 // The Price Engine's customer-money chain as the web keeps it on the Pilot
 // (Issue #185, slice 10 of #81, for #148): Products, Price rows and the Price
 // Lists they are filed under, Billable Events, Billing Runs, and Invoices
-// with their Credit Notes — each the `commercial.*` module the API grants it
-// under, read and written through lib/api/records/pricing.ts and billing.ts.
+// with their Credit Notes, and the Payments that pay them (#291 C6) — each
+// the `commercial.*` module the API grants it under, read and written
+// through lib/api/records/pricing.ts, billing.ts and payments.ts.
 // This file is what every side of them shares: where each module lives, the
 // prefix and the kind a record of it carries, which adapter owns a record
 // (the id's prefix first, then the kind a form stamped: adapter.ts, `ofKind`)
@@ -15,7 +16,8 @@
 // `FIXTURE_PRICE_LISTS_BUCKET`, seeded with the two fixture lists, so the
 // fixture Price Rows table is what it was (the Users & roles precedent: one
 // source by mode, never both).
-import { BILLABLE_EVENT_KINDS, BLOCK_REASONS, CANCEL_REASONS, CREDIT_REASONS, type BillableEventKind, type BlockReason, type CancelReason, type CreditReason } from "@waste/domain/finance/vocabulary"
+import type { InvoicePaymentStatus } from "@waste/domain/finance/payments"
+import { BILLABLE_EVENT_KINDS, BLOCK_REASONS, CANCEL_REASONS, CREDIT_REASONS, type BillableEventKind, type BlockReason, type CancelReason, type CreditReason, type PaymentSource } from "@waste/domain/finance/vocabulary"
 import { CUSTOMER_KINDS, PRODUCT_KINDS, PRODUCT_UNITS, type CustomerKind, type ProductKind, type ProductUnit } from "@waste/domain/registry/vocabulary"
 
 import { ofKind } from "@/lib/api/records/adapter"
@@ -27,6 +29,7 @@ export const PRICE_ROWS_MODULE: ModuleLocation = { workspaceId: "commercial", mo
 export const EVENTS_MODULE: ModuleLocation = { workspaceId: "commercial", moduleId: "events" }
 export const BILLING_MODULE: ModuleLocation = { workspaceId: "commercial", moduleId: "billing" }
 export const INVOICES_MODULE: ModuleLocation = { workspaceId: "commercial", moduleId: "invoices" }
+export const PAYMENTS_MODULE: ModuleLocation = { workspaceId: "commercial", moduleId: "payments" }
 /** Fixture mode's price lists: a browser bucket of their own, never a module the API answers. */
 export const FIXTURE_PRICE_LISTS_BUCKET: ModuleLocation = { workspaceId: "commercial", moduleId: "price-lists" }
 /** The routes an event names (slice 6). */
@@ -39,6 +42,7 @@ export const EVENT_PREFIX = "event"
 export const BILLING_RUN_PREFIX = "billing-run"
 export const INVOICE_PREFIX = "invoice"
 export const CREDIT_NOTE_PREFIX = "credit-note"
+export const PAYMENT_PREFIX = "payment"
 
 /** The prefix of the fields a partial credit note's dialog names a line's quantity under: `line:<uuid>`; the adapter reads the body's lines from them. */
 export const CREDIT_LINE_KEY = "line:"
@@ -50,6 +54,7 @@ export const EVENT_RECORD_KIND = "Billable event"
 export const BILLING_RUN_RECORD_KIND = "Billing run"
 export const INVOICE_RECORD_KIND = "Invoice"
 export const CREDIT_NOTE_RECORD_KIND = "Credit note"
+export const PAYMENT_RECORD_KIND = "Payment"
 
 export const isProductRecord = ofKind(PRODUCT_PREFIX, [PRODUCT_RECORD_KIND])
 export const isPriceListRecord = ofKind(PRICE_LIST_PREFIX, [PRICE_LIST_RECORD_KIND])
@@ -59,6 +64,7 @@ export const isBillingRunRecord = ofKind(BILLING_RUN_PREFIX, [BILLING_RUN_RECORD
 /** An invoice or a credit note: one resource, `/invoices`, two kinds of document. */
 export const isInvoiceDocument = (record: Pick<BusinessRecord, "id" | "recordKind">) =>
   ofKind(INVOICE_PREFIX, [INVOICE_RECORD_KIND])(record) || ofKind(CREDIT_NOTE_PREFIX, [CREDIT_NOTE_RECORD_KIND])(record)
+export const isPaymentRecord = ofKind(PAYMENT_PREFIX, [PAYMENT_RECORD_KIND])
 
 // ---------------------------------------------------------------------------
 // Wire tokens as a person reads them
@@ -98,6 +104,18 @@ export const CREDIT_REASON_LABELS: Readonly<Record<CreditReason, string>> = {
   "price-correction": "Price correction",
   duplicate: "Duplicate",
   other: "Other",
+}
+
+/** What an invoice reads as from its payments (@waste/domain/finance/payments, `invoicePayment`). */
+export const PAYMENT_STATUS_LABELS: Readonly<Record<InvoicePaymentStatus, string>> = { open: "Open", "partially-paid": "Partially paid", paid: "Paid", overdue: "Overdue", credited: "Credited" }
+
+/** Where a payment came from. */
+export const PAYMENT_SOURCE_LABELS: Readonly<Record<PaymentSource, string>> = { manual: "By hand", "bank-file": "Bank statement" }
+
+/** A payment as its row reads: nothing of it allocated, some, or all of it. */
+export function paymentRecordStatus(payment: { allocatedMinor: number; unallocatedMinor: number }): "Unmatched" | "Partially allocated" | "Allocated" {
+  if (payment.allocatedMinor === 0) return "Unmatched"
+  return payment.unallocatedMinor === 0 ? "Allocated" : "Partially allocated"
 }
 
 /** The options a select offers over a vocabulary, in its order. */

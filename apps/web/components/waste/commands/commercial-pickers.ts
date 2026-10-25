@@ -17,7 +17,7 @@ import type { Resolver } from "@/lib/api/records/adapter"
 import { AGREEMENTS_MODULE } from "@/lib/data/agreements"
 import type { BusinessFormField, BusinessFormOption, BusinessFormSchema, BusinessFormValues } from "@/lib/data/business-form-types"
 import { getModuleDefinition, type BusinessRecord, type ModuleLocation } from "@/lib/data/business-modules"
-import { PRICE_ROWS_MODULE, PRODUCTS_MODULE } from "@/lib/data/commercial"
+import { INVOICES_MODULE, PRICE_ROWS_MODULE, PRODUCTS_MODULE } from "@/lib/data/commercial"
 import { commercialRowsFor } from "@/lib/data/commercial-pickers"
 import { ORGANISATION_MODULE } from "@/lib/data/containers"
 import { MASTER_DATA_MODULE } from "@/lib/data/master-data"
@@ -45,6 +45,8 @@ export function useCommercialPickers(): RelationPickers {
   const providers = useModuleRecords(SERVICE_PROVIDERS_MODULE.workspaceId, SERVICE_PROVIDERS_MODULE.moduleId, fixturesOf(SERVICE_PROVIDERS_MODULE))
   const master = useModuleRecords(MASTER_DATA_MODULE.workspaceId, MASTER_DATA_MODULE.moduleId, fixturesOf(MASTER_DATA_MODULE))
   const serviceAreas = useModuleRecords(SERVICE_AREAS_MODULE.workspaceId, SERVICE_AREAS_MODULE.moduleId, fixturesOf(SERVICE_AREAS_MODULE))
+  // The invoices a payment pays (#291 C6).
+  const invoices = useModuleRecords(INVOICES_MODULE.workspaceId, INVOICES_MODULE.moduleId, fixturesOf(INVOICES_MODULE))
   const byKey = new Map([
     [keyOf(PRODUCTS_MODULE), products],
     [keyOf(PRICE_ROWS_MODULE), priceRows],
@@ -52,6 +54,7 @@ export function useCommercialPickers(): RelationPickers {
     [keyOf(AGREEMENTS_MODULE), agreements],
     [keyOf(SERVICE_PROVIDERS_MODULE), providers],
     [keyOf(SERVICE_AREAS_MODULE), serviceAreas],
+    [keyOf(INVOICES_MODULE), invoices],
   ])
   const held = {
     products: live(products.records),
@@ -61,6 +64,7 @@ export function useCommercialPickers(): RelationPickers {
     providers: live(providers.records),
     master: live(master.records),
     serviceAreas: live(serviceAreas.records),
+    invoices: live(invoices.records),
   }
   const options = (field: BusinessFormField, values: BusinessFormValues, projectId?: string, opened?: BusinessFormValues): readonly BusinessFormOption[] => {
     const rows = commercialRowsFor(field.id, values, held, projectId)
@@ -81,7 +85,7 @@ export function useCommercialPickers(): RelationPickers {
 }
 
 /** The modules a Price Engine dialog's web ids may name, for `useCommercialResolver`. */
-const RESOLVED_MODULES: readonly ModuleLocation[] = [ORGANISATION_MODULE, MASTER_DATA_MODULE, CONTACTS_MODULE, PLANNING_AREAS_MODULE, AGREEMENTS_MODULE, PRODUCTS_MODULE, PRICE_ROWS_MODULE]
+const RESOLVED_MODULES: readonly ModuleLocation[] = [ORGANISATION_MODULE, MASTER_DATA_MODULE, CONTACTS_MODULE, PLANNING_AREAS_MODULE, AGREEMENTS_MODULE, PRODUCTS_MODULE, PRICE_ROWS_MODULE, INVOICES_MODULE]
 
 /** A resolver over the modules the chain's dialogs name rows of, as the store holds them now: for a read the surface asks itself (Explain price, Run billing's preview). */
 export function useCommercialResolver(): Resolver {
@@ -92,7 +96,8 @@ export function useCommercialResolver(): Resolver {
   const agreements = useServerModuleState(AGREEMENTS_MODULE.workspaceId, AGREEMENTS_MODULE.moduleId)
   const products = useServerModuleState(PRODUCTS_MODULE.workspaceId, PRODUCTS_MODULE.moduleId)
   const priceRows = useServerModuleState(PRICE_ROWS_MODULE.workspaceId, PRICE_ROWS_MODULE.moduleId)
-  const states = [organisation, master, contacts, areas, agreements, products, priceRows]
+  const invoices = useServerModuleState(INVOICES_MODULE.workspaceId, INVOICES_MODULE.moduleId)
+  const states = [organisation, master, contacts, areas, agreements, products, priceRows, invoices]
   const entries = RESOLVED_MODULES.flatMap((location, index): [string, ModuleState][] => {
     const state = states[index]
     return state === null ? [] : [[keyOf(location), state]]

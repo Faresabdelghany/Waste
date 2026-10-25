@@ -2,7 +2,8 @@
 // pure half of `useCommercialPickers` (components/waste/commands/
 // commercial-pickers.ts) for the fields the money chains add — a price list,
 // a product, a planning area, an agreement; a provider, an award's planning
-// areas and fractions, a service area and an assignment. Every row is offered,
+// areas and fractions, a service area and an assignment; the invoice a payment
+// pays (#291 C6), an invoice and never a credit note. Every row is offered,
 // its status beside its name (#79: a status gates a new reference, and the
 // API's 409 says so), but a product and a planning area only of the project
 // the dialog names: through its price list, its agreement or its project
@@ -13,7 +14,7 @@ import { planningAreaAdapter } from "@/lib/api/records/planning"
 import { isAgreementRecord } from "./agreements"
 import type { BusinessFormValues } from "./business-form-types"
 import type { BusinessRecord } from "./business-modules"
-import { isPriceListRecord } from "./commercial"
+import { isInvoiceDocument, isPriceListRecord } from "./commercial"
 import { masterDataKindOf } from "./master-data-kinds"
 import { isAssignmentRecord, isServiceAreaRecord } from "./provider-money"
 
@@ -27,6 +28,8 @@ export type CommercialPickerRows = {
   providers?: readonly BusinessRecord[]
   master?: readonly BusinessRecord[]
   serviceAreas?: readonly BusinessRecord[]
+  /** The invoices a payment pays (#291 C6). */
+  invoices?: readonly BusinessRecord[]
 }
 
 const picked = (values: BusinessFormValues, key: string) => (typeof values[key] === "string" && values[key] !== "" ? (values[key] as string) : undefined)
@@ -61,6 +64,8 @@ export function commercialRowsFor(fieldId: string, values: BusinessFormValues, r
       return (rows.master ?? []).filter((record) => masterDataKindOf(record) === "waste-fraction")
     case "serviceAreaId":
       return (rows.serviceAreas ?? []).filter(isServiceAreaRecord).filter(ofProject(projectOf(values, rows, projectId)))
+    case "invoiceId":
+      return (rows.invoices ?? []).filter((record) => isInvoiceDocument(record) && record.submittedValues?.kind === "invoice").filter(ofProject(projectOf(values, rows, projectId)))
     case "serviceAreaAssignmentId":
       return (rows.serviceAreas ?? []).filter(isAssignmentRecord).filter(ofProject(projectOf(values, rows, projectId)))
     default:

@@ -3,7 +3,9 @@
 // (lib/api/records/pricing.ts, billing.ts), and what it opens on. The price
 // rows' table lists the rows alone, never the lists they are filed under,
 // which are the same module's first kind; the billable events open on the
-// two a person acts on, blocked and ready.
+// two a person acts on, blocked and ready. An invoice is filtered by what its
+// payments make of it too, and the payments by where they stand and who paid
+// them (#291 C6).
 import { singleFilterValue } from "@waste/domain/business-filters"
 
 import type { BusinessRecord } from "@/lib/data/business-modules"
@@ -37,6 +39,11 @@ export const BILLING_LIST: ModuleList = {
 }
 
 export const INVOICES_LIST: ModuleList = {
-  readers: () => ({ kinds: fact("Kind"), statuses: status, customers: fact("Customer"), billingRuns: fact("Billing run") }),
+  readers: () => ({ kinds: fact("Kind"), statuses: status, paymentStatuses: fact("Payment"), customers: fact("Customer"), billingRuns: fact("Billing run") }),
+  initial: {},
+}
+
+export const PAYMENTS_LIST: ModuleList = {
+  readers: () => ({ statuses: status, sources: fact("Source"), customers: fact("Payer") }),
   initial: {},
 }

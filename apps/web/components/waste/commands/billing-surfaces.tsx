@@ -24,11 +24,14 @@
 // what remains of it, or the named lines by quantity — a create in this
 // module (lib/api/records/billing.ts), after which the invoice and the
 // module are read again, the invoice's standing and the new note with them.
-// A credit note is not credited, so it offers none.
+// A credit note is not credited, so it offers none. An invoice's details say
+// what its payments make of it — open, partially paid, paid or overdue — and
+// list the payments allocated to it (#291 C6).
 import { useState } from "react"
 import { toast } from "sonner"
 import type { BillingRunCreate, BillingRunDetail, BillingRunPreview } from "@waste/contracts/billing"
 import type { Invoice, InvoiceDetail } from "@waste/contracts/invoices"
+import type { Payment } from "@waste/contracts/payments"
 
 import { Button } from "@/components/ui/button"
 import { Dialog, DialogContent, DialogDescription, DialogFooter, DialogHeader, DialogTitle } from "@/components/ui/dialog"
@@ -47,6 +50,7 @@ import { problemSentence } from "@/lib/api/problem"
 import { isLocalRefusal, moduleKeyOf, webIdOf } from "@/lib/api/records/adapter"
 import { billingRunBody, billingRunDetail, billingRunInvoices, eventCommandsOffered, eventPricedByList, eventQuestion, invoiceDetail, invoiceDocument, previewBillingRun } from "@/lib/api/records/billing"
 import { CONTAINERS_MODULE } from "@/lib/api/records/containers"
+import { paymentsOfInvoice } from "@/lib/api/records/payments"
 import { PICKUPS_MODULE } from "@/lib/api/records/pickups"
 import { problemOfError, resolverOver, type ModuleState } from "@/lib/api/records/server-records"
 import { formatMinor } from "@/lib/commercial/money"
@@ -54,7 +58,7 @@ import { AGREEMENTS_MODULE } from "@/lib/data/agreements"
 import type { BusinessFormValues } from "@/lib/data/business-form-types"
 import type { BusinessRecord } from "@/lib/data/business-modules"
 import { downloadBlob } from "@/lib/data/csv"
-import { BILLING_MODULE, EVENTS_MODULE, INVOICE_PREFIX, INVOICES_MODULE, PRICE_ROWS_MODULE, ROUTES_MODULE_LOCATION } from "@/lib/data/commercial"
+import { BILLING_MODULE, EVENTS_MODULE, INVOICE_PREFIX, INVOICES_MODULE, PAYMENT_PREFIX, PAYMENT_SOURCE_LABELS, PAYMENTS_MODULE, PRICE_ROWS_MODULE, ROUTES_MODULE_LOCATION } from "@/lib/data/commercial"
 import {
   blankNone,
   createBillingRunRecord,
@@ -339,7 +343,10 @@ export function BillingRunSurface({ record }: RowSurfaceProps) {
 /** The document's own read, as a one-row history its surface reads again after a credit note. */
 const readInvoice = (client: ApiClient, serverId: string) => invoiceDetail(client, serverId).then((detail): InvoiceDetail[] => [detail])
 
-/** An invoice's or a credit note's details: its lines by position, the credit notes naming it, Download PDF (#291 C5), and — on an invoice — New credit note. */
+/** The payments with an allocation to the invoice, as a history its surface reads. */
+const readPayments = (client: ApiClient, serverId: string): Promise<Payment[]> => paymentsOfInvoice(client, serverId)
+
+/** An invoice's or a credit note's details: its lines by position, the credit notes naming it, Download PDF (#291 C5), and — on an invoice — New credit note and its payments (#291 C6). */
 export function InvoiceSurface({ record }: RowSurfaceProps) {
   const client = useApiClient()
   const { upsertRecord, refreshModule } = useBusinessRecordStore()
@@ -348,6 +355,9 @@ export function InvoiceSurface({ record }: RowSurfaceProps) {
   const read = useRowHistory(INVOICES_MODULE.workspaceId, INVOICES_MODULE.moduleId, record, version, readInvoice)
   const [credit, setCredit] = useState<{ remaining: ReadonlyMap<string, number>; detail: InvoiceDetail } | null>(null)
   const [busy, setBusy] = useState(false)
+  // Read again whenever what the invoice has been paid moves: a payment registered or matched elsewhere re-reads the invoices.
+  const payments = useRowHistory(INVOICES_MODULE.workspaceId, INVOICES_MODULE.moduleId, record, `${version}|${record.facts.Paid ?? ""}`, readPayments)
+  const openPayment = useOpenRecord(PAYMENTS_MODULE.moduleId)
   const detail = read.rows?.[0]
   const isInvoice = record.submittedValues?.kind === "invoice"
   const money = (minor: number) => formatMinor(minor, detail?.currency ?? record.facts.Currency ?? "DKK")
@@ -452,6 +462,25 @@ export function InvoiceSurface({ record }: RowSurfaceProps) {
         <div className="space-y-2">
           <h4 className="text-xs font-medium text-muted-foreground">Credit notes</h4>
           <ReadRows read={{ rows: detail === undefined ? (read.rows === null ? null : []) : detail.creditNotes, problem: read.problem }} label="Reading the document…" empty="No credit note yet." testId="invoice-credit-notes" line={(note) => `${note.label} · ${note.issuedOn} · ${money(note.grossMinor)}`} />
+        </div>
+      )}
+      {isInvoice && record.facts.Payment !== undefined && (
+        <div className="space-y-2">
+          <h4 className="text-xs font-medium text-muted-foreground">Payments</h4>
+          <p className="text-sm" data-testid="invoice-payment-standing">
+            {record.facts.Payment}: {record.facts.Paid} paid, {record.facts.Outstanding} outstanding.
+          </p>
+          <ReadRows
+            read={payments}
+            label="Reading the payments…"
+            empty="No payment yet."
+            testId="invoice-payments"
+            line={(payment) => (
+              <button type="button" className="text-left underline-offset-2 hover:underline" onClick={() => openPayment(webIdOf(PAYMENT_PREFIX, payment.id))}>
+                {payment.paidOn} · {formatMinor(payment.amountMinor, payment.currency)} · {PAYMENT_SOURCE_LABELS[payment.source]}
+              </button>
+            )}
+          />
         </div>
       )}
       {credit !== null && (

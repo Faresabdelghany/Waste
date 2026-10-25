@@ -5,6 +5,7 @@ import {
   Barcode,
   Buildings,
   CalendarBlank,
+  Coins,
   Cube,
   Database,
   Flag,
@@ -107,6 +108,7 @@ const CATEGORY_ICONS: Readonly<Record<BusinessFilterKey, typeof Spinner>> = {
   agreements: Handshake,
   blockReasons: Warning,
   billingRuns: Receipt,
+  paymentStatuses: Coins,
 }
 
 /**
