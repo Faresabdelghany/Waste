@@ -447,6 +447,8 @@ column wms.billable_event 30 charge_period_from date
 column wms.billable_event 31 charge_period_to date
 column wms.billable_event 32 charged_days integer
 column wms.billable_event 33 period_days integer
+column wms.billable_event 34 container_id uuid
+column wms.billable_event 35 placement_id uuid
 constraint wms.billable_event billable_event_agreement_id_fk FOREIGN KEY (company_id, project_id, agreement_id) REFERENCES wms.agreement(company_id, project_id, id)
 constraint wms.billable_event billable_event_amounts_shape CHECK (((net_minor IS NULL) OR (net_minor = ((
 CASE kind
@@ -457,10 +459,11 @@ constraint wms.billable_event billable_event_block_reason_one_of CHECK ((block_r
 constraint wms.billable_event billable_event_cancel_reason_one_of CHECK ((cancel_reason = ANY (ARRAY['pickup-corrected'::text, 'duplicate'::text, 'not-delivered'::text, 'other'::text])))
 constraint wms.billable_event billable_event_cancel_shape CHECK ((((cancelled_at IS NULL) = (cancel_reason IS NULL)) AND ((cancelled_by IS NULL) OR (cancelled_at IS NOT NULL))))
 constraint wms.billable_event billable_event_cancelled_by_fk FOREIGN KEY (company_id, cancelled_by) REFERENCES wms.user_account(company_id, id)
-constraint wms.billable_event billable_event_charge_shape CHECK ((((kind = 'subscription'::text) = (charge_period_from IS NOT NULL)) AND ((charge_period_from IS NULL) = (charge_period_to IS NULL)) AND ((charge_period_from IS NULL) = (charged_days IS NULL)) AND ((charge_period_from IS NULL) = (period_days IS NULL)) AND ((charge_period_to IS NULL) OR (charge_period_to > charge_period_from)) AND ((charged_days IS NULL) OR ((charged_days > 0) AND (charged_days <= period_days)))))
+constraint wms.billable_event billable_event_charge_shape CHECK ((((kind = ANY (ARRAY['subscription'::text, 'hire'::text])) = (charge_period_from IS NOT NULL)) AND ((kind = 'hire'::text) = (placement_id IS NOT NULL)) AND ((placement_id IS NULL) = (container_id IS NULL)) AND ((charge_period_from IS NULL) = (charge_period_to IS NULL)) AND ((charge_period_from IS NULL) = (charged_days IS NULL)) AND ((charge_period_from IS NULL) = (period_days IS NULL)) AND ((charge_period_to IS NULL) OR (charge_period_to > charge_period_from)) AND ((charged_days IS NULL) OR ((charged_days > 0) AND (charged_days <= period_days)))))
 constraint wms.billable_event billable_event_company_id_fk FOREIGN KEY (company_id) REFERENCES wms.company(id)
+constraint wms.billable_event billable_event_container_id_placement_id_fk FOREIGN KEY (company_id, project_id, container_id, placement_id) REFERENCES wms.container_service_placement(company_id, project_id, container_id, id)
 constraint wms.billable_event billable_event_created_by_fk FOREIGN KEY (company_id, created_by) REFERENCES wms.user_account(company_id, id)
-constraint wms.billable_event billable_event_kind_one_of CHECK ((kind = ANY (ARRAY['pickup'::text, 'ticket'::text, 'manual'::text, 'reversal'::text, 'subscription'::text])))
+constraint wms.billable_event billable_event_kind_one_of CHECK ((kind = ANY (ARRAY['pickup'::text, 'ticket'::text, 'manual'::text, 'reversal'::text, 'subscription'::text, 'job'::text, 'hire'::text])))
 constraint wms.billable_event billable_event_kind_shape CHECK (
 CASE kind
     WHEN 'pickup'::text THEN ((pickup_id IS NOT NULL) AND (ticket_id IS NULL) AND (reverses_event_id IS NULL))
@@ -468,11 +471,13 @@ CASE kind
     WHEN 'manual'::text THEN ((pickup_id IS NULL) AND (ticket_id IS NULL) AND (reverses_event_id IS NULL) AND (created_by IS NOT NULL))
     WHEN 'reversal'::text THEN ((reverses_event_id IS NOT NULL) AND (pickup_id IS NULL) AND (ticket_id IS NULL) AND (net_minor IS NOT NULL) AND (net_minor <= 0))
     WHEN 'subscription'::text THEN ((subscription_id IS NOT NULL) AND (pickup_id IS NULL) AND (ticket_id IS NULL) AND (reverses_event_id IS NULL))
+    WHEN 'job'::text THEN ((pickup_id IS NOT NULL) AND (ticket_id IS NULL) AND (reverses_event_id IS NULL))
+    WHEN 'hire'::text THEN ((subscription_id IS NOT NULL) AND (placement_id IS NOT NULL) AND (pickup_id IS NULL) AND (ticket_id IS NULL) AND (reverses_event_id IS NULL))
     ELSE false
 END)
 constraint wms.billable_event billable_event_origin_shape CHECK (
-CASE kind
-    WHEN 'subscription'::text THEN ((created_by IS NULL) AND (source_event_id IS NULL))
+CASE
+    WHEN (kind = ANY (ARRAY['subscription'::text, 'hire'::text])) THEN ((created_by IS NULL) AND (source_event_id IS NULL))
     ELSE ((created_by IS NULL) = (source_event_id IS NOT NULL))
 END)
 constraint wms.billable_event billable_event_override_shape CHECK ((((kind = 'manual'::text) AND (price_list_row_id IS NULL) AND (block_reason IS NULL)) = (override_reason IS NOT NULL)))
@@ -495,8 +500,10 @@ constraint wms.billable_event billable_event_vat_shape CHECK (((vat_minor IS NUL
 index wms.billable_event billable_event_agreement_id_idx CREATE INDEX billable_event_agreement_id_idx ON wms.billable_event USING btree (company_id, agreement_id)
 index wms.billable_event billable_event_cancelled_by_idx CREATE INDEX billable_event_cancelled_by_idx ON wms.billable_event USING btree (company_id, cancelled_by)
 index wms.billable_event billable_event_created_by_idx CREATE INDEX billable_event_created_by_idx ON wms.billable_event USING btree (company_id, created_by)
+index wms.billable_event billable_event_hire_charge_idx CREATE UNIQUE INDEX billable_event_hire_charge_idx ON wms.billable_event USING btree (company_id, placement_id, charge_period_from) WHERE (kind = 'hire'::text)
 index wms.billable_event billable_event_pickup_id_idx CREATE INDEX billable_event_pickup_id_idx ON wms.billable_event USING btree (company_id, pickup_id)
 index wms.billable_event billable_event_pkey CREATE UNIQUE INDEX billable_event_pkey ON wms.billable_event USING btree (id)
+index wms.billable_event billable_event_placement_id_idx CREATE INDEX billable_event_placement_id_idx ON wms.billable_event USING btree (company_id, placement_id)
 index wms.billable_event billable_event_price_list_row_id_idx CREATE INDEX billable_event_price_list_row_id_idx ON wms.billable_event USING btree (company_id, price_list_row_id)
 index wms.billable_event billable_event_product_id_idx CREATE INDEX billable_event_product_id_idx ON wms.billable_event USING btree (company_id, product_id)
 index wms.billable_event billable_event_project_id_service_date_idx CREATE INDEX billable_event_project_id_service_date_idx ON wms.billable_event USING btree (company_id, project_id, service_date)
@@ -1819,8 +1826,10 @@ column wms.product 12 service_frequency_id uuid
 column wms.product 13 invoice_name text
 column wms.product 14 invoice_code text
 column wms.product 15 vat_percent integer
+column wms.product 16 free_days integer
 constraint wms.product product_company_id_fk FOREIGN KEY (company_id) REFERENCES wms.company(id)
 constraint wms.product product_container_type_id_fk FOREIGN KEY (company_id, container_type_id) REFERENCES wms.container_type(company_id, id)
+constraint wms.product product_free_days_shape CHECK (((free_days IS NULL) OR ((unit = 'day'::text) AND ((free_days >= 0) AND (free_days <= 366)))))
 constraint wms.product product_kind_one_of CHECK ((kind = ANY (ARRAY['container-collection'::text, 'recurring-service'::text, 'additional-service'::text])))
 constraint wms.product product_pkey PRIMARY KEY (id)
 constraint wms.product product_project_id_fk FOREIGN KEY (company_id, project_id) REFERENCES wms.project(company_id, id)
@@ -1828,7 +1837,7 @@ constraint wms.product product_project_id_name_key UNIQUE (company_id, project_i
 constraint wms.product product_project_key UNIQUE (company_id, project_id, id)
 constraint wms.product product_service_frequency_id_fk FOREIGN KEY (company_id, project_id, service_frequency_id) REFERENCES wms.service_frequency(company_id, project_id, id)
 constraint wms.product product_status_one_of CHECK ((status = ANY (ARRAY['draft'::text, 'active'::text, 'inactive'::text])))
-constraint wms.product product_unit_one_of CHECK ((unit = ANY (ARRAY['pickup'::text, 'month'::text, 'job'::text])))
+constraint wms.product product_unit_one_of CHECK ((unit = ANY (ARRAY['pickup'::text, 'month'::text, 'job'::text, 'day'::text])))
 constraint wms.product product_vat_percent_range CHECK (((vat_percent >= 0) AND (vat_percent <= 100)))
 constraint wms.product product_waste_fraction_id_fk FOREIGN KEY (company_id, waste_fraction_id) REFERENCES wms.waste_fraction(company_id, id)
 index wms.product product_container_type_id_idx CREATE INDEX product_container_type_id_idx ON wms.product USING btree (company_id, container_type_id)
@@ -3430,6 +3439,26 @@ index wms.weight_review weight_review_project_id_idx CREATE INDEX weight_review_
 index wms.weight_review weight_review_reviewed_by_idx CREATE INDEX weight_review_reviewed_by_idx ON wms.weight_review USING btree (company_id, reviewed_by)
 index wms.weight_review weight_review_unload_id_idx CREATE INDEX weight_review_unload_id_idx ON wms.weight_review USING btree (company_id, unload_id, id)
 policy wms.weight_review weight_review_tenant_fence permissive ALL to=wms_api using=(company_id = ( SELECT wms.current_company_id() AS current_company_id)) check=(company_id = ( SELECT wms.current_company_id() AS current_company_id))
+relation wms.work_order_product kind=table owner=<owner> persistence=p rls=true force-rls=true replica-identity=d acl=[<owner>=DELETE,INSERT,MAINTAIN,REFERENCES,SELECT,TRIGGER,TRUNCATE,UPDATE/<owner> wms_api=DELETE,INSERT,SELECT,UPDATE/<owner> wms_worker=SELECT/<owner>]
+column wms.work_order_product 1 id uuid not-null default=wms.uuidv7()
+column wms.work_order_product 2 company_id uuid not-null
+column wms.work_order_product 3 project_id uuid not-null
+column wms.work_order_product 4 created_at timestamp with time zone not-null default=now()
+column wms.work_order_product 5 updated_at timestamp with time zone not-null default=now()
+column wms.work_order_product 6 service text not-null
+column wms.work_order_product 7 product_id uuid not-null
+constraint wms.work_order_product work_order_product_company_id_fk FOREIGN KEY (company_id) REFERENCES wms.company(id)
+constraint wms.work_order_product work_order_product_pkey PRIMARY KEY (id)
+constraint wms.work_order_product work_order_product_product_id_fk FOREIGN KEY (company_id, project_id, product_id) REFERENCES wms.product(company_id, project_id, id)
+constraint wms.work_order_product work_order_product_project_id_fk FOREIGN KEY (company_id, project_id) REFERENCES wms.project(company_id, id)
+constraint wms.work_order_product work_order_product_project_id_service_key UNIQUE (company_id, project_id, service)
+constraint wms.work_order_product work_order_product_service_one_of CHECK ((service = ANY (ARRAY['deliver'::text, 'remove'::text, 'swap'::text, 'repair'::text, 'wash'::text])))
+index wms.work_order_product work_order_product_pkey CREATE UNIQUE INDEX work_order_product_pkey ON wms.work_order_product USING btree (id)
+index wms.work_order_product work_order_product_product_id_idx CREATE INDEX work_order_product_product_id_idx ON wms.work_order_product USING btree (company_id, product_id)
+index wms.work_order_product work_order_product_project_id_service_key CREATE UNIQUE INDEX work_order_product_project_id_service_key ON wms.work_order_product USING btree (company_id, project_id, service)
+trigger wms.work_order_product work_order_product_audit_trail enabled=O CREATE TRIGGER work_order_product_audit_trail AFTER INSERT OR DELETE OR UPDATE ON wms.work_order_product FOR EACH ROW EXECUTE FUNCTION wms.audit_row('project', 'project_id')
+trigger wms.work_order_product work_order_product_touch_updated_at enabled=O CREATE TRIGGER work_order_product_touch_updated_at BEFORE UPDATE ON wms.work_order_product FOR EACH ROW EXECUTE FUNCTION wms.touch_updated_at()
+policy wms.work_order_product work_order_product_tenant_fence permissive ALL to=wms_api using=(company_id = ( SELECT wms.current_company_id() AS current_company_id)) check=(company_id = ( SELECT wms.current_company_id() AS current_company_id))
 function pgboss.create_queue(queue_name text, options jsonb) returns=void kind=f language=plpgsql volatility=v security=invoker leakproof=false strict=false parallel=u config=none owner=<owner> acl=[<owner>=EXECUTE/<owner> PUBLIC=EXECUTE/<owner> wms_api=EXECUTE/<owner> wms_worker=EXECUTE/<owner>] definition=sha256:414394c97224574f14b2e4b1a2765a836c24faaba627ad33504e5fb8f6da8df4
 function pgboss.delete_queue(queue_name text) returns=void kind=f language=plpgsql volatility=v security=invoker leakproof=false strict=false parallel=u config=none owner=<owner> acl=[<owner>=EXECUTE/<owner> PUBLIC=EXECUTE/<owner> wms_api=EXECUTE/<owner> wms_worker=EXECUTE/<owner>] definition=sha256:39df331dbfb3c58c14251e93e087fa26c1dbb1417ce940d35757b374f521e377
 function pgboss.job_now() returns=timestamp with time zone kind=f language=sql volatility=s security=invoker leakproof=false strict=false parallel=u config=none owner=<owner> acl=[<owner>=EXECUTE/<owner> PUBLIC=EXECUTE/<owner> wms_api=EXECUTE/<owner> wms_worker=EXECUTE/<owner>] definition=sha256:3f827e651af737cc16b9094387f67010edb3eb7d4d7daf1b2a043d91e222d434
@@ -3508,4 +3537,5 @@ journal 1792923020897 c8b3987803dd0f8cb640d986901466c6e8d2195e7301508f475dc8592f
 journal 1792924159748 8dcf073968a66710ff9a712367e53e2391442cc942c1aa486d6822dc43b86905
 journal 1792925242550 975c5a4be9bc2a4de746cf62d5298aa520bd272699f460571a7e527f372a785b
 journal 1792926214973 7b4def117e8b9a90b2c9004f090fe9797125db6e60c8bb1d5c91adbb98f2e154
+journal 1792928027904 dea07fe438532044d3e47b8f1136a440e1137886a6effecd6a5584a64753f08b
 pgboss-version 42

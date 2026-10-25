@@ -69,6 +69,8 @@ export const eventColumns = {
   chargePeriodTo: billableEvent.chargePeriodTo,
   chargedDays: billableEvent.chargedDays,
   periodDays: billableEvent.periodDays,
+  containerId: billableEvent.containerId,
+  placementId: billableEvent.placementId,
   sourceEventId: billableEvent.sourceEventId,
   createdBy: billableEvent.createdBy,
   overrideReason: billableEvent.overrideReason,

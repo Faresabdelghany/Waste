@@ -144,7 +144,10 @@ function originOf(event: BillableEvent, context: MappingContext): string {
     case "manual":
       return event.createdBy === null ? "Entered by a person" : `Entered by ${nameVia(context, "user", event.createdBy)}`
     case "subscription":
+    case "hire":
       return "Charged by a billing run"
+    case "job":
+      return "Completed work order"
   }
 }
 

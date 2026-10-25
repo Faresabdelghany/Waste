@@ -93,6 +93,7 @@ import type { InvoiceParties } from "@waste/domain/finance/invoice-document"
 import { PAYMENT_REFERENCE_PATTERN } from "@waste/domain/finance/payment"
 import { BILLABLE_EVENT_KINDS, BILLING_RUN_STATUSES, BLOCK_REASONS, CANCEL_REASONS, CREDIT_REASONS, EXCLUSION_REASONS, INDEX_BASES, INVOICE_KINDS, PAYMENT_SOURCES, SETTLEMENT_EVENT_KINDS, SETTLEMENT_STATUSES, WEIGHT_REVIEW_DECISIONS } from "@waste/domain/finance/vocabulary"
 import { CUSTOMER_KINDS } from "@waste/domain/registry/vocabulary"
+import { WORK_ORDER_SERVICES } from "@waste/domain/execution/vocabulary"
 import { TICKET_KINDS } from "@waste/domain/resolution/vocabulary"
 import { sql } from "drizzle-orm"
 import { bigint, boolean, check, date, index, integer, jsonb, text, timestamp, unique, uniqueIndex, uuid } from "drizzle-orm/pg-core"
@@ -101,6 +102,7 @@ import { tableObjectName } from "../names"
 import { userAccount } from "./access"
 import { agreement, subscription } from "./agreements"
 import { containerType, product, wasteFraction } from "./catalogue"
+import { containerServicePlacement } from "./containers"
 import { exactlyOne, oneOf, positive } from "./checks"
 import { id, projectScoped, recorded, timestamps, validity, validPeriod } from "./columns"
 import { customer } from "./customers"
@@ -362,11 +364,14 @@ export const billableEvent = wms.table(
     ticketId: uuid(),
     /** On a `reversal`: the invoiced event it undoes. */
     reversesEventId: uuid(),
-    /** On a `subscription` event, a recurring charge (#291 C2): the charge period, half-open, and how many of its days were charged of the days it has — what the unit price was prorated by. */
+    /** On a `subscription` event, a recurring charge (#291 C2): the charge period, half-open, and how many of its days were charged of the days it has — what the unit price was prorated by. On a `hire` event (M14 of #293) the calendar month, its charged days (the quantity) and the month's days. */
     chargePeriodFrom: date(),
     chargePeriodTo: date(),
     chargedDays: integer(),
     periodDays: integer(),
+    /** On a `hire` event (M14 of #293): the container and the placement whose days on site the month charges. */
+    containerId: uuid(),
+    placementId: uuid(),
     /** The outbox event the consumer made it from: a soft uuid, and the idempotency key. */
     sourceEventId: uuid(),
     /** The person on a manual event; null on the consumer's. */
@@ -390,6 +395,8 @@ export const billableEvent = wms.table(
     // The pickup of the route the event names: the key carries the route on both sides, the proof's and the ticket's shape.
     projectReference(t, [t.routeId, t.pickupId], pickup, [pickup.routeId, pickup.id]),
     projectReference(t, [t.ticketId], ticket),
+    // The hire's placement, through its container: the placement's project key, the stock ledger's reference.
+    projectReference(t, [t.containerId, t.placementId], containerServicePlacement, [containerServicePlacement.containerId, containerServicePlacement.id]),
     // The reversed event is one of the same project, through the table's own project key.
     projectReference(t, [t.reversesEventId], t as ProjectTable),
     tenantReference(t, [t.createdBy], userAccount),
@@ -416,20 +423,20 @@ export const billableEvent = wms.table(
     check(tableObjectName(t.id.table, "override_shape", "billableEvent"), sql`(${t.kind} = 'manual' and ${t.priceListRowId} is null and ${t.blockReason} is null) = (${t.overrideReason} is not null)`),
     // A pickup names its route: Postgres leaves a composite key with a null member unchecked.
     check(tableObjectName(t.id.table, "pickup_shape", "billableEvent"), sql`${t.pickupId} is null or ${t.routeId} is not null`),
-    // What each kind names: a pickup its pickup, a ticket its ticket, a manual event neither and its person, a reversal the event it undoes and nothing of its own, with a net that is there and zero or less — a reversal is never blocked, and `null <= 0` is not false, so the null is refused by name — and a recurring charge its subscription alone.
+    // What each kind names: a pickup its pickup, a ticket its ticket, a manual event neither and its person, a reversal the event it undoes and nothing of its own, with a net that is there and zero or less — a reversal is never blocked, and `null <= 0` is not false, so the null is refused by name — a recurring charge its subscription alone, a work order's job its stop (M14 of #293), and a hire its subscription and its placement.
     check(
       tableObjectName(t.id.table, "kind_shape", "billableEvent"),
-      sql`case ${t.kind} when 'pickup' then ${t.pickupId} is not null and ${t.ticketId} is null and ${t.reversesEventId} is null when 'ticket' then ${t.ticketId} is not null and ${t.pickupId} is null and ${t.reversesEventId} is null when 'manual' then ${t.pickupId} is null and ${t.ticketId} is null and ${t.reversesEventId} is null and ${t.createdBy} is not null when 'reversal' then ${t.reversesEventId} is not null and ${t.pickupId} is null and ${t.ticketId} is null and ${t.netMinor} is not null and ${t.netMinor} <= 0 when 'subscription' then ${t.subscriptionId} is not null and ${t.pickupId} is null and ${t.ticketId} is null and ${t.reversesEventId} is null else false end`,
+      sql`case ${t.kind} when 'pickup' then ${t.pickupId} is not null and ${t.ticketId} is null and ${t.reversesEventId} is null when 'ticket' then ${t.ticketId} is not null and ${t.pickupId} is null and ${t.reversesEventId} is null when 'manual' then ${t.pickupId} is null and ${t.ticketId} is null and ${t.reversesEventId} is null and ${t.createdBy} is not null when 'reversal' then ${t.reversesEventId} is not null and ${t.pickupId} is null and ${t.ticketId} is null and ${t.netMinor} is not null and ${t.netMinor} <= 0 when 'subscription' then ${t.subscriptionId} is not null and ${t.pickupId} is null and ${t.ticketId} is null and ${t.reversesEventId} is null when 'job' then ${t.pickupId} is not null and ${t.ticketId} is null and ${t.reversesEventId} is null when 'hire' then ${t.subscriptionId} is not null and ${t.placementId} is not null and ${t.pickupId} is null and ${t.ticketId} is null and ${t.reversesEventId} is null else false end`,
     ),
-    // An event is a person's or the consumer's, never both and never neither; a recurring charge is the billing run's, neither (#291 C2).
+    // An event is a person's or the consumer's, never both and never neither; a recurring charge and a hire are the billing run's, neither (#291 C2, M14 of #293).
     check(
       tableObjectName(t.id.table, "origin_shape", "billableEvent"),
-      sql`case ${t.kind} when 'subscription' then ${t.createdBy} is null and ${t.sourceEventId} is null else (${t.createdBy} is null) = (${t.sourceEventId} is not null) end`,
+      sql`case when ${t.kind} in ('subscription', 'hire') then ${t.createdBy} is null and ${t.sourceEventId} is null else (${t.createdBy} is null) = (${t.sourceEventId} is not null) end`,
     ),
-    // A recurring charge carries its period, its charged days and the period's, and nothing else does; at least a day charged, at most the period's.
+    // A recurring charge and a hire carry their period, its charged days and the period's, and nothing else does; at least a day charged, at most the period's; and a hire alone its placement, with its container, since a key with a null member goes unchecked.
     check(
       tableObjectName(t.id.table, "charge_shape", "billableEvent"),
-      sql`(${t.kind} = 'subscription') = (${t.chargePeriodFrom} is not null) and (${t.chargePeriodFrom} is null) = (${t.chargePeriodTo} is null) and (${t.chargePeriodFrom} is null) = (${t.chargedDays} is null) and (${t.chargePeriodFrom} is null) = (${t.periodDays} is null) and (${t.chargePeriodTo} is null or ${t.chargePeriodTo} > ${t.chargePeriodFrom}) and (${t.chargedDays} is null or (${t.chargedDays} > 0 and ${t.chargedDays} <= ${t.periodDays}))`,
+      sql`(${t.kind} in ('subscription', 'hire')) = (${t.chargePeriodFrom} is not null) and (${t.kind} = 'hire') = (${t.placementId} is not null) and (${t.placementId} is null) = (${t.containerId} is null) and (${t.chargePeriodFrom} is null) = (${t.chargePeriodTo} is null) and (${t.chargePeriodFrom} is null) = (${t.chargedDays} is null) and (${t.chargePeriodFrom} is null) = (${t.periodDays} is null) and (${t.chargePeriodTo} is null or ${t.chargePeriodTo} > ${t.chargePeriodFrom}) and (${t.chargedDays} is null or (${t.chargedDays} > 0 and ${t.chargedDays} <= ${t.periodDays}))`,
     ),
     // A cancellation's instant and reason come together, and a person only with them: the consumer cancels with no person.
     check(tableObjectName(t.id.table, "cancel_shape", "billableEvent"), sql`(${t.cancelledAt} is null) = (${t.cancelReason} is null) and (${t.cancelledBy} is null or ${t.cancelledAt} is not null)`),
@@ -437,6 +444,8 @@ export const billableEvent = wms.table(
     uniqueIndex(tableObjectName(t.companyId.table, "source_event_id_idx", "billableEvent")).on(t.companyId, t.sourceEventId).where(sql`${t.sourceEventId} is not null`),
     // The billing run's idempotency key for a recurring charge (#291 C2): one per subscription and charge period, so a run again charges nothing twice.
     uniqueIndex(tableObjectName(t.companyId.table, "subscription_charge_idx", "billableEvent")).on(t.companyId, t.subscriptionId, t.chargePeriodFrom).where(sql`${t.kind} = 'subscription'`),
+    // The run's key for a hire (M14 of #293): one per placement and month, so a run again charges no day twice.
+    uniqueIndex(tableObjectName(t.companyId.table, "hire_charge_idx", "billableEvent")).on(t.companyId, t.placementId, t.chargePeriodFrom).where(sql`${t.kind} = 'hire'`),
     // The run's selection: a project's events by service date.
     tenantIndex(t, t.projectId, t.serviceDate),
     tenantIndex(t, t.agreementId),
@@ -445,6 +454,7 @@ export const billableEvent = wms.table(
     tenantIndex(t, t.routeId),
     tenantIndex(t, t.pickupId),
     tenantIndex(t, t.ticketId),
+    tenantIndex(t, t.placementId),
     tenantIndex(t, t.priceListRowId),
     tenantIndex(t, t.reversesEventId),
     tenantIndex(t, t.createdBy),
@@ -766,6 +776,32 @@ export const weightReview = wms.table(
     tenantIndex(t, t.correctionUnloadId),
     tenantIndex(t, t.reviewedBy),
     tenantIndex(t, t.projectId),
+  ],
+)
+
+/**
+ * The product each of a project's work orders bills (M14 of #293): a delivery,
+ * a removal, a swap, a repair, a wash, each at one `job` product, a set the
+ * project replaces whole as its ticket charges (#291 C3) are. A service it
+ * names none for bills nothing.
+ */
+export const workOrderProduct = wms.table(
+  "work_order_product",
+  {
+    ...id,
+    ...projectScoped,
+    ...timestamps,
+    service: text().notNull(),
+    productId: uuid().notNull(),
+  },
+  (t) => [
+    companyReference(t, company),
+    tenantReference(t, [t.projectId], project),
+    projectReference(t, [t.productId], product),
+    oneOf(t.service, WORK_ORDER_SERVICES),
+    // A service is billed at one product in a project.
+    tenantUnique(t, t.projectId, t.service),
+    tenantIndex(t, t.productId),
   ],
 )
 

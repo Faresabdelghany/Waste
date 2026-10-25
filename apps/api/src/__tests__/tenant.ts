@@ -46,6 +46,7 @@ import {
   settlementEvent,
   settlementLine,
   ticketKindProduct,
+  workOrderProduct,
   weightReview,
 } from "@waste/db/schema/finance"
 import { driver, vehicle, vehicleCompartment, vehicleCompartmentFraction } from "@waste/db/schema/fleet"
@@ -353,6 +354,7 @@ export async function dropTenant(pool: Database, companyId: string, owner?: Data
     await tx.delete(serviceArea).where(eq(serviceArea.companyId, companyId))
     await tx.delete(priceListRow).where(eq(priceListRow.companyId, companyId))
     await tx.delete(ticketKindProduct).where(eq(ticketKindProduct.companyId, companyId))
+    await tx.delete(workOrderProduct).where(eq(workOrderProduct.companyId, companyId))
     // The Pickup Exceptions' rules (M5 of #293): a step names a product, so the ladders go before the products.
     await tx.delete(pickupExceptionRuleStep).where(eq(pickupExceptionRuleStep.companyId, companyId))
     await tx.delete(pickupExceptionRule).where(eq(pickupExceptionRule.companyId, companyId))

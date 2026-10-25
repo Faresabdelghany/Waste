@@ -40,12 +40,15 @@ import { inProjects, requireProject } from "../auth/projects"
 import { requireGrant } from "../auth/require"
 import { newId } from "../ids"
 import { afterCursor, fetchLimit, pageOf } from "../pagination"
-import { describeProblem, problem, validate } from "../problem"
+import { describeProblem, invalidRequest, problem, validate } from "../problem"
 import { requireContainerType, requireServiceFrequency, requireWasteFraction } from "./references"
 import { created, describeCreated, describeJson, IdParam, refuseDuplicate, stampsOf } from "./shared"
 
 const MODULE = "commercial.products"
 const ProductPage = Page(Product)
+
+/** A product with free days is a hire's (M14 of #293), which the database holds to the day. */
+export const FREE_DAYS_KEEP_THE_DAY = "A product with free days is a hire product sold by the day; it keeps the day while it has them"
 
 const columns = {
   id: product.id,
@@ -61,6 +64,8 @@ const columns = {
   invoiceName: product.invoiceName,
   invoiceCode: product.invoiceCode,
   vatPercent: product.vatPercent,
+  // A hire product's free days (M14 of #293): read to hold its unit, on the wire with M14b.
+  freeDays: product.freeDays,
   createdAt: product.createdAt,
   updatedAt: product.updatedAt,
 }
@@ -234,7 +239,7 @@ export function productRoutes(guard: MiddlewareHandler<AuthEnv>) {
         operationId: "patchProduct",
         summary: "Change a product",
         description:
-          "Changes one product of a project the caller works in; every field is optional and at least one must be given. What the patch points at is held to the stored row's project, not to a project the body names: the project is not patchable, since a record does not move between projects. A null clears a reference, and clears an invoice name, an invoice code or a VAT rate too (Issue #112); the invoice code stays one product's inside the project (409, `This project already has a product with invoice code 4010`). A VAT rate changed here prices the events recorded from then on and moves none already priced.",
+          "Changes one product of a project the caller works in; every field is optional and at least one must be given. What the patch points at is held to the stored row's project, not to a project the body names: the project is not patchable, since a record does not move between projects. A null clears a reference, and clears an invoice name, an invoice code or a VAT rate too (Issue #112); the invoice code stays one product's inside the project (409, `This project already has a product with invoice code 4010`). A VAT rate changed here prices the events recorded from then on and moves none already priced. A hire product with free days (M14 of #293) stays sold by the day (400 at `unit`).",
         security: BEARER_SECURITY,
         responses: {
           200: describeJson("The product as it now stands.", Product),
@@ -260,6 +265,7 @@ export function productRoutes(guard: MiddlewareHandler<AuthEnv>) {
         const current = await findProduct(tx, principal, id)
         if (current === undefined) throw noSuchProduct(id)
         await requireReferences(tx, { companyId: principal.companyId, projectId: current.projectId }, patch)
+        if (patch.unit !== undefined && patch.unit !== "day" && current.freeDays !== null) throw invalidRequest("body", [{ path: "unit", message: FREE_DAYS_KEEP_THE_DAY }])
 
         const [row] = await refuseDuplicate(collisions(patch), () =>
           tx

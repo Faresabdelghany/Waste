@@ -59,9 +59,9 @@
 // so it answers what the run would.
 import type { BillingRunPreview } from "@waste/contracts/billing"
 import { dueOn, termsOf } from "@waste/domain/finance/payment"
-import type { PaymentReferenceScheme } from "@waste/domain/finance/vocabulary"
+import type { BillableEventKind, PaymentReferenceScheme } from "@waste/domain/finance/vocabulary"
 import { addDays } from "@waste/domain/route-schemes/recurrence"
-import { and, asc, count, eq, getTableColumns, gt, gte, inArray, isNotNull, isNull, lte, ne, notExists, or, sql, type SQL } from "drizzle-orm"
+import { and, asc, count, eq, getTableColumns, gt, gte, inArray, isNotNull, isNull, lte, notExists, notInArray, or, sql, type SQL } from "drizzle-orm"
 import { alias, type PgColumn } from "drizzle-orm/pg-core"
 
 import type { Tx } from "../client"
@@ -74,6 +74,7 @@ import { project } from "../schema/organisation"
 import { exclusionColumns, runColumns, type EventRow, type ExclusionRow, type RunRow } from "./billing-shapes"
 import { issueInvoice, type LineDraft } from "./invoice-writes"
 import { projectToday, type Scope } from "./project-clock"
+import { mintHireCharges, planHireCharges } from "./hire-charges"
 import { mintRecurringCharges, planRecurringCharges } from "./recurring-charges"
 import { lockRow, refused } from "./shared"
 
@@ -104,14 +105,18 @@ export type Selection = { events: ReadyEvent[]; groups: Group[]; exclusions: Exc
 /** The event columns the selection's predicates read: the `billable_event` table's own, or an alias's. */
 type EventColumns = { id: PgColumn; companyId: PgColumn; projectId: PgColumn; kind: PgColumn; serviceDate: PgColumn; chargePeriodFrom: PgColumn; chargePeriodTo: PgColumn; cancelledAt: PgColumn; blockReason: PgColumn }
 
-/** The events of the project in the period that were not cancelled: by service date, and a recurring charge by its charge period, overlapping the period or the day after it. */
+/** The kinds a run selects by the period they charge, not by their service date. */
+const CHARGED_BY_PERIOD: BillableEventKind[] = ["subscription", "hire"]
+
+/** The events of the project in the period that were not cancelled: by service date, a recurring charge by its charge period, overlapping the period or the day after it, and a hire by its month overlapping the period (M14 of #293), since a run over part of a month charges it whole once due, its first day charged before the run's. */
 const inPeriod = (scope: Scope, period: BillingPeriod, on: EventColumns = billableEvent): SQL | undefined =>
   and(
     eq(on.companyId, scope.companyId),
     eq(on.projectId, scope.projectId),
     or(
-      and(ne(on.kind, "subscription"), gte(on.serviceDate, period.periodFrom), lte(on.serviceDate, period.periodTo)),
+      and(notInArray(on.kind, CHARGED_BY_PERIOD), gte(on.serviceDate, period.periodFrom), lte(on.serviceDate, period.periodTo)),
       and(eq(on.kind, "subscription"), lte(on.chargePeriodFrom, addDays(period.periodTo, 1)), gt(on.chargePeriodTo, period.periodFrom)),
+      and(eq(on.kind, "hire"), lte(on.chargePeriodFrom, period.periodTo), gt(on.chargePeriodTo, period.periodFrom)),
     ),
     isNull(on.cancelledAt),
   )
@@ -199,14 +204,16 @@ export async function selectBilling(tx: Tx, scope: Scope, period: BillingPeriod,
 /**
  * What a preview answers: the counts, the totals per currency in currency
  * order, and the payers a run would exclude; nothing written. The recurring
- * charges the run would mint are planned and folded in as the run would
+ * charges and the hires (M14 of #293) the run would mint are planned and folded in as the run would
  * select them: a priced one is a ready event of its payer and currency, a
  * blocked one counts toward its payer's exclusion, and a payer with a priced
- * one is invoiced and excluded no more.
+ * one is invoiced and excluded no more. `now` is the caller's clock: the
+ * hires due by the project's today, as a run then would mint them.
  */
-export async function previewBilling(tx: Tx, scope: Scope, period: BillingPeriod): Promise<BillingRunPreview> {
+export async function previewBilling(tx: Tx, scope: Scope, period: BillingPeriod, now: () => Date): Promise<BillingRunPreview> {
   const selection = await selectBilling(tx, scope, period)
-  const planned = await planRecurringCharges(tx, scope, period)
+  const today = await projectToday(tx, scope, now)()
+  const planned = [...(await planRecurringCharges(tx, scope, period)), ...(await planHireCharges(tx, scope, period, today))]
   const priced = planned.flatMap((charge) => (charge.price === null ? [] : [{ payerCustomerId: charge.payerCustomerId, ...charge.price }]))
   const readyCount = selection.events.length + priced.length
   if (readyCount > BILLING_RUN_MAX_EVENTS) throw refused(409, tooManyEvents(readyCount))
@@ -272,7 +279,7 @@ export type RunBillingInput = BillingPeriod & {
 
 /**
  * Runs billing for a project over a period, in the caller's transaction:
- * the project's lock, the recurring charges the period calls for, the
+ * the project's lock, the recurring charges and the hires the period calls for, the
  * selection, the run's row `completed` with its
  * counts and totals, one invoice per payer and currency with its lines and
  * its `invoice-issued`, and one exclusion per payer with nothing to invoice.
@@ -284,11 +291,12 @@ export async function runBilling(tx: Tx, input: RunBillingInput): Promise<{ run:
   const { companyId, projectId } = input
   const scope: Scope = { companyId, projectId }
   await lockRow(tx, project, { companyId, id: projectId })
-  // A period and the next charged before the selection, so the run invoices them; the second of two runs finds them charged.
-  await mintRecurringCharges(tx, scope, input, input.newId)
-  const selection = await selectBilling(tx, scope, input, { lock: true })
   const at = input.now()
   const issuedOn = await projectToday(tx, scope, () => at)()
+  // A period and the next charged before the selection, so the run invoices them, and the months of hire due by today (M14 of #293); the second of two runs finds them charged.
+  await mintRecurringCharges(tx, scope, input, input.newId)
+  await mintHireCharges(tx, scope, input, issuedOn, input.newId)
+  const selection = await selectBilling(tx, scope, input, { lock: true })
   // The project's terms and scheme, and each payer's own terms (#291 C4): a payer's invoice is due by its own where it has them.
   const [settings] = await tx.select({ terms: project.paymentTermsDays, scheme: project.paymentReferenceScheme }).from(project).where(and(eq(project.companyId, companyId), eq(project.id, projectId)))
   if (settings === undefined) throw new Error(`runBilling: project ${projectId} is not in company ${companyId}`)

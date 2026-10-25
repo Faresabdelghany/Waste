@@ -48,7 +48,7 @@ import { vatOf } from "@waste/domain/finance/money"
 import { priceOccurrence, type PriceLabels, type PriceRow, type PricingOutcome } from "@waste/domain/finance/pricing"
 import type { BillableEventKind, BlockReason, CancelReason } from "@waste/domain/finance/vocabulary"
 import type { AgreementStatus, CustomerKind } from "@waste/domain/registry/vocabulary"
-import { and, asc, eq, isNull, sql } from "drizzle-orm"
+import { and, asc, eq, inArray, isNull, sql } from "drizzle-orm"
 
 import type { Tx } from "../client"
 import type { IdMinter } from "../ids"
@@ -255,6 +255,14 @@ export function billableEventShapeIssue(row: ComposedEvent): string | undefined 
       if (row.subscriptionId === null || row.pickupId !== null || row.ticketId !== null || row.reversesEventId !== null) return "a recurring charge names its subscription and no pickup, no ticket and no reversal (billable_event_kind_shape)"
       if (row.createdBy !== null || row.sourceEventId !== null) return "a recurring charge is the billing run's: no person and no outbox event (billable_event_origin_shape)"
       return undefined
+    case "job":
+      if (row.pickupId === null || row.ticketId !== null || row.reversesEventId !== null) return "a work order's job names its stop and no ticket and no reversal (billable_event_kind_shape)"
+      break
+    case "hire":
+      // Its placement and container are the table's to hold (billable_event_kind_shape, billable_event_charge_shape), written beside the composed row.
+      if (row.subscriptionId === null || row.pickupId !== null || row.ticketId !== null || row.reversesEventId !== null) return "a hire names its subscription and no pickup, no ticket and no reversal (billable_event_kind_shape)"
+      if (row.createdBy !== null || row.sourceEventId !== null) return "a hire is the billing run's: no person and no outbox event (billable_event_origin_shape)"
+      return undefined
   }
   if ((row.createdBy === null) !== (row.sourceEventId !== null)) return "an event is a person's or the consumer's, never both and never neither (billable_event_origin_shape)"
   return undefined
@@ -333,8 +341,12 @@ export async function eventBySource(tx: Tx, companyId: string, sourceEventId: st
   return row
 }
 
+/** The kinds a stop's completion records: a pickup's charge, or a work order's job. */
+const STOP_EVENT_KINDS: BillableEventKind[] = ["pickup", "job"]
+
 /**
- * A pickup's live `pickup` event — not cancelled and not reversed: `ready`,
+ * A pickup's live event, its `pickup` charge or a work order's `job` (M14 of
+ * #293), whichever its completion recorded — not cancelled and not reversed: `ready`,
  * `blocked` or `invoiced` in the reading's words, since an invoiced event is
  * the one a correction reverses — under its row lock, so the consumer that
  * judges it and then stamps or reverses it does so against what it read: two
@@ -347,7 +359,7 @@ export async function eventBySource(tx: Tx, companyId: string, sourceEventId: st
 export async function liveEventOf(tx: Tx, companyId: string, pickup: { routeId: string; pickupId: string }): Promise<EventReading | undefined> {
   const { query, reversing } = eventsFrom(tx, companyId)
   const rows = await query
-    .where(and(eq(billableEvent.companyId, companyId), eq(billableEvent.kind, "pickup"), eq(billableEvent.routeId, pickup.routeId), eq(billableEvent.pickupId, pickup.pickupId), isNull(billableEvent.cancelledAt), isNull(reversing.id)))
+    .where(and(eq(billableEvent.companyId, companyId), inArray(billableEvent.kind, STOP_EVENT_KINDS), eq(billableEvent.routeId, pickup.routeId), eq(billableEvent.pickupId, pickup.pickupId), isNull(billableEvent.cancelledAt), isNull(reversing.id)))
     .orderBy(asc(billableEvent.id))
   const [live] = rows
   if (live === undefined) return undefined

@@ -40,9 +40,19 @@
 // the scheme and the container are left joins, since an ad-hoc route names
 // no scheme (no planning area, then) and an address-only stop no container
 // (no type, and no placement to read), so the event is judged and never a
-// dead letter; the domain records nothing for an office stop.
-import type { PlacementFacts, PickupEventFacts, TicketChargeFacts, TicketCompletedFacts } from "@waste/domain/finance/from-event"
-import type { PickupOrigin, PickupOutcome } from "@waste/domain/execution/vocabulary"
+// dead letter; the domain records nothing for an office stop but a work
+// order's job (M14 of #293). For that the stop's `service` and whether a
+// ticket booked it (O3c of #290) are read with it, and, where the project
+// names a product for the service (`work_order_product`) and no ticket booked
+// the stop, the agreement it charges: a delivery's through the subscription
+// it books, a removal's and a swap's through the container's latest placement
+// to begin by the service date — the one it takes away, which the
+// completion's return has ended on that day — and a repair's or a wash's
+// through the placement in force that day; with the list it is priced under
+// on the service date and its rows. An office stop's own placement is never
+// read for a pickup's price, since the domain charges it nothing but a job.
+import type { JobChargeFacts, PlacementFacts, PickupEventFacts, TicketChargeFacts, TicketCompletedFacts } from "@waste/domain/finance/from-event"
+import { isWorkOrderService, type PickupOrigin, type PickupOutcome, type PickupService } from "@waste/domain/execution/vocabulary"
 import type { AgreementStatus, CustomerKind, ProductStatus, ProductUnit } from "@waste/domain/registry/vocabulary"
 import type { TicketResolution } from "@waste/domain/resolution/vocabulary"
 import type { Tx } from "@waste/db/client"
@@ -57,10 +67,10 @@ import { product } from "@waste/db/schema/catalogue"
 import { container, containerServicePlacement } from "@waste/db/schema/containers"
 import { customer } from "@waste/db/schema/customers"
 import { pickup, route } from "@waste/db/schema/execution"
-import { ticketKindProduct } from "@waste/db/schema/finance"
+import { ticketKindProduct, workOrderProduct } from "@waste/db/schema/finance"
 import { ticket } from "@waste/db/schema/resolution"
 import { routeScheme } from "@waste/db/schema/route-schemes"
-import { and, eq } from "drizzle-orm"
+import { and, desc, eq, lte } from "drizzle-orm"
 
 /** A pickup as the consumer read it: the row the event names, with its route's identity day and scheme, its container's type, who put it there, and its status now. */
 export type PickupRow = {
@@ -75,6 +85,12 @@ export type PickupRow = {
   origin: PickupOrigin
   wasteFractionId: string
   status: string
+  /** An emptying, or the office's work order (O3 of #290). */
+  service: PickupService
+  /** The subscription a delivery books; null for every other service. */
+  subscriptionId: string | null
+  /** Whether a ticket booked the stop to answer it (O3c of #290). */
+  bookedForTicket: boolean
 }
 
 /** Whether the read takes the pickup's row lock first: the consumer's own event does, so two Finance events of one pickup take turns; a ticket's read of its pickup does not. */
@@ -104,14 +120,21 @@ export async function pickupRow(tx: Tx, companyId: string, routeId: string, pick
       origin: pickup.origin,
       wasteFractionId: pickup.wasteFractionId,
       status: pickup.status,
+      service: pickup.service,
+      subscriptionId: pickup.subscriptionId,
+      bookingTicketId: ticket.id,
     })
     .from(pickup)
     .innerJoin(route, and(eq(route.companyId, pickup.companyId), eq(route.id, pickup.routeId)))
     .leftJoin(routeScheme, and(eq(routeScheme.companyId, route.companyId), eq(routeScheme.id, route.routeSchemeId)))
     .leftJoin(container, and(eq(container.companyId, pickup.companyId), eq(container.id, pickup.containerId)))
+    // One ticket at most books a stop (`ticket_booked_pickup_id_key`).
+    .leftJoin(ticket, and(eq(ticket.companyId, pickup.companyId), eq(ticket.bookedRouteId, pickup.routeId), eq(ticket.bookedPickupId, pickup.id)))
     .where(and(eq(pickup.companyId, companyId), eq(pickup.routeId, routeId), eq(pickup.id, pickupId)))
     .limit(1)
-  return row === undefined ? undefined : { ...row, origin: row.origin as PickupOrigin }
+  if (row === undefined) return undefined
+  const { bookingTicketId, ...stop } = row
+  return { ...stop, origin: row.origin as PickupOrigin, service: row.service as PickupService, bookedForTicket: bookingTicketId !== null }
 }
 
 /** The placement as read, before the list: what the domain's `PlacementFacts` carries less the list, plus the list the agreement names (null for the project's default), which the next read needs. */
@@ -171,18 +194,21 @@ const liveFacts = (live: EventReading): PickupEventFacts["liveEvent"] => ({
  * correction needs the row and not the domain's plain view of it.
  */
 export async function pickupFacts(tx: Tx, companyId: string, kind: PickupEventFacts["kind"], found: PickupRow, pickupId: string): Promise<{ facts: PickupEventFacts; live: EventReading | undefined }> {
-  // An address-only stop has no container and so no placement: the domain judges it on its origin alone.
-  const placement = found.containerId === null ? undefined : await placementOn(tx, companyId, found.projectId, found.containerId, found.serviceDate)
+  // An address-only stop has no container and so no placement, and an office stop is a job or nothing: the domain judges either on its origin alone.
+  const placement = found.containerId === null || found.origin === "office" ? undefined : await placementOn(tx, companyId, found.projectId, found.containerId, found.serviceDate)
   let priced: PlacementFacts | null = null
   if (placement !== undefined) {
     const { priceListId, ...facts } = placement
-    // A month product records nothing, and a draft agreement blocks before any list is read (`priceOccurrence`); the list is read where a price could come of it.
-    const list = facts.product.unit === "month" || facts.agreement.status === "draft" ? undefined : await listInForce(tx, { companyId, projectId: found.projectId }, priceListId, found.serviceDate)
+    // A month or a day product records nothing, and a draft agreement blocks before any list is read (`priceOccurrence`); the list is read where a price could come of it.
+    const list = facts.product.unit === "month" || facts.product.unit === "day" || facts.agreement.status === "draft" ? undefined : await listInForce(tx, { companyId, projectId: found.projectId }, priceListId, found.serviceDate)
     priced = { ...facts, priceList: list === undefined ? null : { id: list.id, currency: list.currency, rows: await rowsOn(tx, companyId, list.id, facts.product.id, found.serviceDate) } }
   }
   const live = await liveEventOf(tx, companyId, { routeId: found.routeId, pickupId })
   return {
     facts: {
+      service: found.service,
+      bookedForTicket: found.bookedForTicket,
+      job: await jobFacts(tx, companyId, found),
       kind,
       routeId: found.routeId,
       pickupId,
@@ -197,6 +223,61 @@ export async function pickupFacts(tx: Tx, companyId: string, kind: PickupEventFa
     },
     live,
   }
+}
+
+/**
+ * A work order's charge (M14 of #293): the project's product for the stop's
+ * service, and the agreement it charges with its pricing; null for an
+ * emptying, a stop a ticket booked — the ticket's charge is the one — and a
+ * service the project names no product for, none of which the domain charges.
+ */
+async function jobFacts(tx: Tx, companyId: string, found: PickupRow): Promise<JobChargeFacts | null> {
+  if (found.origin !== "office" || !isWorkOrderService(found.service) || found.bookedForTicket || found.containerId === null) return null
+  const scope = { companyId, projectId: found.projectId }
+  const [named] = await tx
+    .select({ id: product.id, status: product.status, unit: product.unit, vatPercent: product.vatPercent })
+    .from(workOrderProduct)
+    .innerJoin(product, and(eq(product.companyId, workOrderProduct.companyId), eq(product.id, workOrderProduct.productId)))
+    .where(and(eq(workOrderProduct.companyId, companyId), eq(workOrderProduct.projectId, found.projectId), eq(workOrderProduct.service, found.service)))
+    .limit(1)
+  if (named === undefined) return null
+  const jobProduct = { id: named.id, status: named.status as ProductStatus, unit: named.unit as ProductUnit, vatPercent: named.vatPercent }
+  const subscriptionId = found.service === "deliver" ? found.subscriptionId : await placedUnder(tx, scope, found.containerId, found.serviceDate, found.service === "remove" || found.service === "swap")
+  const [served] =
+    subscriptionId === null
+      ? []
+      : await tx
+          .select({ agreementId: subscription.agreementId })
+          .from(subscription)
+          .where(and(eq(subscription.companyId, companyId), eq(subscription.projectId, found.projectId), eq(subscription.id, subscriptionId)))
+          .limit(1)
+  const facts = served === undefined ? undefined : await agreementFacts(tx, scope, served.agreementId)
+  if (facts === undefined) return { product: jobProduct, agreement: null, subscriptionId: null, priceList: null }
+  const list = facts.status === "draft" ? undefined : await listInForce(tx, scope, facts.priceListId, found.serviceDate)
+  return {
+    product: jobProduct,
+    agreement: { id: facts.id, status: facts.status, customerKind: facts.customerKind, customerId: facts.customerId },
+    subscriptionId,
+    priceList: list === undefined ? null : { id: list.id, currency: list.currency, rows: await rowsOn(tx, companyId, list.id, jobProduct.id, found.serviceDate) },
+  }
+}
+
+/** The subscription a container stood under for a work order on the day: the placement in force, or for a removal or a swap its latest to begin by the day, ended or not. Null where none is. */
+async function placedUnder(tx: Tx, scope: { companyId: string; projectId: string }, containerId: string, day: string, latest: boolean): Promise<string | null> {
+  const [placed] = await tx
+    .select({ subscriptionId: containerServicePlacement.subscriptionId })
+    .from(containerServicePlacement)
+    .where(
+      and(
+        eq(containerServicePlacement.companyId, scope.companyId),
+        eq(containerServicePlacement.projectId, scope.projectId),
+        eq(containerServicePlacement.containerId, containerId),
+        latest ? lte(containerServicePlacement.validFrom, day) : validOn(containerServicePlacement, day),
+      ),
+    )
+    .orderBy(desc(containerServicePlacement.validFrom))
+    .limit(1)
+  return placed?.subscriptionId ?? null
 }
 
 /** A ticket as the consumer read it: its project and kind, what it ended in, when it closed, the agreement and pickup it names, and the product its completion named. */

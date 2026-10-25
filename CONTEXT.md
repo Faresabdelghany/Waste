@@ -270,6 +270,18 @@ _Avoid_: Deadline, response time, ticket type
 A validated occurrence that is eligible to become an invoice line.
 _Avoid_: Invoice line, route event
 
+**Work Order Charge**:
+The Product a Project bills each Work Order's service at — a delivery, a removal, a swap, a repair, a wash — charged when the Work Order is done, to the container's Agreement, a delivery's through the Subscription it books. A service the Project names no Product for is charged nothing, and a Work Order booked to answer a Ticket never is: the Ticket's charge is the one.
+_Avoid_: Service fee, job price
+
+**Hire**:
+What a Subscription to a Product sold by the day charges each of its containers: the days it stands on site, from the day it is delivered to the day it is taken back, by calendar month in arrears, each placement's Free Days not charged. A pause of the Subscription does not stop a Hire, since the container still stands there.
+_Avoid_: Rental (a Product sold by the month is a recurring charge), demurrage
+
+**Free Days**:
+A Hire Product's first days of each placement on site, charged nothing, counted from the delivery across the months.
+_Avoid_: Grace period
+
 **Billing Run**:
 A controlled batch that converts eligible billable events into invoices.
 _Avoid_: Invoice, settlement
