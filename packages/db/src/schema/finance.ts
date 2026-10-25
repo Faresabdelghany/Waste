@@ -89,12 +89,13 @@
 // project's set (`PUT /ticket-charges`). Not effective-dated: the consumer
 // reads it when the ticket's completion arrives, and an event recorded keeps
 // the product it was priced at.
+import type { InvoiceParties } from "@waste/domain/finance/invoice-document"
 import { PAYMENT_REFERENCE_PATTERN } from "@waste/domain/finance/payment"
 import { BILLABLE_EVENT_KINDS, BILLING_RUN_STATUSES, BLOCK_REASONS, CANCEL_REASONS, CREDIT_REASONS, EXCLUSION_REASONS, INDEX_BASES, INVOICE_KINDS, SETTLEMENT_EVENT_KINDS, SETTLEMENT_STATUSES, WEIGHT_REVIEW_DECISIONS } from "@waste/domain/finance/vocabulary"
 import { CUSTOMER_KINDS } from "@waste/domain/registry/vocabulary"
 import { TICKET_KINDS } from "@waste/domain/resolution/vocabulary"
 import { sql } from "drizzle-orm"
-import { bigint, boolean, check, date, index, integer, text, timestamp, unique, uniqueIndex, uuid } from "drizzle-orm/pg-core"
+import { bigint, boolean, check, date, index, integer, jsonb, text, timestamp, unique, uniqueIndex, uuid } from "drizzle-orm/pg-core"
 
 import { tableObjectName } from "../names"
 import { userAccount } from "./access"
@@ -546,6 +547,8 @@ export const invoice = wms.table(
     issuedBy: uuid(),
     /** The payment reference the payer quotes (#291 C4), frozen at issue from the number under the project's scheme; null under none, and on a credit note. */
     paymentReference: text(),
+    /** The seller and the payer as they stood at issue (#291 C5), the parties its document prints whatever either is called later; an invoice issued before C5 took them as they stood when its migration ran. */
+    parties: jsonb().$type<InvoiceParties>().notNull(),
   },
   (t) => [
     companyReference(t, company),
@@ -569,9 +572,11 @@ export const invoice = wms.table(
     ),
     // A credit note does not credit itself; a null passes.
     check(tableObjectName(t.id.table, "credits_shape", "invoice"), sql`${t.creditsInvoiceId} <> ${t.id}`),
-    // The gross is the net and the VAT, and a credit note's net is zero or less. An invoice's net is not held to a sign: a payer whose period holds reversals alone, or more reversals than lines, is invoiced a negative net rather than failing the run.
     // A reference is FIK 71's fifteen digits or FIK 75's sixteen, and an invoice's alone: a credit note is paid by nobody.
     check(tableObjectName(t.id.table, "payment_reference_shape", "invoice"), sql`${t.paymentReference} is null or (${t.kind} = 'invoice' and ${t.paymentReference} ~ ${sql.raw(`'${PAYMENT_REFERENCE_PATTERN}'`)})`),
+    // The parties are a seller and a buyer, each an object: `is not distinct from`, since a party missing types as null and a null check passes.
+    check(tableObjectName(t.id.table, "parties_shape", "invoice"), sql`jsonb_typeof(${t.parties} -> 'seller') is not distinct from 'object' and jsonb_typeof(${t.parties} -> 'buyer') is not distinct from 'object'`),
+    // The gross is the net and the VAT, and a credit note's net is zero or less. An invoice's net is not held to a sign: a payer whose period holds reversals alone, or more reversals than lines, is invoiced a negative net rather than failing the run.
     check(tableObjectName(t.id.table, "totals_shape", "invoice"), sql`${t.grossMinor} = ${t.netMinor} + ${t.vatMinor} and (${t.kind} <> 'credit-note' or ${t.netMinor} <= 0)`),
     tenantIndex(t, t.customerId),
     tenantIndex(t, t.billingRunId),

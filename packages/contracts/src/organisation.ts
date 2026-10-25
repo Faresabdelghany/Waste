@@ -45,7 +45,7 @@ import * as z from "zod"
 import { Bic, DEFAULT_PAYMENT_TERMS_DAYS, FikCreditorNumber, Iban, PaymentReferenceScheme, PaymentTermsDays, VatNumber } from "./finance"
 import { ServiceDays } from "./planning"
 import { changesSomething, somethingToChange, stamped } from "./resource"
-import { Label } from "./text"
+import { Label, Paragraph } from "./text"
 
 /** A company's status: onboarding until its first project runs. */
 export const CompanyStatus = z.enum(["active", "onboarding"])
@@ -90,6 +90,8 @@ export const Company = z.object({
   bankBic: Bic.nullable(),
   /** The creditor number a FI card names: what a project's FIK scheme needs. */
   fikCreditorNumber: FikCreditorNumber.nullable(),
+  /** Where the company is written to (#291 C5), its lines by newlines: the seller's address an invoice prints; null until set. */
+  postalAddress: Paragraph.nullable(),
 })
 export type Company = z.infer<typeof Company>
 
@@ -106,6 +108,8 @@ export const CompanyPatch = z
     bankBic: Bic.nullable().optional(),
     /** Null clears it, which a project charging by a FI card refuses. */
     fikCreditorNumber: FikCreditorNumber.nullable().optional(),
+    /** Null clears it. */
+    postalAddress: Paragraph.nullable().optional(),
   })
   .refine(changesSomething, somethingToChange)
 export type CompanyPatch = z.infer<typeof CompanyPatch>

@@ -67,6 +67,8 @@ import { planningArea } from "../schema/planning-areas"
 import { ticket } from "../schema/resolution"
 import { collectionGroup, routeScheme } from "../schema/route-schemes"
 import { triggersOf } from "../sql/audit-trail"
+import { INVOICE_PARTIES_OBJECT } from "../sql/invoice-parties"
+import { partiesAt } from "../commands/invoice-writes"
 import { withCompany } from "../tenant"
 import { databaseUnderTest, freshDatabase, type FreshDatabase } from "./database"
 import { refusedWith, rolledBack, rolledBackIn } from "./specimen"
@@ -230,7 +232,7 @@ async function seed(tx: Tx, n: "a" | "b"): Promise<void> {
   await tx.insert(billableEvent).values({ id: own.event, ...scoped, kind: "pickup", serviceDate: DAY, agreementId: own.agreement, subscriptionId: own.subscription, productId: own.product, quantity: 1, ...PRICE, priceListRowId: own.priceListRow, routeId: own.route, pickupId: own.pickup, sourceEventId: own.outbox })
   await tx.insert(billingRun).values({ id: own.run, ...scoped, periodFrom: "2026-10-01", periodTo: "2026-10-31", status: "completed", requestedBy: own.account, completedAt: at(16), eventCount: 1, invoiceCount: 1, excludedCustomerCount: 1, netMinor: PRICE.netMinor, vatMinor: PRICE.vatMinor })
   await tx.insert(billingRunExclusion).values({ id: own.exclusion, ...scoped, billingRunId: own.run, customerId: own.secondCustomer, reason: "all-events-blocked", eventCount: 1 })
-  await tx.insert(invoice).values({ id: own.invoice, ...scoped, number: n === "a" ? 1000 : 1001, kind: "invoice", customerId: own.customer, currency: "DKK", issuedOn: "2026-11-01", dueOn: "2026-12-01", periodFrom: "2026-10-01", periodTo: "2026-10-31", billingRunId: own.run, netMinor: PRICE.netMinor, vatMinor: PRICE.vatMinor, grossMinor: PRICE.netMinor + PRICE.vatMinor, issuedBy: own.account })
+  await tx.insert(invoice).values({ id: own.invoice, ...scoped, number: n === "a" ? 1000 : 1001, kind: "invoice", customerId: own.customer, currency: "DKK", issuedOn: "2026-11-01", dueOn: "2026-12-01", periodFrom: "2026-10-01", periodTo: "2026-10-31", billingRunId: own.run, netMinor: PRICE.netMinor, vatMinor: PRICE.vatMinor, grossMinor: PRICE.netMinor + PRICE.vatMinor, issuedBy: own.account, parties: PARTIES })
   await tx.insert(invoiceLine).values({ id: own.line, ...scoped, invoiceId: own.invoice, position: 1, billableEventId: own.event, description: `Restaffald 240 L · ${DAY}`, productId: own.product, serviceDate: DAY, quantity: 1, unitPriceMinor: PRICE.unitPriceMinor, netMinor: PRICE.netMinor, vatPercent: PRICE.vatPercent, vatMinor: PRICE.vatMinor })
   await tx.insert(settlement).values({ id: own.settlement, ...scoped, validFrom: "2026-10-01", validTo: "2026-11-01", serviceAreaAssignmentId: own.assignment, status: "calculated", currency: "DKK", calculatedAt: at(17), lineCount: 1, netMinor: 8_000 })
   await tx.insert(settlementLine).values({ id: own.settlementLine, ...scoped, settlementId: own.settlement, billableEventId: own.event, serviceProviderPriceId: own.providerPrice, quantity: 1, unitPriceMinor: 8_000, netMinor: 8_000 })
@@ -256,7 +258,7 @@ async function seedHarbor(tx: Tx): Promise<void> {
   await tx.insert(serviceArea).values({ id: a.harborServiceArea, ...scoped, validFrom: OPENED, code: "CA-H-1", name: "Havnen", boundaryText: "The harbour" })
   await tx.insert(serviceAreaAssignment).values({ id: a.harborAssignment, ...scoped, validFrom: OPENED, serviceAreaId: a.harborServiceArea, serviceProviderId: a.serviceProvider })
   await tx.insert(billingRun).values({ id: a.harborRun, ...scoped, periodFrom: "2026-10-01", periodTo: "2026-10-31", status: "completed", completedAt: at(16) })
-  await tx.insert(invoice).values({ id: a.harborInvoice, ...scoped, number: 1500, kind: "invoice", customerId: a.customer, currency: "DKK", issuedOn: "2026-11-01", dueOn: "2026-12-01", periodFrom: "2026-10-01", periodTo: "2026-10-31", billingRunId: a.harborRun, netMinor: 0, vatMinor: 0, grossMinor: 0 })
+  await tx.insert(invoice).values({ id: a.harborInvoice, ...scoped, number: 1500, kind: "invoice", customerId: a.customer, currency: "DKK", issuedOn: "2026-11-01", dueOn: "2026-12-01", periodFrom: "2026-10-01", periodTo: "2026-10-31", billingRunId: a.harborRun, netMinor: 0, vatMinor: 0, grossMinor: 0, parties: PARTIES })
   await tx.insert(unload).values({ id: a.harborUnload, ...scoped, routeId: a.harborRoute, unloadingStationId: a.station, wasteFractionId: a.wasteFraction, source: "dispatch", occurredAt: at(12), recordedBy: a.account, netKg: 1_000 })
 }
 
@@ -290,7 +292,11 @@ const row = (values: Partial<typeof priceListRow.$inferInsert>): typeof priceLis
 })
 
 /** A sound credit note against company a's invoice, but for what a test overrides. */
+/** The parties a hand-written invoice row freezes (#291 C5); `issueInvoice` reads them from the company and the payer. */
+const PARTIES = { seller: { legalName: "Test Renovation A/S", registrationNumber: "12345678", vatNumber: null, postalAddress: null, bankIban: null, bankBic: null, fikCreditorNumber: null }, buyer: { name: "Test Customer", registrationNumber: null, billingAddress: null } }
+
 const creditNote = (values: Partial<typeof invoice.$inferInsert>): typeof invoice.$inferInsert => ({
+  parties: PARTIES,
   id: a.spare,
   companyId: a.company,
   projectId: a.project,
@@ -792,6 +798,23 @@ describe("the Finance & Contracting tables against a fresh database", { skip: da
       await refused(invoiceSet(a.invoice, { paymentReference: "+71<000000260071882" }), /invoice_payment_reference_shape/, "the printed line is no reference")
       await tx.update(invoice).set({ paymentReference: "000000000010006" }).where(eq(invoice.id, a.invoice))
       await assert.rejects(tx.transaction((savepoint) => savepoint.insert(invoice).values(creditNote({ id: a.other, number: 1100, paymentReference: "000000000011006" }))), refusedWith("23514", /invoice_payment_reference_shape/), "a credit note is paid by nobody")
+    }))
+
+  test("an invoice's parties (#291 C5): the writer's TypeScript and the backfill's SQL read one object from the company and the payer, the shape check refuses a party missing, and the column refuses none", () =>
+    seeded(async (tx) => {
+      await tx.update(company).set({ vatNumber: "DK12345678", postalAddress: "Havnegade 4\n2100 København Ø" }).where(eq(company.id, a.company))
+      await tx.update(customer).set({ billingAddress: "Nørrebrogade 1\n2200 København N" }).where(eq(customer.id, a.customer))
+      const written = await partiesAt(tx, a.company, a.customer)
+      const [backfilled] = await tx.execute<{ parties: unknown }>(
+        sql`select ${sql.raw(INVOICE_PARTIES_OBJECT)} as parties from wms.company as c, wms.customer as cu where c.id = ${a.company} and cu.company_id = c.id and cu.id = ${a.customer}`,
+      )
+      assert.deepEqual(backfilled.parties, written, "the two spellings of the parties are one object")
+      assert.equal(written.seller.postalAddress, "Havnegade 4\n2100 København Ø")
+      assert.equal(written.buyer.billingAddress, "Nørrebrogade 1\n2200 København N")
+
+      const partiesSet = (values: Partial<typeof invoice.$inferInsert>) => (savepoint: Tx) => savepoint.update(invoice).set(values).where(eq(invoice.id, a.invoice))
+      await assert.rejects(tx.transaction((savepoint) => partiesSet({ parties: { seller: written.seller } as never })(savepoint)), refusedWith("23514", /invoice_parties_shape/), "a buyer missing")
+      await assert.rejects(tx.transaction((savepoint) => partiesSet({ parties: null as never })(savepoint)), refusedWith("23502", /parties/), "no parties at all")
     }))
 
   test("the domain's vatOf agrees with the two _vat_shape checks over odd amounts of both signs: every row the domain computed lands, and an øre off is refused", () =>

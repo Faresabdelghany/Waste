@@ -42,7 +42,7 @@ const organisationFixtures = fixturesOf("organization")
 const context = (fixtures: readonly BusinessRecord[], resolve: Resolver = NOTHING_RESOLVED): MappingContext => ({ fixtures, resolve, companyRecordId: FIXTURE_COMPANY_ID, now: NOW })
 
 // The seeded demo company as the API answers it (packages/db/src/seed).
-const company: Company = { id: "01a0d2a4-a280-7001-8000-000000000001", ...STAMPS, name: "Kystbyen Renovation", legalName: "Kystbyen Renovation A/S", registrationNumber: "12345678", country: "DK", status: "active", vatNumber: null, bankIban: null, bankBic: null, fikCreditorNumber: null }
+const company: Company = { id: "01a0d2a4-a280-7001-8000-000000000001", ...STAMPS, name: "Kystbyen Renovation", legalName: "Kystbyen Renovation A/S", registrationNumber: "12345678", country: "DK", status: "active", vatNumber: null, bankIban: null, bankBic: null, fikCreditorNumber: null, postalAddress: null }
 const copenhagen: Project = { id: "01a0d2a4-a280-7002-8000-000000000001", ...STAMPS, name: "Copenhagen Central", kind: "Municipality", language: "da", currency: "DKK", timezone: "Europe/Copenhagen", status: "active", weekend: ["saturday", "sunday"], holidayList: "Danish public holidays", publicSlug: null, paymentTermsDays: 30, paymentReferenceScheme: "none" }
 const harbor: Project = { ...copenhagen, id: "01a0d2a4-a280-7002-8000-000000000002", name: "Harbor Commercial", kind: "Business unit", status: "onboarding", holidayList: null }
 

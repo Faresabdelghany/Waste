@@ -26,12 +26,24 @@ const PRODUCT = "01a0d3a5-e5e0-7000-8000-000000000007"
 const STAMP = new Date("2026-10-05T12:00:00Z")
 const ISSUED = new Date("2026-10-05T12:00:01Z")
 
-type Statement = { kind: "update" | "insert"; table: string; values?: Record<string, unknown> | Record<string, unknown>[] }
+type Statement = { kind: "update" | "insert" | "select"; table: string; values?: Record<string, unknown> | Record<string, unknown>[] }
 
-/** A `tx` that records each statement by kind and table, answering the counter and every insert with the rows as inserted. */
+/** The company and the payer as the parties' two reads answer them (#291 C5). */
+const SELLER = { legalName: "Kystbyen Renovation A/S", registrationNumber: "12345678", vatNumber: "DK12345678", postalAddress: "Havnegade 4\n2100 København Ø", bankIban: null, bankBic: null, fikCreditorNumber: null }
+const BUYER = { name: "Østerbro Housing", registrationNumber: "38112009", billingAddress: null }
+
+/** A `tx` that records each statement by kind and table, answering the counter, the parties' reads, and every insert with the rows as inserted. */
 const scripted = () => {
   const statements: Statement[] = []
   const tx = {
+    select: () => ({
+      from: (table: Table) => ({
+        where: () => {
+          statements.push({ kind: "select", table: getTableName(table) })
+          return Promise.resolve([getTableName(table) === "company" ? SELLER : BUYER])
+        },
+      }),
+    }),
     update: (table: Table) => ({
       set: (values: Record<string, unknown>) => ({
         where: () => {
@@ -78,13 +90,13 @@ const line = (billableEventId: string, quantity: number, unitPriceMinor: number,
 }
 
 describe("issueInvoice", () => {
-  test("takes the number from the counter, writes the row with its totals, the lines 1..n in the order given, and emits invoice-issued last with the detail as its payload", async () => {
+  test("takes the number from the counter, reads the parties, writes the row with its totals and its parties frozen, the lines 1..n in the order given, and emits invoice-issued last with the detail as its payload", async () => {
     const { tx, statements } = scripted()
     const lines = [line(EVENT_A, 2, 10_000), line(EVENT_B, 1, 10_000, -1)]
     const detail = await issueInvoice(tx, { companyId: COMPANY, draft, lines, newId: minter(), now: () => ISSUED })
-    assert.deepEqual(shape(statements), ["update company", "insert invoice", "insert invoice_line", "insert outbox_event"])
+    assert.deepEqual(shape(statements), ["update company", "select company", "select customer", "insert invoice", "insert invoice_line", "insert outbox_event"])
 
-    const [counter, row, written, outbox] = statements
+    const [counter, , , row, written, outbox] = statements
     const counterValues = counter.values as Record<string, unknown>
     assert.ok(counterValues.nextInvoiceNumber !== undefined && typeof counterValues.nextInvoiceNumber !== "number", "the counter steps in the database, as an expression over its own column")
     assert.deepEqual([detail.number, detail.label, detail.kind], [26_007_188, "INV-26007188", "invoice"], "the number taken is the one the counter had, not the one it has now")
@@ -92,6 +104,7 @@ describe("issueInvoice", () => {
     assert.deepEqual([rowValues.companyId, rowValues.projectId, rowValues.customerId, rowValues.billingRunId, rowValues.issuedBy], [COMPANY, PROJECT, HOUSING, RUN, OLIVIA])
     assert.deepEqual([rowValues.netMinor, rowValues.vatMinor, rowValues.grossMinor], [10_000, 2_500, 12_500], "the totals are the lines' sums, a negative line taken off")
     assert.equal(rowValues.id, detail.id)
+    assert.deepEqual(rowValues.parties, { seller: SELLER, buyer: BUYER }, "the seller and the payer as they stand, frozen on the row (#291 C5)")
 
     const writtenLines = written.values as Record<string, unknown>[]
     assert.deepEqual(writtenLines.map((values) => [values.invoiceId, values.position, values.billableEventId, values.netMinor]), [[detail.id, 1, EVENT_A, 20_000], [detail.id, 2, EVENT_B, -10_000]], "the lines name the row just written, positioned in the order given")

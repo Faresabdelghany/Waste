@@ -27,13 +27,17 @@
 // refusal here is its backstop — a `Refused` 409 the API's error handler
 // answers as such.
 import type { InvoiceDetail } from "@waste/contracts/invoices"
+import type { InvoiceParties } from "@waste/domain/finance/invoice-document"
 import { vatOf } from "@waste/domain/finance/money"
 import { paymentReference } from "@waste/domain/finance/payment"
 import type { CreditReason, InvoiceKind, PaymentReferenceScheme } from "@waste/domain/finance/vocabulary"
+import { and, eq } from "drizzle-orm"
 
 import type { Tx } from "../client"
 import type { IdMinter } from "../ids"
+import { customer } from "../schema/customers"
 import { invoice, invoiceLine } from "../schema/finance"
+import { company } from "../schema/organisation"
 import { invoiceColumns, invoiceOf, lineColumns, lineOf } from "./billing-shapes"
 import { emit } from "./outbox"
 import { nextNumber, refuseDuplicate } from "./shared"
@@ -110,7 +114,8 @@ export type IssueInvoiceInput = {
  * Issues one document: the lines' shapes checked, the number taken, the row
  * written with its totals summed from the lines and its payment reference
  * frozen from the number under the draft's scheme (#291 C4) — the number is the
- * company's one series, so the reference is too — the lines written 1..n in
+ * company's one series, so the reference is too — and its parties frozen as
+ * they stand (#291 C5, `partiesAt`), the lines written 1..n in
  * the order given, the `invoice-issued` event emitted with the detail as the
  * read answers it — in the caller's transaction, so a refusal anywhere leaves
  * nothing behind, the counter's step included. Answers that detail, which is
@@ -127,9 +132,10 @@ export async function issueInvoice(tx: Tx, input: IssueInvoiceInput): Promise<In
   const vatMinor = lines.reduce((sum, line) => sum + line.vatMinor, 0)
   const number = await nextNumber(tx, companyId, "nextInvoiceNumber")
   const { paymentReferenceScheme, ...columns } = draft
+  const parties = await partiesAt(tx, companyId, draft.customerId)
   const [row] = await tx
     .insert(invoice)
-    .values({ id: input.newId(), companyId, ...columns, number, netMinor, vatMinor, grossMinor: netMinor + vatMinor, paymentReference: draft.kind === "invoice" ? paymentReference(paymentReferenceScheme, number) : null })
+    .values({ id: input.newId(), companyId, ...columns, number, netMinor, vatMinor, grossMinor: netMinor + vatMinor, paymentReference: draft.kind === "invoice" ? paymentReference(paymentReferenceScheme, number) : null, parties })
     .returning(invoiceColumns)
   const written = await refuseDuplicate({ [EVENT_ON_ONE_LINE]: INVOICED_BY_ANOTHER_RUN }, () =>
     tx
@@ -140,4 +146,31 @@ export async function issueInvoice(tx: Tx, input: IssueInvoiceInput): Promise<In
   const detail: InvoiceDetail = { ...invoiceOf(row), lines: written.sort((a, b) => a.position - b.position).map(lineOf), creditNotes: [] }
   await emit(tx, { companyId }, { aggregate: "invoice", aggregateId: row.id, kind: "invoice-issued", payload: detail, projectId: draft.projectId, occurredAt: input.now() })
   return detail
+}
+
+/**
+ * The seller and the payer as they stand, the parties a document freezes at
+ * issue (#291 C5): the company's legal identity and invoice identity, and the
+ * customer's name, registration and billing address — `INVOICE_PARTIES_OBJECT`
+ * (src/sql/invoice-parties.ts) in TypeScript, which finance.test.ts holds equal.
+ */
+export async function partiesAt(tx: Tx, companyId: string, customerId: string): Promise<InvoiceParties> {
+  const [seller] = await tx
+    .select({
+      legalName: company.legalName,
+      registrationNumber: company.registrationNumber,
+      vatNumber: company.vatNumber,
+      postalAddress: company.postalAddress,
+      bankIban: company.bankIban,
+      bankBic: company.bankBic,
+      fikCreditorNumber: company.fikCreditorNumber,
+    })
+    .from(company)
+    .where(eq(company.id, companyId))
+  const [buyer] = await tx
+    .select({ name: customer.name, registrationNumber: customer.registrationNumber, billingAddress: customer.billingAddress })
+    .from(customer)
+    .where(and(eq(customer.companyId, companyId), eq(customer.id, customerId)))
+  if (seller === undefined || buyer === undefined) throw new Error(`partiesAt: no company ${companyId} or no customer ${customerId} of it`)
+  return { seller, buyer }
 }

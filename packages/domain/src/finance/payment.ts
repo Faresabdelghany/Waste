@@ -80,6 +80,12 @@ export function paymentReference(scheme: PaymentReferenceScheme, documentNumber:
   return `${padded}${modulus10(padded)}`
 }
 
+/** The FIK scheme a frozen reference was issued under, by its length; null for anything no scheme makes. */
+export function fikSchemeOf(reference: string): Exclude<PaymentReferenceScheme, "none"> | null {
+  if (!new RegExp(PAYMENT_REFERENCE_PATTERN).test(reference)) return null
+  return reference.length === REFERENCE_LENGTH["fik-71"] ? "fik-71" : reference.length === REFERENCE_LENGTH["fik-75"] ? "fik-75" : null
+}
+
 /** The FIK line a document prints: the card's type, the reference and the creditor's number; null under none. */
 export function fikLine(scheme: PaymentReferenceScheme, reference: string | null, creditorNumber: string): string | null {
   if (scheme === "none" || reference === null) return null

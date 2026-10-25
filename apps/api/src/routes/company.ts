@@ -38,6 +38,7 @@ const columns = {
   bankIban: company.bankIban,
   bankBic: company.bankBic,
   fikCreditorNumber: company.fikCreditorNumber,
+  postalAddress: company.postalAddress,
   createdAt: company.createdAt,
   updatedAt: company.updatedAt,
 }
@@ -57,6 +58,7 @@ function companyOf(row: Row): Company {
     bankIban: row.bankIban,
     bankBic: row.bankBic,
     fikCreditorNumber: row.fikCreditorNumber,
+    postalAddress: row.postalAddress,
     ...stampsOf(row),
   }
 }
@@ -102,7 +104,7 @@ export function companyRoutes(guard: MiddlewareHandler<AuthEnv>) {
         operationId: "patchCompany",
         summary: "Change the caller's company",
         description:
-          "Changes the names, the registration number or the country of the caller's own company, or its invoice identity (#291 C4): the VAT registration, the IBAN and the BIC, and the FIK creditor number a FI card names — each by its shape, null clearing it. Every field is optional and at least one must be given. The creditor number is not cleared while a project references its invoices by a FI card (409, `Project Copenhagen Central references its invoices by a FI card, which names the creditor number; set its scheme to none first`), under the company's row lock, which a project's patch to a FI card's scheme takes too. The status is not here: onboarding to active is an operator's act.",
+          "Changes the names, the registration number or the country of the caller's own company, or its invoice identity (#291 C4): the VAT registration, the IBAN and the BIC, and the FIK creditor number a FI card names — each by its shape, null clearing it — and its postal address, the seller's address an invoice prints (#291 C5). Every field is optional and at least one must be given. The creditor number is not cleared while a project references its invoices by a FI card (409, `Project Copenhagen Central references its invoices by a FI card, which names the creditor number; set its scheme to none first`), under the company's row lock, which a project's patch to a FI card's scheme takes too. The status is not here: onboarding to active is an operator's act.",
         security: BEARER_SECURITY,
         responses: {
           200: describeJson("The company as it now stands.", Company),

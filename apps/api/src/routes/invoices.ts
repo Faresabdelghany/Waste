@@ -37,13 +37,23 @@
 // never changes, so reading it before the lock is safe, and the run's id is
 // what the lock is taken on.
 //
+// `GET /invoices/:id/document` (#291 C5) answers a document's PDF, made of
+// the rows as issued (`@waste/db/commands/invoice-document`) by the domain's
+// model and `@waste/documents`' renderer, whose same bytes for the same rows
+// are its ETag. The renderer — pdf-lib behind it — is imported inside the
+// handler alone, so no other route and no boot holds it (#134's 256 MiB).
+//
 // Every statement carries the tenant and `inProjects`; the grant is
 // `commercial.invoices`, `view` to read, `create` to issue a credit note.
+import { createHash } from "node:crypto"
+
 import { CreditNoteCreate, Invoice, InvoiceDetail, InvoiceListQuery } from "@waste/contracts/invoices"
 import { Page } from "@waste/contracts/pagination"
 import type { ProblemFieldError } from "@waste/contracts/problem"
 import type { Tx } from "@waste/db/client"
+import { invoiceDocumentInputOf } from "@waste/db/commands/invoice-document"
 import { billingRun, invoice, invoiceLine } from "@waste/db/schema/finance"
+import { invoiceDocumentOf } from "@waste/domain/finance/invoice-document"
 import { vatOf } from "@waste/domain/finance/money"
 import { and, asc, eq, gt, gte, inArray, lte, sum } from "drizzle-orm"
 import { Hono, type MiddlewareHandler } from "hono"
@@ -236,6 +246,43 @@ export function invoiceRoutes(guard: MiddlewareHandler<AuthEnv>, { now = () => n
         const row = await findInvoice(tx, principal, id)
         if (row === undefined) throw noSuchInvoice(id)
         return c.json(await invoiceDetailOf(tx, principal.companyId, row))
+      },
+    )
+    .get(
+      "/invoices/:id/document",
+      describeRoute({
+        operationId: "getInvoiceDocument",
+        summary: "One document as its PDF",
+        description:
+          "The invoice or credit note as the file its payer is sent (#291 C5): A4, the seller and the payer as they stood when it was issued, its facts, its lines, the VAT per rate, its totals, and on an invoice how to pay it — the bank account and, under a FIK scheme, the FI card's code line. In Danish for a Danish project, in English otherwise. Made of the rows as issued, so the same document answers the same bytes, whose sha256 is the ETag; `If-None-Match` with it answers 304. Inline, named by the document's label.",
+        security: BEARER_SECURITY,
+        responses: {
+          200: { description: "The PDF.", content: { "application/pdf": { schema: { type: "string" as const, format: "binary" } } } },
+          304: { description: "The ETag named is the document's: nothing has changed, since nothing can." },
+          400: describeProblem("The path does not hold an id."),
+          ...problems("view"),
+        },
+      }),
+      guard,
+      requireGrant(MODULE, "view"),
+      validate("param", IdParam),
+      async (c) => {
+        const { id } = c.req.valid("param")
+        const tx = c.get("tx")
+        const principal = c.get("principal")
+        const row = await findInvoice(tx, principal, id)
+        if (row === undefined) throw noSuchInvoice(id)
+        const model = invoiceDocumentOf(await invoiceDocumentInputOf(tx, principal.companyId, row))
+        const { renderInvoiceDocument } = await import("@waste/documents/invoice")
+        const bytes = await renderInvoiceDocument(model)
+        const etag = `"${createHash("sha256").update(bytes).digest("hex")}"`
+        if (c.req.header("If-None-Match") === etag) return c.body(null, 304, { etag })
+        return c.body(bytes, 200, {
+          "content-type": "application/pdf",
+          "content-disposition": `inline; filename="${labelOf(row)}.pdf"`,
+          etag,
+          "cache-control": "private, no-cache",
+        })
       },
     )
     .post(

@@ -239,8 +239,8 @@ const settlementStamps = (() => {
   return `CONSTRAINT "settlement_stamps_shape" CHECK (case ${column("status")} when 'open' then ${column("calculated_at")} is null and ${column("closed_at")} is null and ${column("closed_by")} is null when 'calculated' then ${column("calculated_at")} is not null and ${column("closed_at")} is null and ${column("closed_by")} is null when 'closed' then ${column("calculated_at")} is not null and ${column("closed_at")} is not null and ${column("closed_by")} is not null else false end)`
 })()
 
-/** invoice as drizzle-kit wrote it as of 0010, and as it writes it since 0037 (#291 C4): the payment reference frozen at issue, an invoice's alone. */
-const invoiceTable = (asOf: "0010" | "0037"): string =>
+/** invoice as drizzle-kit wrote it as of 0010, as of 0037 (#291 C4) — the payment reference frozen at issue, an invoice's alone — and as it writes it since 0041 (#291 C5), its parties frozen beside it. */
+const invoiceTable = (asOf: "0010" | "0037" | "0041"): string =>
   createLedger("invoice", [
     '"number" integer NOT NULL',
     '"kind" text NOT NULL',
@@ -258,7 +258,8 @@ const invoiceTable = (asOf: "0010" | "0037"): string =>
     '"vat_minor" bigint NOT NULL',
     '"gross_minor" bigint NOT NULL',
     '"issued_by" uuid',
-    ...(asOf === "0037" ? ['"payment_reference" text'] : []),
+    ...(asOf !== "0010" ? ['"payment_reference" text'] : []),
+    ...(asOf === "0041" ? ['"parties" jsonb NOT NULL'] : []),
     uniqueKey("invoice_number_key", "company_id", "number"),
     uniqueKey("invoice_project_key", "company_id", "project_id", "id"),
     oneOfCheck("invoice", "kind", ...V.INVOICE_KINDS),
@@ -268,12 +269,14 @@ const invoiceTable = (asOf: "0010" | "0037"): string =>
     `CONSTRAINT "invoice_kind_shape" CHECK ((${ref("invoice", "kind")} = 'invoice') = (${ref("invoice", "billing_run_id")} is not null) and (${ref("invoice", "kind")} = 'credit-note') = (${ref("invoice", "credits_invoice_id")} is not null) and (${ref("invoice", "kind")} = 'credit-note') = (${ref("invoice", "credit_reason")} is not null))`,
     `CONSTRAINT "invoice_credits_shape" CHECK (${ref("invoice", "credits_invoice_id")} <> ${ref("invoice", "id")})`,
     // The payment reference, an invoice's alone; a null passes.
-    ...(asOf === "0037" ? [`CONSTRAINT "invoice_payment_reference_shape" CHECK (${ref("invoice", "payment_reference")} is null or (${ref("invoice", "kind")} = 'invoice' and ${ref("invoice", "payment_reference")} ~ '^[0-9]{15,16}$'))`] : []),
+    ...(asOf !== "0010" ? [`CONSTRAINT "invoice_payment_reference_shape" CHECK (${ref("invoice", "payment_reference")} is null or (${ref("invoice", "kind")} = 'invoice' and ${ref("invoice", "payment_reference")} ~ '^[0-9]{15,16}$'))`] : []),
+    // The parties are a seller and a buyer, each an object.
+    ...(asOf === "0041" ? [`CONSTRAINT "invoice_parties_shape" CHECK (jsonb_typeof(${ref("invoice", "parties")} -> 'seller') is not distinct from 'object' and jsonb_typeof(${ref("invoice", "parties")} -> 'buyer') is not distinct from 'object')`] : []),
     `CONSTRAINT "invoice_totals_shape" CHECK (${ref("invoice", "gross_minor")} = ${ref("invoice", "net_minor")} + ${ref("invoice", "vat_minor")} and (${ref("invoice", "kind")} <> 'credit-note' or ${ref("invoice", "net_minor")} <= 0))`,
   ])
 
-/** What 0037 changed on the sixteen (#291 C4): the invoice's CREATE TABLE as drizzle-kit generates it now onto what 0010 says. */
-const CHANGED_IN_0037 = new Map([[invoiceTable("0037"), invoiceTable("0010")]])
+/** What 0037 (#291 C4) and 0041 (#291 C5) changed on the sixteen: the invoice's CREATE TABLE as drizzle-kit generates it now onto what 0010 says. */
+const CHANGED_LATER_ON_INVOICE = new Map([[invoiceTable("0041"), invoiceTable("0010")]])
 
 const expected = [
   createTable("price_list", "dated", [
@@ -371,7 +374,7 @@ const expected = [
     oneOfCheck("billing_run_exclusion", "reason", ...V.EXCLUSION_REASONS),
     positiveCheck("billing_run_exclusion", "event_count"),
   ]),
-  invoiceTable("0037"),
+  invoiceTable("0041"),
   createLedger("invoice_line", [
     '"invoice_id" uuid NOT NULL',
     '"position" integer NOT NULL',
@@ -816,7 +819,7 @@ const generatedAlterations = (): Promise<string[]> =>
   statementsBetween({ company: companyAsOf0009, product: productAsOf0004, agreement: agreementAsOf0004, unload: unloadAsOf0008, outboxEvent: outboxEventAsOf0009 }, { company: companyAsOf0010, product, agreement, unload, outboxEvent: outboxEventAsOf0010 })
 
 /** Everything drizzle-kit wrote at the head of 0010: the sixteen tables and the five altered ones. */
-const generatedHead = async (): Promise<string[]> => [...(await tablesAsOf0010()).map((statement) => CHANGED_IN_0037.get(statement) ?? statement), ...(await generatedAlterations())]
+const generatedHead = async (): Promise<string[]> => [...(await tablesAsOf0010()).map((statement) => CHANGED_LATER_ON_INVOICE.get(statement) ?? statement), ...(await generatedAlterations())]
 
 const fileStatements = async (): Promise<string[]> => statementsOf(await readFile(join(MIGRATIONS_FOLDER, MIGRATION), "utf8"))
 
@@ -911,7 +914,7 @@ describe("the checks of this context", () => {
   })
 
   test("every other shape check renders without parameters, the way every check in a migration must", () => {
-    assert.deepEqual([...checksOf(invoice).keys()], ["invoice_kind_one_of", "invoice_credit_reason_one_of", "invoice_due_shape", "invoice_period_shape", "invoice_kind_shape", "invoice_credits_shape", "invoice_payment_reference_shape", "invoice_totals_shape"])
+    assert.deepEqual([...checksOf(invoice).keys()], ["invoice_kind_one_of", "invoice_credit_reason_one_of", "invoice_due_shape", "invoice_period_shape", "invoice_kind_shape", "invoice_credits_shape", "invoice_payment_reference_shape", "invoice_parties_shape", "invoice_totals_shape"])
     assert.deepEqual([...checksOf(invoiceLine).keys()], ["invoice_line_position_positive", "invoice_line_quantity_positive", "invoice_line_source_exactly_one", "invoice_line_amounts_shape", "invoice_line_vat_shape"])
     assert.deepEqual([...checksOf(settlement).keys()], ["settlement_validity", "settlement_status_one_of", "settlement_stamps_shape", "settlement_period_closed"])
     assert.deepEqual([...checksOf(settlementEvent).keys()], ["settlement_event_kind_one_of", "settlement_event_status_one_of", "settlement_event_reason_shape"])
