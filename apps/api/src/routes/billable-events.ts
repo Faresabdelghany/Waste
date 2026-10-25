@@ -76,6 +76,7 @@ import { requireAgreement, requireCustomer, requireProduct, type Scope } from ".
 import type { ClockOptions } from "./scheme-groups"
 import { created, describeCreated, describeJson, IdParam, lockRow } from "./shared"
 import { refuseUnofferedProduct, unofferedProduct } from "./statuses"
+import { requireTicketWorkProduct } from "./ticket-charges"
 
 const MODULE = "commercial.events"
 
@@ -323,7 +324,7 @@ export function billableEventRoutes(guard: MiddlewareHandler<AuthEnv>, { now = (
         operationId: "repriceBillableEvent",
         summary: "Run the resolver again over a blocked event",
         description:
-          "The `reprice` command, on a `blocked` event only: the resolver runs again — the list the agreement is priced under and in force on the service date, the row that wins, the product's VAT rate, with the conditions a pickup's event carries (its route's scheme's planning area, its container's type, its fraction on the day) — and the row is written priced, or with the same block or the next one (`no-price-list` mended to `no-price-row`, then to `no-vat-rate`), answering the reading after. A ticket's event, blocked `no-product`, takes the `productId` the office picked — a product of the project (400, `Not a product of this project`) that is offered (409, the #79 gate, since the event is a new reference to it) — and any other kind refuses one (400 at `productId`, `Only a ticket's event takes a product here`). An event blocked `no-subscription` has no agreement to price under and answers as it stands. A `ready` event is refused (409, `Billable event <id> is ready; a priced event is not repriced — cancel it and enter it again`), an `invoiced` one (409, `… is invoiced; correct it with a credit note`), a `cancelled` one (409, `… is cancelled`) and a `reversed` one (409, `… is reversed`). Under the event's row lock; `updatedAt` moves, since a reprice is the row's history. Nothing is published.",
+          "The `reprice` command, on a `blocked` event only: the resolver runs again — the list the agreement is priced under and in force on the service date, the row that wins, the product's VAT rate, with the conditions a pickup's event carries (its route's scheme's planning area, its container's type, its fraction on the day) — and the row is written priced, or with the same block or the next one (`no-price-list` mended to `no-price-row`, then to `no-vat-rate`), answering the reading after. A ticket's event, blocked `no-product`, takes the `productId` the office picked — a product of the project (400, `Not a product of this project`), never one sold by the month (400, a recurring charge is not a ticket's work, #291 C3), that is offered (409, the #79 gate, since the event is a new reference to it) — and any other kind refuses one (400 at `productId`, `Only a ticket's event takes a product here`). An event blocked `no-subscription` has no agreement to price under and answers as it stands. A `ready` event is refused (409, `Billable event <id> is ready; a priced event is not repriced — cancel it and enter it again`), an `invoiced` one (409, `… is invoiced; correct it with a credit note`), a `cancelled` one (409, `… is cancelled`) and a `reversed` one (409, `… is reversed`). Under the event's row lock; `updatedAt` moves, since a reprice is the row's history. Nothing is published.",
         security: BEARER_SECURITY,
         responses: {
           200: describeJson("The event as it now stands, `ready` or `blocked`.", BillableEvent),
@@ -348,7 +349,7 @@ export function billableEventRoutes(guard: MiddlewareHandler<AuthEnv>, { now = (
         if (body.productId !== undefined && current.kind !== "ticket") throw invalidRequest("body", [{ path: "productId", message: ONLY_A_TICKETS_EVENT_TAKES_A_PRODUCT }])
         const scope: Scope = { companyId: principal.companyId, projectId: current.projectId }
         // A product the body names is a new reference: held to the project (400), then to being offered (409). The stored one is no new reference.
-        if (body.productId !== undefined) refuseUnofferedProduct(await requireProduct(tx, scope, body.productId))
+        if (body.productId !== undefined) refuseUnofferedProduct(await requireTicketWorkProduct(tx, scope, body.productId))
         const productId = body.productId ?? current.productId
         // Nothing to price under, or nothing to price: the block stands as it is.
         if (current.agreementId === null) return c.json(eventOf(current))

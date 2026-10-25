@@ -12,7 +12,7 @@ import { defineVocabularyTests } from "../../__tests__/vocabulary"
 import { EXECUTION_SOURCES } from "../../execution/vocabulary"
 import * as vocabulary from "../vocabulary"
 
-defineVocabularyTests("Resolution", vocabulary, vocabulary.RESOLUTION_VOCABULARIES, 11, ["OPEN_TICKET_STATUSES", "CLOSED_TICKET_STATUSES"])
+defineVocabularyTests("Resolution", vocabulary, vocabulary.RESOLUTION_VOCABULARIES, 11, ["OPEN_TICKET_STATUSES", "CLOSED_TICKET_STATUSES", "BILLABLE_RESOLUTIONS"])
 
 describe("the Resolution vocabulary's own rules", () => {
   test("the open and the closed statuses are values of the status list and together make the whole of it, in its order", () => {
@@ -28,6 +28,7 @@ describe("the Resolution vocabulary's own rules", () => {
     assert.deepEqual([...vocabulary.TICKET_KINDS], ["missed-collection", "overflow", "access-issue", "container-request", "container-defect", "proof-follow-up", "complaint", "reported-problem", "rejected-command", "internal-task", "other"])
     assert.deepEqual([...vocabulary.TICKET_PRIORITIES], ["critical", "high", "medium", "low", "none"])
     assert.deepEqual([...vocabulary.TICKET_RESOLUTIONS], ["recollected", "serviced", "answered", "no-action", "duplicate"])
+    assert.deepEqual([...vocabulary.BILLABLE_RESOLUTIONS], ["recollected", "serviced"], "the work Finance charges for, a value of the resolutions")
   })
 
   test("the sources spell the driver as Execution does, the dispatcher beside, and a Service Provider's workspace last (#291 slice 23b); the history has no edited kind and three readerships, the provider's last", () => {

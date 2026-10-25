@@ -43,6 +43,7 @@ import {
   settlement,
   settlementEvent,
   settlementLine,
+  ticketKindProduct,
   weightReview,
 } from "@waste/db/schema/finance"
 import { driver, vehicle, vehicleCompartment, vehicleCompartmentFraction } from "@waste/db/schema/fleet"
@@ -340,6 +341,7 @@ export async function dropTenant(pool: Database, companyId: string, owner?: Data
     await tx.delete(serviceAreaPlanningArea).where(eq(serviceAreaPlanningArea.companyId, companyId))
     await tx.delete(serviceArea).where(eq(serviceArea.companyId, companyId))
     await tx.delete(priceListRow).where(eq(priceListRow.companyId, companyId))
+    await tx.delete(ticketKindProduct).where(eq(ticketKindProduct.companyId, companyId))
     await tx.delete(alert).where(eq(alert.companyId, companyId))
     await tx.delete(ticket).where(eq(ticket.companyId, companyId))
     await tx.delete(outboxEvent).where(eq(outboxEvent.companyId, companyId))

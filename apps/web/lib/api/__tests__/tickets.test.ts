@@ -105,6 +105,7 @@ const missed: Ticket = {
   resolution: null,
   recollectionRouteId: null,
   recollectionPickupId: null,
+  chargeProductId: null,
   closedAt: null,
 }
 

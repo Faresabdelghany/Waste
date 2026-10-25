@@ -82,8 +82,16 @@
 // blocking `close`. `weight_review` is one row per decision on an Unload's
 // weight through `unload_project_key`, which this migration adds; a
 // correction names the new Unload row it wrote and never the reviewed one.
+//
+// `ticket_kind_product` (#291 C3, migration 0033) is a project's charge for
+// a ticket kind's work: the product a completed ticket of the kind is charged
+// at when its completion names none, one per kind, replaced whole as the
+// project's set (`PUT /ticket-charges`). Not effective-dated: the consumer
+// reads it when the ticket's completion arrives, and an event recorded keeps
+// the product it was priced at.
 import { BILLABLE_EVENT_KINDS, BILLING_RUN_STATUSES, BLOCK_REASONS, CANCEL_REASONS, CREDIT_REASONS, EXCLUSION_REASONS, INDEX_BASES, INVOICE_KINDS, SETTLEMENT_EVENT_KINDS, SETTLEMENT_STATUSES, WEIGHT_REVIEW_DECISIONS } from "@waste/domain/finance/vocabulary"
 import { CUSTOMER_KINDS } from "@waste/domain/registry/vocabulary"
+import { TICKET_KINDS } from "@waste/domain/resolution/vocabulary"
 import { sql } from "drizzle-orm"
 import { bigint, boolean, check, date, index, integer, text, timestamp, unique, uniqueIndex, uuid } from "drizzle-orm/pg-core"
 
@@ -733,5 +741,25 @@ export const weightReview = wms.table(
     tenantIndex(t, t.correctionUnloadId),
     tenantIndex(t, t.reviewedBy),
     tenantIndex(t, t.projectId),
+  ],
+)
+
+export const ticketKindProduct = wms.table(
+  "ticket_kind_product",
+  {
+    ...id,
+    ...projectScoped,
+    ...timestamps,
+    ticketKind: text().notNull(),
+    productId: uuid().notNull(),
+  },
+  (t) => [
+    companyReference(t, company),
+    tenantReference(t, [t.projectId], project),
+    projectReference(t, [t.productId], product),
+    oneOf(t.ticketKind, TICKET_KINDS),
+    // A kind is charged at one product in a project.
+    tenantUnique(t, t.projectId, t.ticketKind),
+    tenantIndex(t, t.productId),
   ],
 )

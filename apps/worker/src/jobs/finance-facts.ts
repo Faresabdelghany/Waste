@@ -29,19 +29,24 @@
 // agreement of its pickup's placement on the route's service date, with that
 // placement's subscription; and the project's timezone, in which the worker
 // renders `closedAt` as the day the ticket closed — a ticket reopened since
-// has no `closedAt`, and its completion is stale news, not a failure.
+// has no `closedAt`, and its completion is stale news, not a failure. Then
+// the product it charges for (#291 C3): the one its completion named, else the
+// project's for the ticket's kind (`ticket_kind_product`), with its status,
+// unit and rate, the agreement's pricing facts and the list in force on the
+// day it closed with its rows — whether the product is charged at all is the
+// domain's (`chargesTicketWork`), so a retired one is read like any other.
 //
 // A stop the office added (#111) is read like any other, with its `origin`:
 // the scheme and the container are left joins, since an ad-hoc route names
 // no scheme (no planning area, then) and an address-only stop no container
 // (no type, and no placement to read), so the event is judged and never a
 // dead letter; the domain records nothing for an office stop.
-import type { PlacementFacts, PickupEventFacts, TicketCompletedFacts } from "@waste/domain/finance/from-event"
+import type { PlacementFacts, PickupEventFacts, TicketChargeFacts, TicketCompletedFacts } from "@waste/domain/finance/from-event"
 import type { PickupOrigin, PickupOutcome } from "@waste/domain/execution/vocabulary"
-import type { AgreementStatus, CustomerKind, ProductUnit } from "@waste/domain/registry/vocabulary"
+import type { AgreementStatus, CustomerKind, ProductStatus, ProductUnit } from "@waste/domain/registry/vocabulary"
 import type { TicketResolution } from "@waste/domain/resolution/vocabulary"
 import type { Tx } from "@waste/db/client"
-import { liveEventOf, listInForce, rowsOn } from "@waste/db/commands/billable-writes"
+import { agreementFacts, liveEventOf, listInForce, rowsOn } from "@waste/db/commands/billable-writes"
 import type { EventReading } from "@waste/db/commands/billing-shapes"
 import { dayInTimezone } from "@waste/db/commands/days"
 import { projectTimezone } from "@waste/db/commands/project-clock"
@@ -52,6 +57,7 @@ import { product } from "@waste/db/schema/catalogue"
 import { container, containerServicePlacement } from "@waste/db/schema/containers"
 import { customer } from "@waste/db/schema/customers"
 import { pickup, route } from "@waste/db/schema/execution"
+import { ticketKindProduct } from "@waste/db/schema/finance"
 import { ticket } from "@waste/db/schema/resolution"
 import { routeScheme } from "@waste/db/schema/route-schemes"
 import { and, eq } from "drizzle-orm"
@@ -193,15 +199,17 @@ export async function pickupFacts(tx: Tx, companyId: string, kind: PickupEventFa
   }
 }
 
-/** A ticket as the consumer read it: its project, what it ended in, when it closed, and the agreement and pickup it names. */
+/** A ticket as the consumer read it: its project and kind, what it ended in, when it closed, the agreement and pickup it names, and the product its completion named. */
 export type TicketRow = {
   projectId: string
+  kind: string
   status: string
   resolution: string | null
   closedAt: Date | null
   agreementId: string | null
   routeId: string | null
   pickupId: string | null
+  chargeProductId: string | null
 }
 
 /**
@@ -212,7 +220,7 @@ export type TicketRow = {
 export async function ticketRow(tx: Tx, companyId: string, ticketId: string): Promise<TicketRow | undefined> {
   await lockRow(tx, ticket, { companyId, id: ticketId })
   const [row] = await tx
-    .select({ projectId: ticket.projectId, status: ticket.status, resolution: ticket.resolution, closedAt: ticket.closedAt, agreementId: ticket.agreementId, routeId: ticket.routeId, pickupId: ticket.pickupId })
+    .select({ projectId: ticket.projectId, kind: ticket.kind, status: ticket.status, resolution: ticket.resolution, closedAt: ticket.closedAt, agreementId: ticket.agreementId, routeId: ticket.routeId, pickupId: ticket.pickupId, chargeProductId: ticket.chargeProductId })
     .from(ticket)
     .where(and(eq(ticket.companyId, companyId), eq(ticket.id, ticketId)))
     .limit(1)
@@ -243,5 +251,44 @@ export async function ticketFacts(tx: Tx, companyId: string, ticketId: string, f
   }
   if (reached === null && found.agreementId !== null) reached = { id: found.agreementId, subscriptionId: null }
   const timezone = await projectTimezone(tx, companyId, found.projectId)
-  return { kind: "ticket-completed", ticketId, resolution: found.resolution as TicketResolution | null, agreement: reached, closedOn: found.closedAt === null ? null : dayInTimezone(found.closedAt, timezone) }
+  const closedOn = found.closedAt === null ? null : dayInTimezone(found.closedAt, timezone)
+  const charge = reached === null || closedOn === null ? null : await chargeFacts(tx, { companyId, projectId: found.projectId }, found, reached.id, closedOn)
+  return { kind: "ticket-completed", ticketId, resolution: found.resolution as TicketResolution | null, agreement: reached, closedOn, charge }
+}
+
+/**
+ * The product a completed ticket charges for (#291 C3) — the completion's,
+ * else the project's for the ticket's kind; null where neither names one —
+ * with what the resolver prices it from: the agreement's facts and, unless it
+ * is a draft, which blocks before any list is read, the list it is priced
+ * under in force on the day the ticket closed with its rows for the product.
+ */
+async function chargeFacts(tx: Tx, scope: { companyId: string; projectId: string }, found: TicketRow, agreementId: string, closedOn: string): Promise<TicketChargeFacts | null> {
+  let source: TicketChargeFacts["source"] = "completion"
+  let productId = found.chargeProductId
+  if (productId === null) {
+    const [mapped] = await tx
+      .select({ productId: ticketKindProduct.productId })
+      .from(ticketKindProduct)
+      .where(and(eq(ticketKindProduct.companyId, scope.companyId), eq(ticketKindProduct.projectId, scope.projectId), eq(ticketKindProduct.ticketKind, found.kind)))
+      .limit(1)
+    if (mapped === undefined) return null
+    source = "kind"
+    productId = mapped.productId
+  }
+  const [named] = await tx
+    .select({ status: product.status, unit: product.unit, vatPercent: product.vatPercent })
+    .from(product)
+    .where(and(eq(product.companyId, scope.companyId), eq(product.projectId, scope.projectId), eq(product.id, productId)))
+    .limit(1)
+  if (named === undefined) throw new Error(`ticket charge: product ${productId} is not in project ${scope.projectId}; the ticket's key and the charges' hold it there`)
+  const facts = await agreementFacts(tx, scope, agreementId)
+  if (facts === undefined) throw new Error(`ticket charge: agreement ${agreementId} is not in project ${scope.projectId}; the ticket reached it there`)
+  const list = facts.status === "draft" ? undefined : await listInForce(tx, scope, facts.priceListId, closedOn)
+  return {
+    source,
+    product: { id: productId, status: named.status as ProductStatus, unit: named.unit as ProductUnit, vatPercent: named.vatPercent },
+    agreement: { status: facts.status, customerKind: facts.customerKind, customerId: facts.customerId },
+    priceList: list === undefined ? null : { id: list.id, currency: list.currency, rows: await rowsOn(tx, scope.companyId, list.id, productId, closedOn) },
+  }
 }

@@ -35,6 +35,7 @@
 // (@waste/domain/resolution/event-shapes, the `ProofOfService` precedent), so
 // a row that disagrees with its kind does not parse on the client either.
 import { ticketEventShapeIssue } from "@waste/domain/resolution/event-shapes"
+import { BILLABLE_RESOLUTIONS } from "@waste/domain/resolution/vocabulary"
 import * as z from "zod"
 
 import { Alert } from "./alerts"
@@ -107,6 +108,12 @@ export const ticketFields = {
    * and never as a dead letter.
    */
   recollectionPickupId: Id.nullable().default(null),
+  /**
+   * The product its completion charges (#291 C3), where the completion named
+   * one; null otherwise, the project's charge for the ticket's kind standing in.
+   * Absent on an event the outbox took before #291 C3, and read as null.
+   */
+  chargeProductId: Id.nullable().default(null),
   /** When the ticket was completed or rejected; null while open. */
   closedAt: IsoDateTime.nullable(),
 }
@@ -256,7 +263,14 @@ const recollectionStopWithItsRouteAt = { message: RECOLLECTION_STOP_WITH_ITS_ROU
 /** The re-collection's stop goes with its route (#111): the table's `ticket_recollection_pickup_shape`, at the boundary. */
 export const recollectionStopWithItsRoute = (body: { recollectionRouteId?: string; recollectionPickupId?: string }): boolean => body.recollectionPickupId === undefined || body.recollectionRouteId !== undefined
 
-/** `POST /tickets/:id/complete`: what the ticket ended in, the note, and — with `recollected` — the route the re-collection rides on and the stop of it the re-collection is. */
+/** What a completion naming a product with a resolution nothing is charged for is told. */
+export const CHARGE_WITH_A_BILLABLE_RESOLUTION = "Only a re-collection or a service is charged; name a product with recollected or serviced"
+const chargeWithABillableResolutionAt = { message: CHARGE_WITH_A_BILLABLE_RESOLUTION, path: ["productId"] }
+
+/** The product goes with a resolution Finance charges for (#291 C3): the table's `ticket_charge_shape`, at the boundary. */
+export const chargeWithABillableResolution = (body: { resolution: string; productId?: string }): boolean => body.productId === undefined || (BILLABLE_RESOLUTIONS as readonly string[]).includes(body.resolution)
+
+/** `POST /tickets/:id/complete`: what the ticket ended in, the note, — with `recollected` — the route the re-collection rides on and the stop of it the re-collection is, and — with `recollected` or `serviced` — the product its work is charged at. */
 export const TicketComplete = z
   .strictObject({
     resolution: TicketResolution,
@@ -265,10 +279,34 @@ export const TicketComplete = z
     recollectionRouteId: Id.optional(),
     /** A stop of that route: the one the office added for the re-collection (#111); with the route alone. */
     recollectionPickupId: Id.optional(),
+    /** An offered product of the ticket's project, not sold by the month; without it, the project's charge for the ticket's kind (#291 C3). */
+    productId: Id.optional(),
   })
   .refine(recollectionRouteWithRecollected, recollectionRouteWithRecollectedAt)
   .refine(recollectionStopWithItsRoute, recollectionStopWithItsRouteAt)
+  .refine(chargeWithABillableResolution, chargeWithABillableResolutionAt)
 export type TicketComplete = z.infer<typeof TicketComplete>
+
+/** One ticket kind's charge (#291 C3): the product a completed ticket of the kind is charged at when its completion names none. */
+export const TicketCharge = z.object({ kind: TicketKind, productId: Id })
+export type TicketCharge = z.infer<typeof TicketCharge>
+
+/** `GET /ticket-charges`: a project's charges, a kind at most once, in the kinds' order. */
+export const TicketCharges = z.object({ projectId: Id, charges: z.array(TicketCharge) })
+export type TicketCharges = z.infer<typeof TicketCharges>
+
+/** What a set naming a kind twice is told. */
+export const KIND_CHARGED_ONCE = "Each ticket kind is charged at one product; name a kind once"
+
+/** `PUT /ticket-charges`: a project's charges, replaced whole — a kind left out is charged at nothing afterwards; each product an offered product of the project, not sold by the month, which only the route can judge. */
+export const TicketChargesSet = z
+  .strictObject({ projectId: Id, charges: z.array(TicketCharge.strict()).max(TicketKind.options.length) })
+  .refine((body) => new Set(body.charges.map((charge) => charge.kind)).size === body.charges.length, { message: KIND_CHARGED_ONCE, path: ["charges"] })
+export type TicketChargesSet = z.infer<typeof TicketChargesSet>
+
+/** `GET /ticket-charges`: the project the charges are read for. */
+export const TicketChargesQuery = z.object({ projectId: Id })
+export type TicketChargesQuery = z.infer<typeof TicketChargesQuery>
 
 /** `POST /tickets/:id/reject`: the reason, which becomes the history row's body. */
 export const TicketReject = z.strictObject({ reason: Paragraph })

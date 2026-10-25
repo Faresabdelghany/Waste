@@ -41,11 +41,13 @@
 // is a code change and not a migration — and `ALERT_STATUSES` the prototype's
 // four less "Linked to ticket", which is a reading of `ticket_id`.
 //
-// Two values beside the lists, the way Execution's `CLOSING_REASONS` and
+// Three values beside the lists, the way Execution's `CLOSING_REASONS` and
 // Planning's `DEFAULT_WEEKEND` are values and not vocabularies:
 // `OPEN_TICKET_STATUSES` is what "open" means in a list filter and a count,
-// and `CLOSED_TICKET_STATUSES` what every command but `reopen` and `comment`
-// refuses (resolution/transitions.ts).
+// `CLOSED_TICKET_STATUSES` what every command but `reopen` and `comment`
+// refuses (resolution/transitions.ts), and `BILLABLE_RESOLUTIONS` the
+// resolutions whose work Finance charges for (finance/from-event.ts), which a
+// completion may name its product with (#291 C3).
 //
 // A value is a kebab-case token: it goes into a migration as a SQL literal
 // and onto the wire as an enum member, and those are the same string. A list
@@ -97,6 +99,12 @@ export type ClosedTicketStatus = (typeof CLOSED_TICKET_STATUSES)[number]
 
 /** Whether a Ticket in this status is closed: completed or rejected. */
 export const isClosedTicketStatus = (status: TicketStatus): status is ClosedTicketStatus => (CLOSED_TICKET_STATUSES as readonly TicketStatus[]).includes(status)
+
+/** The resolutions whose completion is billable: a re-collection arranged, or the request fulfilled. A value of `TICKET_RESOLUTIONS`, not a vocabulary. */
+export const BILLABLE_RESOLUTIONS = ["recollected", "serviced"] as const satisfies readonly TicketResolution[]
+
+/** Whether a completed ticket's resolution is one the office may charge for: the list's membership, never a table's keys, so a stray string finds nothing. */
+export const isBillableResolution = (resolution: TicketResolution): boolean => (BILLABLE_RESOLUTIONS as readonly string[]).includes(resolution)
 
 /** Every list of this module by its name, for a test that walks them and for a reader looking for the whole vocabulary at once. */
 export const RESOLUTION_VOCABULARIES = {

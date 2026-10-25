@@ -57,24 +57,7 @@ import { container, containerServicePlacement } from "../schema/containers"
 import { dropOffPoint, dropOffPointException, dropOffPointFraction, dropOffPointHours } from "../schema/drop-off-points"
 import { customer, property, propertyGroup, propertyGroupMember, propertyParty, sharedCollectionPoint, sharedCollectionPointMember } from "../schema/customers"
 import { driverCommand, outboxEvent, pickup, proofOfService, route, session, unload } from "../schema/execution"
-import {
-  billableEvent,
-  billingRun,
-  billingRunExclusion,
-  invoice,
-  invoiceLine,
-  priceList,
-  priceListRow,
-  serviceArea,
-  serviceAreaAssignment,
-  serviceAreaPlanningArea,
-  serviceAreaWasteFraction,
-  serviceProviderPrice,
-  settlement,
-  settlementEvent,
-  settlementLine,
-  weightReview,
-} from "../schema/finance"
+import { billableEvent, billingRun, billingRunExclusion, invoice, invoiceLine, priceList, priceListRow, serviceArea, serviceAreaAssignment, serviceAreaPlanningArea, serviceAreaWasteFraction, serviceProviderPrice, settlement, settlementEvent, settlementLine, ticketKindProduct, weightReview } from "../schema/finance"
 import { driver, vehicle, vehicleCompartment, vehicleCompartmentFraction } from "../schema/fleet"
 import { containerTypeVehicleType, vehicleType } from "../schema/fleet-types"
 import { generationMatch, generationRun } from "../schema/generation"
@@ -197,8 +180,13 @@ export const ABSENCES_AUDITED: readonly Audited[] = [
   { table: vehicleUnavailability, module: "fleet.vehicles", parent: setOf(vehicle, vehicleUnavailability.vehicleId) },
 ]
 
+/** A project's ticket charges (#291 C3), the set of its project they are replaced whole as: its trigger is the charges' migration's. */
+export const TICKET_CHARGE_AUDITED: readonly Audited[] = [
+  { table: ticketKindProduct, module: "commercial.products", parent: setOf(project, ticketKindProduct.projectId) },
+]
+
 /** Every audited table: 0019's, then each later migration's, in the order they were written. */
-export const AUDITED: readonly Audited[] = [...AUDITED_AT_0019, ...SUBSCRIPTION_PAUSE_AUDITED, ...TICKET_SLA_AUDITED, ...DROP_OFF_AUDITED, ...ABSENCES_AUDITED]
+export const AUDITED: readonly Audited[] = [...AUDITED_AT_0019, ...SUBSCRIPTION_PAUSE_AUDITED, ...TICKET_SLA_AUDITED, ...DROP_OFF_AUDITED, ...ABSENCES_AUDITED, ...TICKET_CHARGE_AUDITED]
 
 /** The audited tables by name, for a test that reads a migrated database's triggers. */
 export const AUDITED_TABLE_NAMES: ReadonlySet<string> = new Set(AUDITED.map((entry) => getTableName(entry.table)))

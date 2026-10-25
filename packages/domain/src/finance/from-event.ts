@@ -26,13 +26,19 @@
 // the original's service date, the original named — so the next run puts a
 // negative line on the payer's next invoice; nothing when there is no live
 // event. A `ticket-completed` with `recollected` or `serviced` is a `ticket`
-// event with no product and `no-product` for the office to price through
-// `reprice`, on the day the ticket closed on the project's clock — the worker
+// event on the day the ticket closed on the project's clock — the worker
 // renders the day, since this module has no clock and no timezone — when an
 // agreement is reachable through the ticket or its pickup's placement, and
 // nothing otherwise: a ticket about nothing billable makes no money row; and
 // nothing again for a ticket `reopen`ed since — its resolution and closing
 // day cleared, the completion stale news, its next completion its own event.
+// Its product (#291 C3) is the one the completion named, else the project's
+// for the ticket's kind while that one is offered — a retired one is the
+// office's to replace, never a silent charge — and never one sold by the
+// month, which is a recurring charge (`chargesTicketWork`); priced by the
+// resolver as a pickup is, by the customer's conditions alone, since a
+// ticket's event names no zone, container type or fraction and `reprice`
+// prices it the same way; with none, `no-product` for the office to price.
 // `answered`, `no-action` and `duplicate`, the route's events, the other
 // pickup events, the unload and the two Finance publishes are nothing here.
 // A credit for a missed collection is never the consumer's (§7.11), and a
@@ -55,8 +61,8 @@
 // `sourceEventId` the event's id (`billable_event_origin_shape` ties the two),
 // the stamps, and the row's own id.
 import type { OutboxKind, PickupOrigin, PickupOutcome } from "../execution/vocabulary"
-import type { AgreementStatus, CustomerKind, ProductUnit } from "../registry/vocabulary"
-import type { TicketResolution } from "../resolution/vocabulary"
+import type { AgreementStatus, CustomerKind, ProductStatus, ProductUnit } from "../registry/vocabulary"
+import { isBillableResolution, type TicketResolution } from "../resolution/vocabulary"
 import { priceOccurrence, type PriceLabels, type PricedAmounts, type PricedList, type PriceRow } from "./pricing"
 import type { BillableEventKind, BlockReason, CancelReason } from "./vocabulary"
 
@@ -116,8 +122,19 @@ export type PickupEventFacts<Row extends PriceRow = PriceRow> = {
   liveEvent: LiveEventFacts | null
 }
 
-/** A completed ticket as the worker reads it: what it ended in, the agreement it reaches, and the day it closed on the project's clock — or, for a ticket reopened since its completion was published, no resolution and no day, which is stale news and nothing here. */
-export type TicketCompletedFacts = {
+/** The product a completed ticket charges for, as the worker read it (#291 C3), with what its price is resolved from. */
+export type TicketChargeFacts<Row extends PriceRow = PriceRow> = {
+  /** Who named it: the person who completed the ticket, or the project's charge for the ticket's kind. */
+  source: "completion" | "kind"
+  product: { id: string; status: ProductStatus; unit: ProductUnit; vatPercent: number | null }
+  /** The agreement the ticket reaches, as the resolver reads it. */
+  agreement: { status: AgreementStatus; customerKind: CustomerKind; customerId: string }
+  /** The list that agreement is priced under, with its rows for the product on the day the ticket closed; null when neither the agreement nor the project names one. */
+  priceList: PricedList<Row> | null
+}
+
+/** A completed ticket as the worker reads it: what it ended in, the agreement it reaches, the day it closed on the project's clock, and the product it charges for — or, for a ticket reopened since its completion was published, no resolution and no day, which is stale news and nothing here. */
+export type TicketCompletedFacts<Row extends PriceRow = PriceRow> = {
   kind: "ticket-completed"
   ticketId: string
   /** The ticket's resolution as it stands now; null once `reopen` cleared it, which makes the completion stale news. */
@@ -126,13 +143,15 @@ export type TicketCompletedFacts = {
   agreement: { id: string; subscriptionId: string | null } | null
   /** The ticket's `closedAt` rendered as a `YYYY-MM-DD` day in the project's timezone by the worker: this module has no clock and no timezone. Null where the ticket stands open again and has no closing instant. */
   closedOn: string | null
+  /** The product the completion named, else the project's for the ticket's kind, with its pricing; null where neither names one or no agreement is reachable. */
+  charge: TicketChargeFacts<Row> | null
 }
 
 /** Every other event, which this module reads the kind of and nothing else. */
 export type OtherEventFacts = { kind: Exclude<OutboxKind, PickupEventKind | "ticket-completed"> }
 
 /** An outbox event as the worker hands it here: the kind, and the plain facts that kind's payload and the reads beside it give. */
-export type EventFacts<Row extends PriceRow = PriceRow> = PickupEventFacts<Row> | TicketCompletedFacts | OtherEventFacts
+export type EventFacts<Row extends PriceRow = PriceRow> = PickupEventFacts<Row> | TicketCompletedFacts<Row> | OtherEventFacts
 
 /** What a billable event links to: the ids the event named, each null where it named none. */
 export type BillableEventLinks = {
@@ -162,11 +181,10 @@ export type BillableAction =
   | { action: "cancel"; eventId: string; reason: CancelReason }
   | { action: "reverse"; eventId: string; draft: BillableEventDraft }
 
-/** The resolutions whose completion is billable: a re-collection arranged, or the request fulfilled. */
-export const BILLABLE_RESOLUTIONS = ["recollected", "serviced"] as const satisfies readonly TicketResolution[]
+export { BILLABLE_RESOLUTIONS, isBillableResolution } from "../resolution/vocabulary"
 
-/** Whether a completed ticket's resolution is one the office may charge for: the list's membership, never a table's keys, so a stray string finds nothing. */
-export const isBillableResolution = (resolution: TicketResolution): boolean => (BILLABLE_RESOLUTIONS as readonly string[]).includes(resolution)
+/** Whether a ticket's work may be charged at the product (#291 C3): never one sold by the month, which is a recurring charge; the completion's as the person named it; the kind's only while it is offered, a retired one being the office's to replace. */
+export const chargesTicketWork = (charge: TicketChargeFacts): boolean => charge.product.unit !== "month" && (charge.source === "completion" || charge.product.status === "active")
 
 const NO_LINKS: BillableEventLinks = { routeId: null, pickupId: null, ticketId: null, reversesEventId: null }
 
@@ -249,20 +267,20 @@ export function billableFor<Row extends PriceRow>(event: EventFacts<Row>, labels
       // Stale news: the ticket was reopened after its completion was published, and stands open with no resolution and no closing day; its next completion is its own event.
       if (event.resolution === null || event.closedOn === null) return undefined
       if (!isBillableResolution(event.resolution) || event.agreement === null) return undefined
-      return {
-        action: "record",
-        draft: {
-          kind: "ticket",
-          serviceDate: event.closedOn,
-          agreementId: event.agreement.id,
-          subscriptionId: event.agreement.subscriptionId,
-          productId: null,
+      const base = { kind: "ticket" as const, serviceDate: event.closedOn, agreementId: event.agreement.id, subscriptionId: event.agreement.subscriptionId, quantity: 1, links: { ...NO_LINKS, ticketId: event.ticketId } }
+      const { charge } = event
+      if (charge === null || !chargesTicketWork(charge)) return { action: "record", draft: { ...base, productId: null, price: null, blockReason: "no-product" } }
+      const outcome = priceOccurrence(
+        {
+          agreement: { status: charge.agreement.status },
+          priceList: charge.priceList,
+          product: charge.product,
           quantity: 1,
-          price: null,
-          blockReason: "no-product",
-          links: { ...NO_LINKS, ticketId: event.ticketId },
+          input: { on: event.closedOn, planningAreaId: null, customerKind: charge.agreement.customerKind, containerTypeId: null, wasteFractionId: null, customerId: charge.agreement.customerId },
         },
-      }
+        labels,
+      )
+      return { action: "record", draft: { ...base, productId: charge.product.id, price: outcome.price, blockReason: outcome.blockReason } }
     }
     default:
       return undefined
