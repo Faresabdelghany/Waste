@@ -60,7 +60,7 @@ import { containerType, product, serviceFrequency, wasteFraction } from "../sche
 import { oneOf, positive } from "../schema/checks"
 import { id, projectScoped, recorded, tenant, timestamps, validity, validPeriod } from "../schema/columns"
 import { customer } from "../schema/customers"
-import { outboxEvent, route, session, unload } from "../schema/execution"
+import { route, session, unload } from "../schema/execution"
 import {
   billableEvent,
   billingRun,
@@ -86,6 +86,7 @@ import { companyReference, indexOn, projectKey, projectReference, tenantIndex, t
 import { wms } from "../schema/wms"
 import { excludeOverlapping } from "../sql/exclude-overlapping"
 import { handWrittenStatements, normalised, statementsOf } from "../sql/hand-written"
+import { outboxEventAsOf0010 } from "./outbox-as-of"
 import { checksOf, companyFk, createTable, foreignKey, ID, index, list, oneOfCheck, partialUniqueIndex, positiveCheck, projectFk, projectFkTo, ref, tenantFk, uniqueKey, validityCheck } from "./rendering"
 import { statementsBetween, statementsFor } from "./specimen"
 
@@ -812,7 +813,7 @@ const tablesAsOf0010 = async (): Promise<string[]> =>
 
 /** The ALTER TABLEs as drizzle-kit writes them: the five altered tables from their last spelling to today's, in one diff. */
 const generatedAlterations = (): Promise<string[]> =>
-  statementsBetween({ company: companyAsOf0009, product: productAsOf0004, agreement: agreementAsOf0004, unload: unloadAsOf0008, outboxEvent: outboxEventAsOf0009 }, { company: companyAsOf0010, product, agreement, unload, outboxEvent })
+  statementsBetween({ company: companyAsOf0009, product: productAsOf0004, agreement: agreementAsOf0004, unload: unloadAsOf0008, outboxEvent: outboxEventAsOf0009 }, { company: companyAsOf0010, product, agreement, unload, outboxEvent: outboxEventAsOf0010 })
 
 /** Everything drizzle-kit wrote at the head of 0010: the sixteen tables and the five altered ones. */
 const generatedHead = async (): Promise<string[]> => [...(await tablesAsOf0010()).map((statement) => CHANGED_IN_0037.get(statement) ?? statement), ...(await generatedAlterations())]

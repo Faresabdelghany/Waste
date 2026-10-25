@@ -96,6 +96,7 @@ export const AUDITED_TABLES = [
   "pickup_exception_rule_step",
   "fuel_emission_factor",
   "vehicle_type_consumption",
+  "application",
 ] as const
 export type AuditedTable = (typeof AUDITED_TABLES)[number]
 

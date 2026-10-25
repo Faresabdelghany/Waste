@@ -69,6 +69,7 @@ import { company, project, serviceProvider } from "@waste/db/schema/organisation
 import { contaminantCode, contaminantCodeFraction, pickupExceptionRule, pickupExceptionRuleStep } from "@waste/db/schema/pickup-exceptions"
 import { planningArea, planningAreaBoundary } from "@waste/db/schema/planning-areas"
 import { alert, ticket, ticketEvent, ticketSla } from "@waste/db/schema/resolution"
+import { application, applicationDecision } from "@waste/db/schema/applications"
 import { collectionGroup, collectionGroupContainer, collectionGroupContainerType, collectionGroupFraction, routeScheme } from "@waste/db/schema/route-schemes"
 import { withCompany } from "@waste/db/tenant"
 import { normaliseGrants, type Grant } from "@waste/domain/access/grants"
@@ -325,6 +326,7 @@ export async function dropTenant(pool: Database, companyId: string, owner?: Data
     await owner.db.delete(planLeg).where(eq(planLeg.companyId, companyId))
     await owner.db.delete(planStop).where(eq(planStop.companyId, companyId))
     await owner.db.delete(ticketEvent).where(eq(ticketEvent.companyId, companyId))
+    await owner.db.delete(applicationDecision).where(eq(applicationDecision.companyId, companyId))
     await owner.db.delete(proofOfService).where(eq(proofOfService.companyId, companyId))
     await owner.db.delete(unload).where(eq(unload.companyId, companyId))
     await owner.db.delete(driverCommand).where(eq(driverCommand.companyId, companyId))
@@ -392,6 +394,8 @@ export async function dropTenant(pool: Database, companyId: string, owner?: Data
     await tx.delete(planningAreaBoundary).where(eq(planningAreaBoundary.companyId, companyId))
     await tx.delete(planningArea).where(eq(planningArea.companyId, companyId))
     await tx.delete(containerServicePlacement).where(eq(containerServicePlacement.companyId, companyId))
+    // An Application names a customer, a place and a subscription (M7 of #293): it goes before all three.
+    await tx.delete(application).where(eq(application.companyId, companyId))
     await tx.delete(subscriptionPause).where(eq(subscriptionPause.companyId, companyId))
     await tx.delete(subscription).where(eq(subscription.companyId, companyId))
     await tx.delete(agreement).where(eq(agreement.companyId, companyId))

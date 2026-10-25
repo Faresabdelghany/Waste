@@ -38,7 +38,9 @@
 // from @waste/domain/finance/payment, the patterns the database's checks read
 // too. M10 of #293 added @waste/domain/resources/emissions: emissions.ts
 // bounds a factor and a consumption by the domain's caps, which the
-// database's checks read too.
+// database's checks read too. M7 of #293 added
+// @waste/domain/registry/applications: applications.ts holds a Decision's
+// period and appeal text to the domain's rules in the domain's sentences.
 import path from "node:path"
 import { fileURLToPath } from "node:url"
 
@@ -58,6 +60,7 @@ definePurityTests({
     "@waste/domain/imports/vocabulary",
     "@waste/domain/insight/vocabulary",
     "@waste/domain/planning/vocabulary",
+    "@waste/domain/registry/applications",
     "@waste/domain/registry/vocabulary",
     "@waste/domain/registry/waste-code",
     "@waste/domain/resolution/event-shapes",

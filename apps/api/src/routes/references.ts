@@ -35,7 +35,7 @@ import type { ProductStatus } from "@waste/contracts/catalogue"
 import type { CustomerStatus, PropertyStatus, SharedCollectionPointStatus } from "@waste/contracts/customers"
 import type { Tx } from "@waste/db/client"
 import { projectAccess, userAccount } from "@waste/db/schema/access"
-import { agreement } from "@waste/db/schema/agreements"
+import { agreement, subscription } from "@waste/db/schema/agreements"
 import { containerType, product, serviceFrequency, wasteFraction } from "@waste/db/schema/catalogue"
 import { container } from "@waste/db/schema/containers"
 import { customer, property, sharedCollectionPoint } from "@waste/db/schema/customers"
@@ -483,6 +483,14 @@ export async function requireAlert(tx: Tx, scope: Scope, id: string | null | und
 export async function requireAgreement(tx: Tx, scope: Scope, id: string | null | undefined, path = "agreementId"): Promise<void> {
   if (id == null) return
   await requireRow(tx, agreement, inProject(agreement, scope, id), { path, message: NOT_AN_AGREEMENT })
+}
+
+/** A Subscription a body names: the project's, as its agreement is (an Application's subject, M7 of #293). */
+export const NOT_A_SUBSCRIPTION = "Not a subscription of this project"
+
+export async function requireSubscription(tx: Tx, scope: Scope, id: string | null | undefined, path = "subscriptionId"): Promise<void> {
+  if (id == null) return
+  await requireRow(tx, subscription, inProject(subscription, scope, id), { path, message: NOT_A_SUBSCRIPTION })
 }
 
 /**

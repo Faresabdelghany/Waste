@@ -18,6 +18,7 @@ import * as availabilityModule from "../availability"
 import * as billableEventsModule from "../billable-events"
 import * as billingModule from "../billing"
 import * as catalogueModule from "../catalogue"
+import * as applicationsModule from "../applications"
 import * as collectionCalendarsModule from "../collection-calendars"
 import * as containersModule from "../containers"
 import * as customersModule from "../customers"
@@ -77,6 +78,7 @@ import { ServiceProviderPriceIndex } from "../service-provider-prices"
 
 /** Every module of the package by its file's name: imported by name, since the purity gate refuses an import it cannot read, and held to the directory below. */
 const MODULES: Readonly<Record<string, Record<string, unknown>>> = {
+  "applications": applicationsModule,
   "access": accessModule,
   "agreements": agreementsModule,
   "alerts": alertsModule,

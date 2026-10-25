@@ -281,6 +281,13 @@
       "when": 1792921994648,
       "tag": "0039_fleet_emissions",
       "breakpoints": true
+    },
+    {
+      "idx": 40,
+      "version": "7",
+      "when": 1792923020897,
+      "tag": "0040_applications",
+      "breakpoints": true
     }
   ]
 }

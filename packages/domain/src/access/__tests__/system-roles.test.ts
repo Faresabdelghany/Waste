@@ -97,6 +97,14 @@ describe("the seeded system roles", () => {
     assert.deepEqual(actionsOn("operations-manager"), ["view", "edit"])
   })
 
+  test("the Applications (#293, M7) are the customers' workspace's: Customer Service receives and decides them, the administrator holds all, and the roles that view the customers read them", () => {
+    const actionsOn = (key: string) => SYSTEM_ROLES.find((role) => role.key === key)?.grants.find((grant) => grant.moduleKey === "customers.applications")?.actions
+    assert.deepEqual(actionsOn("customer-service"), ["view", "edit", "create"])
+    assert.deepEqual(actionsOn("company-administrator"), ["view", "edit", "create", "delete"])
+    for (const key of ["operations-manager", "dispatcher", "route-planner", "finance-specialist"]) assert.deepEqual(actionsOn(key), ["view"], key)
+    for (const key of ["service-provider-manager", "service-provider-foreman", "driver", "integration-writer"]) assert.equal(actionsOn(key), undefined, key)
+  })
+
   test("every office role that may move a route may make one: edit on route-studio.routes comes with create, the ad-hoc route being a dispatcher's daily job (#111); the provider's manager crews the routes it runs and makes none (#291 slice 23b)", () => {
     const routes = (key: string) => SYSTEM_ROLES.find((role) => role.key === key)?.grants.find((grant) => grant.moduleKey === "route-studio.routes")?.actions ?? []
     const editors = SYSTEM_ROLES.filter((role) => routes(role.key).includes("edit")).map((role) => role.key)

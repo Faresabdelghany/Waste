@@ -64,6 +64,14 @@ export const BILLING_CADENCES = ["monthly", "quarterly", "annual", "manual"] as 
 
 /** Whose Container it is; `unrecorded` is what an imported registry usually says. */
 export const CONTAINER_OWNERSHIPS = ["company", "customer", "unrecorded"] as const
+/** What a customer applies for (M7 of #293): to be exempt from a collection, to pause it, a longer interval between collections, to compost food waste at home, to share a bin with a neighbour, to be collected from where they can manage, or a fee put right. */
+export const APPLICATION_KINDS = ["exemption", "pause", "longer-interval", "home-composting", "shared-bin", "assisted-collection", "fee-correction"] as const
+/** Where an Application stands: received, under the office's review, decided, or withdrawn by the customer. Whether a decision is still in force is a reading of its period, never a status. */
+export const APPLICATION_STATUSES = ["received", "in-review", "decided", "withdrawn"] as const
+/** How the Application reached the office. */
+export const APPLICATION_CHANNELS = ["phone", "email", "letter", "counter", "portal"] as const
+/** A Decision's outcome. */
+export const DECISION_OUTCOMES = ["granted", "partly-granted", "refused"] as const
 
 export type CustomerKind = (typeof CUSTOMER_KINDS)[number]
 export type CustomerStatus = (typeof CUSTOMER_STATUSES)[number]
@@ -85,6 +93,10 @@ export type ProductUnit = (typeof PRODUCT_UNITS)[number]
 export type AgreementStatus = (typeof AGREEMENT_STATUSES)[number]
 export type BillingCadence = (typeof BILLING_CADENCES)[number]
 export type ContainerOwnership = (typeof CONTAINER_OWNERSHIPS)[number]
+export type ApplicationKind = (typeof APPLICATION_KINDS)[number]
+export type ApplicationStatus = (typeof APPLICATION_STATUSES)[number]
+export type ApplicationChannel = (typeof APPLICATION_CHANNELS)[number]
+export type DecisionOutcome = (typeof DECISION_OUTCOMES)[number]
 
 /** Every list of this module by its name, for a test that walks them and for a reader looking for the whole vocabulary at once. */
 export const REGISTRY_VOCABULARIES = {
@@ -108,4 +120,8 @@ export const REGISTRY_VOCABULARIES = {
   AGREEMENT_STATUSES,
   BILLING_CADENCES,
   CONTAINER_OWNERSHIPS,
+  APPLICATION_KINDS,
+  APPLICATION_STATUSES,
+  APPLICATION_CHANNELS,
+  DECISION_OUTCOMES,
 } as const satisfies Record<string, readonly [string, ...string[]]>

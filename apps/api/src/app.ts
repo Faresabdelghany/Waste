@@ -55,6 +55,7 @@ import { companyRoutes } from "./routes/company"
 import { containerRoutes } from "./routes/containers"
 import { customerRoutes } from "./routes/customers"
 import { depotRoutes } from "./routes/depots"
+import { applicationRoutes } from "./routes/applications"
 import { dropOffPointRoutes } from "./routes/drop-off-points"
 import { emissionReportRoutes } from "./routes/emissions"
 import { fuelEmissionFactorRoutes } from "./routes/fuel-emission-factors"
@@ -241,6 +242,8 @@ export function createApp({
   app.route("/", sharedCollectionPointRoutes(guard))
   // A termination asks generation runs of the schemes whose planned routes stop at its containers (#291), so it takes the clock and the job sender.
   app.route("/", agreementRoutes(guard, { now, jobs }))
+  // A customer's Applications and the office's Decisions (M7 of #293): a decision is stamped with the app's clock.
+  app.route("/", applicationRoutes(guard, { now }))
   app.route("/", subscriptionPauseRoutes(guard, { now, jobs }))
   app.route("/", containerRoutes(guard, { now }))
   app.route("/", lifecycleRoutes(guard, { now }))
