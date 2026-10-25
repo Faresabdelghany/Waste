@@ -7,7 +7,10 @@
 // one voucher per source row, a row once ever and a number once per project,
 // and the voucher's frozen lines — each with its fence and revoke and no
 // trigger. The file is found by its name, not its number, which it takes at
-// its turn. No database.
+// its turn. SAF-T (C7b) gave a VAT code its standard tax code and its shape,
+// in a migration of its own: `CHANGED_BY_SAF_T` maps the code's table as
+// drizzle-kit writes it today onto what the export's migration created. No
+// database.
 import assert from "node:assert/strict"
 import { readdir, readFile } from "node:fs/promises"
 import { join } from "node:path"
@@ -37,16 +40,32 @@ const tables = { accountingAccount, accountingSettings, accountingVatCode, accou
 
 const NUMBER_SHAPE = `${ref("accounting_account", "number")} ~ '${ACCOUNT_NUMBER_PATTERN}' and (${ref("accounting_account", "standard_account")} is null or ${ref("accounting_account", "standard_account")} ~ '${ACCOUNT_NUMBER_PATTERN}')`
 const VAT_CODE_SHAPE = `${ref("accounting_vat_code", "vat_percent")} >= 0 and ${ref("accounting_vat_code", "vat_percent")} <= 100 and ${ref("accounting_vat_code", "code")} ~ '${VAT_CODE_PATTERN}'`
+const STANDARD_SHAPE = `${ref("accounting_vat_code", "standard_tax_code")} is null or ${ref("accounting_vat_code", "standard_tax_code")} ~ '${VAT_CODE_PATTERN}'`
 const EXPORT_SHAPE = `${ref("accounting_export", "period_to")} >= ${ref("accounting_export", "period_from")} and ${ref("accounting_export", "voucher_from")} > 0 and ${ref("accounting_export", "voucher_to")} >= ${ref("accounting_export", "voucher_from")} and ${ref("accounting_export", "line_count")} > 0`
 
 const generated = () => statementsBetween(referenced, { ...referenced, ...tables })
 
-/** The migration, by its name: it takes its number at its turn. */
-async function migration(): Promise<string> {
-  const file = (await readdir(MIGRATIONS_FOLDER)).find((name) => /^\d{4}_accounting_export\.sql$/.test(name))
-  assert.ok(file !== undefined, "the accounting export's migration")
+/** A migration, by its name: it takes its number at its turn. */
+async function migration(name = "accounting_export"): Promise<string> {
+  const file = (await readdir(MIGRATIONS_FOLDER)).find((entry) => new RegExp(`^\\d{4}_${name}\\.sql$`).test(entry))
+  assert.ok(file !== undefined, `the ${name} migration`)
   return readFile(join(MIGRATIONS_FOLDER, file), "utf8")
 }
+
+/** A VAT code's table as the export created it, and as SAF-T grew it with the standard tax code (C7b). */
+const vatCodeTable = (asOf: "export" | "saf-t"): string =>
+  createTable("accounting_vat_code", "project", [
+    '"vat_percent" integer NOT NULL',
+    '"code" text NOT NULL',
+    '"account_id" uuid NOT NULL',
+    ...(asOf === "saf-t" ? ['"standard_tax_code" text'] : []),
+    uniqueKey("accounting_vat_code_project_id_vat_percent_key", "company_id", "project_id", "vat_percent"),
+    `CONSTRAINT "accounting_vat_code_shape" CHECK (${VAT_CODE_SHAPE})`,
+    ...(asOf === "saf-t" ? [`CONSTRAINT "accounting_vat_code_standard_shape" CHECK (${STANDARD_SHAPE})`] : []),
+  ])
+
+/** What SAF-T changed: the VAT code's CREATE TABLE as drizzle-kit generates it now onto what the export's migration created. */
+const CHANGED_BY_SAF_T = new Map([[vatCodeTable("saf-t"), vatCodeTable("export")]])
 
 describe("the accounting export as drizzle-kit writes it", () => {
   test("the mapping's four tables and the export's three ledgers, every column, key, check and index as the Domain model spells them", async () => {
@@ -67,13 +86,7 @@ describe("the accounting export as drizzle-kit writes it", () => {
         '"exports_from" date',
         uniqueKey("accounting_settings_project_id_key", "company_id", "project_id"),
       ]),
-      createTable("accounting_vat_code", "project", [
-        '"vat_percent" integer NOT NULL',
-        '"code" text NOT NULL',
-        '"account_id" uuid NOT NULL',
-        uniqueKey("accounting_vat_code_project_id_vat_percent_key", "company_id", "project_id", "vat_percent"),
-        `CONSTRAINT "accounting_vat_code_shape" CHECK (${VAT_CODE_SHAPE})`,
-      ]),
+      vatCodeTable("saf-t"),
       createTable("accounting_product_account", "project", ['"product_id" uuid NOT NULL', '"account_id" uuid NOT NULL', uniqueKey("accounting_product_account_project_id_product_id_key", "company_id", "project_id", "product_id")]),
       createLedger("accounting_export", [
         '"period_from" date NOT NULL',
@@ -141,7 +154,7 @@ describe("the accounting export as drizzle-kit writes it", () => {
     const text = await migration()
     const audit = ACCOUNTING_AUDITED.flatMap(auditTrail)
     const statements = statementsOf(text)
-    const head = (await generated()).map(normalised)
+    const head = (await generated()).map((statement) => normalised(CHANGED_BY_SAF_T.get(statement) ?? statement))
     // drizzle-kit writes the tables in its own order, so the head is compared as a set; the tail is ours, in order.
     assert.deepEqual([...statements.slice(0, head.length)].sort(), [...head].sort())
     assert.deepEqual(statements.slice(head.length), [...Object.values(tables).flatMap(handWrittenStatements), ...audit].map(normalised))
@@ -153,9 +166,17 @@ describe("the accounting export as drizzle-kit writes it", () => {
     assert.equal(ACCOUNTING_AUDITED.every((entry) => entry.module === "configure.finance"), true, "audited under Settings › Finance & invoicing, where the mapping is set")
   })
 
+  test("SAF-T's migration gives a VAT code its standard tax code, of a code's shape, and nothing else: the table keeps its fence, its touch and its audit trigger (C7b)", async () => {
+    assert.deepEqual(statementsOf(await migration("saf_t")), [
+      'ALTER TABLE "wms"."accounting_vat_code" ADD COLUMN "standard_tax_code" text;',
+      `ALTER TABLE "wms"."accounting_vat_code" ADD CONSTRAINT "accounting_vat_code_standard_shape" CHECK (${STANDARD_SHAPE});`,
+    ].map(normalised))
+  })
+
   test("the checks render without parameters", () => {
     assert.equal(checksOf(accountingAccount).get("accounting_account_number_shape"), NUMBER_SHAPE)
     assert.equal(checksOf(accountingVatCode).get("accounting_vat_code_shape"), VAT_CODE_SHAPE)
+    assert.equal(checksOf(accountingVatCode).get("accounting_vat_code_standard_shape"), STANDARD_SHAPE)
     assert.equal(checksOf(accountingExport).get("accounting_export_shape"), EXPORT_SHAPE)
   })
 })

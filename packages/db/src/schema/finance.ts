@@ -1007,6 +1007,8 @@ export const accountingVatCode = wms.table(
     vatPercent: integer().notNull(),
     code: text().notNull(),
     accountId: uuid().notNull(),
+    /** The code in Erhvervsstyrelsen's standard tax codes (`S1`, `K1`, …) that a SAF-T file names beside the office's own (C7b); null where it is not mapped. */
+    standardTaxCode: text(),
   },
   (t) => [
     companyReference(t, company),
@@ -1017,6 +1019,8 @@ export const accountingVatCode = wms.table(
     // No `between`: nested in an `and`, its expansion deparses one way as written and another once a dump is restored, and the Pilot rehearsal compares the two.
     check(tableObjectName(t.id.table, "shape", "accountingVatCode"), sql`${t.vatPercent} >= 0 and ${t.vatPercent} <= 100 and ${t.code} ~ ${sql.raw(`'${VAT_CODE_PATTERN}'`)}`),
     tenantIndex(t, t.accountId),
+    // A standard code is of the shape a SAF-T TaxCode takes (C7b).
+    check(tableObjectName(t.id.table, "standard_shape", "accountingVatCode"), sql`${t.standardTaxCode} is null or ${t.standardTaxCode} ~ ${sql.raw(`'${VAT_CODE_PATTERN}'`)}`),
   ],
 )
 

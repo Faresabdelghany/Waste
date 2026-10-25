@@ -31,9 +31,9 @@ describe("the Finance vocabulary's own rules", () => {
     assert.deepEqual([...vocabulary.CREDIT_REASONS], ["service-not-delivered", "quantity-correction", "price-correction", "duplicate", "other"])
   })
 
-  test("an accounting export books four kinds of row and downloads as our CSV (#291 C7)", () => {
+  test("an accounting export books four kinds of row and downloads as our CSV or Danish SAF-T (#291 C7)", () => {
     assert.deepEqual([...vocabulary.ACCOUNTING_SOURCE_KINDS], ["invoice", "credit-note", "payment", "allocation"])
-    assert.deepEqual([...vocabulary.ACCOUNTING_FORMATS], ["csv"])
+    assert.deepEqual([...vocabulary.ACCOUNTING_FORMATS], ["csv", "saf-t"])
   })
 
   test("a settlement stands in three statuses, the open two a value of the list, and its history has three kinds", () => {

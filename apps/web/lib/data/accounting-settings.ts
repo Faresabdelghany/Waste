@@ -26,7 +26,7 @@ export type AccountingDraft = {
   accounts: { number: string; name: string; standardAccount: string }[]
   defaults: Record<AccountingDefault, string>
   exportsFrom: string
-  vatCodes: { vatPercent: string; code: string; account: string }[]
+  vatCodes: { vatPercent: string; code: string; account: string; standardTaxCode: string }[]
   productAccounts: { productId: string; account: string }[]
 }
 
@@ -36,7 +36,7 @@ export function draftOf(settings: AccountingSettings): AccountingDraft {
     accounts: settings.accounts.map((account) => ({ number: account.number, name: account.name, standardAccount: account.standardAccount ?? "" })),
     defaults: { receivable: settings.receivable ?? NO_ONE, bank: settings.bank ?? NO_ONE, suspense: settings.suspense ?? NO_ONE, revenue: settings.revenue ?? NO_ONE },
     exportsFrom: settings.exportsFrom ?? "",
-    vatCodes: settings.vatCodes.map((code) => ({ vatPercent: String(code.vatPercent), code: code.code, account: code.account })),
+    vatCodes: settings.vatCodes.map((code) => ({ vatPercent: String(code.vatPercent), code: code.code, account: code.account, standardTaxCode: code.standardTaxCode ?? "" })),
     productAccounts: settings.productAccounts.map((entry) => ({ productId: entry.productId, account: entry.account })),
   }
 }
@@ -90,7 +90,9 @@ export function accountingSettingsBody(projectId: string, draft: AccountingDraft
     const account = named(row.account, `vatCodes.${index}.account`)
     if (account === null) return { path: `vatCodes.${index}.account`, message: `Pick the account ${percent} % VAT goes to` }
     if (typeof account === "object") return account
-    vatCodes.push({ vatPercent: percent, code, account })
+    const standard = row.standardTaxCode.trim()
+    if (standard !== "" && !CODE.test(standard)) return { path: `vatCodes.${index}.standardTaxCode`, message: "A standard tax code is a letter or digit, then up to eight letters, digits, underscores or hyphens" }
+    vatCodes.push({ vatPercent: percent, code, account, standardTaxCode: standard === "" ? null : standard })
   }
   const productAccounts: AccountingSettingsSet["productAccounts"] = []
   for (const [index, row] of draft.productAccounts.entries()) {

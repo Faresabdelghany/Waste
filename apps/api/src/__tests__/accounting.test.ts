@@ -5,7 +5,9 @@
 // note and payment, and the allocation of a payment that named no customer,
 // as one balanced voucher on its own day, each once ever, a late row going
 // into the next export back-dated; and the file, our CSV, rendered from the
-// frozen lines so a download is the same bytes after the mapping changes.
+// frozen lines so a download is the same bytes after the mapping changes, or
+// Danish SAF-T 2.1 (C7b), refused while the company or the mapping lacks what
+// it needs and valid against Erhvervsstyrelsen's schema once they hold it.
 import assert from "node:assert/strict"
 import { after, before, describe, test } from "node:test"
 
@@ -17,6 +19,7 @@ import { PaymentDetail } from "@waste/contracts/payments"
 import { createDb, type Database } from "@waste/db/client"
 import { NOTHING_TO_EXPORT } from "@waste/db/commands/accounting-exports"
 import { ACCOUNTING_CSV_COLUMNS } from "@waste/domain/finance/accounting"
+import { safTGapSentence } from "@waste/domain/finance/saf-t"
 
 import { createApp } from "../app"
 import { EXPORT_PERIOD_ENDS_BY_TODAY } from "../routes/accounting"
@@ -27,11 +30,14 @@ import { created } from "./created"
 import { databaseUnderTest, ownerUnderTest } from "./database"
 import { seedExecution } from "./execution-fixtures"
 import { readProblem } from "./read-problem"
+import { safTSchemaUnderTest, schemaErrors } from "./saf-t-schema"
 import { seedFleet, seedPlanning } from "./scheme-fixtures"
 import { dropTenant, seedTenant, type Tenant } from "./tenant"
 import { signingKeys, type SigningKeys } from "./tokens"
 
 const database = databaseUnderTest()
+/** ERST's schema a SAF-T file is validated against, fetched at its pinned commit. */
+const schema = await safTSchemaUnderTest()
 const ExportPage = Page(AccountingExport)
 /** The owner sweeps the exports, invoices and payments, which `wms_api` may not delete. */
 const owner = ownerUnderTest()
@@ -108,7 +114,7 @@ describe("the accounting export (#291 C7)", { skip: database.skip || owner.skip 
     suspense: "5850",
     revenue: "1020",
     exportsFrom: null,
-    vatCodes: [{ vatPercent: 25, code: "U25", account: "6800" }],
+    vatCodes: [{ vatPercent: 25, code: "U25", account: "6800", standardTaxCode: null as string | null }],
     productAccounts: [] as { productId: string; account: string }[],
   }
   const putMapping = (body: Record<string, unknown>, call: Call = olivia) => call("/accounting-settings", { method: "PUT", body: { projectId: copenhagen, ...MAPPING, ...body } })
@@ -127,7 +133,7 @@ describe("the accounting export (#291 C7)", { skip: database.skip || owner.skip 
     assert.deepEqual(empty, { projectId: copenhagen, accounts: [], receivable: null, bank: null, suspense: null, revenue: null, exportsFrom: null, vatCodes: [], productAccounts: [] })
     const set = AccountingSettings.parse(await (await ok(await putMapping({ accounts: [...MAPPING.accounts].reverse(), productAccounts: [{ productId: fx.products.residual.id, account: "1010" }] }))).json())
     assert.deepEqual(set.accounts.map((account) => account.number), ["1010", "1020", "5600", "5820", "5850", "6800"])
-    assert.deepEqual([set.receivable, set.bank, set.suspense, set.revenue, set.vatCodes, set.productAccounts], ["5600", "5820", "5850", "1020", [{ vatPercent: 25, code: "U25", account: "6800" }], [{ productId: fx.products.residual.id, account: "1010" }]])
+    assert.deepEqual([set.receivable, set.bank, set.suspense, set.revenue, set.vatCodes, set.productAccounts], ["5600", "5820", "5850", "1020", [{ vatPercent: 25, code: "U25", account: "6800", standardTaxCode: null }], [{ productId: fx.products.residual.id, account: "1010" }]])
     assert.deepEqual(AccountingSettings.parse(await (await ok(await olivia(`/accounting-settings?projectId=${copenhagen}`))).json()), set)
   })
 
@@ -135,8 +141,8 @@ describe("the accounting export (#291 C7)", { skip: database.skip || owner.skip 
     const path = async (body: Record<string, unknown>) => (await refused(await putMapping(body), 400)).errors
     assert.equal((await path({ accounts: [...MAPPING.accounts, MAPPING.accounts[0]] }))?.[0]?.path, "accounts")
     assert.deepEqual((await path({ bank: "9999" }))?.[0], { path: "bank", message: NOT_AN_ACCOUNT })
-    assert.deepEqual((await path({ vatCodes: [{ vatPercent: 25, code: "U25", account: "9999" }] }))?.[0], { path: "vatCodes.0.account", message: NOT_AN_ACCOUNT })
-    assert.equal((await path({ vatCodes: [{ vatPercent: 25, code: "U25", account: "6800" }, { vatPercent: 25, code: "U26", account: "6800" }] }))?.[0]?.path, "vatCodes")
+    assert.deepEqual((await path({ vatCodes: [{ vatPercent: 25, code: "U25", account: "9999", standardTaxCode: null }] }))?.[0], { path: "vatCodes.0.account", message: NOT_AN_ACCOUNT })
+    assert.equal((await path({ vatCodes: [{ vatPercent: 25, code: "U25", account: "6800", standardTaxCode: null }, { vatPercent: 25, code: "U26", account: "6800", standardTaxCode: null }] }))?.[0]?.path, "vatCodes")
     assert.equal((await path({ accounts: [{ number: "10 10", name: "Spaced", standardAccount: null }], receivable: null, bank: null, suspense: null, revenue: null, vatCodes: [] }))?.[0]?.path, "accounts.0.number")
     assert.deepEqual((await path({ productAccounts: [{ productId: fx.products.harborBulky.id, account: "1010" }] }))?.[0], { path: "productAccounts.0.productId", message: NOT_A_PRODUCT })
     assert.equal((await refused(await olivia("/accounting-settings", { method: "PUT", body: { ...MAPPING, projectId: "01a00000-0000-7000-8000-000000000000" } }), 400)).errors?.[0]?.path, "projectId")
@@ -209,7 +215,7 @@ describe("the accounting export (#291 C7)", { skip: database.skip || owner.skip 
     assert.deepEqual(page.items.map((item) => item.voucherFrom), [1, 7])
   })
 
-  test("a period ending after the project's today is refused at periodTo, an export of a project this account does not work in reads as none, and the file is our CSV alone", async () => {
+  test("a period ending after the project's today is refused at periodTo, an export of a project this account does not work in reads as none, and the file is our CSV or SAF-T alone", async () => {
     for (const path of ["/accounting-exports/preview", "/accounting-exports"]) {
       assert.deepEqual((await refused(await olivia(path, { method: "POST", body: exportBody(TODAY, "2026-10-06") }), 400)).errors, [{ path: "periodTo", message: EXPORT_PERIOD_ENDS_BY_TODAY }], path)
     }
@@ -217,5 +223,35 @@ describe("the accounting export (#291 C7)", { skip: database.skip || owner.skip 
     assert.equal((await refused(await olivia(`/accounting-exports/${one.id}/file?format=xml`), 400)).errors?.[0]?.path, "format")
     await refused(await olivia("/accounting-exports/01a00000-0000-7000-8000-000000000001"), 404)
     assert.deepEqual(ExportPage.parse(await (await ok(await olivia(`/accounting-exports?projectId=${harbor}`))).json()).items, [], "Harbor Commercial exported nothing")
+  })
+
+  test("the file is Danish SAF-T 2.1 too, made on the project's today: refused while the company or the mapping lacks what it needs, then valid against ERST's schema, the euro vouchers left out and named (C7b)", { skip: schema.skip }, async () => {
+    const [first] = ExportPage.parse(await (await ok(await olivia(`/accounting-exports?projectId=${copenhagen}`))).json()).items
+    const saft = () => olivia(`/accounting-exports/${first.id}/file?format=saf-t`)
+    assert.equal((await refused(await saft(), 409)).detail, safTGapSentence({ company: "address" }))
+    await ok(await olivia("/company", { method: "PATCH", body: { postalAddress: "Havnegade 4\n2100 København Ø", vatNumber: "DK12345678" } }))
+    assert.equal((await refused(await saft(), 409)).detail, safTGapSentence({ company: "bank" }))
+    await ok(await olivia("/company", { method: "PATCH", body: { bankIban: "DK5000400440116243", bankBic: "DABADKKK" } }))
+
+    // The mapping as it now stands types the accounts and gives their standard numbers.
+    const productAccounts = [{ productId: fx.products.residual.id, account: "1010" }]
+    await ok(await putMapping({ productAccounts, accounts: MAPPING.accounts.map((account) => (account.number === "6800" ? { ...account, standardAccount: null } : account)) }))
+    assert.equal((await refused(await saft(), 409)).detail, safTGapSentence({ account: "6800", why: "no-standard-account" }))
+    await ok(await putMapping({ productAccounts, revenue: "5600" }))
+    assert.equal((await refused(await saft(), 409)).detail, safTGapSentence({ account: "5600", why: "two-types" }))
+    await ok(await putMapping({ productAccounts, vatCodes: [{ vatPercent: 25, code: "U25", account: "6800", standardTaxCode: "S1" }] }))
+
+    const file = await ok(await saft())
+    assert.equal(file.headers.get("content-type"), "application/xml; charset=utf-8")
+    assert.match(file.headers.get("content-disposition") ?? "", /^attachment; filename="accounting-2026-10-05-2026-10-05-1-6-saf-t\.xml"$/)
+    const xml = await file.text()
+    assert.equal(schemaErrors(schema.path, xml), null, "valid against Danish_SAF-T_Financial_Schema_v_2_1.xsd")
+    assert.match(xml, /<AuditFileDateCreated>2026-10-05<\/AuditFileDateCreated>/)
+    assert.match(xml, /<StreetName>Havnegade<\/StreetName>\s*<Number>4<\/Number>\s*<City>København Ø<\/City>\s*<PostalCode>2100<\/PostalCode>/)
+    // The housing association's invoice, Anna's, the credit note and the payment; the euro invoice and the unmatched euro payment left out.
+    assert.match(xml, /<NumberOfEntries>4<\/NumberOfEntries>/)
+    assert.match(xml, /Left out, in another currency than DKK: vouchers \d+ \(EUR\), \d+ \(EUR\)\.<\/HeaderComment>/)
+    assert.deepEqual([...xml.matchAll(/<AccountID>(\d+)<\/AccountID>\s*<AccountDescription>[^<]*<\/AccountDescription>\s*<StandardAccountID>\d+<\/StandardAccountID>\s*<AccountType>(\w+)<\/AccountType>/g)].map((match) => [match[1], match[2]]), [["1010", "Sale"], ["5600", "Asset"], ["5820", "Asset"], ["6800", "Liability"]])
+    assert.match(xml, /<TaxCode>U25<\/TaxCode>\s*<StandardTaxCode>S1<\/StandardTaxCode>/)
   })
 })

@@ -45,7 +45,13 @@ export const AccountingAccount = z.object({
 })
 export type AccountingAccount = z.infer<typeof AccountingAccount>
 
-export const AccountingVatCode = z.object({ vatPercent: VatPercent, code: VatCodeText, account: AccountNumber })
+export const AccountingVatCode = z.object({
+  vatPercent: VatPercent,
+  code: VatCodeText,
+  account: AccountNumber,
+  /** The code in Erhvervsstyrelsen's standard tax codes (`S1`, `K1`, …) a SAF-T file names beside the office's own; null where it is not mapped. */
+  standardTaxCode: VatCodeText.nullable(),
+})
 export type AccountingVatCode = z.infer<typeof AccountingVatCode>
 
 export const AccountingProductAccount = z.object({ productId: Id, account: AccountNumber })

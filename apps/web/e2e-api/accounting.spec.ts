@@ -94,10 +94,11 @@ test("Accounting: Settings maps a project onto the office's chart, and Commercia
   await pick(mapping, page, "Bank", /^5820/)
   await pick(mapping, page, "Unmatched payments", /^5850/)
   await pick(mapping, page, "Revenue", /^1010/)
-  for (const [index, [rate, code, account]] of ([["25", "U25", /^6800/], ["0", "U0", /^6810/]] as const).entries()) {
+  for (const [index, [rate, code, standard, account]] of ([["25", "U25", "S1", /^6800/], ["0", "U0", "", /^6810/]] as const).entries()) {
     await mapping.getByRole("button", { name: "Add rate" }).click()
     await mapping.getByLabel(`Rate ${index + 1}`, { exact: true }).fill(rate)
     await mapping.getByLabel(`Code ${index + 1}`, { exact: true }).fill(code)
+    if (standard !== "") await mapping.getByLabel(`Standard code ${index + 1}`, { exact: true }).fill(standard)
     await pick(mapping, page, `VAT account ${index + 1}`, account)
   }
   const [saved] = await Promise.all([answerOf(page, "PUT", /^\/accounting-settings$/), page.getByRole("button", { name: "Save mapping" }).click()])
@@ -108,7 +109,7 @@ test("Accounting: Settings maps a project onto the office's chart, and Commercia
     bank: "5820",
     suspense: "5850",
     revenue: "1010",
-    vatCodes: [{ vatPercent: 25, code: "U25", account: "6800" }, { vatPercent: 0, code: "U0", account: "6810" }],
+    vatCodes: [{ vatPercent: 25, code: "U25", account: "6800", standardTaxCode: "S1" }, { vatPercent: 0, code: "U0", account: "6810", standardTaxCode: null }],
   })
   expect((saved.request().postDataJSON() as { accounts: { number: string; standardAccount: string | null }[] }).accounts.map((account) => [account.number, account.standardAccount])).toEqual(CHART.map((account) => [account.number, account.standard === "" ? null : account.standard]))
   await expect(page.getByRole("button", { name: "Save mapping" })).toBeDisabled()
@@ -146,4 +147,19 @@ test("Accounting: Settings maps a project onto the office's chart, and Commercia
   const rows = file.subarray(3).toString("utf8").split("\r\n")
   expect(rows[0]).toBe("voucher;date;account;account_name;text;amount;vat_code;currency;customer;document;source;source_id")
   expect(rows.filter((row) => row.endsWith(`;invoice;${invoice.id}`)).map((row) => row.split(";")[2])).toEqual(["5600", "1010", "6800"])
+
+  // SAF-T: the API's file saved as it came, or, while the company's identity or the mapping lacks what it needs, the API's sentence told.
+  const saft = await api.get(`/accounting-exports/${made.id}/file?format=saf-t`)
+  if (saft.status() === 409) {
+    const { detail } = (await saft.json()) as { detail: string }
+    await details.getByRole("button", { name: "Download SAF-T" }).click()
+    await expect(page.getByText(detail).first()).toBeVisible()
+  } else {
+    expect(saft.status(), await saft.text()).toBe(200)
+    const [saved] = await Promise.all([page.waitForEvent("download"), details.getByRole("button", { name: "Download SAF-T" }).click()])
+    expect(saved.suggestedFilename()).toMatch(/^accounting-\d{4}-\d{2}-\d{2}-\d{4}-\d{2}-\d{2}-\d+-\d+-saf-t\.xml$/)
+    const xml = (await readFile((await saved.path()) ?? fail("the download was saved"))).toString("utf8")
+    expect(xml).toContain('<AuditFile xmlns="urn:StandardAuditFile-Taxation-Financial:DK">')
+    expect(xml).toContain("<TaxCode>U25</TaxCode>")
+  }
 })

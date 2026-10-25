@@ -114,7 +114,8 @@
         "DATABASE_ADMIN_URL",
         "DATABASE_URL",
         "SUPABASE_URL",
-        "REQUIRE_DATABASE"
+        "REQUIRE_DATABASE",
+        "REQUIRE_SAFT_XSD"
       ]
     },
     "@waste/worker#test": {

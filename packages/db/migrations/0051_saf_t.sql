@@ -1,0 +1,2 @@
+ALTER TABLE "wms"."accounting_vat_code" ADD COLUMN "standard_tax_code" text;--> statement-breakpoint
+ALTER TABLE "wms"."accounting_vat_code" ADD CONSTRAINT "accounting_vat_code_standard_shape" CHECK ("wms"."accounting_vat_code"."standard_tax_code" is null or "wms"."accounting_vat_code"."standard_tax_code" ~ '^[0-9A-Za-z][0-9A-Za-z_-]{0,8}$');

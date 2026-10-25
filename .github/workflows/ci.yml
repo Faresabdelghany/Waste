@@ -41,6 +41,9 @@ env:
   WORKER_DATABASE_URL: postgresql://wms_worker:wms_worker@127.0.0.1:54322/postgres
   # A database test may not skip here.
   REQUIRE_DATABASE: "1"
+  # Nor may the API's SAF-T test (#291 C7b), which validates a file against
+  # Erhvervsstyrelsen's schema fetched at its pinned commit, through xmllint.
+  REQUIRE_SAFT_XSD: "1"
   # The API refuses to start without the project whose tokens it verifies; its
   # tests sign tokens with a key set they generate and never fetch this one.
   SUPABASE_URL: https://example.supabase.co
@@ -89,6 +92,8 @@ jobs:
       - uses: ./.github/actions/postgres-client
       - run: pnpm --filter @waste/db rehearse-restore
 
+      # xmllint validates the API's SAF-T file; installed where the runner lacks it.
+      - run: command -v xmllint || (sudo apt-get update && sudo apt-get install -y libxml2-utils)
       - run: pnpm test
       - run: pnpm build
 

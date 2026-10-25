@@ -21,10 +21,12 @@ import { AccountingExport, AccountingExportCreate, AccountingExportListQuery, Ac
 import { Page } from "@waste/contracts/pagination"
 import type { Tx } from "@waste/db/client"
 import { ACCOUNTING_EXPORT_MAX_VOUCHERS, exportedLines, NOTHING_TO_EXPORT, planExport, runExport, tooManyVouchers } from "@waste/db/commands/accounting-exports"
+import { safTFileOf } from "@waste/db/commands/accounting-saf-t"
 import { product } from "@waste/db/schema/catalogue"
 import { accountingAccount, accountingExport, accountingExportLine, accountingExportVoucher, accountingProductAccount, accountingSettings, accountingVatCode } from "@waste/db/schema/finance"
 import { project } from "@waste/db/schema/organisation"
 import { accountingCsv } from "@waste/domain/finance/accounting"
+import { safTGapSentence, STANDARD_CHART_VERSION } from "@waste/domain/finance/saf-t"
 import { ACCOUNTING_SOURCE_KINDS } from "@waste/domain/finance/vocabulary"
 import { and, asc, count, eq, gt, inArray, notInArray, sql, sum, type SQL } from "drizzle-orm"
 import type { PgColumn } from "drizzle-orm/pg-core"
@@ -70,7 +72,7 @@ async function settingsOf(tx: Tx, scope: Scope): Promise<AccountingSettings> {
     suspense: named(settings?.suspenseAccountId ?? null),
     revenue: named(settings?.revenueAccountId ?? null),
     exportsFrom: settings?.exportsFrom ?? null,
-    vatCodes: vatCodes.map((row) => ({ vatPercent: row.vatPercent, code: row.code, account: numberOf.get(row.accountId)! })),
+    vatCodes: vatCodes.map((row) => ({ vatPercent: row.vatPercent, code: row.code, account: numberOf.get(row.accountId)!, standardTaxCode: row.standardTaxCode })),
     productAccounts: products.map((row) => ({ productId: row.productId, account: numberOf.get(row.accountId)! })),
   }
 }
@@ -116,8 +118,8 @@ async function replaceSettings(tx: Tx, scope: Scope, body: AccountingSettingsSet
   for (const code of body.vatCodes) {
     const before = codes.get(code.vatPercent)
     const accountId = idOf.get(code.account)!
-    if (before === undefined) await tx.insert(accountingVatCode).values({ id: newId(), ...scope, vatPercent: code.vatPercent, code: code.code, accountId })
-    else if (before.code !== code.code || before.accountId !== accountId) await tx.update(accountingVatCode).set({ code: code.code, accountId }).where(fenced(accountingVatCode, eq(accountingVatCode.id, before.id)))
+    if (before === undefined) await tx.insert(accountingVatCode).values({ id: newId(), ...scope, vatPercent: code.vatPercent, code: code.code, accountId, standardTaxCode: code.standardTaxCode })
+    else if (before.code !== code.code || before.accountId !== accountId || before.standardTaxCode !== code.standardTaxCode) await tx.update(accountingVatCode).set({ code: code.code, accountId, standardTaxCode: code.standardTaxCode }).where(fenced(accountingVatCode, eq(accountingVatCode.id, before.id)))
   }
 
   const entries = new Map((await tx.select().from(accountingProductAccount).where(fenced(accountingProductAccount))).map((row) => [row.productId, row]))
@@ -388,13 +390,14 @@ export function accountingRoutes(guard: MiddlewareHandler<AuthEnv>, { now = () =
         operationId: "getAccountingExportFile",
         summary: "An accounting export's file",
         description:
-          "The export's lines as a file, rendered from the lines it froze, so a download is the same bytes every time. `format` is `csv`, our own: UTF-8 with a byte-order mark; semicolon-separated, as e-conomic's journal import and a Danish spreadsheet expect; CRLF line ends; a header row, then one row per line in voucher order. The columns: `voucher` (the voucher number), `date` (the row's own day, `YYYY-MM-DD`), `account` and `account_name` (the account of the office's chart, as it was named), `text`, `amount` (signed — a debit positive, a credit negative — in the currency's digits with a decimal comma and no grouping; always the line's own: a revenue line's net, a VAT line's VAT), `vat_code` (the rate's code on a revenue line and its VAT line; a system that books VAT from a code on a gross amount imports the file with this column unmapped), `currency`, `customer`, `document` (the invoice's or credit note's label, a payment's reference, an allocation's invoice), `source` (`invoice`, `credit-note`, `payment` or `allocation`) and `source_id`. A voucher's lines sum to zero.",
+          "The export's lines as a file, rendered from the lines it froze, so a download is the same bytes every time. `format` is `csv`, our own: UTF-8 with a byte-order mark; semicolon-separated, as e-conomic's journal import and a Danish spreadsheet expect; CRLF line ends; a header row, then one row per line in voucher order. The columns: `voucher` (the voucher number), `date` (the row's own day, `YYYY-MM-DD`), `account` and `account_name` (the account of the office's chart, as it was named), `text`, `amount` (signed — a debit positive, a credit negative — in the currency's digits with a decimal comma and no grouping; always the line's own: a revenue line's net, a VAT line's VAT), `vat_code` (the rate's code on a revenue line and its VAT line; a system that books VAT from a code on a gross amount imports the file with this column unmapped), `currency`, `customer`, `document` (the invoice's or credit note's label, a payment's reference, an allocation's invoice), `source` (`invoice`, `credit-note`, `payment` or `allocation`) and `source_id`. A voucher's lines sum to zero. `format` is `saf-t`, Danish SAF-T 2.1 (`urn:StandardAuditFile-Taxation-Financial:DK`, Erhvervsstyrelsen's Danish_SAF-T_Financial_Schema_v_2_1.xsd), made on the project's today: the company's identity in its header — its CVR where its registration number is one, else the number — with its postal address read as the street on the first line and the postal code and city on the last, and its IBAN; each account a line names, with its standard-chart number (`StandardAccountID`, chart version `" + STANDARD_CHART_VERSION + "`) and its type by its role in the mapping as it now stands — receivables, the bank and unmatched payments an `Asset`, a revenue account a `Sale`, a VAT code's account a `Liability`, any other `Other` — opening at 0 and closing at the net of the file's lines, since the file is the export's and holds no balances; each VAT code a line names, with its standard code where it has one; and one journal, `ACCOUNTING`, of one transaction per voucher. SAF-T's amounts are in the company's currency, so a voucher in another is left out and named in the header comment. Refused while the file cannot be made (409, the sentence saying what to set): no postal address in that shape, no IBAN, an account a line names that the mapping no longer lists or that has no standard-chart number, or one mapped in roles of different types.",
         security: BEARER_SECURITY,
         responses: {
-          200: { description: "The file.", content: { "text/csv": { schema: { type: "string" as const } } } },
+          200: { description: "The file.", content: { "text/csv": { schema: { type: "string" as const } }, "application/xml": { schema: { type: "string" as const } } } },
           400: describeProblem("The path does not hold an id, or `format` is not one."),
           ...problems(EXPORT_MODULE, "view"),
           404: describeProblem("No accounting export with that id in the projects this account works in."),
+          409: describeProblem("A SAF-T file cannot be made yet: the sentence says what to set up."),
         },
       }),
       guard,
@@ -407,10 +410,17 @@ export function accountingRoutes(guard: MiddlewareHandler<AuthEnv>, { now = () =
         const principal = c.get("principal")
         const row = await findExport(tx, principal, id)
         if (row === undefined) throw noSuchExport(id)
-        const lines = await exportedLines(tx, { companyId: principal.companyId, projectId: row.projectId }, row.id)
+        const scope: Scope = { companyId: principal.companyId, projectId: row.projectId }
+        const name = `accounting-${row.periodFrom}-${row.periodTo}-${row.voucherFrom}-${row.voucherTo}`
+        if (c.req.valid("query").format === "saf-t") {
+          const file = await safTFileOf(tx, scope, row, await projectToday(tx, scope, now)())
+          if ("gap" in file) throw problem(409, { detail: safTGapSentence(file.gap) })
+          return c.body(file.xml, 200, { "content-type": "application/xml; charset=utf-8", "content-disposition": `attachment; filename="${name}-saf-t.xml"` })
+        }
+        const lines = await exportedLines(tx, scope, row.id)
         return c.body(accountingCsv(lines), 200, {
           "content-type": "text/csv; charset=utf-8",
-          "content-disposition": `attachment; filename="accounting-${row.periodFrom}-${row.periodTo}-${row.voucherFrom}-${row.voucherTo}.csv"`,
+          "content-disposition": `attachment; filename="${name}.csv"`,
         })
       },
     )

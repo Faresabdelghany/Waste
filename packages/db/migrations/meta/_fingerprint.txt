@@ -371,12 +371,14 @@ column wms.accounting_vat_code 5 updated_at timestamp with time zone not-null de
 column wms.accounting_vat_code 6 vat_percent integer not-null
 column wms.accounting_vat_code 7 code text not-null
 column wms.accounting_vat_code 8 account_id uuid not-null
+column wms.accounting_vat_code 9 standard_tax_code text
 constraint wms.accounting_vat_code accounting_vat_code_account_id_fk FOREIGN KEY (company_id, project_id, account_id) REFERENCES wms.accounting_account(company_id, project_id, id)
 constraint wms.accounting_vat_code accounting_vat_code_company_id_fk FOREIGN KEY (company_id) REFERENCES wms.company(id)
 constraint wms.accounting_vat_code accounting_vat_code_pkey PRIMARY KEY (id)
 constraint wms.accounting_vat_code accounting_vat_code_project_id_fk FOREIGN KEY (company_id, project_id) REFERENCES wms.project(company_id, id)
 constraint wms.accounting_vat_code accounting_vat_code_project_id_vat_percent_key UNIQUE (company_id, project_id, vat_percent)
 constraint wms.accounting_vat_code accounting_vat_code_shape CHECK (((vat_percent >= 0) AND (vat_percent <= 100) AND (code ~ '^[0-9A-Za-z][0-9A-Za-z_-]{0,8}$'::text)))
+constraint wms.accounting_vat_code accounting_vat_code_standard_shape CHECK (((standard_tax_code IS NULL) OR (standard_tax_code ~ '^[0-9A-Za-z][0-9A-Za-z_-]{0,8}$'::text)))
 index wms.accounting_vat_code accounting_vat_code_account_id_idx CREATE INDEX accounting_vat_code_account_id_idx ON wms.accounting_vat_code USING btree (company_id, account_id)
 index wms.accounting_vat_code accounting_vat_code_pkey CREATE UNIQUE INDEX accounting_vat_code_pkey ON wms.accounting_vat_code USING btree (id)
 index wms.accounting_vat_code accounting_vat_code_project_id_vat_percent_key CREATE UNIQUE INDEX accounting_vat_code_project_id_vat_percent_key ON wms.accounting_vat_code USING btree (company_id, project_id, vat_percent)
@@ -3747,4 +3749,5 @@ journal 1792950556670 ff215726a340d783acbe6014a8515499181b8c263d03a1f84c22527b39
 journal 1792952313199 b04f99d3f6c19ac508ebc304ce9ec2237ef28b77e48ea13664c37457ea9cd6a1
 journal 1792954475945 9314378d7dfb21885c2811e4fe94349e28f78895b02bc520bb49ff813b7abf21
 journal 1792963337527 f9d94b2631da7fd4aa199f12f7b126d912d2618f93565389dab6efc3fb32886d
+journal 1792964774291 575d9404cde4feb3468d43c2645301f94e48b4960341cda4dc4d6d7b432065a0
 pgboss-version 42

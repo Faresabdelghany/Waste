@@ -99,8 +99,8 @@ export type PaymentSource = (typeof PAYMENT_SOURCES)[number]
 export const ACCOUNTING_SOURCE_KINDS = ["invoice", "credit-note", "payment", "allocation"] as const
 export type AccountingSourceKind = (typeof ACCOUNTING_SOURCE_KINDS)[number]
 
-/** The files an export downloads as (#291 C7): our own documented CSV; Danish SAF-T 2.1 is C7b's. Not stored: the file is rendered from the frozen lines on each download. */
-export const ACCOUNTING_FORMATS = ["csv"] as const
+/** The files an export downloads as (#291 C7): our own documented CSV, and Danish SAF-T 2.1 (C7b). Not stored: the file is rendered from the frozen lines on each download. */
+export const ACCOUNTING_FORMATS = ["csv", "saf-t"] as const
 export type AccountingFormat = (typeof ACCOUNTING_FORMATS)[number]
 
 /** The statuses a Settlement is recalculated in: open, or calculated and not yet closed. A value of `SETTLEMENT_STATUSES`, not a vocabulary. */
