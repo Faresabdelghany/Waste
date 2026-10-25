@@ -30,6 +30,7 @@ import { AGREEMENTS_MODULE } from "./agreements"
 import type { BusinessFormField, BusinessFormSchema, BusinessFormValues } from "./business-form-types"
 import type { BusinessRecord } from "./business-modules"
 import {
+  ACCOUNTING_EXPORT_RECORD_KIND,
   BILLING_RUN_RECORD_KIND,
   CANCEL_REASON_LABELS,
   CREDIT_LINE_KEY,
@@ -409,6 +410,39 @@ export const RUN_BILLING_FORM: BusinessFormSchema = {
 /** A run Run billing asked for, minted for the session: the API runs it in the request and answers it completed. */
 export function createBillingRunRecord(values: BusinessFormValues, now: number): BusinessRecord {
   return mintedRecord({ id: `billing-billing-run-${now}`, name: `Billing run ${text(values, "periodFrom")} – ${text(values, "periodTo")}`, status: "Requested", recordKind: BILLING_RUN_RECORD_KIND, values: blankNone(values) })
+}
+
+// ---------------------------------------------------------------------------
+// Accounting exports
+// ---------------------------------------------------------------------------
+
+/** Export period (#291 C7): the project and the booking period, previewed before anything is written, as Run billing is. */
+export const EXPORT_PERIOD_FORM: BusinessFormSchema = {
+  key: "commercial.accounting",
+  mode: "action",
+  recordKind: ACCOUNTING_EXPORT_RECORD_KIND,
+  title: "Export period",
+  description: "Book a period's invoices, credit notes and payments to the project's chart of accounts, as a file for the office's bookkeeping. Each row is booked once, ever: a period exported again books only what arrived since, on its own day. You see what it would book first.",
+  submitLabel: "Preview",
+  sections: [
+    {
+      id: "export",
+      title: "Export period",
+      fields: [
+        project,
+        { id: "periodFrom", label: "First day", type: "date", required: true },
+        { id: "periodTo", label: "Last day", type: "date", required: true, description: "Today at the latest: an export is of a closed period." },
+        { id: "note", label: "Note", type: "textarea" },
+      ],
+    },
+  ],
+  validationRules: [{ type: "date-order", startField: "periodFrom", endField: "periodTo", message: "The last day comes on or after the first", allowSame: true }],
+  execution: { kind: "preview", completionMessage: "The export was previewed." },
+}
+
+/** The export the store creates once its preview is confirmed. */
+export function createAccountingExportRecord(values: BusinessFormValues, now: number): BusinessRecord {
+  return mintedRecord({ id: `commercial-accounting-export-${now}`, name: `Export ${text(values, "periodFrom")} – ${text(values, "periodTo")}`, status: "Requested", recordKind: ACCOUNTING_EXPORT_RECORD_KIND, values: blankNone(values) })
 }
 
 // ---------------------------------------------------------------------------

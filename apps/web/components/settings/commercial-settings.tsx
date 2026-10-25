@@ -69,6 +69,7 @@ import {
 import { PriceListsPane, ProductsOnApiPane } from "@/components/settings/commercial-catalogue-panes"
 import { TicketChargesSettings } from "@/components/settings/ticket-charges-settings"
 import { WorkOrderChargesSettings } from "@/components/settings/work-order-charges-settings"
+import { AccountingSettingsPane } from "@/components/settings/accounting-settings"
 import {
   SERVICE_PROVIDER_PERFORMANCE,
   PRICING_REFERENCE_DATE,
@@ -262,6 +263,7 @@ export function CommercialSectionPane({ paneId }: { paneId: string }) {
   if (paneId === "commercial-price-lists") return <PriceListsPane />
   if (paneId === "commercial-ticket-charges") return <TicketChargesSettings />
   if (paneId === "commercial-work-order-charges") return <WorkOrderChargesSettings />
+  if (paneId === "commercial-accounting") return <AccountingSettingsPane />
   return null
 }
 

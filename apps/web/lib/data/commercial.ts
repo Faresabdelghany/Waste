@@ -30,6 +30,7 @@ export const EVENTS_MODULE: ModuleLocation = { workspaceId: "commercial", module
 export const BILLING_MODULE: ModuleLocation = { workspaceId: "commercial", moduleId: "billing" }
 export const INVOICES_MODULE: ModuleLocation = { workspaceId: "commercial", moduleId: "invoices" }
 export const PAYMENTS_MODULE: ModuleLocation = { workspaceId: "commercial", moduleId: "payments" }
+export const ACCOUNTING_MODULE: ModuleLocation = { workspaceId: "commercial", moduleId: "accounting" }
 /** Fixture mode's price lists: a browser bucket of their own, never a module the API answers. */
 export const FIXTURE_PRICE_LISTS_BUCKET: ModuleLocation = { workspaceId: "commercial", moduleId: "price-lists" }
 /** The routes an event names (slice 6). */
@@ -43,6 +44,7 @@ export const BILLING_RUN_PREFIX = "billing-run"
 export const INVOICE_PREFIX = "invoice"
 export const CREDIT_NOTE_PREFIX = "credit-note"
 export const PAYMENT_PREFIX = "payment"
+export const ACCOUNTING_EXPORT_PREFIX = "accounting-export"
 
 /** The prefix of the fields a partial credit note's dialog names a line's quantity under: `line:<uuid>`; the adapter reads the body's lines from them. */
 export const CREDIT_LINE_KEY = "line:"
@@ -55,6 +57,7 @@ export const BILLING_RUN_RECORD_KIND = "Billing run"
 export const INVOICE_RECORD_KIND = "Invoice"
 export const CREDIT_NOTE_RECORD_KIND = "Credit note"
 export const PAYMENT_RECORD_KIND = "Payment"
+export const ACCOUNTING_EXPORT_RECORD_KIND = "Accounting export"
 
 export const isProductRecord = ofKind(PRODUCT_PREFIX, [PRODUCT_RECORD_KIND])
 export const isPriceListRecord = ofKind(PRICE_LIST_PREFIX, [PRICE_LIST_RECORD_KIND])
@@ -65,6 +68,7 @@ export const isBillingRunRecord = ofKind(BILLING_RUN_PREFIX, [BILLING_RUN_RECORD
 export const isInvoiceDocument = (record: Pick<BusinessRecord, "id" | "recordKind">) =>
   ofKind(INVOICE_PREFIX, [INVOICE_RECORD_KIND])(record) || ofKind(CREDIT_NOTE_PREFIX, [CREDIT_NOTE_RECORD_KIND])(record)
 export const isPaymentRecord = ofKind(PAYMENT_PREFIX, [PAYMENT_RECORD_KIND])
+export const isAccountingExportRecord = ofKind(ACCOUNTING_EXPORT_PREFIX, [ACCOUNTING_EXPORT_RECORD_KIND])
 
 // ---------------------------------------------------------------------------
 // Wire tokens as a person reads them

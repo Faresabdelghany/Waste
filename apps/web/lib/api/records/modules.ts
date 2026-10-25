@@ -24,6 +24,7 @@ import { fleetDriversModule, fleetVehiclesModule } from "./fleet"
 import { liveModule } from "./live"
 import { masterDataModule } from "./master-data"
 import { accessModule, organisationModule, serviceProvidersModule } from "./organisation"
+import { accountingModule } from "./accounting"
 import { paymentsModule } from "./payments"
 import { pickupsModule } from "./pickups"
 import { placesModule, warehousesModule } from "./places"
@@ -113,6 +114,7 @@ export const SERVER_MODULES: readonly ServerModule[] = [
   billingModule,
   invoicesModule,
   paymentsModule,
+  accountingModule,
   settlementsModule,
   weightsModule,
 ]
