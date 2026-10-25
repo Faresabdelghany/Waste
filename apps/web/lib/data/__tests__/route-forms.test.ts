@@ -241,10 +241,12 @@ describe("the stop's dialogs", () => {
     assert.ok(PickupRemove.safeParse(pickupAdapter.commands?.[REMOVE_PICKUP]?.toBody?.({ reason: "Blocked" }, stop, context)).success)
   })
 
-  test("a correction offers the three outcomes, a reason only with a miss, and why", () => {
+  test("a correction offers the three outcomes, a reason only with a miss, why, and the contaminant code the stop is tagged with", () => {
     const form = PICKUP_COMMAND_FORMS[CORRECT_PICKUP]
-    assert.deepEqual(fieldIdsOf(form), ["outcome", "reason", "note"])
+    assert.deepEqual(fieldIdsOf(form), ["outcome", "reason", "note", "contaminantCodeId"])
     assert.deepEqual(requiredOf(form), ["outcome", "note"])
+    // M5 of #293: the code is picked from the master data, optional, None untagging it.
+    assert.deepEqual(fieldOf(form, "contaminantCodeId")?.relation, MASTER_DATA_MODULE)
     assert.deepEqual(fieldOf(form, "outcome")?.options?.map((option) => option.value), [...PICKUP_OUTCOMES])
     assert.deepEqual(fieldOf(form, "reason")?.visibleWhen, { fieldId: "outcome", oneOf: ["skipped", "failed"] })
     assert.deepEqual(fieldOf(form, "reason")?.requiredWhen, { fieldId: "outcome", oneOf: ["skipped", "failed"] })
