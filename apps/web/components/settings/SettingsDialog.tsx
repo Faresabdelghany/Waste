@@ -12,6 +12,7 @@ import {
   CreditCard,
   Database,
   Gear,
+  Leaf,
   LinkSimple,
   MagnifyingGlass,
   MapTrifold,
@@ -57,6 +58,7 @@ import { SortingGuideSettings } from "@/components/settings/sorting-guide-settin
 import { FinanceSettingsOnApi } from "@/components/settings/finance-settings-on-api"
 import { TicketSlaSettings } from "@/components/settings/ticket-sla-settings"
 import { PickupExceptionChargesSettings } from "@/components/settings/pickup-exception-charges-settings"
+import { EmissionFactorsSettings } from "@/components/settings/emission-factors-settings"
 import { MasterDataSettings } from "@/components/settings/master-data-settings"
 import { useApiConfigured, useApiSession } from "@/components/waste/api-session-store"
 import { profileOf, type AccountProfile } from "@/lib/data/account-profile"
@@ -65,6 +67,7 @@ import { ASSET_MANAGEMENT_SETTINGS_PANE_ID, FINANCE_ON_API_SETTINGS_PANE_ID, FIN
 import { SORTING_GUIDE_SETTINGS_PANE_ID } from "@/lib/data/sorting-guide"
 import { TICKET_SLA_SETTINGS_PANE_ID } from "@/lib/data/ticket-sla"
 import { PICKUP_EXCEPTION_CHARGES_SETTINGS_PANE_ID } from "@/lib/data/pickup-exception-rules"
+import { EMISSION_FACTORS_SETTINGS_PANE_ID } from "@/lib/data/fleet-emissions"
 import { PLANNING_AREAS_SETTINGS_PANE_ID } from "@/lib/data/planning-areas"
 import { COLLECTION_CALENDARS_SETTINGS_PANE_ID } from "@/lib/data/collection-calendars"
 import { migrateLegacyId } from "@/lib/data/legacy-ids"
@@ -164,6 +167,8 @@ const settingsSections: Array<{
       { id: "ticket-comms", label: "Tickets & communication", icon: Bell },
       // A project's ticket SLA on the API (O4 of #290): offered with the adapter configured.
       { id: TICKET_SLA_SETTINGS_PANE_ID, label: "Ticket SLA", icon: Timer },
+      // The fleet's emission factors on the API (M10 of #293): offered with the adapter configured.
+      { id: EMISSION_FACTORS_SETTINGS_PANE_ID, label: "Emission factors", icon: Leaf },
     ],
   },
   {
@@ -1335,6 +1340,11 @@ const visiblePaneDefinitions: Record<string, SettingsPaneDefinition> = {
       "Each project's holiday list: its name, the weekend the project rests on, and the dated holidays of every year.",
     groups: [],
   },
+  [EMISSION_FACTORS_SETTINGS_PANE_ID]: {
+    title: "Emission factors",
+    description: "Grams of CO₂e per unit of each fuel, over the period it is in force, which the fleet's routes are measured by.",
+    groups: [],
+  },
   [TICKET_SLA_SETTINGS_PANE_ID]: {
     title: "Ticket SLA",
     description: "How long a ticket has from opening to its due date, by priority, for every kind or for one kind.",
@@ -1456,6 +1466,7 @@ function isFullPanelPane(paneId: string): boolean {
     paneId === TICKET_SLA_SETTINGS_PANE_ID ||
     paneId === FINANCE_ON_API_SETTINGS_PANE_ID ||
     paneId === PICKUP_EXCEPTION_CHARGES_SETTINGS_PANE_ID ||
+    paneId === EMISSION_FACTORS_SETTINGS_PANE_ID ||
     paneId.startsWith("commercial-")
   )
 }
@@ -1869,6 +1880,8 @@ function SettingsPane({
         <FinanceSettingsOnApi />
       ) : paneId === PICKUP_EXCEPTION_CHARGES_SETTINGS_PANE_ID ? (
         <PickupExceptionChargesSettings />
+      ) : paneId === EMISSION_FACTORS_SETTINGS_PANE_ID ? (
+        <EmissionFactorsSettings />
       ) : paneId.startsWith("commercial-") ? (
         <CommercialSectionPane paneId={paneId} />
       ) : (
