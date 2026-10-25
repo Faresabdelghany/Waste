@@ -221,8 +221,8 @@ describe("finance.run-billing against Postgres", { skip }, () => {
       await tx.insert(priceListRow).values({ id: testId(), companyId, projectId: copenhagen, priceListId: tenant.priceList.id, productId: tenant.products.rental.id, unitPriceMinor: 6_000, validFrom: "2026-01-01" })
       await tx.insert(subscription).values({ id: rented, companyId, projectId: copenhagen, agreementId: tenant.agreements.anna.id, productId: tenant.products.rental.id, propertyId: tenant.properties.havnegade.id, quantity: 1, validFrom: "2027-02-15" })
     })
-    // A month no other case here bills.
-    const [run] = await handle({ projectId: copenhagen, on: "2027-03-01" })
+    // A month no other case here bills, sent on the day it is asked for: a run is for a closed period.
+    const [run] = await handle({ projectId: copenhagen, on: "2027-03-01" }, new Date("2027-03-01T12:00:00Z"))
     assert.deepEqual([run.periodFrom, run.periodTo], ["2027-02-01", "2027-02-28"])
     assert.ok(run.outcome === "completed" && run.eventCount === 2 && run.invoiceCount === 1, JSON.stringify(run))
     const charged = await withCompany(api.db, companyId, (tx) =>
@@ -246,5 +246,11 @@ describe("finance.run-billing against Postgres", { skip }, () => {
     await assert.rejects(handle({ projectId: tenant.projects.copenhagen.id, on: "not a day" }), /finance\.run-billing: 1 of 1 project runs failed/)
     assert.equal((await runs()).length, before, "a failed project leaves no run row: a run is one transaction or nothing")
     assert.match(lines.at(-1) ?? "", /→ failed: monthBefore/)
+  })
+
+  test("a run sent by hand for a month still running is refused as the office's is, at its last day after the project's today, and writes nothing (M14 of #293)", async () => {
+    const before = (await runs()).length
+    await assert.rejects(handle({ projectId: tenant.projects.copenhagen.id, on: "2026-11-01" }), /1 of 1 project runs failed: .*A run's period ends by today/)
+    assert.equal((await runs()).length, before, "October is not over on the first of it")
   })
 })

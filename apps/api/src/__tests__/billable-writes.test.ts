@@ -61,7 +61,8 @@ const scripted = (answers: Partial<Record<string, unknown[]>> = {}) => {
     insert: (table: Table) => ({
       values: (values: Record<string, unknown>) => {
         statements.push({ kind: "insert", table: getTableName(table), values })
-        return { returning: () => Promise.resolve([{ ...values, createdAt: STAMP, updatedAt: STAMP }]) }
+        // The row as the database answers it: the hold's columns, which an insert names only to hold, null otherwise (M14 of #293).
+        return { returning: () => Promise.resolve([{ heldAt: null, heldBy: null, holdReason: null, ...values, createdAt: STAMP, updatedAt: STAMP }]) }
       },
     }),
   } as unknown as Tx

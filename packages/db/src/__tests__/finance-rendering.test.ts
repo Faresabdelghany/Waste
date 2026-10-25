@@ -54,6 +54,13 @@
 // onto 0044's, before `CHANGED_IN_0036` maps 0044's onto 0010's; the
 // evidence's index is left out of 0010 (`ADDED_IN_0046`), and 0046 is pinned
 // here whole.
+//
+// Migration 0048 (M14 of #293) gave it the hold for review: its three
+// columns and their shape, and the person's key and index (`ADDED_IN_0048`);
+// and a run's exclusion its two reasons for the held. `CHANGED_IN_0048` maps
+// the event as drizzle-kit writes it today, the stage "0048", onto 0046's,
+// and the exclusion onto 0010's, first of all; hire-review-rendering.test.ts
+// pins 0048.
 import assert from "node:assert/strict"
 import { readdir, readFile } from "node:fs/promises"
 import { join } from "node:path"
@@ -153,11 +160,11 @@ const AMOUNTS_0010 = {
 const vatShape = (table: string, nullable: boolean): string =>
   `CONSTRAINT "${table}_vat_shape" CHECK (${nullable ? `${ref(table, "vat_minor")} is null or ` : ""}${ref(table, "vat_minor")} = round(${ref(table, "net_minor")} * ${ref(table, "vat_percent")} / 100.0))`
 
-/** The billable event as 0010 left it, as 0036 grew it with the recurring charge (#291 C2), as 0044 with container hire (M14 of #293), and as 0046 with a Pickup Exception's charge (#293 M5b). */
-type EventAsOf = "0010" | "0036" | "0044" | "0046"
+/** The billable event as 0010 left it, as 0036 grew it with the recurring charge (#291 C2), as 0044 with container hire (M14 of #293), as 0046 with a Pickup Exception's charge (#293 M5b), and as 0048 with the hold for review (M14 of #293). */
+type EventAsOf = "0010" | "0036" | "0044" | "0046" | "0048"
 
 /** The stages in order, so a spelling can say since when it holds. */
-const STAGES: readonly EventAsOf[] = ["0010", "0036", "0044", "0046"]
+const STAGES: readonly EventAsOf[] = ["0010", "0036", "0044", "0046", "0048"]
 const since = (asOf: EventAsOf, stage: EventAsOf): boolean => STAGES.indexOf(asOf) >= STAGES.indexOf(stage)
 
 /** The event's two vocabularies as 0010 spelled them, before the recurring charge's kind and block, and its kinds as 0036 left them. */
@@ -184,7 +191,7 @@ const kindShape = (asOf: EventAsOf): string => {
           `when 'hire' then ${some("subscription_id")} and ${some("placement_id")} and ${none("pickup_id")} and ${none("ticket_id")} and ${none("reverses_event_id")}`,
         ]
       : []),
-    ...(asOf === "0046" ? [`when 'pickup-exception' then ${some("pickup_id")} and ${none("ticket_id")} and ${none("reverses_event_id")}`] : []),
+    ...(since(asOf, "0046") ? [`when 'pickup-exception' then ${some("pickup_id")} and ${none("ticket_id")} and ${none("reverses_event_id")}`] : []),
   ]
   return `CONSTRAINT "billable_event_kind_shape" CHECK (case ${column("kind")} ${clauses.join(" ")} else false end)`
 }
@@ -225,6 +232,12 @@ const ADDED_TO_PRODUCT_IN_0044 = [
   `ALTER TABLE "wms"."product" ADD CONSTRAINT "product_free_days_shape" CHECK (${ref("product", "free_days")} is null or (${ref("product", "unit")} = 'day' and ${ref("product", "free_days")} between 0 and 366));`,
 ]
 
+/** 0048's hold for review (M14 of #293): its instant and reason together, a person only with them, and a priced event alone held. */
+const HOLD_SHAPE = `CONSTRAINT "billable_event_hold_shape" CHECK ((${ref("billable_event", "held_at")} is null) = (${ref("billable_event", "hold_reason")} is null) and (${ref("billable_event", "held_by")} is null or ${ref("billable_event", "held_at")} is not null) and (${ref("billable_event", "held_at")} is null or ${ref("billable_event", "block_reason")} is null))`
+
+/** What 0048 added beside the table: the hold's person's key and its index. */
+export const ADDED_IN_0048 = [tenantFk("billable_event", "held_by", "user_account"), index("billable_event", "billable_event_held_by_idx", "company_id", "held_by")]
+
 /** The billable event's CREATE TABLE as drizzle-kit generated it as of 0010, as of 0036, or generates it since 0044, with its money checks as 0010 spelled them: `asOf0010` maps 0028's casts back first. */
 const billableEventTable = (asOf: EventAsOf): string =>
   createTable("billable_event", "project", [
@@ -245,7 +258,7 @@ const billableEventTable = (asOf: EventAsOf): string =>
     '"pickup_id" uuid',
     '"ticket_id" uuid',
     '"reverses_event_id" uuid',
-    ...(asOf === "0046" ? ['"evidence_proof_id" uuid'] : []),
+    ...(since(asOf, "0046") ? ['"evidence_proof_id" uuid'] : []),
     ...(asOf !== "0010" ? CHARGE_COLUMNS : []),
     ...(since(asOf, "0044") ? ['"container_id" uuid', '"placement_id" uuid'] : []),
     '"source_event_id" uuid',
@@ -255,8 +268,9 @@ const billableEventTable = (asOf: EventAsOf): string =>
     `"cancelled_at" ${INSTANT}`,
     '"cancelled_by" uuid',
     '"cancel_reason" text',
+    ...(since(asOf, "0048") ? [`"held_at" ${INSTANT}`, '"held_by" uuid', '"hold_reason" text'] : []),
     uniqueKey("billable_event_project_key", "company_id", "project_id", "id"),
-    oneOfCheck("billable_event", "kind", ...{ "0010": KINDS_AS_OF_0010, "0036": KINDS_AS_OF_0036, "0044": KINDS_AS_OF_0044, "0046": V.BILLABLE_EVENT_KINDS }[asOf]),
+    oneOfCheck("billable_event", "kind", ...{ "0010": KINDS_AS_OF_0010, "0036": KINDS_AS_OF_0036, "0044": KINDS_AS_OF_0044, "0046": V.BILLABLE_EVENT_KINDS, "0048": V.BILLABLE_EVENT_KINDS }[asOf]),
     oneOfCheck("billable_event", "block_reason", ...(asOf !== "0010" ? V.BLOCK_REASONS : BLOCK_REASONS_AS_OF_0010)),
     oneOfCheck("billable_event", "cancel_reason", ...V.CANCEL_REASONS),
     positiveCheck("billable_event", "quantity"),
@@ -268,10 +282,11 @@ const billableEventTable = (asOf: EventAsOf): string =>
     `CONSTRAINT "billable_event_override_shape" CHECK ((${ref("billable_event", "kind")} = 'manual' and ${ref("billable_event", "price_list_row_id")} is null and ${ref("billable_event", "block_reason")} is null) = (${ref("billable_event", "override_reason")} is not null))`,
     `CONSTRAINT "billable_event_pickup_shape" CHECK (${ref("billable_event", "pickup_id")} is null or ${ref("billable_event", "route_id")} is not null)`,
     kindShape(asOf),
-    ...(asOf === "0046" ? [EVIDENCE_SHAPE] : []),
+    ...(since(asOf, "0046") ? [EVIDENCE_SHAPE] : []),
     originShape(asOf),
     ...(asOf !== "0010" ? [chargeShape(asOf)] : []),
     `CONSTRAINT "billable_event_cancel_shape" CHECK ((${ref("billable_event", "cancelled_at")} is null) = (${ref("billable_event", "cancel_reason")} is null) and (${ref("billable_event", "cancelled_by")} is null or ${ref("billable_event", "cancelled_at")} is not null))`,
+    ...(since(asOf, "0048") ? [HOLD_SHAPE] : []),
   ])
 
 /** What 0036 (#291 C2) and 0044 (M14 of #293) changed on the event: its CREATE TABLE as drizzle-kit generated it as of 0044 onto what it generated as of 0010. */
@@ -292,7 +307,25 @@ const REVERSES_INDEX = {
   "0046": partialUniqueIndex("billable_event", "billable_event_reverses_event_id_idx", ["company_id", "reverses_event_id"], `${ref("billable_event", "reverses_event_id")} is not null`),
 }
 
-/** What 0046 changed (#293 M5b): the event's CREATE TABLE and its two keys, each as drizzle-kit generates it now onto what it generated as of 0044. */
+/** A run's exclusion as 0010 left it, every one of a payer's events blocked, and as 0048 grew its reasons by the held (M14 of #293). */
+const exclusionTable = (asOf: "0010" | "0048"): string =>
+  createLedger("billing_run_exclusion", [
+    '"billing_run_id" uuid NOT NULL',
+    '"customer_id" uuid NOT NULL',
+    '"reason" text NOT NULL',
+    '"event_count" integer NOT NULL',
+    uniqueKey("billing_run_exclusion_billing_run_id_customer_id_key", "company_id", "billing_run_id", "customer_id"),
+    oneOfCheck("billing_run_exclusion", "reason", ...(asOf === "0048" ? V.EXCLUSION_REASONS : ["all-events-blocked"])),
+    positiveCheck("billing_run_exclusion", "event_count"),
+  ])
+
+/** What 0048 changed (M14 of #293): the event's CREATE TABLE as drizzle-kit generates it now onto what it generated as of 0046, and the exclusion's onto 0010's. Applied first. */
+const CHANGED_IN_0048 = new Map([
+  [billableEventTable("0048"), billableEventTable("0046")],
+  [exclusionTable("0048"), exclusionTable("0010")],
+])
+
+/** What 0046 changed (#293 M5b): the event's CREATE TABLE and its two keys, each onto what drizzle-kit generated as of 0044: the table as of 0046, the keys as it generates them now. */
 const CHANGED_IN_0046 = new Map([
   [billableEventTable("0046"), billableEventTable("0044")],
   [SOURCE_INDEX["0046"], SOURCE_INDEX["0010"]],
@@ -457,15 +490,7 @@ const expected = [
     `CONSTRAINT "billing_run_period_shape" CHECK (${ref("billing_run", "period_to")} >= ${ref("billing_run", "period_from")})`,
     `CONSTRAINT "billing_run_stamps_shape" CHECK ((${ref("billing_run", "status")} = 'completed') = (${ref("billing_run", "completed_at")} is not null))`,
   ]),
-  createLedger("billing_run_exclusion", [
-    '"billing_run_id" uuid NOT NULL',
-    '"customer_id" uuid NOT NULL',
-    '"reason" text NOT NULL',
-    '"event_count" integer NOT NULL',
-    uniqueKey("billing_run_exclusion_billing_run_id_customer_id_key", "company_id", "billing_run_id", "customer_id"),
-    oneOfCheck("billing_run_exclusion", "reason", ...V.EXCLUSION_REASONS),
-    positiveCheck("billing_run_exclusion", "event_count"),
-  ]),
+  exclusionTable("0010"),
   invoiceTable("0041"),
   createLedger("invoice_line", [
     '"invoice_id" uuid NOT NULL',
@@ -902,8 +927,9 @@ const asOf0010 = (statement: string): string => CHANGED_IN_0028.reduce((text, [t
 /** The sixteen tables' CREATE TABLE statements as drizzle-kit writes them today, mapped back to 0010: 0036's index left out, 0028's casts mapped back, then 0036's event. */
 const tablesAsOf0010 = async (): Promise<string[]> =>
   (await statementsFor(tables))
-    .filter((statement) => !ADDED_IN_0036.includes(statement) && !ADDED_IN_0044.includes(statement) && !ADDED_IN_0046.includes(statement))
+    .filter((statement) => !ADDED_IN_0036.includes(statement) && !ADDED_IN_0044.includes(statement) && !ADDED_IN_0046.includes(statement) && !ADDED_IN_0048.includes(statement))
     .map(asOf0010)
+    .map((statement) => CHANGED_IN_0048.get(statement) ?? statement)
     .map((statement) => CHANGED_IN_0046.get(statement) ?? statement)
     .map((statement) => CHANGED_IN_0036.get(statement) ?? statement)
 
@@ -936,10 +962,12 @@ describe("the Finance & Contracting tables as drizzle-kit writes them", () => {
     // What 0036 changed is what the schema generates today once 0028's casts are mapped back, and what it added is today's too: each mapping maps something.
     const today = await statementsFor(tables)
     const castBack = today.map(asOf0010)
-    for (const statement of CHANGED_IN_0046.keys()) assert.ok(castBack.includes(statement), statement.split("\n")[0])
-    const asOf0044 = castBack.map((statement) => CHANGED_IN_0046.get(statement) ?? statement)
+    for (const statement of CHANGED_IN_0048.keys()) assert.ok(castBack.includes(statement), statement.split("\n")[0])
+    const asOf0046 = castBack.map((statement) => CHANGED_IN_0048.get(statement) ?? statement)
+    for (const statement of CHANGED_IN_0046.keys()) assert.ok(asOf0046.includes(statement), statement.split("\n")[0])
+    const asOf0044 = asOf0046.map((statement) => CHANGED_IN_0046.get(statement) ?? statement)
     for (const statement of CHANGED_IN_0036.keys()) assert.ok(asOf0044.includes(statement), statement.split("\n")[0])
-    for (const statement of [...ADDED_IN_0036, ...ADDED_IN_0044, ...ADDED_IN_0046]) assert.ok(today.includes(statement), statement)
+    for (const statement of [...ADDED_IN_0036, ...ADDED_IN_0044, ...ADDED_IN_0046, ...ADDED_IN_0048]) assert.ok(today.includes(statement), statement)
     const alterations = await statementsBetween({ product: productAsOf0004 }, { product })
     for (const statement of ADDED_TO_PRODUCT_IN_0044) assert.ok(alterations.includes(statement), statement)
   })
@@ -1003,6 +1031,7 @@ describe("the checks of this context", () => {
       "billable_event_origin_shape",
       "billable_event_charge_shape",
       "billable_event_cancel_shape",
+      "billable_event_hold_shape",
     ])
     assert.equal(`CONSTRAINT "billable_event_kind_shape" CHECK (${checksOf(billableEvent).get("billable_event_kind_shape")})`, kindShape("0046"))
     assert.equal(`CONSTRAINT "billable_event_evidence_shape" CHECK (${checksOf(billableEvent).get("billable_event_evidence_shape")})`, EVIDENCE_SHAPE)

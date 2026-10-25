@@ -42,6 +42,7 @@ const event = {
   cancelledAt: null,
   cancelledBy: null,
   cancelReason: null,
+  hold: null,
   invoiceLineId: null,
   ...STAMPS,
 }

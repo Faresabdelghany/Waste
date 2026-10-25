@@ -16,7 +16,7 @@ defineVocabularyTests("Finance", vocabulary, vocabulary.FINANCE_VOCABULARIES, 15
 describe("the Finance vocabulary's own rules", () => {
   test("a billable event is made of four kinds, stands in five readings and is blocked for one of six actionable reasons — never a missing payer", () => {
     assert.deepEqual([...vocabulary.BILLABLE_EVENT_KINDS], ["pickup", "ticket", "manual", "reversal", "subscription", "job", "hire", "pickup-exception"])
-    assert.deepEqual([...vocabulary.BILLABLE_EVENT_STATUSES], ["blocked", "ready", "invoiced", "cancelled", "reversed"])
+    assert.deepEqual([...vocabulary.BILLABLE_EVENT_STATUSES], ["blocked", "ready", "held", "invoiced", "cancelled", "reversed"])
     assert.equal((vocabulary.BILLABLE_EVENT_STATUSES as readonly string[]).includes("in-progress"), false, "the deferred recurring event's")
     assert.deepEqual([...vocabulary.BLOCK_REASONS], ["no-subscription", "agreement-draft", "no-price-list", "no-price-row", "no-product", "no-vat-rate", "amount-too-large"])
     assert.equal((vocabulary.BLOCK_REASONS as readonly string[]).includes("missing-payer"), false, "a payer is NOT NULL on the agreement")
@@ -26,7 +26,7 @@ describe("the Finance vocabulary's own rules", () => {
 
   test("a run stands in three statuses and excludes a payer for one reason; a document is an invoice or a credit note, credited for one of the prototype's five reasons", () => {
     assert.deepEqual([...vocabulary.BILLING_RUN_STATUSES], ["requested", "completed", "failed"])
-    assert.deepEqual([...vocabulary.EXCLUSION_REASONS], ["all-events-blocked"])
+    assert.deepEqual([...vocabulary.EXCLUSION_REASONS], ["all-events-blocked", "all-events-held", "all-events-blocked-or-held"])
     assert.deepEqual([...vocabulary.INVOICE_KINDS], ["invoice", "credit-note"])
     assert.deepEqual([...vocabulary.CREDIT_REASONS], ["service-not-delivered", "quantity-correction", "price-correction", "duplicate", "other"])
   })

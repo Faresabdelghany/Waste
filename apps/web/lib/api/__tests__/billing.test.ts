@@ -9,8 +9,8 @@ import assert from "node:assert/strict"
 import { describe, test } from "node:test"
 
 import type { Agreement } from "@waste/contracts/agreements"
-import { BillableEventCancel, BillableEventCreate, BillableEventReprice, OVERRIDE_WITH_A_REASON as WIRE_OVERRIDE_WITH_A_REASON, type BillableEvent } from "@waste/contracts/billable-events"
-import { BillingRunCreate, PERIOD_ORDERED as WIRE_PERIOD_ORDERED, type BillingRun, type BillingRunDetail, type BillingRunPreview } from "@waste/contracts/billing"
+import { BillableEventCancel, BillableEventCreate, BillableEventHold, BillableEventReprice, OVERRIDE_WITH_A_REASON as WIRE_OVERRIDE_WITH_A_REASON, type BillableEvent } from "@waste/contracts/billable-events"
+import { BillingRunCreate, PERIOD_ENDS_BY_TODAY as WIRE_PERIOD_ENDS_BY_TODAY, PERIOD_ORDERED as WIRE_PERIOD_ORDERED, type BillingRun, type BillingRunDetail, type BillingRunPreview } from "@waste/contracts/billing"
 import type { Product } from "@waste/contracts/catalogue"
 import type { Customer } from "@waste/contracts/customers"
 import { CreditNoteCreate, type Invoice, type InvoiceDetail, type InvoiceLine } from "@waste/contracts/invoices"
@@ -29,9 +29,11 @@ import {
   eventPricedByList,
   eventQuestion,
   eventsModule,
+  exclusionWords,
   invoiceAdapter,
   invoicesModule,
   OVERRIDE_WITH_A_REASON,
+  PERIOD_ENDS_BY_TODAY,
   PERIOD_ORDERED,
   previewBillingRun,
 } from "../records/billing"
@@ -51,14 +53,14 @@ const eventFixtures = fixturesOf("commercial", "events")
 const runFixtures = fixturesOf("commercial", "billing")
 const invoiceFixtures = fixturesOf("commercial", "invoices")
 
-const copenhagen: Project = { id: "01a0d2a4-a280-7002-8000-000000000001", ...STAMPS, name: "Copenhagen Central", kind: "Municipality", language: "da", currency: "DKK", timezone: "Europe/Copenhagen", status: "active", weekend: ["saturday", "sunday"], holidayList: "Danish public holidays", publicSlug: null, weightTolerancePercent: 5, paymentTermsDays: 30, paymentReferenceScheme: "none" }
+const copenhagen: Project = { id: "01a0d2a4-a280-7002-8000-000000000001", ...STAMPS, name: "Copenhagen Central", kind: "Municipality", language: "da", currency: "DKK", timezone: "Europe/Copenhagen", status: "active", weekend: ["saturday", "sunday"], holidayList: "Danish public holidays", publicSlug: null, weightTolerancePercent: 5, paymentTermsDays: 30, paymentReferenceScheme: "none", holdForReview: false }
 const osterbro: Customer = { id: "01a0d2a4-a280-700b-8000-000000000002", ...STAMPS, kind: "organisation", name: "Østerbro Housing", registrationNumber: "38112009", email: null, phone: null, billingAddress: null, serviceMessagesAllowed: true, paymentTermsDays: null, status: "active" }
 const agr2408: Agreement = { id: "01a0d2a4-a280-7012-8000-000000000001", ...STAMPS, projectId: copenhagen.id, number: "AGR-2408", customerId: osterbro.id, payerCustomerId: osterbro.id, status: "active", billingCadence: "monthly", currency: "DKK", notes: null, priceListId: null, validFrom: "2026-01-01", validTo: null }
 // An agreement of one party billed to another (#256), as the seed's AGR-2607 is.
 const kab: Customer = { ...osterbro, id: "01a0d2a4-a280-700b-8000-000000000003", name: "KAB Bolig", registrationNumber: "38112010" }
 const kommune: Customer = { ...osterbro, id: "01a0d2a4-a280-700b-8000-000000000004", name: "Københavns Kommune", registrationNumber: "64942212" }
 const agr2607: Agreement = { ...agr2408, id: "01a0d2a4-a280-7012-8000-000000000002", number: "AGR-2607", customerId: kab.id, payerCustomerId: kommune.id }
-const res240: Product = { id: "01a0d2a4-a280-700a-8000-000000000001", ...STAMPS, projectId: copenhagen.id, name: "Residual waste · 240L bin", kind: "container-collection", status: "active", unit: "pickup", containerTypeId: null, wasteFractionId: null, serviceFrequencyId: null, invoiceName: "Residual waste collection 240L", invoiceCode: "RES-240", vatPercent: 25 }
+const res240: Product = { id: "01a0d2a4-a280-700a-8000-000000000001", ...STAMPS, projectId: copenhagen.id, name: "Residual waste · 240L bin", kind: "container-collection", status: "active", unit: "pickup", containerTypeId: null, wasteFractionId: null, serviceFrequencyId: null, invoiceName: "Residual waste collection 240L", invoiceCode: "RES-240", vatPercent: 25, freeDays: null }
 const bulky: Product = { ...res240, id: "01a0d2a4-a280-700a-8000-000000000005", name: "Bulky waste pickup", kind: "additional-service", unit: "job" }
 const ROUTE = "01a0d2a4-a280-7030-8000-000000000001"
 const PICKUP = "01a0d2a4-a280-7031-8000-000000000001"
@@ -92,6 +94,7 @@ const ready: BillableEvent = {
   cancelledAt: null,
   cancelledBy: null,
   cancelReason: null,
+  hold: null,
   invoiceLineId: null,
 }
 const blocked: BillableEvent = { ...ready, id: "01a0d2a4-a280-7050-8000-000000000002", kind: "ticket", status: "blocked", productId: null, unitPriceMinor: null, netMinor: null, vatPercent: null, vatMinor: null, currency: null, priceListRowId: null, blockReason: "no-product", links: { routeId: ROUTE, pickupId: null, ticketId: TICKET, reversesEventId: null, proofId: null } }
@@ -232,10 +235,11 @@ describe("the billable events module", () => {
     assert.deepEqual(billableEventAdapter.toPatchBody(record, { ...record, submittedValues: { ...record.submittedValues, quantity: "3" } }, context(eventFixtures)), { path: "quantity", message: "A billable event moves by its commands: reprice a blocked one, cancel one that should not be invoiced" })
   })
 
-  test("offers a command only where the API moves the event by it: reprice a blocked one, cancel a blocked or a ready one, never a reversal (#281)", () => {
+  test("offers a command only where the API moves the event by it: reprice a blocked one, hold a ready one, release a held one, cancel any of them, never a reversal (#281, M14 of #293)", () => {
     const offered = (event: BillableEvent) => eventCommandsOffered(billableEventAdapter.toRecord(event, context(eventFixtures)))
     assert.deepEqual(offered(blocked), ["reprice", "cancel"])
-    assert.deepEqual(offered(ready), ["cancel"], "a priced event is not repriced")
+    assert.deepEqual(offered(ready), ["hold", "cancel"], "a priced event is not repriced")
+    assert.deepEqual(offered({ ...ready, status: "held", hold: { at: "2026-09-10T08:00:00.000Z", by: null, reason: "Checked with the customer" } }), ["release", "cancel"])
     for (const status of ["invoiced", "cancelled", "reversed"] as const) assert.deepEqual(offered({ ...ready, status }), [], `${status}: a credit note corrects it, or there is nothing left to do`)
     assert.deepEqual(offered({ ...ready, kind: "reversal" }), [], "a reversal is the correction, never cancelled")
     assert.deepEqual(eventCommandsOffered({ ...billableEventAdapter.toRecord(ready, context(eventFixtures)), submittedValues: {} }), [], "a record that does not say its status is offered nothing")
@@ -268,6 +272,26 @@ describe("the billable events module", () => {
     const unsaid = await commandRecord(clientOver(fetch), eventsModule, current, record, "cancel", { reason: "pickup-corrected" }, options)
     assert.equal(unsaid.kind, "refused", "the consumer's reason is never a person's")
     assert.equal(calls.length, 3)
+  })
+
+  test("holds a ready event for review with the office's reason, and releases a held one with no body (M14 of #293)", async () => {
+    const record = billableEventAdapter.toRecord(ready, context(eventFixtures))
+    const current = moduleOf([record], [ready.id])
+    const held: BillableEvent = { ...ready, status: "held", hold: { at: "2026-09-30T12:00:00.000Z", by: ADMIN, reason: "Checked with the customer" } }
+    const { fetch, calls } = scripted([() => json(held), () => json(ready)])
+    const options = { fixtures: eventFixtures, state }
+    const unsaid = await commandRecord(clientOver(fetch), eventsModule, current, record, "hold", { reason: "" }, options)
+    assert.equal(unsaid.kind, "refused", "a hold says why")
+    const done = await commandRecord(clientOver(fetch), eventsModule, current, record, "hold", { reason: "Checked with the customer" }, options)
+    assert.equal(done.kind, "done")
+    assert.equal(calls[0].url, `http://api.test/billable-events/${ready.id}/hold`)
+    assert.deepEqual(bodyOf(calls[0]), { reason: "Checked with the customer" })
+    assert.ok(BillableEventHold.safeParse(bodyOf(calls[0])).success)
+    if (done.kind === "done") assert.equal(done.record.facts?.["Held for review"], "2026-09-30 14:00 · Checked with the customer")
+    const released = await commandRecord(clientOver(fetch), eventsModule, current, billableEventAdapter.toRecord(held, context(eventFixtures)), "release", {}, options)
+    assert.equal(released.kind, "done")
+    assert.equal(calls[1].url, `http://api.test/billable-events/${ready.id}/release`)
+    assert.equal(calls.length, 2)
   })
 })
 
@@ -373,17 +397,26 @@ describe("the billing runs module", () => {
 
   test("makes one body for the preview and the run, and refuses a period that runs backwards in the contract's words", () => {
     assert.equal(PERIOD_ORDERED, WIRE_PERIOD_ORDERED)
+    assert.equal(PERIOD_ENDS_BY_TODAY, WIRE_PERIOD_ENDS_BY_TODAY)
     const values = { projectId: "project-copenhagen", periodFrom: "2026-09-01", periodTo: "2026-09-30", note: "September" }
     const body = billingRunBody(values, resolverOver(state))
     assert.deepEqual(body, { projectId: copenhagen.id, periodFrom: "2026-09-01", periodTo: "2026-09-30", note: "September" })
     assert.ok(BillingRunCreate.safeParse(body).success)
     assert.deepEqual(billingRunBody({ ...values, periodTo: "2026-08-31" }, resolverOver(state)), { path: "periodTo", message: PERIOD_ORDERED })
+    assert.deepEqual(billingRunBody(values, resolverOver(state), "2026-09-29"), { path: "periodTo", message: PERIOD_ENDS_BY_TODAY }, "a period still running on the project's today")
+    assert.deepEqual(billingRunBody(values, resolverOver(state), "2026-09-30"), body, "a period ending today is closed by the run")
     assert.deepEqual(billingRunBody({ ...values, projectId: "" }, resolverOver(state)), { path: "projectId", message: "Pick a project" })
     assert.deepEqual(billingRunBody({ ...values, periodFrom: "" }, resolverOver(state)), { path: "periodFrom", message: "Pick the first day of the period" })
   })
 
+  test("says why a run passed over a payer: every event blocked, or held for review, or each one or the other (M14 of #293)", () => {
+    assert.equal(exclusionWords({ eventCount: 1, reason: "all-events-blocked" }), "1 event, all blocked")
+    assert.equal(exclusionWords({ eventCount: 4, reason: "all-events-held" }), "4 events, all held for review")
+    assert.equal(exclusionWords({ eventCount: 3, reason: "all-events-blocked-or-held" }), "3 events, each blocked or held for review")
+  })
+
   test("previews through the client, writing nothing, and runs through the store's create", async () => {
-    const preview: BillingRunPreview = { eventCount: 3, invoiceCount: 1, totals: [{ currency: "DKK", netMinor: 66650, vatMinor: 16663 }], exclusions: [{ customerId: osterbro.id, reason: "all-events-blocked", eventCount: 1 }] }
+    const preview: BillingRunPreview = { eventCount: 3, invoiceCount: 1, totals: [{ currency: "DKK", netMinor: 66650, vatMinor: 16663 }], exclusions: [{ customerId: osterbro.id, reason: "all-events-blocked", eventCount: 1 }], heldEventCount: 0 }
     const { fetch, calls } = scripted([() => json(preview), () => json(detail, 201, { location: `/billing-runs/${run.id}` })])
     const body = billingRunBody({ projectId: "project-copenhagen", periodFrom: "2026-09-01", periodTo: "2026-09-30" }, resolverOver(state))
     if ("message" in (body as object)) throw new Error("refused")

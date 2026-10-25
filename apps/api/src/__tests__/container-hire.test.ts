@@ -20,7 +20,8 @@ import assert from "node:assert/strict"
 import { after, before, describe, test } from "node:test"
 
 import { BillableEvent } from "@waste/contracts/billable-events"
-import { BillingRunDetail, BillingRunPreview } from "@waste/contracts/billing"
+import { FREE_DAYS_ARE_A_HIRES, Product } from "@waste/contracts/catalogue"
+import { BillingRunDetail, BillingRunPreview, PERIOD_ENDS_BY_TODAY } from "@waste/contracts/billing"
 import { InvoiceDetail } from "@waste/contracts/invoices"
 import { createDb, type Database, type Tx } from "@waste/db/client"
 import { agreement, subscription, subscriptionPause } from "@waste/db/schema/agreements"
@@ -31,11 +32,12 @@ import { billableEvent, priceListRow } from "@waste/db/schema/finance"
 import { withCompany } from "@waste/db/tenant"
 import { and, asc, eq, inArray, sql } from "drizzle-orm"
 
+import { HELD_FOR_REVIEW } from "@waste/db/commands/billable-writes"
+
 import { createApp } from "../app"
-import { PERIOD_ENDS_BY_TODAY } from "../routes/billing-runs"
-import { A_JOB_IS_SOLD_BY_THE_JOB } from "../routes/billable-events"
 import { FREE_DAYS_KEEP_THE_DAY } from "../routes/products"
 import { MONTH_PRODUCT_IS_NOT_TICKET_WORK } from "../routes/ticket-charges"
+import { A_JOB_IS_SOLD_BY_THE_JOB } from "../routes/work-order-charges"
 import { seedBilling, type BillingFixtures } from "./billing-fixtures"
 import { callingAs, type Call } from "./calls"
 import { created } from "./created"
@@ -183,6 +185,7 @@ describe("container hire in a billing run", { skip: database.skip || owner.skip 
       invoiceCount: 1,
       totals: [{ currency: "DKK", netMinor: 178_500, vatMinor: 44_625 }],
       exclusions: excluded.map((customerId) => ({ customerId, eventCount: 1, reason: "all-events-blocked" })),
+      heldEventCount: 0,
     })
     const done = await run(october())
     assert.deepEqual(
@@ -340,5 +343,70 @@ describe("container hire in a billing run", { skip: database.skip || owner.skip 
     await run(period("2027-01-15", "2027-02-14"))
     const draftMonths = (await hires(["2027-01-01"])).filter((row) => row.case === "draft")
     assert.deepEqual(draftMonths.map((row) => row.id), [draftJanuary.id], "no second charge of the month")
+  })
+
+  test("a hire product carries its free days on the wire: set on a create and a patch, a product sold by anything but the day refused them at the field, and cleared before it leaves the day", async () => {
+    const body = { projectId: copenhagen, name: "Roll-off hire", kind: "recurring-service", status: "active", unit: "day", vatPercent: 25, freeDays: 14 }
+    const made = await olivia("/products", { method: "POST", body })
+    assert.equal(made.status, 201, JSON.stringify(await made.clone().json()))
+    const rollOff = Product.parse(await made.json())
+    assert.deepEqual([rollOff.unit, rollOff.freeDays], ["day", 14])
+    assert.equal(Product.parse(await (await olivia(`/products/${products.hire}`)).json()).freeDays, 7, "the suite's skip hire reads its seven")
+    const notAHire = await olivia("/products", { method: "POST", body: { ...body, name: "Wash with free days", unit: "job" } })
+    assert.equal(notAHire.status, 400)
+    assert.deepEqual((await readProblem(notAHire)).errors, [{ path: "freeDays", message: FREE_DAYS_ARE_A_HIRES }])
+    const patched = await olivia(`/products/${rollOff.id}`, { method: "PATCH", body: { freeDays: 10 } })
+    assert.equal(Product.parse(await patched.json()).freeDays, 10)
+    const onAPickup = await olivia(`/products/${fx.products.residual.id}`, { method: "PATCH", body: { freeDays: 3 } })
+    assert.equal(onAPickup.status, 400)
+    assert.deepEqual((await readProblem(onAPickup)).errors, [{ path: "freeDays", message: FREE_DAYS_ARE_A_HIRES }])
+    const cleared = await olivia(`/products/${rollOff.id}`, { method: "PATCH", body: { freeDays: null, unit: "month" } })
+    assert.equal(cleared.status, 200, JSON.stringify(await cleared.clone().json()))
+    assert.deepEqual([Product.parse(await cleared.json()).unit, (await olivia(`/products/${rollOff.id}`).then((response) => response.json()) as { freeDays: number | null }).freeDays], ["month", null], "cleared with the unit's move, in one patch")
+  })
+
+  test("a project that holds its hires for review has each priced hire written held with no person, which a run passes over and its preview counts, until the office releases it", async () => {
+    const patched = await olivia(`/projects/${copenhagen}`, { method: "PATCH", body: { holdForReview: true } })
+    assert.equal(patched.status, 200, JSON.stringify(await patched.clone().json()))
+    assert.equal(((await patched.json()) as { holdForReview: boolean }).holdForReview, true)
+    try {
+      clock = new Date("2027-07-02T12:00:00Z")
+      const june = period("2027-06-01", "2027-06-30")
+      const previewed = await preview(june)
+      const done = await run(june)
+      // The run over June charges May too, the month before it, which no earlier run reached.
+      const minted = (await hires(["2027-05-01", "2027-06-01"])).filter((row) => row.block === null)
+      assert.ok(minted.length > 0)
+      const events = await Promise.all(minted.map(async (row) => BillableEvent.parse(await (await olivia(`/billable-events/${row.id}`)).json())))
+      assert.ok(events.every((event) => event.status === "held" && event.hold?.by === null && event.hold.reason === HELD_FOR_REVIEW), "held by the project, with its reason")
+      assert.equal(done.eventCount, 0, "the run passes over every held hire")
+      // The preview told it before the run minted a hire: each priced one counted held, none ready, as the run then wrote them.
+      assert.deepEqual([previewed.eventCount, previewed.heldEventCount], [0, minted.length])
+      assert.equal((await preview(june)).heldEventCount, minted.length)
+      // Released, the next run over the month invoices it.
+      const released = await olivia(`/billable-events/${events[0].id}/release`, { method: "POST", body: {} })
+      assert.equal(BillableEvent.parse(await released.json()).status, "ready")
+      assert.equal((await run(june)).eventCount, 1)
+    } finally {
+      await olivia(`/projects/${copenhagen}`, { method: "PATCH", body: { holdForReview: false } })
+    }
+  })
+
+  test("a job blocked as it was charged is held once the office prices it, where its project holds its jobs for review", async () => {
+    const blockedJob = { route: testId(), pickup: testId(), event: testId() }
+    await withCompany(pool.db, a.companyId, async (tx: Tx) => {
+      await tx.insert(route).values({ id: blockedJob.route, companyId: a.companyId, projectId: copenhagen, routeSchemeId: null, collectionGroupId: null, serviceDate: ex.day, operatingDate: ex.day, status: "planned", number: 990_002 })
+      await tx.insert(pickup).values({ id: blockedJob.pickup, companyId: a.companyId, projectId: copenhagen, routeId: blockedJob.route, containerId: ex.containers.bin1.id, position: 1, status: "planned", origin: "office", service: "wash", propertyId: ex.properties.parkvej.id, wasteFractionId: ex.fractions.residual.id })
+      await tx.insert(billableEvent).values({ id: blockedJob.event, companyId: a.companyId, projectId: copenhagen, kind: "job", serviceDate: ex.day, agreementId: fx.agreements.housingDkk.id, subscriptionId: fx.subscriptions.housingResidual.id, productId: null, quantity: 1, blockReason: "no-product", routeId: blockedJob.route, pickupId: blockedJob.pickup, sourceEventId: testId() })
+    })
+    assert.equal((await olivia(`/projects/${copenhagen}`, { method: "PATCH", body: { holdForReview: true } })).status, 200)
+    try {
+      const response = await olivia(`/billable-events/${blockedJob.event}/reprice`, { method: "POST", body: { productId: products.wash } })
+      assert.equal(response.status, 200, JSON.stringify(await response.clone().json()))
+      const priced = BillableEvent.parse(await response.json())
+      assert.deepEqual([priced.status, priced.netMinor, priced.hold?.by, priced.hold?.reason], ["held", 30_000, null, HELD_FOR_REVIEW])
+    } finally {
+      await olivia(`/projects/${copenhagen}`, { method: "PATCH", body: { holdForReview: false } })
+    }
   })
 })

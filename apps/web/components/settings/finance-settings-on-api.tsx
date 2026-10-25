@@ -4,7 +4,8 @@
 // company's invoice identity — the VAT number, the bank account and the FIK
 // creditor number an invoice document prints, and its postal address (#291
 // C5), the seller's address a Danish invoice must print — and each project's payment
-// terms and reference scheme. Both are rows of `configure.organization`
+// terms and reference scheme, and whether its hires and work-order jobs are held
+// for review before a run invoices them (M14 of #293). Both are rows of `configure.organization`
 // (lib/api/records/organisation.ts), written through the store; what is typed
 // is judged by the domain's shapes (lib/data/finance-settings.ts) before the
 // API is asked. A customer's own terms are its form's, under Customers.
@@ -20,6 +21,7 @@ import { Dialog, DialogContent, DialogDescription, DialogFooter, DialogHeader, D
 import { Input } from "@/components/ui/input"
 import { Label } from "@/components/ui/label"
 import { Select, SelectContent, SelectItem, SelectTrigger, SelectValue } from "@/components/ui/select"
+import { Switch } from "@/components/ui/switch"
 import { Table, TableBody, TableCell, TableHead, TableHeader, TableRow } from "@/components/ui/table"
 import { Textarea } from "@/components/ui/textarea"
 import { useBusinessRecordStore, useModuleRecords, whenSaved } from "@/components/waste/business-record-store"
@@ -62,7 +64,7 @@ export function FinanceSettingsOnApi() {
     <AssetPanelShell
       heading="Administration"
       title="Finance & invoicing"
-      description="What the company's invoices print, and when each project's invoices are due and the payment reference they carry."
+      description="What the company's invoices print, and when each project's invoices are due, the payment reference they carry and whether its hires and jobs wait for review."
       toolbar={null}
     >
       {/* Keyed by what was read: a re-read the store answers starts the form from it. */}
@@ -75,18 +77,20 @@ export function FinanceSettingsOnApi() {
                 <TableHead>Project</TableHead>
                 <TableHead>Payment terms</TableHead>
                 <TableHead>Payment reference</TableHead>
+                <TableHead>Hires and jobs</TableHead>
                 <TableHead className="w-16" />
               </TableRow>
             </TableHeader>
             <TableBody>
               {!organisation.ready || projects.length === 0 ? (
-                <EmptyRow colSpan={4} message={emptyMessage} hint={organisation.notGranted ? organisation.problem?.detail : ""} />
+                <EmptyRow colSpan={5} message={emptyMessage} hint={organisation.notGranted ? organisation.problem?.detail : ""} />
               ) : (
                 projects.map((project) => (
                   <TableRow key={project.id}>
                     <TableCell className="text-sm font-medium text-foreground">{project.name}</TableCell>
                     <TableCell className="text-sm text-muted-foreground">{project.facts["Payment terms"]}</TableCell>
                     <TableCell className="text-sm text-muted-foreground">{project.facts["Payment reference"]}</TableCell>
+                    <TableCell className="text-sm text-muted-foreground">{project.facts["Hires and jobs"]}</TableCell>
                     <TableCell className="text-right">
                       <Button variant="ghost" size="icon" className="h-8 w-8" aria-label={`Edit ${project.name}'s terms`} onClick={() => setEditing(project)}>
                         <PencilSimple className="h-4 w-4" />
@@ -177,18 +181,19 @@ function CompanyIdentity({ company }: { company: BusinessRecord }) {
   )
 }
 
-/** One project's terms and reference scheme; a FIK scheme waits for the company's creditor number. */
+/** One project's terms, reference scheme and hold for review; a FIK scheme waits for the company's creditor number. */
 function ProjectTermsDialog({ project, hasCreditor, onClose }: { project: BusinessRecord; hasCreditor: boolean; onClose: () => void }) {
   const { upsertRecord } = useBusinessRecordStore()
   const [terms, setTerms] = useState(() => typedOf(project, "paymentTermsDays"))
   const [scheme, setScheme] = useState<PaymentReferenceScheme>(() => PAYMENT_REFERENCE_SCHEMES.find((candidate) => candidate === typedOf(project, "paymentReferenceScheme")) ?? "none")
+  const [held, setHeld] = useState(() => project.submittedValues?.holdForReview === true)
   const [saving, setSaving] = useState(false)
   const refusal = paymentTermsRefusalOf(terms)
 
   const save = () => {
     setSaving(true)
     whenSaved(
-      upsertRecord("configure", "organization", { ...project, submittedValues: { ...project.submittedValues, paymentTermsDays: terms.trim(), paymentReferenceScheme: scheme } }),
+      upsertRecord("configure", "organization", { ...project, submittedValues: { ...project.submittedValues, paymentTermsDays: terms.trim(), paymentReferenceScheme: scheme, holdForReview: held } }),
       () => {
         onClose()
         toast.success("Terms saved", { description: `${project.name}'s next invoices follow them.` })
@@ -233,6 +238,15 @@ function ProjectTermsDialog({ project, hasCreditor, onClose }: { project: Busine
             <p className="text-xs text-muted-foreground">
               {hasCreditor ? "Under FIK each invoice carries a reference its payment is matched by." : "Set the company's FIK creditor number above to use a FIK scheme."}
             </p>
+          </div>
+          <div className="flex items-start justify-between gap-4">
+            <div className="grid gap-1">
+              <Label htmlFor="finance-project-hold">Hold hires and jobs for review</Label>
+              <p className="text-xs text-muted-foreground">
+                A container&apos;s hire and a work order&apos;s job are held as they are charged, and a run passes over them until someone releases them under Billable events.
+              </p>
+            </div>
+            <Switch id="finance-project-hold" checked={held} onCheckedChange={setHeld} />
           </div>
           <DialogFooter>
             <Button type="button" variant="outline" onClick={onClose}>

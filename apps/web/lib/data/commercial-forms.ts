@@ -20,6 +20,7 @@
 // (contacts), the agreement, the product and the price list. A select is
 // never emptied once picked, so an optional one offers None (`NO_ONE`), which
 // the record reads as blank (`blankNone`).
+import { FREE_DAYS_MAX, HIRE_UNIT } from "@waste/domain/finance/hire"
 import { PRODUCT_STATUSES } from "@waste/domain/registry/vocabulary"
 import type { InvoiceDetail } from "@waste/contracts/invoices"
 
@@ -110,6 +111,8 @@ export const PRODUCT_FORM: BusinessFormSchema = {
         { id: "productType", label: "Type", type: "select", required: true, options: PRODUCT_KIND_OPTIONS },
         { id: "status", label: "Status", type: "select", required: true, defaultValue: "draft", options: PRODUCT_STATUSES.map((value) => ({ value, label: statusLabel(value) })), description: "Only an active product can be subscribed to." },
         { id: "priceUnit", label: "Unit", type: "select", required: true, defaultValue: "pickup", options: PRODUCT_UNIT_OPTIONS, description: "A price row is quoted per this unit." },
+        // A hire product's free days (M14 of #293): offered only for a product sold by the day, its hire's unit.
+        { id: "freeDays", label: "Free days", type: "number", min: 0, max: FREE_DAYS_MAX, unit: "days", visibleWhen: { fieldId: "priceUnit", equals: HIRE_UNIT }, description: "A container's first days on site, charged nothing before its hire is billed by the day; blank is none." },
       ],
     },
     {
@@ -133,7 +136,7 @@ export const PRODUCT_FORM: BusinessFormSchema = {
 
 /** The product's edit: its project held. */
 export const productEditForm = (record: BusinessRecord): BusinessFormSchema =>
-  editableOnly(PRODUCT_FORM, ["productName", "productType", "status", "priceUnit", "containerType", "wasteFraction", "serviceFrequencyId", "invoiceName", "invoiceCode", "vatPercent"], {
+  editableOnly(PRODUCT_FORM, ["productName", "productType", "status", "priceUnit", "freeDays", "containerType", "wasteFraction", "serviceFrequencyId", "invoiceName", "invoiceCode", "vatPercent"], {
     title: "Edit product",
     description: `Correct ${record.name}. It stays in its project.`,
     submitLabel: "Save changes",
@@ -321,7 +324,7 @@ export function createEventRecord(values: BusinessFormValues, now: number): Busi
 }
 
 /** The commands of an event the dialogs offer, in order. */
-export const EVENT_COMMANDS = ["reprice", "cancel"] as const
+export const EVENT_COMMANDS = ["reprice", "cancel", "hold", "release"] as const
 export type EventCommand = (typeof EVENT_COMMANDS)[number]
 
 export const EVENT_COMMAND_FORMS: Readonly<Record<EventCommand, BusinessFormSchema>> = {
@@ -353,6 +356,26 @@ export const EVENT_COMMAND_FORMS: Readonly<Record<EventCommand, BusinessFormSche
       },
     ],
     execution: { kind: "append-event", completionMessage: "The event was cancelled." },
+  },
+  hold: {
+    key: "commercial.events",
+    mode: "action",
+    recordKind: EVENT_RECORD_KIND,
+    title: "Hold for review",
+    description: "Keep a ready event off the next invoice while you check it (M14 of #293): a run passes over it until you release it.",
+    submitLabel: "Hold for review",
+    sections: [{ id: "command", title: "Hold for review", fields: [{ id: "reason", label: "Why it is held", type: "textarea", required: true, placeholder: "Waiting for the driver's photo of the skip" }] }],
+    execution: { kind: "append-event", completionMessage: "The event is held for review." },
+  },
+  release: {
+    key: "commercial.events",
+    mode: "action",
+    recordKind: EVENT_RECORD_KIND,
+    title: "Release to billing",
+    description: "The event is ready again, for the next run whose period it falls in.",
+    submitLabel: "Release to billing",
+    sections: [{ id: "command", title: "Release to billing", fields: [] }],
+    execution: { kind: "append-event", completionMessage: "The event is ready again." },
   },
 }
 

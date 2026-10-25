@@ -50,6 +50,7 @@ const project = {
   paymentTermsDays: 30,
   paymentReferenceScheme: "none",
   weightTolerancePercent: 5,
+  holdForReview: false,
   ...STAMPS,
 }
 

@@ -154,6 +154,7 @@ describe("recurring charges in a billing run", { skip: database.skip || owner.sk
       invoiceCount: 2,
       totals: [{ currency: "DKK", netMinor: 308_484, vatMinor: 77_121 }],
       exclusions: [{ customerId: fx.customers.bo.id, eventCount: 2, reason: "all-events-blocked" }],
+      heldEventCount: 0,
     })
     const done = await run(october())
     assert.deepEqual(

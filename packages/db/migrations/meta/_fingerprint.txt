@@ -450,6 +450,9 @@ column wms.billable_event 33 period_days integer
 column wms.billable_event 34 container_id uuid
 column wms.billable_event 35 placement_id uuid
 column wms.billable_event 36 evidence_proof_id uuid
+column wms.billable_event 37 held_at timestamp with time zone
+column wms.billable_event 38 held_by uuid
+column wms.billable_event 39 hold_reason text
 constraint wms.billable_event billable_event_agreement_id_fk FOREIGN KEY (company_id, project_id, agreement_id) REFERENCES wms.agreement(company_id, project_id, id)
 constraint wms.billable_event billable_event_amounts_shape CHECK (((net_minor IS NULL) OR (net_minor = ((
 CASE kind
@@ -465,6 +468,8 @@ constraint wms.billable_event billable_event_company_id_fk FOREIGN KEY (company_
 constraint wms.billable_event billable_event_container_id_placement_id_fk FOREIGN KEY (company_id, project_id, container_id, placement_id) REFERENCES wms.container_service_placement(company_id, project_id, container_id, id)
 constraint wms.billable_event billable_event_created_by_fk FOREIGN KEY (company_id, created_by) REFERENCES wms.user_account(company_id, id)
 constraint wms.billable_event billable_event_evidence_shape CHECK (((evidence_proof_id IS NULL) OR (kind = 'pickup-exception'::text)))
+constraint wms.billable_event billable_event_held_by_fk FOREIGN KEY (company_id, held_by) REFERENCES wms.user_account(company_id, id)
+constraint wms.billable_event billable_event_hold_shape CHECK ((((held_at IS NULL) = (hold_reason IS NULL)) AND ((held_by IS NULL) OR (held_at IS NOT NULL)) AND ((held_at IS NULL) OR (block_reason IS NULL))))
 constraint wms.billable_event billable_event_kind_one_of CHECK ((kind = ANY (ARRAY['pickup'::text, 'ticket'::text, 'manual'::text, 'reversal'::text, 'subscription'::text, 'job'::text, 'hire'::text, 'pickup-exception'::text])))
 constraint wms.billable_event billable_event_kind_shape CHECK (
 CASE kind
@@ -504,6 +509,7 @@ index wms.billable_event billable_event_agreement_id_idx CREATE INDEX billable_e
 index wms.billable_event billable_event_cancelled_by_idx CREATE INDEX billable_event_cancelled_by_idx ON wms.billable_event USING btree (company_id, cancelled_by)
 index wms.billable_event billable_event_created_by_idx CREATE INDEX billable_event_created_by_idx ON wms.billable_event USING btree (company_id, created_by)
 index wms.billable_event billable_event_evidence_proof_id_idx CREATE INDEX billable_event_evidence_proof_id_idx ON wms.billable_event USING btree (company_id, evidence_proof_id)
+index wms.billable_event billable_event_held_by_idx CREATE INDEX billable_event_held_by_idx ON wms.billable_event USING btree (company_id, held_by)
 index wms.billable_event billable_event_hire_charge_idx CREATE UNIQUE INDEX billable_event_hire_charge_idx ON wms.billable_event USING btree (company_id, placement_id, charge_period_from) WHERE (kind = 'hire'::text)
 index wms.billable_event billable_event_pickup_id_idx CREATE INDEX billable_event_pickup_id_idx ON wms.billable_event USING btree (company_id, pickup_id)
 index wms.billable_event billable_event_pkey CREATE UNIQUE INDEX billable_event_pkey ON wms.billable_event USING btree (id)
@@ -567,7 +573,7 @@ constraint wms.billing_run_exclusion billing_run_exclusion_customer_id_fk FOREIG
 constraint wms.billing_run_exclusion billing_run_exclusion_event_count_positive CHECK ((event_count > 0))
 constraint wms.billing_run_exclusion billing_run_exclusion_pkey PRIMARY KEY (id)
 constraint wms.billing_run_exclusion billing_run_exclusion_project_id_fk FOREIGN KEY (company_id, project_id) REFERENCES wms.project(company_id, id)
-constraint wms.billing_run_exclusion billing_run_exclusion_reason_one_of CHECK ((reason = 'all-events-blocked'::text))
+constraint wms.billing_run_exclusion billing_run_exclusion_reason_one_of CHECK ((reason = ANY (ARRAY['all-events-blocked'::text, 'all-events-held'::text, 'all-events-blocked-or-held'::text])))
 index wms.billing_run_exclusion billing_run_exclusion_billing_run_id_customer_id_key CREATE UNIQUE INDEX billing_run_exclusion_billing_run_id_customer_id_key ON wms.billing_run_exclusion USING btree (company_id, billing_run_id, customer_id)
 index wms.billing_run_exclusion billing_run_exclusion_customer_id_idx CREATE INDEX billing_run_exclusion_customer_id_idx ON wms.billing_run_exclusion USING btree (company_id, customer_id)
 index wms.billing_run_exclusion billing_run_exclusion_pkey CREATE UNIQUE INDEX billing_run_exclusion_pkey ON wms.billing_run_exclusion USING btree (id)
@@ -1871,6 +1877,7 @@ column wms.project 13 public_slug text acl=[wms_public=SELECT/<owner>]
 column wms.project 14 payment_terms_days integer not-null default=30
 column wms.project 15 payment_reference_scheme text not-null default='none'::text
 column wms.project 16 weight_tolerance_percent integer not-null default=5
+column wms.project 17 hold_for_review boolean not-null default=false
 constraint wms.project project_company_id_fk FOREIGN KEY (company_id) REFERENCES wms.company(id)
 constraint wms.project project_name_key UNIQUE (company_id, name)
 constraint wms.project project_payment_reference_scheme_one_of CHECK ((payment_reference_scheme = ANY (ARRAY['none'::text, 'fik-71'::text, 'fik-75'::text])))
@@ -3569,4 +3576,5 @@ journal 1792928027904 dea07fe438532044d3e47b8f1136a440e1137886a6effecd6a5584a647
 journal 1792945670863 53a1b13d2e90aa2a8f65e733cd43698ac445582226fa5aa1848c4a377c9b38d9
 journal 1792948527917 f5e98d4bbd8a0a2efce518a64f08be8fa02b2f26022e968b2f0ee7c4bd85f2f7
 journal 1792950556670 ff215726a340d783acbe6014a8515499181b8c263d03a1f84c22527b396f9e8c
+journal 1792952313199 b04f99d3f6c19ac508ebc304ce9ec2237ef28b77e48ea13664c37457ea9cd6a1
 pgboss-version 42

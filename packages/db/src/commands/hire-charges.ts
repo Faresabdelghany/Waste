@@ -40,7 +40,7 @@ import { agreement, subscription } from "../schema/agreements"
 import { product } from "../schema/catalogue"
 import { container, containerServicePlacement } from "../schema/containers"
 import { billableEvent } from "../schema/finance"
-import { billableEventShapeIssue, priceDraft, type ComposedEvent } from "./billable-writes"
+import { autoHold, billableEventShapeIssue, priceDraft, type ComposedEvent } from "./billable-writes"
 import type { Scope } from "./project-clock"
 import type { ChargeOutcome } from "./recurring-charges"
 
@@ -142,8 +142,8 @@ export async function planHireCharges(tx: Tx, scope: Scope, period: BillingPerio
   return planned
 }
 
-/** Mints the hires a run over the period on `today` charges, in the run's transaction; answers how many it wrote. */
-export async function mintHireCharges(tx: Tx, scope: Scope, period: BillingPeriod, today: string, newId: IdMinter): Promise<number> {
+/** Mints the hires a run over the period on `today` charges, in the run's transaction; answers how many it wrote. `holds` is the project's hold for review (M14 of #293), which the run read under its lock: each priced hire is written held, with no person, for the office to release. */
+export async function mintHireCharges(tx: Tx, scope: Scope, period: BillingPeriod, today: string, newId: IdMinter, holds: boolean): Promise<number> {
   const planned = await planHireCharges(tx, scope, period, today)
   if (planned.length === 0) return 0
   const rows = planned.map((hire) => {
@@ -183,6 +183,7 @@ export async function mintHireCharges(tx: Tx, scope: Scope, period: BillingPerio
       periodDays: hire.periodDays,
       containerId: hire.containerId,
       placementId: hire.placementId,
+      ...autoHold(holds, "hire", hire.blockReason),
     }
   })
   let written = 0

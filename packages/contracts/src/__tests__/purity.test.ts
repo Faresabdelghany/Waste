@@ -44,7 +44,9 @@
 // #291 C6 added @waste/domain/finance/payments: payments.ts reads the
 // invoice's payment statuses from it, the reading the API answers.
 // M13 of #293 added @waste/domain/insight/sustainability: sustainability.ts
-// reads a factor's bound from it, the bound the database's check reads.
+// reads a factor's bound from it, the bound the database's check reads. M14
+// of #293 added @waste/domain/finance/hire: catalogue.ts bounds a product's
+// free days by its cap and holds them to its unit, which the database reads.
 import path from "node:path"
 import { fileURLToPath } from "node:url"
 
@@ -60,6 +62,7 @@ definePurityTests({
     "@waste/domain/execution/unloads",
     "@waste/domain/execution/vocabulary",
     "@waste/domain/execution/work-orders",
+    "@waste/domain/finance/hire",
     "@waste/domain/finance/payment",
     "@waste/domain/finance/payments",
     "@waste/domain/finance/vocabulary",

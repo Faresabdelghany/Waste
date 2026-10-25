@@ -99,6 +99,7 @@ import { pickupExceptionRoutes } from "./routes/pickup-exceptions"
 import { sortingGuideRoutes } from "./routes/sorting-guide"
 import { sustainabilityRoutes } from "./routes/sustainability"
 import { ticketChargeRoutes } from "./routes/ticket-charges"
+import { workOrderProductRoutes } from "./routes/work-order-charges"
 import { ticketSlaRoutes } from "./routes/ticket-sla"
 import { ticketRoutes } from "./routes/tickets"
 import { unloadRoutes } from "./routes/unloads"
@@ -314,6 +315,7 @@ export function createApp({
   app.route("/", billableEventRoutes(guard, { now }))
   // A project's ticket charges (#291 C3): the product a completed ticket's work is charged at; nothing stamped, no clock.
   app.route("/", ticketChargeRoutes(guard))
+  app.route("/", workOrderProductRoutes(guard))
   app.route("/", billingRunRoutes(guard, { now }))
   app.route("/", invoiceRoutes(guard, { now }))
   // Payments and reconciliation (#291 C6): an invoice's standing is read on its project's day, so the module takes `now`; a payment's `recordedAt` is the database's.

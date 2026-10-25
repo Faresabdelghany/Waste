@@ -36,6 +36,7 @@
 // ledger books it under, and the whole-percent rate a billable event is
 // priced at — zero being exempt, and a product without one blocking its
 // events with `no-vat-rate`, which is the actionable reason.
+import { FREE_DAYS_MAX, HIRE_UNIT } from "@waste/domain/finance/hire"
 import { PRODUCT_KINDS, PRODUCT_STATUSES, PRODUCT_UNITS, WASTE_TREATMENTS } from "@waste/domain/registry/vocabulary"
 import { WASTE_CODE_PATTERN, WASTE_CODE_SHAPE } from "@waste/domain/registry/waste-code"
 import * as z from "zod"
@@ -204,6 +205,12 @@ export type ServiceFrequencyPatch = z.infer<typeof ServiceFrequencyPatch>
 /** A VAT rate in whole percent: zero is exempt, and nothing is taxed at more than the whole (Issue #112). */
 const VatPercent = z.int().min(0).max(100)
 
+/** A hire product's free days (M14 of #293): each placement's first days, charged nothing; none to a year. */
+const FreeDays = z.int().min(0).max(FREE_DAYS_MAX)
+
+/** What a product sold by anything but the day is told of free days. */
+export const FREE_DAYS_ARE_A_HIRES = "Free days are a hire product's: sell it by the day, or give it none"
+
 export const Product = z.object({
   ...stamped,
   projectId: Id,
@@ -223,6 +230,8 @@ export const Product = z.object({
   invoiceCode: Label.nullable(),
   /** The rate a billable event is priced at; a product without one blocks its events with `no-vat-rate`. */
   vatPercent: VatPercent.nullable(),
+  /** A hire product's free days (M14 of #293): each placement's first days on site, charged nothing; null for none, and for every product not sold by the day. */
+  freeDays: FreeDays.nullable(),
 })
 export type Product = z.infer<typeof Product>
 
@@ -238,7 +247,8 @@ export const ProductCreate = z.strictObject({
   invoiceName: Label.nullable().optional(),
   invoiceCode: Label.nullable().optional(),
   vatPercent: VatPercent.nullable().optional(),
-})
+  freeDays: FreeDays.nullable().optional(),
+}).refine((body) => body.freeDays == null || body.unit === HIRE_UNIT, { message: FREE_DAYS_ARE_A_HIRES, path: ["freeDays"] })
 export type ProductCreate = z.infer<typeof ProductCreate>
 
 export const ProductPatch = z
@@ -253,6 +263,8 @@ export const ProductPatch = z
     invoiceName: Label.nullable().optional(),
     invoiceCode: Label.nullable().optional(),
     vatPercent: VatPercent.nullable().optional(),
+    /** Null clears them; a product with free days keeps the day, which the route judges against the stored unit. */
+    freeDays: FreeDays.nullable().optional(),
   })
   .refine(changesSomething, somethingToChange)
 export type ProductPatch = z.infer<typeof ProductPatch>

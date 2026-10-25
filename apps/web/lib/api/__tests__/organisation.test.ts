@@ -58,7 +58,7 @@ const copenhagen: Project = {
   status: "active",
   weekend: ["saturday", "sunday"],
   holidayList: "Danish public holidays",
-  publicSlug: null, paymentTermsDays: 30, paymentReferenceScheme: "none",
+  publicSlug: null, paymentTermsDays: 30, paymentReferenceScheme: "none", holdForReview: false,
   weightTolerancePercent: 5,
 }
 const harbor: Project = { ...copenhagen, id: "01a0d2a4-a280-7002-8000-000000000002", name: "Harbor Commercial", kind: "Business unit", status: "onboarding", holidayList: null }
@@ -306,6 +306,16 @@ describe("the projects", () => {
     const read = projectAdapter.toRecord({ ...copenhagen, paymentTermsDays: 14, paymentReferenceScheme: "fik-71" }, context(fixtures))
     assert.equal(read.facts["Payment terms"], "14 days")
     assert.equal(read.facts["Payment reference"], "FIK 71")
+  })
+
+  test("Settings › Finance & invoicing holds a project's hires and jobs for review (M14 of #293): a flag read back as a fact and patched only when it moved", () => {
+    const before = projectAdapter.toRecord(copenhagen, context(fixtures))
+    assert.equal(before.facts["Hires and jobs"], "Billed as charged")
+    assert.equal(before.submittedValues?.holdForReview, false)
+    const body = projectAdapter.toPatchBody(before, { ...before, submittedValues: { ...before.submittedValues, holdForReview: true } }, context(fixtures))
+    assert.deepEqual(body, { holdForReview: true })
+    assert.ok(ProjectPatch.safeParse(body).success)
+    assert.equal(projectAdapter.toRecord({ ...copenhagen, holdForReview: true }, context(fixtures)).facts["Hires and jobs"], "Held for review")
   })
 
   test("terms the API would refuse are refused here, naming the field, on a patch and a create", () => {

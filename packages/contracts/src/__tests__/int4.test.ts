@@ -75,6 +75,7 @@ import * as unloadsModule from "../unloads"
 import * as validityModule from "../validity"
 import * as vehicleTypesModule from "../vehicle-types"
 import * as weightControlModule from "../weight-control"
+import * as workOrderChargesModule from "../work-order-charges"
 import { Int4, INT4_MAX, INT4_MIN, NonNegativeInt, NonNegativeMinor, NonNegativeTotal, PositiveInt } from "../resource"
 import { ServiceProviderPriceIndex } from "../service-provider-prices"
 
@@ -146,6 +147,7 @@ const MODULES: Readonly<Record<string, Record<string, unknown>>> = {
   "validity": validityModule,
   "vehicle-types": vehicleTypesModule,
   "weight-control": weightControlModule,
+  "work-order-charges": workOrderChargesModule,
 }
 
 describe("the shared whole numbers", () => {

@@ -50,3 +50,6 @@ const SCHEME_LABELS: Readonly<Record<PaymentReferenceScheme, string>> = { none: 
 
 /** A payment reference scheme as the pane and a project's facts name it. */
 export const paymentReferenceSchemeLabel = (scheme: PaymentReferenceScheme): string => SCHEME_LABELS[scheme]
+
+/** Whether a project's hires and work-order jobs wait for a person before a run invoices them (M14 of #293), as its facts and the pane name it. */
+export const holdForReviewLabel = (held: boolean): string => (held ? "Held for review" : "Billed as charged")

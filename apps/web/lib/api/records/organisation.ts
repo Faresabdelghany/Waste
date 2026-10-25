@@ -29,7 +29,7 @@ import { PAYMENT_REFERENCE_SCHEMES } from "@waste/domain/finance/vocabulary"
 import type { Grant } from "@waste/contracts/permissions"
 
 import { FIXTURE_COMPANY_ID, type BusinessRecord } from "@/lib/data/business-modules"
-import { COMPANY_IDENTITY_FIELDS, paymentReferenceSchemeLabel, paymentTermsLabel, paymentTermsRefusalOf } from "@/lib/data/finance-settings"
+import { COMPANY_IDENTITY_FIELDS, holdForReviewLabel, paymentReferenceSchemeLabel, paymentTermsLabel, paymentTermsRefusalOf } from "@/lib/data/finance-settings"
 import { isRoleAccessMap, type RoleAccessMap } from "@/lib/data/role-permissions"
 
 import { command, create, get, listAll, patch, put } from "../client"
@@ -47,6 +47,7 @@ import {
   statusLabel,
   statusToken,
   typed,
+  typedFlag,
   webIdOf,
   type LocalRefusal,
   type MappingContext,
@@ -189,6 +190,8 @@ export const projectAdapter: ResourceAdapter<Project> = {
     facts["Payment reference"] = paymentReferenceSchemeLabel(project.paymentReferenceScheme)
     // How far a weighbridge's net may differ from what the stops weighed on board (O9 of #290).
     facts["Weight tolerance"] = `${project.weightTolerancePercent}%`
+    // Whether its hires and jobs wait for a person before a run (M14 of #293).
+    facts["Hires and jobs"] = holdForReviewLabel(project.holdForReview)
     const submittedValues: Record<string, string> = {
       name: project.name,
       kind: project.kind,
@@ -214,7 +217,8 @@ export const projectAdapter: ResourceAdapter<Project> = {
       // A project record scopes itself: the one project it is.
       projectIds: [id],
       recordKind: "Project",
-      submittedValues,
+      // Whether its hires and jobs wait for a person before a run (M14 of #293), a flag as the form's switch says it.
+      submittedValues: { ...submittedValues, holdForReview: project.holdForReview },
     }
   },
   toCreateBody: (record) => {
@@ -233,6 +237,7 @@ export const projectAdapter: ResourceAdapter<Project> = {
     const terms = typedPaymentTerms(record, "refused")
     if (isLocalRefusal(terms)) return terms
     const scheme = typedScheme(record)
+    const hold = typedFlag(record, "holdForReview")
     return {
       name,
       kind,
@@ -241,10 +246,11 @@ export const projectAdapter: ResourceAdapter<Project> = {
       timezone,
       ...projectCalendarBody(record),
       ...(status === undefined ? {} : { status }),
-      // A create says the terms and the scheme only where the form gave them; the API's defaults do the rest.
+      // A create says the terms, the scheme and the hold only where the form gave them; the API's defaults do the rest.
       ...(typeof terms === "number" ? { paymentTermsDays: terms } : {}),
       ...(scheme === undefined ? {} : { paymentReferenceScheme: scheme }),
       ...(toleranceOf(record) === undefined ? {} : { weightTolerancePercent: toleranceOf(record) }),
+      ...(hold === undefined ? {} : { holdForReview: hold }),
     }
   },
   toPatchBody: (before, after) => {
@@ -265,6 +271,7 @@ export const projectAdapter: ResourceAdapter<Project> = {
       paymentTermsDays: daysOf(typedPaymentTerms(record, "refused")),
       paymentReferenceScheme: typedScheme(record),
       weightTolerancePercent: toleranceOf(record),
+      holdForReview: typedFlag(record, "holdForReview"),
     }))
   },
   create: (client, body) => create<Project>(client, "/projects", body).then((created) => created.body),

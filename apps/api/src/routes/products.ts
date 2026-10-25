@@ -26,12 +26,14 @@
 // The grant is the Price Engine's own, `commercial.products`: the master data
 // a product points at is `configure.master`'s, written through the catalogue
 // routes, and nothing here widens that.
-import { Product, ProductCreate, ProductPatch, type ProductKind, type ProductStatus, type ProductUnit } from "@waste/contracts/catalogue"
+import { FREE_DAYS_ARE_A_HIRES, Product, ProductCreate, ProductPatch, type ProductKind, type ProductStatus, type ProductUnit } from "@waste/contracts/catalogue"
 import { Page } from "@waste/contracts/pagination"
 import { ProjectScopedListQuery } from "@waste/contracts/queries"
 import type { Tx } from "@waste/db/client"
 import { product } from "@waste/db/schema/catalogue"
-import { and, asc, eq, gt } from "drizzle-orm"
+import { workOrderProduct } from "@waste/db/schema/finance"
+import { project } from "@waste/db/schema/organisation"
+import { and, asc, count, eq, gt } from "drizzle-orm"
 import { Hono, type MiddlewareHandler } from "hono"
 import { describeRoute } from "hono-openapi"
 
@@ -42,13 +44,17 @@ import { newId } from "../ids"
 import { afterCursor, fetchLimit, pageOf } from "../pagination"
 import { describeProblem, invalidRequest, problem, validate } from "../problem"
 import { requireContainerType, requireServiceFrequency, requireWasteFraction } from "./references"
-import { created, describeCreated, describeJson, IdParam, refuseDuplicate, stampsOf } from "./shared"
+import { created, describeCreated, describeJson, IdParam, lockRow, refuseDuplicate, stampsOf } from "./shared"
 
 const MODULE = "commercial.products"
 const ProductPage = Page(Product)
 
 /** A product with free days is a hire's (M14 of #293), which the database holds to the day. */
 export const FREE_DAYS_KEEP_THE_DAY = "A product with free days is a hire product sold by the day; it keeps the day while it has them"
+
+/** What moving a product off the job is told while work orders are charged at it (M14 of #293). */
+export const workOrdersChargedAt = (count: number): string =>
+  `${count === 1 ? "A work order is" : `${count} work orders are`} charged at this product, so it stays sold by the job; charge ${count === 1 ? "it" : "them"} at another product first`
 
 const columns = {
   id: product.id,
@@ -64,7 +70,7 @@ const columns = {
   invoiceName: product.invoiceName,
   invoiceCode: product.invoiceCode,
   vatPercent: product.vatPercent,
-  // A hire product's free days (M14 of #293): read to hold its unit, on the wire with M14b.
+  // A hire product's free days (M14 of #293).
   freeDays: product.freeDays,
   createdAt: product.createdAt,
   updatedAt: product.updatedAt,
@@ -87,6 +93,7 @@ function productOf(row: Row): Product {
     invoiceName: row.invoiceName,
     invoiceCode: row.invoiceCode,
     vatPercent: row.vatPercent,
+    freeDays: row.freeDays,
     ...stampsOf(row),
   }
 }
@@ -239,7 +246,7 @@ export function productRoutes(guard: MiddlewareHandler<AuthEnv>) {
         operationId: "patchProduct",
         summary: "Change a product",
         description:
-          "Changes one product of a project the caller works in; every field is optional and at least one must be given. What the patch points at is held to the stored row's project, not to a project the body names: the project is not patchable, since a record does not move between projects. A null clears a reference, and clears an invoice name, an invoice code or a VAT rate too (Issue #112); the invoice code stays one product's inside the project (409, `This project already has a product with invoice code 4010`). A VAT rate changed here prices the events recorded from then on and moves none already priced. A hire product with free days (M14 of #293) stays sold by the day (400 at `unit`).",
+          "Changes one product of a project the caller works in; every field is optional and at least one must be given. What the patch points at is held to the stored row's project, not to a project the body names: the project is not patchable, since a record does not move between projects. A null clears a reference, and clears an invoice name, an invoice code or a VAT rate too (Issue #112); the invoice code stays one product's inside the project (409, `This project already has a product with invoice code 4010`). A VAT rate changed here prices the events recorded from then on and moves none already priced. A hire product with free days (M14 of #293) stays sold by the day (400 at `unit`), and a product a work order is charged at stays sold by the job (409, `A work order is charged at this product, so it stays sold by the job; charge it at another product first`). Under the project's and the product's row locks.",
         security: BEARER_SECURITY,
         responses: {
           200: describeJson("The product as it now stands.", Product),
@@ -249,7 +256,7 @@ export function productRoutes(guard: MiddlewareHandler<AuthEnv>) {
           401: describeProblem("No usable token (see WWW-Authenticate)."),
           403: describeProblem("No active account here, or the caller's role does not allow `edit` on `commercial.products`."),
           404: describeProblem("No product with that id in the projects this account works in."),
-          409: describeProblem("The project already has another product with that name, or another with that invoice code."),
+          409: describeProblem("The project already has another product with that name, or another with that invoice code, or a work order is charged at a product the patch moves off the job."),
         },
       }),
       guard,
@@ -262,10 +269,24 @@ export function productRoutes(guard: MiddlewareHandler<AuthEnv>) {
         const tx = c.get("tx")
         const principal = c.get("principal")
 
-        const current = await findProduct(tx, principal, id)
-        if (current === undefined) throw noSuchProduct(id)
+        const found = await findProduct(tx, principal, id)
+        if (found === undefined) throw noSuchProduct(id)
+        // The rules below read the row and what names it, so they are judged under its lock — the project's first, parent before child, which a project's work order charges are replaced under too.
+        await lockRow(tx, project, { companyId: principal.companyId, id: found.projectId })
+        await lockRow(tx, product, { companyId: principal.companyId, id })
+        const current = (await findProduct(tx, principal, id)) ?? found
         await requireReferences(tx, { companyId: principal.companyId, projectId: current.projectId }, patch)
-        if (patch.unit !== undefined && patch.unit !== "day" && current.freeDays !== null) throw invalidRequest("body", [{ path: "unit", message: FREE_DAYS_KEEP_THE_DAY }])
+        // A work order charged at the product keeps it sold by the job (M14 of #293), or the work order would be charged nothing unseen.
+        if (patch.unit !== undefined && patch.unit !== "job" && current.unit === "job") {
+          const [named] = await tx
+            .select({ rows: count() })
+            .from(workOrderProduct)
+            .where(and(eq(workOrderProduct.companyId, principal.companyId), eq(workOrderProduct.projectId, current.projectId), eq(workOrderProduct.productId, id)))
+          if ((named?.rows ?? 0) > 0) throw problem(409, { detail: workOrdersChargedAt(named!.rows) })
+        }
+        // Free days are a hire's (M14 of #293): judged on the row as the patch leaves it, at the field the patch moved.
+        const freeDays = patch.freeDays === undefined ? current.freeDays : patch.freeDays
+        if (freeDays !== null && (patch.unit ?? current.unit) !== "day") throw invalidRequest("body", [patch.freeDays === undefined ? { path: "unit", message: FREE_DAYS_KEEP_THE_DAY } : { path: "freeDays", message: FREE_DAYS_ARE_A_HIRES }])
 
         const [row] = await refuseDuplicate(collisions(patch), () =>
           tx

@@ -48,14 +48,13 @@
 // Every statement carries the tenant and `inProjects`; the grant is
 // `commercial.events`, `view` to read, `create` to enter, `edit` for the two
 // commands.
-import { BillableEvent, BillableEventCancel, BillableEventCreate, BillableEventListQuery, BillableEventReprice } from "@waste/contracts/billable-events"
+import { BillableEvent, BillableEventCancel, BillableEventCreate, BillableEventHold, BillableEventListQuery, BillableEventRelease, BillableEventReprice } from "@waste/contracts/billable-events"
 import { Page } from "@waste/contracts/pagination"
 import { fitsInt4, INT4_MAX } from "@waste/contracts/resource"
 import type { Tx } from "@waste/db/client"
 import { hireConditionsOf, priceHire, type HireToPrice } from "@waste/db/commands/hire-charges"
 import { priceRecurringCharge, type ChargeToPrice } from "@waste/db/commands/recurring-charges"
 import { agreement } from "@waste/db/schema/agreements"
-import { product } from "@waste/db/schema/catalogue"
 import { container } from "@waste/db/schema/containers"
 import { pickup, route } from "@waste/db/schema/execution"
 import { billableEvent } from "@waste/db/schema/finance"
@@ -64,7 +63,6 @@ import type { BillableEventLinks } from "@waste/domain/finance/from-event"
 import { vatOf } from "@waste/domain/finance/money"
 import type { PricedAmounts } from "@waste/domain/finance/pricing"
 import type { BillableEventStatus, BlockReason } from "@waste/domain/finance/vocabulary"
-import type { ProductStatus } from "@waste/domain/registry/vocabulary"
 import { and, asc, eq, exists, gt, gte, lte, sql } from "drizzle-orm"
 import { Hono, type MiddlewareHandler } from "hono"
 import { describeRoute } from "hono-openapi"
@@ -75,13 +73,14 @@ import { requireGrant } from "../auth/require"
 import { newId } from "../ids"
 import { afterCursor, fetchLimit, pageOf } from "../pagination"
 import { describeProblem, invalidRequest, problem, validate } from "../problem"
-import { agreementFacts, billableEventShapeIssue, priceDraft, productFacts, recordBillableEvent, type ComposedEvent } from "./billable-writes"
+import { agreementFacts, autoHoldOf, billableEventShapeIssue, priceDraft, productFacts, recordBillableEvent, type ComposedEvent } from "./billable-writes"
 import { eventColumns, eventOf, eventScope, eventsFrom, findEvent, noSuchEvent, statusIs, statusOf, UNNAMED, type EventReading } from "./billing-shapes"
-import { NOT_A_PRODUCT, requireAgreement, requireCustomer, requireProduct, type Scope } from "./references"
+import { requireAgreement, requireCustomer, requireProduct, type Scope } from "./references"
 import type { ClockOptions } from "./scheme-groups"
 import { created, describeCreated, describeJson, IdParam, lockRow } from "./shared"
 import { refuseUnofferedProduct, unofferedProduct } from "./statuses"
 import { requireTicketWorkProduct } from "./ticket-charges"
+import { requireJobProduct } from "./work-order-charges"
 
 const MODULE = "commercial.events"
 
@@ -92,6 +91,8 @@ export function notRepriced(id: string, status: Exclude<BillableEventStatus, "bl
   switch (status) {
     case "ready":
       return `Billable event ${id} is ready; a priced event is not repriced — cancel it and enter it again`
+    case "held":
+      return `Billable event ${id} is held for review; a priced event is not repriced — cancel it and enter it again`
     case "invoiced":
       return `Billable event ${id} is invoiced; correct it with a credit note`
     case "cancelled":
@@ -104,14 +105,22 @@ export function notRepriced(id: string, status: Exclude<BillableEventStatus, "bl
 /** What a cancellation of an event a line or a reversal names is told: the same two sentences, since the correction is the same door. */
 export const notCancelled = (id: string, status: "invoiced" | "reversed"): string => notRepriced(id, status)
 
+/** What a hold of an event that is not ready is told (M14 of #293): a blocked one goes to no run until priced, the rest in the status's words. */
+export function notHeld(id: string, status: "blocked" | "invoiced" | "cancelled" | "reversed"): string {
+  return status === "blocked" ? `Billable event ${id} is blocked; it goes to no run until it is priced, so there is nothing to hold` : notRepriced(id, status)
+}
+
+/** What a release of an event that is not held is told. */
+export const notReleased = (id: string): string => `Billable event ${id} is not held`
+
 /** What a cancellation of a `reversal` is told. */
 export const REVERSAL_NOT_CANCELLED = "A reversal is not cancelled; it is the correction"
 
+/** What a hold of a `reversal` is told (M14 of #293): the correction goes to the next run as it stands. */
+export const REVERSAL_NOT_HELD = "A reversal is not held; it is the correction"
+
 /** What a reprice naming a product on anything but a ticket's event is told, at `productId`. */
 export const ONLY_A_TICKET_OR_A_JOB_TAKES_A_PRODUCT = "Only a ticket's event or a work order's job takes a product here"
-
-/** A work order's job is charged at a product sold by the job (M14 of #293). */
-export const A_JOB_IS_SOLD_BY_THE_JOB = "A work order's job is charged at a product sold by the job"
 
 /** What a hand-priced manual event under a draft agreement is told: the row's state, after every 400. */
 export const DRAFT_AGREEMENT_BY_HAND = "The agreement is a draft; an event priced by hand needs a signed agreement"
@@ -121,18 +130,6 @@ export const NO_VAT_RATE_BY_HAND = "The product has no VAT rate; an event priced
 
 /** What an event priced past what its amount columns hold is told: a quantity times a price is an `integer` in the database, and more is a refusal rather than a failed write (22003). */
 export const AMOUNT_TOO_LARGE = `The amount comes to more than ${INT4_MAX} minor units, the most an event holds`
-
-/** A product a work order's job is charged at, as a reprice's body names it (M14 of #293): a product of the project (400) sold by the job (400). Answers its status, which the caller gates. */
-async function requireJobProduct(tx: Tx, scope: Scope, id: string): Promise<ProductStatus> {
-  const [found] = await tx
-    .select({ status: product.status, unit: product.unit })
-    .from(product)
-    .where(and(eq(product.companyId, scope.companyId), eq(product.projectId, scope.projectId), eq(product.id, id)))
-    .limit(1)
-  if (found === undefined) throw invalidRequest("body", [{ path: "productId", message: NOT_A_PRODUCT }])
-  if (found.unit !== "job") throw invalidRequest("body", [{ path: "productId", message: A_JOB_IS_SOLD_BY_THE_JOB }])
-  return found.status as ProductStatus
-}
 
 /** A recurring charge as `reprice` prices it again: its stored period and charged days, never its agreement's cadence now (#291 C2). */
 function chargeOf(row: EventReading, agreementId: string, productId: string): ChargeToPrice {
@@ -357,7 +354,7 @@ export function billableEventRoutes(guard: MiddlewareHandler<AuthEnv>, { now = (
         operationId: "repriceBillableEvent",
         summary: "Run the resolver again over a blocked event",
         description:
-          "The `reprice` command, on a `blocked` event only: the resolver runs again — the list the agreement is priced under and in force on the service date, the row that wins, the product's VAT rate, with the conditions a pickup's event carries (its route's scheme's planning area, its container's type, its fraction on the day) — and the row is written priced, or with the same block or the next one (`no-price-list` mended to `no-price-row`, then to `no-vat-rate`), answering the reading after. A ticket's event, blocked `no-product`, takes the `productId` the office picked — a product of the project (400, `Not a product of this project`), never one sold by the month (400, a recurring charge is not a ticket's work, #291 C3), that is offered (409, the #79 gate, since the event is a new reference to it) — and a work order's job blocked `no-product` (M14 of #293) a product of the project sold by the job (400, `A work order's job is charged at a product sold by the job`), offered (409); any other kind refuses one (400 at `productId`, `Only a ticket's event or a work order's job takes a product here`). A hire (M14 of #293) is priced again as the run priced it: its stored days at the day's price, under its container's type and its placement's fraction. An event blocked `no-subscription` has no agreement to price under and answers as it stands. A recurring charge (`subscription`, minted by a billing run) is priced again as the run priced it: one month of its product on its first day charged, prorated to the days of its charge period it charged. A `ready` event is refused (409, `Billable event <id> is ready; a priced event is not repriced — cancel it and enter it again`), an `invoiced` one (409, `… is invoiced; correct it with a credit note`), a `cancelled` one (409, `… is cancelled`) and a `reversed` one (409, `… is reversed`). Under the event's row lock; `updatedAt` moves, since a reprice is the row's history. Nothing is published.",
+          "The `reprice` command, on a `blocked` event only: the resolver runs again — the list the agreement is priced under and in force on the service date, the row that wins, the product's VAT rate, with the conditions a pickup's event carries (its route's scheme's planning area, its container's type, its fraction on the day) — and the row is written priced, or with the same block or the next one (`no-price-list` mended to `no-price-row`, then to `no-vat-rate`), answering the reading after. A ticket's event, blocked `no-product`, takes the `productId` the office picked — a product of the project (400, `Not a product of this project`), never one sold by the month (400, a recurring charge is not a ticket's work, #291 C3), that is offered (409, the #79 gate, since the event is a new reference to it) — and a work order's job blocked `no-product` (M14 of #293) a product of the project sold by the job (400, `A work order's job is charged at a product sold by the job`), offered (409); any other kind refuses one (400 at `productId`, `Only a ticket's event or a work order's job takes a product here`). A hire (M14 of #293) is priced again as the run priced it: its stored days at the day's price, under its container's type and its placement's fraction. An event blocked `no-subscription` has no agreement to price under and answers as it stands. A recurring charge (`subscription`, minted by a billing run) is priced again as the run priced it: one month of its product on its first day charged, prorated to the days of its charge period it charged. A `ready` event is refused (409, `Billable event <id> is ready; a priced event is not repriced — cancel it and enter it again`), an `invoiced` one (409, `… is invoiced; correct it with a credit note`), a `cancelled` one (409, `… is cancelled`) and a `reversed` one (409, `… is reversed`). A job or a hire priced now is held for review as it would have been charged priced, where its project holds them (`holdForReview`, M14 of #293). Under the event's row lock; `updatedAt` moves, since a reprice is the row's history. Nothing is published.",
         security: BEARER_SECURITY,
         responses: {
           200: describeJson("The event as it now stands, `ready` or `blocked`.", BillableEvent),
@@ -401,7 +398,8 @@ export function billableEventRoutes(guard: MiddlewareHandler<AuthEnv>, { now = (
         if (issue !== undefined) throw new Error(`billable event ${id}: ${issue}`)
         const [row] = await tx
           .update(billableEvent)
-          .set({ productId, blockReason: outcome.blockReason, ...priceColumns(outcome.price) })
+          // A job or hire priced now is held as it would have been charged priced, where the project holds them for review (M14 of #293).
+          .set({ productId, blockReason: outcome.blockReason, ...priceColumns(outcome.price), ...(await autoHoldOf(tx, scope, after.kind, outcome.blockReason)) })
           .where(and(eventScope(principal), eq(billableEvent.id, id)))
           .returning(eventColumns)
         if (row === undefined) throw noSuchEvent(id)
@@ -413,9 +411,9 @@ export function billableEventRoutes(guard: MiddlewareHandler<AuthEnv>, { now = (
       "/billable-events/:id/cancel",
       describeRoute({
         operationId: "cancelBillableEvent",
-        summary: "Cancel a ready or blocked event",
+        summary: "Cancel a ready, held or blocked event",
         description:
-          "The `cancel` command: a `ready` or a `blocked` event is stamped with the caller, the request's clock and the office's `reason` — `duplicate`, `not-delivered` or `other`; `pickup-corrected` is the consumer's and is refused — and the body's `note`, when given, replaces the event's. There is nothing to invoice on a blocked event either, so it is cancelled too. An `invoiced` event is refused (409, `Billable event <id> is invoiced; correct it with a credit note`), as is a `reversed` one (409, `… is reversed`); a `cancelled` one answers 200 as it stands, without a write; and a `reversal` is refused whatever its status (409, `A reversal is not cancelled; it is the correction`). Under the event's row lock; `updatedAt` moves. Nothing is published.",
+          "The `cancel` command: a `ready`, a `held` or a `blocked` event is stamped with the caller, the request's clock and the office's `reason` — `duplicate`, `not-delivered` or `other`; `pickup-corrected` is the consumer's and is refused — and the body's `note`, when given, replaces the event's. There is nothing to invoice on a blocked event either, so it is cancelled too. An `invoiced` event is refused (409, `Billable event <id> is invoiced; correct it with a credit note`), as is a `reversed` one (409, `… is reversed`); a `cancelled` one answers 200 as it stands, without a write; and a `reversal` is refused whatever its status (409, `A reversal is not cancelled; it is the correction`). Under the event's row lock; `updatedAt` moves. Nothing is published.",
         security: BEARER_SECURITY,
         responses: {
           200: describeJson("The event, cancelled.", BillableEvent),
@@ -441,6 +439,80 @@ export function billableEventRoutes(guard: MiddlewareHandler<AuthEnv>, { now = (
         const [row] = await tx
           .update(billableEvent)
           .set({ cancelledAt: now(), cancelledBy: principal.user.id, cancelReason: reason, note: note ?? current.note })
+          .where(and(eventScope(principal), eq(billableEvent.id, id)))
+          .returning(eventColumns)
+        if (row === undefined) throw noSuchEvent(id)
+        return c.json(eventOf({ ...row, ...UNNAMED }))
+      },
+    )
+    .post(
+      "/billable-events/:id/hold",
+      describeRoute({
+        operationId: "holdBillableEvent",
+        summary: "Hold a ready event for review",
+        description:
+          "The `hold` command (M14 of #293): a `ready` event is stamped `held` with the caller, the request's clock and the office's `reason`, and a billing run passes over it — its preview counts it as held — until it is released. A project that holds its hires and work-order jobs for review (`holdForReview`) has them held as they are charged, with no person. A `held` event answers 200 as it stands, without a write. A `blocked` event goes to no run until it is priced (409, `Billable event <id> is blocked; it goes to no run until it is priced, so there is nothing to hold`), and an `invoiced`, `cancelled` or `reversed` one is refused in the status's words (409), as is a `reversal` whatever its status (409, `A reversal is not held; it is the correction`). Under the event's row lock; `updatedAt` moves. Nothing is published.",
+        security: BEARER_SECURITY,
+        responses: {
+          200: describeJson("The event, held.", BillableEvent),
+          400: describeProblem("The path does not hold an id, or the body is missing the reason or names a member the command does not take."),
+          ...commandProblems("edit"),
+          409: describeProblem("The event is blocked, invoiced, cancelled or reversed, or is a reversal; the detail says which."),
+        },
+      }),
+      guard,
+      requireGrant(MODULE, "edit"),
+      validate("param", IdParam),
+      validate("json", BillableEventHold),
+      async (c) => {
+        const { id } = c.req.valid("param")
+        const { reason } = c.req.valid("json")
+        const tx = c.get("tx")
+        const principal = c.get("principal")
+        const current = await lockedEvent(tx, principal, id)
+        if (current.kind === "reversal") throw problem(409, { detail: REVERSAL_NOT_HELD })
+        const status = statusOf(current)
+        if (status === "held") return c.json(eventOf(current))
+        if (status !== "ready") throw problem(409, { detail: notHeld(id, status) })
+        const [row] = await tx
+          .update(billableEvent)
+          .set({ heldAt: now(), heldBy: principal.user.id, holdReason: reason })
+          .where(and(eventScope(principal), eq(billableEvent.id, id)))
+          .returning(eventColumns)
+        if (row === undefined) throw noSuchEvent(id)
+        return c.json(eventOf({ ...row, ...UNNAMED }))
+      },
+    )
+    .post(
+      "/billable-events/:id/release",
+      describeRoute({
+        operationId: "releaseBillableEvent",
+        summary: "Release a held event to the next run",
+        description:
+          "The `release` command (M14 of #293): a `held` event's hold is cleared, whoever put it there, and it is `ready` again for the next run whose period it falls in. A `ready` event answers 200 as it stands, without a write; any other is refused (409, `Billable event <id> is not held`). Under the event's row lock; `updatedAt` moves. Nothing is published.",
+        security: BEARER_SECURITY,
+        responses: {
+          200: describeJson("The event, ready.", BillableEvent),
+          400: describeProblem("The path does not hold an id, or the body says something."),
+          ...commandProblems("edit"),
+          409: describeProblem("The event is not held."),
+        },
+      }),
+      guard,
+      requireGrant(MODULE, "edit"),
+      validate("param", IdParam),
+      validate("json", BillableEventRelease),
+      async (c) => {
+        const { id } = c.req.valid("param")
+        const tx = c.get("tx")
+        const principal = c.get("principal")
+        const current = await lockedEvent(tx, principal, id)
+        const status = statusOf(current)
+        if (status === "ready") return c.json(eventOf(current))
+        if (status !== "held") throw problem(409, { detail: notReleased(id) })
+        const [row] = await tx
+          .update(billableEvent)
+          .set({ heldAt: null, heldBy: null, holdReason: null })
           .where(and(eventScope(principal), eq(billableEvent.id, id)))
           .returning(eventColumns)
         if (row === undefined) throw noSuchEvent(id)

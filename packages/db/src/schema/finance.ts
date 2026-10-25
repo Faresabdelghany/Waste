@@ -385,6 +385,10 @@ export const billableEvent = wms.table(
     cancelledAt: instant(),
     cancelledBy: uuid(),
     cancelReason: text(),
+    /** A hold for the office's review (M14 of #293): the instant, the person (none for the project's own auto-hold), the reason. A held event is not ready, and a run passes over it until it is released. */
+    heldAt: instant(),
+    heldBy: uuid(),
+    holdReason: text(),
   },
   (t) => [
     companyReference(t, company),
@@ -403,6 +407,7 @@ export const billableEvent = wms.table(
     projectReference(t, [t.reversesEventId], t as ProjectTable),
     tenantReference(t, [t.createdBy], userAccount),
     tenantReference(t, [t.cancelledBy], userAccount),
+    tenantReference(t, [t.heldBy], userAccount),
     projectKey(t),
     oneOf(t.kind, BILLABLE_EVENT_KINDS),
     oneOf(t.blockReason, BLOCK_REASONS),
@@ -444,6 +449,8 @@ export const billableEvent = wms.table(
     ),
     // A cancellation's instant and reason come together, and a person only with them: the consumer cancels with no person.
     check(tableObjectName(t.id.table, "cancel_shape", "billableEvent"), sql`(${t.cancelledAt} is null) = (${t.cancelReason} is null) and (${t.cancelledBy} is null or ${t.cancelledAt} is not null)`),
+    // A hold's instant and reason come together, and a person only with them: the project's auto-hold holds with no person; only a priced event is held, since a blocked one is not ready to hold back.
+    check(tableObjectName(t.id.table, "hold_shape", "billableEvent"), sql`(${t.heldAt} is null) = (${t.holdReason} is null) and (${t.heldBy} is null or ${t.heldAt} is not null) and (${t.heldAt} is null or ${t.blockReason} is null)`),
     // The consumer's idempotency key: one row of a kind per outbox event — a tagged collection's charge and its exception's are two of one (#293 M5) — and a reversal keyed by the event it undoes, below.
     uniqueIndex(tableObjectName(t.companyId.table, "source_event_id_idx", "billableEvent")).on(t.companyId, t.sourceEventId, t.kind).where(sql`${t.sourceEventId} is not null and ${t.kind} <> 'reversal'`),
     // The billing run's idempotency key for a recurring charge (#291 C2): one per subscription and charge period, so a run again charges nothing twice.
@@ -465,6 +472,7 @@ export const billableEvent = wms.table(
     tenantIndex(t, t.evidenceProofId),
     tenantIndex(t, t.createdBy),
     tenantIndex(t, t.cancelledBy),
+    tenantIndex(t, t.heldBy),
   ],
 )
 

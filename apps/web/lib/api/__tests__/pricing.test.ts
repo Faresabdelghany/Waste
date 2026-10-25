@@ -23,7 +23,7 @@ import { NOTHING_RESOLVED, type MappingContext } from "../records/adapter"
 import { containerTypeAdapter, serviceFrequencyAdapter, wasteFractionAdapter } from "../records/master-data"
 import { isServerBacked, SERVER_MODULE_KEYS } from "../records/modules"
 import { projectAdapter } from "../records/organisation"
-import { explainPrice, explainQuery, priceListAdapter, priceRowAdapter, priceRowsModule, productAdapter, productsModule, PRODUCT_TRANSITIONS, VAT_REFUSAL } from "../records/pricing"
+import { explainPrice, explainQuery, priceListAdapter, priceRowAdapter, priceRowsModule, productAdapter, productsModule, FREE_DAYS_REFUSAL, PRODUCT_TRANSITIONS, VAT_REFUSAL } from "../records/pricing"
 import { customerAdapter } from "../records/registry"
 import { loaded, loadModule, resolverOver, spellsStatus, writeRecord, type ServerRecordsState } from "../records/server-records"
 import { bodyOf, clientOver, json, problem, scripted } from "./scripted-fetch"
@@ -36,7 +36,7 @@ const productFixtures = fixturesOf("commercial", "products")
 const rowFixtures = fixturesOf("commercial", "price-rows")
 
 // The seeded rows as the API answers them (packages/db/src/seed), in the seed's id scheme.
-const copenhagen: Project = { id: "01a0d2a4-a280-7002-8000-000000000001", ...STAMPS, name: "Copenhagen Central", kind: "Municipality", language: "da", currency: "DKK", timezone: "Europe/Copenhagen", status: "active", weekend: ["saturday", "sunday"], holidayList: "Danish public holidays", publicSlug: null, weightTolerancePercent: 5, paymentTermsDays: 30, paymentReferenceScheme: "none" }
+const copenhagen: Project = { id: "01a0d2a4-a280-7002-8000-000000000001", ...STAMPS, name: "Copenhagen Central", kind: "Municipality", language: "da", currency: "DKK", timezone: "Europe/Copenhagen", status: "active", weekend: ["saturday", "sunday"], holidayList: "Danish public holidays", publicSlug: null, weightTolerancePercent: 5, paymentTermsDays: 30, paymentReferenceScheme: "none", holdForReview: false }
 const residual: WasteFraction = { id: "01a0d2a4-a280-7005-8000-000000000001", ...STAMPS, key: "residual", name: "Residual", wasteCode: null, treatment: null }
 const bin240: ContainerType = { id: "01a0d2a4-a280-7006-8000-000000000002", ...STAMPS, name: "Two-wheel bin · 240 L", volumeLitres: 240 }
 const fortnightly: ServiceFrequency = { id: "01a0d2a4-a280-7007-8000-000000000002", ...STAMPS, projectId: copenhagen.id, name: "Every 2 weeks", description: null, collectionsPerWeek: 1, weeksBetween: 2, daysBetween: null }
@@ -57,6 +57,7 @@ const res240: Product = {
   invoiceName: "Residual waste collection 240L",
   invoiceCode: "RES-240",
   vatPercent: 25,
+  freeDays: null,
 }
 const bulky: Product = { ...res240, id: "01a0d2a4-a280-700a-8000-000000000005", name: "Bulky waste pickup", kind: "additional-service", unit: "job", containerTypeId: null, wasteFractionId: null, serviceFrequencyId: null, invoiceName: "Bulky waste pickup", invoiceCode: "SRV-BLK" }
 const xmas: Product = { ...bulky, id: "01a0d2a4-a280-700a-8000-000000000007", name: "Christmas tree collection", status: "draft", invoiceName: null, invoiceCode: null, vatPercent: null }
@@ -252,6 +253,25 @@ describe("the products module", () => {
     assert.ok(ProductPatch.safeParse(body).success)
     assert.equal(productAdapter.toPatchBody(before, { ...before }, context(productFixtures)), null)
     assert.deepEqual(productAdapter.toPatchBody(before, { ...before, submittedValues: { ...before.submittedValues, projectId: "project-harbor" } }, context(productFixtures)), { path: "projectId", message: "A product stays in its project" })
+  })
+
+  test("gives a hire product its free days (M14 of #293): read back as a fact, sent on a create and a patch, refused at the field, and none under any other unit", () => {
+    const hire: Product = { ...bulky, id: "01a0d2a4-a280-700a-8000-000000000009", name: "Skip hire", kind: "additional-service", unit: "day", freeDays: 7 }
+    const before = productAdapter.toRecord(hire, context(productFixtures))
+    assert.equal(before.facts["Free days"], "7 days")
+    assert.equal(before.submittedValues?.freeDays, "7")
+    assert.equal(productAdapter.toRecord(bulky, context(productFixtures)).facts["Free days"], undefined, "a product with none says nothing")
+    const longer = productAdapter.toPatchBody(before, { ...before, submittedValues: { ...before.submittedValues, freeDays: "14" } }, context(productFixtures))
+    assert.deepEqual(longer, { freeDays: 14 })
+    assert.ok(ProductPatch.safeParse(longer).success)
+    assert.deepEqual(productAdapter.toPatchBody(before, { ...before, submittedValues: { ...before.submittedValues, freeDays: "" } }, context(productFixtures)), { freeDays: null })
+    assert.deepEqual(productAdapter.toPatchBody(before, { ...before, submittedValues: { ...before.submittedValues, priceUnit: "job" } }, context(productFixtures)), { unit: "job", freeDays: null }, "a product sold by the job again has none")
+    for (const days of ["367", "1.5", "-1", "a"]) assert.deepEqual(productAdapter.toPatchBody(before, { ...before, submittedValues: { ...before.submittedValues, freeDays: days } }, context(productFixtures)), { path: "freeDays", message: FREE_DAYS_REFUSAL }, days)
+    const created = productAdapter.toCreateBody!(made("products-product-1", "Product", { projectId: "project-copenhagen", productName: "Skip hire", productType: "additional-service", priceUnit: "day", freeDays: "7" }), context(productFixtures))
+    assert.deepEqual(created, { projectId: copenhagen.id, name: "Skip hire", kind: "additional-service", status: "draft", unit: "day", freeDays: 7 })
+    assert.ok(ProductCreate.safeParse(created).success)
+    const hidden = productAdapter.toCreateBody!(made("products-product-1", "Product", { projectId: "project-copenhagen", productName: "Extra lid", productType: "additional-service", priceUnit: "job", freeDays: "7" }), context(productFixtures))
+    assert.equal((hidden as { freeDays?: number }).freeDays, undefined, "the field the form hid is not sent")
   })
 
   test("writes a product through the store's seam, and tells the API's refusal in its own words", async () => {

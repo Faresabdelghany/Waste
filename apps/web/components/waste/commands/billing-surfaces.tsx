@@ -48,7 +48,7 @@ import { useCommandRunner, useModuleReady, useOpenRecord, useRowHistory, useServ
 import type { ApiClient } from "@/lib/api/client"
 import { problemSentence } from "@/lib/api/problem"
 import { isLocalRefusal, moduleKeyOf, webIdOf } from "@/lib/api/records/adapter"
-import { billingRunBody, billingRunDetail, billingRunInvoices, eventCommandsOffered, eventPricedByList, eventQuestion, invoiceDetail, invoiceDocument, previewBillingRun } from "@/lib/api/records/billing"
+import { billingRunBody, billingRunDetail, billingRunInvoices, eventCommandsOffered, eventPricedByList, eventQuestion, exclusionWords, invoiceDetail, invoiceDocument, previewBillingRun } from "@/lib/api/records/billing"
 import { CONTAINERS_MODULE } from "@/lib/api/records/containers"
 import { paymentsOfInvoice } from "@/lib/api/records/payments"
 import { PICKUPS_MODULE } from "@/lib/api/records/pickups"
@@ -56,7 +56,7 @@ import { problemOfError, resolverOver, type ModuleState } from "@/lib/api/record
 import { formatMinor } from "@/lib/commercial/money"
 import { AGREEMENTS_MODULE } from "@/lib/data/agreements"
 import type { BusinessFormValues } from "@/lib/data/business-form-types"
-import type { BusinessRecord } from "@/lib/data/business-modules"
+import { getModuleDefinition, type BusinessRecord } from "@/lib/data/business-modules"
 import { downloadBlob } from "@/lib/data/csv"
 import { BILLING_MODULE, EVENTS_MODULE, INVOICE_PREFIX, INVOICES_MODULE, PAYMENT_PREFIX, PAYMENT_SOURCE_LABELS, PAYMENTS_MODULE, PRICE_ROWS_MODULE, ROUTES_MODULE_LOCATION } from "@/lib/data/commercial"
 import {
@@ -72,7 +72,7 @@ import {
   type EventCommand,
 } from "@/lib/data/commercial-forms"
 import { CONTACTS_MODULE } from "@/lib/data/properties"
-import { ROUTE_SCHEMES_MODULE } from "@/lib/data/route-schemes"
+import { projectToday, ROUTE_SCHEMES_MODULE, timezoneOfProject } from "@/lib/data/route-schemes"
 
 // ---------------------------------------------------------------------------
 // Billable events
@@ -94,7 +94,7 @@ export function AddManualEventSurface({ label }: PrimarySurfaceProps) {
 }
 
 /** What each command is told once the API has taken it. */
-const EVENT_DONE: Readonly<Record<EventCommand, string>> = { reprice: "Event repriced", cancel: "Event cancelled" }
+const EVENT_DONE: Readonly<Record<EventCommand, string>> = { reprice: "Event repriced", cancel: "Event cancelled", hold: "Event held for review", release: "Event released to billing" }
 
 /** What a command the API took is told: a reprice that leaves the event blocked says what still blocks it. */
 function eventDone(name: EventCommand, record: { name: string; status: string; value: string }): void {
@@ -175,7 +175,7 @@ function useCustomerName(): (serverId: string) => string {
 /** Run billing: the period, the preview, then the run. */
 export function RunBillingSurface({ label }: PrimarySurfaceProps) {
   const client = useApiClient()
-  const { upsertRecord, refreshModule } = useBusinessRecordStore()
+  const { upsertRecord, refreshModule, getRecords } = useBusinessRecordStore()
   const pickers = useCommercialPickers()
   const resolve = useCommercialResolver()
   const moduleReady = useModuleReady(BILLING_MODULE)
@@ -189,7 +189,10 @@ export function RunBillingSurface({ label }: PrimarySurfaceProps) {
   const ask = (submitted: BusinessFormValues) => {
     if (busy || client === null) return
     setValues(submitted)
-    const body = billingRunBody(blankNone(submitted), resolve)
+    // A run is for a closed period: Last day is held to the picked project's today on its own clock.
+    const projectWebId = typeof submitted.projectId === "string" ? submitted.projectId : undefined
+    const today = projectToday(timezoneOfProject(getRecords("configure", "organization", getModuleDefinition({ workspaceId: "configure", moduleId: "organization" })?.records ?? []), projectWebId))
+    const body = billingRunBody(blankNone(submitted), resolve, today)
     if (isLocalRefusal(body)) {
       toast.error("The run was not previewed", { description: body.message })
       return
@@ -248,6 +251,13 @@ export function RunBillingSurface({ label }: PrimarySurfaceProps) {
               <dd data-testid="preview-events">{preview.answer.eventCount}</dd>
               <dt className="text-muted-foreground">Invoices</dt>
               <dd data-testid="preview-invoices">{preview.answer.invoiceCount}</dd>
+              {/* Held for review (M14 of #293): passed over by this run until released. */}
+              {preview.answer.heldEventCount > 0 && (
+                <>
+                  <dt className="text-muted-foreground">Held for review</dt>
+                  <dd data-testid="preview-held">{preview.answer.heldEventCount}, passed over until released</dd>
+                </>
+              )}
               {preview.answer.totals.map((total) => (
                 <div key={total.currency} className="contents">
                   <dt className="text-muted-foreground">Total in {total.currency}</dt>
@@ -265,7 +275,7 @@ export function RunBillingSurface({ label }: PrimarySurfaceProps) {
                 <ul className="text-sm" data-testid="preview-exclusions">
                   {preview.answer.exclusions.map((exclusion) => (
                     <li key={exclusion.customerId}>
-                      {customerName(exclusion.customerId)} · {exclusion.eventCount} event{exclusion.eventCount === 1 ? "" : "s"}, all blocked
+                      {customerName(exclusion.customerId)} · {exclusionWords(exclusion)}
                     </li>
                   ))}
                 </ul>
@@ -316,7 +326,7 @@ export function BillingRunSurface({ record }: RowSurfaceProps) {
       </div>
       <div className="space-y-2">
         <h4 className="text-xs font-medium text-muted-foreground">Excluded customers</h4>
-        <ReadRows read={rowsOf(run?.detail.exclusions)} label="Reading the run…" empty="None: no payer was skipped." testId="run-exclusions" line={(exclusion) => `${customerName(exclusion.customerId)} · ${exclusion.eventCount} event${exclusion.eventCount === 1 ? "" : "s"}, all blocked`} />
+        <ReadRows read={rowsOf(run?.detail.exclusions)} label="Reading the run…" empty="None: no payer was skipped." testId="run-exclusions" line={(exclusion) => `${customerName(exclusion.customerId)} · ${exclusionWords(exclusion)}`} />
       </div>
       <div className="space-y-2">
         <h4 className="text-xs font-medium text-muted-foreground">Invoices issued</h4>
