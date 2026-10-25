@@ -63,6 +63,7 @@ export function pickup(n: number, overrides: Partial<DriverPickup> = {}): Driver
     origin: "generation",
     service: "empty",
     reason: null,
+    contaminantCodeId: null,
     note: null,
     propertyId: "01950000-0000-7000-8000-000000000301",
     sharedCollectionPointId: null,

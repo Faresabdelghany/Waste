@@ -3,8 +3,10 @@
 // replacement, each held to its service; the stock container a planned
 // delivery or swap holds back, generated from the row and unique per company
 // among the planned stops — fourteen statements diffed from the pickup as
-// 0023 left it (pickup-as-of.ts), since an applied file is never edited;
-// execution-rendering.test.ts maps today's table back (`CHANGED_IN_0032`).
+// 0023 left it to the pickup as 0032 left it (pickup-as-of.ts), since an
+// applied file is never edited and the table has changed since (M5 of #293,
+// the contaminant code); execution-rendering.test.ts maps 0032's table back
+// (`CHANGED_IN_0032`).
 // Then migration 0032, which is exactly those statements under its header:
 // no table is new, so nothing is hand-written, and every row present is an
 // emptying, a repair or a wash, which books nothing and holds nothing back, so
@@ -24,7 +26,7 @@ import { company, project } from "../schema/organisation"
 import { warehouse } from "../schema/places"
 import { normalised, statementsOf } from "../sql/hand-written"
 import { BOOKED_SHAPES, RESERVED_CONTAINER, TAKEN_CONTAINER } from "./execution-shapes"
-import { pickupAsOf0023 } from "./pickup-as-of"
+import { pickupAsOf0023, pickupAsOf0032 } from "./pickup-as-of"
 import { checksOf, ref } from "./rendering"
 import { statementsBetween } from "./specimen"
 
@@ -38,7 +40,7 @@ const indexOf = (column: string) => `CREATE INDEX "pickup_${column}_idx" ON "wms
 const shapeOf = (constraint: string) => `ALTER TABLE "wms"."pickup" ADD ${constraint};`
 
 describe("the stop's ledger bookings as drizzle-kit writes them", () => {
-  const generated = statementsBetween({ ...referenced, pickup: pickupAsOf0023 }, { ...referenced, pickup })
+  const generated = statementsBetween({ ...referenced, pickup: pickupAsOf0023 }, { ...referenced, pickup: pickupAsOf0032 })
 
   test("the three bookings with their keys and indexes, each held to its service, and one planned stop per reserved container and per taken one", async () => {
     assert.deepEqual(await generated, [

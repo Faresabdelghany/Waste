@@ -52,6 +52,10 @@
 // invoice a run issues and every credit note, and `settlement-closed` on a
 // `settlement`, the two doors the e-conomic export consumes — after them.
 //
+// `CONTAMINANT_CODE_STATUSES` is a contaminant code's (M5 of #293): a
+// company's own codes for the wrong waste in a bin, which the office retires
+// rather than deletes, since a stop names the code it was tagged with.
+//
 // A value is a kebab-case token: it goes into a migration as a SQL literal
 // and onto the wire as an enum member, and those are the same string. A list
 // is a `readonly` tuple with a type read off it; `EXECUTION_VOCABULARIES`
@@ -83,6 +87,8 @@ export const COMMAND_OUTCOMES = ["applied", "rejected"] as const
 export const OUTBOX_KINDS = ["route-dispatched", "route-started", "route-completed", "route-cancelled", "route-reassigned", "pickup-completed", "pickup-failed", "pickup-skipped", "pickup-problem-reported", "pickup-corrected", "unload-recorded", "command-rejected", "ticket-opened", "ticket-completed", "ticket-rejected", "invoice-issued", "settlement-closed"] as const
 /** What an outbox event is about; the payload is that resource on the wire. */
 export const OUTBOX_AGGREGATES = ["route", "pickup", "unload", "command", "ticket", "invoice", "settlement"] as const
+/** A contaminant code's: in use, or retired from new tags while the stops tagged with it keep it. */
+export const CONTAMINANT_CODE_STATUSES = ["active", "inactive"] as const
 
 export type RouteStatus = (typeof ROUTE_STATUSES)[number]
 export type PickupStatus = (typeof PICKUP_STATUSES)[number]
@@ -97,6 +103,7 @@ export type DriverCommandKind = (typeof DRIVER_COMMAND_KINDS)[number]
 export type CommandOutcome = (typeof COMMAND_OUTCOMES)[number]
 export type OutboxKind = (typeof OUTBOX_KINDS)[number]
 export type OutboxAggregate = (typeof OUTBOX_AGGREGATES)[number]
+export type ContaminantCodeStatus = (typeof CONTAMINANT_CODE_STATUSES)[number]
 
 /**
  * The reasons a driver's device may give for a skip, a failure or a problem:
@@ -132,6 +139,19 @@ export type OfficeCancelReasonCode = (typeof OFFICE_CANCEL_REASON_CODES)[number]
 /** The code a generation run writes on a route its scheme no longer plans. */
 export const REGENERATION_CANCEL = "regeneration" satisfies RouteCancelReasonCode
 
+/**
+ * The reasons a Pickup Exception is missed for (M5 of #293): the driver's
+ * reasons the customer caused — the wrong waste, a bin not out, a bin that
+ * could not be reached, and the driver's `other` — never the operator's own
+ * (`capacity`, `safety`) nor one the system writes. A value beside the lists,
+ * like the driver's six.
+ */
+export const PICKUP_EXCEPTION_REASONS = ["contamination", "not-presented", "inaccessible", "other"] as const satisfies readonly DriverPickupReason[]
+export type PickupExceptionReason = (typeof PICKUP_EXCEPTION_REASONS)[number]
+
+/** The proofs that may name a contaminant code: the ones that record an outcome, the office's correction among them. */
+export const CODED_PROOF_KINDS = ["completion", "skip", "failure", "correction"] as const satisfies readonly ProofKind[]
+
 /** The two reasons the system writes when a route's end or cancellation closes its open pickups; a value beside the lists, like the driver's six. */
 export const CLOSING_REASONS = ["route-ended", "route-cancelled"] as const satisfies readonly PickupReason[]
 export type ClosingReason = (typeof CLOSING_REASONS)[number]
@@ -151,4 +171,5 @@ export const EXECUTION_VOCABULARIES = {
   COMMAND_OUTCOMES,
   OUTBOX_KINDS,
   OUTBOX_AGGREGATES,
+  CONTAMINANT_CODE_STATUSES,
 } as const satisfies Record<string, readonly [string, ...string[]]>

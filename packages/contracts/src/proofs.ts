@@ -49,6 +49,8 @@ export const ProofOfService = z
     objectKey: ObjectKey.nullable(),
     /** On a correction: the outcome the pickup was moved to. */
     outcome: PickupOutcome.nullable(),
+    /** The contaminant code an outcome was tagged with (M5 of #293); a row relayed before it carries none. */
+    contaminantCodeId: Id.nullable().default(null),
   })
   .superRefine((row, context) => {
     const issue = proofShapeIssue(row.kind, row)

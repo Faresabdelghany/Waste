@@ -222,6 +222,7 @@ export const pickupColumns = {
   origin: pickup.origin,
   service: pickup.service,
   reason: pickup.reason,
+  contaminantCodeId: pickup.contaminantCodeId,
   note: pickup.note,
   propertyId: pickup.propertyId,
   sharedCollectionPointId: pickup.sharedCollectionPointId,
@@ -249,6 +250,7 @@ export function pickupOf(row: PickupRow): Pickup {
     origin: row.origin as PickupOrigin,
     service: row.service as PickupService,
     reason: row.reason as PickupReason | null,
+    contaminantCodeId: row.contaminantCodeId,
     note: row.note,
     propertyId: row.propertyId,
     sharedCollectionPointId: row.sharedCollectionPointId,
@@ -362,6 +364,7 @@ export const proofColumns = {
   weightKg: proofOfService.weightKg,
   objectKey: proofOfService.objectKey,
   outcome: proofOfService.outcome,
+  contaminantCodeId: proofOfService.contaminantCodeId,
 }
 
 export type ProofRow = Pick<typeof proofOfService.$inferSelect, keyof typeof proofColumns>
@@ -387,6 +390,7 @@ export function proofOf(row: ProofRow): ProofOfService {
     weightKg: row.weightKg,
     objectKey: row.objectKey,
     outcome: row.outcome as PickupOutcome | null,
+    contaminantCodeId: row.contaminantCodeId,
   }
 }
 

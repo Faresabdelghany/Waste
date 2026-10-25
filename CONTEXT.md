@@ -188,6 +188,14 @@ _Avoid_: Pickup history, separate service event, property, route, Product (a Pic
 A Pickup the office books whose service is not an emptying: a delivery, a removal, a swap, a repair or a wash of a container. Its outcome and proof are recorded as any Pickup's; one not done is the office's task to book again, never a missed collection. A delivery, a removal and a swap are Ledger Work Orders: each books at the office what its Stock Movements need — a delivery the Subscription the container will serve under, a removal and a swap the Warehouse the container taken goes back to, a swap its replacement — and the driver's completion records those movements. A container from stock a planned delivery or swap names is held for it: no second one may name it. A movement the ledger refuses never refuses the completion; it becomes an internal-task Ticket saying why.
 _Avoid_: Job, task (a Ticket's kind), collection
 
+**Pickup Exception**:
+A Pickup whose outcome the customer caused — failed or skipped for a driver's reason other than capacity or safety, or completed but tagged with a Contaminant Code. It may be charged under its project's rules, the first few in a window free and the rest stepped up a ladder of products, and is read in its Property's or Shared Collection Point's exception history.
+_Avoid_: Alert, exception (unqualified — the alerts module's legacy id), deviation, missed collection (a missed collection is the operator's)
+
+**Contaminant Code**:
+A company's own name for the wrong waste in a bin — plastic in organic waste, food in paper — which a driver or the office tags a stop with, optionally narrowed to the waste fractions it is found in. Retired by its status, never deleted, since a stop keeps the code it was tagged with.
+_Avoid_: Contamination reason (the reason is `contamination`; the code says which), fault code
+
 **Stop**:
 The route-line presentation of a Pickup — one position (#) within a dated Route's stop list: the Route's active Plan's order where one exists, else the generated order. Presentation only: the Pickup remains the persisted record. Stops exist only once routes are generated; Stop Matching Rule matches are a preview and are never presented as Stops.
 _Avoid_: Pickup (as the stored record), matched container, stop preview

@@ -116,7 +116,7 @@
 // e-mail index, for the same reason: the relay's read is one statement in the
 // system that crosses companies.
 import { PROOF_SHAPES } from "@waste/domain/execution/proof-shapes"
-import { COMMAND_OUTCOMES, DRIVER_COMMAND_KINDS, EXECUTION_SOURCES, OUTBOX_AGGREGATES, OUTBOX_KINDS, PICKUP_ORIGINS, PICKUP_OUTCOMES, PICKUP_REASONS, PICKUP_SERVICES, PICKUP_STATUSES, PROOF_KINDS, ROUTE_CANCEL_REASON_CODES, ROUTE_STATUSES } from "@waste/domain/execution/vocabulary"
+import { CODED_PROOF_KINDS, COMMAND_OUTCOMES, DRIVER_COMMAND_KINDS, EXECUTION_SOURCES, OUTBOX_AGGREGATES, OUTBOX_KINDS, PICKUP_ORIGINS, PICKUP_OUTCOMES, PICKUP_REASONS, PICKUP_SERVICES, PICKUP_STATUSES, PROOF_KINDS, ROUTE_CANCEL_REASON_CODES, ROUTE_STATUSES } from "@waste/domain/execution/vocabulary"
 import { sql, type SQL } from "drizzle-orm"
 import { boolean, check, date, index, integer, jsonb, text, time, timestamp, unique, uniqueIndex, uuid, type PgColumn } from "drizzle-orm/pg-core"
 
@@ -132,6 +132,7 @@ import { driver, vehicle } from "./fleet"
 import { generationRun } from "./generation"
 import { geometry, validGeometry } from "./geometry"
 import { company, project, serviceProvider } from "./organisation"
+import { contaminantCode } from "./pickup-exceptions"
 import { depot, unloadingStation, warehouse } from "./places"
 import { companyReference, indexOn, projectKey, projectReference, tenantIndex, tenantReference, tenantUnique } from "./references"
 import { collectionGroup, routeScheme } from "./route-schemes"
@@ -302,6 +303,8 @@ export const pickup = wms.table(
      * both set out to take one container.
      */
     takenContainerId: uuid().generatedAlwaysAs(sql`case when "status" = 'planned' and "service" in ('remove', 'swap') then "container_id" end`),
+    /** The wrong waste the stop was tagged with (M5 of #293): on a stop missed for contamination, or collected all the same. */
+    contaminantCodeId: uuid(),
   },
   (t) => [
     companyReference(t, company),
@@ -342,6 +345,9 @@ export const pickup = wms.table(
     check(tableObjectName(t.id.table, "container_shape", "pickup"), sql`${t.containerId} is not null or ${t.origin} = 'office'`),
     check(tableObjectName(t.id.table, "outcome_shape", "pickup"), sql`(${t.status} <> 'planned') = (${t.outcomeAt} is not null)`),
     check(tableObjectName(t.id.table, "reason_shape", "pickup"), sql`(${t.status} in ('skipped', 'failed')) = (${t.reason} is not null)`),
+    tenantReference(t, [t.contaminantCodeId], contaminantCode),
+    // A code tags the wrong waste: a stop missed for contamination, or one collected all the same.
+    check(tableObjectName(t.id.table, "contaminant_code_shape", "pickup"), sql`${t.contaminantCodeId} is null or ${t.reason} = 'contamination' or ${t.status} = 'completed'`),
     tenantIndex(t, t.projectId),
     tenantIndex(t, t.containerId),
     tenantIndex(t, t.propertyId),
@@ -352,6 +358,7 @@ export const pickup = wms.table(
     tenantIndex(t, t.replacementContainerId),
     // The stop list in order.
     tenantIndex(t, t.routeId, t.position),
+    tenantIndex(t, t.contaminantCodeId),
   ],
 )
 
@@ -398,10 +405,11 @@ export const session = wms.table(
 )
 
 /** The kinds by what they say of the pickup, from the domain's table: a stop's kinds name one, the route's own name none, the rest may stand on the route alone. */
-const kindsNaming = (pickup: "required" | "optional" | "none") => sql.raw(PROOF_KINDS.filter((kind) => PROOF_SHAPES[kind].pickup === pickup).map(literal).join(", "))
+/** The kinds whose shape names a pickup as given, as SQL literals; exported for the test that rebuilds the table as an earlier migration left it. */
+export const kindsNaming = (pickup: "required" | "optional" | "none") => sql.raw(PROOF_KINDS.filter((kind) => PROOF_SHAPES[kind].pickup === pickup).map(literal).join(", "))
 
-/** One `WHEN` of the kind CASE: what the kind carries and forbids, as SQL over the row's columns. */
-function kindClause(kind: (typeof PROOF_KINDS)[number], columns: { reason: PgColumn; objectKey: PgColumn; weightKg: PgColumn; outcome: PgColumn; note: PgColumn; source: PgColumn }): SQL {
+/** One `WHEN` of the kind CASE: what the kind carries and forbids, as SQL over the row's columns; exported for the same test. */
+export function kindClause(kind: (typeof PROOF_KINDS)[number], columns: { reason: PgColumn; objectKey: PgColumn; weightKg: PgColumn; outcome: PgColumn; note: PgColumn; source: PgColumn }): SQL {
   const shape = PROOF_SHAPES[kind]
   const terms: SQL[] = []
   for (const column of ["reason", "objectKey", "weightKg", "outcome", "note"] as const) {
@@ -442,6 +450,8 @@ export const proofOfService = wms.table(
     objectKey: text(),
     /** On a correction: the status the pickup was moved to. */
     outcome: text(),
+    /** The contaminant code the outcome was tagged with (M5 of #293), on a proof that records an outcome. */
+    contaminantCodeId: uuid(),
   },
   (t) => [
     companyReference(t, company),
@@ -467,12 +477,16 @@ export const proofOfService = wms.table(
     check(tableObjectName(t.id.table, "session_shape", "proofOfService"), sql`(${t.source} = 'driver-app') = (${t.sessionId} is not null)`),
     // What each kind carries and forbids: one CASE built from PROOF_SHAPES, the one spelling of the table.
     check(tableObjectName(t.id.table, "kind_shape", "proofOfService"), sql`case ${t.kind} ${sql.join(PROOF_KINDS.map((kind) => kindClause(kind, t)), sql` `)} else false end`),
+    tenantReference(t, [t.contaminantCodeId], contaminantCode),
+    // A code tags an outcome: only the proofs that record one carry it, from the domain's list (CODED_PROOF_KINDS).
+    check(tableObjectName(t.id.table, "contaminant_code_shape", "proofOfService"), sql`${t.contaminantCodeId} is null or ${t.kind} in (${sql.raw(CODED_PROOF_KINDS.map(literal).join(", "))})`),
     // The route's timeline in recording order: leads with the route, so it is the index the reference needs too.
     index(tableObjectName(t.companyId.table, "route_id_idx", "proofOfService")).on(t.companyId, t.routeId, t.id),
     tenantIndex(t, t.projectId),
     tenantIndex(t, t.pickupId),
     tenantIndex(t, t.sessionId),
     tenantIndex(t, t.recordedBy),
+    tenantIndex(t, t.contaminantCodeId),
   ],
 )
 

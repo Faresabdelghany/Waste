@@ -24,6 +24,7 @@ const pickup = {
   origin: "generation",
   service: "empty",
   reason: null,
+  contaminantCodeId: null,
   note: null,
   propertyId: OTHER,
   sharedCollectionPointId: null,
@@ -55,6 +56,7 @@ const proof = {
   weightKg: null,
   objectKey: null,
   outcome: null,
+  contaminantCodeId: null,
 }
 
 describe("Pickup", () => {

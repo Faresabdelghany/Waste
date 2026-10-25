@@ -29,7 +29,7 @@
 //
 // `proofShape(kind, row)` is the whole rule over a row; `proofShapeIssue` says
 // which column disagrees, for the API's sentence before the check's code.
-import type { ExecutionSource, ProofKind } from "./vocabulary"
+import { CODED_PROOF_KINDS, type ExecutionSource, type ProofKind } from "./vocabulary"
 
 /** Whether a column is given, absent, or either, for a kind. */
 export type Presence = "required" | "none" | "any"
@@ -56,6 +56,8 @@ export type ProofRow = {
   outcome: string | null
   note: string | null
   source: ExecutionSource
+  /** The contaminant code an outcome was tagged with (M5 of #293); absent on a row from before it. */
+  contaminantCodeId?: string | null
 }
 
 /** A driver event about a stop, carrying nothing but that it happened. */
@@ -96,6 +98,8 @@ export function proofShapeIssue(kind: ProofKind, row: ProofRow): string | undefi
     return shape[column] === "required" ? `A ${kind} proof carries ${column}` : `A ${kind} proof carries no ${column}`
   }
   if (shape.source === "dispatch" && row.source !== "dispatch") return `A ${kind} proof comes from dispatch`
+  // A contaminant code tags an outcome: only the proofs that record one carry it (M5 of #293).
+  if (row.contaminantCodeId != null && !(CODED_PROOF_KINDS as readonly ProofKind[]).includes(kind)) return `A ${kind} proof carries no contaminantCodeId`
   return undefined
 }
 

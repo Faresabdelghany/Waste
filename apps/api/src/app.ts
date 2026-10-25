@@ -48,6 +48,7 @@ import { auditEventRoutes } from "./routes/audit-events"
 import { billableEventRoutes } from "./routes/billable-events"
 import { billingRunRoutes } from "./routes/billing-runs"
 import { catalogueRoutes } from "./routes/catalogue"
+import { contaminantCodeRoutes } from "./routes/contaminant-codes"
 import { collectionCalendarRoutes } from "./routes/collection-calendars"
 import { collectionGroupRoutes } from "./routes/collection-groups"
 import { companyRoutes } from "./routes/company"
@@ -90,6 +91,7 @@ import { serviceProviderPriceRoutes } from "./routes/service-provider-prices"
 import { serviceProviderRoutes } from "./routes/service-providers"
 import { settlementRoutes } from "./routes/settlements"
 import { sharedCollectionPointRoutes } from "./routes/shared-collection-points"
+import { pickupExceptionRoutes } from "./routes/pickup-exceptions"
 import { sortingGuideRoutes } from "./routes/sorting-guide"
 import { ticketChargeRoutes } from "./routes/ticket-charges"
 import { ticketSlaRoutes } from "./routes/ticket-sla"
@@ -278,6 +280,9 @@ export function createApp({
   app.route("/", ticketRoutes(guard, { now }))
   app.route("/", sortingGuideRoutes(guard))
   app.route("/", ticketSlaRoutes(guard))
+  // The Pickup Exceptions (M5 of #293): the company's contaminant codes, the projects' charge rules, and a place's exception history.
+  app.route("/", contaminantCodeRoutes(guard))
+  app.route("/", pickupExceptionRoutes(guard, { now }))
   app.route(
     "/",
     publicRoutes(

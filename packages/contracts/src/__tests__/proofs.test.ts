@@ -44,6 +44,7 @@ const proof = (kind: ProofKind, row: ProofRow = exemplar(kind)) => ({
   deviceId: row.source === "driver-app" ? "device-7" : null,
   location: POINT,
   locationAccuracyM: 8,
+  contaminantCodeId: null,
   ...row,
 })
 

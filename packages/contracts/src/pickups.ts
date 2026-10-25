@@ -70,6 +70,8 @@ export const Pickup = z.object({
   service: PickupService.default("empty"),
   /** Why a skipped or failed pickup was not collected; null otherwise. */
   reason: PickupReason.nullable(),
+  /** The wrong waste the stop was tagged with (M5 of #293); a payload the outbox took before it carries none, and reads as untagged. */
+  contaminantCodeId: Id.nullable().default(null),
   note: Paragraph.nullable(),
   /** The place on the service date: exactly one of the two. */
   propertyId: Id.nullable(),
@@ -220,15 +222,26 @@ const reasonWithAMiss = { message: REASON_WITH_A_MISS, path: ["reason"] }
 /** A reason goes with a skip or a failure and not with a completion: the table's `pickup_reason_shape`, at the boundary. */
 export const reasonWithOutcome = (value: { outcome: string; reason?: string | null }): boolean => (value.outcome === "skipped" || value.outcome === "failed") === (value.reason != null)
 
-/** `POST /pickups/:id/correct-outcome`: the audited correction, appending a correction proof and moving the status. */
+/** What a code given with an outcome it does not tag is told (M5 of #293). */
+export const CODE_WITH_CONTAMINATION = "A contaminant code goes with contamination, or with a collection made all the same"
+const codeWithContamination = { message: CODE_WITH_CONTAMINATION, path: ["contaminantCodeId"] }
+
+/** A code tags the wrong waste: a stop missed for contamination, or one collected all the same — the table's `pickup_contaminant_code_shape`, at the boundary. */
+export const codeWithOutcome = (value: { outcome: string; reason?: string | null; contaminantCodeId?: string | null }): boolean =>
+  value.contaminantCodeId == null || value.reason === "contamination" || value.outcome === "completed"
+
+/** `POST /pickups/:id/correct-outcome`: the audited correction, appending a correction proof and moving the status — and, since M5a, the code the stop is tagged with, or none. */
 export const PickupCorrection = z
   .strictObject({
     outcome: PickupOutcome,
     reason: PickupReason.optional(),
     /** Why the outcome is being corrected: the correction proof's note. */
     note: Paragraph,
+    /** The wrong waste the stop is tagged with; null untags, and absent keeps the stop's code where the corrected outcome still takes one. */
+    contaminantCodeId: Id.nullable().optional(),
   })
   .refine(reasonWithOutcome, reasonWithAMiss)
+  .refine(codeWithOutcome, codeWithContamination)
 export type PickupCorrection = z.infer<typeof PickupCorrection>
 
 /** A page of pickups: one project's, one route's, one container's, of one status, at one property, over a window of the route's operating date. */

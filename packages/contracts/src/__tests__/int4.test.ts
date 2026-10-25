@@ -59,6 +59,7 @@ import * as routingPreviewModule from "../routing-preview"
 import * as routingQuotaModule from "../routing-quota"
 import * as serviceAreasModule from "../service-areas"
 import * as serviceProviderPricesModule from "../service-provider-prices"
+import * as pickupExceptionsModule from "../pickup-exceptions"
 import * as sessionsModule from "../sessions"
 import * as settlementsModule from "../settlements"
 import * as sortingGuideModule from "../sorting-guide"
@@ -104,6 +105,7 @@ const MODULES: Readonly<Record<string, Record<string, unknown>>> = {
   "outbox": outboxModule,
   "pagination": paginationModule,
   "permissions": permissionsModule,
+  "pickup-exceptions": pickupExceptionsModule,
   "pickups": pickupsModule,
   "places": placesModule,
   "planning": planningModule,

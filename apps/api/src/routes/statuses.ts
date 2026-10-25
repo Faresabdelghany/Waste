@@ -60,6 +60,7 @@
 // own heading.
 import type { ProductStatus } from "@waste/contracts/catalogue"
 import type { CustomerStatus, PropertyStatus, SharedCollectionPointStatus } from "@waste/contracts/customers"
+import type { ContaminantCodeStatus } from "@waste/contracts/pickup-exceptions"
 import { vehicleAllocation } from "@waste/db/schema/allocations"
 import type { AllocationStatus, DriverStatus, VehicleStatus, WarehouseStatus } from "@waste/domain/resources/vocabulary"
 import { count } from "@waste/domain/text"
@@ -216,3 +217,20 @@ export const groupsName =
   (what: "vehicle" | "driver") =>
   (rows: number): string =>
     `${count(rows, "collection group")} ${rows === 1 ? "names" : "name"} this ${what}; reassign ${rows === 1 ? "it" : "them"} first`
+
+// Pickup Exceptions (M5 of #293): a retired contaminant code tags nothing new
+// and is named by no new rule, and a rule's step charges a product that is
+// offered. A stop tagged before the code was retired keeps its tag, and a
+// rule written before a product was withdrawn keeps its step.
+
+/** What naming a retired contaminant code is told, by what names it. */
+export const retiredCode = (code: string, by: "a tag" | "a rule"): string => `The contaminant code ${code} is retired; ${by} names an active one`
+
+/** A contaminant code a new tag or rule names: active, or the sentence. */
+export function refuseRetiredCode(status: ContaminantCodeStatus, code: string, by: "a tag" | "a rule"): void {
+  if (status === "active") return
+  throw problem(409, { detail: retiredCode(code, by) })
+}
+
+/** What a rule's step naming a product that is not offered is told. */
+export const unofferedStep = (position: number, status: Exclude<ProductStatus, "active">): string => `The product on step ${position} is ${status}; a rule charges an active product`
