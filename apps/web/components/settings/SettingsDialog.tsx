@@ -56,6 +56,7 @@ import { HolidayListsSettings } from "@/components/settings/holiday-lists-settin
 import { SortingGuideSettings } from "@/components/settings/sorting-guide-settings"
 import { FinanceSettingsOnApi } from "@/components/settings/finance-settings-on-api"
 import { TicketSlaSettings } from "@/components/settings/ticket-sla-settings"
+import { PickupExceptionChargesSettings } from "@/components/settings/pickup-exception-charges-settings"
 import { MasterDataSettings } from "@/components/settings/master-data-settings"
 import { useApiConfigured, useApiSession } from "@/components/waste/api-session-store"
 import { profileOf, type AccountProfile } from "@/lib/data/account-profile"
@@ -63,6 +64,7 @@ import { HOLIDAY_LISTS_SETTINGS_PANE_ID, MASTER_DATA_SETTINGS_PANE_ID } from "@/
 import { ASSET_MANAGEMENT_SETTINGS_PANE_ID, FINANCE_ON_API_SETTINGS_PANE_ID, FINANCE_SETTINGS_PANE_ID, settingsPaneOffered, settingsPaneOpened } from "@/lib/data/settings-panes"
 import { SORTING_GUIDE_SETTINGS_PANE_ID } from "@/lib/data/sorting-guide"
 import { TICKET_SLA_SETTINGS_PANE_ID } from "@/lib/data/ticket-sla"
+import { PICKUP_EXCEPTION_CHARGES_SETTINGS_PANE_ID } from "@/lib/data/pickup-exception-rules"
 import { PLANNING_AREAS_SETTINGS_PANE_ID } from "@/lib/data/planning-areas"
 import { COLLECTION_CALENDARS_SETTINGS_PANE_ID } from "@/lib/data/collection-calendars"
 import { migrateLegacyId } from "@/lib/data/legacy-ids"
@@ -186,6 +188,8 @@ const settingsSections: Array<{
       { id: "commercial-products", label: "Products", icon: Package },
       { id: "commercial-price-lists", label: "Price lists", icon: Receipt },
       { id: "commercial-ticket-charges", label: "Ticket charges", icon: Ticket },
+      // A project's charge rules for Pickup Exceptions on the API (M5 of #293): offered with the adapter configured.
+      { id: PICKUP_EXCEPTION_CHARGES_SETTINGS_PANE_ID, label: "Exception charges", icon: Warning },
     ],
   },
 ]
@@ -1341,6 +1345,11 @@ const visiblePaneDefinitions: Record<string, SettingsPaneDefinition> = {
     description: "What the company's invoices print, and when each project's invoices are due and the payment reference they carry.",
     groups: [],
   },
+  [PICKUP_EXCEPTION_CHARGES_SETTINGS_PANE_ID]: {
+    title: "Exception charges",
+    description: "What a collection missed for the customer, or collected tagged with a contaminant code, costs them: how many are free over a window, then the products charged by occurrence.",
+    groups: [],
+  },
   [SORTING_GUIDE_SETTINGS_PANE_ID]: {
     title: "Sorting guide",
     description: "What residents find when they search where a thing goes, on the project's public page.",
@@ -1446,6 +1455,7 @@ function isFullPanelPane(paneId: string): boolean {
     paneId === SORTING_GUIDE_SETTINGS_PANE_ID ||
     paneId === TICKET_SLA_SETTINGS_PANE_ID ||
     paneId === FINANCE_ON_API_SETTINGS_PANE_ID ||
+    paneId === PICKUP_EXCEPTION_CHARGES_SETTINGS_PANE_ID ||
     paneId.startsWith("commercial-")
   )
 }
@@ -1857,6 +1867,8 @@ function SettingsPane({
         <TicketSlaSettings />
       ) : paneId === FINANCE_ON_API_SETTINGS_PANE_ID ? (
         <FinanceSettingsOnApi />
+      ) : paneId === PICKUP_EXCEPTION_CHARGES_SETTINGS_PANE_ID ? (
+        <PickupExceptionChargesSettings />
       ) : paneId.startsWith("commercial-") ? (
         <CommercialSectionPane paneId={paneId} />
       ) : (

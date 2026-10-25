@@ -10,6 +10,7 @@ import { describe, test } from "node:test"
 import { MASTER_DATA_SETTINGS_PANE_ID } from "../business-links"
 import { ASSET_MANAGEMENT_SETTINGS_PANE_ID, FINANCE_ON_API_SETTINGS_PANE_ID, FINANCE_SETTINGS_PANE_ID, settingsPaneOffered, settingsPaneOpened, TICKETS_COMMUNICATION_SETTINGS_PANE_ID } from "../settings-panes"
 import { SORTING_GUIDE_SETTINGS_PANE_ID } from "../sorting-guide"
+import { PICKUP_EXCEPTION_CHARGES_SETTINGS_PANE_ID } from "../pickup-exception-rules"
 import { TICKET_SLA_SETTINGS_PANE_ID } from "../ticket-sla"
 
 describe("the Settings panes offered", () => {
@@ -25,6 +26,11 @@ describe("the Settings panes offered", () => {
   test("the Sorting Guide on the Pilot only (#293): its items are the API's alone, with no fixtures", () => {
     assert.equal(settingsPaneOffered(SORTING_GUIDE_SETTINGS_PANE_ID, true), true)
     assert.equal(settingsPaneOffered(SORTING_GUIDE_SETTINGS_PANE_ID, false), false)
+  })
+
+  test("Exception charges on the Pilot only (M5 of #293): the rules are the API's alone", () => {
+    assert.equal(settingsPaneOffered(PICKUP_EXCEPTION_CHARGES_SETTINGS_PANE_ID, true), true)
+    assert.equal(settingsPaneOffered(PICKUP_EXCEPTION_CHARGES_SETTINGS_PANE_ID, false), false)
   })
 
   test("the Ticket SLA on the Pilot only, in place of Tickets & communication, whose link opens it there (O4 of #290)", () => {

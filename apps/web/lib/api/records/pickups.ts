@@ -31,7 +31,9 @@ import type { ProofOfService } from "@waste/contracts/proofs"
 import { PICKUP_OUTCOMES, PICKUP_REASONS } from "@waste/domain/execution/vocabulary"
 
 import { FIXTURE_COMPANY_ID, type BusinessRecord, type ModuleLocation } from "@/lib/data/business-modules"
+import { MASTER_DATA_KIND_DETAILS, masterDataKindOf } from "@/lib/data/master-data-kinds"
 import { PICKUP_SERVICE_LABELS } from "@/lib/data/pickup-services"
+import { NO_ONE } from "@/lib/data/properties"
 
 import { command, get, listAll } from "../client"
 import { inheritedPresentation, moduleKeyOf, ofKind, said, stampFacts, statusLabel, typed, webIdOf, type Client, type MappingContext, type RecordCommand, type ResourceAdapter, type ServerModule } from "./adapter"
@@ -52,6 +54,12 @@ export const CORRECT_PICKUP = "correct"
 
 /** The sentence the contract refuses a reason with a completion, or none with a miss, in (`REASON_WITH_A_MISS`, @waste/contracts/pickups), quoted since the web imports no zod at runtime; the test holds the two equal. */
 export const REASON_WITH_A_MISS = "Give a reason with skipped or failed, and none with completed"
+
+/** The contracts' `CODE_WITH_CONTAMINATION`, spelled again since the web imports the contracts as types alone; a test holds the two equal. */
+export const CODE_WITH_CONTAMINATION = "A contaminant code goes with contamination, or with a collection made all the same"
+
+/** The web id prefix of a contaminant code, a kind of the master data (M5 of #293). */
+const CONTAMINANT_CODE_PREFIX = MASTER_DATA_KIND_DETAILS["contaminant-code"].prefix
 
 const PICKUP_PREFIX = "pickup"
 
@@ -112,6 +120,10 @@ export function toPickupRecord(pickup: Pickup, context: MappingContext): Busines
   if (pickup.arrivedAt !== null) facts["Arrived at"] = clockOn(pickup.arrivedAt, timezone)
   if (pickup.status === "completed" && pickup.outcomeAt !== null) facts["Completed at"] = clockOn(pickup.outcomeAt, timezone)
   if (pickup.reason !== null) facts.Reason = statusLabel(pickup.reason)
+  // The wrong waste the stop was tagged with (M5 of #293), by the master data's row where it is loaded, its chip where it is not.
+  const codeRow = pickup.contaminantCodeId == null ? undefined : context.resolve.byServerId(pickup.contaminantCodeId)
+  const codeWebId = pickup.contaminantCodeId == null ? undefined : (codeRow?.id ?? webIdOf(CONTAMINANT_CODE_PREFIX, pickup.contaminantCodeId))
+  if (codeWebId !== undefined) facts["Contaminant code"] = codeRow?.name ?? codeWebId
   if (pickup.note !== null) facts.Note = pickup.note
   const onRoute = (key: string) => {
     const value = route === undefined ? undefined : typed(route, key)
@@ -135,6 +147,7 @@ export function toPickupRecord(pickup: Pickup, context: MappingContext): Busines
     recordKind: "Pickup",
     submittedValues: {
       routeId: routeWebId,
+      ...(codeWebId === undefined ? {} : { contaminantCodeId: codeWebId }),
       ...(container === undefined ? {} : { containerId: container.webId }),
       ...(place === undefined ? {} : { [place.key]: place.webId }),
       origin: pickup.origin,
@@ -170,7 +183,7 @@ export const PICKUP_COMMANDS = {
     const reason = said(input, "reason")
     return reason === undefined ? refusal("reason", "Say why the stop is removed") : { reason }
   }),
-  [CORRECT_PICKUP]: onPickup("correct-outcome", "corrected", (input) => {
+  [CORRECT_PICKUP]: onPickup("correct-outcome", "corrected", (input, _record, context) => {
     const outcome = said(input, "outcome")
     if (outcome === undefined || !isOneOf(PICKUP_OUTCOMES, outcome)) return refusal("outcome", "Pick the outcome: completed, skipped or failed")
     const reason = said(input, "reason")
@@ -178,8 +191,19 @@ export const PICKUP_COMMANDS = {
     if (reason !== undefined && !isOneOf(PICKUP_REASONS, reason)) return refusal("reason", "Pick a reason the API knows")
     const note = said(input, "note")
     if (note === undefined) return refusal("note", "Say why the outcome is corrected")
+    // The code (M5 of #293): absent keeps the stop's where the outcome still takes one, None untags, a code is named by its server id.
+    const codeWebId = said(input, "contaminantCodeId")
+    let contaminantCodeId: string | null | undefined
+    if (codeWebId === NO_ONE) contaminantCodeId = null
+    else if (codeWebId !== undefined) {
+      const row = context.resolve.byServerId(context.resolve.serverIdOf(codeWebId) ?? "")
+      const serverId = row !== undefined && masterDataKindOf(row) === "contaminant-code" ? context.resolve.serverIdOf(codeWebId) : undefined
+      if (serverId === undefined) return refusal("contaminantCodeId", "Pick a contaminant code the API holds")
+      if (outcome !== "completed" && reason !== "contamination") return refusal("contaminantCodeId", CODE_WITH_CONTAMINATION)
+      contaminantCodeId = serverId
+    }
     // A completion names no reason at all: the contract takes the key's absence, never a null.
-    return reason === undefined ? { outcome, note } : { outcome, reason, note }
+    return { outcome, ...(reason === undefined ? {} : { reason }), note, ...(contaminantCodeId === undefined ? {} : { contaminantCodeId }) }
   }),
 } satisfies Record<string, RecordCommand<Pickup>>
 

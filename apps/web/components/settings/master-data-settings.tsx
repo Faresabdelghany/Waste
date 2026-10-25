@@ -91,6 +91,8 @@ function detailOf(record: BusinessRecord, kind: MasterDataKind): string {
       return record.facts.Cadence ?? "—"
     case "vehicle-type":
       return record.facts["Container types"] ?? "No container types"
+    case "contaminant-code":
+      return record.facts.Status === "Retired" ? `${record.facts.Fractions ?? "Every fraction"} · Retired` : (record.facts.Fractions ?? "Every fraction")
   }
 }
 
@@ -121,15 +123,18 @@ export function MasterDataSettings() {
     (record) => !isSoftDeleted(record) && record.id.startsWith("project-"),
   )
   const containerTypes = rows.filter((record) => masterDataKindOf(record) === "container-type")
+  const wasteFractions = rows.filter((record) => masterDataKindOf(record) === "waste-fraction")
 
   const lookups: MasterDataLookups = {
     projectName: (projectId) => projectRecords.find((record) => record.id === projectId)?.name,
     containerTypeName: (containerTypeId) => containerTypes.find((record) => record.id === containerTypeId)?.name,
+    wasteFractionName: (wasteFractionId) => wasteFractions.find((record) => record.id === wasteFractionId)?.name,
   }
 
   const relationOptions = (field: BusinessFormField): readonly BusinessFormOption[] => {
     if (field.id === "projectId") return projectRecords.map((record) => ({ value: record.id, label: record.name }))
     if (field.id === "containerTypeIds") return containerTypes.map((record) => ({ value: record.id, label: record.name }))
+    if (field.id === "wasteFractionIds") return wasteFractions.map((record) => ({ value: record.id, label: record.name }))
     return field.options ?? []
   }
 
@@ -274,7 +279,7 @@ export function MasterDataSettings() {
             <TableHeader>
               <TableRow className="bg-muted/40 hover:bg-muted/40">
                 <TableHead>Name</TableHead>
-                <TableHead>{kind === "waste-fraction" ? "Key" : kind === "container-type" ? "Volume" : kind === "service-frequency" ? "Cadence" : "Container types"}</TableHead>
+                <TableHead>{kind === "waste-fraction" ? "Key" : kind === "container-type" ? "Volume" : kind === "service-frequency" ? "Cadence" : kind === "contaminant-code" ? "Fractions" : "Container types"}</TableHead>
                 {kind === "waste-fraction" && <TableHead>Waste code</TableHead>}
                 <TableHead>Scope</TableHead>
                 <TableHead>Updated</TableHead>
