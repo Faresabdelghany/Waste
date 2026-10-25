@@ -57,9 +57,9 @@
 // many of its days were charged where that is not all of them. The preview
 // plans the charges and writes none, folding the plan into what it counts,
 // so it answers what the run would.
-import type { BillingRunPreview } from "@waste/contracts/billing"
+import { PERIOD_ENDS_BY_TODAY, type BillingRunPreview } from "@waste/contracts/billing"
 import { dueOn, termsOf } from "@waste/domain/finance/payment"
-import type { BillableEventKind, PaymentReferenceScheme } from "@waste/domain/finance/vocabulary"
+import type { BillableEventKind, ExclusionReason, PaymentReferenceScheme } from "@waste/domain/finance/vocabulary"
 import { addDays } from "@waste/domain/route-schemes/recurrence"
 import { and, asc, count, eq, getTableColumns, gt, gte, inArray, isNotNull, isNull, lte, notExists, notInArray, or, sql, type SQL } from "drizzle-orm"
 import { alias, type PgColumn } from "drizzle-orm/pg-core"
@@ -74,9 +74,10 @@ import { project } from "../schema/organisation"
 import { exclusionColumns, runColumns, type EventRow, type ExclusionRow, type RunRow } from "./billing-shapes"
 import { issueInvoice, type LineDraft } from "./invoice-writes"
 import { projectToday, type Scope } from "./project-clock"
+import { heldWhenCharged, holdsForReview } from "./billable-writes"
 import { mintHireCharges, planHireCharges } from "./hire-charges"
 import { mintRecurringCharges, planRecurringCharges } from "./recurring-charges"
-import { lockRow, refused } from "./shared"
+import { lockRow, refused, RefusedField } from "./shared"
 
 /** The most ready events one run takes: a run is one transaction, and a thousand invoices is what Postgres is for; past this, narrow the period (§7.2, §7.9). */
 export const BILLING_RUN_MAX_EVENTS = 5000
@@ -96,14 +97,32 @@ export type ReadyEvent = EventRow & { agreementNumber: string; payerCustomerId: 
 /** One invoice to issue: a payer's events in one currency, with their totals. */
 export type Group = { payerCustomerId: string; currency: string; events: ReadyEvent[]; netMinor: number; vatMinor: number }
 
-/** A payer with events in the period and nothing to invoice: every one of them blocked. */
-export type Excluded = { customerId: string; eventCount: number }
+/** A payer with events in the period and nothing to invoice: every one of them blocked, or held for review, or each one or the other (M14 of #293). */
+export type Excluded = { customerId: string; eventCount: number; reason: ExclusionReason }
 
-/** What a run or a preview finds: the ready events in line order, the groups in numbering order, and the payers excluded. */
-export type Selection = { events: ReadyEvent[]; groups: Group[]; exclusions: Excluded[] }
+/** How many of a payer's events in the period a run passes over: the blocked and the held. */
+type PassedOver = { blocked: number; held: number }
+
+/** The payers a run passes over every event of, in id order, each with its count and the reason its counts give. */
+function exclusionsOf(passedOver: ReadonlyMap<string, PassedOver>, invoiced: ReadonlySet<string>): Excluded[] {
+  return [...passedOver]
+    .filter(([customerId, counts]) => !invoiced.has(customerId) && counts.blocked + counts.held > 0)
+    .sort(([a], [b]) => (a < b ? -1 : a > b ? 1 : 0))
+    .map(([customerId, { blocked, held }]) => ({ customerId, eventCount: blocked + held, reason: held === 0 ? "all-events-blocked" : blocked === 0 ? "all-events-held" : "all-events-blocked-or-held" }))
+}
+
+/** One more blocked or held event of a payer. */
+function passOver(passedOver: Map<string, PassedOver>, customerId: string, as: keyof PassedOver, events = 1): void {
+  const counts = passedOver.get(customerId) ?? { blocked: 0, held: 0 }
+  counts[as] += events
+  passedOver.set(customerId, counts)
+}
+
+/** What a run or a preview finds: the ready events in line order, the groups in numbering order, the payers excluded, and each payer's events it passes over. */
+export type Selection = { events: ReadyEvent[]; groups: Group[]; exclusions: Excluded[]; passedOver: ReadonlyMap<string, PassedOver> }
 
 /** The event columns the selection's predicates read: the `billable_event` table's own, or an alias's. */
-type EventColumns = { id: PgColumn; companyId: PgColumn; projectId: PgColumn; kind: PgColumn; serviceDate: PgColumn; chargePeriodFrom: PgColumn; chargePeriodTo: PgColumn; cancelledAt: PgColumn; blockReason: PgColumn }
+type EventColumns = { id: PgColumn; companyId: PgColumn; projectId: PgColumn; kind: PgColumn; serviceDate: PgColumn; chargePeriodFrom: PgColumn; chargePeriodTo: PgColumn; cancelledAt: PgColumn; blockReason: PgColumn; heldAt: PgColumn }
 
 /** The kinds a run selects by the period they charge, not by their service date. */
 const CHARGED_BY_PERIOD: BillableEventKind[] = ["subscription", "hire"]
@@ -122,12 +141,14 @@ const inPeriod = (scope: Scope, period: BillingPeriod, on: EventColumns = billab
     isNull(on.cancelledAt),
   )
 
-/** The `ready` reading as a `where`: priced, not cancelled, no line naming it, no reversal naming it. `on` is the event row the statement is over, the table or an alias of it. */
-function ready(tx: Tx, scope: Scope, period: BillingPeriod, on: EventColumns = billableEvent): SQL | undefined {
+/** The `ready` reading as a `where`: priced, not cancelled, not held, no line naming it, no reversal naming it — or with `held`, the `held` reading, the same but held. `on` is the event row the statement is over, the table or an alias of it. */
+function ready(tx: Tx, scope: Scope, period: BillingPeriod, on: EventColumns = billableEvent, { held = false }: { held?: boolean } = {}): SQL | undefined {
   const reversal = alias(billableEvent, "reversal")
   return and(
     inPeriod(scope, period, on),
     isNull(on.blockReason),
+    // A hold for review (M14 of #293) keeps an event out of every run until it is released.
+    held ? isNotNull(on.heldAt) : isNull(on.heldAt),
     notExists(
       tx
         .select({ one: sql`1` })
@@ -181,6 +202,17 @@ export async function selectBilling(tx: Tx, scope: Scope, period: BillingPeriod,
     .where(and(inPeriod(scope, period), isNotNull(billableEvent.blockReason)))
     .groupBy(agreement.payerCustomerId)
     .orderBy(asc(agreement.payerCustomerId))
+  // The events held for review (M14 of #293): passed over as the blocked are, so a payer with nothing else is excluded with them.
+  const held = await tx
+    .select({ customerId: agreement.payerCustomerId, events: count() })
+    .from(billableEvent)
+    .innerJoin(agreement, and(eq(agreement.companyId, billableEvent.companyId), eq(agreement.id, billableEvent.agreementId)))
+    .where(ready(tx, scope, period, billableEvent, { held: true }))
+    .groupBy(agreement.payerCustomerId)
+    .orderBy(asc(agreement.payerCustomerId))
+  const passedOver = new Map<string, PassedOver>()
+  for (const payer of blocked) passOver(passedOver, payer.customerId, "blocked", payer.events)
+  for (const payer of held) passOver(passedOver, payer.customerId, "held", payer.events)
 
   const groups = new Map<string, Group>()
   for (const event of events) {
@@ -195,11 +227,7 @@ export async function selectBilling(tx: Tx, scope: Scope, period: BillingPeriod,
   }
   const invoiced = new Set([...groups.values()].map((group) => group.payerCustomerId))
   const ordered = [...groups.values()].sort((a, b) => (a.payerCustomerId < b.payerCustomerId ? -1 : a.payerCustomerId > b.payerCustomerId ? 1 : a.currency < b.currency ? -1 : a.currency > b.currency ? 1 : 0))
-  return {
-    events,
-    groups: ordered,
-    exclusions: blocked.filter((payer) => !invoiced.has(payer.customerId)).map((payer) => ({ customerId: payer.customerId, eventCount: payer.events })),
-  }
+  return { events, groups: ordered, exclusions: exclusionsOf(passedOver, invoiced), passedOver }
 }
 
 /**
@@ -212,10 +240,14 @@ export async function selectBilling(tx: Tx, scope: Scope, period: BillingPeriod,
  * hires due by the project's today, as a run then would mint them.
  */
 export async function previewBilling(tx: Tx, scope: Scope, period: BillingPeriod, now: () => Date): Promise<BillingRunPreview> {
-  const selection = await selectBilling(tx, scope, period)
   const today = await projectToday(tx, scope, now)()
-  const planned = [...(await planRecurringCharges(tx, scope, period)), ...(await planHireCharges(tx, scope, period, today))]
-  const priced = planned.flatMap((charge) => (charge.price === null ? [] : [{ payerCustomerId: charge.payerCustomerId, ...charge.price }]))
+  // A run is for a closed period (M14 of #293): no charge reaches a day still to come, and no month is left undue past every later run's reach.
+  if (period.periodTo > today) throw new RefusedField("periodTo", PERIOD_ENDS_BY_TODAY)
+  const selection = await selectBilling(tx, scope, period)
+  // The charges the run would mint, each as the run would write it: blocked without a price, held for review where the project holds its hires (M14 of #293), else ready.
+  const holds = await holdsForReview(tx, scope)
+  const planned = [...(await planRecurringCharges(tx, scope, period)).map((charge) => ({ ...charge, held: false })), ...(await planHireCharges(tx, scope, period, today)).map((hire) => ({ ...hire, held: heldWhenCharged(holds, "hire", hire.blockReason) }))]
+  const priced = planned.flatMap((charge) => (charge.price === null || charge.held ? [] : [{ payerCustomerId: charge.payerCustomerId, ...charge.price }]))
   const readyCount = selection.events.length + priced.length
   if (readyCount > BILLING_RUN_MAX_EVENTS) throw refused(409, tooManyEvents(readyCount))
   const invoices = new Set(selection.groups.map((group) => `${group.payerCustomerId}/${group.currency}`))
@@ -228,16 +260,15 @@ export async function previewBilling(tx: Tx, scope: Scope, period: BillingPeriod
     totals.set(group.currency, total)
   }
   const invoiced = new Set([...selection.groups, ...priced].map((group) => group.payerCustomerId))
-  const excluded = new Map(selection.exclusions.map((payer) => [payer.customerId, payer.eventCount]))
-  for (const charge of planned) if (charge.price === null) excluded.set(charge.payerCustomerId, (excluded.get(charge.payerCustomerId) ?? 0) + 1)
+  const passedOver = new Map([...selection.passedOver].map(([customerId, counts]) => [customerId, { ...counts }]))
+  for (const charge of planned) if (charge.price === null || charge.held) passOver(passedOver, charge.payerCustomerId, charge.price === null ? "blocked" : "held")
+  const held = [...passedOver.values()].reduce((sum, counts) => sum + counts.held, 0)
   return {
     eventCount: readyCount,
     invoiceCount: invoices.size,
+    heldEventCount: held,
     totals: [...totals.values()].sort((a, b) => (a.currency < b.currency ? -1 : a.currency > b.currency ? 1 : 0)),
-    exclusions: [...excluded]
-      .filter(([customerId]) => !invoiced.has(customerId))
-      .sort(([a], [b]) => (a < b ? -1 : a > b ? 1 : 0))
-      .map(([customerId, eventCount]) => ({ customerId, eventCount, reason: "all-events-blocked" as const })),
+    exclusions: exclusionsOf(passedOver, invoiced),
   }
 }
 
@@ -294,9 +325,12 @@ export async function runBilling(tx: Tx, input: RunBillingInput): Promise<{ run:
   await lockRow(tx, project, { companyId, id: projectId })
   const at = input.now()
   const issuedOn = await projectToday(tx, scope, () => at)()
+  const holds = await holdsForReview(tx, scope)
+  // A closed period alone, the office's run and the schedule's alike (as the preview's).
+  if (input.periodTo > issuedOn) throw new RefusedField("periodTo", PERIOD_ENDS_BY_TODAY)
   // A period and the next charged before the selection, so the run invoices them, and the months of hire due by today (M14 of #293); the second of two runs finds them charged.
   await mintRecurringCharges(tx, scope, input, input.newId)
-  await mintHireCharges(tx, scope, input, issuedOn, input.newId)
+  await mintHireCharges(tx, scope, input, issuedOn, input.newId, holds)
   const selection = await selectBilling(tx, scope, input, { lock: true })
   // The project's terms and scheme, and each payer's own terms (#291 C4): a payer's invoice is due by its own where it has them.
   const [settings] = await tx.select({ terms: project.paymentTermsDays, scheme: project.paymentReferenceScheme }).from(project).where(and(eq(project.companyId, companyId), eq(project.id, projectId)))
@@ -355,7 +389,7 @@ export async function runBilling(tx: Tx, input: RunBillingInput): Promise<{ run:
       ? []
       : await tx
           .insert(billingRunExclusion)
-          .values(selection.exclusions.map((payer) => ({ id: input.newId(), companyId, projectId, billingRunId: run.id, customerId: payer.customerId, reason: "all-events-blocked", eventCount: payer.eventCount })))
+          .values(selection.exclusions.map((payer) => ({ id: input.newId(), companyId, projectId, billingRunId: run.id, customerId: payer.customerId, reason: payer.reason, eventCount: payer.eventCount })))
           .returning(exclusionColumns)
   return { run, exclusions: exclusions.sort((a, b) => (a.id < b.id ? -1 : a.id > b.id ? 1 : 0)), invoiceIds }
 }

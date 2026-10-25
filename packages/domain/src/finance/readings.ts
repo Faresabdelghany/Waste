@@ -2,8 +2,10 @@
 // a status is stored only where the columns do not say it). A Billable
 // Event's status is a fold over its stamps and the invoice line naming it —
 // `blocked` is a block reason, `cancelled` a cancellation stamp, `invoiced` a
-// line naming it, `reversed` a `reversal` event naming it, `ready` none of
-// those — and the later fact wins where two hold: a reversal names an invoiced
+// line naming it, `reversed` a `reversal` event naming it, `held` a hold the
+// office's review put on a priced event (M14 of #293) — what a run passes
+// over until it is released — `ready` none of those — and the later fact
+// wins where two hold: a reversal names an invoiced
 // event, so a reversed event is `reversed` and not `invoiced`; a blocked event
 // may be cancelled (there is nothing to invoice), so a cancelled blocked event
 // is `cancelled`. An Unload's review status is its latest review's decision,
@@ -24,6 +26,8 @@ export type BillableEventReading = {
   invoiced: boolean
   /** Whether a `reversal` event names the event. */
   reversed: boolean
+  /** The hold stamp (M14 of #293), or null, as `cancelledAt` is read: every reader says it, so none reads a held event as ready. */
+  heldAt: Date | string | null
 }
 
 /** The status a Billable Event is read as: the later fact wins where two hold. */
@@ -32,6 +36,7 @@ export function billableEventStatus(reading: BillableEventReading): BillableEven
   if (reading.invoiced) return "invoiced"
   if (reading.cancelledAt !== null) return "cancelled"
   if (reading.blockReason !== null) return "blocked"
+  if (reading.heldAt !== null) return "held"
   return "ready"
 }
 

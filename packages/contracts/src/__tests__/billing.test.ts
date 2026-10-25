@@ -83,9 +83,9 @@ describe("BillingRunCreate and BillingRunPreview", () => {
   })
 
   test("the preview answers the counts, the totals per currency and the exclusions, writing nothing", () => {
-    const preview = { eventCount: 3, invoiceCount: 2, totals: [{ currency: "DKK", netMinor: 24_690, vatMinor: 6_172 }, { currency: "EUR", netMinor: 900, vatMinor: 225 }], exclusions: [{ customerId: THIRD, reason: "all-events-blocked", eventCount: 1 }] }
+    const preview = { eventCount: 3, invoiceCount: 2, totals: [{ currency: "DKK", netMinor: 24_690, vatMinor: 6_172 }, { currency: "EUR", netMinor: 900, vatMinor: 225 }], exclusions: [{ customerId: THIRD, reason: "all-events-blocked", eventCount: 1 }], heldEventCount: 2 }
     assert.deepEqual(BillingRunPreview.parse(preview), preview)
-    assert.deepEqual(BillingRunPreview.parse({ eventCount: 0, invoiceCount: 0, totals: [], exclusions: [] }), { eventCount: 0, invoiceCount: 0, totals: [], exclusions: [] })
+    assert.deepEqual(BillingRunPreview.parse({ eventCount: 0, invoiceCount: 0, totals: [], exclusions: [], heldEventCount: 0 }), { eventCount: 0, invoiceCount: 0, totals: [], exclusions: [], heldEventCount: 0 })
     assert.deepEqual(refusal(BillingRunPreview.safeParse({ ...preview, totals: [{ currency: "kr", netMinor: 1, vatMinor: 0 }] })).map((issue) => issue.path), ["totals.0.currency"])
   })
 })

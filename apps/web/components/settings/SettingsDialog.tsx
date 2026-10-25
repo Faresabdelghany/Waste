@@ -29,6 +29,7 @@ import {
   UserCircle,
   UsersThree,
   Warning,
+  Wrench,
 } from "@phosphor-icons/react/dist/ssr"
 
 import { cn } from "@/lib/utils"
@@ -193,6 +194,8 @@ const settingsSections: Array<{
       { id: "commercial-products", label: "Products", icon: Package },
       { id: "commercial-price-lists", label: "Price lists", icon: Receipt },
       { id: "commercial-ticket-charges", label: "Ticket charges", icon: Ticket },
+      // A project's products for the office's work orders on the API (M14 of #293), as Ticket charges are.
+      { id: "commercial-work-order-charges", label: "Work order charges", icon: Wrench },
       // A project's charge rules for Pickup Exceptions on the API (M5 of #293): offered with the adapter configured.
       { id: PICKUP_EXCEPTION_CHARGES_SETTINGS_PANE_ID, label: "Exception charges", icon: Warning },
     ],
@@ -1352,7 +1355,7 @@ const visiblePaneDefinitions: Record<string, SettingsPaneDefinition> = {
   },
   [FINANCE_ON_API_SETTINGS_PANE_ID]: {
     title: "Finance & invoicing",
-    description: "What the company's invoices print, and when each project's invoices are due and the payment reference they carry.",
+    description: "What the company's invoices print, and when each project's invoices are due, the payment reference they carry and whether its hires and jobs wait for review.",
     groups: [],
   },
   [PICKUP_EXCEPTION_CHARGES_SETTINGS_PANE_ID]: {
@@ -1437,6 +1440,11 @@ const visiblePaneDefinitions: Record<string, SettingsPaneDefinition> = {
   "commercial-ticket-charges": {
     title: "Ticket charges",
     description: "The product each ticket kind's re-collection or service is charged at when its completion names none (#291 C3).",
+    groups: [],
+  },
+  "commercial-work-order-charges": {
+    title: "Work order charges",
+    description: "The product each of the office's work orders — a delivery, a removal, a swap, a repair, a wash — is charged at when it is completed (M14 of #293).",
     groups: [],
   },
   "commercial-price-lists": {

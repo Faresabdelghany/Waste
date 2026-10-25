@@ -28,6 +28,9 @@ import * as z from "zod"
 export const PERIOD_ORDERED = "periodTo is the last day of the period, so it comes on or after periodFrom"
 const periodIsOrdered = { message: PERIOD_ORDERED, path: ["periodTo"] }
 
+/** What a run or a preview whose period ends after its project's today is told, at `periodTo` (M14 of #293): a run is for a closed period. The project's clock is the server's to read, so the shared command judges it (`@waste/db/commands/billing-runs`). */
+export const PERIOD_ENDS_BY_TODAY = "A run's period ends by today"
+
 /** Both days inclusive, so one day is a period; comparing two `YYYY-MM-DD` strings compares the days. */
 export const periodOrdered = (period: { periodFrom: string; periodTo: string }): boolean => period.periodTo >= period.periodFrom
 
@@ -107,6 +110,8 @@ export const BillingRunPreview = z.object({
       eventCount: PositiveInt,
     }),
   ),
+  /** The priced events of the period held for review (M14 of #293): a run passes over them until each is released. */
+  heldEventCount: Count,
 })
 export type BillingRunPreview = z.infer<typeof BillingRunPreview>
 

@@ -63,7 +63,7 @@ const IDENTITY_SHAPES: Array<[string, string]> = [
   ["fik_creditor_number", FIK_CREDITOR_PATTERN],
 ]
 
-/** The project table as drizzle-kit writes it today, and as it wrote it as of 0002, before 0006 gave it the working week, 0017 the public slug, 0037 its payment terms and reference scheme and 0045 the weighbridge's tolerance (O9 of #290). */
+/** The project table as drizzle-kit writes it today, and as it wrote it as of 0002, before 0006 gave it the working week, 0017 the public slug, 0037 its payment terms and reference scheme, 0045 the weighbridge's tolerance (O9 of #290) and 0048 its hold for review (M14 of #293). */
 const projectTable = (era: "0002" | "today"): string => {
   const planning = era === "today"
   const published = era === "today"
@@ -75,7 +75,7 @@ const projectTable = (era: "0002" | "today"): string => {
     '\t"timezone" text NOT NULL,',
     '\t"status" text NOT NULL,',
     ...(planning ? ['\t"weekend" text[] DEFAULT \'{saturday,sunday}\' NOT NULL,', '\t"holiday_list" text,'] : []),
-    ...(published ? ['\t"public_slug" text,', '\t"payment_terms_days" integer DEFAULT 30 NOT NULL,', `\t"payment_reference_scheme" text DEFAULT 'none' NOT NULL,`, '\t"weight_tolerance_percent" integer DEFAULT 5 NOT NULL,'] : []),
+    ...(published ? ['\t"public_slug" text,', '\t"payment_terms_days" integer DEFAULT 30 NOT NULL,', `\t"payment_reference_scheme" text DEFAULT 'none' NOT NULL,`, '\t"weight_tolerance_percent" integer DEFAULT 5 NOT NULL,', '\t"hold_for_review" boolean DEFAULT false NOT NULL,'] : []),
     '\tCONSTRAINT "project_name_key" UNIQUE("company_id","name"),',
     '\tCONSTRAINT "project_tenant_key" UNIQUE("company_id","id"),',
     ...(published ? ['\tCONSTRAINT "project_public_slug_key" UNIQUE("public_slug"),'] : []),

@@ -50,6 +50,7 @@ const product = (id: string, values: Partial<Product> = {}): Product => ({
   invoiceName: null,
   invoiceCode: null,
   vatPercent: 25,
+  freeDays: null,
   ...values,
 })
 

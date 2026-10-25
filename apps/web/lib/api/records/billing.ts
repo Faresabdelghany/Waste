@@ -45,7 +45,7 @@
 import type { BillableEvent } from "@waste/contracts/billable-events"
 import type { BillingRunCreate, BillingRunDetail, BillingRun, BillingRunPreview } from "@waste/contracts/billing"
 import type { Invoice, InvoiceDetail } from "@waste/contracts/invoices"
-import { BILLABLE_EVENT_STATUSES, CREDIT_REASONS } from "@waste/domain/finance/vocabulary"
+import { BILLABLE_EVENT_STATUSES, CREDIT_REASONS, type ExclusionReason } from "@waste/domain/finance/vocabulary"
 
 import { formatMinor, majorOf, minorOf } from "@/lib/commercial/money"
 import { isAgreementRecord } from "@/lib/data/agreements"
@@ -225,11 +225,18 @@ export function eventQuestion(event: BusinessRecord, resolve: Resolver): Busines
  * to do, so neither is offered either. The API's rules
  * (apps/api/src/routes/billable-events.ts), read off the wire's status.
  */
-export function eventCommandsOffered(record: Pick<BusinessRecord, "submittedValues">): ("reprice" | "cancel")[] {
+export function eventCommandsOffered(record: Pick<BusinessRecord, "submittedValues">): ("reprice" | "cancel" | "hold" | "release")[] {
   const status = BILLABLE_EVENT_STATUSES.find((candidate) => candidate === record.submittedValues?.status)
   if (status === undefined) return []
-  const cancellable = (status === "blocked" || status === "ready") && record.submittedValues?.kind !== "reversal"
-  return [...(status === "blocked" ? (["reprice"] as const) : []), ...(cancellable ? (["cancel"] as const) : [])]
+  const reversal = record.submittedValues?.kind === "reversal"
+  const cancellable = (status === "blocked" || status === "ready" || status === "held") && !reversal
+  return [
+    ...(status === "blocked" ? (["reprice"] as const) : []),
+    // A ready event is held for review, and a held one released (M14 of #293); a reversal is the correction, never held.
+    ...(status === "ready" && !reversal ? (["hold"] as const) : []),
+    ...(status === "held" ? (["release"] as const) : []),
+    ...(cancellable ? (["cancel"] as const) : []),
+  ]
 }
 
 export const billableEventAdapter: ResourceAdapter<BillableEvent> = {
@@ -288,6 +295,7 @@ export const billableEventAdapter: ResourceAdapter<BillableEvent> = {
         ...(event.overrideReason === null ? {} : { "Override reason": event.overrideReason }),
         ...(event.note === null ? {} : { Note: event.note }),
         ...(event.cancelledAt === null ? {} : { Cancelled: `${shownOn(event.cancelledAt, timezone)}${event.cancelReason === null ? "" : ` · ${CANCEL_REASON_LABELS[event.cancelReason]}`}` }),
+        ...(event.hold === null ? {} : { "Held for review": `${shownOn(event.hold.at, timezone)} · ${event.hold.reason}` }),
         Invoiced: event.invoiceLineId === null ? "Not yet" : "On an invoice line",
       },
       related: [agreement?.name, product?.name, route?.name].filter((part): part is string => part !== undefined),
@@ -377,6 +385,19 @@ export const billableEventAdapter: ResourceAdapter<BillableEvent> = {
       run: (client, serverId, body) => command<BillableEvent>(client, `/billable-events/${serverId}/cancel`, body),
       refused: (record) => `${record.name} was not cancelled`,
     },
+    hold: {
+      toBody: (input) => {
+        const reason = said(input, "reason")
+        return reason === undefined ? refusal("reason", "Say why it is held") : { reason }
+      },
+      run: (client, serverId, body) => command<BillableEvent>(client, `/billable-events/${serverId}/hold`, body),
+      refused: (record) => `${record.name} was not held`,
+    },
+    release: {
+      toBody: () => ({}),
+      run: (client, serverId, body) => command<BillableEvent>(client, `/billable-events/${serverId}/release`, body),
+      refused: (record) => `${record.name} was not released`,
+    },
   },
 }
 
@@ -387,12 +408,23 @@ export const eventsModule: ServerModule = { workspaceId: EVENTS_MODULE.workspace
 // Billing runs
 // ---------------------------------------------------------------------------
 
+/** Why a run passed over every event of a payer, as a person reads it: blocked, or held for review (M14 of #293), or each one or the other. */
+const EXCLUSION_WORDS: Readonly<Record<ExclusionReason, string>> = { "all-events-blocked": "all blocked", "all-events-held": "all held for review", "all-events-blocked-or-held": "each blocked or held for review" }
+
+/** A payer a run or its preview passed over, after its name: how many of its events, and why. */
+export const exclusionWords = (exclusion: { eventCount: number; reason: ExclusionReason }): string =>
+  `${exclusion.eventCount} event${exclusion.eventCount === 1 ? "" : "s"}, ${EXCLUSION_WORDS[exclusion.reason]}`
+
+/** What a run's period ending after the project's today is told (M14 of #293): the contracts' `PERIOD_ENDS_BY_TODAY`, spelled again so no zod reaches the browser, and held equal to it by a test. */
+export const PERIOD_ENDS_BY_TODAY = "A run's period ends by today"
+
 /**
  * The project and the period a run, or its preview, is asked over: the one
  * body of both requests, from the Run billing form's values, or the field the
- * API would refuse — a period running backwards in the contract's words.
+ * API would refuse — a period running backwards in the contract's words, or
+ * ending after `today`, the project's, where the caller knows it.
  */
-export function billingRunBody(values: BusinessFormValues, resolve: Resolver = NOTHING_RESOLVED): BillingRunCreate | LocalRefusal {
+export function billingRunBody(values: BusinessFormValues, resolve: Resolver = NOTHING_RESOLVED, today?: string): BillingRunCreate | LocalRefusal {
   const record = { submittedValues: values } as BusinessRecord
   const projectWebId = typed(record, "projectId")
   const projectId = projectWebId === undefined ? undefined : resolve.serverIdOf(projectWebId)
@@ -402,6 +434,8 @@ export function billingRunBody(values: BusinessFormValues, resolve: Resolver = N
   const periodTo = typed(record, "periodTo")
   if (periodTo === undefined) return refusal("periodTo", "Pick the last day of the period")
   if (periodTo < periodFrom) return refusal("periodTo", PERIOD_ORDERED)
+  // The project's today where the caller knows it: the API refuses a period still running in the same words.
+  if (today !== undefined && periodTo > today) return refusal("periodTo", PERIOD_ENDS_BY_TODAY)
   const note = typed(record, "note")
   return { projectId, periodFrom, periodTo, ...(note === undefined ? {} : { note }) }
 }

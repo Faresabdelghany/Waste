@@ -19,7 +19,9 @@
 //
 // - Ticket charges (#291 C3) are the API's alone: the product each ticket
 //   kind's work is charged at, read and set through the client
-//   (ticket-charges-settings.tsx).
+//   (ticket-charges-settings.tsx), and so are the work order charges (M14 of
+//   #293): the product each of the office's work orders is charged at
+//   (work-order-charges-settings.tsx).
 //
 // `CommercialDefaultsExtras` and `CommercialSectionPane` are the two names
 // SettingsDialog renders; keep their exported shape stable.
@@ -66,6 +68,7 @@ import {
 } from "@/components/settings/asset-management-settings"
 import { PriceListsPane, ProductsOnApiPane } from "@/components/settings/commercial-catalogue-panes"
 import { TicketChargesSettings } from "@/components/settings/ticket-charges-settings"
+import { WorkOrderChargesSettings } from "@/components/settings/work-order-charges-settings"
 import {
   SERVICE_PROVIDER_PERFORMANCE,
   PRICING_REFERENCE_DATE,
@@ -258,6 +261,7 @@ export function CommercialSectionPane({ paneId }: { paneId: string }) {
   if (paneId === "commercial-products") return <ProductsByModePane />
   if (paneId === "commercial-price-lists") return <PriceListsPane />
   if (paneId === "commercial-ticket-charges") return <TicketChargesSettings />
+  if (paneId === "commercial-work-order-charges") return <WorkOrderChargesSettings />
   return null
 }
 

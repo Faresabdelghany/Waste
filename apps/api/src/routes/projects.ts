@@ -53,6 +53,7 @@ const columns = {
   paymentTermsDays: project.paymentTermsDays,
   paymentReferenceScheme: project.paymentReferenceScheme,
   weightTolerancePercent: project.weightTolerancePercent,
+  holdForReview: project.holdForReview,
   createdAt: project.createdAt,
   updatedAt: project.updatedAt,
 }
@@ -75,6 +76,7 @@ function projectOf(row: Row): Project {
     paymentTermsDays: row.paymentTermsDays,
     paymentReferenceScheme: row.paymentReferenceScheme as PaymentReferenceScheme,
     weightTolerancePercent: row.weightTolerancePercent,
+    holdForReview: row.holdForReview,
     ...stampsOf(row),
   }
 }

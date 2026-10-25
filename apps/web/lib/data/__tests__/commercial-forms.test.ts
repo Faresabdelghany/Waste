@@ -54,12 +54,12 @@ import { NO_ONE } from "../properties"
 const NOW = new Date("2026-09-30T12:00:00Z")
 const STAMPS = { createdAt: "2026-09-24T09:00:00.000Z", updatedAt: "2026-09-25T09:30:00.000Z" }
 
-const copenhagen: Project = { id: "01a0d2a4-a280-7002-8000-000000000001", ...STAMPS, name: "Copenhagen Central", kind: "Municipality", language: "da", currency: "DKK", timezone: "Europe/Copenhagen", status: "active", weekend: ["saturday", "sunday"], holidayList: "Danish public holidays", publicSlug: null, weightTolerancePercent: 5, paymentTermsDays: 30, paymentReferenceScheme: "none" }
+const copenhagen: Project = { id: "01a0d2a4-a280-7002-8000-000000000001", ...STAMPS, name: "Copenhagen Central", kind: "Municipality", language: "da", currency: "DKK", timezone: "Europe/Copenhagen", status: "active", weekend: ["saturday", "sunday"], holidayList: "Danish public holidays", publicSlug: null, weightTolerancePercent: 5, paymentTermsDays: 30, paymentReferenceScheme: "none", holdForReview: false }
 const residual: WasteFraction = { id: "01a0d2a4-a280-7005-8000-000000000001", ...STAMPS, key: "residual", name: "Residual", wasteCode: null, treatment: null }
 const bin240: ContainerType = { id: "01a0d2a4-a280-7006-8000-000000000002", ...STAMPS, name: "Two-wheel bin · 240 L", volumeLitres: 240 }
 const osterbro: Customer = { id: "01a0d2a4-a280-700b-8000-000000000002", ...STAMPS, kind: "organisation", name: "Østerbro Housing", registrationNumber: "38112009", email: null, phone: null, billingAddress: null, serviceMessagesAllowed: true, paymentTermsDays: null, status: "active" }
 const agreement: Agreement = { id: "01a0d2a4-a280-7012-8000-000000000001", ...STAMPS, projectId: copenhagen.id, number: "AGR-2408", customerId: osterbro.id, payerCustomerId: osterbro.id, status: "active", billingCadence: "monthly", currency: "DKK", notes: null, priceListId: null, validFrom: "2026-01-01", validTo: null }
-const product: Product = { id: "01a0d2a4-a280-700a-8000-000000000001", ...STAMPS, projectId: copenhagen.id, name: "Residual waste · 240L bin", kind: "container-collection", status: "active", unit: "pickup", containerTypeId: bin240.id, wasteFractionId: residual.id, serviceFrequencyId: null, invoiceName: null, invoiceCode: null, vatPercent: 25 }
+const product: Product = { id: "01a0d2a4-a280-700a-8000-000000000001", ...STAMPS, projectId: copenhagen.id, name: "Residual waste · 240L bin", kind: "container-collection", status: "active", unit: "pickup", containerTypeId: bin240.id, wasteFractionId: residual.id, serviceFrequencyId: null, invoiceName: null, invoiceCode: null, vatPercent: 25, freeDays: null }
 const list: PriceList = { id: "01a0d2a4-a280-7028-8000-000000000001", ...STAMPS, projectId: copenhagen.id, code: "PL-Copenhagen-2026", name: "PL-Copenhagen-2026", currency: "DKK", isDefault: true, notes: null, validFrom: "2026-01-01", validTo: null }
 const AREA = "01a0d2a4-a280-7015-8000-000000000001"
 const invoice: Invoice = { id: "01a0d2a4-a280-7080-8000-000000000001", recordedAt: STAMPS.createdAt, projectId: copenhagen.id, number: 26007188, label: "INV-26007188", kind: "invoice", customerId: osterbro.id, currency: "DKK", issuedOn: "2026-09-30", dueOn: "2026-10-30", periodFrom: "2026-09-01", periodTo: "2026-09-30", billingRunId: null, creditsInvoiceId: null, creditReason: null, creditNote: null, netMinor: 60000, vatMinor: 15000, grossMinor: 75000, issuedBy: null, paymentReference: null, paidMinor: 0, outstandingMinor: 75000, paymentStatus: "open" }
@@ -98,8 +98,9 @@ const body = (made: unknown) => {
 
 describe("the Price Engine's Pilot forms", () => {
   test("a product filled in is the create the contract accepts; None reads as blank", () => {
-    const values: BusinessFormValues = { projectId: projectRecord.id, productName: "Garden waste", productType: "container-collection", status: "active", priceUnit: "pickup", containerType: master[1].id, wasteFraction: master[0].id, serviceFrequencyId: NO_ONE, invoiceName: "Garden waste collection", invoiceCode: "GRD-140", vatPercent: "25" }
+    const values: BusinessFormValues = { projectId: projectRecord.id, productName: "Garden waste", productType: "container-collection", status: "active", priceUnit: "pickup", freeDays: "", containerType: master[1].id, wasteFraction: master[0].id, serviceFrequencyId: NO_ONE, invoiceName: "Garden waste collection", invoiceCode: "GRD-140", vatPercent: "25" }
     offersExactly(PRODUCT_FORM, Object.keys(values))
+    assert.deepEqual(PRODUCT_FORM.sections.flatMap((section) => section.fields).find((field) => field.id === "freeDays")?.visibleWhen, { fieldId: "priceUnit", equals: "day" }, "free days are a hire product's, sold by the day (M14 of #293)")
     const record = createProductRecord(values, 1)
     assert.equal(record.status, "Active")
     assert.equal(record.submittedValues?.serviceFrequencyId, "")

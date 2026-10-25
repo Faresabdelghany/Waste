@@ -1,12 +1,12 @@
 // The weighbridge in the office (O9 of #290) as drizzle-kit writes it: the
 // project's tolerance, defaulting to the domain's 5 and held to 1..100, and
 // the unload's refusal, its reason from the domain's list and a note that
-// goes with it — six statements diffed from the project as 0037 left it
-// (project-as-of.ts) and the unload as 0010 did (unload-as-of.ts), since an
-// applied file is never edited. Then migration 0045, which is exactly those
-// statements under its header: no table is new, so nothing is hand-written;
-// every project takes the default, and no unload present is refused, so
-// nothing is guarded. No database.
+// goes with it — six statements diffed from the project as 0037 left it to
+// the project as 0045 did (project-as-of.ts) and the unload as 0010 did
+// (unload-as-of.ts), since an applied file is never edited. Then migration
+// 0045, which is exactly those statements under its header: no table is new,
+// so nothing is hand-written; every project takes the default, and no unload
+// present is refused, so nothing is guarded. No database.
 import assert from "node:assert/strict"
 import { readFile } from "node:fs/promises"
 import { join } from "node:path"
@@ -33,7 +33,7 @@ const MIGRATION = "0045_weighbridge.sql"
 const referenced = { company, route, session, unloadingStation, wasteFraction, userAccount }
 
 describe("the weighbridge as drizzle-kit writes it", () => {
-  const generated = statementsBetween({ ...referenced, project: projectAsOf("0037"), unload: unloadAsOf0010 }, { ...referenced, project, unload })
+  const generated = statementsBetween({ ...referenced, project: projectAsOf("0037"), unload: unloadAsOf0010 }, { ...referenced, project: projectAsOf("0045"), unload })
 
   test("the project's tolerance and the unload's refusal, each held by its checks", async () => {
     assert.deepEqual(await generated, [

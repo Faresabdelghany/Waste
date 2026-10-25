@@ -79,6 +79,9 @@ export const eventColumns = {
   cancelledAt: billableEvent.cancelledAt,
   cancelledBy: billableEvent.cancelledBy,
   cancelReason: billableEvent.cancelReason,
+  heldAt: billableEvent.heldAt,
+  heldBy: billableEvent.heldBy,
+  holdReason: billableEvent.holdReason,
   createdAt: billableEvent.createdAt,
   updatedAt: billableEvent.updatedAt,
 }
@@ -102,15 +105,16 @@ export const linksOf = (row: Pick<EventRow, "routeId" | "pickupId" | "ticketId" 
 
 /** The status the domain reads off a row and the two rows that may name it. */
 export const statusOf = (row: EventReading): BillableEventStatus =>
-  billableEventStatus({ blockReason: row.blockReason as BlockReason | null, cancelledAt: row.cancelledAt, invoiced: row.invoiceLineId !== null, reversed: row.reversalId !== null })
+  billableEventStatus({ blockReason: row.blockReason as BlockReason | null, cancelledAt: row.cancelledAt, invoiced: row.invoiceLineId !== null, reversed: row.reversalId !== null, heldAt: row.heldAt })
 
 /** The billable event on the wire, its status the fold over the reading. */
 export function eventOf(row: EventReading): BillableEvent {
+  const status = statusOf(row)
   return {
     id: row.id,
     projectId: row.projectId,
     kind: row.kind as BillableEventKind,
-    status: statusOf(row),
+    status,
     serviceDate: row.serviceDate,
     agreementId: row.agreementId,
     subscriptionId: row.subscriptionId,
@@ -136,6 +140,8 @@ export function eventOf(row: EventReading): BillableEvent {
     cancelledAt: instantOf(row.cancelledAt),
     cancelledBy: row.cancelledBy,
     cancelReason: row.cancelReason as CancelReason | null,
+    // The hold while it stands: a cancellation, which leaves the columns as they were, ends it as a release does.
+    hold: status !== "held" || row.heldAt === null || row.holdReason === null ? null : { at: row.heldAt.toISOString(), by: row.heldBy, reason: row.holdReason },
     invoiceLineId: row.invoiceLineId,
     ...stampsOf(row),
   }
@@ -196,8 +202,10 @@ export function statusIs(status: BillableEventStatus, { line, reversing }: Namin
       return and(notReversed, notInvoiced, isNotNull(billableEvent.cancelledAt))
     case "blocked":
       return and(notReversed, notInvoiced, notCancelled, isNotNull(billableEvent.blockReason))
+    case "held":
+      return and(notReversed, notInvoiced, notCancelled, isNull(billableEvent.blockReason), isNotNull(billableEvent.heldAt))
     case "ready":
-      return and(notReversed, notInvoiced, notCancelled, isNull(billableEvent.blockReason))
+      return and(notReversed, notInvoiced, notCancelled, isNull(billableEvent.blockReason), isNull(billableEvent.heldAt))
   }
 }
 

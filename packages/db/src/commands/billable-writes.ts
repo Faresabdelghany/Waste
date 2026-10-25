@@ -48,7 +48,7 @@ import { vatOf } from "@waste/domain/finance/money"
 import { priceOccurrence, type PriceLabels, type PriceRow, type PricingOutcome } from "@waste/domain/finance/pricing"
 import type { BillableEventKind, BlockReason, CancelReason } from "@waste/domain/finance/vocabulary"
 import type { AgreementStatus, CustomerKind } from "@waste/domain/registry/vocabulary"
-import { and, asc, eq, inArray, isNull, sql } from "drizzle-orm"
+import { and, asc, eq, inArray, isNull, sql, type SQL } from "drizzle-orm"
 
 import type { Tx } from "../client"
 import type { IdMinter } from "../ids"
@@ -57,6 +57,7 @@ import { agreement } from "../schema/agreements"
 import { product } from "../schema/catalogue"
 import { customer } from "../schema/customers"
 import { billableEvent, priceList, priceListRow } from "../schema/finance"
+import { project } from "../schema/organisation"
 import { eventColumns, eventOf, eventsFrom, UNNAMED, type EventReading, type EventRow } from "./billing-shapes"
 import type { Scope } from "./project-clock"
 import { lockRow } from "./shared"
@@ -289,9 +290,35 @@ export type RecordBillableEventInput = {
   newId: IdMinter
 }
 
+/** The reason a project's own hold for review writes (M14 of #293), with no person. */
+export const HELD_FOR_REVIEW = "Held for review: the project holds its hires and work-order jobs"
+
+/** Whether a project holds its hires and work-order jobs for the office's review as they are charged (M14 of #293). */
+export async function holdsForReview(tx: Tx, scope: Scope): Promise<boolean> {
+  const [row] = await tx
+    .select({ holds: project.holdForReview })
+    .from(project)
+    .where(and(eq(project.companyId, scope.companyId), eq(project.id, scope.projectId)))
+    .limit(1)
+  return row?.holds ?? false
+}
+
+/** Whether an event is held as it is charged (M14 of #293): a priced job or hire of a project that holds for review; never a blocked one, which is not ready to hold back. The one rule the consumer, the run's mint, its preview and a reprice share. */
+export const heldWhenCharged = (holds: boolean, kind: BillableEventKind, blockReason: string | null): boolean => holds && (kind === "job" || kind === "hire") && blockReason === null
+
+/** The hold such an event is written with: the database's clock, no person, the project's reason; none for any other. */
+export const autoHold = (holds: boolean, kind: BillableEventKind, blockReason: string | null): { heldAt: SQL; holdReason: string } | Record<string, never> =>
+  heldWhenCharged(holds, kind, blockReason) ? { heldAt: sql`now()`, holdReason: HELD_FOR_REVIEW } : {}
+
+/** `autoHold` with the project's choice read here, and read only where the kind and the price could be held. */
+export async function autoHoldOf(tx: Tx, scope: Scope, kind: BillableEventKind, blockReason: string | null): Promise<{ heldAt: SQL; holdReason: string } | Record<string, never>> {
+  return heldWhenCharged(true, kind, blockReason) ? autoHold(await holdsForReview(tx, scope), kind, blockReason) : {}
+}
+
 /**
  * Records one billable event: the row, in the caller's transaction, its
- * shape checked before the insert. Answers the row and the `BillableEvent`
+ * shape checked before the insert. A work order's job of a project that holds
+ * for review (M14 of #293) is written held, with no person. Answers the row and the `BillableEvent`
  * as the route answers it — `blocked` or `ready`, since no line and no
  * reversal can name a row just written.
  */
@@ -332,6 +359,7 @@ export async function recordBillableEvent(tx: Tx, input: RecordBillableEventInpu
       cancelledAt: null,
       cancelledBy: null,
       cancelReason: null,
+      ...(await autoHoldOf(tx, { companyId: input.companyId, projectId: input.projectId }, draft.kind, draft.blockReason)),
     })
     .returning(eventColumns)
   return { row, answered: eventOf({ ...row, ...UNNAMED }) }

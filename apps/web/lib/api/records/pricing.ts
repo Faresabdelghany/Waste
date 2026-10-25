@@ -42,6 +42,7 @@
 // pick into the list's server id and `PriceResolveQuery`, and `explainPrice`
 // asks `GET /price-lists/:id/resolve`, whose verdicts the dialog shows.
 import type { Product } from "@waste/contracts/catalogue"
+import { FREE_DAYS_MAX, HIRE_UNIT } from "@waste/domain/finance/hire"
 import type { PriceList, PriceListRow, PriceResolution, PriceResolveQuery } from "@waste/contracts/price-lists"
 import { CUSTOMER_KINDS, PRODUCT_KINDS, PRODUCT_STATUSES, PRODUCT_UNITS, type CustomerKind, type ProductKind, type ProductStatus, type ProductUnit } from "@waste/domain/registry/vocabulary"
 
@@ -133,6 +134,18 @@ type ProductWire = {
   invoiceName: string | null
   invoiceCode: string | null
   vatPercent: number | null
+  freeDays: number | null
+}
+
+/** What free days the API would refuse are told, at `freeDays`. */
+export const FREE_DAYS_REFUSAL = `Free days are a whole number from 0 to ${FREE_DAYS_MAX}`
+
+/** A form's free days: null for blank, the whole number for one from 0 to `FREE_DAYS_MAX`, NaN for anything else. */
+function freeDaysOf(value: string | undefined): number | null {
+  if (value === undefined) return null
+  if (!/^\d{1,3}$/.test(value)) return Number.NaN
+  const days = Number(value)
+  return days <= FREE_DAYS_MAX ? days : Number.NaN
 }
 
 /** A form's VAT rate: null for blank, the whole percent for one from 0 to 100, NaN for anything else. */
@@ -158,6 +171,9 @@ function productWire(record: BusinessRecord, context: MappingContext): ProductWi
   if (refused !== undefined) return refused
   const vatPercent = vatOf(typed(record, "vatPercent"))
   if (Number.isNaN(vatPercent)) return refusal("vatPercent", VAT_REFUSAL)
+  // Free days are a hire product's alone: under any other unit the form hides them, and they read as none.
+  const freeDays = unit === HIRE_UNIT ? freeDaysOf(typed(record, "freeDays")) : null
+  if (Number.isNaN(freeDays)) return refusal("freeDays", FREE_DAYS_REFUSAL)
   return {
     name: typed(record, "productName") ?? record.name,
     kind,
@@ -169,6 +185,7 @@ function productWire(record: BusinessRecord, context: MappingContext): ProductWi
     invoiceName: typed(record, "invoiceName") ?? null,
     invoiceCode: typed(record, "invoiceCode") ?? null,
     vatPercent,
+    freeDays,
   }
 }
 
@@ -251,6 +268,7 @@ export const productAdapter: ResourceAdapter<ProductResource> = {
       facts: {
         Type: kindLabel,
         Unit: product.unit,
+        ...(product.freeDays === null ? {} : { "Free days": product.freeDays === 1 ? "1 day" : `${product.freeDays} days` }),
         ...(type === undefined ? {} : { "Container type": type.name }),
         ...(fraction === undefined ? {} : { "Waste fraction": fraction.name }),
         ...(frequency === undefined ? {} : { "Service frequency": frequency.name }),
@@ -268,6 +286,7 @@ export const productAdapter: ResourceAdapter<ProductResource> = {
         productName: product.name,
         productType: product.kind,
         priceUnit: product.unit,
+        ...(product.freeDays === null ? {} : { freeDays: String(product.freeDays) }),
         ...(type === undefined ? {} : { containerType: type.id }),
         ...(fraction === undefined ? {} : { wasteFraction: fraction.id }),
         ...(frequency === undefined ? {} : { serviceFrequencyId: frequency.id }),
@@ -297,6 +316,7 @@ export const productAdapter: ResourceAdapter<ProductResource> = {
       ...given("invoiceName"),
       ...given("invoiceCode"),
       ...given("vatPercent"),
+      ...given("freeDays"),
     }
   },
   toPatchBody: (before, after, context) => {

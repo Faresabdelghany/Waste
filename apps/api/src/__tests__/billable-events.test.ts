@@ -14,7 +14,7 @@ import { and, eq } from "drizzle-orm"
 
 import { createApp } from "../app"
 import { uniqueConstraintOf } from "../problem"
-import { AMOUNT_TOO_LARGE, DRAFT_AGREEMENT_BY_HAND, NO_VAT_RATE_BY_HAND, notCancelled, notRepriced, ONLY_A_TICKET_OR_A_JOB_TAKES_A_PRODUCT, REVERSAL_NOT_CANCELLED } from "../routes/billable-events"
+import { AMOUNT_TOO_LARGE, DRAFT_AGREEMENT_BY_HAND, NO_VAT_RATE_BY_HAND, notCancelled, notHeld, notReleased, notRepriced, ONLY_A_TICKET_OR_A_JOB_TAKES_A_PRODUCT, REVERSAL_NOT_CANCELLED, REVERSAL_NOT_HELD } from "../routes/billable-events"
 import { NOT_AN_AGREEMENT } from "../routes/references"
 import { consumerEvent, pickupEvent, reversalEvent, seedBilling, ticketEvent, type BillingFixtures } from "./billing-fixtures"
 import { callingAs, type Call } from "./calls"
@@ -104,9 +104,9 @@ describe("the billable event endpoints", { skip: database.skip || owner.skip }, 
     return BillableEvent.parse(await response.json())
   }
 
-  const command = async (id: string, verb: "reprice" | "cancel", body: Record<string, unknown> = {}, call: Call = olivia): Promise<Response> => call(`/billable-events/${id}/${verb}`, { method: "POST", body })
+  const command = async (id: string, verb: "reprice" | "cancel" | "hold" | "release", body: Record<string, unknown> = {}, call: Call = olivia): Promise<Response> => call(`/billable-events/${id}/${verb}`, { method: "POST", body })
 
-  const commanded = async (id: string, verb: "reprice" | "cancel", body: Record<string, unknown> = {}, call: Call = olivia): Promise<BillableEvent> => {
+  const commanded = async (id: string, verb: "reprice" | "cancel" | "hold" | "release", body: Record<string, unknown> = {}, call: Call = olivia): Promise<BillableEvent> => {
     const response = await command(id, verb, body, call)
     assert.equal(response.status, 200, JSON.stringify(await response.clone().json()))
     return BillableEvent.parse(await response.json())
@@ -327,9 +327,42 @@ describe("the billable event endpoints", { skip: database.skip || owner.skip }, 
       assert.deepEqual([reversal.kind, reversal.status, reversal.netMinor, reversal.vatMinor, reversal.links.reversesEventId], ["reversal", "ready", -24_000, -6_000, undone.id])
       assert.equal((await refused(await command(undone.id, "cancel", { reason: "duplicate" }), 409)).detail, notCancelled(undone.id, "reversed"))
       assert.equal((await refused(await command(reversal.id, "cancel", { reason: "duplicate" }), 409)).detail, REVERSAL_NOT_CANCELLED)
+      assert.equal((await refused(await command(reversal.id, "hold", { reason: "Checked with the customer" }), 409)).detail, REVERSAL_NOT_HELD)
 
       const consumers = await refused(await command(charged.id, "cancel", { reason: "pickup-corrected" }), 400)
       assert.deepEqual(consumers.errors?.map((error) => error.path), ["reason"])
+    })
+  })
+
+  describe("hold and release (M14 of #293)", () => {
+    test("a ready event is held with the caller, the clock and the reason, a run passes over it — its preview counting it — and a release makes it ready for the next run", async () => {
+      const day = "2026-10-12"
+      const event = await entered(manual({ serviceDate: day }))
+      const held = await commanded(event.id, "hold", { reason: "Waiting for the driver's photo" })
+      assert.deepEqual([held.status, held.hold], ["held", { at: NOON.toISOString(), by: a.users.olivia.id, reason: "Waiting for the driver's photo" }])
+      assert.deepEqual(await commanded(event.id, "hold", { reason: "Again" }), held, "held already: answered as it stands")
+      const previewed = await olivia("/billing-runs/preview", { method: "POST", body: { projectId: copenhagen, periodFrom: day, periodTo: day } })
+      assert.deepEqual(((await previewed.json()) as { eventCount: number; heldEventCount: number }).heldEventCount, 1)
+      assert.equal((await invoiced(day)).invoiceCount, 0, "the run passes over it")
+      assert.equal((await read(event.id)).status, "held")
+      const released = await commanded(event.id, "release")
+      assert.deepEqual([released.status, released.hold], ["ready", null])
+      assert.deepEqual(await commanded(event.id, "release"), released, "ready already: answered as it stands")
+      assert.equal((await invoiced(day)).invoiceCount, 1, "the next run invoices it")
+    })
+
+    test("refuses what is not ready to hold or not held to release, each in its sentence; a held event is not repriced, and is cancelled", async () => {
+      const blocked = await entered(manual({ agreementId: fx.agreements.draft.id }))
+      assert.equal((await refused(await command(blocked.id, "hold", { reason: "Check it" }), 409)).detail, notHeld(blocked.id, "blocked"))
+      assert.equal((await refused(await command(blocked.id, "release"), 409)).detail, notReleased(blocked.id))
+      assert.deepEqual((await refused(await command(blocked.id, "hold", {}), 400)).errors?.map((error) => error.path), ["reason"])
+      const event = await entered(manual({ serviceDate: "2026-10-13" }))
+      await commanded(event.id, "hold", { reason: "Check it" })
+      assert.equal((await refused(await command(event.id, "release", { reason: "Checked" }), 400)).status, 400, "a release says nothing")
+      assert.equal((await refused(await command(event.id, "reprice"), 409)).detail, notRepriced(event.id, "held"))
+      const cancelled = await commanded(event.id, "cancel", { reason: "duplicate" })
+      assert.deepEqual([cancelled.status, cancelled.hold], ["cancelled", null], "a cancellation ends the hold")
+      assert.equal((await refused(await command(event.id, "hold", { reason: "Again" }), 409)).detail, notHeld(event.id, "cancelled"))
     })
   })
 
@@ -348,13 +381,15 @@ describe("the billable event endpoints", { skip: database.skip || owner.skip }, 
       const cancelled = await entered(manual({ serviceDate: day }))
       await commanded(cancelled.id, "cancel", { reason: "other" })
       const charged = await entered(manual({ serviceDate: day, agreementId: fx.agreements.housingEur.id }))
+      const held = await entered(manual({ serviceDate: day, agreementId: fx.agreements.anna.id }))
+      await commanded(held.id, "hold", { reason: "The customer disputes the count" })
       const undone = await pickupEvent(pool, a, fx, ex, { serviceDate: day })
       assert.deepEqual([undone.kind, undone.status, undone.unitPriceMinor, undone.subscriptionId, undone.links.routeId, undone.links.pickupId], ["pickup", "ready", 10_000, fx.subscriptions.housingResidual.id, ex.routes.completed.id, ex.routes.completed.pickupIds[0]])
       const run = await invoiced(day)
       assert.equal(run.invoiceCount, 3, "the housing association twice, DKK and EUR, and Anna")
       const reversal = await reversalEvent(pool, a, await read(undone.id))
 
-      const expected: Record<BillableEventStatus, string> = { ready: reversal.id, blocked: blocked.id, cancelled: cancelled.id, invoiced: charged.id, reversed: undone.id }
+      const expected: Record<BillableEventStatus, string> = { ready: reversal.id, blocked: blocked.id, held: held.id, cancelled: cancelled.id, invoiced: charged.id, reversed: undone.id }
       for (const [status, id] of Object.entries(expected) as [BillableEventStatus, string][]) {
         const listed = await page(`status=${status}&from=${day}&to=${day}&limit=200`)
         assert.ok(listed.items.every((item) => item.status === status), `every item of ?status=${status} reads ${status}`)

@@ -13,7 +13,8 @@
 // `OCCURRENCE_STATUSES` is: `BILLABLE_EVENT_STATUSES` is what
 // finance/readings.ts folds an event's stamps and its invoice line onto —
 // `blocked` is a block reason, `cancelled` a cancellation stamp, `invoiced` a
-// line naming it, `reversed` a reversal naming it, `ready` none of those; the
+// line naming it, `reversed` a reversal naming it, `held` a hold for the
+// office's review (M14 of #293), `ready` none of those; the
 // prototype's "In progress" is the deferred recurring event's — and
 // `WEIGHT_REVIEW_STATUSES` is the latest review's decision, or `captured`
 // when there is none (the prototype's "Needs review"). `BLOCK_REASONS` are
@@ -54,11 +55,11 @@ export const BLOCK_REASONS = ["no-subscription", "agreement-draft", "no-price-li
 /** Why a ready event was cancelled: the consumer's reason first, the office's three after it. */
 export const CANCEL_REASONS = ["pickup-corrected", "duplicate", "not-delivered", "other"] as const
 /** Where a Billable Event stands: a reading over its stamps and its invoice line, never a column. */
-export const BILLABLE_EVENT_STATUSES = ["blocked", "ready", "invoiced", "cancelled", "reversed"] as const
+export const BILLABLE_EVENT_STATUSES = ["blocked", "ready", "held", "invoiced", "cancelled", "reversed"] as const
 /** Where a Billing Run stands; part A writes `completed` alone. */
 export const BILLING_RUN_STATUSES = ["requested", "completed", "failed"] as const
-/** Why a payer with events in the period got no invoice: every one of them is blocked. */
-export const EXCLUSION_REASONS = ["all-events-blocked"] as const
+/** Why a payer with events in the period got no invoice: every one of them is blocked, or held for review (M14 of #293), or each one or the other. */
+export const EXCLUSION_REASONS = ["all-events-blocked", "all-events-held", "all-events-blocked-or-held"] as const
 /** An issued customer financial document: an invoice, or the credit note that corrects one. */
 export const INVOICE_KINDS = ["invoice", "credit-note"] as const
 /** Why a credit note was issued: the prototype's five, verbatim as tokens. */

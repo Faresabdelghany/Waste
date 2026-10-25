@@ -30,12 +30,14 @@ import type { BillableEvent } from "@waste/contracts/billable-events"
 import { createDb, type Database } from "@waste/db/client"
 import { eventOf, eventsFrom } from "@waste/db/commands/billing-shapes"
 import { issueInvoice } from "@waste/db/commands/invoice-writes"
+import { HELD_FOR_REVIEW } from "@waste/db/commands/billable-writes"
 import { lockRow } from "@waste/db/commands/shared"
 import { newId } from "@waste/db/ids"
 import { product } from "@waste/db/schema/catalogue"
 import { pickup } from "@waste/db/schema/execution"
 import { billableEvent, billingRun, ticketKindProduct, workOrderProduct } from "@waste/db/schema/finance"
 import { contaminantCode, pickupExceptionRule, pickupExceptionRuleStep } from "@waste/db/schema/pickup-exceptions"
+import { project } from "@waste/db/schema/organisation"
 import { ticket } from "@waste/db/schema/resolution"
 import { withCompany } from "@waste/db/tenant"
 import type { OutboxKind } from "@waste/domain/execution/vocabulary"
@@ -318,6 +320,22 @@ describe("finance.record-billable-events against Postgres", { skip }, () => {
       assert.deepEqual([done.did, await eventsOfPickup(rebooked)], ["nothing", []])
     } finally {
       await withCompany(pool.db, tenant.companyId, (tx) => tx.delete(workOrderProduct).where(eq(workOrderProduct.id, priced)))
+    }
+  })
+
+  test("a work order's job of a project that holds its jobs for review is recorded held, with no person and the project's reason, for the office to release (M14 of #293)", async () => {
+    const projectId = tenant.projects.copenhagen.id
+    await withCompany(pool.db, tenant.companyId, (tx) => tx.update(project).set({ holdForReview: true }).where(eq(project.id, projectId)))
+    try {
+      const bin = await placeBin(pool, tenant, "BIN-HELD-1", { agreementId: tenant.agreements.anna.id, productId: tenant.products.residual.id })
+      const stops = await seedCompletedRoute(pool, tenant, [{ containerId: bin.containerId, propertyId: bin.propertyId, origin: "office", service: "wash" }])
+      const [wash] = stops.pickupIds
+      const done = await handle(published("pickup-completed", wash, { ...pickupPayload(stops.id, wash, bin.containerId), origin: "office", service: "wash" }))
+      assert.equal(done.did, "recorded")
+      const [recorded] = await eventsOfPickup(wash)
+      assert.deepEqual([recorded.kind, recorded.status, recorded.hold?.by, recorded.hold?.reason], ["job", "held", null, HELD_FOR_REVIEW])
+    } finally {
+      await withCompany(pool.db, tenant.companyId, (tx) => tx.update(project).set({ holdForReview: false }).where(eq(project.id, projectId)))
     }
   })
 

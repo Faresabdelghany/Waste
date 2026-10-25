@@ -12,10 +12,10 @@ const STAMP = new Date("2026-10-05T12:00:00Z")
 
 describe("billableEventStatus", () => {
   test("is ready with no block, no cancellation, no line and no reversal, and blocked with a reason alone", () => {
-    assert.equal(billableEventStatus({ blockReason: null, cancelledAt: null, invoiced: false, reversed: false }), "ready")
-    for (const blockReason of BLOCK_REASONS) assert.equal(billableEventStatus({ blockReason, cancelledAt: null, invoiced: false, reversed: false }), "blocked", blockReason)
-    assert.equal(isReady({ blockReason: null, cancelledAt: null, invoiced: false, reversed: false }), true)
-    assert.equal(isReady({ blockReason: "no-product", cancelledAt: null, invoiced: false, reversed: false }), false)
+    assert.equal(billableEventStatus({ blockReason: null, cancelledAt: null, invoiced: false, reversed: false, heldAt: null }), "ready")
+    for (const blockReason of BLOCK_REASONS) assert.equal(billableEventStatus({ blockReason, cancelledAt: null, invoiced: false, reversed: false, heldAt: null }), "blocked", blockReason)
+    assert.equal(isReady({ blockReason: null, cancelledAt: null, invoiced: false, reversed: false, heldAt: null }), true)
+    assert.equal(isReady({ blockReason: "no-product", cancelledAt: null, invoiced: false, reversed: false, heldAt: null }), false)
   })
 
   test("the later fact wins where two hold: a cancelled blocked event is cancelled, an invoiced event reversed is reversed, over every combination", () => {
@@ -24,7 +24,7 @@ describe("billableEventStatus", () => {
       for (const cancelledAt of [null, STAMP, "2026-10-05T12:00:00Z"]) {
         for (const invoiced of [false, true]) {
           for (const reversed of [false, true]) {
-            const reading = { blockReason, cancelledAt, invoiced, reversed }
+            const reading = { blockReason, cancelledAt, invoiced, reversed, heldAt: null }
             const expected = reversed ? "reversed" : invoiced ? "invoiced" : cancelledAt !== null ? "cancelled" : blockReason !== null ? "blocked" : "ready"
             readings.push([reading, expected])
           }
@@ -34,8 +34,19 @@ describe("billableEventStatus", () => {
     assert.equal(readings.length, 24)
     for (const [reading, expected] of readings) assert.equal(billableEventStatus(reading), expected, JSON.stringify(reading))
     // A stamp of either spelling counts, the Date Drizzle reads or the string the wire carries: the fold reads null and nothing else as none.
-    assert.equal(billableEventStatus({ blockReason: null, cancelledAt: STAMP, invoiced: false, reversed: false }), "cancelled")
-    assert.equal(billableEventStatus({ blockReason: null, cancelledAt: STAMP.toISOString(), invoiced: false, reversed: false }), "cancelled")
+    assert.equal(billableEventStatus({ blockReason: null, cancelledAt: STAMP, invoiced: false, reversed: false, heldAt: null }), "cancelled")
+    assert.equal(billableEventStatus({ blockReason: null, cancelledAt: STAMP.toISOString(), invoiced: false, reversed: false, heldAt: null }), "cancelled")
+  })
+
+  test("a hold for review (M14 of #293) makes a priced event held, not ready; every later fact wins over it, and a block too", () => {
+    const held = { blockReason: null, cancelledAt: null, invoiced: false, reversed: false, heldAt: STAMP }
+    assert.equal(billableEventStatus(held), "held")
+    assert.equal(billableEventStatus({ ...held, heldAt: STAMP.toISOString() }), "held")
+    assert.equal(isReady(held), false, "a run passes over it")
+    assert.equal(billableEventStatus({ ...held, heldAt: null }), "ready", "released")
+    assert.equal(billableEventStatus({ ...held, cancelledAt: STAMP }), "cancelled")
+    assert.equal(billableEventStatus({ ...held, invoiced: true }), "invoiced")
+    assert.equal(billableEventStatus({ ...held, blockReason: "no-price-row" }), "blocked")
   })
 })
 

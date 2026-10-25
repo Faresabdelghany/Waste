@@ -2,7 +2,7 @@ import assert from "node:assert/strict"
 import { after, before, describe, test } from "node:test"
 
 import { BillableEvent } from "@waste/contracts/billable-events"
-import { BillingRun, BillingRunDetail, BillingRunPreview, PERIOD_ORDERED } from "@waste/contracts/billing"
+import { BillingRun, BillingRunDetail, BillingRunPreview, PERIOD_ENDS_BY_TODAY, PERIOD_ORDERED } from "@waste/contracts/billing"
 import { InvoiceDetail } from "@waste/contracts/invoices"
 import { Page } from "@waste/contracts/pagination"
 import { DAY_WINDOW_ORDERED } from "@waste/contracts/queries"
@@ -17,7 +17,7 @@ import { and, asc, count, eq, inArray, sql } from "drizzle-orm"
 import { createApp } from "../app"
 import { newId, type IdMinter } from "../ids"
 import { notCancelled } from "../routes/billable-events"
-import { BILLING_RUN_MAX_EVENTS, PERIOD_ENDS_BY_TODAY, runBilling, selectBilling, tooManyEvents } from "../routes/billing-runs"
+import { BILLING_RUN_MAX_EVENTS, runBilling, selectBilling, tooManyEvents } from "../routes/billing-runs"
 import { lockRow } from "../routes/shared"
 import { pickupEvent, reversalEvent, seedBilling, type BillingFixtures } from "./billing-fixtures"
 import { callingAs, type Call } from "./calls"
@@ -144,6 +144,31 @@ describe("the billing run endpoints", { skip: database.skip || owner.skip }, () 
 
   const byId = (x: { id: string }, y: { id: string }) => (x.id < y.id ? -1 : x.id > y.id ? 1 : 0)
 
+  describe("held for review (M14 of #293)", () => {
+    test("excludes a payer whose events are all held, or each blocked or held, with the reason its events give: the preview counts the held, and the run writes each exclusion", async () => {
+      const day = "2026-11-16"
+      const hold = async (event: BillableEvent) => assert.equal((await olivia(`/billable-events/${event.id}/hold`, { method: "POST", body: { reason: "Checked with the customer" } })).status, 200)
+      await hold(await entered(manual({ agreementId: fx.agreements.anna.id, serviceDate: day })))
+      await hold(await entered(manual({ serviceDate: day })))
+      const blocked = await entered(manual({ agreementId: fx.agreements.housingEur.id, productId: fx.products.bulky.id, serviceDate: day }))
+      assert.equal(blocked.status, "blocked")
+      await entered(manual({ agreementId: fx.agreements.draft.id, serviceDate: day }))
+      const expected = [
+        { customerId: fx.customers.anna.id, reason: "all-events-held", eventCount: 1 },
+        { customerId: fx.customers.housing.id, reason: "all-events-blocked-or-held", eventCount: 2 },
+        { customerId: fx.customers.bo.id, reason: "all-events-blocked", eventCount: 1 },
+      ].sort((x, y) => (x.customerId < y.customerId ? -1 : 1))
+      const previewed = await preview(period(day))
+      assert.deepEqual([previewed.eventCount, previewed.invoiceCount, previewed.heldEventCount, previewed.exclusions], [0, 0, 2, expected])
+      const done = await run(period(day))
+      assert.deepEqual([done.invoiceCount, done.excludedCustomerCount], [0, 3])
+      assert.deepEqual(
+        done.exclusions.map(({ customerId, reason, eventCount }) => ({ customerId, reason, eventCount })),
+        expected,
+      )
+    })
+  })
+
   describe("a run over the seeded events", () => {
     /** The events of the Monday: what the run and the preview are proved against. */
     let e1: BillableEvent
@@ -193,6 +218,7 @@ describe("the billing run endpoints", { skip: database.skip || owner.skip }, () 
           { currency: "EUR", netMinor: 1_600, vatMinor: 400 },
         ],
         exclusions: [{ customerId: fx.customers.bo.id, reason: "all-events-blocked", eventCount: 2 }],
+        heldEventCount: 0,
       })
       assert.deepEqual(await written(), before, "no run, no invoice, no event, no number taken")
       await refused(await lars("/billing-runs/preview", { method: "POST", body: period("2026-10-01", "2026-10-10") }), 400)

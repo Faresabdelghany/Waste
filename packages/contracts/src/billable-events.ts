@@ -98,6 +98,8 @@ export const BillableEvent = z.object({
   /** The person who cancelled it; null on the consumer's cancellation. */
   cancelledBy: Id.nullable(),
   cancelReason: CancelReason.nullable(),
+  /** A hold for the office's review (M14 of #293): when, by whom — null for the project's own auto-hold — and why; null where none stands. */
+  hold: z.object({ at: IsoDateTime, by: Id.nullable(), reason: Paragraph }).nullable(),
   /** The invoice line that charges for it; null until a run puts it on one. */
   invoiceLineId: Id.nullable(),
 })
@@ -131,6 +133,14 @@ export const BillableEventReprice = z.strictObject({
   productId: Id.optional(),
 })
 export type BillableEventReprice = z.infer<typeof BillableEventReprice>
+
+/** `POST /billable-events/:id/hold` (M14 of #293): why the office holds a ready event back from the run. */
+export const BillableEventHold = z.strictObject({ reason: Paragraph })
+export type BillableEventHold = z.infer<typeof BillableEventHold>
+
+/** `POST /billable-events/:id/release` (M14 of #293): a held event back to the run; nothing to say. */
+export const BillableEventRelease = z.strictObject({})
+export type BillableEventRelease = z.infer<typeof BillableEventRelease>
 
 /** `POST /billable-events/:id/cancel`: the office's reason, never the consumer's, and a note. */
 export const BillableEventCancel = z.strictObject({

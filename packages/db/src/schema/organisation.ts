@@ -55,7 +55,7 @@ import { PAYMENT_REFERENCE_SCHEMES } from "@waste/domain/finance/vocabulary"
 import { DEFAULT_WEIGHT_TOLERANCE_PERCENT, WEIGHT_TOLERANCE_PERCENT } from "@waste/domain/execution/unloads"
 import { DEFAULT_WEEKEND, SERVICE_DAYS } from "@waste/domain/planning/vocabulary"
 import { sql } from "drizzle-orm"
-import { check, integer, text } from "drizzle-orm/pg-core"
+import { boolean, check, integer, text } from "drizzle-orm/pg-core"
 
 import { tableObjectName } from "../names"
 import { oneOf, subsetOf } from "./checks"
@@ -151,6 +151,8 @@ export const project = wms.table(
      * above tolerance (O9 of #290).
      */
     weightTolerancePercent: integer().notNull().default(DEFAULT_WEIGHT_TOLERANCE_PERCENT),
+    /** Whether its hires and work-order jobs (M14 of #293) are held for the office's review as they are charged, so a run passes over them until released. */
+    holdForReview: boolean().notNull().default(false),
   },
   (t) => [
     companyReference(t, company),

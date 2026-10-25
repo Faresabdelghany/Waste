@@ -54,6 +54,7 @@ const product = {
   invoiceName: null,
   invoiceCode: null,
   vatPercent: 25,
+  freeDays: null,
   ...STAMPS,
 }
 

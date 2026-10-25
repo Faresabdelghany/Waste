@@ -6,4 +6,4 @@
 // is where the shared write statements live) — and `POST /billable-events`,
 // `reprice` and the suites read them from this path as they did. The header
 // there says what each does and in what order it reads.
-export { agreementFacts, billableEventShapeIssue, priceDraft, productFacts, recordBillableEvent, type AgreementFacts, type ComposedEvent, type PricingInput, type RecordBillableEventInput } from "@waste/db/commands/billable-writes"
+export { agreementFacts, autoHoldOf, billableEventShapeIssue, priceDraft, productFacts, recordBillableEvent, type AgreementFacts, type ComposedEvent, type PricingInput, type RecordBillableEventInput } from "@waste/db/commands/billable-writes"

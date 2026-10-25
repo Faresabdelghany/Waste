@@ -148,6 +148,8 @@ export const Project = z.object({
   paymentReferenceScheme: PaymentReferenceScheme,
   /** How far a weighbridge's net may differ from what the stops weighed on board, in whole percent, before an unload reads as above tolerance (O9 of #290); absent from a payload before it, read as the default. */
   weightTolerancePercent: ProjectTolerance.default(DEFAULT_WEIGHT_TOLERANCE_PERCENT),
+  /** Whether the project's hires and work-order jobs are held for the office's review as they are charged (M14 of #293): a run passes over a held event until it is released. */
+  holdForReview: z.boolean(),
 })
 export type Project = z.infer<typeof Project>
 
@@ -163,6 +165,7 @@ export const ProjectCreate = z.strictObject({
   paymentTermsDays: PaymentTermsDays.default(DEFAULT_PAYMENT_TERMS_DAYS).describe(`Defaults to ${DEFAULT_PAYMENT_TERMS_DAYS} when absent: the days after issue the project's invoices are due, 0 to 365.`),
   paymentReferenceScheme: PaymentReferenceScheme.default("none").describe("Defaults to none when absent: a FI card's scheme needs the company's creditor number."),
   weightTolerancePercent: ProjectTolerance.default(DEFAULT_WEIGHT_TOLERANCE_PERCENT).describe("Defaults to 5 when absent: how far a weighbridge's net may differ from the load weighed on board, in whole percent (O9 of #290)."),
+  holdForReview: z.boolean().default(false).describe("Defaults to false when absent: a project's hires and jobs go to the run as they are charged."),
 })
 export type ProjectCreate = z.infer<typeof ProjectCreate>
 
@@ -183,6 +186,7 @@ export const ProjectPatch = z
     paymentReferenceScheme: PaymentReferenceScheme.optional(),
     /** The weighbridge's tolerance, in whole percent, 1 to 100 (O9 of #290). */
     weightTolerancePercent: ProjectTolerance.optional(),
+    holdForReview: z.boolean().optional(),
   })
   .refine(changesSomething, somethingToChange)
 export type ProjectPatch = z.infer<typeof ProjectPatch>
