@@ -81,7 +81,7 @@ import { container, containerServicePlacement } from "@waste/db/schema/container
 import { customer } from "@waste/db/schema/customers"
 import { pickup, route } from "@waste/db/schema/execution"
 import { ticketKindProduct, workOrderProduct } from "@waste/db/schema/finance"
-import { ticket } from "@waste/db/schema/resolution"
+import { ticket, ticketBooking } from "@waste/db/schema/resolution"
 import { routeScheme } from "@waste/db/schema/route-schemes"
 import { and, desc, eq, lte } from "drizzle-orm"
 
@@ -102,7 +102,7 @@ export type PickupRow = {
   service: PickupService
   /** The subscription a delivery books; null for every other service. */
   subscriptionId: string | null
-  /** Whether a ticket booked the stop to answer it (O3c of #290). */
+  /** Whether a ticket booked the stop to answer it (O3c of #290), the ticket booked again since or not (#422). */
   bookedForTicket: boolean
   /** What a Pickup Exception is judged on (#293 M5): the driver's reason, the contaminant code, and the place it is counted at. */
   reason: string | null
@@ -140,7 +140,7 @@ export async function pickupRow(tx: Tx, companyId: string, routeId: string, pick
       status: pickup.status,
       service: pickup.service,
       subscriptionId: pickup.subscriptionId,
-      bookingTicketId: ticket.id,
+      bookingTicketId: ticketBooking.ticketId,
       reason: pickup.reason,
       contaminantCodeId: pickup.contaminantCodeId,
       propertyId: pickup.propertyId,
@@ -150,8 +150,8 @@ export async function pickupRow(tx: Tx, companyId: string, routeId: string, pick
     .innerJoin(route, and(eq(route.companyId, pickup.companyId), eq(route.id, pickup.routeId)))
     .leftJoin(routeScheme, and(eq(routeScheme.companyId, route.companyId), eq(routeScheme.id, route.routeSchemeId)))
     .leftJoin(container, and(eq(container.companyId, pickup.companyId), eq(container.id, pickup.containerId)))
-    // One ticket at most books a stop (`ticket_booked_pickup_id_key`).
-    .leftJoin(ticket, and(eq(ticket.companyId, pickup.companyId), eq(ticket.bookedRouteId, pickup.routeId), eq(ticket.bookedPickupId, pickup.id)))
+    // Any booking that ever named the stop, not only a ticket's current one (#422): a stop a rebooking replaced still answered its ticket. One ticket at most books a stop (`ticket_booking_pickup_id_key`).
+    .leftJoin(ticketBooking, and(eq(ticketBooking.companyId, pickup.companyId), eq(ticketBooking.pickupId, pickup.id)))
     .where(and(eq(pickup.companyId, companyId), eq(pickup.routeId, routeId), eq(pickup.id, pickupId)))
     .limit(1)
   if (row === undefined) return undefined

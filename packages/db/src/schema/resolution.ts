@@ -49,8 +49,8 @@
 // per stop (`ticket_booked_pickup_id_key`). The link lives here and not on
 // the pickup, since a key back from the pickup would close a cycle the reset
 // to the seed cannot sweep; a stop missed is replaced by the next booking,
-// the comments keeping its story, and the booking outlives the ticket's
-// close.
+// the comments keeping its story and `ticket_booking` every booking (#422),
+// and the booking outlives the ticket's close.
 // Nothing here is effective-dated: a ticket carries a status, which is what a
 // record with no period does.
 //
@@ -305,6 +305,36 @@ export const ticketEvent = wms.table(
     tenantIndex(t, t.projectId),
     tenantIndex(t, t.assigneeUserAccountId),
     tenantIndex(t, t.recordedBy),
+  ],
+)
+
+// Every stop a ticket booked (#422): the ticket's own columns are the current
+// booking, which a rebooking replaces, and this ledger keeps each one, so a
+// stop's outcome heard after its ticket was booked again — a miss the worker
+// hears late, a correction to completed — still finds the ticket, and Finance
+// still knows the stop answered one. A stop is booked as it is added, so one
+// ticket at most ever books it (`ticket_booking_pickup_id_key`). A leaf no
+// other table keys to, so no cycle for the reset to the seed's sweep.
+export const ticketBooking = wms.table(
+  "ticket_booking",
+  {
+    ...id,
+    ...projectScoped,
+    ...recorded,
+    ticketId: uuid().notNull(),
+    routeId: uuid().notNull(),
+    pickupId: uuid().notNull(),
+  },
+  (t) => [
+    companyReference(t, company),
+    tenantReference(t, [t.projectId], project),
+    projectReference(t, [t.ticketId], ticket),
+    projectReference(t, [t.routeId, t.pickupId], pickup, [pickup.routeId, pickup.id]),
+    // A stop's ticket, the read every outcome of a stop asks.
+    uniqueIndex(tableObjectName(t.companyId.table, "pickup_id_key", "ticketBooking")).on(t.companyId, t.pickupId),
+    // A ticket's bookings in the order they were made: leads with the ticket, so it is the index the reference needs too.
+    index(tableObjectName(t.companyId.table, "ticket_id_idx", "ticketBooking")).on(t.companyId, t.ticketId, t.id),
+    tenantIndex(t, t.projectId),
   ],
 )
 

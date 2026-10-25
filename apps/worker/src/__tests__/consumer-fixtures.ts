@@ -39,7 +39,7 @@ import { driver, vehicle } from "@waste/db/schema/fleet"
 import { vehicleType } from "@waste/db/schema/fleet-types"
 import { company, project } from "@waste/db/schema/organisation"
 import { depot, unloadingStation } from "@waste/db/schema/places"
-import { alert, ticket, ticketEvent, ticketSla } from "@waste/db/schema/resolution"
+import { alert, ticket, ticketBooking, ticketEvent, ticketSla } from "@waste/db/schema/resolution"
 import { plan, planLeg, planStop, routingQuota } from "@waste/db/schema/routing"
 import { collectionGroup, routeScheme } from "@waste/db/schema/route-schemes"
 import { withCompany } from "@waste/db/tenant"
@@ -380,6 +380,7 @@ export function outboxJob(tenant: ConsumerTenant, event: Pick<OutboxJob, "kind" 
  * project and the company last.
  */
 export async function dropConsumerTenant(pool: Database, owner: Database, companyId: string): Promise<void> {
+  await owner.db.delete(ticketBooking).where(eq(ticketBooking.companyId, companyId))
   await owner.db.delete(ticketEvent).where(eq(ticketEvent.companyId, companyId))
   await owner.db.delete(proofOfService).where(eq(proofOfService.companyId, companyId))
   await owner.db.delete(driverCommand).where(eq(driverCommand.companyId, companyId))

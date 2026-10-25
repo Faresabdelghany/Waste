@@ -297,6 +297,30 @@ describe("finance.record-billable-events against Postgres", { skip }, () => {
     assert.equal((await eventsOfPickup(wash))[0].status, "cancelled")
   })
 
+  test("a stop a ticket was booked for and then booked away from records no job when it completes after all: the ticket's charge is the one, never two (#422)", async () => {
+    const projectId = tenant.projects.copenhagen.id
+    const priced = testId()
+    // The project prices a repair, so a repair the office booked for nothing would be a job.
+    await withCompany(pool.db, tenant.companyId, (tx) => tx.insert(workOrderProduct).values({ id: priced, companyId: tenant.companyId, projectId, service: "repair", productId: tenant.products.bulky.id }))
+    try {
+      const bin = await placeBin(pool, tenant, "BIN-REBOOK-1", { agreementId: tenant.agreements.anna.id, productId: tenant.products.residual.id })
+      const stops = await seedCompletedRoute(pool, tenant, [
+        { containerId: bin.containerId, propertyId: bin.propertyId, origin: "office", service: "repair" },
+        { containerId: bin.containerId, propertyId: bin.propertyId, origin: "office", service: "repair" },
+      ])
+      const [missed, rebooked] = stops.pickupIds
+      // The defect was booked for the first stop, which failed, and then for the second: the ticket names the second, the ledger both.
+      await seedTicket(pool, tenant, { resolution: null, kind: "container-defect", booked: { routeId: stops.id, pickupId: rebooked }, bookedBefore: [{ routeId: stops.id, pickupId: missed }] })
+      // The office corrects the first stop to completed: the ticket is serviced by it, and its charge is the one.
+      const corrected = await handle(published("pickup-corrected", missed, { ...pickupPayload(stops.id, missed, bin.containerId), origin: "office", service: "repair" }))
+      assert.deepEqual([corrected.did, await eventsOfPickup(missed)], ["nothing", []], "no job beside the ticket's charge")
+      const done = await handle(published("pickup-completed", rebooked, { ...pickupPayload(stops.id, rebooked, bin.containerId), origin: "office", service: "repair" }))
+      assert.deepEqual([done.did, await eventsOfPickup(rebooked)], ["nothing", []])
+    } finally {
+      await withCompany(pool.db, tenant.companyId, (tx) => tx.delete(workOrderProduct).where(eq(workOrderProduct.id, priced)))
+    }
+  })
+
   test("a collection under a product sold by the day records nothing: a billing run charges the hire's days (M14 of #293)", async () => {
     const day = testId()
     await withCompany(pool.db, tenant.companyId, (tx) => tx.insert(product).values({ id: day, companyId: tenant.companyId, projectId: tenant.projects.copenhagen.id, name: "Skip hire", kind: "recurring-service", status: "active", unit: "day", vatPercent: 25, freeDays: 7 }))

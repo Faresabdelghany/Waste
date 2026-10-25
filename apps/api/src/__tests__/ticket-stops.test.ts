@@ -5,6 +5,8 @@
 // planned. The driver's completion of the stop services the ticket in the same
 // request, with `ticket-completed` emitted once; the office's correction to
 // completed does too, and one away from completed only tells the ticket.
+// Every booking is kept in the ledger (#422), so a stop the office booked the
+// ticket away from still services it when it is corrected to completed.
 import assert from "node:assert/strict"
 import { randomInt } from "node:crypto"
 import { after, before, describe, test } from "node:test"
@@ -18,7 +20,7 @@ import { agreement, subscription } from "@waste/db/schema/agreements"
 import { product } from "@waste/db/schema/catalogue"
 import { customer } from "@waste/db/schema/customers"
 import { outboxEvent } from "@waste/db/schema/execution"
-import { ticketEvent } from "@waste/db/schema/resolution"
+import { ticketBooking, ticketEvent } from "@waste/db/schema/resolution"
 import { withCompany } from "@waste/db/tenant"
 import { answeredAlready, bookedFor, correctedAway, notAnsweredBy, onlyAnOpenTicket, servedAfterClose, servicedBy, stopCorrected } from "@waste/domain/execution/ticket-stops"
 import { and, asc, eq } from "drizzle-orm"
@@ -82,6 +84,13 @@ describe("a stop booked to answer a ticket", { skip: database.skip || owner.skip
   const ticketOf = async (id: string) => Ticket.parse(await (await olivia(`/tickets/${id}`)).json())
   const historyOf = (ticketId: string) =>
     withCompany(pool.db, a.companyId, (tx: Tx) => tx.select().from(ticketEvent).where(and(eq(ticketEvent.companyId, a.companyId), eq(ticketEvent.ticketId, ticketId))).orderBy(asc(ticketEvent.id)))
+  /** The stops the ledger says the ticket booked, in the order it booked them. */
+  const bookingsOf = async (ticketId: string) =>
+    (
+      await withCompany(pool.db, a.companyId, (tx: Tx) =>
+        tx.select({ pickupId: ticketBooking.pickupId }).from(ticketBooking).where(and(eq(ticketBooking.companyId, a.companyId), eq(ticketBooking.ticketId, ticketId))).orderBy(asc(ticketBooking.id)),
+      )
+    ).map((row) => row.pickupId)
   const completedEvents = (ticketId: string) =>
     withCompany(pool.db, a.companyId, (tx: Tx) => tx.select().from(outboxEvent).where(and(eq(outboxEvent.companyId, a.companyId), eq(outboxEvent.aggregateId, ticketId), eq(outboxEvent.kind, "ticket-completed"))))
   const commands = async (routeId: string, list: { kind: string; body: unknown; time: string }[]): Promise<CommandOutcomeRow[]> => {
@@ -139,6 +148,7 @@ describe("a stop booked to answer a ticket", { skip: database.skip || owner.skip
       const stop = await added(route.id, { service: "deliver", containerId: (await inStock()).id, subscriptionId, ticketId: request.id })
       const booked = await ticketOf(request.id)
       assert.deepEqual([booked.bookedRouteId, booked.bookedPickupId, booked.status], [route.id, stop.id, "open"])
+      assert.deepEqual(await bookingsOf(request.id), [stop.id], "the ledger keeps the booking")
       const comment = (await historyOf(request.id)).at(-1)
       assert.deepEqual([comment?.kind, comment?.body, comment?.recordedBy], ["comment", bookedFor({ position: stop.position, route: route.label, service: "deliver" }), a.users.olivia.id])
     })
@@ -171,6 +181,7 @@ describe("a stop booked to answer a ticket", { skip: database.skip || owner.skip
       assert.equal((await olivia(`/pickups/${first.id}/remove`, { method: "POST", body: { reason: "Booked on the wrong day" } })).status, 200)
       const second = await added(route.id, { containerId: placed.id, ticketId: overflow.id })
       assert.equal((await ticketOf(overflow.id)).bookedPickupId, second.id)
+      assert.deepEqual(await bookingsOf(overflow.id), [first.id, second.id], "the ticket names its current stop, the ledger every one")
     })
   })
 
@@ -198,6 +209,39 @@ describe("a stop booked to answer a ticket", { skip: database.skip || owner.skip
       const served = await ticketOf(defect.id)
       assert.deepEqual([served.status, served.resolution], ["completed", "serviced"])
       assert.equal((await historyOf(defect.id)).at(-1)?.recordedBy, a.users.olivia.id)
+    })
+
+    test("a stop the ticket was booked away from after it failed, corrected to completed, still services the ticket: it names that stop again, and the stop booked since, still planned, for the office to take off (#422)", async () => {
+      const defect = await opened("container-defect")
+      const route = await running()
+      const placed = await inService()
+      const failed = await added(route.id, { service: "repair", containerId: placed.id, ticketId: defect.id })
+      await driven(route.id, failed.id, "fail-pickup")
+      const later = await running()
+      const rebooked = await added(later.id, { service: "repair", containerId: placed.id, ticketId: defect.id })
+      assert.equal((await ticketOf(defect.id)).bookedPickupId, rebooked.id)
+      assert.equal((await olivia(`/pickups/${failed.id}/correct-outcome`, { method: "POST", body: { outcome: "completed", note: "Repaired after all" } })).status, 200)
+      const served = await ticketOf(defect.id)
+      assert.deepEqual([served.status, served.resolution, served.bookedPickupId], ["completed", "serviced", failed.id], "the stop that answered it")
+      assert.equal((await historyOf(defect.id)).at(-1)?.body, servicedBy({ position: failed.position, route: route.label }, { position: rebooked.position, route: later.label }))
+      assert.equal((await completedEvents(defect.id)).length, 1)
+    })
+
+    test("a stop the ticket was booked away from, completed and then corrected away after the stop booked since serviced it, is told as the correction alone (#422)", async () => {
+      const defect = await opened("container-defect")
+      const route = await running()
+      const placed = await inService()
+      const failed = await added(route.id, { service: "repair", containerId: placed.id, ticketId: defect.id })
+      await driven(route.id, failed.id, "fail-pickup")
+      const later = await running()
+      const rebooked = await added(later.id, { service: "repair", containerId: placed.id, ticketId: defect.id })
+      await driven(later.id, rebooked.id, "complete-pickup")
+      assert.equal((await historyOf(defect.id)).at(-1)?.body, servicedBy({ position: rebooked.position, route: later.label }), "nothing else booked for it is planned")
+      assert.equal((await olivia(`/pickups/${failed.id}/correct-outcome`, { method: "POST", body: { outcome: "completed", note: "Repaired after all" } })).status, 200)
+      assert.equal((await historyOf(defect.id)).at(-1)?.body, servedAfterClose({ position: failed.position, route: route.label, service: "repair" }))
+      assert.equal((await olivia(`/pickups/${failed.id}/correct-outcome`, { method: "POST", body: { outcome: "failed", reason: "inaccessible", note: "Wrong stop ticked" } })).status, 200)
+      assert.equal((await historyOf(defect.id)).at(-1)?.body, stopCorrected({ position: failed.position, route: route.label, outcome: "failed", note: "Wrong stop ticked" }), "it never serviced the ticket")
+      assert.deepEqual([(await ticketOf(defect.id)).bookedPickupId, (await completedEvents(defect.id)).length], [rebooked.id, 1])
     })
 
     test("a serviced ticket whose stop is corrected away from completed stays as it is, told in a comment; reopening is the office's", async () => {

@@ -3,13 +3,17 @@
 // repair or a swap. The office books the stop on a route naming the ticket it
 // serves, and the ticket names the stop (`ticket.booked_pickup_id`), held to
 // what the ticket is about — its container, its place — where the ticket names
-// them (`stopMismatch`). The
+// them (`stopMismatch`). A ticket booked again names its new stop, and the
+// `ticket_booking` ledger keeps every one (#422), so one ticket may hear from
+// several stops. The
 // stop's completion completes the ticket as serviced, in the completion's own
-// request (`servicedBy`); a stop missed, by the driver, the route's end or
-// cancellation or the office, leaves the ticket open with a word of what
-// happened (`stopMissed`), for the office to book another; and a stop the
-// office corrects away from completed once it has serviced its ticket leaves
-// the ticket as it is, the reopening the office's to decide (`correctedAway`).
+// request (`servicedBy`), and names a stop booked for it since that is still
+// planned, for the office to take off; a stop missed, by the driver, the
+// route's end or cancellation or the office, leaves the ticket open with a
+// word of what happened (`stopMissed`), for the office to book another unless
+// it has; and a stop the office corrects away from completed once it has
+// serviced its ticket leaves the ticket as it is, the reopening the office's
+// to decide (`correctedAway`).
 import type { TicketKind } from "../resolution/vocabulary"
 import { SERVICE_NOUNS } from "./services"
 import type { OfficeStopService, PickupService } from "./vocabulary"
@@ -74,13 +78,14 @@ export const answeredAlready = (ticketLabel: string, stop: StopRef): string => `
 /** What a booking for a ticket no longer open is told. */
 export const onlyAnOpenTicket = (ticketLabel: string, status: string): string => `Ticket ${ticketLabel} is ${status}; a stop answers an open ticket`
 
-/** The completion's words on the ticket its stop serviced. */
-export const servicedBy = (stop: StopRef): string => `Serviced by ${stopName(stop)}`
+/** The completion's words on the ticket its stop serviced, and the stop booked for it since that is still planned, which the office takes off (#422). */
+export const servicedBy = (stop: StopRef, stillBooked?: StopRef): string =>
+  stillBooked === undefined ? `Serviced by ${stopName(stop)}` : `Serviced by ${stopName(stop)}. ${capitalised(stopName(stillBooked))} is still booked for this ticket: take it off`
 
 /** What a ticket closed already is told when its stop is done after all. */
 export const servedAfterClose = (stop: StopRef & { service: PickupService }): string => `The ${SERVICE_NOUNS[stop.service]} at ${stopName(stop)} was completed after this ticket closed`
 
-/** What a ticket is told when its stop is missed: what happened and why, and, while the ticket is open, that another stop answers it. */
+/** What a ticket is told when its stop is missed: what happened and why, and, while the ticket is open and waits on this stop, that another stop answers it. */
 export function stopMissed(stop: StopRef & { service: PickupService; outcome: "skipped" | "failed"; reason: string; open: boolean }): string {
   const happened = stop.outcome === "failed" ? "failed" : "was skipped"
   const missed = `The ${SERVICE_NOUNS[stop.service]} at ${stopName(stop)} ${happened}: ${stop.reason.replaceAll("-", " ")}.`
