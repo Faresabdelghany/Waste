@@ -37,7 +37,11 @@
 // (O4 of #290) gave `alert` its rule and occurrence, a ticket as a subject
 // and a rule's resolution by nobody: `CHANGED_LATER` maps today's alert onto
 // 0009's, `ADDED_IN_0034` is left out, and alert-rules-rendering.test.ts pins
-// its statements.
+// its statements. Migration 0035 (O3c of #290) gave the ticket the stop booked
+// to answer it, `booked_route_id` and `booked_pickup_id`, with its check, the
+// same way: today's ticket carries them, `CHANGED_LATER` maps it onto 0009's,
+// `ADDED_IN_0035` is left out, and ticket-stops-rendering.test.ts pins its
+// statements.
 import assert from "node:assert/strict"
 import { readFile } from "node:fs/promises"
 import { join } from "node:path"
@@ -59,6 +63,7 @@ import { wms } from "../schema/wms"
 import { handWrittenStatements, normalised, statementsOf } from "../sql/hand-written"
 import { RESOLVED_SHAPE, RULE_KEY_INDEX, RULE_SHAPE, SUBJECT_SHAPE } from "./alert-as-of"
 import { checksOf, companyFk, createTable, foreignKey, ID, index, list, oneOfCheck, partialUniqueIndex, projectFk, projectFkTo, ref, tenantFk, uniqueKey } from "./rendering"
+import { BOOKED_PICKUP_FK, BOOKED_PICKUP_KEY, BOOKED_ROUTE_INDEX, BOOKED_SHAPE } from "./resolution-shapes"
 import { statementsBetween, statementsFor } from "./specimen"
 
 /** The three tables in the order src/schema/resolution.ts defines them; drizzle-kit's own loader sorts a module's exports, which the migration test allows for. */
@@ -96,7 +101,7 @@ const stampsShape = (() => {
 })()
 
 /** ticket as drizzle-kit wrote it as of 0009, as it wrote it since 0016 (#111) — the re-collection's stop and the check that it names its route — and as it wrote it since 0031 (#291 slice 23b), its sources grown by `service-provider`. */
-const ticketTable = (asOf: "0009" | "0016" | "0031" | "0033"): string =>
+const ticketTable = (asOf: "0009" | "0016" | "0031" | "0033" | "0035"): string =>
   createTable("ticket", "project", [
     '"number" integer NOT NULL',
     '"kind" text NOT NULL',
@@ -122,14 +127,15 @@ const ticketTable = (asOf: "0009" | "0016" | "0031" | "0033"): string =>
     '"resolution" text',
     '"recollection_route_id" uuid',
     ...(asOf !== "0009" ? ['"recollection_pickup_id" uuid'] : []),
-    ...(asOf === "0033" ? ['"charge_product_id" uuid'] : []),
+    ...(asOf >= "0033" ? ['"charge_product_id" uuid'] : []),
     `"closed_at" ${INSTANT}`,
+    ...(asOf >= "0035" ? ['"booked_route_id" uuid', '"booked_pickup_id" uuid'] : []),
     uniqueKey("ticket_number_key", "company_id", "number"),
     uniqueKey("ticket_project_key", "company_id", "project_id", "id"),
     oneOfCheck("ticket", "kind", "missed-collection", "overflow", "access-issue", "container-request", "container-defect", "proof-follow-up", "complaint", "reported-problem", "rejected-command", "internal-task", "other"),
     oneOfCheck("ticket", "status", ...STATUSES),
     oneOfCheck("ticket", "priority", "critical", "high", "medium", "low", "none"),
-    oneOfCheck("ticket", "source", "office", "phone", "email", "portal", "driver-app", "dispatch", "import", "integration", ...(asOf === "0031" || asOf === "0033" ? ["service-provider"] : [])),
+    oneOfCheck("ticket", "source", "office", "phone", "email", "portal", "driver-app", "dispatch", "import", "integration", ...(asOf >= "0031" ? ["service-provider"] : [])),
     oneOfCheck("ticket", "resolution", ...RESOLUTIONS),
     `CONSTRAINT "ticket_origin_shape" CHECK ((${ref("ticket", "created_by")} is null) = (${ref("ticket", "source_event_id")} is not null))`,
     `CONSTRAINT "ticket_pickup_shape" CHECK (${ref("ticket", "pickup_id")} is null or ${ref("ticket", "route_id")} is not null)`,
@@ -139,7 +145,8 @@ const ticketTable = (asOf: "0009" | "0016" | "0031" | "0033"): string =>
     `CONSTRAINT "ticket_recollection_shape" CHECK (${ref("ticket", "recollection_route_id")} is null or ${ref("ticket", "resolution")} is not distinct from 'recollected')`,
     ...(asOf !== "0009" ? [`CONSTRAINT "ticket_recollection_pickup_shape" CHECK (${ref("ticket", "recollection_pickup_id")} is null or ${ref("ticket", "recollection_route_id")} is not null)`] : []),
     // The resolution named not null: `null in (...)` is null, and a null check passes.
-    ...(asOf === "0033" ? [`CONSTRAINT "ticket_charge_shape" CHECK (${ref("ticket", "charge_product_id")} is null or (${ref("ticket", "resolution")} is not null and ${ref("ticket", "resolution")} in ('recollected', 'serviced')))`] : []),
+    ...(asOf >= "0033" ? [`CONSTRAINT "ticket_charge_shape" CHECK (${ref("ticket", "charge_product_id")} is null or (${ref("ticket", "resolution")} is not null and ${ref("ticket", "resolution")} in ('recollected', 'serviced')))`] : []),
+    ...(asOf >= "0035" ? [`CONSTRAINT "ticket_booked_shape" CHECK (${BOOKED_SHAPE})`] : []),
     `CONSTRAINT "ticket_closed_shape" CHECK ((${ref("ticket", "status")} in ('completed', 'rejected')) = (${ref("ticket", "closed_at")} is not null))`,
   ])
 
@@ -212,9 +219,9 @@ const alertTable = (asOf: "0009" | "0034"): string =>
 /** What 0034 added to the alert beside the columns and the checks: one alert per occurrence. */
 const ADDED_IN_0034 = [RULE_KEY_INDEX]
 
-/** What 0016 (#111), 0031 (#291 slice 23b), 0033 (#291 C3) and 0034 (O4 of #290) changed on the three: the ticket's, the history's and the alert's CREATE TABLE as drizzle-kit generates them now onto what 0009 says. */
+/** What 0016 (#111), 0031 (#291 slice 23b), 0033 (#291 C3), 0034 and 0035 (O4 and O3c of #290) changed on the three: the ticket's, the history's and the alert's CREATE TABLE as drizzle-kit generates them now onto what 0009 says. */
 const CHANGED_LATER = new Map([
-  [ticketTable("0033"), ticketTable("0009")],
+  [ticketTable("0035"), ticketTable("0009")],
   [ticketEventTable("0031"), ticketEventTable("0009")],
   [alertTable("0034"), alertTable("0009")],
 ])
@@ -225,8 +232,11 @@ const ADDED_IN_0016 = [RECOLLECTION_PICKUP_FK, RECOLLECTION_PICKUP_INDEX]
 /** What 0033 added to the ticket beside the column: the key to its product and its index. */
 const ADDED_IN_0033 = [CHARGE_PRODUCT_FK, CHARGE_PRODUCT_INDEX]
 
+/** What 0035 added to the ticket beside the columns and the check: the key through the route, one ticket per stop, the route's index. */
+const ADDED_IN_0035 = [BOOKED_PICKUP_FK, BOOKED_PICKUP_KEY, BOOKED_ROUTE_INDEX]
+
 const expected = [
-  ticketTable("0033"),
+  ticketTable("0035"),
   ticketEventTable("0031"),
   alertTable("0034"),
   companyFk("ticket"),
@@ -247,6 +257,7 @@ const expected = [
   projectFkTo("ticket", "recollection_route_id", "route"),
   RECOLLECTION_PICKUP_FK,
   CHARGE_PRODUCT_FK,
+  BOOKED_PICKUP_FK,
   companyFk("ticket_event"),
   projectFk("ticket_event"),
   projectFkTo("ticket_event", "ticket_id", "ticket"),
@@ -262,6 +273,7 @@ const expected = [
   tenantFk("alert", "raised_by", "user_account"),
   tenantFk("alert", "acknowledged_by", "user_account"),
   tenantFk("alert", "resolved_by", "user_account"),
+  BOOKED_PICKUP_KEY,
   // The consumer's first idempotency key: one ticket per outbox event, the rows with one alone in the index.
   partialUniqueIndex("ticket", "ticket_source_event_id_idx", ["company_id", "source_event_id"], `${ref("ticket", "source_event_id")} is not null`),
   // The queue and my tickets, each leading with its reference column.
@@ -280,6 +292,7 @@ const expected = [
   CHARGE_PRODUCT_INDEX,
   index("ticket", "ticket_recollection_route_id_idx", "company_id", "recollection_route_id"),
   RECOLLECTION_PICKUP_INDEX,
+  BOOKED_ROUTE_INDEX,
   // The second idempotency key: one comment per outbox event.
   partialUniqueIndex("ticket_event", "ticket_event_source_event_id_idx", ["company_id", "source_event_id"], `${ref("ticket_event", "source_event_id")} is not null`),
   // A ticket's history in recording order, leading with the ticket.
@@ -370,7 +383,7 @@ const generatedAlterations = (): Promise<string[]> => statementsBetween({ compan
 
 /** Everything drizzle-kit wrote at the head of 0009: the three tables as they were generated as of 0009 — the ticket without the product its completion charges or the re-collection's stop and with 0009's sources, what 0033 and 0016 added left out — and the two altered ones. */
 const generatedHead = async (): Promise<string[]> => [
-  ...(await statementsFor(tables)).filter((statement) => !ADDED_IN_0016.includes(statement) && !ADDED_IN_0033.includes(statement) && !ADDED_IN_0034.includes(statement)).map((statement) => CHANGED_LATER.get(statement) ?? statement),
+  ...(await statementsFor(tables)).filter((statement) => !ADDED_IN_0016.includes(statement) && !ADDED_IN_0033.includes(statement) && !ADDED_IN_0034.includes(statement) && !ADDED_IN_0035.includes(statement)).map((statement) => CHANGED_LATER.get(statement) ?? statement),
   ...(await generatedAlterations()),
 ]
 
@@ -393,7 +406,7 @@ describe("the Resolution tables as drizzle-kit writes them", () => {
     assert.deepEqual([...statements.slice(0, generated.length)].sort(), generated)
     // What 0016, 0031 and 0033 changed and 0016 and 0033 added is what the schema generates today: each mapping maps something.
     const today = await statementsFor(tables)
-    for (const statement of [...CHANGED_LATER.keys(), ...ADDED_IN_0016, ...ADDED_IN_0033, ...ADDED_IN_0034]) assert.ok(today.includes(statement), statement.split("\n")[0])
+    for (const statement of [...CHANGED_LATER.keys(), ...ADDED_IN_0016, ...ADDED_IN_0033, ...ADDED_IN_0034, ...ADDED_IN_0035]) assert.ok(today.includes(statement), statement.split("\n")[0])
   })
 
   test("and carries below them the fence and trigger, or revoke, of each table: 3 x 3 = 9 statements", async () => {
@@ -431,6 +444,7 @@ describe("the checks of this context", () => {
       "ticket_recollection_shape",
       "ticket_recollection_pickup_shape",
       "ticket_charge_shape",
+      "ticket_booked_shape",
       "ticket_closed_shape",
     ])
     assert.deepEqual([...checksOf(ticketEvent).keys()], ["ticket_event_kind_one_of", "ticket_event_status_one_of", "ticket_event_resolution_one_of", "ticket_event_visibility_one_of", "ticket_event_kind_shape"])

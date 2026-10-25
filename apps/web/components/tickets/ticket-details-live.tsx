@@ -31,7 +31,7 @@ import { Textarea } from "@/components/ui/textarea"
 import { BusinessRecordFormDialog } from "@/components/waste/business-record-form-dialog"
 import { useBusinessRecordStore, useServerModuleState, whenSaved } from "@/components/waste/business-record-store"
 import { ProofObject } from "@/components/waste/commands/route-surfaces"
-import { useCommandRunner, useRowHistory, useServerNames } from "@/components/waste/commands/use-command-support"
+import { useCommandRunner, useRelationPickers, useRowHistory, useServerNames } from "@/components/waste/commands/use-command-support"
 import { useProofObjectLinks } from "@/components/waste/commands/use-proof-object-links"
 import type { ApiClient } from "@/lib/api/client"
 import { statusLabel, webIdOf } from "@/lib/api/records/adapter"
@@ -39,7 +39,7 @@ import { ALERT_PREFIX, ALERTS_MODULE } from "@/lib/api/records/alerts"
 import { shownOn } from "@/lib/api/records/clock"
 import { CONTAINERS_MODULE } from "@/lib/api/records/containers"
 import { PICKUPS_MODULE } from "@/lib/api/records/pickups"
-import { ROUTES_MODULE } from "@/lib/api/records/routes"
+import { ADD_STOP, ROUTES_MODULE } from "@/lib/api/records/routes"
 import {
   ASSIGN_TICKET,
   commentOnTicket,
@@ -64,9 +64,11 @@ import { getBusinessModuleHref } from "@/lib/data/business-links"
 import type { BusinessFormValues } from "@/lib/data/business-form-types"
 import type { BusinessRecord, ModuleLocation } from "@/lib/data/business-modules"
 import { CONTACTS_MODULE, NO_ONE, PROPERTIES_MODULE, SHARED_POINTS_MODULE } from "@/lib/data/properties"
+import { bookableRoutes, bookAStopWaits, bookStopForm, bookStopInput, bookStopValues, offersBookAStop } from "@/lib/data/ticket-stops"
 import { ACCESS_MODULE, replyWithEvidenceForm, TICKET_COMMAND_FORMS, TICKET_EDIT_FORM, updateTicketRecord, type TicketCommandWithForm } from "@/lib/data/tickets"
 import { cn } from "@/lib/utils"
 import type { StopEvidence, TicketDetail, TicketEvent } from "@waste/contracts/tickets"
+import type { StopTicketKind } from "@waste/domain/execution/ticket-stops"
 import { TICKET_KINDS, TICKET_PRIORITIES, type TicketStatus } from "@waste/domain/resolution/vocabulary"
 
 import { useResolutionPickers } from "./resolution-pickers"
@@ -134,15 +136,18 @@ function priorityClasses(priority: string): string {
   return "border-border bg-muted/60 text-muted-foreground"
 }
 
-type Open = { kind: "command"; name: TicketCommandWithForm; values: BusinessFormValues } | { kind: "edit" } | { kind: "reply" }
+type Open = { kind: "command"; name: TicketCommandWithForm; values: BusinessFormValues } | { kind: "edit" } | { kind: "reply" } | { kind: "book" }
 
 export function LiveTicketDetailsDialog({ record, onClose }: { record: BusinessRecord; onClose: () => void }) {
   const state = useServerModuleState(workspaceId, moduleId)
   // The row as the store now holds it: a command, a patch or a re-read replaces it, and the dialog shows what the API answered.
   const live = state?.records.find((candidate) => candidate.id === record.id) ?? record
   const ready = state?.status === "ready"
-  const { upsertRecord, sendAction } = useBusinessRecordStore()
+  const { upsertRecord, sendAction, sendCommand, refreshRecord } = useBusinessRecordStore()
   const pickers = useResolutionPickers()
+  // Book a stop (O3c of #290): Add stop's pickers, and the routes a stop may still be added to.
+  const stopPickers = useRelationPickers()
+  const routesState = useServerModuleState(ROUTES_MODULE.workspaceId, ROUTES_MODULE.moduleId)
   const { busy, version, run: send } = useCommandRunner(TICKETS_MODULE, live.id)
   // The comment and the patch answer no command: their own count makes the history read again.
   const [changes, setChanges] = useState(0)
@@ -206,6 +211,21 @@ export function LiveTicketDetailsDialog({ record, onClose }: { record: BusinessR
     )
   }
 
+  /** Book a stop: the route's Add stop, naming this ticket; the ticket is read back, since it now names the stop. */
+  const book = (values: BusinessFormValues) => {
+    const { routeId, input } = bookStopInput(values, live.id)
+    if (routeId === undefined || saving) return
+    setSaving(true)
+    void sendCommand(ROUTES_MODULE.workspaceId, ROUTES_MODULE.moduleId, routeId, ADD_STOP, input).then((outcome) => {
+      setSaving(false)
+      if (outcome.kind !== "done") return
+      setOpen(null)
+      setChanges((count) => count + 1)
+      void refreshRecord(workspaceId, moduleId, live.id)
+      toast.success("Stop booked", { description: `${label} is answered by a stop on ${outcome.record.name}; its completion services the ticket.` })
+    })
+  }
+
   const comment = () => {
     const body = message.trim()
     if (body === "" || sending) return
@@ -221,6 +241,9 @@ export function LiveTicketDetailsDialog({ record, onClose }: { record: BusinessR
   }
 
   const machine = TICKET_MACHINE_COMMANDS.filter((name) => offersTicketCommand(status, name, label))
+  // Book a stop (O3c of #290): on an open ticket a stop answers, once the routes are read.
+  const bookable = offersBookAStop(value("kind"), status)
+  const bookingWaits = bookAStopWaits(routesState)
   const links = TICKET_LINKS.flatMap(([key, , fact]) => {
     const webId = value(key)
     if (webId === "") return []
@@ -408,6 +431,28 @@ export function LiveTicketDetailsDialog({ record, onClose }: { record: BusinessR
                 )}
               </section>
 
+              {(bookable || live.facts["Booked stop"] !== undefined) && (
+                <section data-testid="ticket-booking">
+                  <div className="flex items-center justify-between gap-2">
+                    <h3 className="text-xs font-semibold uppercase tracking-wide text-muted-foreground">Stop</h3>
+                    {bookable && (
+                      <Button type="button" variant="outline" size="sm" className="h-7 text-xs" disabled={!offered || bookingWaits !== undefined || !stopPickers.readyFor(bookStopForm(value("kind") as StopTicketKind, []))} onClick={() => setOpen({ kind: "book" })}>
+                        Book a stop
+                      </Button>
+                    )}
+                  </div>
+                  {bookable && bookingWaits !== undefined && <p className="mt-2 text-xs text-muted-foreground">{bookingWaits}</p>}
+                  {live.facts["Booked stop"] === undefined ? (
+                    <p className="mt-3 text-sm text-muted-foreground">No stop is booked to answer it yet.</p>
+                  ) : (
+                    <div className="mt-3 divide-y divide-border/60 border-y border-border/60">
+                      <Row label="Booked route" value={live.facts["Booked route"] ?? ""} />
+                      <Row label="Booked stop" value={live.facts["Booked stop"]} />
+                    </div>
+                  )}
+                </section>
+              )}
+
               {aboutAStop && (
                 <section data-testid="ticket-evidence">
                   <div className="flex items-center justify-between gap-2">
@@ -482,6 +527,16 @@ export function LiveTicketDetailsDialog({ record, onClose }: { record: BusinessR
           onSubmit={(values) => run(open.name, values)}
           relationOptions={(field, values) => pickers.options(field, values, projectId, open.values)}
           initialValueOverrides={open.values}
+        />
+      )}
+      {open?.kind === "book" && (
+        <BusinessRecordFormDialog
+          schema={bookStopForm(value("kind") as StopTicketKind, bookableRoutes(routesState?.records ?? [], projectId))}
+          open
+          onOpenChange={(isOpen) => !isOpen && setOpen(null)}
+          onSubmit={book}
+          relationOptions={(field, values) => stopPickers.options(field, values, projectId)}
+          initialValueOverrides={bookStopValues(live)}
         />
       )}
       {open?.kind === "reply" && (

@@ -42,6 +42,15 @@
 // `charge_product_id`, a product of the project, with a resolution Finance
 // charges for alone (`ticket_charge_shape`, over the domain's
 // `BILLABLE_RESOLUTIONS`); `reopen` clears it with the resolution.
+// Since O3c of #290 a ticket a stop answers — a container request, an
+// overflow, a defective container — names the stop the office booked for it,
+// `booked_route_id` and `booked_pickup_id`, a pickup of that route through the
+// same project key, both or neither (`ticket_booked_shape`), and one ticket
+// per stop (`ticket_booked_pickup_id_key`). The link lives here and not on
+// the pickup, since a key back from the pickup would close a cycle the reset
+// to the seed cannot sweep; a stop missed is replaced by the next booking,
+// the comments keeping its story, and the booking outlives the ticket's
+// close.
 // Nothing here is effective-dated: a ticket carries a status, which is what a
 // record with no period does.
 //
@@ -162,6 +171,10 @@ export const ticket = wms.table(
     chargeProductId: uuid(),
     /** When the ticket was completed or rejected; cleared by reopen. */
     closedAt: instant(),
+    /** The route of the stop the office booked to answer the ticket (O3c of #290); with its pickup or not at all. */
+    bookedRouteId: uuid(),
+    /** That stop: a container request's delivery, an overflow's emptying, a defect's repair or swap. The latest booking; a missed one's story is in the comments. */
+    bookedPickupId: uuid(),
   },
   (t) => [
     companyReference(t, company),
@@ -183,6 +196,8 @@ export const ticket = wms.table(
     // The re-collection's stop is a stop of the route it rides on (#111): the key carries the route on both sides, as the ticket's own pickup's does.
     projectReference(t, [t.recollectionRouteId, t.recollectionPickupId], pickup, [pickup.routeId, pickup.id]),
     projectReference(t, [t.chargeProductId], product),
+    // The booked stop is a stop of its route (O3c of #290), as the re-collection's is.
+    projectReference(t, [t.bookedRouteId, t.bookedPickupId], pickup, [pickup.routeId, pickup.id]),
     tenantUnique(t, t.number),
     projectKey(t),
     oneOf(t.kind, TICKET_KINDS),
@@ -204,6 +219,10 @@ export const ticket = wms.table(
     check(tableObjectName(t.id.table, "recollection_pickup_shape", "ticket"), sql`${t.recollectionPickupId} is null or ${t.recollectionRouteId} is not null`),
     // The product a completion charges goes with a resolution Finance charges for (#291 C3). The resolution is named not null, since `null in (...)` is null and a null check passes: an open ticket has none and may still not carry the product.
     check(tableObjectName(t.id.table, "charge_shape", "ticket"), sql`${t.chargeProductId} is null or (${t.resolution} is not null and ${t.resolution} in (${sql.raw(BILLABLE_RESOLUTIONS.map(literal).join(", "))}))`),
+    // The booked stop and its route together or not at all: Postgres leaves a composite key with a null member unchecked.
+    check(tableObjectName(t.id.table, "booked_shape", "ticket"), sql`(${t.bookedRouteId} is null) = (${t.bookedPickupId} is null)`),
+    // A stop answers one ticket.
+    uniqueIndex(tableObjectName(t.id.table, "booked_pickup_id_key", "ticket")).on(t.companyId, t.bookedPickupId).where(sql`${t.bookedPickupId} is not null`),
     // A closed ticket has the instant it closed, and an open one none.
     check(tableObjectName(t.id.table, "closed_shape", "ticket"), sql`(${t.status} in ('completed', 'rejected')) = (${t.closedAt} is not null)`),
     // The consumer's idempotency key: one ticket per outbox event, the rows with one in the index and only those.
@@ -224,6 +243,7 @@ export const ticket = wms.table(
     tenantIndex(t, t.chargeProductId),
     tenantIndex(t, t.recollectionRouteId),
     tenantIndex(t, t.recollectionPickupId),
+    tenantIndex(t, t.bookedRouteId),
   ],
 )
 

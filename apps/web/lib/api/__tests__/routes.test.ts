@@ -392,6 +392,15 @@ describe("the route's commands", () => {
     assert.deepEqual(routeAdapter.commands?.[ADD_STOP]?.toBody?.({ containerId: `asset-${bin}` }, record, context()), { containerId: bin }, "a container unless the form says otherwise")
   })
 
+  test("add a stop names the ticket it is booked to answer by server id, where the form carries one (O3c of #290)", () => {
+    const bin = "01a0d2a4-a280-7015-8000-000000000009"
+    const ticketId = "01a0d2a4-a280-7040-8000-000000000001"
+    const answering = addedStopBody({ stopAt: "container", containerId: `asset-${bin}`, ticketId: `ticket-${ticketId}` }, context())
+    assert.deepEqual(answering, { containerId: bin, ticketId })
+    assert.ok(PickupAdd.safeParse(answering).success)
+    assert.deepEqual(addedStopBody({ stopAt: "container", containerId: `asset-${bin}`, ticketId: "ticket-T-1" }, context()), { path: "ticketId", message: "Pick a ticket the API holds" })
+  })
+
   test("add a stop is refused here without what it collects, or with a row the API does not hold", () => {
     assert.deepEqual(addedStopBody({ stopAt: "container" }, context()), { path: "containerId", message: "Pick the container to collect" })
     assert.deepEqual(addedStopBody({ stopAt: "container", containerId: "asset-bin-1" }, context()), { path: "containerId", message: "Pick a container the API holds" })

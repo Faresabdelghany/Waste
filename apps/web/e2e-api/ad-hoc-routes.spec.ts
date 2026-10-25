@@ -20,7 +20,9 @@ import { listAll, projectNamed, type Project } from "./tester"
 // taken goes back to, and the driver's completion moves both in the ledger.
 // Every body is the one the contracts take, read off the browser's own
 // request; the properties and the swap's two containers are made for the
-// run, uniquely named and never cleaned up.
+// run, uniquely named and never cleaned up. A ticket a stop answers (O3c) is
+// booked from the ticket itself — a defective bin's repair on a dispatched
+// route — and the driver's completion services it.
 
 type Named = { id: string; name: string }
 type Property = Named & { address: string }
@@ -29,7 +31,7 @@ type Placement = { containerId: string; projectId: string; wasteFractionId: stri
 type AddedPickup = { id: string; routeId: string; position: number; sequence?: number; status: string; origin: string; service: string; containerId: string | null; propertyId: string | null; sharedCollectionPointId: string | null; wasteFractionId: string; note: string | null }
 type Ledgered = Container & { projectId: string; containerTypeId: string; assetState: { status: string; warehouseId: string | null; placementId: string | null } | null }
 type PlacementRead = { id: string; subscriptionId: string; propertyId: string | null; sharedCollectionPointId: string | null; wasteFractionId: string }
-type ApiTicket = { id: string; label: string; recollectionRouteId: string | null; recollectionPickupId: string | null }
+type ApiTicket = { id: string; label: string; status: string; resolution: string | null; recollectionRouteId: string | null; recollectionPickupId: string | null; bookedRouteId: string | null; bookedPickupId: string | null }
 
 const escaped = (text: string) => text.replace(/[.*+?^${}()|[\]\\]/g, "\\$&")
 
@@ -371,4 +373,61 @@ test("a swap is booked through Add stop with its replacement from stock and its 
   const placed = await placementRead(serving.assetState?.placementId)
   const where = ({ subscriptionId, propertyId, sharedCollectionPointId, wasteFractionId }: PlacementRead) => ({ subscriptionId, propertyId, sharedCollectionPointId, wasteFractionId })
   expect(where(placed)).toEqual(where(servedUnder))
+})
+
+test("a defective bin's ticket books its repair on a dispatched route from the ticket itself, and the driver's completion services the ticket (O3c of #290)", async ({ api, browser, page }) => {
+  test.setTimeout(180_000)
+  const { route } = await dispatchedRouteFor(api)
+  const before = (await routeRead(api, route.id)) as unknown as { pickups: AddedPickup[] }
+  const generated = before.pickups.find((pickup) => pickup.origin === "generation" && pickup.containerId !== null)
+  expect(generated, `${route.label} needs one of generation's stops`).toBeTruthy()
+  const binId = generated?.containerId ?? ""
+  const binLabel = (await listAll<Container>(api, "/containers")).find((container) => container.id === binId)?.label ?? ""
+  const subject = uniqueName("E2E broken lid")
+  const opened = await api.post("/tickets", { data: { projectId: route.projectId, kind: "container-defect", subject, description: "The lid hinge snapped", links: { containerId: binId } } })
+  expect(opened.status(), await opened.text()).toBe(201)
+  const ticket = (await opened.json()) as ApiTicket
+
+  // The office books the repair from the ticket: the route first, the service and the bin opened on what the ticket is about.
+  await page.goto(`/tickets?module=tickets&record=ticket-${ticket.id}`)
+  const details = page.getByRole("dialog", { name: subject })
+  const book = details.getByTestId("ticket-booking").getByRole("button", { name: "Book a stop" })
+  await expect(book).toBeEnabled({ timeout: 30_000 })
+  await book.click()
+  const dialog = page.getByRole("dialog", { name: "Book a stop" })
+  await pickMatching(dialog, page, "Route", new RegExp(`^${escaped(route.label)} · `))
+  await expect(dialog.getByRole("combobox", { name: /^Service/ })).toContainText("Repair")
+  await expect(dialog.getByRole("combobox", { name: /^Container/ })).toContainText(binLabel)
+  const [added] = await Promise.all([answerOf(page, "POST", `/routes/${route.id}/pickups`), dialog.getByRole("button", { name: "Book stop" }).click()])
+  expect(added.status(), await added.text()).toBe(201)
+  expect(added.request().postDataJSON()).toEqual({ service: "repair", containerId: binId, ticketId: ticket.id })
+  const repair = (await added.json()) as AddedPickup
+  await expect(details.getByTestId("ticket-booking")).toContainText("Booked stop", { timeout: 30_000 })
+
+  // The driver starts the route, completes the repair, and ends the route.
+  const context = await freshContext(browser, { viewport: { width: 390, height: 844 } })
+  try {
+    const phone = await context.newPage()
+    await signIn(phone, SEEDED_DRIVER.email, E2E.loginPassword)
+    await expect(phone).toHaveURL(/\/driver$/)
+    const card = phone.getByRole("article", { name: `Route ${route.label}` })
+    await card.getByRole("button", { name: "Start route" }).click()
+    await expect(card.getByText("Active", { exact: true })).toBeVisible()
+    await phone.goto(`/driver/routes/${route.id}`)
+    const repairCard = phone.getByRole("article").filter({ has: phone.locator('[data-slot="badge"]', { hasText: /^Repair$/ }) })
+    await expect(repairCard).toHaveCount(1, { timeout: 30_000 })
+    await repairCard.getByRole("button", { name: "Complete" }).click()
+    await expect(repairCard.getByText("Completed", { exact: true })).toBeVisible()
+    await phone.getByRole("button", { name: "End route" }).click()
+    await phone.getByRole("dialog").getByRole("button", { name: "End route" }).click()
+    await expect(phone.getByRole("region", { name: `Route ${route.label}` }).getByText("Completed", { exact: true })).toBeVisible()
+  } finally {
+    await context.close()
+  }
+
+  // The ticket names the stop that answered it, and the stop's completion serviced it.
+  const after = await api.get(`/tickets/${ticket.id}`)
+  expect(after.status()).toBe(200)
+  const served = (await after.json()) as ApiTicket
+  expect({ status: served.status, resolution: served.resolution, bookedRouteId: served.bookedRouteId, bookedPickupId: served.bookedPickupId }).toEqual({ status: "completed", resolution: "serviced", bookedRouteId: route.id, bookedPickupId: repair.id })
 })

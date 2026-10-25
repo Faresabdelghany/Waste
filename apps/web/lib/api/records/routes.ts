@@ -395,7 +395,11 @@ export function addedStopBody(input: Record<string, unknown>, context: MappingCo
   const service = said(input, "service") ?? "empty"
   if (!isOfficeStopService(service)) return refusal("service", "Book an emptying or one of the work orders offered")
   if (service !== "empty" && at !== STOP_AT_CONTAINER) return refusal("stopAt", A_WORK_ORDER_IS_OF_A_CONTAINER)
-  const withNote = (body: Record<string, string>) => ({ ...(service === "empty" ? {} : { service }), ...body, ...(note === undefined ? {} : { note }) })
+  // The ticket the stop is booked to answer (O3c of #290), where Book a stop names one.
+  const ticketWebId = said(input, "ticketId")
+  const ticketId = ticketWebId === undefined ? undefined : referencedServerId(ticketWebId, "ticket", context, { owns: hasPrefix("ticket") })
+  if (ticketWebId !== undefined && ticketId === undefined) return refusal("ticketId", "Pick a ticket the API holds")
+  const withNote = (body: Record<string, string>) => ({ ...(service === "empty" ? {} : { service }), ...body, ...(note === undefined ? {} : { note }), ...(ticketId === undefined ? {} : { ticketId }) })
   if (at === STOP_AT_CONTAINER) {
     const picked = said(input, "containerId")
     if (picked === undefined) return refusal("containerId", "Pick the container to collect")

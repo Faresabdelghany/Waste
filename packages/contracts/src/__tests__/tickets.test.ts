@@ -75,6 +75,8 @@ const ticket = {
   recollectionPickupId: null,
   chargeProductId: null,
   closedAt: null,
+  bookedRouteId: null,
+  bookedPickupId: null,
   ...STAMPS,
 }
 
@@ -130,6 +132,10 @@ describe("Ticket", () => {
     assert.deepEqual(Ticket.parse(charged), charged, "the product its completion charges (#291 C3)")
     const { chargeProductId: _product, ...beforeCharges } = completed
     assert.deepEqual(Ticket.parse(beforeCharges), completed, "an event the outbox took before #291 C3 names no product, and reads as null")
+    const booked = { ...ticket, kind: "container-request", bookedRouteId: THIRD, bookedPickupId: OTHER }
+    assert.deepEqual(Ticket.parse(booked), booked, "the stop the office booked to answer it (O3c of #290)")
+    const { bookedRouteId: _route, bookedPickupId: _pickup, ...unbooked } = ticket
+    assert.deepEqual(Ticket.parse(unbooked), ticket, "an event the outbox took before O3c names no booking, and reads as none")
     assert.equal(Object.keys(TicketLinks.shape).length, 9)
   })
 

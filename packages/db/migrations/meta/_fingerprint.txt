@@ -2532,8 +2532,12 @@ column wms.ticket 28 recollection_route_id uuid
 column wms.ticket 29 closed_at timestamp with time zone
 column wms.ticket 30 recollection_pickup_id uuid
 column wms.ticket 31 charge_product_id uuid
+column wms.ticket 32 booked_route_id uuid
+column wms.ticket 33 booked_pickup_id uuid
 constraint wms.ticket ticket_agreement_id_fk FOREIGN KEY (company_id, project_id, agreement_id) REFERENCES wms.agreement(company_id, project_id, id)
 constraint wms.ticket ticket_assignee_user_account_id_fk FOREIGN KEY (company_id, assignee_user_account_id) REFERENCES wms.user_account(company_id, id)
+constraint wms.ticket ticket_booked_route_id_booked_pickup_id_fk FOREIGN KEY (company_id, project_id, booked_route_id, booked_pickup_id) REFERENCES wms.pickup(company_id, project_id, route_id, id)
+constraint wms.ticket ticket_booked_shape CHECK (((booked_route_id IS NULL) = (booked_pickup_id IS NULL)))
 constraint wms.ticket ticket_charge_product_id_fk FOREIGN KEY (company_id, project_id, charge_product_id) REFERENCES wms.product(company_id, project_id, id)
 constraint wms.ticket ticket_charge_shape CHECK (((charge_product_id IS NULL) OR ((resolution IS NOT NULL) AND (resolution = ANY (ARRAY['recollected'::text, 'serviced'::text])))))
 constraint wms.ticket ticket_closed_shape CHECK (((status = ANY (ARRAY['completed'::text, 'rejected'::text])) = (closed_at IS NOT NULL)))
@@ -2566,6 +2570,8 @@ constraint wms.ticket ticket_source_one_of CHECK ((source = ANY (ARRAY['office':
 constraint wms.ticket ticket_status_one_of CHECK ((status = ANY (ARRAY['open'::text, 'in-progress'::text, 'pending'::text, 'on-hold'::text, 'completed'::text, 'rejected'::text])))
 index wms.ticket ticket_agreement_id_idx CREATE INDEX ticket_agreement_id_idx ON wms.ticket USING btree (company_id, agreement_id)
 index wms.ticket ticket_assignee_user_account_id_status_idx CREATE INDEX ticket_assignee_user_account_id_status_idx ON wms.ticket USING btree (company_id, assignee_user_account_id, status)
+index wms.ticket ticket_booked_pickup_id_key CREATE UNIQUE INDEX ticket_booked_pickup_id_key ON wms.ticket USING btree (company_id, booked_pickup_id) WHERE (booked_pickup_id IS NOT NULL)
+index wms.ticket ticket_booked_route_id_idx CREATE INDEX ticket_booked_route_id_idx ON wms.ticket USING btree (company_id, booked_route_id)
 index wms.ticket ticket_charge_product_id_idx CREATE INDEX ticket_charge_product_id_idx ON wms.ticket USING btree (company_id, charge_product_id)
 index wms.ticket ticket_container_id_idx CREATE INDEX ticket_container_id_idx ON wms.ticket USING btree (company_id, container_id)
 index wms.ticket ticket_created_by_idx CREATE INDEX ticket_created_by_idx ON wms.ticket USING btree (company_id, created_by)
@@ -3161,4 +3167,5 @@ journal 1792871277838 b4492acfde0d00f5427e247e23084a6456b437ce0e06448a61d0ceac11
 journal 1792881799168 ecb337207906f39fb071c6c0e89498db565cd57067d8d8de0648890a8bbf3e05
 journal 1792906810423 ddf063e560d278c8dd992e167b9e832f15a7274b0aea5d3697a24032d4148e3d
 journal 1792910180662 bdf348f115765c8b7211582f89fb81398b265de911665adda8a6b14839cc99c6
+journal 1792911868439 ba0c23715adea091b0deb7cd195c022dd79454d665aa735400c2650e8638cb94
 pgboss-version 42

@@ -150,6 +150,12 @@ describe("the dispatcher's commands", () => {
     }
   })
 
+  test("a stop may name the ticket it is booked to answer, by id; the API holds the ticket to the stop (O3c of #290)", () => {
+    assert.equal(PickupAdd.parse({ service: "deliver", containerId: ID, subscriptionId: OTHER, ticketId: THIRD }).ticketId, THIRD)
+    assert.equal(PickupAdd.parse({ containerId: ID }).ticketId, undefined)
+    assert.deepEqual(refusal(PickupAdd.safeParse({ containerId: ID, ticketId: "T-8831" })).map((issue) => issue.path), ["ticketId"])
+  })
+
   test("a pickup carries its bookings, null where its service books none, and reads one from before them as booking none", () => {
     const booked = { ...pickup, service: "swap", subscriptionId: null, warehouseId: THIRD, replacementContainerId: OTHER }
     assert.deepEqual(Pickup.parse(booked), booked)

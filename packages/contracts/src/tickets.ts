@@ -116,6 +116,15 @@ export const ticketFields = {
   chargeProductId: Id.nullable().default(null),
   /** When the ticket was completed or rejected; null while open. */
   closedAt: IsoDateTime.nullable(),
+  /**
+   * The stop the office booked to answer the ticket (O3c of #290) — a
+   * container request's delivery, an overflow's emptying, a defect's repair or
+   * swap — its route and its pickup, both or neither: the latest booking, a
+   * missed one's story being in the comments. Absent on an event the outbox
+   * took before O3c, read as none.
+   */
+  bookedRouteId: Id.nullable().default(null),
+  bookedPickupId: Id.nullable().default(null),
 }
 
 export const Ticket = z.object(ticketFields).refine(labelMatches, labelIsTheNumber)

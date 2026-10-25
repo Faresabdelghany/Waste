@@ -203,6 +203,8 @@ export const PickupAdd = z
     sharedCollectionPointId: Id.nullable().optional(),
     wasteFractionId: Id.nullable().optional(),
     note: Paragraph.nullable().optional(),
+    /** The ticket the stop is booked to answer (O3c of #290): an open container request, overflow or defect of the route's project, whose container and place the stop is held to; it then names this stop as its booking. */
+    ticketId: Id.nullable().optional(),
   })
   .superRefine(addedStopIssues)
 export type PickupAdd = z.infer<typeof PickupAdd>

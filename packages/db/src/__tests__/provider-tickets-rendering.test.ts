@@ -2,7 +2,8 @@
 // `ticket_source_one_of` and `ticket_event_visibility_one_of` dropped and
 // added again in their grown spelling, each with `service-provider` — four
 // statements diffed from the two tables as 0024 still had them
-// (ticket-as-of.ts), since an applied file is never edited;
+// (ticket-as-of.ts) to the ticket as 0031 left it, before O3c (#290) booked
+// a stop on it, and to today's history, since an applied file is never edited;
 // resolution-rendering.test.ts maps today's tables back (`CHANGED_LATER`).
 // Then migration 0031, which is exactly those statements under its header:
 // no table is new, so nothing is hand-written, and every source and
