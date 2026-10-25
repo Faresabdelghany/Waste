@@ -2,7 +2,7 @@ import assert from "node:assert/strict"
 import { describe, test } from "node:test"
 
 import { OCCURRED_WINDOW_ORDERED } from "../stock"
-import { BOTH_GROSS_AND_TARE, NET_IS_GROSS_LESS_TARE, Unload, UnloadCreate, UnloadListQuery, unloadWeights, weightsAddUp, weightsPaired } from "../unloads"
+import { BOTH_GROSS_AND_TARE, NET_IS_GROSS_LESS_TARE, SAY_WHY_REFUSED, Unload, UnloadCreate, UnloadListQuery, unloadWeights, weightsAddUp, weightsPaired } from "../unloads"
 import { refusal, refusesWhatTheServerOwns } from "./expect"
 
 const ID = "01a0d3a5-e5e0-7000-8000-000000000001"
@@ -36,6 +36,8 @@ const unload = {
   objectKey: `${OTHER}/${THIRD}/${ID}.jpg`,
   note: null,
   weightReview: CAPTURED,
+  refusal: null,
+  load: null,
 }
 
 describe("the weights rule", () => {
@@ -75,6 +77,24 @@ describe("Unload", () => {
     assert.deepEqual(refusal(Unload.safeParse(without)).map((issue) => issue.path), ["weightReview"], "every unload has a reading")
     assert.deepEqual(refusal(Unload.safeParse({ ...unload, weightReview: null })).map((issue) => issue.path), ["weightReview"])
     assert.deepEqual(refusal(Unload.safeParse({ ...unload, weightReview: { ...CAPTURED, status: "needs-review" } })).map((issue) => issue.path), ["weightReview.status"], "the prototype's name is not a token")
+  })
+})
+
+describe("the weighbridge on an unload (O9 of #290)", () => {
+  test("a refused load carries the station's reason and words, and a row from before reads as taken, with nothing weighed on board", () => {
+    const refused = { ...unload, refusal: { reason: "contamination", note: "Plastic bags in the paper" } }
+    assert.deepEqual(Unload.parse(refused), refused)
+    const measured = { ...unload, load: { onBoardKg: 3_900, deviationPercent: 7.7, withinTolerance: false } }
+    assert.deepEqual(Unload.parse(measured), measured)
+    const { refusal: _refusal, load: _load, ...before } = unload
+    assert.deepEqual(Unload.parse(before), unload)
+  })
+
+  test("the office's capture may say the station refused it, from the list, and other in words", () => {
+    const body = { unloadingStationId: OTHER, wasteFractionId: THIRD, netKg: 4_200, occurredAt: WHEN }
+    assert.deepEqual(UnloadCreate.parse({ ...body, refusal: { reason: "hazardous" } }).refusal, { reason: "hazardous" })
+    assert.deepEqual(refusal(UnloadCreate.safeParse({ ...body, refusal: { reason: "other" } })), [{ path: "refusal.note", message: SAY_WHY_REFUSED }])
+    assert.deepEqual(refusal(UnloadCreate.safeParse({ ...body, refusal: { reason: "smelly" } })).map((issue) => issue.path), ["refusal.reason"])
   })
 })
 

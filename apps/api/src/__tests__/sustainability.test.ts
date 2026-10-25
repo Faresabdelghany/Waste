@@ -2,8 +2,8 @@
 // emission factor added, ended and refused where it overlaps another; and a
 // Customer's report over a completed route — a stop weighed by its own weight
 // proof, two sharing the route's unloaded kilograms less that by volume
-// whoever's they are, a fraction with no unload unmeasured, a rejected unload
-// counting for nothing, and a stop with no container counted at its site as
+// whoever's they are, a fraction with no unload unmeasured, a load the
+// station refused and a rejected unload counting for nothing, and a stop with no container counted at its site as
 // not attributed — with the CO₂e of the weighed kilograms, the recycling
 // rate, its file, and its two grants.
 import assert from "node:assert/strict"
@@ -114,12 +114,13 @@ describe("the sustainability report", { skip: database.skip || owner.skip }, () 
     await withCompany(pool.db, a.companyId, async (tx: Tx) => {
       await tx.insert(pickup).values({ id: testId(), companyId: a.companyId, projectId: a.projects.copenhagen.id, routeId: collected.id, containerId: null, position: 6, origin: "office", propertyId: ex.properties.parkvej.id, wasteFractionId: ex.fractions.residual.id, ...done })
     })
-    // The weighbridge: 130 kg of residual counted, a glass load refused at the gate.
-    const capture = async (values: { wasteFractionId: string; netKg: number }) =>
+    // The weighbridge: 130 kg of residual counted, a glass load refused at the gate (O9 of #290), and a residual reading the office rejected.
+    const capture = async (values: { wasteFractionId: string; netKg: number; refusal?: { reason: string } }) =>
       created(olivia, `/routes/${collected.id}/unloads`, await olivia(`/routes/${collected.id}/unloads`, { method: "POST", body: { unloadingStationId: fleet.stations.amager.id, occurredAt: at(DAY, "12:00").toISOString(), ...values } }), Unload, "/unloads")
     await capture({ wasteFractionId: ex.fractions.residual.id, netKg: 130 })
-    const glass = await capture({ wasteFractionId: ex.fractions.glass.id, netKg: 50 })
-    assert.equal((await olivia(`/unloads/${glass.id}/reject`, { method: "POST", body: { note: "Refused at the gate" } })).status, 201)
+    await capture({ wasteFractionId: ex.fractions.glass.id, netKg: 50, refusal: { reason: "fraction-not-accepted" } })
+    const misread = await capture({ wasteFractionId: ex.fractions.residual.id, netKg: 70 })
+    assert.equal((await olivia(`/unloads/${misread.id}/reject`, { method: "POST", body: { note: "The weighbridge misread" } })).status, 201)
   })
 
   after(async () => {

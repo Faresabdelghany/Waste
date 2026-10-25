@@ -7,6 +7,7 @@ import assert from "node:assert/strict"
 import { describe, test } from "node:test"
 
 import { COMMAND_SURFACES, commandSurfaceFor, initialFiltersOf, listShows, primaryOf, type CommandSurface, type ModuleList } from "@/components/waste/commands/command-surfaces"
+import { RecordUnloadSurface } from "@/components/waste/commands/provider-money-surfaces"
 import type { BusinessRecord } from "@/lib/data/business-modules"
 import { emptyBusinessFilters } from "@waste/domain/business-filters"
 
@@ -84,7 +85,10 @@ describe("a module's list on the Pilot (#147)", () => {
     const award = { status: "Active", facts: { "Planning areas": "Østerbro Zone 2 · Nordhavn" } } as unknown as BusinessRecord
     assert.deepEqual(areas!.readers({ accountId: null }).planningAreas!(award), ["Østerbro Zone 2", "Nordhavn"])
     assert.deepEqual(initialFiltersOf(COMMAND_SURFACES["route-studio.weights"]), { ...emptyBusinessFilters, statuses: ["Needs review"] })
-    assert.equal(COMMAND_SURFACES["route-studio.weights"].primary, null, "an unload is the Driver App's, never the office's")
+    // Record unload: the office's capture of a weighbridge ticket the device did not record (O9 of #290).
+    assert.equal(COMMAND_SURFACES["route-studio.weights"].primary, RecordUnloadSurface)
+    const weighed = { status: "Needs review", facts: { Tolerance: "Above tolerance" } } as unknown as BusinessRecord
+    assert.deepEqual(COMMAND_SURFACES["route-studio.weights"].list!.readers({ accountId: null }).tolerance!(weighed), ["Above tolerance"], "the Tolerance filter reads the load on board against the project's")
   })
 
   test("offers a surface's own primary with the create grant alone, whatever the fixture form; the module's form only where it has one (#186)", () => {

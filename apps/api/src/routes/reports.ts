@@ -466,7 +466,10 @@ async function revenueReport(tx: Tx, principal: Principal, query: RevenueReportQ
   }
 }
 
-const noWeights = () => ({ netKg: 0, approvedKg: 0, capturedKg: 0, unloads: 0, rejectedKg: 0, rejectedUnloads: 0 })
+const noWeights = () => ({ netKg: 0, approvedKg: 0, capturedKg: 0, unloads: 0, rejectedKg: 0, rejectedUnloads: 0, refusedKg: 0, refusedUnloads: 0 })
+
+/** Whether the station refused the load (O9 of #290): a refused load's weight left on the truck, so it is tipped tonnage nowhere. */
+const refused = sql<boolean>`${unload.refusalReason} is not null`
 
 async function tonnageReport(tx: Tx, principal: Principal, query: TonnageReportQuery): Promise<TonnageReport> {
   const { projectId, wasteFractionId, unloadingStationId } = query
@@ -483,6 +486,7 @@ async function tonnageReport(tx: Tx, principal: Principal, query: TonnageReportQ
       unloadingStationName: unloadingStation.name,
       day: occurred,
       status,
+      refused,
       netKg: total(unload.netKg),
       n: count(),
     })
@@ -499,7 +503,7 @@ async function tonnageReport(tx: Tx, principal: Principal, query: TonnageReportQ
         unloadingStationId === undefined ? undefined : eq(unload.unloadingStationId, unloadingStationId),
       ),
     )
-    .groupBy(unload.projectId, unload.wasteFractionId, wasteFraction.name, unload.unloadingStationId, unloadingStation.name, occurred, status)
+    .groupBy(unload.projectId, unload.wasteFractionId, wasteFraction.name, unload.unloadingStationId, unloadingStation.name, occurred, status, refused)
   // A pickup's weight counts where the pickup was collected, on its route's operating day as the service report counts the pickup, by its latest
   // reading: a weight proof appended later is the later word, as a review is. Only the window's routes' proofs are read.
   const latest = tx
@@ -541,9 +545,13 @@ async function tonnageReport(tx: Tx, principal: Principal, query: TonnageReportQ
     const row = rows.get(key) ?? { ...span, projectId: group.projectId, wasteFractionId: group.wasteFractionId, wasteFractionName: group.wasteFractionName, unloadingStationId: group.unloadingStationId, unloadingStationName: group.unloadingStationName, ...noWeights() }
     rows.set(key, row)
     for (const tally of [row, totals]) {
+      // A rejected reading is no weight to trust wherever the load went; a refused load's weight is the truck's still.
       if (standing === "rejected") {
         tally.rejectedKg += group.netKg
         tally.rejectedUnloads += group.n
+      } else if (group.refused) {
+        tally.refusedKg += group.netKg
+        tally.refusedUnloads += group.n
       } else {
         tally.netKg += group.netKg
         tally.unloads += group.n
@@ -592,6 +600,7 @@ async function wasteDataReport(tx: Tx, principal: Principal, query: WasteDataRep
       wasteFractionName: wasteFraction.name,
       wasteCode: wasteFraction.wasteCode,
       status,
+      refused,
       netKg: total(unload.netKg),
       n: count(),
     })
@@ -601,7 +610,7 @@ async function wasteDataReport(tx: Tx, principal: Principal, query: WasteDataRep
     .innerJoin(unloadingStation, and(eq(unloadingStation.companyId, unload.companyId), eq(unloadingStation.id, unload.unloadingStationId)))
     .leftJoinLateral(review, sql`true`)
     .where(and(fenced(unload, principal, projectId), instantInWindow(unload.occurredAt, window)))
-    .groupBy(unload.projectId, project.name, project.kind, unload.unloadingStationId, unloadingStation.name, unload.wasteFractionId, wasteFraction.name, wasteFraction.wasteCode, status)
+    .groupBy(unload.projectId, project.name, project.kind, unload.unloadingStationId, unloadingStation.name, unload.wasteFractionId, wasteFraction.name, wasteFraction.wasteCode, status, refused)
 
   const rows: WasteDataRow[] = []
   const unreviewed: Extract<DomainWarning, { kind: "not-reviewed" }>[] = []
@@ -609,8 +618,8 @@ async function wasteDataReport(tx: Tx, principal: Principal, query: WasteDataRep
   const notMunicipal: Extract<DomainWarning, { kind: "not-a-municipality" }>[] = []
   for (const group of groups) {
     const standing = unloadStanding(group.status as WeightReviewStatus)
-    // A rejected weight is filed nowhere, and a corrected one through its correction.
-    if (standing === "rejected" || standing === "superseded") continue
+    // A rejected weight is filed nowhere, nor a load the station refused (O9 of #290), and a corrected one through its correction.
+    if (standing === "rejected" || standing === "superseded" || group.refused) continue
     const place = { projectId: group.projectId, municipality: group.municipality, unloadingStationId: group.unloadingStationId, unloadingStationName: group.unloadingStationName, wasteFractionId: group.wasteFractionId, wasteFractionName: group.wasteFractionName }
     if (standing !== "approved") {
       unreviewed.push({ kind: "not-reviewed", ...place, unloads: group.n, netKg: group.netKg })

@@ -18,9 +18,10 @@ import { Label } from "@/components/ui/label"
 import { Textarea } from "@/components/ui/textarea"
 import { PhotoField } from "@/components/waste/driver/driver-proof-dialogs"
 import type { DriverMe } from "@waste/contracts/driver-commands"
-import { DRIVER_PICKUP_REASONS, type DriverPickupReason } from "@waste/domain/execution/vocabulary"
+import { DRIVER_PICKUP_REASONS, UNLOAD_REFUSAL_REASONS, type DriverPickupReason, type UnloadRefusalReason } from "@waste/domain/execution/vocabulary"
 import { NOTE_MAX, wholeKilograms, type PilotBody, type ProofBytes } from "@/lib/driver/commands"
 import { DRIVER_REASON_LABELS } from "@/lib/driver/route-view"
+import { REFUSAL_LABELS, SAY_WHY_REFUSED } from "@/lib/data/unload-refusals"
 
 const SELECT = "border-input dark:bg-input/30 h-11 w-full rounded-md border bg-transparent px-3 text-base shadow-xs outline-none focus-visible:border-ring focus-visible:ring-[3px] focus-visible:ring-ring/50"
 
@@ -114,9 +115,14 @@ export function UnloadDialog({ open, onOpenChange, me, onConfirm }: DialogProps 
   const [tare, setTare] = useState("")
   const [ticket, setTicket] = useState("")
   const [note, setNote] = useState("")
+  // The station turned the load away (O9 of #290): why, and in its words, which another reason needs.
+  const [refused, setRefused] = useState(false)
+  const [reason, setReason] = useState<UnloadRefusalReason>("contamination")
+  const [refusalNote, setRefusalNote] = useState("")
   const station = me.unloadingStations.find((candidate) => candidate.id === stationId)
-  // What the station accepts where it says; any of the company's where it says nothing.
-  const fractions = station !== undefined && station.wasteFractionIds.length > 0 ? me.wasteFractions.filter((fraction) => station.wasteFractionIds.includes(fraction.id)) : me.wasteFractions
+  // What the station accepts where it says; any of the company's where it says nothing, or where it refused the load.
+  const fractions = !refused && station !== undefined && station.wasteFractionIds.length > 0 ? me.wasteFractions.filter((fraction) => station.wasteFractionIds.includes(fraction.id)) : me.wasteFractions
+  const wordless = refused && reason === "other" && refusalNote.trim() === ""
   const chosenFraction = fractions.some((fraction) => fraction.id === fractionId) ? fractionId : (fractions[0]?.id ?? "")
   const weighed = gross !== "" && tare !== ""
   const netKg = weighed ? (wholeKilograms(gross) ?? 0) - (wholeKilograms(tare) ?? 0) : wholeKilograms(net)
@@ -124,8 +130,9 @@ export function UnloadDialog({ open, onOpenChange, me, onConfirm }: DialogProps 
 
   const submit = (event: FormEvent) => {
     event.preventDefault()
-    if (stationId === "" || chosenFraction === "" || netKg === undefined || netKg < 1 || pairMissing) return
+    if (stationId === "" || chosenFraction === "" || netKg === undefined || netKg < 1 || pairMissing || wordless) return
     const text = note.trim()
+    const words = refusalNote.trim()
     onConfirm({
       unloadingStationId: stationId,
       wasteFractionId: chosenFraction,
@@ -133,9 +140,11 @@ export function UnloadDialog({ open, onOpenChange, me, onConfirm }: DialogProps 
       ...(weighed ? { grossKg: wholeKilograms(gross), tareKg: wholeKilograms(tare) } : {}),
       ...(ticket.trim() === "" ? {} : { weighbridgeTicket: ticket.trim() }),
       ...(text === "" ? {} : { note: text }),
+      ...(refused ? { refusal: { reason, ...(words === "" ? {} : { note: words }) } } : {}),
     })
     onOpenChange(false)
-    for (const clear of [setNet, setGross, setTare, setTicket, setNote]) clear("")
+    for (const clear of [setNet, setGross, setTare, setTicket, setNote, setRefusalNote]) clear("")
+    setRefused(false)
   }
 
   return (
@@ -195,6 +204,26 @@ export function UnloadDialog({ open, onOpenChange, me, onConfirm }: DialogProps 
             <Label htmlFor={`${id}-note`}>Note (optional)</Label>
             <Textarea id={`${id}-note`} value={note} maxLength={NOTE_MAX} onChange={(event) => setNote(event.target.value)} />
           </div>
+          <label className="flex items-center gap-2 text-sm" htmlFor={`${id}-refused`}>
+            <input id={`${id}-refused`} type="checkbox" className="h-5 w-5" checked={refused} onChange={(event) => setRefused(event.target.checked)} />
+            The station refused the load
+          </label>
+          {refused && (
+            <>
+              <NativeSelect id={`${id}-reason`} label="Why it was refused" value={reason} onChange={(value) => setReason(value as UnloadRefusalReason)}>
+                {UNLOAD_REFUSAL_REASONS.map((candidate) => (
+                  <option key={candidate} value={candidate}>
+                    {REFUSAL_LABELS[candidate]}
+                  </option>
+                ))}
+              </NativeSelect>
+              <div className="flex flex-col gap-1.5">
+                <Label htmlFor={`${id}-refusal-note`}>{reason === "other" ? "In the station's words" : "In the station's words (optional)"}</Label>
+                <Textarea id={`${id}-refusal-note`} value={refusalNote} maxLength={NOTE_MAX} required={reason === "other"} onChange={(event) => setRefusalNote(event.target.value)} />
+                {wordless && <p className="text-sm text-destructive">{SAY_WHY_REFUSED}.</p>}
+              </div>
+            </>
+          )}
           <DialogFooter>
             <Button type="button" variant="outline" onClick={() => onOpenChange(false)}>
               Cancel

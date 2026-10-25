@@ -31,8 +31,8 @@ export const SETTLEMENTS_LIST: ModuleList = {
   initial: {},
 }
 
-/** The weights open on what the desk has still to review (#148). */
+/** The weights open on what the desk has still to review (#148), and filter by the load on board against the project's tolerance (O9 of #290). */
 export const WEIGHTS_LIST: ModuleList = {
-  readers: () => ({ statuses: status, routes: fact("Route"), wasteFractions: fact("Waste fraction") }),
+  readers: () => ({ statuses: status, routes: fact("Route"), wasteFractions: fact("Waste fraction"), tolerance: fact("Tolerance") }),
   initial: { statuses: [REVIEW_LABELS.captured] },
 }

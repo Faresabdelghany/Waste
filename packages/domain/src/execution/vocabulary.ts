@@ -85,6 +85,8 @@ export const EXECUTION_SOURCES = ["driver-app", "dispatch", "integration"] as co
 export const DRIVER_COMMAND_KINDS = ["start-route", "arrive", "complete-pickup", "skip-pickup", "fail-pickup", "report-problem", "add-photo", "add-weight", "add-signature", "add-note", "record-unload", "pause", "resume", "end-route"] as const
 /** What the receipt stores of a command; a replay answers the stored one again and stores nothing. */
 export const COMMAND_OUTCOMES = ["applied", "rejected"] as const
+/** Why a station refused a load (O9 of #290): the facility's side of an unload, apart from weight review's `rejected`, which is the office rejecting a weighbridge reading. */
+export const UNLOAD_REFUSAL_REASONS = ["contamination", "fraction-not-accepted", "hazardous", "overweight", "other"] as const
 /** What the outbox tells the other contexts: Execution's twelve, then Resolution's three (Issue #109), which Finance reads, then Finance's two (Issue #112), which the export reads. */
 export const OUTBOX_KINDS = ["route-dispatched", "route-started", "route-completed", "route-cancelled", "route-reassigned", "pickup-completed", "pickup-failed", "pickup-skipped", "pickup-problem-reported", "pickup-corrected", "unload-recorded", "command-rejected", "ticket-opened", "ticket-completed", "ticket-rejected", "invoice-issued", "settlement-closed", "application-decided"] as const
 /** What an outbox event is about; the payload is that resource on the wire. */
@@ -103,6 +105,7 @@ export type ProofKind = (typeof PROOF_KINDS)[number]
 export type ExecutionSource = (typeof EXECUTION_SOURCES)[number]
 export type DriverCommandKind = (typeof DRIVER_COMMAND_KINDS)[number]
 export type CommandOutcome = (typeof COMMAND_OUTCOMES)[number]
+export type UnloadRefusalReason = (typeof UNLOAD_REFUSAL_REASONS)[number]
 export type OutboxKind = (typeof OUTBOX_KINDS)[number]
 export type OutboxAggregate = (typeof OUTBOX_AGGREGATES)[number]
 export type ContaminantCodeStatus = (typeof CONTAMINANT_CODE_STATUSES)[number]
@@ -181,6 +184,7 @@ export const EXECUTION_VOCABULARIES = {
   EXECUTION_SOURCES,
   DRIVER_COMMAND_KINDS,
   COMMAND_OUTCOMES,
+  UNLOAD_REFUSAL_REASONS,
   OUTBOX_KINDS,
   OUTBOX_AGGREGATES,
   CONTAMINANT_CODE_STATUSES,

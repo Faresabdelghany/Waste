@@ -4,9 +4,10 @@ import { after, before, describe, test } from "node:test"
 import { Id } from "@waste/contracts/ids"
 import { Page } from "@waste/contracts/pagination"
 import { OCCURRED_WINDOW_ORDERED } from "@waste/contracts/stock"
-import { BOTH_GROSS_AND_TARE, NET_IS_GROSS_LESS_TARE, Unload } from "@waste/contracts/unloads"
+import { BOTH_GROSS_AND_TARE, NET_IS_GROSS_LESS_TARE, SAY_WHY_REFUSED, Unload } from "@waste/contracts/unloads"
 import { createDb, type Database, type Tx } from "@waste/db/client"
 import { outboxEvent } from "@waste/db/schema/execution"
+import { unloadingStation } from "@waste/db/schema/places"
 import { withCompany } from "@waste/db/tenant"
 import { and, asc, eq } from "drizzle-orm"
 
@@ -152,8 +153,9 @@ describe("the unload endpoints", { skip: database.skip || owner.skip }, () => {
       const owned = await refused(await post(routeId, ticket({ sessionId: testId() })), 400)
       assert.ok(owned.errors?.some((error) => /sessionId/.test(error.message)), "the server owns the session, the source and the recorder: a member of the caller's is refused by name")
       assert.deepEqual((await refused(await post(routeId, { netKg: 100 }), 400)).errors?.map((error) => error.path).sort(), ["occurredAt", "unloadingStationId", "wasteFractionId"])
-      const glass = await record(routeId, ticket({ wasteFractionId: ex.fractions.glass.id, netKg: 600, occurredAt: at(ex.day, "12:55").toISOString() }))
-      assert.equal(glass.wasteFractionId, ex.fractions.glass.id, "any fraction of the company, whatever the station is set to accept: a full truck unloads where it can")
+      // Any station of the company, since a full truck unloads where it can; but an accepted load is of a fraction the station takes (O9 of #290).
+      const notTaken = await refused(await post(routeId, ticket({ wasteFractionId: ex.fractions.glass.id, netKg: 600, occurredAt: at(ex.day, "12:55").toISOString() })), 400)
+      assert.deepEqual(notTaken.errors, [{ path: "wasteFractionId", message: "Station ARC Amager Bakke does not take Glass" }])
     })
 
     test("refuses a route that has not run and a cancelled one (409), one out of reach (404), and a role without create (403)", async () => {
@@ -172,10 +174,88 @@ describe("the unload endpoints", { skip: database.skip || owner.skip }, () => {
     })
   })
 
+  describe("the weighbridge in the office (O9 of #290)", () => {
+    test("a load the station refused carries its reason and its words, of any fraction, and `other` needs the words; a station that names no fraction takes none", async () => {
+      const routeId = ex.routes.completed.id
+      const turnedAway = await record(routeId, ticket({ wasteFractionId: ex.fractions.glass.id, netKg: 640, occurredAt: at(ex.day, "12:56").toISOString(), refusal: { reason: "fraction-not-accepted", note: "Glass in the residual bay" } }))
+      assert.deepEqual(turnedAway.refusal, { reason: "fraction-not-accepted", note: "Glass in the residual bay" })
+      assert.deepEqual(await one(turnedAway.id), turnedAway)
+      const [event] = await eventsAbout(turnedAway.id)
+      assert.deepEqual(Unload.parse(event.payload).refusal, turnedAway.refusal, "the outbox carries the refusal with the unload")
+      assert.deepEqual((await record(routeId, ticket({ occurredAt: at(ex.day, "12:57").toISOString(), refusal: { reason: "overweight" } }))).refusal, { reason: "overweight", note: null }, "a reason from the list may stand alone")
+      assert.equal((await record(routeId, ticket({ occurredAt: at(ex.day, "12:58").toISOString() }))).refusal, null, "a load the station took")
+      const wordless = await refused(await post(routeId, ticket({ refusal: { reason: "other" } })), 400)
+      assert.deepEqual(wordless.errors, [{ path: "refusal.note", message: SAY_WHY_REFUSED }])
+      const unknown = await refused(await post(routeId, ticket({ refusal: { reason: "smelly" } })), 400)
+      assert.deepEqual(unknown.errors?.map((error) => error.path), ["refusal.reason"])
+
+      const bare = testId()
+      await withCompany(pool.db, a.companyId, async (tx: Tx) => {
+        await tx.insert(unloadingStation).values({ id: bare, companyId: a.companyId, code: "GLASVAERK", name: "Glasværket", address: "Kraftværksvej 1, 2300 København S", location: { type: "Point", coordinates: [12.61, 55.67] }, ownership: "external", weighbridge: true, status: "active" })
+      })
+      const none = await refused(await post(routeId, ticket({ unloadingStationId: bare })), 400)
+      assert.deepEqual(none.errors, [{ path: "wasteFractionId", message: "Station Glasværket has no accepted fractions set" }])
+      assert.equal((await record(routeId, ticket({ unloadingStationId: bare, occurredAt: at(ex.day, "12:59").toISOString(), refusal: { reason: "fraction-not-accepted" } }))).unloadingStationId, bare, "and a load it refused is recorded there")
+    })
+
+    test("each unload reads what the stops of its fraction weighed on board since the route's last accepted unload of it, against the project's tolerance", async () => {
+      const route = await seedRoute(pool, a, fleet, ex, {
+        status: "completed",
+        plannedDriverId: fleet.drivers.mads.id,
+        plannedVehicleId: fleet.vehicles.wh24.id,
+        deviceId: "device-mads-9",
+        pickups: [
+          { containerId: ex.containers.bin1.id, propertyId: ex.properties.parkvej.id, status: "completed", arrivedAt: at(ex.day, "08:00"), outcomeAt: at(ex.day, "08:05") },
+          { containerId: ex.containers.bin2.id, propertyId: ex.properties.havnegade.id, status: "completed", arrivedAt: at(ex.day, "08:30"), outcomeAt: at(ex.day, "08:35") },
+          { containerId: ex.containers.bin3.id, propertyId: ex.properties.norrebrogade.id, status: "completed", arrivedAt: at(ex.day, "10:30"), outcomeAt: at(ex.day, "10:35") },
+        ],
+        proofs: [
+          { kind: "weight", pickupIndex: 0, occurredAt: at(ex.day, "08:04"), weightKg: 3_000 },
+          { kind: "weight", pickupIndex: 1, occurredAt: at(ex.day, "08:34"), weightKg: 1_000 },
+          { kind: "weight", pickupIndex: 2, occurredAt: at(ex.day, "10:34"), weightKg: 2_000 },
+          // The first stop weighed again after the truck tipped: its latest weight counts, where it was first weighed.
+          { kind: "weight", pickupIndex: 0, occurredAt: at(ex.day, "09:30"), weightKg: 3_200 },
+        ],
+      })
+      const projectId = ex.routes.completed.projectId
+      const first = await record(route.id, ticket({ netKg: 4_410, occurredAt: at(ex.day, "09:00").toISOString() }))
+      assert.deepEqual(first.load, { onBoardKg: 4_200, deviationPercent: 5, withinTolerance: true }, "5% over what was weighed on board, the re-weighed stop counted in the load it was tipped in: within the project's 5%")
+      const turnedAway = await record(route.id, ticket({ netKg: 2_000, occurredAt: at(ex.day, "11:00").toISOString(), refusal: { reason: "contamination" } }))
+      assert.deepEqual(turnedAway.load, { onBoardKg: 2_000, deviationPercent: 0, withinTolerance: true })
+      const tipped = await record(route.id, ticket({ netKg: 2_500, occurredAt: at(ex.day, "11:30").toISOString() }))
+      assert.deepEqual(tipped.load, { onBoardKg: 2_000, deviationPercent: 25, withinTolerance: false }, "the refused load stayed on board, so the next unload carries it")
+      const glass = await record(route.id, ticket({ wasteFractionId: ex.fractions.glass.id, netKg: 300, occurredAt: at(ex.day, "11:40").toISOString(), refusal: { reason: "fraction-not-accepted" } }))
+      assert.equal(glass.load, null, "no stop of its fraction was weighed")
+
+      const listed = (await page(olivia, `?limit=200&routeId=${route.id}`)).items
+      assert.deepEqual(
+        listed.map((row) => row.load?.onBoardKg ?? null),
+        [4_200, 2_000, 2_000, null],
+      )
+      const detail = (await (await olivia(`/routes/${route.id}`)).json()) as { unloads: Unload[] }
+      assert.deepEqual(detail.unloads, listed, "the route's detail reads the same")
+      // Weight control's correction is a new row at the instant of the one it corrects, and reads the same load.
+      const corrected = await olivia(`/unloads/${first.id}/correct`, { method: "POST", body: { netKg: 4_000, note: "Net misread at the bridge" } })
+      assert.equal(corrected.status, 201, JSON.stringify(await corrected.clone().json()))
+      const { correctionUnloadId } = (await corrected.json()) as { correctionUnloadId: string }
+      assert.deepEqual((await one(correctionUnloadId)).load, { onBoardKg: 4_200, deviationPercent: -4.8, withinTolerance: true })
+      assert.deepEqual((await one(first.id)).load, first.load, "and the corrected row keeps its own reading")
+
+      // The tolerance is the project's, read at answer.
+      const loosened = await olivia(`/projects/${projectId}`, { method: "PATCH", body: { weightTolerancePercent: 25 } })
+      assert.equal(loosened.status, 200, JSON.stringify(await loosened.clone().json()))
+      try {
+        assert.equal((await one(tipped.id)).load?.withinTolerance, true)
+      } finally {
+        await olivia(`/projects/${projectId}`, { method: "PATCH", body: { weightTolerancePercent: 5 } })
+      }
+    })
+  })
+
   describe("GET /unloads and GET /unloads/:id", () => {
     test("lists the caller's projects' unloads oldest first, filters them by route, station, fraction and the window over occurredAt, and shows a foreman nothing", async () => {
       const early = await record(harbors.id, ticket({ occurredAt: at(ex.day, "10:00").toISOString(), netKg: 4200 }))
-      const late = await record(harbors.id, ticket({ occurredAt: at(ex.day, "12:30").toISOString(), netKg: 3100, wasteFractionId: ex.fractions.glass.id }))
+      const late = await record(harbors.id, ticket({ occurredAt: at(ex.day, "12:30").toISOString(), netKg: 3100, wasteFractionId: ex.fractions.glass.id, refusal: { reason: "fraction-not-accepted" } }))
       const everything = await page(olivia)
       const ids = everything.items.map((row) => row.id)
       assert.deepEqual(

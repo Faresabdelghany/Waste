@@ -52,6 +52,7 @@ const columns = {
   publicSlug: project.publicSlug,
   paymentTermsDays: project.paymentTermsDays,
   paymentReferenceScheme: project.paymentReferenceScheme,
+  weightTolerancePercent: project.weightTolerancePercent,
   createdAt: project.createdAt,
   updatedAt: project.updatedAt,
 }
@@ -73,6 +74,7 @@ function projectOf(row: Row): Project {
     publicSlug: row.publicSlug,
     paymentTermsDays: row.paymentTermsDays,
     paymentReferenceScheme: row.paymentReferenceScheme as PaymentReferenceScheme,
+    weightTolerancePercent: row.weightTolerancePercent,
     ...stampsOf(row),
   }
 }
@@ -202,7 +204,7 @@ export function projectRoutes(guard: MiddlewareHandler<AuthEnv>) {
         operationId: "patchProject",
         summary: "Change a project",
         description:
-          "Changes one project of the caller's company; every field is optional and at least one must be given. `weekend` replaces the days the project rests on with the list given, each of the seven named at most once; `holidayList` renames the list its holidays are looked up under, or as null takes it away, and a project without one rests on its weekend only, whatever collection calendars it has. `publicSlug` publishes the project on the public door under that name (`GET /public/<slug>`, ADR-0010), unique across every company; null unpublishes it: its public pages answer 404 from the next request, and an answer someone cached before (they may keep one for a minute) runs out within that minute. `paymentTermsDays` and `paymentReferenceScheme` (#291 C4) date and reference the invoices its next run issues — an issued invoice keeps its own — and a FI card's scheme needs the company's creditor number (409, `Set the company's FIK creditor number first: a FI card names it`), under the company's row lock.",
+          "Changes one project of the caller's company; every field is optional and at least one must be given. `weekend` replaces the days the project rests on with the list given, each of the seven named at most once; `holidayList` renames the list its holidays are looked up under, or as null takes it away, and a project without one rests on its weekend only, whatever collection calendars it has. `publicSlug` publishes the project on the public door under that name (`GET /public/<slug>`, ADR-0010), unique across every company; null unpublishes it: its public pages answer 404 from the next request, and an answer someone cached before (they may keep one for a minute) runs out within that minute. `paymentTermsDays` and `paymentReferenceScheme` (#291 C4) date and reference the invoices its next run issues — an issued invoice keeps its own — and a FI card's scheme needs the company's creditor number (409, `Set the company's FIK creditor number first: a FI card names it`), under the company's row lock; `weightTolerancePercent` is how far a weighbridge's net may differ from what the stops weighed on board before an unload reads as above tolerance, in whole percent from 1 to 100 (5 when a project is made without one).",
         security: BEARER_SECURITY,
         responses: {
           200: describeJson("The project as it now stands.", Project),

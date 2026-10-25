@@ -10,7 +10,8 @@ import { listAll } from "./tester"
 
 // The waste-data report on the API (#291 slice 29). A generated route of the
 // seeded tenant is started by the seeded driver through the driver door, and
-// the office captures three weighbridge tickets on it: residual waste,
+// the office captures three weighbridge tickets on it, at a station made for
+// the run that takes both fractions: residual waste,
 // approved; a fraction made for the run with no waste code, approved; and
 // more residual nobody reviews. The Dashboard's Compliance tab then files the
 // approved ones by municipality, station and fraction, as the API's report
@@ -67,9 +68,24 @@ test("the Compliance tab files the period's approved unloads with their waste co
   const fraction = (await ok(await api.post("/waste-fractions", { data: { key: `e2e-garden-${suffix}`, name: `E2E garden waste ${suffix}` } }), 201, "POST /waste-fractions")) as Fraction
   expect(fraction.wasteCode).toBeNull()
   const residual = (await listAll<Fraction>(api, "/waste-fractions")).find((candidate) => candidate.key === "residual")
-  const [station] = await listAll<Named>(api, "/unloading-stations")
-  if (residual === undefined || station === undefined) throw new Error("the seed has no residual fraction or no station")
+  if (residual === undefined) throw new Error("the seed has no residual fraction")
   expect(residual.wasteCode, "the seed codes residual waste").toBe("200301")
+  // A load the station took is of a fraction it takes (O9 of #290), so the run's fraction is tipped at a station of the run's own.
+  const station = (await ok(
+    await api.post("/unloading-stations", {
+      data: {
+        code: `E2E-WD-${suffix}`.toUpperCase(),
+        name: `E2E waste-data station ${suffix}`,
+        address: "Prøvestenen 4",
+        location: { type: "Point", coordinates: [12.6302, 55.6801] },
+        ownership: "external",
+        weighbridge: true,
+        wasteFractionIds: [residual.id, fraction.id],
+      },
+    }),
+    201,
+    "POST /unloading-stations",
+  )) as Named
 
   // The driver starts the route, the office captures on it while it runs, and the driver ends the day.
   const context = await freshContext(browser)

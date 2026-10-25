@@ -162,6 +162,7 @@ describe("the project endpoints", { skip: database.skip }, () => {
       assert.equal(created.name, "Nørrebro Collection")
       assert.equal(created.kind, "Contract")
       assert.equal(created.status, "onboarding")
+      assert.equal(created.weightTolerancePercent, 5, "the weighbridge's tolerance starts at 5% (O9 of #290)")
       assert.equal(created.createdAt, created.updatedAt)
       assert.deepEqual(await one(olivia, created.id), created, "and it is there on the next read")
       assert.ok((await page(olivia, "?limit=200")).items.some((project) => project.id === created.id))
@@ -350,6 +351,16 @@ describe("the project endpoints", { skip: database.skip }, () => {
       const week = Project.parse(await rested.json())
       assert.deepEqual(week.weekend, [], "a project may rest on no day at all")
       assert.equal(week.holidayList, null, "and once the list is gone it rests on its weekend only")
+
+      // The weighbridge's tolerance (O9 of #290): whole percent, 1 to 100.
+      const tolerant = await olivia(`/projects/${created.id}`, { method: "PATCH", body: { weightTolerancePercent: 8 } })
+      assert.equal(tolerant.status, 200, JSON.stringify(await tolerant.clone().json()))
+      assert.equal(Project.parse(await tolerant.json()).weightTolerancePercent, 8)
+      for (const out of [0, 101, 2.5]) {
+        const refused = await olivia(`/projects/${created.id}`, { method: "PATCH", body: { weightTolerancePercent: out } })
+        assert.equal(refused.status, 400, String(out))
+        assert.deepEqual((await readProblem(refused)).errors?.map((error) => error.path), ["weightTolerancePercent"], String(out))
+      }
     })
 
     test("refuses a weekend day outside the seven, one named twice, and a blank holiday list, naming the field and changing nothing", async () => {

@@ -65,8 +65,13 @@
 //                   the session with the command's id and copies the actual
 //                   assignment onto the route, `append-proof` writes the row
 //                   with the command's id, `arrive` and `pickup-outcome` move
-//                   the pickup, `append-unload` writes the row, `pause`,
-//                   `resume` and `end-route` move the session and the route,
+//                   the pickup, `append-unload` writes the row — and, for a
+//                   load the station took of a fraction it does not take,
+//                   opens the office an internal task in the station's
+//                   sentence, since the load is tipped and a rejection would
+//                   lose the reading (O9 of #290, routes/unload-writes.ts) —
+//                   `pause`, `resume` and `end-route` move the session and
+//                   the route,
 //                   `end-route` closing the open pickups as `skipped ·
 //                   route-ended` from its own `returning`. Every applied
 //                   command then moves `session.last_seen_at` to the
@@ -178,7 +183,7 @@ import { planContextOf, sequencedPickups } from "./plan-shapes"
 import {
   sessionColumns,
   sessionOf,
-  unloadOf,
+  unloadAnswered,
   unloadsFrom,
   type PickupRow,
   type ReceiptRow,
@@ -190,6 +195,7 @@ import { idsColumn } from "./id-sets"
 import { COMMAND_BACKDATE_MS, describeJson, IdParam, lockRow, OCCURRED_AT_SKEW_MS, primaryKeyOf, replayed } from "./shared"
 import { fractions as stationFractions } from "./unloading-stations"
 import { ticketHearsOfStop } from "./ticket-stops"
+import { stationTakes, tellOfficeNotTaken } from "./unload-writes"
 import { recordLedgerWork } from "./work-orders"
 
 const MODULE = "operate.driver-app"
@@ -542,7 +548,7 @@ async function resultOf(tx: Tx, companyId: string, kind: DriverCommandKind, id: 
     const [row] = await unloadsFrom(tx, companyId)
       .query.where(and(eq(unload.companyId, companyId), eq(unload.id, id)))
       .limit(1)
-    return row === undefined ? undefined : { resource: "unload", value: unloadOf(row) }
+    return row === undefined ? undefined : { resource: "unload", value: await unloadAnswered(tx, companyId, row) }
   }
   if (kind === "end-route" && routeId !== null) {
     const found = await readRoute(tx, companyId, routeId)
@@ -785,7 +791,27 @@ async function runEffects(tx: Tx, applier: Applier, envelope: DriverCommandEnvel
           weighbridgeTicket: draft.weighbridgeTicket,
           objectKey: draft.objectKey,
           note: draft.note,
+          refusalReason: draft.refusalReason,
+          refusalNote: draft.refusalNote,
         })
+        // A tipped load of a fraction the station does not take is recorded all the same, and the office is told (O9 of #290).
+        if (draft.refusalReason === null) {
+          const takes = await stationTakes(tx, companyId, draft.unloadingStationId, draft.wasteFractionId)
+          if (!takes.takes) {
+            await tellOfficeNotTaken(tx, {
+              companyId,
+              projectId,
+              routeId: routeRow.id,
+              routeNumber: routeRow.number,
+              driverId: applier.profile.id,
+              recordedBy: applier.principal.user.id,
+              netKg: draft.netKg,
+              occurredAt: draft.occurredAt,
+              takes,
+              now: () => applier.now,
+            })
+          }
+        }
         break
       }
       case "pause":

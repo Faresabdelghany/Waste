@@ -37,13 +37,15 @@ import type { Problem } from "@waste/contracts/problem"
 import type { ProofOfService } from "@waste/contracts/proofs"
 import type { Route, RouteDetail, RouteProgress } from "@waste/contracts/routes"
 import type { Session } from "@waste/contracts/sessions"
-import type { Unload } from "@waste/contracts/unloads"
+import type { LoadReading, Unload } from "@waste/contracts/unloads"
 import type { Tx } from "@waste/db/client"
 import { reviewStatus, weightReviewOf } from "@waste/db/query/weight-review"
 import { driverCommand, pickup, proofOfService, route, session, unload } from "@waste/db/schema/execution"
+import { project } from "@waste/db/schema/organisation"
 import { noRouteAssigned } from "@waste/domain/execution/commands"
 import { progressOf, type PickupCounts } from "@waste/domain/execution/progress"
-import type { CommandOutcome, DriverCommandKind, ExecutionSource, PickupOrigin, PickupOutcome, PickupReason, PickupService, PickupStatus, ProofKind, RouteCancelReasonCode, RouteStatus } from "@waste/domain/execution/vocabulary"
+import { loadReading, onBoardByUnload } from "@waste/domain/execution/unloads"
+import type { CommandOutcome, DriverCommandKind, ExecutionSource, PickupOrigin, PickupOutcome, PickupReason, PickupService, PickupStatus, ProofKind, RouteCancelReasonCode, RouteStatus, UnloadRefusalReason } from "@waste/domain/execution/vocabulary"
 import type { WeightReviewStatus } from "@waste/domain/finance/vocabulary"
 import { and, asc, count, eq, inArray, isNull, sql, type SQL } from "drizzle-orm"
 
@@ -422,6 +424,8 @@ export const unloadColumns = {
   weighbridgeTicket: unload.weighbridgeTicket,
   objectKey: unload.objectKey,
   note: unload.note,
+  refusalReason: unload.refusalReason,
+  refusalNote: unload.refusalNote,
 }
 
 // Weight control's reading beside every Unload (Issue #112, §5): the latest
@@ -463,8 +467,8 @@ export function unloadsFrom(tx: Tx, companyId: string) {
 /** The reading as the wire spells it: `captured` with two nulls where no review exists, else the latest decision with its review and, on a correction, the new row. */
 export const weightReviewOfRow = (row: ReviewRead): WeightReviewState => ({ status: row.reviewStatus, latestReviewId: row.reviewId, correctionUnloadId: row.reviewCorrectionUnloadId })
 
-/** The unload on the wire, its review reading beside it. */
-export function unloadOf(row: UnloadRow): Unload {
+/** The unload on the wire, its review reading beside it, and the load on board where `unloadsAnswered` read one. */
+export function unloadOf(row: UnloadRow, load: LoadReading | null = null): Unload {
   return {
     id: row.id,
     recordedAt: row.recordedAt.toISOString(),
@@ -485,7 +489,71 @@ export function unloadOf(row: UnloadRow): Unload {
     objectKey: row.objectKey,
     note: row.note,
     weightReview: weightReviewOfRow(row),
+    refusal: row.refusalReason === null ? null : { reason: row.refusalReason as UnloadRefusalReason, note: row.refusalNote },
+    load,
   }
+}
+
+/**
+ * Each unload's load on board against its weighbridge net (O9 of #290): what
+ * the stops of its fraction weighed since the route's last accepted unload of
+ * it (`onBoardByUnload`), read against the project's tolerance
+ * (`loadReading`). The window needs every unload of the route, not only the
+ * rows answered, and each stop's latest weight — the tonnage report's reading
+ * of a stop's weight — at the instant the stop was first weighed, so a weight
+ * corrected after the truck tipped stays with the load it was tipped in. A row
+ * with no stop weighed before it is absent.
+ */
+async function loadsOf(tx: Tx, companyId: string, rows: readonly UnloadRow[]): Promise<Map<string, LoadReading>> {
+  if (rows.length === 0) return new Map()
+  const routeIds = [...new Set(rows.map((row) => row.routeId))]
+  const projectIds = [...new Set(rows.map((row) => row.projectId))]
+  const unloads = await tx
+    .select({ id: unload.id, routeId: unload.routeId, wasteFractionId: unload.wasteFractionId, occurredAt: unload.occurredAt, refusalReason: unload.refusalReason })
+    .from(unload)
+    .where(and(eq(unload.companyId, companyId), inArray(unload.projectId, projectIds), inArray(unload.routeId, routeIds)))
+  const weights = await tx
+    .select({
+      routeId: proofOfService.routeId,
+      wasteFractionId: pickup.wasteFractionId,
+      occurredAt: sql<Date>`min(${proofOfService.occurredAt})`.mapWith(proofOfService.occurredAt),
+      weightKg: sql<number | null>`(array_agg(${proofOfService.weightKg} order by ${proofOfService.id} desc))[1]`,
+    })
+    .from(proofOfService)
+    .innerJoin(pickup, and(eq(pickup.companyId, proofOfService.companyId), eq(pickup.id, proofOfService.pickupId)))
+    .where(and(eq(proofOfService.companyId, companyId), inArray(proofOfService.projectId, projectIds), inArray(proofOfService.routeId, routeIds), eq(proofOfService.kind, "weight")))
+    .groupBy(proofOfService.pickupId, proofOfService.routeId, pickup.wasteFractionId)
+  const tolerances = new Map(
+    (await tx.select({ id: project.id, tolerance: project.weightTolerancePercent }).from(project).where(and(eq(project.companyId, companyId), inArray(project.id, projectIds)))).map((row) => [row.id, row.tolerance]),
+  )
+  // Each route's unloads and weights, gathered in one pass.
+  type UnloadAt = Parameters<typeof onBoardByUnload>[0][number]
+  type WeightAt = Parameters<typeof onBoardByUnload>[1][number]
+  const byRoute = new Map<string, { unloads: UnloadAt[]; weights: WeightAt[] }>(routeIds.map((routeId) => [routeId, { unloads: [], weights: [] }]))
+  for (const row of unloads) byRoute.get(row.routeId)?.unloads.push({ id: row.id, wasteFractionId: row.wasteFractionId, occurredAt: row.occurredAt.toISOString(), refused: row.refusalReason !== null })
+  for (const row of weights) if (row.weightKg !== null) byRoute.get(row.routeId)?.weights.push({ wasteFractionId: row.wasteFractionId, occurredAt: row.occurredAt.toISOString(), weightKg: row.weightKg })
+  const onBoard = new Map<string, number>()
+  for (const ofRoute of byRoute.values()) for (const [id, kg] of onBoardByUnload(ofRoute.unloads, ofRoute.weights)) onBoard.set(id, kg)
+  const loads = new Map<string, LoadReading>()
+  for (const row of rows) {
+    const onBoardKg = onBoard.get(row.id)
+    const tolerance = tolerances.get(row.projectId)
+    const reading = onBoardKg === undefined || tolerance === undefined ? null : loadReading({ netKg: row.netKg, onBoardKg }, tolerance)
+    if (reading !== null) loads.set(row.id, reading)
+  }
+  return loads
+}
+
+/** Unloads as every door answers them: each with its review reading and its load on board (`loadsOf`), in the rows' order. */
+export async function unloadsAnswered(tx: Tx, companyId: string, rows: readonly UnloadRow[]): Promise<Unload[]> {
+  const loads = await loadsOf(tx, companyId, rows)
+  return rows.map((row) => unloadOf(row, loads.get(row.id) ?? null))
+}
+
+/** One unload as every door answers it: `unloadsAnswered` of the one row. */
+export async function unloadAnswered(tx: Tx, companyId: string, row: UnloadRow): Promise<Unload> {
+  const [answered] = await unloadsAnswered(tx, companyId, [row])
+  return answered
 }
 
 /** The unloads of this company, in the projects the caller works in. */
@@ -518,7 +586,7 @@ export async function unloadsOfRoute(tx: Tx, companyId: string, routeId: string)
 export async function routeWithSessions(tx: Tx, companyId: string, row: RouteRow): Promise<Omit<RouteDetail, "pickups" | "activePlan">> {
   const [answered, sessions, unloads] = await Promise.all([routeWithProgress(tx, companyId, row), sessionsOfRoute(tx, companyId, row.id), unloadsOfRoute(tx, companyId, row.id)])
   const open = sessions.find((candidate) => candidate.endedAt === null)
-  return { ...answered, session: open === undefined ? null : sessionOf(open), sessions: sessions.map(sessionOf), unloads: unloads.map(unloadOf) }
+  return { ...answered, session: open === undefined ? null : sessionOf(open), sessions: sessions.map(sessionOf), unloads: await unloadsAnswered(tx, companyId, unloads) }
 }
 
 /**

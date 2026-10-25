@@ -176,6 +176,8 @@ const row = (extra: Partial<TonnageRow>): TonnageRow => ({
   unloads: 0,
   rejectedKg: 0,
   rejectedUnloads: 0,
+  refusedKg: 0,
+  refusedUnloads: 0,
   ...extra,
 })
 

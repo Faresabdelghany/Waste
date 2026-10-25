@@ -277,6 +277,8 @@ export function weightControlRoutes(guard: MiddlewareHandler<AuthEnv>) {
             netKg,
             weighbridgeTicket: weighbridgeTicket ?? null,
             note,
+            refusalReason: current.refusalReason,
+            refusalNote: current.refusalNote,
           })
           return { note, correctionUnloadId: correction.id }
         })

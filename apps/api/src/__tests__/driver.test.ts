@@ -14,6 +14,7 @@ import { property as propertyTable, sharedCollectionPoint } from "@waste/db/sche
 import { driverCommand, outboxEvent, pickup as pickupTable, proofOfService, route as routeTable, session as sessionTable } from "@waste/db/schema/execution"
 import { vehicle as vehicleTable } from "@waste/db/schema/fleet"
 import { unloadingStation, unloadingStationFraction } from "@waste/db/schema/places"
+import { ticket as ticketTable } from "@waste/db/schema/resolution"
 import { withCompany } from "@waste/db/tenant"
 import {
   alreadyOnRoute,
@@ -900,6 +901,65 @@ describe("the driver door", { skip: database.skip || owner.skip }, () => {
       assert.deepEqual(theirFraction.errors, [{ path: "body.wasteFractionId", message: NOT_A_FRACTION }])
       const weights = await rejected(envelope("record-unload", route.id, { unloadingStationId: fleet.stations.amager.id, wasteFractionId: fixtures.residual.id, netKg: 60, grossKg: 100, tareKg: 50 }, { occurredAt: at("11:01") }), 400, "The request body is invalid")
       assert.deepEqual(weights.errors, [{ path: "body.netKg", message: NET_IS_GROSS_LESS_TARE }])
+    })
+
+    test("a load the station does not take is recorded all the same, and the office is told in an internal task in the station's sentence; a refused load and a taken one tell nothing (O9 of #290)", async () => {
+      const route = await minted()
+      await started(route)
+      const tasksOn = () =>
+        withCompany(pool.db, a.companyId, (tx) =>
+          tx
+            .select({ kind: ticketTable.kind, source: ticketTable.source, priority: ticketTable.priority, subject: ticketTable.subject, description: ticketTable.description, createdBy: ticketTable.createdBy, routeId: ticketTable.routeId, driverId: ticketTable.driverId })
+            .from(ticketTable)
+            .where(and(eq(ticketTable.companyId, a.companyId), eq(ticketTable.routeId, route.id)))
+            .orderBy(asc(ticketTable.id)),
+        )
+      const tip = (netKg: number, occurredAt: string, extra: Record<string, unknown> = {}) =>
+        envelope("record-unload", route.id, { unloadingStationId: fleet.stations.amager.id, wasteFractionId: fixtures.residual.id, netKg, ...extra }, { occurredAt })
+
+      // The suite's station names no fraction it takes.
+      const untaken = valueOf(await applied(tip(8240, at("10:12"))), "unload", Unload)
+      assert.equal(untaken.refusal, null, "recorded as tipped: a rejection would lose the weighbridge's reading")
+      const [task, ...more] = await tasksOn()
+      assert.equal(more.length, 0)
+      assert.deepEqual(
+        [task.kind, task.source, task.priority, task.subject, task.createdBy, task.routeId, task.driverId],
+        ["internal-task", "driver-app", "medium", `Unload of Residual waste at ARC Amager Bakke on ${route.label} not accepted`, fixtures.accounts.mads.id, route.id, fleet.drivers.mads.id],
+      )
+      assert.match(task.description, new RegExp(`^The driver recorded 8,240 kg of Residual waste at ARC Amager Bakke on route ${route.label} at \\d\\d:\\d\\d on \\w+ \\d+ \\w+, but Station ARC Amager Bakke has no accepted fractions set\\. Set them on the station, then review the unload in weight control\\.$`))
+
+      // The route's next unload of the fraction there is the same news while the task is open.
+      await applied(tip(6100, at("10:14")))
+      assert.equal((await tasksOn()).length, 1, "one open task per route, station and fraction")
+
+      // Refused, the load tells nothing: the station's word is on the row.
+      const turnedAway = valueOf(await applied(tip(500, at("10:20"), { refusal: { reason: "contamination", note: "Plastic bags" } })), "unload", Unload)
+      assert.deepEqual(turnedAway.refusal, { reason: "contamination", note: "Plastic bags" })
+      assert.equal((await tasksOn()).length, 1)
+      const wordless = await rejected(tip(500, at("10:21"), { refusal: { reason: "other" } }), 400, "The request body is invalid")
+      assert.deepEqual(wordless.errors?.map((error) => error.path), ["body.refusal.note"])
+
+      // The station takes glass alone, then residual waste too.
+      const glass = testId()
+      const memberships = [{ id: testId(), companyId: a.companyId, unloadingStationId: fleet.stations.amager.id, wasteFractionId: glass }]
+      await withCompany(pool.db, a.companyId, async (tx) => {
+        await tx.insert(wasteFraction).values({ id: glass, companyId: a.companyId, key: "glass", name: "Glass" })
+        await tx.insert(unloadingStationFraction).values(memberships)
+      })
+      try {
+        // The office closes the first task; the next unload not taken is news again, in the other sentence.
+        await withCompany(pool.db, a.companyId, (tx) => tx.update(ticketTable).set({ status: "rejected", closedAt: new Date() }).where(and(eq(ticketTable.companyId, a.companyId), eq(ticketTable.routeId, route.id))))
+        await applied(tip(900, at("10:30")))
+        const [, other] = await tasksOn()
+        assert.match(other.description, /but Station ARC Amager Bakke does not take Residual waste\. Check the station's accepted fractions, or review the unload in weight control\.$/)
+        const taken = { id: testId(), companyId: a.companyId, unloadingStationId: fleet.stations.amager.id, wasteFractionId: fixtures.residual.id }
+        memberships.push(taken)
+        await withCompany(pool.db, a.companyId, (tx) => tx.insert(unloadingStationFraction).values(taken))
+        await applied(tip(700, at("10:40")))
+        assert.equal((await tasksOn()).length, 2, "a load the station takes tells nothing")
+      } finally {
+        await withCompany(pool.db, a.companyId, (tx) => tx.delete(unloadingStationFraction).where(and(eq(unloadingStationFraction.companyId, a.companyId), inArray(unloadingStationFraction.id, memberships.map((row) => row.id)))))
+      }
     })
 
     test("pause sets pausedAt and resume clears it; a pause on a paused session and a resume on a running one are applied without a write", async () => {

@@ -52,6 +52,7 @@
 import { PUBLIC_SLUG_LENGTH, PUBLIC_SLUG_PATTERN } from "@waste/domain/access/public-slug"
 import { BIC_PATTERN, DEFAULT_PAYMENT_TERMS_DAYS, FIK_CREDITOR_PATTERN, IBAN_PATTERN, PAYMENT_TERMS_MAX, VAT_NUMBER_PATTERN } from "@waste/domain/finance/payment"
 import { PAYMENT_REFERENCE_SCHEMES } from "@waste/domain/finance/vocabulary"
+import { DEFAULT_WEIGHT_TOLERANCE_PERCENT, WEIGHT_TOLERANCE_PERCENT } from "@waste/domain/execution/unloads"
 import { DEFAULT_WEEKEND, SERVICE_DAYS } from "@waste/domain/planning/vocabulary"
 import { sql } from "drizzle-orm"
 import { check, integer, text } from "drizzle-orm/pg-core"
@@ -144,6 +145,12 @@ export const project = wms.table(
     paymentTermsDays: integer().notNull().default(DEFAULT_PAYMENT_TERMS_DAYS),
     /** How its invoices are referenced for payment (#291 C4): none, or a FI card, which needs the company's creditor number. */
     paymentReferenceScheme: text().notNull().default("none"),
+    /**
+     * How far a weighbridge's net may differ from what the stops weighed on
+     * board, in whole percent of the on-board load, before an unload reads as
+     * above tolerance (O9 of #290).
+     */
+    weightTolerancePercent: integer().notNull().default(DEFAULT_WEIGHT_TOLERANCE_PERCENT),
   },
   (t) => [
     companyReference(t, company),
@@ -165,6 +172,10 @@ export const project = wms.table(
     check(
       tableObjectName(t.id.table, "public_slug_shape", "project"),
       sql`${t.publicSlug} ~ ${sql.raw(`'${PUBLIC_SLUG_PATTERN}'`)} and char_length(${t.publicSlug}) between ${sql.raw(String(PUBLIC_SLUG_LENGTH.min))} and ${sql.raw(String(PUBLIC_SLUG_LENGTH.max))}`,
+    ),
+    check(
+      tableObjectName(t.id.table, "weight_tolerance_percent_range", "project"),
+      sql`${t.weightTolerancePercent} between ${sql.raw(String(WEIGHT_TOLERANCE_PERCENT.min))} and ${sql.raw(String(WEIGHT_TOLERANCE_PERCENT.max))}`,
     ),
   ],
 )

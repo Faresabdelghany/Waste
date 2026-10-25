@@ -15,10 +15,12 @@
 // seed lands in (`SERVICE_AREA_SEED_FIELDS`: projectId, zoneIds, boundary), so
 // a selection opens the form with its planning areas picked; the drawn
 // polygon the seed carries beside them is dropped, never persisted (#127).
+import { UNLOAD_REFUSAL_REASONS } from "@waste/domain/execution/vocabulary"
 import { INDEX_BASES } from "@waste/domain/finance/vocabulary"
 import type { ServiceAreaSeed } from "@waste/domain/map-planning/service-areas"
 
-import type { WeightReviewCommand } from "@/lib/api/records/weights"
+import { ROUTES_MODULE } from "@/lib/api/records/routes"
+import { REFUSAL_LABELS, REVIEW_LABELS, type WeightReviewCommand } from "@/lib/api/records/weights"
 
 import type { BusinessFormField, BusinessFormSchema, BusinessFormValues } from "./business-form-types"
 import type { BusinessRecord, WorkspaceId } from "./business-modules"
@@ -37,7 +39,9 @@ import {
   SERVICE_AREAS_MODULE,
   SERVICE_PROVIDERS_MODULE,
   SETTLEMENT_RECORD_KIND,
+  UNLOAD_RECORD_KIND,
 } from "./provider-money"
+import { DEPOTS_MODULE } from "./allocations"
 import { serviceAreaFormValues } from "./service-areas"
 
 const assignment: BusinessFormField = { id: "serviceAreaAssignmentId", label: "Service area assignment", type: "select", required: true, relation: SERVICE_AREAS_MODULE, description: "The provider and the area at once." }
@@ -280,6 +284,54 @@ const review = (title: string, description: string, submitLabel: string, fields:
   sections: [{ id: "review", title, fields }],
   execution: { kind: "append-event", completionMessage: `${title} recorded.` },
 })
+
+/** Record unload (O9 of #290): the office's capture of a weighbridge ticket the device did not record, on a route that ran, with the station's refusal where it turned the load away. */
+export const UNLOAD_FORM: BusinessFormSchema = {
+  key: "route-studio.weights",
+  mode: "create",
+  recordKind: UNLOAD_RECORD_KIND,
+  title: "Record unload",
+  description: "A weighbridge ticket the truck's device did not record: a forgotten one, or one that came by post. A load the station took is of a fraction it takes; one it turned away may be of any, with why.",
+  submitLabel: "Record unload",
+  sections: [
+    {
+      id: "where",
+      title: "Where and when",
+      fields: [
+        { id: "routeId", label: "Route", type: "select", required: true, relation: ROUTES_MODULE, description: "A route that ran: active or completed." },
+        { id: "unloadingStationId", label: "Unloading station", type: "select", required: true, relation: DEPOTS_MODULE, description: "Any station of the company, not only the route's own; a load it took is of a fraction it takes." },
+        { id: "wasteFractionId", label: "Waste fraction", type: "select", required: true, relation: MASTER_DATA_MODULE },
+        { id: "occurredAt", label: "Tipped at", type: "datetime", required: true, description: "On the route's project's clock." },
+      ],
+    },
+    {
+      id: "ticket",
+      title: "The weighbridge's ticket",
+      fields: [
+        { id: "netKg", label: "Net (kg)", type: "number", required: true, min: 1 },
+        { id: "grossKg", label: "Gross (kg)", type: "number", min: 1, description: "With the tare, or neither; net is gross less tare." },
+        { id: "tareKg", label: "Tare (kg)", type: "number", min: 1 },
+        { id: "weighbridgeTicket", label: "Weighbridge ticket", type: "text" },
+        { id: "note", label: "Note", type: "textarea" },
+      ],
+    },
+    {
+      id: "refusal",
+      title: "Refused by the station",
+      description: "Leave this blank for a load the station took.",
+      fields: [
+        { id: "refusalReason", label: "Why it was refused", type: "select", options: UNLOAD_REFUSAL_REASONS.map((value) => ({ value, label: REFUSAL_LABELS[value] })) },
+        { id: "refusalNote", label: "In the station's words", type: "textarea", requiredWhen: { fieldId: "refusalReason", equals: "other" } },
+      ],
+    },
+  ],
+  execution: { kind: "create-record", completionMessage: "The unload was recorded." },
+}
+
+/** An unload the form made, minted for the session: the desk's queue until it is reviewed. */
+export function createUnloadRecord(values: BusinessFormValues, now: number): BusinessRecord {
+  return mintedRecord({ id: `weights-unload-${now}`, name: "Unload", status: REVIEW_LABELS.captured, recordKind: UNLOAD_RECORD_KIND, values: blankNone(values) })
+}
 
 export const WEIGHT_REVIEW_FORMS: Readonly<Record<WeightReviewCommand, BusinessFormSchema>> = {
   approve: review("Approve weight", "The weight is right as recorded.", "Approve", [{ id: "note", label: "Note", type: "textarea" }]),

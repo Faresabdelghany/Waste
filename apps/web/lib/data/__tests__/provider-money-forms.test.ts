@@ -10,6 +10,7 @@ import type { Project } from "@waste/contracts/organisation"
 import { ServiceAreaAssignmentCreate, ServiceAreaAssignmentPatch, ServiceAreaCreate } from "@waste/contracts/service-areas"
 import { ServiceProviderPriceCreate, ServiceProviderPriceIndex } from "@waste/contracts/service-provider-prices"
 import { SettlementCreate, SettlementReopen } from "@waste/contracts/settlements"
+import { UnloadCreate } from "@waste/contracts/unloads"
 import { WeightApprove, WeightCorrect, WeightReject } from "@waste/contracts/weight-control"
 
 import { isLocalRefusal, NOTHING_RESOLVED, type MappingContext } from "../../api/records/adapter"
@@ -42,6 +43,8 @@ import {
   serviceAreaEditForm,
   SETTLEMENT_FORM,
   updateServiceAreaRecord,
+  UNLOAD_FORM,
+  createUnloadRecord,
   WEIGHT_REVIEW_FORMS,
 } from "../provider-money-forms"
 import { SERVICE_AREA_SEED_FIELDS } from "../service-areas"
@@ -49,7 +52,7 @@ import { SERVICE_AREA_SEED_FIELDS } from "../service-areas"
 const NOW = new Date("2026-09-30T12:00:00Z")
 const STAMPS = { createdAt: "2026-09-24T09:00:00.000Z", updatedAt: "2026-09-25T09:30:00.000Z" }
 
-const copenhagen: Project = { id: "01a0d2a4-a280-7002-8000-000000000001", ...STAMPS, name: "Copenhagen Central", kind: "Municipality", language: "da", currency: "DKK", timezone: "Europe/Copenhagen", status: "active", weekend: ["saturday", "sunday"], holidayList: "Danish public holidays", publicSlug: null, paymentTermsDays: 30, paymentReferenceScheme: "none" }
+const copenhagen: Project = { id: "01a0d2a4-a280-7002-8000-000000000001", ...STAMPS, name: "Copenhagen Central", kind: "Municipality", language: "da", currency: "DKK", timezone: "Europe/Copenhagen", status: "active", weekend: ["saturday", "sunday"], holidayList: "Danish public holidays", publicSlug: null, weightTolerancePercent: 5, paymentTermsDays: 30, paymentReferenceScheme: "none" }
 const organic: WasteFraction = { id: "01a0d2a4-a280-7005-8000-000000000002", ...STAMPS, key: "organic", name: "Organic", wasteCode: null, treatment: null }
 const residual: Product = { id: "01a0d2a4-a280-700a-8000-000000000001", ...STAMPS, projectId: copenhagen.id, name: "Residual waste · 240L bin", kind: "container-collection", status: "active", unit: "pickup", containerTypeId: null, wasteFractionId: null, serviceFrequencyId: null, invoiceName: null, invoiceCode: null, vatPercent: 25 }
 const OSTERBRO = "01a0d2a4-a280-7015-8000-000000000002"
@@ -182,6 +185,28 @@ describe("the provider-money chain's Pilot forms", () => {
     assert.equal(made.validTo, "2026-11-01")
     offersExactly(REOPEN_FORM, ["reason"])
     assert.ok(SettlementReopen.safeParse(body(settlementAdapter.commands!.reopen.toBody!({ reason: "A late event" }, settlementRecord, context))).success)
+  })
+
+  test("Record unload filled in is the capture the contract accepts, posted under its route (O9 of #290)", () => {
+    const ROUTE = "01a0d2a4-a280-7030-8000-000000000001"
+    const STATION = "01a0d2a4-a280-7020-8000-000000000002"
+    const at: ServerRecordsState = new Map([
+      ...state,
+      ["route-studio.routes", moduleOf([plain(`route-${ROUTE}`, "RC-1042 · 2026-09-29", "Route", { projectId: projectRecord.id, status: "completed" })], [ROUTE])],
+      ["resources.depots", moduleOf([plain(`station-${STATION}`, "ARC Amager", "Unloading station")], [STATION])],
+    ])
+    const values: BusinessFormValues = { routeId: `route-${ROUTE}`, unloadingStationId: `station-${STATION}`, wasteFractionId: fractionRecord.id, occurredAt: "2026-09-29T15:05", netKg: "7200", grossKg: "", tareKg: "", weighbridgeTicket: "WB-2026-3901", note: "", refusalReason: "contamination", refusalNote: "" }
+    offersExactly(UNLOAD_FORM, Object.keys(values))
+    const made = createUnloadRecord(values, 1)
+    assert.equal(made.status, "Needs review")
+    const write = body(unloadAdapter.toCreateBody!(made, { ...context, resolve: resolverOver(at) }))
+    assert.equal(write.routeId, ROUTE)
+    assert.ok(UnloadCreate.safeParse(write.body).success)
+    assert.deepEqual((write.body as { refusal?: unknown }).refusal, { reason: "contamination" })
+    for (const option of UNLOAD_FORM.sections.flatMap((section) => section.fields).find((field) => field.id === "refusalReason")?.options ?? []) {
+      const refused = unloadAdapter.toCreateBody!(createUnloadRecord({ ...values, refusalReason: option.value, refusalNote: "In the station's words" }, 1), { ...context, resolve: resolverOver(at) })
+      assert.ok(UnloadCreate.safeParse(body(refused).body).success, option.value)
+    }
   })
 
   test("each weight review's dialog is the body its command's contract accepts", () => {

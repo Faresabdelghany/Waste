@@ -96,6 +96,7 @@ import { excludeOverlapping } from "../sql/exclude-overlapping"
 import { handWrittenStatements, normalised, statementsOf } from "../sql/hand-written"
 import { outboxEventAsOf0010 } from "./outbox-as-of"
 import { checksOf, companyFk, createTable, foreignKey, ID, index, list, oneOfCheck, partialUniqueIndex, positiveCheck, projectFk, projectFkTo, ref, tenantFk, uniqueKey, validityCheck } from "./rendering"
+import { unloadAsOf0010 } from "./unload-as-of"
 import { statementsBetween, statementsFor } from "./specimen"
 
 /** The sixteen tables in the order src/schema/finance.ts defines them; drizzle-kit's own loader sorts a module's exports, which the migration test allows for. */
@@ -848,7 +849,7 @@ const tablesAsOf0010 = async (): Promise<string[]> =>
 
 /** The ALTER TABLEs as drizzle-kit writes them: the five altered tables from their last spelling to today's, in one diff. */
 const generatedAlterations = async (): Promise<string[]> =>
-  (await statementsBetween({ company: companyAsOf0009, product: productAsOf0004, agreement: agreementAsOf0004, unload: unloadAsOf0008, outboxEvent: outboxEventAsOf0009 }, { company: companyAsOf0010, product, agreement, unload, outboxEvent: outboxEventAsOf0010 })).filter(
+  (await statementsBetween({ company: companyAsOf0009, product: productAsOf0004, agreement: agreementAsOf0004, unload: unloadAsOf0008, outboxEvent: outboxEventAsOf0009 }, { company: companyAsOf0010, product, agreement, unload: unloadAsOf0010, outboxEvent: outboxEventAsOf0010 })).filter(
     (statement) => !ADDED_TO_PRODUCT_IN_0044.includes(statement),
   )
 

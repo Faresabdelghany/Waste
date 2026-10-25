@@ -39,7 +39,7 @@ import {
 import { Unload } from "@waste/contracts/unloads"
 import { createDb, type Database, type Tx } from "@waste/db/client"
 import { route } from "@waste/db/schema/execution"
-import { unloadingStation } from "@waste/db/schema/places"
+import { unloadingStation, unloadingStationFraction } from "@waste/db/schema/places"
 import { ticket } from "@waste/db/schema/resolution"
 import { withCompany } from "@waste/db/tenant"
 import { WASTE_DATA_COLUMNS, wasteDataWarningSentence, type WasteDataRow as DomainRow, type WasteDataWarning as DomainWarning } from "@waste/domain/insight/waste-data"
@@ -466,7 +466,7 @@ describe("the report endpoints", { skip: database.skip || owner.skip }, () => {
   describe("GET /reports/tonnage", () => {
     let vestforbraending: string
 
-    const capture = async (routeId: string, values: { unloadingStationId?: string; wasteFractionId?: string; netKg: number; occurredAt: string }): Promise<Unload> => {
+    const capture = async (routeId: string, values: { unloadingStationId?: string; wasteFractionId?: string; netKg: number; occurredAt: string; refusal?: { reason: string; note?: string } }): Promise<Unload> => {
       const body = { unloadingStationId: fleet.stations.amager.id, wasteFractionId: ex.fractions.residual.id, ...values }
       return await created(olivia, `/routes/${routeId}/unloads`, await olivia(`/routes/${routeId}/unloads`, { method: "POST", body }), Unload, "/unloads")
     }
@@ -489,6 +489,11 @@ describe("the report endpoints", { skip: database.skip || owner.skip }, () => {
           weighbridge: true,
           status: "active",
         })
+        // The stations take what the suite unloads at them: an accepted load is of a fraction its station takes (O9 of #290).
+        await tx.insert(unloadingStationFraction).values([
+          { id: testId(), companyId: a.companyId, unloadingStationId: vestforbraending, wasteFractionId: ex.fractions.glass.id },
+          { id: testId(), companyId: a.companyId, unloadingStationId: fleet.stations.amager.id, wasteFractionId: ex.fractions.glass.id },
+        ])
       })
       const completed = ex.routes.completed.id
       // Monday at Amager: 8,000 kg approved and 2,000 kg nobody has looked at.
@@ -497,16 +502,18 @@ describe("the report endpoints", { skip: database.skip || owner.skip }, () => {
       // Tuesday: a glass load refused at Vestforbrænding, and 5,000 kg at Amager corrected to 4,800.
       await decide((await capture(lateStart.id, { unloadingStationId: vestforbraending, wasteFractionId: ex.fractions.glass.id, netKg: 1_500, occurredAt: at("2026-10-06", "11:00").toISOString() })).id, "reject", { note: "Contaminated load refused at the gate" })
       await decide((await capture(lateStart.id, { netKg: 5_000, occurredAt: at("2026-10-06", "12:00").toISOString() })).id, "correct", { netKg: 4_800, note: "Net misread at the bridge" })
+      // And 2,500 kg the station turned away for contamination (O9 of #290), its reading approved: the truck kept it, so it is tipped nowhere and filed nowhere.
+      await decide((await capture(lateStart.id, { netKg: 2_500, occurredAt: at("2026-10-06", "13:00").toISOString(), refusal: { reason: "contamination", note: "Plastic bags in the residual" } })).id, "approve")
       // Harbor's Monday: 3,000 kg at Amager.
       await capture(harborRoute.id, { netKg: 3_000, occurredAt: at("2026-10-05", "11:00").toISOString() })
       // 22:30Z on Sunday is Monday the 12th in Copenhagen: outside the window.
       await capture(completed, { netKg: 700, occurredAt: "2026-10-11T22:30:00.000Z" })
     })
 
-    test("totals the window's net weight by review — approved and captured counted apart, a rejected load beside them, a corrected one by its correction — and the pickups' weights", async () => {
+    test("totals the window's net weight by review — approved and captured counted apart, a rejected load and a refused one beside them, a corrected one by its correction — and the pickups' weights", async () => {
       const { window, totals } = await tonnage(olivia, `${WEEK}&interval=week`)
       assert.equal(window.interval, "week")
-      assert.deepEqual(totals, { netKg: 17_800, approvedKg: 8_000, capturedKg: 9_800, unloads: 4, rejectedKg: 1_500, rejectedUnloads: 1, pickupWeightKg: 127, weighedPickups: 3 })
+      assert.deepEqual(totals, { netKg: 17_800, approvedKg: 8_000, capturedKg: 9_800, unloads: 4, rejectedKg: 1_500, rejectedUnloads: 1, refusedKg: 2_500, refusedUnloads: 1, pickupWeightKg: 127, weighedPickups: 3 })
     })
 
     test("answers the unloads by project, fraction, station and interval, and the pickup weights by project, fraction and interval", async () => {
@@ -527,6 +534,8 @@ describe("the report endpoints", { skip: database.skip || owner.skip }, () => {
         unloads: 3,
         rejectedKg: 0,
         rejectedUnloads: 0,
+        refusedKg: 2_500,
+        refusedUnloads: 1,
       })
       assert.deepEqual(
         [row(copenhagen, ex.fractions.glass.id, vestforbraending)?.netKg, row(copenhagen, ex.fractions.glass.id, vestforbraending)?.rejectedKg, row(copenhagen, ex.fractions.glass.id, vestforbraending)?.unloadingStationName],
@@ -561,7 +570,7 @@ describe("the report endpoints", { skip: database.skip || owner.skip }, () => {
 
     test("counts only the caller's projects, and is held by Improve's Analytics", async () => {
       assert.equal((await tonnage(viewer)).totals.netKg, 14_800)
-      assert.deepEqual((await tonnage(lars)).totals, { netKg: 0, approvedKg: 0, capturedKg: 0, unloads: 0, rejectedKg: 0, rejectedUnloads: 0, pickupWeightKg: 0, weighedPickups: 0 })
+      assert.deepEqual((await tonnage(lars)).totals, { netKg: 0, approvedKg: 0, capturedKg: 0, unloads: 0, rejectedKg: 0, rejectedUnloads: 0, refusedKg: 0, refusedUnloads: 0, pickupWeightKg: 0, weighedPickups: 0 })
       assert.equal((await tonnage(other)).unloads.length, 0)
       assert.match((await refused(await ungranted(`/reports/tonnage?${WEEK}`), 403)).detail ?? "", /improve\.analytics/, "Analytics is not held")
       assert.match((await refused(await ungranted("/reports/revenue?from=2026-10-01&to=2026-10-31"), 403)).detail ?? "", /improve\.analytics/)

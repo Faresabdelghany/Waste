@@ -349,13 +349,34 @@ describe("decide: the body", () => {
     assert.deepEqual(applied(decide(command("record-unload", body), mads, running(), clock)), [
       {
         kind: "append-unload",
-        unload: { id: COMMAND, unloadingStationId: STATION, wasteFractionId: FRACTION, occurredAt: EARLIER, netKg: 4200, grossKg: 12_400, tareKg: 8_200, weighbridgeTicket: "WB-2026-3901", objectKey: KEY, note: "Second tip", location: point },
+        unload: { id: COMMAND, unloadingStationId: STATION, wasteFractionId: FRACTION, occurredAt: EARLIER, netKg: 4200, grossKg: 12_400, tareKg: 8_200, weighbridgeTicket: "WB-2026-3901", objectKey: KEY, note: "Second tip", location: point, refusalReason: null, refusalNote: null },
       },
       { kind: "event", event: "unload-recorded", aggregate: "unload", aggregateId: COMMAND },
     ])
     const bare = applied(decide(command("record-unload", { unloadingStationId: STATION, wasteFractionId: FRACTION, netKg: 4200 }), mads, running(), clock))
-    assert.deepEqual((bare[0] as { unload: object }).unload, { id: COMMAND, unloadingStationId: STATION, wasteFractionId: FRACTION, occurredAt: EARLIER, netKg: 4200, grossKg: null, tareKg: null, weighbridgeTicket: null, objectKey: null, note: null, location: null })
+    assert.deepEqual((bare[0] as { unload: object }).unload, { id: COMMAND, unloadingStationId: STATION, wasteFractionId: FRACTION, occurredAt: EARLIER, netKg: 4200, grossKg: null, tareKg: null, weighbridgeTicket: null, objectKey: null, note: null, location: null, refusalReason: null, refusalNote: null })
     assert.deepEqual(rejected(decide(command("record-unload", body), mads, running({ stationKnown: false }), clock)), { status: 400, detail: NOT_A_STATION, errors: [{ path: "body.unloadingStationId", message: NOT_A_STATION }] })
     assert.deepEqual(rejected(decide(command("record-unload", body), mads, running({ fractionKnown: false }), clock)), { status: 400, detail: NOT_A_FRACTION, errors: [{ path: "body.wasteFractionId", message: NOT_A_FRACTION }] })
+  })
+
+  test("a load the station refused is recorded with the station's reason and words (O9 of #290)", () => {
+    const refused = { unloadingStationId: STATION, wasteFractionId: FRACTION, netKg: 4200, refusal: { reason: "contamination" as const, note: "Plastic bags in the paper" } }
+    assert.deepEqual((applied(decide(command("record-unload", refused), mads, running(), clock))[0] as { unload: object }).unload, {
+      id: COMMAND,
+      unloadingStationId: STATION,
+      wasteFractionId: FRACTION,
+      occurredAt: EARLIER,
+      netKg: 4200,
+      grossKg: null,
+      tareKg: null,
+      weighbridgeTicket: null,
+      objectKey: null,
+      note: null,
+      location: null,
+      refusalReason: "contamination",
+      refusalNote: "Plastic bags in the paper",
+    })
+    const bare = { ...refused, refusal: { reason: "overweight" as const } }
+    assert.deepEqual((applied(decide(command("record-unload", bare), mads, running(), clock))[0] as { unload: { refusalNote: null } }).unload.refusalNote, null)
   })
 })

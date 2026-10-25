@@ -55,7 +55,7 @@
 import { licenceRefusal, licenceSentence, type Licence } from "../resources/licence"
 import type { LicenceClass, VehicleKind, VehicleStatus } from "../resources/vocabulary"
 import { alreadyDecided, notActive, PICKUP_OUTCOME_OF, routeTransition, type PickupCommand, type PickupOutcome } from "./transitions"
-import type { DriverCommandKind, DriverPickupReason, OutboxAggregate, OutboxKind, PickupReason, PickupStatus, ProofKind, RouteStatus } from "./vocabulary"
+import type { DriverCommandKind, DriverPickupReason, OutboxAggregate, OutboxKind, PickupReason, PickupStatus, ProofKind, RouteStatus, UnloadRefusalReason } from "./vocabulary"
 
 /** A point as the device recorded it: `[longitude, latitude]`. */
 export type FlatPoint = { type: "Point"; coordinates: [number, number] }
@@ -75,7 +75,7 @@ export type CommandBodies = {
   "add-weight": { pickupId: string; weightKg: number }
   "add-signature": Located & { pickupId: string; objectKey: string }
   "add-note": { pickupId?: string; note: string }
-  "record-unload": Located & { unloadingStationId: string; wasteFractionId: string; netKg: number; grossKg?: number; tareKg?: number; weighbridgeTicket?: string; objectKey?: string; note?: string }
+  "record-unload": Located & { unloadingStationId: string; wasteFractionId: string; netKg: number; grossKg?: number; tareKg?: number; weighbridgeTicket?: string; objectKey?: string; note?: string; refusal?: { reason: UnloadRefusalReason; note?: string } }
   pause: Record<string, never>
   resume: Record<string, never>
   "end-route": Located & { note?: string }
@@ -189,6 +189,9 @@ export type UnloadDraft = {
   objectKey: string | null
   note: string | null
   location: FlatPoint | null
+  /** Why the station refused the load (O9 of #290), null for one it took; the applier tells the office of a taken load of a fraction the station does not take. */
+  refusalReason: UnloadRefusalReason | null
+  refusalNote: string | null
 }
 
 /** One thing the applier writes. */
@@ -375,6 +378,8 @@ export function decide(command: Command, driver: CommandDriver, state: Lookups, 
         objectKey: body.objectKey ?? null,
         note: body.note ?? null,
         location: body.location ?? null,
+        refusalReason: body.refusal?.reason ?? null,
+        refusalNote: body.refusal?.note ?? null,
       }
       return { apply: [{ kind: "append-unload", unload }, event("unload-recorded", "unload", command.id)] }
     }
