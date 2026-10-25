@@ -322,6 +322,76 @@ index wms.alert alert_ticket_id_idx CREATE INDEX alert_ticket_id_idx ON wms.aler
 index wms.alert alert_vehicle_id_idx CREATE INDEX alert_vehicle_id_idx ON wms.alert USING btree (company_id, vehicle_id)
 trigger wms.alert alert_touch_updated_at enabled=O CREATE TRIGGER alert_touch_updated_at BEFORE UPDATE ON wms.alert FOR EACH ROW EXECUTE FUNCTION wms.touch_updated_at()
 policy wms.alert alert_tenant_fence permissive ALL to=wms_api using=(company_id = ( SELECT wms.current_company_id() AS current_company_id)) check=(company_id = ( SELECT wms.current_company_id() AS current_company_id))
+relation wms.application kind=table owner=<owner> persistence=p rls=true force-rls=true replica-identity=d acl=[<owner>=DELETE,INSERT,MAINTAIN,REFERENCES,SELECT,TRIGGER,TRUNCATE,UPDATE/<owner> wms_api=DELETE,INSERT,SELECT,UPDATE/<owner> wms_worker=SELECT/<owner>]
+column wms.application 1 id uuid not-null default=wms.uuidv7()
+column wms.application 2 company_id uuid not-null
+column wms.application 3 project_id uuid not-null
+column wms.application 4 created_at timestamp with time zone not-null default=now()
+column wms.application 5 updated_at timestamp with time zone not-null default=now()
+column wms.application 6 number integer not-null
+column wms.application 7 kind text not-null
+column wms.application 8 status text not-null default='received'::text
+column wms.application 9 channel text not-null
+column wms.application 10 received_on date not-null
+column wms.application 11 customer_id uuid not-null
+column wms.application 12 property_id uuid
+column wms.application 13 shared_collection_point_id uuid
+column wms.application 14 subscription_id uuid
+column wms.application 15 statement text not-null
+constraint wms.application application_channel_one_of CHECK ((channel = ANY (ARRAY['phone'::text, 'email'::text, 'letter'::text, 'counter'::text, 'portal'::text])))
+constraint wms.application application_company_id_fk FOREIGN KEY (company_id) REFERENCES wms.company(id)
+constraint wms.application application_customer_id_fk FOREIGN KEY (company_id, customer_id) REFERENCES wms.customer(company_id, id)
+constraint wms.application application_kind_one_of CHECK ((kind = ANY (ARRAY['exemption'::text, 'pause'::text, 'longer-interval'::text, 'home-composting'::text, 'shared-bin'::text, 'assisted-collection'::text, 'fee-correction'::text])))
+constraint wms.application application_number_key UNIQUE (company_id, number)
+constraint wms.application application_one_place CHECK (((property_id IS NULL) OR (shared_collection_point_id IS NULL)))
+constraint wms.application application_pkey PRIMARY KEY (id)
+constraint wms.application application_project_id_fk FOREIGN KEY (company_id, project_id) REFERENCES wms.project(company_id, id)
+constraint wms.application application_project_key UNIQUE (company_id, project_id, id)
+constraint wms.application application_property_id_fk FOREIGN KEY (company_id, project_id, property_id) REFERENCES wms.property(company_id, project_id, id)
+constraint wms.application application_shared_collection_point_id_fk FOREIGN KEY (company_id, project_id, shared_collection_point_id) REFERENCES wms.shared_collection_point(company_id, project_id, id)
+constraint wms.application application_statement_given CHECK ((length(btrim(statement)) > 0))
+constraint wms.application application_status_one_of CHECK ((status = ANY (ARRAY['received'::text, 'in-review'::text, 'decided'::text, 'withdrawn'::text])))
+constraint wms.application application_subscription_id_fk FOREIGN KEY (company_id, project_id, subscription_id) REFERENCES wms.subscription(company_id, project_id, id)
+index wms.application application_customer_id_idx CREATE INDEX application_customer_id_idx ON wms.application USING btree (company_id, customer_id)
+index wms.application application_number_key CREATE UNIQUE INDEX application_number_key ON wms.application USING btree (company_id, number)
+index wms.application application_pkey CREATE UNIQUE INDEX application_pkey ON wms.application USING btree (id)
+index wms.application application_project_id_idx CREATE INDEX application_project_id_idx ON wms.application USING btree (company_id, project_id)
+index wms.application application_project_key CREATE UNIQUE INDEX application_project_key ON wms.application USING btree (company_id, project_id, id)
+index wms.application application_property_id_idx CREATE INDEX application_property_id_idx ON wms.application USING btree (company_id, property_id)
+index wms.application application_shared_collection_point_id_idx CREATE INDEX application_shared_collection_point_id_idx ON wms.application USING btree (company_id, shared_collection_point_id)
+index wms.application application_subscription_id_idx CREATE INDEX application_subscription_id_idx ON wms.application USING btree (company_id, subscription_id)
+trigger wms.application application_audit_trail enabled=O CREATE TRIGGER application_audit_trail AFTER INSERT OR DELETE OR UPDATE ON wms.application FOR EACH ROW EXECUTE FUNCTION wms.audit_row('', '')
+trigger wms.application application_touch_updated_at enabled=O CREATE TRIGGER application_touch_updated_at BEFORE UPDATE ON wms.application FOR EACH ROW EXECUTE FUNCTION wms.touch_updated_at()
+policy wms.application application_tenant_fence permissive ALL to=wms_api using=(company_id = ( SELECT wms.current_company_id() AS current_company_id)) check=(company_id = ( SELECT wms.current_company_id() AS current_company_id))
+relation wms.application_decision kind=table owner=<owner> persistence=p rls=true force-rls=true replica-identity=d acl=[<owner>=DELETE,INSERT,MAINTAIN,REFERENCES,SELECT,TRIGGER,TRUNCATE,UPDATE/<owner> wms_api=INSERT,SELECT/<owner> wms_worker=SELECT/<owner>]
+column wms.application_decision 1 id uuid not-null default=wms.uuidv7()
+column wms.application_decision 2 company_id uuid not-null
+column wms.application_decision 3 project_id uuid not-null
+column wms.application_decision 4 recorded_at timestamp with time zone not-null default=now()
+column wms.application_decision 5 application_id uuid not-null
+column wms.application_decision 6 outcome text not-null
+column wms.application_decision 7 conditions text
+column wms.application_decision 8 granted_from date
+column wms.application_decision 9 granted_to date
+column wms.application_decision 10 appeal_text text
+column wms.application_decision 11 decided_by uuid not-null
+constraint wms.application_decision application_decision_appeal_shape CHECK (((outcome = 'granted'::text) OR (length(btrim(COALESCE(appeal_text, ''::text))) > 0)))
+constraint wms.application_decision application_decision_application_id_fk FOREIGN KEY (company_id, project_id, application_id) REFERENCES wms.application(company_id, project_id, id)
+constraint wms.application_decision application_decision_company_id_fk FOREIGN KEY (company_id) REFERENCES wms.company(id)
+constraint wms.application_decision application_decision_decided_by_fk FOREIGN KEY (company_id, decided_by) REFERENCES wms.user_account(company_id, id)
+constraint wms.application_decision application_decision_outcome_one_of CHECK ((outcome = ANY (ARRAY['granted'::text, 'partly-granted'::text, 'refused'::text])))
+constraint wms.application_decision application_decision_period_shape CHECK (
+CASE
+    WHEN (outcome = 'refused'::text) THEN ((granted_from IS NULL) AND (granted_to IS NULL))
+    ELSE ((granted_from IS NOT NULL) AND ((granted_to IS NULL) OR (granted_to > granted_from)))
+END)
+constraint wms.application_decision application_decision_pkey PRIMARY KEY (id)
+constraint wms.application_decision application_decision_project_id_fk FOREIGN KEY (company_id, project_id) REFERENCES wms.project(company_id, id)
+index wms.application_decision application_decision_application_id_idx CREATE INDEX application_decision_application_id_idx ON wms.application_decision USING btree (company_id, application_id, id)
+index wms.application_decision application_decision_decided_by_idx CREATE INDEX application_decision_decided_by_idx ON wms.application_decision USING btree (company_id, decided_by)
+index wms.application_decision application_decision_pkey CREATE UNIQUE INDEX application_decision_pkey ON wms.application_decision USING btree (id)
+index wms.application_decision application_decision_project_id_idx CREATE INDEX application_decision_project_id_idx ON wms.application_decision USING btree (company_id, project_id)
+policy wms.application_decision application_decision_tenant_fence permissive ALL to=wms_api using=(company_id = ( SELECT wms.current_company_id() AS current_company_id)) check=(company_id = ( SELECT wms.current_company_id() AS current_company_id))
 relation wms.audit_event kind=table owner=<owner> persistence=p rls=true force-rls=true replica-identity=d acl=[<owner>=DELETE,INSERT,MAINTAIN,REFERENCES,SELECT,TRIGGER,TRUNCATE,UPDATE/<owner> wms_api=INSERT,SELECT/<owner> wms_worker=SELECT/<owner>]
 column wms.audit_event 1 id uuid not-null default=wms.uuidv7()
 column wms.audit_event 2 company_id uuid not-null
@@ -1315,9 +1385,9 @@ column wms.outbox_event 8 aggregate_id uuid not-null
 column wms.outbox_event 9 occurred_at timestamp with time zone not-null
 column wms.outbox_event 10 payload jsonb not-null
 column wms.outbox_event 11 published_at timestamp with time zone
-constraint wms.outbox_event outbox_event_aggregate_kind_one_of CHECK ((aggregate_kind = ANY (ARRAY['route'::text, 'pickup'::text, 'unload'::text, 'command'::text, 'ticket'::text, 'invoice'::text, 'settlement'::text])))
+constraint wms.outbox_event outbox_event_aggregate_kind_one_of CHECK ((aggregate_kind = ANY (ARRAY['route'::text, 'pickup'::text, 'unload'::text, 'command'::text, 'ticket'::text, 'invoice'::text, 'settlement'::text, 'application'::text])))
 constraint wms.outbox_event outbox_event_company_id_fk FOREIGN KEY (company_id) REFERENCES wms.company(id)
-constraint wms.outbox_event outbox_event_kind_one_of CHECK ((kind = ANY (ARRAY['route-dispatched'::text, 'route-started'::text, 'route-completed'::text, 'route-cancelled'::text, 'route-reassigned'::text, 'pickup-completed'::text, 'pickup-failed'::text, 'pickup-skipped'::text, 'pickup-problem-reported'::text, 'pickup-corrected'::text, 'unload-recorded'::text, 'command-rejected'::text, 'ticket-opened'::text, 'ticket-completed'::text, 'ticket-rejected'::text, 'invoice-issued'::text, 'settlement-closed'::text])))
+constraint wms.outbox_event outbox_event_kind_one_of CHECK ((kind = ANY (ARRAY['route-dispatched'::text, 'route-started'::text, 'route-completed'::text, 'route-cancelled'::text, 'route-reassigned'::text, 'pickup-completed'::text, 'pickup-failed'::text, 'pickup-skipped'::text, 'pickup-problem-reported'::text, 'pickup-corrected'::text, 'unload-recorded'::text, 'command-rejected'::text, 'ticket-opened'::text, 'ticket-completed'::text, 'ticket-rejected'::text, 'invoice-issued'::text, 'settlement-closed'::text, 'application-decided'::text])))
 constraint wms.outbox_event outbox_event_pkey PRIMARY KEY (id)
 constraint wms.outbox_event outbox_event_project_id_fk FOREIGN KEY (company_id, project_id) REFERENCES wms.project(company_id, id)
 index wms.outbox_event outbox_event_aggregate_id_idx CREATE INDEX outbox_event_aggregate_id_idx ON wms.outbox_event USING btree (company_id, aggregate_id)
@@ -3347,4 +3417,5 @@ journal 1792913386367 34a2cb79512e125e0463843dee394e142036f4dae9407646089ec12466
 journal 1792915809470 e17c776f51a992baef9c8594f1ff2b410b37bcb23c15e78c96b74b886a583522
 journal 1792917191234 447d7c013b3af5ae6b94000e86c461c3e22e215a1431d130b99c6231385dfa0b
 journal 1792921994648 578c84818d6e43060d25e4cf420cf3af21ac8d66438272d4b57d1953a464069c
+journal 1792923020897 c8b3987803dd0f8cb640d986901466c6e8d2195e7301508f475dc8592fda8e2d
 pgboss-version 42

@@ -55,3 +55,5 @@ export * from "./imports"
 export * from "./drop-off-points"
 export * from "./pickup-exceptions"
 export * from "./emissions"
+// A customer's Applications and the office's Decisions on them (M7 of #293).
+export * from "./applications"

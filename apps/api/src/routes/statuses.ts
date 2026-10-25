@@ -17,7 +17,11 @@
 // draft product is patched, a customer is set inactive with agreements
 // standing. A patch that re-states the id a record already carries names
 // nothing new, so it is not held here either: a client that sends the record
-// whole is not refused for the customer it already has.
+// whole is not refused for the customer it already has. An Application (M7 of
+// #293) names a customer, a place and a subscription to say whom and what a
+// request is about, not to hold, bill or serve anything: no status gates it,
+// since an inactive customer's fee correction or a closed place's last
+// collection is exactly what an Application is for.
 //
 // The refusal is a 409, not a 400 and not a 404: the id is right and the row
 // is there, and what refuses is the state it is in. A 400 says "fix the id"

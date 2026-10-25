@@ -76,6 +76,14 @@ _Avoid_: Subscription, invoice
 A recurring customer entitlement to a product or collection service under an agreement.
 _Avoid_: Agreement, route scheme
 
+**Application**:
+A customer's written request to change how they are served or billed — an exemption, a pause, a longer interval, home composting, a shared bin, assisted collection, a fee put right — which the office reviews and decides. Received, in review, decided or withdrawn; whether its decision is still in force is read from the decision's period, never set.
+_Avoid_: Request, case (that is a Ticket), exemption (that is one kind)
+
+**Decision**:
+The office's verdict on an Application: granted, partly granted or refused, with what it holds the customer to, the period a grant is in force, and how to appeal anything less than a grant in full. Appended, never rewritten: an appeal reopens the Application and the next Decision follows the last.
+_Avoid_: Approval (a controlled change's), ruling
+
 **Service frequency**:
 The promised collection cadence — a small reusable, project-scoped frequency record (collections per week plus weeks or days between) referenced by containers and products; agreements store none of their own and display what the assigned container inherits. It constrains scheme recurrence, never generates dates.
 _Avoid_: Pickup setting, billing frequency, recurrence (the scheme's cadence)

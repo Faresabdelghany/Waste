@@ -37,6 +37,8 @@ export const MODULE_KEYS = [
   "customers.shared",
   "customers.contacts",
   "customers.agreements",
+  // A customer's Applications and the office's Decisions on them (M7 of #293).
+  "customers.applications",
   "customers.citizen-portal",
   // Assets & Inventory
   "resources.containers",

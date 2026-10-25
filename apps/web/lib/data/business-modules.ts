@@ -2686,6 +2686,25 @@ const customers: WorkspaceDefinition = {
       ],
     },
     {
+      // Applications and the office's Decisions (Issue #293, M7): on the API only, so no fixture records; the module's surfaces are M7b's.
+      id: "applications",
+      label: "Applications",
+      title: "Applications",
+      description: "A customer's written requests to change how they are served or billed — an exemption, a pause, a longer interval, home composting, a shared bin, assisted collection, a fee put right — and the office's decision on each.",
+      entityLabel: "Application",
+      contextLabel: "Kind · customer",
+      valueLabel: "Decision",
+      primaryAction: "Record application",
+      metrics: [],
+      lifecycle: ["Received", "In review", "Decided", "Withdrawn"],
+      rules: [
+        "A decision is appended and never rewritten: an appeal reopens the application and the next decision follows the last.",
+        "A grant is in force from its first day; whether it has expired is read from its period, never set by hand.",
+        "Anything less than a grant in full tells the customer how to appeal it.",
+      ],
+      records: [],
+    },
+    {
       id: "citizen-portal",
       label: "Citizen Portal",
       title: "Citizen and Customer Portal",
