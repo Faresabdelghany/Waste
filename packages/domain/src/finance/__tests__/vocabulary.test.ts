@@ -15,7 +15,7 @@ defineVocabularyTests("Finance", vocabulary, vocabulary.FINANCE_VOCABULARIES, 15
 
 describe("the Finance vocabulary's own rules", () => {
   test("a billable event is made of four kinds, stands in five readings and is blocked for one of six actionable reasons — never a missing payer", () => {
-    assert.deepEqual([...vocabulary.BILLABLE_EVENT_KINDS], ["pickup", "ticket", "manual", "reversal", "subscription", "job", "hire"])
+    assert.deepEqual([...vocabulary.BILLABLE_EVENT_KINDS], ["pickup", "ticket", "manual", "reversal", "subscription", "job", "hire", "pickup-exception"])
     assert.deepEqual([...vocabulary.BILLABLE_EVENT_STATUSES], ["blocked", "ready", "invoiced", "cancelled", "reversed"])
     assert.equal((vocabulary.BILLABLE_EVENT_STATUSES as readonly string[]).includes("in-progress"), false, "the deferred recurring event's")
     assert.deepEqual([...vocabulary.BLOCK_REASONS], ["no-subscription", "agreement-draft", "no-price-list", "no-price-row", "no-product", "no-vat-rate", "amount-too-large"])

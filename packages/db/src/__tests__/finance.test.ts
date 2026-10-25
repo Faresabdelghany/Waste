@@ -898,6 +898,24 @@ describe("the Finance & Contracting tables against a fresh database", { skip: da
       }
     }))
 
+  test("a Pickup Exception's charge (#293 M5b) names its pickup and only it names evidence (23514); one outbox event is a row of each kind (23505 billable_event_source_event_id_idx), and an event is reversed once (23505 billable_event_reverses_event_id_idx)", () =>
+    seeded(async (tx) => {
+      const refused = (statement: (savepoint: Tx) => Promise<unknown>, code: string, constraint: RegExp, why: string) => assert.rejects(tx.transaction((savepoint) => statement(savepoint)), refusedWith(code, constraint), why)
+      // The consumer's row of the seeded completion's event: a pickup's exception charge beside its collection charge.
+      const charge = (values: Partial<typeof billableEvent.$inferInsert>) => manual({ kind: "pickup-exception", routeId: a.route, pickupId: a.pickup, createdBy: null, sourceEventId: a.outbox, ...values })
+      await refused((savepoint) => savepoint.insert(billableEvent).values(charge({ routeId: null, pickupId: null })), "23514", /billable_event_kind_shape/, "an exception's charge names its pickup")
+      await refused((savepoint) => savepoint.insert(billableEvent).values(manual({ evidenceProofId: a.other })), "23514", /billable_event_evidence_shape/, "only an exception's charge names evidence")
+      await tx.insert(billableEvent).values(charge({}))
+      assert.deepEqual((await tx.select({ kind: billableEvent.kind }).from(billableEvent).where(eq(billableEvent.sourceEventId, a.outbox))).map((row) => row.kind).sort(), ["pickup", "pickup-exception"], "two kinds of one event")
+      await refused((savepoint) => savepoint.insert(billableEvent).values(charge({ id: a.other })), "23505", /billable_event_source_event_id_idx/, "the same kind of one event twice")
+
+      // A reversal is keyed by the event it undoes, whatever outbox event made it: a second one of the seeded event is refused.
+      const reversal = (values: Partial<typeof billableEvent.$inferInsert>) =>
+        manual({ id: a.third, kind: "reversal", reversesEventId: a.event, priceListRowId: null, netMinor: -PRICE.netMinor, vatMinor: -PRICE.vatMinor, createdBy: null, sourceEventId: a.third, ...values })
+      await tx.insert(billableEvent).values(reversal({}))
+      await refused((savepoint) => savepoint.insert(billableEvent).values(reversal({ id: a.fourth, sourceEventId: a.fourth })), "23505", /billable_event_reverses_event_id_idx/, "an event reversed twice")
+    }))
+
   test("the domain's vatOf agrees with the two _vat_shape checks over odd amounts of both signs: every row the domain computed lands, and an øre off is refused", () =>
     seeded(async (tx) => {
       let rows = 0

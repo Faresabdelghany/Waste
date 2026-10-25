@@ -210,6 +210,7 @@ export type ComposedEvent = {
   pickupId: string | null
   ticketId: string | null
   reversesEventId: string | null
+  evidenceProofId: string | null
   subscriptionId: string | null
   sourceEventId: string | null
   createdBy: string | null
@@ -238,6 +239,7 @@ export function billableEventShapeIssue(row: ComposedEvent): string | undefined 
   if (row.priceListRowId === null && row.blockReason === null && row.kind !== "manual" && row.kind !== "reversal") return `a priced ${row.kind} event names the row that won (billable_event_row_shape)`
   if ((row.kind === "manual" && row.priceListRowId === null && row.blockReason === null) !== (row.overrideReason !== null)) return "a manual event priced by hand carries the reason, and nothing else does (billable_event_override_shape)"
   if (row.pickupId !== null && row.routeId === null) return "a pickup is named with its route (billable_event_pickup_shape)"
+  if (row.evidenceProofId !== null && row.kind !== "pickup-exception") return "only a Pickup Exception's charge names its evidence (billable_event_evidence_shape)"
   switch (row.kind) {
     case "pickup":
       if (row.pickupId === null || row.ticketId !== null || row.reversesEventId !== null) return "a pickup event names its pickup and no ticket and no reversal (billable_event_kind_shape)"
@@ -250,6 +252,9 @@ export function billableEventShapeIssue(row: ComposedEvent): string | undefined 
       break
     case "reversal":
       if (row.reversesEventId === null || row.pickupId !== null || row.ticketId !== null || !priced || (row.netMinor ?? 0) > 0) return "a reversal names the event it undoes, nothing of its own, and carries the negated price (billable_event_kind_shape)"
+      break
+    case "pickup-exception":
+      if (row.pickupId === null || row.ticketId !== null || row.reversesEventId !== null) return "a Pickup Exception's charge names its pickup and no ticket and no reversal (billable_event_kind_shape)"
       break
     case "subscription":
       if (row.subscriptionId === null || row.pickupId !== null || row.ticketId !== null || row.reversesEventId !== null) return "a recurring charge names its subscription and no pickup, no ticket and no reversal (billable_event_kind_shape)"
@@ -293,6 +298,7 @@ export type RecordBillableEventInput = {
 export async function recordBillableEvent(tx: Tx, input: RecordBillableEventInput): Promise<{ row: EventRow; answered: BillableEvent }> {
   const { draft } = input
   const { price } = draft
+  const { proofId, ...links } = draft.links
   const composed: ComposedEvent = {
     kind: draft.kind,
     agreementId: draft.agreementId,
@@ -305,7 +311,8 @@ export async function recordBillableEvent(tx: Tx, input: RecordBillableEventInpu
     currency: price?.currency ?? null,
     priceListRowId: price?.priceListRowId ?? null,
     blockReason: draft.blockReason,
-    ...draft.links,
+    ...links,
+    evidenceProofId: proofId,
     subscriptionId: draft.subscriptionId,
     sourceEventId: input.sourceEventId,
     createdBy: input.createdBy,
@@ -330,36 +337,53 @@ export async function recordBillableEvent(tx: Tx, input: RecordBillableEventInpu
   return { row, answered: eventOf({ ...row, ...UNNAMED }) }
 }
 
-/** `billable_event_source_event_id_idx`: one row per outbox event, the consumer's idempotency key. */
+/** `billable_event_source_event_id_idx`: one row of a kind per outbox event, reversals aside, the consumer's idempotency key for a record (#293 M5). */
 export const ONE_ROW_PER_SOURCE_EVENT = "billable_event_source_event_id_idx"
 
-/** The consumer's event already recorded from an outbox event, with its reading; undefined when the event has made no row yet. */
-export async function eventBySource(tx: Tx, companyId: string, sourceEventId: string): Promise<EventReading | undefined> {
+/** `billable_event_reverses_event_id_idx`: an event is reversed once, the consumer's idempotency key for a reversal (#293 M5). */
+export const ONE_REVERSAL_PER_EVENT = "billable_event_reverses_event_id_idx"
+
+/** The consumer's event of a kind already recorded from an outbox event, with its reading; undefined when the event has made no such row yet. */
+export async function eventBySource(tx: Tx, companyId: string, sourceEventId: string, kind: BillableEventKind): Promise<EventReading | undefined> {
   const [row] = await eventsFrom(tx, companyId)
-    .query.where(and(eq(billableEvent.companyId, companyId), eq(billableEvent.sourceEventId, sourceEventId)))
+    .query.where(and(eq(billableEvent.companyId, companyId), eq(billableEvent.sourceEventId, sourceEventId), eq(billableEvent.kind, kind)))
+    .limit(1)
+  return row
+}
+
+/** The reversal of an event already recorded, with its reading; undefined while the event stands unreversed. */
+export async function reversalOfEvent(tx: Tx, companyId: string, reversesEventId: string): Promise<EventReading | undefined> {
+  const [row] = await eventsFrom(tx, companyId)
+    .query.where(and(eq(billableEvent.companyId, companyId), eq(billableEvent.reversesEventId, reversesEventId)))
     .limit(1)
   return row
 }
 
 /** The kinds a stop's completion records: a pickup's charge, or a work order's job. */
-const STOP_EVENT_KINDS: BillableEventKind[] = ["pickup", "job"]
+export const STOP_EVENT_KINDS: readonly BillableEventKind[] = ["pickup", "job"]
+
+/** The kind a stop's Pickup Exception records (#293 M5), read apart from the stop's own. */
+export const EXCEPTION_EVENT_KINDS: readonly BillableEventKind[] = ["pickup-exception"]
 
 /**
- * A pickup's live event, its `pickup` charge or a work order's `job` (M14 of
- * #293), whichever its completion recorded — not cancelled and not reversed: `ready`,
+ * A pickup's live event of the kinds asked — by default the stop's own, its
+ * `pickup` charge or a work order's `job` (M14 of #293), whichever its
+ * completion recorded — not cancelled and not reversed: `ready`,
  * `blocked` or `invoiced` in the reading's words, since an invoiced event is
  * the one a correction reverses — under its row lock, so the consumer that
  * judges it and then stamps or reverses it does so against what it read: two
  * workers on one pickup's correction take turns here, and the second finds
  * the cancellation or the reversal already there. Undefined when the pickup
  * has none (never charged for, or its event already cancelled or reversed).
- * One at most: a pickup's completion records one event, and a correction to
- * `completed` records one only where none is live.
+ * One at most of each kind: a pickup's completion records one event, and a
+ * correction to `completed` records one only where none is live; its
+ * Pickup Exception's charge (#293 M5, `EXCEPTION_EVENT_KINDS`) is read the
+ * same way, apart, so neither is ever taken for the other.
  */
-export async function liveEventOf(tx: Tx, companyId: string, pickup: { routeId: string; pickupId: string }): Promise<EventReading | undefined> {
+export async function liveEventOf(tx: Tx, companyId: string, pickup: { routeId: string; pickupId: string }, kinds: readonly BillableEventKind[] = STOP_EVENT_KINDS): Promise<EventReading | undefined> {
   const { query, reversing } = eventsFrom(tx, companyId)
   const rows = await query
-    .where(and(eq(billableEvent.companyId, companyId), inArray(billableEvent.kind, STOP_EVENT_KINDS), eq(billableEvent.routeId, pickup.routeId), eq(billableEvent.pickupId, pickup.pickupId), isNull(billableEvent.cancelledAt), isNull(reversing.id)))
+    .where(and(eq(billableEvent.companyId, companyId), inArray(billableEvent.kind, kinds), eq(billableEvent.routeId, pickup.routeId), eq(billableEvent.pickupId, pickup.pickupId), isNull(billableEvent.cancelledAt), isNull(reversing.id)))
     .orderBy(asc(billableEvent.id))
   const [live] = rows
   if (live === undefined) return undefined

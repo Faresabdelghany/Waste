@@ -148,6 +148,8 @@ function originOf(event: BillableEvent, context: MappingContext): string {
       return "Charged by a billing run"
     case "job":
       return "Completed work order"
+    case "pickup-exception":
+      return "Pickup exception charged by its project's rules"
   }
 }
 
@@ -280,6 +282,8 @@ export const billableEventAdapter: ResourceAdapter<BillableEvent> = {
         ...(block === undefined ? {} : { "Block reason": block }),
         ...(route === undefined ? {} : { Route: route.name }),
         ...(ticket === undefined ? {} : { Ticket: ticket.name }),
+        // A Pickup Exception's charge names the proof that recorded it (#293 M5); its photo is the stop's, read in the stop's details.
+        ...(event.links.proofId === null ? {} : { Evidence: `Proof of service ${event.links.proofId.slice(0, 8)}` }),
         Origin: originOf(event, context),
         ...(event.overrideReason === null ? {} : { "Override reason": event.overrideReason }),
         ...(event.note === null ? {} : { Note: event.note }),

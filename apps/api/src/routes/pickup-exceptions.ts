@@ -36,16 +36,17 @@ import {
 import type { ProductStatus } from "@waste/contracts/catalogue"
 import type { ContaminantCodeStatus } from "@waste/contracts/pickup-exceptions"
 import type { Tx } from "@waste/db/client"
+import { exceptionRulesOf, laddersOf, latestOutcomeProofs, pickupExceptionRows } from "@waste/db/commands/pickup-exceptions"
 import { validOn } from "@waste/db/query/valid-on"
 import { product } from "@waste/db/schema/catalogue"
 import { property, sharedCollectionPoint } from "@waste/db/schema/customers"
-import { pickup, proofOfService, route } from "@waste/db/schema/execution"
+import { pickup, route } from "@waste/db/schema/execution"
 import { project } from "@waste/db/schema/organisation"
 import { contaminantCode, contaminantCodeFraction, pickupExceptionRule, pickupExceptionRuleStep } from "@waste/db/schema/pickup-exceptions"
-import { judgeException, type PickupExceptionRuleFacts, type PickupExceptionStop } from "@waste/domain/execution/pickup-exceptions"
+import { judgeException, type PickupExceptionStop } from "@waste/domain/execution/pickup-exceptions"
 import { addDays } from "@waste/domain/route-schemes/recurrence"
-import { CODED_PROOF_KINDS, PICKUP_EXCEPTION_REASONS, type PickupOrigin, type PickupOutcome, type PickupReason, type PickupService, type PickupStatus } from "@waste/domain/execution/vocabulary"
-import { and, asc, desc, eq, gt, gte, inArray, isNotNull, or, type SQL } from "drizzle-orm"
+import { type PickupOrigin, type PickupOutcome, type PickupReason, type PickupService, type PickupStatus } from "@waste/domain/execution/vocabulary"
+import { and, asc, desc, eq, gt, gte, inArray } from "drizzle-orm"
 import { Hono, type MiddlewareHandler } from "hono"
 import { describeRoute } from "hono-openapi"
 
@@ -121,19 +122,6 @@ async function findRule(tx: Tx, principal: Principal, id: string): Promise<Row |
   return row
 }
 
-/** Each rule's ladder by position, for the rules named. */
-async function laddersOf(tx: Tx, companyId: string, ruleIds: readonly string[]): Promise<Map<string, string[]>> {
-  const ladders = new Map<string, string[]>()
-  if (ruleIds.length === 0) return ladders
-  const steps = await tx
-    .select({ ruleId: pickupExceptionRuleStep.ruleId, productId: pickupExceptionRuleStep.productId })
-    .from(pickupExceptionRuleStep)
-    .where(and(eq(pickupExceptionRuleStep.companyId, companyId), inArray(pickupExceptionRuleStep.ruleId, [...ruleIds])))
-    .orderBy(asc(pickupExceptionRuleStep.ruleId), asc(pickupExceptionRuleStep.position))
-  for (const step of steps) ladders.set(step.ruleId, [...(ladders.get(step.ruleId) ?? []), step.productId])
-  return ladders
-}
-
 /**
  * Holds a ladder to its project's products: every step a product of the
  * project sold per job as an additional service (400 at `ladder.N`), then
@@ -196,43 +184,12 @@ const commonProblems = (action: "view" | "edit" | "create", module = MODULE) => 
 /** The place a history is read at: a Property or a Shared Collection Point, by its column on the stop. */
 type Place = { kind: "property" | "point"; id: string }
 
-/** The stops that are exceptions as a row says so: missed for a reason the customer caused, or collected but tagged. */
-const pickupExceptionRows = (): SQL | undefined =>
-  or(
-    and(inArray(pickup.status, ["failed", "skipped"]), inArray(pickup.reason, [...PICKUP_EXCEPTION_REASONS])),
-    and(eq(pickup.status, "completed"), isNotNull(pickup.contaminantCodeId)),
-  )
-
-/** The rules of one project, any period, as the domain reads them. */
-async function rulesOfProject(tx: Tx, companyId: string, projectId: string): Promise<PickupExceptionRuleFacts[]> {
-  const rows = await tx
-    .select(columns)
-    .from(pickupExceptionRule)
-    .where(and(eq(pickupExceptionRule.companyId, companyId), eq(pickupExceptionRule.projectId, projectId)))
-  const ladders = await laddersOf(
-    tx,
-    companyId,
-    rows.map((row) => row.id),
-  )
-  return rows.map((row) => ({
-    id: row.id,
-    validFrom: row.validFrom,
-    validTo: row.validTo,
-    outcome: row.outcome as PickupOutcome,
-    reason: row.reason as PickupReason | null,
-    contaminantCodeId: row.contaminantCodeId,
-    freeCount: row.freeCount,
-    windowDays: row.windowDays,
-    ladder: ladders.get(row.id) ?? [],
-  }))
-}
-
 /** The most exception rows one history reads, its window's reach included; a place past it is answered from its newest rows and told `truncated`. */
 const HISTORY_READ_MAX = 5000
 
 /** One place's history: its exceptions from `from` on, newest first, judged by its project's rules over the stops at the place in each rule's window. */
 async function historyAt(tx: Tx, companyId: string, projectId: string, place: Place, from: string): Promise<PickupExceptionHistory> {
-  const rules = await rulesOfProject(tx, companyId, projectId)
+  const rules = await exceptionRulesOf(tx, companyId, projectId)
   const reach = Math.max(0, ...rules.map((rule) => rule.windowDays))
   const placeColumn = place.kind === "property" ? pickup.propertyId : pickup.sharedCollectionPointId
   const read = await tx
@@ -293,18 +250,6 @@ async function historyAt(tx: Tx, companyId: string, projectId: string, place: Pl
     ),
     truncated: shown.length > page.length || read.length > HISTORY_READ_MAX,
   }
-}
-
-/** The latest proof recording each stop's outcome — the driver's completion, skip or failure, or the office's correction — by stop. */
-async function latestOutcomeProofs(tx: Tx, companyId: string, pickupIds: readonly string[]): Promise<Map<string, string>> {
-  if (pickupIds.length === 0) return new Map()
-  const rows = await tx
-    .selectDistinctOn([proofOfService.pickupId], { pickupId: proofOfService.pickupId, id: proofOfService.id })
-    .from(proofOfService)
-    .where(and(eq(proofOfService.companyId, companyId), inArray(proofOfService.pickupId, [...pickupIds]), inArray(proofOfService.kind, [...CODED_PROOF_KINDS])))
-    // The server's clock, then the id: a driver's proof is minted on the device's clock, which may run ahead of the office's correction recorded after it.
-    .orderBy(asc(proofOfService.pickupId), desc(proofOfService.recordedAt), desc(proofOfService.id))
-  return new Map(rows.flatMap((row) => (row.pickupId === null ? [] : [[row.pickupId, row.id] as const])))
 }
 
 /** The first service date a history reads when the query names none: the 365 days before the project's today. */

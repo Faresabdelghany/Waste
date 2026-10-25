@@ -41,6 +41,8 @@ export const BillableEventLinks = z.object({
   ticketId: Id.nullable(),
   /** On a reversal: the invoiced event it undoes. */
   reversesEventId: Id.nullable(),
+  /** On a Pickup Exception's charge (#293 M5): the proof that recorded the exception, its evidence. */
+  proofId: Id.nullable(),
 })
 export type BillableEventLinks = z.infer<typeof BillableEventLinks>
 

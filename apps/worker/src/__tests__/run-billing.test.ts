@@ -103,7 +103,7 @@ describe("finance.run-billing against Postgres", { skip }, () => {
       quantity: 1,
       price: { priceListRowId: null, unitPriceMinor, netMinor: unitPriceMinor, vatPercent: 25, vatMinor: Math.round(unitPriceMinor / 4), currency: "DKK" },
       blockReason: null,
-      links: { routeId: null, pickupId: null, ticketId: null, reversesEventId: null },
+      links: { routeId: null, pickupId: null, ticketId: null, reversesEventId: null, proofId: null },
     }
     return await withCompany(api.db, tenant.companyId, async (tx) => (await recordBillableEvent(tx, { companyId: tenant.companyId, projectId: tenant.projects.copenhagen.id, draft, overrideReason: "Agreed by phone", note: null, createdBy: tenant.users.olivia.id, sourceEventId: null, newId })).answered.id)
   }

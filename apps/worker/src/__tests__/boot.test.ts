@@ -354,11 +354,12 @@ describe("the worker booted against a migrated database", { skip: owner.skip }, 
     assert.ok(sent)
     await running!.stop(2_000)
 
-    // The deploy: the process started again, with a second consumer of the kind beside Resolution's, so the event fans out to both.
+    // The deploy: the process started again, with a second consumer of the kind beside Resolution's, so the event fans out to both. Finance's entry of the kind (#293 M5b) is left out: its handler reads the pickup the event names, which this file never wrote, where Resolution's answers a skip with nothing.
     const heard: string[] = []
     const second = defineOutboxConsumer({ name: "test", kinds: ["pickup-skipped"], description: "Counts.", workOptions: { pollingIntervalSeconds: 0.5 }, handler: async (relayed) => void heard.push(relayed.id) })
+    const registry = [...JOBS.filter((job) => job.queue !== consumerQueue("pickup-skipped", "finance")), ...second]
     const boss = createBoss({ url, log: (line) => void errors.push(line) })
-    running = await startBoss(boss, [...JOBS, ...second], context(fresh))
+    running = await startBoss(boss, registry, context(fresh))
     const [drained] = await boss.findJobs(legacy, { id: sent! })
     assert.equal(drained.state, "completed", "completed on the kind's queue")
     assert.ok(lines.includes(`pg-boss: 1 job of ${legacy} moved to ${consumerQueue("pickup-skipped", "resolution")}, ${consumerQueue("pickup-skipped", "test")}`))
@@ -373,7 +374,7 @@ describe("the worker booted against a migrated database", { skip: owner.skip }, 
 
     // Started again: nothing waits on the kind's queue, so nothing moves twice.
     await running.stop(2_000)
-    running = await startBoss(createBoss({ url, log: (line) => void errors.push(line) }), [...JOBS, ...second], context(fresh))
+    running = await startBoss(createBoss({ url, log: (line) => void errors.push(line) }), registry, context(fresh))
     assert.equal(lines.filter((line) => line.startsWith(`pg-boss: 1 job of ${legacy}`)).length, 1, "moved once, at the first start")
     assert.equal((await running.boss.findJobs<RelayedEvent>(consumerQueue("pickup-skipped", "resolution"), { data: { id: event.id } })).length, 1)
   })

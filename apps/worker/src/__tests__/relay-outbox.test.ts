@@ -188,6 +188,7 @@ describe("execution.relay-outbox", { skip: roles.skip }, () => {
       sent,
       [
         { queue: "outbox.pickup-failed.resolution", id: a1 },
+        { queue: "outbox.pickup-failed.finance", id: a1 },
         { queue: "outbox.route-cancelled", id: a2 },
         { queue: "outbox.command-rejected.resolution", id: a3 },
         { queue: "outbox.pickup-completed.finance", id: b1 },
@@ -206,7 +207,7 @@ describe("execution.relay-outbox", { skip: roles.skip }, () => {
     assert.equal(stampsA.size, 1, "one company's batch is one transaction, one instant")
 
     const jobs = await outboxJobs()
-    assert.equal(jobs.length, 5)
+    assert.equal(jobs.length, 6, "a1 on Resolution's queue and Finance's (#293 M5b), the other four on one each")
     for (const job of jobs) {
       const event = RelayedEvent.parse(job.data)
       const row = rows.find((candidate) => candidate.id === event.id)!
@@ -225,7 +226,7 @@ describe("execution.relay-outbox", { skip: roles.skip }, () => {
     sent.length = 0
     assert.deepEqual(await relayOnce(context), { swept: 0, published: 0 })
     assert.deepEqual(sent, [])
-    assert.equal((await outboxJobs()).length, 5)
+    assert.equal((await outboxJobs()).length, 6)
   })
 
   test("a send that fails leaves the company's rows unstamped and its other sends unwritten — one transaction — while the other company's rows are published, and the next tick takes them", async () => {
@@ -252,7 +253,7 @@ describe("execution.relay-outbox", { skip: roles.skip }, () => {
     assert.equal(byId.get(b3)!.publishedAt, null, "B's first row is not stamped, though its send came before the failing one")
     assert.equal(byId.get(b4)!.publishedAt, null)
     const jobs = await outboxJobs()
-    assert.equal(jobs.length, 6, "A's one job; none of B's two, the send of b3 rolled back with the stamp")
+    assert.equal(jobs.length, 8, "A's skip on Resolution's queue and Finance's; none of B's two, the send of b3 rolled back with the stamp")
     assert.ok(!jobs.some((job) => RelayedEvent.parse(job.data).id === b3), "b3's send did not survive its transaction")
 
     // The queue back, the way a consumer's next start would bring it: the next tick takes exactly B's two rows, in order.
@@ -263,7 +264,7 @@ describe("execution.relay-outbox", { skip: roles.skip }, () => {
       sent.map((entry) => entry.id),
       [b3, b4],
     )
-    assert.equal((await outboxJobs()).length, 8)
+    assert.equal((await outboxJobs()).length, 10)
     assert.ok((await outbox()).every((row) => row.publishedAt !== null))
   })
 
@@ -317,7 +318,7 @@ describe("execution.relay-outbox", { skip: roles.skip }, () => {
     await owner.sql.begin(async (holding) => {
       await holding`select id from wms.outbox_event where id = ${a6} for update`
       assert.deepEqual(await relayOnce(context), { swept: 3, published: 2 }, "the held row is left, the other two go")
-      assert.deepEqual(sent.map((entry) => entry.id), [a5, b5])
+      assert.deepEqual(sent.map((entry) => entry.id), [a5, a5, b5], "a5 to Resolution and Finance both")
     })
     const rows = new Map((await outbox()).map((row) => [row.id, row]))
     assert.equal(rows.get(a6)!.publishedAt, null)
@@ -453,7 +454,8 @@ describe("execution.relay-outbox", { skip: roles.skip }, () => {
     assert.deepEqual([...new Set(rows.map((row) => row.companyId))].sort(), [a.companyId, b.companyId].sort())
     const publishedIds = await owner.sql.unsafe<{ id: string }[]>(`select data->>'id' as id from ${PGBOSS_SCHEMA}.job where name like 'outbox.%' and name <> '${OUTBOX_DEAD_QUEUE}' and data->>'companyId' is not null`)
     const ids = publishedIds.map((row) => row.id).filter((candidate) => rows.some((row) => row.id === candidate))
-    assert.equal(ids.length, rows.length + 1, "one job per row, plus the stray job the consumer test sent by hand")
+    const routed = rows.reduce((total, row) => total + (OUTBOX_ROUTES.get(row.kind as OutboxKind)?.length ?? 1), 0)
+    assert.equal(ids.length, routed + 1, "one job per row and consumer of its kind, plus the stray job the consumer test sent by hand")
     assert.equal(new Set(ids).size, rows.length, "every outbox row published once, none twice")
     // The consumer refused two jobs with no retry (a stray kind, and no event at all): both failed, and both are on the dead-letter queue with what they carried and where they came from, for an operator to read and redrive or delete.
     const dead = await owner.sql.unsafe<{ state: string; source_name: string; data: unknown }[]>(`select state, source_name, data from ${PGBOSS_SCHEMA}.job where name = '${OUTBOX_DEAD_QUEUE}' order by created_on`)
