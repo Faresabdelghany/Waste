@@ -122,6 +122,7 @@ import { boolean, check, date, index, integer, jsonb, text, time, timestamp, uni
 
 import { tableObjectName } from "../names"
 import { userAccount } from "./access"
+import { subscription } from "./agreements"
 import { wasteFraction } from "./catalogue"
 import { exactlyOne, literal, oneOf, positive } from "./checks"
 import { id, projectScoped, recorded, timestamps } from "./columns"
@@ -131,7 +132,7 @@ import { driver, vehicle } from "./fleet"
 import { generationRun } from "./generation"
 import { geometry, validGeometry } from "./geometry"
 import { company, project, serviceProvider } from "./organisation"
-import { depot, unloadingStation } from "./places"
+import { depot, unloadingStation, warehouse } from "./places"
 import { companyReference, indexOn, projectKey, projectReference, tenantIndex, tenantReference, tenantUnique } from "./references"
 import { collectionGroup, routeScheme } from "./route-schemes"
 import { wms } from "./wms"
@@ -278,12 +279,38 @@ export const pickup = wms.table(
     outcomeAt: instant(),
     /** Why a skipped or failed pickup was not collected; none otherwise. */
     reason: text(),
+    /** A delivery's subscription (O3b of #290): what the container serves under once its completion issues it, at the stop's place. */
+    subscriptionId: uuid(),
+    /** A removal's or a swap's warehouse: where the container taken is returned to. */
+    warehouseId: uuid(),
+    /** A swap's replacement: the container from stock its completion issues in place of the one taken. */
+    replacementContainerId: uuid(),
+    /**
+     * The stock container a planned delivery or swap holds back from another
+     * booking — the delivery's own, the swap's replacement — and null once
+     * the stop is no longer planned or for any other service: the database's
+     * spelling of `reservedContainerOf` (@waste/domain/execution/work-orders),
+     * which the unique index below holds to one stop at a time.
+     */
+    reservedContainerId: uuid().generatedAlwaysAs(
+      sql`case when "status" = 'planned' then case "service" when 'deliver' then "container_id" when 'swap' then "replacement_container_id" end end`,
+    ),
+    /**
+     * The container a planned removal or swap takes away from where it
+     * serves, and null otherwise: `takenContainerOf`'s spelling, held to one
+     * planned stop at a time by the unique index below, so two routes never
+     * both set out to take one container.
+     */
+    takenContainerId: uuid().generatedAlwaysAs(sql`case when "status" = 'planned' and "service" in ('remove', 'swap') then "container_id" end`),
   },
   (t) => [
     companyReference(t, company),
     tenantReference(t, [t.projectId], project),
     projectReference(t, [t.routeId], route),
     projectReference(t, [t.containerId], container),
+    projectReference(t, [t.subscriptionId], subscription),
+    projectReference(t, [t.warehouseId], warehouse),
+    projectReference(t, [t.replacementContainerId], container),
     projectReference(t, [t.propertyId], property),
     projectReference(t, [t.sharedCollectionPointId], sharedCollectionPoint),
     tenantReference(t, [t.wasteFractionId], wasteFraction),
@@ -300,6 +327,13 @@ export const pickup = wms.table(
     check(tableObjectName(t.id.table, "service_origin_shape", "pickup"), sql`${t.service} = 'empty' or ${t.origin} = 'office'`),
     // A work order is of a container; an address-only stop empties.
     check(tableObjectName(t.id.table, "service_container_shape", "pickup"), sql`${t.service} = 'empty' or ${t.containerId} is not null`),
+    // What each service books beside its container, and nothing else books it (O3b of #290, `BOOKED_WITH`).
+    check(tableObjectName(t.id.table, "subscription_shape", "pickup"), sql`(${t.service} = 'deliver') = (${t.subscriptionId} is not null)`),
+    check(tableObjectName(t.id.table, "warehouse_shape", "pickup"), sql`(${t.service} in ('remove', 'swap')) = (${t.warehouseId} is not null)`),
+    check(tableObjectName(t.id.table, "replacement_shape", "pickup"), sql`(${t.service} = 'swap') = (${t.replacementContainerId} is not null) and (${t.replacementContainerId} is null or ${t.replacementContainerId} <> ${t.containerId})`),
+    // A stock container is held back by one planned delivery or swap at a time, and one in service taken away by one planned removal or swap.
+    uniqueIndex(tableObjectName(t.id.table, "reserved_container_id_key", "pickup")).on(t.companyId, t.reservedContainerId).where(sql`${t.reservedContainerId} is not null`),
+    uniqueIndex(tableObjectName(t.id.table, "taken_container_id_key", "pickup")).on(t.companyId, t.takenContainerId).where(sql`${t.takenContainerId} is not null`),
     oneOf(t.reason, PICKUP_REASONS),
     positive(t.position),
     // Every pickup names its place, an address-only one included: the address the stop is at.
@@ -313,6 +347,9 @@ export const pickup = wms.table(
     tenantIndex(t, t.propertyId),
     tenantIndex(t, t.sharedCollectionPointId),
     tenantIndex(t, t.wasteFractionId),
+    tenantIndex(t, t.subscriptionId),
+    tenantIndex(t, t.warehouseId),
+    tenantIndex(t, t.replacementContainerId),
     // The stop list in order.
     tenantIndex(t, t.routeId, t.position),
   ],

@@ -94,6 +94,7 @@ const MASTER_KIND_BY_FIELD: Readonly<Record<string, MasterDataKind>> = {
   containerType: "container-type",
   wasteFraction: "waste-fraction",
   wasteFractionId: "waste-fraction",
+  deliveryFractionId: "waste-fraction",
   plannedFraction: "waste-fraction",
   serviceFrequencyId: "service-frequency",
 }

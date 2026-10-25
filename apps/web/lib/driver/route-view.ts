@@ -50,17 +50,19 @@ export const EXTRA_EMPTYING = "Extra emptying"
 
 /**
  * What each of a route's stops is for, beside its status, where it is more
- * than its collection (O3 of #290): a work order by its service, an extra
- * emptying by the domain's one rule (`extraEmptyings`), read once for the
- * route; a collection is not in the map. A stop read from an API before the
- * service is a collection.
+ * than its collection (O3 of #290): a work order by its service — a swap with
+ * the container the driver brings, by its label (O3b) — an extra emptying by
+ * the domain's one rule (`extraEmptyings`), read once for the route; a
+ * collection is not in the map. A stop read from an API before the service is
+ * a collection.
  */
 export function stopServices(stops: readonly DriverPickup[]): ReadonlyMap<string, string> {
   const extra = extraEmptyings(stops)
   const labels = new Map<string, string>()
   for (const stop of stops) {
     const service = stop.service ?? "empty"
-    if (service !== "empty") labels.set(stop.id, PICKUP_SERVICE_LABELS[service])
+    if (service === "swap" && stop.replacementContainerLabel != null) labels.set(stop.id, `${PICKUP_SERVICE_LABELS.swap} for ${stop.replacementContainerLabel}`)
+    else if (service !== "empty") labels.set(stop.id, PICKUP_SERVICE_LABELS[service])
     else if (extra.has(stop.id)) labels.set(stop.id, EXTRA_EMPTYING)
   }
   return labels

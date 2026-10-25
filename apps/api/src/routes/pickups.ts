@@ -67,11 +67,16 @@ import { PickupAdd, PickupCorrection, PickupDetail, PickupListItem, PickupListQu
 import type { Tx } from "@waste/db/client"
 import { validOn } from "@waste/db/query/valid-on"
 import { agreement, subscription } from "@waste/db/schema/agreements"
+import { product } from "@waste/db/schema/catalogue"
 import { container, containerServicePlacement } from "@waste/db/schema/containers"
+import { property, sharedCollectionPoint } from "@waste/db/schema/customers"
+import { uniqueConstraintOf } from "@waste/db/sqlstate"
 import { pickup, proofOfService, route } from "@waste/db/schema/execution"
 import { pickupCorrection, pickupTransition } from "@waste/domain/execution/transitions"
-import type { OfficeStopService, PickupStatus } from "@waste/domain/execution/vocabulary"
-import { and, asc, eq, gt, gte, lte, max } from "drizzle-orm"
+import { SERVICE_NOUNS } from "@waste/domain/execution/services"
+import type { OfficeStopService, PickupService, PickupStatus } from "@waste/domain/execution/vocabulary"
+import { isLedgerService, reservedContainerOf, takenContainerOf, type LedgerService } from "@waste/domain/execution/work-orders"
+import { and, asc, desc, eq, gt, gte, lte, max } from "drizzle-orm"
 import { Hono, type MiddlewareHandler } from "hono"
 import { describeRoute } from "hono-openapi"
 
@@ -82,13 +87,16 @@ import { newId } from "../ids"
 import { emit } from "../outbox"
 import { afterCursor, fetchLimit, pageOf } from "../pagination"
 import { describeProblem, invalidRequest, problem, validate } from "../problem"
+import { routeLabel } from "@waste/contracts/execution"
 import { findRoute, labelOf, noSuchPickup, pickupColumns, pickupOf, pickupReach, pickupScope, proofOf, proofsOfPickup, requireReachedRoute, routeScope, type PickupRow, type RouteRow } from "./execution-shapes"
 import { sequenceIn, sequencesOfRoutes } from "./plan-shapes"
-import { requireProperty, requireSharedCollectionPoint, requireWasteFraction, type Scope } from "./references"
+import { requireDeparture, type ContainerRef } from "./lifecycle"
+import { requireProperty, requireSharedCollectionPoint, requireWarehouse, requireWasteFraction, type Scope } from "./references"
 import { lockedRoute, ORDER_IS_FROZEN, requireNotStarted, requireRan } from "./routes"
 import type { ClockOptions } from "./scheme-groups"
 import { created, describeCreated, describeJson, IdParam, lockRow, stamp } from "./shared"
-import { placeOf, refuseUnservedPlace } from "./statuses"
+import { correctLedgerWork } from "./work-orders"
+import { placeOf, refuseUnservedPlace, requireWarehouseTakesStock, type Place } from "./statuses"
 
 const MODULE = "route-studio.pickups"
 
@@ -159,9 +167,161 @@ async function stopOf(tx: Tx, scope: Scope, body: PickupAdd, serviceDate: string
   return { label: null, at: { containerId: null, propertyId: body.propertyId ?? null, sharedCollectionPointId: body.sharedCollectionPointId ?? null, wasteFractionId: body.wasteFractionId } }
 }
 
+/** A ledger work order's bookings (O3b of #290), null where its service books none. */
+type Booking = { subscriptionId: string | null; warehouseId: string | null; replacementContainerId: string | null }
+const NO_BOOKING: Booking = { subscriptionId: null, warehouseId: null, replacementContainerId: null }
+
+/** What a delivery whose subscription's product names no fraction, and whose body names none, is told. */
+export const NAME_THE_FRACTION = "Name the waste fraction: the subscription's product names none"
+/** What a delivery under a subscription not in force on the route's service date is told. */
+export const notInForceOn = (serviceDate: string): string => `The subscription is not in force on the route's service date, ${serviceDate}`
+const NOT_A_SUBSCRIPTION = "Not a subscription of this project"
+
+/** A container of the route's project by id and label, as the ledger's commands name it; a 400 at the field that named it otherwise. */
+async function projectContainer(tx: Tx, scope: Scope, id: string, path: "containerId" | "replacementContainerId"): Promise<ContainerRef> {
+  const [found] = await tx
+    .select({ id: container.id, projectId: container.projectId, label: container.label })
+    .from(container)
+    .where(and(eq(container.companyId, scope.companyId), eq(container.projectId, scope.projectId), eq(container.id, id)))
+    .limit(1)
+  if (found === undefined) throw invalidRequest("body", [{ path, message: NOT_A_CONTAINER }])
+  return found
+}
+
+/** A delivery's subscription: of the route's project (400 otherwise), with its place, its period, the state of its place and its product's fraction. */
+async function deliveredUnder(tx: Tx, scope: Scope, id: string) {
+  const [row] = await tx
+    .select({
+      propertyId: subscription.propertyId,
+      sharedCollectionPointId: subscription.sharedCollectionPointId,
+      validFrom: subscription.validFrom,
+      validTo: subscription.validTo,
+      propertyStatus: property.status,
+      sharedCollectionPointStatus: sharedCollectionPoint.status,
+      productFractionId: product.wasteFractionId,
+    })
+    .from(subscription)
+    .innerJoin(product, and(eq(product.companyId, subscription.companyId), eq(product.id, subscription.productId)))
+    .leftJoin(property, and(eq(property.companyId, subscription.companyId), eq(property.id, subscription.propertyId)))
+    .leftJoin(sharedCollectionPoint, and(eq(sharedCollectionPoint.companyId, subscription.companyId), eq(sharedCollectionPoint.id, subscription.sharedCollectionPointId)))
+    .where(and(eq(subscription.companyId, scope.companyId), eq(subscription.projectId, scope.projectId), eq(subscription.id, id)))
+    .limit(1)
+  if (row === undefined) throw invalidRequest("body", [{ path: "subscriptionId", message: NOT_A_SUBSCRIPTION }])
+  return row
+}
+
+/**
+ * A ledger work order's stop (O3b of #290), judged in body order, the 400s of
+ * the fields first and then the 409s of the rows they name. A delivery's
+ * place is its subscription's — of the project, in force on the route's
+ * service date, its place still served — and its fraction the body's or the
+ * subscription's product's; its container is one the ledger would issue. A
+ * swap's place and fraction are its container's placement in force that day,
+ * as any container's stop, since its replacement serves under it; a
+ * removal's are where the container stands (`standsAt`), its placement in
+ * force or one a termination has ended since, the bin staying until it is
+ * taken away. Either container is one the ledger would return, to a warehouse
+ * of the project that takes stock; a swap's replacement is one the ledger
+ * would issue. Every state is read under the container's lock and judged as
+ * the movement at completion will be, with its sentence; the completion
+ * judges again, since a day passes between.
+ */
+async function ledgerStopOf(tx: Tx, principal: Principal, scope: Scope, body: PickupAdd, serviceDate: string): Promise<{ label: string; replacementLabel: string | null; at: StopPlace & { containerId: string }; booking: Booking }> {
+  const service = body.service as LedgerService
+  const taken = await projectContainer(tx, scope, body.containerId as string, "containerId")
+  if (service === "deliver") {
+    const under = await deliveredUnder(tx, scope, body.subscriptionId as string)
+    const wasteFractionId = body.wasteFractionId ?? under.productFractionId
+    if (wasteFractionId === null) throw invalidRequest("body", [{ path: "wasteFractionId", message: NAME_THE_FRACTION }])
+    if (body.wasteFractionId != null) await requireWasteFraction(tx, scope.companyId, body.wasteFractionId)
+    if (!(under.validFrom <= serviceDate && (under.validTo === null || serviceDate < under.validTo))) throw problem(409, { detail: notInForceOn(serviceDate) })
+    // The two statuses are text the columns' checks hold to the vocabulary, read as the statuses they are.
+    refuseUnservedPlace({ propertyStatus: under.propertyStatus, sharedCollectionPointStatus: under.sharedCollectionPointStatus } as Place, "stop")
+    await requireDeparture(tx, principal, taken, "issue")
+    return {
+      label: taken.label,
+      replacementLabel: null,
+      at: { containerId: taken.id, propertyId: under.propertyId, sharedCollectionPointId: under.sharedCollectionPointId, wasteFractionId },
+      booking: { ...NO_BOOKING, subscriptionId: body.subscriptionId as string },
+    }
+  }
+  const replacement = service === "swap" ? await projectContainer(tx, scope, body.replacementContainerId as string, "replacementContainerId") : undefined
+  const goesBackTo = await requireWarehouse(tx, scope, body.warehouseId)
+  if (goesBackTo === undefined) throw new Error("a removal or a swap reached the route without its warehouse")
+  const place = service === "remove" ? await standsAt(tx, scope, taken.id, serviceDate) : (await containerStop(tx, scope, taken.id, serviceDate)).place
+  if (place === undefined) throw problem(409, { detail: notPlacedOn(taken.label) })
+  requireWarehouseTakesStock(goesBackTo)
+  await requireDeparture(tx, principal, taken, "return")
+  if (replacement !== undefined) await requireDeparture(tx, principal, replacement, "issue")
+  return {
+    label: taken.label,
+    replacementLabel: replacement?.label ?? null,
+    at: { containerId: taken.id, ...place },
+    booking: { ...NO_BOOKING, warehouseId: goesBackTo.id, replacementContainerId: replacement?.id ?? null },
+  }
+}
+
+/**
+ * Where a container stands for its removal: the place and fraction of its
+ * latest placement to begin on or before the day, ended or not — the
+ * placement the return will end, as `endPlacement` (lifecycle.ts) reads it.
+ */
+async function standsAt(tx: Tx, scope: Scope, containerId: string, serviceDate: string): Promise<StopPlace | undefined> {
+  const [place] = await tx
+    .select({ propertyId: subscription.propertyId, sharedCollectionPointId: subscription.sharedCollectionPointId, wasteFractionId: containerServicePlacement.wasteFractionId })
+    .from(containerServicePlacement)
+    .innerJoin(subscription, and(eq(subscription.companyId, containerServicePlacement.companyId), eq(subscription.projectId, containerServicePlacement.projectId), eq(subscription.id, containerServicePlacement.subscriptionId)))
+    .where(and(eq(containerServicePlacement.companyId, scope.companyId), eq(containerServicePlacement.projectId, scope.projectId), eq(containerServicePlacement.containerId, containerId), lte(containerServicePlacement.validFrom, serviceDate)))
+    .orderBy(desc(containerServicePlacement.validFrom))
+    .limit(1)
+  return place
+}
+
+/**
+ * What a planned stop holds back from another booking, by the unique index
+ * that holds it and the generated column it indexes: the stock container a
+ * delivery or a swap puts into service (`reservedContainerOf`), and the
+ * container a removal or a swap takes away (`takenContainerOf`).
+ */
+const HOLDS = {
+  pickup_reserved_container_id_key: "reservedContainerId",
+  pickup_taken_container_id_key: "takenContainerId",
+} as const
+type Held = { index: keyof typeof HOLDS; id: string; label: string }
+
+/** What a second booking of a held container is told, naming the stop that holds it. */
+export const heldBy = (label: string, holder: { service: PickupService; route: string; position: number }): string =>
+  `Container ${label} is held for a ${SERVICE_NOUNS[holder.service]} on route ${holder.route}, stop ${holder.position}; take that stop off first`
+
+/**
+ * The office's stop written, a held container answered: the insert runs in a
+ * savepoint, so a booking that meets a hold's index can read the stop holding
+ * the container and name it — the index decides, never a read before the
+ * write.
+ */
+async function insertHolding(tx: Tx, principal: Principal, values: typeof pickup.$inferInsert, held: readonly Held[]): Promise<PickupRow> {
+  try {
+    return await tx.transaction(async (savepoint) => {
+      const [row] = await savepoint.insert(pickup).values(values).returning(pickupColumns)
+      return row
+    })
+  } catch (error) {
+    const hold = held.find((candidate) => candidate.index === uniqueConstraintOf(error))
+    if (hold === undefined) throw error
+    const [holder] = await tx
+      .select({ service: pickup.service, number: route.number, position: pickup.position })
+      .from(pickup)
+      .innerJoin(route, and(eq(route.companyId, pickup.companyId), eq(route.id, pickup.routeId)))
+      .where(and(pickupScope(principal), eq(pickup[HOLDS[hold.index]], hold.id)))
+      .limit(1)
+    if (holder === undefined) throw error
+    throw problem(409, { detail: heldBy(hold.label, { service: holder.service as PickupService, route: routeLabel(holder.number), position: holder.position }) })
+  }
+}
+
 /** What the same work booked twice on a route is told: an office stop of the container for that service is planned there already. A double-sent Add stop meets it; a second visit is booked once the first is done or taken off. */
 export const bookedAlready = (container: string, service: OfficeStopService, route: string): string =>
-  `Container ${container} has a planned ${service === "empty" ? "emptying" : service} the office added to route ${route} already`
+  `Container ${container} has a planned ${SERVICE_NOUNS[service]} the office added to route ${route} already`
 
 /** One pickup of this company by id, inside the caller's projects; undefined when it is neither. What a command reads. */
 async function findPickup(tx: Tx, principal: Principal, id: string): Promise<PickupRow | undefined> {
@@ -309,7 +469,7 @@ export function pickupRoutes(guard: MiddlewareHandler<AuthEnv>, { now = () => ne
         operationId: "addRoutePickup",
         summary: "Add a stop to a route that has not started",
         description:
-          "The office's stop (#111): a `planned` pickup with `origin` office, appended after the route's last position as the route stands, on a `planned` or `ready` route — on a `ready` one the driver's device sees it through the existing reads, and an active Plan that does not name it reads stale and keeps it at the end of the order until the route is measured again. Generation never moves it, so a later refresh that grows the plan may number its own stops past it; the dispatcher's order is how it goes elsewhere. The body names a container of the route's project (400 at `containerId`), whose placement in force on the route's service date — the placement, its subscription and its agreement each valid that day, as generation judges a stop — gives the stop its place and its fraction: a container with no such placement is refused (409, `Container BIN-82014 has no placement in force on the route's service date, so no place to collect it at`), while one the route stops at already is the office's to name again — an extra emptying, or a work order beside its collection — unless the office has the same work planned for it on the route already (409, `Container BIN-82014 has a planned wash the office added to route RC-1042 already`, which a double-sent request meets) — or an address-only stop: a property or a shared collection point of the project (400 at its field) that is served as a subscription's place is, an active property or an open or restricted point (409 naming the status otherwise), with the waste fraction collected there (400 at `wasteFractionId` for one that is not this company's), and no container. The `service` (O3 of #290) is `empty` unless the body says `repair` or `wash`, each of a container (400 at `containerId` otherwise). The note is what the driver reads at the stop. Generation's refresh never skips or moves the stop; an office emptying of a container generation has no stop of stands for the plan's emptying of it, while a repair or a wash leaves generation to plan the container's emptying beside it. A route that has started is refused (409): its order is frozen; a completed or cancelled one does not change. Under the route's row lock; the route's `updatedAt` moves, since its stops are part of it on the wire. No event is written: Resolution and Finance hear of the stop at its outcome, as of any other.",
+          "The office's stop (#111): a `planned` pickup with `origin` office, appended after the route's last position as the route stands, on a `planned` or `ready` route — on a `ready` one the driver's device sees it through the existing reads, and an active Plan that does not name it reads stale and keeps it at the end of the order until the route is measured again. Generation never moves it, so a later refresh that grows the plan may number its own stops past it; the dispatcher's order is how it goes elsewhere. The body names a container of the route's project (400 at `containerId`), whose placement in force on the route's service date — the placement, its subscription and its agreement each valid that day, as generation judges a stop — gives the stop its place and its fraction: a container with no such placement is refused (409, `Container BIN-82014 has no placement in force on the route's service date, so no place to collect it at`), while one the route stops at already is the office's to name again — an extra emptying, or a work order beside its collection — unless the office has the same work planned for it on the route already (409, `Container BIN-82014 has a planned wash the office added to route RC-1042 already`, which a double-sent request meets) — or an address-only stop: a property or a shared collection point of the project (400 at its field) that is served as a subscription's place is, an active property or an open or restricted point (409 naming the status otherwise), with the waste fraction collected there (400 at `wasteFractionId` for one that is not this company's), and no container. The `service` (O3 of #290) is `empty` unless the body says a work order, each of a container (400 at `containerId` otherwise). A delivery, a removal or a swap (O3b) books what its stock movements need, which the driver's completion records: a delivery names the `subscriptionId` its container from stock will serve under — the stop is at the subscription's place, in force on the route's service date (409 otherwise), with the body's fraction or the subscription product's (400 at `wasteFractionId` where neither names one); a removal and a swap name the `warehouseId` the container taken goes back to, of the project and taking stock; a swap names the `replacementContainerId` from stock that serves under the same placement. A removal's place is where the container stands, its latest placement to begin by the service date even if a termination has ended it; a swap's is its placement in force that day. Each container is held to the move its completion will make, under its lock and in the ledger's sentence (409): a delivered container or a replacement must be in stock, a container taken in service. A planned delivery or swap holds its stock container, and a planned removal or swap the container it takes away, from any other such booking (409 naming the stop that holds it, `Container BIN-7 is held for a swap on route RC-1042, stop 4; take that stop off first`); a stop done, skipped, failed or taken off holds nothing. The note is what the driver reads at the stop. Generation's refresh never skips or moves the stop; an office emptying of a container generation has no stop of stands for the plan's emptying of it, while a repair or a wash leaves generation to plan the container's emptying beside it. A route that has started is refused (409): its order is frozen; a completed or cancelled one does not change. Under the route's row lock; the route's `updatedAt` moves, since its stops are part of it on the wire. No event is written: Resolution and Finance hear of the stop at its outcome, as of any other.",
         security: BEARER_SECURITY,
         responses: {
           201: describeCreated("The stop, planned, with its `sequence` in the route's order and no proofs yet.", PickupDetail),
@@ -317,7 +477,7 @@ export function pickupRoutes(guard: MiddlewareHandler<AuthEnv>, { now = () => ne
           401: describeProblem("No usable token (see WWW-Authenticate)."),
           403: describeProblem(`No active account here, or the caller's role does not allow \`edit\` on \`${MODULE}\`.`),
           404: describeProblem("No route with that id in the projects this account works in."),
-          409: describeProblem("The route is active, completed or cancelled; the container has no placement on the route's service date; or the property or the point is not served; the detail says which."),
+          409: describeProblem("The route is active, completed or cancelled; the container has no placement on the route's service date; the property or the point is not served; a delivery's subscription is not in force that day; a container is not where the move its completion will make takes it from, or another planned stop holds it; the detail says which."),
         },
       }),
       guard,
@@ -332,7 +492,7 @@ export function pickupRoutes(guard: MiddlewareHandler<AuthEnv>, { now = () => ne
         const parent = await lockedRoute(tx, principal, id)
         requireNotStarted(parent, ORDER_IS_FROZEN)
         const scope: Scope = { companyId: principal.companyId, projectId: parent.projectId }
-        const stop = await stopOf(tx, scope, body, parent.serviceDate)
+        const stop = isLedgerService(body.service) ? await ledgerStopOf(tx, principal, scope, body, parent.serviceDate) : { ...(await stopOf(tx, scope, body, parent.serviceDate)), replacementLabel: null, booking: NO_BOOKING }
         const [last] = await tx
           .select({ position: max(pickup.position) })
           .from(pickup)
@@ -346,10 +506,20 @@ export function pickupRoutes(guard: MiddlewareHandler<AuthEnv>, { now = () => ne
             .limit(1)
           if (booked !== undefined) throw problem(409, { detail: bookedAlready(stop.label, body.service, labelOf(parent)) })
         }
-        const [row] = await tx
-          .insert(pickup)
-          .values({ id: newId(), ...scope, routeId: parent.id, position: (last?.position ?? 0) + 1, origin: "office", service: body.service, note: body.note ?? null, ...stop.at })
-          .returning(pickupColumns)
+        // What the stop holds back from another booking: the delivery's container or the swap's replacement, and the container a removal or a swap takes away.
+        const planned = { service: body.service, status: "planned" as const, containerId: stop.at.containerId, replacementContainerId: stop.booking.replacementContainerId }
+        const reserved = reservedContainerOf(planned)
+        const taken = takenContainerOf(planned)
+        const held: Held[] = [
+          ...(reserved === null ? [] : [{ index: "pickup_reserved_container_id_key" as const, id: reserved, label: (reserved === stop.at.containerId ? stop.label : stop.replacementLabel) ?? reserved }]),
+          ...(taken === null ? [] : [{ index: "pickup_taken_container_id_key" as const, id: taken, label: stop.label ?? taken }]),
+        ]
+        const row = await insertHolding(
+          tx,
+          principal,
+          { id: newId(), ...scope, routeId: parent.id, position: (last?.position ?? 0) + 1, origin: "office", service: body.service, note: body.note ?? null, ...stop.at, ...stop.booking },
+          held,
+        )
         await tx
           .update(route)
           .set(stamp())
@@ -405,7 +575,7 @@ export function pickupRoutes(guard: MiddlewareHandler<AuthEnv>, { now = () => ne
         operationId: "correctPickupOutcome",
         summary: "Correct a pickup's outcome",
         description:
-          "The audited correction: on a pickup that is `completed`, `skipped` or `failed` of a route that ran (`active` or `completed`), appends a `correction` Proof of Service — `source` dispatch, the caller's account, the new `outcome`, the reason where the outcome takes one, and the `note` saying why — and moves the pickup's status, `reason` and `outcomeAt`. The original proofs stand: what the driver recorded and what the office decided are both on the record. A `reason` goes with `skipped` or `failed` and not with `completed` (400 at `reason`). A `planned` pickup has no outcome to correct (409); a route that has not run is refused (409), and a cancelled one does not change. Under the route's row lock; the `pickup-corrected` event is written in the same transaction, carrying the pickup with its proofs as answered here.",
+          "The audited correction: on a pickup that is `completed`, `skipped` or `failed` of a route that ran (`active` or `completed`), appends a `correction` Proof of Service — `source` dispatch, the caller's account, the new `outcome`, the reason where the outcome takes one, and the `note` saying why — and moves the pickup's status, `reason` and `outcomeAt`. The original proofs stand: what the driver recorded and what the office decided are both on the record. A `reason` goes with `skipped` or `failed` and not with `completed` (400 at `reason`). A `planned` pickup has no outcome to correct (409); a route that has not run is refused (409), and a cancelled one does not change. A delivery, a removal or a swap (O3b of #290) corrected to `completed` makes its stock movements then, as the driver's completion would have, dated by the correction, an internal task telling the office where the ledger refuses them; one corrected away from `completed` leaves the movements standing and opens an internal task saying so, for the office to put the containers back if the work did not happen. Under the route's row lock; the `pickup-corrected` event is written in the same transaction, carrying the pickup with its proofs as answered here.",
         security: BEARER_SECURITY,
         responses: {
           200: describeJson("The pickup as corrected, with its proofs, the correction last.", PickupDetail),
@@ -450,6 +620,8 @@ export function pickupRoutes(guard: MiddlewareHandler<AuthEnv>, { now = () => ne
           note,
           outcome,
         })
+        // A ledger work order's movements follow its completion (O3b of #290): a correction to completed makes them, one away from completed tells the office they stand.
+        await correctLedgerWork(tx, principal, row.id, { from: current.status as PickupStatus, to: transition.to }, at)
         const detail = await detailOf(tx, principal, row)
         await emit(tx, principal, { aggregate: "pickup", aggregateId: row.id, kind: "pickup-corrected", payload: detail, projectId: row.projectId, occurredAt: at })
         return c.json(detail)

@@ -67,7 +67,7 @@ export type PickupOrigin = z.infer<typeof PickupOrigin>
 export const PickupService = z.enum(PICKUP_SERVICES)
 export type PickupService = z.infer<typeof PickupService>
 
-/** The services the office books on a stop it adds: an emptying, a repair or a wash. */
+/** The services the office books on a stop it adds: every one, a delivery, a removal and a swap with their ledger bookings (O3b of #290). */
 export const OfficeStopService = z.enum(OFFICE_STOP_SERVICES)
 export type OfficeStopService = z.infer<typeof OfficeStopService>
 

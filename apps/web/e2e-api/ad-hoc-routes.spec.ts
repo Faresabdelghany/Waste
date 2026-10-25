@@ -1,6 +1,6 @@
 import type { APIRequestContext, Locator, Page } from "@playwright/test"
 
-import { dayIn, dispatchedRouteFor, driverNamed, generate, SEEDED_DRIVER } from "./dispatched-route"
+import { addDays, dayIn, dispatchedRouteFor, driverNamed, generate, SEEDED_DRIVER } from "./dispatched-route"
 import { E2E, uniqueName } from "./env"
 import { chainLanded, expect, freshContext, signIn, test } from "./fixtures"
 import { answerOf, openRoute, pick, routeRead, schemeWithRoutes, toasts, type ApiRoute } from "./routes-support"
@@ -15,15 +15,20 @@ import { listAll, projectNamed, type Project } from "./tester"
 // and a ticket's re-collection names it: complete · recollected picks the
 // route, then its stop. A stop says what it is for (O3 of #290): the office
 // books a wash of a container the route empties, and an extra emptying of
-// another, and the driver's phone labels each. Every body is the one the contracts take, read off
-// the browser's own request; the properties are made for the run, uniquely
-// named and never cleaned up.
+// another, and the driver's phone labels each. A swap (O3b) is booked the
+// same way, with its replacement from stock and the warehouse the container
+// taken goes back to, and the driver's completion moves both in the ledger.
+// Every body is the one the contracts take, read off the browser's own
+// request; the properties and the swap's two containers are made for the
+// run, uniquely named and never cleaned up.
 
 type Named = { id: string; name: string }
 type Property = Named & { address: string }
 type Container = { id: string; label: string }
 type Placement = { containerId: string; projectId: string; wasteFractionId: string }
 type AddedPickup = { id: string; routeId: string; position: number; sequence?: number; status: string; origin: string; service: string; containerId: string | null; propertyId: string | null; sharedCollectionPointId: string | null; wasteFractionId: string; note: string | null }
+type Ledgered = Container & { projectId: string; containerTypeId: string; assetState: { status: string; warehouseId: string | null; placementId: string | null } | null }
+type PlacementRead = { id: string; subscriptionId: string; propertyId: string | null; sharedCollectionPointId: string | null; wasteFractionId: string }
 type ApiTicket = { id: string; label: string; recollectionRouteId: string | null; recollectionPickupId: string | null }
 
 const escaped = (text: string) => text.replace(/[.*+?^${}()|[\]\\]/g, "\\$&")
@@ -275,4 +280,95 @@ test("a stop says what it is for: the office books a wash of a container its dis
   } finally {
     await context.close()
   }
+})
+
+test("a swap is booked through Add stop with its replacement from stock and its warehouse, and the driver's completion moves both in the ledger: the container taken back into stock, the replacement serving under its placement (O3b of #290)", async ({ api, browser, page }) => {
+  test.setTimeout(180_000)
+  const { route, today } = await dispatchedRouteFor(api)
+  const before = (await routeRead(api, route.id)) as unknown as { pickups: AddedPickup[] }
+  const containerRead = async (id: string) => {
+    const response = await api.get(`/containers/${id}`)
+    expect(response.status(), await response.text()).toBe(200)
+    return (await response.json()) as Ledgered
+  }
+  const placementRead = async (id: string | null | undefined) => {
+    const response = await api.get(`/placements/${id}`)
+    expect(response.status(), await response.text()).toBe(200)
+    return (await response.json()) as PlacementRead
+  }
+  // The seed's containers serve with no stock record, so the swap's two are made for the run, of the type of the one the route empties: the one taken received and put into service since yesterday under the subscription that one serves, the replacement received into stock.
+  // A place still served: a placement needs an active property, and the route stops at the seed's prospects and properties on hold too.
+  const activeProperties = new Set((await listAll<Named & { status: string }>(api, "/properties")).filter((row) => row.status === "active").map((row) => row.id))
+  const generated = before.pickups.find((pickup) => pickup.origin === "generation" && pickup.containerId !== null && pickup.propertyId !== null && activeProperties.has(pickup.propertyId))
+  expect(generated, `${route.label} needs one of generation's stops at an active property`).toBeTruthy()
+  const seeded = await containerRead(generated?.containerId ?? "")
+  const [servedUnder] = await listAll<PlacementRead>(api, "/placements", { containerId: seeded.id, validOn: route.serviceDate })
+  expect(servedUnder, `${seeded.label} serves on ${route.serviceDate}`).toBeTruthy()
+  const warehouse = (await listAll<Named>(api, "/warehouses")).find((row) => row.name === "Nordhavn Warehouse")
+  expect(warehouse, "the seed holds Nordhavn Warehouse").toBeTruthy()
+  const inStock = async (prefix: string) => {
+    const created = await api.post("/containers", { data: { projectId: route.projectId, label: uniqueName(prefix).replace(/\s+/g, "-"), containerTypeId: seeded.containerTypeId } })
+    expect(created.status(), await created.text()).toBe(201)
+    const container = (await created.json()) as Ledgered
+    const received = await api.post(`/containers/${container.id}/receive`, { data: { warehouseId: warehouse?.id } })
+    expect(received.status(), await received.text()).toBe(201)
+    return container
+  }
+  const taken = await inStock("E2E-TAKEN")
+  const issued = await api.post(`/containers/${taken.id}/placements`, { data: { subscriptionId: servedUnder.subscriptionId, wasteFractionId: servedUnder.wasteFractionId, validFrom: addDays(today, -1) } })
+  expect(issued.status(), await issued.text()).toBe(201)
+  const replacement = await inStock("E2E-SWAP")
+  const label = replacement.label
+
+  // The office books the swap: the service, the container taken, its replacement, the warehouse it goes back to.
+  const details = await openRoute(page, route)
+  const addStop = details.getByTestId("route-commands").getByRole("button", { name: "Add stop" })
+  await expect(addStop).toBeEnabled({ timeout: 30_000 })
+  await addStop.click()
+  const dialog = page.getByRole("dialog", { name: "Add stop" })
+  await pickMatching(dialog, page, "Service", /^Swap$/)
+  await pickMatching(dialog, page, "Container", new RegExp(`^${escaped(taken.label)}( · |$)`))
+  await pickMatching(dialog, page, "Replacement", new RegExp(`^${escaped(label)}( · |$)`))
+  await pickMatching(dialog, page, "Back to warehouse", /^Nordhavn Warehouse/)
+  const [added] = await Promise.all([answerOf(page, "POST", `/routes/${route.id}/pickups`), dialog.getByRole("button", { name: "Add stop" }).click()])
+  expect(added.status(), await added.text()).toBe(201)
+  expect(added.request().postDataJSON()).toEqual({ service: "swap", containerId: taken.id, replacementContainerId: replacement.id, warehouseId: warehouse?.id })
+  const swap = (await added.json()) as AddedPickup
+
+  // The stop's details say what it is for and what the driver brings.
+  await page.goto(`/route-studio?module=pickups&record=pickup-${swap.id}`)
+  const stopDetails = page.getByRole("dialog").filter({ hasText: "Added by" })
+  await expect(stopDetails).toContainText("Swap", { timeout: 30_000 })
+  await expect(stopDetails).toContainText(label)
+
+  // The driver starts the route, completes the swap by its label, and ends the route.
+  const context = await freshContext(browser, { viewport: { width: 390, height: 844 } })
+  try {
+    const phone = await context.newPage()
+    await signIn(phone, SEEDED_DRIVER.email, E2E.loginPassword)
+    await expect(phone).toHaveURL(/\/driver$/)
+    const card = phone.getByRole("article", { name: `Route ${route.label}` })
+    await card.getByRole("button", { name: "Start route" }).click()
+    await expect(card.getByText("Active", { exact: true })).toBeVisible()
+    await phone.goto(`/driver/routes/${route.id}`)
+    const swapCard = phone.getByRole("article").filter({ has: phone.locator('[data-slot="badge"]', { hasText: new RegExp(`^Swap for ${escaped(label)}$`) }) })
+    await expect(swapCard).toHaveCount(1, { timeout: 30_000 })
+    await expect(swapCard).toContainText(taken.label)
+    await swapCard.getByRole("button", { name: "Complete" }).click()
+    await expect(swapCard.getByText("Completed", { exact: true })).toBeVisible()
+    await phone.getByRole("button", { name: "End route" }).click()
+    await phone.getByRole("dialog").getByRole("button", { name: "End route" }).click()
+    await expect(phone.getByRole("region", { name: `Route ${route.label}` }).getByText("Completed", { exact: true })).toBeVisible()
+  } finally {
+    await context.close()
+  }
+
+  // The ledger moved both in the completion: the container taken stands in the warehouse, the replacement serves where it served, under the same subscription and fraction.
+  const back = await containerRead(taken.id)
+  expect({ status: back.assetState?.status, warehouseId: back.assetState?.warehouseId }).toEqual({ status: "in-warehouse", warehouseId: warehouse?.id })
+  const serving = await containerRead(replacement.id)
+  expect(serving.assetState?.status).toBe("in-service")
+  const placed = await placementRead(serving.assetState?.placementId)
+  const where = ({ subscriptionId, propertyId, sharedCollectionPointId, wasteFractionId }: PlacementRead) => ({ subscriptionId, propertyId, sharedCollectionPointId, wasteFractionId })
+  expect(where(placed)).toEqual(where(servedUnder))
 })

@@ -5,7 +5,7 @@
 import assert from "node:assert/strict"
 import { describe, test } from "node:test"
 
-import { empties, extraEmptyings, type ServiceStop } from "../services"
+import { empties, extraEmptyings, SERVICE_NOUNS, type ServiceStop } from "../services"
 
 const stop = (id: string, containerId: string | null, values: Partial<ServiceStop> = {}): ServiceStop => ({ id, containerId, origin: "generation", service: "empty", status: "planned", reason: null, ...values })
 
@@ -36,5 +36,11 @@ describe("an extra emptying", () => {
     const older = { ...stop("g1", "c1"), service: undefined }
     assert.equal(empties(older), true)
     assert.deepEqual([...extraEmptyings([older, stop("o1", "c1", { origin: "office" })])], ["o1"])
+  })
+})
+
+describe("a service in a sentence", () => {
+  test("is its noun: an emptying, a delivery, a removal, a swap, a repair, a wash", () => {
+    assert.deepEqual(SERVICE_NOUNS, { empty: "emptying", deliver: "delivery", remove: "removal", swap: "swap", repair: "repair", wash: "wash" })
   })
 })

@@ -28,7 +28,7 @@ import { QueueMissing, type JobSender } from "@waste/db/jobs"
 import { pickup, route } from "@waste/db/schema/execution"
 import { WALK_CAP_DAYS } from "@waste/domain/route-schemes/generation"
 import { addDays } from "@waste/domain/route-schemes/recurrence"
-import { and, asc, eq, gte, inArray, isNotNull, lt, max, ne } from "drizzle-orm"
+import { and, asc, eq, gte, inArray, isNotNull, lt, max, ne, notInArray, or } from "drizzle-orm"
 
 import type { Principal } from "../auth/principal"
 import { allows } from "../auth/require"
@@ -55,12 +55,21 @@ const within = (window: Window) => and(gte(route.serviceDate, window.from), wind
  * The planned stops at these containers over the window, which their leaving
  * service strands: those no run will take away, for the office (`toRemove`,
  * oldest first), and, by scheme, the run over the planned routes whose
- * generated stops a run of the scheme will drop, through the last of them.
+ * generated stops a run of the scheme will drop, through the last of them. A
+ * removal or a swap of one of the containers is how it leaves service (O3b of
+ * #290, D9): the office keeps that stop. Beside them, the planned deliveries
+ * booked under `deliveriesUnder` — the subscriptions a termination ends —
+ * whose bin would go into service under a subscription out of force, and
+ * which hold it from another booking meanwhile.
  */
-export async function stopsLeft(tx: Tx, scope: Scope, containerIds: readonly string[], window: Window): Promise<{ toRemove: StopToRemove[]; runs: RunWindows }> {
+export async function stopsLeft(tx: Tx, scope: Scope, containerIds: readonly string[], window: Window, deliveriesUnder: readonly string[] = []): Promise<{ toRemove: StopToRemove[]; runs: RunWindows }> {
   const toRemove: StopToRemove[] = []
   const runs = new Map<string, { from: string; to: string }>()
-  if (containerIds.length === 0) return { toRemove, runs }
+  const which = [
+    ...(containerIds.length === 0 ? [] : [and(inArray(pickup.containerId, [...containerIds]), notInArray(pickup.service, ["remove", "swap"]))]),
+    ...(deliveriesUnder.length === 0 ? [] : [and(eq(pickup.service, "deliver"), inArray(pickup.subscriptionId, [...deliveriesUnder]))]),
+  ]
+  if (which.length === 0) return { toRemove, runs }
   const rows = await tx
     .select({
       routeId: route.id,
@@ -79,7 +88,7 @@ export async function stopsLeft(tx: Tx, scope: Scope, containerIds: readonly str
       and(
         eq(pickup.companyId, scope.companyId),
         eq(pickup.projectId, scope.projectId),
-        inArray(pickup.containerId, [...containerIds]),
+        or(...which),
         eq(pickup.status, "planned"),
         inArray(route.status, [...OPEN_ROUTES]),
         within(window),

@@ -101,6 +101,7 @@ import {
   PlacementListQuery,
 } from "@waste/contracts/containers"
 import { Page } from "@waste/contracts/pagination"
+import type { StockMovement } from "@waste/contracts/stock"
 import type { Tx } from "@waste/db/client"
 import { assetStatus } from "@waste/db/query/asset-state"
 import { validOn } from "@waste/db/query/valid-on"
@@ -119,7 +120,7 @@ import { newId } from "../ids"
 import { afterCursor, fetchLimit, pageOf } from "../pagination"
 import { describeProblem, invalidRequest, problem, validate } from "../problem"
 import { containerOf, containersFrom, createContainer, findContainer, patchContainer } from "./container-writes"
-import { ALREADY_PLACED, alreadyPlaced, containerScope, move, noSuchContainer, OUTSIDE_SUBSCRIPTION, type LifecycleOptions } from "./lifecycle"
+import { ALREADY_PLACED, alreadyPlaced, containerScope, move, noSuchContainer, OUTSIDE_SUBSCRIPTION, type ContainerRef, type LifecycleOptions } from "./lifecycle"
 import { periodAfter, requireWithin, type Period } from "./periods"
 import { requireServiceFrequency, requireWarehouse, requireWasteFraction, type Scope } from "./references"
 import { created, describeCreated, describeJson, IdParam, lockRow, refuseOverlap, stampsOf } from "./shared"
@@ -285,6 +286,64 @@ async function findServedSubscription(tx: Tx, within: Scope, id: string): Promis
   return row as Period & Place
 }
 
+/** What an issue opens a placement with: the body's fields less the movement's own. */
+export type IssueValues = { subscriptionId: string; wasteFractionId: string; serviceFrequencyId?: string | null; validFrom: string }
+
+/**
+ * The `issue` command (Issue #101): the placement under its subscription and
+ * the movement from the warehouse the container stood in, in the caller's
+ * transaction, both or neither. The office's `POST /containers/:id/placements`
+ * runs it, and so does a delivery's or a swap's completion at the driver door
+ * (O3b of #290). Answers the movement, which names the placement.
+ */
+export async function issueContainer(tx: Tx, principal: Principal, into: ContainerRef, values: IssueValues, says: { occurredAt?: string; reference?: string; at: Date }): Promise<StockMovement & { placementId: string }> {
+  const within = { companyId: principal.companyId, projectId: into.projectId }
+  // What the body names, held before the ledger is consulted: a body
+  // that names nothing real, or starts outside the subscription's
+  // period, is refused whatever the container's state. The period is
+  // read again and held again under the subscription's lock inside
+  // `open`; this unlocked check is the cheap one that answers first.
+  const served = await findServedSubscription(tx, within, values.subscriptionId)
+  await requireWasteFraction(tx, principal.companyId, values.wasteFractionId)
+  await requireServiceFrequency(tx, within, values.serviceFrequencyId)
+  requireStartsWithin(served, values.validFrom)
+
+  const movement = await move(tx, principal, into, {
+    kind: "issue",
+    // The Registry half, run once the container is locked and its state
+    // allows: the subscription locked (after the container's, top
+    // down), its period and its place's state read again underneath,
+    // the start held inside the period and the place held to still
+    // serve, then the placement written, open.
+    open: async () => {
+      await lockRow(tx, subscription, { companyId: principal.companyId, id: values.subscriptionId })
+      const served = await findServedSubscription(tx, within, values.subscriptionId)
+      requireStartsWithin(served, values.validFrom)
+      // Every 400 above, every 409 below (routes/statuses.ts).
+      refuseUnservedPlace(served, "placement")
+      const [written] = await refuseOverlap({ [ALREADY_PLACED]: alreadyPlaced(into.label) }, () =>
+        tx
+          .insert(containerServicePlacement)
+          .values({
+            ...values,
+            id: newId(),
+            companyId: principal.companyId,
+            projectId: into.projectId,
+            containerId: into.id,
+          })
+          .returning({ id: containerServicePlacement.id }),
+      )
+      return written.id
+    },
+    ...(says.occurredAt === undefined ? {} : { occurredAt: says.occurredAt }),
+    ...(says.reference === undefined ? {} : { reference: says.reference }),
+    at: says.at,
+  })
+  // An issue arrives at the placement `open` wrote, so the movement names it; a row that does not is a broken invariant, not a client's doing.
+  if (movement.placementId === null) throw new Error(`the issue movement ${movement.id} of container ${into.id} names no placement`)
+  return { ...movement, placementId: movement.placementId }
+}
+
 export function containerRoutes(guard: MiddlewareHandler<AuthEnv>, { now = () => new Date() }: LifecycleOptions = {}) {
   return new Hono<AuthEnv>()
     .get(
@@ -436,50 +495,7 @@ export function containerRoutes(guard: MiddlewareHandler<AuthEnv>, { now = () =>
 
         const into = await findContainer(tx, principal, id)
         if (into === undefined) throw noSuchContainer(id)
-        const within = { companyId: principal.companyId, projectId: into.projectId }
-        // What the body names, held before the ledger is consulted: a body
-        // that names nothing real, or starts outside the subscription's
-        // period, is refused whatever the container's state. The period is
-        // read again and held again under the subscription's lock inside
-        // `open`; this unlocked check is the cheap one that answers first.
-        const served = await findServedSubscription(tx, within, values.subscriptionId)
-        await requireWasteFraction(tx, principal.companyId, values.wasteFractionId)
-        await requireServiceFrequency(tx, within, values.serviceFrequencyId)
-        requireStartsWithin(served, values.validFrom)
-
-        const movement = await move(tx, principal, into, {
-          kind: "issue",
-          // The Registry half, run once the container is locked and its state
-          // allows: the subscription locked (after the container's, top
-          // down), its period and its place's state read again underneath,
-          // the start held inside the period and the place held to still
-          // serve, then the placement written, open.
-          open: async () => {
-            await lockRow(tx, subscription, { companyId: principal.companyId, id: values.subscriptionId })
-            const served = await findServedSubscription(tx, within, values.subscriptionId)
-            requireStartsWithin(served, values.validFrom)
-            // Every 400 above, every 409 below (routes/statuses.ts).
-            refuseUnservedPlace(served, "placement")
-            const [written] = await refuseOverlap({ [ALREADY_PLACED]: alreadyPlaced(into.label) }, () =>
-              tx
-                .insert(containerServicePlacement)
-                .values({
-                  ...values,
-                  id: newId(),
-                  companyId: principal.companyId,
-                  projectId: into.projectId,
-                  containerId: into.id,
-                })
-                .returning({ id: containerServicePlacement.id }),
-            )
-            return written.id
-          },
-          ...(occurredAt === undefined ? {} : { occurredAt }),
-          ...(reference === undefined ? {} : { reference }),
-          at: now(),
-        })
-        // An issue arrives at the placement `open` wrote, so the movement names it; a row that does not is a broken invariant, not a client's doing.
-        if (movement.placementId === null) throw new Error(`the issue movement ${movement.id} of container ${into.id} names no placement`)
+        const movement = await issueContainer(tx, principal, into, values, { ...(occurredAt === undefined ? {} : { occurredAt }), ...(reference === undefined ? {} : { reference }), at: now() })
         // Read back through the one select every placement is answered from,
         // since the cadence in force is a join and not a column.
         const row = await findPlacement(tx, principal, movement.placementId)

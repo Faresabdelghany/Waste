@@ -270,9 +270,9 @@ async function warehouseName(tx: Tx, companyId: string, id: string | null): Prom
  * leaves from when the rule passes. The reading is what the container is
  * refused by, so every sentence names its label and the state it is in.
  */
-async function departure(tx: Tx, principal: Principal, subject: ContainerRef, reading: Reading | null, intent: Intent): Promise<Place> {
+async function departure(tx: Tx, principal: Principal, subject: ContainerRef, reading: Reading | null, kind: Intent["kind"]): Promise<Place> {
   const { label } = subject
-  switch (intent.kind) {
+  switch (kind) {
     case "receipt":
       if (reading === null) return SUPPLIER
       if (reading.status === "in-service") throw problem(409, { detail: inService(label) })
@@ -281,7 +281,7 @@ async function departure(tx: Tx, principal: Principal, subject: ContainerRef, re
     case "issue":
     case "transfer":
       if (reading === null) throw problem(409, { detail: noRecord(label) })
-      if (reading.status === "in-service") throw problem(409, { detail: intent.kind === "issue" ? inServiceElsewhere(label) : inService(label) })
+      if (reading.status === "in-service") throw problem(409, { detail: kind === "issue" ? inServiceElsewhere(label) : inService(label) })
       if (reading.status === "retired") throw problem(409, { detail: isRetired(label) })
       return placeOf(reading)
     case "return":
@@ -296,6 +296,16 @@ async function departure(tx: Tx, principal: Principal, subject: ContainerRef, re
       if (reading.status === "in-service") throw problem(409, { detail: noAdjustmentInService(label) })
       return placeOf(reading)
   }
+}
+
+/**
+ * Whether the container may leave where it stands as an issue or a return
+ * would — the command's state rule under the container's lock, its 409 with
+ * the sentence spelled above — writing nothing: a ledger work order's booking
+ * (O3b of #290) holds the container to the move its completion will make.
+ */
+export async function requireDeparture(tx: Tx, principal: Principal, subject: ContainerRef, kind: "issue" | "return"): Promise<void> {
+  await departure(tx, principal, subject, await lockedReading(tx, principal, subject), kind)
 }
 
 /**
@@ -534,7 +544,7 @@ async function append(
  */
 export async function move(tx: Tx, principal: Principal, subject: ContainerRef, intent: Intent): Promise<StockMovement> {
   const reading = await lockedReading(tx, principal, subject)
-  const from = await departure(tx, principal, subject, reading, intent)
+  const from = await departure(tx, principal, subject, reading, intent.kind)
   const occurredAt = hold(intent.kind, from, destinationKind(intent), intent)
   const { to, placementId } = await arrival(tx, principal, subject, from, intent)
   return await append(

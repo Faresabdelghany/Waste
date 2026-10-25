@@ -1,0 +1,18 @@
+-- A stop's ledger bookings (O3b of #290): a delivery's subscription, a removal's or a swap's warehouse and a swap's replacement, each held to its service, the stock container a planned delivery or swap holds back, and the container a planned removal or swap takes away, each held by one planned stop at a time.
+-- No table is new, so nothing is hand-written; every row present is an emptying, a repair or a wash, which books nothing and holds nothing back, so nothing is guarded.
+ALTER TABLE "wms"."pickup" ADD COLUMN "subscription_id" uuid;--> statement-breakpoint
+ALTER TABLE "wms"."pickup" ADD COLUMN "warehouse_id" uuid;--> statement-breakpoint
+ALTER TABLE "wms"."pickup" ADD COLUMN "replacement_container_id" uuid;--> statement-breakpoint
+ALTER TABLE "wms"."pickup" ADD COLUMN "reserved_container_id" uuid GENERATED ALWAYS AS (case when "status" = 'planned' then case "service" when 'deliver' then "container_id" when 'swap' then "replacement_container_id" end end) STORED;--> statement-breakpoint
+ALTER TABLE "wms"."pickup" ADD COLUMN "taken_container_id" uuid GENERATED ALWAYS AS (case when "status" = 'planned' and "service" in ('remove', 'swap') then "container_id" end) STORED;--> statement-breakpoint
+ALTER TABLE "wms"."pickup" ADD CONSTRAINT "pickup_subscription_id_fk" FOREIGN KEY ("company_id","project_id","subscription_id") REFERENCES "wms"."subscription"("company_id","project_id","id") ON DELETE no action ON UPDATE no action;--> statement-breakpoint
+ALTER TABLE "wms"."pickup" ADD CONSTRAINT "pickup_warehouse_id_fk" FOREIGN KEY ("company_id","project_id","warehouse_id") REFERENCES "wms"."warehouse"("company_id","project_id","id") ON DELETE no action ON UPDATE no action;--> statement-breakpoint
+ALTER TABLE "wms"."pickup" ADD CONSTRAINT "pickup_replacement_container_id_fk" FOREIGN KEY ("company_id","project_id","replacement_container_id") REFERENCES "wms"."container"("company_id","project_id","id") ON DELETE no action ON UPDATE no action;--> statement-breakpoint
+CREATE UNIQUE INDEX "pickup_reserved_container_id_key" ON "wms"."pickup" USING btree ("company_id","reserved_container_id") WHERE "wms"."pickup"."reserved_container_id" is not null;--> statement-breakpoint
+CREATE UNIQUE INDEX "pickup_taken_container_id_key" ON "wms"."pickup" USING btree ("company_id","taken_container_id") WHERE "wms"."pickup"."taken_container_id" is not null;--> statement-breakpoint
+CREATE INDEX "pickup_subscription_id_idx" ON "wms"."pickup" USING btree ("company_id","subscription_id");--> statement-breakpoint
+CREATE INDEX "pickup_warehouse_id_idx" ON "wms"."pickup" USING btree ("company_id","warehouse_id");--> statement-breakpoint
+CREATE INDEX "pickup_replacement_container_id_idx" ON "wms"."pickup" USING btree ("company_id","replacement_container_id");--> statement-breakpoint
+ALTER TABLE "wms"."pickup" ADD CONSTRAINT "pickup_subscription_shape" CHECK (("wms"."pickup"."service" = 'deliver') = ("wms"."pickup"."subscription_id" is not null));--> statement-breakpoint
+ALTER TABLE "wms"."pickup" ADD CONSTRAINT "pickup_warehouse_shape" CHECK (("wms"."pickup"."service" in ('remove', 'swap')) = ("wms"."pickup"."warehouse_id" is not null));--> statement-breakpoint
+ALTER TABLE "wms"."pickup" ADD CONSTRAINT "pickup_replacement_shape" CHECK (("wms"."pickup"."service" = 'swap') = ("wms"."pickup"."replacement_container_id" is not null) and ("wms"."pickup"."replacement_container_id" is null or "wms"."pickup"."replacement_container_id" <> "wms"."pickup"."container_id"));

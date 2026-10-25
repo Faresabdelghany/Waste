@@ -228,6 +228,9 @@ export const pickupColumns = {
   wasteFractionId: pickup.wasteFractionId,
   arrivedAt: pickup.arrivedAt,
   outcomeAt: pickup.outcomeAt,
+  subscriptionId: pickup.subscriptionId,
+  warehouseId: pickup.warehouseId,
+  replacementContainerId: pickup.replacementContainerId,
   createdAt: pickup.createdAt,
   updatedAt: pickup.updatedAt,
 }
@@ -252,6 +255,9 @@ export function pickupOf(row: PickupRow): Pickup {
     wasteFractionId: row.wasteFractionId,
     arrivedAt: instantOf(row.arrivedAt),
     outcomeAt: instantOf(row.outcomeAt),
+    subscriptionId: row.subscriptionId,
+    warehouseId: row.warehouseId,
+    replacementContainerId: row.replacementContainerId,
     ...stampsOf(row),
   }
 }

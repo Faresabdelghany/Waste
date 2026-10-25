@@ -1255,6 +1255,24 @@ column wms.pickup 15 outcome_at timestamp with time zone
 column wms.pickup 16 reason text
 column wms.pickup 17 origin text not-null default='generation'::text
 column wms.pickup 18 service text not-null default='empty'::text
+column wms.pickup 19 subscription_id uuid
+column wms.pickup 20 warehouse_id uuid
+column wms.pickup 21 replacement_container_id uuid
+column wms.pickup 22 reserved_container_id uuid generated=(
+CASE
+    WHEN (status = 'planned'::text) THEN
+    CASE service
+        WHEN 'deliver'::text THEN container_id
+        WHEN 'swap'::text THEN replacement_container_id
+        ELSE NULL::uuid
+    END
+    ELSE NULL::uuid
+END)
+column wms.pickup 23 taken_container_id uuid generated=(
+CASE
+    WHEN ((status = 'planned'::text) AND (service = ANY (ARRAY['remove'::text, 'swap'::text]))) THEN container_id
+    ELSE NULL::uuid
+END)
 constraint wms.pickup pickup_company_id_fk FOREIGN KEY (company_id) REFERENCES wms.company(id)
 constraint wms.pickup pickup_container_id_fk FOREIGN KEY (company_id, project_id, container_id) REFERENCES wms.container(company_id, project_id, id)
 constraint wms.pickup pickup_container_shape CHECK (((container_id IS NOT NULL) OR (origin = 'office'::text)))
@@ -1267,6 +1285,8 @@ constraint wms.pickup pickup_project_id_fk FOREIGN KEY (company_id, project_id) 
 constraint wms.pickup pickup_property_id_fk FOREIGN KEY (company_id, project_id, property_id) REFERENCES wms.property(company_id, project_id, id)
 constraint wms.pickup pickup_reason_one_of CHECK ((reason = ANY (ARRAY['inaccessible'::text, 'contamination'::text, 'not-presented'::text, 'capacity'::text, 'safety'::text, 'other'::text, 'route-ended'::text, 'route-cancelled'::text, 'removed-by-dispatcher'::text, 'regeneration'::text])))
 constraint wms.pickup pickup_reason_shape CHECK (((status = ANY (ARRAY['skipped'::text, 'failed'::text])) = (reason IS NOT NULL)))
+constraint wms.pickup pickup_replacement_container_id_fk FOREIGN KEY (company_id, project_id, replacement_container_id) REFERENCES wms.container(company_id, project_id, id)
+constraint wms.pickup pickup_replacement_shape CHECK ((((service = 'swap'::text) = (replacement_container_id IS NOT NULL)) AND ((replacement_container_id IS NULL) OR (replacement_container_id <> container_id))))
 constraint wms.pickup pickup_route_id_fk FOREIGN KEY (company_id, project_id, route_id) REFERENCES wms.route(company_id, project_id, id)
 constraint wms.pickup pickup_route_id_project_key UNIQUE (company_id, project_id, route_id, id)
 constraint wms.pickup pickup_service_container_shape CHECK (((service = 'empty'::text) OR (container_id IS NOT NULL)))
@@ -1274,15 +1294,24 @@ constraint wms.pickup pickup_service_one_of CHECK ((service = ANY (ARRAY['empty'
 constraint wms.pickup pickup_service_origin_shape CHECK (((service = 'empty'::text) OR (origin = 'office'::text)))
 constraint wms.pickup pickup_shared_collection_point_id_fk FOREIGN KEY (company_id, project_id, shared_collection_point_id) REFERENCES wms.shared_collection_point(company_id, project_id, id)
 constraint wms.pickup pickup_status_one_of CHECK ((status = ANY (ARRAY['planned'::text, 'completed'::text, 'skipped'::text, 'failed'::text])))
+constraint wms.pickup pickup_subscription_id_fk FOREIGN KEY (company_id, project_id, subscription_id) REFERENCES wms.subscription(company_id, project_id, id)
+constraint wms.pickup pickup_subscription_shape CHECK (((service = 'deliver'::text) = (subscription_id IS NOT NULL)))
+constraint wms.pickup pickup_warehouse_id_fk FOREIGN KEY (company_id, project_id, warehouse_id) REFERENCES wms.warehouse(company_id, project_id, id)
+constraint wms.pickup pickup_warehouse_shape CHECK (((service = ANY (ARRAY['remove'::text, 'swap'::text])) = (warehouse_id IS NOT NULL)))
 constraint wms.pickup pickup_waste_fraction_id_fk FOREIGN KEY (company_id, waste_fraction_id) REFERENCES wms.waste_fraction(company_id, id)
 index wms.pickup pickup_container_id_idx CREATE INDEX pickup_container_id_idx ON wms.pickup USING btree (company_id, container_id)
 index wms.pickup pickup_pkey CREATE UNIQUE INDEX pickup_pkey ON wms.pickup USING btree (id)
 index wms.pickup pickup_project_id_idx CREATE INDEX pickup_project_id_idx ON wms.pickup USING btree (company_id, project_id)
 index wms.pickup pickup_property_id_idx CREATE INDEX pickup_property_id_idx ON wms.pickup USING btree (company_id, property_id)
+index wms.pickup pickup_replacement_container_id_idx CREATE INDEX pickup_replacement_container_id_idx ON wms.pickup USING btree (company_id, replacement_container_id)
+index wms.pickup pickup_reserved_container_id_key CREATE UNIQUE INDEX pickup_reserved_container_id_key ON wms.pickup USING btree (company_id, reserved_container_id) WHERE (reserved_container_id IS NOT NULL)
 index wms.pickup pickup_route_id_container_id_key CREATE UNIQUE INDEX pickup_route_id_container_id_key ON wms.pickup USING btree (company_id, route_id, container_id) WHERE (origin = 'generation'::text)
 index wms.pickup pickup_route_id_position_idx CREATE INDEX pickup_route_id_position_idx ON wms.pickup USING btree (company_id, route_id, "position")
 index wms.pickup pickup_route_id_project_key CREATE UNIQUE INDEX pickup_route_id_project_key ON wms.pickup USING btree (company_id, project_id, route_id, id)
 index wms.pickup pickup_shared_collection_point_id_idx CREATE INDEX pickup_shared_collection_point_id_idx ON wms.pickup USING btree (company_id, shared_collection_point_id)
+index wms.pickup pickup_subscription_id_idx CREATE INDEX pickup_subscription_id_idx ON wms.pickup USING btree (company_id, subscription_id)
+index wms.pickup pickup_taken_container_id_key CREATE UNIQUE INDEX pickup_taken_container_id_key ON wms.pickup USING btree (company_id, taken_container_id) WHERE (taken_container_id IS NOT NULL)
+index wms.pickup pickup_warehouse_id_idx CREATE INDEX pickup_warehouse_id_idx ON wms.pickup USING btree (company_id, warehouse_id)
 index wms.pickup pickup_waste_fraction_id_idx CREATE INDEX pickup_waste_fraction_id_idx ON wms.pickup USING btree (company_id, waste_fraction_id)
 trigger wms.pickup pickup_touch_updated_at enabled=O CREATE TRIGGER pickup_touch_updated_at BEFORE UPDATE ON wms.pickup FOR EACH ROW EXECUTE FUNCTION wms.touch_updated_at()
 policy wms.pickup pickup_tenant_fence permissive ALL to=wms_api using=(company_id = ( SELECT wms.current_company_id() AS current_company_id)) check=(company_id = ( SELECT wms.current_company_id() AS current_company_id))
@@ -3100,4 +3129,5 @@ journal 1792867065800 f8212d9d9ad7d0d5e457e9772d762f6453b4ca8b3d68bd81d86470274b
 journal 1792868216557 6775a033d267b5b88bf3f92f2efd3f695a1039822f38c8c2c49e9e7b24ee0e56
 journal 1792869628829 b505b3c7d5a7facb5ef7d48d8c936b335c3a626fdce876f9866e5ee49bc273e8
 journal 1792871277838 b4492acfde0d00f5427e247e23084a6456b437ce0e06448a61d0ceac1110b9bd
+journal 1792881799168 ecb337207906f39fb071c6c0e89498db565cd57067d8d8de0648890a8bbf3e05
 pgboss-version 42

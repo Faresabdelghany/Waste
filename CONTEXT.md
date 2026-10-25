@@ -185,7 +185,7 @@ One stop-level service action inside a dated Route, generated from its scheme or
 _Avoid_: Pickup history, separate service event, property, route, Product (a Pickup's service is what it does; the Product prices it)
 
 **Work Order**:
-A Pickup the office books whose service is not an emptying: a delivery, a removal, a swap, a repair or a wash of a container. Its outcome and proof are recorded as any Pickup's; one not done is the office's task to book again, never a missed collection.
+A Pickup the office books whose service is not an emptying: a delivery, a removal, a swap, a repair or a wash of a container. Its outcome and proof are recorded as any Pickup's; one not done is the office's task to book again, never a missed collection. A delivery, a removal and a swap are Ledger Work Orders: each books at the office what its Stock Movements need — a delivery the Subscription the container will serve under, a removal and a swap the Warehouse the container taken goes back to, a swap its replacement — and the driver's completion records those movements. A container from stock a planned delivery or swap names is held for it: no second one may name it. A movement the ledger refuses never refuses the completion; it becomes an internal-task Ticket saying why.
 _Avoid_: Job, task (a Ticket's kind), collection
 
 **Stop**:

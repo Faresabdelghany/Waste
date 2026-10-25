@@ -110,13 +110,14 @@ export const DRIVER_PICKUP_REASONS = ["inaccessible", "contamination", "not-pres
 export type DriverPickupReason = (typeof DRIVER_PICKUP_REASONS)[number]
 
 /**
- * The services the office books on a stop it adds: an emptying — an extra
- * one, of a container on the route already, included — a repair and a wash,
- * each of a container where it stands. A delivery, a removal and a swap move
- * a container through the ledger as the stop is completed, which comes with
- * their booking; a value beside the lists, like the driver's six reasons.
+ * The services the office books on a stop it adds: every one. An emptying —
+ * an extra one, of a container on the route already, included — a repair and
+ * a wash, each of a container where it stands, and since O3b a delivery, a
+ * removal and a swap, which move a container through the ledger as the stop
+ * is completed (execution/work-orders.ts). Generation's stops are emptyings
+ * alone. A value beside the lists, like the driver's six reasons.
  */
-export const OFFICE_STOP_SERVICES = ["empty", "repair", "wash"] as const satisfies readonly PickupService[]
+export const OFFICE_STOP_SERVICES = ["empty", "deliver", "remove", "swap", "repair", "wash"] as const satisfies readonly PickupService[]
 export type OfficeStopService = (typeof OFFICE_STOP_SERVICES)[number]
 
 /**

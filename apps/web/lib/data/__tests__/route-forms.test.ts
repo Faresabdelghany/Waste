@@ -16,9 +16,11 @@ import { CORRECT_PICKUP, pickupAdapter, REMOVE_PICKUP } from "../../api/records/
 import { CONTAINERS_MODULE } from "../../api/records/containers"
 import { ADD_STOP, ASSIGN_ROUTE, CANCEL_ROUTE, RESCHEDULE_ROUTE, routeAdapter } from "../../api/records/routes"
 import { loaded, resolverOver, type ServerRecordsState } from "../../api/records/server-records"
+import { AGREEMENTS_MODULE } from "../agreements"
 import { DEPOTS_MODULE, DRIVERS_MODULE, isTrailerRecord, VEHICLES_MODULE } from "../allocations"
 import { FIXTURE_COMPANY_ID, type BusinessRecord } from "../business-modules"
 import type { BusinessFormSchema } from "../business-form-types"
+import { WAREHOUSES_MODULE } from "../containers"
 import { MASTER_DATA_MODULE } from "../master-data"
 import { ORGANISATION_MODULE } from "../containers"
 import { PROPERTIES_MODULE, SHARED_POINTS_MODULE } from "../properties"
@@ -127,7 +129,7 @@ describe("the route's dialogs", () => {
 
   test("Add stop asks what it collects at, then the container, or the property or the shared point with its fraction, each shown only for its choice, and a note (#111)", () => {
     const form = ROUTE_COMMAND_FORMS["add-stop"]
-    assert.deepEqual(fieldIdsOf(form), ["service", "stopAt", "containerId", "propertyId", "sharedCollectionPointId", "wasteFractionId", "note"])
+    assert.deepEqual(fieldIdsOf(form), ["service", "stopAt", "containerId", "subscriptionId", "deliveryFractionId", "replacementContainerId", "warehouseId", "propertyId", "sharedCollectionPointId", "wasteFractionId", "note"])
     assert.deepEqual(requiredOf(form), ["service", "stopAt"])
     assert.equal(fieldOf(form, "stopAt")?.defaultValue, "container")
     assert.deepEqual(fieldOf(form, "containerId")?.relation, CONTAINERS_MODULE)
@@ -141,11 +143,14 @@ describe("the route's dialogs", () => {
     assert.deepEqual(Object.keys(routeCommandValues(record)).filter((key) => fieldIdsOf(form).includes(key)), [])
   })
 
-  test("Add stop books an emptying unless it says a repair or a wash, each of a container; an emptying's body says no service, the API's default (O3 of #290)", () => {
+  test("Add stop books an emptying unless it says a work order, each of a container; an emptying's body says no service, the API's default (O3 of #290)", () => {
     const form = ROUTE_COMMAND_FORMS["add-stop"]
     assert.equal(fieldOf(form, "service")?.defaultValue, "empty")
     assert.deepEqual(fieldOf(form, "service")?.options?.map((option) => [option.value, option.label]), [
       ["empty", "Emptying"],
+      ["deliver", "Delivery"],
+      ["remove", "Removal"],
+      ["swap", "Swap"],
       ["repair", "Repair"],
       ["wash", "Wash"],
     ])
@@ -154,7 +159,46 @@ describe("the route's dialogs", () => {
     assert.equal((toBody({ ...atAProperty, service: "empty" }) as Record<string, unknown>).service, undefined, "an emptying is the API's default")
     assert.deepEqual(toBody({ ...atAProperty, service: "wash" }), { path: "stopAt", message: A_WORK_ORDER_IS_OF_A_CONTAINER })
     assert.equal(A_WORK_ORDER_IS_OF_A_CONTAINER, A_WORK_ORDER_OF_A_CONTAINER, "one sentence, whichever side refuses")
-    assert.deepEqual(toBody({ ...atAProperty, service: "deliver" }), { path: "service", message: "Book an emptying, a repair or a wash" })
+    assert.deepEqual(toBody({ ...atAProperty, service: "deliver" }), { path: "stopAt", message: A_WORK_ORDER_IS_OF_A_CONTAINER })
+    assert.deepEqual(toBody({ ...atAProperty, service: "sweep" }), { path: "service", message: "Book an emptying or one of the work orders offered" })
+  })
+
+  test("Add stop books a delivery under a subscription, a removal back to a warehouse and a swap for a container from stock, each field shown and asked for its service alone (O3b of #290)", () => {
+    const form = ROUTE_COMMAND_FORMS["add-stop"]
+    assert.deepEqual(fieldOf(form, "subscriptionId")?.relation, AGREEMENTS_MODULE)
+    assert.deepEqual(fieldOf(form, "subscriptionId")?.requiredWhen, { fieldId: "service", equals: "deliver" })
+    assert.deepEqual(fieldOf(form, "deliveryFractionId")?.relation, MASTER_DATA_MODULE)
+    assert.deepEqual(fieldOf(form, "deliveryFractionId")?.visibleWhen, { fieldId: "service", equals: "deliver" })
+    assert.equal(fieldOf(form, "deliveryFractionId")?.requiredWhen, undefined, "blank takes the subscription product's fraction")
+    assert.deepEqual(fieldOf(form, "replacementContainerId")?.relation, CONTAINERS_MODULE)
+    assert.deepEqual(fieldOf(form, "replacementContainerId")?.requiredWhen, { fieldId: "service", equals: "swap" })
+    assert.deepEqual(fieldOf(form, "warehouseId")?.relation, WAREHOUSES_MODULE)
+    assert.deepEqual(fieldOf(form, "warehouseId")?.requiredWhen, { fieldId: "service", oneOf: ["remove", "swap"] })
+    for (const id of ["subscriptionId", "replacementContainerId", "warehouseId"]) assert.deepEqual(fieldOf(form, id)?.visibleWhen, fieldOf(form, id)?.requiredWhen, id)
+
+    const toBody = (input: Record<string, unknown>) => routeAdapter.commands?.[ADD_STOP]?.toBody?.(input, record, context)
+    const bin = "01a0d2a4-a280-7014-8000-000000000009"
+    const replacement = "01a0d2a4-a280-7014-8000-000000000010"
+    const subscription = "01a0d2a4-a280-7021-8000-000000000001"
+    const warehouse = "01a0d2a4-a280-7008-8000-000000000001"
+    const fraction = "01a0d2a4-a280-7005-8000-000000000001"
+    // Whatever a hidden field still holds is not read: the delivery's fields under a swap, an address under a delivery.
+    const filled = { stopAt: "container", containerId: `asset-${bin}`, subscriptionId: `subscription-${subscription}`, replacementContainerId: `asset-${replacement}`, warehouseId: `warehouse-${warehouse}`, propertyId: "property-01a0d2a4-a280-7011-8000-000000000001", wasteFractionId: `fraction-${fraction}` }
+    const delivery = toBody({ ...filled, service: "deliver" })
+    assert.deepEqual(delivery, { service: "deliver", containerId: bin, subscriptionId: subscription })
+    assert.deepEqual(toBody({ ...filled, service: "deliver", deliveryFractionId: `fraction-${fraction}` }), { service: "deliver", containerId: bin, subscriptionId: subscription, wasteFractionId: fraction })
+    const removal = toBody({ ...filled, service: "remove" })
+    assert.deepEqual(removal, { service: "remove", containerId: bin, warehouseId: warehouse })
+    const swap = toBody({ ...filled, service: "swap", note: "Bring the 370 l" })
+    assert.deepEqual(swap, { service: "swap", containerId: bin, replacementContainerId: replacement, warehouseId: warehouse, note: "Bring the 370 l" })
+    for (const body of [delivery, removal, swap]) assert.ok(PickupAdd.safeParse(body).success, JSON.stringify(body))
+
+    const atBin = { stopAt: "container", containerId: `asset-${bin}` }
+    assert.deepEqual(toBody({ ...atBin, service: "deliver" }), { path: "subscriptionId", message: "Pick the subscription it will serve under" })
+    assert.deepEqual(toBody({ ...atBin, service: "deliver", subscriptionId: "subscription-sub-1" }), { path: "subscriptionId", message: "Pick a subscription the API holds" })
+    assert.deepEqual(toBody({ ...atBin, service: "remove" }), { path: "warehouseId", message: "Pick the warehouse it goes back to" })
+    assert.deepEqual(toBody({ ...atBin, service: "swap", warehouseId: `warehouse-${warehouse}` }), { path: "replacementContainerId", message: "Pick the container that replaces it" })
+    assert.deepEqual(toBody({ ...atBin, service: "swap", replacementContainerId: `asset-${replacement}`, warehouseId: "warehouse-1" }), { path: "warehouseId", message: "Pick a warehouse the API holds" })
   })
 
   test("cancel asks why as one of the office's codes, and in words; the two are the body (O5 of #290)", () => {
@@ -187,7 +231,7 @@ describe("the route's dialogs", () => {
 })
 
 describe("the stop's dialogs", () => {
-  const pickup: Pickup = { id: "01a0d2a4-a280-7033-8000-000000000001", ...STAMPS, projectId: route.projectId, routeId: route.id, containerId: "01a0d2a4-a280-7014-8000-000000000009", position: 1, status: "completed", origin: "generation", service: "empty", reason: null, note: null, propertyId: null, sharedCollectionPointId: "01a0d2a4-a280-7019-8000-000000000001", wasteFractionId: "01a0d2a4-a280-7005-8000-000000000001", arrivedAt: null, outcomeAt: "2026-10-01T05:00:00.000Z" }
+  const pickup: Pickup = { id: "01a0d2a4-a280-7033-8000-000000000001", ...STAMPS, projectId: route.projectId, routeId: route.id, containerId: "01a0d2a4-a280-7014-8000-000000000009", position: 1, status: "completed", origin: "generation", service: "empty", reason: null, note: null, propertyId: null, sharedCollectionPointId: "01a0d2a4-a280-7019-8000-000000000001", wasteFractionId: "01a0d2a4-a280-7005-8000-000000000001", subscriptionId: null, warehouseId: null, replacementContainerId: null, arrivedAt: null, outcomeAt: "2026-10-01T05:00:00.000Z" }
   const stop = pickupAdapter.toRecord(pickup, context)
 
   test("remove asks why", () => {

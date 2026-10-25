@@ -10,6 +10,9 @@ export type ServiceStop = { id: string; containerId: string | null; origin: Pick
 /** The reasons a generation stop left its route by without being visited: the dispatcher took it off, or the plan no longer holds it. */
 const TAKEN_OFF: ReadonlySet<PickupReason> = new Set(["removed-by-dispatcher", "regeneration"])
 
+/** Each service as a sentence names it: "a planned delivery", "the ledger refused the removal". */
+export const SERVICE_NOUNS: Readonly<Record<PickupService, string>> = { empty: "emptying", deliver: "delivery", remove: "removal", swap: "swap", repair: "repair", wash: "wash" }
+
 /** Whether a stop empties its container: an emptying, or a stop read from before the service. */
 export const empties = (stop: Pick<ServiceStop, "service">): boolean => (stop.service ?? "empty") === "empty"
 

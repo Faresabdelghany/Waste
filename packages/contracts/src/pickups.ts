@@ -23,6 +23,7 @@
 // `Rescheduled` is a Ticket's outcome, not a status here. A stop the office
 // added carries `origin = office`, which generation's refresh leaves where
 // the office put it; `containerId` is null on an address-only one.
+import { BOOKED_WITH, type BookedField } from "@waste/domain/execution/work-orders"
 import * as z from "zod"
 
 import { IsoDate, IsoDateTime } from "./dates"
@@ -79,6 +80,15 @@ export const Pickup = z.object({
   arrivedAt: IsoDateTime.nullable(),
   /** When the status left planned. */
   outcomeAt: IsoDateTime.nullable(),
+  /**
+   * What a ledger work order booked (O3b of #290): a delivery's subscription,
+   * a removal's or a swap's warehouse, a swap's replacement; null where the
+   * service books none. Absent on an event the outbox took before them, which
+   * booked none, so each reads as null.
+   */
+  subscriptionId: Id.nullable().default(null),
+  warehouseId: Id.nullable().default(null),
+  replacementContainerId: Id.nullable().default(null),
 })
 export type Pickup = z.infer<typeof Pickup>
 
@@ -112,22 +122,56 @@ export const THE_CONTAINER_ALONE = "A container's stop takes its place and fract
 export const ONE_ADDRESS = "Name a property or a shared collection point, not both"
 /** What an address-only stop without its fraction is told. */
 export const AN_ADDRESS_WITH_ITS_FRACTION = "An address-only stop names the waste fraction collected there"
-/** What a repair or a wash at an address alone is told. */
-export const A_WORK_ORDER_OF_A_CONTAINER = "A repair or a wash is of a container: name the container"
+/** What a work order at an address alone is told. */
+export const A_WORK_ORDER_OF_A_CONTAINER = "A work order is of a container: name the container"
+/** What a delivery naming its place is told: the subscription says where. */
+export const A_DELIVERY_AT_ITS_SUBSCRIPTION = "A delivery goes where its subscription serves: name the subscription, not the place"
+/** What a swap of a container for itself is told. */
+export const A_SWAP_FOR_ANOTHER = "A swap's replacement is another container"
+
+/** What each ledger booking a service needs is told when it is missing (O3b of #290, `BOOKED_WITH`). */
+export const BOOKS: Readonly<Record<BookedField, string>> = {
+  subscriptionId: "A delivery names the subscription the container will serve under",
+  warehouseId: "A removal or a swap names the warehouse the container goes back to",
+  replacementContainerId: "A swap names the container that replaces it",
+}
+/** What a booking the service does not take is told. */
+export const BOOKED_BY_NO_OTHER: Readonly<Record<BookedField, string>> = {
+  subscriptionId: "Only a delivery names a subscription",
+  warehouseId: "Only a removal or a swap names a warehouse",
+  replacementContainerId: "Only a swap names a replacement",
+}
 
 const given = (value: string | null | undefined): value is string => value != null
 
+type PickupServiceToken = keyof typeof BOOKED_WITH
+
 /** The shape of a stop the office adds: a container alone, or one place with its fraction. A null counts as not given, as a form sends one for the field it leaves empty. */
-function addedStopIssues(body: { service?: string; containerId?: string | null; propertyId?: string | null; sharedCollectionPointId?: string | null; wasteFractionId?: string | null }, context: z.RefinementCtx): void {
+function addedStopIssues(
+  body: { service?: string; containerId?: string | null; propertyId?: string | null; sharedCollectionPointId?: string | null; wasteFractionId?: string | null } & Partial<Record<BookedField, string | null>>,
+  context: z.RefinementCtx,
+): void {
   const place = [given(body.propertyId), given(body.sharedCollectionPointId)].filter(Boolean).length
+  const service = (body.service ?? "empty") as PickupServiceToken
   // A work order is of a container where it stands: the table's `pickup_service_container_shape`, at the boundary.
-  if (body.service !== undefined && body.service !== "empty" && !given(body.containerId)) {
+  if (service !== "empty" && !given(body.containerId)) {
     context.addIssue({ code: "custom", message: A_WORK_ORDER_OF_A_CONTAINER, path: ["containerId"] })
     return
   }
+  // What the service books beside its container, and nothing else books it: the table's three shapes, at the boundary.
+  const booked = BOOKED_WITH[service] ?? []
+  for (const field of ["subscriptionId", "replacementContainerId", "warehouseId"] as const) {
+    if (booked.includes(field) && !given(body[field])) context.addIssue({ code: "custom", message: BOOKS[field], path: [field] })
+    if (!booked.includes(field) && given(body[field])) context.addIssue({ code: "custom", message: BOOKED_BY_NO_OTHER[field], path: [field] })
+  }
+  if (service === "swap" && given(body.replacementContainerId) && body.replacementContainerId === body.containerId) {
+    context.addIssue({ code: "custom", message: A_SWAP_FOR_ANOTHER, path: ["replacementContainerId"] })
+  }
   if (given(body.containerId)) {
+    // A delivery takes its place from its subscription and may name its fraction; every other container's stop takes both from the placement.
     for (const path of ["propertyId", "sharedCollectionPointId", "wasteFractionId"] as const) {
-      if (given(body[path])) context.addIssue({ code: "custom", message: THE_CONTAINER_ALONE, path: [path] })
+      if (!given(body[path]) || (service === "deliver" && path === "wasteFractionId")) continue
+      context.addIssue({ code: "custom", message: service === "deliver" ? A_DELIVERY_AT_ITS_SUBSCRIPTION : THE_CONTAINER_ALONE, path: [path] })
     }
     return
   }
@@ -147,8 +191,14 @@ function addedStopIssues(body: { service?: string; containerId?: string | null; 
  */
 export const PickupAdd = z
   .strictObject({
-    service: OfficeStopService.default("empty").describe("An emptying when absent; a repair or a wash names a container."),
+    service: OfficeStopService.default("empty").describe("An emptying when absent; every work order names a container, and a delivery, a removal and a swap their ledger bookings."),
     containerId: Id.nullable().optional(),
+    /** A delivery's: the subscription the container serves under once delivered, which says the place. */
+    subscriptionId: Id.nullable().optional(),
+    /** A removal's or a swap's: the warehouse the container taken goes back to. */
+    warehouseId: Id.nullable().optional(),
+    /** A swap's: the container from stock that replaces the one taken. */
+    replacementContainerId: Id.nullable().optional(),
     propertyId: Id.nullable().optional(),
     sharedCollectionPointId: Id.nullable().optional(),
     wasteFractionId: Id.nullable().optional(),

@@ -3,7 +3,7 @@ import { describe, test } from "node:test"
 
 import { PICKUP_OUTCOMES } from "@waste/domain/execution/vocabulary"
 
-import { A_CONTAINER_OR_AN_ADDRESS, A_WORK_ORDER_OF_A_CONTAINER, AN_ADDRESS_WITH_ITS_FRACTION, ONE_ADDRESS, Pickup, PickupAdd, PickupCorrection, PickupDetail, PickupListItem, PickupListQuery, PickupOutcome, PickupRemove, REASON_WITH_A_MISS, reasonWithOutcome, THE_CONTAINER_ALONE } from "../pickups"
+import { A_CONTAINER_OR_AN_ADDRESS, A_DELIVERY_AT_ITS_SUBSCRIPTION, A_SWAP_FOR_ANOTHER, A_WORK_ORDER_OF_A_CONTAINER, AN_ADDRESS_WITH_ITS_FRACTION, BOOKED_BY_NO_OTHER, BOOKS, ONE_ADDRESS, Pickup, PickupAdd, PickupCorrection, PickupDetail, PickupListItem, PickupListQuery, PickupOutcome, PickupRemove, REASON_WITH_A_MISS, reasonWithOutcome, THE_CONTAINER_ALONE } from "../pickups"
 import { DAY_WINDOW_ORDERED } from "../queries"
 import { refusal } from "./expect"
 
@@ -30,6 +30,9 @@ const pickup = {
   wasteFractionId: THIRD,
   arrivedAt: "2026-10-05T06:20:00.000Z",
   outcomeAt: WHEN,
+  subscriptionId: null,
+  warehouseId: null,
+  replacementContainerId: null,
   ...STAMPS,
 }
 
@@ -115,13 +118,43 @@ describe("the dispatcher's commands", () => {
     assert.match(refusal(PickupAdd.safeParse({ containerId: ID, origin: "office" }))[0].message, /origin/)
   })
 
-  test("add books an emptying, a repair or a wash, the two work orders each of a container; a delivery, a removal and a swap are not booked here (O3 of #290)", () => {
+  test("add books an emptying, a repair or a wash, the two work orders each of a container (O3 of #290)", () => {
     assert.deepEqual(PickupAdd.parse({ service: "repair", containerId: ID, note: "The lid hinge" }), { service: "repair", containerId: ID, note: "The lid hinge" })
     assert.deepEqual(PickupAdd.parse({ service: "wash", containerId: ID }), { service: "wash", containerId: ID })
-    for (const service of ["repair", "wash"]) {
-      assert.deepEqual(refusal(PickupAdd.safeParse({ service, propertyId: OTHER, wasteFractionId: THIRD })), [{ path: "containerId", message: A_WORK_ORDER_OF_A_CONTAINER }], service)
+    for (const service of ["repair", "wash", "deliver", "remove", "swap"]) {
+      assert.deepEqual(refusal(PickupAdd.safeParse({ service, propertyId: OTHER, wasteFractionId: THIRD })).at(0), { path: "containerId", message: A_WORK_ORDER_OF_A_CONTAINER }, service)
     }
-    for (const service of ["deliver", "remove", "swap"]) assert.deepEqual(refusal(PickupAdd.safeParse({ service, containerId: ID })).map((issue) => issue.path), ["service"], service)
+  })
+
+  test("a delivery books its subscription, and its fraction where the product names none; its place is the subscription's (O3b of #290)", () => {
+    assert.deepEqual(PickupAdd.parse({ service: "deliver", containerId: ID, subscriptionId: OTHER }), { service: "deliver", containerId: ID, subscriptionId: OTHER })
+    assert.deepEqual(PickupAdd.parse({ service: "deliver", containerId: ID, subscriptionId: OTHER, wasteFractionId: THIRD }).wasteFractionId, THIRD)
+    assert.deepEqual(refusal(PickupAdd.safeParse({ service: "deliver", containerId: ID })), [{ path: "subscriptionId", message: BOOKS.subscriptionId }])
+    assert.deepEqual(refusal(PickupAdd.safeParse({ service: "deliver", containerId: ID, subscriptionId: OTHER, propertyId: OTHER })), [{ path: "propertyId", message: A_DELIVERY_AT_ITS_SUBSCRIPTION }])
+    assert.deepEqual(refusal(PickupAdd.safeParse({ service: "deliver", containerId: ID, subscriptionId: OTHER, warehouseId: THIRD })), [{ path: "warehouseId", message: BOOKED_BY_NO_OTHER.warehouseId }])
+  })
+
+  test("a removal books its warehouse; a swap its replacement, another container, and its warehouse (O3b of #290)", () => {
+    assert.deepEqual(PickupAdd.parse({ service: "remove", containerId: ID, warehouseId: THIRD }), { service: "remove", containerId: ID, warehouseId: THIRD })
+    assert.deepEqual(refusal(PickupAdd.safeParse({ service: "remove", containerId: ID })), [{ path: "warehouseId", message: BOOKS.warehouseId }])
+    assert.deepEqual(PickupAdd.parse({ service: "swap", containerId: ID, replacementContainerId: OTHER, warehouseId: THIRD }), { service: "swap", containerId: ID, replacementContainerId: OTHER, warehouseId: THIRD })
+    assert.deepEqual(refusal(PickupAdd.safeParse({ service: "swap", containerId: ID, warehouseId: THIRD })), [{ path: "replacementContainerId", message: BOOKS.replacementContainerId }])
+    assert.deepEqual(refusal(PickupAdd.safeParse({ service: "swap", containerId: ID, replacementContainerId: ID, warehouseId: THIRD })), [{ path: "replacementContainerId", message: A_SWAP_FOR_ANOTHER }])
+    assert.deepEqual(refusal(PickupAdd.safeParse({ service: "remove", containerId: ID, warehouseId: THIRD, wasteFractionId: THIRD })), [{ path: "wasteFractionId", message: THE_CONTAINER_ALONE }])
+  })
+
+  test("an emptying, a repair or a wash books nothing of the ledger's", () => {
+    for (const service of ["empty", "repair", "wash"]) {
+      assert.deepEqual(refusal(PickupAdd.safeParse({ service, containerId: ID, subscriptionId: OTHER })), [{ path: "subscriptionId", message: BOOKED_BY_NO_OTHER.subscriptionId }], service)
+      assert.deepEqual(refusal(PickupAdd.safeParse({ service, containerId: ID, replacementContainerId: OTHER })), [{ path: "replacementContainerId", message: BOOKED_BY_NO_OTHER.replacementContainerId }], service)
+    }
+  })
+
+  test("a pickup carries its bookings, null where its service books none, and reads one from before them as booking none", () => {
+    const booked = { ...pickup, service: "swap", subscriptionId: null, warehouseId: THIRD, replacementContainerId: OTHER }
+    assert.deepEqual(Pickup.parse(booked), booked)
+    const { subscriptionId: _s, warehouseId: _w, replacementContainerId: _r, ...before } = pickup
+    assert.deepEqual([Pickup.parse(before).subscriptionId, Pickup.parse(before).warehouseId, Pickup.parse(before).replacementContainerId], [null, null, null])
   })
 
   test("remove carries the reason and nothing else", () => {
