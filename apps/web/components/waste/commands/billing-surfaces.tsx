@@ -45,7 +45,7 @@ import { useCommandRunner, useModuleReady, useOpenRecord, useRowHistory, useServ
 import type { ApiClient } from "@/lib/api/client"
 import { problemSentence } from "@/lib/api/problem"
 import { isLocalRefusal, moduleKeyOf, webIdOf } from "@/lib/api/records/adapter"
-import { billingRunBody, billingRunDetail, billingRunInvoices, eventCommandsOffered, eventPricedByList, eventQuestion, invoiceDetail, previewBillingRun } from "@/lib/api/records/billing"
+import { billingRunBody, billingRunDetail, billingRunInvoices, eventCommandsOffered, eventPricedByList, eventQuestion, invoiceDetail, invoiceDocument, previewBillingRun } from "@/lib/api/records/billing"
 import { CONTAINERS_MODULE } from "@/lib/api/records/containers"
 import { PICKUPS_MODULE } from "@/lib/api/records/pickups"
 import { problemOfError, resolverOver, type ModuleState } from "@/lib/api/records/server-records"
@@ -53,6 +53,7 @@ import { formatMinor } from "@/lib/commercial/money"
 import { AGREEMENTS_MODULE } from "@/lib/data/agreements"
 import type { BusinessFormValues } from "@/lib/data/business-form-types"
 import type { BusinessRecord } from "@/lib/data/business-modules"
+import { downloadBlob } from "@/lib/data/csv"
 import { BILLING_MODULE, EVENTS_MODULE, INVOICE_PREFIX, INVOICES_MODULE, PRICE_ROWS_MODULE, ROUTES_MODULE_LOCATION } from "@/lib/data/commercial"
 import {
   blankNone,
@@ -338,7 +339,7 @@ export function BillingRunSurface({ record }: RowSurfaceProps) {
 /** The document's own read, as a one-row history its surface reads again after a credit note. */
 const readInvoice = (client: ApiClient, serverId: string) => invoiceDetail(client, serverId).then((detail): InvoiceDetail[] => [detail])
 
-/** An invoice's or a credit note's details: its lines by position, the credit notes naming it, and — on an invoice — New credit note. */
+/** An invoice's or a credit note's details: its lines by position, the credit notes naming it, Download PDF (#291 C5), and — on an invoice — New credit note. */
 export function InvoiceSurface({ record }: RowSurfaceProps) {
   const client = useApiClient()
   const { upsertRecord, refreshModule } = useBusinessRecordStore()
@@ -365,6 +366,21 @@ export function InvoiceSurface({ record }: RowSurfaceProps) {
     }
   }
 
+  /** The document's PDF, as the API renders it from the rows as issued, saved under its label. */
+  const download = async () => {
+    const serverId = detail?.id
+    if (client === null || serverId === undefined || busy) return
+    setBusy(true)
+    try {
+      const file = await invoiceDocument(client, serverId)
+      downloadBlob(file.fileName ?? `${detail?.label ?? record.name}.pdf`, new Blob([file.bytes], { type: file.contentType ?? "application/pdf" }))
+    } catch (error) {
+      toast.error("The document could not be read", { description: problemSentence(problemOfError(error)) })
+    } finally {
+      setBusy(false)
+    }
+  }
+
   const issue = (values: BusinessFormValues) => {
     if (busy) return
     const note = createCreditNoteRecord(record, values, Date.now())
@@ -385,13 +401,16 @@ export function InvoiceSurface({ record }: RowSurfaceProps) {
   return (
     <section className="space-y-4" data-testid="invoice-commands">
       <h3 className="text-sm font-semibold">{isInvoice ? "Invoice" : "Credit note"}</h3>
-      {isInvoice && (
-        <div className="flex flex-wrap gap-2">
+      <div className="flex flex-wrap gap-2">
+        <Button variant="outline" size="sm" disabled={busy || detail === undefined} onClick={() => void download()}>
+          Download PDF
+        </Button>
+        {isInvoice && (
           <Button variant="outline" size="sm" disabled={!moduleReady || busy || detail === undefined || record.status === "Credited"} onClick={() => void openCredit()}>
             New credit note
           </Button>
-        </div>
-      )}
+        )}
+      </div>
       <div className="space-y-2">
         <h4 className="text-xs font-medium text-muted-foreground">Lines</h4>
         {read.problem !== null ? (

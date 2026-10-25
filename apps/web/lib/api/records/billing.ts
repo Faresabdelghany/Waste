@@ -78,7 +78,7 @@ import {
   PRODUCT_PREFIX,
 } from "@/lib/data/commercial"
 
-import { command, create, get, listAll } from "../client"
+import { command, create, get, getFile, listAll, type ApiFile } from "../client"
 import { inheritedPresentation, NOTHING_RESOLVED, said, stampFacts, statusLabel, typed, webIdOf, type Client, type LocalRefusal, type MappingContext, type Resolver, type ResourceAdapter, type ServerModule } from "./adapter"
 import { shownOn } from "./clock"
 import { referenced, refusal } from "./places"
@@ -490,6 +490,11 @@ function creditStandingOf(document: InvoiceResource): { status: "Issued" | "Part
 /** `GET /invoices/:id`: the document with its lines by position and the credit notes naming it. */
 export function invoiceDetail(client: Client, serverId: string): Promise<InvoiceDetail> {
   return get<InvoiceDetail>(client, `/invoices/${serverId}`)
+}
+
+/** An invoice's or a credit note's PDF (#291 C5), rendered by the API from the rows as issued. */
+export function invoiceDocument(client: Client, serverId: string): Promise<ApiFile> {
+  return getFile(client, `/invoices/${serverId}/document`, "application/pdf")
 }
 
 export const invoiceAdapter: ResourceAdapter<InvoiceResource> = {

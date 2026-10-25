@@ -95,6 +95,11 @@ export const companyAdapter: ResourceAdapter<Company> = {
       identityFacts[field.fact] = value
       identityValues[field.key] = value
     }
+    // The postal address (#291 C5): its lines as typed, one line in its fact.
+    if (company.postalAddress !== null) {
+      identityFacts["Postal address"] = company.postalAddress.split(/\r?\n/).map((line) => line.trim()).filter((line) => line !== "").join(", ")
+      identityValues.postalAddress = company.postalAddress
+    }
     // The caller's company is the one the fixtures call the tenant, whatever
     // it is named: every fixture record's `companyId` is this id, and the
     // organisation store's tenant is it too.
@@ -135,6 +140,7 @@ export const companyAdapter: ResourceAdapter<Company> = {
       country: typed(record, "country") === undefined ? undefined : countryCode(typed(record, "country") as string),
       // Settings › Finance & invoicing sets the identity and clears it (#291 C4): a field not typed is none.
       ...Object.fromEntries(COMPANY_IDENTITY_FIELDS.map((field) => [field.key, typed(record, field.key) ?? null])),
+      postalAddress: typed(record, "postalAddress") ?? null,
     })),
   update: (client, _serverId, body) => patch<Company>(client, "/company", body),
 }
