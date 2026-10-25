@@ -177,6 +177,20 @@ describe("the company", () => {
     assert.deepEqual(companyAdapter.toPatchBody(read, cleared, context(fixtures)), { fikCreditorNumber: null })
   })
 
+  test("the postal address (#291 C5) reads back as a fact and a typed value, a patch sets it whole and a blank clears it", () => {
+    const before = companyAdapter.toRecord(company, context(fixtures))
+    assert.equal(before.facts["Postal address"], undefined)
+    const address = "Havnegade 4\n2100 København Ø"
+    const set = { ...before, submittedValues: { ...before.submittedValues, postalAddress: address } }
+    const body = companyAdapter.toPatchBody(before, set, context(fixtures))
+    assert.deepEqual(body, { postalAddress: address })
+    assert.ok(CompanyPatch.safeParse(body).success)
+    const read = companyAdapter.toRecord({ ...company, postalAddress: address }, context(fixtures))
+    assert.equal(read.facts["Postal address"], "Havnegade 4, 2100 København Ø", "one line in a fact")
+    assert.equal(read.submittedValues?.postalAddress, address)
+    assert.deepEqual(companyAdapter.toPatchBody(read, { ...read, submittedValues: { ...read.submittedValues, postalAddress: "  " } }, context(fixtures)), { postalAddress: null })
+  })
+
   test("the company is not created here", () => {
     assert.equal(companyAdapter.toCreateBody, undefined)
     assert.equal(companyAdapter.create, undefined)

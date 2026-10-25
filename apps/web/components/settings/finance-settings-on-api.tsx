@@ -2,7 +2,8 @@
 
 // Settings › Administration › Finance & invoicing on the Pilot (#291 C4): the
 // company's invoice identity — the VAT number, the bank account and the FIK
-// creditor number an invoice document prints — and each project's payment
+// creditor number an invoice document prints, and its postal address (#291
+// C5), the seller's address a Danish invoice must print — and each project's payment
 // terms and reference scheme. Both are rows of `configure.organization`
 // (lib/api/records/organisation.ts), written through the store; what is typed
 // is judged by the domain's shapes (lib/data/finance-settings.ts) before the
@@ -20,6 +21,7 @@ import { Input } from "@/components/ui/input"
 import { Label } from "@/components/ui/label"
 import { Select, SelectContent, SelectItem, SelectTrigger, SelectValue } from "@/components/ui/select"
 import { Table, TableBody, TableCell, TableHead, TableHeader, TableRow } from "@/components/ui/table"
+import { Textarea } from "@/components/ui/textarea"
 import { useBusinessRecordStore, useModuleRecords, whenSaved } from "@/components/waste/business-record-store"
 import { isCompanyRecord } from "@/lib/api/records/organisation"
 import { getModuleDefinition, type BusinessRecord } from "@/lib/data/business-modules"
@@ -64,7 +66,7 @@ export function FinanceSettingsOnApi() {
       toolbar={null}
     >
       {/* Keyed by what was read: a re-read the store answers starts the form from it. */}
-      {company !== null && organisation.ready && <CompanyIdentity key={COMPANY_IDENTITY_FIELDS.map((field) => typedOf(company, field.key)).join("|")} company={company} />}
+      {company !== null && organisation.ready && <CompanyIdentity key={[...COMPANY_IDENTITY_FIELDS.map((field) => typedOf(company, field.key)), typedOf(company, "postalAddress")].join("|")} company={company} />}
       <RecordsSection shown={projects.length} total={projects.length}>
         <div className="overflow-x-auto">
           <Table className="min-w-[640px]">
@@ -106,6 +108,7 @@ export function FinanceSettingsOnApi() {
 function CompanyIdentity({ company }: { company: BusinessRecord }) {
   const { upsertRecord } = useBusinessRecordStore()
   const [values, setValues] = useState<Record<CompanyIdentityKey, string>>(() => Object.fromEntries(COMPANY_IDENTITY_FIELDS.map((field) => [field.key, typedOf(company, field.key)])) as Record<CompanyIdentityKey, string>)
+  const [postalAddress, setPostalAddress] = useState(() => typedOf(company, "postalAddress"))
   const [saving, setSaving] = useState(false)
   const refusals = Object.fromEntries(COMPANY_IDENTITY_FIELDS.map((field) => [field.key, identityRefusalOf(field.key, values[field.key])]))
   const refused = Object.values(refusals).some((refusal) => refusal !== null)
@@ -117,6 +120,14 @@ function CompanyIdentity({ company }: { company: BusinessRecord }) {
       if (value === null) delete submittedValues[field.key]
       else submittedValues[field.key] = value
     }
+    // The address's lines as typed, each trimmed, the blank ones dropped; none at all clears it.
+    const address = postalAddress
+      .split(/\r?\n/)
+      .map((line) => line.trim())
+      .filter((line) => line !== "")
+      .join("\n")
+    if (address === "") delete submittedValues.postalAddress
+    else submittedValues.postalAddress = address
     setSaving(true)
     whenSaved(
       upsertRecord("configure", "organization", { ...company, submittedValues }),
@@ -129,7 +140,7 @@ function CompanyIdentity({ company }: { company: BusinessRecord }) {
     <section className="rounded-xl border border-border/60">
       <div className="border-b border-border px-4 py-3">
         <h2 className="text-sm font-semibold text-foreground">Invoice identity</h2>
-        <p className="text-xs text-muted-foreground">Printed on every invoice and credit note. A FI card needs the creditor number before a project can use it.</p>
+        <p className="text-xs text-muted-foreground">Printed on every invoice and credit note issued from now on; an issued one keeps what it was issued with. A FI card needs the creditor number before a project can use it.</p>
       </div>
       <form
         className="grid gap-4 px-4 py-4 md:grid-cols-2"
@@ -151,6 +162,11 @@ function CompanyIdentity({ company }: { company: BusinessRecord }) {
             {refusals[field.key] !== null && <p className="text-xs text-destructive">{refusals[field.key]}</p>}
           </div>
         ))}
+        <div className="grid gap-1.5 md:col-span-2">
+          <Label htmlFor="finance-postalAddress">Postal address</Label>
+          <Textarea id="finance-postalAddress" rows={3} value={postalAddress} placeholder={"Havnegade 4\n2100 København Ø"} onChange={(event) => setPostalAddress(event.target.value)} />
+          <p className="text-xs text-muted-foreground">The seller&apos;s address the documents print, a line per row.</p>
+        </div>
         <div className="md:col-span-2 flex justify-end">
           <Button type="submit" size="sm" disabled={saving || refused}>
             Save identity
