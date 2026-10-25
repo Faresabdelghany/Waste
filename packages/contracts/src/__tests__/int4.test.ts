@@ -39,6 +39,7 @@ import * as meModule from "../me"
 import * as organisationModule from "../organisation"
 import * as outboxModule from "../outbox"
 import * as paginationModule from "../pagination"
+import * as paymentsModule from "../payments"
 import * as permissionsModule from "../permissions"
 import * as pickupsModule from "../pickups"
 import * as placesModule from "../places"
@@ -108,6 +109,7 @@ const MODULES: Readonly<Record<string, Record<string, unknown>>> = {
   "organisation": organisationModule,
   "outbox": outboxModule,
   "pagination": paginationModule,
+  "payments": paymentsModule,
   "permissions": permissionsModule,
   "pickup-exceptions": pickupExceptionsModule,
   "pickups": pickupsModule,

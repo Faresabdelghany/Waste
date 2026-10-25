@@ -57,7 +57,7 @@ import { container, containerServicePlacement } from "../schema/containers"
 import { dropOffPoint, dropOffPointException, dropOffPointFraction, dropOffPointHours } from "../schema/drop-off-points"
 import { customer, property, propertyGroup, propertyGroupMember, propertyParty, sharedCollectionPoint, sharedCollectionPointMember } from "../schema/customers"
 import { driverCommand, outboxEvent, pickup, proofOfService, route, session, unload } from "../schema/execution"
-import { billableEvent, billingRun, billingRunExclusion, invoice, invoiceLine, priceList, priceListRow, serviceArea, serviceAreaAssignment, serviceAreaPlanningArea, serviceAreaWasteFraction, serviceProviderPrice, settlement, settlementEvent, settlementLine, ticketKindProduct, weightReview } from "../schema/finance"
+import { billableEvent, billingRun, billingRunExclusion, invoice, invoiceLine, priceList, priceListRow, serviceArea, serviceAreaAssignment, serviceAreaPlanningArea, serviceAreaWasteFraction, serviceProviderPrice, settlement, settlementEvent, settlementLine, payment, paymentAllocation, ticketKindProduct, weightReview } from "../schema/finance"
 import { contaminantCode, contaminantCodeFraction, pickupExceptionRule, pickupExceptionRuleStep } from "../schema/pickup-exceptions"
 import { driver, vehicle, vehicleCompartment, vehicleCompartmentFraction } from "../schema/fleet"
 import { fuelEmissionFactor, vehicleTypeConsumption } from "../schema/emissions"
@@ -221,7 +221,7 @@ const ROUTING = "routing: Plans and the quota, written by the worker and the pro
 
 export const EXEMPT: readonly Exempt[] = [
   { table: auditEvent, why: "the audit log itself" },
-  ...[stockMovement, vehicleAllocationEvent, proofOfService, unload, driverCommand, ticketEvent, billingRunExclusion, invoice, invoiceLine, settlementEvent, weightReview, applicationDecision].map((table) => ({ table, why: LEDGER })),
+  ...[stockMovement, vehicleAllocationEvent, proofOfService, unload, driverCommand, ticketEvent, billingRunExclusion, invoice, invoiceLine, settlementEvent, weightReview, applicationDecision, payment, paymentAllocation].map((table) => ({ table, why: LEDGER })),
   ...[route, pickup, session].map((table) => ({ table, why: EXECUTION })),
   { table: outboxEvent, why: "the outbox: a transport, stamped as it is relayed" },
   ...[generationRun, generationMatch].map((table) => ({ table, why: GENERATION })),

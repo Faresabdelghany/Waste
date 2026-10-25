@@ -46,6 +46,8 @@ import {
   billingRunExclusion,
   invoice,
   invoiceLine,
+  payment,
+  paymentAllocation,
   priceList,
   priceListRow,
   serviceArea,
@@ -815,6 +817,46 @@ describe("the Finance & Contracting tables against a fresh database", { skip: da
       const partiesSet = (values: Partial<typeof invoice.$inferInsert>) => (savepoint: Tx) => savepoint.update(invoice).set(values).where(eq(invoice.id, a.invoice))
       await assert.rejects(tx.transaction((savepoint) => partiesSet({ parties: { seller: written.seller } as never })(savepoint)), refusedWith("23514", /invoice_parties_shape/), "a buyer missing")
       await assert.rejects(tx.transaction((savepoint) => partiesSet({ parties: null as never })(savepoint)), refusedWith("23502", /parties/), "no parties at all")
+    }))
+
+  test("payments (#291 C6): a payment is more than nothing, a bank line carries its key and only a bank line does, and a key is one payment (23514, 23505); an allocation moves money, only a reversal is negative and it reverses another row, once (23514, 23505), and pays an invoice of its own project (23503)", () =>
+    seeded(async (tx) => {
+      await seedHarbor(tx)
+      // Each refusal in a savepoint of its own, so the transaction goes on past it.
+      const refused = (statement: (savepoint: Tx) => Promise<unknown>, code: string, constraint: RegExp, why: string) => assert.rejects(tx.transaction((savepoint) => statement(savepoint)), refusedWith(code, constraint), why)
+      const fifth = "018f7c35-a000-7000-8000-0000000000e5"
+      const paid = (values: Partial<typeof payment.$inferInsert> = {}): typeof payment.$inferInsert => ({ id: a.spare, companyId: a.company, projectId: a.project, customerId: a.customer, amountMinor: 62_500, currency: "DKK", paidOn: "2026-11-12", source: "manual", recordedBy: a.account, ...values })
+      await tx.insert(payment).values(paid())
+      await refused((savepoint) => savepoint.insert(payment).values(paid({ id: a.other, amountMinor: 0 })), "23514", /payment_amount_positive/, "money that arrived is more than nothing")
+      await refused((savepoint) => savepoint.insert(payment).values(paid({ id: a.other, source: "bank-file" })), "23514", /payment_bank_line_shape/, "a bank line carries its key")
+      await refused((savepoint) => savepoint.insert(payment).values(paid({ id: a.other, bankLineKey: "[\"2026-11-12\",62500]" })), "23514", /payment_bank_line_shape/, "and only a bank line does")
+      await refused((savepoint) => savepoint.insert(payment).values(paid({ id: a.other, source: "card" })), "23514", /payment_source_one_of/, "a source outside the vocabulary")
+      await tx.insert(payment).values(paid({ id: a.other, customerId: null, source: "bank-file", bankLineKey: "[\"2026-11-12\",62500]" }))
+      await refused((savepoint) => savepoint.insert(payment).values(paid({ id: a.third, source: "bank-file", bankLineKey: "[\"2026-11-12\",62500]" })), "23505", /payment_bank_line_key_idx/, "a statement's line imported twice")
+
+      const allocated = (values: Partial<typeof paymentAllocation.$inferInsert> = {}): typeof paymentAllocation.$inferInsert => ({ id: a.third, companyId: a.company, projectId: a.project, paymentId: a.spare, invoiceId: a.invoice, amountMinor: 10_000, reversesAllocationId: null, recordedBy: a.account, ...values })
+      await refused((savepoint) => savepoint.insert(paymentAllocation).values(allocated({ amountMinor: 0 })), "23514", /payment_allocation_amount_shape/, "an allocation moves money: undo one by its reversal")
+      await refused((savepoint) => savepoint.insert(paymentAllocation).values(allocated({ amountMinor: -10_000 })), "23514", /payment_allocation_amount_shape/, "only a reversal is negative")
+      await refused((savepoint) => savepoint.insert(paymentAllocation).values(allocated({ invoiceId: a.harborInvoice })), "23503", /payment_allocation_invoice_id_fk/, "an invoice of another project")
+      await tx.insert(paymentAllocation).values(allocated())
+      await refused((savepoint) => savepoint.insert(paymentAllocation).values(allocated({ id: a.fourth, reversesAllocationId: a.third })), "23514", /payment_allocation_amount_shape/, "a reversal is negative")
+      await refused((savepoint) => savepoint.insert(paymentAllocation).values(allocated({ id: a.fourth, amountMinor: -10_000, reversesAllocationId: a.fourth })), "23514", /payment_allocation_amount_shape/, "a reversal reverses another row")
+      await tx.insert(paymentAllocation).values(allocated({ id: a.fourth, amountMinor: -10_000, reversesAllocationId: a.third }))
+      await refused((savepoint) => savepoint.insert(paymentAllocation).values(allocated({ id: fifth, amountMinor: -10_000, reversesAllocationId: a.third })), "23505", /payment_allocation_reverses_allocation_id_idx/, "an allocation is reversed once")
+    }))
+
+  test("payments (#291 C6): as the API role a payment and an allocation are appended and neither updated nor deleted (42501)", () =>
+    asCompany(a.company, async (tx) => {
+      await tx.insert(payment).values({ id: a.spare, companyId: a.company, projectId: a.project, customerId: a.customer, amountMinor: 62_500, currency: "DKK", paidOn: "2026-11-12", source: "manual", recordedBy: a.account })
+      await tx.insert(paymentAllocation).values({ id: a.other, companyId: a.company, projectId: a.project, paymentId: a.spare, invoiceId: a.invoice, amountMinor: 10_000, recordedBy: a.account })
+      await assert.rejects(tx.transaction((savepoint) => savepoint.update(payment).set({ note: "rewritten" }).where(eq(payment.id, a.spare))), refusedWith("42501", /permission denied for table payment/))
+      await assert.rejects(tx.transaction((savepoint) => savepoint.update(paymentAllocation).set({ amountMinor: 1 }).where(eq(paymentAllocation.id, a.other))), refusedWith("42501", /permission denied for table payment_allocation/))
+      for (const [table, id, name] of [
+        [paymentAllocation, a.other, "payment_allocation"],
+        [payment, a.spare, "payment"],
+      ] as const) {
+        await assert.rejects(tx.transaction((savepoint) => savepoint.delete(table).where(eq(table.id, id))), refusedWith("42501", new RegExp(`permission denied for table ${name}`)))
+      }
     }))
 
   test("the domain's vatOf agrees with the two _vat_shape checks over odd amounts of both signs: every row the domain computed lands, and an øre off is refused", () =>

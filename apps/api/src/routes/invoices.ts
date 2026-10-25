@@ -65,7 +65,7 @@ import { requireGrant } from "../auth/require"
 import { newId } from "../ids"
 import { afterCursor, fetchLimit, pageOf } from "../pagination"
 import { describeProblem, invalidRequest, problem, validate } from "../problem"
-import { findInvoice, invoiceColumns, invoiceDetailOf, invoiceOf, invoiceScope, labelOf, linesOf, noSuchInvoice, type LineRow } from "./billing-shapes"
+import { findInvoice, invoiceColumns, invoiceDetailOf, invoiceOf, invoiceScope, labelOf, linesOf, noSuchInvoice, standingsOf, type InvoiceRow, type LineRow } from "./billing-shapes"
 import { projectToday } from "./fleet-lookups"
 import { issueInvoice, type LineDraft } from "./invoice-writes"
 import { requireCustomer } from "./references"
@@ -175,6 +175,12 @@ const problems = (action: "view" | "create") => ({
 })
 
 export function invoiceRoutes(guard: MiddlewareHandler<AuthEnv>, { now = () => new Date() }: ClockOptions = {}) {
+  /** How each document stands on its project's day (#291 C6), the clock read once for the request. */
+  const standings = (tx: Tx, companyId: string, rows: readonly InvoiceRow[]) => {
+    const at = now()
+    return standingsOf(tx, companyId, rows, (projectId) => projectToday(tx, { companyId, projectId }, () => at)())
+  }
+
   return new Hono<AuthEnv>()
     .get(
       "/invoices",
@@ -219,7 +225,8 @@ export function invoiceRoutes(guard: MiddlewareHandler<AuthEnv>, { now = () => n
           )
           .orderBy(asc(invoice.id))
           .limit(fetchLimit(limit))
-        return c.json(pageOf(rows.map(invoiceOf), limit))
+        const standing = await standings(tx, principal.companyId, rows)
+        return c.json(pageOf(rows.map((row) => invoiceOf(row, standing.get(row.id))), limit))
       },
     )
     .get(
@@ -245,7 +252,8 @@ export function invoiceRoutes(guard: MiddlewareHandler<AuthEnv>, { now = () => n
         const principal = c.get("principal")
         const row = await findInvoice(tx, principal, id)
         if (row === undefined) throw noSuchInvoice(id)
-        return c.json(await invoiceDetailOf(tx, principal.companyId, row))
+        const standing = await standings(tx, principal.companyId, [row])
+        return c.json(await invoiceDetailOf(tx, principal.companyId, row, standing.get(row.id)))
       },
     )
     .get(

@@ -359,11 +359,11 @@ describe("the migrations carry every table's hand-written statements", () => {
     }
   })
 
-  test("the schema has exactly sixteen ledgers and one reservation, and no ledger carries a trigger anywhere", async () => {
+  test("the schema has exactly eighteen ledgers and one reservation, and no ledger carries a trigger anywhere", async () => {
     const all = await tables()
     const ledgers = all.filter(isLedger).map((table) => createTableStatement(table))
-    // Resources' two, Execution's three, Resolution's one, Finance's five (Issue #112), Routing's two (#169): a Plan's stops and legs are the immutable result, written once (#124 §1); the audit log (#291); and an import run's rows (#291 slice 12); and an Application's Decisions (M7 of #293).
-    const LEDGERS = ["application_decision", "audit_event", "billing_run_exclusion", "driver_command", "import_run_row", "invoice", "invoice_line", "plan_leg", "plan_stop", "proof_of_service", "settlement_event", "stock_movement", "ticket_event", "unload", "vehicle_allocation_event", "weight_review"]
+    // Resources' two, Execution's three, Resolution's one, Finance's five (Issue #112), Routing's two (#169): a Plan's stops and legs are the immutable result, written once (#124 §1); the audit log (#291); and an import run's rows (#291 slice 12); an Application's Decisions (M7 of #293); and the payments with their allocations (#291 C6).
+    const LEDGERS = ["application_decision", "audit_event", "billing_run_exclusion", "driver_command", "import_run_row", "invoice", "invoice_line", "payment", "payment_allocation", "plan_leg", "plan_stop", "proof_of_service", "settlement_event", "stock_movement", "ticket_event", "unload", "vehicle_allocation_event", "weight_review"]
     assert.deepEqual(
       ledgers.sort(),
       LEDGERS.map((name) => `CREATE TABLE "wms"."${name}" (`),

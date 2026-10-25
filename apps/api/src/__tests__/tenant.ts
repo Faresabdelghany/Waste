@@ -33,6 +33,8 @@ import {
   billingRunExclusion,
   invoice,
   invoiceLine,
+  payment,
+  paymentAllocation,
   priceList,
   priceListRow,
   serviceArea,
@@ -313,11 +315,15 @@ export async function grantRole(pool: Database, companyId: string, roleId: strin
  * The CSV import's two (#291 slice 12) go first: `import_run_row`, a ledger,
  * as the owner, then `import_run`, which names a project and an account.
  * A driver's absences and a vehicle's unavailability (O6 of #290) go before
- * the drivers and the vehicles they name.
+ * the drivers and the vehicles they name. The payments' two ledgers (#291 C6)
+ * go before `invoice`, as the owner: `payment_allocation` (it names
+ * payments, invoices and the allocation it reverses), then `payment`.
  */
 export async function dropTenant(pool: Database, companyId: string, owner?: Database): Promise<void> {
   if (owner !== undefined) {
     await owner.db.delete(importRunRow).where(eq(importRunRow.companyId, companyId))
+    await owner.db.delete(paymentAllocation).where(eq(paymentAllocation.companyId, companyId))
+    await owner.db.delete(payment).where(eq(payment.companyId, companyId))
     await owner.db.delete(invoiceLine).where(eq(invoiceLine.companyId, companyId))
     await owner.db.delete(invoice).where(eq(invoice.companyId, companyId))
     await owner.db.delete(billingRunExclusion).where(eq(billingRunExclusion.companyId, companyId))
