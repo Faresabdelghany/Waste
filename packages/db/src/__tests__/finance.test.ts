@@ -743,6 +743,28 @@ describe("the Finance & Contracting tables against a fresh database", { skip: da
       await tx.update(ticket).set({ resolution: "serviced" }).where(eq(ticket.id, a.ticket))
     }))
 
+  test("a recurring charge (#291 C2) names its subscription alone, is the billing run's, carries its period and its days and nothing else does (23514), and is one per subscription and period (23505 billable_event_subscription_charge_idx)", () =>
+    seeded(async (tx) => {
+      const november = { chargePeriodFrom: "2026-11-01", chargePeriodTo: "2026-12-01", chargedDays: 30, periodDays: 30 }
+      const charge = (values: Partial<typeof billableEvent.$inferInsert> = {}) => manual({ kind: "subscription", subscriptionId: a.subscription, createdBy: null, serviceDate: "2026-11-01", ...november, ...values })
+      const refuse = (values: Partial<typeof billableEvent.$inferInsert>, constraint: RegExp, why: string) =>
+        assert.rejects(tx.transaction((savepoint) => savepoint.insert(billableEvent).values(charge(values))), refusedWith("23514", constraint), why)
+      await refuse({ subscriptionId: null }, /billable_event_kind_shape/, "a charge of no subscription")
+      await refuse({ routeId: a.route, pickupId: a.pickup }, /billable_event_kind_shape/, "a charge naming a pickup")
+      await refuse({ createdBy: a.account }, /billable_event_origin_shape/, "a person's charge")
+      await refuse({ sourceEventId: a.spare }, /billable_event_origin_shape/, "an outbox event's charge")
+      await refuse({ chargePeriodFrom: null, chargePeriodTo: null, chargedDays: null, periodDays: null }, /billable_event_charge_shape/, "a charge of no period")
+      await refuse({ chargedDays: null }, /billable_event_charge_shape/, "the four not null together")
+      await refuse({ chargedDays: 31 }, /billable_event_charge_shape/, "more days than the period holds")
+      await refuse({ chargedDays: 0 }, /billable_event_charge_shape/, "no day charged")
+      await refuse({ chargePeriodTo: "2026-11-01" }, /billable_event_charge_shape/, "an empty period")
+      await assert.rejects(tx.transaction((savepoint) => savepoint.insert(billableEvent).values(manual(november))), refusedWith("23514", /billable_event_charge_shape/), "a period on a person's event")
+      // The shapes that stand: November priced, December blocked; November again is the run's idempotency key.
+      const unpriced = { unitPriceMinor: null, netMinor: null, vatPercent: null, vatMinor: null, currency: null, priceListRowId: null }
+      await tx.insert(billableEvent).values([charge(), charge({ id: a.other, ...unpriced, blockReason: "amount-too-large", serviceDate: "2026-12-01", chargePeriodFrom: "2026-12-01", chargePeriodTo: "2027-01-01", chargedDays: 31, periodDays: 31 })])
+      await assert.rejects(tx.transaction((savepoint) => savepoint.insert(billableEvent).values(charge({ id: a.third }))), refusedWith("23505", /billable_event_subscription_charge_idx/), "a period charged twice")
+    }))
+
   test("the domain's vatOf agrees with the two _vat_shape checks over odd amounts of both signs: every row the domain computed lands, and an øre off is refused", () =>
     seeded(async (tx) => {
       let rows = 0

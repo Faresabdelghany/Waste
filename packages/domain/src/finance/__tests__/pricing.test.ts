@@ -10,6 +10,7 @@
 import assert from "node:assert/strict"
 import { describe, test } from "node:test"
 
+import { MINOR_MAX } from "../money"
 import { CONDITION_NAMES, PRICE_CONDITIONS, priceListIdFor, priceOccurrence, RESOLUTION_RULE, resolvePrice, scoreOf, type PriceInput, type PriceRow } from "../pricing"
 
 const HARBOR = "018f7c34-a000-7000-8000-000000000001"
@@ -224,5 +225,15 @@ describe("priceOccurrence", () => {
     assert.equal(priceOccurrence({ ...occurrence, agreement: { status: "cancelled" } }).blockReason, null)
     // A price of zero is a price, not a missing row.
     assert.deepEqual(priceOccurrence({ ...occurrence, priceList: { ...list, rows: [row("free", { unitPriceMinor: 0 })] } }).price, { priceListRowId: "free", unitPriceMinor: 0, netMinor: 0, vatPercent: 25, vatMinor: 0, currency: "DKK" })
+  })
+
+  test("blocks an amount the integer it is stored in cannot hold as amount-too-large, never a failed write (#291 C2)", () => {
+    // 15 000 øre a pickup: 143 166 of them are 2 147 490 000, past 2 147 483 647.
+    const huge = priceOccurrence({ ...occurrence, quantity: 143_166 }, labels)
+    assert.equal(huge.blockReason, "amount-too-large")
+    assert.equal(huge.price, null)
+    assert.equal(huge.resolution?.winner?.row.id, "harbor", "the resolution travels with the block")
+    assert.equal(priceOccurrence({ ...occurrence, quantity: 143_165 }, labels).blockReason, null, "2 147 475 000 fits")
+    assert.equal(MINOR_MAX, 2 ** 31 - 1)
   })
 })

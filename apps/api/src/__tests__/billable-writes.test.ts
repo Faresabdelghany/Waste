@@ -150,6 +150,7 @@ describe("billableEventShapeIssue", () => {
     pickupId: null,
     ticketId: null,
     reversesEventId: null,
+    subscriptionId: null,
     sourceEventId: null,
     createdBy: OLIVIA,
     overrideReason: null,
@@ -177,6 +178,17 @@ describe("billableEventShapeIssue", () => {
     assert.match(billableEventShapeIssue({ ...manual, kind: "reversal", reversesEventId: ROW, priceListRowId: null, createdBy: null, sourceEventId: SOURCE }) ?? "", /billable_event_amounts_shape/, "a reversal with a positive net is caught by the amounts first")
     assert.match(billableEventShapeIssue({ ...manual, kind: "reversal", priceListRowId: null, netMinor: -10_000, vatMinor: -2_500, createdBy: null, sourceEventId: SOURCE }) ?? "", /names the event it undoes[^(]*\(billable_event_kind_shape\)/, "a reversal naming nothing")
     assert.match(billableEventShapeIssue({ ...manual, sourceEventId: SOURCE }) ?? "", /billable_event_origin_shape/)
+  })
+
+  test("holds a recurring charge to its subscription alone, priced from a row, and to being the run's: no person and no outbox event (#291 C2)", () => {
+    const charge: ComposedEvent = { ...manual, kind: "subscription", subscriptionId: AGREEMENT, createdBy: null }
+    assert.equal(billableEventShapeIssue(charge), undefined)
+    assert.equal(billableEventShapeIssue({ ...charge, unitPriceMinor: null, netMinor: null, vatPercent: null, vatMinor: null, currency: null, priceListRowId: null, blockReason: "amount-too-large" }), undefined, "a blocked charge")
+    assert.match(billableEventShapeIssue({ ...charge, subscriptionId: null }) ?? "", /a recurring charge names its subscription[^(]*\(billable_event_kind_shape\)/)
+    assert.match(billableEventShapeIssue({ ...charge, routeId: ROUTE, pickupId: PICKUP }) ?? "", /billable_event_kind_shape/)
+    assert.match(billableEventShapeIssue({ ...charge, priceListRowId: null }) ?? "", /a priced subscription event names the row that won/)
+    assert.match(billableEventShapeIssue({ ...charge, createdBy: OLIVIA }) ?? "", /a recurring charge is the billing run's[^(]*\(billable_event_origin_shape\)/)
+    assert.match(billableEventShapeIssue({ ...charge, sourceEventId: SOURCE }) ?? "", /billable_event_origin_shape/)
   })
 })
 

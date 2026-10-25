@@ -43,10 +43,23 @@
 // database's word behind the selection is `invoice_line_billable_event_id_idx`,
 // an event on one line of one invoice, and its refusal is the backstop for a
 // race the project's lock prevents.
+//
+// A run charges subscriptions too (#291 slice 2, #292 C2): under the
+// project's lock and before it selects, it mints the recurring charges its
+// period calls for (recurring-charges.ts) — a month-sold subscription's next
+// charge period in advance, and one in its period never charged — as
+// `subscription` events, which it then selects as it selects every other. A
+// recurring charge is selected by its charge period, not its service date:
+// one overlapping the run's period or the day after it, so the run over
+// October invoices November's charges it minted with October's pickups. Its
+// line reads the product, the charge period's first and last days, and how
+// many of its days were charged where that is not all of them. The preview
+// plans the charges and writes none, folding the plan into what it counts,
+// so it answers what the run would.
 import type { BillingRunPreview } from "@waste/contracts/billing"
 import { PAYMENT_TERMS_DAYS } from "@waste/domain/finance/money"
 import { addDays } from "@waste/domain/route-schemes/recurrence"
-import { and, asc, count, eq, getTableColumns, gte, isNotNull, isNull, lte, notExists, sql, type SQL } from "drizzle-orm"
+import { and, asc, count, eq, getTableColumns, gt, gte, isNotNull, isNull, lte, ne, notExists, or, sql, type SQL } from "drizzle-orm"
 import { alias, type PgColumn } from "drizzle-orm/pg-core"
 
 import type { Tx } from "../client"
@@ -58,6 +71,7 @@ import { project } from "../schema/organisation"
 import { exclusionColumns, runColumns, type EventRow, type ExclusionRow, type RunRow } from "./billing-shapes"
 import { issueInvoice, type LineDraft } from "./invoice-writes"
 import { projectToday, type Scope } from "./project-clock"
+import { mintRecurringCharges, planRecurringCharges } from "./recurring-charges"
 import { lockRow, refused } from "./shared"
 
 /** The most ready events one run takes: a run is one transaction, and a thousand invoices is what Postgres is for; past this, narrow the period (§7.2, §7.9). */
@@ -85,11 +99,19 @@ export type Excluded = { customerId: string; eventCount: number }
 export type Selection = { events: ReadyEvent[]; groups: Group[]; exclusions: Excluded[] }
 
 /** The event columns the selection's predicates read: the `billable_event` table's own, or an alias's. */
-type EventColumns = { id: PgColumn; companyId: PgColumn; projectId: PgColumn; serviceDate: PgColumn; cancelledAt: PgColumn; blockReason: PgColumn }
+type EventColumns = { id: PgColumn; companyId: PgColumn; projectId: PgColumn; kind: PgColumn; serviceDate: PgColumn; chargePeriodFrom: PgColumn; chargePeriodTo: PgColumn; cancelledAt: PgColumn; blockReason: PgColumn }
 
-/** The events of the project whose service date lies in the period and that were not cancelled. */
+/** The events of the project in the period that were not cancelled: by service date, and a recurring charge by its charge period, overlapping the period or the day after it. */
 const inPeriod = (scope: Scope, period: BillingPeriod, on: EventColumns = billableEvent): SQL | undefined =>
-  and(eq(on.companyId, scope.companyId), eq(on.projectId, scope.projectId), gte(on.serviceDate, period.periodFrom), lte(on.serviceDate, period.periodTo), isNull(on.cancelledAt))
+  and(
+    eq(on.companyId, scope.companyId),
+    eq(on.projectId, scope.projectId),
+    or(
+      and(ne(on.kind, "subscription"), gte(on.serviceDate, period.periodFrom), lte(on.serviceDate, period.periodTo)),
+      and(eq(on.kind, "subscription"), lte(on.chargePeriodFrom, addDays(period.periodTo, 1)), gt(on.chargePeriodTo, period.periodFrom)),
+    ),
+    isNull(on.cancelledAt),
+  )
 
 /** The `ready` reading as a `where`: priced, not cancelled, no line naming it, no reversal naming it. `on` is the event row the statement is over, the table or an alias of it. */
 function ready(tx: Tx, scope: Scope, period: BillingPeriod, on: EventColumns = billableEvent): SQL | undefined {
@@ -171,22 +193,49 @@ export async function selectBilling(tx: Tx, scope: Scope, period: BillingPeriod,
   }
 }
 
-/** What a preview answers: the counts, the totals per currency in currency order, and the payers a run would exclude; nothing written. */
+/**
+ * What a preview answers: the counts, the totals per currency in currency
+ * order, and the payers a run would exclude; nothing written. The recurring
+ * charges the run would mint are planned and folded in as the run would
+ * select them: a priced one is a ready event of its payer and currency, a
+ * blocked one counts toward its payer's exclusion, and a payer with a priced
+ * one is invoiced and excluded no more.
+ */
 export async function previewBilling(tx: Tx, scope: Scope, period: BillingPeriod): Promise<BillingRunPreview> {
   const selection = await selectBilling(tx, scope, period)
+  const planned = await planRecurringCharges(tx, scope, period)
+  const priced = planned.flatMap((charge) => (charge.price === null ? [] : [{ payerCustomerId: charge.payerCustomerId, ...charge.price }]))
+  const readyCount = selection.events.length + priced.length
+  if (readyCount > BILLING_RUN_MAX_EVENTS) throw refused(409, tooManyEvents(readyCount))
+  const invoices = new Set(selection.groups.map((group) => `${group.payerCustomerId}/${group.currency}`))
   const totals = new Map<string, { currency: string; netMinor: number; vatMinor: number }>()
-  for (const group of selection.groups) {
+  for (const group of [...selection.groups, ...priced]) {
+    invoices.add(`${group.payerCustomerId}/${group.currency}`)
     const total = totals.get(group.currency) ?? { currency: group.currency, netMinor: 0, vatMinor: 0 }
     total.netMinor += group.netMinor
     total.vatMinor += group.vatMinor
     totals.set(group.currency, total)
   }
+  const invoiced = new Set([...selection.groups, ...priced].map((group) => group.payerCustomerId))
+  const excluded = new Map(selection.exclusions.map((payer) => [payer.customerId, payer.eventCount]))
+  for (const charge of planned) if (charge.price === null) excluded.set(charge.payerCustomerId, (excluded.get(charge.payerCustomerId) ?? 0) + 1)
   return {
-    eventCount: selection.events.length,
-    invoiceCount: selection.groups.length,
+    eventCount: readyCount,
+    invoiceCount: invoices.size,
     totals: [...totals.values()].sort((a, b) => (a.currency < b.currency ? -1 : a.currency > b.currency ? 1 : 0)),
-    exclusions: selection.exclusions.map((payer) => ({ ...payer, reason: "all-events-blocked" as const })),
+    exclusions: [...excluded]
+      .filter(([customerId]) => !invoiced.has(customerId))
+      .sort(([a], [b]) => (a < b ? -1 : a > b ? 1 : 0))
+      .map(([customerId, eventCount]) => ({ customerId, eventCount, reason: "all-events-blocked" as const })),
   }
+}
+
+/** A line's text: the product's invoice name (or its name) and the service date; a recurring charge's, its charge period's first and last days and, where it charged fewer, how many of its days. */
+function descriptionOf(event: ReadyEvent): string {
+  const name = event.invoiceName ?? event.productName
+  if (event.chargePeriodFrom === null || event.chargePeriodTo === null || event.chargedDays === null || event.periodDays === null) return `${name} · ${event.serviceDate}`
+  const days = event.chargedDays === event.periodDays ? "" : ` · ${event.chargedDays} of ${event.periodDays} days`
+  return `${name} · ${event.chargePeriodFrom} – ${addDays(event.chargePeriodTo, -1)}${days}`
 }
 
 /** One event as its line: the frozen text, the product, the day, the amounts as the event froze them — a reversal's negative. */
@@ -195,7 +244,7 @@ function lineOfEvent(event: ReadyEvent): LineDraft {
   return {
     billableEventId: event.id,
     creditsLineId: null,
-    description: `${event.invoiceName ?? event.productName} · ${event.serviceDate}`,
+    description: descriptionOf(event),
     productId: event.productId,
     serviceDate: event.serviceDate,
     quantity: event.quantity,
@@ -220,7 +269,8 @@ export type RunBillingInput = BillingPeriod & {
 
 /**
  * Runs billing for a project over a period, in the caller's transaction:
- * the project's lock, the selection, the run's row `completed` with its
+ * the project's lock, the recurring charges the period calls for, the
+ * selection, the run's row `completed` with its
  * counts and totals, one invoice per payer and currency with its lines and
  * its `invoice-issued`, and one exclusion per payer with nothing to invoice.
  * A refusal anywhere — the ceiling, a line another run wrote — leaves
@@ -231,6 +281,8 @@ export async function runBilling(tx: Tx, input: RunBillingInput): Promise<{ run:
   const { companyId, projectId } = input
   const scope: Scope = { companyId, projectId }
   await lockRow(tx, project, { companyId, id: projectId })
+  // A period and the next charged before the selection, so the run invoices them; the second of two runs finds them charged.
+  await mintRecurringCharges(tx, scope, input, input.newId)
   const selection = await selectBilling(tx, scope, input, { lock: true })
   const at = input.now()
   const issuedOn = await projectToday(tx, scope, () => at)()

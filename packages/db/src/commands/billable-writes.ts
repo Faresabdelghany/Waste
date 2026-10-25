@@ -39,7 +39,7 @@
 // The row's shape is checked before the insert (`billableEventShapeIssue`):
 // the server composes every row itself, so a row that disagrees with its
 // kind, its origin or its price is a bug in a route or a job and thrown as
-// one, never left for the table's ten checks to answer as a 500 naming a
+// one, never left for the table's shape checks to answer as a 500 naming a
 // constraint. The checks here spell the same rules as the table's, named for
 // them.
 import type { BillableEvent } from "@waste/contracts/billable-events"
@@ -210,6 +210,7 @@ export type ComposedEvent = {
   pickupId: string | null
   ticketId: string | null
   reversesEventId: string | null
+  subscriptionId: string | null
   sourceEventId: string | null
   createdBy: string | null
   overrideReason: string | null
@@ -224,7 +225,8 @@ export type ComposedEvent = {
  * winning row is traceable unless blocked, a person's or a reversal; a manual
  * event with a person's price and no row carries the reason and nothing else
  * does; a pickup names its route; what each kind names; and a row is a
- * person's or an event's, never both and never neither.
+ * person's or an event's, never both and never neither — a recurring charge,
+ * the billing run's, is neither (#291 C2).
  */
 export function billableEventShapeIssue(row: ComposedEvent): string | undefined {
   const priced = row.netMinor !== null
@@ -249,6 +251,10 @@ export function billableEventShapeIssue(row: ComposedEvent): string | undefined 
     case "reversal":
       if (row.reversesEventId === null || row.pickupId !== null || row.ticketId !== null || !priced || (row.netMinor ?? 0) > 0) return "a reversal names the event it undoes, nothing of its own, and carries the negated price (billable_event_kind_shape)"
       break
+    case "subscription":
+      if (row.subscriptionId === null || row.pickupId !== null || row.ticketId !== null || row.reversesEventId !== null) return "a recurring charge names its subscription and no pickup, no ticket and no reversal (billable_event_kind_shape)"
+      if (row.createdBy !== null || row.sourceEventId !== null) return "a recurring charge is the billing run's: no person and no outbox event (billable_event_origin_shape)"
+      return undefined
   }
   if ((row.createdBy === null) !== (row.sourceEventId !== null)) return "an event is a person's or the consumer's, never both and never neither (billable_event_origin_shape)"
   return undefined
@@ -292,6 +298,7 @@ export async function recordBillableEvent(tx: Tx, input: RecordBillableEventInpu
     priceListRowId: price?.priceListRowId ?? null,
     blockReason: draft.blockReason,
     ...draft.links,
+    subscriptionId: draft.subscriptionId,
     sourceEventId: input.sourceEventId,
     createdBy: input.createdBy,
     overrideReason: input.overrideReason,
@@ -306,7 +313,6 @@ export async function recordBillableEvent(tx: Tx, input: RecordBillableEventInpu
       projectId: input.projectId,
       ...composed,
       serviceDate: draft.serviceDate,
-      subscriptionId: draft.subscriptionId,
       note: input.note,
       cancelledAt: null,
       cancelledBy: null,

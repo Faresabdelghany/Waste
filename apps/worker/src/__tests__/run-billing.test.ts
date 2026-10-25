@@ -13,7 +13,9 @@
 // null; a second sweep over the same month issues nothing, which is what
 // makes a retry safe; a run sent by hand names one project and a day; and a
 // project whose run refuses is one failure among the others' successes, the
-// job failing at the end with the project named. Skipped with the reason when
+// job failing at the end with the project named. The scheduled run charges a
+// month-sold subscription as the office's does (#291 C2): the month billed and
+// the next in advance, prorated by its days in force. Skipped with the reason when
 // `DATABASE_URL`, `WORKER_DATABASE_URL` or `DATABASE_ADMIN_URL` is unset,
 // failed under `REQUIRE_DATABASE`.
 import assert from "node:assert/strict"
@@ -27,7 +29,8 @@ import { dayInTimezone } from "@waste/db/commands/days"
 import { newId } from "@waste/db/ids"
 import { migrateDatabase } from "@waste/db/migrate"
 import { outboxEvent } from "@waste/db/schema/execution"
-import { billableEvent, billingRun, invoice } from "@waste/db/schema/finance"
+import { subscription } from "@waste/db/schema/agreements"
+import { billableEvent, billingRun, invoice, priceListRow } from "@waste/db/schema/finance"
 import { withCompany } from "@waste/db/tenant"
 import type { BillableEventDraft } from "@waste/domain/finance/from-event"
 import { monthBefore } from "@waste/domain/finance/periods"
@@ -208,6 +211,32 @@ describe("finance.run-billing against Postgres", { skip }, () => {
     const [run] = await handle({ projectId: tenant.projects.copenhagen.id, on: null }, lateOnTheThirtieth)
     assert.deepEqual([run.periodFrom, run.periodTo], ["2026-07-01", "2026-07-31"], "01:30 on 1 August in Copenhagen: July is the month before")
     assert.ok(run.outcome === "completed" && run.eventCount === 1)
+  })
+
+  test("charges a month-sold subscription as the office's run does: the month billed, prorated by its days in force, and the next in advance (#291 C2)", async () => {
+    const rented = testId()
+    const { companyId } = tenant
+    const copenhagen = tenant.projects.copenhagen.id
+    await withCompany(api.db, companyId, async (tx) => {
+      await tx.insert(priceListRow).values({ id: testId(), companyId, projectId: copenhagen, priceListId: tenant.priceList.id, productId: tenant.products.rental.id, unitPriceMinor: 6_000, validFrom: "2026-01-01" })
+      await tx.insert(subscription).values({ id: rented, companyId, projectId: copenhagen, agreementId: tenant.agreements.anna.id, productId: tenant.products.rental.id, propertyId: tenant.properties.havnegade.id, quantity: 1, validFrom: "2027-02-15" })
+    })
+    // A month no other case here bills.
+    const [run] = await handle({ projectId: copenhagen, on: "2027-03-01" })
+    assert.deepEqual([run.periodFrom, run.periodTo], ["2027-02-01", "2027-02-28"])
+    assert.ok(run.outcome === "completed" && run.eventCount === 2 && run.invoiceCount === 1, JSON.stringify(run))
+    const charged = await withCompany(api.db, companyId, (tx) =>
+      tx
+        .select({ from: billableEvent.chargePeriodFrom, days: billableEvent.chargedDays, net: billableEvent.netMinor, createdBy: billableEvent.createdBy })
+        .from(billableEvent)
+        .where(and(eq(billableEvent.companyId, companyId), eq(billableEvent.subscriptionId, rented)))
+        .orderBy(asc(billableEvent.chargePeriodFrom)),
+    )
+    // From the 15th: 14 of February's 28 days of 60.00 kr, then March whole, both on the run's invoice; nobody's.
+    assert.deepEqual(charged, [
+      { from: "2027-02-01", days: 14, net: 3_000, createdBy: null },
+      { from: "2027-03-01", days: 31, net: 6_000, createdBy: null },
+    ])
   })
 
   test("one project's refusal is not another's: a run that cannot run is a failure named in the job's error, the rest completed, and nothing of the failed one written", async () => {

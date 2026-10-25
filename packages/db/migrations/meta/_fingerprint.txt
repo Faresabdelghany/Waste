@@ -373,28 +373,38 @@ column wms.billable_event 26 note text
 column wms.billable_event 27 cancelled_at timestamp with time zone
 column wms.billable_event 28 cancelled_by uuid
 column wms.billable_event 29 cancel_reason text
+column wms.billable_event 30 charge_period_from date
+column wms.billable_event 31 charge_period_to date
+column wms.billable_event 32 charged_days integer
+column wms.billable_event 33 period_days integer
 constraint wms.billable_event billable_event_agreement_id_fk FOREIGN KEY (company_id, project_id, agreement_id) REFERENCES wms.agreement(company_id, project_id, id)
 constraint wms.billable_event billable_event_amounts_shape CHECK (((net_minor IS NULL) OR (net_minor = ((
 CASE kind
     WHEN 'reversal'::text THEN '-1'::integer
     ELSE 1
 END * (unit_price_minor)::bigint) * quantity))))
-constraint wms.billable_event billable_event_block_reason_one_of CHECK ((block_reason = ANY (ARRAY['no-subscription'::text, 'agreement-draft'::text, 'no-price-list'::text, 'no-price-row'::text, 'no-product'::text, 'no-vat-rate'::text])))
+constraint wms.billable_event billable_event_block_reason_one_of CHECK ((block_reason = ANY (ARRAY['no-subscription'::text, 'agreement-draft'::text, 'no-price-list'::text, 'no-price-row'::text, 'no-product'::text, 'no-vat-rate'::text, 'amount-too-large'::text])))
 constraint wms.billable_event billable_event_cancel_reason_one_of CHECK ((cancel_reason = ANY (ARRAY['pickup-corrected'::text, 'duplicate'::text, 'not-delivered'::text, 'other'::text])))
 constraint wms.billable_event billable_event_cancel_shape CHECK ((((cancelled_at IS NULL) = (cancel_reason IS NULL)) AND ((cancelled_by IS NULL) OR (cancelled_at IS NOT NULL))))
 constraint wms.billable_event billable_event_cancelled_by_fk FOREIGN KEY (company_id, cancelled_by) REFERENCES wms.user_account(company_id, id)
+constraint wms.billable_event billable_event_charge_shape CHECK ((((kind = 'subscription'::text) = (charge_period_from IS NOT NULL)) AND ((charge_period_from IS NULL) = (charge_period_to IS NULL)) AND ((charge_period_from IS NULL) = (charged_days IS NULL)) AND ((charge_period_from IS NULL) = (period_days IS NULL)) AND ((charge_period_to IS NULL) OR (charge_period_to > charge_period_from)) AND ((charged_days IS NULL) OR ((charged_days > 0) AND (charged_days <= period_days)))))
 constraint wms.billable_event billable_event_company_id_fk FOREIGN KEY (company_id) REFERENCES wms.company(id)
 constraint wms.billable_event billable_event_created_by_fk FOREIGN KEY (company_id, created_by) REFERENCES wms.user_account(company_id, id)
-constraint wms.billable_event billable_event_kind_one_of CHECK ((kind = ANY (ARRAY['pickup'::text, 'ticket'::text, 'manual'::text, 'reversal'::text])))
+constraint wms.billable_event billable_event_kind_one_of CHECK ((kind = ANY (ARRAY['pickup'::text, 'ticket'::text, 'manual'::text, 'reversal'::text, 'subscription'::text])))
 constraint wms.billable_event billable_event_kind_shape CHECK (
 CASE kind
     WHEN 'pickup'::text THEN ((pickup_id IS NOT NULL) AND (ticket_id IS NULL) AND (reverses_event_id IS NULL))
     WHEN 'ticket'::text THEN ((ticket_id IS NOT NULL) AND (pickup_id IS NULL) AND (reverses_event_id IS NULL))
     WHEN 'manual'::text THEN ((pickup_id IS NULL) AND (ticket_id IS NULL) AND (reverses_event_id IS NULL) AND (created_by IS NOT NULL))
     WHEN 'reversal'::text THEN ((reverses_event_id IS NOT NULL) AND (pickup_id IS NULL) AND (ticket_id IS NULL) AND (net_minor IS NOT NULL) AND (net_minor <= 0))
+    WHEN 'subscription'::text THEN ((subscription_id IS NOT NULL) AND (pickup_id IS NULL) AND (ticket_id IS NULL) AND (reverses_event_id IS NULL))
     ELSE false
 END)
-constraint wms.billable_event billable_event_origin_shape CHECK (((created_by IS NULL) = (source_event_id IS NOT NULL)))
+constraint wms.billable_event billable_event_origin_shape CHECK (
+CASE kind
+    WHEN 'subscription'::text THEN ((created_by IS NULL) AND (source_event_id IS NULL))
+    ELSE ((created_by IS NULL) = (source_event_id IS NOT NULL))
+END)
 constraint wms.billable_event billable_event_override_shape CHECK ((((kind = 'manual'::text) AND (price_list_row_id IS NULL) AND (block_reason IS NULL)) = (override_reason IS NOT NULL)))
 constraint wms.billable_event billable_event_pickup_shape CHECK (((pickup_id IS NULL) OR (route_id IS NOT NULL)))
 constraint wms.billable_event billable_event_pkey PRIMARY KEY (id)
@@ -424,6 +434,7 @@ index wms.billable_event billable_event_project_key CREATE UNIQUE INDEX billable
 index wms.billable_event billable_event_reverses_event_id_idx CREATE INDEX billable_event_reverses_event_id_idx ON wms.billable_event USING btree (company_id, reverses_event_id)
 index wms.billable_event billable_event_route_id_idx CREATE INDEX billable_event_route_id_idx ON wms.billable_event USING btree (company_id, route_id)
 index wms.billable_event billable_event_source_event_id_idx CREATE UNIQUE INDEX billable_event_source_event_id_idx ON wms.billable_event USING btree (company_id, source_event_id) WHERE (source_event_id IS NOT NULL)
+index wms.billable_event billable_event_subscription_charge_idx CREATE UNIQUE INDEX billable_event_subscription_charge_idx ON wms.billable_event USING btree (company_id, subscription_id, charge_period_from) WHERE (kind = 'subscription'::text)
 index wms.billable_event billable_event_subscription_id_idx CREATE INDEX billable_event_subscription_id_idx ON wms.billable_event USING btree (company_id, subscription_id)
 index wms.billable_event billable_event_ticket_id_idx CREATE INDEX billable_event_ticket_id_idx ON wms.billable_event USING btree (company_id, ticket_id)
 trigger wms.billable_event billable_event_touch_updated_at enabled=O CREATE TRIGGER billable_event_touch_updated_at BEFORE UPDATE ON wms.billable_event FOR EACH ROW EXECUTE FUNCTION wms.touch_updated_at()
@@ -3168,4 +3179,5 @@ journal 1792881799168 ecb337207906f39fb071c6c0e89498db565cd57067d8d8de0648890a8b
 journal 1792906810423 ddf063e560d278c8dd992e167b9e832f15a7274b0aea5d3697a24032d4148e3d
 journal 1792910180662 bdf348f115765c8b7211582f89fb81398b265de911665adda8a6b14839cc99c6
 journal 1792911868439 ba0c23715adea091b0deb7cd195c022dd79454d665aa735400c2650e8638cb94
+journal 1792913386367 34a2cb79512e125e0463843dee394e142036f4dae9407646089ec12466c60342
 pgboss-version 42

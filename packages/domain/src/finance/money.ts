@@ -20,6 +20,12 @@
 // invoice is due thirty days after it is issued until `configure.finance`
 // lands, and a credit note is due on issue.
 
+/** The most an amount in minor units may be: the `integer` column it is stored in. A price past it is `amount-too-large` (#291 C2), never a failed write. */
+export const MINOR_MAX = 2_147_483_647
+
+/** Whether an amount fits the column it is stored in, either sign. */
+export const fitsMinor = (value: number): boolean => Number.isInteger(value) && value >= -MINOR_MAX - 1 && value <= MINOR_MAX
+
 /** How many days after issue an invoice is due, until a project configures its own terms. */
 export const PAYMENT_TERMS_DAYS = 30
 

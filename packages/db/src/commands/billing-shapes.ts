@@ -64,6 +64,10 @@ export const eventColumns = {
   pickupId: billableEvent.pickupId,
   ticketId: billableEvent.ticketId,
   reversesEventId: billableEvent.reversesEventId,
+  chargePeriodFrom: billableEvent.chargePeriodFrom,
+  chargePeriodTo: billableEvent.chargePeriodTo,
+  chargedDays: billableEvent.chargedDays,
+  periodDays: billableEvent.periodDays,
   sourceEventId: billableEvent.sourceEventId,
   createdBy: billableEvent.createdBy,
   overrideReason: billableEvent.overrideReason,
@@ -115,6 +119,11 @@ export function eventOf(row: EventReading): BillableEvent {
     priceListRowId: row.priceListRowId,
     blockReason: row.blockReason as BlockReason | null,
     links: linksOf(row),
+    // The four are set together on a recurring charge and on nothing else (billable_event_charge_shape).
+    charge:
+      row.chargePeriodFrom === null || row.chargePeriodTo === null || row.chargedDays === null || row.periodDays === null
+        ? null
+        : { periodFrom: row.chargePeriodFrom, periodTo: row.chargePeriodTo, chargedDays: row.chargedDays, periodDays: row.periodDays },
     sourceEventId: row.sourceEventId,
     createdBy: row.createdBy,
     overrideReason: row.overrideReason,

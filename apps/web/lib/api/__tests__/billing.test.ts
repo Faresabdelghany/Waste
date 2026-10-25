@@ -84,6 +84,7 @@ const ready: BillableEvent = {
   priceListRowId: "01a0d2a4-a280-7029-8000-000000000003",
   blockReason: null,
   links: { routeId: ROUTE, pickupId: PICKUP, ticketId: null, reversesEventId: null },
+  charge: null,
   sourceEventId: "01a0d2a4-a280-7060-8000-000000000001",
   createdBy: null,
   overrideReason: null,
@@ -188,6 +189,19 @@ describe("the billable events module", () => {
     assert.equal(entered.value, "DKK 600.00")
     assert.equal(entered.facts["Override reason"], "Agreed on the phone")
     assert.equal(entered.facts.Origin, "Entered by Fares Abdelghany")
+  })
+
+  test("shows a recurring charge by its charge period's first and last days and the days it charged, a run's and nobody's (#291 C2)", () => {
+    const charge: BillableEvent = { ...ready, id: "01a0d2a4-a280-7050-8000-000000000004", kind: "subscription", serviceDate: "2026-11-16", subscriptionId: "01a0d2a4-a280-7013-8000-000000000001", unitPriceMinor: 5500, netMinor: 5500, vatMinor: 1375, links: { routeId: null, pickupId: null, ticketId: null, reversesEventId: null }, charge: { periodFrom: "2026-11-01", periodTo: "2026-12-01", chargedDays: 15, periodDays: 30 }, sourceEventId: null }
+    const record = billableEventAdapter.toRecord(charge, context(eventFixtures))
+    assert.equal(record.name, "Recurring charge · Residual waste · 240L bin")
+    assert.equal(record.facts.Kind, "Recurring charge")
+    assert.equal(record.facts["Charge period"], "2026-11-01 – 2026-11-30", "the last day in, where the wire's end is the first day out")
+    assert.equal(record.facts["Days charged"], "15 of 30")
+    assert.equal(record.facts.Origin, "Charged by a billing run")
+    assert.equal(billableEventAdapter.toRecord(ready, context(eventFixtures)).facts["Charge period"], undefined, "a pickup's event charges no period")
+    const tooMuch = billableEventAdapter.toRecord({ ...charge, status: "blocked", unitPriceMinor: null, netMinor: null, vatPercent: null, vatMinor: null, currency: null, priceListRowId: null, blockReason: "amount-too-large" }, context(eventFixtures))
+    assert.equal(tooMuch.facts["Block reason"], "Amount too large")
   })
 
   test("makes the manual event's body: the project the agreement's, a person's price in the agreement's currency with its reason", () => {

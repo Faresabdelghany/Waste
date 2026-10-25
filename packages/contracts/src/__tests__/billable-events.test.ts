@@ -34,6 +34,7 @@ const event = {
   priceListRowId: THIRD,
   blockReason: null,
   links,
+  charge: null,
   sourceEventId: OTHER,
   createdBy: null,
   overrideReason: null,
@@ -64,6 +65,9 @@ describe("BillableEvent", () => {
     assert.deepEqual(BillableEvent.parse(cancelled), cancelled)
     const invoiced = { ...event, status: "invoiced", invoiceLineId: THIRD }
     assert.deepEqual(BillableEvent.parse(invoiced), invoiced)
+    // A recurring charge (#291 C2): its subscription, no links, the run's — no person, no outbox event — and what it charged.
+    const recurring = { ...event, kind: "subscription", links: { routeId: null, pickupId: null, ticketId: null, reversesEventId: null }, sourceEventId: null, charge: { periodFrom: "2026-11-01", periodTo: "2026-12-01", chargedDays: 15, periodDays: 30 } }
+    assert.deepEqual(BillableEvent.parse(recurring), recurring)
     for (const status of BILLABLE_EVENT_STATUSES) assert.equal(BillableEvent.safeParse({ ...event, status }).success, true, status)
     for (const blockReason of BLOCK_REASONS) assert.equal(BillableEvent.safeParse({ ...blocked, blockReason }).success, true, blockReason)
   })
@@ -85,6 +89,14 @@ describe("BillableEvent", () => {
     }
     assert.equal(BillableEvent.safeParse({ ...event, unitPriceMinor: -100, netMinor: -100, vatMinor: -25 }).success, true, "a reversal's amounts are negative")
     assert.deepEqual(refusal(BillableEvent.safeParse({ ...event, links: { ...links, pickupId: "pickup-1" } })).map((issue) => issue.path), ["links.pickupId"])
+    const charge = { periodFrom: "2026-11-01", periodTo: "2026-12-01", chargedDays: 15, periodDays: 30 }
+    for (const [field, value] of [
+      ["periodFrom", "2026-11"],
+      ["chargedDays", 0],
+      ["periodDays", 30.5],
+    ] as const) {
+      assert.deepEqual(refusal(BillableEvent.safeParse({ ...event, charge: { ...charge, [field]: value } })).map((issue) => issue.path), [`charge.${field}`], field)
+    }
   })
 })
 

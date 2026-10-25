@@ -209,7 +209,7 @@ export const EXEMPT: readonly Exempt[] = [
   { table: ticket, why: "a ticket's history is its ledger, ticket_event, appended by every command" },
   { table: alert, why: "an alert's history is its stamps, held to its status" },
   { table: vehicleAllocation, why: "an allocation's history is its ledger, vehicle_allocation_event" },
-  { table: billableEvent, why: "the money the work makes: recorded by the worker per pickup, its stamps saying who repriced or cancelled it" },
+  { table: billableEvent, why: "the money the work makes: recorded by the worker per pickup and by the billing run per subscription and charge period, its stamps saying who repriced or cancelled it" },
   { table: billingRun, why: "a run's row is the record of the run, written once" },
   { table: settlementLine, why: "a settlement's calculation, replaced whole on every calculate; the settlement's ledger says who" },
   { table: importRun, why: "an import's own log, as a generation run is: who ran which file, and its counts, moved by the batches that wrote the rows the audit log records under the import's reason" },

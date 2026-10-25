@@ -82,6 +82,7 @@ import { command, create, get, listAll } from "../client"
 import { inheritedPresentation, NOTHING_RESOLVED, said, stampFacts, statusLabel, typed, webIdOf, type Client, type LocalRefusal, type MappingContext, type Resolver, type ResourceAdapter, type ServerModule } from "./adapter"
 import { shownOn } from "./clock"
 import { referenced, refusal } from "./places"
+import { lastDayIn } from "./planning"
 import { nameVia, referencedServerId, webIdVia } from "./references"
 import { customerKindOf } from "./registry"
 
@@ -141,6 +142,8 @@ function originOf(event: BillableEvent, context: MappingContext): string {
       return "Reversal of an invoiced event"
     case "manual":
       return event.createdBy === null ? "Entered by a person" : `Entered by ${nameVia(context, "user", event.createdBy)}`
+    case "subscription":
+      return "Charged by a billing run"
   }
 }
 
@@ -263,6 +266,8 @@ export const billableEventAdapter: ResourceAdapter<BillableEvent> = {
         ...(customerName === undefined ? {} : { Customer: customerName }),
         ...(payerName === undefined ? {} : { Payer: payerName }),
         ...(product === undefined ? {} : { Product: product.name }),
+        // A recurring charge's period, spelt by its last day in, and how many of its days it charged.
+        ...(event.charge === null ? {} : { "Charge period": `${event.charge.periodFrom} – ${lastDayIn(event.charge.periodTo)}`, "Days charged": `${event.charge.chargedDays} of ${event.charge.periodDays}` }),
         Quantity: String(event.quantity),
         ...(money(event.unitPriceMinor) === undefined ? {} : { "Unit price": money(event.unitPriceMinor)! }),
         ...(net === undefined ? {} : { Net: net }),
