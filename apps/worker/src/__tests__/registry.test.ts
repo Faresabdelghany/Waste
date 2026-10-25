@@ -15,6 +15,7 @@ import { OUTBOX_KINDS } from "@waste/domain/execution/vocabulary"
 
 import { isCronExpression } from "../boss"
 import { defineJob, JOBS } from "../jobs"
+import { alertRulesJob } from "../jobs/alert-rules"
 import { updatableOptions } from "../jobs/definition"
 import { generateRoutes } from "../jobs/generate-routes"
 import { heartbeat } from "../jobs/heartbeat"
@@ -118,7 +119,17 @@ describe("the job registry", () => {
       ...FINANCE_EVENT_KINDS.map(outboxQueue),
       "finance.run-billing",
       "execution.purge-proof-objects",
+      "resolution.alert-rules",
     ])
+  })
+
+  test("holds the alert rules (O4 of #290): every five minutes unless the knob says otherwise, a missed tick skipped, sent as the schedule's, no retry — the next tick reads the same", () => {
+    assert.ok(JOBS.includes(alertRulesJob))
+    assert.equal(alertRulesJob.queue, "resolution.alert-rules")
+    assert.equal(alertRulesJob.schedule, "*/5 * * * *")
+    assert.deepEqual(alertRulesJob.scheduleData, { source: "schedule" })
+    assert.deepEqual(alertRulesJob.scheduleOptions, { tz: "UTC", missed: "skip" })
+    assert.deepEqual(alertRulesJob.queueOptions, { retryLimit: 0, deleteAfterSeconds: 86_400 })
   })
 
   test("holds the proofs' purge (O1 of #290): nightly at 03:45 UTC, after the horizon sweep, once for every night missed, sent as the schedule's, no retry — the next night's window overlaps by a week", () => {

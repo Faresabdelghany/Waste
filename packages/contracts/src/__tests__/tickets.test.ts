@@ -111,6 +111,7 @@ const alert = {
   resolvedAt: null,
   resolvedBy: null,
   resolutionNote: null,
+  rule: null,
   ...STAMPS,
 }
 

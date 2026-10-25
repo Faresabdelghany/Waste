@@ -74,6 +74,8 @@ export function toAlertRecord(alert: Alert, context: MappingContext): BusinessRe
     Severity: statusLabel(alert.severity),
     Kind: statusLabel(alert.kind),
     "Raised by": statusLabel(alert.source),
+    // The worker's rule that raised it (O4 of #290): "Route not started", "Ticket overdue".
+    ...(alert.rule === null ? {} : { Rule: statusLabel(alert.rule) }),
     Detected: shownOn(alert.detectedAt, timezone),
     Project: project.name ?? project.webId,
   }
@@ -85,7 +87,8 @@ export function toAlertRecord(alert: Alert, context: MappingContext): BusinessRe
   return {
     id: webIdOf(ALERT_PREFIX, alert.id),
     name: alert.title,
-    context: subjects.map((subject) => subject.name).join(" · "),
+    // An overdue ticket's alert is about the ticket alone: its context is the ticket.
+    context: subjects.length === 0 ? (ticketName ?? "") : subjects.map((subject) => subject.name).join(" · "),
     status: statusLabel(alert.status),
     ...inheritedPresentation(undefined),
     ...stampFacts(alert, context.now),

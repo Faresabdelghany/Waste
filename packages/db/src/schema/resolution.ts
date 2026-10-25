@@ -76,13 +76,25 @@
 // (`alert_acknowledged_shape`, `alert_resolved_shape`, the resolution note
 // going with a resolution). `alert_subject_shape` is the prototype's own
 // validation: an alert names a route, a vehicle, a driver or a container, or
-// it is about nothing and is nothing. `ticket_id` is the one ticket it
-// created or was linked to; "linked to ticket" is this column not null.
+// — since the worker's rules (O4 of #290) — the ticket it is about, or it is
+// about nothing and is nothing. `ticket_id` is the one ticket it created or
+// was linked to; "linked to ticket" is this column not null, and an overdue
+// ticket's alert is linked to the ticket it is about.
+//
+// A rule's alert (O4 of #290) names its rule and the occurrence it was raised
+// for, `rule_key`, unique per company across every alert but one the worker
+// itself cleared — so two ticks of the worker cannot raise one occurrence
+// twice, a person's resolve is not undone by the next tick while the
+// condition holds, and a condition that cleared and came back is raised
+// again; a new occurrence is a new key. Together or not at all
+// (`alert_rule_shape`). The worker resolves a
+// rule's alert when its condition clears, with no account and a note, so
+// `alert_resolved_shape` lets the resolver be null on a rule's alert alone.
 // Nothing points at an alert, so it carries no project key; and it has no
 // display number, being named by its title.
 import { TICKET_EVENT_SHAPES } from "@waste/domain/resolution/event-shapes"
 import { TICKET_SLA_HOURS_MAX } from "@waste/domain/resolution/sla"
-import { ALERT_KINDS, ALERT_SEVERITIES, ALERT_SOURCES, ALERT_STATUSES, BILLABLE_RESOLUTIONS, TICKET_EVENT_KINDS, TICKET_KINDS, TICKET_PRIORITIES, TICKET_RESOLUTIONS, TICKET_SOURCES, TICKET_STATUSES, TICKET_VISIBILITIES } from "@waste/domain/resolution/vocabulary"
+import { ALERT_KINDS, ALERT_RULES, ALERT_SEVERITIES, ALERT_SOURCES, ALERT_STATUSES, BILLABLE_RESOLUTIONS, TICKET_EVENT_KINDS, TICKET_KINDS, TICKET_PRIORITIES, TICKET_RESOLUTIONS, TICKET_SOURCES, TICKET_STATUSES, TICKET_VISIBILITIES } from "@waste/domain/resolution/vocabulary"
 import { sql, type SQL } from "drizzle-orm"
 import { check, index, integer, text, timestamp, uniqueIndex, uuid, type PgColumn } from "drizzle-orm/pg-core"
 
@@ -307,6 +319,10 @@ export const alert = wms.table(
     resolvedAt: instant(),
     resolvedBy: uuid(),
     resolutionNote: text(),
+    /** The worker's rule that raised it; null for an alert a person raised. */
+    rule: text(),
+    /** The occurrence the rule raised it for, unique per company: `route-not-started:<route>`. */
+    ruleKey: text(),
   },
   (t) => [
     companyReference(t, company),
@@ -323,14 +339,21 @@ export const alert = wms.table(
     oneOf(t.severity, ALERT_SEVERITIES),
     oneOf(t.source, ALERT_SOURCES),
     oneOf(t.status, ALERT_STATUSES),
-    // An alert about nothing is nothing: the prototype's own validation.
+    oneOf(t.rule, ALERT_RULES),
+    // An alert about nothing is nothing: the prototype's own validation, and a ticket since the worker's rules.
     check(
       tableObjectName(t.id.table, "subject_shape", "alert"),
-      sql`(${t.routeId} is not null)::int + (${t.vehicleId} is not null)::int + (${t.driverId} is not null)::int + (${t.containerId} is not null)::int >= 1`,
+      sql`(${t.routeId} is not null)::int + (${t.vehicleId} is not null)::int + (${t.driverId} is not null)::int + (${t.containerId} is not null)::int + (${t.ticketId} is not null)::int >= 1`,
     ),
+    // A rule's alert names its occurrence, and only a rule's does.
+    check(tableObjectName(t.id.table, "rule_shape", "alert"), sql`(${t.rule} is null) = (${t.ruleKey} is null)`),
     // The acknowledgement's instant and account come together or not at all; so do the resolution's, and its note only with them.
     check(tableObjectName(t.id.table, "acknowledged_shape", "alert"), sql`(${t.acknowledgedAt} is null) = (${t.acknowledgedBy} is null)`),
-    check(tableObjectName(t.id.table, "resolved_shape", "alert"), sql`(${t.resolvedAt} is null) = (${t.resolvedBy} is null) and (${t.resolutionNote} is null or ${t.resolvedAt} is not null)`),
+    // A rule's alert may be resolved by the worker, with no account.
+    check(
+      tableObjectName(t.id.table, "resolved_shape", "alert"),
+      sql`(${t.resolvedBy} is null or ${t.resolvedAt} is not null) and (${t.resolvedAt} is null or ${t.resolvedBy} is not null or ${t.rule} is not null) and (${t.resolutionNote} is null or ${t.resolvedAt} is not null)`,
+    ),
     // Which stamps each status carries: a resolved alert may never have been acknowledged.
     check(
       tableObjectName(t.id.table, "stamps_shape", "alert"),
@@ -346,6 +369,10 @@ export const alert = wms.table(
     tenantIndex(t, t.raisedBy),
     tenantIndex(t, t.acknowledgedBy),
     tenantIndex(t, t.resolvedBy),
+    // One alert per occurrence, whatever its status, but for one the worker cleared: a condition that comes back is raised again, while a person's resolve holds.
+    uniqueIndex(tableObjectName(t.id.table, "rule_key_idx", "alert"))
+      .on(t.companyId, t.ruleKey)
+      .where(sql`${t.ruleKey} is not null and (${t.status} <> 'resolved' or ${t.resolvedBy} is not null)`),
   ],
 )
 

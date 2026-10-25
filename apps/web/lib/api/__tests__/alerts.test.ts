@@ -69,6 +69,7 @@ const stale: Alert = {
   resolvedAt: null,
   resolvedBy: null,
   resolutionNote: null,
+  rule: null,
 }
 const record = alertAdapter.toRecord(stale, context())
 const current = loaded({ records: [record], serverIds: new Map([[record.id, stale.id]]) }, 1)
@@ -112,6 +113,18 @@ describe("an alert", () => {
     })
     assert.equal(record.submittedValues?.vehicleId, wh24.id)
     assert.equal(record.submittedValues?.ticketId, "")
+  })
+
+  test("one a worker's rule raised names its rule, and one about a ticket alone is about that ticket; the worker's resolve names nobody (O4 of #290)", () => {
+    const overdue = alertAdapter.toRecord(
+      { ...stale, source: "rule", rule: "ticket-overdue", kind: "service-risk", title: "T-1001 is overdue", vehicleId: null, ticketId, raisedBy: null, status: "resolved", resolvedAt: "2026-10-01T08:00:00.000Z", resolutionNote: "Cleared: the ticket was closed, or given a later due date." },
+      context(),
+    )
+    assert.equal(overdue.facts["Raised by"], "Rule")
+    assert.equal(overdue.facts.Rule, "Ticket overdue")
+    assert.equal(overdue.context, "T-1001", "about the ticket alone")
+    assert.equal(overdue.facts.Resolved, "2026-10-01 10:00", "the worker resolved it: a time and no one")
+    assert.equal(record.facts.Rule, undefined, "a person's alert names no rule")
   })
 
   test("once acknowledged, resolved and linked, says by whom and when, and names its ticket by label", () => {

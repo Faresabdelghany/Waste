@@ -1,0 +1,11 @@
+-- The worker's alert rules (O4 of #290): an alert names the rule and the occurrence it was raised for, one alert per occurrence whatever its status; a ticket may be what an alert is about; and a rule's alert may be resolved by the worker, with no account.
+-- No table is new, so nothing is hand-written; every row present names no rule and passes the widened checks, so nothing is guarded.
+ALTER TABLE "wms"."alert" DROP CONSTRAINT "alert_subject_shape";--> statement-breakpoint
+ALTER TABLE "wms"."alert" DROP CONSTRAINT "alert_resolved_shape";--> statement-breakpoint
+ALTER TABLE "wms"."alert" ADD COLUMN "rule" text;--> statement-breakpoint
+ALTER TABLE "wms"."alert" ADD COLUMN "rule_key" text;--> statement-breakpoint
+CREATE UNIQUE INDEX "alert_rule_key_idx" ON "wms"."alert" USING btree ("company_id","rule_key") WHERE "wms"."alert"."rule_key" is not null and ("wms"."alert"."status" <> 'resolved' or "wms"."alert"."resolved_by" is not null);--> statement-breakpoint
+ALTER TABLE "wms"."alert" ADD CONSTRAINT "alert_rule_one_of" CHECK ("wms"."alert"."rule" in ('route-not-started', 'session-silent', 'licence-expiring', 'ticket-overdue'));--> statement-breakpoint
+ALTER TABLE "wms"."alert" ADD CONSTRAINT "alert_rule_shape" CHECK (("wms"."alert"."rule" is null) = ("wms"."alert"."rule_key" is null));--> statement-breakpoint
+ALTER TABLE "wms"."alert" ADD CONSTRAINT "alert_subject_shape" CHECK (("wms"."alert"."route_id" is not null)::int + ("wms"."alert"."vehicle_id" is not null)::int + ("wms"."alert"."driver_id" is not null)::int + ("wms"."alert"."container_id" is not null)::int + ("wms"."alert"."ticket_id" is not null)::int >= 1);--> statement-breakpoint
+ALTER TABLE "wms"."alert" ADD CONSTRAINT "alert_resolved_shape" CHECK (("wms"."alert"."resolved_by" is null or "wms"."alert"."resolved_at" is not null) and ("wms"."alert"."resolved_at" is null or "wms"."alert"."resolved_by" is not null or "wms"."alert"."rule" is not null) and ("wms"."alert"."resolution_note" is null or "wms"."alert"."resolved_at" is not null));

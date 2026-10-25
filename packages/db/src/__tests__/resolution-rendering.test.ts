@@ -33,14 +33,18 @@
 // product its completion charges, `charge_product_id`, with its key, its
 // index and `ticket_charge_shape`: `CHANGED_LATER` maps today's spelling
 // onto 0009's, `ADDED_IN_0033` is left out with 0016's, and
-// ticket-charges-rendering.test.ts pins 0033's own statements.
+// ticket-charges-rendering.test.ts pins 0033's own statements. Migration 0034
+// (O4 of #290) gave `alert` its rule and occurrence, a ticket as a subject
+// and a rule's resolution by nobody: `CHANGED_LATER` maps today's alert onto
+// 0009's, `ADDED_IN_0034` is left out, and alert-rules-rendering.test.ts pins
+// its statements.
 import assert from "node:assert/strict"
 import { readFile } from "node:fs/promises"
 import { join } from "node:path"
 import { describe, test } from "node:test"
 
 import { TICKET_EVENT_SHAPES } from "@waste/domain/resolution/event-shapes"
-import { TICKET_EVENT_KINDS } from "@waste/domain/resolution/vocabulary"
+import { ALERT_RULES, TICKET_EVENT_KINDS } from "@waste/domain/resolution/vocabulary"
 import { sql } from "drizzle-orm"
 import { check, integer, jsonb, text, timestamp, uuid } from "drizzle-orm/pg-core"
 
@@ -53,6 +57,7 @@ import { companyReference, indexOn, tenantIndex, tenantReference, uniqueOn } fro
 import { alert, ticket, ticketEvent } from "../schema/resolution"
 import { wms } from "../schema/wms"
 import { handWrittenStatements, normalised, statementsOf } from "../sql/hand-written"
+import { RESOLVED_SHAPE, RULE_KEY_INDEX, RULE_SHAPE, SUBJECT_SHAPE } from "./alert-as-of"
 import { checksOf, companyFk, createTable, foreignKey, ID, index, list, oneOfCheck, partialUniqueIndex, projectFk, projectFkTo, ref, tenantFk, uniqueKey } from "./rendering"
 import { statementsBetween, statementsFor } from "./specimen"
 
@@ -166,21 +171,8 @@ const RECOLLECTION_PICKUP_INDEX = index("ticket", "ticket_recollection_pickup_id
 const CHARGE_PRODUCT_FK = foreignKey("ticket", "ticket_charge_product_id_fk", ["company_id", "project_id", "charge_product_id"], "product", ["company_id", "project_id", "id"])
 const CHARGE_PRODUCT_INDEX = index("ticket", "ticket_charge_product_id_idx", "company_id", "charge_product_id")
 
-/** What 0016 (#111), 0031 (#291 slice 23b) and 0033 (#291 C3) changed on two of the three: the ticket's and the history's CREATE TABLE as drizzle-kit generates them now onto what 0009 says. */
-const CHANGED_LATER = new Map([
-  [ticketTable("0033"), ticketTable("0009")],
-  [ticketEventTable("0031"), ticketEventTable("0009")],
-])
-
-/** What 0016 added to the ticket beside the column: the key through the route and its index. 0009 begins with the generated statements less these. */
-const ADDED_IN_0016 = [RECOLLECTION_PICKUP_FK, RECOLLECTION_PICKUP_INDEX]
-
-/** What 0033 added to the ticket beside the column: the key to its product and its index. */
-const ADDED_IN_0033 = [CHARGE_PRODUCT_FK, CHARGE_PRODUCT_INDEX]
-
-const expected = [
-  ticketTable("0033"),
-  ticketEventTable("0031"),
+/** The alert as 0009 created it, and as 0034 changed it (O4 of #290): the rule and its occurrence, a ticket as a subject, a rule's alert resolved by nobody. */
+const alertTable = (asOf: "0009" | "0034"): string =>
   createTable("alert", "project", [
     '"kind" text NOT NULL',
     '"severity" text NOT NULL',
@@ -200,15 +192,43 @@ const expected = [
     `"resolved_at" ${INSTANT}`,
     '"resolved_by" uuid',
     '"resolution_note" text',
+    ...(asOf === "0034" ? ['"rule" text', '"rule_key" text'] : []),
     oneOfCheck("alert", "kind", "route-exception", "resource", "service-risk", "asset", "weight", "other"),
     oneOfCheck("alert", "severity", "critical", "high", "medium", "low"),
     oneOfCheck("alert", "source", "manual", "execution", "telemetry", "rule"),
     oneOfCheck("alert", "status", "new", "acknowledged", "resolved"),
-    `CONSTRAINT "alert_subject_shape" CHECK ((${ref("alert", "route_id")} is not null)::int + (${ref("alert", "vehicle_id")} is not null)::int + (${ref("alert", "driver_id")} is not null)::int + (${ref("alert", "container_id")} is not null)::int >= 1)`,
+    ...(asOf === "0034" ? [oneOfCheck("alert", "rule", ...ALERT_RULES)] : []),
+    asOf === "0034"
+      ? `CONSTRAINT "alert_subject_shape" CHECK (${SUBJECT_SHAPE})`
+      : `CONSTRAINT "alert_subject_shape" CHECK ((${ref("alert", "route_id")} is not null)::int + (${ref("alert", "vehicle_id")} is not null)::int + (${ref("alert", "driver_id")} is not null)::int + (${ref("alert", "container_id")} is not null)::int >= 1)`,
+    ...(asOf === "0034" ? [`CONSTRAINT "alert_rule_shape" CHECK (${RULE_SHAPE})`] : []),
     `CONSTRAINT "alert_acknowledged_shape" CHECK ((${ref("alert", "acknowledged_at")} is null) = (${ref("alert", "acknowledged_by")} is null))`,
-    `CONSTRAINT "alert_resolved_shape" CHECK ((${ref("alert", "resolved_at")} is null) = (${ref("alert", "resolved_by")} is null) and (${ref("alert", "resolution_note")} is null or ${ref("alert", "resolved_at")} is not null))`,
+    asOf === "0034"
+      ? `CONSTRAINT "alert_resolved_shape" CHECK (${RESOLVED_SHAPE})`
+      : `CONSTRAINT "alert_resolved_shape" CHECK ((${ref("alert", "resolved_at")} is null) = (${ref("alert", "resolved_by")} is null) and (${ref("alert", "resolution_note")} is null or ${ref("alert", "resolved_at")} is not null))`,
     stampsShape,
-  ]),
+  ])
+
+/** What 0034 added to the alert beside the columns and the checks: one alert per occurrence. */
+const ADDED_IN_0034 = [RULE_KEY_INDEX]
+
+/** What 0016 (#111), 0031 (#291 slice 23b), 0033 (#291 C3) and 0034 (O4 of #290) changed on the three: the ticket's, the history's and the alert's CREATE TABLE as drizzle-kit generates them now onto what 0009 says. */
+const CHANGED_LATER = new Map([
+  [ticketTable("0033"), ticketTable("0009")],
+  [ticketEventTable("0031"), ticketEventTable("0009")],
+  [alertTable("0034"), alertTable("0009")],
+])
+
+/** What 0016 added to the ticket beside the column: the key through the route and its index. 0009 begins with the generated statements less these. */
+const ADDED_IN_0016 = [RECOLLECTION_PICKUP_FK, RECOLLECTION_PICKUP_INDEX]
+
+/** What 0033 added to the ticket beside the column: the key to its product and its index. */
+const ADDED_IN_0033 = [CHARGE_PRODUCT_FK, CHARGE_PRODUCT_INDEX]
+
+const expected = [
+  ticketTable("0033"),
+  ticketEventTable("0031"),
+  alertTable("0034"),
   companyFk("ticket"),
   projectFk("ticket"),
   tenantFk("ticket", "assignee_user_account_id", "user_account"),
@@ -276,6 +296,7 @@ const expected = [
   index("alert", "alert_raised_by_idx", "company_id", "raised_by"),
   index("alert", "alert_acknowledged_by_idx", "company_id", "acknowledged_by"),
   index("alert", "alert_resolved_by_idx", "company_id", "resolved_by"),
+  RULE_KEY_INDEX,
 ]
 
 /** The company table's columns as every file has left them but for the counters, and its keys, so `statementsBetween` can write the ALTER TABLE of 0009 from 0008's spelling to 0009's. Another table object of the same name is fine here, since nothing connects to a database. */
@@ -349,7 +370,7 @@ const generatedAlterations = (): Promise<string[]> => statementsBetween({ compan
 
 /** Everything drizzle-kit wrote at the head of 0009: the three tables as they were generated as of 0009 — the ticket without the product its completion charges or the re-collection's stop and with 0009's sources, what 0033 and 0016 added left out — and the two altered ones. */
 const generatedHead = async (): Promise<string[]> => [
-  ...(await statementsFor(tables)).filter((statement) => !ADDED_IN_0016.includes(statement) && !ADDED_IN_0033.includes(statement)).map((statement) => CHANGED_LATER.get(statement) ?? statement),
+  ...(await statementsFor(tables)).filter((statement) => !ADDED_IN_0016.includes(statement) && !ADDED_IN_0033.includes(statement) && !ADDED_IN_0034.includes(statement)).map((statement) => CHANGED_LATER.get(statement) ?? statement),
   ...(await generatedAlterations()),
 ]
 
@@ -372,7 +393,7 @@ describe("the Resolution tables as drizzle-kit writes them", () => {
     assert.deepEqual([...statements.slice(0, generated.length)].sort(), generated)
     // What 0016, 0031 and 0033 changed and 0016 and 0033 added is what the schema generates today: each mapping maps something.
     const today = await statementsFor(tables)
-    for (const statement of [...CHANGED_LATER.keys(), ...ADDED_IN_0016, ...ADDED_IN_0033]) assert.ok(today.includes(statement), statement.split("\n")[0])
+    for (const statement of [...CHANGED_LATER.keys(), ...ADDED_IN_0016, ...ADDED_IN_0033, ...ADDED_IN_0034]) assert.ok(today.includes(statement), statement.split("\n")[0])
   })
 
   test("and carries below them the fence and trigger, or revoke, of each table: 3 x 3 = 9 statements", async () => {
@@ -413,7 +434,7 @@ describe("the checks of this context", () => {
       "ticket_closed_shape",
     ])
     assert.deepEqual([...checksOf(ticketEvent).keys()], ["ticket_event_kind_one_of", "ticket_event_status_one_of", "ticket_event_resolution_one_of", "ticket_event_visibility_one_of", "ticket_event_kind_shape"])
-    assert.deepEqual([...checksOf(alert).keys()], ["alert_kind_one_of", "alert_severity_one_of", "alert_source_one_of", "alert_status_one_of", "alert_subject_shape", "alert_acknowledged_shape", "alert_resolved_shape", "alert_stamps_shape"])
+    assert.deepEqual([...checksOf(alert).keys()], ["alert_kind_one_of", "alert_severity_one_of", "alert_source_one_of", "alert_status_one_of", "alert_rule_one_of", "alert_subject_shape", "alert_rule_shape", "alert_acknowledged_shape", "alert_resolved_shape", "alert_stamps_shape"])
   })
 
   test("the instants read and write as Dates, and the history is a ledger with the one stamp", () => {

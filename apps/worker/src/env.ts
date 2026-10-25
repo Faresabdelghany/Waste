@@ -16,6 +16,8 @@
 // around.
 import * as z from "zod"
 
+import { EVEN_CADENCE, isEvenCadence } from "./cadence"
+
 /** The address to bind the probes to. Loopback by default; a container sets `0.0.0.0`. */
 const Host = z
   .string()
@@ -124,6 +126,8 @@ export const Env = z.object({
   SUPABASE_SERVICE_ROLE_KEY: z.string().min(1).optional(),
   /** How many days a photo or a signature is kept before the nightly purge removes it, unless an open ticket names its stop; a Pilot setting (apps/pilot/README.md), unset means no purge. */
   PROOF_RETENTION_DAYS: wholeNumber(1, " of days, at least 1"),
+  /** How often the alert rules run, in seconds (O4 of #290): an even cadence (cadence.ts); the job's five minutes unless set. */
+  WORKER_RULES_INTERVAL_SECONDS: wholeNumber(60, " of seconds, at least 60").refine((seconds) => seconds === undefined || isEvenCadence(seconds), { error: EVEN_CADENCE }),
   /** Where batch routing work stops, per family (#132 §1): the remaining it leaves for the office's own calls; the Standard plan's 500 directions and 100 optimisations unless set. */
   ROUTING_DIRECTIONS_RESERVE: wholeNumber(0, " of requests"),
   ROUTING_OPTIMISATION_RESERVE: wholeNumber(0, " of requests"),

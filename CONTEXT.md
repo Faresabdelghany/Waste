@@ -235,7 +235,7 @@ A case that owns the resolution of a request, deviation, complaint, task, or ope
 _Avoid_: Alert, message
 
 **Alert**:
-A condition that requires attention, notification, or acknowledgement and may create or link to a ticket. It is acknowledged and resolved, and links to at most one Ticket.
+A condition that requires attention, notification, or acknowledgement and may create or link to a ticket. It is acknowledged and resolved, and links to at most one Ticket. The office raises one by hand; the worker's rules raise one per occurrence of a route not started, a device silent, a licence running out or a ticket overdue — an overdue ticket's alert is about that Ticket, never a new one — and resolve it when the condition clears.
 _Avoid_: Ticket, insight
 
 **SLA Target**:

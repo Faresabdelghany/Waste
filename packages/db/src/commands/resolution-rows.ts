@@ -18,7 +18,7 @@
 import type { Alert } from "@waste/contracts/alerts"
 import { ticketLabel } from "@waste/contracts/resolution"
 import type { Ticket, TicketEvent, TicketLinks } from "@waste/contracts/tickets"
-import type { AlertKind, AlertSeverity, AlertSource, AlertStatus, TicketEventKind, TicketKind, TicketPriority, TicketResolution, TicketSource, TicketStatus, TicketVisibility } from "@waste/domain/resolution/vocabulary"
+import type { AlertKind, AlertRule, AlertSeverity, AlertSource, AlertStatus, TicketEventKind, TicketKind, TicketPriority, TicketResolution, TicketSource, TicketStatus, TicketVisibility } from "@waste/domain/resolution/vocabulary"
 
 import { alert, ticket, ticketEvent } from "../schema/resolution"
 
@@ -167,6 +167,7 @@ export const alertColumns = {
   resolvedAt: alert.resolvedAt,
   resolvedBy: alert.resolvedBy,
   resolutionNote: alert.resolutionNote,
+  rule: alert.rule,
   createdAt: alert.createdAt,
   updatedAt: alert.updatedAt,
 }
@@ -196,6 +197,7 @@ export function alertOf(row: AlertRow): Alert {
     resolvedAt: instantOf(row.resolvedAt),
     resolvedBy: row.resolvedBy,
     resolutionNote: row.resolutionNote,
+    rule: row.rule as AlertRule | null,
     ...stampsOf(row),
   }
 }

@@ -21,6 +21,7 @@
 // and `ticket-completed`, and the monthly `finance.run-billing`. A consumer
 // is `...defineOutboxConsumer({ ... })` spread into the list, one entry per
 // kind (../outbox/subscribe.ts).
+import { alertRulesJob, ALERT_RULES_QUEUE, rulesSchedule } from "./alert-rules"
 import type { AnyJob } from "./definition"
 import { generateRoutes } from "./generate-routes"
 import { heartbeat } from "./heartbeat"
@@ -34,7 +35,11 @@ import { routingMeasure } from "./routing-measure"
 import { routingOptimise } from "./routing-optimise"
 import { runScheduledBilling } from "./run-billing"
 
-export const JOBS: readonly AnyJob[] = [heartbeat, generateRoutes, planAheadJob, routingMeasure, routingOptimise, sweepHorizonJob, relayOutbox, ...openTickets, ...recordBillableEvents, runScheduledBilling, purgeProofObjectsJob]
+export const JOBS: readonly AnyJob[] = [heartbeat, generateRoutes, planAheadJob, routingMeasure, routingOptimise, sweepHorizonJob, relayOutbox, ...openTickets, ...recordBillableEvents, runScheduledBilling, purgeProofObjectsJob, alertRulesJob]
+
+/** The registry with the alert rules on the cadence `WORKER_RULES_INTERVAL_SECONDS` sets (O4 of #290); the registry as it is where it is unset. */
+export const jobsWithRulesEvery = (seconds: number | undefined): readonly AnyJob[] =>
+  seconds === undefined ? JOBS : JOBS.map((job) => (job.queue === ALERT_RULES_QUEUE ? { ...job, schedule: rulesSchedule(seconds) } : job))
 
 export type { AnyJob, JobContext, JobDefinition, JobQueueOptions, PublishedQueue } from "./definition"
 export { defineJob } from "./definition"

@@ -239,6 +239,13 @@
       "when": 1792906810423,
       "tag": "0033_ticket_charges",
       "breakpoints": true
+    },
+    {
+      "idx": 34,
+      "version": "7",
+      "when": 1792910180662,
+      "tag": "0034_alert_rules",
+      "breakpoints": true
     }
   ]
 }

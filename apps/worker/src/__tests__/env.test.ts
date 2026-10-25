@@ -30,6 +30,12 @@ describe("parseEnv", () => {
     assert.throws(() => parseEnv({ ...base, SUPABASE_URL: "not a url" }), naming("SUPABASE_URL"))
   })
 
+  test("reads the alert rules' cadence (O4 of #290), absent unless set, an even one alone: whole minutes that divide an hour or whole hours that divide a day", () => {
+    assert.equal(parseEnv(base).WORKER_RULES_INTERVAL_SECONDS, undefined)
+    assert.equal(parseEnv({ ...base, WORKER_RULES_INTERVAL_SECONDS: "900" }).WORKER_RULES_INTERVAL_SECONDS, 900)
+    for (const value of ["59", "five", "300.5", "420", "2700"]) assert.throws(() => parseEnv({ ...base, WORKER_RULES_INTERVAL_SECONDS: value }), naming("WORKER_RULES_INTERVAL_SECONDS"), value)
+  })
+
   test("refuses a HOST with whitespace, brackets, a scheme or an IPv6 zone id, and a PORT outside 1..65535, naming the variable", () => {
     for (const value of [" ", "[::1]", "http://0.0.0.0", "fe80::1%lo0"]) {
       assert.throws(() => parseEnv({ ...base, HOST: value }), naming("HOST"), value)
