@@ -8,6 +8,8 @@ import { getBusinessModuleHref, masterDataSettingsHref, MASTER_DATA_SETTINGS_PAN
 import { getModuleDefinition, type BusinessRecord } from "../business-modules"
 import { settingsModuleDomains } from "../business-domain"
 import { getBusinessFormSchema } from "../business-form-schemas"
+import { WASTE_TREATMENTS } from "@waste/domain/registry/vocabulary"
+
 import {
   cadenceLabel,
   createMasterDataRecord,
@@ -19,6 +21,8 @@ import {
   masterDataKindForField,
   masterDataKindOf,
   masterDataSchema,
+  NO_TREATMENT,
+  TREATMENT_LABELS,
   updateMasterDataRecord,
   WASTE_CODE_REFUSAL,
 } from "../master-data"
@@ -75,7 +79,7 @@ describe("the four forms", () => {
       assert.ok(!ids.includes("kind"), "the kind is the tab, not a field")
     }
     const fields = (kind: (typeof MASTER_DATA_KINDS)[number]) => masterDataSchema(kind).sections.flatMap((section) => section.fields.map((field) => field.id))
-    assert.deepEqual(fields("waste-fraction"), ["name", "key", "wasteCode"])
+    assert.deepEqual(fields("waste-fraction"), ["name", "key", "wasteCode", "treatment"])
     assert.deepEqual(fields("container-type"), ["name", "volumeLitres"])
     assert.deepEqual(fields("service-frequency"), ["name", "projectId", "description", "collectionsPerWeek", "weeksBetween", "daysBetween"])
     assert.deepEqual(fields("vehicle-type"), ["name", "key", "description", "containerTypeIds"])
@@ -135,6 +139,27 @@ describe("the records the pane writes", () => {
     assert.deepEqual(edited.submittedValues, { kind: "container-type", name: "Open skip" })
     assert.deepEqual(masterDataFormValues(edited), { name: "Open skip" })
     assert.deepEqual(masterDataFormValues(record), { name: "Skip", volumeLitres: "8000" })
+  })
+})
+
+describe("a waste fraction's treatment (M13 of #293)", () => {
+  test("is picked from the domain's four or left not recorded, shown as a fact, and kept out of the typed values while none", () => {
+    const record = createMasterDataRecord("waste-fraction", { name: "Glass", key: "glass", treatment: "recycling" }, write)
+    assert.equal(record.facts.Treatment, "Recycling")
+    assert.equal(record.submittedValues?.treatment, "recycling")
+    const none = createMasterDataRecord("waste-fraction", { name: "Mixed", key: "mixed", treatment: NO_TREATMENT }, write)
+    assert.equal(none.facts.Treatment, undefined)
+    assert.deepEqual(none.submittedValues, { kind: "waste-fraction", name: "Mixed", key: "mixed" }, "none is no value")
+    assert.equal(updateMasterDataRecord(record, { treatment: "energy-recovery" }, lookups).facts.Treatment, "Energy recovery")
+    assert.equal(updateMasterDataRecord(record, { treatment: NO_TREATMENT }, lookups).facts.Treatment, undefined)
+    assert.equal(createMasterDataRecord("waste-fraction", { name: "Odd", key: "odd", treatment: "composting" }, write).facts.Treatment, undefined, "a value not the domain's is none")
+  })
+
+  test("the form offers not recorded first, then the domain's four in its order", () => {
+    const field = masterDataSchema("waste-fraction").sections.flatMap((section) => section.fields).find((candidate) => candidate.id === "treatment")
+    assert.deepEqual(field?.options?.map((option) => option.value), [NO_TREATMENT, ...WASTE_TREATMENTS])
+    assert.equal(field?.defaultValue, NO_TREATMENT)
+    assert.deepEqual(Object.keys(TREATMENT_LABELS), [...WASTE_TREATMENTS])
   })
 })
 

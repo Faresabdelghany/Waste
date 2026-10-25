@@ -126,12 +126,12 @@ export const wasteFractionAdapter: ResourceAdapter<WasteFraction> = {
   owns: (record) => masterDataKindOf(record) === "waste-fraction",
   statuses: undefined,
   list: (client) => listAll<WasteFraction>(client, "/waste-fractions"),
-  toRecord: (fraction, context) => recordOf("waste-fraction", fraction, { name: fraction.name, key: fraction.key, wasteCode: fraction.wasteCode ?? "" }, context),
+  toRecord: (fraction, context) => recordOf("waste-fraction", fraction, { name: fraction.name, key: fraction.key, wasteCode: fraction.wasteCode ?? "", treatment: fraction.treatment ?? "" }, context),
   toCreateBody: (record) => {
     const refused = firstRefusal("waste-fraction", record)
     if (refused) return refused
     const fields = fieldsOf("waste-fraction", record)
-    return { key: fields.key, name: fields.name, ...(fields.wasteCode == null ? {} : { wasteCode: fields.wasteCode }) }
+    return { key: fields.key, name: fields.name, ...(fields.wasteCode == null ? {} : { wasteCode: fields.wasteCode }), ...(fields.treatment == null ? {} : { treatment: fields.treatment }) }
   },
   toPatchBody: (before, after) => {
     if (rekinded("waste-fraction", after)) return refusal("kind", "A row keeps its kind")
@@ -140,7 +140,7 @@ export const wasteFractionAdapter: ResourceAdapter<WasteFraction> = {
     if (refused) return refused
     return patchOf(before, after, (record) => {
       const read = fieldsOf("waste-fraction", record)
-      return { name: read.name || record.name, wasteCode: read.wasteCode ?? null }
+      return { name: read.name || record.name, wasteCode: read.wasteCode ?? null, treatment: read.treatment ?? null }
     })
   },
   create: (client, body) => create<WasteFraction>(client, "/waste-fractions", body).then((created) => created.body),

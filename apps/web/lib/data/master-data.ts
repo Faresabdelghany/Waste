@@ -30,7 +30,10 @@
 // of Waste entry the waste-data report files it under: typed as the list
 // prints it (`20 03 01`), kept compact (`wasteCodeOf`), held to the domain's
 // shape (`@waste/domain/registry/waste-code`, the one the contracts and the
-// database read), and cleared by leaving the field blank.
+// database read), and cleared by leaving the field blank. Since M13 of #293
+// it carries its treatment too — reuse, recycling, energy recovery or
+// disposal, what the customer sustainability report counts it as — or
+// "Not recorded", which the report counts as not recycled and warns of.
 //
 // The four forms are the pane's own, not the generic registry's: the
 // registry's `configure.master` schema stays disabled, since the prototype
@@ -38,6 +41,7 @@
 // key (a fraction's, a vehicle type's) is set once and a frequency stays in
 // its project, so the edit forms hold those read-only; what a person may
 // change is what the wire patches.
+import { WASTE_TREATMENTS, type WasteTreatment } from "@waste/domain/registry/vocabulary"
 import { isWasteCode, WASTE_CODE_SHAPE, wasteCodeOf } from "@waste/domain/registry/waste-code"
 
 import type { BusinessFormSchema, BusinessFormValues } from "./business-form-types"
@@ -120,6 +124,8 @@ export type MasterDataFields = {
   key?: string
   /** A fraction's waste code, compact (`200301`); null where it has none. */
   wasteCode?: string | null
+  /** A fraction's treatment (M13 of #293); null where nobody recorded one. */
+  treatment?: WasteTreatment | null
   /** A container type's volume; null where nobody recorded one. */
   volumeLitres?: number | null
   /** A frequency's project, by web id. */
@@ -150,12 +156,21 @@ export type MasterDataLookups = {
 
 /** The form's own field ids per kind: what the typed values carry, in the form's order. */
 const KIND_FIELD_IDS: Readonly<Record<MasterDataKind, readonly string[]>> = {
-  "waste-fraction": ["name", "key", "wasteCode"],
+  "waste-fraction": ["name", "key", "wasteCode", "treatment"],
   "container-type": ["name", "volumeLitres"],
   "service-frequency": ["name", "projectId", "description", "collectionsPerWeek", "weeksBetween", "daysBetween"],
   "vehicle-type": ["name", "key", "description", "containerTypeIds", ...CONSUMPTION_FIELDS.map((field) => field.id)],
   "contaminant-code": ["name", "key", "status", "wasteFractionIds"],
 }
+
+/** A fraction's treatment as a person reads it. */
+export const TREATMENT_LABELS: Readonly<Record<WasteTreatment, string>> = { reuse: "Reuse", recycling: "Recycling", "energy-recovery": "Energy recovery", disposal: "Disposal" }
+
+/** The form's value for a fraction with no treatment recorded: a select holds no empty value. */
+export const NO_TREATMENT = "none"
+
+/** A form's treatment: one of the domain's, else none. */
+const treatmentOf = (value: string | undefined): WasteTreatment | null => WASTE_TREATMENTS.find((treatment) => treatment === value) ?? null
 
 const text = (values: BusinessFormValues | SubmittedValues | undefined, key: string): string | undefined => {
   const value = values?.[key]
@@ -176,7 +191,7 @@ export function masterDataFieldsOf(kind: MasterDataKind, values: BusinessFormVal
   switch (kind) {
     case "waste-fraction": {
       const code = text(values, "wasteCode")
-      return { kind, name, key: text(values, "key") ?? "", wasteCode: code === undefined ? null : wasteCodeOf(code) }
+      return { kind, name, key: text(values, "key") ?? "", wasteCode: code === undefined ? null : wasteCodeOf(code), treatment: treatmentOf(text(values, "treatment")) }
     }
     case "container-type":
       return { kind, name, volumeLitres: count(values, "volumeLitres") }
@@ -213,7 +228,8 @@ export function masterDataTypedValues(kind: MasterDataKind, values: BusinessForm
   const typed: SubmittedValues = { [MASTER_DATA_KIND_KEY]: kind }
   for (const key of KIND_FIELD_IDS[kind]) {
     const value = text(values, key)
-    if (value !== undefined) typed[key] = value
+    // A fraction's treatment not recorded is no value, as a cleared waste code is.
+    if (value !== undefined && !(key === "treatment" && value === NO_TREATMENT)) typed[key] = value
   }
   return typed
 }
@@ -271,7 +287,13 @@ export function presentMasterData(fields: MasterDataFields, lookups: MasterDataL
     case "waste-fraction": {
       const key = fields.key ?? ""
       const code = fields.wasteCode ?? null
-      return { ...base, context: `${details.label} · ${key}`, value: key, facts: { Kind: details.label, Key: key, ...(code === null ? {} : { "Waste code": code }) } }
+      const treatment = fields.treatment ?? null
+      return {
+        ...base,
+        context: `${details.label} · ${key}`,
+        value: key,
+        facts: { Kind: details.label, Key: key, ...(code === null ? {} : { "Waste code": code }), ...(treatment === null ? {} : { Treatment: TREATMENT_LABELS[treatment] }) },
+      }
     }
     case "container-type": {
       const volume = fields.volumeLitres ?? null
@@ -338,7 +360,19 @@ export function masterDataSchema(kind: MasterDataKind): BusinessFormSchema {
   const fields: BusinessFormSchema["sections"][number]["fields"] = [
     { id: "name", label: "Name", type: "text", required: true },
     ...(kind === "waste-fraction" || kind === "vehicle-type" ? [{ id: "key", label: "Key", type: "text" as const, required: true, placeholder: kind === "waste-fraction" ? "hard-plastic" : "rear-loader" }] : []),
-    ...(kind === "waste-fraction" ? [{ id: "wasteCode", label: "Waste code", type: "text" as const, placeholder: "20 03 01" }] : []),
+    ...(kind === "waste-fraction"
+      ? [
+          { id: "wasteCode", label: "Waste code", type: "text" as const, placeholder: "20 03 01" },
+          {
+            id: "treatment",
+            label: "Treatment",
+            type: "select" as const,
+            defaultValue: NO_TREATMENT,
+            options: [{ value: NO_TREATMENT, label: "Not recorded" }, ...WASTE_TREATMENTS.map((treatment) => ({ value: treatment, label: TREATMENT_LABELS[treatment] }))],
+            description: "What the customer sustainability report counts it as: reuse and recycling are recycled, the rest not.",
+          },
+        ]
+      : []),
     ...(kind === "contaminant-code"
       ? [
           { id: "key", label: "Code", type: "text" as const, required: true, placeholder: "plastic-in-organic" },
@@ -418,6 +452,8 @@ export function masterDataFormValues(record: BusinessRecord): BusinessFormValues
     if (key === MASTER_DATA_KIND_KEY) continue
     if (typeof value === "string" && value.trim() !== "") values[key] = value
   }
+  // The select shows a fraction with no treatment as not recorded.
+  if (masterDataKindOf(record) === "waste-fraction" && values.treatment === undefined) values.treatment = NO_TREATMENT
   return values
 }
 
@@ -466,7 +502,7 @@ export function updateMasterDataRecord(existing: BusinessRecord, values: Busines
   const fields = masterDataFieldsOf(kind, merged)
   const shown = presentMasterData(fields, lookups)
   const facts = { ...existing.facts }
-  for (const key of ["Key", "Waste code", "Volume", "Project", "Cadence", "Description", "Container types", "Code", "Status", "Fractions"]) delete facts[key]
+  for (const key of ["Key", "Waste code", "Treatment", "Volume", "Project", "Cadence", "Description", "Container types", "Code", "Status", "Fractions"]) delete facts[key]
   return {
     ...existing,
     name: fields.name || existing.name,

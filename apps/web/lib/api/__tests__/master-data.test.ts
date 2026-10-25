@@ -27,7 +27,7 @@ import type { ContaminantCode } from "@waste/contracts/pickup-exceptions"
 import { VehicleTypeContainerTypesSet, VehicleTypeCreate, VehicleTypePatch, type VehicleType } from "@waste/contracts/vehicle-types"
 
 import { FIXTURE_COMPANY_ID, FIXTURE_PROJECT_IDS, getModuleDefinition, type BusinessRecord } from "../../data/business-modules"
-import { createMasterDataRecord, KEY_REFUSAL, MASTER_DATA_MODULE, masterDataKindOf, WASTE_CODE_REFUSAL } from "../../data/master-data"
+import { createMasterDataRecord, KEY_REFUSAL, MASTER_DATA_MODULE, masterDataKindOf, NO_TREATMENT, WASTE_CODE_REFUSAL } from "../../data/master-data"
 import { problemSentence } from "../problem"
 import { NOTHING_RESOLVED, type MappingContext, type Resolver } from "../records/adapter"
 import { VehicleTypeConsumptionSet } from "@waste/contracts/emissions"
@@ -200,6 +200,22 @@ describe("a waste fraction", () => {
     assert.equal(wasteFractionAdapter.toPatchBody(coded, { ...coded, submittedValues: { ...coded.submittedValues, wasteCode: "20 03 01" } }, context()), null, "the same code spelled as printed is no change")
     assert.deepEqual(wasteFractionAdapter.toPatchBody(record, typed("2003"), context()), { path: "wasteCode", message: WASTE_CODE_REFUSAL })
     assert.equal(WasteCode.safeParse("2003").error?.issues[0]?.message, WASTE_CODE_REFUSAL, "the pane refuses in the contract's words")
+  })
+
+  test("carries its treatment (M13 of #293): read into the record, sent on a create, and patched — not recorded as null", () => {
+    const treated = wasteFractionAdapter.toRecord({ ...residual, treatment: "recycling" }, context())
+    assert.equal(treated.facts.Treatment, "Recycling")
+    assert.equal(treated.submittedValues?.treatment, "recycling")
+    assert.equal(record.facts.Treatment, undefined, "a fraction nobody has treated shows none")
+    assert.equal(record.submittedValues?.treatment, undefined)
+    const made = createMasterDataRecord("waste-fraction", { name: "Garden waste", key: "garden", treatment: "recycling" }, { now: 1, actorName: "Olivia Larsen", lookups: { projectName: () => undefined, containerTypeName: () => undefined } })
+    const body = wasteFractionAdapter.toCreateBody?.(made, context())
+    assert.deepEqual(body, { key: "garden", name: "Garden waste", treatment: "recycling" })
+    assert.ok(WasteFractionCreate.safeParse(body).success)
+    const typed = (treatment: string): BusinessRecord => ({ ...record, submittedValues: { ...record.submittedValues, treatment } })
+    assert.deepEqual(wasteFractionAdapter.toPatchBody(record, typed("disposal"), context()), { treatment: "disposal" })
+    assert.deepEqual(wasteFractionAdapter.toPatchBody(treated, { ...treated, submittedValues: { ...treated.submittedValues, treatment: NO_TREATMENT } }, context()), { treatment: null })
+    assert.ok(WasteFractionPatch.safeParse({ treatment: null }).success)
   })
 
   test("a rename is the patch; the key and the kind are set once", () => {
