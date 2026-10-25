@@ -323,6 +323,13 @@
       "when": 1792945670863,
       "tag": "0045_weighbridge",
       "breakpoints": true
+    },
+    {
+      "idx": 46,
+      "version": "7",
+      "when": 1792948527917,
+      "tag": "0046_exception_charges",
+      "breakpoints": true
     }
   ]
 }

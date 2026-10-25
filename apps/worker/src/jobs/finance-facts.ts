@@ -36,6 +36,16 @@
 // day it closed with its rows — whether the product is charged at all is the
 // domain's (`chargesTicketWork`), so a retired one is read like any other.
 //
+// A pickup's event reads its Pickup Exception too (#293 M5): where the stop
+// is one the rules may charge (`isChargeable`), its project's rules, the
+// exceptions at its place over the longest rule's window up to its service
+// date (`exceptionStopsAt`, the read the API's history makes), the proof that
+// recorded its outcome, and `judgeException`'s step; then, where a step is
+// charged under a placement, the step's product with its rows on the list the
+// placement's agreement is priced under — whatever the placement's own
+// product is sold by, since a month's subscription still pays its fees — and
+// the pickup's live exception charge, read apart from its collection's.
+//
 // A stop the office added (#111) is read like any other, with its `origin`:
 // the scheme and the container are left joins, since an ad-hoc route names
 // no scheme (no planning area, then) and an address-only stop no container
@@ -51,14 +61,17 @@
 // through the placement in force that day; with the list it is priced under
 // on the service date and its rows. An office stop's own placement is never
 // read for a pickup's price, since the domain charges it nothing but a job.
-import type { JobChargeFacts, PlacementFacts, PickupEventFacts, TicketChargeFacts, TicketCompletedFacts } from "@waste/domain/finance/from-event"
-import { isWorkOrderService, type PickupOrigin, type PickupOutcome, type PickupService } from "@waste/domain/execution/vocabulary"
+import { isChargeable, judgeException, type PickupExceptionStop } from "@waste/domain/execution/pickup-exceptions"
+import type { ExceptionFacts, JobChargeFacts, PlacementFacts, PickupEventFacts, TicketChargeFacts, TicketCompletedFacts } from "@waste/domain/finance/from-event"
+import { isWorkOrderService, type PickupOrigin, type PickupOutcome, type PickupReason, type PickupService, type PickupStatus } from "@waste/domain/execution/vocabulary"
+import { addDays } from "@waste/domain/route-schemes/recurrence"
 import type { AgreementStatus, CustomerKind, ProductStatus, ProductUnit } from "@waste/domain/registry/vocabulary"
 import type { TicketResolution } from "@waste/domain/resolution/vocabulary"
 import type { Tx } from "@waste/db/client"
-import { agreementFacts, liveEventOf, listInForce, rowsOn } from "@waste/db/commands/billable-writes"
+import { agreementFacts, EXCEPTION_EVENT_KINDS, liveEventOf, listInForce, rowsOn } from "@waste/db/commands/billable-writes"
 import type { EventReading } from "@waste/db/commands/billing-shapes"
 import { dayInTimezone } from "@waste/db/commands/days"
+import { exceptionRulesOf, exceptionStopsAt, latestOutcomeProofs, placeOf } from "@waste/db/commands/pickup-exceptions"
 import { projectTimezone } from "@waste/db/commands/project-clock"
 import { lockRow } from "@waste/db/commands/shared"
 import { validOn } from "@waste/db/query/valid-on"
@@ -91,6 +104,11 @@ export type PickupRow = {
   subscriptionId: string | null
   /** Whether a ticket booked the stop to answer it (O3c of #290). */
   bookedForTicket: boolean
+  /** What a Pickup Exception is judged on (#293 M5): the driver's reason, the contaminant code, and the place it is counted at. */
+  reason: string | null
+  contaminantCodeId: string | null
+  propertyId: string | null
+  sharedCollectionPointId: string | null
 }
 
 /** Whether the read takes the pickup's row lock first: the consumer's own event does, so two Finance events of one pickup take turns; a ticket's read of its pickup does not. */
@@ -123,6 +141,10 @@ export async function pickupRow(tx: Tx, companyId: string, routeId: string, pick
       service: pickup.service,
       subscriptionId: pickup.subscriptionId,
       bookingTicketId: ticket.id,
+      reason: pickup.reason,
+      contaminantCodeId: pickup.contaminantCodeId,
+      propertyId: pickup.propertyId,
+      sharedCollectionPointId: pickup.sharedCollectionPointId,
     })
     .from(pickup)
     .innerJoin(route, and(eq(route.companyId, pickup.companyId), eq(route.id, pickup.routeId)))
@@ -186,6 +208,51 @@ const liveFacts = (live: EventReading): PickupEventFacts["liveEvent"] => ({
 })
 
 /**
+ * The stop as a Pickup Exception (#293 M5): null where it is none the rules
+ * may charge; else the rules' judgement over the exceptions at its place, the
+ * proof that recorded it, and — where a step is charged under a placement —
+ * the step's product priced as any product is.
+ */
+async function exceptionFacts(tx: Tx, companyId: string, found: PickupRow, pickupId: string, placement: PlacementRead | undefined): Promise<ExceptionFacts | null> {
+  const place = placeOf(found)
+  if (place === undefined) return null
+  const stop: PickupExceptionStop = {
+    id: pickupId,
+    status: found.status as PickupStatus,
+    reason: found.reason as PickupReason | null,
+    contaminantCodeId: found.contaminantCodeId,
+    origin: found.origin,
+    service: found.service,
+    serviceDate: found.serviceDate,
+    place: place.id,
+  }
+  if (!isChargeable(stop)) return null
+  const scope = { companyId, projectId: found.projectId }
+  const rules = await exceptionRulesOf(tx, companyId, found.projectId)
+  const reach = Math.max(0, ...rules.map((rule) => rule.windowDays))
+  const history = await exceptionStopsAt(tx, companyId, found.projectId, place, addDays(found.serviceDate, -reach), found.serviceDate)
+  const judgement = judgeException(stop, rules, history)
+  const evidenceProofId = (await latestOutcomeProofs(tx, companyId, [pickupId])).get(pickupId) ?? null
+  if (judgement === null || judgement.free || judgement.productId === null || placement === undefined) return { judgement, evidenceProofId, charge: null }
+  const [named] = await tx
+    .select({ unit: product.unit, vatPercent: product.vatPercent })
+    .from(product)
+    .where(and(eq(product.companyId, companyId), eq(product.projectId, found.projectId), eq(product.id, judgement.productId)))
+    .limit(1)
+  if (named === undefined) throw new Error(`pickup exception: step ${judgement.productId} is not a product of project ${found.projectId}; the rule's ladder holds it there`)
+  // A draft agreement blocks before any list is read (`priceOccurrence`); the list is read where a price could come of it.
+  const list = placement.agreement.status === "draft" ? undefined : await listInForce(tx, scope, placement.priceListId, found.serviceDate)
+  return {
+    judgement,
+    evidenceProofId,
+    charge: {
+      product: { id: judgement.productId, unit: named.unit as ProductUnit, vatPercent: named.vatPercent },
+      priceList: list === undefined ? null : { id: list.id, currency: list.currency, rows: await rowsOn(tx, companyId, list.id, judgement.productId, found.serviceDate) },
+    },
+  }
+}
+
+/**
  * Everything a pickup's event is judged on, read in the order the table
  * lists it — the pickup with its route, scheme and container; the placement
  * valid on the service date with what it reaches; the list the agreement is
@@ -193,7 +260,7 @@ const liveFacts = (live: EventReading): PickupEventFacts["liveEvent"] => ({
  * the live event's reading beside it, since the handler that acts on a
  * correction needs the row and not the domain's plain view of it.
  */
-export async function pickupFacts(tx: Tx, companyId: string, kind: PickupEventFacts["kind"], found: PickupRow, pickupId: string): Promise<{ facts: PickupEventFacts; live: EventReading | undefined }> {
+export async function pickupFacts(tx: Tx, companyId: string, kind: PickupEventFacts["kind"], found: PickupRow, pickupId: string): Promise<{ facts: PickupEventFacts; live: EventReading[] }> {
   // An address-only stop has no container and so no placement, and an office stop is a job or nothing: the domain judges either on its origin alone.
   const placement = found.containerId === null || found.origin === "office" ? undefined : await placementOn(tx, companyId, found.projectId, found.containerId, found.serviceDate)
   let priced: PlacementFacts | null = null
@@ -204,6 +271,8 @@ export async function pickupFacts(tx: Tx, companyId: string, kind: PickupEventFa
     priced = { ...facts, priceList: list === undefined ? null : { id: list.id, currency: list.currency, rows: await rowsOn(tx, companyId, list.id, facts.product.id, found.serviceDate) } }
   }
   const live = await liveEventOf(tx, companyId, { routeId: found.routeId, pickupId })
+  const liveException = await liveEventOf(tx, companyId, { routeId: found.routeId, pickupId }, EXCEPTION_EVENT_KINDS)
+  const exception = await exceptionFacts(tx, companyId, found, pickupId, placement)
   return {
     facts: {
       service: found.service,
@@ -220,8 +289,10 @@ export async function pickupFacts(tx: Tx, companyId: string, kind: PickupEventFa
       outcome: found.status as PickupOutcome,
       placement: priced,
       liveEvent: live === undefined ? null : liveFacts(live),
+      exception,
+      liveException: liveException === undefined ? null : liveFacts(liveException),
     },
-    live,
+    live: [live, liveException].flatMap((row) => (row === undefined ? [] : [row])),
   }
 }
 

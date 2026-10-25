@@ -66,9 +66,29 @@
 // event is nothing too: the pickup is charged for once, whichever of its
 // events arrives first or twice.
 //
+// A pickup's event is worth two charges since #293 M5: its collection, as
+// above, and its Pickup Exception — a stop missed for a reason the customer
+// caused, or collected but tagged with a contaminant code — which its
+// project's rules may charge (execution/pickup-exceptions.ts judges the rule,
+// the count of earlier matches at the place and the ladder's step; the worker
+// hands the judgement here with the step's product priced as any is). The
+// two are judged apart, so `billableActionsFor` answers the collection's
+// action, then the exception's. An exception is a `pickup-exception` event of
+// quantity one, named with its stop and the proof that recorded it, priced on
+// the service date under the placement's agreement or blocked
+// (`no-subscription` with no placement), and nothing while free. The driver's
+// `pickup-failed`, `pickup-skipped` and `pickup-completed` record it once,
+// where none is live — stale news where the stop has moved since, the
+// correction's own event deciding. A `pickup-corrected` leaves a live charge
+// standing where the stop is still charged at the same step, and otherwise
+// cancels it (or reverses it, once invoiced) and records the step it is
+// charged at now, if any: the ladder is judged once, at each stop's own
+// event, and a correction of one stop never re-steps another's.
+//
 // What the draft does not carry is the writer's: `createdBy` null,
 // `sourceEventId` the event's id (`billable_event_origin_shape` ties the two),
 // the stamps, and the row's own id.
+import type { PickupExceptionJudgement } from "../execution/pickup-exceptions"
 import { isWorkOrderService, type OutboxKind, type PickupOrigin, type PickupOutcome, type PickupService } from "../execution/vocabulary"
 import type { AgreementStatus, CustomerKind, ProductStatus, ProductUnit } from "../registry/vocabulary"
 import { isBillableResolution, type TicketResolution } from "../resolution/vocabulary"
@@ -77,8 +97,8 @@ import { priceOccurrence, type PriceLabels, type PricedAmounts, type PricedList,
 import { RECURRING_UNIT } from "./recurring"
 import type { BillableEventKind, BlockReason, CancelReason } from "./vocabulary"
 
-/** The events about a pickup that Finance reads. */
-export const PICKUP_EVENT_KINDS = ["pickup-completed", "pickup-corrected"] as const satisfies readonly OutboxKind[]
+/** The events about a pickup that Finance reads: a missed stop's two (#293 M5) beside the completion and the correction. */
+export const PICKUP_EVENT_KINDS = ["pickup-completed", "pickup-corrected", "pickup-failed", "pickup-skipped"] as const satisfies readonly OutboxKind[]
 export type PickupEventKind = (typeof PICKUP_EVENT_KINDS)[number]
 
 /** The placement valid on the service date, with what it reaches: the subscription, the agreement it runs under, and the product it delivers. */
@@ -110,6 +130,16 @@ export type LiveEventFacts = {
   invoiced: boolean
 }
 
+/** A Pickup Exception as the worker judged it (#293 M5): what its project's rules say of the stop now, the proof that recorded it, and the step's product priced as any product is. */
+export type ExceptionFacts<Row extends PriceRow = PriceRow> = {
+  /** `judgeException`'s answer: the rule, the earlier matches at the place, and the ladder's product, null while free; null where no rule governs the stop. */
+  judgement: PickupExceptionJudgement | null
+  /** The proof that recorded the outcome — the driver's completion, skip or failure, or the office's correction — the charge's evidence. */
+  evidenceProofId: string | null
+  /** The step's product with its rows on the list the placement's agreement is priced under on the service date; null while free, or with no placement to price under. */
+  charge: { product: { id: string; unit: ProductUnit; vatPercent: number | null }; priceList: PricedList<Row> | null } | null
+}
+
 /** A pickup's event as the worker reads it: the payload's fields, the outcome a correction gave, and what it read beside them. */
 export type PickupEventFacts<Row extends PriceRow = PriceRow> = {
   kind: PickupEventKind
@@ -137,6 +167,10 @@ export type PickupEventFacts<Row extends PriceRow = PriceRow> = {
   bookedForTicket: boolean
   /** The `job` product the project names for a work order's service, with the agreement it charges and its pricing (M14 of #293); null where the project names none. */
   job: JobChargeFacts<Row> | null
+  /** The stop as a Pickup Exception (#293 M5); null where it is none the rules may charge. */
+  exception: ExceptionFacts<Row> | null
+  /** The pickup's live exception charge, or null. */
+  liveException: LiveEventFacts | null
 }
 
 /** A work order's charge as the worker read it: the project's product for the service, and the agreement it charges — the container's, a delivery's the stop's subscription's — with its pricing, null where none is reachable. */
@@ -185,6 +219,8 @@ export type BillableEventLinks = {
   pickupId: string | null
   ticketId: string | null
   reversesEventId: string | null
+  /** The proof a Pickup Exception's charge is evidenced by (#293 M5); null on every other kind. */
+  proofId: string | null
 }
 
 /** The event the consumer records: what the writer takes from the draft, the rest being the outbox event's. */
@@ -215,7 +251,7 @@ const chargedByPeriod = (unit: ProductUnit): boolean => unit === RECURRING_UNIT 
 /** Whether a ticket's work may be charged at the product (#291 C3): never one sold by the month or the day, which a billing run charges by its period; the completion's as the person named it; the kind's only while it is offered, a retired one being the office's to replace. */
 export const chargesTicketWork = (charge: TicketChargeFacts): boolean => !chargedByPeriod(charge.product.unit) && (charge.source === "completion" || charge.product.status === "active")
 
-const NO_LINKS: BillableEventLinks = { routeId: null, pickupId: null, ticketId: null, reversesEventId: null }
+const NO_LINKS: BillableEventLinks = { routeId: null, pickupId: null, ticketId: null, reversesEventId: null, proofId: null }
 
 /** Whether a work order may be charged at the project's product: one sold by the job, while it is offered — a retired one is the office's to replace, never a silent charge. */
 export const chargesJob = (job: JobChargeFacts): boolean => job.product.unit === "job" && job.product.status === "active"
@@ -305,7 +341,63 @@ function correctionOf(live: LiveEventFacts | null): BillableAction | undefined {
   return { action: "reverse", eventId: live.id, draft: reversalOf(live) }
 }
 
-/** The action an event is worth, or undefined for an event that is news and not money. */
+/** The outcome each of the driver's events reports; a correction's is whatever it gave. */
+const OUTCOME_REPORTED: Readonly<Record<PickupEventKind, PickupOutcome | null>> = { "pickup-completed": "completed", "pickup-failed": "failed", "pickup-skipped": "skipped", "pickup-corrected": null }
+
+const isPickupEvent = <Row extends PriceRow>(event: EventFacts<Row>): event is PickupEventFacts<Row> => (PICKUP_EVENT_KINDS as readonly string[]).includes(event.kind)
+
+/** A Pickup Exception's charge at the step the rules judged: nothing while free or ungoverned, blocked `no-subscription` with no placement, otherwise priced on the service date under the placement's agreement. */
+function exceptionDraft<Row extends PriceRow>(event: PickupEventFacts<Row>, labels: PriceLabels): BillableEventDraft | undefined {
+  const exception = event.exception
+  const judgement = exception?.judgement ?? null
+  if (exception === null || judgement === null || judgement.free || judgement.productId === null) return undefined
+  const links: BillableEventLinks = { ...NO_LINKS, routeId: event.routeId, pickupId: event.pickupId, proofId: exception.evidenceProofId }
+  const base = { kind: "pickup-exception" as const, serviceDate: event.serviceDate, quantity: 1, links }
+  const placement = event.placement
+  if (placement === null) return { ...base, agreementId: null, subscriptionId: null, productId: judgement.productId, price: null, blockReason: "no-subscription" }
+  const charge = exception.charge
+  if (charge === null) return { ...base, agreementId: placement.agreement.id, subscriptionId: placement.subscriptionId, productId: null, price: null, blockReason: "no-product" }
+  const outcome = priceOccurrence(
+    {
+      agreement: { status: placement.agreement.status },
+      priceList: charge.priceList,
+      product: charge.product,
+      quantity: 1,
+      input: {
+        on: event.serviceDate,
+        planningAreaId: event.planningAreaId,
+        customerKind: placement.agreement.customerKind,
+        containerTypeId: event.containerTypeId,
+        wasteFractionId: event.wasteFractionId,
+        customerId: placement.agreement.customerId,
+      },
+    },
+    labels,
+  )
+  return { ...base, agreementId: placement.agreement.id, subscriptionId: placement.subscriptionId, productId: charge.product.id, price: outcome.price, blockReason: outcome.blockReason }
+}
+
+/** What a pickup's event does to its exception charge: records it once from the driver's event; on a correction, keeps it at the same step, else undoes it and records the step charged now. */
+function exceptionActionsFor<Row extends PriceRow>(event: PickupEventFacts<Row>, labels: PriceLabels): BillableAction[] {
+  const reported = OUTCOME_REPORTED[event.kind]
+  // Stale news: the stop has moved since the driver's event, and the correction's own event decides.
+  if (reported !== null && event.outcome !== reported) return []
+  const draft = exceptionDraft(event, labels)
+  const live = event.liveException
+  if (live === null) return draft === undefined ? [] : [{ action: "record", draft }]
+  // Already charged: the driver's event arriving again or after the correction, or a correction that leaves the step as it was.
+  if (event.kind !== "pickup-corrected" || (draft !== undefined && draft.productId === live.productId)) return []
+  const undone = correctionOf(live)
+  return [...(undone === undefined ? [] : [undone]), ...(draft === undefined ? [] : [{ action: "record" as const, draft }])]
+}
+
+/** Every action an event is worth, in order: a pickup's collection charge, then its exception charge (#293 M5); for any other event its one action, or none. */
+export function billableActionsFor<Row extends PriceRow>(event: EventFacts<Row>, labels: PriceLabels = {}): BillableAction[] {
+  const first = billableFor(event, labels)
+  return [...(first === undefined ? [] : [first]), ...(isPickupEvent(event) ? exceptionActionsFor(event, labels) : [])]
+}
+
+/** The action an event is worth, or undefined for an event that is news and not money: a pickup's collection, a ticket's work. */
 export function billableFor<Row extends PriceRow>(event: EventFacts<Row>, labels: PriceLabels = {}): BillableAction | undefined {
   switch (event.kind) {
     case "pickup-completed": {

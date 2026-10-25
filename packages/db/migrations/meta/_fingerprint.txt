@@ -449,6 +449,7 @@ column wms.billable_event 32 charged_days integer
 column wms.billable_event 33 period_days integer
 column wms.billable_event 34 container_id uuid
 column wms.billable_event 35 placement_id uuid
+column wms.billable_event 36 evidence_proof_id uuid
 constraint wms.billable_event billable_event_agreement_id_fk FOREIGN KEY (company_id, project_id, agreement_id) REFERENCES wms.agreement(company_id, project_id, id)
 constraint wms.billable_event billable_event_amounts_shape CHECK (((net_minor IS NULL) OR (net_minor = ((
 CASE kind
@@ -463,7 +464,8 @@ constraint wms.billable_event billable_event_charge_shape CHECK ((((kind = ANY (
 constraint wms.billable_event billable_event_company_id_fk FOREIGN KEY (company_id) REFERENCES wms.company(id)
 constraint wms.billable_event billable_event_container_id_placement_id_fk FOREIGN KEY (company_id, project_id, container_id, placement_id) REFERENCES wms.container_service_placement(company_id, project_id, container_id, id)
 constraint wms.billable_event billable_event_created_by_fk FOREIGN KEY (company_id, created_by) REFERENCES wms.user_account(company_id, id)
-constraint wms.billable_event billable_event_kind_one_of CHECK ((kind = ANY (ARRAY['pickup'::text, 'ticket'::text, 'manual'::text, 'reversal'::text, 'subscription'::text, 'job'::text, 'hire'::text])))
+constraint wms.billable_event billable_event_evidence_shape CHECK (((evidence_proof_id IS NULL) OR (kind = 'pickup-exception'::text)))
+constraint wms.billable_event billable_event_kind_one_of CHECK ((kind = ANY (ARRAY['pickup'::text, 'ticket'::text, 'manual'::text, 'reversal'::text, 'subscription'::text, 'job'::text, 'hire'::text, 'pickup-exception'::text])))
 constraint wms.billable_event billable_event_kind_shape CHECK (
 CASE kind
     WHEN 'pickup'::text THEN ((pickup_id IS NOT NULL) AND (ticket_id IS NULL) AND (reverses_event_id IS NULL))
@@ -473,6 +475,7 @@ CASE kind
     WHEN 'subscription'::text THEN ((subscription_id IS NOT NULL) AND (pickup_id IS NULL) AND (ticket_id IS NULL) AND (reverses_event_id IS NULL))
     WHEN 'job'::text THEN ((pickup_id IS NOT NULL) AND (ticket_id IS NULL) AND (reverses_event_id IS NULL))
     WHEN 'hire'::text THEN ((subscription_id IS NOT NULL) AND (placement_id IS NOT NULL) AND (pickup_id IS NULL) AND (ticket_id IS NULL) AND (reverses_event_id IS NULL))
+    WHEN 'pickup-exception'::text THEN ((pickup_id IS NOT NULL) AND (ticket_id IS NULL) AND (reverses_event_id IS NULL))
     ELSE false
 END)
 constraint wms.billable_event billable_event_origin_shape CHECK (
@@ -500,6 +503,7 @@ constraint wms.billable_event billable_event_vat_shape CHECK (((vat_minor IS NUL
 index wms.billable_event billable_event_agreement_id_idx CREATE INDEX billable_event_agreement_id_idx ON wms.billable_event USING btree (company_id, agreement_id)
 index wms.billable_event billable_event_cancelled_by_idx CREATE INDEX billable_event_cancelled_by_idx ON wms.billable_event USING btree (company_id, cancelled_by)
 index wms.billable_event billable_event_created_by_idx CREATE INDEX billable_event_created_by_idx ON wms.billable_event USING btree (company_id, created_by)
+index wms.billable_event billable_event_evidence_proof_id_idx CREATE INDEX billable_event_evidence_proof_id_idx ON wms.billable_event USING btree (company_id, evidence_proof_id)
 index wms.billable_event billable_event_hire_charge_idx CREATE UNIQUE INDEX billable_event_hire_charge_idx ON wms.billable_event USING btree (company_id, placement_id, charge_period_from) WHERE (kind = 'hire'::text)
 index wms.billable_event billable_event_pickup_id_idx CREATE INDEX billable_event_pickup_id_idx ON wms.billable_event USING btree (company_id, pickup_id)
 index wms.billable_event billable_event_pkey CREATE UNIQUE INDEX billable_event_pkey ON wms.billable_event USING btree (id)
@@ -508,9 +512,9 @@ index wms.billable_event billable_event_price_list_row_id_idx CREATE INDEX billa
 index wms.billable_event billable_event_product_id_idx CREATE INDEX billable_event_product_id_idx ON wms.billable_event USING btree (company_id, product_id)
 index wms.billable_event billable_event_project_id_service_date_idx CREATE INDEX billable_event_project_id_service_date_idx ON wms.billable_event USING btree (company_id, project_id, service_date)
 index wms.billable_event billable_event_project_key CREATE UNIQUE INDEX billable_event_project_key ON wms.billable_event USING btree (company_id, project_id, id)
-index wms.billable_event billable_event_reverses_event_id_idx CREATE INDEX billable_event_reverses_event_id_idx ON wms.billable_event USING btree (company_id, reverses_event_id)
+index wms.billable_event billable_event_reverses_event_id_idx CREATE UNIQUE INDEX billable_event_reverses_event_id_idx ON wms.billable_event USING btree (company_id, reverses_event_id) WHERE (reverses_event_id IS NOT NULL)
 index wms.billable_event billable_event_route_id_idx CREATE INDEX billable_event_route_id_idx ON wms.billable_event USING btree (company_id, route_id)
-index wms.billable_event billable_event_source_event_id_idx CREATE UNIQUE INDEX billable_event_source_event_id_idx ON wms.billable_event USING btree (company_id, source_event_id) WHERE (source_event_id IS NOT NULL)
+index wms.billable_event billable_event_source_event_id_idx CREATE UNIQUE INDEX billable_event_source_event_id_idx ON wms.billable_event USING btree (company_id, source_event_id, kind) WHERE ((source_event_id IS NOT NULL) AND (kind <> 'reversal'::text))
 index wms.billable_event billable_event_subscription_charge_idx CREATE UNIQUE INDEX billable_event_subscription_charge_idx ON wms.billable_event USING btree (company_id, subscription_id, charge_period_from) WHERE (kind = 'subscription'::text)
 index wms.billable_event billable_event_subscription_id_idx CREATE INDEX billable_event_subscription_id_idx ON wms.billable_event USING btree (company_id, subscription_id)
 index wms.billable_event billable_event_ticket_id_idx CREATE INDEX billable_event_ticket_id_idx ON wms.billable_event USING btree (company_id, ticket_id)
@@ -3545,4 +3549,5 @@ journal 1792925242550 975c5a4be9bc2a4de746cf62d5298aa520bd272699f460571a7e527f37
 journal 1792926214973 7b4def117e8b9a90b2c9004f090fe9797125db6e60c8bb1d5c91adbb98f2e154
 journal 1792928027904 dea07fe438532044d3e47b8f1136a440e1137886a6effecd6a5584a64753f08b
 journal 1792945670863 53a1b13d2e90aa2a8f65e733cd43698ac445582226fa5aa1848c4a377c9b38d9
+journal 1792948527917 f5e98d4bbd8a0a2efce518a64f08be8fa02b2f26022e968b2f0ee7c4bd85f2f7
 pgboss-version 42

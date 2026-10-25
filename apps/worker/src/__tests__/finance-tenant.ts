@@ -29,17 +29,18 @@ import { agreement, subscription } from "@waste/db/schema/agreements"
 import { containerType, product, wasteFraction } from "@waste/db/schema/catalogue"
 import { container, containerServicePlacement } from "@waste/db/schema/containers"
 import { customer, property } from "@waste/db/schema/customers"
-import { outboxEvent, pickup, route } from "@waste/db/schema/execution"
+import { outboxEvent, pickup, proofOfService, route } from "@waste/db/schema/execution"
 import { billableEvent, billingRun, billingRunExclusion, invoice, invoiceLine, priceList, priceListRow, ticketKindProduct, workOrderProduct } from "@waste/db/schema/finance"
 import { driver, vehicle } from "@waste/db/schema/fleet"
 import { vehicleType } from "@waste/db/schema/fleet-types"
 import { company, project } from "@waste/db/schema/organisation"
+import { pickupExceptionRule, pickupExceptionRuleStep } from "@waste/db/schema/pickup-exceptions"
 import { warehouse } from "@waste/db/schema/places"
 import { planningArea } from "@waste/db/schema/planning-areas"
 import { ticket, ticketEvent } from "@waste/db/schema/resolution"
 import { collectionGroup, routeScheme } from "@waste/db/schema/route-schemes"
 import { withCompany } from "@waste/db/tenant"
-import type { PickupOrigin, PickupService, PickupStatus } from "@waste/domain/execution/vocabulary"
+import type { PickupOrigin, PickupOutcome, PickupReason, PickupService, PickupStatus } from "@waste/domain/execution/vocabulary"
 import type { TicketKind, TicketResolution } from "@waste/domain/resolution/vocabulary"
 import { eq, sql } from "drizzle-orm"
 
@@ -339,8 +340,30 @@ export async function seedTicket(pool: Database, tenant: FinanceTenant, seed: Ti
   return { id }
 }
 
+/** A project's Pickup Exception rule (#293 M5) in force from the year's start, its ladder by position. */
+export async function seedExceptionRule(pool: Database, tenant: FinanceTenant, rule: { outcome: PickupOutcome; reason?: PickupReason | null; freeCount: number; windowDays?: number; ladder: readonly string[] }): Promise<{ id: string }> {
+  const { companyId } = tenant
+  const projectId = tenant.projects.copenhagen.id
+  const id = testId()
+  await withCompany(pool.db, companyId, async (tx: Tx) => {
+    await tx.insert(pickupExceptionRule).values({ id, companyId, projectId, validFrom: "2026-01-01", validTo: null, outcome: rule.outcome, reason: rule.reason ?? null, contaminantCodeId: null, freeCount: rule.freeCount, windowDays: rule.windowDays ?? 365 })
+    if (rule.ladder.length > 0) await tx.insert(pickupExceptionRuleStep).values(rule.ladder.map((productId, index) => ({ id: testId(), companyId, projectId, ruleId: id, position: index + 1, productId })))
+  })
+  return { id }
+}
+
+/** The office's correction proof of a stop's outcome: what a Pickup Exception's charge names as its evidence when no driver's proof came after it. */
+export async function seedCorrectionProof(pool: Database, tenant: FinanceTenant, stop: { routeId: string; pickupId: string }, outcome: PickupOutcome): Promise<{ id: string }> {
+  const id = testId()
+  await withCompany(pool.db, tenant.companyId, async (tx: Tx) => {
+    await tx.insert(proofOfService).values({ id, companyId: tenant.companyId, projectId: tenant.projects.copenhagen.id, routeId: stop.routeId, pickupId: stop.pickupId, kind: "correction", source: "dispatch", occurredAt: at(FIXTURE_DAY, "07:00"), recordedBy: tenant.users.olivia.id, outcome, note: "Corrected by the office", reason: outcome === "completed" ? null : "not-presented" })
+  })
+  return { id }
+}
+
 /** Deletes everything of the company, the ledgers as the owner first, children before parents. */
 export async function dropFinanceTenant(pool: Database, owner: Database, companyId: string): Promise<void> {
+  await owner.db.delete(proofOfService).where(eq(proofOfService.companyId, companyId))
   await owner.db.delete(invoiceLine).where(eq(invoiceLine.companyId, companyId))
   await owner.db.delete(invoice).where(eq(invoice.companyId, companyId))
   await owner.db.delete(billingRunExclusion).where(eq(billingRunExclusion.companyId, companyId))
@@ -349,6 +372,8 @@ export async function dropFinanceTenant(pool: Database, owner: Database, company
     await tx.delete(billingRun).where(eq(billingRun.companyId, companyId))
     await tx.delete(billableEvent).where(eq(billableEvent.companyId, companyId))
     await tx.delete(priceListRow).where(eq(priceListRow.companyId, companyId))
+    await tx.delete(pickupExceptionRuleStep).where(eq(pickupExceptionRuleStep.companyId, companyId))
+    await tx.delete(pickupExceptionRule).where(eq(pickupExceptionRule.companyId, companyId))
     await tx.delete(ticketKindProduct).where(eq(ticketKindProduct.companyId, companyId))
     await tx.delete(workOrderProduct).where(eq(workOrderProduct.companyId, companyId))
     await tx.delete(ticket).where(eq(ticket.companyId, companyId))

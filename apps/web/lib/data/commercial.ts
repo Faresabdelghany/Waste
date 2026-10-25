@@ -83,7 +83,7 @@ export const UNIT_SUFFIX: Readonly<Record<ProductUnit, string>> = { pickup: "/pi
 /** A price row's customer-kind condition, as the prototype's Customer type read: a person is a household, an organisation is commercial. */
 export const CUSTOMER_KIND_LABELS: Readonly<Record<CustomerKind, string>> = { person: "Person", organisation: "Organisation" }
 
-export const EVENT_KIND_LABELS: Readonly<Record<BillableEventKind, string>> = { pickup: "Pickup", ticket: "Ticket", manual: "Manual", reversal: "Reversal", subscription: "Recurring charge", job: "Work order", hire: "Hire" }
+export const EVENT_KIND_LABELS: Readonly<Record<BillableEventKind, string>> = { pickup: "Pickup", ticket: "Ticket", manual: "Manual", reversal: "Reversal", subscription: "Recurring charge", job: "Work order", hire: "Hire", "pickup-exception": "Pickup exception" }
 
 /** Why an event is blocked, each a sentence saying what to do. */
 export const BLOCK_REASON_LABELS: Readonly<Record<BlockReason, string>> = {

@@ -35,6 +35,15 @@
 // records nothing (from-event.ts says why); the payload is parsed for the
 // ids and the kind and trusted for nothing else.
 //
+// A pickup's event may be worth two charges since #293 M5 — its collection
+// and its Pickup Exception — so the domain answers a list of actions
+// (`billableActionsFor`) and each is done in turn, idempotent on its own key:
+// a record by the event and its kind (`billable_event_source_event_id_idx`
+// is `(source_event_id, kind)`, reversals aside), a reversal by the event it
+// undoes (`billable_event_reverses_event_id_idx`, an event is reversed once),
+// a cancellation by the reading it stamps. The driver's `pickup-failed` and
+// `pickup-skipped` are read for the exception alone.
+//
 // One job, one transaction: the reads and the write commit together, and a
 // handler that throws — a payload that does not parse, a row the event names
 // that is not there, a shape the domain drafted that the table would refuse —
@@ -51,13 +60,13 @@
 import { PickupDetail } from "@waste/contracts/pickups"
 import { Ticket } from "@waste/contracts/tickets"
 import type { Tx } from "@waste/db/client"
-import { cancelLiveEvent, eventBySource, ONE_ROW_PER_SOURCE_EVENT, recordBillableEvent } from "@waste/db/commands/billable-writes"
-import { eventOf } from "@waste/db/commands/billing-shapes"
+import { cancelLiveEvent, eventBySource, ONE_REVERSAL_PER_EVENT, ONE_ROW_PER_SOURCE_EVENT, recordBillableEvent, reversalOfEvent } from "@waste/db/commands/billable-writes"
+import { eventOf, type EventReading } from "@waste/db/commands/billing-shapes"
 import { uniqueConstraintOf } from "@waste/db/sqlstate"
 import { newId } from "@waste/db/ids"
 import { withCompany } from "@waste/db/tenant"
 import type { OutboxKind } from "@waste/domain/execution/vocabulary"
-import { billableFor, PICKUP_EVENT_KINDS, type BillableAction, type EventFacts } from "@waste/domain/finance/from-event"
+import { billableActionsFor, PICKUP_EVENT_KINDS, type BillableAction, type EventFacts } from "@waste/domain/finance/from-event"
 
 import { defineOutboxConsumer, type RelayedEvent } from "../outbox/subscribe"
 import type { JobContext } from "./definition"
@@ -69,8 +78,11 @@ export const FINANCE_EVENT_KINDS = [...PICKUP_EVENT_KINDS, "ticket-completed"] a
 /** The job's data as the relay sends it: the seam's `RelayedEvent`, under the name this module always used. */
 export type PublishedEvent = RelayedEvent
 
-/** What one job answered, for the log and the job's output. */
-export type Recorded = { event: string; kind: OutboxKind; did: "recorded" | "cancelled" | "reversed" | "nothing" | "replayed"; billableEventId: string | null }
+/** What one action came to. */
+export type Done = { did: "recorded" | "cancelled" | "reversed" | "nothing" | "replayed"; billableEventId: string | null }
+
+/** What one job answered, for the log and the job's output: its first action's outcome, or nothing, and every action's in order (a tagged collection's two, #293 M5). */
+export type Recorded = { event: string; kind: OutboxKind; actions: Done[] } & Done
 
 /**
  * The facts of one event, read under the company's fence: the payload
@@ -82,7 +94,9 @@ export type Recorded = { event: string; kind: OutboxKind; did: "recorded" | "can
 async function factsOf(tx: Tx, event: PublishedEvent) {
   switch (event.kind) {
     case "pickup-completed":
-    case "pickup-corrected": {
+    case "pickup-corrected":
+    case "pickup-failed":
+    case "pickup-skipped": {
       const detail = PickupDetail.parse(event.payload)
       // The pickup's row lock first: two Finance events of one pickup — its completion and a correction to `completed`, on two queues, under two workers — would otherwise both read no live event and both record, and the source-event index holds one row per event, not per pickup.
       const found = await pickupRow(tx, event.companyId, detail.routeId, detail.id, { lock: true })
@@ -93,47 +107,52 @@ async function factsOf(tx: Tx, event: PublishedEvent) {
       const answered = Ticket.parse(event.payload)
       const found = await ticketRow(tx, event.companyId, answered.id)
       if (found === undefined) throw new Error(`ticket-completed ${event.id} names ticket ${answered.id}, which is not in company ${event.companyId}`)
-      return { facts: await ticketFacts(tx, event.companyId, answered.id, found), live: undefined }
+      return { facts: await ticketFacts(tx, event.companyId, answered.id, found), live: [] }
     }
     default:
-      return { facts: { kind: event.kind } as EventFacts, live: undefined }
+      return { facts: { kind: event.kind } as EventFacts, live: [] }
   }
 }
 
-/** Does what the domain answered, in the event's company and project, and says what it did. */
-async function act(tx: Tx, event: PublishedEvent, action: BillableAction | undefined, live: Awaited<ReturnType<typeof factsOf>>["live"]): Promise<Recorded> {
-  const answer = (did: Recorded["did"], billableEventId: string | null): Recorded => ({ event: event.id, kind: event.kind, did, billableEventId })
-  if (action === undefined) return answer("nothing", null)
+/** Does one action the domain answered, in the event's company and project, and says what it did. */
+async function act(tx: Tx, event: PublishedEvent, action: BillableAction, live: readonly EventReading[]): Promise<Done> {
   if (action.action === "cancel") {
     // The live event was read under its lock a statement ago; the row is what the lock let through.
-    if (live === undefined || live.id !== action.eventId) throw new Error(`${event.kind} ${event.id}: the domain cancels event ${action.eventId}, which was not the live event read`)
-    const cancelled = await cancelLiveEvent(tx, event.companyId, live, action.reason)
-    return answer("cancelled", cancelled.id)
+    const reading = live.find((row) => row.id === action.eventId)
+    if (reading === undefined) throw new Error(`${event.kind} ${event.id}: the domain cancels event ${action.eventId}, which was not a live event read`)
+    const cancelled = await cancelLiveEvent(tx, event.companyId, reading, action.reason)
+    return { did: "cancelled", billableEventId: cancelled.id }
   }
   const did = action.action === "reverse" ? "reversed" : "recorded"
-  // A record or a reversal is one row with the event's id. The row it wrote the first time is read before the write — the common redelivery — and the index is the word behind it for two workers on one event at once: the insert runs in a savepoint, so a 23505 on it rolls the savepoint back and not the transaction, and the winner's row is read back.
-  const before = await eventBySource(tx, event.companyId, event.id)
-  if (before !== undefined) return answer("replayed", before.id)
+  // A record is one row of its kind with the event's id, a reversal one row naming the event it undoes. The row written the first time is read before the write — the common redelivery — and the index is the word behind it for two workers on one event at once: the insert runs in a savepoint, so a 23505 on it rolls the savepoint back and not the transaction, and the winner's row is read back.
+  const already = () => (action.action === "reverse" ? reversalOfEvent(tx, event.companyId, action.eventId) : eventBySource(tx, event.companyId, event.id, action.draft.kind))
+  const before = await already()
+  if (before !== undefined) return { did: "replayed", billableEventId: before.id }
   try {
     const { answered } = await tx.transaction((savepoint) =>
       recordBillableEvent(savepoint, { companyId: event.companyId, projectId: event.projectId, draft: action.draft, overrideReason: null, note: null, createdBy: null, sourceEventId: event.id, newId }),
     )
-    return answer(did, answered.id)
+    return { did, billableEventId: answered.id }
   } catch (error) {
-    if (uniqueConstraintOf(error) !== ONE_ROW_PER_SOURCE_EVENT) throw error
-    const winner = await eventBySource(tx, event.companyId, event.id)
+    const constraint = uniqueConstraintOf(error)
+    if (constraint !== ONE_ROW_PER_SOURCE_EVENT && constraint !== ONE_REVERSAL_PER_EVENT) throw error
+    const winner = await already()
     if (winner === undefined) throw error
-    return answer("replayed", eventOf(winner).id)
+    return { did: "replayed", billableEventId: eventOf(winner).id }
   }
 }
 
 /** One event to what was done with it: the facts read and the write made in one fenced transaction as the tenant. */
 export async function recordBillableEventFor(event: PublishedEvent, { api, log }: Pick<JobContext, "api" | "log">): Promise<Recorded> {
-  const outcome = await withCompany(api.db, event.companyId, async (tx) => {
+  const outcome = await withCompany(api.db, event.companyId, async (tx): Promise<Recorded> => {
     const { facts, live } = await factsOf(tx, event)
-    return await act(tx, event, billableFor(facts), live)
+    const actions: Done[] = []
+    for (const action of billableActionsFor(facts)) actions.push(await act(tx, event, action, live))
+    const first = actions[0] ?? { did: "nothing" as const, billableEventId: null }
+    return { event: event.id, kind: event.kind, ...first, actions }
   })
-  log(`finance.record-billable-events: ${outcome.kind} ${outcome.event} → ${outcome.did}${outcome.billableEventId === null ? "" : ` (billable event ${outcome.billableEventId})`}`)
+  const said = (done: Done) => `${done.did}${done.billableEventId === null ? "" : ` (billable event ${done.billableEventId})`}`
+  log(`finance.record-billable-events: ${outcome.kind} ${outcome.event} → ${outcome.actions.length === 0 ? said(outcome) : outcome.actions.map(said).join(", ")}`)
   return outcome
 }
 
@@ -144,7 +163,7 @@ export const RECORD_BILLABLE_EVENTS_QUEUE_OPTIONS = { retryLimit: 5, retryDelay:
 export const recordBillableEvents = defineOutboxConsumer({
   name: "finance",
   kinds: FINANCE_EVENT_KINDS,
-  description: "Records a Billable Event from each pickup-completed, pickup-corrected and ticket-completed the relay publishes, or cancels or reverses the pickup's live event on a correction; one row per outbox event however often it is delivered.",
+  description: "Records a Billable Event from each pickup-completed, pickup-corrected and ticket-completed the relay publishes, and a Pickup Exception's charge from a pickup's completion, failure, skip or correction, or cancels or reverses a pickup's live charges on a correction; one row of a kind per outbox event however often it is delivered.",
   queueOptions: RECORD_BILLABLE_EVENTS_QUEUE_OPTIONS,
   handler: (event, context) => recordBillableEventFor(event, context),
 })

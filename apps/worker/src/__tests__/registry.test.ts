@@ -76,7 +76,7 @@ describe("the job registry", () => {
       assert.equal(job.queueOptions?.deadLetter, OUTBOX_DEAD_QUEUE, `${job.queue}: a consumer's queue dead-letters to outbox.dead, so a poison job is kept for a redrive and not lost with its retention`)
       assert.equal(job.queueOptions?.retentionSeconds, CONSUMED_RETENTION_SECONDS, `${job.queue}: a consumed queue keeps a job a fortnight`)
     }
-    assert.deepEqual([...consumed].sort(), [...resolutionQueues, ...financeQueues].sort(), "the two consumers take Resolution's four and Finance's three, and nothing else is consumed")
+    assert.deepEqual([...consumed].sort(), [...resolutionQueues, ...financeQueues].sort(), "the two consumers take Resolution's four and Finance's five, and nothing else is consumed")
     assert.ok(!consumed.includes(OUTBOX_DEAD_QUEUE), "nobody works the dead-letter queue: an operator redrives it")
     // The relay's routes are the consumers' queues by kind, in the consumers' order.
     for (const kind of OUTBOX_KINDS) {
@@ -202,11 +202,13 @@ describe("the job registry", () => {
   })
 
   test("holds Finance's two: the consumer one entry per kind it reads on outbox.<kind>.finance, never scheduled, with five backed-off retries under a cap over the seam's dead letter; the billing run scheduled monthly at noon UTC", () => {
-    assert.deepEqual([...FINANCE_EVENT_KINDS], ["pickup-completed", "pickup-corrected", "ticket-completed"])
+    assert.deepEqual([...FINANCE_EVENT_KINDS], ["pickup-completed", "pickup-corrected", "pickup-failed", "pickup-skipped", "ticket-completed"])
     assert.deepEqual(
       recordBillableEvents.map((job) => job.queue),
-      ["outbox.pickup-completed.finance", "outbox.pickup-corrected.finance", "outbox.ticket-completed.finance"],
+      ["outbox.pickup-completed.finance", "outbox.pickup-corrected.finance", "outbox.pickup-failed.finance", "outbox.pickup-skipped.finance", "outbox.ticket-completed.finance"],
     )
+    // A missed stop's two kinds fan out to Resolution and Finance both (#293 M5b on #339's fan-out).
+    for (const kind of ["pickup-failed", "pickup-skipped"] as const) assert.deepEqual(OUTBOX_ROUTES.get(kind), [consumerQueue(kind, "resolution"), consumerQueue(kind, "finance")], kind)
     assert.deepEqual(RECORD_BILLABLE_EVENTS_QUEUE_OPTIONS, { retryLimit: 5, retryDelay: 10, retryBackoff: true, retryDelayMax: 300, deleteAfterSeconds: 604_800 }, "five retries backing off from ten seconds under a five-minute cap: longer than an ordinary failover")
     for (const job of recordBillableEvents) {
       assert.ok(JOBS.includes(job), job.queue)

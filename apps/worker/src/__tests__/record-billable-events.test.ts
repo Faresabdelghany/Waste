@@ -35,6 +35,7 @@ import { newId } from "@waste/db/ids"
 import { product } from "@waste/db/schema/catalogue"
 import { pickup } from "@waste/db/schema/execution"
 import { billableEvent, billingRun, ticketKindProduct, workOrderProduct } from "@waste/db/schema/finance"
+import { contaminantCode, pickupExceptionRule, pickupExceptionRuleStep } from "@waste/db/schema/pickup-exceptions"
 import { ticket } from "@waste/db/schema/resolution"
 import { withCompany } from "@waste/db/tenant"
 import type { OutboxKind } from "@waste/domain/execution/vocabulary"
@@ -45,7 +46,7 @@ import type { JobContext } from "../jobs"
 import { FINANCE_EVENT_KINDS, recordBillableEvents, type PublishedEvent, type Recorded } from "../jobs/record-billable-events"
 import { consumerQueue } from "../outbox/subscribe"
 import { databaseUnderTest, ownerUnderTest } from "./database"
-import { at, dropFinanceTenant, FIXTURE_DAY, movePickup, placeBin, seedCompletedRoute, seedFinanceTenant, seedTicket, testId, type FinanceTenant } from "./finance-tenant"
+import { at, dropFinanceTenant, FIXTURE_DAY, movePickup, placeBin, seedCompletedRoute, seedCorrectionProof, seedExceptionRule, seedFinanceTenant, seedTicket, testId, type FinanceTenant } from "./finance-tenant"
 import { fakeRouting, settlesNothing } from "./routing-context"
 
 const database = databaseUnderTest()
@@ -157,9 +158,9 @@ describe("finance.record-billable-events against Postgres", { skip }, () => {
     assert.deepEqual(output.events, [event.id], "the seam answers the events it handled")
     const line = lines.findLast((candidate) => candidate.includes(` ${event.id} → `))
     assert.ok(line, "the consumer logged the event")
-    const did = /→ (recorded|cancelled|reversed|nothing|replayed)/.exec(line)![1] as Recorded["did"]
-    const billableEventId = /\(billable event ([0-9a-f-]{36})\)/.exec(line)?.[1] ?? null
-    return { event: event.id, kind: event.kind, did, billableEventId }
+    // Every action the event came to, in order (a tagged collection is two, #293 M5); the first is the job's answer.
+    const actions = [...line.slice(line.indexOf(" → ")).matchAll(/(recorded|cancelled|reversed|nothing|replayed)(?: \(billable event ([0-9a-f-]{36})\))?/g)].map(([, did, id]) => ({ did: did as Recorded["did"], billableEventId: id ?? null }))
+    return { event: event.id, kind: event.kind, ...actions[0], actions: actions[0]?.did === "nothing" ? [] : actions }
   }
 
   /** The billable events of a pickup, as the API reads them, oldest first. */
@@ -186,8 +187,8 @@ describe("finance.record-billable-events against Postgres", { skip }, () => {
     })
   }
 
-  test("works the three kinds Finance reads and no other, one entry per kind on Finance's own queue of the kind (#339)", () => {
-    assert.deepEqual([...FINANCE_EVENT_KINDS], ["pickup-completed", "pickup-corrected", "ticket-completed"])
+  test("works the five kinds Finance reads and no other, one entry per kind on Finance's own queue of the kind (#339): a missed stop's two for its Pickup Exception (#293 M5)", () => {
+    assert.deepEqual([...FINANCE_EVENT_KINDS], ["pickup-completed", "pickup-corrected", "pickup-failed", "pickup-skipped", "ticket-completed"])
     assert.deepEqual(recordBillableEvents.map((job) => job.queue), FINANCE_EVENT_KINDS.map((kind) => consumerQueue(kind, "finance")))
     for (const job of recordBillableEvents) assert.equal(job.schedule, undefined, "sent by the relay, never by a cron")
   })
@@ -207,7 +208,7 @@ describe("finance.record-billable-events against Postgres", { skip }, () => {
       [first.billableEventId, "pickup", "ready", FIXTURE_DAY, tenant.agreements.anna.id, bin.subscriptionId, tenant.products.residual.id, 1],
     )
     assert.deepEqual([recorded.priceListRowId, recorded.unitPriceMinor, recorded.netMinor, recorded.vatPercent, recorded.vatMinor, recorded.currency], [tenant.priceList.rows.residualCentrum.id, 13_500, 13_500, 25, 3_375, "DKK"], "the Centrum row wins: the scheme names the planning area, and a row naming it scores over the default")
-    assert.deepEqual(recorded.links, { routeId: seeded.id, pickupId, ticketId: null, reversesEventId: null })
+    assert.deepEqual(recorded.links, { routeId: seeded.id, pickupId, ticketId: null, reversesEventId: null, proofId: null })
     assert.deepEqual([recorded.createdBy, recorded.sourceEventId, recorded.blockReason, recorded.cancelledAt], [null, event.id, null, null])
 
     // At-least-once: the same job again is one row. The redelivery finds the pickup's live event and the domain says nothing; the index behind it (`billable_event_source_event_id_idx`) is the word for the race two workers make, proved below on the reversal.
@@ -283,7 +284,7 @@ describe("finance.record-billable-events against Postgres", { skip }, () => {
     const washJob = await handle(published("pickup-completed", wash, office(wash, washed.containerId, "wash")))
     assert.deepEqual(await job(washJob), ["recorded", "job", "ready", tenant.agreements.anna.id, washed.subscriptionId, tenant.products.bulky.id, 35_000, 35_000, 8_750, null])
     const [recorded] = await eventsOfPickup(wash)
-    assert.deepEqual([recorded.links, recorded.quantity, recorded.priceListRowId], [{ routeId: stops.id, pickupId: wash, ticketId: null, reversesEventId: null }, 1, tenant.priceList.rows.bulky.id])
+    assert.deepEqual([recorded.links, recorded.quantity, recorded.priceListRowId], [{ routeId: stops.id, pickupId: wash, ticketId: null, reversesEventId: null, proofId: null }, 1, tenant.priceList.rows.bulky.id])
     assert.deepEqual(await job(await handle(published("pickup-completed", delivery, office(delivery, stock.containerId, "deliver")))), ["recorded", "job", "ready", tenant.agreements.housing.id, delivered.subscriptionId, tenant.products.bulky.id, 35_000, 35_000, 8_750, null])
     // A repair the project prices nothing for records nothing, as an office stop did before; a removal mapped to a product sold by the pickup is the office's to fix, blocked.
     assert.deepEqual([(await handle(published("pickup-completed", repair, office(repair, washed.containerId, "repair")))).did, await eventsOfPickup(repair)], ["nothing", []])
@@ -392,7 +393,7 @@ describe("finance.record-billable-events against Postgres", { skip }, () => {
       ["reversal", "ready", original.serviceDate, original.agreementId, original.subscriptionId, original.productId, 1, null],
     )
     assert.deepEqual([reversal.unitPriceMinor, reversal.netMinor, reversal.vatPercent, reversal.vatMinor, reversal.currency], [10_000, -10_000, 25, -2_500, "DKK"])
-    assert.deepEqual(reversal.links, { routeId: null, pickupId: null, ticketId: null, reversesEventId: original.id })
+    assert.deepEqual(reversal.links, { routeId: null, pickupId: null, ticketId: null, reversesEventId: original.id, proofId: null })
     assert.deepEqual([reversal.createdBy, reversal.sourceEventId], [null, correction.id])
     assert.equal((await eventsOfPickup(pickupId))[0].status, "reversed", "the original reads reversed now")
 
@@ -462,7 +463,7 @@ describe("finance.record-billable-events against Postgres", { skip }, () => {
       [recorded.kind, recorded.status, recorded.blockReason, recorded.serviceDate, recorded.agreementId, recorded.subscriptionId, recorded.productId, recorded.quantity, recorded.netMinor, recorded.createdBy],
       ["ticket", "blocked", "no-product", "2026-10-08", tenant.agreements.housing.id, null, null, 1, null, null],
     )
-    assert.deepEqual(recorded.links, { routeId: null, pickupId: null, ticketId: direct.id, reversesEventId: null })
+    assert.deepEqual(recorded.links, { routeId: null, pickupId: null, ticketId: direct.id, reversesEventId: null, proofId: null })
 
     // Through the pickup it names: the placement's agreement on the route's service date, with that placement's subscription.
     const bin = await placeBin(pool, tenant, "BIN-TICKET-1", { agreementId: tenant.agreements.anna.id, productId: tenant.products.residual.id })
@@ -564,4 +565,99 @@ describe("finance.record-billable-events against Postgres", { skip }, () => {
     await assert.rejects(consumer.handler([{ ...job, data: published("ticket-completed", testId(), ticketPayload(testId(), 9, "recollected", NOON)) }], context()), /carries a ticket-completed event/)
     assert.equal((await allEvents()).length, before)
   })
+
+  /** Runs a test under one Pickup Exception rule of the project (#293 M5), and takes the rule and any codes away after, so no other test meets them. */
+  async function underRule<T>(rule: Parameters<typeof seedExceptionRule>[2], body: () => Promise<T>): Promise<T> {
+    await seedExceptionRule(pool, tenant, rule)
+    try {
+      return await body()
+    } finally {
+      await withCompany(pool.db, tenant.companyId, async (tx) => {
+        await tx.update(pickup).set({ contaminantCodeId: null }).where(eq(pickup.companyId, tenant.companyId))
+        await tx.delete(pickupExceptionRuleStep).where(eq(pickupExceptionRuleStep.companyId, tenant.companyId))
+        await tx.delete(pickupExceptionRule).where(eq(pickupExceptionRule.companyId, tenant.companyId))
+        await tx.delete(contaminantCode).where(eq(contaminantCode.companyId, tenant.companyId))
+      })
+    }
+  }
+
+  /** The exception charges of a pickup, oldest first. */
+  const chargesOf = async (pickupId: string) => (await eventsOfPickup(pickupId)).filter((event) => event.kind === "pickup-exception")
+
+  test("a stop missed for a reason the customer caused is charged at its rule's step once the free count is spent, its proof the evidence, once however often delivered (#293 M5)", () =>
+    underRule({ outcome: "failed", freeCount: 1, ladder: [tenant.products.bulky.id] }, async () => {
+      const bin = await placeBin(pool, tenant, "BIN-EXC-1", { agreementId: tenant.agreements.anna.id, productId: tenant.products.residual.id })
+      const earlier = await seedCompletedRoute(pool, tenant, [{ containerId: bin.containerId, propertyId: bin.propertyId, status: "failed" }], "2026-09-28")
+      const later = await seedCompletedRoute(pool, tenant, [{ containerId: bin.containerId, propertyId: bin.propertyId, status: "failed" }])
+      const [first] = earlier.pickupIds
+      const [second] = later.pickupIds
+      const free = await handle(published("pickup-failed", first, pickupPayload(earlier.id, first, bin.containerId, "failed")))
+      assert.deepEqual([free.did, free.actions], ["nothing", []], "the first is free")
+      assert.deepEqual(await eventsOfPickup(first), [])
+
+      const proof = await seedCorrectionProof(pool, tenant, { routeId: later.id, pickupId: second }, "failed")
+      const failed = published("pickup-failed", second, pickupPayload(later.id, second, bin.containerId, "failed"))
+      const charged = await handle(failed)
+      assert.equal(charged.did, "recorded")
+      const [fee] = await chargesOf(second)
+      assert.deepEqual(
+        [fee.kind, fee.status, fee.productId, fee.agreementId, fee.subscriptionId, fee.netMinor, fee.links.proofId, fee.links.pickupId, fee.sourceEventId],
+        ["pickup-exception", "ready", tenant.products.bulky.id, tenant.agreements.anna.id, bin.subscriptionId, tenant.priceList.rows.bulky.unitPriceMinor, proof.id, second, failed.id],
+      )
+      assert.equal((await handle(failed)).did, "nothing", "already charged: the live charge stands")
+      assert.equal((await chargesOf(second)).length, 1)
+    }))
+
+  test("a tagged collection is two charges from one event, each its own row under the widened key, and a correction to plain completed cancels the exception's alone (#293 M5)", () =>
+    underRule({ outcome: "completed", freeCount: 0, ladder: [tenant.products.bulky.id] }, async () => {
+      const bin = await placeBin(pool, tenant, "BIN-EXC-2", { agreementId: tenant.agreements.anna.id, productId: tenant.products.residual.id })
+      const seeded = await seedCompletedRoute(pool, tenant, [{ containerId: bin.containerId, propertyId: bin.propertyId }])
+      const [pickupId] = seeded.pickupIds
+      const codeId = testId()
+      await withCompany(pool.db, tenant.companyId, async (tx) => {
+        await tx.insert(contaminantCode).values({ id: codeId, companyId: tenant.companyId, code: "plastic", name: "Plastic in residual", status: "active" })
+        await tx.update(pickup).set({ contaminantCodeId: codeId }).where(eq(pickup.id, pickupId))
+      })
+      const completion = published("pickup-completed", pickupId, pickupPayload(seeded.id, pickupId, bin.containerId))
+      const both = await handle(completion)
+      assert.deepEqual(both.actions.map((action) => action.did), ["recorded", "recorded"])
+      assert.deepEqual((await eventsOfPickup(pickupId)).map((event) => [event.kind, event.sourceEventId]), [["pickup", completion.id], ["pickup-exception", completion.id]], "one outbox event, a row of each kind")
+      const again = await handle(completion)
+      assert.deepEqual(again.actions, [], "redelivered: both charges live, nothing more")
+
+      // The office takes the tag back: the collection stands, the exception's charge is cancelled with the consumer's reason.
+      await withCompany(pool.db, tenant.companyId, (tx) => tx.update(pickup).set({ contaminantCodeId: null }).where(eq(pickup.id, pickupId)))
+      const untagged = await handle(published("pickup-corrected", pickupId, pickupPayload(seeded.id, pickupId, bin.containerId)))
+      assert.deepEqual(untagged.actions.map((action) => action.did), ["cancelled"])
+      const [collection, exception] = await eventsOfPickup(pickupId)
+      assert.deepEqual([collection.status, exception.status, exception.cancelReason], ["ready", "cancelled", "pickup-corrected"])
+    }))
+
+  test("one correction reverses a pickup's two invoiced charges, each keyed by the event it undoes, once however often delivered (#293 M5)", () =>
+    underRule({ outcome: "completed", freeCount: 0, ladder: [tenant.products.bulky.id] }, async () => {
+      const bin = await placeBin(pool, tenant, "BIN-EXC-3", { agreementId: tenant.agreements.housing.id, productId: tenant.products.residual.id })
+      const seeded = await seedCompletedRoute(pool, tenant, [{ containerId: bin.containerId, propertyId: bin.propertyId }])
+      const [pickupId] = seeded.pickupIds
+      const codeId = testId()
+      await withCompany(pool.db, tenant.companyId, async (tx) => {
+        await tx.insert(contaminantCode).values({ id: codeId, companyId: tenant.companyId, code: "food", name: "Food in paper", status: "active" })
+        await tx.update(pickup).set({ contaminantCodeId: codeId }).where(eq(pickup.id, pickupId))
+      })
+      await handle(published("pickup-completed", pickupId, pickupPayload(seeded.id, pickupId, bin.containerId)))
+      const [collection, exception] = await eventsOfPickup(pickupId)
+      await invoiced(collection)
+      await invoiced(exception)
+
+      // Corrected to a stop not presented, which no rule here charges: both invoiced charges are reversed by the one event.
+      await withCompany(pool.db, tenant.companyId, (tx) => tx.update(pickup).set({ contaminantCodeId: null }).where(eq(pickup.id, pickupId)))
+      await movePickup(pool, tenant, pickupId, "failed")
+      const correction = published("pickup-corrected", pickupId, pickupPayload(seeded.id, pickupId, bin.containerId, "failed"))
+      const done = await handle(correction)
+      assert.deepEqual(done.actions.map((action) => action.did), ["reversed", "reversed"])
+      const reversals = (await allEvents()).filter((event) => event.kind === "reversal" && event.sourceEventId === correction.id)
+      assert.deepEqual(reversals.map((event) => event.links.reversesEventId).sort(), [collection.id, exception.id].sort())
+      const again = await handle(correction)
+      assert.deepEqual(again.actions, [], "redelivered: both are reversed, nothing is live")
+      assert.equal((await allEvents()).filter((event) => event.kind === "reversal" && event.sourceEventId === correction.id).length, 2)
+    }))
 })

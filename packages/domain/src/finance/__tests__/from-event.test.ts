@@ -11,7 +11,7 @@ import { describe, test } from "node:test"
 import { OUTBOX_KINDS, PICKUP_OUTCOMES, type OutboxKind } from "../../execution/vocabulary"
 import { PRODUCT_UNITS } from "../../registry/vocabulary"
 import { TICKET_RESOLUTIONS } from "../../resolution/vocabulary"
-import { BILLABLE_RESOLUTIONS, billableFor, chargesJob, chargesTicketWork, isBillableResolution, PICKUP_EVENT_KINDS, reversalOf, type EventFacts, type JobChargeFacts, type LiveEventFacts, type PickupEventFacts, type PlacementFacts, type TicketChargeFacts, type TicketCompletedFacts } from "../from-event"
+import { BILLABLE_RESOLUTIONS, billableActionsFor, billableFor, chargesJob, chargesTicketWork, isBillableResolution, PICKUP_EVENT_KINDS, reversalOf, type EventFacts, type ExceptionFacts, type JobChargeFacts, type LiveEventFacts, type PickupEventFacts, type PlacementFacts, type TicketChargeFacts, type TicketCompletedFacts } from "../from-event"
 import type { PriceRow } from "../pricing"
 
 const ROUTE = "route"
@@ -39,7 +39,7 @@ const placement = (values: Partial<PlacementFacts> = {}): PlacementFacts => ({
 })
 
 /** A pickup's event with everything the worker could read, but for what a test overrides: a completed stop in the harbour with a placement and no live event. */
-const pickupEvent = (kind: "pickup-completed" | "pickup-corrected", values: Partial<PickupEventFacts> = {}): PickupEventFacts => ({
+const pickupEvent = (kind: PickupEventFacts["kind"], values: Partial<PickupEventFacts> = {}): PickupEventFacts => ({
   kind,
   routeId: ROUTE,
   pickupId: PICKUP,
@@ -54,6 +54,8 @@ const pickupEvent = (kind: "pickup-completed" | "pickup-corrected", values: Part
   service: "empty",
   bookedForTicket: false,
   job: null,
+  exception: null,
+  liveException: null,
   ...values,
 })
 
@@ -81,7 +83,7 @@ const charge = (values: Partial<TicketChargeFacts> = {}): TicketChargeFacts => (
   ...values,
 })
 
-const links = { routeId: ROUTE, pickupId: PICKUP, ticketId: null, reversesEventId: null }
+const links = { routeId: ROUTE, pickupId: PICKUP, ticketId: null, reversesEventId: null, proofId: null }
 
 describe("billableFor a completed pickup", () => {
   test("under a per-pickup product with a placement, a signed agreement, a list, a row and a rate is a pickup event of quantity one, priced by the resolver on the service date, the winning row traceable", () => {
@@ -224,7 +226,7 @@ describe("billableFor a corrected pickup", () => {
       quantity: 2,
       price: { priceListRowId: null, unitPriceMinor: 1_500, netMinor: -3_000, vatPercent: 25, vatMinor: -750, currency: "DKK" },
       blockReason: null,
-      links: { routeId: null, pickupId: null, ticketId: null, reversesEventId: LIVE },
+      links: { routeId: null, pickupId: null, ticketId: null, reversesEventId: LIVE, proofId: null },
     })
     // A reversal of nothing to reverse is a bug: a blocked event is cancelled, never reversed.
     assert.throws(() => reversalOf(live({ price: null })), /reversalOf: event live-event carries no price; a blocked event is cancelled, never reversed/)
@@ -243,7 +245,7 @@ describe("billableFor a completed ticket", () => {
           action,
           {
             action: "record",
-            draft: { kind: "ticket", serviceDate: "2026-10-07", agreementId: AGREEMENT, subscriptionId: SUBSCRIPTION, productId: null, quantity: 1, price: null, blockReason: "no-product", links: { routeId: null, pickupId: null, ticketId: TICKET, reversesEventId: null } },
+            draft: { kind: "ticket", serviceDate: "2026-10-07", agreementId: AGREEMENT, subscriptionId: SUBSCRIPTION, productId: null, quantity: 1, price: null, blockReason: "no-product", links: { routeId: null, pickupId: null, ticketId: TICKET, reversesEventId: null, proofId: null } },
           },
           resolution,
         )
@@ -256,7 +258,7 @@ describe("billableFor a completed ticket", () => {
   })
 
   test("with a product — the completion's or its kind's — is priced as a pickup is, on the day it closed, by the customer's conditions alone: no zone, no container type, no fraction (#291 C3)", () => {
-    const ticketLinks = { routeId: null, pickupId: null, ticketId: TICKET, reversesEventId: null }
+    const ticketLinks = { routeId: null, pickupId: null, ticketId: TICKET, reversesEventId: null, proofId: null }
     assert.deepEqual(billableFor(completedTicket({ charge: charge() })), {
       action: "record",
       draft: {
@@ -323,11 +325,91 @@ describe("billableFor every other kind", () => {
     const money: OutboxKind[] = []
     const news: OutboxKind[] = []
     for (const kind of OUTBOX_KINDS) {
-      const event: EventFacts = (PICKUP_EVENT_KINDS as readonly string[]).includes(kind) ? pickupEvent(kind as "pickup-completed" | "pickup-corrected") : kind === "ticket-completed" ? completedTicket() : ({ kind } as EventFacts)
+      const event: EventFacts = (PICKUP_EVENT_KINDS as readonly string[]).includes(kind) ? pickupEvent(kind as PickupEventFacts["kind"]) : kind === "ticket-completed" ? completedTicket() : ({ kind } as EventFacts)
       ;(billableFor(event) === undefined ? news : money).push(kind)
     }
     assert.deepEqual(money, ["pickup-completed", "pickup-corrected", "ticket-completed"])
     assert.deepEqual(news, ["route-dispatched", "route-started", "route-completed", "route-cancelled", "route-reassigned", "pickup-failed", "pickup-skipped", "pickup-problem-reported", "unload-recorded", "command-rejected", "ticket-opened", "ticket-rejected", "invoice-issued", "settlement-closed", "application-decided"])
-    assert.deepEqual([...PICKUP_EVENT_KINDS], ["pickup-completed", "pickup-corrected"])
+    assert.deepEqual([...PICKUP_EVENT_KINDS], ["pickup-completed", "pickup-corrected", "pickup-failed", "pickup-skipped"])
+  })
+})
+
+describe("billableActionsFor a Pickup Exception (#293 M5)", () => {
+  const PROOF = "proof"
+  const FEE = "contamination-fee"
+  const HIGH = "contamination-fee-high"
+  /** The stop as the rules judged it: the first step of a ladder past its free count, priced from the default list, its proof the evidence. */
+  const exception = (values: Partial<ExceptionFacts> = {}, productId = FEE): ExceptionFacts => ({
+    judgement: { ruleId: "rule", index: 1, free: false, productId },
+    evidenceProofId: PROOF,
+    charge: { product: { id: productId, unit: "job", vatPercent: 25 }, priceList: { id: "list", currency: "DKK", rows: [row("fee", { unitPriceMinor: 25_000 })] } },
+    ...values,
+  })
+  const charged = (productId = FEE, unitPriceMinor = 25_000) => ({
+    kind: "pickup-exception",
+    serviceDate: DAY,
+    agreementId: AGREEMENT,
+    subscriptionId: SUBSCRIPTION,
+    productId,
+    quantity: 1,
+    price: { priceListRowId: "fee", unitPriceMinor, netMinor: unitPriceMinor, vatPercent: 25, vatMinor: unitPriceMinor / 4, currency: "DKK" },
+    blockReason: null,
+    links: { routeId: ROUTE, pickupId: PICKUP, ticketId: null, reversesEventId: null, proofId: PROOF },
+  })
+  const liveFee = (values: Partial<LiveEventFacts> = {}) => live({ id: "live-fee", productId: FEE, ...values })
+
+  test("a stop missed for the customer's reason is charged at the ladder's step once, with its proof as the evidence; nothing while free or ungoverned", () => {
+    for (const [kind, outcome] of [["pickup-failed", "failed"], ["pickup-skipped", "skipped"]] as const) {
+      assert.deepEqual(billableActionsFor(pickupEvent(kind, { outcome, exception: exception() })), [{ action: "record", draft: charged() }], kind)
+      assert.deepEqual(billableActionsFor(pickupEvent(kind, { outcome, exception: exception(), liveException: liveFee() })), [], `${kind}: already charged`)
+      assert.deepEqual(billableActionsFor(pickupEvent(kind, { outcome: "completed", exception: exception() })), [], `${kind}: stale news, the correction decides`)
+    }
+    assert.deepEqual(billableActionsFor(pickupEvent("pickup-failed", { outcome: "failed", exception: exception({ judgement: { ruleId: "rule", index: 0, free: true, productId: null }, charge: null }) })), [], "free")
+    assert.deepEqual(billableActionsFor(pickupEvent("pickup-failed", { outcome: "failed", exception: exception({ judgement: null, charge: null }) })), [], "no rule governs it")
+    assert.deepEqual(billableActionsFor(pickupEvent("pickup-failed", { outcome: "failed", exception: null })), [], "no exception")
+  })
+
+  test("a tagged collection is two charges from one event: the collection, then the exception", () => {
+    const actions = billableActionsFor(pickupEvent("pickup-completed", { exception: exception() }))
+    assert.deepEqual(
+      actions.map((action) => (action.action === "record" ? action.draft.kind : action.action)),
+      ["pickup", "pickup-exception"],
+    )
+    assert.deepEqual(actions[1], { action: "record", draft: charged() })
+    // Each half judged apart: a live collection charge still records the exception, and the other way round.
+    assert.deepEqual(billableActionsFor(pickupEvent("pickup-completed", { liveEvent: live(), exception: exception() })), [{ action: "record", draft: charged() }])
+    assert.deepEqual(billableActionsFor(pickupEvent("pickup-completed", { exception: exception(), liveException: liveFee() })).length, 1)
+  })
+
+  test("with no placement is blocked no-subscription at the step's product; a draft agreement and a missing row block as any price does", () => {
+    const blocked = billableActionsFor(pickupEvent("pickup-failed", { outcome: "failed", placement: null, exception: exception() }))
+    assert.deepEqual(blocked, [{ action: "record", draft: { ...charged(), agreementId: null, subscriptionId: null, price: null, blockReason: "no-subscription" } }])
+    const draft = billableActionsFor(pickupEvent("pickup-failed", { outcome: "failed", placement: placement({ agreement: { id: AGREEMENT, status: "draft", customerKind: "organisation", customerId: CUSTOMER } }), exception: exception() }))[0]
+    assert.equal(draft?.action === "record" ? draft.draft.blockReason : undefined, "agreement-draft")
+    const rowless = billableActionsFor(pickupEvent("pickup-failed", { outcome: "failed", exception: exception({ charge: { product: { id: FEE, unit: "job", vatPercent: 25 }, priceList: { id: "list", currency: "DKK", rows: [] } } }) }))[0]
+    assert.equal(rowless?.action === "record" ? rowless.draft.blockReason : undefined, "no-price-row")
+  })
+
+  test("a correction keeps a charge at the same step, and otherwise undoes it — cancelled, or reversed once invoiced — and records the step charged now", () => {
+    const corrected = (values: Partial<PickupEventFacts>) => billableActionsFor(pickupEvent("pickup-corrected", { outcome: "failed", ...values }))
+    assert.deepEqual(corrected({ exception: exception(), liveException: liveFee() }), [], "the same step: the charge stands")
+    // To plain completed (no code, so no exception): the collection is recorded and the exception charge undone.
+    assert.deepEqual(
+      billableActionsFor(pickupEvent("pickup-corrected", { outcome: "completed", exception: null, liveException: liveFee() })).map((action) => action.action),
+      ["record", "cancel"],
+    )
+    assert.deepEqual(corrected({ exception: null, liveException: liveFee({ invoiced: true }) }), [{ action: "reverse", eventId: "live-fee", draft: reversalOf(liveFee({ invoiced: true })) }])
+    // To another step: the old undone, the new recorded, in that order.
+    assert.deepEqual(corrected({ exception: exception({}, HIGH), liveException: liveFee() }), [
+      { action: "cancel", eventId: "live-fee", reason: "pickup-corrected" },
+      { action: "record", draft: charged(HIGH) },
+    ])
+    assert.deepEqual(corrected({ exception: exception(), liveException: null }), [{ action: "record", draft: charged() }], "charged now, nothing live")
+  })
+
+  test("an office stop and every other event are no exception charge", () => {
+    assert.deepEqual(billableActionsFor(pickupEvent("pickup-failed", { outcome: "failed", origin: "office", exception: null })), [])
+    assert.deepEqual(billableActionsFor(completedTicket()).map((action) => action.action), ["record"])
+    assert.deepEqual(billableActionsFor({ kind: "route-started" } as EventFacts), [])
   })
 })
