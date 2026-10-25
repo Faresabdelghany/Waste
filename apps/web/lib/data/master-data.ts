@@ -42,6 +42,7 @@ import { isWasteCode, WASTE_CODE_SHAPE, wasteCodeOf } from "@waste/domain/regist
 
 import type { BusinessFormSchema, BusinessFormValues } from "./business-form-types"
 import { splitMultiValue } from "./business-form-records"
+import { CONSUMPTION_FIELDS, consumptionOf, consumptionSentence } from "./fleet-emissions"
 import { settingsModuleDomains } from "./business-domain"
 import { FIXTURE_COMPANY_ID, type BusinessRecord, type ModuleLocation } from "./business-modules"
 import { MASTER_DATA_KIND_DETAILS, MASTER_DATA_KIND_KEY, masterDataKindOf, type MasterDataKind } from "./master-data-kinds"
@@ -133,6 +134,8 @@ export type MasterDataFields = {
   status?: "active" | "inactive"
   /** A contaminant code's fractions, by web id; none is every fraction. */
   wasteFractionIds?: string[]
+  /** A vehicle type's consumption by fuel, in the wire's thousandths of the unit per km (M10 of #293); the fields the wire would refuse are `masterDataFieldErrors`'. */
+  consumption?: { fuel: (typeof CONSUMPTION_FIELDS)[number]["fuel"]; milliUnitsPerKm: number }[]
 }
 
 /** The names a row's facts show for the rows it names. */
@@ -148,7 +151,7 @@ const KIND_FIELD_IDS: Readonly<Record<MasterDataKind, readonly string[]>> = {
   "waste-fraction": ["name", "key", "wasteCode"],
   "container-type": ["name", "volumeLitres"],
   "service-frequency": ["name", "projectId", "description", "collectionsPerWeek", "weeksBetween", "daysBetween"],
-  "vehicle-type": ["name", "key", "description", "containerTypeIds"],
+  "vehicle-type": ["name", "key", "description", "containerTypeIds", ...CONSUMPTION_FIELDS.map((field) => field.id)],
   "contaminant-code": ["name", "key", "status", "wasteFractionIds"],
 }
 
@@ -187,7 +190,14 @@ export function masterDataFieldsOf(kind: MasterDataKind, values: BusinessFormVal
       }
     case "vehicle-type": {
       const ids = text(values, "containerTypeIds")
-      return { kind, name, key: text(values, "key") ?? "", description: text(values, "description") ?? null, containerTypeIds: ids === undefined ? [] : splitMultiValue(ids) }
+      return {
+        kind,
+        name,
+        key: text(values, "key") ?? "",
+        description: text(values, "description") ?? null,
+        containerTypeIds: ids === undefined ? [] : splitMultiValue(ids),
+        consumption: consumptionOf(values).entries,
+      }
     }
     case "contaminant-code": {
       const ids = text(values, "wasteFractionIds")
@@ -218,6 +228,7 @@ export function masterDataFieldErrors(kind: MasterDataKind, values: BusinessForm
   if ((kind === "waste-fraction" || kind === "vehicle-type" || kind === "contaminant-code") && !isKey(fields.key)) errors.key = KEY_REFUSAL
   if (kind === "waste-fraction" && fields.wasteCode != null && !isWasteCode(fields.wasteCode)) errors.wasteCode = WASTE_CODE_REFUSAL
   if (kind === "container-type" && Number.isNaN(fields.volumeLitres)) errors.volumeLitres = VOLUME_REFUSAL
+  if (kind === "vehicle-type") Object.assign(errors, consumptionOf(values).errors)
   if (kind === "service-frequency") {
     if (!fields.projectId) errors.projectId = "Pick a project"
     for (const key of COUNT_KEYS) if (Number.isNaN(fields[key])) errors[key] = countRefusal(key)
@@ -290,7 +301,13 @@ export function presentMasterData(fields: MasterDataFields, lookups: MasterDataL
         ...base,
         context: `${details.label} · ${key}`,
         value: ids.length === 0 ? "No container types" : `${ids.length} container type${ids.length === 1 ? "" : "s"}`,
-        facts: { Kind: details.label, Key: key, ...(fields.description ? { Description: fields.description } : {}), ...(names.length === 0 ? {} : { "Container types": names.join(", ") }) },
+        facts: {
+          Kind: details.label,
+          Key: key,
+          ...(fields.description ? { Description: fields.description } : {}),
+          ...(names.length === 0 ? {} : { "Container types": names.join(", ") }),
+          Consumption: consumptionSentence(fields.consumption ?? []),
+        },
       }
     }
     case "contaminant-code": {
@@ -365,7 +382,13 @@ export function masterDataSchema(kind: MasterDataKind): BusinessFormSchema {
     submitLabel: `Create ${lower}`,
     nameField: "name",
     contextFieldIds: kind === "service-frequency" ? ["projectId"] : kind === "container-type" ? ["volumeLitres"] : ["key"],
-    sections: [{ id: "identity", title: details.label, fields }],
+    sections: [
+      { id: "identity", title: details.label, fields },
+      // What a vehicle of the type burns of each fuel it may run on (M10 of #293): blank for a fuel it never runs on, whose routes are then unmeasured.
+      ...(kind === "vehicle-type"
+        ? [{ id: "consumption", title: "Consumption", description: "What a vehicle of this type burns per 100 km of each fuel it may run on. Leave a fuel blank where it never runs on it: its routes' emissions are then not measured.", fields: CONSUMPTION_FIELDS.map((field) => ({ id: field.id, label: field.label, type: "text" as const, placeholder: "e.g. 45.5" })) }]
+        : []),
+    ],
     execution: { kind: "create-record", initialStatus: "Effective", completionMessage: `${details.label} created.` },
   }
 }

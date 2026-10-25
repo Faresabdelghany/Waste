@@ -27,10 +27,12 @@
 // pane shows at the field before a submit; the adapter reads them again
 // here, so a body reaches the API only when it can be accepted.
 import type { ContainerType, ServiceFrequency, WasteFraction } from "@waste/contracts/catalogue"
+import type { VehicleTypeConsumptionSet } from "@waste/contracts/emissions"
 import type { ContaminantCode } from "@waste/contracts/pickup-exceptions"
-import type { VehicleType } from "@waste/contracts/vehicle-types"
+import type { VehicleType, VehicleTypeCreate } from "@waste/contracts/vehicle-types"
 
 import { FIXTURE_COMPANY_ID, type BusinessRecord } from "@/lib/data/business-modules"
+import { consumptionValues, sameConsumption } from "@/lib/data/fleet-emissions"
 import type { BusinessFormValues } from "@/lib/data/business-form-types"
 import {
   keyMovedRefusal,
@@ -243,11 +245,15 @@ export const serviceFrequencyAdapter: ResourceAdapter<ServiceFrequency> = {
 // Vehicle types
 // ---------------------------------------------------------------------------
 
-/** What a vehicle type's update carries: a patch of the type, the whole set of container types, or both, each to its own route. */
+/** What a vehicle type's update carries: a patch of the type, the whole set of container types, the whole consumption set (M10 of #293), or any of them, each to its own route. */
 type VehicleTypeWrite = {
   type?: { name?: string; description?: string | null }
   containerTypeIds?: string[]
+  consumption?: VehicleTypeConsumptionSet["consumption"]
 }
+
+/** What a vehicle type's create carries: the type, and the consumption set its own route takes once the type exists. */
+type VehicleTypeCreateWrite = VehicleTypeCreate & { consumption?: VehicleTypeConsumptionSet["consumption"] }
 
 /** The server ids the form's container types stand for, or a refusal for one the store does not hold. */
 function containerTypeServerIds(webIds: readonly string[], context: MappingContext): string[] | LocalRefusal {
@@ -279,6 +285,7 @@ export const vehicleTypeAdapter: ResourceAdapter<VehicleType> = {
         description: type.description ?? "",
         // By the web id the store knows each container type under: a row made this session keeps its minted one.
         containerTypeIds: type.containerTypeIds.map((id) => context.resolve.byServerId(id)?.id ?? webIdOf(CONTAINER_TYPE_PREFIX, id)).join(","),
+        ...consumptionValues(type.consumption ?? []),
       },
       context,
     ),
@@ -288,7 +295,9 @@ export const vehicleTypeAdapter: ResourceAdapter<VehicleType> = {
     const fields = fieldsOf("vehicle-type", record)
     const containerTypeIds = containerTypeServerIds(fields.containerTypeIds ?? [], context)
     if ("path" in containerTypeIds) return containerTypeIds
-    return { key: fields.key, name: fields.name, ...(fields.description ? { description: fields.description } : {}), containerTypeIds }
+    const consumption = fields.consumption ?? []
+    const body: VehicleTypeCreateWrite = { key: fields.key ?? "", name: fields.name, ...(fields.description ? { description: fields.description } : {}), containerTypeIds, ...(consumption.length === 0 ? {} : { consumption }) }
+    return body
   },
   toPatchBody: (before, after, context) => {
     if (rekinded("vehicle-type", after)) return refusal("kind", "A row keeps its kind")
@@ -307,13 +316,19 @@ export const vehicleTypeAdapter: ResourceAdapter<VehicleType> = {
       if ("path" in ids) return ids
       containerTypeIds = ids
     }
-    if (type === null && containerTypeIds === undefined) return null
-    const write: VehicleTypeWrite = { ...(type === null ? {} : { type }), ...(containerTypeIds === undefined ? {} : { containerTypeIds }) }
+    const consumption = sameConsumption(was.consumption ?? [], is.consumption ?? []) ? undefined : (is.consumption ?? [])
+    if (type === null && containerTypeIds === undefined && consumption === undefined) return null
+    const write: VehicleTypeWrite = { ...(type === null ? {} : { type }), ...(containerTypeIds === undefined ? {} : { containerTypeIds }), ...(consumption === undefined ? {} : { consumption }) }
     return write
   },
-  create: (client, body) => create<VehicleType>(client, "/vehicle-types", body).then((created) => created.body),
+  // The type, then its consumption through its own route where the form gave any; the answer is the type as it then stands.
+  create: async (client, body) => {
+    const { consumption, ...type } = body as VehicleTypeCreateWrite
+    const made = (await create<VehicleType>(client, "/vehicle-types", type)).body
+    return consumption === undefined ? made : put<VehicleType>(client, `/vehicle-types/${made.id}/consumption`, { consumption })
+  },
   // The type first, then the whole set through its own route; the answer is
-  // the type as it now stands. Two requests are still two: a type patched
+  // the type as it now stands, and the consumption the same way. Two requests are still two: a type patched
   // before a set the transport loses stays patched, and the store says it was
   // saved only in part, keeps the row as typed and reads the module again
   // (#263) — as for the planning adapters.
@@ -322,6 +337,7 @@ export const vehicleTypeAdapter: ResourceAdapter<VehicleType> = {
     let type: VehicleType | undefined
     if (write.type !== undefined) type = await patch<VehicleType>(client, `/vehicle-types/${serverId}`, write.type)
     if (write.containerTypeIds !== undefined) type = await put<VehicleType>(client, `/vehicle-types/${serverId}/container-types`, { containerTypeIds: write.containerTypeIds })
+    if (write.consumption !== undefined) type = await put<VehicleType>(client, `/vehicle-types/${serverId}/consumption`, { consumption: write.consumption })
     return type ?? (await get<VehicleType>(client, `/vehicle-types/${serverId}`))
   },
 }
