@@ -40,6 +40,7 @@ import {
   FUEL_LABELS,
   isFactorRefusal,
   newFactorForm,
+  unitWordOf,
   type FactorForm,
   type FactorRefusal,
 } from "@/lib/data/fleet-emissions"
@@ -111,13 +112,18 @@ export function EmissionFactorsSettings() {
       title="Emission factors"
       description="Grams of CO₂e per unit of each fuel, over the period it is in force, which the fleet's routes are measured by."
       action={
-        <Button size="sm" disabled={!access.create || read.shown === null} onClick={() => open(null)}>
+        <Button size="sm" disabled={!access.create} onClick={() => open(null)}>
           <Plus className="h-4 w-4" weight="bold" />
           Add factor
         </Button>
       }
       toolbar={null}
     >
+      {read.problem !== null && factors.length > 0 && (
+        <p role="alert" className="border-b border-border px-4 py-3 text-sm text-destructive">
+          The factors could not be read again from the API: {problemSentence(read.problem)}. What is listed is the last read.
+        </p>
+      )}
       <p className="border-b border-border px-4 py-3 text-sm text-muted-foreground">
         A route is measured by the factor of its vehicle&apos;s fuel in force on the day it drives. Quote the published list and its year in the source, or say it is a demo value. A revised number is a new factor from the day the old one ends.
       </p>
@@ -216,7 +222,7 @@ function FactorDialogForm({
           </Select>
         </div>
         <div className="space-y-1.5">
-          <Label htmlFor="factor-grams">{`g CO₂e per ${factorSentence({ fuel: form.fuel, gramsPerUnit: 0 }).split(" per ")[1]}`}</Label>
+          <Label htmlFor="factor-grams">{`g CO₂e per ${unitWordOf(form.fuel)}`}</Label>
           <Input id="factor-grams" inputMode="numeric" value={form.gramsPerUnit} disabled={keyed} aria-invalid={refusal?.field === "gramsPerUnit"} onChange={(event) => onChange({ gramsPerUnit: event.target.value })} />
           {message("gramsPerUnit")}
         </div>

@@ -10,11 +10,11 @@ import { FUEL_LABELS } from "../data/fleet-emissions"
 const oneDecimal = new Intl.NumberFormat("en-GB", { maximumFractionDigits: 1 })
 const whole = new Intl.NumberFormat("en-GB", { maximumFractionDigits: 0 })
 
-/** Grams as a person reads them: grams under a kilogram, kilograms to one decimal under a tonne, tonnes to one decimal above. */
+/** Grams as a person reads them: grams under a kilogram, kilograms to one decimal under a tonne, tonnes to one decimal above — the unit chosen after the rounding, so 999.6 g reads 1 kg and never 1,000 g. */
 export function massOf(grams: number): string {
   const size = Math.abs(grams)
-  if (size < 1_000) return `${whole.format(grams)} g`
-  if (size < 1_000_000) return `${oneDecimal.format(grams / 1_000)} kg`
+  if (Math.round(size) < 1_000) return `${whole.format(grams)} g`
+  if (Math.round(size / 100) / 10 < 1_000) return `${oneDecimal.format(grams / 1_000)} kg`
   return `${oneDecimal.format(grams / 1_000_000)} t`
 }
 
@@ -46,12 +46,18 @@ export function unmeasuredSentence(report: Pick<EmissionsReport, "unmeasured">):
   return `${routes(total)} unmeasured: ${report.unmeasured.map((gap) => `${whole.format(gap.routes)} with ${GAP_WORDS[gap.gap]}`).join(", ")}`
 }
 
-/** The optimiser's saving in a sentence: "Optimising saved 2.4 kg CO₂e and 2 km on 1 route", or what it cost where it drove further. Empty where no route was optimised against a measured baseline. */
+/**
+ * The optimiser's saving in a sentence — "Optimising saved 2.4 kg CO₂e and
+ * drove 2 km less on 1 route" — the grams and the distance each by their own
+ * sign, since routes on different fuels may save grams while driving
+ * further. Empty where no route was optimised against a measured baseline.
+ */
 export function savingSentence(report: Pick<EmissionsReport, "saving">): string {
   const { saving } = report
   if (saving.routes === 0) return ""
-  if (saving.grams >= 0) return `Optimising saved ${massOf(saving.grams)} CO₂e and ${distanceOf(saving.metres)} on ${routes(saving.routes)}`
-  return `Optimising added ${massOf(-saving.grams)} CO₂e and ${distanceOf(-saving.metres)} on ${routes(saving.routes)}`
+  const grams = saving.grams >= 0 ? `saved ${massOf(saving.grams)}` : `added ${massOf(-saving.grams)}`
+  const metres = saving.metres >= 0 ? `drove ${distanceOf(saving.metres)} less` : `drove ${distanceOf(-saving.metres)} more`
+  return `Optimising ${grams} CO₂e and ${metres} on ${routes(saving.routes)}`
 }
 
 /** A vehicle's row label: its callsign and fuel. */

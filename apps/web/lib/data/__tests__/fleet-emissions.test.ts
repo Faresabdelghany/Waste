@@ -36,7 +36,7 @@ const diesel = (values: Partial<FuelEmissionFactor> = {}): FuelEmissionFactor =>
 describe("a vehicle type's consumption", () => {
   test("offers a field per fuel, in the vocabulary's order, each labelled with its unit per 100 km", () => {
     assert.deepEqual(CONSUMPTION_FIELDS.map((field) => field.fuel), [...FUEL_TYPES])
-    assert.deepEqual(CONSUMPTION_FIELDS.map((field) => field.label), ["Diesel · l per 100 km", "HVO · l per 100 km", "Biogas · kg per 100 km", "Electric · kWh per 100 km", "Hybrid · l per 100 km", "Other fuel · l per 100 km"])
+    assert.deepEqual(CONSUMPTION_FIELDS.map((field) => field.label), ["Diesel · l per 100 km", "HVO · l per 100 km", "Biogas · kg per 100 km", "Electric · kWh per 100 km", "Hybrid · l per 100 km", "Other · l per 100 km"])
   })
 
   test("is typed per 100 km to one decimal, a comma read as a point, and sent as thousandths per km: ten times the number", () => {

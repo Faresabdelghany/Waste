@@ -136,6 +136,8 @@ export type MasterDataFields = {
   wasteFractionIds?: string[]
   /** A vehicle type's consumption by fuel, in the wire's thousandths of the unit per km (M10 of #293); the fields the wire would refuse are `masterDataFieldErrors`'. */
   consumption?: { fuel: (typeof CONSUMPTION_FIELDS)[number]["fuel"]; milliUnitsPerKm: number }[]
+  /** The consumption fields the wire would refuse, by field: read in the same pass as the set. */
+  consumptionErrors?: Record<string, string>
 }
 
 /** The names a row's facts show for the rows it names. */
@@ -196,7 +198,7 @@ export function masterDataFieldsOf(kind: MasterDataKind, values: BusinessFormVal
         key: text(values, "key") ?? "",
         description: text(values, "description") ?? null,
         containerTypeIds: ids === undefined ? [] : splitMultiValue(ids),
-        consumption: consumptionOf(values).entries,
+        ...(({ entries, errors }) => ({ consumption: entries, consumptionErrors: errors }))(consumptionOf(values)),
       }
     }
     case "contaminant-code": {
@@ -228,7 +230,7 @@ export function masterDataFieldErrors(kind: MasterDataKind, values: BusinessForm
   if ((kind === "waste-fraction" || kind === "vehicle-type" || kind === "contaminant-code") && !isKey(fields.key)) errors.key = KEY_REFUSAL
   if (kind === "waste-fraction" && fields.wasteCode != null && !isWasteCode(fields.wasteCode)) errors.wasteCode = WASTE_CODE_REFUSAL
   if (kind === "container-type" && Number.isNaN(fields.volumeLitres)) errors.volumeLitres = VOLUME_REFUSAL
-  if (kind === "vehicle-type") Object.assign(errors, consumptionOf(values).errors)
+  if (kind === "vehicle-type") Object.assign(errors, fields.consumptionErrors ?? {})
   if (kind === "service-frequency") {
     if (!fields.projectId) errors.projectId = "Pick a project"
     for (const key of COUNT_KEYS) if (Number.isNaN(fields[key])) errors[key] = countRefusal(key)
@@ -382,13 +384,7 @@ export function masterDataSchema(kind: MasterDataKind): BusinessFormSchema {
     submitLabel: `Create ${lower}`,
     nameField: "name",
     contextFieldIds: kind === "service-frequency" ? ["projectId"] : kind === "container-type" ? ["volumeLitres"] : ["key"],
-    sections: [
-      { id: "identity", title: details.label, fields },
-      // What a vehicle of the type burns of each fuel it may run on (M10 of #293): blank for a fuel it never runs on, whose routes are then unmeasured.
-      ...(kind === "vehicle-type"
-        ? [{ id: "consumption", title: "Consumption", description: "What a vehicle of this type burns per 100 km of each fuel it may run on. Leave a fuel blank where it never runs on it: its routes' emissions are then not measured.", fields: CONSUMPTION_FIELDS.map((field) => ({ id: field.id, label: field.label, type: "text" as const, placeholder: "e.g. 45.5" })) }]
-        : []),
-    ],
+    sections: [{ id: "identity", title: details.label, fields }],
     execution: { kind: "create-record", initialStatus: "Effective", completionMessage: `${details.label} created.` },
   }
 }
@@ -402,10 +398,16 @@ export function masterDataEditSchema(kind: MasterDataKind): BusinessFormSchema {
     title: `Edit ${lower}`,
     description: `Update this ${lower}. Its key and its project do not move.`,
     submitLabel: "Save changes",
-    sections: schema.sections.map((section) => ({
-      ...section,
-      fields: section.fields.map((field) => (field.id === "key" || field.id === "projectId" ? { ...field, readOnly: true } : field)),
-    })),
+    sections: [
+      ...schema.sections.map((section) => ({
+        ...section,
+        fields: section.fields.map((field) => (field.id === "key" || field.id === "projectId" ? { ...field, readOnly: true } : field)),
+      })),
+      // What a vehicle of the type burns of each fuel it may run on (M10 of #293), set once the type exists: the set is its own route, so a create stays one request and never half-lands. Blank for a fuel it never runs on, whose routes are then unmeasured.
+      ...(kind === "vehicle-type"
+        ? [{ id: "consumption", title: "Consumption", description: "What a vehicle of this type burns per 100 km of each fuel it may run on. Leave a fuel blank where it never runs on it: its routes' emissions are then not measured.", fields: CONSUMPTION_FIELDS.map((field) => ({ id: field.id, label: field.label, type: "text" as const, placeholder: "e.g. 45.5" })) }]
+        : []),
+    ],
   }
 }
 

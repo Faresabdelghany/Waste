@@ -422,33 +422,26 @@ describe("a vehicle type", () => {
     assert.equal(vehicleTypeAdapter.toRecord(rearLoader, context(resolveTypes)).facts.Consumption, "No consumption: its routes are unmeasured")
   })
 
-  test("a create carries the consumption the form gave, which the update puts through its own route once the type exists", async () => {
-    const body = vehicleTypeAdapter.toCreateBody?.(made({ name: "Side loader", key: "side-loader", "consumption-diesel": "42,5", "consumption-hvo": "44" }), context(resolveTypes)) as Record<string, unknown>
-    assert.deepEqual(body.consumption, [{ fuel: "diesel", milliUnitsPerKm: 425 }, { fuel: "hvo", milliUnitsPerKm: 440 }])
-    const { consumption, ...type } = body
-    assert.ok(VehicleTypeCreate.safeParse(type).success)
-    assert.ok(VehicleTypeConsumptionSet.safeParse({ consumption }).success)
-    const made_ = { ...rearLoader, id: "01a0d2a4-a280-7008-8000-000000000009", key: "side-loader", name: "Side loader" }
-    const { fetch, calls } = scripted([() => json(made_, 201, { location: `/vehicle-types/${made_.id}` }), () => json({ ...made_, consumption: [{ fuel: "diesel", unit: "litre", milliUnitsPerKm: 425 }] })])
-    const answer = await vehicleTypeAdapter.create!(clientOver(fetch), body)
-    assert.deepEqual(calls.map((call) => `${call.init.method} ${call.url}`), ["POST http://api.test/vehicle-types", `PUT http://api.test/vehicle-types/${made_.id}/consumption`])
-    assert.equal((bodyOf(calls[0]) as Record<string, unknown>).consumption, undefined, "the type's create never carries the set")
-    assert.deepEqual(bodyOf(calls[1]), { consumption: [{ fuel: "diesel", milliUnitsPerKm: 425 }, { fuel: "hvo", milliUnitsPerKm: 440 }] })
-    assert.equal(answer.consumption.length, 1)
-    const without = vehicleTypeAdapter.toCreateBody?.(made({ name: "Side loader", key: "side-loader" }), context(resolveTypes)) as Record<string, unknown>
-    assert.equal("consumption" in without, false, "no field typed, no set to put")
+  test("a create stays one request: the consumption is the edit's, once the type exists", () => {
+    const body = vehicleTypeAdapter.toCreateBody?.(made({ name: "Side loader", key: "side-loader", "consumption-diesel": "42,5" }), context(resolveTypes)) as Record<string, unknown>
+    assert.equal("consumption" in body, false)
+    assert.ok(VehicleTypeCreate.safeParse(body).success)
   })
 
-  test("a consumption the wire would refuse is refused at its field", () => {
+  test("a consumption the wire would refuse is refused at its field, before any request", () => {
+    const burning = vehicleTypeAdapter.toRecord(rearLoader, context(resolveTypes))
     for (const typed of ["0", "-3", "45.55", "lots", "1000.1"]) {
-      assert.deepEqual(vehicleTypeAdapter.toCreateBody?.(made({ name: "Side loader", key: "side-loader", "consumption-diesel": typed }), context(resolveTypes)), { path: "consumption-diesel", message: CONSUMPTION_REFUSAL }, typed)
+      const edited: BusinessRecord = { ...burning, submittedValues: { ...burning.submittedValues, "consumption-diesel": typed } }
+      assert.deepEqual(vehicleTypeAdapter.toPatchBody(burning, edited, context(resolveTypes)), { path: "consumption-diesel", message: CONSUMPTION_REFUSAL }, typed)
     }
   })
 
   test("an edit puts the whole consumption set where it moved, and nothing where it did not", async () => {
     const burning = vehicleTypeAdapter.toRecord({ ...rearLoader, consumption: [{ fuel: "diesel", unit: "litre", milliUnitsPerKm: 450 }] }, context(resolveTypes))
     const moved: BusinessRecord = { ...burning, submittedValues: { ...burning.submittedValues, "consumption-diesel": "", "consumption-electric": "130" } }
-    assert.deepEqual(vehicleTypeAdapter.toPatchBody(burning, moved, context(resolveTypes)), { consumption: [{ fuel: "electric", milliUnitsPerKm: 1300 }] })
+    const movedBody = vehicleTypeAdapter.toPatchBody(burning, moved, context(resolveTypes)) as { consumption?: unknown }
+    assert.deepEqual(movedBody, { consumption: [{ fuel: "electric", milliUnitsPerKm: 1300 }] })
+    assert.ok(VehicleTypeConsumptionSet.safeParse({ consumption: movedBody.consumption }).success)
     const retyped: BusinessRecord = { ...burning, submittedValues: { ...burning.submittedValues, "consumption-diesel": "45.0" } }
     assert.equal(vehicleTypeAdapter.toPatchBody(burning, retyped, context(resolveTypes)), null, "45.0 is the 45 it was")
     const cleared: BusinessRecord = { ...burning, submittedValues: { ...burning.submittedValues, "consumption-diesel": "" } }

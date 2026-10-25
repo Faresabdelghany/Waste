@@ -252,9 +252,6 @@ type VehicleTypeWrite = {
   consumption?: VehicleTypeConsumptionSet["consumption"]
 }
 
-/** What a vehicle type's create carries: the type, and the consumption set its own route takes once the type exists. */
-type VehicleTypeCreateWrite = VehicleTypeCreate & { consumption?: VehicleTypeConsumptionSet["consumption"] }
-
 /** The server ids the form's container types stand for, or a refusal for one the store does not hold. */
 function containerTypeServerIds(webIds: readonly string[], context: MappingContext): string[] | LocalRefusal {
   const ids: string[] = []
@@ -295,8 +292,8 @@ export const vehicleTypeAdapter: ResourceAdapter<VehicleType> = {
     const fields = fieldsOf("vehicle-type", record)
     const containerTypeIds = containerTypeServerIds(fields.containerTypeIds ?? [], context)
     if ("path" in containerTypeIds) return containerTypeIds
-    const consumption = fields.consumption ?? []
-    const body: VehicleTypeCreateWrite = { key: fields.key ?? "", name: fields.name, ...(fields.description ? { description: fields.description } : {}), containerTypeIds, ...(consumption.length === 0 ? {} : { consumption }) }
+    // The consumption is set by the edit, once the type exists: the create is one request.
+    const body: VehicleTypeCreate = { key: fields.key ?? "", name: fields.name, ...(fields.description ? { description: fields.description } : {}), containerTypeIds }
     return body
   },
   toPatchBody: (before, after, context) => {
@@ -321,12 +318,7 @@ export const vehicleTypeAdapter: ResourceAdapter<VehicleType> = {
     const write: VehicleTypeWrite = { ...(type === null ? {} : { type }), ...(containerTypeIds === undefined ? {} : { containerTypeIds }), ...(consumption === undefined ? {} : { consumption }) }
     return write
   },
-  // The type, then its consumption through its own route where the form gave any; the answer is the type as it then stands.
-  create: async (client, body) => {
-    const { consumption, ...type } = body as VehicleTypeCreateWrite
-    const made = (await create<VehicleType>(client, "/vehicle-types", type)).body
-    return consumption === undefined ? made : put<VehicleType>(client, `/vehicle-types/${made.id}/consumption`, { consumption })
-  },
+  create: (client, body) => create<VehicleType>(client, "/vehicle-types", body).then((created) => created.body),
   // The type first, then the whole set through its own route; the answer is
   // the type as it now stands, and the consumption the same way. Two requests are still two: a type patched
   // before a set the transport loses stays patched, and the store says it was

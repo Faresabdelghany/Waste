@@ -1,5 +1,8 @@
 import type { Page } from "@playwright/test"
+import type { EmissionsReport } from "@waste/contracts/emissions"
+import { FUEL_TYPES } from "@waste/domain/resources/vocabulary"
 
+import { plannedSentence } from "../lib/insight/emissions"
 import { addDays, dispatchedRouteFor } from "./dispatched-route"
 import { expect, test } from "./fixtures"
 import { answerOf, routeRead, toasts } from "./routes-support"
@@ -11,26 +14,20 @@ import { listAll } from "./tester"
 // type's own route, its HVO kept — and adds an electric factor in Settings ›
 // Operations › Emission factors, then ends it through its edit. A route
 // generated on a seeded scheme and dispatched (dispatched-route.ts) is
-// measured once its Plan is; the Dashboard's Performance tab then reads the
-// last 7 days' planned emissions for its project — the total the API
-// answers, the routes it could not measure, and the vehicle beside it — and
-// asks the report without the window's interval, which its strict query
-// refuses. Every body is the one the contracts take, read off the browser's
+// measured once the Plan Optimise asks for it is; the Dashboard's
+// Performance tab then reads the last 7 days' planned emissions for its
+// project — the total the API answers, the routes it could not measure, and
+// the vehicle beside it — and asks the report without the window's
+// interval, which its strict query refuses. Every body is the one the contracts take, read off the browser's
 // own request. The rear loader's consumption is put back as the seed had it;
 // the factor's period is a year of its own far ahead, so a run never meets
 // an earlier run's on a long-lived stack.
 
 type Consumption = { fuel: string; milliUnitsPerKm: number }
 type VehicleType = { id: string; key: string; name: string; consumption: (Consumption & { unit: string })[] }
-type Report = { planned: { routes: number; metres: number; grams: number }; unmeasured: { gap: string; routes: number }[] }
 
-/** The card's spelling of a mass and a distance (lib/insight/emissions.ts). */
-const oneDecimal = new Intl.NumberFormat("en-GB", { maximumFractionDigits: 1 })
-const whole = new Intl.NumberFormat("en-GB", { maximumFractionDigits: 0 })
-const mass = (grams: number) => (grams < 1_000 ? `${whole.format(grams)} g` : grams < 1_000_000 ? `${oneDecimal.format(grams / 1_000)} kg` : `${oneDecimal.format(grams / 1_000_000)} t`)
-const routes = (n: number) => (n === 1 ? "1 route" : `${whole.format(n)} routes`)
-const planned = (report: Report) =>
-  report.planned.routes === 0 ? "No route measured in this period" : `${mass(report.planned.grams)} CO₂e over ${routes(report.planned.routes)} and ${whole.format(report.planned.metres / 1_000)} km`
+/** A set in the vocabulary's fuel order, the order the form sends it in. */
+const inFuelOrder = (set: readonly Consumption[]) => [...set].sort((a, b) => FUEL_TYPES.indexOf(a.fuel as never) - FUEL_TYPES.indexOf(b.fuel as never))
 
 async function choose(page: Page, filter: string, option: string) {
   await page.getByLabel(filter, { exact: true }).click()
@@ -59,7 +56,7 @@ test("the office types a vehicle type's consumption and a fuel's factor, and the
     await dialog.getByLabel("Diesel · l per 100 km").fill("41,5")
     const [put] = await Promise.all([answerOf(page, "PUT", `/vehicle-types/${rearLoader.id}/consumption`), dialog.getByRole("button", { name: "Save changes" }).click()])
     expect(put.status(), await put.text()).toBe(200)
-    expect(put.request().postDataJSON()).toEqual({ consumption: [{ fuel: "diesel", milliUnitsPerKm: 415 }, ...seeded.filter((entry) => entry.fuel !== "diesel")] })
+    expect(put.request().postDataJSON()).toEqual({ consumption: inFuelOrder([{ fuel: "diesel", milliUnitsPerKm: 415 }, ...seeded.filter((entry) => entry.fuel !== "diesel")]) })
     expect(writes, "the consumption alone moved: no patch of the type").toEqual([`PUT /waste-api/vehicle-types/${rearLoader.id}/consumption`])
     await expect(dialog).toBeHidden()
 
@@ -96,11 +93,14 @@ test("the office types a vehicle type's consumption and a fuel's factor, and the
 
     // The Dashboard: a dispatched route, measured once its Plan is, and the card the report's own answer.
     const { route, today } = await dispatchedRouteFor(api)
+    // Today is outside Plan Ahead's window (tomorrow on), so generation asked no Plan for today's route and dispatch asks none: the office's Optimise asks it, as dispatch-day.spec.ts does, and the fake provider measures it on the worker.
+    const optimised = await api.post(`/routes/${route.id}/optimise`)
+    expect([200, 202], await optimised.text()).toContain(optimised.status())
     await expect.poll(async () => (await routeRead(api, route.id)).activePlan?.status ?? "none", { timeout: 60_000, message: "the dispatched route's Plan is measured" }).toBe("ready")
     const window = { projectId: route.projectId, from: addDays(today, -6), to: today }
     const answer = await api.get("/reports/emissions", { params: window })
     expect(answer.status(), await answer.text()).toBe(200)
-    const report = (await answer.json()) as Report
+    const report = (await answer.json()) as EmissionsReport
     expect(report.planned.routes, "the dispatched route on WH-24 is measured: a rear loader on HVO").toBeGreaterThan(0)
     const project = (await (await api.get(`/projects/${route.projectId}`)).json()) as { name: string }
 
@@ -113,7 +113,8 @@ test("the office types a vehicle type's consumption and a fuel's factor, and the
     await choose(page, "Period", "Last 7 days")
     await choose(page, "Project", project.name)
     const card = page.getByTestId("emissions")
-    await expect(card.getByTestId("emissions-planned")).toHaveText(planned(report))
+    // The card's own sentence over the API's answer: the card says what the API answered.
+    await expect(card.getByTestId("emissions-planned")).toHaveText(plannedSentence(report))
     await expect(card).toContainText("By fraction · split by stops")
     await expect(card).toContainText("WH-24 · HVO")
     expect(asked.length).toBeGreaterThan(0)

@@ -10,10 +10,14 @@ import { FUEL_UNIT, GRAMS_PER_UNIT_MAX, MILLI_UNITS_PER_KM_MAX } from "@waste/do
 import { FUEL_TYPES, type EnergyUnit, type FuelType } from "@waste/domain/resources/vocabulary"
 
 import { allows, type Grants } from "../api/grants"
+import { fuelLabel } from "./resources-vocabulary"
 import { firstDayOut, lastDayIn } from "../api/records/planning"
 
-/** What a person calls each fuel. */
-export const FUEL_LABELS: Readonly<Record<FuelType, string>> = { diesel: "Diesel", hvo: "HVO", biogas: "Biogas", electric: "Electric", hybrid: "Hybrid", other: "Other fuel" }
+/** What a person calls each fuel: the vehicle form's own words (`fuelLabel`). */
+export const FUEL_LABELS: Readonly<Record<FuelType, string>> = Object.fromEntries(FUEL_TYPES.map((fuel) => [fuel, fuelLabel(fuel)])) as Record<FuelType, string>
+
+/** The unit a fuel's factor and consumption are given in, as it is written after a number: `l`, `kg`, `kWh`. */
+export const unitWordOf = (fuel: FuelType): string => UNIT_WORDS[FUEL_UNIT[fuel]]
 
 /** A unit as it is written after a number. */
 export const UNIT_WORDS: Readonly<Record<EnergyUnit, string>> = { litre: "l", kg: "kg", kwh: "kWh" }

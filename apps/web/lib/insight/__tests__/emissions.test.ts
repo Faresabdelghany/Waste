@@ -29,6 +29,11 @@ describe("the masses", () => {
     assert.equal(massOf(999), "999 g")
     assert.equal(massOf(23_922), "23.9 kg")
     assert.equal(massOf(1_234_567), "1.2 t")
+    // The unit is chosen after the rounding: never "1,000 g" or "1,000 kg".
+    assert.equal(massOf(999.4), "999 g")
+    assert.equal(massOf(999.6), "1 kg")
+    assert.equal(massOf(999_949), "999.9 kg")
+    assert.equal(massOf(999_960), "1 t")
     assert.equal(distanceOf(20_000), "20 km")
   })
 })
@@ -50,8 +55,10 @@ describe("the sentences", () => {
 
   test("say the saving, or what optimising added where it drove further", () => {
     assert.equal(savingSentence(report()), "")
-    assert.equal(savingSentence(report({ saving: { routes: 1, metres: 2_000, grams: 2_392 } })), "Optimising saved 2.4 kg CO₂e and 2 km on 1 route")
-    assert.equal(savingSentence(report({ saving: { routes: 2, metres: -500, grams: -598 } })), "Optimising added 598 g CO₂e and 1 km on 2 routes")
+    assert.equal(savingSentence(report({ saving: { routes: 1, metres: 2_000, grams: 2_392 } })), "Optimising saved 2.4 kg CO₂e and drove 2 km less on 1 route")
+    assert.equal(savingSentence(report({ saving: { routes: 2, metres: -1_500, grams: -598 } })), "Optimising added 598 g CO₂e and drove 2 km more on 2 routes")
+    // Routes on different fuels: grams saved while the distance grew, each told by its own sign.
+    assert.equal(savingSentence(report({ saving: { routes: 2, metres: -3_000, grams: 400 } })), "Optimising saved 400 g CO₂e and drove 3 km more on 2 routes")
   })
 
   test("label a vehicle by callsign and fuel, and the routes with no counted stop", () => {
