@@ -146,6 +146,7 @@ describe("a period's line and the fleet's surfaces", () => {
       assert.equal(surface.genericEdit, true, key)
       assert.ok(surface.rowActions !== undefined, key)
     }
-    assert.ok(Object.values(COMMAND_SURFACES).filter((surface) => surface.genericEdit).length === 2, "no other surface keeps it")
+    // M7 of #293: an Application is corrected by its form while undecided, beside its commands.
+    assert.deepEqual(Object.keys(COMMAND_SURFACES).filter((key) => COMMAND_SURFACES[key].genericEdit).sort(), ["customers.applications", "fleet.drivers", "fleet.vehicles"], "no other surface keeps it")
   })
 })
