@@ -40,7 +40,7 @@
 // priced at, held to 0..100 by `product_vat_percent_range`. All three are
 // nullable, so no guard: a product without a rate makes a `no-vat-rate`
 // event, which is the actionable reason.
-import { PRODUCT_KINDS, PRODUCT_STATUSES, PRODUCT_UNITS } from "@waste/domain/registry/vocabulary"
+import { PRODUCT_KINDS, PRODUCT_STATUSES, PRODUCT_UNITS, WASTE_TREATMENTS } from "@waste/domain/registry/vocabulary"
 import { WASTE_CODE_PATTERN } from "@waste/domain/registry/waste-code"
 import { sql } from "drizzle-orm"
 import { check, integer, text, uniqueIndex, uuid } from "drizzle-orm/pg-core"
@@ -63,6 +63,8 @@ export const wasteFraction = wms.table(
     name: text().notNull(),
     /** The European List of Waste entry it is reported under, `200301`; null where nobody has set one. */
     wasteCode: text(),
+    /** How it is treated once collected (M13 of #293), what its recycling rate reads; null where nobody has set one. */
+    treatment: text(),
   },
   (t) => [
     companyReference(t, company),
@@ -72,6 +74,7 @@ export const wasteFraction = wms.table(
     lowercase(t.key),
     // The code's shape, the domain's one spelling; a null passes: no code is not a wrong one.
     check(tableObjectName(t.id.table, "waste_code_shape", "wasteFraction"), sql`${t.wasteCode} ~ ${sql.raw(`'${WASTE_CODE_PATTERN}'`)}`),
+    oneOf(t.treatment, WASTE_TREATMENTS),
   ],
 )
 

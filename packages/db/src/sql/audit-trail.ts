@@ -73,6 +73,7 @@ import { collectionGroup, collectionGroupContainer, collectionGroupContainerType
 import { plan, planLeg, planStop, routingQuota } from "../schema/routing"
 import { sortingGuideItem } from "../schema/sorting-guide"
 import { stockMovement } from "../schema/stock"
+import { wasteFractionEmissionFactor } from "../schema/sustainability"
 
 const HELPER = "auditTrail"
 /** The suffix of an audited table's trigger. */
@@ -205,8 +206,11 @@ export const EMISSIONS_AUDITED: readonly Audited[] = [
 /** The Applications (M7 of #293): a customer's request, each move audited under the module it is read in; its Decisions are a ledger, exempt. */
 export const APPLICATIONS_AUDITED: readonly Audited[] = [{ table: application, module: "customers.applications" }]
 
+/** The waste fractions' emission factors (M13 of #293), the master data's beside the fractions they price in CO₂e: its trigger is the sustainability report's migration's. */
+export const SUSTAINABILITY_AUDITED: readonly Audited[] = [{ table: wasteFractionEmissionFactor, module: "configure.master" }]
+
 /** Every audited table: 0019's, then each later migration's, in the order they were written. */
-export const AUDITED: readonly Audited[] = [...AUDITED_AT_0019, ...SUBSCRIPTION_PAUSE_AUDITED, ...TICKET_SLA_AUDITED, ...DROP_OFF_AUDITED, ...ABSENCES_AUDITED, ...TICKET_CHARGE_AUDITED, ...PICKUP_EXCEPTIONS_AUDITED, ...EMISSIONS_AUDITED, ...APPLICATIONS_AUDITED]
+export const AUDITED: readonly Audited[] = [...AUDITED_AT_0019, ...SUBSCRIPTION_PAUSE_AUDITED, ...TICKET_SLA_AUDITED, ...DROP_OFF_AUDITED, ...ABSENCES_AUDITED, ...TICKET_CHARGE_AUDITED, ...PICKUP_EXCEPTIONS_AUDITED, ...EMISSIONS_AUDITED, ...APPLICATIONS_AUDITED, ...SUSTAINABILITY_AUDITED]
 
 /** The audited tables by name, for a test that reads a migrated database's triggers. */
 export const AUDITED_TABLE_NAMES: ReadonlySet<string> = new Set(AUDITED.map((entry) => getTableName(entry.table)))

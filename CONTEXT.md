@@ -134,6 +134,14 @@ _Avoid_: Warehouse, unloading station
 A destination where a route unloads collected material and records weight or disposal evidence.
 _Avoid_: Depot, warehouse
 
+**Treatment**:
+How a waste fraction is handled once collected: reuse, recycling (composting and digestion among it), energy recovery, or disposal. A Customer's recycling rate is read from it.
+_Avoid_: Disposal method, processing, destination
+
+**Emission Factor**:
+A published figure of CO₂e per unit in force over a period, with the source it is quoted from. A fuel has grams per litre, kilogram or kilowatt-hour burnt. A waste fraction has kilograms per tonne its Treatment emits, and per tonne it avoids where the Treatment displaces anything. Revised by adding the next period, never by editing a figure.
+_Avoid_: Carbon factor, emission rate
+
 **Drop-off Point**:
 A place residents bring waste to themselves, on a project's public map: a recycling centre (staffed, with opening hours, many fractions) or a bring bank (bins on a street, usually open always). It carries the fractions it takes, weekly hours, dated exceptions, and whether the project's holidays close it.
 _Avoid_: Unloading Station (where the operation's own vehicles empty), Depot, container (a bring bank's bins are not the platform's Containers), genbrugsstation in copy that is not Danish
@@ -287,6 +295,10 @@ The effective-dated relationship that links an existing Service Area to one serv
 _Avoid_: Contract area assignment, create service area, service provider area
 
 ## Intelligence and automation
+
+**Sustainability Report**:
+One Customer's collected waste over a window, by site and fraction. Each stop's kilograms say how they were weighed: measured, apportioned from its route's Unloads, estimated, or unmeasured (counted, never zero). The report also gives the recycling rate and the CO₂e emitted and avoided. It is a reading of the stops and the Emission Factors, and stores nothing.
+_Avoid_: Carbon report, ESG report, tonnage report
 
 **Insight**:
 A governed analytical finding grounded in traceable operational data.

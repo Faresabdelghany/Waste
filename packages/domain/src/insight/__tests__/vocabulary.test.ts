@@ -7,10 +7,14 @@ import { describe, test } from "node:test"
 import { defineVocabularyTests } from "../../__tests__/vocabulary"
 import * as vocabulary from "../vocabulary"
 
-defineVocabularyTests("Insight", vocabulary, vocabulary.INSIGHT_VOCABULARIES, 2)
+defineVocabularyTests("Insight", vocabulary, vocabulary.INSIGHT_VOCABULARIES, 4)
 
 describe("the Insight vocabulary's own rules", () => {
   test("a series is cut by the day, the ISO week or the calendar month, finest first", () => {
     assert.deepEqual([...vocabulary.REPORT_INTERVALS], ["day", "week", "month"])
+  })
+
+  test("a stop's weight is read best first: its own, its route's share, its volume's estimate, none", () => {
+    assert.deepEqual([...vocabulary.WEIGHT_BASES], ["measured", "apportioned", "estimated", "unmeasured"])
   })
 })

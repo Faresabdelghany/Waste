@@ -67,6 +67,7 @@ import * as sessionsModule from "../sessions"
 import * as settlementsModule from "../settlements"
 import * as sortingGuideModule from "../sorting-guide"
 import * as stockModule from "../stock"
+import * as sustainabilityModule from "../sustainability"
 import * as textModule from "../text"
 import * as ticketSlaModule from "../ticket-sla"
 import * as ticketsModule from "../tickets"
@@ -137,6 +138,7 @@ const MODULES: Readonly<Record<string, Record<string, unknown>>> = {
   "settlements": settlementsModule,
   "sorting-guide": sortingGuideModule,
   "stock": stockModule,
+  "sustainability": sustainabilityModule,
   "text": textModule,
   "ticket-sla": ticketSlaModule,
   "tickets": ticketsModule,

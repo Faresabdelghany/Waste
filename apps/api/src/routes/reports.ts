@@ -148,7 +148,7 @@ const projectOf = (table: ProjectTable) => and(eq(project.companyId, table.compa
 const dayOn = (instant: PgColumn | SQL): SQL<string> => sql<string>`(${instant} at time zone ${project.timezone})::date`
 
 /** A day inside the window, both ends inclusive. */
-const inWindow = (day: PgColumn | SQL, window: DayInterval): SQL => sql`${day} between ${window.from}::date and ${window.to}::date`
+export const inWindow = (day: PgColumn | SQL, window: DayInterval): SQL => sql`${day} between ${window.from}::date and ${window.to}::date`
 
 const DAY_MS = 86_400_000
 
@@ -166,7 +166,7 @@ const countWhere = (condition: SQL | undefined) => sql<number>`count(*) filter (
 const total = (value: PgColumn | SQL) => sql<number>`coalesce(sum(${value}), 0)::bigint`.mapWith(Number)
 
 /** Names in one order wherever the API runs. */
-const byName = new Intl.Collator("en").compare
+export const byName = new Intl.Collator("en").compare
 
 // The service report's tallies.
 
@@ -219,7 +219,7 @@ function inSeries<Tally>(series: Map<string, DayInterval & Tally>, day: string, 
 }
 
 /** The routes a report counts: operating in the window, a regeneration's cancellations left out, since the occurrence they stood for is gone. */
-const routesOfWindow = (window: DayInterval): SQL => and(inWindow(route.operatingDate, window), eq(route.cancelledByGeneration, false)) as SQL
+export const routesOfWindow = (window: DayInterval): SQL => and(inWindow(route.operatingDate, window), eq(route.cancelledByGeneration, false)) as SQL
 
 async function serviceReport(tx: Tx, principal: Principal, query: ServiceReportQuery): Promise<ServiceReport> {
   const { projectId, wasteFractionId, routeSchemeId } = query

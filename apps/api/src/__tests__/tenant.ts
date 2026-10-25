@@ -58,6 +58,7 @@ import { dropOffPoint, dropOffPointException, dropOffPointFraction, dropOffPoint
 import { sortingGuideItem } from "@waste/db/schema/sorting-guide"
 import { depot, unloadingStation, unloadingStationFraction, warehouse } from "@waste/db/schema/places"
 import { stockMovement } from "@waste/db/schema/stock"
+import { wasteFractionEmissionFactor } from "@waste/db/schema/sustainability"
 import {
   customer,
   property,
@@ -418,6 +419,8 @@ export async function dropTenant(pool: Database, companyId: string, owner?: Data
     await tx.delete(property).where(eq(property.companyId, companyId))
     await tx.delete(customer).where(eq(customer.companyId, companyId))
     await tx.delete(containerType).where(eq(containerType.companyId, companyId))
+    // The fractions' emission factors (M13 of #293) name the fractions.
+    await tx.delete(wasteFractionEmissionFactor).where(eq(wasteFractionEmissionFactor.companyId, companyId))
     await tx.delete(wasteFraction).where(eq(wasteFraction.companyId, companyId))
     await tx.delete(serviceProviderAccess).where(eq(serviceProviderAccess.companyId, companyId))
     await tx.delete(projectAccess).where(eq(projectAccess.companyId, companyId))

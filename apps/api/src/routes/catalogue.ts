@@ -54,6 +54,7 @@ import { Page, PageRequest } from "@waste/contracts/pagination"
 import { ProjectScopedListQuery } from "@waste/contracts/queries"
 import type { Tx } from "@waste/db/client"
 import { containerType, serviceFrequency, wasteFraction } from "@waste/db/schema/catalogue"
+import type { WasteTreatment } from "@waste/domain/registry/vocabulary"
 import { and, asc, eq, gt } from "drizzle-orm"
 import { Hono, type MiddlewareHandler } from "hono"
 import { describeRoute } from "hono-openapi"
@@ -77,6 +78,7 @@ const fractionColumns = {
   key: wasteFraction.key,
   name: wasteFraction.name,
   wasteCode: wasteFraction.wasteCode,
+  treatment: wasteFraction.treatment,
   createdAt: wasteFraction.createdAt,
   updatedAt: wasteFraction.updatedAt,
 }
@@ -84,7 +86,7 @@ const fractionColumns = {
 type FractionRow = Pick<typeof wasteFraction.$inferSelect, keyof typeof fractionColumns>
 
 function fractionOf(row: FractionRow): WasteFraction {
-  return { id: row.id, key: row.key, name: row.name, wasteCode: row.wasteCode, ...stampsOf(row) }
+  return { id: row.id, key: row.key, name: row.name, wasteCode: row.wasteCode, treatment: row.treatment as WasteTreatment | null, ...stampsOf(row) }
 }
 
 /** `unique (company_id, key)` and `unique (company_id, name)`: each is one fraction's inside a company, and free in the next. */
@@ -203,7 +205,7 @@ export function catalogueRoutes(guard: MiddlewareHandler<AuthEnv>) {
         operationId: "createWasteFraction",
         summary: "Add a waste fraction",
         description:
-          "Adds a fraction to the company's own vocabulary. `key` is the stable slug the rest of the system quotes and is set once; `name` is what a person reads. Both are unique inside the company. `wasteCode`, optional, is the European List of Waste entry the national waste-data system keys the fraction by, six digits compact (`200301`) with an asterisk after a hazardous entry's; the waste-data report names a fraction without one with a warning. The server mints the id; a body that carries one is refused.",
+          "Adds a fraction to the company's own vocabulary. `key` is the stable slug the rest of the system quotes and is set once; `name` is what a person reads. Both are unique inside the company. `wasteCode`, optional, is the European List of Waste entry the national waste-data system keys the fraction by, six digits compact (`200301`) with an asterisk after a hazardous entry's; the waste-data report names a fraction without one with a warning. `treatment`, optional, is how it is treated once collected — `reuse`, `recycling`, `energy-recovery` or `disposal` — which the sustainability report's recycling rate reads (M13 of #293). The server mints the id; a body that carries one is refused.",
         security: BEARER_SECURITY,
         responses: {
           201: describeCreated("The waste fraction as it was written.", WasteFraction),
@@ -263,9 +265,9 @@ export function catalogueRoutes(guard: MiddlewareHandler<AuthEnv>) {
       "/waste-fractions/:id",
       describeRoute({
         operationId: "patchWasteFraction",
-        summary: "Rename a waste fraction or set its waste code",
+        summary: "Rename a waste fraction or set its waste code or treatment",
         description:
-          "Changes the name a person reads, or the waste code the national waste-data system keys the fraction by; a null clears the code. The key is not patchable: it is the slug reports, imports and fixtures quote, and a fraction that needs another key is another fraction.",
+          "Changes the name a person reads, the waste code the national waste-data system keys the fraction by, or how it is treated once collected; a null clears the code or the treatment. The key is not patchable: it is the slug reports, imports and fixtures quote, and a fraction that needs another key is another fraction.",
         security: BEARER_SECURITY,
         responses: {
           200: describeJson("The waste fraction as it now stands.", WasteFraction),

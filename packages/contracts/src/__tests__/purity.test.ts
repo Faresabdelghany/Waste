@@ -43,6 +43,8 @@
 // period and appeal text to the domain's rules in the domain's sentences.
 // #291 C6 added @waste/domain/finance/payments: payments.ts reads the
 // invoice's payment statuses from it, the reading the API answers.
+// M13 of #293 added @waste/domain/insight/sustainability: sustainability.ts
+// reads a factor's bound from it, the bound the database's check reads.
 import path from "node:path"
 import { fileURLToPath } from "node:url"
 
@@ -61,6 +63,7 @@ definePurityTests({
     "@waste/domain/finance/payments",
     "@waste/domain/finance/vocabulary",
     "@waste/domain/imports/vocabulary",
+    "@waste/domain/insight/sustainability",
     "@waste/domain/insight/vocabulary",
     "@waste/domain/planning/vocabulary",
     "@waste/domain/registry/applications",

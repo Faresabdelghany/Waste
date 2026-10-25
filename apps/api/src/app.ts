@@ -97,6 +97,7 @@ import { settlementRoutes } from "./routes/settlements"
 import { sharedCollectionPointRoutes } from "./routes/shared-collection-points"
 import { pickupExceptionRoutes } from "./routes/pickup-exceptions"
 import { sortingGuideRoutes } from "./routes/sorting-guide"
+import { sustainabilityRoutes } from "./routes/sustainability"
 import { ticketChargeRoutes } from "./routes/ticket-charges"
 import { ticketSlaRoutes } from "./routes/ticket-sla"
 import { ticketRoutes } from "./routes/tickets"
@@ -107,6 +108,7 @@ import { vehicleAllocationRoutes } from "./routes/vehicle-allocations"
 import { vehicleTypeRoutes } from "./routes/vehicle-types"
 import { vehicleRoutes } from "./routes/vehicles"
 import { warehouseRoutes } from "./routes/warehouses"
+import { wasteFractionEmissionFactorRoutes } from "./routes/waste-fraction-emission-factors"
 import { weightControlRoutes } from "./routes/weight-control"
 
 export type AppOptions = {
@@ -236,6 +238,7 @@ export function createApp({
   app.route("/", roleRoutes(guard))
   app.route("/", auditEventRoutes(guard))
   app.route("/", catalogueRoutes(guard))
+  app.route("/", wasteFractionEmissionFactorRoutes(guard))
   app.route("/", productRoutes(guard))
   app.route("/", customerRoutes(guard))
   app.route("/", propertyRoutes(guard))
@@ -322,6 +325,8 @@ export function createApp({
   app.route("/", reportRoutes(guard, { now }))
   // The fleet's emissions (M10 of #293): a report of its own, read like the others.
   app.route("/", emissionReportRoutes(guard))
+  // A customer's sustainability report (M13 of #293), likewise.
+  app.route("/", sustainabilityRoutes(guard))
   // The CSV import (#291 slice 12): a preview, then a run written a batch at a time through the families' own writes.
   app.route("/", importRoutes(guard))
 

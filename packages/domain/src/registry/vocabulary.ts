@@ -50,6 +50,9 @@ export const SHARED_COLLECTION_POINT_STATUSES = ["draft", "open", "restricted", 
 /** What a Property is to the Shared Collection Point it is a member of. */
 export const SHARED_COLLECTION_POINT_MEMBER_ROLES = ["service-member", "administrator", "payer", "notification-contact"] as const
 
+/** How a Waste Fraction is treated once collected (M13 of #293), the waste hierarchy's steps: composting and digestion count as recycling, as the EU's municipal recycling target counts them; a fraction with none set is reported as not recycled. */
+export const WASTE_TREATMENTS = ["reuse", "recycling", "energy-recovery", "disposal"] as const
+
 /** What the Product delivers: a collection at a container, a recurring service, or a one-off. */
 export const PRODUCT_KINDS = ["container-collection", "recurring-service", "additional-service"] as const
 /** Where the Product stands in the catalogue. Only an active Product can be subscribed to, which the API holds (Issue #79); a subscription already made stands when its Product is withdrawn. */
@@ -97,9 +100,11 @@ export type ApplicationKind = (typeof APPLICATION_KINDS)[number]
 export type ApplicationStatus = (typeof APPLICATION_STATUSES)[number]
 export type ApplicationChannel = (typeof APPLICATION_CHANNELS)[number]
 export type DecisionOutcome = (typeof DECISION_OUTCOMES)[number]
+export type WasteTreatment = (typeof WASTE_TREATMENTS)[number]
 
 /** Every list of this module by its name, for a test that walks them and for a reader looking for the whole vocabulary at once. */
 export const REGISTRY_VOCABULARIES = {
+  WASTE_TREATMENTS,
   CUSTOMER_KINDS,
   CUSTOMER_STATUSES,
   PROPERTY_KINDS,

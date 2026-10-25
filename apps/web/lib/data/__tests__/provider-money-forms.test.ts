@@ -50,7 +50,7 @@ const NOW = new Date("2026-09-30T12:00:00Z")
 const STAMPS = { createdAt: "2026-09-24T09:00:00.000Z", updatedAt: "2026-09-25T09:30:00.000Z" }
 
 const copenhagen: Project = { id: "01a0d2a4-a280-7002-8000-000000000001", ...STAMPS, name: "Copenhagen Central", kind: "Municipality", language: "da", currency: "DKK", timezone: "Europe/Copenhagen", status: "active", weekend: ["saturday", "sunday"], holidayList: "Danish public holidays", publicSlug: null, paymentTermsDays: 30, paymentReferenceScheme: "none" }
-const organic: WasteFraction = { id: "01a0d2a4-a280-7005-8000-000000000002", ...STAMPS, key: "organic", name: "Organic", wasteCode: null }
+const organic: WasteFraction = { id: "01a0d2a4-a280-7005-8000-000000000002", ...STAMPS, key: "organic", name: "Organic", wasteCode: null, treatment: null }
 const residual: Product = { id: "01a0d2a4-a280-700a-8000-000000000001", ...STAMPS, projectId: copenhagen.id, name: "Residual waste · 240L bin", kind: "container-collection", status: "active", unit: "pickup", containerTypeId: null, wasteFractionId: null, serviceFrequencyId: null, invoiceName: null, invoiceCode: null, vatPercent: 25 }
 const OSTERBRO = "01a0d2a4-a280-7015-8000-000000000002"
 const NORDREN = "01a0d2a4-a280-7004-8000-000000000001"
