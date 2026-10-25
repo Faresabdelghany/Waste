@@ -99,6 +99,31 @@ describe("a customer on the prototype's record", () => {
     assert.equal(customerAdapter.toPatchBody(before, before, context), null)
   })
 
+  test("a customer's own payment terms (#291 C4) read back as a fact, a patch sets them, and a blank gives the project's back", () => {
+    const before = customerAdapter.toRecord(osterbro, context)
+    assert.equal(before.facts["Payment terms"], undefined, "no terms of its own, no fact")
+    assert.equal(before.submittedValues?.paymentTermsDays, "")
+    const set = { ...before, submittedValues: { ...before.submittedValues, paymentTermsDays: "8" } }
+    const body = customerAdapter.toPatchBody(before, set, context)
+    assert.deepEqual(body, { paymentTermsDays: 8 })
+    assert.ok(CustomerPatch.safeParse(body).success)
+    const read = customerAdapter.toRecord({ ...osterbro, paymentTermsDays: 8 }, context)
+    assert.equal(read.facts["Payment terms"], "8 days")
+    assert.equal(read.submittedValues?.paymentTermsDays, "8")
+    const cleared = { ...read, submittedValues: { ...read.submittedValues, paymentTermsDays: "" } }
+    assert.deepEqual(customerAdapter.toPatchBody(read, cleared, context), { paymentTermsDays: null })
+    const refused = { ...read, submittedValues: { ...read.submittedValues, paymentTermsDays: "400" } }
+    assert.deepEqual(customerAdapter.toPatchBody(read, refused, context), { path: "paymentTermsDays", message: "Payment terms are a whole number of days from 0 to 365" })
+  })
+
+  test("a create says the customer's terms only where the form gave them", () => {
+    const made = { ...customerAdapter.toRecord(kab, context), id: "contacts-x", status: "Active", submittedValues: { partyType: "company", displayName: "Nørrebro Boligselskab", paymentTermsDays: "14" } }
+    const body = customerAdapter.toCreateBody?.(made, context)
+    assert.deepEqual(body, { kind: "organisation", name: "Nørrebro Boligselskab", paymentTermsDays: 14 })
+    assert.ok(CustomerCreate.safeParse(body).success)
+    assert.deepEqual(customerAdapter.toCreateBody?.({ ...made, submittedValues: { ...made.submittedValues, paymentTermsDays: "" } }, context), { kind: "organisation", name: "Nørrebro Boligselskab" })
+  })
+
   test("the module is Customers → Contacts & Companies", () => {
     assert.equal(customersModule.workspaceId, "customers")
     assert.equal(customersModule.moduleId, "contacts")

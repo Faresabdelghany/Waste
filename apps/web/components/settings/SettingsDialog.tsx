@@ -54,12 +54,13 @@ import { PlanningAreasSettings } from "@/components/settings/planning-areas-sett
 import { CollectionCalendarsSettings } from "@/components/settings/collection-calendars-settings"
 import { HolidayListsSettings } from "@/components/settings/holiday-lists-settings"
 import { SortingGuideSettings } from "@/components/settings/sorting-guide-settings"
+import { FinanceSettingsOnApi } from "@/components/settings/finance-settings-on-api"
 import { TicketSlaSettings } from "@/components/settings/ticket-sla-settings"
 import { MasterDataSettings } from "@/components/settings/master-data-settings"
 import { useApiConfigured, useApiSession } from "@/components/waste/api-session-store"
 import { profileOf, type AccountProfile } from "@/lib/data/account-profile"
 import { HOLIDAY_LISTS_SETTINGS_PANE_ID, MASTER_DATA_SETTINGS_PANE_ID } from "@/lib/data/business-links"
-import { ASSET_MANAGEMENT_SETTINGS_PANE_ID, settingsPaneOffered, settingsPaneOpened } from "@/lib/data/settings-panes"
+import { ASSET_MANAGEMENT_SETTINGS_PANE_ID, FINANCE_ON_API_SETTINGS_PANE_ID, FINANCE_SETTINGS_PANE_ID, settingsPaneOffered, settingsPaneOpened } from "@/lib/data/settings-panes"
 import { SORTING_GUIDE_SETTINGS_PANE_ID } from "@/lib/data/sorting-guide"
 import { TICKET_SLA_SETTINGS_PANE_ID } from "@/lib/data/ticket-sla"
 import { PLANNING_AREAS_SETTINGS_PANE_ID } from "@/lib/data/planning-areas"
@@ -167,7 +168,9 @@ const settingsSections: Array<{
     id: "administration",
     label: "Administration",
     items: [
-      { id: "finance", label: "Finance & invoicing", icon: CreditCard },
+      // The browser's pane in fixture mode; on the Pilot the API's (#291 C4), the company's invoice identity and the projects' terms.
+      { id: FINANCE_SETTINGS_PANE_ID, label: "Finance & invoicing", icon: CreditCard },
+      { id: FINANCE_ON_API_SETTINGS_PANE_ID, label: "Finance & invoicing", icon: CreditCard },
       { id: "pricing", label: "Commercial defaults", icon: Tag },
       { id: "integrations", label: "Integrations", icon: LinkSimple },
       { id: "portals", label: "Portals & branding", icon: PaintBrush },
@@ -1333,6 +1336,11 @@ const visiblePaneDefinitions: Record<string, SettingsPaneDefinition> = {
     description: "How long a ticket has from opening to its due date, by priority, for every kind or for one kind.",
     groups: [],
   },
+  [FINANCE_ON_API_SETTINGS_PANE_ID]: {
+    title: "Finance & invoicing",
+    description: "What the company's invoices print, and when each project's invoices are due and the payment reference they carry.",
+    groups: [],
+  },
   [SORTING_GUIDE_SETTINGS_PANE_ID]: {
     title: "Sorting guide",
     description: "What residents find when they search where a thing goes, on the project's public page.",
@@ -1437,6 +1445,7 @@ function isFullPanelPane(paneId: string): boolean {
     paneId === MASTER_DATA_SETTINGS_PANE_ID ||
     paneId === SORTING_GUIDE_SETTINGS_PANE_ID ||
     paneId === TICKET_SLA_SETTINGS_PANE_ID ||
+    paneId === FINANCE_ON_API_SETTINGS_PANE_ID ||
     paneId.startsWith("commercial-")
   )
 }
@@ -1846,6 +1855,8 @@ function SettingsPane({
         <SortingGuideSettings />
       ) : paneId === TICKET_SLA_SETTINGS_PANE_ID ? (
         <TicketSlaSettings />
+      ) : paneId === FINANCE_ON_API_SETTINGS_PANE_ID ? (
+        <FinanceSettingsOnApi />
       ) : paneId.startsWith("commercial-") ? (
         <CommercialSectionPane paneId={paneId} />
       ) : (

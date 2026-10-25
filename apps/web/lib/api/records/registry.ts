@@ -32,11 +32,13 @@
 import type { Customer } from "@waste/contracts/customers"
 
 import { FIXTURE_COMPANY_ID, type BusinessRecord } from "@/lib/data/business-modules"
+import { paymentTermsLabel } from "@/lib/data/finance-settings"
 
 import { create, listAll, patch } from "../client"
 import {
   fixtureNamed,
   inheritedPresentation,
+  isLocalRefusal,
   patchOf,
   stampFacts,
   statusLabel,
@@ -48,6 +50,7 @@ import {
   type ResourceAdapter,
   type ServerModule,
 } from "./adapter"
+import { daysOrNoneOf, typedPaymentTerms } from "./organisation"
 
 const refusal = (path: string, message: string): LocalRefusal => ({ path, message })
 
@@ -82,6 +85,8 @@ function customerFields(record: BusinessRecord) {
     phone: said("phone"),
     billingAddress: said("billingAddress"),
     serviceMessagesAllowed: typedFlag(record, "serviceMessagesAllowed"),
+    // Its own payment terms (#291 C4); a blank is none of its own, the project's.
+    paymentTermsDays: daysOrNoneOf(typedPaymentTerms(record, "cleared")),
     // The record's own status label is what the workspace shows and a
     // controlled action moves; the wire's two are what it may say.
     status: CUSTOMER_STATUSES.find((candidate) => candidate === statusToken(record.status)),
@@ -110,6 +115,7 @@ export const customerAdapter: ResourceAdapter<Customer> = {
     fact("Email", customer.email)
     fact("Phone", customer.phone)
     fact("Billing address", customer.billingAddress)
+    fact("Payment terms", customer.paymentTermsDays === null ? null : paymentTermsLabel(customer.paymentTermsDays))
     facts.Consent = customer.serviceMessagesAllowed ? "Service messages" : "No service messages"
     return {
       id: fixture?.id ?? webIdOf(prefix, customer.id),
@@ -133,10 +139,13 @@ export const customerAdapter: ResourceAdapter<Customer> = {
         phone: customer.phone ?? "",
         billingAddress: customer.billingAddress ?? "",
         serviceMessagesAllowed: customer.serviceMessagesAllowed,
+        paymentTermsDays: customer.paymentTermsDays === null ? "" : String(customer.paymentTermsDays),
       },
     }
   },
   toCreateBody: (record) => {
+    const terms = typedPaymentTerms(record, "cleared")
+    if (isLocalRefusal(terms)) return terms
     const fields = customerFields(record)
     if (fields.kind === undefined) return refusal("partyType", "Say whether this is a person or an organisation")
     if (!fields.name) return refusal("displayName", "A customer needs a name")
@@ -147,10 +156,15 @@ export const customerAdapter: ResourceAdapter<Customer> = {
     if (fields.phone) body.phone = fields.phone
     if (fields.billingAddress) body.billingAddress = fields.billingAddress
     if (fields.serviceMessagesAllowed !== undefined) body.serviceMessagesAllowed = fields.serviceMessagesAllowed
+    if (typeof fields.paymentTermsDays === "number") body.paymentTermsDays = fields.paymentTermsDays
     if (fields.status !== undefined && fields.status !== "active") body.status = fields.status
     return body
   },
-  toPatchBody: (before, after) => patchOf(before, after, customerFields),
+  toPatchBody: (before, after) => {
+    const terms = typedPaymentTerms(after, "cleared")
+    if (isLocalRefusal(terms)) return terms
+    return patchOf(before, after, customerFields)
+  },
   create: (client, body) => create<Customer>(client, "/customers", body).then((created) => created.body),
   update: (client, serverId, body) => patch<Customer>(client, `/customers/${serverId}`, body),
 }

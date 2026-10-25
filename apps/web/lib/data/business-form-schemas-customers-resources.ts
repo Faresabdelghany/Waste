@@ -601,6 +601,15 @@ export const customerResourceBusinessFormSchemas: readonly BusinessFormSchema[] 
             label: "Billing or correspondence address",
             type: "textarea",
           },
+          {
+            // The customer's own terms (#291 C4); blank pays by its project's.
+            id: "paymentTermsDays",
+            label: "Payment terms (days)",
+            type: "number",
+            min: 0,
+            max: 365,
+            description: "Days an invoice to this customer is due after issue. Leave blank for the project's terms.",
+          },
         ],
       },
       {

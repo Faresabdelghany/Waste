@@ -158,6 +158,25 @@ describe("the company", () => {
     assert.ok(!isCompanyRecord(osterbro), "by kind it does not")
   })
 
+  test("the invoice identity (#291 C4) reads back as facts and typed values, and a patch sets it and clears it", () => {
+    const before = companyAdapter.toRecord(company, context(fixtures))
+    assert.equal(before.facts["VAT number"], undefined, "no identity, no fact")
+    assert.equal(before.submittedValues?.vatNumber, undefined)
+    const set = { ...before, submittedValues: { ...before.submittedValues, vatNumber: "DK12345678", bankIban: "DK5000400440116243", bankBic: "DABADKKK", fikCreditorNumber: "85123456" } }
+    const body = companyAdapter.toPatchBody(before, set, context(fixtures))
+    assert.deepEqual(body, { vatNumber: "DK12345678", bankIban: "DK5000400440116243", bankBic: "DABADKKK", fikCreditorNumber: "85123456" })
+    assert.ok(CompanyPatch.safeParse(body).success)
+    const read = companyAdapter.toRecord({ ...company, vatNumber: "DK12345678", bankIban: "DK5000400440116243", bankBic: "DABADKKK", fikCreditorNumber: "85123456" }, context(fixtures))
+    assert.equal(read.facts["VAT number"], "DK12345678")
+    assert.equal(read.facts.IBAN, "DK5000400440116243")
+    assert.equal(read.facts.BIC, "DABADKKK")
+    assert.equal(read.facts["FIK creditor"], "85123456")
+    assert.equal(read.submittedValues?.fikCreditorNumber, "85123456")
+    assert.equal(companyAdapter.toPatchBody(read, read, context(fixtures)), null, "an identity read back moves nothing")
+    const cleared = { ...read, submittedValues: { ...read.submittedValues, fikCreditorNumber: "" } }
+    assert.deepEqual(companyAdapter.toPatchBody(read, cleared, context(fixtures)), { fikCreditorNumber: null })
+  })
+
   test("the company is not created here", () => {
     assert.equal(companyAdapter.toCreateBody, undefined)
     assert.equal(companyAdapter.create, undefined)
@@ -256,6 +275,35 @@ describe("the projects", () => {
     const unpublished = { ...read, submittedValues: { ...read.submittedValues } }
     delete unpublished.submittedValues.publicSlug
     assert.deepEqual(projectAdapter.toPatchBody(read, unpublished, context(fixtures)), { publicSlug: null })
+  })
+
+  test("Settings › Finance & invoicing sets a project's payment terms and reference scheme (#291 C4): they read back as facts and typed values, and a patch says only what moved", () => {
+    const before = projectAdapter.toRecord(copenhagen, context(fixtures))
+    assert.equal(before.facts["Payment terms"], "30 days")
+    assert.equal(before.facts["Payment reference"], "None")
+    assert.equal(before.submittedValues?.paymentTermsDays, "30")
+    assert.equal(before.submittedValues?.paymentReferenceScheme, "none")
+    assert.equal(projectAdapter.toPatchBody(before, before, context(fixtures)), null, "terms read back move nothing")
+    const after = { ...before, submittedValues: { ...before.submittedValues, paymentTermsDays: "14", paymentReferenceScheme: "fik-71" } }
+    const body = projectAdapter.toPatchBody(before, after, context(fixtures))
+    assert.deepEqual(body, { paymentTermsDays: 14, paymentReferenceScheme: "fik-71" })
+    assert.ok(ProjectPatch.safeParse(body).success)
+    const read = projectAdapter.toRecord({ ...copenhagen, paymentTermsDays: 14, paymentReferenceScheme: "fik-71" }, context(fixtures))
+    assert.equal(read.facts["Payment terms"], "14 days")
+    assert.equal(read.facts["Payment reference"], "FIK 71")
+  })
+
+  test("terms the API would refuse are refused here, naming the field, on a patch and a create", () => {
+    const before = projectAdapter.toRecord(copenhagen, context(fixtures))
+    const refused = { path: "paymentTermsDays", message: "Payment terms are a whole number of days from 0 to 365" }
+    for (const terms of ["", "4.5", "366", "thirty"]) {
+      assert.deepEqual(projectAdapter.toPatchBody(before, { ...before, submittedValues: { ...before.submittedValues, paymentTermsDays: terms } }, context(fixtures)), refused, terms)
+    }
+    const made = { ...before, id: "organization-project-1700000000000", submittedValues: { name: "Odense", kind: "Contract", language: "da", currency: "DKK", timezone: "Europe/Copenhagen", paymentTermsDays: "400" } }
+    assert.deepEqual(projectAdapter.toCreateBody?.(made, context(fixtures)), refused)
+    const terms = projectAdapter.toCreateBody?.({ ...made, submittedValues: { ...made.submittedValues, paymentTermsDays: "8", paymentReferenceScheme: "fik-75" } }, context(fixtures))
+    assert.deepEqual(terms, { name: "Odense", kind: "Contract", language: "da", currency: "DKK", timezone: "Europe/Copenhagen", status: "active", paymentTermsDays: 8, paymentReferenceScheme: "fik-75" })
+    assert.ok(ProjectCreate.safeParse(terms).success)
   })
 
   test("a controlled action that moved the status is a status patch; the adapter lists exactly the statuses the wire has, so the store refuses the rest before a patch is built", () => {
