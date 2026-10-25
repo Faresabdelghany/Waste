@@ -30,10 +30,11 @@ import { containerType, product, wasteFraction } from "@waste/db/schema/catalogu
 import { container, containerServicePlacement } from "@waste/db/schema/containers"
 import { customer, property } from "@waste/db/schema/customers"
 import { outboxEvent, pickup, route } from "@waste/db/schema/execution"
-import { billableEvent, billingRun, billingRunExclusion, invoice, invoiceLine, priceList, priceListRow, ticketKindProduct } from "@waste/db/schema/finance"
+import { billableEvent, billingRun, billingRunExclusion, invoice, invoiceLine, priceList, priceListRow, ticketKindProduct, workOrderProduct } from "@waste/db/schema/finance"
 import { driver, vehicle } from "@waste/db/schema/fleet"
 import { vehicleType } from "@waste/db/schema/fleet-types"
 import { company, project } from "@waste/db/schema/organisation"
+import { warehouse } from "@waste/db/schema/places"
 import { planningArea } from "@waste/db/schema/planning-areas"
 import { ticket, ticketEvent } from "@waste/db/schema/resolution"
 import { collectionGroup, routeScheme } from "@waste/db/schema/route-schemes"
@@ -71,6 +72,8 @@ export type FinanceTenant = {
   scheme: { id: string; groupId: string }
   /** The truck and the driver every completed route here went out with: what `route_actual_shape` asks of a started route. */
   fleet: { vehicleTypeId: string; vehicleId: string; driverId: string }
+  /** Where a removal returns the container it takes (O3b of #290). */
+  warehouse: { id: string }
 }
 
 const grants = (companyId: string, roleId: string) => [{ companyId, roleId, moduleKey: "commercial.events", action: "view" }]
@@ -93,6 +96,7 @@ export async function seedFinanceTenant(pool: Database): Promise<FinanceTenant> 
     properties: { parkvej: { id: testId() }, havnegade: { id: testId() } },
     scheme: { id: testId(), groupId: testId() },
     fleet: { vehicleTypeId: testId(), vehicleId: testId(), driverId: testId() },
+    warehouse: { id: testId() },
   }
   const copenhagen = tenant.projects.copenhagen.id
   const roleId = testId()
@@ -151,6 +155,7 @@ export async function seedFinanceTenant(pool: Database): Promise<FinanceTenant> 
     await tx.insert(collectionGroup).values({ id: tenant.scheme.groupId, companyId, projectId: copenhagen, routeSchemeId: tenant.scheme.id, name: "Group 1", position: 1, days: ["monday"], stopSource: "rule" })
     await tx.insert(vehicleType).values({ id: tenant.fleet.vehicleTypeId, companyId, key: "rear-loader", name: "Rear loader" })
     await tx.insert(vehicle).values({ id: tenant.fleet.vehicleId, companyId, projectId: copenhagen, registration: "AB 12 345", callsign: "WH-24", kind: "powered-vehicle", vehicleTypeId: tenant.fleet.vehicleTypeId, ownership: "company", status: "active", requiredLicenceClass: "c" })
+    await tx.insert(warehouse).values({ id: tenant.warehouse.id, companyId, projectId: copenhagen, code: "WH-NORD", name: "Nordhavn yard", address: "Kattegatvej 20, 2150 Nordhavn", status: "active" })
     await tx.insert(driver).values({ id: tenant.fleet.driverId, companyId, projectId: copenhagen, name: "Mads Jensen", employment: "employee", licenceClass: "ce", licenceExpiry: "2030-12-31", status: "active" })
   })
   return tenant
@@ -193,7 +198,7 @@ export async function placeBin(pool: Database, tenant: FinanceTenant, label: str
 
 /** A stop to seed: a container's, or — with `containerId` null — an address-only one, which only the office adds (#111). */
 /** A stop as a test seeds it; an emptying unless it says a work order, a delivery naming the subscription it books (O3b of #290). */
-export type StopSeed = { containerId: string | null; propertyId: string; status?: PickupStatus; wasteFractionId?: string; origin?: PickupOrigin; service?: PickupService; subscriptionId?: string }
+export type StopSeed = { containerId: string | null; propertyId: string; status?: PickupStatus; wasteFractionId?: string; origin?: PickupOrigin; service?: PickupService; subscriptionId?: string; warehouseId?: string; replacementContainerId?: string }
 
 export type SeededRoute = { id: string; number: number; serviceDate: string; pickupIds: string[] }
 
@@ -258,6 +263,8 @@ export async function seedCompletedRoute(pool: Database, tenant: FinanceTenant, 
           origin: stop.origin ?? "generation",
           service: stop.service ?? "empty",
           subscriptionId: stop.subscriptionId ?? null,
+          warehouseId: stop.warehouseId ?? null,
+          replacementContainerId: stop.replacementContainerId ?? null,
           propertyId: stop.propertyId,
           sharedCollectionPointId: null,
           wasteFractionId: stop.wasteFractionId ?? tenant.fractions.residual.id,
@@ -292,6 +299,8 @@ export type TicketSeed = {
   kind?: TicketKind
   /** The product its completion named (#291 C3), with a billable resolution. */
   chargeProductId?: string | null
+  /** The stop the office booked to answer it (O3c of #290). */
+  booked?: { routeId: string; pickupId: string } | null
 }
 
 /** A ticket as Resolution would have written it, completed with a resolution or open, on Olivia's word. */
@@ -322,6 +331,8 @@ export async function seedTicket(pool: Database, tenant: FinanceTenant, seed: Ti
       pickupId: seed.pickup?.pickupId ?? null,
       resolution: seed.resolution,
       chargeProductId: seed.chargeProductId ?? null,
+      bookedRouteId: seed.booked?.routeId ?? null,
+      bookedPickupId: seed.booked?.pickupId ?? null,
       closedAt,
     })
   })
@@ -339,12 +350,14 @@ export async function dropFinanceTenant(pool: Database, owner: Database, company
     await tx.delete(billableEvent).where(eq(billableEvent.companyId, companyId))
     await tx.delete(priceListRow).where(eq(priceListRow.companyId, companyId))
     await tx.delete(ticketKindProduct).where(eq(ticketKindProduct.companyId, companyId))
+    await tx.delete(workOrderProduct).where(eq(workOrderProduct.companyId, companyId))
     await tx.delete(ticket).where(eq(ticket.companyId, companyId))
     await tx.delete(outboxEvent).where(eq(outboxEvent.companyId, companyId))
     await tx.delete(pickup).where(eq(pickup.companyId, companyId))
     await tx.delete(route).where(eq(route.companyId, companyId))
     await tx.delete(collectionGroup).where(eq(collectionGroup.companyId, companyId))
     await tx.delete(routeScheme).where(eq(routeScheme.companyId, companyId))
+    await tx.delete(warehouse).where(eq(warehouse.companyId, companyId))
     await tx.delete(vehicle).where(eq(vehicle.companyId, companyId))
     await tx.delete(driver).where(eq(driver.companyId, companyId))
     await tx.delete(vehicleType).where(eq(vehicleType.companyId, companyId))

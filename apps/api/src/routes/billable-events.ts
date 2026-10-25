@@ -31,7 +31,8 @@
 // status gate — a product the body names afresh is offered (#79). `reprice`
 // is blocked-only: on a `ready`, `invoiced`, `cancelled` or `reversed` event
 // it is 409 in the status's words; a ticket's event takes the `productId` the
-// office picked and any other kind refuses one (400); the resolver runs over
+// office picked, and a work order's job one sold by the job (M14 of #293),
+// and any other kind refuses one (400); the resolver runs over
 // the event's agreement, the product, and the conditions a pickup event
 // carries (its route's scheme's planning area, its container's type, its
 // fraction on the day, read off the pickup), and the row is written priced or
@@ -51,8 +52,10 @@ import { BillableEvent, BillableEventCancel, BillableEventCreate, BillableEventL
 import { Page } from "@waste/contracts/pagination"
 import { fitsInt4, INT4_MAX } from "@waste/contracts/resource"
 import type { Tx } from "@waste/db/client"
+import { hireConditionsOf, priceHire, type HireToPrice } from "@waste/db/commands/hire-charges"
 import { priceRecurringCharge, type ChargeToPrice } from "@waste/db/commands/recurring-charges"
 import { agreement } from "@waste/db/schema/agreements"
+import { product } from "@waste/db/schema/catalogue"
 import { container } from "@waste/db/schema/containers"
 import { pickup, route } from "@waste/db/schema/execution"
 import { billableEvent } from "@waste/db/schema/finance"
@@ -61,6 +64,7 @@ import type { BillableEventLinks } from "@waste/domain/finance/from-event"
 import { vatOf } from "@waste/domain/finance/money"
 import type { PricedAmounts } from "@waste/domain/finance/pricing"
 import type { BillableEventStatus, BlockReason } from "@waste/domain/finance/vocabulary"
+import type { ProductStatus } from "@waste/domain/registry/vocabulary"
 import { and, asc, eq, exists, gt, gte, lte, sql } from "drizzle-orm"
 import { Hono, type MiddlewareHandler } from "hono"
 import { describeRoute } from "hono-openapi"
@@ -73,7 +77,7 @@ import { afterCursor, fetchLimit, pageOf } from "../pagination"
 import { describeProblem, invalidRequest, problem, validate } from "../problem"
 import { agreementFacts, billableEventShapeIssue, priceDraft, productFacts, recordBillableEvent, type ComposedEvent } from "./billable-writes"
 import { eventColumns, eventOf, eventScope, eventsFrom, findEvent, noSuchEvent, statusIs, statusOf, UNNAMED, type EventReading } from "./billing-shapes"
-import { requireAgreement, requireCustomer, requireProduct, type Scope } from "./references"
+import { NOT_A_PRODUCT, requireAgreement, requireCustomer, requireProduct, type Scope } from "./references"
 import type { ClockOptions } from "./scheme-groups"
 import { created, describeCreated, describeJson, IdParam, lockRow } from "./shared"
 import { refuseUnofferedProduct, unofferedProduct } from "./statuses"
@@ -104,7 +108,10 @@ export const notCancelled = (id: string, status: "invoiced" | "reversed"): strin
 export const REVERSAL_NOT_CANCELLED = "A reversal is not cancelled; it is the correction"
 
 /** What a reprice naming a product on anything but a ticket's event is told, at `productId`. */
-export const ONLY_A_TICKETS_EVENT_TAKES_A_PRODUCT = "Only a ticket's event takes a product here"
+export const ONLY_A_TICKETS_EVENT_TAKES_A_PRODUCT = "Only a ticket's event or a work order's job takes a product here"
+
+/** A work order's job is charged at a product sold by the job (M14 of #293). */
+export const A_JOB_IS_SOLD_BY_THE_JOB = "A work order's job is charged at a product sold by the job"
 
 /** What a hand-priced manual event under a draft agreement is told: the row's state, after every 400. */
 export const DRAFT_AGREEMENT_BY_HAND = "The agreement is a draft; an event priced by hand needs a signed agreement"
@@ -115,10 +122,29 @@ export const NO_VAT_RATE_BY_HAND = "The product has no VAT rate; an event priced
 /** What an event priced past what its amount columns hold is told: a quantity times a price is an `integer` in the database, and more is a refusal rather than a failed write (22003). */
 export const AMOUNT_TOO_LARGE = `The amount comes to more than ${INT4_MAX} minor units, the most an event holds`
 
+/** A product a work order's job is charged at, as a reprice's body names it (M14 of #293): a product of the project (400) sold by the job (400). Answers its status, which the caller gates. */
+async function requireJobProduct(tx: Tx, scope: Scope, id: string): Promise<ProductStatus> {
+  const [found] = await tx
+    .select({ status: product.status, unit: product.unit })
+    .from(product)
+    .where(and(eq(product.companyId, scope.companyId), eq(product.projectId, scope.projectId), eq(product.id, id)))
+    .limit(1)
+  if (found === undefined) throw invalidRequest("body", [{ path: "productId", message: NOT_A_PRODUCT }])
+  if (found.unit !== "job") throw invalidRequest("body", [{ path: "productId", message: A_JOB_IS_SOLD_BY_THE_JOB }])
+  return found.status as ProductStatus
+}
+
 /** A recurring charge as `reprice` prices it again: its stored period and charged days, never its agreement's cadence now (#291 C2). */
 function chargeOf(row: EventReading, agreementId: string, productId: string): ChargeToPrice {
   if (row.chargePeriodFrom === null || row.chargePeriodTo === null || row.chargedDays === null) throw new Error(`billable event ${row.id} is a recurring charge with no charge period (billable_event_charge_shape)`)
   return { agreementId, productId, quantity: row.quantity, serviceDate: row.serviceDate, period: { from: row.chargePeriodFrom, to: row.chargePeriodTo }, chargedDays: row.chargedDays }
+}
+
+/** A hire as `reprice` prices it again (M14 of #293): its stored days, under its container's type and its placement's fraction, as the run priced it. */
+async function hireOf(tx: Tx, scope: Scope, row: EventReading, agreementId: string, productId: string, placementId: string): Promise<HireToPrice> {
+  const conditions = await hireConditionsOf(tx, scope, placementId)
+  if (conditions === undefined) throw new Error(`billable event ${row.id} is a hire of placement ${placementId}, which is not in project ${scope.projectId}`)
+  return { agreementId, productId, serviceDate: row.serviceDate, chargedDays: row.quantity, ...conditions }
 }
 
 /** A manual event links to nothing. */
@@ -141,8 +167,11 @@ const priceColumns = (price: PricedAmounts | null) => ({
 /**
  * What a pickup event's occurrence was, read off the pickup: its route's
  * scheme's planning area (the price row's zone), its container's type, its
- * fraction on the day. One statement; a pickup the row names and the table
- * does not have is a broken key, not a client's doing, and is thrown.
+ * fraction on the day. The scheme and the container are left joins, as the
+ * worker reads a stop: a work order's job (M14 of #293) may be on the
+ * office's ad-hoc route, which has no scheme. One statement; a pickup the row
+ * names and the table does not have is a broken key, not a client's doing,
+ * and is thrown.
  */
 async function conditionsOf(tx: Tx, companyId: string, row: EventReading): Promise<Conditions> {
   if (row.pickupId === null || row.routeId === null) return NO_CONDITIONS
@@ -150,8 +179,8 @@ async function conditionsOf(tx: Tx, companyId: string, row: EventReading): Promi
     .select({ planningAreaId: routeScheme.planningAreaId, containerTypeId: container.containerTypeId, wasteFractionId: pickup.wasteFractionId })
     .from(pickup)
     .innerJoin(route, and(eq(route.companyId, pickup.companyId), eq(route.id, pickup.routeId)))
-    .innerJoin(routeScheme, and(eq(routeScheme.companyId, route.companyId), eq(routeScheme.id, route.routeSchemeId)))
-    .innerJoin(container, and(eq(container.companyId, pickup.companyId), eq(container.id, pickup.containerId)))
+    .leftJoin(routeScheme, and(eq(routeScheme.companyId, route.companyId), eq(routeScheme.id, route.routeSchemeId)))
+    .leftJoin(container, and(eq(container.companyId, pickup.companyId), eq(container.id, pickup.containerId)))
     .where(and(eq(pickup.companyId, companyId), eq(pickup.id, row.pickupId), eq(pickup.routeId, row.routeId)))
     .limit(1)
   if (found === undefined) throw new Error(`billable event ${row.id} names pickup ${row.pickupId} of route ${row.routeId}, which is not there`)
@@ -328,7 +357,7 @@ export function billableEventRoutes(guard: MiddlewareHandler<AuthEnv>, { now = (
         operationId: "repriceBillableEvent",
         summary: "Run the resolver again over a blocked event",
         description:
-          "The `reprice` command, on a `blocked` event only: the resolver runs again — the list the agreement is priced under and in force on the service date, the row that wins, the product's VAT rate, with the conditions a pickup's event carries (its route's scheme's planning area, its container's type, its fraction on the day) — and the row is written priced, or with the same block or the next one (`no-price-list` mended to `no-price-row`, then to `no-vat-rate`), answering the reading after. A ticket's event, blocked `no-product`, takes the `productId` the office picked — a product of the project (400, `Not a product of this project`), never one sold by the month (400, a recurring charge is not a ticket's work, #291 C3), that is offered (409, the #79 gate, since the event is a new reference to it) — and any other kind refuses one (400 at `productId`, `Only a ticket's event takes a product here`). An event blocked `no-subscription` has no agreement to price under and answers as it stands. A recurring charge (`subscription`, minted by a billing run) is priced again as the run priced it: one month of its product on its first day charged, prorated to the days of its charge period it charged. A `ready` event is refused (409, `Billable event <id> is ready; a priced event is not repriced — cancel it and enter it again`), an `invoiced` one (409, `… is invoiced; correct it with a credit note`), a `cancelled` one (409, `… is cancelled`) and a `reversed` one (409, `… is reversed`). Under the event's row lock; `updatedAt` moves, since a reprice is the row's history. Nothing is published.",
+          "The `reprice` command, on a `blocked` event only: the resolver runs again — the list the agreement is priced under and in force on the service date, the row that wins, the product's VAT rate, with the conditions a pickup's event carries (its route's scheme's planning area, its container's type, its fraction on the day) — and the row is written priced, or with the same block or the next one (`no-price-list` mended to `no-price-row`, then to `no-vat-rate`), answering the reading after. A ticket's event, blocked `no-product`, takes the `productId` the office picked — a product of the project (400, `Not a product of this project`), never one sold by the month (400, a recurring charge is not a ticket's work, #291 C3), that is offered (409, the #79 gate, since the event is a new reference to it) — and a work order's job blocked `no-product` (M14 of #293) a product of the project sold by the job (400, `A work order's job is charged at a product sold by the job`), offered (409); any other kind refuses one (400 at `productId`, `Only a ticket's event or a work order's job takes a product here`). A hire (M14 of #293) is priced again as the run priced it: its stored days at the day's price, under its container's type and its placement's fraction. An event blocked `no-subscription` has no agreement to price under and answers as it stands. A recurring charge (`subscription`, minted by a billing run) is priced again as the run priced it: one month of its product on its first day charged, prorated to the days of its charge period it charged. A `ready` event is refused (409, `Billable event <id> is ready; a priced event is not repriced — cancel it and enter it again`), an `invoiced` one (409, `… is invoiced; correct it with a credit note`), a `cancelled` one (409, `… is cancelled`) and a `reversed` one (409, `… is reversed`). Under the event's row lock; `updatedAt` moves, since a reprice is the row's history. Nothing is published.",
         security: BEARER_SECURITY,
         responses: {
           200: describeJson("The event as it now stands, `ready` or `blocked`.", BillableEvent),
@@ -350,10 +379,10 @@ export function billableEventRoutes(guard: MiddlewareHandler<AuthEnv>, { now = (
         // The row's own state first, as every command judges it.
         const status = statusOf(current)
         if (status !== "blocked") throw problem(409, { detail: notRepriced(id, status) })
-        if (body.productId !== undefined && current.kind !== "ticket") throw invalidRequest("body", [{ path: "productId", message: ONLY_A_TICKETS_EVENT_TAKES_A_PRODUCT }])
+        if (body.productId !== undefined && current.kind !== "ticket" && current.kind !== "job") throw invalidRequest("body", [{ path: "productId", message: ONLY_A_TICKETS_EVENT_TAKES_A_PRODUCT }])
         const scope: Scope = { companyId: principal.companyId, projectId: current.projectId }
         // A product the body names is a new reference: held to the project (400), then to being offered (409). The stored one is no new reference.
-        if (body.productId !== undefined) refuseUnofferedProduct(await requireTicketWorkProduct(tx, scope, body.productId))
+        if (body.productId !== undefined) refuseUnofferedProduct(current.kind === "job" ? await requireJobProduct(tx, scope, body.productId) : await requireTicketWorkProduct(tx, scope, body.productId))
         const productId = body.productId ?? current.productId
         // Nothing to price under, or nothing to price: the block stands as it is.
         if (current.agreementId === null) return c.json(eventOf(current))
@@ -362,7 +391,9 @@ export function billableEventRoutes(guard: MiddlewareHandler<AuthEnv>, { now = (
             ? { price: null, blockReason: "no-product" as const }
             : current.kind === "subscription"
               ? await priceRecurringCharge(tx, scope, chargeOf(current, current.agreementId, productId))
-              : await priceDraft(tx, scope, { agreementId: current.agreementId, productId, quantity: current.quantity, serviceDate: current.serviceDate, ...(await conditionsOf(tx, principal.companyId, current)) })
+              : current.kind === "hire" && current.placementId !== null
+                ? await priceHire(tx, scope, await hireOf(tx, scope, current, current.agreementId, productId, current.placementId))
+                : await priceDraft(tx, scope, { agreementId: current.agreementId, productId, quantity: current.quantity, serviceDate: current.serviceDate, ...(await conditionsOf(tx, principal.companyId, current)) })
         // The quantity is the stored event's, so an amount past the columns is the row's 409.
         if (outcome.blockReason === "amount-too-large") throw problem(409, { detail: AMOUNT_TOO_LARGE })
         const after: ComposedEvent = { ...current, productId, blockReason: outcome.blockReason, ...priceColumns(outcome.price), kind: current.kind as ComposedEvent["kind"] }

@@ -11,7 +11,7 @@ import { describe, test } from "node:test"
 import { OUTBOX_KINDS, PICKUP_OUTCOMES, type OutboxKind } from "../../execution/vocabulary"
 import { PRODUCT_UNITS } from "../../registry/vocabulary"
 import { TICKET_RESOLUTIONS } from "../../resolution/vocabulary"
-import { BILLABLE_RESOLUTIONS, billableFor, chargesTicketWork, isBillableResolution, PICKUP_EVENT_KINDS, reversalOf, type EventFacts, type LiveEventFacts, type PickupEventFacts, type PlacementFacts, type TicketChargeFacts, type TicketCompletedFacts } from "../from-event"
+import { BILLABLE_RESOLUTIONS, billableFor, chargesJob, chargesTicketWork, isBillableResolution, PICKUP_EVENT_KINDS, reversalOf, type EventFacts, type JobChargeFacts, type LiveEventFacts, type PickupEventFacts, type PlacementFacts, type TicketChargeFacts, type TicketCompletedFacts } from "../from-event"
 import type { PriceRow } from "../pricing"
 
 const ROUTE = "route"
@@ -51,6 +51,9 @@ const pickupEvent = (kind: "pickup-completed" | "pickup-corrected", values: Part
   outcome: "completed",
   placement: placement(),
   liveEvent: null,
+  service: "empty",
+  bookedForTicket: false,
+  job: null,
   ...values,
 })
 
@@ -115,10 +118,10 @@ describe("billableFor a completed pickup", () => {
     assert.equal(blocked({ placement: placement({ product: { id: PRODUCT, unit: "pickup", vatPercent: null } }) })?.blockReason, "no-vat-rate")
   })
 
-  test("under a month product is nothing, whatever else the facts say: the collection is inside a recurring charge", () => {
+  test("under a month or a day product is nothing, whatever else the facts say: the collection is inside a recurring charge or a hire (M14 of #293)", () => {
     for (const unit of PRODUCT_UNITS) {
       const action = billableFor(pickupEvent("pickup-completed", { placement: placement({ product: { id: PRODUCT, unit, vatPercent: 25 } }) }))
-      if (unit === "month") assert.equal(action, undefined, unit)
+      if (unit === "month" || unit === "day") assert.equal(action, undefined, unit)
       else assert.equal(action?.action, "record", unit)
     }
     // Even a month product under a draft agreement or without a list is nothing: the unit is judged first.
@@ -139,6 +142,56 @@ describe("billableFor a completed pickup", () => {
     assert.equal(billableFor(pickupEvent("pickup-completed", { origin: "office" })), undefined, "a container placed under a per-pickup product")
     assert.equal(billableFor(pickupEvent("pickup-completed", { origin: "office", containerTypeId: null, placement: null })), undefined, "an address-only stop, no placement and no block")
     assert.equal(billableFor(pickupEvent("pickup-corrected", { origin: "office", outcome: "completed" })), undefined, "a correction to completed records nothing either")
+  })
+})
+
+describe("billableFor a completed work order (M14 of #293)", () => {
+  const JOB = "delivery-job"
+  /** The project's job product for the service: an active per-job product at 25 %, charged to the container's agreement on the default list's row. */
+  const job = (values: Partial<JobChargeFacts> = {}): JobChargeFacts => ({
+    product: { id: JOB, status: "active", unit: "job", vatPercent: 25 },
+    agreement: { id: AGREEMENT, status: "active", customerKind: "organisation", customerId: CUSTOMER },
+    subscriptionId: SUBSCRIPTION,
+    priceList: { id: "list", currency: "DKK", rows: [row("delivery", { unitPriceMinor: 45_000 })] },
+    ...values,
+  })
+  const office = (values: Partial<PickupEventFacts> = {}) => pickupEvent("pickup-completed", { origin: "office", service: "deliver", job: job(), ...values })
+
+  test("is a job event of quantity one on the container's agreement, priced as a pickup is on the service date", () => {
+    const action = billableFor(office())
+    assert.equal(action?.action, "record")
+    const draft = action?.action === "record" ? action.draft : undefined
+    assert.deepEqual(
+      [draft?.kind, draft?.quantity, draft?.agreementId, draft?.subscriptionId, draft?.productId, draft?.price?.unitPriceMinor, draft?.price?.vatMinor, draft?.blockReason, draft?.links.pickupId],
+      ["job", 1, AGREEMENT, SUBSCRIPTION, JOB, 45_000, 11_250, null, PICKUP],
+    )
+    for (const service of ["remove", "swap", "repair", "wash"] as const) assert.equal(billableFor(office({ service }))?.action, "record", service)
+  })
+
+  test("is nothing for a stop booked to answer a ticket: the ticket's charge is the one, so exactly one live event comes of the work", () => {
+    assert.equal(billableFor(office({ bookedForTicket: true })), undefined)
+    assert.equal(billableFor(office({ bookedForTicket: true, kind: "pickup-corrected" })), undefined, "nor its correction to completed")
+  })
+
+  test("is nothing for an office emptying or a service the project prices nothing for, as before", () => {
+    assert.equal(billableFor(office({ service: "empty" })), undefined)
+    assert.equal(billableFor(office({ job: null })), undefined)
+  })
+
+  test("is blocked for the office where the product will not do or no agreement is reachable, never a silent charge or a silent nothing", () => {
+    const blocked = (values: Partial<JobChargeFacts>) => {
+      const action = billableFor(office({ job: job(values) }))
+      return action?.action === "record" ? [action.draft.blockReason, action.draft.productId, action.draft.price] : undefined
+    }
+    assert.deepEqual(blocked({ product: { id: JOB, status: "inactive", unit: "job", vatPercent: 25 } }), ["no-product", null, null], "a retired product")
+    assert.deepEqual(blocked({ product: { id: JOB, status: "active", unit: "month", vatPercent: 25 } }), ["no-product", null, null], "one not sold by the job")
+    assert.deepEqual(blocked({ agreement: null, subscriptionId: null }), ["no-subscription", JOB, null], "no agreement reachable")
+    assert.equal(chargesJob(job()), true)
+  })
+
+  test("is charged once: a completion of a work order that already has a live event is nothing, and its correction away from completed cancels it", () => {
+    assert.equal(billableFor(office({ liveEvent: live() })), undefined)
+    assert.deepEqual(billableFor(office({ kind: "pickup-corrected", outcome: "failed", liveEvent: live() })), { action: "cancel", eventId: LIVE, reason: "pickup-corrected" })
   })
 })
 
@@ -243,6 +296,7 @@ describe("billableFor a completed ticket", () => {
     assert.deepEqual(productOf(charge({ source: "completion", product: retired })), [PRODUCT, null], "the person named it at completion, where the gate stood")
     for (const source of ["completion", "kind"] as const) {
       assert.deepEqual(productOf(charge({ source, product: { id: PRODUCT, status: "active", unit: "month", vatPercent: 25 } })), [null, "no-product"], `a month product is a recurring charge, never ticket work (${source})`)
+      assert.deepEqual(productOf(charge({ source, product: { id: PRODUCT, status: "active", unit: "day", vatPercent: 25 } })), [null, "no-product"], `a day product is a hire, never ticket work (${source})`)
     }
     assert.equal(chargesTicketWork(charge({ product: { id: PRODUCT, status: "active", unit: "pickup", vatPercent: 25 } })), true, "a per-pickup product charges a re-collection")
   })

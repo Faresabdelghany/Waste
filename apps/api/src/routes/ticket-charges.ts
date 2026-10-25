@@ -35,11 +35,11 @@ import { refuseUnofferedProduct } from "./statuses"
 const MODULE = "commercial.products"
 
 /** What a ticket's charge naming a product sold by the month is told. */
-export const MONTH_PRODUCT_IS_NOT_TICKET_WORK = "A product sold by the month is a recurring charge; a ticket's work is charged per job or per pickup"
+export const MONTH_PRODUCT_IS_NOT_TICKET_WORK = "A product sold by the month or the day is charged by its period; a ticket's work is charged per job or per pickup"
 
 /**
  * A product a ticket's work is charged at, as a body names it: a product of
- * the project (400) not sold by the month (400). Answers its status, which
+ * the project (400) not sold by the month or the day (400), which a billing run charges by its period (M14 of #293). Answers its status, which
  * the caller gates with `refuseUnofferedProduct` once every 400 is asked.
  */
 export async function requireTicketWorkProduct(tx: Tx, scope: Scope, id: string, path = "productId"): Promise<ProductStatus> {
@@ -49,7 +49,7 @@ export async function requireTicketWorkProduct(tx: Tx, scope: Scope, id: string,
     .where(and(eq(product.companyId, scope.companyId), eq(product.projectId, scope.projectId), eq(product.id, id)))
     .limit(1)
   if (found === undefined) throw invalidRequest("body", [{ path, message: NOT_A_PRODUCT }])
-  if (found.unit === "month") throw invalidRequest("body", [{ path, message: MONTH_PRODUCT_IS_NOT_TICKET_WORK }])
+  if (found.unit === "month" || found.unit === "day") throw invalidRequest("body", [{ path, message: MONTH_PRODUCT_IS_NOT_TICKET_WORK }])
   return found.status as ProductStatus
 }
 

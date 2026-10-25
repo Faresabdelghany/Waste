@@ -78,12 +78,12 @@ export const PRODUCT_KIND_LABELS: Readonly<Record<ProductKind, string>> = {
 }
 
 /** A Product's unit, as a price is quoted per it: `/pickup`. */
-export const UNIT_SUFFIX: Readonly<Record<ProductUnit, string>> = { pickup: "/pickup", month: "/mo", job: "/job" }
+export const UNIT_SUFFIX: Readonly<Record<ProductUnit, string>> = { pickup: "/pickup", month: "/mo", job: "/job", day: "/day" }
 
 /** A price row's customer-kind condition, as the prototype's Customer type read: a person is a household, an organisation is commercial. */
 export const CUSTOMER_KIND_LABELS: Readonly<Record<CustomerKind, string>> = { person: "Person", organisation: "Organisation" }
 
-export const EVENT_KIND_LABELS: Readonly<Record<BillableEventKind, string>> = { pickup: "Pickup", ticket: "Ticket", manual: "Manual", reversal: "Reversal", subscription: "Recurring charge" }
+export const EVENT_KIND_LABELS: Readonly<Record<BillableEventKind, string>> = { pickup: "Pickup", ticket: "Ticket", manual: "Manual", reversal: "Reversal", subscription: "Recurring charge", job: "Work order", hire: "Hire" }
 
 /** Why an event is blocked, each a sentence saying what to do. */
 export const BLOCK_REASON_LABELS: Readonly<Record<BlockReason, string>> = {

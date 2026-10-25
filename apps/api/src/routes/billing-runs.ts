@@ -156,7 +156,7 @@ export function billingRunRoutes(guard: MiddlewareHandler<AuthEnv>, { now = () =
         const body: BillingRunCreate = c.req.valid("json")
         const principal = c.get("principal")
         requireProject(principal, body.projectId)
-        return c.json(await previewBilling(c.get("tx"), { companyId: principal.companyId, projectId: body.projectId }, body))
+        return c.json(await previewBilling(c.get("tx"), { companyId: principal.companyId, projectId: body.projectId }, body, now))
       },
     )
     .get(

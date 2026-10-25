@@ -46,6 +46,15 @@
 // container put on a route by hand, an address-only stop — is no pickup
 // charge either: its completion and its correction to `completed` are
 // nothing here, the extra collection's billable event being a follow-up's.
+// A work order the office booked (M14 of #293: a delivery, a removal, a swap,
+// a repair, a wash) is a `job` event where its project names a product for
+// the service (`work_order_product`), charged to the container's agreement —
+// a delivery's the stop's subscription's — and priced as a pickup is; nothing
+// where the project names none, as before; never where the stop was booked to
+// answer a ticket (O3c of #290), whose completion the ticket's charge (#291 C3)
+// already is; and blocked where the product is retired or not sold by the job
+// (`no-product`) or no agreement is reachable (`no-subscription`), for the
+// office to act on rather than a silent charge or a silent nothing.
 //
 // Two of the facts are the table's word and not the payload's, because
 // pg-boss delivers at least once and in no promised order (part B): the
@@ -60,10 +69,12 @@
 // What the draft does not carry is the writer's: `createdBy` null,
 // `sourceEventId` the event's id (`billable_event_origin_shape` ties the two),
 // the stamps, and the row's own id.
-import type { OutboxKind, PickupOrigin, PickupOutcome } from "../execution/vocabulary"
+import { isWorkOrderService, type OutboxKind, type PickupOrigin, type PickupOutcome, type PickupService } from "../execution/vocabulary"
 import type { AgreementStatus, CustomerKind, ProductStatus, ProductUnit } from "../registry/vocabulary"
 import { isBillableResolution, type TicketResolution } from "../resolution/vocabulary"
+import { HIRE_UNIT } from "./hire"
 import { priceOccurrence, type PriceLabels, type PricedAmounts, type PricedList, type PriceRow } from "./pricing"
+import { RECURRING_UNIT } from "./recurring"
 import type { BillableEventKind, BlockReason, CancelReason } from "./vocabulary"
 
 /** The events about a pickup that Finance reads. */
@@ -120,6 +131,21 @@ export type PickupEventFacts<Row extends PriceRow = PriceRow> = {
   placement: PlacementFacts<Row> | null
   /** The pickup's live event, or null when it has none. */
   liveEvent: LiveEventFacts | null
+  /** The stop's service: an emptying, or a work order the office booked (O3 of #290). */
+  service: PickupService
+  /** Whether the stop was booked to answer a ticket (O3c of #290): the ticket's charge is the one, never a job's. */
+  bookedForTicket: boolean
+  /** The `job` product the project names for a work order's service, with the agreement it charges and its pricing (M14 of #293); null where the project names none. */
+  job: JobChargeFacts<Row> | null
+}
+
+/** A work order's charge as the worker read it: the project's product for the service, and the agreement it charges — the container's, a delivery's the stop's subscription's — with its pricing, null where none is reachable. */
+export type JobChargeFacts<Row extends PriceRow = PriceRow> = {
+  product: { id: string; status: ProductStatus; unit: ProductUnit; vatPercent: number | null }
+  agreement: { id: string; status: AgreementStatus; customerKind: CustomerKind; customerId: string } | null
+  subscriptionId: string | null
+  /** The list that agreement is priced under, with its rows for the product on the service date; null where neither the agreement nor the project names one. */
+  priceList: PricedList<Row> | null
 }
 
 /** The product a completed ticket charges for, as the worker read it (#291 C3), with what its price is resolved from. */
@@ -183,21 +209,54 @@ export type BillableAction =
 
 export { BILLABLE_RESOLUTIONS, isBillableResolution } from "../resolution/vocabulary"
 
-/** Whether a ticket's work may be charged at the product (#291 C3): never one sold by the month, which is a recurring charge; the completion's as the person named it; the kind's only while it is offered, a retired one being the office's to replace. */
-export const chargesTicketWork = (charge: TicketChargeFacts): boolean => charge.product.unit !== "month" && (charge.source === "completion" || charge.product.status === "active")
+/** Whether a product is charged by its period, never per occurrence: a recurring charge's month (#291 C2), a hire's day (M14 of #293). */
+const chargedByPeriod = (unit: ProductUnit): boolean => unit === RECURRING_UNIT || unit === HIRE_UNIT
+
+/** Whether a ticket's work may be charged at the product (#291 C3): never one sold by the month or the day, which a billing run charges by its period; the completion's as the person named it; the kind's only while it is offered, a retired one being the office's to replace. */
+export const chargesTicketWork = (charge: TicketChargeFacts): boolean => !chargedByPeriod(charge.product.unit) && (charge.source === "completion" || charge.product.status === "active")
 
 const NO_LINKS: BillableEventLinks = { routeId: null, pickupId: null, ticketId: null, reversesEventId: null }
 
-/** A completed pickup's event: nothing for a stop the office added, blocked with `no-subscription` where no placement was valid, nothing under a `month` product, otherwise priced by the resolver or blocked with the reason that stood in the way. */
+/** Whether a work order may be charged at the project's product: one sold by the job, while it is offered — a retired one is the office's to replace, never a silent charge. */
+export const chargesJob = (job: JobChargeFacts): boolean => job.product.unit === "job" && job.product.status === "active"
+
+/** A completed work order's event (M14 of #293): nothing for an emptying, a stop booked for a ticket or a service the project prices nothing for; blocked where the product will not do or no agreement is reachable; otherwise priced by the resolver as a pickup is. */
+function jobDraft<Row extends PriceRow>(facts: PickupEventFacts<Row>, labels: PriceLabels): BillableEventDraft | undefined {
+  if (!isWorkOrderService(facts.service) || facts.bookedForTicket || facts.job === null) return undefined
+  const { job } = facts
+  const base = { kind: "job" as const, serviceDate: facts.serviceDate, quantity: 1, links: { ...NO_LINKS, routeId: facts.routeId, pickupId: facts.pickupId } }
+  if (!chargesJob(job)) return { ...base, agreementId: job.agreement?.id ?? null, subscriptionId: job.subscriptionId, productId: null, price: null, blockReason: "no-product" }
+  if (job.agreement === null) return { ...base, agreementId: null, subscriptionId: null, productId: job.product.id, price: null, blockReason: "no-subscription" }
+  const outcome = priceOccurrence(
+    {
+      agreement: { status: job.agreement.status },
+      priceList: job.priceList,
+      product: job.product,
+      quantity: 1,
+      input: {
+        on: facts.serviceDate,
+        planningAreaId: facts.planningAreaId,
+        customerKind: job.agreement.customerKind,
+        containerTypeId: facts.containerTypeId,
+        wasteFractionId: facts.wasteFractionId,
+        customerId: job.agreement.customerId,
+      },
+    },
+    labels,
+  )
+  return { ...base, agreementId: job.agreement.id, subscriptionId: job.subscriptionId, productId: job.product.id, price: outcome.price, blockReason: outcome.blockReason }
+}
+
+/** A completed pickup's event: a work order's job for a stop the office added, blocked with `no-subscription` where no placement was valid, nothing under a `month` product, otherwise priced by the resolver or blocked with the reason that stood in the way. */
 function pickupDraft<Row extends PriceRow>(facts: PickupEventFacts<Row>, labels: PriceLabels): BillableEventDraft | undefined {
-  // The office's extra collection (#111) — a re-collection, a container added to a route, an address-only stop — is not a pickup charge; its billable event is the follow-up's.
-  if (facts.origin === "office") return undefined
+  // The office's extra collection (#111) — a re-collection, a container added to a route, an address-only stop — is not a pickup charge; its billable event is the follow-up's. Its work order is a job (M14 of #293).
+  if (facts.origin === "office") return jobDraft(facts, labels)
   const links: BillableEventLinks = { ...NO_LINKS, routeId: facts.routeId, pickupId: facts.pickupId }
   const base = { kind: "pickup" as const, serviceDate: facts.serviceDate, quantity: 1, links }
   const placement = facts.placement
   if (placement === null) return { ...base, agreementId: null, subscriptionId: null, productId: null, price: null, blockReason: "no-subscription" }
-  // The collection is inside a recurring charge, which the recurring issue bills; a `job` is one event like a `pickup`.
-  if (placement.product.unit === "month") return undefined
+  // The collection is inside a recurring charge or a hire (M14 of #293), which a billing run bills by its period; a `job` is one event like a `pickup`.
+  if (chargedByPeriod(placement.product.unit)) return undefined
   const outcome = priceOccurrence(
     {
       agreement: { status: placement.agreement.status },

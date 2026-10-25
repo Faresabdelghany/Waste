@@ -40,6 +40,7 @@
 // priced at, held to 0..100 by `product_vat_percent_range`. All three are
 // nullable, so no guard: a product without a rate makes a `no-vat-rate`
 // event, which is the actionable reason.
+import { FREE_DAYS_MAX } from "@waste/domain/finance/hire"
 import { PRODUCT_KINDS, PRODUCT_STATUSES, PRODUCT_UNITS, WASTE_TREATMENTS } from "@waste/domain/registry/vocabulary"
 import { WASTE_CODE_PATTERN } from "@waste/domain/registry/waste-code"
 import { sql } from "drizzle-orm"
@@ -146,6 +147,8 @@ export const product = wms.table(
     invoiceCode: text(),
     /** The VAT rate a billable event is priced at, whole percent, zero being exempt; a product without one blocks its events with `no-vat-rate`. */
     vatPercent: integer(),
+    /** A hire product's free days (M14 of #293): each placement's first days, not charged; null is none. Only a product sold by the `day` carries them. */
+    freeDays: integer(),
   },
   (t) => [
     companyReference(t, company),
@@ -160,6 +163,8 @@ export const product = wms.table(
     oneOf(t.unit, PRODUCT_UNITS),
     // A rate is a percent: zero is exempt, and nothing is taxed at more than the whole (Issue #112). No helper spells it, since no other table has it.
     check(tableObjectName(t.id.table, "vat_percent_range", "product"), sql`${t.vatPercent} between 0 and 100`),
+    // A hire's free days, from none to a year (`FREE_DAYS_MAX`), on a product sold by the day and no other.
+    check(tableObjectName(t.id.table, "free_days_shape", "product"), sql`${t.freeDays} is null or (${t.unit} = 'day' and ${t.freeDays} between 0 and ${sql.raw(String(FREE_DAYS_MAX))})`),
     tenantIndex(t, t.containerTypeId),
     tenantIndex(t, t.wasteFractionId),
     tenantIndex(t, t.serviceFrequencyId),
