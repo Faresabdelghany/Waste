@@ -345,6 +345,11 @@ describe("the demo seed against a fresh database", { skip: database.skip }, () =
         nextRouteNumber: 1000,
         nextTicketNumber: 1000,
         nextInvoiceNumber: 1000,
+        // The invoice identity (#291 C4) is the administrator's to set: the seed writes none of it.
+        vatNumber: null,
+        bankIban: null,
+        bankBic: null,
+        fikCreditorNumber: null,
         createdAt: undefined,
         updatedAt: undefined,
       },

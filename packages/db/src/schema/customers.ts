@@ -43,6 +43,7 @@
 // leading with `(company_id, project_id)`: they take a `tenantIndex` on
 // `project_id` instead, as migrations/README.md requires of every referencing
 // column set.
+import { PAYMENT_TERMS_MAX } from "@waste/domain/finance/payment"
 import {
   CUSTOMER_KINDS,
   CUSTOMER_STATUSES,
@@ -60,7 +61,7 @@ import {
   SHARED_COLLECTION_POINT_STATUSES,
 } from "@waste/domain/registry/vocabulary"
 import { sql } from "drizzle-orm"
-import { boolean, integer, text, unique, uniqueIndex, uuid } from "drizzle-orm/pg-core"
+import { boolean, check, integer, text, unique, uniqueIndex, uuid } from "drizzle-orm/pg-core"
 
 import { tableObjectName } from "../names"
 import { lowercase, oneOf, positive } from "./checks"
@@ -85,6 +86,8 @@ export const customer = wms.table(
     billingAddress: text(),
     /** Whether the Customer may be written to about their service at all. */
     serviceMessagesAllowed: boolean().notNull().default(true),
+    /** The customer's own payment terms (#291 C4), which its invoices are due by instead of their project's; null keeps the project's. */
+    paymentTermsDays: integer(),
     status: text().notNull(),
   },
   (t) => [
@@ -93,6 +96,8 @@ export const customer = wms.table(
     oneOf(t.kind, CUSTOMER_KINDS),
     oneOf(t.status, CUSTOMER_STATUSES),
     lowercase(t.email),
+    // The domain's range, as a project's terms are held to it; a null keeps the project's.
+    check(tableObjectName(t.id.table, "payment_terms_range", "customer"), sql`${t.paymentTermsDays} between 0 and ${sql.raw(String(PAYMENT_TERMS_MAX))}`),
     // Most customers have no registration number, and a null is not a
     // duplicate of another null, so the key is a partial index rather than a
     // unique constraint.

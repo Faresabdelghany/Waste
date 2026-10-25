@@ -19,10 +19,12 @@
 //
 // The grant is `configure.organization`, the same as the company's: Settings
 // → Company & Projects is one surface.
+import type { PaymentReferenceScheme } from "@waste/contracts/finance"
 import { Project, ProjectCreate, ProjectPatch, type ProjectStatus } from "@waste/contracts/organisation"
 import { Page, PageRequest } from "@waste/contracts/pagination"
 import type { ServiceDay } from "@waste/contracts/planning"
-import { project } from "@waste/db/schema/organisation"
+import type { Tx } from "@waste/db/client"
+import { company, project } from "@waste/db/schema/organisation"
 import { and, asc, eq, gt } from "drizzle-orm"
 import { Hono, type MiddlewareHandler } from "hono"
 import { describeRoute } from "hono-openapi"
@@ -32,7 +34,7 @@ import { requireGrant } from "../auth/require"
 import { newId } from "../ids"
 import { afterCursor, fetchLimit, pageOf } from "../pagination"
 import { describeProblem, problem, validate } from "../problem"
-import { created, describeCreated, describeJson, IdParam, refuseDuplicate, stampsOf } from "./shared"
+import { created, describeCreated, describeJson, IdParam, lockRow, refuseDuplicate, stampsOf } from "./shared"
 
 const MODULE = "configure.organization"
 const ProjectPage = Page(Project)
@@ -48,6 +50,8 @@ const columns = {
   weekend: project.weekend,
   holidayList: project.holidayList,
   publicSlug: project.publicSlug,
+  paymentTermsDays: project.paymentTermsDays,
+  paymentReferenceScheme: project.paymentReferenceScheme,
   createdAt: project.createdAt,
   updatedAt: project.updatedAt,
 }
@@ -67,8 +71,21 @@ function projectOf(row: Row): Project {
     weekend: row.weekend as ServiceDay[],
     holidayList: row.holidayList,
     publicSlug: row.publicSlug,
+    paymentTermsDays: row.paymentTermsDays,
+    paymentReferenceScheme: row.paymentReferenceScheme as PaymentReferenceScheme,
     ...stampsOf(row),
   }
+}
+
+/** What a project moved to a FI card's scheme is told while its company has no creditor number (#291 C4). */
+export const NO_FIK_CREDITOR = "Set the company's FIK creditor number first: a FI card names it"
+
+/** A FI card's scheme names the company's creditor number (#291 C4): asked under the company's row lock, which clearing the number takes too, so the two take turns. */
+async function requireFikCreditor(tx: Tx, companyId: string, scheme: PaymentReferenceScheme | undefined): Promise<void> {
+  if (scheme === undefined || scheme === "none") return
+  await lockRow(tx, company, { companyId, id: companyId })
+  const [found] = await tx.select({ creditor: company.fikCreditorNumber }).from(company).where(eq(company.id, companyId)).limit(1)
+  if (found === undefined || found.creditor === null) throw problem(409, { detail: NO_FIK_CREDITOR })
 }
 
 /** `unique (company_id, name)`: a name is one project's inside a company, and free in the next. */
@@ -120,14 +137,14 @@ export function projectRoutes(guard: MiddlewareHandler<AuthEnv>) {
         operationId: "createProject",
         summary: "Add a project",
         description:
-          "Creates a project in the caller's company. The server mints the id; a body that carries one is refused. `weekend` is the days the project rests on, each named once — Saturday and Sunday unless the body says otherwise, Friday and Saturday for a project in Cairo — and `holidayList` the name its holidays are looked up under (`Danish public holidays`); null or absent is no list, and a project without one rests on its weekend only, whatever collection calendars it has.",
+          "Creates a project in the caller's company. The server mints the id; a body that carries one is refused. `weekend` is the days the project rests on, each named once — Saturday and Sunday unless the body says otherwise, Friday and Saturday for a project in Cairo — and `holidayList` the name its holidays are looked up under (`Danish public holidays`); null or absent is no list, and a project without one rests on its weekend only, whatever collection calendars it has. `paymentTermsDays` is the days after issue its invoices are due, 0 to 365, 30 unless the body says otherwise, a customer's own terms standing in for theirs, and `paymentReferenceScheme` how they are referenced for payment, `none` unless said: a FI card's (`fik-71`, `fik-75`) needs the company's creditor number (409, `Set the company's FIK creditor number first: a FI card names it`) (#291 C4).",
         security: BEARER_SECURITY,
         responses: {
           201: describeCreated("The project as it was written.", Project),
           400: describeProblem("The body is missing a field, holds a value of the wrong shape, or names one the server owns."),
           401: describeProblem("No usable token (see WWW-Authenticate)."),
           403: describeProblem("No active account here, or the caller's role does not allow `create` on `configure.organization`."),
-          409: describeProblem("The company already has a project with that name."),
+          409: describeProblem("The company already has a project with that name, or a FI card's scheme is named while the company has no creditor number."),
         },
       }),
       guard,
@@ -135,6 +152,7 @@ export function projectRoutes(guard: MiddlewareHandler<AuthEnv>) {
       validate("json", ProjectCreate),
       async (c) => {
         const values = c.req.valid("json")
+        await requireFikCreditor(c.get("tx"), c.get("principal").companyId, values.paymentReferenceScheme)
         const [row] = await refuseDuplicate({ [NAME_TAKEN]: nameTaken(values.name) }, () =>
           c
             .get("tx")
@@ -184,7 +202,7 @@ export function projectRoutes(guard: MiddlewareHandler<AuthEnv>) {
         operationId: "patchProject",
         summary: "Change a project",
         description:
-          "Changes one project of the caller's company; every field is optional and at least one must be given. `weekend` replaces the days the project rests on with the list given, each of the seven named at most once; `holidayList` renames the list its holidays are looked up under, or as null takes it away, and a project without one rests on its weekend only, whatever collection calendars it has. `publicSlug` publishes the project on the public door under that name (`GET /public/<slug>`, ADR-0010), unique across every company; null unpublishes it: its public pages answer 404 from the next request, and an answer someone cached before (they may keep one for a minute) runs out within that minute.",
+          "Changes one project of the caller's company; every field is optional and at least one must be given. `weekend` replaces the days the project rests on with the list given, each of the seven named at most once; `holidayList` renames the list its holidays are looked up under, or as null takes it away, and a project without one rests on its weekend only, whatever collection calendars it has. `publicSlug` publishes the project on the public door under that name (`GET /public/<slug>`, ADR-0010), unique across every company; null unpublishes it: its public pages answer 404 from the next request, and an answer someone cached before (they may keep one for a minute) runs out within that minute. `paymentTermsDays` and `paymentReferenceScheme` (#291 C4) date and reference the invoices its next run issues — an issued invoice keeps its own — and a FI card's scheme needs the company's creditor number (409, `Set the company's FIK creditor number first: a FI card names it`), under the company's row lock.",
         security: BEARER_SECURITY,
         responses: {
           200: describeJson("The project as it now stands.", Project),
@@ -192,7 +210,7 @@ export function projectRoutes(guard: MiddlewareHandler<AuthEnv>) {
           401: describeProblem("No usable token (see WWW-Authenticate)."),
           403: describeProblem("No active account here, or the caller's role does not allow `edit` on `configure.organization`."),
           404: describeProblem("No project with that id in this company."),
-          409: describeProblem("The company already has another project with that name, or another project already publishes itself under that slug."),
+          409: describeProblem("The company already has another project with that name, another project already publishes itself under that slug, or a FI card's scheme is named while the company has no creditor number."),
         },
       }),
       guard,
@@ -202,6 +220,14 @@ export function projectRoutes(guard: MiddlewareHandler<AuthEnv>) {
       async (c) => {
         const { id } = c.req.valid("param")
         const patch = c.req.valid("json")
+        const tx = c.get("tx")
+        const companyId = c.get("principal").companyId
+        if (patch.paymentReferenceScheme !== undefined && patch.paymentReferenceScheme !== "none") {
+          // The path's row first (404), then the 409 the body's scheme needs.
+          const [found] = await tx.select({ id: project.id }).from(project).where(and(eq(project.companyId, companyId), eq(project.id, id))).limit(1)
+          if (found === undefined) throw noSuchProject(id)
+          await requireFikCreditor(tx, companyId, patch.paymentReferenceScheme)
+        }
         const sentences: Record<string, string> = {
           ...(patch.name === undefined ? {} : { [NAME_TAKEN]: nameTaken(patch.name) }),
           ...(patch.publicSlug == null ? {} : { [SLUG_TAKEN]: slugTaken(patch.publicSlug) }),

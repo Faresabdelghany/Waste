@@ -42,6 +42,7 @@ import { PUBLIC_SLUG_LENGTH, PUBLIC_SLUG_PATTERN } from "@waste/domain/access/pu
 import { DEFAULT_WEEKEND } from "@waste/domain/planning/vocabulary"
 import * as z from "zod"
 
+import { Bic, DEFAULT_PAYMENT_TERMS_DAYS, FikCreditorNumber, Iban, PaymentReferenceScheme, PaymentTermsDays, VatNumber } from "./finance"
 import { ServiceDays } from "./planning"
 import { changesSomething, somethingToChange, stamped } from "./resource"
 import { Label } from "./text"
@@ -83,6 +84,12 @@ export const Company = z.object({
   registrationNumber: Label,
   country: Country,
   status: CompanyStatus,
+  /** The invoice identity (#291 C4), what an invoice document prints; each null until the administrator sets it. */
+  vatNumber: VatNumber.nullable(),
+  bankIban: Iban.nullable(),
+  bankBic: Bic.nullable(),
+  /** The creditor number a FI card names: what a project's FIK scheme needs. */
+  fikCreditorNumber: FikCreditorNumber.nullable(),
 })
 export type Company = z.infer<typeof Company>
 
@@ -93,6 +100,12 @@ export const CompanyPatch = z
     legalName: Label.optional(),
     registrationNumber: Label.optional(),
     country: Country.optional(),
+    /** Null clears it. */
+    vatNumber: VatNumber.nullable().optional(),
+    bankIban: Iban.nullable().optional(),
+    bankBic: Bic.nullable().optional(),
+    /** Null clears it, which a project charging by a FI card refuses. */
+    fikCreditorNumber: FikCreditorNumber.nullable().optional(),
   })
   .refine(changesSomething, somethingToChange)
 export type CompanyPatch = z.infer<typeof CompanyPatch>
@@ -121,6 +134,10 @@ export const Project = z.object({
   holidayList: Label.nullable(),
   /** The name it publishes itself under on the public door, `/public/<slug>` (ADR-0010); null is unpublished. */
   publicSlug: PublicSlug.nullable(),
+  /** How many days after issue its invoices are due (#291 C4), unless a customer has terms of its own. */
+  paymentTermsDays: PaymentTermsDays,
+  /** How its invoices are referenced for payment: none, or a FI card, which needs the company's creditor number. */
+  paymentReferenceScheme: PaymentReferenceScheme,
 })
 export type Project = z.infer<typeof Project>
 
@@ -133,6 +150,8 @@ export const ProjectCreate = z.strictObject({
   status: ProjectStatus.default("onboarding").describe("Defaults to onboarding when absent: a project is onboarding until it runs."),
   weekend: Weekend.default([...DEFAULT_WEEKEND]).describe("Defaults to Saturday and Sunday when absent: the days the project rests on, each named once, at most six."),
   holidayList: Label.nullable().optional().describe("Null or absent is no holiday list: the project then rests on its weekend only, whatever calendars it has."),
+  paymentTermsDays: PaymentTermsDays.default(DEFAULT_PAYMENT_TERMS_DAYS).describe(`Defaults to ${DEFAULT_PAYMENT_TERMS_DAYS} when absent: the days after issue the project's invoices are due, 0 to 365.`),
+  paymentReferenceScheme: PaymentReferenceScheme.default("none").describe("Defaults to none when absent: a FI card's scheme needs the company's creditor number."),
 })
 export type ProjectCreate = z.infer<typeof ProjectCreate>
 
@@ -149,6 +168,8 @@ export const ProjectPatch = z
     holidayList: Label.nullable().optional(),
     /** A slug publishes the project under it; null unpublishes it, and its public pages answer 404 from the next request (an answer cached before runs out within the minute). */
     publicSlug: PublicSlug.nullable().optional(),
+    paymentTermsDays: PaymentTermsDays.optional(),
+    paymentReferenceScheme: PaymentReferenceScheme.optional(),
   })
   .refine(changesSomething, somethingToChange)
 export type ProjectPatch = z.infer<typeof ProjectPatch>

@@ -28,7 +28,7 @@ const STAMPS = { createdAt: "2026-09-29T02:00:00.000Z", updatedAt: "2026-10-01T0
 const fixturesOf = (workspaceId: "configure" | "fleet" | "route-studio", moduleId: string) => getModuleDefinition({ workspaceId, moduleId })?.records ?? []
 const fixtures = fixturesOf("route-studio", "live")
 
-const copenhagen: Project = { id: "01a0d2a4-a280-7002-8000-000000000001", ...STAMPS, name: "Copenhagen Central", kind: "Municipality", language: "da", currency: "DKK", timezone: "Europe/Copenhagen", status: "active", weekend: ["saturday", "sunday"], holidayList: "Danish public holidays", publicSlug: null }
+const copenhagen: Project = { id: "01a0d2a4-a280-7002-8000-000000000001", ...STAMPS, name: "Copenhagen Central", kind: "Municipality", language: "da", currency: "DKK", timezone: "Europe/Copenhagen", status: "active", weekend: ["saturday", "sunday"], holidayList: "Danish public holidays", publicSlug: null, paymentTermsDays: 30, paymentReferenceScheme: "none" }
 const wh24: Vehicle = { id: "01a0d2a4-a280-7013-8000-000000000001", ...STAMPS, projectId: copenhagen.id, registration: "CN 42 018", callsign: "WH-24", kind: "powered-vehicle", vehicleTypeId: "01a0d2a4-a280-7008-8000-000000000001", ownership: "company", serviceProviderId: null, status: "active", capacityKg: 18_000, requiredLicenceClass: "c", homeDepotId: null, fuel: "hvo", telematicsDeviceId: null, notes: null, compartments: [] }
 const wh31: Vehicle = { ...wh24, id: "01a0d2a4-a280-7013-8000-000000000002", registration: "CN 42 031", callsign: "WH-31" }
 const tr12: Vehicle = { ...wh24, id: "01a0d2a4-a280-7013-8000-000000000003", registration: "TR 12 001", callsign: "TR-12", kind: "trailer", compartments: [] }

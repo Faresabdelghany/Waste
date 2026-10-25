@@ -27,6 +27,7 @@ export const customerColumns = {
   billingAddress: customer.billingAddress,
   serviceMessagesAllowed: customer.serviceMessagesAllowed,
   status: customer.status,
+  paymentTermsDays: customer.paymentTermsDays,
   createdAt: customer.createdAt,
   updatedAt: customer.updatedAt,
 }
@@ -45,6 +46,7 @@ export function customerOf(row: CustomerRow): Customer {
     billingAddress: row.billingAddress,
     serviceMessagesAllowed: row.serviceMessagesAllowed,
     status: row.status as CustomerStatus,
+    paymentTermsDays: row.paymentTermsDays,
     ...stampsOf(row),
   }
 }

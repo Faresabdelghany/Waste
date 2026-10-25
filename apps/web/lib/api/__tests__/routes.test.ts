@@ -61,7 +61,7 @@ const fixturesOf = (workspaceId: "configure" | "fleet" | "resources" | "route-st
 const fixtures = fixturesOf("route-studio", "routes")
 
 // The seeded rows the store has loaded before the routes, as the API answers them.
-const copenhagen: Project = { id: "01a0d2a4-a280-7002-8000-000000000001", ...STAMPS, name: "Copenhagen Central", kind: "Municipality", language: "da", currency: "DKK", timezone: "Europe/Copenhagen", status: "active", weekend: ["saturday", "sunday"], holidayList: "Danish public holidays", publicSlug: null }
+const copenhagen: Project = { id: "01a0d2a4-a280-7002-8000-000000000001", ...STAMPS, name: "Copenhagen Central", kind: "Municipality", language: "da", currency: "DKK", timezone: "Europe/Copenhagen", status: "active", weekend: ["saturday", "sunday"], holidayList: "Danish public holidays", publicSlug: null, paymentTermsDays: 30, paymentReferenceScheme: "none" }
 const residual: WasteFraction = { id: "01a0d2a4-a280-7005-8000-000000000001", ...STAMPS, key: "residual", name: "Residual", wasteCode: null }
 const nordhavn: Depot = { id: "01a0d2a4-a280-7010-8000-000000000001", ...STAMPS, projectId: copenhagen.id, code: "DEPOT-NORDHAVN", name: "Nordhavn Depot", address: "Kaj 14, Nordhavn", location: at(12.5958, 55.7091), ownership: "company", serviceProviderId: null, opensAt: "05:00", closesAt: "22:00", vehicleCapacity: null, status: "active", notes: null }
 const arc: UnloadingStation = { id: "01a0d2a4-a280-7012-8000-000000000001", ...STAMPS, code: "STATION-ARC", name: "ARC Amager", address: "Kraftværksvej 31", location: at(12.6186, 55.6903), ownership: "external", serviceProviderId: null, opensAt: null, closesAt: null, weighbridge: true, status: "active", notes: null, wasteFractionIds: [residual.id] }

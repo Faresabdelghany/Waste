@@ -28,6 +28,10 @@ const company = {
   registrationNumber: "12345678",
   country: "DK",
   status: "active",
+  vatNumber: null,
+  bankIban: null,
+  bankBic: null,
+  fikCreditorNumber: null,
   ...STAMPS,
 }
 
@@ -42,6 +46,8 @@ const project = {
   weekend: ["saturday", "sunday"],
   holidayList: "Danish public holidays",
   publicSlug: null,
+  paymentTermsDays: 30,
+  paymentReferenceScheme: "none",
   ...STAMPS,
 }
 
@@ -95,6 +101,29 @@ describe("Company", () => {
     for (const country of ["dk", "Dk", "DNK", "D", "DK ", "", "12"]) {
       assert.equal(Company.safeParse({ ...company, country }).success, false, JSON.stringify(country))
     }
+  })
+})
+
+describe("the company's invoice identity (#291 C4)", () => {
+  const identity = { vatNumber: "DK12345678", bankIban: "DK5000400440116243", bankBic: "DABADKKK", fikCreditorNumber: "85123456" }
+
+  test("is the VAT registration, the bank account and the FIK creditor number, each null until set and each by the domain's shape", () => {
+    assert.deepEqual(Company.parse({ ...company, ...identity }), { ...company, ...identity })
+    for (const [field, value] of [
+      ["vatNumber", "12345678"],
+      ["vatNumber", "dk12345678"],
+      ["bankIban", "DK50 0040 0440 1162 43"],
+      ["bankBic", "DABADK"],
+      ["fikCreditorNumber", "8512345"],
+    ] as const) {
+      assert.deepEqual(refusal(Company.safeParse({ ...company, [field]: value })).map((issue) => issue.path), [field], `${field} ${value}`)
+    }
+  })
+
+  test("is the administrator's to set and to clear in a patch", () => {
+    assert.deepEqual(CompanyPatch.parse(identity), identity)
+    assert.deepEqual(CompanyPatch.parse({ bankIban: null }), { bankIban: null }, "null clears it")
+    assert.deepEqual(refusal(CompanyPatch.safeParse({ fikCreditorNumber: "123" })).map((issue) => issue.path), ["fikCreditorNumber"])
   })
 })
 
@@ -234,6 +263,20 @@ describe("a project's public slug (ADR-0010)", () => {
     assert.equal(ProjectPatch.safeParse({ publicSlug: "Not A Slug" }).success, false)
     const { id: _id, createdAt: _created, updatedAt: _updated, publicSlug: _slug, ...create } = project
     assert.equal(ProjectCreate.safeParse({ ...create, publicSlug: "kystbyen" }).success, false)
+  })
+})
+
+describe("a project's payment terms and reference scheme (#291 C4)", () => {
+  test("are whole days from due on issue to a year, and none or a FI card; a new project's are thirty days and none, and the schema says so", () => {
+    const { id: _id, createdAt: _createdAt, updatedAt: _updatedAt, publicSlug: _publicSlug, paymentTermsDays: _terms, paymentReferenceScheme: _scheme, ...body } = project
+    const made = ProjectCreate.parse(body)
+    assert.deepEqual([made.paymentTermsDays, made.paymentReferenceScheme], [30, "none"])
+    assert.match(ProjectCreate.shape.paymentTermsDays.description ?? "", /30/)
+    assert.deepEqual(ProjectPatch.parse({ paymentTermsDays: 14, paymentReferenceScheme: "fik-71" }), { paymentTermsDays: 14, paymentReferenceScheme: "fik-71" })
+    assert.equal(ProjectPatch.parse({ paymentTermsDays: 0 }).paymentTermsDays, 0, "due on issue")
+    for (const terms of [-1, 366, 14.5]) assert.deepEqual(refusal(ProjectPatch.safeParse({ paymentTermsDays: terms })).map((issue) => issue.path), ["paymentTermsDays"], String(terms))
+    assert.deepEqual(refusal(ProjectPatch.safeParse({ paymentReferenceScheme: "kid" })).map((issue) => issue.path), ["paymentReferenceScheme"])
+    assert.deepEqual(Project.parse({ ...project, paymentReferenceScheme: "fik-75" }).paymentReferenceScheme, "fik-75")
   })
 })
 

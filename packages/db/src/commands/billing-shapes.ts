@@ -283,6 +283,7 @@ export const invoiceColumns = {
   vatMinor: invoice.vatMinor,
   grossMinor: invoice.grossMinor,
   issuedBy: invoice.issuedBy,
+  paymentReference: invoice.paymentReference,
 }
 
 export type InvoiceRow = Pick<typeof invoice.$inferSelect, keyof typeof invoiceColumns>
@@ -313,6 +314,7 @@ export function invoiceOf(row: InvoiceRow): Invoice {
     vatMinor: row.vatMinor,
     grossMinor: row.grossMinor,
     issuedBy: row.issuedBy,
+    paymentReference: row.paymentReference,
   }
 }
 

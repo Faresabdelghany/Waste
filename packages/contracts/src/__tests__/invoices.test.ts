@@ -31,6 +31,7 @@ const invoice = {
   vatMinor: 3_086,
   grossMinor: 15_431,
   issuedBy: THIRD,
+  paymentReference: null,
 }
 
 const creditNote = {
@@ -77,6 +78,11 @@ describe("Invoice", () => {
     assert.equal("updatedAt" in Invoice.shape, false)
     const workers = { ...invoice, issuedBy: null }
     assert.deepEqual(Invoice.parse(workers), workers)
+  })
+
+  test("carries the payment reference frozen at issue under its project's scheme (#291 C4): FIK 71's fifteen digits or FIK 75's sixteen, null under none", () => {
+    for (const paymentReference of ["000000260071882", "0000000260071884"]) assert.equal(Invoice.parse({ ...invoice, paymentReference }).paymentReference, paymentReference)
+    for (const paymentReference of ["26007188", "+71<000000260071882", ""]) assert.equal(Invoice.safeParse({ ...invoice, paymentReference }).success, false, paymentReference)
   })
 
   test("a credit note is an invoice of its kind, under the other prefix, naming the invoice it credits and why, its totals zero or negative and its period none", () => {

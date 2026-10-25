@@ -20,8 +20,8 @@ const fixtures = module.records
 const context: MappingContext = { fixtures, resolve: NOTHING_RESOLVED, companyRecordId: "company-kystbyen-dk", now: NOW }
 
 // The seeded rows as the API answers them (packages/db/src/seed/registry.ts).
-const mikkel: Customer = { id: "01a0d2a4-a280-700b-8000-000000000001", ...STAMPS, kind: "person", name: "Mikkel Sørensen", registrationNumber: null, email: "mikkel.sorensen@example.dk", phone: "+45 20 11 88 04", billingAddress: null, serviceMessagesAllowed: true, status: "active" }
-const osterbro: Customer = { id: "01a0d2a4-a280-700b-8000-000000000002", ...STAMPS, kind: "organisation", name: "Østerbro Housing", registrationNumber: "38112009", email: "service@osterbro-housing.example", phone: null, billingAddress: null, serviceMessagesAllowed: true, status: "active" }
+const mikkel: Customer = { id: "01a0d2a4-a280-700b-8000-000000000001", ...STAMPS, kind: "person", name: "Mikkel Sørensen", registrationNumber: null, email: "mikkel.sorensen@example.dk", phone: "+45 20 11 88 04", billingAddress: null, serviceMessagesAllowed: true, paymentTermsDays: null, status: "active" }
+const osterbro: Customer = { id: "01a0d2a4-a280-700b-8000-000000000002", ...STAMPS, kind: "organisation", name: "Østerbro Housing", registrationNumber: "38112009", email: "service@osterbro-housing.example", phone: null, billingAddress: null, serviceMessagesAllowed: true, paymentTermsDays: null, status: "active" }
 const kab: Customer = { ...osterbro, id: "01a0d2a4-a280-700b-8000-000000000004", name: "KAB Bolig", registrationNumber: null, email: null, status: "inactive" }
 
 describe("a customer on the prototype's record", () => {

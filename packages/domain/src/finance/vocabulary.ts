@@ -73,6 +73,8 @@ export const WEIGHT_REVIEW_DECISIONS = ["approved", "rejected", "corrected"] as 
 export const WEIGHT_REVIEW_STATUSES = ["captured", "approved", "rejected", "corrected"] as const
 /** What an indexation multiplied: the locked bid, or the fee it replaced. */
 export const INDEX_BASES = ["bid", "current-fee"] as const
+/** How a project's invoices are referenced for payment (#291 C4): none, or a Danish FI card — 71 the reference alone, 75 the reference and a text line. A Norwegian KID or a Swedish OCR is a later value here. */
+export const PAYMENT_REFERENCE_SCHEMES = ["none", "fik-71", "fik-75"] as const
 
 export type BillableEventKind = (typeof BILLABLE_EVENT_KINDS)[number]
 export type BlockReason = (typeof BLOCK_REASONS)[number]
@@ -87,6 +89,7 @@ export type SettlementEventKind = (typeof SETTLEMENT_EVENT_KINDS)[number]
 export type WeightReviewDecision = (typeof WEIGHT_REVIEW_DECISIONS)[number]
 export type WeightReviewStatus = (typeof WEIGHT_REVIEW_STATUSES)[number]
 export type IndexBase = (typeof INDEX_BASES)[number]
+export type PaymentReferenceScheme = (typeof PAYMENT_REFERENCE_SCHEMES)[number]
 
 /** The statuses a Settlement is recalculated in: open, or calculated and not yet closed. A value of `SETTLEMENT_STATUSES`, not a vocabulary. */
 export const OPEN_SETTLEMENT_STATUSES = ["open", "calculated"] as const satisfies readonly SettlementStatus[]
@@ -110,4 +113,5 @@ export const FINANCE_VOCABULARIES = {
   WEIGHT_REVIEW_DECISIONS,
   WEIGHT_REVIEW_STATUSES,
   INDEX_BASES,
+  PAYMENT_REFERENCE_SCHEMES,
 } as const satisfies Record<string, readonly [string, ...string[]]>

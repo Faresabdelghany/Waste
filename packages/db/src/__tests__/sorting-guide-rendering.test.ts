@@ -46,7 +46,7 @@ const expected = [
   `ALTER TABLE "wms"."project" ADD CONSTRAINT "project_public_slug_shape" CHECK (${SLUG});`,
 ]
 
-const generated = (): Promise<string[]> => statementsBetween({ project: projectAsOf("0006") }, { project, sortingGuideItem })
+const generated = (): Promise<string[]> => statementsBetween({ project: projectAsOf("0006") }, { project: projectAsOf("0017"), sortingGuideItem })
 
 const fileStatements = async (): Promise<string[]> => statementsOf(await readFile(join(MIGRATIONS_FOLDER, MIGRATION), "utf8"))
 

@@ -27,7 +27,7 @@
 // A credit is by quantity, never by amount (§7.25): the amount follows from
 // the line's unit price.
 import { IsoDate } from "./dates"
-import { CreditReason, InvoiceKind, invoiceLabel } from "./finance"
+import { CreditReason, InvoiceKind, invoiceLabel, PaymentReference } from "./finance"
 import { Id } from "./ids"
 import { Currency } from "./organisation"
 import { dayWindowIsOrdered, dayWindowOrdered, ProjectScopedListQuery } from "./queries"
@@ -79,6 +79,8 @@ const invoiceFields = {
   grossMinor: Minor,
   /** The caller; null for the worker's run. */
   issuedBy: Id.nullable(),
+  /** The payment reference the payer quotes (#291 C4), frozen at issue under the project's scheme; null under none, and on a credit note. */
+  paymentReference: PaymentReference.nullable(),
 }
 
 export const Invoice = z.object(invoiceFields).refine(labelMatches, labelIsTheNumber).refine(totalsAgree, grossIsNetPlusVat)

@@ -73,6 +73,7 @@ const customer = {
   billingAddress: "Att. Regnskab\nParkvej 18\n2000 Frederiksberg",
   serviceMessagesAllowed: true,
   status: "active",
+  paymentTermsDays: null,
   ...STAMPS,
 }
 
@@ -152,6 +153,16 @@ describe("Customer", () => {
     assert.equal(Customer.safeParse({ ...customer, email: "post at boligforening" }).success, false)
     assert.equal(Customer.safeParse({ ...customer, kind: "company" }).success, false)
     assert.equal(Customer.safeParse({ ...customer, name: "  " }).success, false)
+  })
+})
+
+describe("a customer's own payment terms (#291 C4)", () => {
+  test("are null on the wire until set, then whole days its invoices are due by instead of their project's", () => {
+    assert.equal(Customer.parse(customer).paymentTermsDays, null)
+    assert.equal(Customer.parse({ ...customer, paymentTermsDays: 14 }).paymentTermsDays, 14)
+    assert.equal(CustomerCreate.parse({ kind: "organisation", name: "Østerbro Housing", paymentTermsDays: 8 }).paymentTermsDays, 8)
+    assert.deepEqual(CustomerPatch.parse({ paymentTermsDays: null }), { paymentTermsDays: null }, "null gives the project's back")
+    assert.deepEqual(refusal(CustomerPatch.safeParse({ paymentTermsDays: 400 })).map((issue) => issue.path), ["paymentTermsDays"])
   })
 })
 

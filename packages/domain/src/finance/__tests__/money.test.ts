@@ -4,7 +4,7 @@
 import assert from "node:assert/strict"
 import { describe, test } from "node:test"
 
-import { indexedFee, PAYMENT_TERMS_DAYS, roundHalfAwayFromZero, vatOf } from "../money"
+import { indexedFee, roundHalfAwayFromZero, vatOf } from "../money"
 
 /** Odd amounts of both signs at 25 %, with what Postgres's `round(net * 25 / 100.0)` answers for each. */
 export const VAT_CASES: readonly [netMinor: number, vatPercent: number, vatMinor: number][] = [
@@ -74,8 +74,3 @@ describe("indexedFee", () => {
   })
 })
 
-describe("PAYMENT_TERMS_DAYS", () => {
-  test("is thirty days until configure.finance lands", () => {
-    assert.equal(PAYMENT_TERMS_DAYS, 30)
-  })
-})

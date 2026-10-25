@@ -32,11 +32,13 @@ import {
   EXCLUSION_REASONS,
   INDEX_BASES,
   INVOICE_KINDS,
+  PAYMENT_REFERENCE_SCHEMES,
   SETTLEMENT_EVENT_KINDS,
   SETTLEMENT_STATUSES,
   WEIGHT_REVIEW_DECISIONS,
   WEIGHT_REVIEW_STATUSES,
 } from "@waste/domain/finance/vocabulary"
+import { BIC_PATTERN, DEFAULT_PAYMENT_TERMS_DAYS, FIK_CREDITOR_PATTERN, IBAN_PATTERN, PAYMENT_REFERENCE_PATTERN, PAYMENT_TERMS_MAX, VAT_NUMBER_PATTERN } from "@waste/domain/finance/payment"
 import * as z from "zod"
 
 import { Id } from "./ids"
@@ -111,3 +113,23 @@ export const WeightReviewState = z.object({
   correctionUnloadId: Id.nullable(),
 })
 export type WeightReviewState = z.infer<typeof WeightReviewState>
+
+/**
+ * How an invoice is paid (#291 C4): a project's terms, or a customer's own,
+ * and its reference scheme; the company's invoice identity — the VAT
+ * registration, the bank account and the FIK creditor number — each by the
+ * domain's shape (@waste/domain/finance/payment), upper case and without the
+ * spaces a person types for reading.
+ */
+export const PaymentTermsDays = z.int().min(0).max(PAYMENT_TERMS_MAX)
+export const PaymentReferenceScheme = z.enum(PAYMENT_REFERENCE_SCHEMES)
+export type PaymentReferenceScheme = z.infer<typeof PaymentReferenceScheme>
+export const VatNumber = z.string().regex(new RegExp(VAT_NUMBER_PATTERN), "a VAT registration: its country's two letters, then its number, such as DK12345678")
+export const Iban = z.string().regex(new RegExp(IBAN_PATTERN), "an IBAN without spaces, such as DK5000400440116243")
+export const Bic = z.string().regex(new RegExp(BIC_PATTERN), "a BIC of eight or eleven characters, such as DABADKKK")
+export const FikCreditorNumber = z.string().regex(new RegExp(FIK_CREDITOR_PATTERN), "a FIK creditor number: eight digits")
+/** A frozen payment reference: FIK 71's fifteen digits or FIK 75's sixteen. */
+export const PaymentReference = z.string().regex(new RegExp(PAYMENT_REFERENCE_PATTERN))
+
+/** A new project's terms, the column's default. */
+export { DEFAULT_PAYMENT_TERMS_DAYS }

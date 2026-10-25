@@ -11,7 +11,7 @@ import { describe, test } from "node:test"
 import { defineVocabularyTests } from "../../__tests__/vocabulary"
 import * as vocabulary from "../vocabulary"
 
-defineVocabularyTests("Finance", vocabulary, vocabulary.FINANCE_VOCABULARIES, 13, ["OPEN_SETTLEMENT_STATUSES"])
+defineVocabularyTests("Finance", vocabulary, vocabulary.FINANCE_VOCABULARIES, 14, ["OPEN_SETTLEMENT_STATUSES"])
 
 describe("the Finance vocabulary's own rules", () => {
   test("a billable event is made of four kinds, stands in five readings and is blocked for one of six actionable reasons — never a missing payer", () => {

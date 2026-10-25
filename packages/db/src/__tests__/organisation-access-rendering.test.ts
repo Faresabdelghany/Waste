@@ -12,6 +12,7 @@ import { readFile } from "node:fs/promises"
 import { join } from "node:path"
 import { describe, test } from "node:test"
 
+import { BIC_PATTERN, FIK_CREDITOR_PATTERN, IBAN_PATTERN, VAT_NUMBER_PATTERN } from "@waste/domain/finance/payment"
 import { getTableConfig, PgDialect, text, uuid } from "drizzle-orm/pg-core"
 
 import { CASING } from "../casing"
@@ -53,7 +54,15 @@ const WEEKEND = "<@ ARRAY['monday', 'tuesday', 'wednesday', 'thursday', 'friday'
 /** The public slug's shape, as 0017's check spells it (Issue #293). */
 const PUBLIC_SLUG = `${ref("project", "public_slug")} ~ '^[a-z0-9]+(-[a-z0-9]+)*$' and char_length(${ref("project", "public_slug")}) between 3 and 63`
 
-/** The project table as drizzle-kit writes it today, and as it wrote it as of 0002, before 0006 gave it the working week and 0017 the public slug. */
+/** The invoice identity's shapes as 0037's checks spell them (#291 C4), the domain's patterns. */
+const IDENTITY_SHAPES: Array<[string, string]> = [
+  ["vat_number", VAT_NUMBER_PATTERN],
+  ["bank_iban", IBAN_PATTERN],
+  ["bank_bic", BIC_PATTERN],
+  ["fik_creditor_number", FIK_CREDITOR_PATTERN],
+]
+
+/** The project table as drizzle-kit writes it today, and as it wrote it as of 0002, before 0006 gave it the working week, 0017 the public slug and 0037 its payment terms and reference scheme. */
 const projectTable = (era: "0002" | "today"): string => {
   const planning = era === "today"
   const published = era === "today"
@@ -65,7 +74,7 @@ const projectTable = (era: "0002" | "today"): string => {
     '\t"timezone" text NOT NULL,',
     '\t"status" text NOT NULL,',
     ...(planning ? ['\t"weekend" text[] DEFAULT \'{saturday,sunday}\' NOT NULL,', '\t"holiday_list" text,'] : []),
-    ...(published ? ['\t"public_slug" text,'] : []),
+    ...(published ? ['\t"public_slug" text,', '\t"payment_terms_days" integer DEFAULT 30 NOT NULL,', `\t"payment_reference_scheme" text DEFAULT 'none' NOT NULL,`] : []),
     '\tCONSTRAINT "project_name_key" UNIQUE("company_id","name"),',
     '\tCONSTRAINT "project_tenant_key" UNIQUE("company_id","id"),',
     ...(published ? ['\tCONSTRAINT "project_public_slug_key" UNIQUE("public_slug"),'] : []),
@@ -74,13 +83,19 @@ const projectTable = (era: "0002" | "today"): string => {
       ? [
           `\tCONSTRAINT "project_weekend_subset_of" CHECK (${ref("project", "weekend")} ${WEEKEND}),`,
           `\tCONSTRAINT "project_weekend_not_every_day" CHECK (cardinality(${ref("project", "weekend")}) < 7)${published ? "," : ""}`,
+          ...(published
+            ? [
+                `\tCONSTRAINT "project_payment_reference_scheme_one_of" CHECK (${ref("project", "payment_reference_scheme")} in ('none', 'fik-71', 'fik-75')),`,
+                `\tCONSTRAINT "project_payment_terms_range" CHECK (${ref("project", "payment_terms_days")} between 0 and 365),`,
+              ]
+            : []),
         ]
       : []),
     ...(published ? [`\tCONSTRAINT "project_public_slug_shape" CHECK (${PUBLIC_SLUG})`] : []),
   ])
 }
 
-/** The company table as drizzle-kit writes it today, and as it wrote it as of 0002, before 0008 gave it the route-number counter (Issue #104), 0009 the ticket-number counter (Issue #109) and 0010 the invoice-number counter (Issue #112). */
+/** The company table as drizzle-kit writes it today, and as it wrote it as of 0002, before 0008 gave it the route-number counter (Issue #104), 0009 the ticket-number counter (Issue #109), 0010 the invoice-number counter (Issue #112) and 0037 the invoice identity (#291 C4). */
 const companyTable = (counters: boolean): string =>
   createTable("company", [
     '\t"name" text NOT NULL,',
@@ -89,7 +104,9 @@ const companyTable = (counters: boolean): string =>
     '\t"country" text NOT NULL,',
     '\t"status" text NOT NULL,',
     ...(counters ? ['\t"next_route_number" integer DEFAULT 1000 NOT NULL,', '\t"next_ticket_number" integer DEFAULT 1000 NOT NULL,', '\t"next_invoice_number" integer DEFAULT 1000 NOT NULL,'] : []),
+    ...(counters ? IDENTITY_SHAPES.map(([column]) => `\t"${column}" text,`) : []),
     '\tCONSTRAINT "company_country_registration_number_key" UNIQUE("country","registration_number"),',
+    ...(counters ? IDENTITY_SHAPES.map(([column, pattern]) => `\tCONSTRAINT "company_${column}_shape" CHECK (${ref("company", column)} ~ '${pattern}'),`) : []),
     `\tCONSTRAINT "company_self" CHECK (${ref("company", "company_id")} = ${ref("company", "id")}),`,
     `\tCONSTRAINT "company_status_one_of" CHECK (${ref("company", "status")} ${STATUS})`,
   ])
@@ -103,7 +120,9 @@ const companyTable = (counters: boolean): string =>
  * execution-rendering.test.ts pins; Issue #109: `company` gained
  * `next_ticket_number` in 0009, which resolution-rendering.test.ts pins;
  * Issue #112: `company` gained `next_invoice_number` in 0010, which
- * finance-rendering.test.ts pins), each through an `ALTER TABLE`: the
+ * finance-rendering.test.ts pins; #291 C4: `company` gained the invoice
+ * identity and `project` its payment terms and reference scheme in 0037,
+ * which finance-settings-rendering.test.ts pins), each through an `ALTER TABLE`: the
  * statement as drizzle-kit generates it now, and as it generated it as of
  * 0002. An applied file is never edited, so 0002 is held to the earlier
  * spelling.
