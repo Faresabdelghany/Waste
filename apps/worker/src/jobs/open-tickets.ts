@@ -107,6 +107,7 @@ import { routeLabel } from "@waste/contracts/execution"
 import { routeFields } from "@waste/contracts/routes"
 import type { Database, Tx } from "@waste/db/client"
 import { appendTicketEvent, BY_SLA, openTicket, type TicketDraft, type TicketEventDraft } from "@waste/db/commands/open-ticket"
+import { bookedTicket } from "@waste/db/commands/ticket-stops"
 import { emit } from "@waste/db/commands/outbox"
 import { labelOf, ticketColumns, ticketOf, type TicketRow } from "@waste/db/commands/resolution-rows"
 import { newId } from "@waste/db/ids"
@@ -397,7 +398,8 @@ async function supersede(tx: Tx, companyId: string, problem: TicketRow, missed: 
 /**
  * The ticket a missed stop was booked to answer (O3c of #290), under its row
  * lock, with the comment its miss is; undefined for an event of another kind
- * or a stop booked for no ticket.
+ * or a stop booked for no ticket. Found through the booking ledger (#422), so
+ * a miss heard after the office booked the ticket again still finds it.
  */
 async function bookedTicketOf(tx: Tx, event: OutboxJob): Promise<{ row: TicketRow; missed: string } | undefined> {
   if (event.kind !== "pickup-failed" && event.kind !== "pickup-skipped") return undefined
@@ -405,14 +407,15 @@ async function bookedTicketOf(tx: Tx, event: OutboxJob): Promise<{ row: TicketRo
   const [row] = await tx
     .select(ticketColumns)
     .from(ticket)
-    .where(and(eq(ticket.companyId, event.companyId), eq(ticket.bookedPickupId, stop.id)))
+    .where(bookedTicket(tx, event.companyId, stop.id))
     .for("update")
     .limit(1)
   if (row === undefined) return undefined
   const [onRoute] = await tx.select({ number: route.number }).from(route).where(and(eq(route.companyId, event.companyId), eq(route.id, stop.routeId))).limit(1)
   const reason = stop.reason ?? stop.proofs?.[0]?.reason ?? "other"
   const outcome = event.kind === "pickup-failed" ? "failed" : "skipped"
-  const open = (OPEN_TICKET_STATUSES as readonly string[]).includes(row.status)
+  // Told to book another only while the ticket is open and still waits on this stop: one booked since (#422) answers it already.
+  const open = (OPEN_TICKET_STATUSES as readonly string[]).includes(row.status) && row.bookedPickupId === stop.id
   return { row, missed: stopMissed({ position: stop.position, route: onRoute === undefined ? stop.routeId : routeLabel(onRoute.number), service: stop.service ?? "empty", outcome, reason, open }) }
 }
 

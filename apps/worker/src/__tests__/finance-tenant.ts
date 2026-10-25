@@ -37,7 +37,7 @@ import { company, project } from "@waste/db/schema/organisation"
 import { pickupExceptionRule, pickupExceptionRuleStep } from "@waste/db/schema/pickup-exceptions"
 import { warehouse } from "@waste/db/schema/places"
 import { planningArea } from "@waste/db/schema/planning-areas"
-import { ticket, ticketEvent } from "@waste/db/schema/resolution"
+import { ticket, ticketBooking, ticketEvent } from "@waste/db/schema/resolution"
 import { collectionGroup, routeScheme } from "@waste/db/schema/route-schemes"
 import { withCompany } from "@waste/db/tenant"
 import type { PickupOrigin, PickupOutcome, PickupReason, PickupService, PickupStatus } from "@waste/domain/execution/vocabulary"
@@ -302,6 +302,8 @@ export type TicketSeed = {
   chargeProductId?: string | null
   /** The stop the office booked to answer it (O3c of #290). */
   booked?: { routeId: string; pickupId: string } | null
+  /** Stops it was booked for before that one, which only the ledger keeps (#422). */
+  bookedBefore?: { routeId: string; pickupId: string }[]
 }
 
 /** A ticket as Resolution would have written it, completed with a resolution or open, on Olivia's word. */
@@ -336,6 +338,10 @@ export async function seedTicket(pool: Database, tenant: FinanceTenant, seed: Ti
       bookedPickupId: seed.booked?.pickupId ?? null,
       closedAt,
     })
+    // Every booking in the ledger, as the API's bookTicket appends them: the earlier ones first, then the one the ticket names.
+    for (const stop of [...(seed.bookedBefore ?? []), ...(seed.booked ? [seed.booked] : [])]) {
+      await tx.insert(ticketBooking).values({ companyId, projectId: tenant.projects.copenhagen.id, ticketId: id, ...stop })
+    }
   })
   return { id }
 }
@@ -367,6 +373,7 @@ export async function dropFinanceTenant(pool: Database, owner: Database, company
   await owner.db.delete(invoiceLine).where(eq(invoiceLine.companyId, companyId))
   await owner.db.delete(invoice).where(eq(invoice.companyId, companyId))
   await owner.db.delete(billingRunExclusion).where(eq(billingRunExclusion.companyId, companyId))
+  await owner.db.delete(ticketBooking).where(eq(ticketBooking.companyId, companyId))
   await owner.db.delete(ticketEvent).where(eq(ticketEvent.companyId, companyId))
   await withCompany(pool.db, companyId, async (tx: Tx) => {
     await tx.delete(billingRun).where(eq(billingRun.companyId, companyId))

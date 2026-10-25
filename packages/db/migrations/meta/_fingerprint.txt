@@ -2892,6 +2892,24 @@ index wms.ticket ticket_shared_collection_point_id_idx CREATE INDEX ticket_share
 index wms.ticket ticket_source_event_id_idx CREATE UNIQUE INDEX ticket_source_event_id_idx ON wms.ticket USING btree (company_id, source_event_id) WHERE (source_event_id IS NOT NULL)
 trigger wms.ticket ticket_touch_updated_at enabled=O CREATE TRIGGER ticket_touch_updated_at BEFORE UPDATE ON wms.ticket FOR EACH ROW EXECUTE FUNCTION wms.touch_updated_at()
 policy wms.ticket ticket_tenant_fence permissive ALL to=wms_api using=(company_id = ( SELECT wms.current_company_id() AS current_company_id)) check=(company_id = ( SELECT wms.current_company_id() AS current_company_id))
+relation wms.ticket_booking kind=table owner=<owner> persistence=p rls=true force-rls=true replica-identity=d acl=[<owner>=DELETE,INSERT,MAINTAIN,REFERENCES,SELECT,TRIGGER,TRUNCATE,UPDATE/<owner> wms_api=INSERT,SELECT/<owner> wms_worker=SELECT/<owner>]
+column wms.ticket_booking 1 id uuid not-null default=wms.uuidv7()
+column wms.ticket_booking 2 company_id uuid not-null
+column wms.ticket_booking 3 project_id uuid not-null
+column wms.ticket_booking 4 recorded_at timestamp with time zone not-null default=now()
+column wms.ticket_booking 5 ticket_id uuid not-null
+column wms.ticket_booking 6 route_id uuid not-null
+column wms.ticket_booking 7 pickup_id uuid not-null
+constraint wms.ticket_booking ticket_booking_company_id_fk FOREIGN KEY (company_id) REFERENCES wms.company(id)
+constraint wms.ticket_booking ticket_booking_pkey PRIMARY KEY (id)
+constraint wms.ticket_booking ticket_booking_project_id_fk FOREIGN KEY (company_id, project_id) REFERENCES wms.project(company_id, id)
+constraint wms.ticket_booking ticket_booking_route_id_pickup_id_fk FOREIGN KEY (company_id, project_id, route_id, pickup_id) REFERENCES wms.pickup(company_id, project_id, route_id, id)
+constraint wms.ticket_booking ticket_booking_ticket_id_fk FOREIGN KEY (company_id, project_id, ticket_id) REFERENCES wms.ticket(company_id, project_id, id)
+index wms.ticket_booking ticket_booking_pickup_id_key CREATE UNIQUE INDEX ticket_booking_pickup_id_key ON wms.ticket_booking USING btree (company_id, pickup_id)
+index wms.ticket_booking ticket_booking_pkey CREATE UNIQUE INDEX ticket_booking_pkey ON wms.ticket_booking USING btree (id)
+index wms.ticket_booking ticket_booking_project_id_idx CREATE INDEX ticket_booking_project_id_idx ON wms.ticket_booking USING btree (company_id, project_id)
+index wms.ticket_booking ticket_booking_ticket_id_idx CREATE INDEX ticket_booking_ticket_id_idx ON wms.ticket_booking USING btree (company_id, ticket_id, id)
+policy wms.ticket_booking ticket_booking_tenant_fence permissive ALL to=wms_api using=(company_id = ( SELECT wms.current_company_id() AS current_company_id)) check=(company_id = ( SELECT wms.current_company_id() AS current_company_id))
 relation wms.ticket_event kind=table owner=<owner> persistence=p rls=true force-rls=true replica-identity=d acl=[<owner>=DELETE,INSERT,MAINTAIN,REFERENCES,SELECT,TRIGGER,TRUNCATE,UPDATE/<owner> wms_api=INSERT,SELECT/<owner> wms_worker=SELECT/<owner>]
 column wms.ticket_event 1 id uuid not-null default=wms.uuidv7()
 column wms.ticket_event 2 company_id uuid not-null
@@ -3550,4 +3568,5 @@ journal 1792926214973 7b4def117e8b9a90b2c9004f090fe9797125db6e60c8bb1d5c91adbb98
 journal 1792928027904 dea07fe438532044d3e47b8f1136a440e1137886a6effecd6a5584a64753f08b
 journal 1792945670863 53a1b13d2e90aa2a8f65e733cd43698ac445582226fa5aa1848c4a377c9b38d9
 journal 1792948527917 f5e98d4bbd8a0a2efce518a64f08be8fa02b2f26022e968b2f0ee7c4bd85f2f7
+journal 1792950556670 ff215726a340d783acbe6014a8515499181b8c263d03a1f84c22527b396f9e8c
 pgboss-version 42

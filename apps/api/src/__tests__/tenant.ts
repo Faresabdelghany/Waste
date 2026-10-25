@@ -72,7 +72,7 @@ import {
 import { company, project, serviceProvider } from "@waste/db/schema/organisation"
 import { contaminantCode, contaminantCodeFraction, pickupExceptionRule, pickupExceptionRuleStep } from "@waste/db/schema/pickup-exceptions"
 import { planningArea, planningAreaBoundary } from "@waste/db/schema/planning-areas"
-import { alert, ticket, ticketEvent, ticketSla } from "@waste/db/schema/resolution"
+import { alert, ticket, ticketBooking, ticketEvent, ticketSla } from "@waste/db/schema/resolution"
 import { application, applicationDecision } from "@waste/db/schema/applications"
 import { collectionGroup, collectionGroupContainer, collectionGroupContainerType, collectionGroupFraction, routeScheme } from "@waste/db/schema/route-schemes"
 import { withCompany } from "@waste/db/tenant"
@@ -333,6 +333,7 @@ export async function dropTenant(pool: Database, companyId: string, owner?: Data
     await owner.db.delete(weightReview).where(eq(weightReview.companyId, companyId))
     await owner.db.delete(planLeg).where(eq(planLeg.companyId, companyId))
     await owner.db.delete(planStop).where(eq(planStop.companyId, companyId))
+    await owner.db.delete(ticketBooking).where(eq(ticketBooking.companyId, companyId))
     await owner.db.delete(ticketEvent).where(eq(ticketEvent.companyId, companyId))
     await owner.db.delete(applicationDecision).where(eq(applicationDecision.companyId, companyId))
     await owner.db.delete(proofOfService).where(eq(proofOfService.companyId, companyId))

@@ -66,6 +66,7 @@ describe("booking the stop", () => {
 describe("what the ticket is told", () => {
   test("its stop done: serviced by it, or, closed already, that it was done after", () => {
     assert.equal(servicedBy(stop), "Serviced by stop 4 of route RC-1042")
+    assert.equal(servicedBy(stop, { position: 2, route: "RC-1043" }), "Serviced by stop 4 of route RC-1042. Stop 2 of route RC-1043 is still booked for this ticket: take it off", "a stop booked since, still planned (#422)")
     assert.equal(servedAfterClose({ ...stop, service: "deliver" }), "The delivery at stop 4 of route RC-1042 was completed after this ticket closed")
   })
 

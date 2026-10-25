@@ -38,8 +38,9 @@ import { driver, vehicle } from "../schema/fleet"
 import { vehicleType } from "../schema/fleet-types"
 import { company, project } from "../schema/organisation"
 import { depot } from "../schema/places"
-import { alert, ticket, ticketEvent } from "../schema/resolution"
+import { alert, ticket, ticketBooking, ticketEvent } from "../schema/resolution"
 import { collectionGroup, routeScheme } from "../schema/route-schemes"
+import { ticketBookingBackfill } from "../sql/ticket-booking"
 import { withCompany } from "../tenant"
 import { databaseUnderTest, freshDatabase, type FreshDatabase } from "./database"
 import { refusedWith, rolledBack, rolledBackIn } from "./specimen"
@@ -599,6 +600,35 @@ describe("the Resolution tables against a fresh database", { skip: database.skip
       ])
       await assert.rejects(tx.transaction((savepoint) => savepoint.insert(outboxEvent).values({ ...event, id: a.fourth, kind: "alert-raised" })), refusedWith("23514", /outbox_event_kind_one_of/))
       await assert.rejects(tx.transaction((savepoint) => savepoint.insert(outboxEvent).values({ ...event, id: a.fourth, kind: "ticket-opened", aggregateKind: "alert" })), refusedWith("23514", /outbox_event_aggregate_kind_one_of/))
+    }))
+
+  test("ticket_booking (#422) keeps every booking: one ticket per stop (23505), the stop of the ticket's own project and company (23503), and the API role appends and never rewrites (42501)", async () => {
+    await seeded(async (tx) => {
+      await seedHarbor(tx)
+      const booking = { companyId: a.company, projectId: a.project, ticketId: a.ticket }
+      await tx.insert(ticketBooking).values([
+        { ...booking, id: a.spare, routeId: a.route, pickupId: a.pickup },
+        { ...booking, id: a.other, routeId: a.secondRoute, pickupId: a.secondPickup },
+      ])
+      await assert.rejects(tx.transaction((savepoint) => savepoint.insert(ticketBooking).values({ ...booking, id: a.third, routeId: a.route, pickupId: a.pickup })), refusedWith("23505", /ticket_booking_pickup_id_key/))
+      await assert.rejects(tx.transaction((savepoint) => savepoint.insert(ticketBooking).values({ ...booking, id: a.third, routeId: a.harborRoute, pickupId: a.harborPickup })), refusedWith("23503", /ticket_booking_route_id_pickup_id_fk/), "another project's stop")
+      await assert.rejects(tx.transaction((savepoint) => savepoint.insert(ticketBooking).values({ ...booking, id: a.third, routeId: b.route, pickupId: b.pickup })), refusedWith("23503", /ticket_booking_route_id_pickup_id_fk/), "another company's stop")
+      await assert.rejects(tx.transaction((savepoint) => savepoint.insert(ticketBooking).values({ ...booking, id: a.third, ticketId: b.ticket, routeId: a.route, pickupId: a.harborPickup })), refusedWith("23503", /ticket_booking_ticket_id_fk/), "another company's ticket")
+    })
+    await asCompany(a.company, async (tx) => {
+      await tx.insert(ticketBooking).values({ id: a.spare, companyId: a.company, projectId: a.project, ticketId: a.ticket, routeId: a.route, pickupId: a.pickup })
+      await assert.rejects(tx.transaction((savepoint) => savepoint.update(ticketBooking).set({ pickupId: a.secondPickup, routeId: a.secondRoute }).where(eq(ticketBooking.id, a.spare))), refusedWith("42501", /permission denied for table ticket_booking/))
+      await assert.rejects(tx.transaction((savepoint) => savepoint.delete(ticketBooking).where(eq(ticketBooking.id, a.spare))), refusedWith("42501", /permission denied for table ticket_booking/))
+    })
+  })
+
+  test("the migration's backfill gives the ledger each ticket's current booking, and nothing for a ticket booked for no stop", () =>
+    seeded(async (tx) => {
+      // As the ticket's columns held it before the ledger: booked for the second route's stop, with no row in the ledger.
+      await tx.update(ticket).set({ bookedRouteId: a.secondRoute, bookedPickupId: a.secondPickup }).where(eq(ticket.id, a.ticket))
+      await tx.execute(sql.raw(ticketBookingBackfill()))
+      const rows = await tx.select({ companyId: ticketBooking.companyId, projectId: ticketBooking.projectId, ticketId: ticketBooking.ticketId, routeId: ticketBooking.routeId, pickupId: ticketBooking.pickupId }).from(ticketBooking)
+      assert.deepEqual(rows, [{ companyId: a.company, projectId: a.project, ticketId: a.ticket, routeId: a.secondRoute, pickupId: a.secondPickup }], "b's ticket is booked for nothing")
     }))
 })
 

@@ -67,7 +67,7 @@ import { importRun, importRunRow } from "../schema/imports"
 import { company, project, serviceProvider } from "../schema/organisation"
 import { depot, unloadingStation, unloadingStationFraction, warehouse } from "../schema/places"
 import { planningArea, planningAreaBoundary } from "../schema/planning-areas"
-import { alert, ticket, ticketEvent, ticketSla } from "../schema/resolution"
+import { alert, ticket, ticketBooking, ticketEvent, ticketSla } from "../schema/resolution"
 import { application, applicationDecision } from "../schema/applications"
 import { collectionGroup, collectionGroupContainer, collectionGroupContainerType, collectionGroupFraction, routeScheme } from "../schema/route-schemes"
 import { plan, planLeg, planStop, routingQuota } from "../schema/routing"
@@ -232,7 +232,7 @@ const ROUTING = "routing: Plans and the quota, written by the worker and the pro
 
 export const EXEMPT: readonly Exempt[] = [
   { table: auditEvent, why: "the audit log itself" },
-  ...[stockMovement, vehicleAllocationEvent, proofOfService, unload, driverCommand, ticketEvent, billingRunExclusion, invoice, invoiceLine, settlementEvent, weightReview, applicationDecision, payment, paymentAllocation].map((table) => ({ table, why: LEDGER })),
+  ...[stockMovement, vehicleAllocationEvent, proofOfService, unload, driverCommand, ticketEvent, ticketBooking, billingRunExclusion, invoice, invoiceLine, settlementEvent, weightReview, applicationDecision, payment, paymentAllocation].map((table) => ({ table, why: LEDGER })),
   ...[route, pickup, session].map((table) => ({ table, why: EXECUTION })),
   { table: outboxEvent, why: "the outbox: a transport, stamped as it is relayed" },
   ...[generationRun, generationMatch].map((table) => ({ table, why: GENERATION })),

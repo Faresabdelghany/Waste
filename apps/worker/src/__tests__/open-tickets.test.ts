@@ -30,8 +30,10 @@ import { newId } from "@waste/db/ids"
 import { appendTicketEvent, openTicket } from "@waste/db/commands/open-ticket"
 import { outboxEvent } from "@waste/db/schema/execution"
 import { driver } from "@waste/db/schema/fleet"
-import { ticket, ticketEvent, ticketSla } from "@waste/db/schema/resolution"
+import { ticket, ticketBooking, ticketEvent, ticketSla } from "@waste/db/schema/resolution"
+import type { Tx } from "@waste/db/client"
 import { withCompany } from "@waste/db/tenant"
+import { stopMissed } from "@waste/domain/execution/ticket-stops"
 import { OPEN_TICKET_STATUSES } from "@waste/domain/resolution/vocabulary"
 import { and, asc, eq, inArray, sql } from "drizzle-orm"
 
@@ -151,6 +153,51 @@ describe("resolution.open-tickets", { skip: api.skip || owner.skip }, () => {
     }
   })
 
+  /** The booking as the API's `bookTicket` writes it: the ticket names the stop, and the ledger keeps it (#422). */
+  const book = async (tx: Tx, booking: { id: string; projectId: string }, routeId: string, pickupId: string) => {
+    await tx.update(ticket).set({ bookedRouteId: routeId, bookedPickupId: pickupId }).where(and(eq(ticket.companyId, tenant.companyId), eq(ticket.id, booking.id)))
+    await tx.insert(ticketBooking).values({ companyId: tenant.companyId, projectId: booking.projectId, ticketId: booking.id, routeId, pickupId })
+  }
+
+  test("a miss heard after the office booked the ticket again still finds it through the ledger: a comment on the ticket, and no case of its own (#422)", async () => {
+    const missed = await seedRoute(pool, tenant)
+    const [stopId] = missed.pickupIds
+    const next = await seedRoute(pool, tenant, { status: "active", pickups: [{ container: "bin1", status: "planned" }] })
+    const booked = await withCompany(pool.db, tenant.companyId, async (tx) => {
+      const { row } = await openTicket(tx, {
+        companyId: tenant.companyId,
+        draft: {
+          projectId: tenant.projectId,
+          kind: "overflow",
+          priority: "medium",
+          source: "phone",
+          subject: "Overflowing at Parkvej 18",
+          description: "Bags beside BIN-1",
+          occurredAt: NOW,
+          dueAt: null,
+          assigneeUserAccountId: null,
+          links: { routeId: null, pickupId: null, containerId: tenant.containers.bin1.id, propertyId: tenant.properties.parkvej.id, sharedCollectionPointId: null, customerId: null, agreementId: null, driverId: null, parentTicketId: null },
+          alertId: null,
+        },
+        createdBy: tenant.officeUserId,
+        sourceEventId: null,
+        newId,
+        now: () => NOW,
+      })
+      await book(tx, { id: row.id, projectId: row.projectId }, missed.id, stopId)
+      // The office books the next stop before the worker has heard of the first one's miss: the ticket's columns now name only the next.
+      await book(tx, { id: row.id, projectId: row.projectId }, next.id, next.pickupIds[0])
+      return row.id
+    })
+    const event = outboxJob(tenant, { kind: "pickup-skipped", aggregateKind: "pickup", aggregateId: stopId, payload: pickupPayload(tenant, missed.id, stopId, { container: "bin1", status: "skipped", reason: "removed-by-dispatcher" }, []) })
+    assert.deepEqual(await openTicketFor(event, context()), { outcome: "commented", ticketId: booked })
+    assert.equal((await ticketsFrom(event.id)).length, 0, "no case of its own")
+    const told = (await historyOf(booked)).at(-1)
+    assert.equal(told?.sourceEventId, event.id)
+    // Not told to book another: the stop booked since answers it already.
+    assert.equal(told?.body, stopMissed({ position: 1, route: missed.label, service: "empty", outcome: "skipped", reason: "removed-by-dispatcher", open: false }))
+  })
+
   test("a stop booked to answer a ticket, missed, is that ticket's news: a comment saying what happened and why, the event's id its key, and no case of its own (O3c of #290)", async () => {
     const seeded = await seedRoute(pool, tenant)
     const [stopId] = seeded.pickupIds
@@ -175,7 +222,7 @@ describe("resolution.open-tickets", { skip: api.skip || owner.skip }, () => {
         newId,
         now: () => NOW,
       })
-      await tx.update(ticket).set({ bookedRouteId: seeded.id, bookedPickupId: stopId }).where(and(eq(ticket.companyId, tenant.companyId), eq(ticket.id, row.id)))
+      await book(tx, { id: row.id, projectId: row.projectId }, seeded.id, stopId)
       return row.id
     })
     const event = outboxJob(tenant, { kind: "pickup-skipped", aggregateKind: "pickup", aggregateId: stopId, payload: pickupPayload(tenant, seeded.id, stopId, { container: "bin1", status: "skipped", reason: "removed-by-dispatcher" }, []) })
