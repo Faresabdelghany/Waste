@@ -63,6 +63,14 @@ const spellRecord = (record: Readonly<Record<string, string | number | boolean>>
     .map((key) => `${key}=${JSON.stringify(record[key])}`)
     .join("&")
 
+/**
+ * The request a Plan answers, spelt so equal requests share one answer. A
+ * stop's seconds at the kerb (O10 of #290) are sent to the optimiser and not
+ * spelt here: its cost is the drive, so they never change the order or a
+ * leg, and spelling them would send every active Plan back to the provider
+ * once for an answer it already holds. They join the day a time window makes
+ * them matter.
+ */
 export function planFingerprint(inputs: FingerprintInputs): string {
   const stops = inputs.stops.map((stop) => (typeof stop === "string" ? `none(${stop})` : spell(stop)))
   if (inputs.solver === "optimiser") stops.sort()

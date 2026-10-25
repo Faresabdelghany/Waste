@@ -30,13 +30,16 @@ import type { Position2D } from "@waste/contracts/geojson"
 import type { Tx } from "@waste/db/client"
 import { activateSolved, classOf, ROUTING_OPTIMISE_QUEUE, type RoutingJobData } from "@waste/db/commands/plans"
 import { quotaRows, type QuotaRow } from "@waste/db/commands/routing-quota"
+import { containerType } from "@waste/db/schema/catalogue"
+import { container } from "@waste/db/schema/containers"
 import { property, sharedCollectionPoint } from "@waste/db/schema/customers"
 import { pickup, route } from "@waste/db/schema/execution"
 import { depot, unloadingStation } from "@waste/db/schema/places"
 import { plan, planLeg, planStop } from "@waste/db/schema/routing"
 import { withCompany } from "@waste/db/tenant"
 import { orderIsOpen } from "@waste/domain/execution/transitions"
-import type { RouteStatus } from "@waste/domain/execution/vocabulary"
+import type { PickupService, RouteStatus } from "@waste/domain/execution/vocabulary"
+import { serviceSecondsOf } from "@waste/domain/execution/workload"
 import { isSuperseded, OPTIMISER_MAX_STOPS } from "@waste/domain/routing/plans"
 import { SUPERSEDED } from "@waste/domain/routing/vocabulary"
 import { DEFAULT_PROFILE, type OptimiseRequest, type RoutedLeg } from "@waste/routing/provider"
@@ -76,11 +79,14 @@ async function gather(tx: Tx, keys: { planId: string; companyId: string; provide
   const station = positionOf(ends.station)
   if (found.trip === "full" && !station) return { kind: "refused", sentence: "a full trip needs the route's unloading station, and it has none" }
   // The route's open stops as they are now: the optimiser's request is a set, and the solver reads it when it runs (#170).
+  // Each with its seconds at the kerb (O10 of #290): its arrival times', never the order's, since the solver's cost is the drive.
   const stops = await tx
-    .select({ id: pickup.id, position: pickup.position, property: property.location, point: sharedCollectionPoint.location })
+    .select({ id: pickup.id, position: pickup.position, service: pickup.service, containerServiceSeconds: containerType.serviceSeconds, property: property.location, point: sharedCollectionPoint.location })
     .from(pickup)
     .leftJoin(property, eq(pickup.propertyId, property.id))
     .leftJoin(sharedCollectionPoint, eq(pickup.sharedCollectionPointId, sharedCollectionPoint.id))
+    .leftJoin(container, eq(pickup.containerId, container.id))
+    .leftJoin(containerType, eq(container.containerTypeId, containerType.id))
     .where(and(eq(pickup.routeId, found.routeId), eq(pickup.status, "planned")))
     .orderBy(asc(pickup.position), asc(pickup.id))
   if (stops.length === 0) return { kind: "refused", sentence: "the route has no open pickups to order" }
@@ -91,7 +97,8 @@ async function gather(tx: Tx, keys: { planId: string; companyId: string; provide
     if (!at) return { kind: "refused", sentence: `stop ${stop.position} has no location to route` }
     points.push(at)
   }
-  const request: OptimiseRequest = { profile: DEFAULT_PROFILE, depot: home, stops: points, station: found.trip === "full" ? station : null }
+  const serviceSeconds = stops.map((stop) => serviceSecondsOf({ service: stop.service as PickupService, containerServiceSeconds: stop.containerServiceSeconds }))
+  const request: OptimiseRequest = { profile: DEFAULT_PROFILE, depot: home, stops: points, serviceSeconds, station: found.trip === "full" ? station : null }
   const quota = await quotaRows(tx, { companyId: keys.companyId, provider: keys.provider })
   return { kind: "request", request, routeId: found.routeId, pickupIds: stops.map((stop) => stop.id), trip: found.trip, operatingDate: ends.operatingDate, quota }
 }

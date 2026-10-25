@@ -79,6 +79,7 @@ const fractionColumns = {
   name: wasteFraction.name,
   wasteCode: wasteFraction.wasteCode,
   treatment: wasteFraction.treatment,
+  densityKgPerCubicMetre: wasteFraction.densityKgPerCubicMetre,
   createdAt: wasteFraction.createdAt,
   updatedAt: wasteFraction.updatedAt,
 }
@@ -86,7 +87,7 @@ const fractionColumns = {
 type FractionRow = Pick<typeof wasteFraction.$inferSelect, keyof typeof fractionColumns>
 
 function fractionOf(row: FractionRow): WasteFraction {
-  return { id: row.id, key: row.key, name: row.name, wasteCode: row.wasteCode, treatment: row.treatment as WasteTreatment | null, ...stampsOf(row) }
+  return { id: row.id, key: row.key, name: row.name, wasteCode: row.wasteCode, treatment: row.treatment as WasteTreatment | null, densityKgPerCubicMetre: row.densityKgPerCubicMetre, ...stampsOf(row) }
 }
 
 /** `unique (company_id, key)` and `unique (company_id, name)`: each is one fraction's inside a company, and free in the next. */
@@ -101,6 +102,7 @@ const typeColumns = {
   id: containerType.id,
   name: containerType.name,
   volumeLitres: containerType.volumeLitres,
+  serviceSeconds: containerType.serviceSeconds,
   createdAt: containerType.createdAt,
   updatedAt: containerType.updatedAt,
 }
@@ -108,7 +110,7 @@ const typeColumns = {
 type TypeRow = Pick<typeof containerType.$inferSelect, keyof typeof typeColumns>
 
 function typeOf(row: TypeRow): ContainerType {
-  return { id: row.id, name: row.name, volumeLitres: row.volumeLitres, ...stampsOf(row) }
+  return { id: row.id, name: row.name, volumeLitres: row.volumeLitres, serviceSeconds: row.serviceSeconds, ...stampsOf(row) }
 }
 
 /** `unique (company_id, name)`: a container type's name is one type's inside a company. */
@@ -265,9 +267,9 @@ export function catalogueRoutes(guard: MiddlewareHandler<AuthEnv>) {
       "/waste-fractions/:id",
       describeRoute({
         operationId: "patchWasteFraction",
-        summary: "Rename a waste fraction or set its waste code or treatment",
+        summary: "Rename a waste fraction or set its waste code, treatment or density",
         description:
-          "Changes the name a person reads, the waste code the national waste-data system keys the fraction by, or how it is treated once collected; a null clears the code or the treatment. The key is not patchable: it is the slug reports, imports and fixtures quote, and a fraction that needs another key is another fraction.",
+          "Changes the name a person reads, the waste code the national waste-data system keys the fraction by, how it is treated once collected, or its density, kg per cubic metre as it lies in a container, which a stop's expected weight multiplies its container's litres by (1 to 2000); a null clears the code, the treatment or the density. The key is not patchable: it is the slug reports, imports and fixtures quote, and a fraction that needs another key is another fraction.",
         security: BEARER_SECURITY,
         responses: {
           200: describeJson("The waste fraction as it now stands.", WasteFraction),
@@ -335,7 +337,7 @@ export function catalogueRoutes(guard: MiddlewareHandler<AuthEnv>) {
         operationId: "createContainerType",
         summary: "Add a container type",
         description:
-          "Adds a container type to the company's own vocabulary. The name is unique inside the company; `volumeLitres` is optional, and null means nobody recorded one — zero is not a volume. The server mints the id.",
+          "Adds a container type to the company's own vocabulary. The name is unique inside the company; `volumeLitres` is optional, and null means nobody recorded one — zero is not a volume. `serviceSeconds`, the time an emptying of one takes at the kerb (1 to 3600), is optional too. The server mints the id.",
         security: BEARER_SECURITY,
         responses: {
           201: describeCreated("The container type as it was written.", ContainerType),
@@ -396,7 +398,7 @@ export function catalogueRoutes(guard: MiddlewareHandler<AuthEnv>) {
         operationId: "patchContainerType",
         summary: "Change a container type",
         description:
-          "Changes the name or the volume of one container type; every field is optional and at least one must be given. A null volume is the volume nobody recorded.",
+          "Changes the name, the volume or the service seconds of one container type; every field is optional and at least one must be given. A null volume is the volume nobody recorded; `serviceSeconds` is the time an emptying of one takes at the kerb (1 to 3600), its stop's service time, and null leaves a stop to the unknown figure.",
         security: BEARER_SECURITY,
         responses: {
           200: describeJson("The container type as it now stands.", ContainerType),

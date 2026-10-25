@@ -259,6 +259,29 @@ describe("OpenRouteService optimisation, VROOM behind /vroom/v0 (#171)", () => {
     })
   })
 
+  test("gives each job its stop's seconds at the kerb where the request names them (O10 of #290), and leaves the legs the steps' travel", async () => {
+    const withService = vroomBody(
+      [
+        step("start", depot, { arrival: 0, duration: 0, distance: 0 }),
+        step("job", a, { id: 2, job: 2, arrival: 40, duration: 40, distance: 320, service: 75 }),
+        step("job", b, { id: 1, job: 1, arrival: 155, duration: 80, distance: 640, service: 30 }),
+        step("end", depot, { arrival: 275, duration: 170, distance: 1300 }),
+      ],
+      line,
+    )
+    const server = recording(json(200, withService, QUOTA_HEADERS))
+    const result = answered(await new OpenRouteServiceProvider({ apiKey: KEY, fetch: server.fetch }).optimise({ profile: "driving-hgv", depot, stops: [b, a], serviceSeconds: [30, 75] }))
+    assert.deepEqual((server.requests[0].body as { jobs: unknown[] }).jobs, [
+      { id: 1, location: b, service: 30 },
+      { id: 2, location: a, service: 75 },
+    ])
+    assert.deepEqual(
+      result.legs.map((leg) => leg.seconds),
+      [40, 40, 90],
+      "a stop's time at the kerb is never a leg's",
+    )
+  })
+
   test("answers the solver's order, and the closed trip's legs cut from its polyline at each step, measured by the steps' own travel", async () => {
     const server = recording(json(200, roundTrip, QUOTA_HEADERS))
     const result = answered(await new OpenRouteServiceProvider({ apiKey: KEY, fetch: server.fetch }).optimise({ profile: "driving-hgv", depot, stops: [b, a] }))

@@ -5,9 +5,9 @@
 import assert from "node:assert/strict"
 import { describe, test } from "node:test"
 
-import { estimatedKg, fractionFactorInForce, gramsOf, kilogramsOf, recycles, SUSTAINABILITY_COLUMNS, sustainabilityCsv, sustainabilityLines, weighStops, type CustomerStop, type FractionFactor, type StopToWeigh } from "../sustainability"
+import { fractionFactorInForce, gramsOf, kilogramsOf, recycles, SUSTAINABILITY_COLUMNS, sustainabilityCsv, sustainabilityLines, weighStops, type CustomerStop, type FractionFactor, type StopToWeigh } from "../sustainability"
 
-const stop = (id: string, values: Partial<StopToWeigh> = {}): StopToWeigh => ({ id, routeId: "r1", wasteFractionId: "food", volumeLitres: 240, measuredKg: null, densityKgPerM3: null, ...values })
+const stop = (id: string, values: Partial<StopToWeigh> = {}): StopToWeigh => ({ id, routeId: "r1", wasteFractionId: "food", volumeLitres: 240, measuredKg: null, densityKgPerCubicMetre: null, ...values })
 
 describe("weighing the stops", () => {
   test("a stop's own weight is measured; the route's unloaded kilograms less those are shared over the others by container volume", () => {
@@ -47,9 +47,7 @@ describe("weighing the stops", () => {
   })
 
   test("with no unload, a stop is estimated by volume and density where both are known, and unmeasured otherwise", () => {
-    assert.equal(estimatedKg({ volumeLitres: 240, densityKgPerM3: 125 }), 30)
-    assert.equal(estimatedKg({ volumeLitres: null, densityKgPerM3: 125 }), null)
-    const weights = weighStops([stop("a", { densityKgPerM3: 125 }), stop("b")], [])
+    const weights = weighStops([stop("a", { densityKgPerCubicMetre: 125 }), stop("b")], [])
     assert.deepEqual([weights.get("a"), weights.get("b")], [{ kg: 30, basis: "estimated" }, { kg: null, basis: "unmeasured" }])
   })
 })

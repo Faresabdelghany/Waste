@@ -12,8 +12,8 @@
 // numbers, so the shares sum to the kilograms exactly and a tie always goes
 // to the earlier stop); a stop whose share comes to nothing is not weighed
 // as zero but falls to the next basis; else by its container's volume times its
-// fraction's density, where one is known (#290's O10 records densities;
-// until it does nothing is estimated); else not at all. An unmeasured stop is
+// fraction's density, where one is known (`expectedKg`, O10 of #290's
+// expected weight); else not at all. An unmeasured stop is
 // counted beside the figures and never weighed as zero.
 //
 // The recycling rate is the reused and recycled kilograms over every weighed
@@ -23,6 +23,7 @@
 // factor in force on a stop's day is reported without CO₂e (`no-factor`),
 // never as zero, and so are the totals: a sum missing a line would read as
 // the whole.
+import { expectedKg } from "../execution/workload"
 import { csvField } from "../imports/csv"
 import { splitByStops } from "../resources/emissions"
 import type { WasteTreatment } from "../registry/vocabulary"
@@ -36,7 +37,7 @@ export type StopToWeigh = {
   wasteFractionId: string
   volumeLitres: number | null
   measuredKg: number | null
-  densityKgPerM3: number | null
+  densityKgPerCubicMetre: number | null
 }
 
 /** The kilograms a route unloaded of a fraction, counted: neither rejected nor superseded by a correction. */
@@ -44,12 +45,6 @@ export type RouteUnloaded = { routeId: string; wasteFractionId: string; netKg: n
 
 /** A stop's weight and how it was found; `kg` is null exactly when it is unmeasured. */
 export type StopWeight = { kg: number | null; basis: WeightBasis }
-
-/** Its container's volume times its fraction's density, whole kilograms, or null where either is unknown. */
-export function estimatedKg(stop: Pick<StopToWeigh, "volumeLitres" | "densityKgPerM3">): number | null {
-  if (stop.volumeLitres === null || stop.densityKgPerM3 === null) return null
-  return Math.round((stop.volumeLitres * stop.densityKgPerM3) / 1000)
-}
 
 /**
  * Every stop's weight, by the bases best first. A route's unloaded
@@ -82,7 +77,7 @@ export function weighStops(stops: readonly StopToWeigh[], unloaded: readonly Rou
         weights.set(stop.id, { kg: share, basis: "apportioned" })
         continue
       }
-      const kg = estimatedKg(stop)
+      const kg = expectedKg(stop)
       weights.set(stop.id, kg === null ? { kg: null, basis: "unmeasured" } : { kg, basis: "estimated" })
     }
   }

@@ -29,8 +29,8 @@ const ID = "01a0d3a5-e5e0-7000-8000-000000000001"
 const OTHER = "01a0d3a5-e5e0-7000-8000-000000000002"
 const STAMPS = { createdAt: "2026-09-24T13:41:00.000Z", updatedAt: "2026-09-24T13:41:00.000Z" }
 
-const fraction = { id: ID, key: "hard-plastic", name: "Hard plastic", wasteCode: "150102", treatment: "recycling", ...STAMPS }
-const containerType = { id: ID, name: "240 L two-wheeled", volumeLitres: 240, ...STAMPS }
+const fraction = { id: ID, key: "hard-plastic", name: "Hard plastic", wasteCode: "150102", treatment: "recycling", densityKgPerCubicMetre: 40, ...STAMPS }
+const containerType = { id: ID, name: "240 L two-wheeled", volumeLitres: 240, serviceSeconds: 30, ...STAMPS }
 const frequency = {
   id: ID,
   projectId: OTHER,
@@ -113,6 +113,13 @@ describe("WasteFractionCreate and WasteFractionPatch", () => {
     assert.equal(WasteFraction.parse({ ...fraction, treatment: null }).treatment, null)
     assert.equal(WasteFractionCreate.parse({ key: "food", name: "Food waste", treatment: "recycling" }).treatment, "recycling")
     assert.deepEqual(WasteFractionPatch.parse({ treatment: null }), { treatment: null })
+  })
+
+  test("a fraction's density is a whole number of kg a cubic metre, 1 to 2000, or none (O10 of #290)", () => {
+    assert.equal(WasteFraction.parse({ ...fraction, densityKgPerCubicMetre: null }).densityKgPerCubicMetre, null)
+    assert.equal(WasteFractionCreate.parse({ key: "glass", name: "Glass", densityKgPerCubicMetre: 300 }).densityKgPerCubicMetre, 300)
+    for (const density of [0, 2001, 12.5]) assert.deepEqual(refusal(WasteFractionPatch.safeParse({ densityKgPerCubicMetre: density })).map((issue) => issue.path), ["densityKgPerCubicMetre"], String(density))
+    assert.deepEqual(WasteFractionPatch.parse({ densityKgPerCubicMetre: null }), { densityKgPerCubicMetre: null })
     assert.equal(WasteFractionPatch.safeParse({ treatment: "landfill" }).success, false)
     for (const wasteCode of ["20 01 08", "2001080", "210101", "food"]) {
       const refused = refusal(WasteFractionPatch.safeParse({ wasteCode }))
@@ -125,6 +132,9 @@ describe("ContainerType", () => {
   test("is the row on the wire, the volume null where nobody recorded one", () => {
     assert.deepEqual(ContainerType.parse(containerType), containerType)
     assert.deepEqual(ContainerType.parse({ ...containerType, volumeLitres: null }), { ...containerType, volumeLitres: null })
+    // O10 of #290: the seconds an emptying takes at the kerb, 1 to 3600, or none.
+    assert.deepEqual(ContainerType.parse({ ...containerType, serviceSeconds: null }), { ...containerType, serviceSeconds: null })
+    for (const seconds of [0, 3601]) assert.deepEqual(refusal(ContainerTypePatch.safeParse({ serviceSeconds: seconds })).map((issue) => issue.path), ["serviceSeconds"], String(seconds))
   })
 
   test("takes whole positive litres and nothing else: zero is not a volume", () => {

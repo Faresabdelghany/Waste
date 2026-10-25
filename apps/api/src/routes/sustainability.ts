@@ -14,8 +14,9 @@
 // a route's weighbridge kilograms are shared over all its stops of a fraction,
 // whoever's they are; the report then keeps the Customer's. A stop at one of
 // the Customer's sites with no container is no agreement's, and is counted
-// there as not attributed. Fraction density is #290's O10, which this report
-// reads nothing of until it lands: no stop is estimated before then.
+// there as not attributed. A stop no weight reaches is estimated by its
+// container's litres times its fraction's density (O10 of #290), where both
+// are set.
 import { SustainabilityFileQuery, SustainabilityReport, SustainabilityReportQuery } from "@waste/contracts/sustainability"
 import type { Tx } from "@waste/db/client"
 import { reviewStatus, weightReviewOf } from "@waste/db/query/weight-review"
@@ -87,9 +88,17 @@ async function sustainabilityReport(tx: Tx, principal: Principal, query: Sustain
     routeIds.length === 0
       ? []
       : await tx
-          .select({ id: pickup.id, routeId: pickup.routeId, wasteFractionId: pickup.wasteFractionId, volumeLitres: containerType.volumeLitres, measuredKg: latestWeight.weightKg })
+          .select({
+            id: pickup.id,
+            routeId: pickup.routeId,
+            wasteFractionId: pickup.wasteFractionId,
+            volumeLitres: containerType.volumeLitres,
+            densityKgPerCubicMetre: wasteFraction.densityKgPerCubicMetre,
+            measuredKg: latestWeight.weightKg,
+          })
           .from(pickup)
           .innerJoin(route, and(eq(route.companyId, pickup.companyId), eq(route.id, pickup.routeId)))
+          .innerJoin(wasteFraction, and(eq(wasteFraction.companyId, pickup.companyId), eq(wasteFraction.id, pickup.wasteFractionId)))
           .leftJoin(container, and(eq(container.companyId, pickup.companyId), eq(container.id, pickup.containerId)))
           .leftJoin(containerType, and(eq(containerType.companyId, container.companyId), eq(containerType.id, container.containerTypeId)))
           .leftJoin(latestWeight, eq(latestWeight.pickupId, pickup.id))
@@ -111,8 +120,7 @@ async function sustainabilityReport(tx: Tx, principal: Principal, query: Sustain
     return standing !== "rejected" && standing !== "superseded"
   })
 
-  // Densities are #290's O10, recorded nowhere yet: nothing is estimated before then.
-  const weights = weighStops(onRoutes.map((stop) => ({ ...stop, densityKgPerM3: null }) satisfies StopToWeigh), counted)
+  const weights = weighStops(onRoutes satisfies StopToWeigh[], counted)
   const stops: CustomerStop[] = mine.map((stop) => ({ siteKey: siteKeyOf(stop), wasteFractionId: stop.wasteFractionId, day: stop.day, weight: weights.get(stop.id) ?? { kg: null, basis: "unmeasured" } }))
 
   // The fractions' treatments and names, and their factors.

@@ -56,8 +56,8 @@ const boundaryOf = (area: PlanningArea, id: string, boundary = square(12.56, 55.
 // A second area of Copenhagen Central over Parkvej alone, inside Østerbro Zone 2: areas of one project overlap.
 const parkvejBlock: PlanningArea = { ...osterbroArea, id: "01a0d2a4-a280-7016-8000-000000000003", code: "OP-OST-03", name: "Parkvej Block" }
 
-const residual: WasteFraction = { id: "01a0d2a4-a280-7007-8000-000000000001", ...STAMPS, key: "residual", name: "Residual", wasteCode: null, treatment: null }
-const bin240: ContainerType = { id: "01a0d2a4-a280-7008-8000-000000000002", ...STAMPS, name: "Two-wheel bin · 240 L", volumeLitres: 240 }
+const residual: WasteFraction = { id: "01a0d2a4-a280-7007-8000-000000000001", ...STAMPS, key: "residual", name: "Residual", wasteCode: null, treatment: null, densityKgPerCubicMetre: null }
+const bin240: ContainerType = { id: "01a0d2a4-a280-7008-8000-000000000002", ...STAMPS, name: "Two-wheel bin · 240 L", volumeLitres: 240, serviceSeconds: null }
 const osterbro: Customer = { id: "01a0d2a4-a280-700b-8000-000000000002", ...STAMPS, kind: "organisation", name: "Østerbro Housing", registrationNumber: "38112009", email: null, phone: null, billingAddress: null, serviceMessagesAllowed: true, paymentTermsDays: null, status: "active" }
 const parkvej: Property = { id: "01a0d2a4-a280-700c-8000-000000000001", ...STAMPS, projectId: copenhagen.id, name: "Parkvej 18", address: "Parkvej 18, 2100 København Ø", registryId: null, kind: "residential", location: { type: "Point", coordinates: [12.5709, 55.7012] }, notes: null, driverInstructions: null, status: "active", parties: [] }
 const dock4: Property = { ...parkvej, id: "01a0d2a4-a280-700c-8000-000000000002", name: "Dock 4 · Harbor Offices", address: "Dock 4, Nordhavn", location: null }

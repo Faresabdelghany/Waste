@@ -36,6 +36,7 @@
 // ledger books it under, and the whole-percent rate a billable event is
 // priced at — zero being exempt, and a product without one blocking its
 // events with `no-vat-rate`, which is the actionable reason.
+import { DENSITY_KG_PER_CUBIC_METRE, SERVICE_SECONDS } from "@waste/domain/execution/workload"
 import { FREE_DAYS_MAX, HIRE_UNIT } from "@waste/domain/finance/hire"
 import { PRODUCT_KINDS, PRODUCT_STATUSES, PRODUCT_UNITS, WASTE_TREATMENTS } from "@waste/domain/registry/vocabulary"
 import { WASTE_CODE_PATTERN, WASTE_CODE_SHAPE } from "@waste/domain/registry/waste-code"
@@ -69,6 +70,12 @@ export const WasteTreatment = z.enum(WASTE_TREATMENTS)
 /** A volume, a rate or an interval: a whole positive number, since zero is none of them. */
 const Count = PositiveInt
 
+/** What a cubic metre of a fraction weighs in a container, kg (O10 of #290): within the domain's bounds, the database's check. */
+export const Density = z.int().min(DENSITY_KG_PER_CUBIC_METRE.min).max(DENSITY_KG_PER_CUBIC_METRE.max)
+
+/** The seconds an emptying of a container type takes at the kerb (O10 of #290): within the domain's bounds, the database's check. */
+export const ServiceSeconds = z.int().min(SERVICE_SECONDS.min).max(SERVICE_SECONDS.max)
+
 export const WasteFraction = z.object({
   ...stamped,
   /** The stable slug the rest of the system quotes; unique per company. */
@@ -79,6 +86,8 @@ export const WasteFraction = z.object({
   wasteCode: WasteCode.nullable(),
   /** How it is treated once collected (M13 of #293), what the sustainability report's recycling rate reads; null where nobody has set one. */
   treatment: WasteTreatment.nullable(),
+  /** What a cubic metre of it weighs in a container, kg (O10 of #290): a stop's expected weight is its container's litres times this; null where nobody has set one. */
+  densityKgPerCubicMetre: Density.nullable(),
 })
 export type WasteFraction = z.infer<typeof WasteFraction>
 
@@ -87,15 +96,17 @@ export const WasteFractionCreate = z.strictObject({
   name: Label,
   wasteCode: WasteCode.nullable().optional(),
   treatment: WasteTreatment.nullable().optional(),
+  densityKgPerCubicMetre: Density.nullable().optional(),
 })
 export type WasteFractionCreate = z.infer<typeof WasteFractionCreate>
 
-/** The name, the waste code and the treatment: the key is the slug the rest of the system quotes, and a fraction that needs another one is another fraction. Null clears the code or the treatment. */
+/** The name, the waste code, the treatment and the density: the key is the slug the rest of the system quotes, and a fraction that needs another one is another fraction. Null clears the code, the treatment or the density. */
 export const WasteFractionPatch = z
   .strictObject({
     name: Label.optional(),
     wasteCode: WasteCode.nullable().optional(),
     treatment: WasteTreatment.nullable().optional(),
+    densityKgPerCubicMetre: Density.nullable().optional(),
   })
   .refine(changesSomething, somethingToChange)
 export type WasteFractionPatch = z.infer<typeof WasteFractionPatch>
@@ -105,12 +116,15 @@ export const ContainerType = z.object({
   name: Label,
   /** Null where nobody recorded one. */
   volumeLitres: Count.nullable(),
+  /** The seconds an emptying of one takes at the kerb (O10 of #290), its stop's service time; null where nobody has set one. */
+  serviceSeconds: ServiceSeconds.nullable(),
 })
 export type ContainerType = z.infer<typeof ContainerType>
 
 export const ContainerTypeCreate = z.strictObject({
   name: Label,
   volumeLitres: Count.nullable().optional(),
+  serviceSeconds: ServiceSeconds.nullable().optional(),
 })
 export type ContainerTypeCreate = z.infer<typeof ContainerTypeCreate>
 
@@ -118,6 +132,7 @@ export const ContainerTypePatch = z
   .strictObject({
     name: Label.optional(),
     volumeLitres: Count.nullable().optional(),
+    serviceSeconds: ServiceSeconds.nullable().optional(),
   })
   .refine(changesSomething, somethingToChange)
 export type ContainerTypePatch = z.infer<typeof ContainerTypePatch>

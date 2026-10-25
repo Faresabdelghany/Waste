@@ -135,10 +135,11 @@ function directionsResult(body: unknown, points: readonly Position2D[]): Measure
   return { legs: legsBetween(line, wayPoints as number[], points, measures), provenance: provenanceOf(body) }
 }
 
-/** The optimisation request: a job per stop, the station held last by its window, one vehicle from and back to the depot. */
-function vroomRequest({ profile, depot, stops, station }: OptimiseRequest) {
+/** The optimisation request: a job per stop with its seconds at the kerb where given, the station held last by its window, one vehicle from and back to the depot. */
+function vroomRequest({ profile, depot, stops, serviceSeconds, station }: OptimiseRequest) {
   const held = station ? { time_windows: [[0, STATION_OPENS - 1]] } : {}
-  const jobs: Record<string, unknown>[] = stops.map((location, index) => ({ id: index + 1, location, ...held }))
+  const serviceOf = (index: number) => (serviceSeconds?.[index] === undefined ? {} : { service: serviceSeconds[index] })
+  const jobs: Record<string, unknown>[] = stops.map((location, index) => ({ id: index + 1, location, ...serviceOf(index), ...held }))
   if (station) jobs.push({ id: stops.length + 1, location: station, time_windows: [[STATION_OPENS, STATION_OPENS + DAY_SECONDS]] })
   const vehicle = { id: 1, profile, start: depot, end: depot, ...(station ? { time_window: [0, STATION_OPENS + 2 * DAY_SECONDS] } : {}) }
   return { jobs, vehicles: [vehicle], options: { g: true } }

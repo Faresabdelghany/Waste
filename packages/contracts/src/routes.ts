@@ -23,6 +23,7 @@
 // (`LiveRoute`) is a route with its open session and three readings — the
 // latest point a proof carried, when the device was last seen, whether it is
 // paused — for the dashboard, paged like every list.
+import type { RouteWorkload as DomainRouteWorkload } from "@waste/domain/execution/workload"
 import * as z from "zod"
 
 import { IsoDate, IsoDateTime, IsoTime } from "./dates"
@@ -110,6 +111,28 @@ export const Route = z.object(routeFields).refine(labelMatches, labelIsTheNumber
 export type Route = z.infer<typeof Route>
 
 /**
+ * What a route's stops take and weigh (O10 of #290), read live from its
+ * stops, its containers' types and fractions and its planned vehicle: the
+ * stop time its Duration adds to the active Plan's drive, and its expected
+ * load against the vehicle's payload. Capacity is a reading, never a
+ * constraint on the optimiser: a route over it is told so, for the office to
+ * plan a tip. The domain's `RouteWorkload` is the shape, and this is held to it.
+ */
+export const RouteWorkload = z.object({
+  /** Seconds at the stops still planned, the set the Plan orders: an emptying its container type's, a work order its service's. */
+  stopSeconds: NonNegativeInt,
+  /** Kilograms the stops that load waste — an emptying, a swap — are expected to weigh, litres times density, of those that can be; null where none can. */
+  expectedKg: NonNegativeInt.nullable(),
+  /** Stops that load waste whose weight cannot be expected: no container, no volume, no density. */
+  unexpectedStops: NonNegativeInt,
+  /** The planned vehicle's payload, or null. */
+  capacityKg: PositiveInt.nullable(),
+  /** How far the expected kilograms run over the payload, 0 within it; null where either is unknown. */
+  overCapacityKg: NonNegativeInt.nullable(),
+}) satisfies z.ZodType<DomainRouteWorkload>
+export type RouteWorkload = z.infer<typeof RouteWorkload>
+
+/**
  * A route as `GET /routes` lists it: with its active Plan's reading, the way
  * the live list carries it (#173), so a map or a list drawn over the page
  * reads every per-route sentence of #132 §5 — Not measured, Measuring…,
@@ -121,6 +144,8 @@ export const RouteListItem = z
     ...routeFields,
     /** The active Plan's reading, or null while the generated baseline stands unmeasured, drawn dashed (#124). */
     activePlan: ActivePlan.nullable(),
+    /** What its stops take and weigh (O10 of #290). */
+    workload: RouteWorkload,
   })
   .refine(labelMatches, labelIsTheNumber)
 export type RouteListItem = z.infer<typeof RouteListItem>
@@ -133,6 +158,8 @@ export const RouteDetail = z
     pickups: z.array(Pickup),
     /** The active Plan's reading, or null while the generated baseline stands unmeasured, drawn dashed (#124). */
     activePlan: ActivePlan.nullable(),
+    /** What its stops take and weigh (O10 of #290). */
+    workload: RouteWorkload,
     /** The open session, or null. */
     session: Session.nullable(),
     /** Every session, oldest first. */

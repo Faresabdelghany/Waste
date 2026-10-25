@@ -14,6 +14,7 @@ import type { Position2D } from "@waste/contracts/geojson"
 import { createDb, type Database, type Tx } from "@waste/db/client"
 import { ROUTING_MEASURE_QUEUE, ROUTING_OPTIMISE_QUEUE, routingSendOptions, type RoutingJobData } from "@waste/db/commands/plans"
 import { migrateDatabase } from "@waste/db/migrate"
+import { containerType } from "@waste/db/schema/catalogue"
 import { property } from "@waste/db/schema/customers"
 import { route } from "@waste/db/schema/execution"
 import { depot, unloadingStation } from "@waste/db/schema/places"
@@ -21,6 +22,7 @@ import { plan, planLeg, planStop, routingQuota } from "@waste/db/schema/routing"
 import { PGBOSS_SCHEMA } from "@waste/db/sql/pgboss"
 import { withCompany } from "@waste/db/tenant"
 import { planFingerprint } from "@waste/domain/routing/fingerprint"
+import { UNKNOWN_SERVICE_SECONDS } from "@waste/domain/execution/workload"
 import { SUPERSEDED } from "@waste/domain/routing/vocabulary"
 import { FakeProvider, type FakeScript } from "@waste/routing/fake"
 import type { OptimiseRequest, RoutingProvider } from "@waste/routing/provider"
@@ -342,6 +344,39 @@ describe("routing's jobs under the quota engine", { skip: roles.skip }, () => {
   })
 
   describe("routing.optimise", () => {
+    test("sends each open stop with its seconds at the kerb: its container type's, the unknown figure where the type has none (O10 of #290)", async () => {
+      const sent: OptimiseRequest[] = []
+      const fake = new FakeProvider()
+      const recording: RoutingProvider = {
+        name: fake.name,
+        maxWaypoints: fake.maxWaypoints,
+        measure: (request) => fake.measure(request),
+        optimise: (request: OptimiseRequest) => {
+          sent.push(request)
+          return fake.optimise(request)
+        },
+      }
+      const typed = (serviceSeconds: number | null) => withCompany(api.db, tenant.companyId, (tx: Tx) => tx.update(containerType).set({ serviceSeconds }).where(eq(containerType.id, tenant.containerTypeId)))
+      try {
+        await typed(45)
+        const { engine } = engineOf({}, recording)
+        const seeded = await routeWith("depot")
+        await routingOptimise.handler([await inHand(ROUTING_OPTIMISE_QUEUE, await planOf(seeded, "optimiser", "stops-only"))], contextOf(engine))
+        await typed(null)
+        const unset = await routeWith("depot")
+        await routingOptimise.handler([await inHand(ROUTING_OPTIMISE_QUEUE, await planOf(unset, "optimiser", "stops-only"))], contextOf(engine))
+        assert.deepEqual(
+          sent.map((request) => request.serviceSeconds),
+          [
+            [45, 45],
+            [UNKNOWN_SERVICE_SECONDS, UNKNOWN_SERVICE_SECONDS],
+          ],
+        )
+      } finally {
+        await typed(null)
+      }
+    })
+
     test("orders a stops-only route's stops from its depot, writes the solver's stops and the stop-to-stop legs, and activates the Plan on ready", async () => {
       await clearQuota()
       const { engine } = engineOf({ quota: { optimisation: { remaining: 480, limit: 500, resetAt: RESET } } })

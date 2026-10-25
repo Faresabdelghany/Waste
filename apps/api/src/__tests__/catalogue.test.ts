@@ -207,6 +207,19 @@ describe("the master data endpoints", { skip: database.skip }, () => {
       assert.deepEqual(spaced.errors?.map((error) => error.path), ["wasteCode"])
       assert.equal((await one(olivia, `/waste-fractions/${coded.id}`, WasteFraction)).wasteCode, null)
     })
+
+    test("takes a density on a create and a patch, clears it with a null, and refuses one outside 1 to 2000 at the field (O10 of #290)", async () => {
+      const dense = await create(olivia, "/waste-fractions", { key: "green-waste", name: "Green waste", densityKgPerCubicMetre: 250 }, WasteFraction)
+      assert.equal(dense.densityKgPerCubicMetre, 250)
+      assert.equal((await create(olivia, "/waste-fractions", { key: "unweighed", name: "Unweighed fraction" }, WasteFraction)).densityKgPerCubicMetre, null, "nobody has set one")
+      assert.equal((await patch(olivia, `/waste-fractions/${dense.id}`, { densityKgPerCubicMetre: 2000 }, WasteFraction)).densityKgPerCubicMetre, 2000)
+      for (const density of [0, 2001, 12.5]) {
+        const refusal = await refused(await olivia(`/waste-fractions/${dense.id}`, { method: "PATCH", body: { densityKgPerCubicMetre: density } }), 400)
+        assert.deepEqual(refusal.errors?.map((error) => error.path), ["densityKgPerCubicMetre"], String(density))
+      }
+      assert.equal((await patch(olivia, `/waste-fractions/${dense.id}`, { densityKgPerCubicMetre: null }, WasteFraction)).densityKgPerCubicMetre, null)
+      assert.equal((await one(olivia, `/waste-fractions/${dense.id}`, WasteFraction)).densityKgPerCubicMetre, null)
+    })
   })
 
   describe("the container types", () => {
@@ -249,6 +262,18 @@ describe("the master data endpoints", { skip: database.skip }, () => {
       assert.equal((await patch(olivia, `/container-types/${created.id}`, { volumeLitres: 10_000 }, ContainerType)).volumeLitres, 10_000)
       assert.equal((await patch(olivia, `/container-types/${created.id}`, { volumeLitres: null }, ContainerType)).volumeLitres, null)
       assert.equal((await one(olivia, `/container-types/${created.id}`, ContainerType)).name, "Roll-on container")
+    })
+
+    test("takes service seconds on a create and a patch, clears them, and refuses any outside 1 to 3600 at the field (O10 of #290)", async () => {
+      const crane = await create(olivia, "/container-types", { name: "Crane-lifted bank", volumeLitres: 3000, serviceSeconds: 240 }, ContainerType)
+      assert.equal(crane.serviceSeconds, 240)
+      assert.equal((await create(olivia, "/container-types", { name: "Sack holder" }, ContainerType)).serviceSeconds, null)
+      assert.equal((await patch(olivia, `/container-types/${crane.id}`, { serviceSeconds: 3600 }, ContainerType)).serviceSeconds, 3600)
+      for (const seconds of [0, 3601]) {
+        const refusal = await refused(await olivia(`/container-types/${crane.id}`, { method: "PATCH", body: { serviceSeconds: seconds } }), 400)
+        assert.deepEqual(refusal.errors?.map((error) => error.path), ["serviceSeconds"], String(seconds))
+      }
+      assert.equal((await patch(olivia, `/container-types/${crane.id}`, { serviceSeconds: null }, ContainerType)).serviceSeconds, null)
     })
 
     test("refuses a rename onto a name the company already uses, and changes nothing", async () => {

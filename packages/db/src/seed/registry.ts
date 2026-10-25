@@ -190,16 +190,19 @@ const projectIdOf = (project: RegistryProject): string => DEMO_PROJECT_IDS[proje
 // Each with its treatment (M13 of #293), what its recycling rate reads: residual waste to an
 // energy-from-waste plant, organic to biogas or compost, the dry recyclables recycled; a mixed
 // load and wastewater carry none, since how they are treated depends on where they go.
+// And a density, kg per cubic metre as it lies in a container (O10 of #290): typical figures,
+// not measurements — the company sets its own, so the seed writes them on insert alone and
+// never over a figure the company set or cleared.
 const WASTE_FRACTIONS = [
-  ["residual", "Residual", "200301", "energy-recovery"],
-  ["organic", "Organic", "200108", "recycling"],
-  ["paper", "Paper", "200101", "recycling"],
-  ["cardboard", "Cardboard", "150101", "recycling"],
-  ["glass", "Glass", "150107", "recycling"],
-  ["plastic", "Plastic", "150102", "recycling"],
-  ["metal", "Metal", "150104", "recycling"],
-  ["mixed", "Mixed", null, null],
-  ["wastewater", "Wastewater", null, null],
+  ["residual", "Residual", "200301", "energy-recovery", 150],
+  ["organic", "Organic", "200108", "recycling", 400],
+  ["paper", "Paper", "200101", "recycling", 80],
+  ["cardboard", "Cardboard", "150101", "recycling", 50],
+  ["glass", "Glass", "150107", "recycling", 300],
+  ["plastic", "Plastic", "150102", "recycling", 40],
+  ["metal", "Metal", "150104", "recycling", 80],
+  ["mixed", "Mixed", null, null, 120],
+  ["wastewater", "Wastewater", null, null, 1000],
 ] as const
 type WasteFractionKey = (typeof WASTE_FRACTIONS)[number][0]
 
@@ -207,14 +210,17 @@ type WasteFractionKey = (typeof WASTE_FRACTIONS)[number][0]
 // vocabulary, with the volume read off the name. The key follows the
 // container form's enum ids (`two-wheel-240`, `four-wheel-660`,
 // `four-wheel-1100`, `wastewater-3000`) and spells the rest the same way.
+// And the seconds an emptying takes at the kerb (O10 of #290): typical figures — a bin wheeled
+// to the lift, a crane over an igloo or an underground container, a tank pumped — which the
+// company sets its own over, written on insert alone like the densities.
 const CONTAINER_TYPES = [
-  ["two-wheel-140", "Two-wheel bin · 140 L", 140],
-  ["two-wheel-240", "Two-wheel bin · 240 L", 240],
-  ["four-wheel-660", "Four-wheel bin · 660 L", 660],
-  ["four-wheel-1100", "Four-wheel bin · 1,100 L", 1100],
-  ["igloo-2500", "Igloo · 2,500 L", 2500],
-  ["underground-5000", "Underground · 5,000 L", 5000],
-  ["wastewater-3000", "Wastewater tank · 3,000 L", 3000],
+  ["two-wheel-140", "Two-wheel bin · 140 L", 140, 30],
+  ["two-wheel-240", "Two-wheel bin · 240 L", 240, 30],
+  ["four-wheel-660", "Four-wheel bin · 660 L", 660, 75],
+  ["four-wheel-1100", "Four-wheel bin · 1,100 L", 1100, 75],
+  ["igloo-2500", "Igloo · 2,500 L", 2500, 180],
+  ["underground-5000", "Underground · 5,000 L", 5000, 300],
+  ["wastewater-3000", "Wastewater tank · 3,000 L", 3000, 900],
 ] as const
 type ContainerTypeKey = (typeof CONTAINER_TYPES)[number][0]
 
@@ -934,8 +940,8 @@ function build(): { ids: RegistryIds; rows: RegistryRows } {
   const productOf = (key: string) => requiredSpec(productByKey, key, "product")
 
   const rows: RegistryRows = {
-    wasteFractions: WASTE_FRACTIONS.map(([key, name, wasteCode, treatment]) => ({ id: wasteFractionId(key), companyId: COMPANY_ID, key, name, wasteCode, treatment })),
-    containerTypes: CONTAINER_TYPES.map(([key, name, volumeLitres]) => ({ id: containerTypeId(key), companyId: COMPANY_ID, name, volumeLitres })),
+    wasteFractions: WASTE_FRACTIONS.map(([key, name, wasteCode, treatment, densityKgPerCubicMetre]) => ({ id: wasteFractionId(key), companyId: COMPANY_ID, key, name, wasteCode, treatment, densityKgPerCubicMetre })),
+    containerTypes: CONTAINER_TYPES.map(([key, name, volumeLitres, serviceSeconds]) => ({ id: containerTypeId(key), companyId: COMPANY_ID, name, volumeLitres, serviceSeconds })),
     serviceFrequencies: REGISTRY_PROJECTS.flatMap((project) =>
       SERVICE_FREQUENCIES.map(([key, name, description, collectionsPerWeek, weeksBetween, daysBetween]) => ({
         id: serviceFrequencyId(project, key),

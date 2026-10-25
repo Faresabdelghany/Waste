@@ -50,9 +50,9 @@ const context = (resolve: Resolver = NOTHING_RESOLVED): MappingContext => ({ fix
 
 // The seeded rows as the API answers them (packages/db/src/seed/registry.ts, resources.ts).
 const copenhagen: Project = { id: "01a0d2a4-a280-7002-8000-000000000001", ...STAMPS, name: "Copenhagen Central", kind: "Municipality", language: "da", currency: "DKK", timezone: "Europe/Copenhagen", status: "active", weekend: ["saturday", "sunday"], holidayList: "Danish public holidays", publicSlug: null, weightTolerancePercent: 5, paymentTermsDays: 30, paymentReferenceScheme: "none", holdForReview: false }
-const residual: WasteFraction = { id: "01a0d2a4-a280-7005-8000-000000000001", ...STAMPS, key: "residual", name: "Residual", wasteCode: null, treatment: null }
+const residual: WasteFraction = { id: "01a0d2a4-a280-7005-8000-000000000001", ...STAMPS, key: "residual", name: "Residual", wasteCode: null, treatment: null, densityKgPerCubicMetre: null }
 const glass: WasteFraction = { ...residual, id: "01a0d2a4-a280-7005-8000-000000000005", key: "glass", name: "Glass" }
-const bin240: ContainerType = { id: "01a0d2a4-a280-7006-8000-000000000002", ...STAMPS, name: "Two-wheel bin · 240 L", volumeLitres: 240 }
+const bin240: ContainerType = { id: "01a0d2a4-a280-7006-8000-000000000002", ...STAMPS, name: "Two-wheel bin · 240 L", volumeLitres: 240, serviceSeconds: null }
 const igloo: ContainerType = { ...bin240, id: "01a0d2a4-a280-7006-8000-000000000005", name: "Igloo · 2,500 L", volumeLitres: 2500 }
 const unmeasured: ContainerType = { ...bin240, id: "01a0d2a4-a280-7006-8000-000000000009", name: "Skip", volumeLitres: null }
 const weekly: ServiceFrequency = { id: "01a0d2a4-a280-7007-8000-000000000001", ...STAMPS, projectId: copenhagen.id, name: "Every week", description: "One collection per week on the serviced weekday.", collectionsPerWeek: 1, weeksBetween: 1, daysBetween: null }
@@ -200,6 +200,19 @@ describe("a waste fraction", () => {
     assert.equal(wasteFractionAdapter.toPatchBody(coded, { ...coded, submittedValues: { ...coded.submittedValues, wasteCode: "20 03 01" } }, context()), null, "the same code spelled as printed is no change")
     assert.deepEqual(wasteFractionAdapter.toPatchBody(record, typed("2003"), context()), { path: "wasteCode", message: WASTE_CODE_REFUSAL })
     assert.equal(WasteCode.safeParse("2003").error?.issues[0]?.message, WASTE_CODE_REFUSAL, "the pane refuses in the contract's words")
+  })
+
+  test("carries its density (O10 of #290): read into the record, sent on a create, and patched, blank as null", () => {
+    const dense = wasteFractionAdapter.toRecord({ ...residual, densityKgPerCubicMetre: 150 }, context())
+    assert.deepEqual([dense.facts.Density, dense.submittedValues?.densityKgPerCubicMetre], ["150 kg/m³", "150"])
+    const made = createMasterDataRecord("waste-fraction", { name: "Garden waste", key: "garden", densityKgPerCubicMetre: "250" }, { now: 1, actorName: "Olivia Larsen", lookups: { projectName: () => undefined, containerTypeName: () => undefined } })
+    const body = wasteFractionAdapter.toCreateBody?.(made, context())
+    assert.deepEqual(body, { key: "garden", name: "Garden waste", densityKgPerCubicMetre: 250 })
+    assert.ok(WasteFractionCreate.safeParse(body).success)
+    const typed = (density: string): BusinessRecord => ({ ...dense, submittedValues: { ...dense.submittedValues, densityKgPerCubicMetre: density } })
+    assert.deepEqual(wasteFractionAdapter.toPatchBody(dense, typed("180"), context()), { densityKgPerCubicMetre: 180 })
+    assert.deepEqual(wasteFractionAdapter.toPatchBody(dense, typed(""), context()), { densityKgPerCubicMetre: null })
+    assert.ok(WasteFractionPatch.safeParse({ densityKgPerCubicMetre: null }).success)
   })
 
   test("carries its treatment (M13 of #293): read into the record, sent on a create, and patched — not recorded as null", () => {
