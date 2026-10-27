@@ -2,11 +2,15 @@
 // part B): the SQLSTATE readers over an error as postgres.js raises it and as
 // Drizzle wraps it, and `Refused`, the refusal a statement both processes run
 // throws in place of the API's problem — its status, its sentence, and the
-// field a 400 came in.
+// field a 400 came in; and the strength a patch's row lock is taken at.
 import assert from "node:assert/strict"
 import { describe, test } from "node:test"
 
-import { Refused, refused, RefusedField } from "../commands/shared"
+import { Refused, refused, RefusedField, strengthFor } from "../commands/shared"
+import { product } from "../schema/catalogue"
+import { vehicle } from "../schema/fleet"
+import { company } from "../schema/organisation"
+import { depot } from "../schema/places"
 import { CHECK_VIOLATION, checkConstraintOf, DRIZZLE_QUERY, EXCLUSION_VIOLATION, exclusionConstraintOf, messageWithoutStatement, sqlstate, UNIQUE_VIOLATION, uniqueConstraintOf } from "../sqlstate"
 
 /** An error the way postgres.js raises one: the SQLSTATE as `code`, the constraint as `constraint_name`. */
@@ -61,5 +65,23 @@ describe("messageWithoutStatement", () => {
     assert.equal(messageWithoutStatement(drizzle), "Failed query")
     assert.equal(messageWithoutStatement('duplicate key value violates unique constraint "ticket_source_event_id_idx"'), 'duplicate key value violates unique constraint "ticket_source_event_id_idx"')
     assert.equal(messageWithoutStatement(""), "")
+  })
+})
+
+describe("strengthFor", () => {
+  test("is `update` where the patch sets a column of a unique constraint, whatever else it sets", () => {
+    assert.equal(strengthFor(depot, { name: "Nordhavn depot" }), "update")
+    assert.equal(strengthFor(depot, { code: "NH", notes: null }), "update")
+    assert.equal(strengthFor(vehicle, { registration: "AB 12 345" }), "update")
+    assert.equal(strengthFor(company, { country: "SE" }), "update")
+  })
+
+  test("is `no key update` where it sets none, leaves a key undefined, or sets a column only a partial index holds unique", () => {
+    assert.equal(strengthFor(depot, { notes: "Gate code 4411" }), "no key update")
+    assert.equal(strengthFor(depot, { name: undefined, notes: null }), "no key update")
+    assert.equal(strengthFor(vehicle, { callsign: "N-7" }), "no key update")
+    assert.equal(strengthFor(product, { invoiceCode: "R-140" }), "no key update")
+    assert.equal(strengthFor(company, { postalAddress: null }), "no key update")
+    assert.equal(strengthFor(company, { shape: { kind: "all-projects" } }), "no key update", "a member that is no column of the table sets no key")
   })
 })

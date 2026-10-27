@@ -48,8 +48,8 @@
 // `ProblemError` directly, since a route has the request in hand. Nothing
 // here knows a table or a resource but the company's row, which every series
 // lives on.
-import { and, asc, eq, inArray, sql, type SQL } from "drizzle-orm"
-import type { PgColumn, PgTable } from "drizzle-orm/pg-core"
+import { and, asc, eq, getTableColumns, inArray, is, SQL, sql } from "drizzle-orm"
+import { getTableConfig, type PgColumn, type PgTable } from "drizzle-orm/pg-core"
 
 import type { Tx } from "../client"
 import { company } from "../schema/organisation"
@@ -125,29 +125,78 @@ export async function refuseOverlap<T>(sentences: Readonly<Record<string, string
 }
 
 /**
- * Takes the row lock of the record a rule hangs off, inside the caller's one
- * transaction, and reads nothing back: `select … for update`. A rule the
- * database holds — a key, a period that overlaps — needs none of this; a
- * rule the caller holds does, since it is read first and written after, and
- * without the lock two transactions both read the state the other has not
- * written yet and both pass.
+ * How strongly `lockRow` takes its row. `no key update` serialises every
+ * caller of the row — it conflicts with itself — but not the `for key share`
+ * Postgres takes on a referenced row for each foreign-key insert, so a
+ * child's insert naming the row goes on while a rule over the row's set is
+ * judged (#335). `update` blocks those inserts too, and is for the caller
+ * that goes on to change a key column of the row it locked (`strengthFor`).
+ * It takes the stronger lock at once rather than upgrading at the update,
+ * since a transaction that holds a key share on the row and then waits for
+ * its lock would deadlock with the upgrade.
  */
-export async function lockRow(tx: Tx, table: TenantTable, row: { companyId: string; id: string }): Promise<void> {
+export type LockStrength = "no key update" | "update"
+
+/**
+ * The columns Postgres counts as the table's key when it decides whether an
+ * update changes one: every column of its primary key, of a unique
+ * constraint, and of a unique index that is neither partial nor over an
+ * expression.
+ */
+function keyColumnsOf(table: PgTable): ReadonlySet<string> {
+  const config = getTableConfig(table)
+  const columns = [
+    ...config.primaryKeys.flatMap((key) => key.columns),
+    ...config.uniqueConstraints.flatMap((constraint) => constraint.columns),
+    ...config.columns.filter((column) => column.isUnique || column.primary),
+  ].map((column) => column.name)
+  for (const index of config.indexes) {
+    if (!index.config.unique || index.config.where !== undefined) continue
+    for (const column of index.config.columns) {
+      if (!is(column, SQL) && "name" in column && column.name !== undefined) columns.push(column.name)
+    }
+  }
+  return new Set(columns)
+}
+
+/**
+ * The strength a patch of the table's row is locked at: `update` where it
+ * sets a key column (`keyColumnsOf`), such as a name or a code unique in its
+ * scope, and `no key update` otherwise. A member left undefined sets nothing.
+ */
+export function strengthFor(table: TenantTable, patch: object): LockStrength {
+  const keys = keyColumnsOf(table)
+  const columns = getTableColumns(table)
+  const setsKey = Object.entries(patch).some(([member, value]) => value !== undefined && columns[member] !== undefined && keys.has(columns[member].name))
+  return setsKey ? "update" : "no key update"
+}
+
+/**
+ * Takes the row lock of the record a rule hangs off, inside the caller's one
+ * transaction, and reads nothing back: `select … for no key update`, or
+ * `for update` where the caller changes a key column of the row
+ * (`LockStrength`). A rule the database holds — a key, a period that
+ * overlaps — needs none of this; a rule the caller holds does, since it is
+ * read first and written after, and without the lock two transactions both
+ * read the state the other has not written yet and both pass.
+ */
+export async function lockRow(tx: Tx, table: TenantTable, row: { companyId: string; id: string }, strength: LockStrength = "no key update"): Promise<void> {
   await tx
     .select({ id: table.id })
     .from(table)
     .where(and(eq(table.companyId, row.companyId), eq(table.id, row.id)))
     .limit(1)
-    .for("update")
+    .for(strength)
 }
 
 /**
  * The same for several rows of one table, taken in id order in one statement
- * (`order by id for update`: Postgres sorts first and locks as it returns the
- * rows, so two transactions naming overlapping sets take them in the same
- * order and neither waits on the other's second row). An id that is not
- * there locks nothing; the check that follows answers for it. Nothing to lock
- * is nothing to do.
+ * (`order by id for no key update`: Postgres sorts first and locks as it
+ * returns the rows, so two transactions naming overlapping sets take them in
+ * the same order and neither waits on the other's second row). An id that is
+ * not there locks nothing; the check that follows answers for it. Nothing to
+ * lock is nothing to do. No caller changes a key column of a row it locks
+ * this way.
  */
 export async function lockRows(tx: Tx, table: TenantTable, companyId: string, ids: readonly string[]): Promise<void> {
   if (ids.length === 0) return
@@ -156,7 +205,7 @@ export async function lockRows(tx: Tx, table: TenantTable, companyId: string, id
     .from(table)
     .where(and(eq(table.companyId, companyId), inArray(table.id, [...ids])))
     .orderBy(asc(table.id))
-    .for("update")
+    .for("no key update")
 }
 
 /** The counters a company's row carries, one per document series. */
