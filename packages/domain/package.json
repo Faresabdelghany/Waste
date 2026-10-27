@@ -22,6 +22,7 @@
     "./audit/__tests__/*": null,
     "./fixtures/__tests__/*": null,
     "./sorting-guide/__tests__/*": null,
+    "./visits/__tests__/*": null,
     "./*": "./src/*.ts"
   },
   "scripts": {

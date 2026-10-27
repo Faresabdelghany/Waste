@@ -19,6 +19,8 @@ export const MODULE_KEYS = [
   "operate.tickets",
   "operate.exceptions",
   "operate.driver-app",
+  // The recycling centres' visit ledger and the attendant's check-in (M4 of #293).
+  "operate.site-visits",
   // Map Planning
   "plan.map-planning",
   // Route Studio
@@ -40,6 +42,8 @@ export const MODULE_KEYS = [
   // A customer's Applications and the office's Decisions on them (M7 of #293).
   "customers.applications",
   "customers.citizen-portal",
+  // The register of plates and cards a recycling centre admits by (M4 of #293).
+  "customers.site-access",
   // Assets & Inventory
   "resources.containers",
   "resources.inventory",

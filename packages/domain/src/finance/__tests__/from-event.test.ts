@@ -11,7 +11,7 @@ import { describe, test } from "node:test"
 import { OUTBOX_KINDS, PICKUP_OUTCOMES, type OutboxKind } from "../../execution/vocabulary"
 import { PRODUCT_UNITS } from "../../registry/vocabulary"
 import { TICKET_RESOLUTIONS } from "../../resolution/vocabulary"
-import { BILLABLE_RESOLUTIONS, billableActionsFor, billableFor, chargesJob, chargesTicketWork, isBillableResolution, PICKUP_EVENT_KINDS, reversalOf, type EventFacts, type ExceptionFacts, type JobChargeFacts, type LiveEventFacts, type PickupEventFacts, type PlacementFacts, type TicketChargeFacts, type TicketCompletedFacts } from "../from-event"
+import { BILLABLE_RESOLUTIONS, billableActionsFor, billableFor, chargesJob, chargesTicketWork, isBillableResolution, PICKUP_EVENT_KINDS, reversalOf, VISIT_EVENT_KINDS, type EventFacts, type VisitEventFacts, type ExceptionFacts, type JobChargeFacts, type LiveEventFacts, type PickupEventFacts, type PlacementFacts, type TicketChargeFacts, type TicketCompletedFacts } from "../from-event"
 import type { PriceRow } from "../pricing"
 
 const ROUTE = "route"
@@ -72,6 +72,20 @@ const live = (values: Partial<LiveEventFacts> = {}): LiveEventFacts => ({
   ...values,
 })
 
+/** A Site Visit's event (#393): an admitted household visit at its ladder's second step, priced at 70 kr, with no live event. */
+const visitEvent = (kind: VisitEventFacts["kind"], values: Partial<VisitEventFacts> = {}): VisitEventFacts => ({
+  kind,
+  visitId: "visit",
+  serviceDate: DAY,
+  admitted: true,
+  voided: kind === "site-visit-voided",
+  agreementId: AGREEMENT,
+  charge: { ruleId: "rule", basis: "ladder", counted: true, n: 2, productId: PRODUCT },
+  priced: { blockReason: null, price: { priceListRowId: "everyone", unitPriceMinor: 7_000, netMinor: 7_000, vatPercent: 25, vatMinor: 1_750, currency: "DKK" } },
+  liveEvent: null,
+  ...values,
+})
+
 const completedTicket = (values: Partial<TicketCompletedFacts> = {}): TicketCompletedFacts => ({ kind: "ticket-completed", ticketId: TICKET, resolution: "recollected", agreement: { id: AGREEMENT, subscriptionId: SUBSCRIPTION }, closedOn: "2026-10-07", charge: null, ...values })
 
 /** The product a completed ticket charges for (#291 C3): the completion's, a per-job service at 25 %, under the reached agreement of an organisation, with the default list's two rows. */
@@ -83,7 +97,7 @@ const charge = (values: Partial<TicketChargeFacts> = {}): TicketChargeFacts => (
   ...values,
 })
 
-const links = { routeId: ROUTE, pickupId: PICKUP, ticketId: null, reversesEventId: null, proofId: null }
+const links = { routeId: ROUTE, pickupId: PICKUP, ticketId: null, reversesEventId: null, proofId: null, visitId: null }
 
 describe("billableFor a completed pickup", () => {
   test("under a per-pickup product with a placement, a signed agreement, a list, a row and a rate is a pickup event of quantity one, priced by the resolver on the service date, the winning row traceable", () => {
@@ -226,7 +240,7 @@ describe("billableFor a corrected pickup", () => {
       quantity: 2,
       price: { priceListRowId: null, unitPriceMinor: 1_500, netMinor: -3_000, vatPercent: 25, vatMinor: -750, currency: "DKK" },
       blockReason: null,
-      links: { routeId: null, pickupId: null, ticketId: null, reversesEventId: LIVE, proofId: null },
+      links: { routeId: null, pickupId: null, ticketId: null, reversesEventId: LIVE, proofId: null, visitId: null },
     })
     // A reversal of nothing to reverse is a bug: a blocked event is cancelled, never reversed.
     assert.throws(() => reversalOf(live({ price: null })), /reversalOf: event live-event carries no price; a blocked event is cancelled, never reversed/)
@@ -245,7 +259,7 @@ describe("billableFor a completed ticket", () => {
           action,
           {
             action: "record",
-            draft: { kind: "ticket", serviceDate: "2026-10-07", agreementId: AGREEMENT, subscriptionId: SUBSCRIPTION, productId: null, quantity: 1, price: null, blockReason: "no-product", links: { routeId: null, pickupId: null, ticketId: TICKET, reversesEventId: null, proofId: null } },
+            draft: { kind: "ticket", serviceDate: "2026-10-07", agreementId: AGREEMENT, subscriptionId: SUBSCRIPTION, productId: null, quantity: 1, price: null, blockReason: "no-product", links: { routeId: null, pickupId: null, ticketId: TICKET, reversesEventId: null, proofId: null, visitId: null } },
           },
           resolution,
         )
@@ -258,7 +272,7 @@ describe("billableFor a completed ticket", () => {
   })
 
   test("with a product — the completion's or its kind's — is priced as a pickup is, on the day it closed, by the customer's conditions alone: no zone, no container type, no fraction (#291 C3)", () => {
-    const ticketLinks = { routeId: null, pickupId: null, ticketId: TICKET, reversesEventId: null, proofId: null }
+    const ticketLinks = { routeId: null, pickupId: null, ticketId: TICKET, reversesEventId: null, proofId: null, visitId: null }
     assert.deepEqual(billableFor(completedTicket({ charge: charge() })), {
       action: "record",
       draft: {
@@ -325,10 +339,16 @@ describe("billableFor every other kind", () => {
     const money: OutboxKind[] = []
     const news: OutboxKind[] = []
     for (const kind of OUTBOX_KINDS) {
-      const event: EventFacts = (PICKUP_EVENT_KINDS as readonly string[]).includes(kind) ? pickupEvent(kind as PickupEventFacts["kind"]) : kind === "ticket-completed" ? completedTicket() : ({ kind } as EventFacts)
+      const event: EventFacts = (PICKUP_EVENT_KINDS as readonly string[]).includes(kind)
+        ? pickupEvent(kind as PickupEventFacts["kind"])
+        : kind === "ticket-completed"
+          ? completedTicket()
+          : (VISIT_EVENT_KINDS as readonly string[]).includes(kind)
+            ? visitEvent(kind as VisitEventFacts["kind"], { liveEvent: kind === "site-visit-voided" ? live() : null })
+            : ({ kind } as EventFacts)
       ;(billableFor(event) === undefined ? news : money).push(kind)
     }
-    assert.deepEqual(money, ["pickup-completed", "pickup-corrected", "ticket-completed"])
+    assert.deepEqual(money, ["pickup-completed", "pickup-corrected", "ticket-completed", "site-visit-recorded", "site-visit-voided"])
     assert.deepEqual(news, ["route-dispatched", "route-started", "route-completed", "route-cancelled", "route-reassigned", "pickup-failed", "pickup-skipped", "pickup-problem-reported", "unload-recorded", "command-rejected", "ticket-opened", "ticket-rejected", "invoice-issued", "settlement-closed", "application-decided"])
     assert.deepEqual([...PICKUP_EVENT_KINDS], ["pickup-completed", "pickup-corrected", "pickup-failed", "pickup-skipped"])
   })
@@ -354,7 +374,7 @@ describe("billableActionsFor a Pickup Exception (#293 M5)", () => {
     quantity: 1,
     price: { priceListRowId: "fee", unitPriceMinor, netMinor: unitPriceMinor, vatPercent: 25, vatMinor: unitPriceMinor / 4, currency: "DKK" },
     blockReason: null,
-    links: { routeId: ROUTE, pickupId: PICKUP, ticketId: null, reversesEventId: null, proofId: PROOF },
+    links: { routeId: ROUTE, pickupId: PICKUP, ticketId: null, reversesEventId: null, proofId: PROOF, visitId: null },
   })
   const liveFee = (values: Partial<LiveEventFacts> = {}) => live({ id: "live-fee", productId: FEE, ...values })
 
@@ -411,5 +431,45 @@ describe("billableActionsFor a Pickup Exception (#293 M5)", () => {
     assert.deepEqual(billableActionsFor(pickupEvent("pickup-failed", { outcome: "failed", origin: "office", exception: null })), [])
     assert.deepEqual(billableActionsFor(completedTicket()).map((action) => action.action), ["record"])
     assert.deepEqual(billableActionsFor({ kind: "route-started" } as EventFacts), [])
+  })
+})
+
+describe("billableFor a Site Visit (#393)", () => {
+  test("an admitted visit its rule charges is a visit event of one, at the product, priced under its Agreement on its day", () => {
+    assert.deepEqual(billableFor(visitEvent("site-visit-recorded")), {
+      action: "record",
+      draft: {
+        kind: "visit",
+        serviceDate: DAY,
+        agreementId: AGREEMENT,
+        subscriptionId: null,
+        productId: PRODUCT,
+        quantity: 1,
+        price: { priceListRowId: "everyone", unitPriceMinor: 7_000, netMinor: 7_000, vatPercent: 25, vatMinor: 1_750, currency: "DKK" },
+        blockReason: null,
+        links: { routeId: null, pickupId: null, ticketId: null, reversesEventId: null, proofId: null, visitId: "visit" },
+      },
+    })
+  })
+
+  test("blocked as any event is where it cannot be priced, and no-subscription with no Agreement to price under", () => {
+    const noRow = billableFor(visitEvent("site-visit-recorded", { priced: { blockReason: "no-price-row", price: null } }))
+    assert.equal(noRow?.action === "record" && noRow.draft.blockReason, "no-price-row")
+    const nobody = billableFor(visitEvent("site-visit-recorded", { agreementId: null, priced: null }))
+    assert.equal(nobody?.action === "record" && nobody.draft.blockReason, "no-subscription")
+  })
+
+  test("nothing for a free visit, a refused one, a voided one or one already charged", () => {
+    assert.equal(billableFor(visitEvent("site-visit-recorded", { charge: { ruleId: "rule", basis: "free-quota", counted: true, n: 1, productId: null }, priced: null })), undefined)
+    assert.equal(billableFor(visitEvent("site-visit-recorded", { admitted: false, charge: null, priced: null })), undefined)
+    assert.equal(billableFor(visitEvent("site-visit-recorded", { voided: true })), undefined)
+    assert.equal(billableFor(visitEvent("site-visit-recorded", { liveEvent: live() })), undefined)
+  })
+
+  test("a void cancels the live event with visit-voided, reverses it once invoiced, and does nothing without one", () => {
+    assert.deepEqual(billableFor(visitEvent("site-visit-voided", { liveEvent: live() })), { action: "cancel", eventId: LIVE, reason: "visit-voided" })
+    const reversed = billableFor(visitEvent("site-visit-voided", { liveEvent: live({ invoiced: true }) }))
+    assert.equal(reversed?.action, "reverse")
+    assert.equal(billableFor(visitEvent("site-visit-voided")), undefined)
   })
 })
