@@ -121,6 +121,6 @@ describe("a booking changed", () => {
     assert.deepEqual(toBody?.({ routeId: "route-unknown" }, record, context), { path: "routeId", message: "Pick a route of the booking's day" })
     const resolving: MappingContext = { ...context, resolve: { ...NOTHING_RESOLVED, serverIdOf: (webId) => (webId === "route-held" ? id(12) : undefined) } }
     assert.deepEqual(toBody?.({ routeId: "route-held" }, record, resolving), { routeId: id(12) })
-    assert.deepEqual(BULKY_BOOKING_COMMANDS[ROUTE_BOOKING].touches, ["route-studio.routes", "route-studio.pickups"])
+    assert.deepEqual(BULKY_BOOKING_COMMANDS[ROUTE_BOOKING].touches, ["route-studio.routes", "route-studio.pickups", "route-studio.live"])
   })
 })

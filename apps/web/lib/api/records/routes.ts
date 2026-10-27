@@ -56,7 +56,7 @@ import { masterDataKindOf } from "@/lib/data/master-data"
 import { A_WORK_ORDER_IS_OF_A_CONTAINER } from "@/lib/data/pickup-services"
 import { isPropertyRecord, isSharedPointRecord } from "@/lib/data/properties"
 import { formatDistance, formatDuration } from "@/lib/map-planning/format"
-import { ROUTE_ACTIVE_PLAN_KEY, STOP_AT_CONTAINER, STOP_AT_POINT, STOP_AT_PROPERTY } from "@/lib/data/routes"
+import { ROUTE_ACTIVE_PLAN_KEY, STOP_AT_BULKY_BOOKING, STOP_AT_CONTAINER, STOP_AT_POINT, STOP_AT_PROPERTY } from "@/lib/data/routes"
 
 import { command, create, get, listAll, put } from "../client"
 import { hasPrefix, inheritedPresentation, isLocalRefusal, moduleKeyOf, ofKind, said, stampFacts, statusLabel, typed, webIdOf, type Client, type MappingContext, type RecordCommand, type ResourceAdapter, type ServerModule } from "./adapter"
@@ -88,6 +88,8 @@ export function routesWindowFrom(now = new Date()): string {
 // The modules a route's command changes the rows of too, spelled here: their own constants sit in files built on this one (live.ts, pickups.ts).
 const LIVE_KEY = moduleKeyOf(ROUTES_MODULE.workspaceId, "live")
 const PICKUPS_KEY = moduleKeyOf(ROUTES_MODULE.workspaceId, "pickups")
+/** The bulky bookings (O11 of #290): a stop added for one routes it, and a stop of one skipped books it again. */
+const BULKY_KEY = moduleKeyOf("operate", "bulky-bookings")
 
 /** The route's commands, by the names the surfaces send. */
 export const ASSIGN_ROUTE = "assign"
@@ -311,7 +313,8 @@ export const ROUTE_COMMANDS = {
       const reason = said(input, "reason")
       return reason === undefined ? refusal("reason", "Say why the route is cancelled") : { reasonCode, reason }
     },
-    [PICKUPS_KEY, LIVE_KEY],
+    // A cancel skips the open stops, a bulky booking's among them, which books it again.
+    [PICKUPS_KEY, LIVE_KEY, BULKY_KEY],
   ),
   // A stop of the office's own (#111): a container, or an address with the fraction collected there. The API answers the stop; the route is read back for the row, its stops and its progress.
   [ADD_STOP]: {
@@ -321,7 +324,7 @@ export const ROUTE_COMMANDS = {
       return routeDetail(client, serverId)
     },
     refused: (record) => `No stop was added to ${record.name}`,
-    touches: [PICKUPS_KEY, LIVE_KEY],
+    touches: [PICKUPS_KEY, LIVE_KEY, BULKY_KEY],
   },
   // A Plan over the route's open stops (O5 of #290): the API answers the Plan, calculating or re-activated, so the route is read back for its active Plan.
   [OPTIMISE_ROUTE]: {
@@ -393,6 +396,13 @@ function bookedWith(service: OfficeStopService, input: Record<string, unknown>, 
 export function addedStopBody(input: Record<string, unknown>, context: MappingContext): Record<string, string> | ReturnType<typeof refusal> {
   const at = said(input, "stopAt") ?? STOP_AT_CONTAINER
   const note = said(input, "note")
+  // A bulky booking's collection (O11 of #290): the booking says the place, the fraction and, unless the form gives one, the note.
+  if (at === STOP_AT_BULKY_BOOKING) {
+    const picked = said(input, "bulkyBookingId")
+    const bulkyBookingId = picked === undefined ? undefined : referencedServerId(picked, "bulky-booking", context, { owns: hasPrefix("bulky-booking") })
+    if (bulkyBookingId === undefined) return refusal("bulkyBookingId", "Pick a bulky booking of the route's day")
+    return { service: "bulky", bulkyBookingId, ...(note === undefined ? {} : { note }) }
+  }
   // An emptying is the API's default, so a body says a service only where it is a work order (O3 of #290).
   const service = said(input, "service") ?? "empty"
   if (!isOfficeStopService(service)) return refusal("service", "Book an emptying or one of the work orders offered")

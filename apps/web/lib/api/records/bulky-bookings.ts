@@ -164,7 +164,7 @@ export const BULKY_BOOKING_COMMANDS: Readonly<Record<string, RecordCommand<Bulky
       return await get<BulkyBooking>(client, `/bulky-bookings/${serverId}`)
     },
     refused: (record) => `${record.name} was not routed`,
-    touches: ["route-studio.routes", "route-studio.pickups"],
+    touches: ["route-studio.routes", "route-studio.pickups", "route-studio.live"],
   },
   [CANCEL_BOOKING]: {
     toBody: (input) => ({ reason: typeof input.reason === "string" ? input.reason : "" }),

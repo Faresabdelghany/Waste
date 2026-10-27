@@ -1,12 +1,12 @@
 "use client"
 // Operate › Bulky Bookings on the Pilot (O11 of #290). Book bulky collection
 // is the module's own dialog: the customer, the agreement charged — the
-// customer's, signed — the place in the agreement's project, the fraction,
+// customer's, signed — a place the agreement's subscriptions serve, the fraction,
 // then the days the place may be booked on, read from the API's availability
 // with each day's slots left (a full one shown and not offered), and the
 // items. A booking's details offer, while it stands booked, Route — onto a
-// route of its project running on its day, not started — and Cancel, with
-// why. The API's refusal is the store's toast in its own words. The words
+// route of its project running on its day, not started — Change day, from
+// the days its place offers, and Cancel, with why. The API's refusal is the store's toast in its own words. The words
 // and the helpers are lib/data/bulky.ts', the adapter
 // lib/api/records/bulky-bookings.ts.
 import { useRef, useState, type FormEvent } from "react"
@@ -28,9 +28,9 @@ import { problemSentence } from "@/lib/api/problem"
 import { bulkyAvailability, CANCEL_BOOKING, ROUTE_BOOKING } from "@/lib/api/records/bulky-bookings"
 import { dayIn } from "@/lib/api/records/planning"
 import { problemOfError } from "@/lib/api/records/server-records"
-import { AGREEMENTS_MODULE, isAgreementRecord } from "@/lib/data/agreements"
+import { AGREEMENTS_MODULE, isAgreementRecord, isSubscriptionRecord } from "@/lib/data/agreements"
 import { getModuleDefinition, type BusinessRecord, type ModuleLocation } from "@/lib/data/business-modules"
-import { agreementsOfCustomer, availabilityWindow, BULKY_BOOKINGS_MODULE, bookingMoves, bookingRecordOf, dayOption, ITEMS_MAX, itemsOf, routesForBooking, type ItemRow } from "@/lib/data/bulky"
+import { agreementsOfCustomer, availabilityWindow, bookingPlaceOf, placesOfAgreement, withBookingDay, BULKY_BOOKINGS_MODULE, bookingMoves, bookingRecordOf, dayOption, ITEMS_MAX, itemsOf, routesForBooking, type ItemRow } from "@/lib/data/bulky"
 import { PROPERTIES_MODULE, SHARED_POINTS_MODULE } from "@/lib/data/properties"
 
 const NO_RECORDS: readonly BusinessRecord[] = []
@@ -77,7 +77,9 @@ export function BookBulkySurface({ label }: PrimarySurfaceProps) {
   const projectId = agreement?.projectIds?.[0] ?? ""
   const customers = pickers.options(field("customerId", "Customer", { workspaceId: "customers", moduleId: "contacts" }), {})
   const fractions = pickers.options(field("wasteFractionId", "Waste fraction"), {})
-  const ofProject = (records: readonly BusinessRecord[]) => records.filter((record) => projectId !== "" && record.projectIds?.includes(projectId))
+  // The places the agreement serves: a booking is collected where its agreement's subscriptions are.
+  const served = placesOfAgreement(agreements.records.filter(isSubscriptionRecord), agreementId)
+  const ofProject = (records: readonly BusinessRecord[]) => records.filter((record) => projectId !== "" && record.projectIds?.includes(projectId) && served.has(record.id))
   const placeOptions = [
     ...ofProject(properties.records).map((record) => ({ value: placeValue("property", record.id), label: record.name })),
     ...ofProject(points.records).map((record) => ({ value: placeValue("point", record.id), label: `${record.name} · shared point` })),
@@ -302,7 +304,14 @@ export function BookBulkySurface({ label }: PrimarySurfaceProps) {
 /** A booking's details: Route and Cancel while it stands booked. */
 export function BulkyBookingCommandsSurface({ record }: RowSurfaceProps) {
   const moduleReady = useModuleReady(BULKY_BOOKINGS_MODULE)
-  const { busy, run } = useCommandRunner(BULKY_BOOKINGS_MODULE, record.id)
+  const { busy, run, save } = useCommandRunner(BULKY_BOOKINGS_MODULE, record.id)
+  const client = useApiClient()
+  const resolver = useServerResolver()
+  const pickers = useRelationPickers()
+  const { upsertRecord } = useBusinessRecordStore()
+  const [moving, setMoving] = useState(false)
+  const [newDay, setNewDay] = useState("")
+  const [days, setDays] = useState<DaysRead>({ status: "idle" })
   const routes = useModuleRecords(ROUTES.workspaceId, ROUTES.moduleId, fixturesOf(ROUTES))
   const [routing, setRouting] = useState(false)
   const [cancelling, setCancelling] = useState(false)
@@ -316,6 +325,30 @@ export function BulkyBookingCommandsSurface({ record }: RowSurfaceProps) {
     run(ROUTE_BOOKING, { routeId }, (outcome) => {
       setRouting(false)
       toast.success("Booking routed", { description: outcome.record.name })
+    })
+  }
+  // Another day (a stop missed, the customer asked): the place's days read as the booking dialog reads them, and the booking moved through its patch.
+  const openMove = () => {
+    setMoving(true)
+    setNewDay("")
+    const place = bookingPlaceOf(record)
+    const serverId = place === undefined ? undefined : resolver.serverIdOf(place.webId)
+    if (client === null || place === undefined || serverId === undefined) {
+      setDays({ status: "refused", sentence: "The place is not one the API holds yet." })
+      return
+    }
+    setDays({ status: "reading" })
+    const projectId = record.projectIds?.[0]
+    bulkyAvailability(client, place.kind === "property" ? { propertyId: serverId } : { sharedCollectionPointId: serverId }, availabilityWindow(dayIn(new Date(), pickers.timezoneOf(projectId)))).then(
+      (read) => setDays({ status: "read", days: read }),
+      (error: unknown) => setDays({ status: "refused", sentence: problemSentence(problemOfError(error)) }),
+    )
+  }
+  const move = (event: FormEvent) => {
+    event.preventDefault()
+    save(upsertRecord(BULKY_BOOKINGS_MODULE.workspaceId, BULKY_BOOKINGS_MODULE.moduleId, withBookingDay(record, newDay)), (saved) => {
+      setMoving(false)
+      if (saved !== undefined) toast.success("Booking moved", { description: `${record.context} · ${newDay}` })
     })
   }
   const cancel = (event: FormEvent) => {
@@ -335,12 +368,15 @@ export function BulkyBookingCommandsSurface({ record }: RowSurfaceProps) {
           <Button variant="outline" size="sm" disabled={!moduleReady || busy} onClick={() => setRouting(true)}>
             Route
           </Button>
+          <Button variant="outline" size="sm" disabled={!moduleReady || busy} onClick={openMove}>
+            Change day
+          </Button>
           <Button variant="outline" size="sm" disabled={!moduleReady || busy} onClick={() => setCancelling(true)}>
             Cancel booking
           </Button>
         </div>
       ) : (
-        <p className="text-sm text-muted-foreground">Only a booked booking is routed or cancelled; a routed one&apos;s stop is taken off its route first.</p>
+        <p className="text-sm text-muted-foreground">Only a booked booking is routed, moved or cancelled; a routed one&apos;s stop is taken off its route first.</p>
       )}
 
       <Dialog open={routing} onOpenChange={(next) => !busy && setRouting(next)}>
@@ -372,6 +408,42 @@ export function BulkyBookingCommandsSurface({ record }: RowSurfaceProps) {
               </Button>
               <Button type="submit" disabled={busy || routeId === ""}>
                 Route
+              </Button>
+            </DialogFooter>
+          </form>
+        </DialogContent>
+      </Dialog>
+
+      <Dialog open={moving} onOpenChange={(next) => !busy && setMoving(next)}>
+        <DialogContent className="sm:max-w-md">
+          <form onSubmit={move} className="space-y-4">
+            <DialogHeader>
+              <DialogTitle>Change day</DialogTitle>
+              <DialogDescription>Move the booking to another day its place offers, a slot of that day taken and this one freed. A missed stop&apos;s booking is moved here, then routed again.</DialogDescription>
+            </DialogHeader>
+            <div className="space-y-1.5">
+              <Label htmlFor="bulky-new-day">Day</Label>
+              <Select value={newDay} onValueChange={setNewDay} disabled={days.status !== "read" || days.days.length === 0}>
+                <SelectTrigger id="bulky-new-day">
+                  <SelectValue placeholder="Pick a day with a slot left" />
+                </SelectTrigger>
+                <SelectContent>
+                  {(days.status === "read" ? days.days : []).map(dayOption).map((option) => (
+                    <SelectItem key={option.value} value={option.value} disabled={option.disabled}>
+                      {option.label}
+                    </SelectItem>
+                  ))}
+                </SelectContent>
+              </Select>
+              {days.status === "reading" && <p className="text-xs text-muted-foreground">Reading the place&apos;s days…</p>}
+              {days.status === "refused" && <p className="text-xs text-muted-foreground">{days.sentence}</p>}
+            </div>
+            <DialogFooter>
+              <Button type="button" variant="outline" disabled={busy} onClick={() => setMoving(false)}>
+                Keep the day
+              </Button>
+              <Button type="submit" disabled={busy || newDay === ""}>
+                Move booking
               </Button>
             </DialogFooter>
           </form>

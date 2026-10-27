@@ -118,6 +118,17 @@ export function agreementsOfCustomer<T extends BusinessRecord>(agreements: reado
   return agreements.filter((record) => customerId !== "" && valueOf(record, "customerId") === customerId && record.status === "Active")
 }
 
+/** The places a booking under an agreement may be at: those its subscriptions serve, not ended — the property's or the shared point's web id. The API judges the day. */
+export function placesOfAgreement(subscriptions: readonly BusinessRecord[], agreementId: string): ReadonlySet<string> {
+  const places = new Set<string>()
+  for (const subscription of subscriptions) {
+    if (agreementId === "" || valueOf(subscription, "agreementId") !== agreementId || subscription.status === "Expired") continue
+    const place = valueOf(subscription, "propertyId") || valueOf(subscription, "sharedPointId")
+    if (place !== "") places.add(place)
+  }
+  return places
+}
+
 /** The routes a booking may be put on: its project's, running on its day, not started. */
 export function routesForBooking<T extends BusinessRecord>(routes: readonly T[], booking: BusinessRecord): T[] {
   const projectId = valueOf(booking, "projectId")
@@ -125,7 +136,25 @@ export function routesForBooking<T extends BusinessRecord>(routes: readonly T[],
   return routes.filter((route) => valueOf(route, "projectId") === projectId && valueOf(route, "operatingDate") === day && ["planned", "ready"].includes(valueOf(route, "status")))
 }
 
-/** Whether a booking's details offer Route and Cancel: only a booked one moves. */
+/** The bookings a route's Add stop may collect: booked ones of its project for the day it runs, as the picker offers them. */
+export function bookingsForRoute(bookings: readonly BusinessRecord[], route: BusinessRecord): { value: string; label: string }[] {
+  const projectId = valueOf(route, "projectId")
+  const day = valueOf(route, "operatingDate")
+  return bookings.filter((booking) => bookingMoves(booking) && valueOf(booking, "projectId") === projectId && valueOf(booking, BULKY_DAY_KEY) === day).map((booking) => ({ value: booking.id, label: `${booking.context} · ${booking.description}` }))
+}
+
+/** A booking's place by web id, and which of the two it is; undefined where the row names none. */
+export function bookingPlaceOf(booking: BusinessRecord): { kind: "property" | "point"; webId: string } | undefined {
+  const property = valueOf(booking, "propertyId")
+  if (property !== "") return { kind: "property", webId: property }
+  const point = valueOf(booking, "sharedCollectionPointId")
+  return point === "" ? undefined : { kind: "point", webId: point }
+}
+
+/** The booking moved to another day: the row the store patches, its day alone changed. */
+export const withBookingDay = (booking: BusinessRecord, day: string): BusinessRecord => ({ ...booking, value: day, submittedValues: { ...booking.submittedValues, [BULKY_DAY_KEY]: day } })
+
+/** Whether a booking's details offer Route, Change day and Cancel: only a booked one moves. */
 export const bookingMoves = (record: BusinessRecord): boolean => valueOf(record, BULKY_STATUS_KEY) === "booked"
 
 // ---------------------------------------------------------------------------

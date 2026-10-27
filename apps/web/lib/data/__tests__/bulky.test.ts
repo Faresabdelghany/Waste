@@ -7,7 +7,7 @@ import type { BulkySchedule } from "@waste/contracts/bulky"
 
 import { mintedRecord } from "../containers"
 
-import { agreementsOfCustomer, bookingRecordOf, dayOption, routesForBooking, itemsOf, itemsSentence, newScheduleForm, periodSentence, recurrenceSentence, scheduleCreateBodyOf, scheduleFormOf, schedulePatchBodyOf, shortDay, slotsSentence } from "../bulky"
+import { agreementsOfCustomer, bookingPlaceOf, bookingRecordOf, bookingsForRoute, dayOption, placesOfAgreement, routesForBooking, withBookingDay, itemsOf, itemsSentence, newScheduleForm, periodSentence, recurrenceSentence, scheduleCreateBodyOf, scheduleFormOf, schedulePatchBodyOf, shortDay, slotsSentence } from "../bulky"
 
 const SCHEDULE: BulkySchedule = {
   id: "01a0d2a4-a280-7099-8000-000000000001",
@@ -104,6 +104,37 @@ describe("the pickers of a booking", () => {
     assert.deepEqual(
       routesForBooking(routes, booking).map((record) => record.id),
       ["route-1", "route-2"],
+    )
+  })
+})
+
+describe("a booking's place and day", () => {
+  const row = (id: string, status: string, values: Record<string, string>) => mintedRecord({ id, name: id, status, recordKind: "Row", values })
+  const booking = bookingRecordOf({ projectId: "project-1", customerId: "c", agreementId: "agreement-1", propertyId: "property-1", sharedCollectionPointId: "", wasteFractionId: "f", day: "2027-03-09", items: [{ description: "Sofa", quantity: 1 }], note: "" }, "Parkvej 18", 1)
+
+  test("are the places the agreement's subscriptions serve, not ended", () => {
+    const subscriptions = [
+      row("subscription-1", "Active", { agreementId: "agreement-1", propertyId: "property-1" }),
+      row("subscription-2", "Pending", { agreementId: "agreement-1", sharedPointId: "shared-point-1" }),
+      row("subscription-3", "Expired", { agreementId: "agreement-1", propertyId: "property-9" }),
+      row("subscription-4", "Active", { agreementId: "agreement-2", propertyId: "property-2" }),
+    ]
+    assert.deepEqual([...placesOfAgreement(subscriptions, "agreement-1")], ["property-1", "shared-point-1"])
+  })
+
+  test("move by the day alone, and the place is read off the row", () => {
+    assert.deepEqual(bookingPlaceOf(booking), { kind: "property", webId: "property-1" })
+    assert.equal(withBookingDay(booking, "2027-03-16").submittedValues?.day, "2027-03-16")
+  })
+
+  test("a route's Add stop offers the booked bookings of its project for the day it runs", () => {
+    const route = row("route-1", "Planned", { projectId: "project-1", operatingDate: "2027-03-09", status: "planned" })
+    const booked = { ...booking, id: "bulky-booking-1", submittedValues: { ...booking.submittedValues, bulkyStatus: "booked" } }
+    const routed = { ...booked, id: "bulky-booking-2", submittedValues: { ...booked.submittedValues, bulkyStatus: "routed" } }
+    const otherDay = withBookingDay({ ...booked, id: "bulky-booking-3" }, "2027-03-10")
+    assert.deepEqual(
+      bookingsForRoute([booked, routed, otherDay], route).map((option) => option.value),
+      ["bulky-booking-1"],
     )
   })
 })
