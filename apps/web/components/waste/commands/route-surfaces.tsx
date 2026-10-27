@@ -33,6 +33,7 @@ import type { RowSurfaceProps } from "@/components/waste/commands/command-surfac
 import { CreateSurface } from "@/components/waste/commands/create-surface"
 import { ReadRows } from "@/components/waste/commands/read-rows"
 import { useCommandRunner, useModuleReady, useOpenRecord, useRelationPickers, useRowHistory, useServerNames } from "@/components/waste/commands/use-command-support"
+import { useIsProviderAccount } from "@/components/waste/provider-account"
 import { useProofObjectLinks } from "@/components/waste/commands/use-proof-object-links"
 import type { ApiClient } from "@/lib/api/client"
 import { problemSentence } from "@/lib/api/problem"
@@ -311,6 +312,8 @@ export function RouteCommandsSurface({ record }: RowSurfaceProps) {
   const offered = moduleReady && !busy
   const status = typeof record.submittedValues?.status === "string" ? record.submittedValues.status : ""
   const openForm = (name: RouteCommandWithForm) => setOpen({ kind: "form", name, values: name === "assign" || name === "reschedule" ? routeCommandValues(record) : {} })
+  // A provider's account crews a route it runs and sends it to its own driver (#291 slice 23b); every other command is the office's (C24).
+  const officeCommands = !useIsProviderAccount()
   // An address-only stop the office added (#111) names no container: it is named by the place it is collected at.
   const stopName = (pickup: Pickup) => {
     if (pickup.containerId !== null) return containerName(pickup.containerId)
@@ -331,33 +334,39 @@ export function RouteCommandsSurface({ record }: RowSurfaceProps) {
         <Button variant="outline" size="sm" disabled={!offered} onClick={() => run(DISPATCH_ROUTE)}>
           Dispatch
         </Button>
-        <Button variant="outline" size="sm" disabled={!offered} onClick={() => openForm("reschedule")}>
-          Reschedule
-        </Button>
+        {officeCommands && (
+          <Button variant="outline" size="sm" disabled={!offered} onClick={() => openForm("reschedule")}>
+            Reschedule
+          </Button>
+        )}
         {/* A route the office holds goes back to its scheme on a word: the next generation run brings back its day, start and assignment (#226). */}
-        {isHeldRoute(record) && record.submittedValues?.status === "planned" && (
+        {officeCommands && isHeldRoute(record) && record.submittedValues?.status === "planned" && (
           <Button variant="outline" size="sm" disabled={!offered} onClick={() => run(RELEASE_HOLD)}>
             Release hold
           </Button>
         )}
         {/* A stop of the office's own goes onto a route that has not started (#111). */}
-        {TAKES_A_STOP.has(status) && (
+        {officeCommands && TAKES_A_STOP.has(status) && (
           <Button variant="outline" size="sm" disabled={!offered || !pickers.readyFor(ROUTE_COMMAND_FORMS["add-stop"])} onClick={() => openForm("add-stop")}>
             Add stop
           </Button>
         )}
-        <Button variant="outline" size="sm" disabled={!offered || detail === undefined || openStops.length < 2} onClick={() => setOpen({ kind: "reorder", order: openStops.map((pickup) => pickup.id) })}>
-          Reorder stops
-        </Button>
+        {officeCommands && (
+          <Button variant="outline" size="sm" disabled={!offered || detail === undefined || openStops.length < 2} onClick={() => setOpen({ kind: "reorder", order: openStops.map((pickup) => pickup.id) })}>
+            Reorder stops
+          </Button>
+        )}
         {/* A Plan over the open stops, on a route that has not started (O5 of #290): the optimiser's order, or a measured baseline where it cannot take the route. */}
-        {TAKES_A_STOP.has(status) && (
+        {officeCommands && TAKES_A_STOP.has(status) && (
           <Button variant="outline" size="sm" disabled={!offered || detail === undefined || openStops.length === 0} onClick={() => run(OPTIMISE_ROUTE)}>
             Optimise
           </Button>
         )}
-        <Button variant="outline" size="sm" disabled={!offered} onClick={() => openForm("cancel")}>
-          Cancel route
-        </Button>
+        {officeCommands && (
+          <Button variant="outline" size="sm" disabled={!offered} onClick={() => openForm("cancel")}>
+            Cancel route
+          </Button>
+        )}
       </div>
       <div className="space-y-2">
         <h4 className="text-xs font-medium text-muted-foreground">Stops, in the order they will be visited</h4>

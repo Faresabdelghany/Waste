@@ -642,6 +642,31 @@ export const accessModule: ServerModule = {
   resources: [roleAdapter, userAdapter],
 }
 
+/**
+ * A Service Provider's team (#291 C24): the accounts of a provider and the
+ * roles they may be given, read through the same `/users` and `/roles` under
+ * `service-providers.service-provider-workspace` for a provider's account —
+ * its own team and the providers' roles — and `configure.access` for the
+ * office, whose read is narrowed to the providers' accounts here. An invite
+ * names its provider, as the access module's does.
+ */
+export const teamUserAdapter: ResourceAdapter<User> = {
+  ...userAdapter,
+  // The accounts' history is `configure.access`'s, which a provider's role does not read: Settings › Users & roles shows it.
+  auditTable: undefined,
+  list: (client) => listAll<User>(client, "/users").then((users) => users.filter((user) => user.serviceProviderId !== null)),
+}
+
+/** The roles a team reads beside its members, to name them and to offer them; their history is Settings' too. */
+const teamRoleAdapter: ResourceAdapter<Role> = { ...roleAdapter, auditTable: undefined }
+
+/** Service Providers › Service Provider Workspace: the roles first, so a member's mapping finds its role's name, then the members. */
+export const teamModule: ServerModule = {
+  workspaceId: "service-providers",
+  moduleId: "service-provider-workspace",
+  resources: [teamRoleAdapter, teamUserAdapter],
+}
+
 /** The mapping context a module's fixtures and a resolver make. */
 export const contextOf = (fixtures: readonly BusinessRecord[], resolve: MappingContext["resolve"], companyRecordId?: string, now?: Date): MappingContext => ({
   fixtures,

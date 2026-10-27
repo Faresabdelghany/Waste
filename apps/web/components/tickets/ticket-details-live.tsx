@@ -33,6 +33,7 @@ import { useBusinessRecordStore, useServerModuleState, whenSaved } from "@/compo
 import { ProofObject } from "@/components/waste/commands/route-surfaces"
 import { useCommandRunner, useRelationPickers, useRowHistory, useServerNames } from "@/components/waste/commands/use-command-support"
 import { useProofObjectLinks } from "@/components/waste/commands/use-proof-object-links"
+import { useIsProviderAccount } from "@/components/waste/provider-account"
 import type { ApiClient } from "@/lib/api/client"
 import { statusLabel, webIdOf } from "@/lib/api/records/adapter"
 import { ALERT_PREFIX, ALERTS_MODULE } from "@/lib/api/records/alerts"
@@ -121,8 +122,13 @@ const COMMAND_DONE: Readonly<Record<TicketCommandName, string>> = {
 const COMPOSER = {
   internal: { label: "Internal note", hint: "Only the office reads it", placeholder: "Write an internal note…", action: "Add note", done: "Internal note added" },
   customer: { label: "Customer-visible comment", hint: "The customer reads it too", placeholder: "Write a comment the customer reads…", action: "Add comment", done: "Comment added" },
+  // A Service Provider's account writes and reads the ticket's service-provider thread alone (#291 slice 23b, C24).
+  "service-provider": { label: "Comment to the office", hint: "The office and your team read it", placeholder: "Write a comment to the office…", action: "Add comment", done: "Comment added" },
 } as const
 type Visibility = keyof typeof COMPOSER
+/** The threads an account writes in: the office's two, or a provider's own. */
+const OFFICE_THREADS: readonly Visibility[] = ["internal", "customer"]
+const PROVIDER_THREADS: readonly Visibility[] = ["service-provider"]
 
 function statusClasses(status: string): string {
   if (/completed/i.test(status)) return "border-emerald-500/25 bg-emerald-500/10 text-emerald-700 dark:text-emerald-200"
@@ -162,7 +168,11 @@ export function LiveTicketDetailsDialog({ record, onClose }: { record: BusinessR
   const alertWebId = (serverId: string) => [...(alertsState?.serverIds ?? [])].find(([, id]) => id === serverId)?.[0] ?? webIdOf(ALERT_PREFIX, serverId)
   const [open, setOpen] = useState<Open | null>(null)
   const [message, setMessage] = useState("")
-  const [visibility, setVisibility] = useState<Visibility>("internal")
+  // A provider's account raises and comments, and moves no ticket: the office's commands, edits and replies are not offered it (#291 C24).
+  const provider = useIsProviderAccount()
+  const threads = provider ? PROVIDER_THREADS : OFFICE_THREADS
+  const [chosen, setVisibility] = useState<Visibility>("internal")
+  const visibility = threads.includes(chosen) ? chosen : threads[0]
   const [sending, setSending] = useState(false)
   const [saving, setSaving] = useState(false)
 
@@ -174,7 +184,7 @@ export function LiveTicketDetailsDialog({ record, onClose }: { record: BusinessR
   const detail = reads.rows?.[0]
   const offered = ready && !busy && !saving
   // A closed ticket's own fields are refused by the API until it is reopened: its edits are offered while it is open.
-  const editable = offered && isOpenTicketStatus(status)
+  const editable = offered && !provider && isOpenTicketStatus(status)
 
   const run = (name: TicketCommandName, input?: BusinessFormValues) =>
     send(name, input, (outcome) => {
@@ -234,15 +244,15 @@ export function LiveTicketDetailsDialog({ record, onClose }: { record: BusinessR
       setSending(false)
       if (outcome.kind !== "done") return
       setMessage("")
-      setVisibility("internal")
+      setVisibility(threads[0])
       setChanges((count) => count + 1)
       toast.success(COMPOSER[visibility].done)
     })
   }
 
-  const machine = TICKET_MACHINE_COMMANDS.filter((name) => offersTicketCommand(status, name, label))
+  const machine = provider ? [] : TICKET_MACHINE_COMMANDS.filter((name) => offersTicketCommand(status, name, label))
   // Book a stop (O3c of #290): on an open ticket a stop answers, once the routes are read.
-  const bookable = offersBookAStop(value("kind"), status)
+  const bookable = !provider && offersBookAStop(value("kind"), status)
   const bookingWaits = bookAStopWaits(routesState)
   const links = TICKET_LINKS.flatMap(([key, , fact]) => {
     const webId = value(key)
@@ -324,7 +334,7 @@ export function LiveTicketDetailsDialog({ record, onClose }: { record: BusinessR
                 <div className={cn("flex items-center gap-2 border-b px-3 py-2", visibility === "internal" ? "border-amber-500/20 bg-amber-500/5" : "border-blue-500/20 bg-blue-500/5")}>
                   {visibility === "internal" ? <LockKey className="h-4 w-4 shrink-0 text-amber-600" /> : <ChatCircleText className="h-4 w-4 shrink-0 text-blue-600" />}
                   <div className="flex gap-1" role="radiogroup" aria-label="Who reads it">
-                    {(Object.keys(COMPOSER) as Visibility[]).map((mode) => (
+                    {threads.map((mode) => (
                       <Button key={mode} type="button" role="radio" aria-checked={visibility === mode} size="sm" variant={visibility === mode ? "secondary" : "ghost"} className="h-7 text-xs" onClick={() => setVisibility(mode)}>
                         {COMPOSER[mode].label}
                       </Button>
@@ -397,7 +407,7 @@ export function LiveTicketDetailsDialog({ record, onClose }: { record: BusinessR
                   <Row label="Assignee" value={live.owner}>
                     <span className="flex items-center justify-end gap-2">
                       <span className="truncate">{live.owner}</span>
-                      {offersTicketCommand(status, ASSIGN_TICKET, label) && (
+                      {!provider && offersTicketCommand(status, ASSIGN_TICKET, label) && (
                         <Button type="button" variant="ghost" size="sm" className="h-7 text-xs" aria-label="Change Assignee" disabled={!offered || !pickers.readyFor(TICKET_COMMAND_FORMS.assign)} onClick={() => command(ASSIGN_TICKET)}>
                           Change
                         </Button>
@@ -457,10 +467,12 @@ export function LiveTicketDetailsDialog({ record, onClose }: { record: BusinessR
                 <section data-testid="ticket-evidence">
                   <div className="flex items-center justify-between gap-2">
                     <h3 className="text-xs font-semibold uppercase tracking-wide text-muted-foreground">Evidence</h3>
-                    <Button type="button" variant="outline" size="sm" className="h-7 text-xs" disabled={!offered || evidence == null} onClick={() => setOpen({ kind: "reply" })}>
-                      <ChatCircleText className="h-3.5 w-3.5" />
-                      Reply with the record
-                    </Button>
+                    {!provider && (
+                      <Button type="button" variant="outline" size="sm" className="h-7 text-xs" disabled={!offered || evidence == null} onClick={() => setOpen({ kind: "reply" })}>
+                        <ChatCircleText className="h-3.5 w-3.5" />
+                        Reply with the record
+                      </Button>
+                    )}
                   </div>
                   {evidenceRead.problem !== null ? (
                     <p className="mt-3 text-sm text-destructive">{evidenceRead.problem}</p>

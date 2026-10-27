@@ -23,7 +23,7 @@ import { containersModule, inventoryModule } from "./containers"
 import { fleetDriversModule, fleetVehiclesModule } from "./fleet"
 import { liveModule } from "./live"
 import { masterDataModule } from "./master-data"
-import { accessModule, organisationModule, serviceProvidersModule } from "./organisation"
+import { accessModule, organisationModule, serviceProvidersModule, teamModule } from "./organisation"
 import { accountingModule } from "./accounting"
 import { paymentsModule } from "./payments"
 import { pickupsModule } from "./pickups"
@@ -81,6 +81,8 @@ export const SERVER_MODULES: readonly ServerModule[] = [
   organisationModule,
   serviceProvidersModule,
   accessModule,
+  // A provider's team (#291 C24), after the providers its accounts name.
+  teamModule,
   customersModule,
   planningAreasModule,
   collectionCalendarsModule,
