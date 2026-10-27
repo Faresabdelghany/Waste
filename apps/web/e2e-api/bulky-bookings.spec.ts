@@ -3,7 +3,7 @@ import type { APIRequestContext } from "@playwright/test"
 import { dayIn, driverNamed, SEEDED_DRIVER } from "./dispatched-route"
 import { E2E, uniqueName } from "./env"
 import { accessTokenOf, apiAs, chainLanded, expect, freshContext, problemOf, signIn, test } from "./fixtures"
-import { answerOf, pick, toasts } from "./routes-support"
+import { answerOf, openRoute, pick, toasts } from "./routes-support"
 import { listAll, projectNamed, TESTER_PROJECT } from "./tester"
 
 // Bulky-waste booking on the API (O11 of #290). Each test draws a planning
@@ -20,7 +20,8 @@ import { listAll, projectNamed, TESTER_PROJECT } from "./tester"
 // The second drives the office's web (O11b): Settings › Operations › Bulky
 // schedules adds the area's schedule; Operate › Bulky Bookings' dialog books
 // the customer's items on a day the place offers, its slots left beside it;
-// the booking's details route it onto a route of that day. Every body is the
+// the booking's details move it to the next day, and the route of that day's
+// Add stop collects it as a bulky booking. Every body is the
 // one the contracts take, read off the browser's own request.
 //
 // The charge of a completed bulky stop is the worker's, held by its own
@@ -126,7 +127,7 @@ test("a place's bulky days come from its area's schedule; a booking takes the da
   }
 })
 
-test("Settings › Bulky schedules adds an area's schedule; the office books a bulky collection through its dialog on a day the place offers, and routes it from its details onto a route of that day", async ({ api, page }) => {
+test("Settings › Bulky schedules adds an area's schedule; the office books a bulky collection through its dialog on a day the place offers, moves it to the next day from its details, and the route of that day's Add stop collects it", async ({ api, page }) => {
   test.setTimeout(150_000)
   const { project, area, property, customer, bulky, agreement, fraction, today } = await groundFor(api)
 
@@ -151,7 +152,7 @@ test("Settings › Bulky schedules adds an area's schedule; the office books a b
   // The first day the place offers, and a route of that day for the office to put the booking on.
   const days = ((await (await api.get(`/bulky-bookings/availability?propertyId=${property.id}&from=${today}&to=${fortnight(today)}`)).json()) as { days: Day[] }).days
   const [first] = days
-  const route = await made<{ id: string; label: string }>(api, "/routes", { projectId: project.id, operatingDate: first.day })
+  const route = await made<{ id: string; label: string }>(api, "/routes", { projectId: project.id, operatingDate: days[1].day })
 
   // The booking, through the module's own dialog.
   const listed = answerOf(page, "GET", "/bulky-bookings")
@@ -176,15 +177,30 @@ test("Settings › Bulky schedules adds an area's schedule; the office books a b
   expect(booked.request().postDataJSON()).toEqual({ customerId: customer.id, agreementId: agreement.id, propertyId: property.id, wasteFractionId: fraction.id, day: first.day, items: [{ description: "Wardrobe", quantity: 1 }], note: "Ring twice" })
   const booking = (await booked.json()) as Booking
 
-  // Routed from its details onto the route of its day.
+  // Moved from its details to the place's next day, a slot of that day taken.
+  const second = days[1]
   const details = page.getByTestId("bulky-booking-commands")
-  await details.getByRole("button", { name: "Route" }).click()
-  const routing = page.getByRole("dialog", { name: "Route booking" })
-  await pick(routing, page, "Route", route.label)
-  const [stopped] = await Promise.all([answerOf(page, "POST", `/routes/${route.id}/pickups`), routing.getByRole("button", { name: "Route", exact: true }).click()])
+  await details.getByRole("button", { name: "Change day" }).click()
+  const moving = page.getByRole("dialog", { name: "Change day" })
+  await moving.getByRole("combobox", { name: "Day" }).click()
+  // The first day now has one slot left; the next, the second day the place offers, both.
+  await page.getByRole("option", { name: /· 2 of 2 left$/ }).first().click()
+  const [moved] = await Promise.all([answerOf(page, "PATCH", `/bulky-bookings/${booking.id}`), moving.getByRole("button", { name: "Move booking" }).click()])
+  expect(moved.status(), await moved.text()).toBe(200)
+  expect(moved.request().postDataJSON()).toEqual({ day: second.day })
+  await expect(toasts(page)).toContainText("Booking moved")
+
+  // Routed through the route's Add stop, as a bulky booking of the route's day; the booking reads routed, and its stop carries the note.
+  const details_ = await openRoute(page, route)
+  await details_.getByTestId("route-commands").getByRole("button", { name: "Add stop" }).click()
+  const adding = page.getByRole("dialog", { name: "Add stop" })
+  await pick(adding, page, "Collect", "A bulky booking")
+  await adding.getByRole("combobox", { name: /^Bulky booking/ }).click()
+  await page.getByRole("option", { name: new RegExp(customer.name) }).click()
+  const [stopped] = await Promise.all([answerOf(page, "POST", `/routes/${route.id}/pickups`), adding.getByRole("button", { name: "Add stop" }).click()])
   expect(stopped.status(), await stopped.text()).toBe(201)
   expect(stopped.request().postDataJSON()).toEqual({ service: "bulky", bulkyBookingId: booking.id })
-  await expect(toasts(page)).toContainText("Booking routed")
+  expect(((await stopped.json()) as { note: string | null }).note).toBe("Ring twice")
   const routed = (await (await api.get(`/bulky-bookings/${booking.id}`)).json()) as Booking
-  expect(routed.status).toBe("routed")
+  expect([routed.status, routed.day]).toEqual(["routed", second.day])
 })

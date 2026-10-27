@@ -155,7 +155,7 @@ export function BookBulkySurface({ label }: PrimarySurfaceProps) {
         : days.status === "refused"
           ? days.sentence
           : days.status === "read" && days.days.length === 0
-            ? "No bulky collection day in the next four weeks."
+            ? "No bulky collection day in the next three months."
             : null
 
   return (
@@ -208,7 +208,7 @@ export function BookBulkySurface({ label }: PrimarySurfaceProps) {
                     <SelectValue placeholder="Pick the agreement charged" />
                   </SelectTrigger>
                   <SelectContent>
-                    {agreementsOfCustomer(agreements.records.filter(isAgreementRecord), customerId).map((record) => (
+                    {agreementsOfCustomer(agreements.records.filter(isAgreementRecord), customerId, (project) => dayIn(new Date(), pickers.timezoneOf(project))).map((record) => (
                       <SelectItem key={record.id} value={record.id}>
                         {record.name}
                       </SelectItem>

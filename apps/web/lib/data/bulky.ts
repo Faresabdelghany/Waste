@@ -8,6 +8,7 @@
 // components/waste/commands/bulky-surfaces.tsx, the adapter
 // lib/api/records/bulky-bookings.ts.
 import type { BulkyAvailableDay, BulkySchedule, BulkyScheduleCreate, BulkySchedulePatch } from "@waste/contracts/bulky"
+import { BULKY_ITEM_QUANTITY_MAX, BULKY_ITEMS_MAX, BULKY_WINDOW_DAYS_MAX } from "@waste/domain/execution/bulky"
 import type { BulkyBookingStatus } from "@waste/domain/execution/vocabulary"
 import type { HolidayPolicy, RecurrenceFrequency, ServiceDay, WeekRotation } from "@waste/domain/planning/vocabulary"
 import { HOLIDAY_POLICY_LABELS } from "@waste/domain/route-schemes/occurrences"
@@ -17,6 +18,7 @@ import type { BusinessRecord, ModuleLocation } from "@/lib/data/business-modules
 import { mintedRecord } from "@/lib/data/containers"
 
 import { allows, type Grants } from "../api/grants"
+import { firstDayOut, lastDayIn } from "../api/records/planning"
 import { itemsSentence } from "./pickup-services"
 
 /** Where the bookings are: Operate › Bulky Bookings. */
@@ -34,8 +36,8 @@ export const BULKY_ITEMS_KEY = "items"
 /** A booking's status as a person reads it. */
 export const BULKY_STATUS_LABELS: Readonly<Record<BulkyBookingStatus, string>> = { booked: "Booked", routed: "Routed", collected: "Collected", cancelled: "Cancelled" }
 
-/** The bookings at most one dialog lists items for; the API's own cap. */
-export const ITEMS_MAX = 20
+/** The items one booking lists at most, and the most of one item: the API's own caps. */
+export { BULKY_ITEM_QUANTITY_MAX, BULKY_ITEMS_MAX as ITEMS_MAX }
 
 /** One item as the dialog edits it: the count a string, as an input holds it. */
 export type ItemRow = { description: string; quantity: string }
@@ -44,12 +46,12 @@ export type ItemRow = { description: string; quantity: string }
 export function itemsOf(rows: readonly ItemRow[]): { description: string; quantity: number }[] | string {
   const listed = rows.filter((row) => row.description.trim() !== "" || row.quantity.trim() !== "")
   if (listed.length === 0) return "List an item at least"
-  if (listed.length > ITEMS_MAX) return `List ${ITEMS_MAX} items at most`
+  if (listed.length > BULKY_ITEMS_MAX) return `List ${BULKY_ITEMS_MAX} items at most`
   const items: { description: string; quantity: number }[] = []
   for (const row of listed) {
     const quantity = Number(row.quantity)
     if (row.description.trim() === "") return "Say what each item is"
-    if (!Number.isInteger(quantity) || quantity < 1 || quantity > 100) return "Give each item a count from 1 to 100"
+    if (!Number.isInteger(quantity) || quantity < 1 || quantity > BULKY_ITEM_QUANTITY_MAX) return `Give each item a count from 1 to ${BULKY_ITEM_QUANTITY_MAX}`
     items.push({ description: row.description.trim(), quantity })
   }
   return items
@@ -70,8 +72,8 @@ export function dayOption(day: BulkyAvailableDay): { value: string; label: strin
   return { value: day.day, label: `${shortDay(day.day)} · ${day.left === 0 ? "full" : `${day.left} of ${day.slots} left`}`, disabled: day.left === 0 }
 }
 
-/** The window an availability read asks for: from the project's today, four weeks ahead. */
-export const availabilityWindow = (today: string): { from: string; to: string } => ({ from: today, to: addDays(today, 27) })
+/** The window an availability read asks for: from the project's today, as far ahead as the API answers in one read, so a monthly schedule's next day is in it. */
+export const availabilityWindow = (today: string): { from: string; to: string } => ({ from: today, to: addDays(today, BULKY_WINDOW_DAYS_MAX - 1) })
 
 /** What the booking dialog holds once filled in: every id the web's, the place one of the two. */
 export type BookingDraft = {
@@ -113,9 +115,15 @@ const valueOf = (record: BusinessRecord, key: string): string => {
   return typeof value === "string" ? value : ""
 }
 
-/** The agreements a customer's booking may be charged to: the customer's own, signed. */
-export function agreementsOfCustomer<T extends BusinessRecord>(agreements: readonly T[], customerId: string): T[] {
-  return agreements.filter((record) => customerId !== "" && valueOf(record, "customerId") === customerId && record.status === "Active")
+/** The agreements a customer's booking may be charged to: the customer's own, signed, and in force on a day the availability window holds after its project's today — its last day in after today, its first day before the window ends. The API judges the day picked. */
+export function agreementsOfCustomer<T extends BusinessRecord>(agreements: readonly T[], customerId: string, todayOf: (projectId: string) => string): T[] {
+  return agreements.filter((record) => {
+    if (customerId === "" || valueOf(record, "customerId") !== customerId || record.status !== "Active") return false
+    const today = todayOf(valueOf(record, "projectId"))
+    const first = valueOf(record, "effectiveFrom")
+    const last = valueOf(record, "effectiveTo")
+    return (last === "" || last > today) && (first === "" || first <= availabilityWindow(today).to)
+  })
 }
 
 /** The places a booking under an agreement may be at: those its subscriptions serve, not ended — the property's or the shared point's web id. The API judges the day. */
@@ -203,7 +211,7 @@ export const scheduleFormOf = (schedule: BulkySchedule): ScheduleForm => ({
   slotsPerDay: String(schedule.slotsPerDay),
   productId: schedule.productId,
   validFrom: schedule.validFrom,
-  lastDay: schedule.validTo === null ? "" : addDays(schedule.validTo, -1),
+  lastDay: schedule.validTo === null ? "" : lastDayIn(schedule.validTo),
 })
 
 const slotsOf = (form: ScheduleForm): number | ScheduleRefusal => {
@@ -214,7 +222,7 @@ const slotsOf = (form: ScheduleForm): number | ScheduleRefusal => {
 /** The end a form names, as the wire's first day out, or a refusal where it does not come after the start. */
 const endOf = (form: ScheduleForm): string | null | ScheduleRefusal => {
   if (form.lastDay === "") return null
-  return form.lastDay < form.validFrom ? { field: "lastDay", message: "The last day in force comes on or after the first" } : addDays(form.lastDay, 1)
+  return form.lastDay < form.validFrom ? { field: "lastDay", message: "The last day in force comes on or after the first" } : firstDayOut(form.lastDay)
 }
 
 /** `POST /bulky-schedules`: the area, the recurrence, the slots, the product and the period, or the first refusal. */
@@ -269,7 +277,7 @@ export const slotsSentence = (slots: number): string => `${slots} ${slots === 1 
 
 /** "From 2027-01-01", "2027-01-01 to 2027-06-30": a period by its last day in force. */
 export const periodSentence = (period: { validFrom: string; validTo: string | null }): string =>
-  period.validTo === null ? `From ${period.validFrom}` : `${period.validFrom} to ${addDays(period.validTo, -1)}`
+  period.validTo === null ? `From ${period.validFrom}` : `${period.validFrom} to ${lastDayIn(period.validTo)}`
 
 /** The schedules a project holds, by their area's name then their start. */
 export function schedulesInOrder(schedules: readonly BulkySchedule[], areaName: (id: string) => string): BulkySchedule[] {

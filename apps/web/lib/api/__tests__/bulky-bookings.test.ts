@@ -17,6 +17,8 @@ import { FIXTURE_COMPANY_ID, getModuleDefinition, type BusinessRecord } from "..
 import { NOTHING_RESOLVED, isLocalRefusal, type MappingContext } from "../records/adapter"
 import { BULKY_BOOKING_COMMANDS, bulkyBookingAdapter, itemsOfRecord, ROUTE_BOOKING, toBulkyBookingCreateBody, toBulkyBookingPatchBody, toBulkyBookingRecord } from "../records/bulky-bookings"
 import { isServerBacked } from "../records/modules"
+import { routesWindowFrom } from "../records/routes"
+import { clientOver, json, scripted } from "./scripted-fetch"
 
 const NOW = new Date("2027-03-01T12:00:00Z")
 const STAMPS = { createdAt: "2027-03-01T09:00:00.000Z", updatedAt: "2027-03-01T09:30:00.000Z" }
@@ -52,6 +54,15 @@ const routed: BulkyBooking = { ...booked, status: "routed", stop: { pickupId: id
 const context: MappingContext = { fixtures: getModuleDefinition(BULKY_BOOKINGS_MODULE)?.records ?? [], resolve: NOTHING_RESOLVED, companyRecordId: FIXTURE_COMPANY_ID, now: NOW }
 
 describe("a bulky booking as a record", () => {
+  test("is read over the routes' window by its day, not every booking ever made", async () => {
+    const { fetch, calls } = scripted([() => json({ items: [], nextCursor: null })])
+    await bulkyBookingAdapter.list?.(clientOver(fetch))
+    assert.deepEqual(
+      calls.map((call) => call.url),
+      [`http://api.test/bulky-bookings?limit=200&from=${routesWindowFrom()}`],
+    )
+  })
+
   test("is the module's on the API, `bulky-booking-<uuid>`, named by its place and day, its items in one line", () => {
     assert.ok(isServerBacked("operate", "bulky-bookings"))
     const record = toBulkyBookingRecord(booked, context)

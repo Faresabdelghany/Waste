@@ -21,6 +21,7 @@ import { inheritedPresentation, isLocalRefusal, ofKind, stampFacts, typed, webId
 import { projectMoved, refusal } from "./places"
 import { nameVia, typedReference, webIdVia } from "./references"
 import { customerAdapter } from "./registry"
+import { routesWindowFrom } from "./routes"
 
 export const BULKY_BOOKING_PREFIX = "bulky-booking"
 export const BULKY_BOOKING_RECORD_KIND = "Bulky booking"
@@ -185,7 +186,8 @@ export const bulkyBookingAdapter: ResourceAdapter<BulkyBooking> = {
   // A row the dialog has just made is `bulky-bookings-bulky-booking-<clock>` until the server answers: owned by its recordKind.
   owns: ofKind(BULKY_BOOKING_PREFIX, [BULKY_BOOKING_RECORD_KIND]),
   statuses: undefined,
-  list: (client) => listAll<BulkyBooking>(client, "/bulky-bookings"),
+  // Over the routes' window, by the booking's day: a booking older than the routes it could have been routed on is history the module does not hold.
+  list: (client) => listAll<BulkyBooking>(client, "/bulky-bookings", { from: routesWindowFrom() }),
   toRecord: toBulkyBookingRecord,
   toCreateBody: toBulkyBookingCreateBody,
   toPatchBody: toBulkyBookingPatchBody,

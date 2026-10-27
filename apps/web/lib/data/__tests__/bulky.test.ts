@@ -83,13 +83,24 @@ describe("a schedule's form", () => {
 describe("the pickers of a booking", () => {
   const row = (id: string, status: string, values: Record<string, string>) => mintedRecord({ id, name: id, status, recordKind: "Row", values })
 
-  test("offer the customer's signed agreements alone", () => {
-    const agreements = [row("agreement-1", "Active", { customerId: "customer-1" }), row("agreement-2", "Draft", { customerId: "customer-1" }), row("agreement-3", "Active", { customerId: "customer-2" })]
+  test("offer the customer's signed agreements alone, in force on a day the availability window holds", () => {
+    const signed = (id: string, values: Record<string, string>) => row(id, "Active", { customerId: "customer-1", projectId: "project-1", ...values })
+    const agreements = [
+      signed("agreement-1", { effectiveFrom: "2026-01-01" }),
+      row("agreement-2", "Draft", { customerId: "customer-1" }),
+      row("agreement-3", "Active", { customerId: "customer-2" }),
+      signed("agreement-4", { effectiveFrom: "2026-01-01", effectiveTo: "2027-03-01" }),
+      signed("agreement-5", { effectiveFrom: "2026-01-01", effectiveTo: "2027-03-02" }),
+      signed("agreement-6", { effectiveFrom: "2027-05-31" }),
+      signed("agreement-7", { effectiveFrom: "2027-06-01" }),
+    ]
+    const todayOf = (project: string) => (project === "project-1" ? "2027-03-01" : "")
     assert.deepEqual(
-      agreementsOfCustomer(agreements, "customer-1").map((record) => record.id),
-      ["agreement-1"],
+      agreementsOfCustomer(agreements, "customer-1", todayOf).map((record) => record.id),
+      ["agreement-1", "agreement-5", "agreement-6"],
+      "ended on today or before, or starting past the window's last day, 2027-05-31, is not offered",
     )
-    assert.deepEqual(agreementsOfCustomer(agreements, ""), [])
+    assert.deepEqual(agreementsOfCustomer(agreements, "", todayOf), [])
   })
 
   test("offer the routes of the booking's project running on its day, not started", () => {
