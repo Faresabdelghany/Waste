@@ -36,7 +36,8 @@ import { useBusinessRecordStore, useModuleRecords, useServerModuleState, whenSav
 import { statusClasses } from "@/components/waste/business-record-views"
 import { ApplyIndexDialog } from "@/components/waste/commands/apply-index-dialog"
 import { useCommercialPickers } from "@/components/waste/commands/commercial-pickers"
-import { useServerNames } from "@/components/waste/commands/use-command-support"
+import { useProjectRecords, useRecordsByServerId, useServerNames } from "@/components/waste/commands/use-command-support"
+import { typed } from "@/lib/api/records/adapter"
 import { indexPriceList } from "@/lib/api/records/indexation"
 import { dayIn } from "@/lib/api/records/planning"
 import { PRICING_REFERENCE_DATE, recordToPriceRow } from "@/lib/commercial/price-model"
@@ -150,7 +151,7 @@ export function ProductsOnApiPane() {
                 <TableHead>VAT</TableHead>
                 <TableHead>Invoice code</TableHead>
                 <TableHead>Status</TableHead>
-                <TableHead className="w-24" />
+                <TableHead className="w-16" />
               </TableRow>
             </TableHeader>
             <TableBody>
@@ -203,29 +204,29 @@ export function ProductsOnApiPane() {
 
 const LIST_STATUS_OPTIONS = ["Scheduled", "Active", "Expired"] as const
 
-/** Apply index over one list on the Pilot (#291 C8): each line named by its row — the product and its conditions — and the rows and the products read again once it lands. */
+/** Apply index over one list on the Pilot (#291 C8): each line named by its row — the product and its conditions — from today on the list's project's clock, and the rows and the products read again once it lands. */
 function ApplyListIndex({ list, onClose }: { list: BusinessRecord; onClose: () => void }) {
   const client = useApiClient()
   const { refreshModule } = useBusinessRecordStore()
   const state = useServerModuleState(PRICE_ROWS_MODULE.workspaceId, PRICE_ROWS_MODULE.moduleId)
+  const rowOf = useRecordsByServerId(PRICE_ROWS_MODULE)
   const productName = useServerNames(PRODUCTS_MODULE, PRODUCT_PREFIX)
+  const projectOf = useProjectRecords()
+  const project = projectOf(list.projectIds?.[0])
   const serverId = state?.serverIds.get(list.id)
-  const rowOf = (rowServerId: string) => {
-    for (const [webId, id] of state?.serverIds ?? []) if (id === rowServerId) return state?.records.find((record) => record.id === webId)
-    return undefined
-  }
   return (
     <ApplyIndexDialog
       title={`Apply index to ${list.name}`}
       description="Each row in force on the day ends on it, and its successor carries the indexed price, rounded to the minor unit. A row that starts on that day or later is left as it is. Preview first; nothing is written until Apply."
-      currencyOf={() => String(list.submittedValues?.currency ?? "DKK")}
+      defaultDay={dayIn(new Date(), project === undefined ? undefined : typed(project, "timezone"))}
+      currencyOf={() => String(list.submittedValues?.currency ?? (project === undefined ? undefined : typed(project, "currency")) ?? "")}
       nameOf={(line) => {
         const row = rowOf(line.id)
         return row === undefined ? productName(line.productId) : `${row.context} · ${row.name}`
       }}
-      send={(typed, dryRun) => {
+      send={(index, dryRun) => {
         if (client === null || serverId === undefined) return Promise.reject(new Error("The price list is not read from the API yet"))
-        return indexPriceList(client, serverId, { label: typed.label, basisPoints: typed.basisPoints, appliedFrom: typed.appliedFrom, dryRun })
+        return indexPriceList(client, serverId, { label: index.label, basisPoints: index.basisPoints, appliedFrom: index.appliedFrom, dryRun })
       }}
       onApplied={() => {
         void refreshModule(PRICE_ROWS_MODULE.workspaceId, PRICE_ROWS_MODULE.moduleId)
@@ -323,7 +324,7 @@ export function PriceListsPane() {
                 <TableHead>Rows</TableHead>
                 <TableHead>Period</TableHead>
                 <TableHead>Status</TableHead>
-                <TableHead className="w-16" />
+                <TableHead className="w-24" />
               </TableRow>
             </TableHeader>
             <TableBody>
@@ -349,7 +350,8 @@ export function PriceListsPane() {
                         </Badge>
                       </TableCell>
                       <TableCell className="whitespace-nowrap text-right">
-                        {configured && (
+                        {/* An ended list has no price to index: the bulk index is offered while it runs or before it starts, as a price's own is (#281). */}
+                        {configured && list.status !== "Expired" && (
                           <Button variant="ghost" size="icon" className="h-8 w-8" disabled={saving || !answer.ready} onClick={() => setIndexing(list)} aria-label={`Apply index to ${list.name}`} title="Apply index">
                             <Percent className="h-4 w-4" />
                           </Button>

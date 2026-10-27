@@ -93,8 +93,6 @@ function assignmentNames(serverId: string, context: MappingContext): { name: str
 // Service provider prices
 // ---------------------------------------------------------------------------
 
-export { basisPointsOf, INDEX_REFUSAL } from "@/lib/commercial/indexation"
-
 /** The submitted value a price record carries the project's day it was read on under: what Apply index is offered on (#281). */
 export const PRICE_DAY_KEY = "readOn"
 

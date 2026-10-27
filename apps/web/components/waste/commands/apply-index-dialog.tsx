@@ -7,8 +7,10 @@
 // plan with `dryRun` and shows each price before and after, or why it stays;
 // Apply sends the same body without it. Nothing is computed here: the prices
 // are the API's (`indexedFee`, half away from zero), and a body changed after
-// its preview is previewed again before it is applied. The prices moved are
-// read again by the caller's `onApplied`.
+// its preview is previewed again before it is applied. The day defaults to
+// the project's (`defaultDay`, on its clock, never the browser's), and Preview
+// says why it waits where it cannot be asked yet. The prices moved are read
+// again by the caller's `onApplied`.
 import { useState, type ReactNode } from "react"
 import { toast } from "sonner"
 import type { IndexLine, IndexResult } from "@waste/contracts/finance"
@@ -20,7 +22,6 @@ import { Label } from "@/components/ui/label"
 import { Select, SelectContent, SelectItem, SelectTrigger, SelectValue } from "@/components/ui/select"
 import { Table, TableBody, TableCell, TableHead, TableHeader, TableRow } from "@/components/ui/table"
 import { problemSentence } from "@/lib/api/problem"
-import { dayIn } from "@/lib/api/records/planning"
 import { problemOfError } from "@/lib/api/records/server-records"
 import { basisPointsOf, INDEX_REFUSAL, indexSummary, percentLabel, SKIP_SENTENCES } from "@/lib/commercial/indexation"
 import { formatMinor } from "@/lib/commercial/money"
@@ -28,12 +29,14 @@ import { formatMinor } from "@/lib/commercial/money"
 /** What the office typed, sent as the body's index. */
 export type IndexTyped = { label: string; basisPoints: number; appliedFrom: string; base: "bid" | "current-fee" }
 
-/** The dialog's own question beside the index: a scope picker, ready or not. */
-export type ApplyIndexScope = { field: ReactNode; ready: boolean }
+/** The dialog's own question beside the index: a scope picker, ready or not, and why not. */
+export type ApplyIndexScope = { field: ReactNode; ready: boolean; waiting?: string }
 
 export function ApplyIndexDialog({
   title,
   description,
+  defaultDay,
+  waiting,
   currencyOf,
   withBase = false,
   scope,
@@ -45,6 +48,10 @@ export function ApplyIndexDialog({
 }: {
   title: string
   description: string
+  /** The day the index applies from until one is typed: today on the project's clock. */
+  defaultDay: string
+  /** Why Preview cannot be asked yet — the rows a line is named by still being read — or undefined when it can. */
+  waiting?: string
   /** A line's currency: its list's, or its project's for a provider price. */
   currencyOf: (line: IndexLine) => string
   /** Provider prices are indexed over the bid or the current fee; a customer row has its price alone. */
@@ -60,7 +67,8 @@ export function ApplyIndexDialog({
 }) {
   const [label, setLabel] = useState("")
   const [percent, setPercent] = useState("")
-  const [appliedFrom, setAppliedFrom] = useState(() => dayIn(new Date(), undefined))
+  const [typedDay, setTypedDay] = useState<string | null>(null)
+  const appliedFrom = typedDay ?? defaultDay
   const [base, setBase] = useState<IndexTyped["base"]>("current-fee")
   const [preview, setPreview] = useState<{ of: string; result: IndexResult } | null>(null)
   const [busy, setBusy] = useState(false)
@@ -68,7 +76,8 @@ export function ApplyIndexDialog({
   const basisPoints = basisPointsOf(percent)
   const percentRefused = percent.trim() !== "" && Number.isNaN(basisPoints)
   const typed: IndexTyped = { label: label.trim(), basisPoints, appliedFrom, base }
-  const complete = typed.label !== "" && !Number.isNaN(basisPoints) && appliedFrom !== "" && (scope?.ready ?? true)
+  const held = waiting ?? (scope !== undefined && !scope.ready ? scope.waiting : undefined)
+  const complete = typed.label !== "" && !Number.isNaN(basisPoints) && appliedFrom !== "" && (scope?.ready ?? true) && waiting === undefined
   // The preview shown is of exactly this body and scope; anything typed since asks again.
   const key = JSON.stringify([typed, withBase, scopeKey])
   const previewed = preview !== null && preview.of === key ? preview.result : null
@@ -111,7 +120,7 @@ export function ApplyIndexDialog({
           </div>
           <div className="space-y-1.5">
             <Label htmlFor="apply-index-from">From</Label>
-            <Input id="apply-index-from" type="date" value={appliedFrom} onChange={(event) => setAppliedFrom(event.target.value)} />
+            <Input id="apply-index-from" type="date" value={appliedFrom} onChange={(event) => setTypedDay(event.target.value)} />
           </div>
           {withBase && (
             <div className="space-y-1.5">
@@ -128,6 +137,11 @@ export function ApplyIndexDialog({
             </div>
           )}
         </div>
+        {held !== undefined && (
+          <p className="text-sm text-muted-foreground" data-testid="apply-index-waiting">
+            {held}
+          </p>
+        )}
         {previewed !== null && (
           <div className="space-y-2">
             <p className="text-sm" data-testid="apply-index-summary">

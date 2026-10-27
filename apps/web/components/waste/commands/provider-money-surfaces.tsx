@@ -48,14 +48,16 @@ import { useApiClient } from "@/components/waste/api-session-store"
 import { BusinessRecordFormDialog } from "@/components/waste/business-record-form-dialog"
 import { savedRow, useBusinessRecordStore, useModuleRecords, useServerModuleState, whenSaved } from "@/components/waste/business-record-store"
 import { ApplyIndexDialog } from "@/components/waste/commands/apply-index-dialog"
-import { useCommercialPickers, useCommercialResolver } from "@/components/waste/commands/commercial-pickers"
+import { useCommercialPickers } from "@/components/waste/commands/commercial-pickers"
 import type { RowSurfaceProps } from "@/components/waste/commands/command-surfaces"
 import { CreateSurface } from "@/components/waste/commands/create-surface"
 import { ReadRows } from "@/components/waste/commands/read-rows"
-import { useCommandRunner, useModuleReady, useRelationPickers, useRowHistory, useServerNames, type RelationPickers } from "@/components/waste/commands/use-command-support"
+import { useCommandRunner, useModuleReady, useProjectRecords, useRecordsByServerId, useRelationPickers, useRowHistory, useServerNames, type RelationPickers } from "@/components/waste/commands/use-command-support"
 import type { ApiClient } from "@/lib/api/client"
 import { statusLabel } from "@/lib/api/records/adapter"
 import { indexProviderPrices } from "@/lib/api/records/indexation"
+import { serviceProviderAdapter } from "@/lib/api/records/organisation"
+import { dayIn } from "@/lib/api/records/planning"
 import { shownOn } from "@/lib/api/records/clock"
 import { providerPriceIndexHeldBack, providerPriceIndexOffered, settlementCommandsOffered, settlementDetail, settlementHeldBack, settlementHistory } from "@/lib/api/records/provider-money"
 import { typed } from "@/lib/api/records/adapter"
@@ -66,6 +68,7 @@ import type { BusinessFormValues } from "@/lib/data/business-form-types"
 import type { BusinessRecord, ModuleLocation } from "@/lib/data/business-modules"
 import { EVENT_PREFIX, EVENTS_MODULE } from "@/lib/data/commercial"
 import { blankNone, editedRecord, formValuesOf } from "@/lib/data/commercial-forms"
+import { ORGANISATION_MODULE } from "@/lib/data/containers"
 import {
   assignmentsOf,
   isAssignmentRecord,
@@ -206,9 +209,12 @@ export function ServiceAreaCommandsSurface({ record }: RowSurfaceProps) {
           <Button variant="outline" size="sm" disabled={!moduleReady || busy} onClick={() => end(record)}>
             End or note
           </Button>
-          <Button variant="outline" size="sm" disabled={!moduleReady || busy} onClick={() => setIndexing({ kind: "award", webId: record.id })}>
-            Apply index
-          </Button>
+          {/* An ended award has no price to index, as an ended price takes no index (#281). */}
+          {record.status !== "Expired" && (
+            <Button variant="outline" size="sm" disabled={!moduleReady || busy} onClick={() => setIndexing({ kind: "award", webId: record.id })}>
+              Apply index
+            </Button>
+          )}
         </div>
       ) : (
         <>
@@ -233,9 +239,11 @@ export function ServiceAreaCommandsSurface({ record }: RowSurfaceProps) {
                     {assignment.facts["Service provider"] ?? assignment.name} · {assignment.value} · {assignment.status}
                   </span>
                   <span className="flex gap-1">
-                    <Button variant="ghost" size="sm" disabled={!moduleReady || busy} onClick={() => setIndexing({ kind: "award", webId: assignment.id })}>
-                      Apply index
-                    </Button>
+                    {assignment.status !== "Expired" && (
+                      <Button variant="ghost" size="sm" disabled={!moduleReady || busy} onClick={() => setIndexing({ kind: "award", webId: assignment.id })}>
+                        Apply index
+                      </Button>
+                    )}
                     <Button variant="ghost" size="sm" disabled={!moduleReady || busy} onClick={() => end(assignment)}>
                       End or note
                     </Button>
@@ -284,36 +292,47 @@ const scopeOf = (value: string): IndexScope | undefined => {
 
 /**
  * Apply index over a provider's or an award's prices (#291 C8): the scope
- * picked from the awards the store holds — a provider by the awards naming
- * it — each line named by its price, and the prices read again once it lands.
+ * picked from the awards the store holds that have not ended — a provider by
+ * the awards naming it, its server id from the organisation the store loaded
+ * or, where that is not read, from the id chip the award names it by — each
+ * line named and priced by its price as the store holds it, so Preview waits
+ * for the prices to be read; the day defaults to today on the scope's
+ * project's clock, and the prices are read again once it lands.
  */
 function ProviderApplyIndex({ initial, onClose }: { initial?: IndexScope; onClose: () => void }) {
   const client = useApiClient()
-  const resolve = useCommercialResolver()
   const { refreshModule } = useBusinessRecordStore()
   const areas = useServerModuleState(SERVICE_AREAS_MODULE.workspaceId, SERVICE_AREAS_MODULE.moduleId)
-  const prices = useServerModuleState(PROVIDER_PRICES_MODULE.workspaceId, PROVIDER_PRICES_MODULE.moduleId)
+  const organisation = useServerModuleState(ORGANISATION_MODULE.workspaceId, ORGANISATION_MODULE.moduleId)
+  const pricesReady = useModuleReady(PROVIDER_PRICES_MODULE)
+  const priceOf = useRecordsByServerId(PROVIDER_PRICES_MODULE)
+  const projectOf = useProjectRecords()
   const [scope, setScope] = useState<IndexScope | undefined>(initial)
-  const assignments = (areas?.records ?? []).filter(isAssignmentRecord)
+  // An ended award has no price to index; one opened by its own details is offered whatever it is, since that is the one asked for.
+  const assignments = (areas?.records ?? []).filter((record) => isAssignmentRecord(record) && (record.status !== "Expired" || record.id === initial?.webId))
   const providers = new Map<string, string>()
   for (const assignment of assignments) {
     const provider = assignment.submittedValues?.serviceProviderId
     if (typeof provider === "string") providers.set(provider, assignment.facts["Service provider"] ?? provider)
   }
-  const priceOf = (serverId: string) => {
-    for (const [webId, id] of prices?.serverIds ?? []) if (id === serverId) return prices?.records.find((record) => record.id === webId)
-    return undefined
-  }
-  const serverIdOf = (target: IndexScope) => (target.kind === "award" ? areas?.serverIds.get(target.webId) : resolve.serverIdOf(target.webId))
+  const providerPrefix = `${serviceProviderAdapter.prefix}-`
+  const serverIdOf = (target: IndexScope) =>
+    target.kind === "award" ? areas?.serverIds.get(target.webId) : (organisation?.serverIds.get(target.webId) ?? (target.webId.startsWith(providerPrefix) ? target.webId.slice(providerPrefix.length) : undefined))
+  // The scope's project: the award's, or the first of the provider's awards'.
+  const scopeProject = projectOf((scope === undefined ? undefined : scope.kind === "award" ? assignments.find((assignment) => assignment.id === scope.webId) : assignments.find((assignment) => assignment.submittedValues?.serviceProviderId === scope.webId))?.projectIds?.[0])
+  const awardLabel = (assignment: BusinessRecord) => `${assignment.name} · ${projectOf(assignment.projectIds?.[0])?.name ?? "its project"} (${assignment.value}, ${assignment.status})`
 
   return (
     <ApplyIndexDialog
       title="Apply index to provider prices"
       description="Every price of the provider or the award in force on the day ends on it, and its successor carries the fee indexed over the bid or the current fee, rounded to the minor unit. A price that starts on that day or later is left as it is. Preview first; nothing is written until Apply."
       withBase
+      defaultDay={dayIn(new Date(), scopeProject === undefined ? undefined : typed(scopeProject, "timezone"))}
+      waiting={pricesReady ? undefined : "The provider prices are being read from the API; Preview follows."}
       scopeKey={scope === undefined ? "" : scopeValue(scope)}
       scope={{
         ready: scope !== undefined && serverIdOf(scope) !== undefined,
+        waiting: scope === undefined ? undefined : "This provider or award is not one the API holds; pick another.",
         field: (
           <div className="space-y-1.5 sm:col-span-2">
             <Label htmlFor="apply-index-scope">Prices of</Label>
@@ -334,7 +353,7 @@ function ProviderApplyIndex({ initial, onClose }: { initial?: IndexScope; onClos
                   <SelectLabel>One award</SelectLabel>
                   {assignments.map((assignment) => (
                     <SelectItem key={assignment.id} value={scopeValue({ kind: "award", webId: assignment.id })}>
-                      {assignment.name} ({assignment.value})
+                      {awardLabel(assignment)}
                     </SelectItem>
                   ))}
                 </SelectGroup>
@@ -343,7 +362,11 @@ function ProviderApplyIndex({ initial, onClose }: { initial?: IndexScope; onClos
           </div>
         ),
       }}
-      currencyOf={(line) => priceOf(line.id)?.facts.Currency ?? "DKK"}
+      currencyOf={(line) => {
+        const price = priceOf(line.id)
+        const project = projectOf(price?.projectIds?.[0]) ?? scopeProject
+        return price?.facts.Currency ?? (project === undefined ? undefined : typed(project, "currency")) ?? ""
+      }}
       nameOf={(line) => priceOf(line.id)?.name ?? line.id}
       send={(typed, dryRun) => {
         const serverId = scope === undefined ? undefined : serverIdOf(scope)
