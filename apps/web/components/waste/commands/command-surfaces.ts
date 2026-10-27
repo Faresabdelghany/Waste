@@ -45,7 +45,7 @@ import { AccountingExportSurface, ExportPeriodSurface } from "./accounting-surfa
 import { AddPropertyGroupSurface, AddPropertySurface, AddSharedPointSurface, PropertyCommandsSurface, PropertyGroupCommandsSurface, SharedPointCommandsSurface } from "./place-surfaces"
 import { PriceRowCommandsSurface, PriceRowsPrimarySurface, ProductCommandsSurface, ProductsPrimarySurface } from "./pricing-surfaces"
 import { PROVIDER_PRICES_LIST, SERVICE_AREAS_LIST, SETTLEMENTS_LIST, WEIGHTS_LIST } from "./provider-money-lists"
-import { AddProviderPriceSurface, CreateServiceAreaSurface, OpenSettlementSurface, ProviderPriceCommandsSurface, RecordUnloadSurface, ServiceAreaCommandsSurface, ServiceAreasRead, SettlementSurface, WeightReviewSurface } from "./provider-money-surfaces"
+import { CreateServiceAreaSurface, OpenSettlementSurface, ProviderPriceCommandsSurface, ProviderPricesPrimarySurface, RecordUnloadSurface, ServiceAreaCommandsSurface, ServiceAreasRead, SettlementSurface, WeightReviewSurface } from "./provider-money-surfaces"
 import { InviteTeamMemberSurface, TeamMemberCommandsSurface } from "./team-surfaces"
 import { LiveBoardRefresh, LiveRouteSurface, PickupCommandsSurface, RouteCommandsSurface, RoutesPrimarySurface } from "./route-surfaces"
 
@@ -191,7 +191,7 @@ export const COMMAND_SURFACES: Readonly<Record<string, CommandSurface>> = {
   // award the map or the provider page made has its first assignment on the
   // server alone.
   "service-providers.service-areas": { primary: CreateServiceAreaSurface, rowActions: ServiceAreaCommandsSurface, list: SERVICE_AREAS_LIST, whileShown: ServiceAreasRead },
-  "commercial.service-provider-prices": { primary: AddProviderPriceSurface, rowActions: ProviderPriceCommandsSurface, list: PROVIDER_PRICES_LIST, whileShown: ServiceAreasRead },
+  "commercial.service-provider-prices": { primary: ProviderPricesPrimarySurface, rowActions: ProviderPriceCommandsSurface, list: PROVIDER_PRICES_LIST, whileShown: ServiceAreasRead },
   "commercial.settlements": { primary: OpenSettlementSurface, rowActions: SettlementSurface, list: SETTLEMENTS_LIST, whileShown: ServiceAreasRead },
   "route-studio.weights": { primary: RecordUnloadSurface, rowActions: WeightReviewSurface, list: WEIGHTS_LIST },
   // #291 C24: a provider's team invited through its own dialog on a provider's role, a member switched off and on in its details; the module lists the accounts, never the roles it reads beside them.

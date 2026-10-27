@@ -14,7 +14,7 @@
 // a new reference and never an existing one (#79), so a closed warehouse or a
 // retired vehicle is listed with its status beside its name, and the API's
 // 409 says why it was refused.
-import { useEffect, useState } from "react"
+import { useEffect, useMemo, useState } from "react"
 import { usePathname, useRouter, useSearchParams } from "next/navigation"
 
 import type { ApiClient } from "@/lib/api/client"
@@ -232,6 +232,27 @@ export function useServerNames(location: ModuleLocation, prefix: string): (serve
     }
     return `${prefix}-${serverId}`
   }
+}
+
+/** A switched module's rows by server id, keyed once per read of the module: what a line naming its row by server id looks it up by, in constant time. */
+export function useRecordsByServerId(location: ModuleLocation): (serverId: string) => BusinessRecord | undefined {
+  const state = useServerModuleState(location.workspaceId, location.moduleId)
+  const byServerId = useMemo(() => {
+    const byWebId = new Map((state?.records ?? []).map((record) => [record.id, record]))
+    const keyed = new Map<string, BusinessRecord>()
+    for (const [webId, serverId] of state?.serverIds ?? []) {
+      const record = byWebId.get(webId)
+      if (record !== undefined) keyed.set(serverId, record)
+    }
+    return keyed
+  }, [state])
+  return (serverId) => byServerId.get(serverId)
+}
+
+/** A project's record, by its web id, from the organisation the store loaded: its name, its currency and its timezone; undefined until it is read. */
+export function useProjectRecords(): (projectWebId: string | undefined) => BusinessRecord | undefined {
+  const state = useServerModuleState(ORGANISATION_MODULE.workspaceId, ORGANISATION_MODULE.moduleId)
+  return (projectWebId) => (projectWebId === undefined ? undefined : state?.records.find((record) => record.id === projectWebId))
 }
 
 /**
