@@ -2,21 +2,30 @@ import type { APIRequestContext } from "@playwright/test"
 
 import { dayIn, driverNamed, SEEDED_DRIVER } from "./dispatched-route"
 import { E2E, uniqueName } from "./env"
-import { accessTokenOf, apiAs, expect, freshContext, problemOf, signIn, test } from "./fixtures"
+import { accessTokenOf, apiAs, chainLanded, expect, freshContext, problemOf, signIn, test } from "./fixtures"
+import { answerOf, pick, toasts } from "./routes-support"
 import { listAll, projectNamed, TESTER_PROJECT } from "./tester"
 
-// Bulky-waste booking on the API (O11 of #290), driven by API calls alone:
-// the office's form and the Driver App's card are O11b's. A planning area is
-// drawn for the run somewhere no other run's area is, with a property inside
-// it served under a customer's agreement; the area gets a Bulky Schedule of
-// one slot a day, charged at a product sold by the job. The property's days
-// come from the availability read, a booking takes the first one, and the day
-// then answers none left and refuses a second booking. The office routes the
-// booking as a stop on an ad-hoc route of its day, assigned to the seeded
-// driver and dispatched, and the driver's read of the route lists the stop at
-// the property with the booking's items. The charge of a completed bulky stop
-// is the worker's, held by its own suite: the route runs on a day after today.
-// Everything is made for the run, uniquely named, and never cleaned up.
+// Bulky-waste booking on the API (O11 of #290). Each test draws a planning
+// area for its run somewhere no other run's area is, with a property inside
+// it served under a customer's agreement, and a product sold by the job.
+//
+// The first drives the API alone: the area gets a Bulky Schedule of one slot
+// a day; the property's days come from the availability read; a booking takes
+// the first one, and the day then answers none left and refuses a second. The
+// office routes the booking as a stop on an ad-hoc route of its day, assigned
+// to the seeded driver and dispatched, and the driver's read of the route
+// lists the stop at the property with the booking's items.
+//
+// The second drives the office's web (O11b): Settings › Operations › Bulky
+// schedules adds the area's schedule; Operate › Bulky Bookings' dialog books
+// the customer's items on a day the place offers, its slots left beside it;
+// the booking's details route it onto a route of that day. Every body is the
+// one the contracts take, read off the browser's own request.
+//
+// The charge of a completed bulky stop is the worker's, held by its own
+// suite: these routes run on a day after today. Everything is made for the
+// run, uniquely named, and never cleaned up.
 
 type Named = { id: string; name: string }
 type Day = { day: string; slots: number; booked: number; left: number; planningAreaId: string; scheduleId: string }
@@ -39,25 +48,35 @@ function spot(): { centre: [number, number]; square: { type: "Polygon"; coordina
   }
 }
 
-test("a place's bulky days come from its area's schedule; a booking takes the day's one slot, the office routes it as a stop of that day, and the driver reads its items", async ({ api, browser }) => {
-  test.setTimeout(120_000)
-  const [project, driver] = await Promise.all([projectNamed(api, TESTER_PROJECT), driverNamed(api, SEEDED_DRIVER.name)])
+type Ground = { project: Named; area: Named; property: Named; customer: Named; bulky: Named; agreement: { id: string; number: string }; fraction: Named; today: string }
+
+/** What a run books on: a planning area drawn for it, a property inside it served under a customer's signed agreement, and a product sold by the job. */
+async function groundFor(api: APIRequestContext): Promise<Ground> {
+  const project = await projectNamed(api, TESTER_PROJECT)
   const fraction = (await listAll<Named>(api, "/waste-fractions")).find((row) => row.name === "Residual")
   if (fraction === undefined) throw new Error("the seed holds no Residual fraction")
   const today = dayIn("Europe/Copenhagen")
   const { centre, square } = spot()
-
   const area = await made<Named>(api, "/planning-areas", { projectId: project.id, code: uniqueName("E2E-BLK").replace(/\s+/g, "-").toUpperCase(), name: uniqueName("E2E Bulky area"), purpose: "service-operations", boundary: { boundary: square, validFrom: today } })
   const property = await made<Named>(api, "/properties", { projectId: project.id, name: uniqueName("E2E Bulky property"), address: "Skovvej 1, 8600 Silkeborg", kind: "residential", location: { type: "Point", coordinates: centre } })
   const customer = await made<Named>(api, "/customers", { kind: "person", name: uniqueName("E2E Bulky customer") })
   const collection = await made<Named>(api, "/products", { projectId: project.id, name: uniqueName("E2E Bulky residual"), kind: "container-collection", unit: "pickup", status: "active" })
   const bulky = await made<Named>(api, "/products", { projectId: project.id, name: uniqueName("E2E Bulky collection"), kind: "additional-service", unit: "job", status: "active" })
-  const agreement = await made<{ id: string }>(api, "/agreements", { projectId: project.id, number: uniqueName("E2E-BLK").replace(/\s+/g, "-").toUpperCase(), customerId: customer.id, payerCustomerId: customer.id, status: "active", billingCadence: "monthly", currency: "DKK", validFrom: today, validTo: null })
+  const agreement = await made<{ id: string; number: string }>(api, "/agreements", { projectId: project.id, number: uniqueName("E2E-BLK").replace(/\s+/g, "-").toUpperCase(), customerId: customer.id, payerCustomerId: customer.id, status: "active", billingCadence: "monthly", currency: "DKK", validFrom: today, validTo: null })
   await made(api, `/agreements/${agreement.id}/subscriptions`, { productId: collection.id, propertyId: property.id, validFrom: today, validTo: null })
+  return { project, area, property, customer, bulky, agreement, fraction, today }
+}
+
+const fortnight = (today: string) => new Date(Date.parse(`${today}T00:00:00Z`) + 14 * 86_400_000).toISOString().slice(0, 10)
+
+test("a place's bulky days come from its area's schedule; a booking takes the day's one slot, the office routes it as a stop of that day, and the driver reads its items", async ({ api, browser }) => {
+  test.setTimeout(120_000)
+  const driver = await driverNamed(api, SEEDED_DRIVER.name)
+  const { project, area, property, customer, bulky, agreement, fraction, today } = await groundFor(api)
 
   // One slot a day, every day: the first day after today is bookable.
   const schedule = await made<{ id: string; holidayPolicy: string }>(api, "/bulky-schedules", { projectId: project.id, planningAreaId: area.id, frequency: "daily", serviceDays: ["monday", "tuesday", "wednesday", "thursday", "friday"], holidayPolicy: "collect", slotsPerDay: 1, productId: bulky.id, validFrom: today })
-  const window = `propertyId=${property.id}&from=${today}&to=${new Date(Date.parse(`${today}T00:00:00Z`) + 14 * 86_400_000).toISOString().slice(0, 10)}`
+  const window = `propertyId=${property.id}&from=${today}&to=${fortnight(today)}`
   const read = await api.get(`/bulky-bookings/availability?${window}`)
   expect(read.status(), await read.text()).toBe(200)
   const days = ((await read.json()) as { days: Day[] }).days
@@ -105,4 +124,67 @@ test("a place's bulky days come from its area's schedule; a booking takes the da
   } finally {
     await context.close()
   }
+})
+
+test("Settings › Bulky schedules adds an area's schedule; the office books a bulky collection through its dialog on a day the place offers, and routes it from its details onto a route of that day", async ({ api, page }) => {
+  test.setTimeout(150_000)
+  const { project, area, property, customer, bulky, agreement, fraction, today } = await groundFor(api)
+
+  // The schedule, through Settings: every weekday, two slots a day, charged at the run's product.
+  const read = answerOf(page, "GET", "/bulky-schedules")
+  await page.goto("/settings?pane=operations-bulky-schedules")
+  const pane = page.locator("body")
+  await pick(pane, page, "Project", project.name)
+  expect((await read).status()).toBe(200)
+  await pane.getByRole("button", { name: "Add schedule" }).click()
+  const add = page.getByRole("dialog", { name: "Add schedule" })
+  await pick(add, page, "Planning area", area.name)
+  await pick(add, page, "Frequency", "Daily")
+  await add.getByLabel("Slots a day").fill("2")
+  await pick(add, page, "Charged at", bulky.name)
+  await add.getByLabel("First day in force").fill(today)
+  const [scheduled] = await Promise.all([answerOf(page, "POST", "/bulky-schedules"), add.getByRole("button", { name: "Add schedule" }).click()])
+  expect(scheduled.status(), await scheduled.text()).toBe(201)
+  expect(scheduled.request().postDataJSON()).toEqual({ projectId: project.id, planningAreaId: area.id, frequency: "daily", serviceDays: ["monday", "tuesday", "wednesday", "thursday", "friday", "saturday", "sunday"], weekRotation: null, holidayPolicy: "skip", slotsPerDay: 2, productId: bulky.id, validFrom: today, validTo: null })
+  await expect(pane.getByRole("row", { name: `${area.name} bulky schedule` })).toContainText("2 slots a day")
+
+  // The first day the place offers, and a route of that day for the office to put the booking on.
+  const days = ((await (await api.get(`/bulky-bookings/availability?propertyId=${property.id}&from=${today}&to=${fortnight(today)}`)).json()) as { days: Day[] }).days
+  const [first] = days
+  const route = await made<{ id: string; label: string }>(api, "/routes", { projectId: project.id, operatingDate: first.day })
+
+  // The booking, through the module's own dialog.
+  const listed = answerOf(page, "GET", "/bulky-bookings")
+  await page.goto("/operate?module=bulky-bookings")
+  expect((await listed).status()).toBe(200)
+  await chainLanded(page)
+  const book = page.getByRole("button", { name: "Book bulky collection" })
+  await expect(book).toBeEnabled({ timeout: 30_000 })
+  await book.click()
+  const dialog = page.getByRole("dialog", { name: "Book bulky collection" })
+  await pick(dialog, page, "Customer", customer.name)
+  await pick(dialog, page, "Agreement", `${agreement.number} · ${customer.name}`)
+  const [availability] = await Promise.all([answerOf(page, "GET", "/bulky-bookings/availability"), pick(dialog, page, "Place", property.name)])
+  expect(availability.status()).toBe(200)
+  await pick(dialog, page, "Waste fraction", fraction.name)
+  await dialog.getByRole("combobox", { name: /^Day/ }).click()
+  await page.getByRole("option", { name: new RegExp(`· 2 of 2 left$`) }).first().click()
+  await dialog.getByLabel("Item 1", { exact: true }).fill("Wardrobe")
+  await dialog.getByLabel("Note for the driver").fill("Ring twice")
+  const [booked] = await Promise.all([answerOf(page, "POST", "/bulky-bookings"), dialog.getByRole("button", { name: "Book", exact: true }).click()])
+  expect(booked.status(), await booked.text()).toBe(201)
+  expect(booked.request().postDataJSON()).toEqual({ customerId: customer.id, agreementId: agreement.id, propertyId: property.id, wasteFractionId: fraction.id, day: first.day, items: [{ description: "Wardrobe", quantity: 1 }], note: "Ring twice" })
+  const booking = (await booked.json()) as Booking
+
+  // Routed from its details onto the route of its day.
+  const details = page.getByTestId("bulky-booking-commands")
+  await details.getByRole("button", { name: "Route" }).click()
+  const routing = page.getByRole("dialog", { name: "Route booking" })
+  await pick(routing, page, "Route", route.label)
+  const [stopped] = await Promise.all([answerOf(page, "POST", `/routes/${route.id}/pickups`), routing.getByRole("button", { name: "Route", exact: true }).click()])
+  expect(stopped.status(), await stopped.text()).toBe(201)
+  expect(stopped.request().postDataJSON()).toEqual({ service: "bulky", bulkyBookingId: booking.id })
+  await expect(toasts(page)).toContainText("Booking routed")
+  const routed = (await (await api.get(`/bulky-bookings/${booking.id}`)).json()) as Booking
+  expect(routed.status).toBe("routed")
 })

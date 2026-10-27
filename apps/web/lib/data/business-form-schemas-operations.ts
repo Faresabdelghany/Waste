@@ -860,6 +860,34 @@ export const operationsBusinessFormSchemas = [
     ],
   },
   {
+    // Bulky Bookings (O11 of #290): on the Pilot the module's own dialog books
+    // one (components/waste/commands/bulky-surfaces.tsx), since its days are
+    // read from the place's schedule; this schema names the record's fields.
+    key: "operate.bulky-bookings",
+    mode: "create",
+    recordKind: "Bulky booking",
+    title: "Book bulky collection",
+    description: "A customer's bulky items, collected at their place on a day of its area's bulky schedule and charged to their agreement once collected.",
+    submitLabel: "Book",
+    contextFieldIds: ["customerId", "day"],
+    sections: [
+      {
+        id: "booking",
+        title: "Booking",
+        fields: [
+          { id: "projectId", label: "Project", type: "select", required: true, relation: { workspaceId: "configure", moduleId: "organization" } },
+          { id: "customerId", label: "Customer", type: "select", required: true, relation: { workspaceId: "customers", moduleId: "contacts" } },
+          { id: "agreementId", label: "Agreement", type: "select", required: true, relation: { workspaceId: "customers", moduleId: "agreements" } },
+          { id: "propertyId", label: "Property", type: "select", relation: { workspaceId: "customers", moduleId: "properties" } },
+          { id: "sharedCollectionPointId", label: "Shared point", type: "select", relation: { workspaceId: "customers", moduleId: "shared" } },
+          { id: "day", label: "Day", type: "date", required: true },
+          { id: "note", label: "Note for the driver", type: "textarea" },
+        ],
+      },
+    ],
+    execution: { kind: "create-record", initialStatus: "Booked", completionMessage: "Bulky collection booked." },
+  },
+  {
     key: "operate.driver-app",
     mode: "action",
     recordKind: "Driver session action",

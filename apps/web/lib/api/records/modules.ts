@@ -16,6 +16,7 @@ import type { WorkspaceId } from "@/lib/data/business-modules"
 import { moduleKeyOf, type ServerModule } from "./adapter"
 import { agreementsModule } from "./agreements"
 import { applicationsModule } from "./applications"
+import { bulkyBookingsModule } from "./bulky-bookings"
 import { alertsModule } from "./alerts"
 import { vehiclePlanningModule } from "./allocations"
 import { billingModule, eventsModule, invoicesModule } from "./billing"
@@ -108,6 +109,8 @@ export const SERVER_MODULES: readonly ServerModule[] = [
   liveModule,
   routesModule,
   pickupsModule,
+  // The Bulky Bookings (O11 of #290), after the routes their stops are on and the places, agreements and fractions they name.
+  bulkyBookingsModule,
   ticketsModule,
   alertsModule,
   eventsModule,

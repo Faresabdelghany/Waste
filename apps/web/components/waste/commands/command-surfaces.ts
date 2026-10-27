@@ -33,6 +33,7 @@ import { emptyBusinessFilters, type BusinessFilters, type FilterValueReaders } f
 
 import { AgreementCommandsSurface } from "./agreement-surfaces"
 import { ApplicationCommandsSurface } from "./application-surfaces"
+import { BookBulkySurface, BulkyBookingCommandsSurface } from "./bulky-surfaces"
 import { AllocateSurface, AllocationCommandsSurface } from "./allocation-surfaces"
 import { DriverAbsenceSurface, VehicleUnavailabilitySurface } from "./availability-surfaces"
 import { AddManualEventSurface, BillingRunSurface, EventCommandsSurface, InvoiceSurface, RunBillingSurface } from "./billing-surfaces"
@@ -156,6 +157,8 @@ export const COMMAND_SURFACES: Readonly<Record<string, CommandSurface>> = {
   // in its own details (TicketDetailsDialog), the list opening on the open
   // ones; an alert raised by hand and moved by its commands, the queue
   // opening on what still needs attention.
+  // O11 of #290: a bulky collection booked by its own dialog, its days read from the place's schedule; a booked one routed onto a route of its day or cancelled.
+  "operate.bulky-bookings": { primary: BookBulkySurface, rowActions: BulkyBookingCommandsSurface },
   "operate.tickets": { primary: NewTicketSurface, list: { readers: ({ accountId }) => ticketListReaders(accountId), initial: TICKET_LIST_INITIAL } },
   "operate.exceptions": { primary: RaiseAlertSurface, rowActions: AlertCommandsSurface, list: { readers: alertListReaders, initial: ALERT_LIST_INITIAL } },
   // Slice 10 (#185): a product is made in Settings, so both pricing modules'

@@ -44,6 +44,12 @@ describe("the stops", () => {
     assert.equal(stopServices([removed, extra]).has(extra.id), false)
   })
 
+  test("say a bulky collection with the items the driver takes away (O11 of #290)", () => {
+    const bulky = pickup(1, { containerId: null, containerLabel: null, origin: "office", service: "bulky", bulkyBookingId: "01950000-0000-7000-8000-000000000901", bulkyItems: [{ description: "Sofa", quantity: 1 }, { description: "Chair", quantity: 2 }] })
+    const listless = pickup(2, { containerId: null, containerLabel: null, origin: "office", service: "bulky", bulkyBookingId: "01950000-0000-7000-8000-000000000902" })
+    assert.deepEqual(Object.fromEntries(stopServices([bulky, listless])), { [bulky.id]: "Bulky collection: Sofa · 2 × Chair", [listless.id]: "Bulky collection" })
+  })
+
   test("say a delivery, a removal, and a swap with the container the driver brings, by its label (O3b of #290)", () => {
     const delivery = pickup(1, { origin: "office", service: "deliver" })
     const removal = pickup(2, { origin: "office", service: "remove" })

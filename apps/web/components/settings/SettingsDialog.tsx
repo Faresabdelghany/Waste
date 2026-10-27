@@ -7,6 +7,7 @@ import {
   Bell,
   CalendarBlank,
   CalendarCheck,
+  Couch,
   CaretLeft,
   CheckCircle,
   CreditCard,
@@ -60,6 +61,7 @@ import { SortingGuideSettings } from "@/components/settings/sorting-guide-settin
 import { FinanceSettingsOnApi } from "@/components/settings/finance-settings-on-api"
 import { TicketSlaSettings } from "@/components/settings/ticket-sla-settings"
 import { PickupExceptionChargesSettings } from "@/components/settings/pickup-exception-charges-settings"
+import { BulkySchedulesSettings } from "@/components/settings/bulky-schedules-settings"
 import { EmissionFactorsSettings } from "@/components/settings/emission-factors-settings"
 import { MasterDataSettings } from "@/components/settings/master-data-settings"
 import { useApiConfigured, useApiSession } from "@/components/waste/api-session-store"
@@ -69,6 +71,7 @@ import { ASSET_MANAGEMENT_SETTINGS_PANE_ID, FINANCE_ON_API_SETTINGS_PANE_ID, FIN
 import { SORTING_GUIDE_SETTINGS_PANE_ID } from "@/lib/data/sorting-guide"
 import { TICKET_SLA_SETTINGS_PANE_ID } from "@/lib/data/ticket-sla"
 import { PICKUP_EXCEPTION_CHARGES_SETTINGS_PANE_ID } from "@/lib/data/pickup-exception-rules"
+import { BULKY_SCHEDULES_SETTINGS_PANE_ID } from "@/lib/data/bulky"
 import { EMISSION_FACTORS_SETTINGS_PANE_ID } from "@/lib/data/fleet-emissions"
 import { PLANNING_AREAS_SETTINGS_PANE_ID } from "@/lib/data/planning-areas"
 import { COLLECTION_CALENDARS_SETTINGS_PANE_ID } from "@/lib/data/collection-calendars"
@@ -162,6 +165,8 @@ const settingsSections: Array<{
       { id: COLLECTION_CALENDARS_SETTINGS_PANE_ID, label: "Collection calendars", icon: CalendarBlank },
       // Each project's holiday list — name, weekend, dated holidays per year (issue #36).
       { id: HOLIDAY_LISTS_SETTINGS_PANE_ID, label: "Holiday lists", icon: CalendarCheck },
+      // Each planning area's bulky collection days and their slots on the API (O11 of #290): offered with the adapter configured.
+      { id: BULKY_SCHEDULES_SETTINGS_PANE_ID, label: "Bulky schedules", icon: Couch },
       // The company's catalogue vocabulary on the API (slice 2 of #81): offered with the adapter configured, since fixture mode never had the pane.
       { id: MASTER_DATA_SETTINGS_PANE_ID, label: "Master data", icon: Database },
       { id: "operations-setup", label: "Operations setup", icon: SlidersHorizontal },
@@ -1361,6 +1366,11 @@ const visiblePaneDefinitions: Record<string, SettingsPaneDefinition> = {
     description: "What the company's invoices print, and when each project's invoices are due, the payment reference they carry and whether its hires and jobs wait for review.",
     groups: [],
   },
+  [BULKY_SCHEDULES_SETTINGS_PANE_ID]: {
+    title: "Bulky schedules",
+    description: "The days each planning area collects bulky waste on, how many bookings a day takes, and what a booking is charged once collected.",
+    groups: [],
+  },
   [PICKUP_EXCEPTION_CHARGES_SETTINGS_PANE_ID]: {
     title: "Exception charges",
     description: "What a collection missed for the customer, or collected tagged with a contaminant code, costs them: how many are free over a window, then the products charged by occurrence.",
@@ -1482,6 +1492,7 @@ function isFullPanelPane(paneId: string): boolean {
     paneId === TICKET_SLA_SETTINGS_PANE_ID ||
     paneId === FINANCE_ON_API_SETTINGS_PANE_ID ||
     paneId === PICKUP_EXCEPTION_CHARGES_SETTINGS_PANE_ID ||
+    paneId === BULKY_SCHEDULES_SETTINGS_PANE_ID ||
     paneId === EMISSION_FACTORS_SETTINGS_PANE_ID ||
     paneId.startsWith("commercial-")
   )
@@ -1896,6 +1907,8 @@ function SettingsPane({
         <FinanceSettingsOnApi />
       ) : paneId === PICKUP_EXCEPTION_CHARGES_SETTINGS_PANE_ID ? (
         <PickupExceptionChargesSettings />
+      ) : paneId === BULKY_SCHEDULES_SETTINGS_PANE_ID ? (
+        <BulkySchedulesSettings />
       ) : paneId === EMISSION_FACTORS_SETTINGS_PANE_ID ? (
         <EmissionFactorsSettings />
       ) : paneId.startsWith("commercial-") ? (
