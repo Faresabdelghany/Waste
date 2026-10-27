@@ -145,7 +145,7 @@ async function hireOf(tx: Tx, scope: Scope, row: EventReading, agreementId: stri
 }
 
 /** A manual event links to nothing. */
-const NO_LINKS: BillableEventLinks = { routeId: null, pickupId: null, ticketId: null, reversesEventId: null, proofId: null }
+const NO_LINKS: BillableEventLinks = { routeId: null, pickupId: null, ticketId: null, reversesEventId: null, proofId: null, visitId: null }
 
 /** The conditions a pickup event carries into the resolver; none on a manual or a ticket event. */
 type Conditions = { planningAreaId: string | null; containerTypeId: string | null; wasteFractionId: string | null }
