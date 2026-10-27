@@ -1,0 +1,6 @@
+ALTER TABLE "wms"."price_list_row" ADD COLUMN "indexed_from_id" uuid;--> statement-breakpoint
+ALTER TABLE "wms"."price_list_row" ADD COLUMN "index_label" text;--> statement-breakpoint
+ALTER TABLE "wms"."price_list_row" ADD COLUMN "index_basis_points" integer;--> statement-breakpoint
+ALTER TABLE "wms"."price_list_row" ADD CONSTRAINT "price_list_row_indexed_from_id_fk" FOREIGN KEY ("company_id","project_id","indexed_from_id") REFERENCES "wms"."price_list_row"("company_id","project_id","id") ON DELETE no action ON UPDATE no action;--> statement-breakpoint
+CREATE INDEX "price_list_row_indexed_from_id_idx" ON "wms"."price_list_row" USING btree ("company_id","indexed_from_id");--> statement-breakpoint
+ALTER TABLE "wms"."price_list_row" ADD CONSTRAINT "price_list_row_index_shape" CHECK (("wms"."price_list_row"."indexed_from_id" is null) = ("wms"."price_list_row"."index_label" is null) and ("wms"."price_list_row"."indexed_from_id" is null) = ("wms"."price_list_row"."index_basis_points" is null) and "wms"."price_list_row"."indexed_from_id" <> "wms"."price_list_row"."id");

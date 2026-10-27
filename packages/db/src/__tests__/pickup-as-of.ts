@@ -10,7 +10,7 @@
 // diffs to it and pickup-exceptions-rendering (M5 of #293) from it. And as
 // 0038 left it: the contaminant code, and no bulky booking —
 // pickup-exceptions-rendering diffs to it and bulky-rendering (O11 of #290)
-// from it. Until 0052 the services were six, frozen here since the
+// from it. Until 0053 the services were six, frozen here since the
 // vocabulary has grown.
 import { PICKUP_ORIGINS, PICKUP_REASONS, PICKUP_STATUSES } from "@waste/domain/execution/vocabulary"
 import { sql } from "drizzle-orm"
@@ -32,8 +32,8 @@ import { wms } from "../schema/wms"
 
 const instant = () => timestamp({ withTimezone: true })
 
-/** The stop's services from 0023 until 0052 added `bulky`. */
-const SERVICES_UNTIL_0052 = ["empty", "deliver", "remove", "swap", "repair", "wash"] as const
+/** The stop's services from 0023 until 0053 added `bulky`. */
+const SERVICES_UNTIL_0053 = ["empty", "deliver", "remove", "swap", "repair", "wash"] as const
 
 export const pickupAsOf0016 = wms.table(
   "pickup",
@@ -115,7 +115,7 @@ export const pickupAsOf0023 = wms.table(
     projectKey(t, t.routeId),
     oneOf(t.status, PICKUP_STATUSES),
     oneOf(t.origin, PICKUP_ORIGINS),
-    oneOf(t.service, SERVICES_UNTIL_0052),
+    oneOf(t.service, SERVICES_UNTIL_0053),
     check(tableObjectName(t.id.table, "service_origin_shape", "pickup"), sql`${t.service} = 'empty' or ${t.origin} = 'office'`),
     check(tableObjectName(t.id.table, "service_container_shape", "pickup"), sql`${t.service} = 'empty' or ${t.containerId} is not null`),
     oneOf(t.reason, PICKUP_REASONS),
@@ -179,7 +179,7 @@ export const pickupAsOf0032 = wms.table(
     projectKey(t, t.routeId),
     oneOf(t.status, PICKUP_STATUSES),
     oneOf(t.origin, PICKUP_ORIGINS),
-    oneOf(t.service, SERVICES_UNTIL_0052),
+    oneOf(t.service, SERVICES_UNTIL_0053),
     // Generation empties; a work order is the office's.
     check(tableObjectName(t.id.table, "service_origin_shape", "pickup"), sql`${t.service} = 'empty' or ${t.origin} = 'office'`),
     // A work order is of a container; an address-only stop empties.
@@ -261,7 +261,7 @@ export const pickupAsOf0038 = wms.table(
     projectKey(t, t.routeId),
     oneOf(t.status, PICKUP_STATUSES),
     oneOf(t.origin, PICKUP_ORIGINS),
-    oneOf(t.service, SERVICES_UNTIL_0052),
+    oneOf(t.service, SERVICES_UNTIL_0053),
     // Generation empties; a work order is the office's.
     check(tableObjectName(t.id.table, "service_origin_shape", "pickup"), sql`${t.service} = 'empty' or ${t.origin} = 'office'`),
     // A work order is of a container; an address-only stop empties.

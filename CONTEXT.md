@@ -306,6 +306,10 @@ _Avoid_: Invoice, service provider price
 An effective-dated set of explainable customer pricing rules and price rows.
 _Avoid_: Service provider price, invoice
 
+**Indexation**:
+A percent applied to prices from a day — a customer price list's rows, or a provider's or an award's prices — as new rows and never an update: each price in force on the day ends on it, and its successor carries the indexed price and names the row it was indexed from. The office calls it Apply index; the chain of rows is a price's indexation history.
+_Avoid_: Price update, repricing, tariff edit
+
 **Service Area**:
 An effective-dated geographic and service responsibility awarded to a service provider. Its geographic scope references operator-owned Planning Areas — the service provider domain has no zone concept of its own — while the contract's own boundary text stays the authoritative legal boundary.
 _Avoid_: Contract area, operational area, route, service provider zone

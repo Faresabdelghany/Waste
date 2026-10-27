@@ -2,7 +2,7 @@
 // tables — an area's schedules, the bookings and their items — and the
 // pickup's bulky collection, diffed from the pickup as 0038 left it
 // (pickup-as-of.ts), since an applied file is never edited. Then migration
-// 0052, which is exactly those statements, then what the three owe the file
+// 0053, which is exactly those statements, then what the three owe the file
 // by migrations/README.md: each one's fence and trigger, the schedule's
 // exclusion constraint over its area, and the audit trail of the three
 // (`BULKY_AUDITED`). No database.
@@ -30,12 +30,12 @@ import { checksOf, ref } from "./rendering"
 import { pickupAsOf0038 } from "./pickup-as-of"
 import { statementsBetween } from "./specimen"
 
-const MIGRATION = "0052_bulky_booking.sql"
+const MIGRATION = "0053_bulky_booking.sql"
 
 const referenced = { company, project, route, container, property, sharedCollectionPoint, wasteFraction, product, userAccount, customer, agreement, subscription, warehouse, planningArea, contaminantCode }
 const created = { bulkyBooking, bulkyBookingItem, bulkySchedule }
 
-/** What drizzle-kit writes for 0052: the three tables, and the pickup from its 0038 spelling to today's. */
+/** What drizzle-kit writes for 0053: the three tables, and the pickup from its 0038 spelling to today's. */
 const generated = (): Promise<string[]> => statementsBetween({ ...referenced, pickup: pickupAsOf0038 }, { ...referenced, pickup, ...created })
 
 /** What the three owe the file below drizzle-kit's statements: fence and trigger each, the schedule's exclusion constraint, then their audit trail. */
@@ -80,7 +80,7 @@ describe("the bulky booking as drizzle-kit writes it", () => {
   })
 })
 
-describe("migration 0052", () => {
+describe("migration 0053", () => {
   test("begins with exactly what drizzle-kit generates for it, whatever order its loader gave the tables", async () => {
     const statements = await fileStatements()
     const head = (await generated()).map(normalised).sort()

@@ -4,6 +4,7 @@ import { describe, test } from "node:test"
 import {
   PriceList,
   PriceListCreate,
+  PriceListIndex,
   PriceListListQuery,
   PriceListPatch,
   PriceListRow,
@@ -14,6 +15,7 @@ import {
   PriceResolveQuery,
   RowVerdict,
 } from "../price-lists"
+import { IndexResult } from "../finance"
 import { ENDS_AFTER_IT_STARTS } from "../validity"
 import { refusal, refusesAnEmptyPatch, refusesWhatTheServerOwns } from "./expect"
 
@@ -48,6 +50,9 @@ const row = {
   wasteFractionId: null,
   customerId: null,
   note: null,
+  indexedFromId: null,
+  indexLabel: null,
+  indexBasisPoints: null,
   validFrom: "2026-01-01",
   validTo: null,
   ...STAMPS,
@@ -186,5 +191,34 @@ describe("the list queries", () => {
     assert.deepEqual(PriceListRowListQuery.parse({}), { limit: 50 })
     assert.deepEqual(PriceListRowListQuery.parse({ productId: OTHER, validOn: "2026-06-01", limit: "20" }), { limit: 20, productId: OTHER, validOn: "2026-06-01" })
     assert.equal("projectId" in PriceListRowListQuery.shape, false, "a list's rows are the list's, not a project's")
+  })
+})
+
+describe("PriceListIndex and its answer (#291 C8)", () => {
+  test("takes a label, basis points within an integer, a day and the preview flag, and nothing the server owns", () => {
+    const body = { label: "CPI 2027", basisPoints: 320, appliedFrom: "2027-01-01" }
+    assert.deepEqual(PriceListIndex.parse(body), body)
+    assert.deepEqual(PriceListIndex.parse({ ...body, basisPoints: -250, dryRun: true }), { ...body, basisPoints: -250, dryRun: true })
+    assert.deepEqual(refusal(PriceListIndex.safeParse({ ...body, basisPoints: 3.2 })).map((issue) => issue.path), ["basisPoints"])
+    assert.deepEqual(refusal(PriceListIndex.safeParse({ ...body, basisPoints: 2 ** 31 })).map((issue) => issue.path), ["basisPoints"])
+    assert.deepEqual(refusal(PriceListIndex.safeParse({ ...body, appliedFrom: "2027-01-01T00:00:00Z" })).map((issue) => issue.path), ["appliedFrom"])
+    assert.deepEqual(refusal(PriceListIndex.safeParse({ ...body, base: "bid" })).map((issue) => issue.path), [""], "a customer row has no bid")
+  })
+
+  test("a row carries its chain, and the answer a line per row, indexed or skipped with why", () => {
+    const indexed = { ...row, id: OTHER, indexedFromId: ID, indexLabel: "CPI 2027", indexBasisPoints: 320 }
+    assert.deepEqual(PriceListRow.parse(indexed), indexed)
+    const result = {
+      dryRun: false,
+      label: "CPI 2027",
+      basisPoints: 320,
+      appliedFrom: "2027-01-01",
+      lines: [
+        { id: ID, productId: OTHER, fromMinor: 10_050, toMinor: 10_372, indexedId: THIRD, skipped: null },
+        { id: OTHER, productId: OTHER, fromMinor: 500, toMinor: null, indexedId: null, skipped: "scheduled" },
+      ],
+    }
+    assert.deepEqual(IndexResult.parse(result), result)
+    assert.equal(IndexResult.safeParse({ ...result, lines: [{ ...result.lines[1], skipped: "expired" }] }).success, false)
   })
 })
