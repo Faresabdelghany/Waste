@@ -173,6 +173,20 @@ async function stopOf(tx: Tx, scope: Scope, body: PickupAdd, serviceDate: string
 
 /** What a body naming a bulky booking of another project is told, at `bulkyBookingId`. */
 export const NOT_A_BULKY_BOOKING = "Not a bulky booking of this project"
+/** What a correction to completed of a bulky collection whose booking was cancelled is told. */
+export const BOOKING_CANCELLED = "The bulky booking was cancelled; its stop is not corrected to completed"
+
+/** Refuses a correction that would collect a cancelled booking, under the booking's row lock (the stop's route locked first). */
+async function refuseCancelledBooking(tx: Tx, principal: Principal, bookingId: string): Promise<void> {
+  await lockRow(tx, bulkyBooking, { companyId: principal.companyId, id: bookingId })
+  const [row] = await tx
+    .select({ cancelledAt: bulkyBooking.cancelledAt })
+    .from(bulkyBooking)
+    .where(and(eq(bulkyBooking.companyId, principal.companyId), eq(bulkyBooking.id, bookingId)))
+    .limit(1)
+  if (row?.cancelledAt != null) throw problem(409, { detail: BOOKING_CANCELLED })
+}
+
 /** What a correction to completed of a bulky collection whose booking was routed again since is told. */
 export const BOOKED_AGAIN = "The bulky booking has another stop planned or done since; take that stop off before this one is corrected to completed"
 
@@ -181,9 +195,10 @@ export const BOOKED_AGAIN = "The bulky booking has another stop planned or done 
  * the route's project (400 at `bulkyBookingId`), locked once found — the
  * route's lock taken first — then booked (409 in the domain's sentence: a
  * routed one names its stop) and for the day the route runs on (409). The
- * stop is at the booking's place, of its fraction, with no container.
+ * stop is at the booking's place, of its fraction, with no container, and
+ * tells the driver the booking's note unless the body gives its own.
  */
-async function bulkyStopOf(tx: Tx, scope: Scope, bookingId: string, parent: RouteRow): Promise<StopPlace & { containerId: null; bulkyBookingId: string }> {
+async function bulkyStopOf(tx: Tx, scope: Scope, bookingId: string, parent: RouteRow): Promise<StopPlace & { containerId: null; bulkyBookingId: string; note: string | null }> {
   const [found] = await tx
     .select({ id: bulkyBooking.id })
     .from(bulkyBooking)
@@ -194,6 +209,7 @@ async function bulkyStopOf(tx: Tx, scope: Scope, bookingId: string, parent: Rout
   const [row] = await tx
     .select({
       day: bulkyBooking.day,
+      note: bulkyBooking.note,
       propertyId: bulkyBooking.propertyId,
       sharedCollectionPointId: bulkyBooking.sharedCollectionPointId,
       wasteFractionId: bulkyBooking.wasteFractionId,
@@ -211,7 +227,7 @@ async function bulkyStopOf(tx: Tx, scope: Scope, bookingId: string, parent: Rout
   if (status === "routed" && row.stopRoute !== null) throw problem(409, { detail: `${onlyABookedBooking(status, "route")} (route ${routeLabel(row.stopRoute)}, stop ${row.stopPosition})` })
   if (status !== "booked") throw problem(409, { detail: onlyABookedBooking(status, "route") })
   if (row.day !== parent.operatingDate) throw problem(409, { detail: notTheBookingsDay(row.day, parent.operatingDate) })
-  return { containerId: null, propertyId: row.propertyId, sharedCollectionPointId: row.sharedCollectionPointId, wasteFractionId: row.wasteFractionId, bulkyBookingId: bookingId }
+  return { containerId: null, propertyId: row.propertyId, sharedCollectionPointId: row.sharedCollectionPointId, wasteFractionId: row.wasteFractionId, bulkyBookingId: bookingId, note: row.note }
 }
 
 /** A ledger work order's bookings (O3b of #290), null where its service books none. */
@@ -575,7 +591,7 @@ export function pickupRoutes(guard: MiddlewareHandler<AuthEnv>, { now = () => ne
         const row = await insertHolding(
           tx,
           principal,
-          { id: newId(), ...scope, routeId: parent.id, position: (last?.position ?? 0) + 1, origin: "office", service: body.service, note: body.note ?? null, ...stop.at, ...stop.booking, bulkyBookingId: bulky?.bulkyBookingId ?? null },
+          { id: newId(), ...scope, routeId: parent.id, position: (last?.position ?? 0) + 1, origin: "office", service: body.service, note: body.note ?? bulky?.note ?? null, ...stop.at, ...stop.booking, bulkyBookingId: bulky?.bulkyBookingId ?? null },
           held,
         )
         if (answering !== undefined) await bookTicket(tx, principal, answering, { pickupId: row.id, routeId: parent.id, position: row.position, routeLabel: labelOf(parent), service: body.service })
@@ -657,6 +673,8 @@ export function pickupRoutes(guard: MiddlewareHandler<AuthEnv>, { now = () => ne
         const transition = pickupCorrection(current.status as PickupStatus, outcome, current.position)
         if (transition.kind === "refuse") throw problem(409, { detail: transition.sentence })
         if (transition.kind !== "move") throw new Error(`a correction of pickup ${id} neither moved nor refused`)
+        // A cancelled bulky booking is collected by none of its stops (O11 of #290): a missed one is never corrected to completed, which would charge it.
+        if (outcome === "completed" && current.status !== "completed" && current.bulkyBookingId !== null) await refuseCancelledBooking(tx, principal, current.bulkyBookingId)
         // The code the stop is tagged with (M5 of #293): a code named is held to the company's, for its fraction, and active where it is new to the stop; null untags; absent keeps the stop's tag where the new outcome still takes one — a correction of the note or the reason leaves a tag it never mentioned — and drops it where it does not.
         await requireTag(tx, principal.companyId, current, contaminantCodeId)
         const tagged = contaminantCodeId !== undefined ? contaminantCodeId : outcome === "completed" || reason === "contamination" ? current.contaminantCodeId : null
