@@ -103,6 +103,12 @@ export const AUDITED_TABLES = [
   "accounting_settings",
   "accounting_vat_code",
   "accounting_product_account",
+  "access_credential",
+  "site_visit",
+  "site_visit_fraction",
+  "visit_rule",
+  "visit_rule_step",
+  "visit_rule_free_fraction",
 ] as const
 export type AuditedTable = (typeof AUDITED_TABLES)[number]
 

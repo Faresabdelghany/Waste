@@ -13,7 +13,7 @@ const THIRD = "01a0d3a5-e5e0-7000-8000-000000000003"
 const STAMPS = { createdAt: "2026-10-05T18:00:00.000Z", updatedAt: "2026-10-05T18:00:00.000Z" }
 const WHEN = "2026-10-06T09:00:00.000Z"
 
-const links = { routeId: OTHER, pickupId: THIRD, ticketId: null, reversesEventId: null, proofId: null }
+const links = { routeId: OTHER, pickupId: THIRD, ticketId: null, reversesEventId: null, proofId: null, visitId: null }
 
 /** The consumer's priced pickup event: no person, the outbox event's id, the winning row traceable, ready. */
 const event = {
@@ -50,24 +50,24 @@ const event = {
 describe("BillableEvent", () => {
   test("is the occurrence on the wire: its kind and its reading, what it was under, the frozen price, the winning row, the links, its origin and its stamps", () => {
     assert.deepEqual(BillableEvent.parse(event), event)
-    assert.equal(Object.keys(BillableEventLinks.shape).length, 5, "the route, the pickup, the ticket, the reversed event and a Pickup Exception's evidence (#293 M5)")
+    assert.equal(Object.keys(BillableEventLinks.shape).length, 6, "the route, the pickup, the ticket, the reversed event, a Pickup Exception's evidence (#293 M5) and a recycling-centre visit (#393)")
   })
 
   test("parses each shape a row takes: blocked with the five price columns null, a manual event with a person's price and reason, a ticket's event awaiting its product, a reversal with negative amounts, a cancelled and an invoiced one", () => {
     const blocked = { ...event, status: "blocked", agreementId: null, subscriptionId: null, productId: null, unitPriceMinor: null, netMinor: null, vatPercent: null, vatMinor: null, currency: null, priceListRowId: null, blockReason: "no-subscription" }
     assert.deepEqual(BillableEvent.parse(blocked), blocked)
-    const manual = { ...event, kind: "manual", links: { routeId: null, pickupId: null, ticketId: null, reversesEventId: null, proofId: null }, sourceEventId: null, createdBy: OTHER, priceListRowId: null, overrideReason: "Agreed by phone", note: "Extra lift" }
+    const manual = { ...event, kind: "manual", links: { routeId: null, pickupId: null, ticketId: null, reversesEventId: null, proofId: null, visitId: null }, sourceEventId: null, createdBy: OTHER, priceListRowId: null, overrideReason: "Agreed by phone", note: "Extra lift" }
     assert.deepEqual(BillableEvent.parse(manual), manual)
-    const ticket = { ...blocked, kind: "ticket", agreementId: THIRD, links: { routeId: null, pickupId: null, ticketId: OTHER, reversesEventId: null, proofId: null }, blockReason: "no-product" }
+    const ticket = { ...blocked, kind: "ticket", agreementId: THIRD, links: { routeId: null, pickupId: null, ticketId: OTHER, reversesEventId: null, proofId: null, visitId: null }, blockReason: "no-product" }
     assert.deepEqual(BillableEvent.parse(ticket), ticket)
-    const reversal = { ...event, kind: "reversal", netMinor: -12_345, vatMinor: -3_086, priceListRowId: null, links: { routeId: null, pickupId: null, ticketId: null, reversesEventId: ID, proofId: null }, sourceEventId: THIRD }
+    const reversal = { ...event, kind: "reversal", netMinor: -12_345, vatMinor: -3_086, priceListRowId: null, links: { routeId: null, pickupId: null, ticketId: null, reversesEventId: ID, proofId: null, visitId: null }, sourceEventId: THIRD }
     assert.deepEqual(BillableEvent.parse(reversal), reversal)
     const cancelled = { ...event, status: "cancelled", cancelledAt: WHEN, cancelledBy: OTHER, cancelReason: "duplicate" }
     assert.deepEqual(BillableEvent.parse(cancelled), cancelled)
     const invoiced = { ...event, status: "invoiced", invoiceLineId: THIRD }
     assert.deepEqual(BillableEvent.parse(invoiced), invoiced)
     // A recurring charge (#291 C2): its subscription, no links, the run's — no person, no outbox event — and what it charged.
-    const recurring = { ...event, kind: "subscription", links: { routeId: null, pickupId: null, ticketId: null, reversesEventId: null, proofId: null }, sourceEventId: null, charge: { periodFrom: "2026-11-01", periodTo: "2026-12-01", chargedDays: 15, periodDays: 30 } }
+    const recurring = { ...event, kind: "subscription", links: { routeId: null, pickupId: null, ticketId: null, reversesEventId: null, proofId: null, visitId: null }, sourceEventId: null, charge: { periodFrom: "2026-11-01", periodTo: "2026-12-01", chargedDays: 15, periodDays: 30 } }
     assert.deepEqual(BillableEvent.parse(recurring), recurring)
     for (const status of BILLABLE_EVENT_STATUSES) assert.equal(BillableEvent.safeParse({ ...event, status }).success, true, status)
     for (const blockReason of BLOCK_REASONS) assert.equal(BillableEvent.safeParse({ ...blocked, blockReason }).success, true, blockReason)

@@ -49,7 +49,10 @@
 // free days by its cap and holds them to its unit, which the database reads.
 // #291 C7 added @waste/domain/finance/accounting: accounting.ts reads the
 // account number's and the VAT code's patterns the database's checks read,
-// and the CSV's columns its file is documented by.
+// and the CSV's columns its file is documented by. M4 of #293 added
+// @waste/domain/visits/vocabulary and @waste/domain/visits/charges:
+// site-visits.ts reads the visits' lists and normalises a plate or a card
+// as the API stores and matches it.
 import path from "node:path"
 import { fileURLToPath } from "node:url"
 
@@ -87,6 +90,8 @@ definePurityTests({
     "@waste/domain/routing/vocabulary",
     "@waste/domain/sorting-guide/search",
     "@waste/domain/sorting-guide/vocabulary",
+    "@waste/domain/visits/charges",
+    "@waste/domain/visits/vocabulary",
     "zod",
   ],
   allowedTestImports: ["@waste/tooling/purity"],
