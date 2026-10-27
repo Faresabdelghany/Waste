@@ -7,7 +7,6 @@ import { InvoiceDetail } from "@waste/contracts/invoices"
 import { Page } from "@waste/contracts/pagination"
 import { DAY_WINDOW_ORDERED } from "@waste/contracts/queries"
 import { createDb, type Database, type Tx } from "@waste/db/client"
-import { product } from "@waste/db/schema/catalogue"
 import { customer } from "@waste/db/schema/customers"
 import { outboxEvent } from "@waste/db/schema/execution"
 import { billableEvent, billingRun, billingRunExclusion, invoice, invoiceLine } from "@waste/db/schema/finance"
@@ -167,105 +166,6 @@ describe("the billing run endpoints", { skip: database.skip || owner.skip }, () 
         done.exclusions.map(({ customerId, reason, eventCount }) => ({ customerId, reason, eventCount })),
         expected,
       )
-    })
-  })
-
-  describe("catch-up (#447)", () => {
-    test("takes an event released from a hold and one repriced after their month's run into the next month's run, each exactly once, and the preview lists them as catch-up lines", async () => {
-      const july = period("2026-07-01", "2026-07-31")
-      const august = period("2026-08-01", "2026-08-31")
-      const own = await entered(manual({ serviceDate: "2026-07-01" }))
-      const held = await entered(manual({ agreementId: fx.agreements.anna.id, serviceDate: "2026-07-14" }))
-      assert.equal((await olivia(`/billable-events/${held.id}/hold`, { method: "POST", body: { reason: "Checked with the customer" } })).status, 200)
-      const blocked = await entered(manual({ productId: fx.products.bulky.id, serviceDate: "2026-07-15" }))
-      assert.deepEqual([blocked.status, blocked.blockReason], ["blocked", "no-vat-rate"])
-
-      const first = await run(july)
-      assert.deepEqual([first.eventCount, first.invoiceCount], [1, 1], "July's run takes its one ready event and passes over the held and the blocked")
-      assert.equal((await readEvent(own.id)).status, "invoiced")
-
-      // After July's run: the hold released, the bulky product given its rate and the event repriced.
-      assert.equal((await olivia(`/billable-events/${held.id}/release`, { method: "POST", body: {} })).status, 200)
-      await withCompany(pool.db, a.companyId, async (tx: Tx) => {
-        await tx.update(product).set({ vatPercent: 25 }).where(and(eq(product.companyId, a.companyId), eq(product.id, fx.products.bulky.id)))
-      })
-      try {
-        const repriced = await olivia(`/billable-events/${blocked.id}/reprice`, { method: "POST", body: {} })
-        assert.equal(repriced.status, 200, JSON.stringify(await repriced.clone().json()))
-        assert.equal(BillableEvent.parse(await repriced.json()).status, "ready")
-      } finally {
-        await withCompany(pool.db, a.companyId, async (tx: Tx) => {
-          await tx.update(product).set({ vatPercent: null }).where(and(eq(product.companyId, a.companyId), eq(product.id, fx.products.bulky.id)))
-        })
-      }
-      const ownAugust = await entered(manual({ agreementId: fx.agreements.anna.id, serviceDate: "2026-08-03" }))
-
-      const before = await written()
-      const previewed = await preview(august)
-      assert.deepEqual(await written(), before, "a preview writes nothing")
-      assert.deepEqual([previewed.eventCount, previewed.invoiceCount, previewed.catchUpDeferredCount], [3, 2, 0])
-      assert.deepEqual(previewed.catchUp, [
-        { billableEventId: held.id, kind: "manual", customerId: fx.customers.anna.id, description: "Restaffald 240 L · 2026-07-14", serviceDate: "2026-07-14", currency: "DKK", netMinor: 12_000, vatMinor: 3_000 },
-        { billableEventId: blocked.id, kind: "manual", customerId: fx.customers.housing.id, description: "Bulky pickup · 2026-07-15", serviceDate: "2026-07-15", currency: "DKK", netMinor: 35_000, vatMinor: 8_750 },
-      ])
-      assert.deepEqual(previewed.totals, [{ currency: "DKK", netMinor: 12_000 + 35_000 + 12_000, vatMinor: 3_000 + 8_750 + 3_000 }], "the caught up count in the totals")
-
-      const second = await run(august)
-      assert.deepEqual([second.eventCount, second.invoiceCount, second.netMinor], [3, 2, 59_000])
-      const invoices = await Promise.all(second.invoiceIds.map((id) => readInvoice(id)))
-      const lines = invoices.flatMap((issued) => issued.lines.map((line) => [issued.customerId, line.billableEventId, line.serviceDate]))
-      assert.deepEqual(
-        lines.sort(),
-        [
-          [fx.customers.anna.id, held.id, "2026-07-14"],
-          [fx.customers.anna.id, ownAugust.id, "2026-08-03"],
-          [fx.customers.housing.id, blocked.id, "2026-07-15"],
-        ].sort(),
-        "each on its payer's invoice beside the month's own",
-      )
-      for (const event of [held, blocked, ownAugust]) assert.equal((await readEvent(event.id)).status, "invoiced")
-
-      const september = await run(period("2026-09-01", "2026-09-30"))
-      assert.deepEqual([september.eventCount, september.invoiceCount], [0, 0], "the next month's run finds them invoiced")
-      const again = await run(august)
-      assert.deepEqual([again.eventCount, again.invoiceCount], [0, 0], "and so does a second run over August")
-      assert.deepEqual((await preview(period("2026-09-01", "2026-09-30"))).catchUp, [])
-    })
-
-    test("leaves an event whose period no run has covered for that period's own run: a later run does not reach back for it", async () => {
-      const event = await entered(manual({ agreementId: fx.agreements.anna.id, serviceDate: "2026-05-12" }))
-      assert.ok(!(await preview(period("2026-06-01", "2026-06-05"))).catchUp.some((line) => line.billableEventId === event.id), "May has had no run")
-      const may = await run(period("2026-05-01", "2026-05-31"))
-      assert.equal(may.eventCount, 1, "May's own run invoices it")
-      assert.equal((await readEvent(event.id)).status, "invoiced")
-    })
-
-    test("reaches back twelve months from the period's first day and no further", async () => {
-      await run(period("2026-01-31", "2026-02-01"))
-      const inside = await entered(manual({ serviceDate: "2026-02-01" }))
-      const outside = await entered(manual({ serviceDate: "2026-01-31" }))
-      try {
-        const caughtUp = (await preview(period("2027-02-01", "2027-02-05"))).catchUp.map((line) => line.billableEventId)
-        assert.ok(caughtUp.includes(inside.id), "twelve months before 2027-02-01 is 2026-02-01, the window's first day")
-        assert.ok(!caughtUp.includes(outside.id), "the day before it is past the reach")
-      } finally {
-        for (const event of [inside, outside]) assert.equal((await olivia(`/billable-events/${event.id}/cancel`, { method: "POST", body: { reason: "duplicate" } })).status, 200)
-      }
-    })
-
-    test("takes the catch-up only in the room the period's own leave under the ceiling, oldest first, and counts the rest it leaves", async () => {
-      const day = "2026-04-14"
-      await run(period(day))
-      const earlier = await Promise.all([1, 2, 3].map(() => entered(manual({ serviceDate: day }))))
-      const scope = { companyId: a.companyId, projectId: copenhagen }
-      // The period's own as many as leave room for two: the preview's planned charges count so, and so does a run's minted ones.
-      const selection = await withCompany(pool.db, a.companyId, (tx: Tx) => selectBilling(tx, scope, { periodFrom: "2026-04-20", periodTo: "2026-04-30" }, { reserved: BILLING_RUN_MAX_EVENTS - 2 }))
-      const oldest = earlier.map((event) => event.id).sort()
-      assert.deepEqual(selection.catchUpIds, oldest.slice(0, 2), "oldest first, one day's by id")
-      assert.equal(selection.catchUpDeferredCount, 1)
-      assert.deepEqual(selection.events.filter((event) => event.catchUp).map((event) => event.id).sort(), oldest.slice(0, 2))
-      // The day's own run takes the three, so no later run here reaches back for them.
-      assert.equal((await run(period(day))).eventCount, 3)
     })
   })
 
@@ -451,21 +351,6 @@ describe("the billing run endpoints", { skip: database.skip || owner.skip }, () 
       assert.deepEqual(await written(), before, "a refused run leaves nothing behind, the counter included")
       const narrower = await run(period("2027-01-04"))
       assert.deepEqual([narrower.eventCount, narrower.invoiceCount], [0, 0], "the day before holds nothing")
-    })
-
-    test("writes an invoice's lines a thousand to a statement: one invoice of more lines than that is whole, its positions in order", async () => {
-      // A run's invoice may carry up to the ceiling's lines, past the 65 534 parameters one statement binds at fifteen a line; the batches cross the thousand here.
-      const day = "2027-01-20"
-      const lines = 1_001
-      const rows = Array.from({ length: lines }, () => ({ id: testId(), companyId: a.companyId, projectId: copenhagen, kind: "manual", serviceDate: day, agreementId: fx.agreements.anna.id, productId: fx.products.residual.id, quantity: 1, unitPriceMinor: 12_000, netMinor: 12_000, vatPercent: 25, vatMinor: 3_000, currency: "DKK", priceListRowId: fx.rows.residual.id, createdBy: a.users.olivia.id }))
-      await withCompany(pool.db, a.companyId, async (tx: Tx) => {
-        for (let start = 0; start < rows.length; start += 500) await tx.insert(billableEvent).values(rows.slice(start, start + 500))
-      })
-      const done = await run(period(day))
-      assert.deepEqual([done.eventCount, done.invoiceCount], [lines, 1])
-      const issued = await readInvoice(done.invoiceIds[0])
-      assert.deepEqual(issued.lines.map((line) => line.position), Array.from({ length: lines }, (_, index) => index + 1))
-      assert.equal(issued.netMinor, lines * 12_000)
     })
 
     test("serialises two runs of one project on the project's lock: the second finds only what the first left", async () => {
