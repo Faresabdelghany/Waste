@@ -12,11 +12,12 @@
 // `POST /billing-runs` takes the project and the period (`periodOrdered`:
 // the last day comes on or after the first) and runs synchronously in the
 // request; `POST /billing-runs/preview` takes the same body and answers
-// `BillingRunPreview` — the counts, the totals per currency and the
-// exclusions — writing nothing. There is no patch: a run is a record of what
+// `BillingRunPreview` — the counts, the totals per currency, the
+// exclusions, and the lines it catches up from earlier periods (#447) —
+// writing nothing. There is no patch: a run is a record of what
 // it did.
 import { IsoDate, IsoDateTime } from "./dates"
-import { BillingRunStatus, ExclusionReason } from "./finance"
+import { BillableEventKind, BillingRunStatus, ExclusionReason } from "./finance"
 import { Id } from "./ids"
 import { Currency } from "./organisation"
 import { dayWindowIsOrdered, dayWindowOrdered, ProjectScopedListQuery } from "./queries"
@@ -92,6 +93,24 @@ export const BillingRunCreate = z
   .refine(periodOrdered, periodIsOrdered)
 export type BillingRunCreate = z.infer<typeof BillingRunCreate>
 
+/**
+ * A ready event from before the period that a run catches up (#447): one no
+ * invoice line names, whose own period a completed run already reached — so
+ * it became ready, or was recorded, after that run: released from a hold, or
+ * repriced — as the line it would be, under its payer.
+ */
+export const BillingRunCatchUpLine = z.object({
+  billableEventId: Id,
+  kind: BillableEventKind,
+  customerId: Id,
+  description: z.string(),
+  serviceDate: IsoDate,
+  currency: Currency,
+  netMinor: Minor,
+  vatMinor: Minor,
+})
+export type BillingRunCatchUpLine = z.infer<typeof BillingRunCatchUpLine>
+
 /** What a preview answers: the counts, the totals per currency, and the payers a run would exclude. */
 export const BillingRunPreview = z.object({
   eventCount: Count,
@@ -112,6 +131,10 @@ export const BillingRunPreview = z.object({
   ),
   /** The priced events of the period held for review (M14 of #293): a run passes over them until each is released. */
   heldEventCount: Count,
+  /** The ready events from earlier periods the run takes (#447), oldest first; counted in `eventCount`, `invoiceCount` and `totals`. */
+  catchUp: z.array(BillingRunCatchUpLine),
+  /** The ready events from earlier periods left for a later run: the period's own come first under the run's ceiling, and catch-up takes only the room they leave. */
+  catchUpDeferredCount: Count,
 })
 export type BillingRunPreview = z.infer<typeof BillingRunPreview>
 

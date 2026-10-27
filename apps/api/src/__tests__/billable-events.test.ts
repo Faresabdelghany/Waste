@@ -337,6 +337,8 @@ describe("the billable event endpoints", { skip: database.skip || owner.skip }, 
   describe("hold and release (M14 of #293)", () => {
     test("a ready event is held with the caller, the clock and the reason, a run passes over it — its preview counting it — and a release makes it ready for the next run", async () => {
       const day = "2026-10-12"
+      // The ready events the suite's earlier tests left before the day, caught up by a run over the day before (#447), so the day's runs read this event alone.
+      await invoiced("2026-10-11")
       const event = await entered(manual({ serviceDate: day }))
       const held = await commanded(event.id, "hold", { reason: "Waiting for the driver's photo" })
       assert.deepEqual([held.status, held.hold], ["held", { at: NOON.toISOString(), by: a.users.olivia.id, reason: "Waiting for the driver's photo" }])

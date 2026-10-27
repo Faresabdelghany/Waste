@@ -45,6 +45,9 @@ import { nextNumber, refuseDuplicate } from "./shared"
 /** `invoice_line_billable_event_id_idx`: an event is on one line of one invoice, the database's word behind the run's selection. */
 export const EVENT_ON_ONE_LINE = "invoice_line_billable_event_id_idx"
 
+/** The lines one statement writes: fifteen parameters a line, under the 65 534 one statement binds, so a run's invoice at the run's ceiling of lines goes in several. */
+const LINES_PER_INSERT = 1000
+
 /** What a run whose selection another run invoiced under it is told: the backstop behind the project's lock. */
 export const INVOICED_BY_ANOTHER_RUN = "An event in the selection was invoiced by another run; run again"
 
@@ -137,12 +140,13 @@ export async function issueInvoice(tx: Tx, input: IssueInvoiceInput): Promise<In
     .insert(invoice)
     .values({ id: input.newId(), companyId, ...columns, number, netMinor, vatMinor, grossMinor: netMinor + vatMinor, paymentReference: draft.kind === "invoice" ? paymentReference(paymentReferenceScheme, number) : null, parties })
     .returning(invoiceColumns)
-  const written = await refuseDuplicate({ [EVENT_ON_ONE_LINE]: INVOICED_BY_ANOTHER_RUN }, () =>
-    tx
-      .insert(invoiceLine)
-      .values(lines.map((line, index) => ({ id: input.newId(), companyId, projectId: draft.projectId, invoiceId: row.id, position: index + 1, ...line })))
-      .returning(lineColumns),
-  )
+  const values = lines.map((line, index) => ({ id: input.newId(), companyId, projectId: draft.projectId, invoiceId: row.id, position: index + 1, ...line }))
+  // A statement at a time of `LINES_PER_INSERT`: a run's invoice may carry up to the run's ceiling of lines, past the 65 534 parameters one statement binds.
+  const written = await refuseDuplicate({ [EVENT_ON_ONE_LINE]: INVOICED_BY_ANOTHER_RUN }, async () => {
+    const rows = []
+    for (let start = 0; start < values.length; start += LINES_PER_INSERT) rows.push(...(await tx.insert(invoiceLine).values(values.slice(start, start + LINES_PER_INSERT)).returning(lineColumns)))
+    return rows
+  })
   const detail: InvoiceDetail = { ...invoiceOf(row), lines: written.sort((a, b) => a.position - b.position).map(lineOf), creditNotes: [] }
   await emit(tx, { companyId }, { aggregate: "invoice", aggregateId: row.id, kind: "invoice-issued", payload: detail, projectId: draft.projectId, occurredAt: input.now() })
   return detail
