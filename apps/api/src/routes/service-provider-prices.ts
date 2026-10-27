@@ -24,8 +24,14 @@
 // bid and currency, the fee `round(base × (1 + basisPoints / 10 000))` half
 // away from zero over the bid or the fee it replaces (@waste/domain/finance/
 // money, `indexedFee`), the label, the basis points and what was multiplied,
-// and the old row's end as its own — under the row's lock, so two
-// indexations of one row take turns and the chain never forks. The bid is
+// and the old row's end as its own — under the assignment's lock and then
+// the row's, the order a price's create and patch take them (the successor's
+// key into the assignment asks its key share, so the reverse could
+// deadlock), so two indexations of one row take turns and the chain never
+// forks. The row is judged by the plan the Apply index over many prices runs
+// (routes/indexation.ts): one fee, one pair of range refusals, and a product
+// no longer active refused (409, routes/statuses.ts) since the successor is a
+// new reference to it. The bid is
 // set on the first row and copied onto every indexed one; the patch never
 // takes it, and the fee moves through `index` alone. A day at or before the
 // row's start is a 400 on `appliedFrom`, since the index applies inside the
@@ -45,9 +51,11 @@
 // routes/price-lists.ts judges a list's rows, over the bid or the fee as the
 // body's base says. A price that starts on the day or later, or whose
 // product is no longer active, is left with its reason; `dryRun` previews.
-// Held under the prices' locks in id order and read again under them, so a
-// bulk index and a single one of a price take turns and the chain never
-// forks; the successors run bare for the reason the single index's does.
+// A write holds the scope's assignments' locks and then the prices', each in
+// id order, the order the single index takes them, and reads the prices again
+// under them, so a bulk index and a single one of a price take turns and the
+// chain never forks; the successors run bare for the reason the single
+// index's does, and are written in batches (routes/indexation.ts).
 //
 // Two scopes, as routes/service-areas.ts has them (auth/provider.ts, §7.22):
 // the office reads and writes the prices of its projects; a Service
@@ -56,7 +64,6 @@
 // grant is `commercial.service-provider-prices` throughout.
 import { IndexResult, type IndexBase } from "@waste/contracts/finance"
 import { Page } from "@waste/contracts/pagination"
-import { fitsInt4, INT4_MAX } from "@waste/contracts/resource"
 import {
   ServiceProviderPrice,
   ServiceProviderPriceBulkIndex,
@@ -67,10 +74,8 @@ import {
 } from "@waste/contracts/service-provider-prices"
 import type { Tx } from "@waste/db/client"
 import { validOn } from "@waste/db/query/valid-on"
-import { product } from "@waste/db/schema/catalogue"
 import { serviceAreaAssignment, serviceProviderPrice } from "@waste/db/schema/finance"
 import { indexedOf, planIndexation } from "@waste/domain/finance/indexation"
-import { indexedFee } from "@waste/domain/finance/money"
 import { priceEnded, priceEndedBy } from "@waste/domain/finance/transitions"
 import { and, asc, eq, exists, gt, inArray, isNull, or, sql, type SQL } from "drizzle-orm"
 import { Hono, type MiddlewareHandler } from "hono"
@@ -84,10 +89,10 @@ import { newId } from "../ids"
 import { afterCursor, fetchLimit, pageOf } from "../pagination"
 import { describeProblem, invalidRequest, problem, validate } from "../problem"
 import { projectCurrency } from "./fleet-lookups"
-import { answerOf, refusePlan } from "./indexation"
+import { answerOf, batchesOf, INDEX_BELOW_ZERO, INDEX_TOO_LARGE, lockInBatches, productStatuses, refusePlan } from "./indexation"
 import { periodAfter, periodOf, requireWithin } from "./periods"
 import { requireProduct, requireServiceAreaAssignment, requireServiceProvider } from "./references"
-import { created, describeCreated, describeJson, IdParam, lockRow, lockRows, refuseOverlap, stampsOf } from "./shared"
+import { created, describeCreated, describeJson, IdParam, lockRow, refuseOverlap, stampsOf } from "./shared"
 import { refuseUnofferedProduct } from "./statuses"
 
 const MODULE = "commercial.service-provider-prices"
@@ -145,11 +150,8 @@ export const OUTSIDE_ASSIGNMENT = "Outside the assignment's period"
 /** What an indexation applied on or before the row's start is refused with, at `appliedFrom`. */
 export const INDEX_OUTSIDE_PERIOD = "The index applies inside the price's period"
 
-/** What an index that takes the fee below zero is told: a fee is a price, and a deflator past -100 % would make it negative. */
-export const INDEX_BELOW_ZERO = "The index would take the fee below zero"
-
-/** What an index whose fee is past the column is told. */
-export const INDEX_TOO_LARGE = `The indexed fee would be more than ${INT4_MAX} minor units, the most a price holds`
+/** The two sentences an index past what a price holds is told, shared with the Apply index over many prices (routes/indexation.ts). */
+export { INDEX_BELOW_ZERO, INDEX_TOO_LARGE }
 
 const noSuchPrice = (id: string) => problem(404, { detail: `No service provider price ${id} this account reaches` })
 
@@ -182,17 +184,6 @@ const underProvider = (tx: Tx, companyId: string, serviceProviderId: string) =>
       .from(serviceAreaAssignment)
       .where(and(eq(serviceAreaAssignment.companyId, companyId), eq(serviceAreaAssignment.id, serviceProviderPrice.serviceAreaAssignmentId), eq(serviceAreaAssignment.serviceProviderId, serviceProviderId))),
   )
-
-/** The status of each product the prices name, in one statement: a successor is a new reference to its product (routes/statuses.ts). */
-async function productStatuses(tx: Tx, companyId: string, ids: readonly string[]): Promise<Map<string, string>> {
-  const named = [...new Set(ids)]
-  if (named.length === 0) return new Map()
-  const rows = await tx
-    .select({ id: product.id, status: product.status })
-    .from(product)
-    .where(and(eq(product.companyId, companyId), inArray(product.id, named)))
-  return new Map(rows.map((row) => [row.id, row.status]))
-}
 
 export function serviceProviderPriceRoutes(guard: MiddlewareHandler<AuthEnv>) {
   return new Hono<AuthEnv>()
@@ -298,7 +289,7 @@ export function serviceProviderPriceRoutes(guard: MiddlewareHandler<AuthEnv>) {
         operationId: "indexServiceProviderPrices",
         summary: "Apply an index to many service provider prices",
         description:
-          "Applies an index from `appliedFrom` to every price under one provider's assignments in the projects the caller works in (`serviceProviderId`) or under one award (`serviceAreaAssignmentId`, of a project the caller works in), exactly one of the two, each as the single `POST /service-provider-prices/{id}/index` writes it: a price in force on that day that started before it is ended on it and its successor written with the same assignment, product, bid, currency and end, the fee `round(base × (1 + basisPoints / 10 000))` half away from zero over the bid or the current fee (`base`), `indexedFromId` naming the price, the label, the basis points and the base. A price that starts on `appliedFrom` (`starts-on-index-day`), starts after it (`scheduled`), or whose product is no longer active (`product-not-active`) is left as it is and answered with why; a price that ended on or before the day is not in the answer. `dryRun: true` is the preview: the same lines, 200, nothing written. Otherwise the plan is written and answered 201 without `Location`, each indexed line naming its successor. Held under the prices' locks in id order, so a bulk index and a single one take turns.",
+          "Applies an index from `appliedFrom` to every price under one provider's assignments in the projects the caller works in (`serviceProviderId`) or under one award (`serviceAreaAssignmentId`, of a project the caller works in), exactly one of the two, each as the single `POST /service-provider-prices/{id}/index` writes it: a price in force on that day that started before it is ended on it and its successor written with the same assignment, product, bid, currency and end, the fee `round(base × (1 + basisPoints / 10 000))` half away from zero over the bid or the current fee (`base`), `indexedFromId` naming the price, the label, the basis points and the base. A price that starts on `appliedFrom` (`starts-on-index-day`), starts after it (`scheduled`), or whose product is no longer active (`product-not-active`) is left as it is and answered with why; a price that ended on or before the day is not in the answer. `dryRun: true` is the preview: the same lines, 200, nothing written. Otherwise the plan is written and answered 201 without `Location`, each indexed line naming its successor. Held under the scope's assignments' locks and then the prices', so a bulk index and a single one take turns.",
         security: BEARER_SECURITY,
         responses: {
           200: describeJson("The preview: what each price would become, nothing written.", IndexResult),
@@ -329,16 +320,20 @@ export function serviceProviderPriceRoutes(guard: MiddlewareHandler<AuthEnv>) {
           scoped = underProvider(tx, principal.companyId, serviceProviderId)
         }
         const inPlan = and(writable(principal), scoped, or(isNull(serviceProviderPrice.validTo), gt(serviceProviderPrice.validTo, index.appliedFrom)))
-        // No parent row holds the scope, so the prices are locked until the set read under the locks is the set locked: a single index that committed while this waited wrote a successor this has not locked yet.
+        // No parent row holds the scope, so a write locks what it reads until the set read under the locks is the set locked: a single index that committed while this waited wrote a successor this has not locked yet. Each round takes the assignments' locks before the prices', the order a price's create and patch take them, since a successor's key into its assignment asks the assignment's key share and the reverse order could deadlock.
         let rows = await tx.select(columns).from(serviceProviderPrice).where(inPlan).orderBy(asc(serviceProviderPrice.id))
-        const locked = new Set<string>()
-        while (!dryRun && rows.some((row) => !locked.has(row.id))) {
-          const unlocked = rows.map((row) => row.id).filter((priceId) => !locked.has(priceId))
-          await lockRows(tx, serviceProviderPrice, principal.companyId, unlocked)
-          for (const priceId of unlocked) locked.add(priceId)
+        const lockedAssignments = new Set<string>()
+        const lockedPrices = new Set<string>()
+        while (!dryRun && rows.some((row) => !lockedPrices.has(row.id))) {
+          const assignments = rows.map((row) => row.serviceAreaAssignmentId).filter((assignmentId) => !lockedAssignments.has(assignmentId))
+          await lockInBatches(tx, serviceAreaAssignment, principal.companyId, assignments)
+          for (const assignmentId of assignments) lockedAssignments.add(assignmentId)
+          const prices = rows.map((row) => row.id).filter((priceId) => !lockedPrices.has(priceId))
+          await lockInBatches(tx, serviceProviderPrice, principal.companyId, prices)
+          for (const priceId of prices) lockedPrices.add(priceId)
           rows = await tx.select(columns).from(serviceProviderPrice).where(inPlan).orderBy(asc(serviceProviderPrice.id))
         }
-        const statuses = await productStatuses(tx, principal.companyId, rows.map((row) => row.productId))
+        const statuses = await productStatuses(tx, principal, rows.map((row) => row.productId))
         const plan = planIndexation(
           rows.map((row) => ({
             id: row.id,
@@ -357,34 +352,36 @@ export function serviceProviderPriceRoutes(guard: MiddlewareHandler<AuthEnv>) {
         if (dryRun) return c.json(answerOf(index, plan, productOf, new Map()), 200)
 
         const indexed = indexedOf(plan)
-        await tx
-          .update(serviceProviderPrice)
-          .set({ validTo: index.appliedFrom })
-          .where(and(eq(serviceProviderPrice.companyId, principal.companyId), inArray(serviceProviderPrice.id, indexed.map((verdict) => verdict.id))))
-        // Each successor takes the tail of the price just ended: the insert runs bare, as the single index's (the header says why).
         const successors = new Map(indexed.map((verdict) => [verdict.id, newId()]))
-        await tx.insert(serviceProviderPrice).values(
-          indexed.map((verdict) => {
-            const old = byId.get(verdict.id)!
-            return {
-              id: successors.get(verdict.id)!,
-              companyId: principal.companyId,
-              projectId: old.projectId,
-              serviceAreaAssignmentId: old.serviceAreaAssignmentId,
-              productId: old.productId,
-              bidMinor: old.bidMinor,
-              unitPriceMinor: verdict.toMinor,
-              currency: old.currency,
-              indexedFromId: old.id,
-              indexLabel: index.label,
-              indexBasisPoints: index.basisPoints,
-              indexBase: index.base,
-              notes: null,
-              validFrom: index.appliedFrom,
-              validTo: old.validTo,
-            }
-          }),
-        )
+        for (const batch of batchesOf(indexed)) {
+          await tx
+            .update(serviceProviderPrice)
+            .set({ validTo: index.appliedFrom })
+            .where(and(writable(principal), inArray(serviceProviderPrice.id, batch.map((verdict) => verdict.id))))
+          // Each successor takes the tail of the price just ended: the insert runs bare, as the single index's (the header says why).
+          await tx.insert(serviceProviderPrice).values(
+            batch.map((verdict) => {
+              const old = byId.get(verdict.id)!
+              return {
+                id: successors.get(verdict.id)!,
+                companyId: principal.companyId,
+                projectId: old.projectId,
+                serviceAreaAssignmentId: old.serviceAreaAssignmentId,
+                productId: old.productId,
+                bidMinor: old.bidMinor,
+                unitPriceMinor: verdict.toMinor,
+                currency: old.currency,
+                indexedFromId: old.id,
+                indexLabel: index.label,
+                indexBasisPoints: index.basisPoints,
+                indexBase: index.base,
+                notes: null,
+                validFrom: index.appliedFrom,
+                validTo: old.validTo,
+              }
+            }),
+          )
+        }
         return c.json(answerOf(index, plan, productOf, successors), 201)
       },
     )
@@ -475,7 +472,7 @@ export function serviceProviderPriceRoutes(guard: MiddlewareHandler<AuthEnv>) {
         operationId: "indexServiceProviderPrice",
         summary: "Index a service provider price",
         description:
-          "Applies an indexation to one price of a project the caller works in, as a new row and never an update: this row is ended on `appliedFrom` and the next is written from it with the same assignment, product, bid and currency, the new fee — `round(base × (1 + basisPoints / 10 000))` in minor units, half away from zero, `base` the locked bid or the fee this row carries (`bid` or `current-fee`, the latter compounding earlier indexations) — `indexedFromId` naming this row, the label, the basis points (negative is a deflator) and the base, and this row's end as its own, so the fee on any day stays a read of the row in force on it and the chain through `indexedFromId` is the history. `appliedFrom` is after this row's start (400 on `appliedFrom`, `The index applies inside the price's period`); a row already ended on or before `appliedFrom` is over and not the one to index (409, `This price was valid to 2026-12-31; index the price in force`, its end named by its last day in, as the office reads it). Held under the row's lock, so two indexations take turns. Answers the new row, 201 with `Location`, since a row was made.",
+          "Applies an indexation to one price of a project the caller works in, as a new row and never an update: this row is ended on `appliedFrom` and the next is written from it with the same assignment, product, bid and currency, the new fee — `round(base × (1 + basisPoints / 10 000))` in minor units, half away from zero, `base` the locked bid or the fee this row carries (`bid` or `current-fee`, the latter compounding earlier indexations) — `indexedFromId` naming this row, the label, the basis points (negative is a deflator) and the base, and this row's end as its own, so the fee on any day stays a read of the row in force on it and the chain through `indexedFromId` is the history. `appliedFrom` is after this row's start (400 on `appliedFrom`, `The index applies inside the price's period`); a row already ended on or before `appliedFrom` is over and not the one to index (409, `This price was valid to 2026-12-31; index the price in force`, its end named by its last day in, as the office reads it). A price whose product is no longer active takes no index, since the next row is a new reference to it (409). Held under the assignment's lock and then the row's, so two indexations take turns. Answers the new row, 201 with `Location`, since a row was made.",
         security: BEARER_SECURITY,
         responses: {
           201: describeCreated("The indexed price, the new row of the chain.", ServiceProviderPrice),
@@ -483,7 +480,7 @@ export function serviceProviderPriceRoutes(guard: MiddlewareHandler<AuthEnv>) {
           401: describeProblem("No usable token (see WWW-Authenticate)."),
           403: describeProblem("No active account here, or the caller's role does not allow `edit` on `commercial.service-provider-prices`."),
           404: describeProblem("No service provider price with that id in the projects this account works in."),
-          409: describeProblem("The price already ended on or before the day the index applies from."),
+          409: describeProblem("The price already ended on or before the day the index applies from, or its product is not active."),
         },
       }),
       guard,
@@ -496,24 +493,41 @@ export function serviceProviderPriceRoutes(guard: MiddlewareHandler<AuthEnv>) {
         const tx = c.get("tx")
         const principal = c.get("principal")
 
-        // The row's lock before it is read, so two indexations of one row
-        // take turns and the second sees the end the first wrote.
+        // The price is read once to learn its assignment, then both locks are
+        // taken from the top down, as the price's patch and create take them —
+        // the successor's key into the assignment asks its key share, so the
+        // reverse order could deadlock with a patch — and the price is read
+        // again under them, so two indexations of one row take turns and the
+        // second sees the end the first wrote.
+        const named = await findPrice(tx, writable(principal), id)
+        if (named === undefined) throw noSuchPrice(id)
+        await lockRow(tx, serviceAreaAssignment, { companyId: principal.companyId, id: named.serviceAreaAssignmentId })
         await lockRow(tx, serviceProviderPrice, { companyId: principal.companyId, id })
         const current = await findPrice(tx, writable(principal), id)
         if (current === undefined) throw noSuchPrice(id)
         if (index.appliedFrom <= current.validFrom) throw invalidRequest("body", [{ path: "appliedFrom", message: INDEX_OUTSIDE_PERIOD }])
-        const base = index.base === "bid" ? current.bidMinor : current.unitPriceMinor
-        // The fee is a price, so not below zero, and an `integer` in the database: a deflator past -100 % or an index past the column is the basis points' 400, never a failed write.
-        const fee = indexedFee(base, index.basisPoints)
-        if (fee < 0) throw invalidRequest("body", [{ path: "basisPoints", message: INDEX_BELOW_ZERO }])
-        if (!fitsInt4(fee)) throw invalidRequest("body", [{ path: "basisPoints", message: INDEX_TOO_LARGE }])
+        // The row judged by the plan the Apply index over many prices runs (routes/indexation.ts), its end set aside: a fee past what a price holds is the basis points' 400, judged before the 409 an ended row earns, which needs the body's day too.
+        const statuses = await productStatuses(tx, principal, [current.productId])
+        const plan = planIndexation(
+          [{ id: current.id, validFrom: current.validFrom, validTo: null, baseMinor: index.base === "bid" ? current.bidMinor : current.unitPriceMinor, unitPriceMinor: current.unitPriceMinor, productActive: statuses.get(current.productId) === "active" }],
+          index.appliedFrom,
+          index.basisPoints,
+        )
+        if (plan.outOfRange !== undefined) throw invalidRequest("body", [{ path: "basisPoints", message: plan.outOfRange.problem === "below-zero" ? INDEX_BELOW_ZERO : INDEX_TOO_LARGE }])
         // The row in force is the one to index; the refusal names the end by its last day in, as the office reads a period (#281).
         if (current.validTo !== null && priceEndedBy(current.validTo, index.appliedFrom)) throw problem(409, { detail: priceEnded(current.validTo) })
+        // The successor is a new reference to its product, which is active (routes/statuses.ts), as the bulk index skips it.
+        const [verdict] = plan.verdicts
+        if (verdict.outcome !== "indexed") {
+          refuseUnofferedProduct(statuses.get(current.productId))
+          throw new Error(`price ${id} was not indexed: ${verdict.reason}`)
+        }
+        const fee = verdict.toMinor
 
         await tx
           .update(serviceProviderPrice)
           .set({ validTo: index.appliedFrom })
-          .where(and(eq(serviceProviderPrice.companyId, principal.companyId), eq(serviceProviderPrice.id, id)))
+          .where(and(writable(principal), eq(serviceProviderPrice.id, id)))
         // The new row takes the tail of the one just ended, ground the constraint held clear of every other row: no overlap is reachable here (the header says why), so the insert runs bare.
         const [row] = await tx
           .insert(serviceProviderPrice)

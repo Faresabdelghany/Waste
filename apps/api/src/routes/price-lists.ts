@@ -52,17 +52,20 @@
 // 13.5 and 13.6): a percent from a day, judged row by row by the domain's
 // `planIndexation` (@waste/domain/finance/indexation). Each row in force on
 // the day from an earlier one ends on it and its successor is written — the
-// same list, product, conditions and end, the price `indexedFee` over the
+// same list, product, conditions and end, its note its own, the price `indexedFee` over the
 // row's own, half away from zero, and the chain through `indexedFromId` with
 // the label and the basis points — as the provider price's single index
 // writes its next row (routes/service-provider-prices.ts). A row that starts
 // on the day or later, or whose product is no longer active, is left with
 // its reason. `dryRun` is the preview: the same plan over the same rows,
-// written nowhere. Held under the list's lock, then its rows' in id order, so
-// an indexation waits behind a row's create or patch and another indexation
-// of the list, and reads the rows again under them: a chain never forks. A
-// successor takes the tail of the row it splits, ground the constraint held
-// clear of every other row, so the insert runs bare, as the single index's.
+// written nowhere and under no lock. A write holds the list's lock, which
+// every writer of its rows takes first, so an indexation waits behind a row's
+// create or patch and another indexation of the list, and the rows it read
+// stay as read: a chain never forks. A successor takes the tail of the row it
+// splits, ground the constraint held clear of every other row, so the insert
+// runs bare, as the single index's; the rows are written in batches
+// (`WRITE_BATCH`, routes/indexation.ts), since a tariff of thousands would
+// pass the parameters one statement takes.
 //
 // The rest is the shape every project-scoped family has: each statement
 // carries the tenant and `inProjects` (auth/projects.ts), a create names a
@@ -106,8 +109,8 @@ import { describeProblem, invalidRequest, problem, validate } from "../problem"
 import { projectCurrency } from "./fleet-lookups"
 import { notWithin, periodAfter, periodOf, refuseStranded, requireOrdered, requireWithin, strandedSentence, type Period } from "./periods"
 import { NOT_A_PRODUCT, requireContainerType, requireCustomer, requirePlanningArea, requireProduct, requireWasteFraction, type Scope } from "./references"
-import { answerOf, refusePlan } from "./indexation"
-import { created, describeCreated, describeJson, IdParam, lockRow, lockRows, refuseDuplicate, refuseOverlap, stampsOf } from "./shared"
+import { answerOf, batchesOf, productStatuses, refusePlan } from "./indexation"
+import { created, describeCreated, describeJson, IdParam, lockRow, refuseDuplicate, refuseOverlap, stampsOf } from "./shared"
 import { refuseUnofferedProduct } from "./statuses"
 
 const MODULE = "commercial.price-rows"
@@ -290,17 +293,6 @@ async function labelsFor(tx: Tx, companyId: string, rows: readonly PriceListRow[
   ])
   const spell = (names: Map<string, string>) => (id: string) => names.get(id) ?? id
   return { planningAreaId: spell(areas), containerTypeId: spell(types), wasteFractionId: spell(fractions), customerId: spell(customers) }
-}
-
-/** The status of each product the rows name, in one statement: a successor is a new reference to its product, so an inactive one is a row the plan skips (routes/statuses.ts). */
-async function productStatuses(tx: Tx, companyId: string, ids: readonly string[]): Promise<Map<string, string>> {
-  const named = [...new Set(ids)]
-  if (named.length === 0) return new Map()
-  const rows = await tx
-    .select({ id: product.id, status: product.status })
-    .from(product)
-    .where(and(eq(product.companyId, companyId), inArray(product.id, named)))
-  return new Map(rows.map((row) => [row.id, row.status]))
 }
 
 export function priceListRoutes(guard: MiddlewareHandler<AuthEnv>) {
@@ -640,14 +632,16 @@ export function priceListRoutes(guard: MiddlewareHandler<AuthEnv>) {
         const principal = c.get("principal")
         const dryRun = index.dryRun === true
 
-        // The list's lock, then the rows the plan reads, locked in id order and read again under them (routes/shared.ts).
-        await lockRow(tx, priceList, { companyId: principal.companyId, id })
+        // A write holds the list's lock, which every writer of its rows takes first (a row's create and patch, the list's patch), so the rows read under it stay as read; a preview writes nothing and takes none.
+        if (!dryRun) await lockRow(tx, priceList, { companyId: principal.companyId, id })
         const list = await findList(tx, principal, id)
         if (list === undefined) throw noSuchList(id)
-        const inPlan = and(eq(priceListRow.companyId, principal.companyId), eq(priceListRow.priceListId, list.id), or(isNull(priceListRow.validTo), gt(priceListRow.validTo, index.appliedFrom)))
-        if (!dryRun) await lockRows(tx, priceListRow, principal.companyId, (await tx.select({ id: priceListRow.id }).from(priceListRow).where(inPlan)).map((row) => row.id))
-        const rows = await tx.select(rowColumns).from(priceListRow).where(inPlan).orderBy(asc(priceListRow.id))
-        const statuses = await productStatuses(tx, principal.companyId, rows.map((row) => row.productId))
+        const rows = await tx
+          .select(rowColumns)
+          .from(priceListRow)
+          .where(and(rowScope(principal), eq(priceListRow.priceListId, list.id), or(isNull(priceListRow.validTo), gt(priceListRow.validTo, index.appliedFrom))))
+          .orderBy(asc(priceListRow.id))
+        const statuses = await productStatuses(tx, principal, rows.map((row) => row.productId))
         const plan = planIndexation(
           rows.map((row) => ({ id: row.id, validFrom: row.validFrom, validTo: row.validTo, baseMinor: row.unitPriceMinor, unitPriceMinor: row.unitPriceMinor, productActive: statuses.get(row.productId) === "active" })),
           index.appliedFrom,
@@ -659,36 +653,38 @@ export function priceListRoutes(guard: MiddlewareHandler<AuthEnv>) {
         if (dryRun) return c.json(answerOf(index, plan, productOf, new Map()), 200)
 
         const indexed = indexedOf(plan)
-        await tx
-          .update(priceListRow)
-          .set({ validTo: index.appliedFrom })
-          .where(and(eq(priceListRow.companyId, principal.companyId), inArray(priceListRow.id, indexed.map((verdict) => verdict.id))))
-        // Each successor takes the tail of the row just ended, ground the constraint held clear of every other row: the insert runs bare (the header says why).
         const successors = new Map(indexed.map((verdict) => [verdict.id, newId()]))
-        await tx.insert(priceListRow).values(
-          indexed.map((verdict) => {
-            const old = byId.get(verdict.id)!
-            return {
-              id: successors.get(verdict.id)!,
-              companyId: principal.companyId,
-              projectId: old.projectId,
-              priceListId: old.priceListId,
-              productId: old.productId,
-              unitPriceMinor: verdict.toMinor,
-              planningAreaId: old.planningAreaId,
-              customerKind: old.customerKind,
-              containerTypeId: old.containerTypeId,
-              wasteFractionId: old.wasteFractionId,
-              customerId: old.customerId,
-              note: old.note,
-              indexedFromId: old.id,
-              indexLabel: index.label,
-              indexBasisPoints: index.basisPoints,
-              validFrom: index.appliedFrom,
-              validTo: old.validTo,
-            }
-          }),
-        )
+        for (const batch of batchesOf(indexed)) {
+          await tx
+            .update(priceListRow)
+            .set({ validTo: index.appliedFrom })
+            .where(and(rowScope(principal), inArray(priceListRow.id, batch.map((verdict) => verdict.id))))
+          // Each successor takes the tail of the row just ended, ground the constraint held clear of every other row: the insert runs bare (the header says why). Its note is its own, as an indexed provider price's is.
+          await tx.insert(priceListRow).values(
+            batch.map((verdict) => {
+              const old = byId.get(verdict.id)!
+              return {
+                id: successors.get(verdict.id)!,
+                companyId: principal.companyId,
+                projectId: old.projectId,
+                priceListId: old.priceListId,
+                productId: old.productId,
+                unitPriceMinor: verdict.toMinor,
+                planningAreaId: old.planningAreaId,
+                customerKind: old.customerKind,
+                containerTypeId: old.containerTypeId,
+                wasteFractionId: old.wasteFractionId,
+                customerId: old.customerId,
+                note: null,
+                indexedFromId: old.id,
+                indexLabel: index.label,
+                indexBasisPoints: index.basisPoints,
+                validFrom: index.appliedFrom,
+                validTo: old.validTo,
+              }
+            }),
+          )
+        }
         return c.json(answerOf(index, plan, productOf, successors), 201)
       },
     )
