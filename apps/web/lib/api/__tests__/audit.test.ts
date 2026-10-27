@@ -38,6 +38,9 @@ describe("which kinds keep a history", () => {
         "route-studio.pickups pickup",
         "route-studio.routes route",
         "route-studio.weights unload",
+        // A provider's team (#291 C24): the accounts' and the roles' history is Settings › Users & roles', under `configure.access`.
+        "service-providers.service-provider-workspace role",
+        "service-providers.service-provider-workspace user",
       ].sort(),
     )
   })

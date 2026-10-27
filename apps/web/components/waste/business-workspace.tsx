@@ -334,7 +334,9 @@ type BusinessWorkspaceProps = {
   /**
    * Isolates the workspace to one service provider: only records attributed to it
    * are visible, created records are stamped with it, and relation options
-   * belonging to other service providers are excluded.
+   * belonging to other service providers are excluded. On the Pilot a
+   * switched module's rows are the API's, which fences them to the
+   * provider itself (#291 C24), so the scope filters only the rest.
    */
   serviceProviderScopeId?: string
   /**
@@ -343,6 +345,8 @@ type BusinessWorkspaceProps = {
    * the office workspace default: everything permitted.
    */
   permissionsRoleId?: string
+  /** The role's grants as `/me` answers them, in place of a fixture role's matrix (#291 C24): the provider's workspace on the Pilot. */
+  roleGrants?: RoleAccessMap
   /** Name written as owner/actor on audit events and created records. */
   actorName?: string
 }
@@ -1080,6 +1084,7 @@ export function BusinessWorkspace({
   navigationBasePath,
   serviceProviderScopeId,
   permissionsRoleId,
+  roleGrants,
   actorName = "Olivia Larsen",
 }: BusinessWorkspaceProps) {
   const sourceWorkspace = getWorkspaceDefinition(workspaceId)
@@ -1098,6 +1103,13 @@ export function BusinessWorkspace({
   // 409 speaks). Fixture mode keeps the prototype's rule: a company where a
   // field says company.
   const customersOnApi = apiConfigured && isServerBacked("customers", "contacts")
+  // Whether the API fences a module's rows to the signed-in account (#291 C24):
+  // a switched module on the Pilot answers a provider's account its own rows
+  // alone, whatever provider a row's mapping names, so no scope filters it again.
+  const fencedByApi = useCallback(
+    (targetWorkspaceId: WorkspaceId, targetModuleId: string) => apiConfigured && isServerBacked(targetWorkspaceId, targetModuleId),
+    [apiConfigured],
+  )
   // The live records of any workspace module (fixtures merged with stored
   // records) — what the scheme lifecycle planners read their related
   // records from.
@@ -1123,12 +1135,13 @@ export function BusinessWorkspace({
   // The live grants for the restricting role — Settings edits apply on the
   // next render. Null means no role restriction (office default).
   const roleAccess = useMemo<RoleAccessMap | null>(() => {
+    if (roleGrants) return roleGrants
     if (!permissionsRoleId) return null
     const role = organizationRoles.find(
       (candidate) => candidate.id === permissionsRoleId,
     )
     return effectiveRoleAccess(role ?? { id: permissionsRoleId })
-  }, [organizationRoles, permissionsRoleId])
+  }, [organizationRoles, permissionsRoleId, roleGrants])
   const workspace = useMemo<WorkspaceDefinition>(() => {
     const allowedModules = allowedModuleIds ? new Set(allowedModuleIds) : null
     const allowedRecords = allowedRecordIds ? new Set(allowedRecordIds) : null
@@ -1431,11 +1444,11 @@ export function BusinessWorkspace({
       records = records.map((record) => withDerivedCalendarValue(record, today))
     }
     // Service provider isolation covers user-created records too, which a static
-    // fixture-id allowlist cannot.
-    return serviceProviderScopeId
+    // fixture-id allowlist cannot. A module the API fences is the API's rows alone.
+    return serviceProviderScopeId && !fencedByApi(workspace.id, activeModule.id)
       ? records.filter((record) => record.serviceProviderId === serviceProviderScopeId)
       : records
-  }, [activeModule, serviceProviderScopeId, getRecords, moduleRecords, projectRecords, workspace.id])
+  }, [activeModule, serviceProviderScopeId, fencedByApi, getRecords, moduleRecords, projectRecords, workspace.id])
   const formTargetRecords = useMemo(
     () =>
       relatedCreateModule
@@ -2163,17 +2176,18 @@ export function BusinessWorkspace({
       if (record && module.id === "calendars") {
         record = withDerivedCalendarValue(record, todayIso())
       }
-      // Deep links cannot escape a service provider scope.
+      // Deep links cannot escape a service provider scope; the API's own fence holds a switched module's.
       if (
         record &&
         serviceProviderScopeId &&
+        !fencedByApi(workspace.id, module.id) &&
         record.serviceProviderId !== serviceProviderScopeId
       ) {
         return null
       }
       return record
     },
-    [serviceProviderScopeId, getRecords, moduleRecords, projectRecords, workspace],
+    [serviceProviderScopeId, fencedByApi, getRecords, moduleRecords, projectRecords, workspace],
   )
 
   const openRecord = (record: BusinessRecord) => {
@@ -2592,7 +2606,7 @@ export function BusinessWorkspace({
         // scope exactly — company-operated ones are not the service provider's to
         // reference — while shared registries without attribution remain.
         .filter((record) => {
-          if (!serviceProviderScopeId) return true
+          if (!serviceProviderScopeId || fencedByApi(resolved.workspaceId, resolved.module.id)) return true
           if (serviceProviderOperatedRelationModuleIds.has(resolved.module.id)) {
             return record.serviceProviderId === serviceProviderScopeId
           }
@@ -2741,7 +2755,7 @@ export function BusinessWorkspace({
         label: showsStatus && record.status !== "Active" ? `${record.name} · ${record.status}` : record.name,
       }))
     },
-    [apiConfigured, customersOnApi, isAgreementsView, agreementPriceRows.records, agreementProducts.records, serviceProviderScopeId, formSchema?.key, formSchema?.recordKind, getRecords, projectScope],
+    [apiConfigured, customersOnApi, isAgreementsView, agreementPriceRows.records, agreementProducts.records, serviceProviderScopeId, fencedByApi, formSchema?.key, formSchema?.recordKind, getRecords, projectScope],
   )
 
   const formInitialValues = useMemo<BusinessFormValues>(() => {

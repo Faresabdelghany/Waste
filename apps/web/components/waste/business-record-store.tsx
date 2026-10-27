@@ -26,7 +26,7 @@ import { UNREACHABLE_STATUS, type ApiClient } from "@/lib/api/client"
 import { genericProblem, isAccountRefusal, problemSentence, type Problem } from "@/lib/api/problem"
 import { moduleKeyOf, type CommandInput, type Resolver, type ServerModule } from "@/lib/api/records/adapter"
 import { ME_PROJECTS, withMeProjects } from "@/lib/api/records/me-projects"
-import { SERVER_MODULES, serverModuleOf, viewableModules } from "@/lib/api/records/modules"
+import { MODULES_WITHOUT_ME, SERVER_MODULES, serverModuleOf, viewableModules } from "@/lib/api/records/modules"
 import { organisationModule } from "@/lib/api/records/organisation"
 import {
   actOnRecord,
@@ -418,7 +418,8 @@ export function BusinessRecordStoreProvider({
   // are never requested and are marked not granted, told to nobody (Issue
   // #200), so nobody meets a refusal for a pane they cannot open and a pane
   // they do open says why it is empty. A `/me` that cannot be read leaves
-  // the grants unknown, and every module is tried as before. A load the
+  // the grants unknown, and every module is tried as before but a
+  // provider's own (`MODULES_WITHOUT_ME`, #291 C24). A load the
   // session outlives — the person signs out mid-way — is aborted, not left
   // to finish into a store that no longer wants it, and a write it outlives
   // is dropped when it answers (`generation`). Every change of person or API
@@ -434,11 +435,11 @@ export function BusinessRecordStoreProvider({
     if (initial === null) return
     stores.sessionSignal.set(controller.signal)
     const run = async () => {
-      let modules = SERVER_MODULES
+      let modules = MODULES_WITHOUT_ME
       let projects: readonly { id: string; name: string }[] | undefined
       try {
         const me = await loadMe()
-        modules = viewableModules(me.role.grants, SERVER_MODULES)
+        modules = viewableModules(me.role.grants, SERVER_MODULES, { provider: me.serviceProvider !== null })
         projects = me.projects
       } catch (error) {
         // The account's refusal has ended the session; anything else leaves the grants unknown.

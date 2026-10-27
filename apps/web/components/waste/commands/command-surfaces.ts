@@ -28,8 +28,9 @@ import { moduleKeyOf } from "@/lib/api/records/adapter"
 import { isServerBacked } from "@/lib/api/records/modules"
 import { ALERT_LIST_INITIAL, alertListReaders } from "@/lib/data/alerts"
 import { applicationCorrectable } from "@/lib/data/applications"
+import { isTeamMember } from "@/lib/data/provider-workspace"
 import { TICKET_LIST_INITIAL, ticketListReaders } from "@/lib/data/tickets"
-import { emptyBusinessFilters, type BusinessFilters, type FilterValueReaders } from "@waste/domain/business-filters"
+import { emptyBusinessFilters, singleFilterValue, type BusinessFilters, type FilterValueReaders } from "@waste/domain/business-filters"
 
 import { AgreementCommandsSurface } from "./agreement-surfaces"
 import { ApplicationCommandsSurface } from "./application-surfaces"
@@ -45,6 +46,7 @@ import { AddPropertyGroupSurface, AddPropertySurface, AddSharedPointSurface, Pro
 import { PriceRowCommandsSurface, PriceRowsPrimarySurface, ProductCommandsSurface, ProductsPrimarySurface } from "./pricing-surfaces"
 import { PROVIDER_PRICES_LIST, SERVICE_AREAS_LIST, SETTLEMENTS_LIST, WEIGHTS_LIST } from "./provider-money-lists"
 import { AddProviderPriceSurface, CreateServiceAreaSurface, OpenSettlementSurface, ProviderPriceCommandsSurface, RecordUnloadSurface, ServiceAreaCommandsSurface, ServiceAreasRead, SettlementSurface, WeightReviewSurface } from "./provider-money-surfaces"
+import { InviteTeamMemberSurface, TeamMemberCommandsSurface } from "./team-surfaces"
 import { LiveBoardRefresh, LiveRouteSurface, PickupCommandsSurface, RouteCommandsSurface, RoutesPrimarySurface } from "./route-surfaces"
 
 /** What a primary surface is handed: the label the module's primary action carries. */
@@ -125,6 +127,13 @@ export function initialFiltersOf(surface: CommandSurface | undefined): BusinessF
   return { ...emptyBusinessFilters, ...surface?.list?.initial }
 }
 
+/** A provider's team: its accounts alone, filtered by where they stand and the role they hold. */
+const TEAM_LIST: ModuleList = {
+  shows: isTeamMember,
+  readers: () => ({ statuses: (record) => [record.status], roles: (record) => singleFilterValue(record.facts.Roles) }),
+  initial: {},
+}
+
 /** The surfaces, by `workspace.module`. */
 export const COMMAND_SURFACES: Readonly<Record<string, CommandSurface>> = {
   // Slice 5b (#181): the identity by its own form, the lifecycle by command.
@@ -185,6 +194,8 @@ export const COMMAND_SURFACES: Readonly<Record<string, CommandSurface>> = {
   "commercial.service-provider-prices": { primary: AddProviderPriceSurface, rowActions: ProviderPriceCommandsSurface, list: PROVIDER_PRICES_LIST, whileShown: ServiceAreasRead },
   "commercial.settlements": { primary: OpenSettlementSurface, rowActions: SettlementSurface, list: SETTLEMENTS_LIST, whileShown: ServiceAreasRead },
   "route-studio.weights": { primary: RecordUnloadSurface, rowActions: WeightReviewSurface, list: WEIGHTS_LIST },
+  // #291 C24: a provider's team invited through its own dialog on a provider's role, a member switched off and on in its details; the module lists the accounts, never the roles it reads beside them.
+  "service-providers.service-provider-workspace": { primary: InviteTeamMemberSurface, rowActions: TeamMemberCommandsSurface, list: TEAM_LIST },
 }
 
 /** The module's surface while the adapter is configured and the module switched; undefined otherwise, and always in fixture mode. */

@@ -55,6 +55,7 @@ import {
   type ServerModule,
 } from "./adapter"
 import { projectWebIdOf } from "./me-projects"
+import { referencedServerId } from "./references"
 
 const refusal = (path: string, message: string): LocalRefusal => ({ path, message })
 
@@ -579,7 +580,8 @@ export const userAdapter: ResourceAdapter<User> = {
     if (roleId === undefined) return refusal("roleId", "Pick a role")
     const providerWebId = typed(record, "serviceProviderId") ?? record.serviceProviderId
     if (providerWebId !== undefined) {
-      const serviceProviderId = context.resolve.serverIdOf(providerWebId)
+      // By the providers module's row, or by the chip a provider's own account names it by where that module is not read (#291 C24).
+      const serviceProviderId = referencedServerId(providerWebId, "service-provider", context)
       if (serviceProviderId === undefined) return refusal("serviceProviderId", "Not a service provider of this company")
       return { email, fullName, roleId, serviceProviderId }
     }
@@ -640,6 +642,33 @@ export const accessModule: ServerModule = {
   workspaceId: "configure",
   moduleId: "access",
   resources: [roleAdapter, userAdapter],
+}
+
+/**
+ * A Service Provider's team (#291 C24): the accounts of its provider and the
+ * roles they may be given, read through `/users` and `/roles` under
+ * `service-providers.service-provider-workspace`, which a provider's account
+ * alone reads (`providersOnly`). An invite names its provider, as the access
+ * module's does. The list keeps the providers' accounts, which is all the
+ * API answers a provider.
+ */
+export const teamUserAdapter: ResourceAdapter<User> = {
+  ...userAdapter,
+  // The accounts' history is `configure.access`'s, which a provider's role does not read: Settings › Users & roles shows it.
+  auditTable: undefined,
+  list: (client) => listAll<User>(client, "/users").then((users) => users.filter((user) => user.serviceProviderId !== null)),
+}
+
+/** The roles a team reads beside its members, to name them and to offer them; their history is Settings' too. */
+const teamRoleAdapter: ResourceAdapter<Role> = { ...roleAdapter, auditTable: undefined }
+
+/** Service Providers › Service Provider Workspace: the roles first, so a member's mapping finds its role's name, then the members. */
+export const teamModule: ServerModule = {
+  workspaceId: "service-providers",
+  moduleId: "service-provider-workspace",
+  resources: [teamRoleAdapter, teamUserAdapter],
+  // An office account's `/users` and `/roles` are `configure.access`'s, read by the access module: never twice, and never refused to a role without it.
+  providersOnly: true,
 }
 
 /** The mapping context a module's fixtures and a resolver make. */
