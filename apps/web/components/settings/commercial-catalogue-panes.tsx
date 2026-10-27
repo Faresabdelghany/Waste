@@ -16,26 +16,33 @@
 // answer with the dialog open, its refusal the store's toast (`whenSaved`).
 // The forms are lib/data/commercial-forms.ts', their fields the adapters'
 // keys. A list is never deleted: it ends on its last day in force.
+//
+// On the Pilot a list's row offers Apply index (#291 C8): the dialog previews
+// what each of its rows becomes from a day and applies it, and the rows and
+// the products' default prices are read again once it lands.
 import { useMemo, useState } from "react"
 import Link from "next/link"
 import { toast } from "sonner"
-import { ArrowSquareOut, PencilSimple, Plus } from "@phosphor-icons/react/dist/ssr"
+import { ArrowSquareOut, PencilSimple, Percent, Plus } from "@phosphor-icons/react/dist/ssr"
 
 import { Badge } from "@/components/ui/badge"
 import { Button } from "@/components/ui/button"
 import { Table, TableBody, TableCell, TableHead, TableHeader, TableRow } from "@/components/ui/table"
 import { TablePagination, useTablePagination } from "@/components/ui/table-pagination"
 import { AssetPanelShell, AssetToolbar, EmptyRow, RecordsSection, defaultAssetView, sortByView, type AssetView } from "@/components/settings/asset-management-settings"
-import { useApiConfigured } from "@/components/waste/api-session-store"
+import { useApiClient, useApiConfigured } from "@/components/waste/api-session-store"
 import { BusinessRecordFormDialog } from "@/components/waste/business-record-form-dialog"
-import { useBusinessRecordStore, useModuleRecords, whenSaved } from "@/components/waste/business-record-store"
+import { useBusinessRecordStore, useModuleRecords, useServerModuleState, whenSaved } from "@/components/waste/business-record-store"
 import { statusClasses } from "@/components/waste/business-record-views"
+import { ApplyIndexDialog } from "@/components/waste/commands/apply-index-dialog"
 import { useCommercialPickers } from "@/components/waste/commands/commercial-pickers"
+import { useServerNames } from "@/components/waste/commands/use-command-support"
+import { indexPriceList } from "@/lib/api/records/indexation"
 import { dayIn } from "@/lib/api/records/planning"
 import { PRICING_REFERENCE_DATE, recordToPriceRow } from "@/lib/commercial/price-model"
 import type { BusinessFormSchema, BusinessFormValues } from "@/lib/data/business-form-types"
 import { businessWorkspaces, type BusinessRecord } from "@/lib/data/business-modules"
-import { FIXTURE_PRICE_LISTS, FIXTURE_PRICE_LISTS_BUCKET, isPriceListRecord, isPriceRowRecord, PRICE_ROWS_MODULE, PRODUCT_KIND_LABELS, PRODUCTS_MODULE } from "@/lib/data/commercial"
+import { FIXTURE_PRICE_LISTS, FIXTURE_PRICE_LISTS_BUCKET, isPriceListRecord, isPriceRowRecord, PRICE_ROWS_MODULE, PRODUCT_KIND_LABELS, PRODUCT_PREFIX, PRODUCTS_MODULE } from "@/lib/data/commercial"
 import { createPriceListRecord, createProductRecord, formValuesOf, PRICE_LIST_FORM, priceListEditForm, PRODUCT_FORM, productEditForm, productFormValues, updatePriceListRecord, updateProductRecord } from "@/lib/data/commercial-forms"
 import { cn } from "@/lib/utils"
 
@@ -143,7 +150,7 @@ export function ProductsOnApiPane() {
                 <TableHead>VAT</TableHead>
                 <TableHead>Invoice code</TableHead>
                 <TableHead>Status</TableHead>
-                <TableHead className="w-16" />
+                <TableHead className="w-24" />
               </TableRow>
             </TableHeader>
             <TableBody>
@@ -196,6 +203,40 @@ export function ProductsOnApiPane() {
 
 const LIST_STATUS_OPTIONS = ["Scheduled", "Active", "Expired"] as const
 
+/** Apply index over one list on the Pilot (#291 C8): each line named by its row — the product and its conditions — and the rows and the products read again once it lands. */
+function ApplyListIndex({ list, onClose }: { list: BusinessRecord; onClose: () => void }) {
+  const client = useApiClient()
+  const { refreshModule } = useBusinessRecordStore()
+  const state = useServerModuleState(PRICE_ROWS_MODULE.workspaceId, PRICE_ROWS_MODULE.moduleId)
+  const productName = useServerNames(PRODUCTS_MODULE, PRODUCT_PREFIX)
+  const serverId = state?.serverIds.get(list.id)
+  const rowOf = (rowServerId: string) => {
+    for (const [webId, id] of state?.serverIds ?? []) if (id === rowServerId) return state?.records.find((record) => record.id === webId)
+    return undefined
+  }
+  return (
+    <ApplyIndexDialog
+      title={`Apply index to ${list.name}`}
+      description="Each row in force on the day ends on it, and its successor carries the indexed price, rounded to the minor unit. A row that starts on that day or later is left as it is. Preview first; nothing is written until Apply."
+      currencyOf={() => String(list.submittedValues?.currency ?? "DKK")}
+      nameOf={(line) => {
+        const row = rowOf(line.id)
+        return row === undefined ? productName(line.productId) : `${row.context} · ${row.name}`
+      }}
+      send={(typed, dryRun) => {
+        if (client === null || serverId === undefined) return Promise.reject(new Error("The price list is not read from the API yet"))
+        return indexPriceList(client, serverId, { label: typed.label, basisPoints: typed.basisPoints, appliedFrom: typed.appliedFrom, dryRun })
+      }}
+      onApplied={() => {
+        void refreshModule(PRICE_ROWS_MODULE.workspaceId, PRICE_ROWS_MODULE.moduleId)
+        void refreshModule(PRODUCTS_MODULE.workspaceId, PRODUCTS_MODULE.moduleId)
+        onClose()
+      }}
+      onClose={onClose}
+    />
+  )
+}
+
 /** Settings › Commercial › Price lists: the Pilot's from the API, fixture mode's from the browser's bucket; one form for both. */
 export function PriceListsPane() {
   const configured = useApiConfigured()
@@ -208,6 +249,7 @@ export function PriceListsPane() {
   const [statuses, setStatuses] = useState<string[]>([])
   const [view, setView] = useState<AssetView>(defaultAssetView)
   const [editing, setEditing] = useState<Editing | null>(null)
+  const [indexing, setIndexing] = useState<BusinessRecord | null>(null)
   const [saving, setSaving] = useState(false)
   // Fixture mode reads every period on the prototype's day; the Pilot's statuses are the adapter's, read on each project's.
   const day = configured ? dayIn(new Date(), undefined) : PRICING_REFERENCE_DATE
@@ -307,6 +349,11 @@ export function PriceListsPane() {
                         </Badge>
                       </TableCell>
                       <TableCell className="whitespace-nowrap text-right">
+                        {configured && (
+                          <Button variant="ghost" size="icon" className="h-8 w-8" disabled={saving || !answer.ready} onClick={() => setIndexing(list)} aria-label={`Apply index to ${list.name}`} title="Apply index">
+                            <Percent className="h-4 w-4" />
+                          </Button>
+                        )}
                         <Button variant="ghost" size="icon" className="h-8 w-8" disabled={saving} onClick={() => setEditing({ schema: priceListEditForm(list), values: formValuesOf(PRICE_LIST_FORM, list), record: list })} aria-label={`Edit ${list.name}`}>
                           <PencilSimple className="h-4 w-4" />
                         </Button>
@@ -323,6 +370,7 @@ export function PriceListsPane() {
       {editing !== null && (
         <BusinessRecordFormDialog schema={editing.schema} open onOpenChange={(isOpen) => !isOpen && setEditing(null)} onSubmit={save} relationOptions={(field, values) => pickers.options(field, values, undefined, editing.values)} initialValueOverrides={editing.values} />
       )}
+      {indexing !== null && <ApplyListIndex list={indexing} onClose={() => setIndexing(null)} />}
     </AssetPanelShell>
   )
 }

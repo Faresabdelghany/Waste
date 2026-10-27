@@ -46,6 +46,7 @@ import { FREE_DAYS_MAX, HIRE_UNIT } from "@waste/domain/finance/hire"
 import type { PriceList, PriceListRow, PriceResolution, PriceResolveQuery } from "@waste/contracts/price-lists"
 import { CUSTOMER_KINDS, PRODUCT_KINDS, PRODUCT_STATUSES, PRODUCT_UNITS, type CustomerKind, type ProductKind, type ProductStatus, type ProductUnit } from "@waste/domain/registry/vocabulary"
 
+import { percentLabel } from "@/lib/commercial/indexation"
 import { formatMinor, majorOf, minorOf } from "@/lib/commercial/money"
 import { FIXTURE_COMPANY_ID, type BusinessRecord } from "@/lib/data/business-modules"
 import type { BusinessFormValues } from "@/lib/data/business-form-types"
@@ -521,6 +522,8 @@ export const priceRowAdapter: ResourceAdapter<PriceListRow> = {
         "Effective from": row.validFrom,
         ...(lastDay === undefined ? {} : { "Effective to": lastDay }),
         ...(row.note === null ? {} : { Note: row.note }),
+        // The chain (#291 C8): the row Apply index wrote this one from, by its index, the day being the row's own start.
+        ...(row.indexLabel === null || row.indexBasisPoints === null ? {} : { Indexed: `${row.indexLabel} ${percentLabel(row.indexBasisPoints)} from ${row.validFrom}` }),
       },
       related: [listName, productName],
       companyId: context.companyRecordId ?? FIXTURE_COMPANY_ID,

@@ -16,6 +16,9 @@
 // #281), Apply index, a create of the chain's next row that ends this one the
 // day before — so the module is read again once it lands. An ended price says
 // why it takes none, its end named by its last day in, as its details read it.
+// Beside Add price, Apply index over many prices (#291 C8): every price under
+// one provider or one award, previewed then applied in one request
+// (apply-index-dialog.tsx), also offered on each of an award's assignments.
 //
 // Settlements: Open settlement is a period of an assignment; its details offer
 // the commands the machine moves it by from its status and the project's day
@@ -37,17 +40,22 @@ import { toast } from "sonner"
 import type { SettlementDetail, SettlementEvent } from "@waste/contracts/settlements"
 
 import { Button } from "@/components/ui/button"
+import { Label } from "@/components/ui/label"
+import { Select, SelectContent, SelectGroup, SelectItem, SelectLabel, SelectTrigger, SelectValue } from "@/components/ui/select"
 import { Dialog, DialogContent, DialogDescription, DialogFooter, DialogHeader, DialogTitle } from "@/components/ui/dialog"
 import { Table, TableBody, TableCell, TableHead, TableHeader, TableRow } from "@/components/ui/table"
+import { useApiClient } from "@/components/waste/api-session-store"
 import { BusinessRecordFormDialog } from "@/components/waste/business-record-form-dialog"
 import { savedRow, useBusinessRecordStore, useModuleRecords, useServerModuleState, whenSaved } from "@/components/waste/business-record-store"
-import { useCommercialPickers } from "@/components/waste/commands/commercial-pickers"
+import { ApplyIndexDialog } from "@/components/waste/commands/apply-index-dialog"
+import { useCommercialPickers, useCommercialResolver } from "@/components/waste/commands/commercial-pickers"
 import type { RowSurfaceProps } from "@/components/waste/commands/command-surfaces"
 import { CreateSurface } from "@/components/waste/commands/create-surface"
 import { ReadRows } from "@/components/waste/commands/read-rows"
 import { useCommandRunner, useModuleReady, useRelationPickers, useRowHistory, useServerNames, type RelationPickers } from "@/components/waste/commands/use-command-support"
 import type { ApiClient } from "@/lib/api/client"
 import { statusLabel } from "@/lib/api/records/adapter"
+import { indexProviderPrices } from "@/lib/api/records/indexation"
 import { shownOn } from "@/lib/api/records/clock"
 import { providerPriceIndexHeldBack, providerPriceIndexOffered, settlementCommandsOffered, settlementDetail, settlementHeldBack, settlementHistory } from "@/lib/api/records/provider-money"
 import { typed } from "@/lib/api/records/adapter"
@@ -165,6 +173,7 @@ export function ServiceAreaCommandsSurface({ record }: RowSurfaceProps) {
   const reread = useRowReread(SERVICE_AREAS_MODULE)
   const { busy, write } = useRowWrite(SERVICE_AREAS_MODULE)
   const [dialog, setDialog] = useState<AreaDialog | null>(null)
+  const [indexing, setIndexing] = useState<IndexScope | null>(null)
   const isAssignment = isAssignmentRecord(record)
   const assignments = isAssignment ? [] : assignmentsOf(state?.records ?? [], record.id)
   const project = record.projectIds?.[0]
@@ -193,9 +202,14 @@ export function ServiceAreaCommandsSurface({ record }: RowSurfaceProps) {
       <h3 className="text-sm font-semibold">{isAssignment ? "Assignment" : "Service area"}</h3>
       {!moduleReady && <p className="text-sm text-muted-foreground">The service areas are being read from the API; their actions follow.</p>}
       {isAssignment ? (
-        <Button variant="outline" size="sm" disabled={!moduleReady || busy} onClick={() => end(record)}>
-          End or note
-        </Button>
+        <div className="flex flex-wrap gap-2">
+          <Button variant="outline" size="sm" disabled={!moduleReady || busy} onClick={() => end(record)}>
+            End or note
+          </Button>
+          <Button variant="outline" size="sm" disabled={!moduleReady || busy} onClick={() => setIndexing({ kind: "award", webId: record.id })}>
+            Apply index
+          </Button>
+        </div>
       ) : (
         <>
           <div className="flex flex-wrap gap-2">
@@ -218,9 +232,14 @@ export function ServiceAreaCommandsSurface({ record }: RowSurfaceProps) {
                   <span>
                     {assignment.facts["Service provider"] ?? assignment.name} · {assignment.value} · {assignment.status}
                   </span>
-                  <Button variant="ghost" size="sm" disabled={!moduleReady || busy} onClick={() => end(assignment)}>
-                    End or note
-                  </Button>
+                  <span className="flex gap-1">
+                    <Button variant="ghost" size="sm" disabled={!moduleReady || busy} onClick={() => setIndexing({ kind: "award", webId: assignment.id })}>
+                      Apply index
+                    </Button>
+                    <Button variant="ghost" size="sm" disabled={!moduleReady || busy} onClick={() => end(assignment)}>
+                      End or note
+                    </Button>
+                  </span>
                 </div>
               )}
             />
@@ -230,6 +249,7 @@ export function ServiceAreaCommandsSurface({ record }: RowSurfaceProps) {
       {dialog !== null && schema !== null && (
         <BusinessRecordFormDialog schema={schema} open onOpenChange={(isOpen) => !isOpen && setDialog(null)} onSubmit={submit} relationOptions={(field, values) => pickers.options(field, values, project, opened)} initialValueOverrides={opened} />
       )}
+      {indexing !== null && <ProviderApplyIndex initial={indexing} onClose={() => setIndexing(null)} />}
     </section>
   )
 }
@@ -250,6 +270,107 @@ export function AddProviderPriceSurface() {
       make={(values, now) => createProviderPriceRecord(values, now)}
       created={() => ({ title: "Price added", description: "The provider is paid it for the product's events from the day it starts." })}
     />
+  )
+}
+
+/** The scope an Apply index over many prices is asked over: every award of a provider, or one award, each by its web id. */
+type IndexScope = { kind: "provider" | "award"; webId: string }
+
+const scopeValue = (scope: IndexScope) => `${scope.kind}:${scope.webId}`
+const scopeOf = (value: string): IndexScope | undefined => {
+  const [kind, ...rest] = value.split(":")
+  return kind === "provider" || kind === "award" ? { kind, webId: rest.join(":") } : undefined
+}
+
+/**
+ * Apply index over a provider's or an award's prices (#291 C8): the scope
+ * picked from the awards the store holds — a provider by the awards naming
+ * it — each line named by its price, and the prices read again once it lands.
+ */
+function ProviderApplyIndex({ initial, onClose }: { initial?: IndexScope; onClose: () => void }) {
+  const client = useApiClient()
+  const resolve = useCommercialResolver()
+  const { refreshModule } = useBusinessRecordStore()
+  const areas = useServerModuleState(SERVICE_AREAS_MODULE.workspaceId, SERVICE_AREAS_MODULE.moduleId)
+  const prices = useServerModuleState(PROVIDER_PRICES_MODULE.workspaceId, PROVIDER_PRICES_MODULE.moduleId)
+  const [scope, setScope] = useState<IndexScope | undefined>(initial)
+  const assignments = (areas?.records ?? []).filter(isAssignmentRecord)
+  const providers = new Map<string, string>()
+  for (const assignment of assignments) {
+    const provider = assignment.submittedValues?.serviceProviderId
+    if (typeof provider === "string") providers.set(provider, assignment.facts["Service provider"] ?? provider)
+  }
+  const priceOf = (serverId: string) => {
+    for (const [webId, id] of prices?.serverIds ?? []) if (id === serverId) return prices?.records.find((record) => record.id === webId)
+    return undefined
+  }
+  const serverIdOf = (target: IndexScope) => (target.kind === "award" ? areas?.serverIds.get(target.webId) : resolve.serverIdOf(target.webId))
+
+  return (
+    <ApplyIndexDialog
+      title="Apply index to provider prices"
+      description="Every price of the provider or the award in force on the day ends on it, and its successor carries the fee indexed over the bid or the current fee, rounded to the minor unit. A price that starts on that day or later is left as it is. Preview first; nothing is written until Apply."
+      withBase
+      scopeKey={scope === undefined ? "" : scopeValue(scope)}
+      scope={{
+        ready: scope !== undefined && serverIdOf(scope) !== undefined,
+        field: (
+          <div className="space-y-1.5 sm:col-span-2">
+            <Label htmlFor="apply-index-scope">Prices of</Label>
+            <Select value={scope === undefined ? undefined : scopeValue(scope)} onValueChange={(value) => setScope(scopeOf(value))}>
+              <SelectTrigger id="apply-index-scope" aria-label="Prices of">
+                <SelectValue placeholder="A provider or an award" />
+              </SelectTrigger>
+              <SelectContent>
+                <SelectGroup>
+                  <SelectLabel>Every award of a provider</SelectLabel>
+                  {[...providers].map(([webId, name]) => (
+                    <SelectItem key={webId} value={scopeValue({ kind: "provider", webId })}>
+                      {name}
+                    </SelectItem>
+                  ))}
+                </SelectGroup>
+                <SelectGroup>
+                  <SelectLabel>One award</SelectLabel>
+                  {assignments.map((assignment) => (
+                    <SelectItem key={assignment.id} value={scopeValue({ kind: "award", webId: assignment.id })}>
+                      {assignment.name} ({assignment.value})
+                    </SelectItem>
+                  ))}
+                </SelectGroup>
+              </SelectContent>
+            </Select>
+          </div>
+        ),
+      }}
+      currencyOf={(line) => priceOf(line.id)?.facts.Currency ?? "DKK"}
+      nameOf={(line) => priceOf(line.id)?.name ?? line.id}
+      send={(typed, dryRun) => {
+        const serverId = scope === undefined ? undefined : serverIdOf(scope)
+        if (client === null || scope === undefined || serverId === undefined) return Promise.reject(new Error("Pick a provider or an award the API holds"))
+        return indexProviderPrices(client, { ...(scope.kind === "provider" ? { serviceProviderId: serverId } : { serviceAreaAssignmentId: serverId }), label: typed.label, basisPoints: typed.basisPoints, base: typed.base, appliedFrom: typed.appliedFrom, dryRun })
+      }}
+      onApplied={() => {
+        void refreshModule(PROVIDER_PRICES_MODULE.workspaceId, PROVIDER_PRICES_MODULE.moduleId)
+        onClose()
+      }}
+      onClose={onClose}
+    />
+  )
+}
+
+/** The prices' primary actions: Apply index over many prices, and Add price. */
+export function ProviderPricesPrimarySurface() {
+  const moduleReady = useModuleReady(PROVIDER_PRICES_MODULE)
+  const [open, setOpen] = useState(false)
+  return (
+    <div className="flex items-center gap-2">
+      <Button variant="outline" size="sm" disabled={!moduleReady} onClick={() => setOpen(true)}>
+        Apply index
+      </Button>
+      <AddProviderPriceSurface />
+      {open && <ProviderApplyIndex onClose={() => setOpen(false)} />}
+    </div>
   )
 }
 
