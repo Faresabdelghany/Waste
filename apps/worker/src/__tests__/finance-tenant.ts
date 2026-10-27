@@ -286,9 +286,11 @@ export async function seedBulkyBooking(pool: Database, tenant: FinanceTenant, bo
   const { companyId } = tenant
   const projectId = tenant.projects.copenhagen.id
   const id = testId()
-  const scheduleId = testId()
   await withCompany(pool.db, companyId, async (tx: Tx) => {
-    await tx.insert(bulkySchedule).values({ id: scheduleId, companyId, projectId, planningAreaId: tenant.planningAreas.centrum.id, frequency: "weekly", serviceDays: ["monday"], holidayPolicy: "skip", slotsPerDay: 10, productId: tenant.products.bulky.id, validFrom: "2026-01-01", validTo: null })
+    // One schedule of the area is in force at a time: the first booking makes it, the next ones book under it.
+    const [held] = await tx.select({ id: bulkySchedule.id }).from(bulkySchedule).where(eq(bulkySchedule.companyId, companyId)).limit(1)
+    const scheduleId = held?.id ?? testId()
+    if (held === undefined) await tx.insert(bulkySchedule).values({ id: scheduleId, companyId, projectId, planningAreaId: tenant.planningAreas.centrum.id, frequency: "weekly", serviceDays: ["monday"], holidayPolicy: "skip", slotsPerDay: 10, productId: tenant.products.bulky.id, validFrom: "2026-01-01", validTo: null })
     await tx.insert(bulkyBooking).values({ id, companyId, projectId, customerId: booking.customerId, agreementId: booking.agreementId, propertyId: booking.propertyId, wasteFractionId: tenant.fractions.residual.id, day: booking.day ?? FIXTURE_DAY, planningAreaId: tenant.planningAreas.centrum.id, scheduleId, productId: tenant.products.bulky.id })
   })
   return { id }

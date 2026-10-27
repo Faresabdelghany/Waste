@@ -343,19 +343,22 @@ async function jobFacts(tx: Tx, companyId: string, found: PickupRow): Promise<Jo
 /**
  * A bulky collection's charge (O11 of #290): the product its booking froze
  * from its schedule, and the agreement the booking names, with the list it is
- * priced under on the service date. The booking is the stop's by the
- * table's shape, so one missing is a broken invariant and thrown.
+ * priced under on the service date; none for a booking cancelled. The
+ * booking is the stop's by the table's shape, so one missing is a broken
+ * invariant and thrown.
  */
-async function bulkyFacts(tx: Tx, companyId: string, found: PickupRow): Promise<JobChargeFacts> {
+async function bulkyFacts(tx: Tx, companyId: string, found: PickupRow): Promise<JobChargeFacts | null> {
   if (found.bulkyBookingId === null) throw new Error("a bulky collection names no booking")
   const scope = { companyId, projectId: found.projectId }
   const [booked] = await tx
-    .select({ agreementId: bulkyBooking.agreementId, id: product.id, status: product.status, unit: product.unit, vatPercent: product.vatPercent })
+    .select({ agreementId: bulkyBooking.agreementId, cancelledAt: bulkyBooking.cancelledAt, id: product.id, status: product.status, unit: product.unit, vatPercent: product.vatPercent })
     .from(bulkyBooking)
     .innerJoin(product, and(eq(product.companyId, bulkyBooking.companyId), eq(product.id, bulkyBooking.productId)))
     .where(and(eq(bulkyBooking.companyId, companyId), eq(bulkyBooking.id, found.bulkyBookingId)))
     .limit(1)
   if (booked === undefined) throw new Error(`bulky booking ${found.bulkyBookingId} of a stop not there`)
+  // A cancelled booking is charged nothing, whatever a stop of it says: the API refuses its stop a correction to completed, and this is the second stop.
+  if (booked.cancelledAt !== null) return null
   const bulkyProduct = { id: booked.id, status: booked.status as ProductStatus, unit: booked.unit as ProductUnit, vatPercent: booked.vatPercent }
   const facts = await agreementFacts(tx, scope, booked.agreementId)
   if (facts === undefined) return { product: bulkyProduct, agreement: null, subscriptionId: null, priceList: null }

@@ -12,12 +12,15 @@ import { agreement, subscription } from "@waste/db/schema/agreements"
 import { product, wasteFraction } from "@waste/db/schema/catalogue"
 import { customer, property } from "@waste/db/schema/customers"
 import { planningArea } from "@waste/db/schema/planning-areas"
+import { pickup, route as route_ } from "@waste/db/schema/execution"
+import { eq } from "drizzle-orm"
 import { withCompany } from "@waste/db/tenant"
 import { dayFull, NO_BULKY_SCHEDULE, NO_LOCATION, notABulkyDay, notAfterToday, notTheBookingsDay, onlyABookedBooking } from "@waste/domain/execution/bulky"
 
 import { createApp } from "../app"
 import { bookingsOutside, unofferedBulkyProduct } from "../routes/bulky-schedules"
-import { NOT_A_BULKY_BOOKING } from "../routes/pickups"
+import { BOOKING_CANCELLED, NOT_A_BULKY_BOOKING } from "../routes/pickups"
+import { bulkyKeepsTheDay } from "../routes/routes"
 import { A_JOB_IS_SOLD_BY_THE_JOB } from "../routes/work-order-charges"
 import { callingAs, type Call } from "./calls"
 import { created } from "./created"
@@ -26,6 +29,7 @@ import { TOWN_HALL } from "./execution-fixtures"
 import { readProblem } from "./read-problem"
 import { dropTenant, seedTenant, testId, type Tenant } from "./tenant"
 import { signingKeys, type SigningKeys } from "./tokens"
+import { seedFleet, seedPlanning, type FleetFixtures } from "./scheme-fixtures"
 
 const database = databaseUnderTest()
 /** The owner sweeps the audit trail the bookings write. */
@@ -64,6 +68,7 @@ describe("bulky-waste booking (O11 of #290)", { skip: database.skip || owner.ski
   let olivia: Call
   let other: Call
   let ungranted: Call
+  let fleet: FleetFixtures
   const ids = {
     area: testId(),
     bulky: testId(),
@@ -85,6 +90,7 @@ describe("bulky-waste booking (O11 of #290)", { skip: database.skip || owner.ski
     keys = await signingKeys()
     a = await seedTenant(pool)
     b = await seedTenant(pool)
+    fleet = await seedFleet(pool, a, await seedPlanning(pool, a))
     const app = createApp({ probe: pool, pool, verifier: keys.verifier, now: () => NOW })
     olivia = callingAs(app, keys, a.users.olivia, a.companyId)
     other = callingAs(app, keys, b.users.olivia, b.companyId)
@@ -108,7 +114,7 @@ describe("bulky-waste booking (O11 of #290)", { skip: database.skip || owner.ski
         { id: testId(), ...scoped, validFrom: "2026-01-01", agreementId: ids.agreement, productId: ids.collection, propertyId: ids.outside },
         { id: testId(), ...scoped, validFrom: "2026-01-01", agreementId: ids.agreement, productId: ids.collection, propertyId: ids.nowhere },
       ])
-      await tx.insert(planningArea).values({ id: ids.area, ...scoped, code: "BLK-CEN", name: "Centrum", purpose: "service-operations" })
+      await tx.insert(planningArea).values({ id: ids.area, ...scoped, code: "BLK-CEN", name: "Centrum bulky", purpose: "service-operations" })
     })
     const boundary = await olivia(`/planning-areas/${ids.area}/boundaries`, { method: "POST", body: { boundary: CENTRUM, validFrom: "2026-01-01" } })
     assert.equal(boundary.status, 201, JSON.stringify(await boundary.clone().json()))
@@ -187,8 +193,8 @@ describe("bulky-waste booking (O11 of #290)", { skip: database.skip || owner.ski
     assert.deepEqual([moved.day, moved.items], [NEXT_TUESDAY, [{ description: "Fridge", quantity: 1 }]])
     assert.equal((await refused(await patch(olivia, `/bulky-bookings/${made.id}`, { day: THIRD_TUESDAY }), 409)).detail, dayFull(THIRD_TUESDAY))
     assert.equal((await refused(await patch(olivia, `/bulky-schedules/${schedule.id}`, { validTo: NEXT_TUESDAY }), 409)).detail, bookingsOutside(4))
-    const fewer = BulkySchedule.parse(await (await patch(olivia, `/bulky-schedules/${schedule.id}`, { slotsPerDay: 3 })).json())
-    assert.equal(fewer.slotsPerDay, 3)
+    const more = BulkySchedule.parse(await (await patch(olivia, `/bulky-schedules/${schedule.id}`, { slotsPerDay: 10 })).json())
+    assert.equal(more.slotsPerDay, 10)
   })
 
   test("the office routes a booking as a stop on a route of its day, at its place with no container; a routed booking is neither routed again nor cancelled, and its stop taken off books it again", async () => {
@@ -219,5 +225,28 @@ describe("bulky-waste booking (O11 of #290)", { skip: database.skip || owner.ski
     const cancelled = BulkyBooking.parse(await (await post(olivia, `/bulky-bookings/${made.id}/cancel`, { reason: "Customer called" })).json())
     assert.deepEqual([cancelled.status, cancelled.cancelReason, cancelled.cancelledBy], ["cancelled", "Customer called", a.users.olivia.id])
     assert.equal((await refused(await post(olivia, `/routes/${route.id}/pickups`, { service: "bulky", bulkyBookingId: made.id }), 409)).detail, onlyABookedBooking("cancelled", "route"))
+  })
+
+  test("a route carrying a booking's stop does not move off the booking's day; the stop tells the driver the booking's note", async () => {
+    const made = await book({ day: NEXT_TUESDAY, note: "Ring twice" })
+    const route = (await (await post(olivia, "/routes", { projectId: a.projects.copenhagen.id, operatingDate: NEXT_TUESDAY })).json()) as { id: string; label: string }
+    const stop = await created(olivia, `/routes/${route.id}/pickups`, await post(olivia, `/routes/${route.id}/pickups`, { service: "bulky", bulkyBookingId: made.id }), PickupDetail, "/pickups")
+    assert.equal(stop.note, "Ring twice")
+    assert.equal((await refused(await post(olivia, `/routes/${route.id}/reschedule`, { operatingDate: THIRD_TUESDAY }), 409)).detail, bulkyKeepsTheDay(route.label, 1))
+    assert.equal((await post(olivia, `/routes/${route.id}/reschedule`, { plannedStartTime: "07:00" })).status, 200, "a time on the same day moves nothing the customer booked")
+  })
+
+  test("a cancelled booking's missed stop is never corrected to completed, which would charge it", async () => {
+    const made = await book({ day: NEXT_TUESDAY })
+    const route = (await (await post(olivia, "/routes", { projectId: a.projects.copenhagen.id, operatingDate: NEXT_TUESDAY })).json()) as { id: string }
+    const stop = await created(olivia, `/routes/${route.id}/pickups`, await post(olivia, `/routes/${route.id}/pickups`, { service: "bulky", bulkyBookingId: made.id }), PickupDetail, "/pickups")
+    // The route ran and the stop was missed, as the driver door leaves it; the booking is booked again, then cancelled.
+    const ran = new Date("2027-03-09T07:00:00Z")
+    await withCompany(pool.db, a.companyId, async (tx: Tx) => {
+      await tx.update(route_).set({ status: "completed", dispatchedAt: ran, startedAt: ran, completedAt: ran, actualDriverId: fleet.drivers.mads.id, actualVehicleId: fleet.vehicles.wh24.id }).where(eq(route_.id, route.id))
+      await tx.update(pickup).set({ status: "failed", reason: "not-presented", outcomeAt: ran }).where(eq(pickup.id, stop.id))
+    })
+    assert.equal((await post(olivia, `/bulky-bookings/${made.id}/cancel`, { reason: "Customer took it to the recycling centre" })).status, 200)
+    assert.equal((await refused(await post(olivia, `/pickups/${stop.id}/correct-outcome`, { outcome: "completed", note: "The driver collected it after all" }), 409)).detail, BOOKING_CANCELLED)
   })
 })
