@@ -351,6 +351,9 @@ describe("the price rows module: the lists and their rows", () => {
       validTo: "2027-02-02",
     })
     assert.equal(priceRowAdapter.toRecord(rowDefault, context(rowFixtures, pricedState)).name, "Everyone")
+    assert.equal(priceRowAdapter.toRecord(rowDefault, context(rowFixtures, pricedState)).facts.Indexed, undefined, "a row typed in names no index")
+    const indexed = priceRowAdapter.toRecord({ ...rowDefault, id: "01a0d2a4-a280-7029-8000-000000000009", indexedFromId: rowDefault.id, indexLabel: "CPI 2027", indexBasisPoints: 320, validFrom: "2027-01-01" }, context(rowFixtures, pricedState))
+    assert.equal(indexed.facts.Indexed, "CPI 2027 +3.2% from 2027-01-01", "an indexed row names its index and its first day (#291 C8)")
     assert.equal(priceRowAdapter.toRecord(rowOrganisation, context(rowFixtures, pricedState)).facts["Customer type"], "Organisation")
     const area = priceRowAdapter.toRecord(rowArea, context(rowFixtures, pricedState))
     assert.equal(area.name, "Østerbro · Two-wheel bin · 240 L · Residual")

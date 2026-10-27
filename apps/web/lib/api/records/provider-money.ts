@@ -57,12 +57,11 @@ import { command, create, get, listAll, patch } from "../client"
 import { inheritedPresentation, patchOf, said, stampFacts, statusLabel, typed, webIdOf, type Client, type MappingContext, type ResourceAdapter, type ServerModule } from "./adapter"
 import { shownOn } from "./clock"
 import { firstDayOut, lastDayIn } from "./planning"
+import { basisPointsOf, INDEX_REFUSAL, percentLabel } from "@/lib/commercial/indexation"
 import { projectDay } from "./pricing"
 import { referenced, refusal } from "./places"
 import { nameVia, referencedServerId, webIdVia } from "./references"
 
-/** What a change that is no index or no whole percent with at most two decimals is told. */
-export const INDEX_REFUSAL = "Give the change as a percent with at most two decimals, such as 5 or -1.25"
 const PRICE_KEY_REFUSAL = "The fee moves by Apply index and the bid never: end this price and add another for anything else"
 
 /** The assignment a record names under `key`, loaded: its server id and its record; undefined where the store holds none. */
@@ -93,21 +92,6 @@ function assignmentNames(serverId: string, context: MappingContext): { name: str
 // ---------------------------------------------------------------------------
 // Service provider prices
 // ---------------------------------------------------------------------------
-
-/**
- * A change typed as a percent, as basis points: `5` is 500, `-1.25` is -125.
- * NaN for anything else. No float: the digits are read as integers.
- */
-export function basisPointsOf(text: string): number {
-  const match = /^(-)?(\d+)(?:[.,](\d{1,2}))?$/.exec(text.trim())
-  if (match === null) return Number.NaN
-  const [, sign, whole, fraction = ""] = match
-  const points = Number(whole) * 100 + Number(fraction.padEnd(2, "0") || "0")
-  return sign === "-" ? -points : points
-}
-
-/** Basis points as a signed percent: 500 is `+5%`, -125 is `-1.25%`. */
-const percentLabel = (points: number) => `${points < 0 ? "-" : "+"}${(Math.abs(points) / 100).toFixed(2).replace(/\.?0+$/, "")}%`
 
 /** The submitted value a price record carries the project's day it was read on under: what Apply index is offered on (#281). */
 export const PRICE_DAY_KEY = "readOn"
