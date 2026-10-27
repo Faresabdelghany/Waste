@@ -428,6 +428,25 @@ export async function liveEventOf(tx: Tx, companyId: string, pickup: { routeId: 
 }
 
 /**
+ * A Site Visit's live `visit` event (#393), not cancelled and not reversed,
+ * under its row lock as a pickup's is (`liveEventOf`); undefined where the
+ * visit has none — never charged, or its charge already cancelled or
+ * reversed. A visit is charged once, so there is one at most.
+ */
+export async function liveVisitEventOf(tx: Tx, companyId: string, visitId: string): Promise<EventReading | undefined> {
+  const { query, reversing } = eventsFrom(tx, companyId)
+  const [live] = await query
+    .where(and(eq(billableEvent.companyId, companyId), eq(billableEvent.kind, "visit"), eq(billableEvent.visitId, visitId), isNull(billableEvent.cancelledAt), isNull(reversing.id)))
+    .orderBy(asc(billableEvent.id))
+    .limit(1)
+  if (live === undefined) return undefined
+  await lockRow(tx, billableEvent, { companyId, id: live.id })
+  const [current] = await eventsFrom(tx, companyId).query.where(and(eq(billableEvent.companyId, companyId), eq(billableEvent.id, live.id))).limit(1)
+  if (current === undefined || current.cancelledAt !== null || current.reversalId !== null) return undefined
+  return current
+}
+
+/**
  * The consumer's cancellation (§3): the live event stamped with the
  * database's clock, no person, and the reason the domain gave — the
  * `pickup-corrected` the office's `cancel` refuses to take. Answers the row
