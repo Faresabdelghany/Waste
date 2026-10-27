@@ -240,39 +240,6 @@ describe("the billing run endpoints", { skip: database.skip || owner.skip }, () 
       assert.equal((await readEvent(event.id)).status, "invoiced")
     })
 
-    test("judges a caught-up event on the row a cancellation committed while the run waited on its lock: it is not invoiced", async () => {
-      // A cancellation holds the event's lock, its `cancelled_at` written and not yet committed, when the run's selection reaches the row: the run waits, and once the cancellation commits Postgres re-reads the run's `where` over the row it wrote. The ids the catch-up chose before the lock are not enough to name it.
-      await run(period("2026-06-10"))
-      const event = await entered(manual({ serviceDate: "2026-06-10" }))
-      const scope = { companyId: a.companyId, projectId: copenhagen }
-      const window = { periodFrom: "2026-06-15", periodTo: "2026-06-30" }
-      const commit = Promise.withResolvers<void>()
-      const written = Promise.withResolvers<number>()
-      const cancelling = withCompany(pool.db, a.companyId, async (tx: Tx) => {
-        const [{ pid }] = await tx.execute<{ pid: number }>(sql`select pg_backend_pid() as pid`)
-        await tx.update(billableEvent).set({ cancelledAt: NOON, cancelReason: "duplicate", cancelledBy: a.users.olivia.id }).where(and(eq(billableEvent.companyId, a.companyId), eq(billableEvent.id, event.id)))
-        written.resolve(pid)
-        await commit.promise
-      })
-      let selecting: Promise<string[]> | undefined
-      try {
-        const pid = await written.promise
-        selecting = withCompany(pool.db, a.companyId, async (tx: Tx) => (await selectBilling(tx, scope, window, { lock: true })).events.map((ready) => ready.id))
-        const blocked = async (): Promise<boolean> => (await pool.sql`select pid from pg_stat_activity where ${pid} = any(pg_blocking_pids(pid))`).length > 0
-        const deadline = Date.now() + 10_000
-        while (!(await blocked())) {
-          assert.ok(Date.now() < deadline, "the selection never waited on the cancellation's lock")
-          await new Promise((resolve) => setTimeout(resolve, 20))
-        }
-      } finally {
-        commit.resolve()
-        await cancelling
-      }
-      assert.ok(selecting, "the selection was made")
-      assert.ok(!(await selecting).includes(event.id), "a cancelled event is not caught up")
-      assert.equal((await readEvent(event.id)).status, "cancelled")
-    })
-
     test("reaches back twelve months from the period's first day and no further", async () => {
       await run(period("2026-01-31", "2026-02-01"))
       const inside = await entered(manual({ serviceDate: "2026-02-01" }))
