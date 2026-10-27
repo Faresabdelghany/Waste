@@ -7,6 +7,7 @@ import { afterEach, describe, test } from "node:test"
 
 import { DEFAULT_LOCAL_LOGIN_PASSWORD, E2E_TESTER_LOGIN, ensureLogins, MINIMUM_PASSWORD_LENGTH, parseExtraLogins, parseStatusEnv, planLocalLogins, type LocalLoginsPlan } from "../local-stack/logins"
 import { ensureSigningKeys, generateSigningKey, renderSigningKeys } from "../local-stack/signing-keys"
+import { startWithOneRetry, type SupabaseRunner } from "../local-stack/start"
 import { DEMO_ACCOUNT_EMAILS } from "../seed/demo"
 
 describe("generateSigningKey", () => {
@@ -185,5 +186,41 @@ describe("parseStatusEnv", () => {
   test("reads NAME=\"value\" lines and skips everything else", () => {
     const output = ['Stopped services: [supabase_studio_waste]', 'API_URL="http://127.0.0.1:54321"', 'PUBLISHABLE_KEY="sb_publishable_abc"', "SECRET_KEY=sb_secret_def", "", "not a variable"].join("\n")
     assert.deepEqual(parseStatusEnv(output), { API_URL: "http://127.0.0.1:54321", PUBLISHABLE_KEY: "sb_publishable_abc", SECRET_KEY: "sb_secret_def" })
+  })
+})
+
+describe("startWithOneRetry", () => {
+  const scripted = (codes: number[]) => {
+    const calls: string[] = []
+    const run: SupabaseRunner = async (args) => {
+      calls.push(args.join(" "))
+      return args[0] === "stop" ? 0 : (codes.shift() ?? 0)
+    }
+    return { calls, run }
+  }
+  const quiet = () => {}
+
+  test("a start that succeeds runs once, and nothing else", async () => {
+    const { calls, run } = scripted([0])
+    assert.deepEqual(await startWithOneRetry(run, ["db", "start"], { ci: true, log: quiet }), { code: 0, attempts: 1 })
+    assert.deepEqual(calls, ["db start"])
+  })
+
+  test("a failed start on CI stops the stack without a backup, so its ports are free, and starts once more", async () => {
+    const { calls, run } = scripted([1, 0])
+    assert.deepEqual(await startWithOneRetry(run, ["start", "-x", "studio"], { ci: true, log: quiet }), { code: 0, attempts: 2 })
+    assert.deepEqual(calls, ["start -x studio", "stop --no-backup", "start -x studio"])
+  })
+
+  test("locally the stop between the two starts keeps the data volume", async () => {
+    const { calls, run } = scripted([1, 0])
+    await startWithOneRetry(run, ["db", "start"], { ci: false, log: quiet })
+    assert.deepEqual(calls, ["db start", "stop", "db start"])
+  })
+
+  test("a second failure is the command's: its exit code, and no third start", async () => {
+    const { calls, run } = scripted([1, 3])
+    assert.deepEqual(await startWithOneRetry(run, ["db", "start"], { ci: true, log: quiet }), { code: 3, attempts: 2 })
+    assert.equal(calls.filter((call) => call === "db start").length, 2)
   })
 })

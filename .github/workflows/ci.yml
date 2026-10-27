@@ -71,8 +71,13 @@ jobs:
       # The database tests run against the same Postgres image as the hosted
       # project: the Supabase CLI (a root devDependency, so pnpm install brought
       # it) starts one container on the runner's Docker, migrations apply
-      # through packages/db, and the API role gets its local login.
-      - run: pnpm db:start
+      # through packages/db, and the API role gets its local login. Its images
+      # come from the Actions cache once a run has pulled them, and a failed
+      # start is stopped and retried once (#437).
+      - uses: ./.github/actions/supabase-start
+        with:
+          command: pnpm db:start
+          name: db
       - run: pnpm db:migrate
       - run: pnpm db:bootstrap
       # The demo company, as a fresh clone gets it: this step proves the seed
@@ -409,9 +414,13 @@ jobs:
       # proofs' private bucket, O1 of #290), the other services excluded by name — migrated, bootstrapped, seeded and given
       # its Logins, by the one root script developers run (root CLAUDE.md,
       # Commands). The ES256 signing key is minted on this runner first and
-      # dies with it. The images are pulled every run and never put in the
-      # Actions cache, which the two image jobs' layers already share.
-      - run: pnpm stack:start
+      # dies with it. The images come from the Actions cache once a run has
+      # pulled them, under a key of their own beside the verify job's, and a
+      # failed start is stopped and retried once (#437).
+      - uses: ./.github/actions/supabase-start
+        with:
+          command: pnpm stack:start
+          name: stack
 
       # The web built with the adapter on: the two Supabase variables are
       # inlined at build time (apps/web/lib/api/config.ts), so this build is

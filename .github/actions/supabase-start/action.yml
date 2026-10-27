@@ -1,0 +1,67 @@
+name: Start the local Supabase stack from cached images
+description: >-
+  Runs one of the root start commands (`pnpm db:start`, `pnpm stack:start`)
+  with the Supabase images it pulls kept in the Actions cache (Issue #437):
+  the anonymous registries answer a pull limit ("Data limit exceeded") often
+  enough to fail a job, and a loaded image is never pulled. The images are
+  restored and loaded before the command; on a miss, the images the command
+  pulled (those present after it and not before) are saved under the key, so
+  the set is whatever this CLI version starts on a fresh runner, never a list
+  kept by hand. The command's own retry (packages/db/scripts/supabase-start.ts)
+  covers a pull that still fails.
+inputs:
+  command:
+    description: The root command that starts the stack.
+    required: true
+  name:
+    description: Names this job's image set in the cache key, since `db start` and the trimmed `start` pull different sets.
+    required: true
+runs:
+  using: composite
+  steps:
+    # The key moves with what decides the image set: the CLI's version (it
+    # pins every image), the config (Postgres's major version, the services
+    # turned on) and the root manifest (the start commands and their
+    # exclusions).
+    - id: key
+      shell: bash
+      run: |
+        version=$(node -p "require('./node_modules/supabase/package.json').version")
+        echo "key=supabase-images-${{ runner.os }}-${version}-${{ inputs.name }}-${{ hashFiles('supabase/config.toml', 'package.json') }}" >> "$GITHUB_OUTPUT"
+        echo "dir=${RUNNER_TEMP}/supabase-images" >> "$GITHUB_OUTPUT"
+    - id: restore
+      uses: actions/cache/restore@v6
+      with:
+        path: ${{ steps.key.outputs.dir }}
+        key: ${{ steps.key.outputs.key }}
+    - name: Load the cached images
+      if: steps.restore.outputs.cache-hit == 'true'
+      shell: bash
+      run: docker load --input "${{ steps.key.outputs.dir }}/images.tar"
+    - name: List the images before the start
+      shell: bash
+      run: |
+        mkdir -p "${{ steps.key.outputs.dir }}"
+        docker image ls --format '{{.Repository}}:{{.Tag}}' | grep -v '<none>' | sort -u > "${RUNNER_TEMP}/supabase-images-before.txt"
+    - name: Start
+      shell: bash
+      run: ${{ inputs.command }}
+    - name: Save the images the start pulled
+      id: save
+      if: steps.restore.outputs.cache-hit != 'true'
+      shell: bash
+      run: |
+        set -euo pipefail
+        docker image ls --format '{{.Repository}}:{{.Tag}}' | grep -v '<none>' | sort -u > "${RUNNER_TEMP}/supabase-images-after.txt"
+        comm -13 "${RUNNER_TEMP}/supabase-images-before.txt" "${RUNNER_TEMP}/supabase-images-after.txt" > "${RUNNER_TEMP}/supabase-images-pulled.txt"
+        echo "The start pulled:"
+        cat "${RUNNER_TEMP}/supabase-images-pulled.txt"
+        if [ -s "${RUNNER_TEMP}/supabase-images-pulled.txt" ]; then
+          xargs --arg-file="${RUNNER_TEMP}/supabase-images-pulled.txt" docker save --output "${{ steps.key.outputs.dir }}/images.tar"
+          echo "saved=true" >> "$GITHUB_OUTPUT"
+        fi
+    - if: steps.save.outputs.saved == 'true'
+      uses: actions/cache/save@v6
+      with:
+        path: ${{ steps.key.outputs.dir }}
+        key: ${{ steps.key.outputs.key }}
