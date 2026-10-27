@@ -48,6 +48,22 @@
 // at no agreement: which list an agreement is priced under is the event's
 // question (routes/billable-writes.ts), and here the office asks what a list would say.
 //
+// `POST /price-lists/:id/index` is Apply index over the list (#291 C8, rows
+// 13.5 and 13.6): a percent from a day, judged row by row by the domain's
+// `planIndexation` (@waste/domain/finance/indexation). Each row in force on
+// the day from an earlier one ends on it and its successor is written — the
+// same list, product, conditions and end, the price `indexedFee` over the
+// row's own, half away from zero, and the chain through `indexedFromId` with
+// the label and the basis points — as the provider price's single index
+// writes its next row (routes/service-provider-prices.ts). A row that starts
+// on the day or later, or whose product is no longer active, is left with
+// its reason. `dryRun` is the preview: the same plan over the same rows,
+// written nowhere. Held under the list's lock, then its rows' in id order, so
+// an indexation waits behind a row's create or patch and another indexation
+// of the list, and reads the rows again under them: a chain never forks. A
+// successor takes the tail of the row it splits, ground the constraint held
+// clear of every other row, so the insert runs bare, as the single index's.
+//
 // The rest is the shape every project-scoped family has: each statement
 // carries the tenant and `inProjects` (auth/projects.ts), a create names a
 // project the caller works in and a record never moves between projects; a
@@ -58,6 +74,7 @@ import { Page } from "@waste/contracts/pagination"
 import {
   PriceList,
   PriceListCreate,
+  PriceListIndex,
   PriceListListQuery,
   PriceListPatch,
   PriceListRow,
@@ -73,8 +90,10 @@ import { containerType, product, wasteFraction } from "@waste/db/schema/catalogu
 import { customer } from "@waste/db/schema/customers"
 import { priceList, priceListRow } from "@waste/db/schema/finance"
 import { planningArea } from "@waste/db/schema/planning-areas"
+import { IndexResult } from "@waste/contracts/finance"
+import { indexedOf, planIndexation } from "@waste/domain/finance/indexation"
 import { resolvePrice, type PriceInput, type PriceLabels } from "@waste/domain/finance/pricing"
-import { and, asc, eq, gt, inArray } from "drizzle-orm"
+import { and, asc, eq, gt, inArray, isNull, or } from "drizzle-orm"
 import { Hono, type MiddlewareHandler } from "hono"
 import { describeRoute } from "hono-openapi"
 
@@ -87,7 +106,8 @@ import { describeProblem, invalidRequest, problem, validate } from "../problem"
 import { projectCurrency } from "./fleet-lookups"
 import { notWithin, periodAfter, periodOf, refuseStranded, requireOrdered, requireWithin, strandedSentence, type Period } from "./periods"
 import { NOT_A_PRODUCT, requireContainerType, requireCustomer, requirePlanningArea, requireProduct, requireWasteFraction, type Scope } from "./references"
-import { created, describeCreated, describeJson, IdParam, lockRow, refuseDuplicate, refuseOverlap, stampsOf } from "./shared"
+import { answerOf, refusePlan } from "./indexation"
+import { created, describeCreated, describeJson, IdParam, lockRow, lockRows, refuseDuplicate, refuseOverlap, stampsOf } from "./shared"
 import { refuseUnofferedProduct } from "./statuses"
 
 const MODULE = "commercial.price-rows"
@@ -138,6 +158,9 @@ const rowColumns = {
   wasteFractionId: priceListRow.wasteFractionId,
   customerId: priceListRow.customerId,
   note: priceListRow.note,
+  indexedFromId: priceListRow.indexedFromId,
+  indexLabel: priceListRow.indexLabel,
+  indexBasisPoints: priceListRow.indexBasisPoints,
   validFrom: priceListRow.validFrom,
   validTo: priceListRow.validTo,
   createdAt: priceListRow.createdAt,
@@ -160,6 +183,9 @@ function rowOf(row: PriceRowRow): PriceListRow {
     wasteFractionId: row.wasteFractionId,
     customerId: row.customerId,
     note: row.note,
+    indexedFromId: row.indexedFromId,
+    indexLabel: row.indexLabel,
+    indexBasisPoints: row.indexBasisPoints,
     validFrom: row.validFrom,
     validTo: row.validTo,
     ...stampsOf(row),
@@ -264,6 +290,17 @@ async function labelsFor(tx: Tx, companyId: string, rows: readonly PriceListRow[
   ])
   const spell = (names: Map<string, string>) => (id: string) => names.get(id) ?? id
   return { planningAreaId: spell(areas), containerTypeId: spell(types), wasteFractionId: spell(fractions), customerId: spell(customers) }
+}
+
+/** The status of each product the rows name, in one statement: a successor is a new reference to its product, so an inactive one is a row the plan skips (routes/statuses.ts). */
+async function productStatuses(tx: Tx, companyId: string, ids: readonly string[]): Promise<Map<string, string>> {
+  const named = [...new Set(ids)]
+  if (named.length === 0) return new Map()
+  const rows = await tx
+    .select({ id: product.id, status: product.status })
+    .from(product)
+    .where(and(eq(product.companyId, companyId), inArray(product.id, named)))
+  return new Map(rows.map((row) => [row.id, row.status]))
 }
 
 export function priceListRoutes(guard: MiddlewareHandler<AuthEnv>) {
@@ -572,6 +609,87 @@ export function priceListRoutes(guard: MiddlewareHandler<AuthEnv>) {
           currency: list.currency,
         }
         return c.json(answer)
+      },
+    )
+    .post(
+      "/price-lists/:id/index",
+      describeRoute({
+        operationId: "indexPriceList",
+        summary: "Apply an index to a price list",
+        description:
+          "Applies an index to every row of one price list of a project the caller works in, from `appliedFrom`, each as a new row and never an update: a row in force on that day that started before it is ended on it and its successor written with the same product, conditions and end, the price `round(price × (1 + basisPoints / 10 000))` in minor units, half away from zero, `indexedFromId` naming the row, the label and the basis points (negative is a deflator) — so the price on any day stays a read of the row in force on it and the chain through `indexedFromId` is the history. A row that starts on `appliedFrom` (`starts-on-index-day`), starts after it (`scheduled`), or whose product is no longer active (`product-not-active`) is left as it is and answered with why; a row that ended on or before the day is not in the answer. `dryRun: true` is the preview: the same lines, 200, nothing written. Otherwise the plan is written and answered 201 without `Location`, each indexed line naming its successor. Held under the list's lock and then its rows', so two indexations of a list take turns.",
+        security: BEARER_SECURITY,
+        responses: {
+          200: describeJson("The preview: what each row would become, nothing written.", IndexResult),
+          201: describeJson("What each row became, each indexed line naming its successor.", IndexResult),
+          400: describeProblem("The path does not hold an id, or the body is missing a field, names a member the server owns, or gives basis points that take a price below zero or past 2147483647 minor units."),
+          401: describeProblem("No usable token (see WWW-Authenticate)."),
+          403: describeProblem("No active account here, or the caller's role does not allow `edit` on `commercial.price-rows`."),
+          404: describeProblem("No price list with that id in the projects this account works in."),
+          409: describeProblem("No row of the list runs into `appliedFrom` from an earlier day, so a write would index nothing."),
+        },
+      }),
+      guard,
+      requireGrant(MODULE, "edit"),
+      validate("param", IdParam),
+      validate("json", PriceListIndex),
+      async (c) => {
+        const { id } = c.req.valid("param")
+        const index = c.req.valid("json")
+        const tx = c.get("tx")
+        const principal = c.get("principal")
+        const dryRun = index.dryRun === true
+
+        // The list's lock, then the rows the plan reads, locked in id order and read again under them (routes/shared.ts).
+        await lockRow(tx, priceList, { companyId: principal.companyId, id })
+        const list = await findList(tx, principal, id)
+        if (list === undefined) throw noSuchList(id)
+        const inPlan = and(eq(priceListRow.companyId, principal.companyId), eq(priceListRow.priceListId, list.id), or(isNull(priceListRow.validTo), gt(priceListRow.validTo, index.appliedFrom)))
+        if (!dryRun) await lockRows(tx, priceListRow, principal.companyId, (await tx.select({ id: priceListRow.id }).from(priceListRow).where(inPlan)).map((row) => row.id))
+        const rows = await tx.select(rowColumns).from(priceListRow).where(inPlan).orderBy(asc(priceListRow.id))
+        const statuses = await productStatuses(tx, principal.companyId, rows.map((row) => row.productId))
+        const plan = planIndexation(
+          rows.map((row) => ({ id: row.id, validFrom: row.validFrom, validTo: row.validTo, baseMinor: row.unitPriceMinor, unitPriceMinor: row.unitPriceMinor, productActive: statuses.get(row.productId) === "active" })),
+          index.appliedFrom,
+          index.basisPoints,
+        )
+        refusePlan(plan, index.appliedFrom, dryRun)
+        const byId = new Map(rows.map((row) => [row.id, row]))
+        const productOf = (rowId: string) => byId.get(rowId)!.productId
+        if (dryRun) return c.json(answerOf(index, plan, productOf, new Map()), 200)
+
+        const indexed = indexedOf(plan)
+        await tx
+          .update(priceListRow)
+          .set({ validTo: index.appliedFrom })
+          .where(and(eq(priceListRow.companyId, principal.companyId), inArray(priceListRow.id, indexed.map((verdict) => verdict.id))))
+        // Each successor takes the tail of the row just ended, ground the constraint held clear of every other row: the insert runs bare (the header says why).
+        const successors = new Map(indexed.map((verdict) => [verdict.id, newId()]))
+        await tx.insert(priceListRow).values(
+          indexed.map((verdict) => {
+            const old = byId.get(verdict.id)!
+            return {
+              id: successors.get(verdict.id)!,
+              companyId: principal.companyId,
+              projectId: old.projectId,
+              priceListId: old.priceListId,
+              productId: old.productId,
+              unitPriceMinor: verdict.toMinor,
+              planningAreaId: old.planningAreaId,
+              customerKind: old.customerKind,
+              containerTypeId: old.containerTypeId,
+              wasteFractionId: old.wasteFractionId,
+              customerId: old.customerId,
+              note: old.note,
+              indexedFromId: old.id,
+              indexLabel: index.label,
+              indexBasisPoints: index.basisPoints,
+              validFrom: index.appliedFrom,
+              validTo: old.validTo,
+            }
+          }),
+        )
+        return c.json(answerOf(index, plan, productOf, successors), 201)
       },
     )
     .get(

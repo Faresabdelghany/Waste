@@ -11,7 +11,7 @@ import { describe, test } from "node:test"
 import { defineVocabularyTests } from "../../__tests__/vocabulary"
 import * as vocabulary from "../vocabulary"
 
-defineVocabularyTests("Finance", vocabulary, vocabulary.FINANCE_VOCABULARIES, 17, ["OPEN_SETTLEMENT_STATUSES"])
+defineVocabularyTests("Finance", vocabulary, vocabulary.FINANCE_VOCABULARIES, 18, ["OPEN_SETTLEMENT_STATUSES"])
 
 describe("the Finance vocabulary's own rules", () => {
   test("a billable event is made of four kinds, stands in five readings and is blocked for one of six actionable reasons — never a missing payer", () => {
@@ -51,5 +51,6 @@ describe("the Finance vocabulary's own rules", () => {
     assert.deepEqual([...vocabulary.WEIGHT_REVIEW_STATUSES], ["captured", ...vocabulary.WEIGHT_REVIEW_DECISIONS])
     assert.equal((vocabulary.WEIGHT_REVIEW_STATUSES as readonly string[]).includes("needs-review"), false, "the prototype's Needs review is captured")
     assert.deepEqual([...vocabulary.INDEX_BASES], ["bid", "current-fee"])
+    assert.deepEqual([...vocabulary.INDEX_SKIP_REASONS], ["starts-on-index-day", "scheduled", "product-not-active"])
   })
 })

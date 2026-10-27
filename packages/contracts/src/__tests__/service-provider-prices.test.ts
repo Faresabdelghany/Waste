@@ -1,7 +1,7 @@
 import assert from "node:assert/strict"
 import { describe, test } from "node:test"
 
-import { ServiceProviderPrice, ServiceProviderPriceCreate, ServiceProviderPriceIndex, ServiceProviderPriceListQuery, ServiceProviderPricePatch } from "../service-provider-prices"
+import { ServiceProviderPrice, ServiceProviderPriceBulkIndex, ServiceProviderPriceCreate, ServiceProviderPriceIndex, ServiceProviderPriceListQuery, ServiceProviderPricePatch } from "../service-provider-prices"
 import { ENDS_AFTER_IT_STARTS } from "../validity"
 import { refusal, refusesAnEmptyPatch, refusesWhatTheServerOwns } from "./expect"
 
@@ -91,6 +91,23 @@ describe("ServiceProviderPriceCreate, ServiceProviderPricePatch and ServiceProvi
     assert.deepEqual(refusal(ServiceProviderPriceIndex.safeParse({ ...index, basisPoints: 5.5 })).map((issue) => issue.path), ["basisPoints"])
     assert.deepEqual(refusal(ServiceProviderPriceIndex.safeParse({ ...index, base: "fee" })).map((issue) => issue.path), ["base"])
     assert.deepEqual(refusal(ServiceProviderPriceIndex.safeParse({ ...index, unitPriceMinor: 8_400 })).map((issue) => issue.path), [""], "the new fee is computed, not given")
+  })
+})
+
+describe("ServiceProviderPriceBulkIndex (#291 C8)", () => {
+  const index = { label: "CPI", basisPoints: 500, base: "current-fee", appliedFrom: "2027-01-01" }
+
+  test("indexes every price under one provider or one award, never both and never neither", () => {
+    assert.deepEqual(ServiceProviderPriceBulkIndex.parse({ ...index, serviceProviderId: OTHER }), { ...index, serviceProviderId: OTHER })
+    assert.deepEqual(ServiceProviderPriceBulkIndex.parse({ ...index, serviceAreaAssignmentId: THIRD, dryRun: true }), { ...index, serviceAreaAssignmentId: THIRD, dryRun: true })
+    assert.deepEqual(refusal(ServiceProviderPriceBulkIndex.safeParse(index)).map((issue) => issue.path), ["serviceProviderId"])
+    assert.deepEqual(refusal(ServiceProviderPriceBulkIndex.safeParse({ ...index, serviceProviderId: OTHER, serviceAreaAssignmentId: THIRD })).map((issue) => issue.path), ["serviceProviderId"])
+  })
+
+  test("takes the single index's base and basis points, and nothing the server owns", () => {
+    assert.deepEqual(refusal(ServiceProviderPriceBulkIndex.safeParse({ ...index, serviceProviderId: OTHER, base: "fee" })).map((issue) => issue.path), ["base"])
+    assert.deepEqual(refusal(ServiceProviderPriceBulkIndex.safeParse({ ...index, serviceProviderId: OTHER, basisPoints: 5.5 })).map((issue) => issue.path), ["basisPoints"])
+    assert.deepEqual(refusal(ServiceProviderPriceBulkIndex.safeParse({ ...index, serviceProviderId: OTHER, projectId: THIRD })).map((issue) => issue.path), [""])
   })
 })
 

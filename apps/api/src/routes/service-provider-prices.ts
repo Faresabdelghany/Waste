@@ -38,16 +38,28 @@
 // answering there would be the 409 naming a constraint, the signal a rule
 // above is broken, not a sentence to write.
 //
+// `POST /service-provider-prices/index` is the same Apply index over many
+// prices at once (#291 C8, row 13.6): every price under one provider's
+// assignments in the caller's projects, or under one award, judged by the
+// domain's `planIndexation` (@waste/domain/finance/indexation) as
+// routes/price-lists.ts judges a list's rows, over the bid or the fee as the
+// body's base says. A price that starts on the day or later, or whose
+// product is no longer active, is left with its reason; `dryRun` previews.
+// Held under the prices' locks in id order and read again under them, so a
+// bulk index and a single one of a price take turns and the chain never
+// forks; the successors run bare for the reason the single index's does.
+//
 // Two scopes, as routes/service-areas.ts has them (auth/provider.ts, §7.22):
 // the office reads and writes the prices of its projects; a Service
 // Provider's manager reads the prices under its own assignments and no
 // other, and writes nothing here, since the company sets what it pays. The
 // grant is `commercial.service-provider-prices` throughout.
-import type { IndexBase } from "@waste/contracts/finance"
+import { IndexResult, type IndexBase } from "@waste/contracts/finance"
 import { Page } from "@waste/contracts/pagination"
 import { fitsInt4, INT4_MAX } from "@waste/contracts/resource"
 import {
   ServiceProviderPrice,
+  ServiceProviderPriceBulkIndex,
   ServiceProviderPriceCreate,
   ServiceProviderPriceIndex,
   ServiceProviderPriceListQuery,
@@ -55,10 +67,12 @@ import {
 } from "@waste/contracts/service-provider-prices"
 import type { Tx } from "@waste/db/client"
 import { validOn } from "@waste/db/query/valid-on"
+import { product } from "@waste/db/schema/catalogue"
 import { serviceAreaAssignment, serviceProviderPrice } from "@waste/db/schema/finance"
+import { indexedOf, planIndexation } from "@waste/domain/finance/indexation"
 import { indexedFee } from "@waste/domain/finance/money"
 import { priceEnded, priceEndedBy } from "@waste/domain/finance/transitions"
-import { and, asc, eq, exists, gt, sql, type SQL } from "drizzle-orm"
+import { and, asc, eq, exists, gt, inArray, isNull, or, sql, type SQL } from "drizzle-orm"
 import { Hono, type MiddlewareHandler } from "hono"
 import { describeRoute } from "hono-openapi"
 
@@ -70,9 +84,10 @@ import { newId } from "../ids"
 import { afterCursor, fetchLimit, pageOf } from "../pagination"
 import { describeProblem, invalidRequest, problem, validate } from "../problem"
 import { projectCurrency } from "./fleet-lookups"
+import { answerOf, refusePlan } from "./indexation"
 import { periodAfter, periodOf, requireWithin } from "./periods"
-import { requireProduct, requireServiceAreaAssignment } from "./references"
-import { created, describeCreated, describeJson, IdParam, lockRow, refuseOverlap, stampsOf } from "./shared"
+import { requireProduct, requireServiceAreaAssignment, requireServiceProvider } from "./references"
+import { created, describeCreated, describeJson, IdParam, lockRow, lockRows, refuseOverlap, stampsOf } from "./shared"
 import { refuseUnofferedProduct } from "./statuses"
 
 const MODULE = "commercial.service-provider-prices"
@@ -167,6 +182,17 @@ const underProvider = (tx: Tx, companyId: string, serviceProviderId: string) =>
       .from(serviceAreaAssignment)
       .where(and(eq(serviceAreaAssignment.companyId, companyId), eq(serviceAreaAssignment.id, serviceProviderPrice.serviceAreaAssignmentId), eq(serviceAreaAssignment.serviceProviderId, serviceProviderId))),
   )
+
+/** The status of each product the prices name, in one statement: a successor is a new reference to its product (routes/statuses.ts). */
+async function productStatuses(tx: Tx, companyId: string, ids: readonly string[]): Promise<Map<string, string>> {
+  const named = [...new Set(ids)]
+  if (named.length === 0) return new Map()
+  const rows = await tx
+    .select({ id: product.id, status: product.status })
+    .from(product)
+    .where(and(eq(product.companyId, companyId), inArray(product.id, named)))
+  return new Map(rows.map((row) => [row.id, row.status]))
+}
 
 export function serviceProviderPriceRoutes(guard: MiddlewareHandler<AuthEnv>) {
   return new Hono<AuthEnv>()
@@ -264,6 +290,102 @@ export function serviceProviderPriceRoutes(guard: MiddlewareHandler<AuthEnv>) {
             .returning(columns),
         )
         return created(c, "/service-provider-prices", priceOf(row))
+      },
+    )
+    .post(
+      "/service-provider-prices/index",
+      describeRoute({
+        operationId: "indexServiceProviderPrices",
+        summary: "Apply an index to many service provider prices",
+        description:
+          "Applies an index from `appliedFrom` to every price under one provider's assignments in the projects the caller works in (`serviceProviderId`) or under one award (`serviceAreaAssignmentId`, of a project the caller works in), exactly one of the two, each as the single `POST /service-provider-prices/{id}/index` writes it: a price in force on that day that started before it is ended on it and its successor written with the same assignment, product, bid, currency and end, the fee `round(base × (1 + basisPoints / 10 000))` half away from zero over the bid or the current fee (`base`), `indexedFromId` naming the price, the label, the basis points and the base. A price that starts on `appliedFrom` (`starts-on-index-day`), starts after it (`scheduled`), or whose product is no longer active (`product-not-active`) is left as it is and answered with why; a price that ended on or before the day is not in the answer. `dryRun: true` is the preview: the same lines, 200, nothing written. Otherwise the plan is written and answered 201 without `Location`, each indexed line naming its successor. Held under the prices' locks in id order, so a bulk index and a single one take turns.",
+        security: BEARER_SECURITY,
+        responses: {
+          200: describeJson("The preview: what each price would become, nothing written.", IndexResult),
+          201: describeJson("What each price became, each indexed line naming its successor.", IndexResult),
+          400: describeProblem("The body is missing a field, names a member the server owns, names both a provider and an award or neither, names a provider not of this company or an award outside the caller's projects, gives a base outside the two, or gives basis points that take a fee below zero or past 2147483647 minor units."),
+          401: describeProblem("No usable token (see WWW-Authenticate)."),
+          403: describeProblem("No active account here, or the caller's role does not allow `edit` on `commercial.service-provider-prices`."),
+          409: describeProblem("No price in scope runs into `appliedFrom` from an earlier day, so a write would index nothing."),
+        },
+      }),
+      guard,
+      requireGrant(MODULE, "edit"),
+      validate("json", ServiceProviderPriceBulkIndex),
+      async (c) => {
+        const index = c.req.valid("json")
+        const tx = c.get("tx")
+        const principal = c.get("principal")
+        const dryRun = index.dryRun === true
+
+        // The scope named: an award of the caller's projects, or a provider of this company.
+        let scoped: SQL
+        if (index.serviceAreaAssignmentId !== undefined) {
+          await requireServiceAreaAssignment(tx, { companyId: principal.companyId, projectId: projectIdsOf(principal) }, index.serviceAreaAssignmentId)
+          scoped = eq(serviceProviderPrice.serviceAreaAssignmentId, index.serviceAreaAssignmentId)
+        } else {
+          const serviceProviderId = index.serviceProviderId!
+          await requireServiceProvider(tx, principal.companyId, serviceProviderId)
+          scoped = underProvider(tx, principal.companyId, serviceProviderId)
+        }
+        const inPlan = and(writable(principal), scoped, or(isNull(serviceProviderPrice.validTo), gt(serviceProviderPrice.validTo, index.appliedFrom)))
+        // No parent row holds the scope, so the prices are locked until the set read under the locks is the set locked: a single index that committed while this waited wrote a successor this has not locked yet.
+        let rows = await tx.select(columns).from(serviceProviderPrice).where(inPlan).orderBy(asc(serviceProviderPrice.id))
+        const locked = new Set<string>()
+        while (!dryRun && rows.some((row) => !locked.has(row.id))) {
+          const unlocked = rows.map((row) => row.id).filter((priceId) => !locked.has(priceId))
+          await lockRows(tx, serviceProviderPrice, principal.companyId, unlocked)
+          for (const priceId of unlocked) locked.add(priceId)
+          rows = await tx.select(columns).from(serviceProviderPrice).where(inPlan).orderBy(asc(serviceProviderPrice.id))
+        }
+        const statuses = await productStatuses(tx, principal.companyId, rows.map((row) => row.productId))
+        const plan = planIndexation(
+          rows.map((row) => ({
+            id: row.id,
+            validFrom: row.validFrom,
+            validTo: row.validTo,
+            baseMinor: index.base === "bid" ? row.bidMinor : row.unitPriceMinor,
+            unitPriceMinor: row.unitPriceMinor,
+            productActive: statuses.get(row.productId) === "active",
+          })),
+          index.appliedFrom,
+          index.basisPoints,
+        )
+        refusePlan(plan, index.appliedFrom, dryRun)
+        const byId = new Map(rows.map((row) => [row.id, row]))
+        const productOf = (priceId: string) => byId.get(priceId)!.productId
+        if (dryRun) return c.json(answerOf(index, plan, productOf, new Map()), 200)
+
+        const indexed = indexedOf(plan)
+        await tx
+          .update(serviceProviderPrice)
+          .set({ validTo: index.appliedFrom })
+          .where(and(eq(serviceProviderPrice.companyId, principal.companyId), inArray(serviceProviderPrice.id, indexed.map((verdict) => verdict.id))))
+        // Each successor takes the tail of the price just ended: the insert runs bare, as the single index's (the header says why).
+        const successors = new Map(indexed.map((verdict) => [verdict.id, newId()]))
+        await tx.insert(serviceProviderPrice).values(
+          indexed.map((verdict) => {
+            const old = byId.get(verdict.id)!
+            return {
+              id: successors.get(verdict.id)!,
+              companyId: principal.companyId,
+              projectId: old.projectId,
+              serviceAreaAssignmentId: old.serviceAreaAssignmentId,
+              productId: old.productId,
+              bidMinor: old.bidMinor,
+              unitPriceMinor: verdict.toMinor,
+              currency: old.currency,
+              indexedFromId: old.id,
+              indexLabel: index.label,
+              indexBasisPoints: index.basisPoints,
+              indexBase: index.base,
+              notes: null,
+              validFrom: index.appliedFrom,
+              validTo: old.validTo,
+            }
+          }),
+        )
+        return c.json(answerOf(index, plan, productOf, successors), 201)
       },
     )
     .get(
