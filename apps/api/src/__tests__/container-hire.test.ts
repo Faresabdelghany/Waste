@@ -186,6 +186,8 @@ describe("container hire in a billing run", { skip: database.skip || owner.skip 
       totals: [{ currency: "DKK", netMinor: 178_500, vatMinor: 44_625 }],
       exclusions: excluded.map((customerId) => ({ customerId, eventCount: 1, reason: "all-events-blocked" })),
       heldEventCount: 0,
+      catchUp: [],
+      catchUpDeferredCount: 0,
     })
     const done = await run(october())
     assert.deepEqual(
@@ -269,8 +271,8 @@ describe("container hire in a billing run", { skip: database.skip || owner.skip 
     })
     clock = ON.february20
     const done = await run(period("2027-01-15", "2027-02-14"))
-    // January for the 10 m³ skip, the late one and the mid one, and Anna's crane skip now its product has a row; Bo's still blocked.
-    assert.deepEqual([done.eventCount, done.invoiceCount, done.netMinor], [4, 2, 426_000])
+    // January for the 10 m³ skip, the late one and the mid one, and Anna's crane skip now its product has a row; Bo's still blocked. And Anna's October crane skip, blocked at October's run and repriced since, caught up on her invoice (#447).
+    assert.deepEqual([done.eventCount, done.invoiceCount, done.netMinor], [5, 2, 426_000 + 62_000])
     const [issued] = await withCompany(pool.db, a.companyId, (tx: Tx) => tx.execute<{ id: string }>(sql`select id from wms.invoice where company_id = ${a.companyId} and customer_id = ${fx.customers.housing.id} and period_from = '2027-01-15'`))
     const response = await olivia(`/invoices/${issued.id}`)
     const invoice = InvoiceDetail.parse(await response.json())
