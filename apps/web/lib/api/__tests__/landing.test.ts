@@ -20,6 +20,16 @@ describe("the landing", () => {
     assert.equal(landingOf(OFFICE), "/operate")
   })
 
+  test("a Site attendant lands on the check-in, after a driver and a provider; any other role's key on operations", () => {
+    const attendant = { role: { key: "site-attendant" } }
+    assert.equal(landingOf({ ...OFFICE, ...attendant }), "/check-in")
+    assert.equal(landingOf({ ...DRIVER, ...attendant }), "/driver")
+    assert.equal(landingOf({ ...PROVIDER, ...attendant }), "/service-provider-workspace")
+    assert.equal(landingOf({ ...OFFICE, role: { key: "dispatcher" } }), "/operate")
+    assert.equal(landingOf({ ...OFFICE, role: { key: null } }), "/operate")
+    assert.equal(afterSignIn({ ...OFFICE, ...attendant }, null), "/check-in")
+  })
+
   test("a provider's driver is a driver first: the phone is where the work is", () => {
     assert.equal(landingOf(PROVIDERS_DRIVER), "/driver")
   })

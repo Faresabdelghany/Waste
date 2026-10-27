@@ -8,9 +8,13 @@
 //                 account on its workspace (#291 slice 23), everyone else on
 //                 operations; never a grant, never a probe of the driver door.
 //                 A provider's driver is a driver first: the phone is where
-//                 the work is. `/driver` is the Driver App (#145,
-//                 components/waste/driver/), `/service-provider-workspace`
-//                 the provider's restricted shell;
+//                 the work is. A Site attendant (#393) lands on the
+//                 recycling centre's check-in, after those two: the seeded
+//                 role's key, the one landing a role decides. `/driver` is
+//                 the Driver App (#145, components/waste/driver/),
+//                 `/service-provider-workspace` the provider's restricted
+//                 shell, `/check-in` the attendant's phone-first page
+//                 (components/waste/check-in/);
 //   the gate    — with the adapter on, every page but /login and the public
 //                 pages under /p/ (ADR-0010: a published project's, for
 //                 anyone, no account) needs a session:
@@ -24,6 +28,7 @@
 //                 carries no `next`: whoever signs in next lands by their own
 //                 `/me`, not on the page the last person left.
 import type { Me } from "@waste/contracts/me"
+import type { SystemRoleKey } from "@waste/domain/access/system-roles"
 
 import type { SessionEnding } from "./session"
 
@@ -37,19 +42,27 @@ export const PUBLIC_PATH_PREFIX = "/p/"
 export const isPublicPath = (pathname: string): boolean => pathname.startsWith(PUBLIC_PATH_PREFIX)
 
 /** Where each kind of account lands. */
-export type Landing = "/driver" | "/service-provider-workspace" | "/operate"
+export type Landing = "/driver" | "/service-provider-workspace" | "/check-in" | "/operate"
+
+/** The seeded role whose accounts land on the check-in. */
+export const SITE_ATTENDANT_ROLE: SystemRoleKey = "site-attendant"
+
+/** What the landing reads of `/me`: the driver, the provider, and the role's key, each read defensively. */
+export type LandingFacts = Pick<Me, "driver" | "serviceProvider"> & { role?: Pick<Me["role"], "key"> | null }
 
 /**
  * Where a signed-in person lands when they were going nowhere in particular:
  * a driver on the Driver App, then a Service Provider's account on its
- * workspace, then everyone else on operations. A body with no `driver` or no
- * `serviceProvider` at all — an API from before it — is no driver's and no
- * provider's: `/me` is read as a type and not checked, so the facts are read
- * defensively.
+ * workspace, then a Site attendant on the check-in, then everyone else on
+ * operations. A body with no `driver`, no `serviceProvider` or no `role` at
+ * all — an API from before it — is no driver's, no provider's and no
+ * attendant's: `/me` is read as a type and not checked, so the facts are
+ * read defensively.
  */
-export function landingOf(me: Pick<Me, "driver" | "serviceProvider">): Landing {
+export function landingOf(me: LandingFacts): Landing {
   if (me.driver?.id !== undefined) return "/driver"
   if (me.serviceProvider?.id !== undefined) return "/service-provider-workspace"
+  if (me.role?.key === SITE_ATTENDANT_ROLE) return "/check-in"
   return "/operate"
 }
 
@@ -83,7 +96,7 @@ export function returnPath(next: string | null | undefined): string | null {
 }
 
 /** Where sign-in sends the person: back to `next` when it is one of ours, else their landing. */
-export function afterSignIn(me: Pick<Me, "driver" | "serviceProvider">, next: string | null | undefined): string {
+export function afterSignIn(me: LandingFacts, next: string | null | undefined): string {
   return returnPath(next) ?? landingOf(me)
 }
 

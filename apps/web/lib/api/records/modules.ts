@@ -17,6 +17,8 @@ import { moduleKeyOf, type ServerModule } from "./adapter"
 import { agreementsModule } from "./agreements"
 import { applicationsModule } from "./applications"
 import { bulkyBookingsModule } from "./bulky-bookings"
+import { siteAccessModule } from "./site-access"
+import { siteVisitsModule } from "./site-visits"
 import { alertsModule } from "./alerts"
 import { vehiclePlanningModule } from "./allocations"
 import { billingModule, eventsModule, invoicesModule } from "./billing"
@@ -102,6 +104,8 @@ export const SERVER_MODULES: readonly ServerModule[] = [
   agreementsModule,
   // The Applications (M7 of #293), after the customers, the places and the agreements their subjects name.
   applicationsModule,
+  // The register of plates and cards (#393), after the customers, the properties and the agreements its holders name.
+  siteAccessModule,
   containersModule,
   inventoryModule,
   vehiclePlanningModule,
@@ -113,6 +117,8 @@ export const SERVER_MODULES: readonly ServerModule[] = [
   pickupsModule,
   // The Bulky Bookings (O11 of #290), after the routes their stops are on and the places, agreements and fractions they name.
   bulkyBookingsModule,
+  // The recycling-centre visits (#393), after the places, the fractions, the holders and the products their rows name.
+  siteVisitsModule,
   ticketsModule,
   alertsModule,
   eventsModule,

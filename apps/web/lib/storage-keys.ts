@@ -55,6 +55,9 @@ export const API_SESSION_STORAGE_KEY = "waste.api-session.v1"
 /** The API session's tab-scoped half, in sessionStorage: the refresh token, the one long-lived credential (Issue #81; api-session-store.tsx says why it is kept apart). Never carried a legacy name. */
 export const API_REFRESH_TOKEN_STORAGE_KEY = "waste.api-session.refresh-token.v1"
 
+/** The recycling centre a phone checks visitors in at, as `{ projectId, siteId }` (#393, components/waste/check-in/): remembered per device, so an attendant picks the site once. Never carried a legacy name. */
+export const CHECK_IN_SITE_STORAGE_KEY = "waste.check-in.site.v1"
+
 /** The Driver App's Command Queue, an IndexedDB database with two stores, the installation id and the queue (Issue #145, lib/driver/command-queue.ts). Never carried a legacy name. */
 export const DRIVER_COMMAND_QUEUE_DATABASE = "waste.driver-command-queue"
 
@@ -100,7 +103,7 @@ export const LEGACY_STORAGE_KEYS: Readonly<
  * every key constant to a `LEGACY_STORAGE_KEYS` entry accepts a key here
  * instead, so a key added without deciding either way still fails it.
  */
-export const STORAGE_KEYS_WITHOUT_A_LEGACY_NAME: readonly string[] = [API_SESSION_STORAGE_KEY, API_REFRESH_TOKEN_STORAGE_KEY]
+export const STORAGE_KEYS_WITHOUT_A_LEGACY_NAME: readonly string[] = [API_SESSION_STORAGE_KEY, API_REFRESH_TOKEN_STORAGE_KEY, CHECK_IN_SITE_STORAGE_KEY]
 
 /**
  * The keys to try for one store, current first. `readPersisted` walks this

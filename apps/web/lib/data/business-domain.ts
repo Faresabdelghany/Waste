@@ -205,7 +205,7 @@ export const publicWorkspaceDomains: readonly PublicWorkspaceDomain[] = [
       "Customer-service agent",
       "Driver",
     ],
-    moduleIds: ["tickets", "bulky-bookings", "exceptions", "driver-app"],
+    moduleIds: ["tickets", "bulky-bookings", "exceptions", "site-visits", "driver-app"],
     boundaryNote:
       "Tickets owns resolution work and linked communication. Driver App remains available only through its restricted shell.",
   },
@@ -262,6 +262,7 @@ export const publicWorkspaceDomains: readonly PublicWorkspaceDomain[] = [
       "contacts",
       "agreements",
       "applications",
+      "site-access",
       "citizen-portal",
     ],
     boundaryNote:
@@ -426,6 +427,19 @@ export const publicModuleDomains: readonly PublicModuleDomain[] = [
     downstream: ["M11", "M14", "M16"],
     boundaryNote:
       "A Bulky Booking takes a slot of a day of its area's Bulky Schedule; it becomes a Pickup only when the office routes it, and its charge is the completed stop's.",
+  },
+  {
+    key: "operate.site-visits",
+    workspaceId: "operate",
+    moduleId: "site-visits",
+    primaryBlueprintModule: "M24",
+    supportingBlueprintModules: ["M03", "M16"],
+    canonicalOwner: "Operate · Site visits",
+    personas: ["Site attendant", "Operations manager", "Finance specialist"],
+    upstream: ["M02", "M03", "M06"],
+    downstream: ["M16"],
+    boundaryNote:
+      "A Site Visit is one arrival at a recycling centre, admitted or refused with the reason; its charge is the Visit Rule's, made a billable event by Finance, and a mistake is voided, never deleted.",
   },
   {
     key: "route-studio.pickups",
@@ -613,6 +627,19 @@ export const publicModuleDomains: readonly PublicModuleDomain[] = [
     downstream: ["M03", "M09", "M16"],
     boundaryNote:
       "An Application is a customer's written request decided by the office, not a Ticket: a case is worked, an application is granted or refused, and its effect is applied in the lane that owns it.",
+  },
+  {
+    key: "customers.site-access",
+    workspaceId: "customers",
+    moduleId: "site-access",
+    primaryBlueprintModule: "M03",
+    supportingBlueprintModules: ["M24"],
+    canonicalOwner: "Customers · Site access",
+    personas: ["Customer-service agent", "Operations administrator", "Site attendant"],
+    upstream: ["M02", "M03"],
+    downstream: ["M24", "M16"],
+    boundaryNote:
+      "An Access Credential is a plate or a card registered under its holder — a business's customer and agreement, or a household's property — and admits its visits; it is ended or blocked, never deleted.",
   },
   {
     key: "customers.citizen-portal",

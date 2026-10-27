@@ -320,19 +320,21 @@ describe("recycling-centre visits (M4 of #293)", { skip: database.skip || owner.
   test("the Site attendant finds the project's active centres and a household by its address, and checks it in by address", async () => {
     const sites = VisitSites.parse(await (await expect(await attendant(`/site-visits/sites?projectId=${copenhagen}`), 200)).json())
     const centre = sites.items.find((item) => item.id === site)
-    assert.deepEqual(centre && [centre.name, [...centre.wasteFractionIds].sort()], ["Nordhavn Recycling Centre", [ex.fractions.residual.id, garden].sort()])
+    assert.deepEqual(centre && [centre.name, centre.wasteFractions.map((fraction) => fraction.id).sort()], ["Nordhavn Recycling Centre", [ex.fractions.residual.id, garden].sort()])
     assert.equal(
       sites.items.some((item) => item.code === "GS-SHUT"),
       false,
       "a closed centre is not offered",
     )
+    assert.ok(centre?.wasteFractions.every((fraction) => fraction.name.length > 0), "each fraction by the name its chip shows")
     await expect(await attendant("/drop-off-points"), 403)
+    await expect(await attendant("/waste-fractions"), 403)
     await expect(await attendant("/properties"), 403)
     const found = VisitAddresses.parse(await (await expect(await attendant(`/site-visits/addresses?projectId=${copenhagen}&q=${encodeURIComponent("parkvej 1")}`), 200)).json())
     assert.deepEqual(found.items, [{ propertyId: ex.properties.parkvej.id, projectId: copenhagen, name: "Parkvej 18", address: "Parkvej 18, 2100 København Ø" }])
     assert.equal((await attendant(`/site-visits/addresses?projectId=${copenhagen}&q=p`)).status, 400, "two characters at the least")
     assert.deepEqual((await (await expect(await attendant(`/site-visits/addresses?projectId=${copenhagen}&q=${encodeURIComponent("1%")}`), 200)).json()) as VisitAddresses, { items: [] }, "a wildcard is the person's text")
-    const visit = await checkIn({ identifier: { kind: "property", propertyId: found.items[0].propertyId }, wasteFractionIds: [centre?.wasteFractionIds[0] ?? ""], occurredAt: at("2026-07-03") }, attendant)
+    const visit = await checkIn({ identifier: { kind: "property", propertyId: found.items[0].propertyId }, wasteFractionIds: [centre?.wasteFractions[0]?.id ?? ""], occurredAt: at("2026-07-03") }, attendant)
     assert.deepEqual([visit.visit.outcome, visit.visit.recordedBy, visit.visit.agreementId], ["admitted", a.users.viewer.id, fx.agreements.housingDkk.id])
   })
 

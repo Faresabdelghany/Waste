@@ -888,6 +888,32 @@ export const operationsBusinessFormSchemas = [
     execution: { kind: "create-record", initialStatus: "Booked", completionMessage: "Bulky collection booked." },
   },
   {
+    // Recycling-centre visits (#393): on the Pilot a visit is checked in on
+    // the attendant's own page, /check-in (components/waste/check-in/), and the
+    // ledger takes no form; this schema names the record's fields.
+    key: "operate.site-visits",
+    mode: "create",
+    recordKind: "Site visit",
+    title: "Check in a visitor",
+    description: "One arrival at a recycling centre: the site, how the visitor was identified, the fractions brought and a note. The visit is admitted or turned away, and charged by the project's Visit Rule.",
+    submitLabel: "Check in",
+    contextFieldIds: ["siteId", "identifierValue"],
+    sections: [
+      {
+        id: "visit",
+        title: "Visit",
+        fields: [
+          { id: "projectId", label: "Project", type: "select", required: true, relation: { workspaceId: "configure", moduleId: "organization" } },
+          { id: "siteId", label: "Recycling centre", type: "select", required: true, relation: { workspaceId: "resources", moduleId: "drop-off-points" } },
+          { id: "identifierValue", label: "Plate or card", type: "text" },
+          { id: "propertyId", label: "Property", type: "select", relation: { workspaceId: "customers", moduleId: "properties" } },
+          { id: "note", label: "Note", type: "textarea" },
+        ],
+      },
+    ],
+    execution: { kind: "create-record", initialStatus: "Admitted", completionMessage: "Visitor checked in." },
+  },
+  {
     key: "operate.driver-app",
     mode: "action",
     recordKind: "Driver session action",
