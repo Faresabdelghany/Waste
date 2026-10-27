@@ -22,3 +22,7 @@ export const OFFICE_STOP_SERVICE_OPTIONS = OFFICE_STOP_SERVICES.filter((service)
 
 /** What a work order at an address alone is told, before the API would say it: the contracts' `A_WORK_ORDER_OF_A_CONTAINER`, spelled again so no zod reaches the browser, and held equal to it by a test. */
 export const A_WORK_ORDER_IS_OF_A_CONTAINER = "A work order is of a container: name the container"
+
+/** "Sofa · 2 × Chair": a bulky collection's items in one line (O11 of #290), what the stop's details and the Driver App's card say it takes away. */
+export const itemsSentence = (items: readonly { description: string; quantity: number }[]): string =>
+  items.map((item) => (item.quantity === 1 ? item.description : `${item.quantity} × ${item.description}`)).join(" · ")

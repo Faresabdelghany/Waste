@@ -1,14 +1,16 @@
 // Apply index over many prices on the API (#291 C8, C8a): a customer price
 // list indexed from a day — the preview first, then the write, each row in
 // force ended and its successor on the chain, a row typed in for the day
-// left with why — and the same over an award's provider prices. API calls
-// alone; the web's Apply index is C8w's. Records are uniquely made in
-// Copenhagen Central and never cleaned up, so each test makes its own list,
-// product and award.
-import type { APIRequestContext } from "@playwright/test"
+// left with why — and the same over an award's provider prices; then the
+// office's Apply index on the web (C8w): Settings › Commercial › Price lists
+// previews a list's index and applies it, and the provider prices' header
+// does the same over one award's prices. Records are uniquely made in Copenhagen Central and never
+// cleaned up, so each test makes its own list, product and award.
+import type { APIRequestContext, Page } from "@playwright/test"
 
 import { uniqueName } from "./env"
 import { expect, test } from "./fixtures"
+import { answerOf } from "./routes-support"
 import { listAll, projectNamed, type Project } from "./tester"
 
 type Product = { id: string }
@@ -18,6 +20,19 @@ type ProviderPrice = { id: string; bidMinor: number; unitPriceMinor: number; ind
 type IndexLine = { id: string; productId: string; fromMinor: number; toMinor: number | null; indexedId: string | null; skipped: string | null }
 type IndexResult = { dryRun: boolean; lines: IndexLine[] }
 type ServiceProvider = { id: string; legalName: string }
+
+/** A dialog by its heading: the details sheet and a form dialog may both be open. */
+const dialogTitled = (page: Page, title: string) => page.getByRole("dialog").filter({ has: page.getByRole("heading", { name: title, exact: true }) })
+
+/** An award of NordRen's in Copenhagen Central, made through the API with its first assignment. */
+async function newAward(api: APIRequestContext, project: Project): Promise<{ code: string; assignmentId: string }> {
+  const provider = (await listAll<ServiceProvider>(api, "/service-providers")).find((candidate) => candidate.legalName.startsWith("NordRen"))
+  if (provider === undefined) throw new Error("the seed has no NordRen")
+  const code = `E2E-${Date.now().toString(36)}-${Math.random().toString(36).slice(2, 5)}`.toUpperCase()
+  const award = await made<{ assignment: { id: string } | null }>(api, "/service-areas", { projectId: project.id, code, name: uniqueName("E2E indexed award"), boundaryText: "As the e2e contract draws it", planningAreaIds: [], wasteFractionIds: [], validFrom: JANUARY, validTo: null, assignment: { serviceProviderId: provider.id } })
+  if (award.assignment === null) throw new Error("the award was made without its assignment")
+  return { code, assignmentId: award.assignment.id }
+}
 
 const JANUARY = "2026-01-01"
 const NEW_YEAR = "2027-01-01"
@@ -68,12 +83,7 @@ test.describe("Apply index over many prices (#291 C8)", () => {
 
   test("an award's provider prices: indexed over the bid in one request, on the chain the single index writes", async ({ api }) => {
     const project = await projectNamed(api, "Copenhagen Central")
-    const provider = (await listAll<ServiceProvider>(api, "/service-providers")).find((candidate) => candidate.legalName.startsWith("NordRen"))
-    if (provider === undefined) throw new Error("the seed has no NordRen")
-    const code = `E2E-${Date.now().toString(36)}-${Math.random().toString(36).slice(2, 5)}`.toUpperCase()
-    const award = await made<{ assignment: { id: string } | null }>(api, "/service-areas", { projectId: project.id, code, name: uniqueName("E2E indexed award"), boundaryText: "As the e2e contract draws it", planningAreaIds: [], wasteFractionIds: [], validFrom: JANUARY, validTo: null, assignment: { serviceProviderId: provider.id } })
-    const assignmentId = award.assignment?.id
-    if (assignmentId === undefined) throw new Error("the award was made without its assignment")
+    const { assignmentId } = await newAward(api, project)
     const [first, second] = await Promise.all([product(api, project), product(api, project)])
     const a = await made<ProviderPrice>(api, "/service-provider-prices", { serviceAreaAssignmentId: assignmentId, productId: first.id, bidMinor: 3_000, unitPriceMinor: 3_200, validFrom: JANUARY })
     const b = await made<ProviderPrice>(api, "/service-provider-prices", { serviceAreaAssignmentId: assignmentId, productId: second.id, bidMinor: 1_000, validFrom: JANUARY })
@@ -93,5 +103,60 @@ test.describe("Apply index over many prices (#291 C8)", () => {
       [NEW_YEAR, null, 1_050, b.id],
     ])
     expect(result.lines.map((line) => line.indexedId)).toEqual([chain[2].id, chain[3].id])
+  })
+
+  test("Settings › Commercial › Price lists: a list's Apply index previews each row before and after, then applies it", async ({ page, api }) => {
+    const project = await projectNamed(api, "Copenhagen Central")
+    const running = await product(api, project)
+    const name = uniqueName("E2E index list")
+    const list = await made<PriceList>(api, "/price-lists", { projectId: project.id, code: `e2e-idx-${Date.now().toString(36)}`, name, validFrom: JANUARY })
+    const old = await made<PriceListRow>(api, `/price-lists/${list.id}/rows`, { productId: running.id, unitPriceMinor: 10_050, validFrom: JANUARY })
+
+    await page.goto("/settings?pane=commercial-price-lists")
+    await page.getByPlaceholder("Search price lists").fill(name)
+    await page.getByRole("button", { name: `Apply index to ${name}` }).click()
+    const dialog = dialogTitled(page, `Apply index to ${name}`)
+    await dialog.getByLabel("Index").fill("CPI 2027")
+    await dialog.getByLabel("Change (%)").fill("3.2")
+    await dialog.getByLabel("From").fill(NEW_YEAR)
+    await expect(dialog.getByRole("button", { name: "Apply index" })).toBeDisabled()
+    const [previewed] = await Promise.all([answerOf(page, "POST", `/price-lists/${list.id}/index`), dialog.getByRole("button", { name: "Preview" }).click()])
+    expect(previewed.status()).toBe(200)
+    expect(previewed.request().postDataJSON()).toEqual({ label: "CPI 2027", basisPoints: 320, appliedFrom: NEW_YEAR, dryRun: true })
+    await expect(dialog.getByTestId("apply-index-summary")).toContainText("1 price moves.")
+    await expect(dialog.getByTestId("apply-index-lines")).toContainText("103.72")
+
+    const [applied] = await Promise.all([answerOf(page, "POST", `/price-lists/${list.id}/index`), dialog.getByRole("button", { name: "Apply index" }).click()])
+    expect(applied.status(), await applied.text()).toBe(201)
+    expect(applied.request().postDataJSON()).toEqual({ label: "CPI 2027", basisPoints: 320, appliedFrom: NEW_YEAR, dryRun: false })
+    await expect(dialog).toBeHidden()
+    const rows = await listAll<PriceListRow>(api, `/price-lists/${list.id}/rows`)
+    expect(rows.find((row) => row.indexedFromId === old.id)).toMatchObject({ unitPriceMinor: 10_372, indexLabel: "CPI 2027", validFrom: NEW_YEAR })
+  })
+
+  test("the provider prices' header: Apply index over one award's prices on the current fee, previewed then applied", async ({ page, api }) => {
+    const project = await projectNamed(api, "Copenhagen Central")
+    const award = await newAward(api, project)
+    const priced = await product(api, project)
+    const price = await made<ProviderPrice>(api, "/service-provider-prices", { serviceAreaAssignmentId: award.assignmentId, productId: priced.id, bidMinor: 1_000, unitPriceMinor: 1_200, validFrom: JANUARY })
+
+    const loaded = answerOf(page, "GET", "/service-provider-prices")
+    await page.goto("/commercial?module=service-provider-prices")
+    expect((await loaded).status()).toBe(200)
+    await page.getByRole("button", { name: "Apply index" }).first().click()
+    const dialog = dialogTitled(page, "Apply index to provider prices")
+    await dialog.getByRole("combobox", { name: "Prices of" }).click()
+    await page.getByRole("option", { name: new RegExp(`^${award.code} · NordRen`) }).click()
+    await dialog.getByLabel("Index").fill("CPI")
+    await dialog.getByLabel("Change (%)").fill("5")
+    await dialog.getByLabel("From").fill(NEW_YEAR)
+    const [previewed] = await Promise.all([answerOf(page, "POST", "/service-provider-prices/index"), dialog.getByRole("button", { name: "Preview" }).click()])
+    expect(previewed.request().postDataJSON()).toEqual({ serviceAreaAssignmentId: award.assignmentId, label: "CPI", basisPoints: 500, base: "current-fee", appliedFrom: NEW_YEAR, dryRun: true })
+    await expect(dialog.getByTestId("apply-index-lines")).toContainText("12.60")
+    const [applied] = await Promise.all([answerOf(page, "POST", "/service-provider-prices/index"), dialog.getByRole("button", { name: "Apply index" }).click()])
+    expect(applied.status(), await applied.text()).toBe(201)
+    await expect(dialog).toBeHidden()
+    const chain = await listAll<ProviderPrice>(api, "/service-provider-prices", { serviceAreaAssignmentId: award.assignmentId })
+    expect(chain.find((row) => row.indexedFromId === price.id)).toMatchObject({ unitPriceMinor: 1_260, validFrom: NEW_YEAR })
   })
 })
