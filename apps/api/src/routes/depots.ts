@@ -57,7 +57,7 @@ import { afterCursor, fetchLimit, pageOf } from "../pagination"
 import { describeProblem, problem, validate } from "../problem"
 import { hourOf, placeShapeInvalid, pointInvalid, requirePlacePatch } from "./place-rules"
 import { requireServiceProvider } from "./references"
-import { created, describeCreated, describeJson, IdParam, lockRow, refuseCheck, refuseDuplicate, stampsOf } from "./shared"
+import { created, describeCreated, describeJson, IdParam, lockRow, refuseCheck, refuseDuplicate, stampsOf, strengthFor } from "./shared"
 
 const MODULE = "resources.depots"
 const DepotPage = Page(Depot)
@@ -269,9 +269,8 @@ export function depotRoutes(guard: MiddlewareHandler<AuthEnv>) {
         // row, and two patches of one depot each read and then write, so the
         // lock makes the second read what the first wrote (routes/shared.ts).
         // An id nobody minted locks nothing and is a 404 here as in every
-        // other family. `for update` where the patch renames it, the name
-        // being a key column.
-        await lockRow(tx, depot, { companyId: principal.companyId, id }, patch.name === undefined ? "no key update" : "update")
+        // other family.
+        await lockRow(tx, depot, { companyId: principal.companyId, id }, strengthFor(depot, patch))
         const current = await findDepot(tx, principal, id)
         if (current === undefined) throw noSuchDepot(id)
         // The provider's existence and the two shape rules, every refusal in one 400 (routes/place-rules.ts).

@@ -22,7 +22,7 @@ import { describeRoute } from "hono-openapi"
 import { BEARER_SECURITY, type AuthEnv } from "../auth/principal"
 import { requireGrant } from "../auth/require"
 import { describeProblem, problem, validate } from "../problem"
-import { describeJson, lockRow, refuseDuplicate, stampsOf } from "./shared"
+import { describeJson, lockRow, refuseDuplicate, stampsOf, strengthFor } from "./shared"
 
 const MODULE = "configure.organization"
 
@@ -123,8 +123,8 @@ export function companyRoutes(guard: MiddlewareHandler<AuthEnv>) {
         const companyId = c.get("principal").companyId
         const tx = c.get("tx")
         if (patch.fikCreditorNumber === null) {
-          // The company's row lock first, which a project's move to a FI card's scheme takes too: the two take turns. `for update` where the patch moves the registration, a key column.
-          await lockRow(tx, company, { companyId, id: companyId }, patch.registrationNumber === undefined && patch.country === undefined ? "no key update" : "update")
+          // The company's row lock first, which a project's move to a FI card's scheme takes too: the two take turns.
+          await lockRow(tx, company, { companyId, id: companyId }, strengthFor(company, patch))
           const [referencing] = await tx.select({ name: project.name }).from(project).where(and(eq(project.companyId, companyId), ne(project.paymentReferenceScheme, "none"))).orderBy(asc(project.name)).limit(1)
           if (referencing !== undefined) throw problem(409, { detail: fikStillReferenced(referencing.name) })
         }

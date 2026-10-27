@@ -79,7 +79,7 @@ import { newId } from "../ids"
 import { afterCursor, fetchLimit, pageOf } from "../pagination"
 import { describeProblem, invalidRequest, problem, validate } from "../problem"
 import { periodAfter, refuseStranded, requireOrdered, strandedSentence, type Period } from "./periods"
-import { created, describeCreated, describeJson, IdParam, lockRow, refuseDuplicate, refuseOverlap, stamp, stampsOf } from "./shared"
+import { created, describeCreated, describeJson, IdParam, lockRow, refuseDuplicate, refuseOverlap, stamp, stampsOf, strengthFor } from "./shared"
 
 const MODULE = "configure.calendars"
 const CollectionCalendarPage = Page(CollectionCalendar)
@@ -361,9 +361,8 @@ export function collectionCalendarRoutes(guard: MiddlewareHandler<AuthEnv>) {
 
         // The row this patch counts holidays against, locked before it is
         // read: a shortening and a replacement of the set are the two halves
-        // of one rule, and they serialise here (routes/shared.ts). `for
-        // update` where the patch renames it, the name being a key column.
-        await lockRow(tx, collectionCalendar, { companyId: principal.companyId, id }, patch.name === undefined ? "no key update" : "update")
+        // of one rule, and they serialise here (routes/shared.ts).
+        await lockRow(tx, collectionCalendar, { companyId: principal.companyId, id }, strengthFor(collectionCalendar, patch))
         const current = await findCalendar(tx, principal, id)
         if (current === undefined) throw noSuchCalendar(id)
 

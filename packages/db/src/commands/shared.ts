@@ -48,8 +48,8 @@
 // `ProblemError` directly, since a route has the request in hand. Nothing
 // here knows a table or a resource but the company's row, which every series
 // lives on.
-import { and, asc, eq, inArray, sql, type SQL } from "drizzle-orm"
-import type { PgColumn, PgTable } from "drizzle-orm/pg-core"
+import { and, asc, eq, getTableColumns, inArray, is, SQL, sql } from "drizzle-orm"
+import { getTableConfig, type PgColumn, type PgTable } from "drizzle-orm/pg-core"
 
 import type { Tx } from "../client"
 import { company } from "../schema/organisation"
@@ -130,13 +130,46 @@ export async function refuseOverlap<T>(sentences: Readonly<Record<string, string
  * Postgres takes on a referenced row for each foreign-key insert, so a
  * child's insert naming the row goes on while a rule over the row's set is
  * judged (#335). `update` blocks those inserts too, and is for the caller
- * that goes on to change a key column of the row it locked — a column of a
- * unique constraint a reference could name, such as a name or a code unique
- * in its scope. It takes the stronger lock at once rather than upgrading at
- * the update, since a transaction that holds a key share on the row and then
- * waits for its lock would deadlock with the upgrade.
+ * that goes on to change a key column of the row it locked (`strengthFor`).
+ * It takes the stronger lock at once rather than upgrading at the update,
+ * since a transaction that holds a key share on the row and then waits for
+ * its lock would deadlock with the upgrade.
  */
 export type LockStrength = "no key update" | "update"
+
+/**
+ * The columns Postgres counts as the table's key when it decides whether an
+ * update changes one: every column of its primary key, of a unique
+ * constraint, and of a unique index that is neither partial nor over an
+ * expression.
+ */
+function keyColumnsOf(table: PgTable): ReadonlySet<string> {
+  const config = getTableConfig(table)
+  const columns = [
+    ...config.primaryKeys.flatMap((key) => key.columns),
+    ...config.uniqueConstraints.flatMap((constraint) => constraint.columns),
+    ...config.columns.filter((column) => column.isUnique || column.primary),
+  ].map((column) => column.name)
+  for (const index of config.indexes) {
+    if (!index.config.unique || index.config.where !== undefined) continue
+    for (const column of index.config.columns) {
+      if (!is(column, SQL) && "name" in column && column.name !== undefined) columns.push(column.name)
+    }
+  }
+  return new Set(columns)
+}
+
+/**
+ * The strength a patch of the table's row is locked at: `update` where it
+ * sets a key column (`keyColumnsOf`), such as a name or a code unique in its
+ * scope, and `no key update` otherwise. A member left undefined sets nothing.
+ */
+export function strengthFor(table: TenantTable, patch: object): LockStrength {
+  const keys = keyColumnsOf(table)
+  const columns = getTableColumns(table)
+  const setsKey = Object.entries(patch).some(([member, value]) => value !== undefined && columns[member] !== undefined && keys.has(columns[member].name))
+  return setsKey ? "update" : "no key update"
+}
 
 /**
  * Takes the row lock of the record a rule hangs off, inside the caller's one

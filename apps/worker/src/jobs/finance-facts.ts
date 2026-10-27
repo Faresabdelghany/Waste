@@ -117,8 +117,8 @@ export type PickupRowOptions = { lock?: boolean }
 /**
  * The pickup of the route the event names, with its route, its scheme's
  * planning area and its container's type; undefined when the row is not
- * there. With `lock`, `lockRow(pickup)` runs first — `select … for update` on
- * the pickup's own row, as `wms_api` under the fence — so the status and the
+ * there. With `lock`, `lockRow(pickup)` runs first — `select … for no key
+ * update` on the pickup's own row, as `wms_api` under the fence — so the status and the
  * live event read after it are what the lock let through: two workers on two
  * events of one pickup (the completion on `outbox.pickup-completed`, a
  * correction to `completed` on `outbox.pickup-corrected`) serialise here, and
