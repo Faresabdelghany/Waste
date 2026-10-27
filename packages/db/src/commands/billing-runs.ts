@@ -227,17 +227,21 @@ export async function selectBilling(tx: Tx, scope: Scope, period: BillingPeriod,
   // The agreement and the product every ready event names, joined for the grouping and the line's text.
   const event = alias(billableEvent, "event")
   const earlier = alias(billableEvent, "earlier")
+  // The reading is stated again over the locked row beside the ids: a cancellation or a hold that commits while the run waits on an event's lock is judged on the row it wrote (Postgres re-reads the `where` of a locked row that changed), where the ids alone would still name it.
   const caughtUp =
     room === 0
       ? undefined
-      : inArray(
-          event.id,
-          tx
-            .select({ id: earlier.id })
-            .from(earlier)
-            .where(ready(tx, scope, period, earlier, { reach: "catch-up" }))
-            .orderBy(asc(earlier.serviceDate), asc(earlier.id))
-            .limit(room),
+      : and(
+          ready(tx, scope, period, event, { reach: "catch-up" }),
+          inArray(
+            event.id,
+            tx
+              .select({ id: earlier.id })
+              .from(earlier)
+              .where(ready(tx, scope, period, earlier, { reach: "catch-up" }))
+              .orderBy(asc(earlier.serviceDate), asc(earlier.id))
+              .limit(room),
+          ),
         )
   const { companyId: _companyId, ...columns } = getTableColumns(event)
   const selected = tx
