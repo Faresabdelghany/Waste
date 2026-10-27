@@ -95,9 +95,9 @@ export type BillingRunCreate = z.infer<typeof BillingRunCreate>
 
 /**
  * A ready event from before the period that a run catches up (#447): one no
- * invoice line names, which became ready after its own period's run —
- * released from a hold, or repriced — as the line it would be, under its
- * payer.
+ * invoice line names, whose own period a completed run already reached — so
+ * it became ready, or was recorded, after that run: released from a hold, or
+ * repriced — as the line it would be, under its payer.
  */
 export const BillingRunCatchUpLine = z.object({
   billableEventId: Id,

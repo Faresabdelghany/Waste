@@ -180,8 +180,7 @@ describe("finance.run-billing against Postgres", { skip }, () => {
     // The office ran November's billing by hand on the first of December (`requested_by` set), before the schedule fired.
     const november = await ready(tenant.agreements.housing.id, "2026-11-12", 7_000)
     const office = await withCompany(api.db, tenant.companyId, (tx) => runBilling(tx, { companyId: tenant.companyId, projectId: tenant.projects.copenhagen.id, periodFrom: "2026-11-01", periodTo: "2026-11-30", note: "By hand", requestedBy: tenant.users.olivia.id, newId, now: () => new Date("2026-12-01T09:00:00Z") }))
-    // November's event, and Anna's of 2026-10-01 that no run over October reached, caught up on her own invoice (#447).
-    assert.deepEqual([office.run.eventCount, office.run.invoiceCount], [2, 2])
+    assert.equal(office.run.invoiceCount, 1)
     assert.equal(await statusOf(november), "invoiced")
     const before = (await runs()).length
     // The schedule at noon on the first of December: it has no run of its own over November, so it runs — and finds nothing ready, a completed run of zero invoices, the record that it looked.

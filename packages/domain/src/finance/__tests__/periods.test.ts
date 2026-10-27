@@ -27,7 +27,8 @@ describe("catchUpFrom", () => {
     assert.equal(BILLING_CATCH_UP_MONTHS, 12)
     assert.equal(catchUpFrom("2026-10-01"), "2025-10-01")
     assert.equal(catchUpFrom("2026-01-15"), "2025-01-15", "a narrower period reaches back from its own first day")
-    assert.equal(catchUpFrom("2028-02-29"), "2027-03-01", "a leap day rolls over as a month's arithmetic does")
+    assert.equal(catchUpFrom("2028-02-29"), "2027-02-28", "a leap day reaches back to the last of February, not past it")
+    assert.equal(catchUpFrom("2026-12-31"), "2025-12-31", "across the year's end")
   })
 
   test("refuses a day that is not one", () => {

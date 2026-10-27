@@ -232,8 +232,17 @@ describe("the billing run endpoints", { skip: database.skip || owner.skip }, () 
       assert.deepEqual((await preview(period("2026-09-01", "2026-09-30"))).catchUp, [])
     })
 
+    test("leaves an event whose period no run has covered for that period's own run: a later run does not reach back for it", async () => {
+      const event = await entered(manual({ agreementId: fx.agreements.anna.id, serviceDate: "2026-05-12" }))
+      assert.ok(!(await preview(period("2026-06-01", "2026-06-05"))).catchUp.some((line) => line.billableEventId === event.id), "May has had no run")
+      const may = await run(period("2026-05-01", "2026-05-31"))
+      assert.equal(may.eventCount, 1, "May's own run invoices it")
+      assert.equal((await readEvent(event.id)).status, "invoiced")
+    })
+
     test("judges a caught-up event on the row a cancellation committed while the run waited on its lock: it is not invoiced", async () => {
       // A cancellation holds the event's lock, its `cancelled_at` written and not yet committed, when the run's selection reaches the row: the run waits, and once the cancellation commits Postgres re-reads the run's `where` over the row it wrote. The ids the catch-up chose before the lock are not enough to name it.
+      await run(period("2026-06-10"))
       const event = await entered(manual({ serviceDate: "2026-06-10" }))
       const scope = { companyId: a.companyId, projectId: copenhagen }
       const window = { periodFrom: "2026-06-15", periodTo: "2026-06-30" }
@@ -265,6 +274,7 @@ describe("the billing run endpoints", { skip: database.skip || owner.skip }, () 
     })
 
     test("reaches back twelve months from the period's first day and no further", async () => {
+      await run(period("2026-01-31", "2026-02-01"))
       const inside = await entered(manual({ serviceDate: "2026-02-01" }))
       const outside = await entered(manual({ serviceDate: "2026-01-31" }))
       try {
@@ -458,10 +468,12 @@ describe("the billing run endpoints", { skip: database.skip || owner.skip }, () 
       assert.equal((await refused(await olivia("/billing-runs/preview", { method: "POST", body: period("2027-01-01", "2027-01-31") }), 409)).detail, tooMany.detail)
       assert.deepEqual(await written(), before, "a refused run leaves nothing behind, the counter included")
       const narrower = await run(period("2027-01-04"))
-      assert.deepEqual([narrower.eventCount, narrower.invoiceCount], [1, 1], "the day before holds nothing of its own, and catches up the one earlier event left ready (#447)")
-      assert.deepEqual((await readInvoice(narrower.invoiceIds[0])).lines.map((line) => line.serviceDate), ["2026-10-20"])
+      assert.deepEqual([narrower.eventCount, narrower.invoiceCount], [0, 0], "the day before holds nothing, and catches up nothing: no run reached 2026-10-20's event, which waits for its own period's run (#447)")
 
-      // The period's own come first under the ceiling (#447): the catch-up takes the room they leave, oldest first, and the rest wait for the next run.
+      // The period's own come first under the ceiling (#447): the catch-up takes the room they leave, oldest first, and the rest wait for the next run. The day's run is the one the ceiling refuses, so its record is written here as a run of the day that completed before the rows were recorded.
+      await withCompany(pool.db, a.companyId, async (tx: Tx) => {
+        await tx.insert(billingRun).values({ id: testId(), companyId: a.companyId, projectId: copenhagen, periodFrom: day, periodTo: day, status: "completed", requestedBy: a.users.olivia.id, completedAt: NOON, eventCount: 0, invoiceCount: 0, excludedCustomerCount: 0, netMinor: 0, vatMinor: 0, note: null })
+      })
       const own = await Promise.all([1, 2, 3].map(() => entered(manual({ serviceDate: "2027-01-20" }))))
       const after = period("2027-01-06", "2027-01-31")
       const previewed = await preview(after)

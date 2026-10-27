@@ -272,7 +272,7 @@ export function RunBillingSurface({ label }: PrimarySurfaceProps) {
               <div className="space-y-1">
                 <h4 className="text-xs font-medium text-muted-foreground">Caught up from earlier periods</h4>
                 {preview.answer.catchUp.length > 0 && (
-                  <ul className="text-sm" data-testid="preview-catch-up">
+                  <ul className="max-h-48 overflow-y-auto text-sm" data-testid="preview-catch-up">
                     {preview.answer.catchUp.map((line) => (
                       <li key={line.billableEventId}>
                         {customerName(line.customerId)} · {line.description} · {formatMinor(line.netMinor, line.currency)}

@@ -64,19 +64,25 @@
 // selection also takes the ready events from before the period, back to
 // `catchUpFrom` (twelve months before its first day, the domain's): by service
 // date, a recurring charge or a hire by a charge period that ended before the
-// period's reach. Only an event no line names is ready, so each is invoiced
-// once, by the first run after it became ready. The period's own events come
-// first under `BILLING_RUN_MAX_EVENTS`: the ceiling refuses them alone, and
-// the catch-up takes, oldest first, only the room they leave; the rest wait
-// for the next run, and the preview lists the lines it catches up and counts
-// those it leaves. The blocked and the held of earlier periods are no payer's
+// period's reach — and only those a completed run of the project already
+// reached, so it was not ready, or not there, when its own period's run
+// looked. An event whose period no run has covered — a scheduled run that
+// failed, a month the office has not run yet, history from before the project
+// billed — waits for that period's own run, so a period's invoices carry its
+// own events and periods are still run apart. Only an event no line names is
+// ready, so each is invoiced once, by the first run after it became ready. The
+// period's own events come first under `BILLING_RUN_MAX_EVENTS`: the ceiling
+// refuses them alone, and the catch-up takes, oldest first by the day its
+// window reaches it by, only the room they leave; the rest wait for the next
+// run, and the preview lists the lines it catches up and counts those it
+// leaves. The blocked and the held of earlier periods are no payer's
 // exclusion here: an exclusion is about the run's own period.
 import { PERIOD_ENDS_BY_TODAY, type BillingRunPreview } from "@waste/contracts/billing"
 import { dueOn, termsOf } from "@waste/domain/finance/payment"
 import { catchUpFrom } from "@waste/domain/finance/periods"
 import type { BillableEventKind, ExclusionReason, PaymentReferenceScheme } from "@waste/domain/finance/vocabulary"
 import { addDays } from "@waste/domain/route-schemes/recurrence"
-import { and, asc, count, eq, getTableColumns, gt, gte, inArray, isNotNull, isNull, lt, lte, notExists, notInArray, or, sql, type SQL } from "drizzle-orm"
+import { and, asc, count, eq, exists, getTableColumns, gt, gte, inArray, isNotNull, isNull, lt, lte, notExists, notInArray, or, sql, type SQL } from "drizzle-orm"
 import { alias, type PgColumn } from "drizzle-orm/pg-core"
 
 import type { Tx } from "../client"
@@ -133,8 +139,8 @@ function passOver(passedOver: Map<string, PassedOver>, customerId: string, as: k
   passedOver.set(customerId, counts)
 }
 
-/** What a run or a preview finds: the ready events in line order, the groups in numbering order, the payers excluded, each payer's events it passes over, and how many ready events from before the period it leaves for a later run (#447). */
-export type Selection = { events: ReadyEvent[]; groups: Group[]; exclusions: Excluded[]; passedOver: ReadonlyMap<string, PassedOver>; catchUpDeferredCount: number }
+/** What a run or a preview finds: the ready events in line order, the groups in numbering order, the payers excluded, each payer's events it passes over, and the ready events from before the period it catches up, oldest first, with how many more it leaves for a later run (#447). */
+export type Selection = { events: ReadyEvent[]; groups: Group[]; exclusions: Excluded[]; passedOver: ReadonlyMap<string, PassedOver>; catchUpIds: string[]; catchUpDeferredCount: number }
 
 /** The event columns the selection's predicates read: the `billable_event` table's own, or an alias's. */
 type EventColumns = { id: PgColumn; companyId: PgColumn; projectId: PgColumn; kind: PgColumn; serviceDate: PgColumn; chargePeriodFrom: PgColumn; chargePeriodTo: PgColumn; cancelledAt: PgColumn; blockReason: PgColumn; heldAt: PgColumn }
@@ -156,8 +162,28 @@ const inPeriod = (scope: Scope, period: BillingPeriod, on: EventColumns = billab
     isNull(on.cancelledAt),
   )
 
-/** The events of the project from before the period, back to `catchUpFrom`, that were not cancelled (#447): by service date, and a recurring charge or a hire by a charge period that ended before `inPeriod` reaches it, within the window. */
-const beforePeriod = (scope: Scope, period: BillingPeriod, on: EventColumns = billableEvent): SQL | undefined => {
+/** Whether a completed run of the project reached the event: `inPeriod` over the run's period, the run's columns for the period's days. */
+const coveredByRun = (tx: Tx, scope: Scope, on: EventColumns): SQL =>
+  exists(
+    tx
+      .select({ one: sql`1` })
+      .from(billingRun)
+      .where(
+        and(
+          eq(billingRun.companyId, scope.companyId),
+          eq(billingRun.projectId, scope.projectId),
+          eq(billingRun.status, "completed"),
+          or(
+            and(notInArray(on.kind, CHARGED_BY_PERIOD), lte(billingRun.periodFrom, on.serviceDate), gte(billingRun.periodTo, on.serviceDate)),
+            and(eq(on.kind, "subscription"), sql`${on.chargePeriodFrom} <= ${billingRun.periodTo} + 1`, gt(on.chargePeriodTo, billingRun.periodFrom)),
+            and(eq(on.kind, "hire"), lte(on.chargePeriodFrom, billingRun.periodTo), gte(on.chargePeriodTo, billingRun.periodFrom)),
+          ),
+        ),
+      ),
+  )
+
+/** The events of the project from before the period, back to `catchUpFrom`, that were not cancelled and that a completed run already reached (#447): by service date, and a recurring charge or a hire by a charge period that ended before `inPeriod` reaches it, within the window. */
+const beforePeriod = (tx: Tx, scope: Scope, period: BillingPeriod, on: EventColumns = billableEvent): SQL | undefined => {
   const from = catchUpFrom(period.periodFrom)
   return and(
     eq(on.companyId, scope.companyId),
@@ -168,6 +194,7 @@ const beforePeriod = (scope: Scope, period: BillingPeriod, on: EventColumns = bi
       and(eq(on.kind, "hire"), gt(on.chargePeriodTo, from), lt(on.chargePeriodTo, period.periodFrom)),
     ),
     isNull(on.cancelledAt),
+    coveredByRun(tx, scope, on),
   )
 }
 
@@ -178,7 +205,7 @@ type Reach = "period" | "catch-up"
 function ready(tx: Tx, scope: Scope, period: BillingPeriod, on: EventColumns = billableEvent, { held = false, reach = "period" }: { held?: boolean; reach?: Reach } = {}): SQL | undefined {
   const reversal = alias(billableEvent, "reversal")
   return and(
-    reach === "period" ? inPeriod(scope, period, on) : beforePeriod(scope, period, on),
+    reach === "period" ? inPeriod(scope, period, on) : beforePeriod(tx, scope, period, on),
     isNull(on.blockReason),
     // A hold for review (M14 of #293) keeps an event out of every run until it is released.
     held ? isNotNull(on.heldAt) : isNull(on.heldAt),
@@ -220,45 +247,29 @@ export async function selectBilling(tx: Tx, scope: Scope, period: BillingPeriod,
   const [counted] = await tx.select({ rows: count() }).from(billableEvent).where(ready(tx, scope, period))
   const readyCount = (counted?.rows ?? 0) + reserved
   if (readyCount > BILLING_RUN_MAX_EVENTS) throw refused(409, tooManyEvents(readyCount))
-  // The earlier events no run invoiced (#447): as many as the room the period's own leave, oldest first, and the rest left for a later run.
-  const [behind] = await tx.select({ rows: count() }).from(billableEvent).where(ready(tx, scope, period, billableEvent, { reach: "catch-up" }))
-  const behindCount = behind?.rows ?? 0
-  const room = Math.min(behindCount, BILLING_RUN_MAX_EVENTS - readyCount)
+  // The earlier events no run invoiced (#447), in one statement so the count and the rows agree: the ids in the room the period's own leave, oldest first by the day the window reaches each by, and how many there are in all.
+  const room = BILLING_RUN_MAX_EVENTS - readyCount
+  const behind = await tx
+    .select({ id: billableEvent.id, total: sql<number>`count(*) over ()`.mapWith(Number) })
+    .from(billableEvent)
+    .where(ready(tx, scope, period, billableEvent, { reach: "catch-up" }))
+    .orderBy(asc(sql`coalesce(${billableEvent.chargePeriodTo}, ${billableEvent.serviceDate})`), asc(billableEvent.id))
+    .limit(Math.max(room, 1))
+  const catchUpIds = behind.slice(0, room).map((row) => row.id)
+  const catchingUp = new Set(catchUpIds)
   // The agreement and the product every ready event names, joined for the grouping and the line's text.
   const event = alias(billableEvent, "event")
-  const earlier = alias(billableEvent, "earlier")
   // The reading is stated again over the locked row beside the ids: a cancellation or a hold that commits while the run waits on an event's lock is judged on the row it wrote (Postgres re-reads the `where` of a locked row that changed), where the ids alone would still name it.
-  const caughtUp =
-    room === 0
-      ? undefined
-      : and(
-          ready(tx, scope, period, event, { reach: "catch-up" }),
-          inArray(
-            event.id,
-            tx
-              .select({ id: earlier.id })
-              .from(earlier)
-              .where(ready(tx, scope, period, earlier, { reach: "catch-up" }))
-              .orderBy(asc(earlier.serviceDate), asc(earlier.id))
-              .limit(room),
-          ),
-        )
+  const caughtUp = catchUpIds.length === 0 ? undefined : and(ready(tx, scope, period, event, { reach: "catch-up" }), inArray(event.id, catchUpIds))
   const { companyId: _companyId, ...columns } = getTableColumns(event)
   const selected = tx
-    .select({
-      ...columns,
-      agreementNumber: agreement.number,
-      payerCustomerId: agreement.payerCustomerId,
-      productName: product.name,
-      invoiceName: product.invoiceName,
-      catchUp: sql<boolean>`coalesce(${beforePeriod(scope, period, event)}, false)`,
-    })
+    .select({ ...columns, agreementNumber: agreement.number, payerCustomerId: agreement.payerCustomerId, productName: product.name, invoiceName: product.invoiceName })
     .from(event)
     .innerJoin(agreement, and(eq(agreement.companyId, event.companyId), eq(agreement.id, event.agreementId)))
     .innerJoin(product, and(eq(product.companyId, event.companyId), eq(product.id, event.productId)))
     .where(or(ready(tx, scope, period, event), caughtUp))
     .orderBy(asc(agreement.number), asc(event.serviceDate), asc(product.name), asc(event.id))
-  const events: ReadyEvent[] = await (lock ? selected.for("update", { of: event }) : selected)
+  const events: ReadyEvent[] = (await (lock ? selected.for("update", { of: event }) : selected)).map((row) => ({ ...row, catchUp: catchingUp.has(row.id) }))
   const blocked = await tx
     .select({ customerId: agreement.payerCustomerId, events: count() })
     .from(billableEvent)
@@ -291,7 +302,7 @@ export async function selectBilling(tx: Tx, scope: Scope, period: BillingPeriod,
   }
   const invoiced = new Set([...groups.values()].map((group) => group.payerCustomerId))
   const ordered = [...groups.values()].sort((a, b) => (a.payerCustomerId < b.payerCustomerId ? -1 : a.payerCustomerId > b.payerCustomerId ? 1 : a.currency < b.currency ? -1 : a.currency > b.currency ? 1 : 0))
-  return { events, groups: ordered, exclusions: exclusionsOf(passedOver, invoiced), passedOver, catchUpDeferredCount: behindCount - room }
+  return { events, groups: ordered, exclusions: exclusionsOf(passedOver, invoiced), passedOver, catchUpIds, catchUpDeferredCount: (behind[0]?.total ?? 0) - catchUpIds.length }
 }
 
 /**
@@ -329,21 +340,19 @@ export async function previewBilling(tx: Tx, scope: Scope, period: BillingPeriod
   const passedOver = new Map([...selection.passedOver].map(([customerId, counts]) => [customerId, { ...counts }]))
   for (const charge of planned) if (charge.price === null || charge.held) passOver(passedOver, charge.payerCustomerId, charge.price === null ? "blocked" : "held")
   const held = [...passedOver.values()].reduce((sum, counts) => sum + counts.held, 0)
+  const caughtUp = new Map(selection.events.filter((event) => event.catchUp).map((event) => [event.id, event]))
   return {
     eventCount: readyCount,
     invoiceCount: invoices.size,
     heldEventCount: held,
     totals: [...totals.values()].sort((a, b) => (a.currency < b.currency ? -1 : a.currency > b.currency ? 1 : 0)),
     exclusions: exclusionsOf(passedOver, invoiced),
-    catchUp: selection.events
-      .filter((event) => event.catchUp)
-      .sort((a, b) => (a.serviceDate < b.serviceDate ? -1 : a.serviceDate > b.serviceDate ? 1 : a.id < b.id ? -1 : a.id > b.id ? 1 : 0))
-      // A ready event is priced, which the selection's grouping has checked; the guard says so to the types.
-      .flatMap(({ currency, netMinor, vatMinor, ...event }) =>
-        currency === null || netMinor === null || vatMinor === null
-          ? []
-          : [{ billableEventId: event.id, kind: event.kind as BillableEventKind, customerId: event.payerCustomerId, description: descriptionOf({ ...event, currency, netMinor, vatMinor }), serviceDate: event.serviceDate, currency, netMinor, vatMinor }],
-      ),
+    // In the selection's oldest-first order; an id the locked reading dropped is neither listed nor counted.
+    catchUp: selection.catchUpIds.flatMap((id) => {
+      const event = caughtUp.get(id)
+      if (event === undefined || event.currency === null || event.netMinor === null || event.vatMinor === null) return []
+      return [{ billableEventId: id, kind: event.kind as BillableEventKind, customerId: event.payerCustomerId, description: descriptionOf(event), serviceDate: event.serviceDate, currency: event.currency, netMinor: event.netMinor, vatMinor: event.vatMinor }]
+    }),
     catchUpDeferredCount: selection.catchUpDeferredCount,
   }
 }
