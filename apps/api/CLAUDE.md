@@ -23,7 +23,7 @@ The Hono API (ADR-0001), run from TypeScript source through tsx. `src/app.ts` bu
 
 ## Rules the API holds
 
-- Take `lockRow` before reading a row whose rule the API holds, parent before child, and `lockRows` for a set (in id order). `wms_api` cannot row-lock a ledger row, since `FOR UPDATE` needs the UPDATE privilege it was denied, so lock the parent instead.
+- Take `lockRow` before reading a row whose rule the API holds, parent before child, and `lockRows` for a set (in id order). Both take `FOR NO KEY UPDATE`, which serialises writers without holding back the inserts whose foreign key names the row (#335); pass `"update"` to `lockRow` when the command changes a key column of the row it locks (a column of a unique constraint, such as a name unique in its scope). `wms_api` cannot row-lock a ledger row, since a row lock needs the UPDATE privilege it was denied, so lock the parent instead.
 - A status gates a new reference, never an existing one (`src/routes/statuses.ts`).
 - A child's period sits inside its parent's (`src/routes/periods.ts`): a child placed outside is a 400 at the bound, and a parent shortened under its children is a 409 counting them.
 - Routes take the app's injected `now`. An instant becomes a day in the project's timezone through `src/routes/days.ts`, and a body's instant may run ahead of the clock by `OCCURRED_AT_SKEW_MS` at most.

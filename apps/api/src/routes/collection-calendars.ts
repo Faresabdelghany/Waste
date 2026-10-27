@@ -361,8 +361,9 @@ export function collectionCalendarRoutes(guard: MiddlewareHandler<AuthEnv>) {
 
         // The row this patch counts holidays against, locked before it is
         // read: a shortening and a replacement of the set are the two halves
-        // of one rule, and they serialise here (routes/shared.ts).
-        await lockRow(tx, collectionCalendar, { companyId: principal.companyId, id })
+        // of one rule, and they serialise here (routes/shared.ts). `for
+        // update` where the patch renames it, the name being a key column.
+        await lockRow(tx, collectionCalendar, { companyId: principal.companyId, id }, patch.name === undefined ? "no key update" : "update")
         const current = await findCalendar(tx, principal, id)
         if (current === undefined) throw noSuchCalendar(id)
 

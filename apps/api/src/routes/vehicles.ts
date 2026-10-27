@@ -501,8 +501,9 @@ export function vehicleRoutes(guard: MiddlewareHandler<AuthEnv>, { now = () => n
 
         // The row every rule below is held against, locked before it is read
         // (routes/shared.ts): a retirement and an allocation being made are two
-        // halves of one rule, and they serialise here.
-        await lockRow(tx, vehicle, { companyId: principal.companyId, id })
+        // halves of one rule, and they serialise here. `for update` where the
+        // patch moves the registration, a key column.
+        await lockRow(tx, vehicle, { companyId: principal.companyId, id }, patch.registration === undefined ? "no key update" : "update")
         const current = await findVehicle(tx, principal, id)
         if (current === undefined) throw noSuchVehicle(id)
         const within: Scope = { companyId: principal.companyId, projectId: current.projectId }

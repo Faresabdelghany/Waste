@@ -11,20 +11,20 @@
 // it keeps its id and the audit log (sql/audit-trail.ts) reads one row's
 // history per kind and priority with the reason its request gave; a target
 // the body leaves out is deleted; the new ones go in one insert. Two writes
-// to one project's set take turns under a transaction-scoped advisory lock on
-// the set, so neither merges into the other. Not `lockRow` on the project,
-// as a set whose parent the API locks would be: `FOR UPDATE` on a project
-// row blocks every insert whose key names it — a ticket, a route, a stop —
-// until the set is saved, and the set's rule is the set's alone.
+// to one project's set take turns under the project's row lock (`lockRow`),
+// so neither merges into the other. The lock is `for no key update` (#335),
+// so the inserts whose key names the project — a ticket, a route, a stop —
+// go on while the set is saved.
 //
 // The project is a path's row: one the caller does not work in, or another
 // company's, is the family's 404, as a read of the project would be.
 import { TicketSla, TicketSlaSet, type TicketSlaTarget } from "@waste/contracts/ticket-sla"
 import type { Tx } from "@waste/db/client"
+import { project } from "@waste/db/schema/organisation"
 import { ticketSla } from "@waste/db/schema/resolution"
 import { slaTargetKey } from "@waste/domain/resolution/sla"
 import { TICKET_KINDS, TICKET_PRIORITIES, type TicketKind, type TicketPriority } from "@waste/domain/resolution/vocabulary"
-import { and, eq, inArray, sql } from "drizzle-orm"
+import { and, eq, inArray } from "drizzle-orm"
 import { Hono, type MiddlewareHandler } from "hono"
 import { describeRoute } from "hono-openapi"
 
@@ -33,7 +33,7 @@ import { projectIdsOf } from "../auth/projects"
 import { requireGrant } from "../auth/require"
 import { newId } from "../ids"
 import { describeProblem, problem, validate } from "../problem"
-import { describeJson, IdParam } from "./shared"
+import { describeJson, IdParam, lockRow } from "./shared"
 
 const MODULE = "configure.templates"
 
@@ -116,7 +116,7 @@ export function ticketSlaRoutes(guard: MiddlewareHandler<AuthEnv>) {
         const tx = c.get("tx")
         const principal = c.get("principal")
         requireOwnProject(principal, id)
-        await tx.execute(sql`select pg_advisory_xact_lock(hashtextextended(${`ticket-sla:${principal.companyId}:${id}`}, 0))`)
+        await lockRow(tx, project, { companyId: principal.companyId, id })
         const current = new Map((await targetsOf(tx, principal.companyId, id)).map((row) => [slaTargetKey(row), row]))
         const kept = new Set(targets.map(slaTargetKey))
         const gone = [...current.values()].filter((row) => !kept.has(slaTargetKey(row))).map((row) => row.id)
