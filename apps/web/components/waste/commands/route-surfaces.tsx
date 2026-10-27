@@ -49,6 +49,7 @@ import { DRIVERS_MODULE, VEHICLES_MODULE } from "@/lib/data/allocations"
 import type { BusinessFormValues } from "@/lib/data/business-form-types"
 import { PROPERTIES_MODULE, SHARED_POINTS_MODULE } from "@/lib/data/properties"
 import { getModuleDefinition, type BusinessRecord } from "@/lib/data/business-modules"
+import { BULKY_BOOKINGS_MODULE, bookingsForRoute } from "@/lib/data/bulky"
 import { MASTER_DATA_MODULE, masterDataKindOf } from "@/lib/data/master-data"
 import { contaminantCodeOptions, createRouteRecord, DISPATCH_DAY_FORM, dispatchDayRows, PICKUP_COMMAND_FORMS, pickupReasonLabel, ROUTE_COMMAND_FORMS, ROUTE_CREATE_FORM, routeCommandValues, type PickupCommandWithForm, type RouteCommandWithForm } from "@/lib/data/routes"
 import type { Pickup } from "@waste/contracts/pickups"
@@ -269,8 +270,13 @@ const DONE_SAYS: Readonly<Record<string, string>> = {
 type RouteOpen = { kind: "form"; name: RouteCommandWithForm; values: BusinessFormValues } | { kind: "reorder"; order: string[] }
 
 /** A route's commands, its stops in sequence, its sessions and the device's command log, in its details. */
+/** No fixture bookings: the module is the API's alone. */
+const NO_BOOKINGS: readonly BusinessRecord[] = []
+
 export function RouteCommandsSurface({ record }: RowSurfaceProps) {
   const pickers = useRelationPickers()
+  // The bookings Add stop may collect (O11 of #290): booked ones of the route's project for its day.
+  const bulkyBookings = useModuleRecords(BULKY_BOOKINGS_MODULE.workspaceId, BULKY_BOOKINGS_MODULE.moduleId, NO_BOOKINGS)
   const moduleReady = useModuleReady(ROUTES_MODULE)
   // The version is bumped after each command the API took: the stops and the log are the route's own reads.
   const { busy, version, run: send } = useCommandRunner(ROUTES_MODULE, record.id)
@@ -420,7 +426,7 @@ export function RouteCommandsSurface({ record }: RowSurfaceProps) {
           open
           onOpenChange={(isOpen) => !isOpen && setOpen(null)}
           onSubmit={(values) => run(ROUTE_COMMAND_OF[open.name], values)}
-          relationOptions={(field, values) => pickers.options(field, values, projectId)}
+          relationOptions={(field, values) => (field.id === "bulkyBookingId" ? bookingsForRoute(bulkyBookings.records, record) : pickers.options(field, values, projectId))}
           initialValueOverrides={open.values}
         />
       )}

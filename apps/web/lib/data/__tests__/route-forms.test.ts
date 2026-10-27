@@ -129,8 +129,10 @@ describe("the route's dialogs", () => {
 
   test("Add stop asks what it collects at, then the container, or the property or the shared point with its fraction, each shown only for its choice, and a note (#111)", () => {
     const form = ROUTE_COMMAND_FORMS["add-stop"]
-    assert.deepEqual(fieldIdsOf(form), ["service", "stopAt", "containerId", "subscriptionId", "deliveryFractionId", "replacementContainerId", "warehouseId", "propertyId", "sharedCollectionPointId", "wasteFractionId", "note"])
-    assert.deepEqual(requiredOf(form), ["service", "stopAt"])
+    assert.deepEqual(fieldIdsOf(form), ["service", "stopAt", "bulkyBookingId", "containerId", "subscriptionId", "deliveryFractionId", "replacementContainerId", "warehouseId", "propertyId", "sharedCollectionPointId", "wasteFractionId", "note"])
+    assert.deepEqual(requiredOf(form), ["stopAt"])
+    assert.deepEqual(fieldOf(form, "service")?.requiredWhen, { fieldId: "stopAt", notIn: ["bulky-booking"] }, "a bulky booking's stop is a bulky collection")
+    assert.deepEqual(fieldOf(form, "bulkyBookingId")?.requiredWhen, { fieldId: "stopAt", equals: "bulky-booking" })
     assert.equal(fieldOf(form, "stopAt")?.defaultValue, "container")
     assert.deepEqual(fieldOf(form, "containerId")?.relation, CONTAINERS_MODULE)
     assert.deepEqual(fieldOf(form, "propertyId")?.relation, PROPERTIES_MODULE)

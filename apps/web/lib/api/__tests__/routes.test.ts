@@ -373,9 +373,9 @@ describe("the route's commands", () => {
 
   test("each names the modules whose rows it changes too (`touches`): the Live board reads the routes' rows, a cancel closes the route's open stops, and a reorder moves each stop's sequence (#219)", () => {
     for (const name of [ASSIGN_ROUTE, DISPATCH_ROUTE, RESCHEDULE_ROUTE]) assert.deepEqual(routeAdapter.commands?.[name]?.touches, ["route-studio.live"], name)
-    assert.deepEqual(cancel?.touches, ["route-studio.pickups", "route-studio.live"])
+    assert.deepEqual(cancel?.touches, ["route-studio.pickups", "route-studio.live", "operate.bulky-bookings"], "a cancel's skipped stops book their bulky bookings again")
     assert.deepEqual(routeAdapter.commands?.[REORDER_ROUTE]?.touches, ["route-studio.pickups", "route-studio.live"])
-    assert.deepEqual(routeAdapter.commands?.[ADD_STOP]?.touches, ["route-studio.pickups", "route-studio.live"], "an added stop is a new row of the stops, and moves the route's progress")
+    assert.deepEqual(routeAdapter.commands?.[ADD_STOP]?.touches, ["route-studio.pickups", "route-studio.live", "operate.bulky-bookings"], "an added stop is a new row of the stops, moves the route's progress, and routes a bulky booking")
   })
 
   test("add a stop sends a container alone, or one address with its fraction, by server id, and the note: the stop body the contract accepts (#111)", () => {
@@ -392,6 +392,14 @@ describe("the route's commands", () => {
     assert.deepEqual(atAPoint, { sharedCollectionPointId: point, wasteFractionId: residual.id })
     assert.ok(PickupAdd.safeParse(atAPoint).success)
     assert.deepEqual(routeAdapter.commands?.[ADD_STOP]?.toBody?.({ containerId: `asset-${bin}` }, record, context()), { containerId: bin }, "a container unless the form says otherwise")
+  })
+
+  test("add a stop collects a bulky booking by its server id alone, the note where the form gives one (O11 of #290)", () => {
+    const booking = "01a0d2a4-a280-7050-8000-000000000001"
+    const bulky = addedStopBody({ stopAt: "bulky-booking", bulkyBookingId: `bulky-booking-${booking}`, service: "wash", note: "Gate code 4711" }, context())
+    assert.deepEqual(bulky, { service: "bulky", bulkyBookingId: booking, note: "Gate code 4711" }, "the booking says the place and the fraction; the service the form hides is not read")
+    assert.ok(PickupAdd.safeParse(bulky).success)
+    assert.deepEqual(addedStopBody({ stopAt: "bulky-booking" }, context()), { path: "bulkyBookingId", message: "Pick a bulky booking of the route's day" })
   })
 
   test("add a stop names the ticket it is booked to answer by server id, where the form carries one (O3c of #290)", () => {

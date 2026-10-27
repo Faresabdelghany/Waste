@@ -205,7 +205,7 @@ export const publicWorkspaceDomains: readonly PublicWorkspaceDomain[] = [
       "Customer-service agent",
       "Driver",
     ],
-    moduleIds: ["tickets", "exceptions", "driver-app"],
+    moduleIds: ["tickets", "bulky-bookings", "exceptions", "driver-app"],
     boundaryNote:
       "Tickets owns resolution work and linked communication. Driver App remains available only through its restricted shell.",
   },
@@ -413,6 +413,19 @@ export const publicModuleDomains: readonly PublicModuleDomain[] = [
     downstream: ["M07", "M11", "M14", "M16", "M17", "M18", "M23"],
     boundaryNote:
       "Customer messages, internal comments, Alerts, and Tickets are separate records connected through explicit relationships.",
+  },
+  {
+    key: "operate.bulky-bookings",
+    workspaceId: "operate",
+    moduleId: "bulky-bookings",
+    primaryBlueprintModule: "M11",
+    supportingBlueprintModules: ["M13", "M16"],
+    canonicalOwner: "Operate · Bulky Bookings",
+    personas: ["Customer-service agent", "Dispatcher", "Driver"],
+    upstream: ["M02", "M03", "M06"],
+    downstream: ["M11", "M14", "M16"],
+    boundaryNote:
+      "A Bulky Booking takes a slot of a day of its area's Bulky Schedule; it becomes a Pickup only when the office routes it, and its charge is the completed stop's.",
   },
   {
     key: "route-studio.pickups",

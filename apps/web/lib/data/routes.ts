@@ -34,6 +34,7 @@ import { DEPOTS_MODULE, DRIVERS_MODULE, VEHICLES_MODULE } from "./allocations"
 import type { BusinessRecord } from "./business-modules"
 import type { BusinessFormField, BusinessFormOption, BusinessFormSchema, BusinessFormValues } from "./business-form-types"
 import { AGREEMENTS_MODULE } from "./agreements"
+import { BULKY_BOOKINGS_MODULE } from "./bulky"
 import { mintedRecord, ORGANISATION_MODULE, WAREHOUSES_MODULE } from "./containers"
 import { MASTER_DATA_MODULE } from "./master-data"
 import { OFFICE_STOP_SERVICE_OPTIONS } from "./pickup-services"
@@ -63,15 +64,21 @@ const routeForm = (title: string, description: string, submitLabel: string, fiel
 export const STOP_AT_CONTAINER = "container"
 export const STOP_AT_PROPERTY = "property"
 export const STOP_AT_POINT = "shared-point"
+/** A Bulky Booking's collection (O11 of #290): at the booking's place, of its fraction, on a route of its day. */
+export const STOP_AT_BULKY_BOOKING = "bulky-booking"
 const STOP_AT_OPTIONS = [
   { value: STOP_AT_CONTAINER, label: "A container" },
   { value: STOP_AT_PROPERTY, label: "A property" },
   { value: STOP_AT_POINT, label: "A shared collection point" },
+  { value: STOP_AT_BULKY_BOOKING, label: "A bulky booking" },
 ]
 const AT_A_CONTAINER = { fieldId: "stopAt", equals: STOP_AT_CONTAINER } as const
 const AT_A_PROPERTY = { fieldId: "stopAt", equals: STOP_AT_PROPERTY } as const
 const AT_A_POINT = { fieldId: "stopAt", equals: STOP_AT_POINT } as const
 const AT_AN_ADDRESS = { fieldId: "stopAt", oneOf: [STOP_AT_PROPERTY, STOP_AT_POINT] } as const
+const AT_A_BOOKING = { fieldId: "stopAt", equals: STOP_AT_BULKY_BOOKING } as const
+/** A bulky booking's stop is its booking's collection: no service to pick. */
+const NOT_A_BOOKING = { fieldId: "stopAt", notIn: [STOP_AT_BULKY_BOOKING] } as const
 /** What a ledger work order books beside its container (O3b of #290): a delivery its subscription, a swap its replacement, a removal and a swap the warehouse. */
 const A_DELIVERY = { fieldId: "service", equals: "deliver" } as const
 const A_SWAP = { fieldId: "service", equals: "swap" } as const
@@ -108,11 +115,12 @@ export const ROUTE_COMMAND_FORMS: Readonly<Record<RouteCommandWithForm, Business
   ]),
   "add-stop": routeForm(
     "Add stop",
-    "A stop the office adds after the route's last one, on a route that has not started. A container is collected where it is placed on the route's service date, and may be one the route stops at already — an extra emptying, or a repair or a wash beside its collection; an address is collected with the fraction you name. A delivery, a removal or a swap moves the container in its ledger when the driver completes the stop. Generation never moves or skips it.",
+    "A stop the office adds after the route's last one, on a route that has not started. A container is collected where it is placed on the route's service date, and may be one the route stops at already — an extra emptying, or a repair or a wash beside its collection; an address is collected with the fraction you name, and a bulky booking at its place on the day it was booked for. A delivery, a removal or a swap moves the container in its ledger when the driver completes the stop. Generation never moves or skips it.",
     "Add stop",
     [
-      { id: "service", label: "Service", type: "select", required: true, defaultValue: "empty", options: OFFICE_STOP_SERVICE_OPTIONS, description: "Every work order is of a container." },
+      { id: "service", label: "Service", type: "select", defaultValue: "empty", options: OFFICE_STOP_SERVICE_OPTIONS, visibleWhen: NOT_A_BOOKING, requiredWhen: NOT_A_BOOKING, description: "Every work order is of a container." },
       { id: "stopAt", label: "Collect", type: "select", required: true, defaultValue: STOP_AT_CONTAINER, options: STOP_AT_OPTIONS },
+      { id: "bulkyBookingId", label: "Bulky booking", type: "select", relation: BULKY_BOOKINGS_MODULE, visibleWhen: AT_A_BOOKING, requiredWhen: AT_A_BOOKING, description: "A booked booking of the route's project for the day it runs: its place, fraction, items and note are the stop's." },
       { id: "containerId", label: "Container", type: "select", relation: CONTAINERS_MODULE, visibleWhen: AT_A_CONTAINER, requiredWhen: AT_A_CONTAINER, description: "Its place and fraction are its placement's on the route's service date; a delivery's, its subscription's." },
       { id: "subscriptionId", label: "Subscription", type: "select", relation: AGREEMENTS_MODULE, visibleWhen: A_DELIVERY, requiredWhen: A_DELIVERY, description: "The subscription the container serves under once delivered, at the place it is delivered at." },
       { id: "deliveryFractionId", label: "Waste fraction", type: "select", relation: MASTER_DATA_MODULE, visibleWhen: A_DELIVERY, description: "Blank takes the subscription's product's." },

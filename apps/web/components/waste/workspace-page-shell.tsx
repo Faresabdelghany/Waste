@@ -9,7 +9,8 @@ import type { WorkspaceId } from "@/lib/data/business-modules"
 const publicModuleIdsByWorkspace: Partial<
   Record<WorkspaceId, readonly string[]>
 > = {
-  operate: ["tickets", "exceptions"],
+  // O11 of #290: a customer's bulky items booked onto a collection day.
+  operate: ["tickets", "bulky-bookings", "exceptions"],
   customers: [
     "properties",
     "groups",
