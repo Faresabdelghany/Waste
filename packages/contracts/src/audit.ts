@@ -103,6 +103,9 @@ export const AUDITED_TABLES = [
   "accounting_settings",
   "accounting_vat_code",
   "accounting_product_account",
+  "bulky_schedule",
+  "bulky_booking",
+  "bulky_booking_item",
 ] as const
 export type AuditedTable = (typeof AUDITED_TABLES)[number]
 

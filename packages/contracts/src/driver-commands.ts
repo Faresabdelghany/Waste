@@ -276,6 +276,8 @@ export const DriverPickup = Pickup.extend({
   wasteFractionName: Label,
   /** A swap's replacement by its label (O3b of #290): what the driver brings; null for any other service. Absent from an answer before it, read as null. */
   replacementContainerLabel: Label.nullable().default(null),
+  /** A bulky collection's items (O11 of #290): what the driver takes away, as the booking lists them; empty for any other service, and absent from an answer before it, read as none. */
+  bulkyItems: z.array(z.object({ description: Label, quantity: PositiveInt })).default([]),
 })
 export type DriverPickup = z.infer<typeof DriverPickup>
 

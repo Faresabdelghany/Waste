@@ -64,6 +64,11 @@ describe("replyFromRecord", () => {
     assert.equal(replyFromRecord(stopEvidenceOf(stop({ status: "planned", reason: null, outcomeAt: null }), []), null), "The collection has not been recorded yet.")
   })
 
+  test("tells of a bulky collection (O11 of #290) as the bulky items collected, or not", () => {
+    assert.equal(replyFromRecord(stopEvidenceOf(stop({ service: "bulky", status: "completed", reason: null }), []), WHEN), `Our driver collected the bulky items at ${WHEN}.`)
+    assert.equal(replyFromRecord(stopEvidenceOf(stop({ service: "bulky", status: "failed", reason: "other" }), []), WHEN), `Our driver was at the address at ${WHEN} and could not collect the bulky items: the visit did not take place.`)
+  })
+
   test("never puts the driver at an address the driver never reached: the route's end, its cancellation, the dispatcher and generation each say what happened", () => {
     const closed = (reason: PickupReason) => replyFromRecord(stopEvidenceOf(stop({ status: "skipped", reason }), []), WHEN)
     assert.equal(closed("route-ended"), `The bin was not collected: the route ended at ${WHEN} before our driver reached it.`)

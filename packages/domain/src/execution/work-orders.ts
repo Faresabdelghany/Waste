@@ -36,6 +36,7 @@ export const BOOKED_WITH: Readonly<Record<PickupService, readonly BookedField[]>
   swap: ["replacementContainerId", "warehouseId"],
   repair: [],
   wash: [],
+  bulky: [],
 }
 
 /** The movements a completed stop makes, in order: the swap returns the container taken before it issues the replacement. */

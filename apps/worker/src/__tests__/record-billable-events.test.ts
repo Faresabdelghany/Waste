@@ -39,6 +39,7 @@ import { billableEvent, billingRun, ticketKindProduct, workOrderProduct } from "
 import { contaminantCode, pickupExceptionRule, pickupExceptionRuleStep } from "@waste/db/schema/pickup-exceptions"
 import { project } from "@waste/db/schema/organisation"
 import { ticket } from "@waste/db/schema/resolution"
+import { bulkyBooking } from "@waste/db/schema/bulky"
 import { withCompany } from "@waste/db/tenant"
 import type { OutboxKind } from "@waste/domain/execution/vocabulary"
 import type { Job } from "pg-boss"
@@ -48,7 +49,7 @@ import type { JobContext } from "../jobs"
 import { FINANCE_EVENT_KINDS, recordBillableEvents, type PublishedEvent, type Recorded } from "../jobs/record-billable-events"
 import { consumerQueue } from "../outbox/subscribe"
 import { databaseUnderTest, ownerUnderTest } from "./database"
-import { at, dropFinanceTenant, FIXTURE_DAY, movePickup, placeBin, seedCompletedRoute, seedCorrectionProof, seedExceptionRule, seedFinanceTenant, seedTicket, testId, type FinanceTenant } from "./finance-tenant"
+import { at, dropFinanceTenant, FIXTURE_DAY, movePickup, placeBin, seedBulkyBooking, seedCompletedRoute, seedCorrectionProof, seedExceptionRule, seedFinanceTenant, seedTicket, testId, type FinanceTenant } from "./finance-tenant"
 import { fakeRouting, settlesNothing } from "./routing-context"
 
 const database = databaseUnderTest()
@@ -297,6 +298,33 @@ describe("finance.record-billable-events against Postgres", { skip }, () => {
     await movePickup(pool, tenant, wash, "skipped")
     assert.equal((await handle(published("pickup-corrected", wash, office(wash, washed.containerId, "wash", "skipped")))).did, "cancelled")
     assert.equal((await eventsOfPickup(wash))[0].status, "cancelled")
+  })
+
+  test("a bulky collection's completion records a job at its booking's product, charged to the booking's agreement with no subscription (O11 of #290), and a correction away cancels it", async () => {
+    const booking = await seedBulkyBooking(pool, tenant, { agreementId: tenant.agreements.housing.id, customerId: tenant.customers.housing.id, propertyId: tenant.properties.havnegade.id })
+    const stops = await seedCompletedRoute(pool, tenant, [{ containerId: null, propertyId: tenant.properties.havnegade.id, origin: "office", service: "bulky", bulkyBookingId: booking.id }], FIXTURE_DAY, { adHoc: true })
+    const [collected] = stops.pickupIds
+    const payload = { ...pickupPayload(stops.id, collected, null, "completed"), origin: "office", service: "bulky", bulkyBookingId: booking.id }
+    const recorded = await handle(published("pickup-completed", collected, payload))
+    const row = (await allEvents()).find((candidate) => candidate.id === recorded.billableEventId)
+    assert.deepEqual(
+      [recorded.did, row?.kind, row?.status, row?.agreementId, row?.subscriptionId, row?.productId, row?.unitPriceMinor, row?.vatMinor, row?.blockReason],
+      ["recorded", "job", "ready", tenant.agreements.housing.id, null, tenant.products.bulky.id, 35_000, 8_750, null],
+    )
+    assert.equal((await handle(published("pickup-completed", collected, payload))).did, "nothing", "charged once")
+    await movePickup(pool, tenant, collected, "failed")
+    assert.equal((await handle(published("pickup-corrected", collected, { ...payload, status: "failed", reason: "not-presented" }))).did, "cancelled")
+  })
+
+  test("a cancelled bulky booking is charged nothing, whatever a stop of it says (O11 of #290)", async () => {
+    const booking = await seedBulkyBooking(pool, tenant, { agreementId: tenant.agreements.housing.id, customerId: tenant.customers.housing.id, propertyId: tenant.properties.havnegade.id })
+    await withCompany(pool.db, tenant.companyId, async (tx) => {
+      await tx.update(bulkyBooking).set({ cancelledAt: NOON, cancelReason: "Customer called" }).where(eq(bulkyBooking.id, booking.id))
+    })
+    const stops = await seedCompletedRoute(pool, tenant, [{ containerId: null, propertyId: tenant.properties.havnegade.id, origin: "office", service: "bulky", bulkyBookingId: booking.id }], FIXTURE_DAY, { adHoc: true })
+    const [collected] = stops.pickupIds
+    const payload = { ...pickupPayload(stops.id, collected, null, "completed"), origin: "office", service: "bulky", bulkyBookingId: booking.id }
+    assert.deepEqual([(await handle(published("pickup-completed", collected, payload))).did, await eventsOfPickup(collected)], ["nothing", []])
   })
 
   test("a stop a ticket was booked for and then booked away from records no job when it completes after all: the ticket's charge is the one, never two (#422)", async () => {

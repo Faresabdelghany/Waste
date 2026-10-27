@@ -71,6 +71,7 @@ export function pickup(n: number, overrides: Partial<DriverPickup> = {}): Driver
     subscriptionId: null,
     warehouseId: null,
     replacementContainerId: null,
+    bulkyBookingId: null,
     arrivedAt: null,
     outcomeAt: null,
     address: `Strandvejen ${n}, 2100 København Ø`,
@@ -79,6 +80,7 @@ export function pickup(n: number, overrides: Partial<DriverPickup> = {}): Driver
     containerLabel: `BIN-9100${n}`,
     wasteFractionName: "Residual",
     replacementContainerLabel: null,
+    bulkyItems: [],
     ...overrides,
   }
 }
