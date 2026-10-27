@@ -145,7 +145,7 @@ async function hireOf(tx: Tx, scope: Scope, row: EventReading, agreementId: stri
 }
 
 /** A manual event links to nothing. */
-const NO_LINKS: BillableEventLinks = { routeId: null, pickupId: null, ticketId: null, reversesEventId: null, proofId: null }
+const NO_LINKS: BillableEventLinks = { routeId: null, pickupId: null, ticketId: null, reversesEventId: null, proofId: null, visitId: null }
 
 /** The conditions a pickup event carries into the resolver; none on a manual or a ticket event. */
 type Conditions = { planningAreaId: string | null; containerTypeId: string | null; wasteFractionId: string | null }
@@ -413,7 +413,7 @@ export function billableEventRoutes(guard: MiddlewareHandler<AuthEnv>, { now = (
         operationId: "cancelBillableEvent",
         summary: "Cancel a ready, held or blocked event",
         description:
-          "The `cancel` command: a `ready`, a `held` or a `blocked` event is stamped with the caller, the request's clock and the office's `reason` — `duplicate`, `not-delivered` or `other`; `pickup-corrected` is the consumer's and is refused — and the body's `note`, when given, replaces the event's. There is nothing to invoice on a blocked event either, so it is cancelled too. An `invoiced` event is refused (409, `Billable event <id> is invoiced; correct it with a credit note`), as is a `reversed` one (409, `… is reversed`); a `cancelled` one answers 200 as it stands, without a write; and a `reversal` is refused whatever its status (409, `A reversal is not cancelled; it is the correction`). Under the event's row lock; `updatedAt` moves. Nothing is published.",
+          "The `cancel` command: a `ready`, a `held` or a `blocked` event is stamped with the caller, the request's clock and the office's `reason` — `duplicate`, `not-delivered` or `other`; `pickup-corrected` and `visit-voided` are the consumer's and are refused — and the body's `note`, when given, replaces the event's. There is nothing to invoice on a blocked event either, so it is cancelled too. An `invoiced` event is refused (409, `Billable event <id> is invoiced; correct it with a credit note`), as is a `reversed` one (409, `… is reversed`); a `cancelled` one answers 200 as it stands, without a write; and a `reversal` is refused whatever its status (409, `A reversal is not cancelled; it is the correction`). Under the event's row lock; `updatedAt` moves. Nothing is published.",
         security: BEARER_SECURITY,
         responses: {
           200: describeJson("The event, cancelled.", BillableEvent),

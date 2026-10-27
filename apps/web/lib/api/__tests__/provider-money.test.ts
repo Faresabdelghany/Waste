@@ -20,8 +20,6 @@ import { isServerBacked, SERVER_MODULE_KEYS } from "../records/modules"
 import { projectAdapter } from "../records/organisation"
 import { productAdapter } from "../records/pricing"
 import {
-  basisPointsOf,
-  INDEX_REFUSAL,
   providerPriceAdapter,
   providerPriceIndexHeldBack,
   providerPriceIndexOffered,
@@ -32,6 +30,7 @@ import {
   settlementHistory,
   settlementsModule,
 } from "../records/provider-money"
+import { basisPointsOf, INDEX_REFUSAL } from "@/lib/commercial/indexation"
 import { commandRecord, loaded, resolverOver, spellsStatus, writeRecord, type ServerRecordsState } from "../records/server-records"
 import { bodyOf, clientOver, json, problem, scripted } from "./scripted-fetch"
 

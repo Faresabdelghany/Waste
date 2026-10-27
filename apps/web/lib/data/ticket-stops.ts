@@ -10,7 +10,7 @@ import { OPEN_TICKET_STATUSES, type TicketKind } from "@waste/domain/resolution/
 
 import type { BusinessFormField, BusinessFormOption, BusinessFormSchema, BusinessFormValues } from "./business-form-types"
 import type { BusinessRecord } from "./business-modules"
-import { ROUTE_COMMAND_FORMS, STOP_AT_CONTAINER, STOP_AT_POINT, STOP_AT_PROPERTY } from "./routes"
+import { ROUTE_COMMAND_FORMS, STOP_AT_BULKY_BOOKING, STOP_AT_CONTAINER, STOP_AT_POINT, STOP_AT_PROPERTY } from "./routes"
 
 /** Whether a ticket of this kind and status offers Book a stop: an open one a stop answers. */
 export const offersBookAStop = (kind: string, status: string): boolean => (OPEN_TICKET_STATUSES as readonly string[]).includes(status) && isStopTicketKind(kind as TicketKind)
@@ -34,13 +34,13 @@ export function bookAStopWaits(routes: { status: string } | null | undefined): s
   return routes.status === "ready" ? undefined : "Reading the routes a stop may be booked on…"
 }
 
-/** Book a stop's dialog: the route, then Add stop's fields with only the services the ticket's kind answers; a work order is of a container. */
+/** Book a stop's dialog: the route, then Add stop's fields with only the services the ticket's kind answers; a work order is of a container, and a ticket's stop is never a bulky booking's. */
 export function bookStopForm(kind: StopTicketKind, routes: readonly BusinessFormOption[]): BusinessFormSchema {
   const addStop = ROUTE_COMMAND_FORMS["add-stop"]
   const answers: readonly string[] = servicesAnswering(kind)
-  const fields = addStop.sections.flatMap((section) => section.fields).map((field): BusinessFormField => {
+  const fields = addStop.sections.flatMap((section) => section.fields).filter((field) => field.id !== "bulkyBookingId").map((field): BusinessFormField => {
     if (field.id === "service") return { ...field, defaultValue: answers[0], options: field.options?.filter((option) => answers.includes(String(option.value))) }
-    if (field.id === "stopAt" && !answers.includes("empty")) return { ...field, options: field.options?.filter((option) => option.value === STOP_AT_CONTAINER) }
+    if (field.id === "stopAt") return { ...field, options: field.options?.filter((option) => answers.includes("empty") ? option.value !== STOP_AT_BULKY_BOOKING : option.value === STOP_AT_CONTAINER) }
     return field
   })
   return {

@@ -14,7 +14,6 @@ import { readFile } from "node:fs/promises"
 import { join } from "node:path"
 import { describe, test } from "node:test"
 
-import { OUTBOX_AGGREGATES, OUTBOX_KINDS } from "@waste/domain/execution/vocabulary"
 import { APPLICATION_CHANNELS, APPLICATION_KINDS, APPLICATION_STATUSES, DECISION_OUTCOMES } from "@waste/domain/registry/vocabulary"
 
 import { MIGRATIONS_FOLDER } from "../migrate"
@@ -22,12 +21,11 @@ import { userAccount } from "../schema/access"
 import { subscription } from "../schema/agreements"
 import { application, applicationDecision } from "../schema/applications"
 import { customer, property, sharedCollectionPoint } from "../schema/customers"
-import { outboxEvent } from "../schema/execution"
 import { company, project } from "../schema/organisation"
 import { APPLICATIONS_AUDITED, auditTrail, EXEMPT } from "../sql/audit-trail"
 import { handWrittenStatements, normalised, statementsOf } from "../sql/hand-written"
 import { checksOf, list, ref } from "./rendering"
-import { outboxEventAsOf0010 } from "./outbox-as-of"
+import { OUTBOX_AGGREGATES_AS_OF_0040, OUTBOX_KINDS_AS_OF_0040, outboxEventAsOf0010, outboxEventAsOf0040 } from "./outbox-as-of"
 import { statementsBetween } from "./specimen"
 
 const MIGRATION = "0040_applications.sql"
@@ -36,8 +34,8 @@ const fileStatements = async (): Promise<string[]> => statementsOf(await readFil
 /** The tables the two name, the same on both sides of the diff. */
 const referenced = { company, project, customer, property, sharedCollectionPoint, subscription, userAccount }
 
-/** What drizzle-kit writes for 0040: the two tables, and the outbox from its 0010 spelling to today's. */
-const generated = (): Promise<string[]> => statementsBetween({ ...referenced, outboxEvent: outboxEventAsOf0010 }, { ...referenced, outboxEvent, application, applicationDecision })
+/** What drizzle-kit writes for 0040: the two tables, and the outbox from its 0010 spelling to its 0040 one (outbox-as-of.ts; 0054 grew it again). */
+const generated = (): Promise<string[]> => statementsBetween({ ...referenced, outboxEvent: outboxEventAsOf0010 }, { ...referenced, outboxEvent: outboxEventAsOf0040, application, applicationDecision })
 
 const decision = (column: string) => ref("application_decision", column)
 const PERIOD = `case when ${decision("outcome")} = 'refused' then ${decision("granted_from")} is null and ${decision("granted_to")} is null else ${decision("granted_from")} is not null and (${decision("granted_to")} is null or ${decision("granted_to")} > ${decision("granted_from")}) end`
@@ -70,11 +68,11 @@ describe("the outbox", () => {
     assert.deepEqual(outbox, [
       'ALTER TABLE "wms"."outbox_event" DROP CONSTRAINT "outbox_event_kind_one_of";',
       'ALTER TABLE "wms"."outbox_event" DROP CONSTRAINT "outbox_event_aggregate_kind_one_of";',
-      `ALTER TABLE "wms"."outbox_event" ADD CONSTRAINT "outbox_event_kind_one_of" CHECK (${ref("outbox_event", "kind")} in (${list(...OUTBOX_KINDS)}));`,
-      `ALTER TABLE "wms"."outbox_event" ADD CONSTRAINT "outbox_event_aggregate_kind_one_of" CHECK (${ref("outbox_event", "aggregate_kind")} in (${list(...OUTBOX_AGGREGATES)}));`,
+      `ALTER TABLE "wms"."outbox_event" ADD CONSTRAINT "outbox_event_kind_one_of" CHECK (${ref("outbox_event", "kind")} in (${list(...OUTBOX_KINDS_AS_OF_0040)}));`,
+      `ALTER TABLE "wms"."outbox_event" ADD CONSTRAINT "outbox_event_aggregate_kind_one_of" CHECK (${ref("outbox_event", "aggregate_kind")} in (${list(...OUTBOX_AGGREGATES_AS_OF_0040)}));`,
     ])
-    assert.equal(OUTBOX_KINDS.at(-1), "application-decided")
-    assert.equal(OUTBOX_AGGREGATES.at(-1), "application")
+    assert.equal(OUTBOX_KINDS_AS_OF_0040.at(-1), "application-decided")
+    assert.equal(OUTBOX_AGGREGATES_AS_OF_0040.at(-1), "application")
   })
 })
 

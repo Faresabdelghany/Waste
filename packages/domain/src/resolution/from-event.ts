@@ -156,7 +156,7 @@ export const boundedSubject = (subject: string): string => bounded(subject, TICK
 export const boundedDescription = (description: string): string => bounded(description, TICKET_DESCRIPTION_MAX)
 
 /** A work order as its subject names it. */
-const WORK_ORDER_NAMES: Readonly<Record<Exclude<PickupService, "empty">, string>> = { deliver: "Delivery", remove: "Removal", swap: "Swap", repair: "Repair", wash: "Wash" }
+const WORK_ORDER_NAMES: Readonly<Record<Exclude<PickupService, "empty">, string>> = { deliver: "Delivery", remove: "Removal", swap: "Swap", repair: "Repair", wash: "Wash", bulky: "Bulky collection" }
 
 /** "Wash not done: BIN-82014 at Parkvej 18": a work order the stop did not get done, with whichever of the two the worker found. */
 export const workOrderNotDoneSubject = (service: Exclude<PickupService, "empty">, containerLabel: string | null, address: string | null): string =>

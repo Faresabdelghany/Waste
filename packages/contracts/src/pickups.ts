@@ -91,6 +91,8 @@ export const Pickup = z.object({
   subscriptionId: Id.nullable().default(null),
   warehouseId: Id.nullable().default(null),
   replacementContainerId: Id.nullable().default(null),
+  /** The Bulky Booking a `bulky` stop collects (O11 of #290); null for any other service, and absent on an event the outbox took before it, which named none. */
+  bulkyBookingId: Id.nullable().default(null),
 })
 export type Pickup = z.infer<typeof Pickup>
 
@@ -128,6 +130,12 @@ export const AN_ADDRESS_WITH_ITS_FRACTION = "An address-only stop names the wast
 export const A_WORK_ORDER_OF_A_CONTAINER = "A work order is of a container: name the container"
 /** What a delivery naming its place is told: the subscription says where. */
 export const A_DELIVERY_AT_ITS_SUBSCRIPTION = "A delivery goes where its subscription serves: name the subscription, not the place"
+/** What a bulky collection naming anything but its booking is told: the booking says where and what. */
+export const THE_BOOKING_ALONE = "A bulky collection takes its place and fraction from its booking; name the booking alone"
+/** What a bulky collection without its booking is told. */
+export const A_BULKY_BOOKING = "A bulky collection names the bulky booking it collects"
+/** What any other stop naming a booking is told. */
+export const ONLY_A_BULKY_COLLECTION = "Only a bulky collection names a bulky booking"
 /** What a swap of a container for itself is told. */
 export const A_SWAP_FOR_ANOTHER = "A swap's replacement is another container"
 
@@ -150,11 +158,20 @@ type PickupServiceToken = keyof typeof BOOKED_WITH
 
 /** The shape of a stop the office adds: a container alone, or one place with its fraction. A null counts as not given, as a form sends one for the field it leaves empty. */
 function addedStopIssues(
-  body: { service?: string; containerId?: string | null; propertyId?: string | null; sharedCollectionPointId?: string | null; wasteFractionId?: string | null } & Partial<Record<BookedField, string | null>>,
+  body: { service?: string; containerId?: string | null; propertyId?: string | null; sharedCollectionPointId?: string | null; wasteFractionId?: string | null; bulkyBookingId?: string | null } & Partial<Record<BookedField, string | null>>,
   context: z.RefinementCtx,
 ): void {
   const place = [given(body.propertyId), given(body.sharedCollectionPointId)].filter(Boolean).length
   const service = (body.service ?? "empty") as PickupServiceToken
+  // A bulky collection is its booking's alone: the table's `pickup_bulky_shape`, at the boundary (O11 of #290).
+  if (service === "bulky") {
+    if (!given(body.bulkyBookingId)) context.addIssue({ code: "custom", message: A_BULKY_BOOKING, path: ["bulkyBookingId"] })
+    for (const path of ["containerId", "propertyId", "sharedCollectionPointId", "wasteFractionId", "subscriptionId", "warehouseId", "replacementContainerId"] as const) {
+      if (given(body[path])) context.addIssue({ code: "custom", message: THE_BOOKING_ALONE, path: [path] })
+    }
+    return
+  }
+  if (given(body.bulkyBookingId)) context.addIssue({ code: "custom", message: ONLY_A_BULKY_COLLECTION, path: ["bulkyBookingId"] })
   // A work order is of a container where it stands: the table's `pickup_service_container_shape`, at the boundary.
   if (service !== "empty" && !given(body.containerId)) {
     context.addIssue({ code: "custom", message: A_WORK_ORDER_OF_A_CONTAINER, path: ["containerId"] })
@@ -193,7 +210,7 @@ function addedStopIssues(
  */
 export const PickupAdd = z
   .strictObject({
-    service: OfficeStopService.default("empty").describe("An emptying when absent; every work order names a container, and a delivery, a removal and a swap their ledger bookings."),
+    service: OfficeStopService.default("empty").describe("An emptying when absent; every work order names a container, a delivery, a removal and a swap their ledger bookings, and a bulky collection its booking alone."),
     containerId: Id.nullable().optional(),
     /** A delivery's: the subscription the container serves under once delivered, which says the place. */
     subscriptionId: Id.nullable().optional(),
@@ -207,6 +224,8 @@ export const PickupAdd = z
     note: Paragraph.nullable().optional(),
     /** The ticket the stop is booked to answer (O3c of #290): an open container request, overflow or defect of the route's project, whose container and place the stop is held to; it then names this stop as its booking. */
     ticketId: Id.nullable().optional(),
+    /** The Bulky Booking a `bulky` stop collects (O11 of #290): a booked one of the route's project, for the route's day, whose place and fraction the stop takes. */
+    bulkyBookingId: Id.nullable().optional(),
   })
   .superRefine(addedStopIssues)
 export type PickupAdd = z.infer<typeof PickupAdd>

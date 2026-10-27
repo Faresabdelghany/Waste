@@ -61,19 +61,23 @@
 // through the placement in force that day; with the list it is priced under
 // on the service date and its rows. An office stop's own placement is never
 // read for a pickup's price, since the domain charges it nothing but a job.
+// A bulky collection (O11 of #290) is a job at its booking's product, charged
+// to the agreement the booking names (`bulkyFacts`).
 import { isChargeable, judgeException, type PickupExceptionStop } from "@waste/domain/execution/pickup-exceptions"
-import type { ExceptionFacts, JobChargeFacts, PlacementFacts, PickupEventFacts, TicketChargeFacts, TicketCompletedFacts } from "@waste/domain/finance/from-event"
+import type { ExceptionFacts, JobChargeFacts, PlacementFacts, PickupEventFacts, TicketChargeFacts, TicketCompletedFacts, VisitEventFacts } from "@waste/domain/finance/from-event"
 import { isWorkOrderService, type PickupOrigin, type PickupOutcome, type PickupReason, type PickupService, type PickupStatus } from "@waste/domain/execution/vocabulary"
 import { addDays } from "@waste/domain/route-schemes/recurrence"
 import type { AgreementStatus, CustomerKind, ProductStatus, ProductUnit } from "@waste/domain/registry/vocabulary"
 import type { TicketResolution } from "@waste/domain/resolution/vocabulary"
 import type { Tx } from "@waste/db/client"
-import { agreementFacts, EXCEPTION_EVENT_KINDS, liveEventOf, listInForce, rowsOn } from "@waste/db/commands/billable-writes"
+import type { SiteVisit } from "@waste/contracts/site-visits"
+import { agreementFacts, EXCEPTION_EVENT_KINDS, liveEventOf, liveVisitEventOf, listInForce, rowsOn } from "@waste/db/commands/billable-writes"
 import type { EventReading } from "@waste/db/commands/billing-shapes"
 import { dayInTimezone } from "@waste/db/commands/days"
 import { exceptionRulesOf, exceptionStopsAt, latestOutcomeProofs, placeOf } from "@waste/db/commands/pickup-exceptions"
 import { projectTimezone } from "@waste/db/commands/project-clock"
 import { lockRow } from "@waste/db/commands/shared"
+import { priceVisitCharge, type VisitRow } from "@waste/db/commands/site-visits"
 import { validOn } from "@waste/db/query/valid-on"
 import { agreement, subscription } from "@waste/db/schema/agreements"
 import { product } from "@waste/db/schema/catalogue"
@@ -81,6 +85,7 @@ import { container, containerServicePlacement } from "@waste/db/schema/container
 import { customer } from "@waste/db/schema/customers"
 import { pickup, route } from "@waste/db/schema/execution"
 import { ticketKindProduct, workOrderProduct } from "@waste/db/schema/finance"
+import { bulkyBooking } from "@waste/db/schema/bulky"
 import { ticket, ticketBooking } from "@waste/db/schema/resolution"
 import { routeScheme } from "@waste/db/schema/route-schemes"
 import { and, desc, eq, lte } from "drizzle-orm"
@@ -102,6 +107,8 @@ export type PickupRow = {
   service: PickupService
   /** The subscription a delivery books; null for every other service. */
   subscriptionId: string | null
+  /** The Bulky Booking a bulky collection collects (O11 of #290); null for every other service. */
+  bulkyBookingId: string | null
   /** Whether a ticket booked the stop to answer it (O3c of #290), the ticket booked again since or not (#422). */
   bookedForTicket: boolean
   /** What a Pickup Exception is judged on (#293 M5): the driver's reason, the contaminant code, and the place it is counted at. */
@@ -117,8 +124,8 @@ export type PickupRowOptions = { lock?: boolean }
 /**
  * The pickup of the route the event names, with its route, its scheme's
  * planning area and its container's type; undefined when the row is not
- * there. With `lock`, `lockRow(pickup)` runs first — `select … for update` on
- * the pickup's own row, as `wms_api` under the fence — so the status and the
+ * there. With `lock`, `lockRow(pickup)` runs first — `select … for no key
+ * update` on the pickup's own row, as `wms_api` under the fence — so the status and the
  * live event read after it are what the lock let through: two workers on two
  * events of one pickup (the completion on `outbox.pickup-completed`, a
  * correction to `completed` on `outbox.pickup-corrected`) serialise here, and
@@ -140,6 +147,7 @@ export async function pickupRow(tx: Tx, companyId: string, routeId: string, pick
       status: pickup.status,
       service: pickup.service,
       subscriptionId: pickup.subscriptionId,
+      bulkyBookingId: pickup.bulkyBookingId,
       bookingTicketId: ticketBooking.ticketId,
       reason: pickup.reason,
       contaminantCodeId: pickup.contaminantCodeId,
@@ -193,7 +201,7 @@ export async function placementOn(tx: Tx, companyId: string, projectId: string, 
 }
 
 /** The live event as the domain reads it: its parties, its quantity, its frozen price or null while blocked, its day, and whether a line names it. */
-const liveFacts = (live: EventReading): PickupEventFacts["liveEvent"] => ({
+export const liveFacts = (live: EventReading): PickupEventFacts["liveEvent"] => ({
   id: live.id,
   agreementId: live.agreementId,
   subscriptionId: live.subscriptionId,
@@ -303,6 +311,7 @@ export async function pickupFacts(tx: Tx, companyId: string, kind: PickupEventFa
  * service the project names no product for, none of which the domain charges.
  */
 async function jobFacts(tx: Tx, companyId: string, found: PickupRow): Promise<JobChargeFacts | null> {
+  if (found.service === "bulky") return await bulkyFacts(tx, companyId, found)
   if (found.origin !== "office" || !isWorkOrderService(found.service) || found.bookedForTicket || found.containerId === null) return null
   const scope = { companyId, projectId: found.projectId }
   const [named] = await tx
@@ -330,6 +339,37 @@ async function jobFacts(tx: Tx, companyId: string, found: PickupRow): Promise<Jo
     agreement: { id: facts.id, status: facts.status, customerKind: facts.customerKind, customerId: facts.customerId },
     subscriptionId,
     priceList: list === undefined ? null : { id: list.id, currency: list.currency, rows: await rowsOn(tx, companyId, list.id, jobProduct.id, found.serviceDate) },
+  }
+}
+
+/**
+ * A bulky collection's charge (O11 of #290): the product its booking froze
+ * from its schedule, and the agreement the booking names, with the list it is
+ * priced under on the service date; none for a booking cancelled. The
+ * booking is the stop's by the table's shape, so one missing is a broken
+ * invariant and thrown.
+ */
+async function bulkyFacts(tx: Tx, companyId: string, found: PickupRow): Promise<JobChargeFacts | null> {
+  if (found.bulkyBookingId === null) throw new Error("a bulky collection names no booking")
+  const scope = { companyId, projectId: found.projectId }
+  const [booked] = await tx
+    .select({ agreementId: bulkyBooking.agreementId, cancelledAt: bulkyBooking.cancelledAt, id: product.id, status: product.status, unit: product.unit, vatPercent: product.vatPercent })
+    .from(bulkyBooking)
+    .innerJoin(product, and(eq(product.companyId, bulkyBooking.companyId), eq(product.id, bulkyBooking.productId)))
+    .where(and(eq(bulkyBooking.companyId, companyId), eq(bulkyBooking.id, found.bulkyBookingId)))
+    .limit(1)
+  if (booked === undefined) throw new Error(`bulky booking ${found.bulkyBookingId} of a stop not there`)
+  // A cancelled booking is charged nothing, whatever a stop of it says: the API refuses its stop a correction to completed, and this is the second stop.
+  if (booked.cancelledAt !== null) return null
+  const bulkyProduct = { id: booked.id, status: booked.status as ProductStatus, unit: booked.unit as ProductUnit, vatPercent: booked.vatPercent }
+  const facts = await agreementFacts(tx, scope, booked.agreementId)
+  if (facts === undefined) return { product: bulkyProduct, agreement: null, subscriptionId: null, priceList: null }
+  const list = facts.status === "draft" ? undefined : await listInForce(tx, scope, facts.priceListId, found.serviceDate)
+  return {
+    product: bulkyProduct,
+    agreement: { id: facts.id, status: facts.status, customerKind: facts.customerKind, customerId: facts.customerId },
+    subscriptionId: null,
+    priceList: list === undefined ? null : { id: list.id, currency: list.currency, rows: await rowsOn(tx, companyId, list.id, bulkyProduct.id, found.serviceDate) },
   }
 }
 
@@ -442,5 +482,40 @@ async function chargeFacts(tx: Tx, scope: { companyId: string; projectId: string
     product: { id: productId, status: named.status as ProductStatus, unit: named.unit as ProductUnit, vatPercent: named.vatPercent },
     agreement: { status: facts.status, customerKind: facts.customerKind, customerId: facts.customerId },
     priceList: list === undefined ? null : { id: list.id, currency: list.currency, rows: await rowsOn(tx, scope.companyId, list.id, productId, closedOn) },
+  }
+}
+
+/**
+ * A Site Visit's event as the domain reads it (#393, M4 of #293): the visit
+ * as it stands now — admitted or not, voided or not, the Agreement it is
+ * charged to — its live `visit` event under its row lock, and, for a
+ * recording of an admitted visit standing unvoided and uncharged, the
+ * product its Visit Rule charged it at when it was checked in — stored on
+ * the visit, the number the attendant quoted, never recounted here — priced
+ * through `priceDraft` on its day. The caller holds the visit's row lock, so
+ * a recording and its void take turns.
+ */
+export async function visitFacts(tx: Tx, companyId: string, kind: VisitEventFacts["kind"], found: { row: VisitRow; visit: SiteVisit }): Promise<{ facts: VisitEventFacts; live: EventReading[] }> {
+  const { row } = found
+  const scope = { companyId, projectId: row.projectId }
+  const live = await liveVisitEventOf(tx, companyId, row.id)
+  const voided = row.voidedAt !== null
+  const admitted = row.outcome === "admitted"
+  const productId = admitted ? row.chargeProductId : null
+  const judged = kind === "site-visit-recorded" && admitted && !voided && live === undefined
+  const priced = judged ? await priceVisitCharge(tx, scope, row.agreementId, productId, row.serviceDate) : null
+  return {
+    facts: {
+      kind,
+      visitId: row.id,
+      serviceDate: row.serviceDate,
+      admitted,
+      voided,
+      agreementId: row.agreementId,
+      productId,
+      priced: priced === null ? null : { price: priced.price, blockReason: priced.blockReason },
+      liveEvent: live === undefined ? null : liveFacts(live),
+    },
+    live: live === undefined ? [] : [live],
   }
 }

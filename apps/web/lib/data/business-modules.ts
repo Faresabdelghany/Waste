@@ -1204,6 +1204,25 @@ const operate: WorkspaceDefinition = {
       ],
     },
     {
+      // Bulky Bookings (O11 of #290): on the API only, so no fixture records; the module's surfaces are O11b's.
+      id: "bulky-bookings",
+      label: "Bulky Bookings",
+      title: "Bulky Bookings",
+      description: "A customer's bulky items booked onto a collection day of their planning area, a slot of the day's capacity each, routed by the office as a stop and charged once collected.",
+      entityLabel: "Bulky booking",
+      contextLabel: "Customer · place",
+      valueLabel: "Day",
+      primaryAction: "Book bulky collection",
+      metrics: [],
+      lifecycle: ["Booked", "Routed", "Collected", "Cancelled"],
+      rules: [
+        "A booking takes one slot of its day; a full day is not offered.",
+        "The office routes a booking onto a route running on its day, as a stop at the booking's address.",
+        "A collected booking is charged at its schedule's product to the agreement it names.",
+      ],
+      records: [],
+    },
+    {
       id: "pickups",
       label: "Pickups",
       title: "Pickups",
@@ -1940,6 +1959,24 @@ const operate: WorkspaceDefinition = {
           "/projects/2",
         ),
       ],
+    },
+    {
+      // Recycling-centre visits (M4 of #293): on the API only, so no fixture records; the ledger, the likely trades and the phone-first check-in are M4b's.
+      id: "site-visits",
+      label: "Site visits",
+      title: "Recycling-centre visits",
+      description: "Every arrival at a recycling centre: who it was for, the fractions brought, admitted or turned away, and what the project's Visit Rule charges for it.",
+      entityLabel: "Site visit",
+      contextLabel: "Site · identifier",
+      valueLabel: "Charge",
+      primaryAction: "Check in a visitor",
+      metrics: [],
+      lifecycle: ["Admitted", "Refused", "Voided"],
+      rules: [
+        "A refused visit is still recorded: the ledger says who was turned away.",
+        "A mistake is voided, never deleted: the ledger is the evidence for its charge.",
+      ],
+      records: [],
     },
   ],
 }
@@ -2797,6 +2834,24 @@ const customers: WorkspaceDefinition = {
         ),
       ],
     },
+    {
+      // The register of plates and cards (M4 of #293): on the API only, so no fixture records; the office's pane is M4b's.
+      id: "site-access",
+      label: "Site access",
+      title: "Recycling-centre access",
+      description: "The vehicle plates and access cards a project's recycling centres admit by: a business's under its customer and the agreement its visits are charged to, a household's under its property.",
+      entityLabel: "Access credential",
+      contextLabel: "Kind · holder",
+      valueLabel: "In force",
+      primaryAction: "Register a plate or card",
+      metrics: [],
+      lifecycle: ["In force", "Blocked", "Ended"],
+      rules: [
+        "One credential of a plate or card number is in force at a time.",
+        "A credential is ended or blocked, never deleted.",
+      ],
+      records: [],
+    },
   ],
 }
 
@@ -3620,10 +3675,13 @@ const operateWithoutRouteStudio: WorkspaceDefinition = {
     "Manage customer and operational tickets, then triage the exceptions and alerts that require resolution work.",
   modules: [
     requireWorkspaceModule(operate, "tickets"),
+    requireWorkspaceModule(operate, "bulky-bookings"),
     requireWorkspaceModule(operate, "exceptions"),
     // Retained as a data contract for route evidence and existing schemas,
     // but omitted from office navigation and public routing.
     requireWorkspaceModule(operate, "driver-app"),
+    // Recycling-centre visits (M4 of #293): the ledger and the attendant's check-in, whose pages are M4b's.
+    requireWorkspaceModule(operate, "site-visits"),
   ],
 }
 

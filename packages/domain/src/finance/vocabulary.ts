@@ -48,12 +48,12 @@
 // is a `readonly` tuple with a type read off it; `FINANCE_VOCABULARIES` names
 // them all for the test that walks them.
 
-/** What the occurrence was: a completed pickup, a resolved ticket, a person's entry, the reversal of an invoiced event a correction undid, a subscription's charge period a billing run charged, since M14 of #293 a completed work order and a hired container's month on site, and a Pickup Exception its project's rules charge (#293 M5). */
-export const BILLABLE_EVENT_KINDS = ["pickup", "ticket", "manual", "reversal", "subscription", "job", "hire", "pickup-exception"] as const
+/** What the occurrence was: a completed pickup, a resolved ticket, a person's entry, the reversal of an invoiced event a correction undid, a subscription's charge period a billing run charged, since M14 of #293 a completed work order and a hired container's month on site, a Pickup Exception its project's rules charge (#293 M5), and a recycling-centre visit its Visit Rule charges (#393). */
+export const BILLABLE_EVENT_KINDS = ["pickup", "ticket", "manual", "reversal", "subscription", "job", "hire", "pickup-exception", "visit"] as const
 /** Why an event cannot be invoiced, each actionable; cleared by `reprice`. */
 export const BLOCK_REASONS = ["no-subscription", "agreement-draft", "no-price-list", "no-price-row", "no-product", "no-vat-rate", "amount-too-large"] as const
-/** Why a ready event was cancelled: the consumer's reason first, the office's three after it. */
-export const CANCEL_REASONS = ["pickup-corrected", "duplicate", "not-delivered", "other"] as const
+/** Why a ready event was cancelled: the consumer's two reasons first — a corrected pickup, a voided Site Visit (#393) — the office's three after them. */
+export const CANCEL_REASONS = ["pickup-corrected", "visit-voided", "duplicate", "not-delivered", "other"] as const
 /** Where a Billable Event stands: a reading over its stamps and its invoice line, never a column. */
 export const BILLABLE_EVENT_STATUSES = ["blocked", "ready", "held", "invoiced", "cancelled", "reversed"] as const
 /** Where a Billing Run stands; part A writes `completed` alone. */
@@ -74,6 +74,8 @@ export const WEIGHT_REVIEW_DECISIONS = ["approved", "rejected", "corrected"] as 
 export const WEIGHT_REVIEW_STATUSES = ["captured", "approved", "rejected", "corrected"] as const
 /** What an indexation multiplied: the locked bid, or the fee it replaced. */
 export const INDEX_BASES = ["bid", "current-fee"] as const
+/** Why an Apply index over many prices leaves a row as it is (#291 C8): it already starts on the index day, it starts later, or its successor would be a new reference to a product no longer active. A reading on the answer, never a column. */
+export const INDEX_SKIP_REASONS = ["starts-on-index-day", "scheduled", "product-not-active"] as const
 /** How a project's invoices are referenced for payment (#291 C4): none, or a Danish FI card — 71 the reference alone, 75 the reference and a text line. A Norwegian KID or a Swedish OCR is a later value here. */
 export const PAYMENT_REFERENCE_SCHEMES = ["none", "fik-71", "fik-75"] as const
 /** Where a payment came from (#291 C6): registered by the office, or a line of an imported bank statement. A card provider (#293 M15) is a later value here. */
@@ -92,6 +94,7 @@ export type SettlementEventKind = (typeof SETTLEMENT_EVENT_KINDS)[number]
 export type WeightReviewDecision = (typeof WEIGHT_REVIEW_DECISIONS)[number]
 export type WeightReviewStatus = (typeof WEIGHT_REVIEW_STATUSES)[number]
 export type IndexBase = (typeof INDEX_BASES)[number]
+export type IndexSkipReason = (typeof INDEX_SKIP_REASONS)[number]
 export type PaymentReferenceScheme = (typeof PAYMENT_REFERENCE_SCHEMES)[number]
 export type PaymentSource = (typeof PAYMENT_SOURCES)[number]
 
@@ -125,6 +128,7 @@ export const FINANCE_VOCABULARIES = {
   WEIGHT_REVIEW_DECISIONS,
   WEIGHT_REVIEW_STATUSES,
   INDEX_BASES,
+  INDEX_SKIP_REASONS,
   PAYMENT_REFERENCE_SCHEMES,
   PAYMENT_SOURCES,
   ACCOUNTING_SOURCE_KINDS,

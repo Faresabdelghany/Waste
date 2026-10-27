@@ -57,6 +57,7 @@ import {
   weightReview,
 } from "@waste/db/schema/finance"
 import { driver, vehicle, vehicleCompartment, vehicleCompartmentFraction } from "@waste/db/schema/fleet"
+import { accessCredential, siteVisit, siteVisitFraction, visitRule, visitRuleFreeFraction, visitRuleStep } from "@waste/db/schema/site-visits"
 import { fuelEmissionFactor, vehicleTypeConsumption } from "@waste/db/schema/emissions"
 import { containerTypeVehicleType, vehicleType } from "@waste/db/schema/fleet-types"
 import { generationMatch, generationRun } from "@waste/db/schema/generation"
@@ -81,6 +82,7 @@ import { contaminantCode, contaminantCodeFraction, pickupExceptionRule, pickupEx
 import { planningArea, planningAreaBoundary } from "@waste/db/schema/planning-areas"
 import { alert, ticket, ticketBooking, ticketEvent, ticketSla } from "@waste/db/schema/resolution"
 import { application, applicationDecision } from "@waste/db/schema/applications"
+import { bulkyBooking, bulkyBookingItem, bulkySchedule } from "@waste/db/schema/bulky"
 import { collectionGroup, collectionGroupContainer, collectionGroupContainerType, collectionGroupFraction, routeScheme } from "@waste/db/schema/route-schemes"
 import { withCompany } from "@waste/db/tenant"
 import { normaliseGrants, type Grant } from "@waste/domain/access/grants"
@@ -365,6 +367,13 @@ export async function dropTenant(pool: Database, companyId: string, owner?: Data
     await tx.delete(settlement).where(eq(settlement.companyId, companyId))
     await tx.delete(billingRun).where(eq(billingRun.companyId, companyId))
     await tx.delete(billableEvent).where(eq(billableEvent.companyId, companyId))
+    // Recycling-centre visits (M4 of #293): a charge names its visit, so the ledger goes after the events and before the sites, the credentials, the agreements and the properties it names; a rule's sets before the products they name.
+    await tx.delete(siteVisitFraction).where(eq(siteVisitFraction.companyId, companyId))
+    await tx.delete(siteVisit).where(eq(siteVisit.companyId, companyId))
+    await tx.delete(accessCredential).where(eq(accessCredential.companyId, companyId))
+    await tx.delete(visitRuleStep).where(eq(visitRuleStep.companyId, companyId))
+    await tx.delete(visitRuleFreeFraction).where(eq(visitRuleFreeFraction.companyId, companyId))
+    await tx.delete(visitRule).where(eq(visitRule.companyId, companyId))
     await tx.delete(serviceProviderPrice).where(eq(serviceProviderPrice.companyId, companyId))
     await tx.delete(serviceAreaAssignment).where(eq(serviceAreaAssignment.companyId, companyId))
     await tx.delete(serviceAreaWasteFraction).where(eq(serviceAreaWasteFraction.companyId, companyId))
@@ -390,6 +399,10 @@ export async function dropTenant(pool: Database, companyId: string, owner?: Data
     await tx.delete(plan).where(eq(plan.companyId, companyId))
     await tx.delete(session).where(eq(session.companyId, companyId))
     await tx.delete(pickup).where(eq(pickup.companyId, companyId))
+    // The bulky bookings (O11 of #290) after the stops that name them, before the schedules, places, agreements and products they name.
+    await tx.delete(bulkyBookingItem).where(eq(bulkyBookingItem.companyId, companyId))
+    await tx.delete(bulkyBooking).where(eq(bulkyBooking.companyId, companyId))
+    await tx.delete(bulkySchedule).where(eq(bulkySchedule.companyId, companyId))
     // A stop and its proofs name the code they were tagged with, so the codes go after them, before the fractions they apply to.
     await tx.delete(contaminantCodeFraction).where(eq(contaminantCodeFraction.companyId, companyId))
     await tx.delete(contaminantCode).where(eq(contaminantCode.companyId, companyId))

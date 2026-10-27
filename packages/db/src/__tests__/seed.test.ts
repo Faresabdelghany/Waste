@@ -156,7 +156,7 @@ describe("the demo seed's fixed ids", () => {
     assert.equal(new Set(ids).size, ids.length, "an id is used for two records")
   })
 
-  test("the eleven roles have an id each, keyed by the domain's role keys", () => {
+  test("the twelve roles have an id each, keyed by the domain's role keys", () => {
     assert.deepEqual(Object.keys(DEMO_IDS.roles), [...SYSTEM_ROLE_KEYS])
   })
 
@@ -170,6 +170,7 @@ describe("the demo seed's fixed ids", () => {
     assert.equal(demoId("company", 1), DEMO_IDS.company)
     assert.equal(demoId("project", 3), DEMO_IDS.projects.cairo)
     assert.equal(demoId("role", 11), DEMO_IDS.roles["integration-writer"])
+    assert.equal(demoId("role", 12), DEMO_IDS.roles["site-attendant"])
     // The id #156's driver profile names as its `user_account_id` (decided in #143).
     assert.equal(demoId("user", 3), DEMO_IDS.users.mads)
     assert.equal(demoId("serviceProviderAccess", 1), DEMO_IDS.serviceProviderAccess.lars)
@@ -328,14 +329,14 @@ describe("the demo seed against a fresh database", { skip: database.skip }, () =
     return rows.map((row) => row.id).sort()
   }
 
-  test("a clean database becomes Kystbyen Renovation: three projects, two service providers, eleven roles with their grants, three accounts", async () => {
+  test("a clean database becomes Kystbyen Renovation: three projects, two service providers, twelve roles with their grants, three accounts", async () => {
     const report = await seedDemo(fresh.url)
     assert.equal(report.companyId, DEMO_IDS.company)
     assert.ok(report.changed > 0)
     assert.deepEqual(report.counts, {
       projects: 3,
       serviceProviders: 2,
-      roles: 11,
+      roles: 12,
       roleGrants: expectedGrants,
       users: 3,
       projectAccess: 1,

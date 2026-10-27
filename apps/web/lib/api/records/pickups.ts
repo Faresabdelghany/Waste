@@ -168,12 +168,12 @@ export function toPickupRecord(pickup: Pickup, context: MappingContext): Busines
 // The dispatcher's commands on a stop
 // ---------------------------------------------------------------------------
 
-/** A command posted to its path on the stop, which answers the stop with its proofs. A stop removed or corrected moves its route's progress, on the Routes table and the Live board. */
+/** A command posted to its path on the stop, which answers the stop with its proofs. A stop removed or corrected moves its route's progress, on the Routes table and the Live board, and a bulky booking's stop where the booking stands (O11 of #290). */
 const onPickup = (path: string, verb: string, toBody: NonNullable<RecordCommand<Pickup>["toBody"]>): RecordCommand<Pickup> => ({
   toBody,
   run: (client, serverId, body) => command<PickupDetail>(client, `/pickups/${serverId}/${path}`, body),
   refused: (record) => `${record.name} was not ${verb}`,
-  touches: [moduleKeyOf(ROUTES_MODULE.workspaceId, ROUTES_MODULE.moduleId), moduleKeyOf(LIVE_MODULE.workspaceId, LIVE_MODULE.moduleId)],
+  touches: [moduleKeyOf(ROUTES_MODULE.workspaceId, ROUTES_MODULE.moduleId), moduleKeyOf(LIVE_MODULE.workspaceId, LIVE_MODULE.moduleId), moduleKeyOf("operate", "bulky-bookings")],
 })
 
 const isOneOf = <T extends string>(words: readonly T[], value: string): value is T => (words as readonly string[]).includes(value)

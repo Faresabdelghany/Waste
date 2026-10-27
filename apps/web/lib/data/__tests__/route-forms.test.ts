@@ -129,8 +129,10 @@ describe("the route's dialogs", () => {
 
   test("Add stop asks what it collects at, then the container, or the property or the shared point with its fraction, each shown only for its choice, and a note (#111)", () => {
     const form = ROUTE_COMMAND_FORMS["add-stop"]
-    assert.deepEqual(fieldIdsOf(form), ["service", "stopAt", "containerId", "subscriptionId", "deliveryFractionId", "replacementContainerId", "warehouseId", "propertyId", "sharedCollectionPointId", "wasteFractionId", "note"])
-    assert.deepEqual(requiredOf(form), ["service", "stopAt"])
+    assert.deepEqual(fieldIdsOf(form), ["service", "stopAt", "bulkyBookingId", "containerId", "subscriptionId", "deliveryFractionId", "replacementContainerId", "warehouseId", "propertyId", "sharedCollectionPointId", "wasteFractionId", "note"])
+    assert.deepEqual(requiredOf(form), ["stopAt"])
+    assert.deepEqual(fieldOf(form, "service")?.requiredWhen, { fieldId: "stopAt", notIn: ["bulky-booking"] }, "a bulky booking's stop is a bulky collection")
+    assert.deepEqual(fieldOf(form, "bulkyBookingId")?.requiredWhen, { fieldId: "stopAt", equals: "bulky-booking" })
     assert.equal(fieldOf(form, "stopAt")?.defaultValue, "container")
     assert.deepEqual(fieldOf(form, "containerId")?.relation, CONTAINERS_MODULE)
     assert.deepEqual(fieldOf(form, "propertyId")?.relation, PROPERTIES_MODULE)
@@ -231,7 +233,7 @@ describe("the route's dialogs", () => {
 })
 
 describe("the stop's dialogs", () => {
-  const pickup: Pickup = { id: "01a0d2a4-a280-7033-8000-000000000001", ...STAMPS, projectId: route.projectId, routeId: route.id, containerId: "01a0d2a4-a280-7014-8000-000000000009", position: 1, status: "completed", origin: "generation", service: "empty", reason: null, contaminantCodeId: null, note: null, propertyId: null, sharedCollectionPointId: "01a0d2a4-a280-7019-8000-000000000001", wasteFractionId: "01a0d2a4-a280-7005-8000-000000000001", subscriptionId: null, warehouseId: null, replacementContainerId: null, arrivedAt: null, outcomeAt: "2026-10-01T05:00:00.000Z" }
+  const pickup: Pickup = { id: "01a0d2a4-a280-7033-8000-000000000001", ...STAMPS, projectId: route.projectId, routeId: route.id, containerId: "01a0d2a4-a280-7014-8000-000000000009", position: 1, status: "completed", origin: "generation", service: "empty", reason: null, contaminantCodeId: null, note: null, propertyId: null, sharedCollectionPointId: "01a0d2a4-a280-7019-8000-000000000001", wasteFractionId: "01a0d2a4-a280-7005-8000-000000000001", subscriptionId: null, warehouseId: null, replacementContainerId: null, bulkyBookingId: null, arrivedAt: null, outcomeAt: "2026-10-01T05:00:00.000Z" }
   const stop = pickupAdapter.toRecord(pickup, context)
 
   test("remove asks why", () => {

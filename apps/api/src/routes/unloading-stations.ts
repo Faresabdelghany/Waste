@@ -75,7 +75,7 @@ import { describeProblem, problem, validate } from "../problem"
 import { asRead, idsFor, idsOf, replaceIdSet, requireEachOf, writeIds, type IdSet } from "./id-sets"
 import { hourOf, placeShapeInvalid, pointInvalid, requirePlacePatch } from "./place-rules"
 import { requireServiceProvider, requireWasteFraction } from "./references"
-import { created, describeCreated, describeJson, IdParam, lockRow, refuseCheck, refuseDuplicate, stampsOf } from "./shared"
+import { created, describeCreated, describeJson, IdParam, lockRow, refuseCheck, refuseDuplicate, stampsOf, strengthFor } from "./shared"
 
 const MODULE = "resources.depots"
 const UnloadingStationPage = Page(UnloadingStation)
@@ -327,7 +327,7 @@ export function unloadingStationRoutes(guard: MiddlewareHandler<AuthEnv>) {
         // row, and two patches of one station each read and then write, so
         // the lock makes the second read what the first wrote. An id nobody
         // minted locks nothing and is a 404 here as in every other family.
-        await lockRow(tx, unloadingStation, { companyId: principal.companyId, id })
+        await lockRow(tx, unloadingStation, { companyId: principal.companyId, id }, strengthFor(unloadingStation, patch))
         const current = await findStation(tx, principal, id)
         if (current === undefined) throw noSuchStation(id)
         // The provider's existence and the two shape rules, every refusal in one 400 (routes/place-rules.ts).

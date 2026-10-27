@@ -58,7 +58,12 @@
 // container on a route, a partial unique index over `origin = 'generation'`:
 // the office's may repeat a container already there — an extra emptying, a
 // repair, a wash — and its nulls are distinct, so a route takes any number
-// of address-only stops.
+// of address-only stops. Since O11 a stop may be a Bulky Booking's
+// collection, `bulky`: the office's, at the booking's address with no
+// container (`pickup_bulky_shape` ties the service to the booking it names
+// and to no container), one live stop — planned or completed — per booking
+// (`pickup_bulky_booking_id_key`), so a booking's stop missed is routed again
+// on another.
 //
 // `session` is per Route, from `start-route` to `end-route` (#104 §7.3), its
 // id the start command's; open or ended is a reading of `ended_at`, paused of
@@ -132,6 +137,7 @@ import { driver, vehicle } from "./fleet"
 import { generationRun } from "./generation"
 import { geometry, validGeometry } from "./geometry"
 import { company, project, serviceProvider } from "./organisation"
+import { bulkyBooking } from "./bulky"
 import { contaminantCode } from "./pickup-exceptions"
 import { depot, unloadingStation, warehouse } from "./places"
 import { companyReference, indexOn, projectKey, projectReference, tenantIndex, tenantReference, tenantUnique } from "./references"
@@ -305,6 +311,8 @@ export const pickup = wms.table(
     takenContainerId: uuid().generatedAlwaysAs(sql`case when "status" = 'planned' and "service" in ('remove', 'swap') then "container_id" end`),
     /** The wrong waste the stop was tagged with (M5 of #293): on a stop missed for contamination, or collected all the same. */
     contaminantCodeId: uuid(),
+    /** The Bulky Booking a `bulky` stop collects (O11 of #290), and none for any other service. */
+    bulkyBookingId: uuid(),
   },
   (t) => [
     companyReference(t, company),
@@ -328,8 +336,13 @@ export const pickup = wms.table(
     oneOf(t.service, PICKUP_SERVICES),
     // Generation empties; a work order is the office's.
     check(tableObjectName(t.id.table, "service_origin_shape", "pickup"), sql`${t.service} = 'empty' or ${t.origin} = 'office'`),
-    // A work order is of a container; an address-only stop empties.
-    check(tableObjectName(t.id.table, "service_container_shape", "pickup"), sql`${t.service} = 'empty' or ${t.containerId} is not null`),
+    // A work order is of a container; an address-only stop empties, or collects a bulky booking.
+    check(tableObjectName(t.id.table, "service_container_shape", "pickup"), sql`${t.service} in ('empty', 'bulky') or ${t.containerId} is not null`),
+    // A bulky collection is a booking's, at its address with no container, and nothing else names a booking (O11 of #290).
+    check(tableObjectName(t.id.table, "bulky_shape", "pickup"), sql`(${t.service} = 'bulky') = (${t.bulkyBookingId} is not null) and (${t.service} <> 'bulky' or ${t.containerId} is null)`),
+    projectReference(t, [t.bulkyBookingId], bulkyBooking),
+    // A booking has one live stop at a time: planned, or the one that collected it.
+    uniqueIndex(tableObjectName(t.id.table, "bulky_booking_id_key", "pickup")).on(t.companyId, t.bulkyBookingId).where(sql`${t.bulkyBookingId} is not null and ${t.status} in ('planned', 'completed')`),
     // What each service books beside its container, and nothing else books it (O3b of #290, `BOOKED_WITH`).
     check(tableObjectName(t.id.table, "subscription_shape", "pickup"), sql`(${t.service} = 'deliver') = (${t.subscriptionId} is not null)`),
     check(tableObjectName(t.id.table, "warehouse_shape", "pickup"), sql`(${t.service} in ('remove', 'swap')) = (${t.warehouseId} is not null)`),
@@ -359,6 +372,7 @@ export const pickup = wms.table(
     // The stop list in order.
     tenantIndex(t, t.routeId, t.position),
     tenantIndex(t, t.contaminantCodeId),
+    tenantIndex(t, t.bulkyBookingId),
   ],
 )
 

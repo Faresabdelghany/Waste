@@ -32,8 +32,9 @@ import { ProjectScopedListQuery } from "@waste/contracts/queries"
 import type { Tx } from "@waste/db/client"
 import { product } from "@waste/db/schema/catalogue"
 import { workOrderProduct } from "@waste/db/schema/finance"
+import { visitRule, visitRuleStep } from "@waste/db/schema/site-visits"
 import { project } from "@waste/db/schema/organisation"
-import { and, asc, count, eq, gt } from "drizzle-orm"
+import { and, asc, count, eq, gt, inArray, or } from "drizzle-orm"
 import { Hono, type MiddlewareHandler } from "hono"
 import { describeRoute } from "hono-openapi"
 
@@ -44,7 +45,7 @@ import { newId } from "../ids"
 import { afterCursor, fetchLimit, pageOf } from "../pagination"
 import { describeProblem, invalidRequest, problem, validate } from "../problem"
 import { requireContainerType, requireServiceFrequency, requireWasteFraction } from "./references"
-import { created, describeCreated, describeJson, IdParam, lockRow, refuseDuplicate, stampsOf } from "./shared"
+import { created, describeCreated, describeJson, IdParam, lockRow, refuseDuplicate, stampsOf, strengthFor } from "./shared"
 
 const MODULE = "commercial.products"
 const ProductPage = Page(Product)
@@ -55,6 +56,10 @@ export const FREE_DAYS_KEEP_THE_DAY = "A product with free days is a hire produc
 /** What moving a product off the job is told while work orders are charged at it (M14 of #293). */
 export const workOrdersChargedAt = (count: number): string =>
   `${count === 1 ? "A work order is" : `${count} work orders are`} charged at this product, so it stays sold by the job; charge ${count === 1 ? "it" : "them"} at another product first`
+
+/** What a unit change of a product a Visit Rule names is told (M4 of #293). */
+export const visitRulesChargeAt = (count: number): string =>
+  `${count === 1 ? "A visit rule names" : `${count} visit rules name`} this product, so it stays sold as it is; name another product in ${count === 1 ? "it" : "them"} first`
 
 const columns = {
   id: product.id,
@@ -273,7 +278,7 @@ export function productRoutes(guard: MiddlewareHandler<AuthEnv>) {
         if (found === undefined) throw noSuchProduct(id)
         // The rules below read the row and what names it, so they are judged under its lock — the project's first, parent before child, which a project's work order charges are replaced under too.
         await lockRow(tx, project, { companyId: principal.companyId, id: found.projectId })
-        await lockRow(tx, product, { companyId: principal.companyId, id })
+        await lockRow(tx, product, { companyId: principal.companyId, id }, strengthFor(product, patch))
         const current = (await findProduct(tx, principal, id)) ?? found
         await requireReferences(tx, { companyId: principal.companyId, projectId: current.projectId }, patch)
         // A work order charged at the product keeps it sold by the job (M14 of #293), or the work order would be charged nothing unseen.
@@ -283,6 +288,19 @@ export function productRoutes(guard: MiddlewareHandler<AuthEnv>) {
             .from(workOrderProduct)
             .where(and(eq(workOrderProduct.companyId, principal.companyId), eq(workOrderProduct.projectId, current.projectId), eq(workOrderProduct.productId, id)))
           if ((named?.rows ?? 0) > 0) throw problem(409, { detail: workOrdersChargedAt(named!.rows) })
+        }
+        // A Visit Rule's step, its business per-visit product and its annual access keep the unit they were named with (M4 of #293): a visit charged by the month, or access sold per visit, would be charged unseen.
+        if (patch.unit !== undefined && patch.unit !== current.unit) {
+          const steps = tx
+            .select({ ruleId: visitRuleStep.ruleId })
+            .from(visitRuleStep)
+            .where(and(eq(visitRuleStep.companyId, principal.companyId), eq(visitRuleStep.productId, id)))
+          const [rules] = await tx
+            .select({ rows: count() })
+            .from(visitRule)
+            .where(and(eq(visitRule.companyId, principal.companyId), eq(visitRule.projectId, current.projectId), or(eq(visitRule.businessVisitProductId, id), eq(visitRule.annualAccessProductId, id), inArray(visitRule.id, steps))))
+          const named = rules?.rows ?? 0
+          if (named > 0) throw problem(409, { detail: visitRulesChargeAt(named) })
         }
         // Free days are a hire's (M14 of #293): judged on the row as the patch leaves it, at the field the patch moved.
         const freeDays = patch.freeDays === undefined ? current.freeDays : patch.freeDays

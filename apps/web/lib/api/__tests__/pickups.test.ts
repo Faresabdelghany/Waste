@@ -93,6 +93,7 @@ const pickupOf = (id: string, containerId: string, position: number, over: Parti
   subscriptionId: null,
   warehouseId: null,
   replacementContainerId: null,
+  bulkyBookingId: null,
   arrivedAt: null,
   outcomeAt: null,
   ...over,
@@ -296,8 +297,8 @@ describe("the pickup's commands", () => {
   const correct = pickupAdapter.commands?.[CORRECT_PICKUP]
   const detail = (pickup: Pickup, proofs: ProofOfService[] = []): PickupDetail => ({ ...pickup, proofs })
 
-  test("each names the route's modules too (`touches`): a stop removed or corrected moves its route's progress, on the Routes table and the Live board", () => {
-    for (const [name, command] of Object.entries(pickupAdapter.commands ?? {})) assert.deepEqual(command.touches, ["route-studio.routes", "route-studio.live"], name)
+  test("each names the route's modules too (`touches`): a stop removed or corrected moves its route's progress, on the Routes table and the Live board, and where a bulky booking stands (O11 of #290)", () => {
+    for (const [name, command] of Object.entries(pickupAdapter.commands ?? {})) assert.deepEqual(command.touches, ["route-studio.routes", "route-studio.live", "operate.bulky-bookings"], name)
   })
 
   test("remove carries its reason; without one it is refused here", async () => {

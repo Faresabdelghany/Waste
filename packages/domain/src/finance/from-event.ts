@@ -54,7 +54,10 @@
 // answer a ticket (O3c of #290), whose completion the ticket's charge (#291 C3)
 // already is; and blocked where the product is retired or not sold by the job
 // (`no-product`) or no agreement is reachable (`no-subscription`), for the
-// office to act on rather than a silent charge or a silent nothing.
+// office to act on rather than a silent charge or a silent nothing. A bulky
+// collection (O11 of #290) is charged the same way, at the product its
+// booking froze, to the agreement the booking names: the worker reads both
+// off the booking into the same facts.
 //
 // Two of the facts are the table's word and not the payload's, because
 // pg-boss delivers at least once and in no promised order (part B): the
@@ -85,6 +88,18 @@
 // charged at now, if any: the ladder is judged once, at each stop's own
 // event, and a correction of one stop never re-steps another's.
 //
+// A Site Visit's two events (#393, M4 of #293) are Finance's too: a
+// `site-visit-recorded` of an admitted visit standing unvoided, with no live
+// event, is a `visit` event of quantity one at the product its Visit Rule
+// charged at check-in (visits/charges.ts judges the step; the visit stores
+// it, the price the attendant quoted, and the worker prices that product
+// through `priceDraft` under the visit's Agreement on its day and hands the
+// outcome here), nothing where the rule charged nothing; a
+// `site-visit-voided` cancels the visit's live event with `visit-voided`, or
+// reverses it once a line names it, as a corrected pickup's is. A later
+// visit's step is never re-tiered by a void or a backdated check-in: each
+// visit keeps the product it was quoted at.
+//
 // What the draft does not carry is the writer's: `createdBy` null,
 // `sourceEventId` the event's id (`billable_event_origin_shape` ties the two),
 // the stamps, and the row's own id.
@@ -93,13 +108,17 @@ import { isWorkOrderService, type OutboxKind, type PickupOrigin, type PickupOutc
 import type { AgreementStatus, CustomerKind, ProductStatus, ProductUnit } from "../registry/vocabulary"
 import { isBillableResolution, type TicketResolution } from "../resolution/vocabulary"
 import { HIRE_UNIT } from "./hire"
-import { priceOccurrence, type PriceLabels, type PricedAmounts, type PricedList, type PriceRow } from "./pricing"
+import { priceOccurrence, type PriceLabels, type PricedAmounts, type PricedList, type PriceRow, type PricingOutcome } from "./pricing"
 import { RECURRING_UNIT } from "./recurring"
 import type { BillableEventKind, BlockReason, CancelReason } from "./vocabulary"
 
 /** The events about a pickup that Finance reads: a missed stop's two (#293 M5) beside the completion and the correction. */
 export const PICKUP_EVENT_KINDS = ["pickup-completed", "pickup-corrected", "pickup-failed", "pickup-skipped"] as const satisfies readonly OutboxKind[]
 export type PickupEventKind = (typeof PICKUP_EVENT_KINDS)[number]
+
+/** The events about a Site Visit that Finance reads (#393, M4 of #293). */
+export const VISIT_EVENT_KINDS = ["site-visit-recorded", "site-visit-voided"] as const satisfies readonly OutboxKind[]
+export type VisitEventKind = (typeof VISIT_EVENT_KINDS)[number]
 
 /** The placement valid on the service date, with what it reaches: the subscription, the agreement it runs under, and the product it delivers. */
 export type PlacementFacts<Row extends PriceRow = PriceRow> = {
@@ -165,7 +184,7 @@ export type PickupEventFacts<Row extends PriceRow = PriceRow> = {
   service: PickupService
   /** Whether the stop was booked to answer a ticket (O3c of #290): the ticket's charge is the one, never a job's. */
   bookedForTicket: boolean
-  /** The `job` product the project names for a work order's service, with the agreement it charges and its pricing (M14 of #293); null where the project names none. */
+  /** The `job` product the project names for a work order's service, or a bulky collection's booking's, with the agreement it charges and its pricing (M14 of #293, O11 of #290); null where none is named. */
   job: JobChargeFacts<Row> | null
   /** The stop as a Pickup Exception (#293 M5); null where it is none the rules may charge. */
   exception: ExceptionFacts<Row> | null
@@ -207,11 +226,31 @@ export type TicketCompletedFacts<Row extends PriceRow = PriceRow> = {
   charge: TicketChargeFacts<Row> | null
 }
 
+/** A Site Visit's event as the worker reads it (#393): the visit as it stands now, what its rule charges, that charge priced, and its live event. */
+export type VisitEventFacts = {
+  kind: VisitEventKind
+  visitId: string
+  /** The visit's day on its project's clock, which it is priced and billed on. */
+  serviceDate: string
+  /** Whether the visit was let in; a refused one is never charged. */
+  admitted: boolean
+  /** Whether it stands voided now: a recording delivered after the void is stale news. */
+  voided: boolean
+  /** The Agreement the visit is charged to: a household's fee-paying one, a business's credential's; null where none. */
+  agreementId: string | null
+  /** The product the visit was charged at when it was checked in — its Visit Rule's step, stored on the visit; null where it was charged nothing or refused. */
+  productId: string | null
+  /** The charge's product priced under the Agreement on the day (`priceDraft`); null where nothing is charged or no Agreement is named. */
+  priced: Pick<PricingOutcome, "price" | "blockReason"> | null
+  /** The visit's live `visit` event, or null. */
+  liveEvent: LiveEventFacts | null
+}
+
 /** Every other event, which this module reads the kind of and nothing else. */
-export type OtherEventFacts = { kind: Exclude<OutboxKind, PickupEventKind | "ticket-completed"> }
+export type OtherEventFacts = { kind: Exclude<OutboxKind, PickupEventKind | VisitEventKind | "ticket-completed"> }
 
 /** An outbox event as the worker hands it here: the kind, and the plain facts that kind's payload and the reads beside it give. */
-export type EventFacts<Row extends PriceRow = PriceRow> = PickupEventFacts<Row> | TicketCompletedFacts<Row> | OtherEventFacts
+export type EventFacts<Row extends PriceRow = PriceRow> = PickupEventFacts<Row> | TicketCompletedFacts<Row> | VisitEventFacts | OtherEventFacts
 
 /** What a billable event links to: the ids the event named, each null where it named none. */
 export type BillableEventLinks = {
@@ -221,6 +260,8 @@ export type BillableEventLinks = {
   reversesEventId: string | null
   /** The proof a Pickup Exception's charge is evidenced by (#293 M5); null on every other kind. */
   proofId: string | null
+  /** The Site Visit a `visit` event charges for (#393); null on every other kind. */
+  visitId: string | null
 }
 
 /** The event the consumer records: what the writer takes from the draft, the rest being the outbox event's. */
@@ -251,14 +292,17 @@ const chargedByPeriod = (unit: ProductUnit): boolean => unit === RECURRING_UNIT 
 /** Whether a ticket's work may be charged at the product (#291 C3): never one sold by the month or the day, which a billing run charges by its period; the completion's as the person named it; the kind's only while it is offered, a retired one being the office's to replace. */
 export const chargesTicketWork = (charge: TicketChargeFacts): boolean => !chargedByPeriod(charge.product.unit) && (charge.source === "completion" || charge.product.status === "active")
 
-const NO_LINKS: BillableEventLinks = { routeId: null, pickupId: null, ticketId: null, reversesEventId: null, proofId: null }
+const NO_LINKS: BillableEventLinks = { routeId: null, pickupId: null, ticketId: null, reversesEventId: null, proofId: null, visitId: null }
 
 /** Whether a work order may be charged at the project's product: one sold by the job, while it is offered — a retired one is the office's to replace, never a silent charge. */
 export const chargesJob = (job: JobChargeFacts): boolean => job.product.unit === "job" && job.product.status === "active"
 
+/** The office's services charged as a job once done: the work orders, and a bulky collection (O11 of #290) at its booking's product. */
+export const chargedAsJob = (service: PickupService): boolean => isWorkOrderService(service) || service === "bulky"
+
 /** A completed work order's event (M14 of #293): nothing for an emptying, a stop booked for a ticket or a service the project prices nothing for; blocked where the product will not do or no agreement is reachable; otherwise priced by the resolver as a pickup is. */
 function jobDraft<Row extends PriceRow>(facts: PickupEventFacts<Row>, labels: PriceLabels): BillableEventDraft | undefined {
-  if (!isWorkOrderService(facts.service) || facts.bookedForTicket || facts.job === null) return undefined
+  if (!chargedAsJob(facts.service) || facts.bookedForTicket || facts.job === null) return undefined
   const { job } = facts
   const base = { kind: "job" as const, serviceDate: facts.serviceDate, quantity: 1, links: { ...NO_LINKS, routeId: facts.routeId, pickupId: facts.pickupId } }
   // The agreement first, as a pickup's placement is: with none reachable a product would price under nothing, so the block says what to fix.
@@ -334,10 +378,10 @@ export function reversalOf(original: LiveEventFacts): BillableEventDraft {
   }
 }
 
-/** What a corrected pickup does to its live event: nothing without one; a cancellation with the consumer's reason when no line names it; a reversal when one does. */
-function correctionOf(live: LiveEventFacts | null): BillableAction | undefined {
+/** What a corrected pickup or a voided visit does to its live event: nothing without one; a cancellation with the consumer's reason when no line names it; a reversal when one does. */
+function correctionOf(live: LiveEventFacts | null, reason: CancelReason = "pickup-corrected"): BillableAction | undefined {
   if (live === null) return undefined
-  if (!live.invoiced) return { action: "cancel", eventId: live.id, reason: "pickup-corrected" }
+  if (!live.invoiced) return { action: "cancel", eventId: live.id, reason }
   return { action: "reverse", eventId: live.id, draft: reversalOf(live) }
 }
 
@@ -434,6 +478,17 @@ export function billableFor<Row extends PriceRow>(event: EventFacts<Row>, labels
       )
       return { action: "record", draft: { ...base, productId: charge.product.id, price: outcome.price, blockReason: outcome.blockReason } }
     }
+    case "site-visit-recorded": {
+      // Stale news, a refusal, or charged already: the void's own event decides, a refused visit is never charged, and a visit is charged once.
+      if (!event.admitted || event.voided || event.liveEvent !== null) return undefined
+      const { productId } = event
+      if (productId === null) return undefined
+      const base = { kind: "visit" as const, serviceDate: event.serviceDate, subscriptionId: null, productId, quantity: 1, links: { ...NO_LINKS, visitId: event.visitId } }
+      if (event.agreementId === null || event.priced === null) return { action: "record", draft: { ...base, agreementId: null, price: null, blockReason: "no-subscription" } }
+      return { action: "record", draft: { ...base, agreementId: event.agreementId, price: event.priced.price, blockReason: event.priced.blockReason } }
+    }
+    case "site-visit-voided":
+      return correctionOf(event.liveEvent, "visit-voided")
     default:
       return undefined
   }

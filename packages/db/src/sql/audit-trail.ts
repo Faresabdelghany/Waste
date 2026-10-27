@@ -69,11 +69,13 @@ import { depot, unloadingStation, unloadingStationFraction, warehouse } from "..
 import { planningArea, planningAreaBoundary } from "../schema/planning-areas"
 import { alert, ticket, ticketBooking, ticketEvent, ticketSla } from "../schema/resolution"
 import { application, applicationDecision } from "../schema/applications"
+import { bulkyBooking, bulkyBookingItem, bulkySchedule } from "../schema/bulky"
 import { collectionGroup, collectionGroupContainer, collectionGroupContainerType, collectionGroupFraction, routeScheme } from "../schema/route-schemes"
 import { plan, planLeg, planStop, routingQuota } from "../schema/routing"
 import { sortingGuideItem } from "../schema/sorting-guide"
 import { stockMovement } from "../schema/stock"
 import { wasteFractionEmissionFactor } from "../schema/sustainability"
+import { accessCredential, siteVisit, siteVisitFraction, visitRule, visitRuleFreeFraction, visitRuleStep } from "../schema/site-visits"
 
 const HELPER = "auditTrail"
 /** The suffix of an audited table's trigger. */
@@ -218,8 +220,25 @@ export const CONTAINER_HIRE_AUDITED: readonly Audited[] = [
 /** The accounting mapping (#291 C7): a project's accounts, its four defaults, its VAT codes and its products' accounts, each a set of its project that Settings › Finance replaces whole; the exports are ledgers, exempt. */
 export const ACCOUNTING_AUDITED: readonly Audited[] = [accountingAccount, accountingSettings, accountingVatCode, accountingProductAccount].map((table) => ({ table, module: "configure.finance", parent: setOf(project, table.projectId) }))
 
+/** Recycling-centre visits (M4 of #293): the register of plates and cards, the visit ledger with its fractions — a visit voided in place is audited, never deleted — and a project's Visit Rules with their ladders and free fractions; their migration writes these triggers. */
+export const SITE_VISITS_AUDITED: readonly Audited[] = [
+  { table: accessCredential, module: "customers.site-access" },
+  { table: siteVisit, module: "operate.site-visits" },
+  { table: siteVisitFraction, module: "operate.site-visits", parent: setOf(siteVisit, siteVisitFraction.visitId) },
+  { table: visitRule, module: "commercial.products" },
+  { table: visitRuleStep, module: "commercial.products", parent: setOf(visitRule, visitRuleStep.ruleId) },
+  { table: visitRuleFreeFraction, module: "commercial.products", parent: setOf(visitRule, visitRuleFreeFraction.ruleId) },
+]
+
 /** Every audited table: 0019's, then each later migration's, in the order they were written. */
-export const AUDITED: readonly Audited[] = [...AUDITED_AT_0019, ...SUBSCRIPTION_PAUSE_AUDITED, ...TICKET_SLA_AUDITED, ...DROP_OFF_AUDITED, ...ABSENCES_AUDITED, ...TICKET_CHARGE_AUDITED, ...PICKUP_EXCEPTIONS_AUDITED, ...EMISSIONS_AUDITED, ...APPLICATIONS_AUDITED, ...SUSTAINABILITY_AUDITED, ...CONTAINER_HIRE_AUDITED, ...ACCOUNTING_AUDITED]
+/** Bulky-waste booking (O11 of #290): an area's schedules under the route schemes they recur like, the bookings, and their items, a set under its booking. */
+export const BULKY_AUDITED: readonly Audited[] = [
+  { table: bulkySchedule, module: "route-studio.schemes" },
+  { table: bulkyBooking, module: "operate.bulky-bookings" },
+  { table: bulkyBookingItem, module: "operate.bulky-bookings", parent: setOf(bulkyBooking, bulkyBookingItem.bookingId) },
+]
+
+export const AUDITED: readonly Audited[] = [...AUDITED_AT_0019, ...SUBSCRIPTION_PAUSE_AUDITED, ...TICKET_SLA_AUDITED, ...DROP_OFF_AUDITED, ...ABSENCES_AUDITED, ...TICKET_CHARGE_AUDITED, ...PICKUP_EXCEPTIONS_AUDITED, ...EMISSIONS_AUDITED, ...APPLICATIONS_AUDITED, ...SUSTAINABILITY_AUDITED, ...CONTAINER_HIRE_AUDITED, ...ACCOUNTING_AUDITED, ...BULKY_AUDITED, ...SITE_VISITS_AUDITED]
 
 /** The audited tables by name, for a test that reads a migrated database's triggers. */
 export const AUDITED_TABLE_NAMES: ReadonlySet<string> = new Set(AUDITED.map((entry) => getTableName(entry.table)))

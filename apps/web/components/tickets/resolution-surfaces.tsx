@@ -14,14 +14,17 @@ import { toast } from "sonner"
 
 import { Button } from "@/components/ui/button"
 import { BusinessRecordFormDialog } from "@/components/waste/business-record-form-dialog"
-import { savedRow, useBusinessRecordStore, whenSaved } from "@/components/waste/business-record-store"
+import { savedRow, useBusinessRecordStore, useServerModuleState, whenSaved } from "@/components/waste/business-record-store"
 import type { PrimarySurfaceProps, RowSurfaceProps } from "@/components/waste/commands/command-surfaces"
 import { useCommandRunner, useModuleReady, useOpenRecord, type RelationPickers } from "@/components/waste/commands/use-command-support"
 import { ACKNOWLEDGE_ALERT, ALERTS_MODULE, LINK_ALERT_TICKET, RESOLVE_ALERT } from "@/lib/api/records/alerts"
+import { useIsProviderAccount } from "@/components/waste/provider-account"
+import { ROUTES_MODULE } from "@/lib/api/records/routes"
 import { ticketOpened, TICKETS_MODULE } from "@/lib/api/records/tickets"
 import { ALERT_COMMAND_FORMS, ALERT_FORM, createAlertRecord, ticketValuesOfAlert, type AlertCommandWithForm } from "@/lib/data/alerts"
 import type { BusinessFormSchema, BusinessFormValues } from "@/lib/data/business-form-types"
 import type { BusinessRecord, ModuleLocation } from "@/lib/data/business-modules"
+import { createProviderTicketRecord, PROVIDER_TICKET_FORM } from "@/lib/data/provider-workspace"
 import { createTicketRecord, TICKET_FORM } from "@/lib/data/tickets"
 import type { AlertStatus } from "@waste/domain/resolution/vocabulary"
 
@@ -97,8 +100,17 @@ function CreateButton({ label, module, schema, children }: { label: string; modu
   )
 }
 
-/** New ticket: the office opens a case. */
+/** New ticket: the office opens a case; a provider's account raises one about a route it runs (#291 C24). */
 export function NewTicketSurface({ label }: PrimarySurfaceProps) {
+  const provider = useIsProviderAccount()
+  const routes = useServerModuleState(ROUTES_MODULE.workspaceId, ROUTES_MODULE.moduleId)
+  if (provider) {
+    return (
+      <CreateButton label={label} module={TICKETS_MODULE} schema={PROVIDER_TICKET_FORM}>
+        {(open, setOpen, pickers) => <ResolutionCreateDialog module={TICKETS_MODULE} schema={PROVIDER_TICKET_FORM} pickers={pickers} open={open} onOpenChange={setOpen} make={(values, now) => createProviderTicketRecord(values, routes?.records ?? [], now)} created={ticketOpened} />}
+      </CreateButton>
+    )
+  }
   return (
     <CreateButton label={label} module={TICKETS_MODULE} schema={TICKET_FORM}>
       {(open, setOpen, pickers) => <ResolutionCreateDialog module={TICKETS_MODULE} schema={TICKET_FORM} pickers={pickers} open={open} onOpenChange={setOpen} make={(values, now) => createTicketRecord(values, { now })} created={ticketOpened} />}

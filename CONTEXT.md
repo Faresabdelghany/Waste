@@ -146,6 +146,18 @@ _Avoid_: Carbon factor, emission rate
 A place residents bring waste to themselves, on a project's public map: a recycling centre (staffed, with opening hours, many fractions) or a bring bank (bins on a street, usually open always). It carries the fractions it takes, weekly hours, dated exceptions, and whether the project's holidays close it.
 _Avoid_: Unloading Station (where the operation's own vehicles empty), Depot, container (a bring bank's bins are not the platform's Containers), genbrugsstation in copy that is not Danish
 
+**Access Credential**:
+A vehicle plate or an access card a project's recycling centres admit by, effective-dated and ended or blocked, never deleted. A business holds one under its Customer, its visits charged to the Agreement the credential names; a household under its Property. Its value is stored upper case with no spaces or hyphens, so a plate is one value however it is written, and one credential of a plate or card number is in force at a time.
+_Avoid_: Permit, pass, badge, key card, licence (a driver's)
+
+**Site Visit**:
+One arrival at a recycling centre, recorded by the attendant at check-in or by the gate: the site, the instant and the project's day, how it was identified (a plate, a card, or the Property the attendant found), the fractions brought, and whom it was for. Admitted or refused with the reason — a refused visit is still recorded — and voided with a reason when it was a mistake, never deleted, since the ledger is the evidence for its charge.
+_Avoid_: Drop-off (a Drop-off Point is the place), check-in (the attendant's act that records one), trip, pickup
+
+**Visit Rule**:
+A project's effective-dated rule for charging its recycling centres' visits: a household's free visits per calendar year and a ladder of per-visit products after them, the last step repeating; the free fractions, whose visits are neither counted nor charged; a business's per-visit product and the annual-access product whose subscription includes its visits; and the threshold of visits in a window that flags a Property as a likely trade. One is in force per project at a time.
+_Avoid_: Quota (one part of the rule), tariff, price list (the rule names products; the Price List prices them)
+
 **Stock Movement**:
 An append-only record of receipt, issue, return, transfer, adjustment, or decommission.
 _Avoid_: Inventory quantity, balance edit
@@ -197,12 +209,20 @@ The office's release of a planned Route to execution: it requires a Planned Assi
 _Avoid_: Assign (dispatch releases an assignment, it does not create one), start (the driver's act), send
 
 **Pickup**:
-One stop-level service action inside a dated Route, generated from its scheme or added by the office — a container, or an address with the waste fraction collected there — which generation then leaves where the office put it. It exists from planning through execution, and its outcome and proof are recorded against that same Pickup. Its service says what the action is: an emptying of its container — generation's only service — or a Work Order. The office's emptying of a container one of generation's emptyings on the Route visits too is an Extra Emptying.
+One stop-level service action inside a dated Route, generated from its scheme or added by the office — a container, or an address with the waste fraction collected there — which generation then leaves where the office put it. It exists from planning through execution, and its outcome and proof are recorded against that same Pickup. Its service says what the action is: an emptying of its container — generation's only service — a Work Order, or a Bulky Booking's collection. The office's emptying of a container one of generation's emptyings on the Route visits too is an Extra Emptying.
 _Avoid_: Pickup history, separate service event, property, route, Product (a Pickup's service is what it does; the Product prices it)
 
 **Work Order**:
 A Pickup the office books whose service is not an emptying: a delivery, a removal, a swap, a repair or a wash of a container. Its outcome and proof are recorded as any Pickup's; one not done is the office's task to book again, never a missed collection. A delivery, a removal and a swap are Ledger Work Orders: each books at the office what its Stock Movements need — a delivery the Subscription the container will serve under, a removal and a swap the Warehouse the container taken goes back to, a swap its replacement — and the driver's completion records those movements. A container from stock a planned delivery or swap names is held for it: no second one may name it. A movement the ledger refuses never refuses the completion; it becomes an internal-task Ticket saying why.
 _Avoid_: Job, task (a Ticket's kind), collection
+
+**Bulky Booking**:
+A Customer's booked collection of bulky items at one of their places, a Property or a Shared Collection Point, on a day of a Bulky Schedule: the Agreement it is charged to, the waste fraction and the items, each a description and a count. It takes one slot of its day, and freezes the Planning Area, the Bulky Schedule and the Product it was booked under. The office routes it as a Pickup at its address with no container, on a Route running on its day; its completion is charged at its Product to its Agreement. Booked, routed, collected or cancelled is read from its cancellation and its stop; a stop missed leaves it booked, the office's to move and route again.
+_Avoid_: Order, reservation, appointment, Work Order (a Work Order is of a container)
+
+**Bulky Schedule**:
+A Planning Area's effective-dated recurrence of the days bulky waste is collected there — a Route Scheme's frequency, service days, week rotation and holiday policy — with the slots each day has, one per Bulky Booking, and the Product a booking is charged at, sold by the job. One of an area is in force at a time; a place is booked on the days of the schedule of the area it lies in.
+_Avoid_: Bulky route, slot calendar, Route Scheme (a scheme generates Routes; a schedule only offers days)
 
 **Pickup Exception**:
 A Pickup whose outcome the customer caused — failed or skipped for a driver's reason other than capacity or safety, or completed but tagged with a Contaminant Code. It may be charged under its project's rules, the first few in a window free and the rest stepped up a ladder of products, and is read in its Property's or Shared Collection Point's exception history.
@@ -297,6 +317,10 @@ _Avoid_: Invoice, service provider price
 **Price List**:
 An effective-dated set of explainable customer pricing rules and price rows.
 _Avoid_: Service provider price, invoice
+
+**Indexation**:
+A percent applied to prices from a day — a customer price list's rows, or a provider's or an award's prices — as new rows and never an update: each price in force on the day ends on it, and its successor carries the indexed price and names the row it was indexed from. The office calls it Apply index; the chain of rows is a price's indexation history.
+_Avoid_: Price update, repricing, tariff edit
 
 **Service Area**:
 An effective-dated geographic and service responsibility awarded to a service provider. Its geographic scope references operator-owned Planning Areas — the service provider domain has no zone concept of its own — while the contract's own boundary text stays the authoritative legal boundary.

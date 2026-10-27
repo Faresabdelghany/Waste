@@ -9,9 +9,9 @@ import { describe, test } from "node:test"
 import { SYSTEM_ROLES } from "@waste/domain/access/system-roles"
 
 import { moduleKeyOf } from "../records/adapter"
-import { SERVER_MODULE_KEYS, SERVER_MODULES, viewableModules } from "../records/modules"
+import { MODULES_WITHOUT_ME, SERVER_MODULE_KEYS, SERVER_MODULES, viewableModules } from "../records/modules"
 
-const keysOf = (modules: ReturnType<typeof viewableModules>) => modules.map((module) => moduleKeyOf(module.workspaceId, module.moduleId))
+const keysOf = (modules: readonly ReturnType<typeof viewableModules>[number][]) => modules.map((module) => moduleKeyOf(module.workspaceId, module.moduleId))
 const systemRole = (key: string) => {
   const role = SYSTEM_ROLES.find((candidate) => candidate.key === key)
   if (role === undefined) throw new Error(`no system role ${key}`)
@@ -23,9 +23,19 @@ describe("the switched modules a person's grants let the store read", () => {
     assert.deepEqual(keysOf(viewableModules(systemRole("driver").grants, SERVER_MODULES)), [])
   })
 
-  test("are all of them, in SERVER_MODULES' order, for a role that views everything, however its grants are listed", () => {
+  test("are all of them, in SERVER_MODULES' order, for a provider's role that views everything, however its grants are listed", () => {
     const everything = [...SERVER_MODULE_KEYS].reverse().map((moduleKey) => ({ moduleKey, actions: ["view"] as const }))
-    assert.deepEqual(keysOf(viewableModules(everything, SERVER_MODULES)), [...SERVER_MODULE_KEYS])
+    assert.deepEqual(keysOf(viewableModules(everything, SERVER_MODULES, { provider: true })), [...SERVER_MODULE_KEYS])
+  })
+
+  test("leave a provider's own team to a provider's account (#291 C24): the office's accounts are the access module's", () => {
+    const everything = SERVER_MODULE_KEYS.map((moduleKey) => ({ moduleKey, actions: ["view"] as const }))
+    const team = "service-providers.service-provider-workspace"
+    assert.deepEqual(keysOf(viewableModules(everything, SERVER_MODULES)), SERVER_MODULE_KEYS.filter((key) => key !== team))
+    assert.deepEqual(keysOf(MODULES_WITHOUT_ME), SERVER_MODULE_KEYS.filter((key) => key !== team))
+    // An Operations Manager views the providers' workspace and not the accounts: the team is never asked for.
+    assert.equal(keysOf(viewableModules(systemRole("operations-manager").grants, SERVER_MODULES)).includes(team), false)
+    assert.equal(keysOf(viewableModules(systemRole("service-provider-manager").grants, SERVER_MODULES, { provider: true })).includes(team), true)
   })
 
   test("are exactly the ones viewed, for a role between the two", () => {

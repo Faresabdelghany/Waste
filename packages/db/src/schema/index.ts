@@ -54,7 +54,11 @@ export * from "./audit"
 export * from "./imports"
 export * from "./drop-off-points"
 export * from "./pickup-exceptions"
+// Bulky-waste booking (O11 of #290): the schedules of an area's collection days and the bookings that take a slot of one.
+export * from "./bulky"
 export * from "./emissions"
 // A customer's Applications and the office's Decisions on them (M7 of #293).
 export * from "./applications"
 export * from "./sustainability"
+// Recycling-centre visits (M4 of #293): the register, the ledger and the Visit Rules.
+export * from "./site-visits"

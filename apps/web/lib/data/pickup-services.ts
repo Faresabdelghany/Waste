@@ -2,7 +2,8 @@
 // container, generation's only service, or one of the office's work orders.
 // The office books any of them on a stop it adds (`OFFICE_STOP_SERVICES`),
 // each work order of a container; the stop's details and the Driver App's
-// card say which.
+// card say which. A bulky collection (O11 of #290) is routed from its
+// booking rather than picked here.
 import type { PickupService } from "@waste/contracts/execution"
 import { OFFICE_STOP_SERVICES } from "@waste/domain/execution/vocabulary"
 
@@ -13,10 +14,15 @@ export const PICKUP_SERVICE_LABELS: Readonly<Record<PickupService, string>> = {
   swap: "Swap",
   repair: "Repair",
   wash: "Wash",
+  bulky: "Bulky collection",
 }
 
-/** What an office stop may be booked as, for the Add stop form. */
-export const OFFICE_STOP_SERVICE_OPTIONS = OFFICE_STOP_SERVICES.map((service) => ({ value: service, label: PICKUP_SERVICE_LABELS[service] }))
+/** What an office stop may be booked as, for the Add stop form: every service but a bulky collection, which is routed from its booking (O11 of #290). */
+export const OFFICE_STOP_SERVICE_OPTIONS = OFFICE_STOP_SERVICES.filter((service) => service !== "bulky").map((service) => ({ value: service, label: PICKUP_SERVICE_LABELS[service] }))
 
 /** What a work order at an address alone is told, before the API would say it: the contracts' `A_WORK_ORDER_OF_A_CONTAINER`, spelled again so no zod reaches the browser, and held equal to it by a test. */
 export const A_WORK_ORDER_IS_OF_A_CONTAINER = "A work order is of a container: name the container"
+
+/** "Sofa · 2 × Chair": a bulky collection's items in one line (O11 of #290), what the stop's details and the Driver App's card say it takes away. */
+export const itemsSentence = (items: readonly { description: string; quantity: number }[]): string =>
+  items.map((item) => (item.quantity === 1 ? item.description : `${item.quantity} × ${item.description}`)).join(" · ")
