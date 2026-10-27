@@ -21,13 +21,14 @@ runs:
   steps:
     # The key moves with what decides the image set: the CLI's version (it
     # pins every image), the config (Postgres's major version, the services
-    # turned on) and the root manifest (the start commands and their
-    # exclusions).
+    # turned on) and the two root start commands (their exclusions), never
+    # the rest of the root manifest.
     - id: key
       shell: bash
       run: |
         version=$(node -p "require('./node_modules/supabase/package.json').version")
-        echo "key=supabase-images-${{ runner.os }}-${version}-${{ inputs.name }}-${{ hashFiles('supabase/config.toml', 'package.json') }}" >> "$GITHUB_OUTPUT"
+        starts=$(node -p "const { scripts } = require('./package.json'); scripts['db:start'] + '\\n' + scripts['stack:start']" | sha256sum | cut -c1-16)
+        echo "key=supabase-images-${{ runner.os }}-${version}-${{ inputs.name }}-${starts}-${{ hashFiles('supabase/config.toml') }}" >> "$GITHUB_OUTPUT"
         echo "dir=${RUNNER_TEMP}/supabase-images" >> "$GITHUB_OUTPUT"
     - id: restore
       uses: actions/cache/restore@v6
