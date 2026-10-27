@@ -18,7 +18,7 @@
 // customer's thread — the note after it, and the case completed `answered`
 // where asked.
 import { useState, type ReactNode } from "react"
-import { ArrowLeft, ArrowSquareOut, ChatCircleText, CheckCircle, ClockCounterClockwise, LockKey, PaperPlaneTilt, PencilSimple, X } from "@phosphor-icons/react/dist/ssr"
+import { ArrowLeft, ArrowSquareOut, ChatCircleText, CheckCircle, ClockCounterClockwise, LockKey, PaperPlaneTilt, PencilSimple, Truck, X } from "@phosphor-icons/react/dist/ssr"
 import Link from "next/link"
 import { toast } from "sonner"
 
@@ -33,7 +33,8 @@ import { useBusinessRecordStore, useServerModuleState, whenSaved } from "@/compo
 import { ProofObject } from "@/components/waste/commands/route-surfaces"
 import { useCommandRunner, useRelationPickers, useRowHistory, useServerNames } from "@/components/waste/commands/use-command-support"
 import { useProofObjectLinks } from "@/components/waste/commands/use-proof-object-links"
-import { useIsProviderAccount } from "@/components/waste/provider-account"
+import { useCommandOffered, useIsProviderAccount } from "@/components/waste/provider-account"
+import { PATCH_RECORD } from "@/lib/data/provider-workspace"
 import type { ApiClient } from "@/lib/api/client"
 import { statusLabel, webIdOf } from "@/lib/api/records/adapter"
 import { ALERT_PREFIX, ALERTS_MODULE } from "@/lib/api/records/alerts"
@@ -168,9 +169,11 @@ export function LiveTicketDetailsDialog({ record, onClose }: { record: BusinessR
   const alertWebId = (serverId: string) => [...(alertsState?.serverIds ?? [])].find(([, id]) => id === serverId)?.[0] ?? webIdOf(ALERT_PREFIX, serverId)
   const [open, setOpen] = useState<Open | null>(null)
   const [message, setMessage] = useState("")
-  // A provider's account raises and comments, and moves no ticket: the office's commands, edits and replies are not offered it (#291 C24).
-  const provider = useIsProviderAccount()
-  const threads = provider ? PROVIDER_THREADS : OFFICE_THREADS
+  // A provider's account raises and comments on its own thread, and moves no ticket: the office's commands, edits, booking and replies are not offered it (#291 C24).
+  const threads = useIsProviderAccount() ? PROVIDER_THREADS : OFFICE_THREADS
+  const offeredCommand = useCommandOffered(TICKETS_MODULE)
+  const offeredStop = useCommandOffered(ROUTES_MODULE)
+  const patches = offeredCommand(PATCH_RECORD)
   const [chosen, setVisibility] = useState<Visibility>("internal")
   const visibility = threads.includes(chosen) ? chosen : threads[0]
   const [sending, setSending] = useState(false)
@@ -184,7 +187,7 @@ export function LiveTicketDetailsDialog({ record, onClose }: { record: BusinessR
   const detail = reads.rows?.[0]
   const offered = ready && !busy && !saving
   // A closed ticket's own fields are refused by the API until it is reopened: its edits are offered while it is open.
-  const editable = offered && !provider && isOpenTicketStatus(status)
+  const editable = offered && patches && isOpenTicketStatus(status)
 
   const run = (name: TicketCommandName, input?: BusinessFormValues) =>
     send(name, input, (outcome) => {
@@ -250,9 +253,9 @@ export function LiveTicketDetailsDialog({ record, onClose }: { record: BusinessR
     })
   }
 
-  const machine = provider ? [] : TICKET_MACHINE_COMMANDS.filter((name) => offersTicketCommand(status, name, label))
+  const machine = TICKET_MACHINE_COMMANDS.filter((name) => offeredCommand(name) && offersTicketCommand(status, name, label))
   // Book a stop (O3c of #290): on an open ticket a stop answers, once the routes are read.
-  const bookable = !provider && offersBookAStop(value("kind"), status)
+  const bookable = offeredStop(ADD_STOP) && offersBookAStop(value("kind"), status)
   const bookingWaits = bookAStopWaits(routesState)
   const links = TICKET_LINKS.flatMap(([key, , fact]) => {
     const webId = value(key)
@@ -288,10 +291,12 @@ export function LiveTicketDetailsDialog({ record, onClose }: { record: BusinessR
                   </DialogDescription>
                 </div>
               </div>
-              <Button type="button" variant="outline" size="sm" disabled={!editable} onClick={() => setOpen({ kind: "edit" })}>
-                <PencilSimple className="h-4 w-4" />
-                <span className="hidden sm:inline">Edit case</span>
-              </Button>
+              {patches && (
+                <Button type="button" variant="outline" size="sm" disabled={!editable} onClick={() => setOpen({ kind: "edit" })}>
+                  <PencilSimple className="h-4 w-4" />
+                  <span className="hidden sm:inline">Edit case</span>
+                </Button>
+              )}
             </header>
 
             <div className="min-h-0 flex-1 overflow-y-auto px-4 py-5 sm:px-7 sm:py-7">
@@ -407,7 +412,7 @@ export function LiveTicketDetailsDialog({ record, onClose }: { record: BusinessR
                   <Row label="Assignee" value={live.owner}>
                     <span className="flex items-center justify-end gap-2">
                       <span className="truncate">{live.owner}</span>
-                      {!provider && offersTicketCommand(status, ASSIGN_TICKET, label) && (
+                      {offeredCommand(ASSIGN_TICKET) && offersTicketCommand(status, ASSIGN_TICKET, label) && (
                         <Button type="button" variant="ghost" size="sm" className="h-7 text-xs" aria-label="Change Assignee" disabled={!offered || !pickers.readyFor(TICKET_COMMAND_FORMS.assign)} onClick={() => command(ASSIGN_TICKET)}>
                           Change
                         </Button>
@@ -467,7 +472,7 @@ export function LiveTicketDetailsDialog({ record, onClose }: { record: BusinessR
                 <section data-testid="ticket-evidence">
                   <div className="flex items-center justify-between gap-2">
                     <h3 className="text-xs font-semibold uppercase tracking-wide text-muted-foreground">Evidence</h3>
-                    {!provider && (
+                    {offeredCommand(REPLY_WITH_EVIDENCE) && (
                       <Button type="button" variant="outline" size="sm" className="h-7 text-xs" disabled={!offered || evidence == null} onClick={() => setOpen({ kind: "reply" })}>
                         <ChatCircleText className="h-3.5 w-3.5" />
                         Reply with the record
@@ -569,6 +574,16 @@ export function LiveTicketDetailsDialog({ record, onClose }: { record: BusinessR
 }
 
 /** One row of the history: what it is, who and when, and what it said. A comment shows who may read it. */
+/** How the history shows a comment of each thread: the office's internal note, the customer's, and the one the office and the route's provider share (#291 C24). */
+const COMMENT_THREADS = {
+  internal: { title: "Internal note", badge: "Internal", Icon: LockKey, iconClass: "text-amber-600", badgeClass: "border-amber-500/30 bg-amber-500/10 text-amber-700 dark:text-amber-200" },
+  customer: { title: "Customer-visible comment", badge: "Customer", Icon: ChatCircleText, iconClass: "text-blue-600", badgeClass: "border-blue-500/30 bg-blue-500/10 text-blue-700 dark:text-blue-200" },
+  "service-provider": { title: "Service provider thread", badge: "Service provider", Icon: Truck, iconClass: "text-violet-600", badgeClass: "border-violet-500/30 bg-violet-500/10 text-violet-700 dark:text-violet-200" },
+} as const
+
+/** A comment's thread by its visibility; one the history does not know reads as the office's own, as it did before the provider's. */
+const threadOf = (visibility: string | null): keyof typeof COMMENT_THREADS => (visibility === "customer" || visibility === "service-provider" ? visibility : "internal")
+
 function HistoryRow({ event, who, assignee, at }: { event: TicketEvent; who: string; assignee: string | undefined; at: string }) {
   const title =
     event.kind === "created"
@@ -579,15 +594,14 @@ function HistoryRow({ event, who, assignee, at }: { event: TicketEvent; who: str
           : `Assigned to ${assignee}`
         : event.kind === "status-changed"
           ? `${statusLabel(event.status)}${event.resolution === null ? "" : ` · ${statusLabel(event.resolution)}`}`
-          : event.visibility === "customer"
-            ? "Customer-visible comment"
-            : "Internal note"
+          : COMMENT_THREADS[threadOf(event.visibility)].title
   const isComment = event.kind === "comment"
+  const thread = COMMENT_THREADS[threadOf(event.visibility)]
   return (
     <li className="relative flex gap-3 pb-4" data-kind={event.kind}>
       <span className={cn("relative z-10 flex h-8 w-8 shrink-0 items-center justify-center rounded-full border bg-background", event.kind === "status-changed" && "border-emerald-500/30 bg-emerald-500/10 text-emerald-600")}>
         {isComment ? (
-          event.visibility === "customer" ? <ChatCircleText className="h-4 w-4 text-blue-600" /> : <LockKey className="h-4 w-4 text-amber-600" />
+          <thread.Icon className={cn("h-4 w-4", thread.iconClass)} />
         ) : event.kind === "status-changed" ? (
           <CheckCircle className="h-4 w-4" weight="fill" />
         ) : (
@@ -599,8 +613,8 @@ function HistoryRow({ event, who, assignee, at }: { event: TicketEvent; who: str
         <div className="text-sm font-medium">
           {title}
           {isComment && (
-            <Badge variant="outline" className={cn("ml-2 rounded-full px-2 py-0 text-[10px] font-medium", event.visibility === "customer" ? "border-blue-500/30 bg-blue-500/10 text-blue-700 dark:text-blue-200" : "border-amber-500/30 bg-amber-500/10 text-amber-700 dark:text-amber-200")}>
-              {event.visibility === "customer" ? "Customer" : "Internal"}
+            <Badge variant="outline" className={cn("ml-2 rounded-full px-2 py-0 text-[10px] font-medium", thread.badgeClass)}>
+              {thread.badge}
             </Badge>
           )}
         </div>

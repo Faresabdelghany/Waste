@@ -9,16 +9,19 @@
 // through `POST /users` on a provider's role (`PROVIDER_ROLE_SCOPE`), and its
 // tickets, raised about a route it runs, in that route's project. Fixture
 // mode keeps NordRen ApS, its fixture role and its fixture forms untouched.
+import type { Grant } from "@waste/contracts/permissions"
 import { PROVIDER_ROLE_SCOPE } from "@waste/domain/access/system-roles"
 import { TICKET_KINDS, TICKET_PRIORITIES } from "@waste/domain/resolution/vocabulary"
 
+import { allows, type Grants } from "../api/grants"
+import { accessMapOf, DEACTIVATE_USER, REACTIVATE_USER } from "../api/records/organisation"
 import { PICKUPS_MODULE } from "../api/records/pickups"
-import { ROUTES_MODULE } from "../api/records/routes"
-import type { BusinessFormField, BusinessFormOption, BusinessFormSchema, BusinessFormValues } from "./business-form-types"
+import { ASSIGN_ROUTE, DISPATCH_ROUTE, ROUTES_MODULE } from "../api/records/routes"
+import type { BusinessFormOption, BusinessFormSchema, BusinessFormValues } from "./business-form-types"
 import type { BusinessRecord, ModuleLocation } from "./business-modules"
 import { mintedRecord } from "./containers"
 import type { RoleAccessMap } from "./role-permissions"
-import { tokenOptions } from "./tickets"
+import { createTicketRecord, tokenOptions } from "./tickets"
 
 /** Service Providers › Service Provider Workspace: a provider's own team, read and invited through `/users` (#291 C24). */
 export const TEAM_MODULE: ModuleLocation = { workspaceId: "service-providers", moduleId: "service-provider-workspace" }
@@ -39,7 +42,7 @@ export type ProviderWorkspace = {
 
 type MeOfProvider = {
   user: { fullName: string }
-  role: { grants: readonly { moduleKey: string; actions: readonly string[] }[] }
+  role: { grants: readonly Grant[] }
   serviceProvider: ProviderOfMe | null
 }
 
@@ -50,8 +53,34 @@ export function providerWorkspaceOf(me: MeOfProvider): ProviderWorkspace | null 
     providerId: me.serviceProvider.id,
     legalName: me.serviceProvider.legalName,
     actorName: me.user.fullName,
-    access: Object.fromEntries(me.role.grants.map((grant) => [grant.moduleKey, [...grant.actions]])) as RoleAccessMap,
+    access: accessMapOf(me.role.grants),
   }
+}
+
+/**
+ * The commands a Service Provider's account sends, by module (#291 slice
+ * 23b): it crews a route it runs and sends it to its own driver, and switches
+ * its own team's accounts off and on again. Every other command of a module —
+ * a stop's, a ticket's, a ticket's patch — is the office's: the API finds no
+ * row for a provider's, so no surface offers it one.
+ */
+export const PROVIDER_COMMANDS: Readonly<Record<string, readonly string[]>> = {
+  "route-studio.routes": [ASSIGN_ROUTE, DISPATCH_ROUTE],
+  [`${TEAM_MODULE.workspaceId}.${TEAM_MODULE.moduleId}`]: [DEACTIVATE_USER, REACTIVATE_USER],
+}
+
+/** A row's own fields changed by its patch, which a surface asks after as it asks after a command: a provider's account patches no ticket. */
+export const PATCH_RECORD = "patch"
+
+/**
+ * Whether a surface offers a command of a module to the account signed in:
+ * an office account every one, as before; a provider's account those the
+ * API gives a provider (`PROVIDER_COMMANDS`), and only where its role allows
+ * `edit` on the module.
+ */
+export function commandOffered(account: { provider: boolean; grants: Grants | undefined }, moduleKey: string, command: string): boolean {
+  if (!account.provider) return true
+  return (PROVIDER_COMMANDS[moduleKey] ?? []).includes(command) && allows(account.grants, moduleKey, "edit")
 }
 
 /** What an office account is told on the provider's workspace on the Pilot: it is a provider's alone. */
@@ -75,30 +104,35 @@ export const teamRoleOptions = (records: readonly BusinessRecord[]): BusinessFor
 
 /**
  * Add user on the Pilot: `UserInvite` with a provider's access — a name, an
- * e-mail, a provider's role — and, for the office, which provider; a
- * provider's account invites into its own team, which the dialog stamps.
+ * e-mail, a provider's role — into the signed-in provider's own team, which
+ * the dialog stamps. The office invites a provider's accounts in Settings ›
+ * Users & roles, whose module it reads.
  */
-export function teamInviteForm(roles: readonly BusinessFormOption[], providers: readonly BusinessFormOption[] | null): BusinessFormSchema {
-  const fields: BusinessFormField[] = [
-    { id: "fullName", label: "Full name", type: "text", required: true },
-    { id: "email", label: "Email", type: "email", required: true, description: "The address the person signs in with. No e-mail is sent: the login is made with the same address." },
-    { id: "roleId", label: "Role", type: "select", required: true, options: [...roles], description: "A service provider's role, allowing nothing your own does not." },
-  ]
-  if (providers !== null) fields.unshift({ id: "serviceProviderId", label: "Service provider", type: "select", required: true, options: [...providers] })
+export function teamInviteForm(roles: readonly BusinessFormOption[]): BusinessFormSchema {
   return {
     key: `${TEAM_MODULE.workspaceId}.${TEAM_MODULE.moduleId}`,
     mode: "create",
     recordKind: "Service provider user",
     title: "Add user",
-    description: providers === null ? "Invite a person into your service provider's team." : "Invite a person into a service provider's team.",
+    description: "Invite a person into your service provider's team.",
     submitLabel: "Add user",
     nameField: "fullName",
     execution: { kind: "create-record", completionMessage: "User invited." },
-    sections: [{ id: "invite", title: "User access", fields }],
+    sections: [
+      {
+        id: "invite",
+        title: "User access",
+        fields: [
+          { id: "fullName", label: "Full name", type: "text", required: true },
+          { id: "email", label: "Email", type: "email", required: true, description: "The address the person signs in with. No e-mail is sent: the login is made with the same address." },
+          { id: "roleId", label: "Role", type: "select", required: true, options: [...roles], description: "A service provider's role, allowing nothing your own does not." },
+        ],
+      },
+    ],
   }
 }
 
-/** The account an invite makes, before the API answers it: invited until the person first signs in. */
+/** The account an invite makes, before the API answers it: invited until the person first signs in. `serviceProviderId` names the provider by its web id or its chip. */
 export function createTeamMemberRecord(values: BusinessFormValues, serviceProviderId: string, now: number): BusinessRecord {
   const text = (key: string) => (typeof values[key] === "string" ? (values[key] as string).trim() : "")
   const record = mintedRecord({
@@ -158,10 +192,9 @@ export const projectOfRoute = (route: Pick<BusinessRecord, "projectIds" | "submi
   return typeof typed === "string" && typed !== "" ? typed : route.projectIds?.[0]
 }
 
-/** A provider's ticket before the API answers it: its route's project, its words, and no assignee. */
+/** A provider's ticket before the API answers it: the office's ticket, in its route's project, with no assignee. */
 export function createProviderTicketRecord(values: BusinessFormValues, routes: readonly BusinessRecord[], now: number): BusinessRecord {
   const route = routes.find((record) => record.id === values.routeId)
   const projectId = route === undefined ? undefined : projectOfRoute(route)
-  const name = typeof values.subject === "string" ? values.subject.trim() : ""
-  return mintedRecord({ id: `operate-ticket-${now}`, name, status: "Open", recordKind: "Ticket", values: { ...values, ...(projectId === undefined ? {} : { projectId }) } })
+  return createTicketRecord(values, { now, extra: projectId === undefined ? {} : { projectId } })
 }

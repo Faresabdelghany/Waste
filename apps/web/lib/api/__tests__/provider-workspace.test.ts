@@ -11,13 +11,14 @@ import { TicketCreate } from "@waste/contracts/tickets"
 import { PROVIDER_ROLE_SCOPE } from "@waste/domain/access/system-roles"
 
 import { FIXTURE_COMPANY_ID, type BusinessRecord } from "../../data/business-modules"
-import { createProviderTicketRecord, createTeamMemberRecord, isTeamMember, isTeamRole, PROVIDER_TICKET_FORM, providerWorkspaceOf, TEAM_MODULE, teamInviteForm, teamRoleOptions } from "../../data/provider-workspace"
+import { commandOffered, createProviderTicketRecord, createTeamMemberRecord, PATCH_RECORD, isTeamMember, isTeamRole, PROVIDER_TICKET_FORM, providerWorkspaceOf, TEAM_MODULE, teamInviteForm, teamRoleOptions } from "../../data/provider-workspace"
 import { isLocalRefusal, webIdOf, type MappingContext, type Resolver } from "../records/adapter"
 import { serverModuleOf } from "../records/modules"
 import { teamModule, teamUserAdapter, userAdapter } from "../records/organisation"
 import { ticketAdapter } from "../records/tickets"
 import { clientOver, json, scripted } from "./scripted-fetch"
 
+const TEAM_KEY = `${TEAM_MODULE.workspaceId}.${TEAM_MODULE.moduleId}`
 const providerId = "01a0d2a4-a280-7003-8000-000000000001"
 const projectId = "01a0d2a4-a280-7002-8000-000000000001"
 const routeId = "01a0d2a4-a280-7030-8000-000000000001"
@@ -98,10 +99,9 @@ describe("the team", () => {
     assert.deepEqual(teamRoleOptions([foreman, planner]), [{ value: foreman.id, label: "Service Provider Foreman" }])
   })
 
-  test("a provider's account invites into its own team; the office picks the provider", () => {
-    const ids = (providers: null | { value: string; label: string }[]) => teamInviteForm([], providers).sections.flatMap((section) => section.fields.map((field) => field.id))
-    assert.deepEqual(ids(null), ["fullName", "email", "roleId"])
-    assert.deepEqual(ids([{ value: "service-provider-nordren", label: "NordRen ApS" }]), ["serviceProviderId", "fullName", "email", "roleId"])
+  test("is read for a provider's account alone, whose invite asks no provider: it is its own", () => {
+    assert.equal(teamModule.providersOnly, true)
+    assert.deepEqual(teamInviteForm([]).sections.flatMap((section) => section.fields.map((field) => field.id)), ["fullName", "email", "roleId"])
   })
 
   test("an invite goes out as `UserInvite` under the provider, on the role picked", () => {
@@ -112,6 +112,44 @@ describe("the team", () => {
     const body = userAdapter.toCreateBody!(invited, context(resolverOf([[provider, providerId], [role, roleId]])))
     assert.equal(isLocalRefusal(body), false)
     assert.deepEqual(UserInvite.parse(body), { email: "mette@nordren.example", fullName: "Mette Holm", roleId, serviceProviderId: providerId })
+  })
+
+  test("an invite names its provider by its chip where the providers module is not read", () => {
+    const role = record("role-service-provider-foreman", { recordKind: "Role" })
+    const invited = createTeamMemberRecord({ fullName: "Mette Holm", email: "mette@nordren.example", roleId: role.id }, webIdOf("service-provider", providerId), 1)
+    const body = userAdapter.toCreateBody!(invited, context(resolverOf([[role, roleId]])))
+    assert.equal(isLocalRefusal(body), false)
+    assert.equal(UserInvite.parse(body).serviceProviderId, providerId)
+  })
+})
+
+describe("what a surface offers the account signed in", () => {
+  const manager = [
+    { moduleKey: "route-studio.routes", actions: ["view", "edit"] },
+    { moduleKey: "route-studio.pickups", actions: ["view", "edit"] },
+    { moduleKey: "operate.tickets", actions: ["view", "create"] },
+    { moduleKey: TEAM_KEY, actions: ["view", "create", "edit"] },
+  ]
+  const foreman = [{ moduleKey: "route-studio.routes", actions: ["view"] }, { moduleKey: TEAM_KEY, actions: ["view"] }]
+
+  test("every command to the office, as before", () => {
+    for (const command of ["cancel", "remove", "start", PATCH_RECORD]) assert.equal(commandOffered({ provider: false, grants: undefined }, "route-studio.routes", command), true)
+  })
+
+  test("a provider's account the crew of a route it runs and its own team's accounts, and none of the office's", () => {
+    const provider = { provider: true, grants: manager }
+    assert.deepEqual(["assign", "dispatch", "reschedule", "cancel", "add-stop", "reorder", "optimise"].filter((command) => commandOffered(provider, "route-studio.routes", command)), ["assign", "dispatch"])
+    assert.equal(commandOffered(provider, "route-studio.pickups", "remove"), false)
+    assert.equal(commandOffered(provider, "route-studio.pickups", "correct"), false)
+    assert.equal(commandOffered(provider, "operate.tickets", "assign"), false)
+    assert.equal(commandOffered(provider, "operate.tickets", PATCH_RECORD), false)
+    assert.equal(commandOffered(provider, TEAM_KEY, "deactivate"), true)
+  })
+
+  test("and only where its role allows `edit`: a foreman reads the routes and the team, and moves neither", () => {
+    const provider = { provider: true, grants: foreman }
+    assert.equal(commandOffered(provider, "route-studio.routes", "dispatch"), false)
+    assert.equal(commandOffered(provider, TEAM_KEY, "deactivate"), false)
   })
 })
 

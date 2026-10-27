@@ -127,6 +127,11 @@ test("NordRen's manager works his own workspace on the API: the routes NordRen r
     const [commented] = await Promise.all([answerOf(page, "POST", `/tickets/${(await opened.json() as { id: string }).id}/comments`), ticket.getByRole("button", { name: "Add comment" }).click()])
     expect(commented.status(), await commented.text()).toBe(201)
     expect(commented.request().postDataJSON()).toEqual({ body: "We wait at the gate until 07:00.", visibility: "service-provider" })
+    // The history shows it as the provider's thread, never the office's internal note.
+    const comment = ticket.getByTestId("ticket-history").locator('li[data-kind="comment"]').filter({ hasText: "We wait at the gate until 07:00." })
+    await expect(comment).toContainText("Service provider thread")
+    await expect(comment).not.toContainText("Internal")
+    await expect(ticket.getByRole("button", { name: "Edit case" })).toHaveCount(0)
     await page.keyboard.press("Escape")
 
     // The team: NordRen's accounts alone, a foreman invited on a provider's role under NordRen, then switched off.

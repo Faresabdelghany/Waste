@@ -9,12 +9,13 @@
 // reads to its provider. Its landing is its routes there, the fixture
 // dashboard's figures being the prototype's.
 import Link from "next/link"
-import { Suspense, type ReactNode } from "react"
+import { Suspense, useEffect, useState, type ReactNode } from "react"
 
+import { Button } from "@/components/ui/button"
 import { SidebarInset, SidebarProvider } from "@/components/ui/sidebar"
 import { useApiSession } from "@/components/waste/api-session-store"
 import { BusinessWorkspace } from "@/components/waste/business-workspace"
-import { useProviderWebId } from "@/components/waste/provider-account"
+import { useProviderWebId, useProviderWorkspace } from "@/components/waste/provider-account"
 import { ServiceProviderDashboard } from "@/components/waste/service-provider-dashboard"
 import {
   RestrictedPersonaSidebar,
@@ -25,9 +26,11 @@ import {
   FIXTURE_SERVICE_PROVIDER_IDS,
   type WorkspaceId,
 } from "@/lib/data/business-modules"
+import { problemSentence } from "@/lib/api/problem"
+import { problemOfError } from "@/lib/api/records/server-records"
 import type { RoleAccessMap } from "@/lib/data/role-permissions"
 import { ALL_PROJECTS, type ProjectScope } from "@/lib/data/project-scope"
-import { NOT_A_PROVIDER_ACCOUNT, providerWorkspaceOf } from "@/lib/data/provider-workspace"
+import { NOT_A_PROVIDER_ACCOUNT } from "@/lib/data/provider-workspace"
 
 type RestrictedWorkspacePage = {
   id: string
@@ -175,13 +178,44 @@ function RestrictedFrame({ persona, children }: { persona: RestrictedPersona; ch
   )
 }
 
+/**
+ * The provider's workspace while `/me` is unread: its read asked for — one
+ * in flight per person, shared with the session's own — and a read that
+ * failed said in the API's words, with Retry, rather than a placeholder that
+ * waits on the session's next change.
+ */
+function ReadingAccount() {
+  const { loadMe } = useApiSession()
+  const [attempt, setAttempt] = useState(0)
+  const [failed, setFailed] = useState<{ attempt: number; sentence: string } | null>(null)
+  useEffect(() => {
+    let current = true
+    loadMe().catch((error: unknown) => {
+      if (current) setFailed({ attempt, sentence: problemSentence(problemOfError(error)) })
+    })
+    return () => {
+      current = false
+    }
+  }, [attempt, loadMe])
+  if (failed === null || failed.attempt !== attempt) return <p className="p-6 text-sm text-muted-foreground">Reading your account…</p>
+  return (
+    <div className="space-y-3 p-6 text-sm" role="alert">
+      <p>Your account could not be read: {failed.sentence}</p>
+      <Button type="button" variant="outline" size="sm" onClick={() => setAttempt((count) => count + 1)}>
+        Retry
+      </Button>
+    </div>
+  )
+}
+
 export function RestrictedWorkspaceShell({
   persona,
   pageId,
 }: RestrictedWorkspaceShellProps) {
   const { apiConfigured, me } = useApiSession()
   const definition = restrictedWorkspaceDefinitions[persona]
-  const provider = persona === "service-provider" && apiConfigured && me !== null ? providerWorkspaceOf(me) : null
+  const workspace = useProviderWorkspace()
+  const provider = persona === "service-provider" ? workspace : null
   const providerWebId = useProviderWebId(provider?.providerId)
 
   if (persona === "service-provider" && apiConfigured) {
@@ -189,7 +223,7 @@ export function RestrictedWorkspaceShell({
     if (me === null) {
       return (
         <RestrictedFrame persona={persona}>
-          <p className="p-6 text-sm text-muted-foreground">Reading your account…</p>
+          <ReadingAccount />
         </RestrictedFrame>
       )
     }
