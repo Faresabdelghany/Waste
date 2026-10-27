@@ -44,13 +44,13 @@ export type VisitChargeBasis = z.infer<typeof VisitChargeBasis>
 export const CREDENTIAL_VALUE_MAX = 32
 
 /** What a value that normalises to nothing usable is told. */
-export const CREDENTIAL_VALUE_SHAPE = "A plate or card number of letters, digits and hyphens; spaces are dropped and letters read upper case"
+export const CREDENTIAL_VALUE_SHAPE = "A plate or card number of letters and digits; spaces and hyphens are dropped and letters read upper case"
 
-/** A plate or a card as a person types it: it normalises to letters, digits and hyphens, at most `CREDENTIAL_VALUE_MAX`. */
+/** A plate or a card as a person types it: it normalises to letters and digits, at most `CREDENTIAL_VALUE_MAX`, so `AB-12 345` and `ab12345` are one plate. */
 export const CredentialValue = z
   .string()
   .max(CREDENTIAL_VALUE_MAX * 2)
-  .refine((value) => /^[A-Z0-9-]+$/.test(normaliseCredentialValue(value)) && normaliseCredentialValue(value).length <= CREDENTIAL_VALUE_MAX, { message: CREDENTIAL_VALUE_SHAPE })
+  .refine((value) => /^[A-Z0-9]+$/.test(normaliseCredentialValue(value)) && normaliseCredentialValue(value).length <= CREDENTIAL_VALUE_MAX, { message: CREDENTIAL_VALUE_SHAPE })
 
 /** A credential's holder is a business's Customer with its Agreement, or a household's Property: exactly one. */
 const oneHolder = (value: { customerId?: string | null; agreementId?: string | null; propertyId?: string | null }): boolean =>
@@ -64,7 +64,7 @@ export const AccessCredential = z
     ...stamped,
     projectId: Id,
     kind: AccessCredentialKind,
-    /** Normalised: upper case, no spaces. */
+    /** Normalised: upper case, no spaces and no hyphens. */
     value: z.string(),
     /** What the office calls it: `Van 2`, `Garden card`. */
     label: Label.nullable(),
@@ -121,6 +121,14 @@ export const AccessCredentialListQuery = ProjectScopedListQuery.extend({
 })
 export type AccessCredentialListQuery = z.infer<typeof AccessCredentialListQuery>
 
+/** What a visit was charged at when it was checked in — the number the attendant quoted, stored with the visit so a later void or a backdated check-in never re-tiers it: why, its place among its Property's counted visits this year (a household's), and the product, null where it is included. */
+export const VisitChargeQuoted = z.object({
+  basis: VisitChargeBasis,
+  n: PositiveInt.nullable(),
+  productId: Id.nullable(),
+})
+export type VisitChargeQuoted = z.infer<typeof VisitChargeQuoted>
+
 export const SiteVisit = z.object({
   ...stamped,
   projectId: Id,
@@ -148,6 +156,8 @@ export const SiteVisit = z.object({
   note: Paragraph.nullable(),
   /** The fractions brought, each one the site takes; none recorded for a gate's read. */
   wasteFractionIds: z.array(Id),
+  /** What the visit was charged at when it was recorded; null for a refused one. */
+  charge: VisitChargeQuoted.nullable(),
   /** Set once the visit is voided: a mistake is voided, never deleted. */
   voidedAt: IsoDateTime.nullable(),
   voidedBy: Id.nullable(),
@@ -188,16 +198,8 @@ export const VisitPrice = z.object({
 })
 export type VisitPrice = z.infer<typeof VisitPrice>
 
-/** What the project's Visit Rule says an admitted visit costs, read as it is checked in: why, whether it counted, its place among the Property's counted visits this year, the product, and that product's price or why it has none. */
-export const VisitChargeReading = z.object({
-  /** The rule in force on the visit's day; null where none was, which charges nothing. */
-  ruleId: Id.nullable(),
-  basis: VisitChargeBasis,
-  counted: z.boolean(),
-  /** A household's: the n-th counted visit of its Property in the calendar year. */
-  n: PositiveInt.nullable(),
-  /** The product charged; null where the visit is included. */
-  productId: Id.nullable(),
+/** What an admitted visit costs, as the check-in answers it: what it was charged at — stored with the visit, so the number quoted is the number charged — and the product's price under the visit's Agreement on its day, or why it has none. */
+export const VisitChargeReading = VisitChargeQuoted.extend({
   price: VisitPrice.nullable(),
   /** Why a charged visit's product has no price yet, as its billable event will be blocked. */
   blockReason: z.enum(BLOCK_REASONS).nullable(),
@@ -248,3 +250,42 @@ export const FrequentVisitors = z.object({
   items: z.array(LikelyTrade),
 })
 export type FrequentVisitors = z.infer<typeof FrequentVisitors>
+
+/** `GET /site-visits/sites`: one project's recycling centres an attendant checks visitors in at. */
+export const VisitSitesQuery = z.strictObject({ projectId: Id })
+export type VisitSitesQuery = z.infer<typeof VisitSitesQuery>
+
+/** A recycling centre as the check-in picks it: what it is called and the fractions it takes, nothing of the office's. */
+export const VisitSite = z.object({
+  id: Id,
+  projectId: Id,
+  code: Label,
+  name: Label,
+  wasteFractionIds: z.array(Id),
+})
+export type VisitSite = z.infer<typeof VisitSite>
+
+export const VisitSites = z.object({ items: z.array(VisitSite) })
+export type VisitSites = z.infer<typeof VisitSites>
+
+/** The most Properties an address search answers. */
+export const VISIT_ADDRESS_MAX = 20
+
+/** `GET /site-visits/addresses`: one project's Properties whose name or address holds `q`, for a check-in by address. */
+export const VisitAddressQuery = z.strictObject({
+  projectId: Id,
+  q: z.string().trim().min(2).max(100),
+})
+export type VisitAddressQuery = z.infer<typeof VisitAddressQuery>
+
+/** A Property as the check-in finds it by its address: what identifies it and nothing else — no parties, no notes, no subscriptions. */
+export const VisitAddress = z.object({
+  propertyId: Id,
+  projectId: Id,
+  name: Label,
+  address: z.string(),
+})
+export type VisitAddress = z.infer<typeof VisitAddress>
+
+export const VisitAddresses = z.object({ items: z.array(VisitAddress).max(VISIT_ADDRESS_MAX) })
+export type VisitAddresses = z.infer<typeof VisitAddresses>

@@ -4,7 +4,7 @@
 // (@waste/domain/visits/charges says who a visit is for and what it costs).
 //
 // `access_credential` is effective-dated (ADR-0005) per project: a plate or a
-// card, its value normalised (upper case, no spaces, `value_shape`), held by
+// card, its value normalised (upper case, no spaces, no hyphens, `value_shape`), held by
 // a business's Customer with the Agreement its visits are charged to or by a
 // household's Property (`holder_shape`), blocked rather than deleted. One
 // credential of a kind and value is in force at a time
@@ -15,13 +15,17 @@
 // charge. Its site is a Drop-off Point; the gate's read (M8 of #293, ADR-0011)
 // is idempotent by its `external_id`, unique per company and source. Whom it
 // reached is a household's Property with the Agreement it pays under, or a
-// business's Customer and Agreement; a refused visit may reach nobody.
+// business's Customer and Agreement; a refused visit may reach nobody. An
+// admitted visit keeps what its Visit Rule charged it at when it was
+// recorded — the basis, the household's n, the product — the number the
+// attendant quoted, which the Finance consumer charges, so a later void or a
+// backdated check-in never re-tiers it.
 //
 // `visit_rule` is effective-dated, one in force per project at a time
 // (`visit_rule_no_overlap`, hand-written); `visit_rule_step` its ladder by
 // position from 1, the last repeating; `visit_rule_free_fraction` the
 // fractions whose visits are neither counted nor charged.
-import { ACCESS_CREDENTIAL_KINDS, SITE_VISIT_IDENTIFICATIONS, SITE_VISIT_OUTCOMES, SITE_VISIT_REFUSAL_REASONS, SITE_VISIT_SOURCES } from "@waste/domain/visits/vocabulary"
+import { ACCESS_CREDENTIAL_KINDS, SITE_VISIT_IDENTIFICATIONS, SITE_VISIT_OUTCOMES, SITE_VISIT_REFUSAL_REASONS, SITE_VISIT_SOURCES, VISIT_CHARGE_BASES } from "@waste/domain/visits/vocabulary"
 import { sql } from "drizzle-orm"
 import { check, date, integer, text, timestamp, unique, uniqueIndex, uuid } from "drizzle-orm/pg-core"
 
@@ -47,7 +51,7 @@ export const accessCredential = wms.table(
     ...timestamps,
     ...validity,
     kind: text().notNull(),
-    /** Normalised: upper case, no spaces. */
+    /** Normalised: upper case, no spaces, no hyphens. */
     value: text().notNull(),
     /** What the office calls it: `Van 2`, `Garden card`. */
     label: text(),
@@ -69,7 +73,7 @@ export const accessCredential = wms.table(
     projectKey(t),
     validPeriod(t),
     oneOf(t.kind, ACCESS_CREDENTIAL_KINDS),
-    check(tableObjectName(t.id.table, "value_shape", "accessCredential"), sql`${t.value} ~ '^[A-Z0-9-]+$'`),
+    check(tableObjectName(t.id.table, "value_shape", "accessCredential"), sql`${t.value} ~ '^[A-Z0-9]+$'`),
     // A business's Customer with its Agreement, or a household's Property: exactly one holder.
     check(
       tableObjectName(t.id.table, "holder_shape", "accessCredential"),
@@ -108,6 +112,10 @@ export const siteVisit = wms.table(
     /** The attendant; null for the gate's read. */
     recordedBy: uuid(),
     note: text(),
+    /** What the visit was charged at when it was recorded: why, the household's n-th counted visit of the year, and the product, null where it is included; none on a refused visit. */
+    chargeBasis: text(),
+    chargeN: integer(),
+    chargeProductId: uuid(),
     /** A mistake voided, never deleted: the instant, the person (none for the gate's), the reason. */
     voidedAt: instant(),
     voidedBy: uuid(),
@@ -123,8 +131,16 @@ export const siteVisit = wms.table(
     projectReference(t, [t.agreementId], agreement),
     tenantReference(t, [t.recordedBy], userAccount),
     tenantReference(t, [t.voidedBy], userAccount),
+    projectReference(t, [t.chargeProductId], product),
     projectKey(t),
     oneOf(t.source, SITE_VISIT_SOURCES),
+    oneOf(t.chargeBasis, VISIT_CHARGE_BASES),
+    positive(t.chargeN),
+    // An admitted visit keeps its charge's basis and a refused one none; a product only at a step of the ladder or a business's visit.
+    check(
+      tableObjectName(t.id.table, "charge_shape", "siteVisit"),
+      sql`(${t.outcome} = 'admitted') = (${t.chargeBasis} is not null) and (${t.chargeProductId} is null or ${t.chargeBasis} in ('ladder', 'per-visit'))`,
+    ),
     oneOf(t.identification, SITE_VISIT_IDENTIFICATIONS),
     oneOf(t.outcome, SITE_VISIT_OUTCOMES),
     oneOf(t.refusalReason, SITE_VISIT_REFUSAL_REASONS),
@@ -153,6 +169,7 @@ export const siteVisit = wms.table(
     tenantIndex(t, t.agreementId),
     tenantIndex(t, t.recordedBy),
     tenantIndex(t, t.voidedBy),
+    tenantIndex(t, t.chargeProductId),
   ],
 )
 

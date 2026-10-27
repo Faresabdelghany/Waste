@@ -19,14 +19,14 @@
 // consumer cancels its charge, or reverses it once invoiced. A later visit's
 // step is not re-tiered: each was judged at its own event.
 import { Page } from "@waste/contracts/pagination"
-import { FrequentVisitors, FrequentVisitorsQuery, SiteVisit, SiteVisitCheckIn, SiteVisitCheckInAnswer, SiteVisitListQuery, SiteVisitVoid, type VisitChargeReading } from "@waste/contracts/site-visits"
+import { FrequentVisitors, FrequentVisitorsQuery, SiteVisit, SiteVisitCheckIn, SiteVisitCheckInAnswer, SiteVisitListQuery, SiteVisitVoid, VISIT_ADDRESS_MAX, VisitAddresses, VisitAddressQuery, VisitSites, VisitSitesQuery, type VisitChargeQuoted, type VisitChargeReading } from "@waste/contracts/site-visits"
 import type { Tx } from "@waste/db/client"
 import { fractionsOf, likelyTradesOf, NOT_A_CENTRE, priceVisitCharge, recordVisit, siteVisitOf, visitById, visitColumns } from "@waste/db/commands/site-visits"
 import { projectToday } from "@waste/db/commands/project-clock"
-import { dropOffPoint } from "@waste/db/schema/drop-off-points"
+import { property } from "@waste/db/schema/customers"
+import { dropOffPoint, dropOffPointFraction } from "@waste/db/schema/drop-off-points"
 import { siteVisit } from "@waste/db/schema/site-visits"
-import type { VisitCharge } from "@waste/domain/visits/charges"
-import { and, desc, eq, gte, lt, lte } from "drizzle-orm"
+import { and, asc, desc, eq, gte, ilike, inArray, lt, lte, or } from "drizzle-orm"
 import { Hono, type MiddlewareHandler } from "hono"
 import { describeRoute } from "hono-openapi"
 
@@ -63,16 +63,12 @@ async function siteProject(tx: Tx, principal: Principal, siteId: string): Promis
   return found.projectId
 }
 
-/** A charge as the attendant reads it: the domain's, with its step priced under the visit's Agreement on its day. */
-async function readingOf(tx: Tx, scope: { companyId: string; projectId: string }, visit: SiteVisit, charge: VisitCharge): Promise<VisitChargeReading> {
-  const priced = await priceVisitCharge(tx, scope, visit.agreementId, charge, visit.serviceDate)
+/** A charge as the attendant reads it: what the visit was charged at, stored with it, and that product priced under the visit's Agreement on its day. */
+async function readingOf(tx: Tx, scope: { companyId: string; projectId: string }, visit: SiteVisit, charge: VisitChargeQuoted): Promise<VisitChargeReading> {
+  const priced = await priceVisitCharge(tx, scope, visit.agreementId, charge.productId, visit.serviceDate)
   const price = priced?.price ?? null
   return {
-    ruleId: charge.ruleId,
-    basis: charge.basis,
-    counted: charge.counted,
-    n: charge.n,
-    productId: charge.productId,
+    ...charge,
     price: price === null ? null : { unitPriceMinor: price.unitPriceMinor, netMinor: price.netMinor, vatPercent: price.vatPercent, vatMinor: price.vatMinor, currency: price.currency },
     blockReason: charge.productId === null ? null : visit.agreementId === null ? "no-subscription" : (priced?.blockReason ?? null),
   }
@@ -176,11 +172,83 @@ export function siteVisitRoutes(guard: MiddlewareHandler<AuthEnv>, { now = () =>
             recordedBy: principal.user.id,
             newId,
           })
-          const answer: SiteVisitCheckInAnswer = { visit: recorded.visit, charge: recorded.charge === null ? null : await readingOf(tx, scope, recorded.visit, recorded.charge) }
+          const answer: SiteVisitCheckInAnswer = { visit: recorded.visit, charge: recorded.visit.charge === null ? null : await readingOf(tx, scope, recorded.visit, recorded.visit.charge) }
           return c.json(answer, 201, { location: `/site-visits/${recorded.visit.id}` })
         },
       )
-      // The likely trades before `/:id`, whose validator would refuse `frequent` as an id.
+      // The attendant's two lookups and the likely trades before `/:id`, whose validator would refuse their names as ids.
+      .get(
+        "/site-visits/sites",
+        describeRoute({
+          operationId: "listVisitSites",
+          summary: "The recycling centres a visitor is checked in at",
+          description:
+            "One project's active recycling centres, by name, each with the fractions it takes: what the check-in's site picker and its fraction chips are drawn from, under `operate.site-visits` so the Site attendant needs no grant on the Drop-off Points themselves. Nothing of the office's — no notes, hours or exceptions. `projectId` is a project the caller works in (400 on the query otherwise).",
+          security: BEARER_SECURITY,
+          responses: {
+            200: describeJson("The project's active recycling centres.", VisitSites),
+            400: describeProblem("`projectId` is missing, malformed or not a project this account works in."),
+            ...problems("view"),
+          },
+        }),
+        guard,
+        requireGrant(MODULE, "view"),
+        validate("query", VisitSitesQuery),
+        async (c) => {
+          const { projectId } = c.req.valid("query")
+          const tx = c.get("tx")
+          const principal = c.get("principal")
+          requireProject(principal, projectId, "projectId", "query")
+          const sites = await tx
+            .select({ id: dropOffPoint.id, projectId: dropOffPoint.projectId, code: dropOffPoint.code, name: dropOffPoint.name })
+            .from(dropOffPoint)
+            .where(and(eq(dropOffPoint.companyId, principal.companyId), eq(dropOffPoint.projectId, projectId), eq(dropOffPoint.kind, "recycling-centre"), eq(dropOffPoint.status, "active")))
+            .orderBy(asc(dropOffPoint.name))
+          const fractions =
+            sites.length === 0
+              ? []
+              : await tx
+                  .select({ siteId: dropOffPointFraction.dropOffPointId, wasteFractionId: dropOffPointFraction.wasteFractionId })
+                  .from(dropOffPointFraction)
+                  .where(and(eq(dropOffPointFraction.companyId, principal.companyId), inArray(dropOffPointFraction.dropOffPointId, sites.map((site) => site.id))))
+                  .orderBy(asc(dropOffPointFraction.id))
+          const answer: VisitSites = { items: sites.map((site) => ({ ...site, wasteFractionIds: fractions.filter((row) => row.siteId === site.id).map((row) => row.wasteFractionId) })) }
+          return c.json(answer)
+        },
+      )
+      .get(
+        "/site-visits/addresses",
+        describeRoute({
+          operationId: "searchVisitAddresses",
+          summary: "Find a household by its address for a check-in",
+          description: `One project's Properties whose name or address holds \`q\` (at least two characters, case-insensitive), at most ${VISIT_ADDRESS_MAX} by name: what a check-in by address names, under \`operate.site-visits\` so the Site attendant needs no grant on the Properties themselves. Each answers its id, its name and its address and nothing else — no parties, notes or subscriptions: whether it pays for collection is the check-in's to judge. \`projectId\` is a project the caller works in (400 on the query otherwise).`,
+          security: BEARER_SECURITY,
+          responses: {
+            200: describeJson("The Properties that match, at most twenty.", VisitAddresses),
+            400: describeProblem("`projectId` is missing, malformed or not a project this account works in, or `q` is shorter than two characters or longer than a hundred."),
+            ...problems("view"),
+          },
+        }),
+        guard,
+        requireGrant(MODULE, "view"),
+        validate("query", VisitAddressQuery),
+        async (c) => {
+          const { projectId, q } = c.req.valid("query")
+          const tx = c.get("tx")
+          const principal = c.get("principal")
+          requireProject(principal, projectId, "projectId", "query")
+          // The pattern's own wildcards are the person's literal text.
+          const pattern = `%${q.replace(/[\\%_]/g, (character) => `\\${character}`)}%`
+          const rows = await tx
+            .select({ propertyId: property.id, projectId: property.projectId, name: property.name, address: property.address })
+            .from(property)
+            .where(and(eq(property.companyId, principal.companyId), eq(property.projectId, projectId), or(ilike(property.name, pattern), ilike(property.address, pattern))))
+            .orderBy(asc(property.name), asc(property.id))
+            .limit(VISIT_ADDRESS_MAX)
+          const answer: VisitAddresses = { items: rows }
+          return c.json(answer)
+        },
+      )
       .get(
         "/site-visits/frequent",
         describeRoute({

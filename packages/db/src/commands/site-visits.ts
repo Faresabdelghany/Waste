@@ -6,34 +6,41 @@
 // charge through the same `visitChargeOf`, so the attendant's answer and the
 // event judge alike.
 //
-// `recordVisit` holds the site to a recycling centre of the project, active,
-// and each fraction to one it takes (a `Refused` 409 or 400 naming the
-// field); renders the instant as the project's day; reads the credential in
-// force for the plate or the card on that day, and for a household the
-// Agreement it pays under (@waste/domain/visits/charges's
-// `feePayingAgreement`: a subscription in force at the Property, or at a
-// Shared Collection Point it is a member of, under a signed Agreement in
-// force); identifies the visit by the domain's order; writes it, admitted or
-// refused, with its fractions; and emits `site-visit-recorded` with the wire
+// `recordVisit` answers a gate's read already recorded under its
+// `externalId` first, as it stands (ADR-0011), refused where it names
+// another project or site; then holds the site to a recycling centre of the
+// project, each fraction to one it takes and the address's Property to the
+// project's (each a `Refused` 400 naming its field), and only then the site
+// to an active one (a 409). It renders the instant as the project's day;
+// reads the credential in force for the plate or the card on that day, and
+// the Agreement the visit is charged to — a household's fee-paying one
+// (@waste/domain/visits/charges's `feePayingAgreement`: a subscription in
+// force at the Property, or at a Shared Collection Point it is a member of,
+// under a signed Agreement in force), a business's credential's own while it
+// is signed and in force on the day; identifies the visit in the domain's
+// order; judges what an admitted visit costs (`visitChargeOf`) and stores it
+// with the visit, the number the attendant quotes and the Finance consumer
+// charges, so nothing later re-tiers it; writes it, admitted or refused,
+// with its fractions; and emits `site-visit-recorded` with the wire
 // resource. A household's visit takes its Property's row lock first, so two
-// check-ins at once count one after the other. A gate's read already
-// recorded under its `externalId` is answered as it stands (ADR-0011), and
-// nothing is written or emitted twice.
+// check-ins at once count one after the other; two deliveries of one gate
+// read at once meet the external id's unique index, and the second answers
+// the first's visit.
 //
 // `visitChargeOf` is the domain's `visitCharge` over what it needs: the rule
 // in force on the visit's day with its ladder and free fractions, the
 // Property's admitted visits of the calendar year not voided, and whether a
 // business's Agreement holds the annual-access product in force that day.
 // `priceVisitCharge` prices the step through `priceDraft`, exactly as a
-// billable event will be. `likelyTradesOf` reads the window a rule's
-// threshold counts over.
-import type { SiteVisit, VisitIdentifier } from "@waste/contracts/site-visits"
+// billable event will be. `likelyTradesOf` counts a rule's window in one
+// aggregate statement, so no list of visits crosses the wire.
+import type { SiteVisit, VisitChargeQuoted, VisitIdentifier } from "@waste/contracts/site-visits"
 import type { PricingOutcome } from "@waste/domain/finance/pricing"
 import type { AgreementStatus } from "@waste/domain/registry/vocabulary"
-import { feePayingAgreement, householdPropertyOf, identifyVisit, likelyTrades, normaliseCredentialValue, ruleOn, visitCharge, type CredentialFacts, type Identified, type LikelyTrade, type VisitCharge, type VisitFacts, type VisitHolder, type VisitRuleFacts } from "@waste/domain/visits/charges"
-import type { SiteVisitIdentification, SiteVisitOutcome, SiteVisitRefusalReason, SiteVisitSource } from "@waste/domain/visits/vocabulary"
+import { businessAgreementOf, feePayingAgreement, householdPropertyOf, identifyVisit, normaliseCredentialValue, ruleOn, visitCharge, type CredentialFacts, type Identified, type LikelyTrade, type VisitCharge, type VisitFacts, type VisitHolder, type VisitRuleFacts } from "@waste/domain/visits/charges"
+import type { SiteVisitIdentification, SiteVisitOutcome, SiteVisitRefusalReason, SiteVisitSource, VisitChargeBasis } from "@waste/domain/visits/vocabulary"
 import { addDays } from "@waste/domain/route-schemes/recurrence"
-import { and, asc, eq, gte, inArray, isNull, lte, or } from "drizzle-orm"
+import { and, asc, count, desc, eq, exists, gte, inArray, isNotNull, isNull, lte, not, notInArray, or, sql } from "drizzle-orm"
 
 import type { Tx } from "../client"
 import type { IdMinter } from "../ids"
@@ -47,7 +54,7 @@ import { dayInTimezone } from "./days"
 import { emit } from "./outbox"
 import { projectTimezone, type Scope } from "./project-clock"
 import { instantOf, stampsOf } from "./resolution-rows"
-import { lockRow, refused, RefusedField } from "./shared"
+import { lockRow, refused, RefusedField, uniqueConstraintOf } from "./shared"
 
 /** What a site that is no recycling centre of the project is told, at `siteId`. */
 export const NOT_A_CENTRE = "Not a recycling centre of this project"
@@ -55,6 +62,10 @@ export const NOT_A_CENTRE = "Not a recycling centre of this project"
 export const NOT_TAKEN_HERE = "The site does not take this fraction"
 /** What a Property that is not the project's is told. */
 export const NOT_A_PROPERTY = "Not a property of this project"
+/** What a gate's read is told whose external id an earlier read at another project or site already took. */
+export const EXTERNAL_ID_TAKEN = "This external id was already recorded for a visit at another site; a gate names each read once"
+/** `site_visit_external_id_idx`: a gate's read is one visit (ADR-0011). */
+const ONE_VISIT_PER_READ = "site_visit_external_id_idx"
 /** What a check-in at a site that is not open for visits is told. */
 export const siteNotActive = (status: string): string => `The recycling centre is ${status}; visits are checked in at an active one`
 
@@ -76,6 +87,9 @@ export const visitColumns = {
   refusalReason: siteVisit.refusalReason,
   recordedBy: siteVisit.recordedBy,
   note: siteVisit.note,
+  chargeBasis: siteVisit.chargeBasis,
+  chargeN: siteVisit.chargeN,
+  chargeProductId: siteVisit.chargeProductId,
   voidedAt: siteVisit.voidedAt,
   voidedBy: siteVisit.voidedBy,
   voidReason: siteVisit.voidReason,
@@ -106,12 +120,17 @@ export function siteVisitOf(row: VisitRow, wasteFractionIds: readonly string[]):
     recordedBy: row.recordedBy,
     note: row.note,
     wasteFractionIds: [...wasteFractionIds],
+    charge: quotedOf(row),
     voidedAt: instantOf(row.voidedAt),
     voidedBy: row.voidedBy,
     voidReason: row.voidReason,
     ...stampsOf(row),
   }
 }
+
+/** What a visit's row says it was charged at when it was recorded; null for a refused one. */
+export const quotedOf = (row: Pick<VisitRow, "chargeBasis" | "chargeN" | "chargeProductId">): VisitChargeQuoted | null =>
+  row.chargeBasis === null ? null : { basis: row.chargeBasis as VisitChargeBasis, n: row.chargeN, productId: row.chargeProductId }
 
 /** The fractions of each visit asked, by visit, in the order they were written. */
 export async function fractionsOf(tx: Tx, companyId: string, visitIds: readonly string[]): Promise<Map<string, string[]>> {
@@ -179,6 +198,16 @@ export async function feePayingAgreementOf(tx: Tx, scope: Scope, propertyId: str
       ),
     )
   return feePayingAgreement(rows.map((row) => ({ agreementId: row.agreementId, status: row.status as AgreementStatus })))
+}
+
+/** Whether a business's Agreement pays for its visits on the day: signed, and in force. */
+async function agreementPaysOn(tx: Tx, scope: Scope, agreementId: string, day: string): Promise<boolean> {
+  const [row] = await tx
+    .select({ id: agreement.id })
+    .from(agreement)
+    .where(and(eq(agreement.companyId, scope.companyId), eq(agreement.projectId, scope.projectId), eq(agreement.id, agreementId), eq(agreement.status, "active"), validOn(agreement, day)))
+    .limit(1)
+  return row !== undefined
 }
 
 /** A project's Visit Rules in force on a day, with their ladders and free fractions: at most one, the database holds. */
@@ -272,25 +301,53 @@ export async function visitChargeOf(tx: Tx, scope: Scope, visit: VisitFacts): Pr
   return visitCharge(visit, rule, history)
 }
 
-/** A charge's step priced under the visit's Agreement on its day, as its billable event will be; null where nothing is charged or no Agreement is named. */
-export async function priceVisitCharge(tx: Tx, scope: Scope, agreementId: string | null, charge: VisitCharge, serviceDate: string): Promise<PricingOutcome | null> {
-  if (charge.productId === null || agreementId === null) return null
-  return await priceDraft(tx, scope, { agreementId, productId: charge.productId, quantity: 1, serviceDate })
+/** A charged product priced under the visit's Agreement on its day, as its billable event will be; null where nothing is charged or no Agreement is named. */
+export async function priceVisitCharge(tx: Tx, scope: Scope, agreementId: string | null, productId: string | null, serviceDate: string): Promise<PricingOutcome | null> {
+  if (productId === null || agreementId === null) return null
+  return await priceDraft(tx, scope, { agreementId, productId, quantity: 1, serviceDate })
 }
 
-/** A visit's row as the charge reads it; null for a refused one or one that reached nobody. */
-export function visitFactsOf(row: VisitRow, fractionIds: readonly string[]): VisitFacts | null {
-  const holder = holderOf(row)
-  if (row.outcome !== "admitted" || holder === null) return null
-  return { id: row.id, occurredAt: row.occurredAt.toISOString(), serviceDate: row.serviceDate, fractionIds, holder }
-}
-
-/** A project's likely trades on a day under the rule in force: the rule, and the Properties at or past its threshold in its window. */
+/**
+ * A project's likely trades on a day under the rule in force: the rule, and
+ * the Properties with at least its threshold of counted visits in its window
+ * — admitted, not voided, a household's, bringing nothing recorded or
+ * something other than the rule's free fractions — most visits first and
+ * then by id: the domain's `likelyTrades` as one aggregate, so the window is
+ * counted where it lies and no list of visits crosses the wire.
+ */
 export async function likelyTradesOf(tx: Tx, scope: Scope, on: string): Promise<{ rule: VisitRuleFacts | null; items: LikelyTrade[] }> {
   const rule = await visitRuleOn(tx, scope, on)
-  if (rule === null || rule.tradeWindowDays === null) return { rule, items: [] }
-  const visits = await admittedVisits(tx, scope, and(gte(siteVisit.serviceDate, addDays(on, 1 - rule.tradeWindowDays)), lte(siteVisit.serviceDate, on)))
-  return { rule, items: likelyTrades(visits, rule, on) }
+  if (rule === null || rule.tradeThreshold === null || rule.tradeWindowDays === null) return { rule, items: [] }
+  const free = rule.freeFractionIds
+  const brought = (where: ReturnType<typeof and>) =>
+    exists(
+      tx
+        .select({ one: sql`1` })
+        .from(siteVisitFraction)
+        .where(and(eq(siteVisitFraction.companyId, scope.companyId), eq(siteVisitFraction.visitId, siteVisit.id), where)),
+    )
+  // Counted: no fraction recorded, or one that is not free (isCounted).
+  const counted = free.length === 0 ? undefined : or(not(brought(undefined)), brought(notInArray(siteVisitFraction.wasteFractionId, [...free])))
+  const visits = count()
+  const rows = await tx
+    .select({ propertyId: siteVisit.propertyId, visits })
+    .from(siteVisit)
+    .where(
+      and(
+        eq(siteVisit.companyId, scope.companyId),
+        eq(siteVisit.projectId, scope.projectId),
+        eq(siteVisit.outcome, "admitted"),
+        isNull(siteVisit.voidedAt),
+        isNotNull(siteVisit.propertyId),
+        gte(siteVisit.serviceDate, addDays(on, 1 - rule.tradeWindowDays)),
+        lte(siteVisit.serviceDate, on),
+        counted,
+      ),
+    )
+    .groupBy(siteVisit.propertyId)
+    .having(sql`count(*) >= ${rule.tradeThreshold}`)
+    .orderBy(desc(visits), asc(siteVisit.propertyId))
+  return { rule, items: rows.flatMap((row) => (row.propertyId === null ? [] : [{ propertyId: row.propertyId, visits: row.visits }])) }
 }
 
 export type RecordVisitInput = {
@@ -309,19 +366,18 @@ export type RecordVisitInput = {
   newId: IdMinter
 }
 
-/** What the door answers: the visit as recorded, what it costs where admitted, and whether it was already there (a gate's read again). */
-export type RecordedVisit = { row: VisitRow; visit: SiteVisit; charge: VisitCharge | null; replayed: boolean }
+/** What the door answers: the visit as recorded, with what it was charged at, and whether it was already there (a gate's read again). */
+export type RecordedVisit = { row: VisitRow; visit: SiteVisit; replayed: boolean }
 
-/** Holds the site to an active recycling centre of the project and each fraction to one it takes. */
-async function requireSite(tx: Tx, scope: Scope, siteId: string, fractionIds: readonly string[]): Promise<void> {
+/** Holds the site to a recycling centre of the project and each fraction to one it takes (the 400s), and answers its status, which the caller judges after every 400. */
+async function siteStatusOf(tx: Tx, scope: Scope, siteId: string, fractionIds: readonly string[]): Promise<string> {
   const [site] = await tx
     .select({ kind: dropOffPoint.kind, status: dropOffPoint.status })
     .from(dropOffPoint)
     .where(and(eq(dropOffPoint.companyId, scope.companyId), eq(dropOffPoint.projectId, scope.projectId), eq(dropOffPoint.id, siteId)))
     .limit(1)
   if (site === undefined || site.kind !== "recycling-centre") throw new RefusedField("siteId", NOT_A_CENTRE)
-  if (site.status !== "active") throw refused(409, siteNotActive(site.status))
-  if (fractionIds.length === 0) return
+  if (fractionIds.length === 0) return site.status
   const taken = await tx
     .select({ wasteFractionId: dropOffPointFraction.wasteFractionId })
     .from(dropOffPointFraction)
@@ -329,6 +385,7 @@ async function requireSite(tx: Tx, scope: Scope, siteId: string, fractionIds: re
   const takes = new Set(taken.map((row) => row.wasteFractionId))
   const index = fractionIds.findIndex((id) => !takes.has(id))
   if (index >= 0) throw new RefusedField(`wasteFractionIds.${index}`, NOT_TAKEN_HERE)
+  return site.status
 }
 
 /** The visit an earlier read of the gate recorded under its id, if any. */
@@ -341,24 +398,29 @@ async function visitByExternalId(tx: Tx, companyId: string, source: SiteVisitSou
   return row
 }
 
+/** A gate's read already recorded, answered as it stands where it was the same site's, refused where another project or site took the id. */
+async function replayOf(tx: Tx, scope: Scope, input: RecordVisitInput, earlier: VisitRow): Promise<RecordedVisit> {
+  if (earlier.projectId !== scope.projectId || earlier.siteId !== input.siteId) throw refused(409, EXTERNAL_ID_TAKEN)
+  const fractions = (await fractionsOf(tx, scope.companyId, [earlier.id])).get(earlier.id) ?? []
+  return { row: earlier, visit: siteVisitOf(earlier, fractions), replayed: true }
+}
+
 /**
  * Records one visit at a recycling centre, in the caller's transaction:
- * identified, admitted or refused, its fractions written and its
- * `site-visit-recorded` emitted, and its charge read where it was admitted.
- * The gate's read meets its earlier recording by `externalId` and is
- * answered as it stands.
+ * identified, admitted or refused, what it costs judged and stored with it,
+ * its fractions written and its `site-visit-recorded` emitted. The gate's
+ * read meets its earlier recording by `externalId` before anything else is
+ * judged, and is answered as it stands.
  */
 export async function recordVisit(tx: Tx, input: RecordVisitInput): Promise<RecordedVisit> {
   const scope: Scope = { companyId: input.companyId, projectId: input.projectId }
-  await requireSite(tx, scope, input.siteId, input.wasteFractionIds)
   if (input.externalId !== null) {
     const earlier = await visitByExternalId(tx, input.companyId, input.source, input.externalId)
-    if (earlier !== undefined) return { ...(await answerOf(tx, scope, earlier)), replayed: true }
+    if (earlier !== undefined) return await replayOf(tx, scope, input, earlier)
   }
-  const day = dayInTimezone(input.occurredAt, await projectTimezone(tx, scope.companyId, scope.projectId))
+  // The body's 400s first — the site, its fractions, the address's Property — then the site's state (apps/api's order of judgement).
+  const siteStatus = await siteStatusOf(tx, scope, input.siteId, input.wasteFractionIds)
   const { identifier } = input
-  let identified: Identified
-  let identifierValue: string | null = null
   if (identifier.kind === "property") {
     const [found] = await tx
       .select({ id: property.id })
@@ -366,51 +428,64 @@ export async function recordVisit(tx: Tx, input: RecordVisitInput): Promise<Reco
       .where(and(eq(property.companyId, scope.companyId), eq(property.projectId, scope.projectId), eq(property.id, identifier.propertyId)))
       .limit(1)
     if (found === undefined) throw new RefusedField("identifier.propertyId", NOT_A_PROPERTY)
-    identified = { by: "property", propertyId: identifier.propertyId }
-  } else {
+  }
+  if (siteStatus !== "active") throw refused(409, siteNotActive(siteStatus))
+  const day = dayInTimezone(input.occurredAt, await projectTimezone(tx, scope.companyId, scope.projectId))
+  let identifierValue: string | null = null
+  let identified: Identified
+  if (identifier.kind === "property") identified = { by: "property", propertyId: identifier.propertyId }
+  else {
     identifierValue = normaliseCredentialValue(identifier.value)
     identified = { by: identifier.kind, credential: await credentialOn(tx, scope, identifier.kind, identifierValue, day) }
   }
   const household = householdPropertyOf(identified)
   // Two check-ins of one household at once count one after the other.
   if (household !== null) await lockRow(tx, property, { companyId: scope.companyId, id: household })
-  const feePaying = household === null ? null : await feePayingAgreementOf(tx, scope, household, day)
-  const identification = identifyVisit(identified, feePaying)
+  const business = businessAgreementOf(identified)
+  const paying = household !== null ? await feePayingAgreementOf(tx, scope, household, day) : business !== null && (await agreementPaysOn(tx, scope, business, day)) ? business : null
+  const identification = identifyVisit(identified, paying)
   const holder = identification.holder
-  const [row] = await tx
-    .insert(siteVisit)
-    .values({
-      id: input.newId(),
-      companyId: scope.companyId,
-      projectId: scope.projectId,
-      siteId: input.siteId,
-      occurredAt: input.occurredAt,
-      serviceDate: day,
-      source: input.source,
-      externalId: input.externalId,
-      identification: identifier.kind,
-      identifierValue,
-      credentialId: identification.credentialId,
-      propertyId: holder?.kind === "household" ? holder.propertyId : null,
-      customerId: holder?.kind === "business" ? holder.customerId : null,
-      agreementId: holder?.agreementId ?? null,
-      outcome: identification.outcome,
-      refusalReason: identification.refusalReason,
-      recordedBy: input.recordedBy,
-      note: input.note,
-    })
-    .returning(visitColumns)
+  const id = input.newId()
+  // What an admitted visit costs, judged now and stored: the number the attendant quotes is the one the consumer charges.
+  const charge: VisitCharge | null =
+    identification.outcome === "admitted" && holder !== null ? await visitChargeOf(tx, scope, { id, occurredAt: input.occurredAt.toISOString(), serviceDate: day, fractionIds: input.wasteFractionIds, holder }) : null
+  const values = {
+    id,
+    companyId: scope.companyId,
+    projectId: scope.projectId,
+    siteId: input.siteId,
+    occurredAt: input.occurredAt,
+    serviceDate: day,
+    source: input.source,
+    externalId: input.externalId,
+    identification: identifier.kind,
+    identifierValue,
+    credentialId: identification.credentialId,
+    propertyId: holder?.kind === "household" ? holder.propertyId : null,
+    customerId: holder?.kind === "business" ? holder.customerId : null,
+    agreementId: holder?.agreementId ?? null,
+    outcome: identification.outcome,
+    refusalReason: identification.refusalReason,
+    recordedBy: input.recordedBy,
+    note: input.note,
+    chargeBasis: charge?.basis ?? null,
+    chargeN: charge?.n ?? null,
+    chargeProductId: charge?.productId ?? null,
+  }
+  let row: VisitRow
+  try {
+    // A savepoint, so a second delivery of one gate read meeting the first's index rolls back alone and reads the first's visit.
+    ;[row] = await tx.transaction((savepoint) => savepoint.insert(siteVisit).values(values).returning(visitColumns))
+  } catch (error) {
+    if (input.externalId === null || uniqueConstraintOf(error) !== ONE_VISIT_PER_READ) throw error
+    const winner = await visitByExternalId(tx, input.companyId, input.source, input.externalId)
+    if (winner === undefined) throw error
+    return await replayOf(tx, scope, input, winner)
+  }
   if (input.wasteFractionIds.length > 0) {
     await tx.insert(siteVisitFraction).values(input.wasteFractionIds.map((wasteFractionId) => ({ id: input.newId(), companyId: scope.companyId, projectId: scope.projectId, visitId: row.id, wasteFractionId })))
   }
-  const answered = await answerOf(tx, scope, row)
-  await emit(tx, scope, { aggregate: "site-visit", aggregateId: row.id, kind: "site-visit-recorded", payload: answered.visit, projectId: scope.projectId, occurredAt: input.occurredAt })
-  return { ...answered, replayed: false }
-}
-
-/** A visit's row as the door answers it: on the wire with its fractions, and its charge where it was admitted. */
-async function answerOf(tx: Tx, scope: Scope, row: VisitRow): Promise<Omit<RecordedVisit, "replayed">> {
-  const fractions = (await fractionsOf(tx, scope.companyId, [row.id])).get(row.id) ?? []
-  const facts = visitFactsOf(row, fractions)
-  return { row, visit: siteVisitOf(row, fractions), charge: facts === null ? null : await visitChargeOf(tx, scope, facts) }
+  const visit = siteVisitOf(row, input.wasteFractionIds)
+  await emit(tx, scope, { aggregate: "site-visit", aggregateId: row.id, kind: "site-visit-recorded", payload: visit, projectId: scope.projectId, occurredAt: input.occurredAt })
+  return { row, visit, replayed: false }
 }

@@ -113,11 +113,11 @@ describe("the checks of the visits", () => {
   test("a credential is held by a business's customer with its agreement or by a household's Property, its value normalised, blocked with a reason", () => {
     const checks = checksOf(accessCredential)
     assert.equal(checks.get("access_credential_holder_shape"), `case when ${credential("property_id")} is not null then ${credential("customer_id")} is null and ${credential("agreement_id")} is null else ${credential("customer_id")} is not null and ${credential("agreement_id")} is not null end`)
-    assert.equal(checks.get("access_credential_value_shape"), `${credential("value")} ~ '^[A-Z0-9-]+$'`)
+    assert.equal(checks.get("access_credential_value_shape"), `${credential("value")} ~ '^[A-Z0-9]+$'`)
     assert.equal(checks.get("access_credential_blocked_shape"), `(${credential("blocked_at")} is null) = (${credential("blocked_reason")} is null)`)
   })
 
-  test("a visit refused carries its reason, a read value its value, the attendant's its person, an admitted one its agreement, a void its reason", () => {
+  test("a visit refused carries its reason, a read value its value, the attendant's its person, an admitted one its agreement and what it was charged at, a void its reason", () => {
     const checks = checksOf(siteVisit)
     assert.equal(checks.get("site_visit_outcome_shape"), `(${visit("outcome")} = 'refused') = (${visit("refusal_reason")} is not null)`)
     assert.equal(checks.get("site_visit_identifier_shape"), `(${visit("identification")} = 'property') = (${visit("identifier_value")} is null)`)
@@ -126,6 +126,7 @@ describe("the checks of the visits", () => {
       checks.get("site_visit_holder_shape"),
       `not (${visit("property_id")} is not null and ${visit("customer_id")} is not null) and (${visit("customer_id")} is null or ${visit("agreement_id")} is not null) and (${visit("outcome")} <> 'admitted' or ${visit("agreement_id")} is not null)`,
     )
+    assert.equal(checks.get("site_visit_charge_shape"), `(${visit("outcome")} = 'admitted') = (${visit("charge_basis")} is not null) and (${visit("charge_product_id")} is null or ${visit("charge_basis")} in ('ladder', 'per-visit'))`)
     assert.equal(checks.get("site_visit_void_shape"), `(${visit("voided_at")} is null) = (${visit("void_reason")} is null) and (${visit("voided_by")} is null or ${visit("voided_at")} is not null)`)
   })
 })

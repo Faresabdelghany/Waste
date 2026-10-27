@@ -187,6 +187,17 @@ describe("finance.record-billable-events over a Site Visit's events (M4 of #293)
     assert.deepEqual([original.status, reversal.kind, reversal.links.reversesEventId, reversal.netMinor], ["reversed", "reversal", original.id, -7_000])
   })
 
+  test("a void never re-tiers a later visit: the visit is charged at the product it was quoted when it was checked in, not one recounted at its event", async () => {
+    const free = await visit({ kind: "property", propertyId: tenant.properties.parkvej.id }, "2027-02-01T09:00:00.000Z")
+    const quoted = await visit({ kind: "property", propertyId: tenant.properties.parkvej.id }, "2027-02-02T09:00:00.000Z")
+    assert.deepEqual([free.charge?.basis, quoted.charge?.n, quoted.charge?.productId], ["free-quota", 2, visit70])
+    // The first is voided before the second's recording reaches the consumer: recounted, the second would be the year's first and free.
+    assert.equal(await handle(published("site-visit-voided", await voided(free.id))), "nothing")
+    assert.equal(await handle(published("site-visit-recorded", quoted)), "recorded")
+    const [event] = await eventsOf(quoted.id)
+    assert.deepEqual([event.productId, event.netMinor], [visit70, 7_000])
+  })
+
   test("a business's visit at a step with no price row is blocked as any event is", async () => {
     await withCompany(pool.db, tenant.companyId, (tx: Tx) =>
       tx.insert(accessCredential).values({ id: testId(), companyId: tenant.companyId, projectId: copenhagen, kind: "plate", value: "VAN2", customerId: tenant.customers.anna.id, agreementId: tenant.agreements.anna.id, validFrom: "2026-01-01" }),

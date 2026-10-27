@@ -147,7 +147,7 @@ A place residents bring waste to themselves, on a project's public map: a recycl
 _Avoid_: Unloading Station (where the operation's own vehicles empty), Depot, container (a bring bank's bins are not the platform's Containers), genbrugsstation in copy that is not Danish
 
 **Access Credential**:
-A vehicle plate or an access card a project's recycling centres admit by, effective-dated and ended or blocked, never deleted. A business holds one under its Customer, its visits charged to the Agreement the credential names; a household under its Property. Its value is stored upper case with no spaces, and one credential of a plate or card number is in force at a time.
+A vehicle plate or an access card a project's recycling centres admit by, effective-dated and ended or blocked, never deleted. A business holds one under its Customer, its visits charged to the Agreement the credential names; a household under its Property. Its value is stored upper case with no spaces or hyphens, so a plate is one value however it is written, and one credential of a plate or card number is in force at a time.
 _Avoid_: Permit, pass, badge, key card, licence (a driver's)
 
 **Site Visit**:

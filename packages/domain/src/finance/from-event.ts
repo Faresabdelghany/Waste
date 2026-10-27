@@ -88,12 +88,14 @@
 // A Site Visit's two events (#393, M4 of #293) are Finance's too: a
 // `site-visit-recorded` of an admitted visit standing unvoided, with no live
 // event, is a `visit` event of quantity one at the product its Visit Rule
-// charges (visits/charges.ts judges the step; the worker prices it through
-// `priceDraft` under the visit's Agreement on its day and hands the outcome
-// here), nothing where the rule charges nothing; a `site-visit-voided` cancels
-// the visit's live event with `visit-voided`, or reverses it once a line
-// names it, as a corrected pickup's is. A later visit's step is never
-// re-tiered by a void: each event keeps the product it was charged at.
+// charged at check-in (visits/charges.ts judges the step; the visit stores
+// it, the price the attendant quoted, and the worker prices that product
+// through `priceDraft` under the visit's Agreement on its day and hands the
+// outcome here), nothing where the rule charged nothing; a
+// `site-visit-voided` cancels the visit's live event with `visit-voided`, or
+// reverses it once a line names it, as a corrected pickup's is. A later
+// visit's step is never re-tiered by a void or a backdated check-in: each
+// visit keeps the product it was quoted at.
 //
 // What the draft does not carry is the writer's: `createdBy` null,
 // `sourceEventId` the event's id (`billable_event_origin_shape` ties the two),
@@ -105,7 +107,6 @@ import { isBillableResolution, type TicketResolution } from "../resolution/vocab
 import { HIRE_UNIT } from "./hire"
 import { priceOccurrence, type PriceLabels, type PricedAmounts, type PricedList, type PriceRow, type PricingOutcome } from "./pricing"
 import { RECURRING_UNIT } from "./recurring"
-import type { VisitCharge } from "../visits/charges"
 import type { BillableEventKind, BlockReason, CancelReason } from "./vocabulary"
 
 /** The events about a pickup that Finance reads: a missed stop's two (#293 M5) beside the completion and the correction. */
@@ -234,8 +235,8 @@ export type VisitEventFacts = {
   voided: boolean
   /** The Agreement the visit is charged to: a household's fee-paying one, a business's credential's; null where none. */
   agreementId: string | null
-  /** What the visit's rule says it costs; null for a refused visit. */
-  charge: VisitCharge | null
+  /** The product the visit was charged at when it was checked in — its Visit Rule's step, stored on the visit; null where it was charged nothing or refused. */
+  productId: string | null
   /** The charge's product priced under the Agreement on the day (`priceDraft`); null where nothing is charged or no Agreement is named. */
   priced: Pick<PricingOutcome, "price" | "blockReason"> | null
   /** The visit's live `visit` event, or null. */
@@ -474,7 +475,7 @@ export function billableFor<Row extends PriceRow>(event: EventFacts<Row>, labels
     case "site-visit-recorded": {
       // Stale news, a refusal, or charged already: the void's own event decides, a refused visit is never charged, and a visit is charged once.
       if (!event.admitted || event.voided || event.liveEvent !== null) return undefined
-      const productId = event.charge?.productId ?? null
+      const { productId } = event
       if (productId === null) return undefined
       const base = { kind: "visit" as const, serviceDate: event.serviceDate, subscriptionId: null, productId, quantity: 1, links: { ...NO_LINKS, visitId: event.visitId } }
       if (event.agreementId === null || event.priced === null) return { action: "record", draft: { ...base, agreementId: null, price: null, blockReason: "no-subscription" } }

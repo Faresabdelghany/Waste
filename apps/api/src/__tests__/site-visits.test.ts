@@ -8,11 +8,15 @@
 import assert from "node:assert/strict"
 import { after, before, describe, test } from "node:test"
 
-import { AccessCredential, FrequentVisitors, ONE_HOLDER, SiteVisit, SiteVisitCheckInAnswer } from "@waste/contracts/site-visits"
+import { AccessCredential, FrequentVisitors, ONE_HOLDER, SiteVisit, SiteVisitCheckInAnswer, VisitAddresses, VisitSites, type VisitIdentifier } from "@waste/contracts/site-visits"
 import { VisitRule } from "@waste/contracts/visit-rules"
 import { createDb, type Database, type Tx } from "@waste/db/client"
-import { NOT_A_CENTRE, NOT_TAKEN_HERE } from "@waste/db/commands/site-visits"
-import { subscription } from "@waste/db/schema/agreements"
+import { Refused } from "@waste/db/commands/shared"
+import { EXTERNAL_ID_TAKEN, NOT_A_CENTRE, NOT_TAKEN_HERE, recordVisit, siteNotActive } from "@waste/db/commands/site-visits"
+import { newId } from "@waste/db/ids"
+import { agreement, subscription } from "@waste/db/schema/agreements"
+import { customer } from "@waste/db/schema/customers"
+import { dropOffPoint } from "@waste/db/schema/drop-off-points"
 import { product, wasteFraction } from "@waste/db/schema/catalogue"
 import { outboxEvent } from "@waste/db/schema/execution"
 import { priceListRow } from "@waste/db/schema/finance"
@@ -21,7 +25,7 @@ import { SYSTEM_ROLES } from "@waste/domain/access/system-roles"
 import { and, asc, eq, sql } from "drizzle-orm"
 
 import { createApp } from "../app"
-import { ALREADY_BLOCKED, NOT_THE_CUSTOMERS_AGREEMENT } from "../routes/access-credentials"
+import { agreementPaysNothing, ALREADY_BLOCKED, INACTIVE_HOLDER, NOT_THE_CUSTOMERS_AGREEMENT, WITHIN_THE_AGREEMENT } from "../routes/access-credentials"
 import { visitRulesChargeAt } from "../routes/products"
 import { ALREADY_VOIDED } from "../routes/site-visits"
 import { ACCESS_SOLD_BY_THE_MONTH, SOLD_PER_VISIT } from "../routes/visit-rules"
@@ -160,7 +164,7 @@ describe("recycling-centre visits (M4 of #293)", { skip: database.skip || owner.
     assert.deepEqual([first.charge?.basis, first.charge?.n, first.charge?.productId], ["free-quota", 1, null])
 
     const garden1 = await checkIn({ identifier: { kind: "property", propertyId: ex.properties.parkvej.id }, wasteFractionIds: [garden], occurredAt: at("2026-03-03") })
-    assert.deepEqual([garden1.charge?.basis, garden1.charge?.counted], ["free-fractions", false])
+    assert.deepEqual([garden1.charge?.basis, garden1.charge?.n, garden1.charge?.productId], ["free-fractions", null, null])
 
     const second = await checkIn({ identifier: { kind: "plate", value: "AB12345" }, occurredAt: at("2026-03-04") })
     assert.deepEqual([second.charge?.basis, second.charge?.n, second.charge?.productId], ["ladder", 2, visit70])
@@ -236,6 +240,100 @@ describe("recycling-centre visits (M4 of #293)", { skip: database.skip || owner.
     await expect(await attendant(`/site-visits/${visit.visit.id}/void`, { method: "POST", body: { reason: "x" } }), 403)
     await expect(await attendant("/access-credentials", { method: "POST", body: { projectId: copenhagen, validFrom: "2026-01-01", kind: "plate", value: "Q1", propertyId: ex.properties.parkvej.id } }), 403)
     await expect(await attendant(`/visit-rules?projectId=${copenhagen}`), 403)
+  })
+
+  test("a business's credential is registered only under a signed agreement of an active customer, inside the agreement's period, and is turned away once its agreement no longer pays", async () => {
+    const ended = testId()
+    const cancelled = testId()
+    const dormant = testId()
+    const dormantsAgreement = testId()
+    await withCompany(pool.db, a.companyId, async (tx: Tx) => {
+      await tx.insert(customer).values({ id: dormant, companyId: a.companyId, kind: "organisation", name: "Dormant Builders", status: "inactive" })
+      const signed = (id: string, number: string, customerId: string, values: { status?: string; validTo?: string } = {}) => ({ id, companyId: a.companyId, projectId: copenhagen, number, customerId, payerCustomerId: customerId, status: values.status ?? "active", billingCadence: "monthly", currency: "DKK", validFrom: "2026-01-01", validTo: values.validTo ?? null })
+      await tx.insert(agreement).values([signed(ended, "AGR-ENDS", fx.customers.anna.id, { validTo: "2026-07-01" }), signed(cancelled, "AGR-CANC", fx.customers.anna.id, { status: "cancelled" }), signed(dormantsAgreement, "AGR-DORM", dormant)])
+    })
+    const body = (values: Record<string, unknown>) => ({ projectId: copenhagen, validFrom: "2026-01-01", kind: "plate", value: `B${testId().slice(-6)}`, customerId: fx.customers.anna.id, ...values })
+    assert.deepEqual((await refused(await olivia("/access-credentials", { method: "POST", body: body({ agreementId: ended }) }), 400)).errors, [{ path: "validTo", message: WITHIN_THE_AGREEMENT }], "an open end past the agreement's")
+    assert.equal((await refused(await olivia("/access-credentials", { method: "POST", body: body({ agreementId: cancelled }) }), 409)).detail, agreementPaysNothing("cancelled"))
+    assert.equal((await refused(await olivia("/access-credentials", { method: "POST", body: body({ customerId: dormant, agreementId: dormantsAgreement }) }), 409)).detail, INACTIVE_HOLDER)
+
+    const plate = await register({ kind: "plate", value: "EN-D 1", customerId: fx.customers.anna.id, agreementId: ended, validTo: "2026-07-01" })
+    assert.equal(plate.value, "END1", "hyphens dropped with the spaces")
+    assert.deepEqual((await refused(await olivia(`/access-credentials/${plate.id}`, { method: "PATCH", body: { validTo: null } }), 400)).errors, [{ path: "validTo", message: WITHIN_THE_AGREEMENT }])
+    const inForce = await checkIn({ identifier: { kind: "plate", value: "END-1" }, occurredAt: at("2026-06-30") })
+    assert.equal(inForce.visit.outcome, "admitted", "one plate however it is written")
+    // The agreement cancelled since: the plate is turned away, its customer and agreement still recorded.
+    await withCompany(pool.db, a.companyId, (tx: Tx) => tx.update(agreement).set({ status: "cancelled" }).where(and(eq(agreement.companyId, a.companyId), eq(agreement.id, ended))))
+    const turnedAway = await checkIn({ identifier: { kind: "plate", value: "END1" }, occurredAt: at("2026-06-30", "11:00") })
+    assert.deepEqual([turnedAway.visit.outcome, turnedAway.visit.refusalReason, turnedAway.visit.customerId, turnedAway.visit.agreementId, turnedAway.charge], ["refused", "not-fee-paying", fx.customers.anna.id, ended, null])
+  })
+
+  test("a household that no longer pays is not-fee-paying though its card is blocked too, in the design's order", async () => {
+    const card = await register({ kind: "card", value: "HAV-7", propertyId: ex.properties.havnegade.id })
+    await expect(await olivia(`/access-credentials/${card.id}/block`, { method: "POST", body: { reason: "Lost" } }), 200)
+    const visit = await checkIn({ identifier: { kind: "card", value: "HAV7" }, occurredAt: at("2026-07-01") })
+    assert.deepEqual([visit.visit.outcome, visit.visit.refusalReason, visit.visit.credentialId], ["refused", "not-fee-paying", card.id])
+  })
+
+  test("the check-in judges the body's fields before the site's state: a closed centre with a fraction it does not take is told the fraction", async () => {
+    const closed = await olivia("/drop-off-points", {
+      method: "POST",
+      body: { projectId: copenhagen, code: "GS-SHUT", name: "Shut Recycling Centre", kind: "recycling-centre", address: "Vej 1", location: { type: "Point", coordinates: [12.6, 55.65] }, status: "closed", wasteFractionIds: [ex.fractions.residual.id] },
+    })
+    const shut = ((await (await expect(closed, 201)).json()) as { id: string }).id
+    assert.deepEqual((await refused(await olivia("/site-visits", { method: "POST", body: { siteId: shut, identifier: { kind: "plate", value: "AB1" }, wasteFractionIds: [garden] } }), 400)).errors, [{ path: "wasteFractionIds.0", message: NOT_TAKEN_HERE }])
+    assert.equal((await refused(await olivia("/site-visits", { method: "POST", body: { siteId: shut, identifier: { kind: "plate", value: "AB1" } } }), 409)).detail, siteNotActive("closed"))
+  })
+
+  test("a gate's read is one visit (ADR-0011): replayed as it stands before anything is judged, the same read at once answers the first's visit, and another site's id is refused", async () => {
+    const read = (externalId: string, values: { siteId?: string; identifier?: VisitIdentifier } = {}) =>
+      withCompany(pool.db, a.companyId, (tx: Tx) =>
+        recordVisit(tx, {
+          companyId: a.companyId,
+          projectId: copenhagen,
+          siteId: values.siteId ?? site,
+          occurredAt: new Date(at("2026-07-02")),
+          source: "gate",
+          externalId,
+          identifier: values.identifier ?? { kind: "plate", value: "AB12345" },
+          wasteFractionIds: [],
+          note: null,
+          recordedBy: null,
+          newId,
+        }),
+      )
+    const gateRead = `gate-${testId()}`
+    const [first, second] = await Promise.all([read(gateRead), read(gateRead)])
+    assert.equal(first.visit.id, second.visit.id, "two deliveries at once are one visit")
+    assert.deepEqual([first.replayed || second.replayed, first.replayed && second.replayed], [true, false])
+    // The office closes the site; the gate's retry is answered with what it recorded, not refused.
+    await withCompany(pool.db, a.companyId, (tx: Tx) => tx.update(dropOffPoint).set({ status: "closed" }).where(and(eq(dropOffPoint.companyId, a.companyId), eq(dropOffPoint.id, site))))
+    try {
+      const retried = await read(gateRead)
+      assert.deepEqual([retried.replayed, retried.visit.id], [true, first.visit.id])
+    } finally {
+      await withCompany(pool.db, a.companyId, (tx: Tx) => tx.update(dropOffPoint).set({ status: "active" }).where(and(eq(dropOffPoint.companyId, a.companyId), eq(dropOffPoint.id, site))))
+    }
+    await assert.rejects(read(gateRead, { siteId: testId() }), (error: unknown) => error instanceof Refused && error.status === 409 && error.message === EXTERNAL_ID_TAKEN)
+  })
+
+  test("the Site attendant finds the project's active centres and a household by its address, and checks it in by address", async () => {
+    const sites = VisitSites.parse(await (await expect(await attendant(`/site-visits/sites?projectId=${copenhagen}`), 200)).json())
+    const centre = sites.items.find((item) => item.id === site)
+    assert.deepEqual(centre && [centre.name, [...centre.wasteFractionIds].sort()], ["Nordhavn Recycling Centre", [ex.fractions.residual.id, garden].sort()])
+    assert.equal(
+      sites.items.some((item) => item.code === "GS-SHUT"),
+      false,
+      "a closed centre is not offered",
+    )
+    await expect(await attendant("/drop-off-points"), 403)
+    await expect(await attendant("/properties"), 403)
+    const found = VisitAddresses.parse(await (await expect(await attendant(`/site-visits/addresses?projectId=${copenhagen}&q=${encodeURIComponent("parkvej 1")}`), 200)).json())
+    assert.deepEqual(found.items, [{ propertyId: ex.properties.parkvej.id, projectId: copenhagen, name: "Parkvej 18", address: "Parkvej 18, 2100 København Ø" }])
+    assert.equal((await attendant(`/site-visits/addresses?projectId=${copenhagen}&q=p`)).status, 400, "two characters at the least")
+    assert.deepEqual((await (await expect(await attendant(`/site-visits/addresses?projectId=${copenhagen}&q=${encodeURIComponent("1%")}`), 200)).json()) as VisitAddresses, { items: [] }, "a wildcard is the person's text")
+    const visit = await checkIn({ identifier: { kind: "property", propertyId: found.items[0].propertyId }, wasteFractionIds: [centre?.wasteFractionIds[0] ?? ""], occurredAt: at("2026-07-03") }, attendant)
+    assert.deepEqual([visit.visit.outcome, visit.visit.recordedBy, visit.visit.agreementId], ["admitted", a.users.viewer.id, fx.agreements.housingDkk.id])
   })
 
   test("each row written is audited under its module", async () => {

@@ -34,7 +34,7 @@ import { describeProblem, invalidRequest, problem, validate } from "../problem"
 import { periodAfter, requireOrdered } from "./periods"
 import { NOT_A_PRODUCT, type Scope } from "./references"
 import { created, describeCreated, describeJson, IdParam, lockRow, refuseOverlap, stamp, stampsOf } from "./shared"
-import { unofferedProduct } from "./statuses"
+import { unofferedProduct, unofferedStep } from "./statuses"
 
 const MODULE = "commercial.products"
 
@@ -105,7 +105,7 @@ async function setsOf(tx: Tx, companyId: string, ids: readonly string[]): Promis
 }
 
 /** A product reference as the rule's body names it: the field, the product, and the product the rule named there before, if any. */
-type Named = { path: string; id: string; unit: ProductUnit; message: string; kept: string | null }
+type Named = { path: string; id: string; unit: ProductUnit; message: string; kept: string | null; step: number | null }
 
 /**
  * Holds every product a rule names to its project's, at the unit its place
@@ -129,16 +129,16 @@ async function requireProducts(tx: Tx, scope: Scope, named: readonly Named[]): P
   if (wrong.length > 0) throw invalidRequest("body", wrong)
   for (const entry of named) {
     const status = byId.get(entry.id)?.status as ProductStatus | undefined
-    if (status !== undefined && status !== "active" && entry.kept !== entry.id) throw problem(409, { detail: unofferedProduct(status) })
+    if (status !== undefined && status !== "active" && entry.kept !== entry.id) throw problem(409, { detail: entry.step === null ? unofferedProduct(status) : unofferedStep(entry.step, status) })
   }
 }
 
 /** The products a body names, each at its place, beside what the rule named there. */
 function productsNamed(body: { ladder?: readonly string[]; businessVisitProductId?: string | null; annualAccessProductId?: string | null }, before: { ladder: readonly string[]; businessVisitProductId: string | null; annualAccessProductId: string | null } | null): Named[] {
   return [
-    ...(body.ladder ?? []).map((id, index): Named => ({ path: `ladder.${index}`, id, unit: "visit", message: SOLD_PER_VISIT, kept: before?.ladder[index] ?? null })),
-    ...(body.businessVisitProductId == null ? [] : [{ path: "businessVisitProductId", id: body.businessVisitProductId, unit: "visit" as const, message: SOLD_PER_VISIT, kept: before?.businessVisitProductId ?? null }]),
-    ...(body.annualAccessProductId == null ? [] : [{ path: "annualAccessProductId", id: body.annualAccessProductId, unit: "month" as const, message: ACCESS_SOLD_BY_THE_MONTH, kept: before?.annualAccessProductId ?? null }]),
+    ...(body.ladder ?? []).map((id, index): Named => ({ path: `ladder.${index}`, id, unit: "visit", message: SOLD_PER_VISIT, kept: before?.ladder[index] ?? null, step: index + 1 })),
+    ...(body.businessVisitProductId == null ? [] : [{ path: "businessVisitProductId", id: body.businessVisitProductId, unit: "visit" as const, message: SOLD_PER_VISIT, kept: before?.businessVisitProductId ?? null, step: null }]),
+    ...(body.annualAccessProductId == null ? [] : [{ path: "annualAccessProductId", id: body.annualAccessProductId, unit: "month" as const, message: ACCESS_SOLD_BY_THE_MONTH, kept: before?.annualAccessProductId ?? null, step: null }]),
   ]
 }
 

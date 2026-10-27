@@ -75,7 +75,7 @@ import { dayInTimezone } from "@waste/db/commands/days"
 import { exceptionRulesOf, exceptionStopsAt, latestOutcomeProofs, placeOf } from "@waste/db/commands/pickup-exceptions"
 import { projectTimezone } from "@waste/db/commands/project-clock"
 import { lockRow } from "@waste/db/commands/shared"
-import { priceVisitCharge, visitChargeOf, visitFactsOf, type VisitRow } from "@waste/db/commands/site-visits"
+import { priceVisitCharge, type VisitRow } from "@waste/db/commands/site-visits"
 import { validOn } from "@waste/db/query/valid-on"
 import { agreement, subscription } from "@waste/db/schema/agreements"
 import { product } from "@waste/db/schema/catalogue"
@@ -451,29 +451,30 @@ async function chargeFacts(tx: Tx, scope: { companyId: string; projectId: string
  * A Site Visit's event as the domain reads it (#393, M4 of #293): the visit
  * as it stands now — admitted or not, voided or not, the Agreement it is
  * charged to — its live `visit` event under its row lock, and, for a
- * recording of an admitted visit standing unvoided and uncharged, what its
- * Visit Rule says it costs (`visitChargeOf`, the attendant's reading's own
- * statements) with that step priced through `priceDraft` on its day. The
- * caller holds the visit's row lock, so a recording and its void take turns.
+ * recording of an admitted visit standing unvoided and uncharged, the
+ * product its Visit Rule charged it at when it was checked in — stored on
+ * the visit, the number the attendant quoted, never recounted here — priced
+ * through `priceDraft` on its day. The caller holds the visit's row lock, so
+ * a recording and its void take turns.
  */
 export async function visitFacts(tx: Tx, companyId: string, kind: VisitEventFacts["kind"], found: { row: VisitRow; visit: SiteVisit }): Promise<{ facts: VisitEventFacts; live: EventReading[] }> {
-  const { row, visit } = found
+  const { row } = found
   const scope = { companyId, projectId: row.projectId }
   const live = await liveVisitEventOf(tx, companyId, row.id)
   const voided = row.voidedAt !== null
-  const standing = visitFactsOf(row, visit.wasteFractionIds)
-  const judged = kind === "site-visit-recorded" && !voided && live === undefined && standing !== null
-  const charge = judged ? await visitChargeOf(tx, scope, standing) : null
-  const priced = charge === null ? null : await priceVisitCharge(tx, scope, row.agreementId, charge, row.serviceDate)
+  const admitted = row.outcome === "admitted"
+  const productId = admitted ? row.chargeProductId : null
+  const judged = kind === "site-visit-recorded" && admitted && !voided && live === undefined
+  const priced = judged ? await priceVisitCharge(tx, scope, row.agreementId, productId, row.serviceDate) : null
   return {
     facts: {
       kind,
       visitId: row.id,
       serviceDate: row.serviceDate,
-      admitted: row.outcome === "admitted",
+      admitted,
       voided,
       agreementId: row.agreementId,
-      charge,
+      productId,
       priced: priced === null ? null : { price: priced.price, blockReason: priced.blockReason },
       liveEvent: live === undefined ? null : liveFacts(live),
     },

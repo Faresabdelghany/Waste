@@ -27,7 +27,7 @@ CREATE TABLE "wms"."access_credential" (
 	CONSTRAINT "access_credential_project_key" UNIQUE("company_id","project_id","id"),
 	CONSTRAINT "access_credential_validity" CHECK ("wms"."access_credential"."valid_to" is null or "wms"."access_credential"."valid_to" > "wms"."access_credential"."valid_from"),
 	CONSTRAINT "access_credential_kind_one_of" CHECK ("wms"."access_credential"."kind" in ('plate', 'card')),
-	CONSTRAINT "access_credential_value_shape" CHECK ("wms"."access_credential"."value" ~ '^[A-Z0-9-]+$'),
+	CONSTRAINT "access_credential_value_shape" CHECK ("wms"."access_credential"."value" ~ '^[A-Z0-9]+$'),
 	CONSTRAINT "access_credential_holder_shape" CHECK (case when "wms"."access_credential"."property_id" is not null then "wms"."access_credential"."customer_id" is null and "wms"."access_credential"."agreement_id" is null else "wms"."access_credential"."customer_id" is not null and "wms"."access_credential"."agreement_id" is not null end),
 	CONSTRAINT "access_credential_blocked_shape" CHECK (("wms"."access_credential"."blocked_at" is null) = ("wms"."access_credential"."blocked_reason" is null))
 );
@@ -53,11 +53,17 @@ CREATE TABLE "wms"."site_visit" (
 	"refusal_reason" text,
 	"recorded_by" uuid,
 	"note" text,
+	"charge_basis" text,
+	"charge_n" integer,
+	"charge_product_id" uuid,
 	"voided_at" timestamp with time zone,
 	"voided_by" uuid,
 	"void_reason" text,
 	CONSTRAINT "site_visit_project_key" UNIQUE("company_id","project_id","id"),
 	CONSTRAINT "site_visit_source_one_of" CHECK ("wms"."site_visit"."source" in ('staff', 'gate')),
+	CONSTRAINT "site_visit_charge_basis_one_of" CHECK ("wms"."site_visit"."charge_basis" in ('no-rule', 'free-fractions', 'free-quota', 'ladder', 'annual-access', 'per-visit')),
+	CONSTRAINT "site_visit_charge_n_positive" CHECK ("wms"."site_visit"."charge_n" > 0),
+	CONSTRAINT "site_visit_charge_shape" CHECK (("wms"."site_visit"."outcome" = 'admitted') = ("wms"."site_visit"."charge_basis" is not null) and ("wms"."site_visit"."charge_product_id" is null or "wms"."site_visit"."charge_basis" in ('ladder', 'per-visit'))),
 	CONSTRAINT "site_visit_identification_one_of" CHECK ("wms"."site_visit"."identification" in ('plate', 'card', 'property')),
 	CONSTRAINT "site_visit_outcome_one_of" CHECK ("wms"."site_visit"."outcome" in ('admitted', 'refused')),
 	CONSTRAINT "site_visit_refusal_reason_one_of" CHECK ("wms"."site_visit"."refusal_reason" in ('unknown-identifier', 'not-fee-paying', 'credential-blocked')),
@@ -143,6 +149,7 @@ ALTER TABLE "wms"."site_visit" ADD CONSTRAINT "site_visit_customer_id_fk" FOREIG
 ALTER TABLE "wms"."site_visit" ADD CONSTRAINT "site_visit_agreement_id_fk" FOREIGN KEY ("company_id","project_id","agreement_id") REFERENCES "wms"."agreement"("company_id","project_id","id") ON DELETE no action ON UPDATE no action;--> statement-breakpoint
 ALTER TABLE "wms"."site_visit" ADD CONSTRAINT "site_visit_recorded_by_fk" FOREIGN KEY ("company_id","recorded_by") REFERENCES "wms"."user_account"("company_id","id") ON DELETE no action ON UPDATE no action;--> statement-breakpoint
 ALTER TABLE "wms"."site_visit" ADD CONSTRAINT "site_visit_voided_by_fk" FOREIGN KEY ("company_id","voided_by") REFERENCES "wms"."user_account"("company_id","id") ON DELETE no action ON UPDATE no action;--> statement-breakpoint
+ALTER TABLE "wms"."site_visit" ADD CONSTRAINT "site_visit_charge_product_id_fk" FOREIGN KEY ("company_id","project_id","charge_product_id") REFERENCES "wms"."product"("company_id","project_id","id") ON DELETE no action ON UPDATE no action;--> statement-breakpoint
 ALTER TABLE "wms"."site_visit_fraction" ADD CONSTRAINT "site_visit_fraction_company_id_fk" FOREIGN KEY ("company_id") REFERENCES "wms"."company"("id") ON DELETE no action ON UPDATE no action;--> statement-breakpoint
 ALTER TABLE "wms"."site_visit_fraction" ADD CONSTRAINT "site_visit_fraction_visit_id_fk" FOREIGN KEY ("company_id","project_id","visit_id") REFERENCES "wms"."site_visit"("company_id","project_id","id") ON DELETE no action ON UPDATE no action;--> statement-breakpoint
 ALTER TABLE "wms"."site_visit_fraction" ADD CONSTRAINT "site_visit_fraction_waste_fraction_id_fk" FOREIGN KEY ("company_id","waste_fraction_id") REFERENCES "wms"."waste_fraction"("company_id","id") ON DELETE no action ON UPDATE no action;--> statement-breakpoint
@@ -169,6 +176,7 @@ CREATE INDEX "site_visit_credential_id_idx" ON "wms"."site_visit" USING btree ("
 CREATE INDEX "site_visit_agreement_id_idx" ON "wms"."site_visit" USING btree ("company_id","agreement_id");--> statement-breakpoint
 CREATE INDEX "site_visit_recorded_by_idx" ON "wms"."site_visit" USING btree ("company_id","recorded_by");--> statement-breakpoint
 CREATE INDEX "site_visit_voided_by_idx" ON "wms"."site_visit" USING btree ("company_id","voided_by");--> statement-breakpoint
+CREATE INDEX "site_visit_charge_product_id_idx" ON "wms"."site_visit" USING btree ("company_id","charge_product_id");--> statement-breakpoint
 CREATE INDEX "site_visit_fraction_waste_fraction_id_idx" ON "wms"."site_visit_fraction" USING btree ("company_id","waste_fraction_id");--> statement-breakpoint
 CREATE INDEX "visit_rule_project_id_idx" ON "wms"."visit_rule" USING btree ("company_id","project_id");--> statement-breakpoint
 CREATE INDEX "visit_rule_business_visit_product_id_idx" ON "wms"."visit_rule" USING btree ("company_id","business_visit_product_id");--> statement-breakpoint

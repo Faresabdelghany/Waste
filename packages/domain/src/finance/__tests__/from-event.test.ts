@@ -80,7 +80,7 @@ const visitEvent = (kind: VisitEventFacts["kind"], values: Partial<VisitEventFac
   admitted: true,
   voided: kind === "site-visit-voided",
   agreementId: AGREEMENT,
-  charge: { ruleId: "rule", basis: "ladder", counted: true, n: 2, productId: PRODUCT },
+  productId: PRODUCT,
   priced: { blockReason: null, price: { priceListRowId: "everyone", unitPriceMinor: 7_000, netMinor: 7_000, vatPercent: 25, vatMinor: 1_750, currency: "DKK" } },
   liveEvent: null,
   ...values,
@@ -460,8 +460,8 @@ describe("billableFor a Site Visit (#393)", () => {
   })
 
   test("nothing for a free visit, a refused one, a voided one or one already charged", () => {
-    assert.equal(billableFor(visitEvent("site-visit-recorded", { charge: { ruleId: "rule", basis: "free-quota", counted: true, n: 1, productId: null }, priced: null })), undefined)
-    assert.equal(billableFor(visitEvent("site-visit-recorded", { admitted: false, charge: null, priced: null })), undefined)
+    assert.equal(billableFor(visitEvent("site-visit-recorded", { productId: null, priced: null })), undefined)
+    assert.equal(billableFor(visitEvent("site-visit-recorded", { admitted: false, productId: null, priced: null })), undefined)
     assert.equal(billableFor(visitEvent("site-visit-recorded", { voided: true })), undefined)
     assert.equal(billableFor(visitEvent("site-visit-recorded", { liveEvent: live() })), undefined)
   })

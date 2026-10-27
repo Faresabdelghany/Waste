@@ -1,5 +1,5 @@
 {
-  "id": "50c41ad7-a3d1-411f-9d1d-a8a45bf61376",
+  "id": "b3a8de8d-848a-4d53-ad52-c5b66dca8ab7",
   "prevId": "a87d60c9-b795-4899-a0bc-07bbbaf1f5a4",
   "version": "7",
   "dialect": "postgresql",
@@ -26258,7 +26258,7 @@
         },
         "access_credential_value_shape": {
           "name": "access_credential_value_shape",
-          "value": "\"wms\".\"access_credential\".\"value\" ~ '^[A-Z0-9-]+$'"
+          "value": "\"wms\".\"access_credential\".\"value\" ~ '^[A-Z0-9]+$'"
         },
         "access_credential_holder_shape": {
           "name": "access_credential_holder_shape",
@@ -26395,6 +26395,24 @@
         "note": {
           "name": "note",
           "type": "text",
+          "primaryKey": false,
+          "notNull": false
+        },
+        "charge_basis": {
+          "name": "charge_basis",
+          "type": "text",
+          "primaryKey": false,
+          "notNull": false
+        },
+        "charge_n": {
+          "name": "charge_n",
+          "type": "integer",
+          "primaryKey": false,
+          "notNull": false
+        },
+        "charge_product_id": {
+          "name": "charge_product_id",
+          "type": "uuid",
           "primaryKey": false,
           "notNull": false
         },
@@ -26625,6 +26643,27 @@
           "concurrently": false,
           "method": "btree",
           "with": {}
+        },
+        "site_visit_charge_product_id_idx": {
+          "name": "site_visit_charge_product_id_idx",
+          "columns": [
+            {
+              "expression": "company_id",
+              "isExpression": false,
+              "asc": true,
+              "nulls": "last"
+            },
+            {
+              "expression": "charge_product_id",
+              "isExpression": false,
+              "asc": true,
+              "nulls": "last"
+            }
+          ],
+          "isUnique": false,
+          "concurrently": false,
+          "method": "btree",
+          "with": {}
         }
       },
       "foreignKeys": {
@@ -26777,6 +26816,24 @@
           ],
           "onDelete": "no action",
           "onUpdate": "no action"
+        },
+        "site_visit_charge_product_id_fk": {
+          "name": "site_visit_charge_product_id_fk",
+          "tableFrom": "site_visit",
+          "tableTo": "product",
+          "schemaTo": "wms",
+          "columnsFrom": [
+            "company_id",
+            "project_id",
+            "charge_product_id"
+          ],
+          "columnsTo": [
+            "company_id",
+            "project_id",
+            "id"
+          ],
+          "onDelete": "no action",
+          "onUpdate": "no action"
         }
       },
       "compositePrimaryKeys": {},
@@ -26796,6 +26853,18 @@
         "site_visit_source_one_of": {
           "name": "site_visit_source_one_of",
           "value": "\"wms\".\"site_visit\".\"source\" in ('staff', 'gate')"
+        },
+        "site_visit_charge_basis_one_of": {
+          "name": "site_visit_charge_basis_one_of",
+          "value": "\"wms\".\"site_visit\".\"charge_basis\" in ('no-rule', 'free-fractions', 'free-quota', 'ladder', 'annual-access', 'per-visit')"
+        },
+        "site_visit_charge_n_positive": {
+          "name": "site_visit_charge_n_positive",
+          "value": "\"wms\".\"site_visit\".\"charge_n\" > 0"
+        },
+        "site_visit_charge_shape": {
+          "name": "site_visit_charge_shape",
+          "value": "(\"wms\".\"site_visit\".\"outcome\" = 'admitted') = (\"wms\".\"site_visit\".\"charge_basis\" is not null) and (\"wms\".\"site_visit\".\"charge_product_id\" is null or \"wms\".\"site_visit\".\"charge_basis\" in ('ladder', 'per-visit'))"
         },
         "site_visit_identification_one_of": {
           "name": "site_visit_identification_one_of",

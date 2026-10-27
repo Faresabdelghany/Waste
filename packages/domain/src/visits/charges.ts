@@ -1,16 +1,19 @@
 // Recycling-centre visits (Issue #393, M4 of #293): who a visit was for, and
 // what its project's Visit Rule says it costs.
 //
-// Identification, in order (`identifyVisit`): a plate or a card names the
-// Access Credential in force on the visit's day with that value, and none is
-// `unknown-identifier`; a blocked one is `credential-blocked`. A business's
-// credential is charged to the Agreement it names. A household — reached by
-// its credential's Property, or by the Property the attendant found by its
-// address — is admitted where it is fee-paying: a Subscription in force at the
-// Property on the day, or at a Shared Collection Point it is a member of,
-// under a signed Agreement, the charge going to that Agreement, the lowest id
-// of several (`feePayingAgreement`); otherwise `not-fee-paying`. A refused
-// visit is still recorded, with whom it reached.
+// Identification, in the order the design on #393 sets (`identifyVisit`): a
+// plate or a card names the Access Credential in force on the visit's day
+// with that value, and none is `unknown-identifier`; then the visit must have
+// an Agreement to be charged to, else `not-fee-paying`; then a blocked
+// credential is `credential-blocked`. A household — reached by its
+// credential's Property, or by the Property the attendant found by its
+// address — is charged to the Agreement it pays under: a Subscription in
+// force at the Property on the day, or at a Shared Collection Point it is a
+// member of, under a signed Agreement, the lowest id of several
+// (`feePayingAgreement`). A business's credential is charged to the
+// Agreement it names, while that Agreement is signed and in force on the
+// day; one cancelled or ended since pays for nothing. A refused visit is
+// still recorded, with whom it reached.
 //
 // The charge (`visitCharge`), under the rule in force on the visit's day; no
 // rule charges nothing. A household's visit whose fractions are all free is
@@ -66,6 +69,11 @@ export function feePayingAgreement(candidates: readonly FeePayingCandidate[]): s
   return signed.length === 0 ? null : signed.reduce((lowest, id) => (id < lowest ? id : lowest))
 }
 
+/** The Agreement a business's credential names, which identification asks whether it is signed and in force on the day; null for a household or no credential. */
+export function businessAgreementOf(identified: Identified): string | null {
+  return identified.by !== "property" && identified.credential?.holder.kind === "business" ? identified.credential.holder.agreementId : null
+}
+
 /** The household Property identification will ask fee-paying of, or null for a business's credential or none. */
 export function householdPropertyOf(identified: Identified): string | null {
   if (identified.by === "property") return identified.propertyId
@@ -74,20 +82,23 @@ export function householdPropertyOf(identified: Identified): string | null {
 
 /**
  * Who a visit was for, in the identification order: the credential in force
- * on the day, else `unknown-identifier` for a plate or a card; a blocked
- * credential `credential-blocked`; a household admitted only where
- * `feePayingAgreementId` names its Agreement, else `not-fee-paying`.
+ * on the day, else `unknown-identifier` for a plate or a card; then
+ * `not-fee-paying` where `payingAgreementId` is null — for a household the
+ * Agreement it pays under, for a business its credential's Agreement while
+ * signed and in force on the day; then a blocked credential
+ * `credential-blocked`.
  */
-export function identifyVisit(identified: Identified, feePayingAgreementId: string | null): Identification {
+export function identifyVisit(identified: Identified, payingAgreementId: string | null): Identification {
   if (identified.by === "property") {
-    const holder: VisitHolder = { kind: "household", propertyId: identified.propertyId, agreementId: feePayingAgreementId }
-    return feePayingAgreementId === null ? { outcome: "refused", refusalReason: "not-fee-paying", credentialId: null, holder } : { outcome: "admitted", refusalReason: null, credentialId: null, holder }
+    const holder: VisitHolder = { kind: "household", propertyId: identified.propertyId, agreementId: payingAgreementId }
+    return payingAgreementId === null ? { outcome: "refused", refusalReason: "not-fee-paying", credentialId: null, holder } : { outcome: "admitted", refusalReason: null, credentialId: null, holder }
   }
   const { credential } = identified
   if (credential === null) return { outcome: "refused", refusalReason: "unknown-identifier", credentialId: null, holder: null }
-  const holder: VisitHolder = credential.holder.kind === "business" ? credential.holder : { ...credential.holder, agreementId: feePayingAgreementId }
+  // A business's visit names the credential's Agreement whether or not it still pays: the ledger says whose plate was turned away.
+  const holder: VisitHolder = credential.holder.kind === "business" ? credential.holder : { ...credential.holder, agreementId: payingAgreementId }
+  if (payingAgreementId === null) return { outcome: "refused", refusalReason: "not-fee-paying", credentialId: credential.id, holder }
   if (credential.blocked) return { outcome: "refused", refusalReason: "credential-blocked", credentialId: credential.id, holder }
-  if (holder.kind === "household" && holder.agreementId === null) return { outcome: "refused", refusalReason: "not-fee-paying", credentialId: credential.id, holder }
   return { outcome: "admitted", refusalReason: null, credentialId: credential.id, holder }
 }
 
@@ -189,5 +200,5 @@ export function likelyTrades(visits: readonly VisitFacts[], rule: VisitRuleFacts
     .sort((a, b) => b.visits - a.visits || (a.propertyId < b.propertyId ? -1 : a.propertyId > b.propertyId ? 1 : 0))
 }
 
-/** A plate's or a card's value as stored and matched: upper case, with no spaces. */
-export const normaliseCredentialValue = (value: string): string => value.replace(/\s+/g, "").toUpperCase()
+/** A plate's or a card's value as stored and matched: upper case, with no spaces and no hyphens, so `AB-12 345` and `ab12345` are one plate. */
+export const normaliseCredentialValue = (value: string): string => value.replace(/[\s-]+/g, "").toUpperCase()

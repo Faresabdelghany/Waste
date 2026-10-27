@@ -35,8 +35,8 @@ import { requireGrant } from "../auth/require"
 import { newId } from "../ids"
 import { afterCursor, fetchLimit, pageOf } from "../pagination"
 import { describeProblem, invalidRequest, problem, validate } from "../problem"
-import { periodAfter, requireOrdered } from "./periods"
-import { requireAgreement, requireCustomer, requireProperty } from "./references"
+import { periodAfter, periodOf, requireOrdered, requireWithin, type Period } from "./periods"
+import { NOT_AN_AGREEMENT, requireCustomer, requireProperty } from "./references"
 import { created, describeCreated, describeJson, IdParam, instantOf, lockRow, refuseOverlap, stampsOf } from "./shared"
 
 const MODULE = "customers.site-access"
@@ -103,15 +103,23 @@ async function findCredential(tx: Tx, principal: Principal, id: string): Promise
   return row
 }
 
-/** Holds a business credential's agreement to its customer's. */
-async function requireCustomersAgreement(tx: Tx, scope: { companyId: string; projectId: string }, customerId: string, agreementId: string): Promise<void> {
-  await requireAgreement(tx, scope, agreementId)
+/** What a credential running outside its business's Agreement is told, at the bound. */
+export const WITHIN_THE_AGREEMENT = "A business's credential is in force only while the agreement its visits are charged to is"
+/** What a credential naming an inactive customer is told. */
+export const INACTIVE_HOLDER = "The customer is inactive; a credential needs an active customer"
+/** What a credential naming an Agreement that pays for nothing is told. */
+export const agreementPaysNothing = (status: string): string => `The agreement is ${status}; a credential's visits are charged to a signed agreement`
+
+/** A business credential's Agreement, read once under the project's fence: the project's (400), its customer's (400), its period, and its status. */
+async function customersAgreement(tx: Tx, scope: { companyId: string; projectId: string }, customerId: string, agreementId: string): Promise<{ status: string; period: Period }> {
   const [found] = await tx
-    .select({ customerId: agreement.customerId })
+    .select({ customerId: agreement.customerId, status: agreement.status, validFrom: agreement.validFrom, validTo: agreement.validTo })
     .from(agreement)
-    .where(and(eq(agreement.companyId, scope.companyId), eq(agreement.id, agreementId)))
+    .where(and(eq(agreement.companyId, scope.companyId), eq(agreement.projectId, scope.projectId), eq(agreement.id, agreementId)))
     .limit(1)
-  if (found?.customerId !== customerId) throw invalidRequest("body", [{ path: "agreementId", message: NOT_THE_CUSTOMERS_AGREEMENT }])
+  if (found === undefined) throw invalidRequest("body", [{ path: "agreementId", message: NOT_AN_AGREEMENT }])
+  if (found.customerId !== customerId) throw invalidRequest("body", [{ path: "agreementId", message: NOT_THE_CUSTOMERS_AGREEMENT }])
+  return { status: found.status, period: { validFrom: found.validFrom, validTo: found.validTo } }
 }
 
 const problems = (action: "view" | "edit" | "create") => ({
@@ -207,8 +215,12 @@ export function accessCredentialRoutes(guard: MiddlewareHandler<AuthEnv>) {
         const scope = { companyId: principal.companyId, projectId: body.projectId }
         if (body.propertyId != null) await requireProperty(tx, scope, body.propertyId)
         else if (body.customerId != null && body.agreementId != null) {
-          await requireCustomer(tx, principal.companyId, body.customerId)
-          await requireCustomersAgreement(tx, scope, body.customerId, body.agreementId)
+          // The body's 400s first — the customer, its agreement, the period inside it — then the two states a new reference is gated on.
+          const customerStatus = await requireCustomer(tx, principal.companyId, body.customerId)
+          const charged = await customersAgreement(tx, scope, body.customerId, body.agreementId)
+          requireWithin(charged.period, periodOf(body), WITHIN_THE_AGREEMENT)
+          if (customerStatus !== undefined && customerStatus !== "active") throw problem(409, { detail: INACTIVE_HOLDER })
+          if (charged.status !== "active") throw problem(409, { detail: agreementPaysNothing(charged.status) })
         }
         const [row] = await refuseOverlap({ [RUNNING]: RUNNING_SENTENCE }, () =>
           tx
@@ -283,7 +295,12 @@ export function accessCredentialRoutes(guard: MiddlewareHandler<AuthEnv>) {
         await lockRow(tx, accessCredential, { companyId: principal.companyId, id })
         const current = await findCredential(tx, principal, id)
         if (current === undefined) throw noSuchCredential(id)
-        requireOrdered(periodAfter(current, fields))
+        const period = periodAfter(current, fields)
+        requireOrdered(period)
+        // A business's credential stays inside its Agreement's period, which an end moved past it would leave.
+        if (current.customerId !== null && current.agreementId !== null && fields.validTo !== undefined) {
+          requireWithin((await customersAgreement(tx, { companyId: principal.companyId, projectId: current.projectId }, current.customerId, current.agreementId)).period, period, WITHIN_THE_AGREEMENT)
+        }
         const [row] = await refuseOverlap({ [RUNNING]: RUNNING_SENTENCE }, () =>
           tx
             .update(accessCredential)

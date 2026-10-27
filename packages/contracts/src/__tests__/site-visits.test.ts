@@ -17,7 +17,8 @@ describe("AccessCredentialCreate", () => {
     for (const holder of [{}, { customerId: ID }, { propertyId: ID, customerId: ID, agreementId: OTHER }]) assert.deepEqual(messages(AccessCredentialCreate.safeParse({ ...base, ...holder })), [ONE_HOLDER])
   })
 
-  test("a value normalises to letters, digits and hyphens", () => {
+  test("a value normalises to letters and digits, spaces and hyphens dropped", () => {
+    assert.equal(AccessCredentialCreate.safeParse({ projectId: ID, kind: "plate", value: "ab-12 345", validFrom: "2027-01-01", propertyId: ID }).success, true)
     assert.deepEqual(messages(AccessCredentialCreate.safeParse({ projectId: ID, kind: "card", value: "ab/12", validFrom: "2027-01-01", propertyId: ID })), [CREDENTIAL_VALUE_SHAPE])
     assert.deepEqual(messages(AccessCredentialCreate.safeParse({ projectId: ID, kind: "card", value: "   ", validFrom: "2027-01-01", propertyId: ID })), [CREDENTIAL_VALUE_SHAPE])
   })

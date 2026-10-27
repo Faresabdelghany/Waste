@@ -251,7 +251,7 @@ constraint wms.access_credential access_credential_project_id_fk FOREIGN KEY (co
 constraint wms.access_credential access_credential_project_key UNIQUE (company_id, project_id, id)
 constraint wms.access_credential access_credential_property_id_fk FOREIGN KEY (company_id, project_id, property_id) REFERENCES wms.property(company_id, project_id, id)
 constraint wms.access_credential access_credential_validity CHECK (((valid_to IS NULL) OR (valid_to > valid_from)))
-constraint wms.access_credential access_credential_value_shape CHECK ((value ~ '^[A-Z0-9-]+$'::text))
+constraint wms.access_credential access_credential_value_shape CHECK ((value ~ '^[A-Z0-9]+$'::text))
 index wms.access_credential access_credential_agreement_id_idx CREATE INDEX access_credential_agreement_id_idx ON wms.access_credential USING btree (company_id, agreement_id)
 index wms.access_credential access_credential_customer_id_idx CREATE INDEX access_credential_customer_id_idx ON wms.access_credential USING btree (company_id, customer_id)
 index wms.access_credential access_credential_no_overlap CREATE INDEX access_credential_no_overlap ON wms.access_credential USING gist (company_id, project_id, kind, value, daterange(valid_from, valid_to, '[)'::text))
@@ -2901,10 +2901,17 @@ column wms.site_visit 17 outcome text not-null
 column wms.site_visit 18 refusal_reason text
 column wms.site_visit 19 recorded_by uuid
 column wms.site_visit 20 note text
-column wms.site_visit 21 voided_at timestamp with time zone
-column wms.site_visit 22 voided_by uuid
-column wms.site_visit 23 void_reason text
+column wms.site_visit 21 charge_basis text
+column wms.site_visit 22 charge_n integer
+column wms.site_visit 23 charge_product_id uuid
+column wms.site_visit 24 voided_at timestamp with time zone
+column wms.site_visit 25 voided_by uuid
+column wms.site_visit 26 void_reason text
 constraint wms.site_visit site_visit_agreement_id_fk FOREIGN KEY (company_id, project_id, agreement_id) REFERENCES wms.agreement(company_id, project_id, id)
+constraint wms.site_visit site_visit_charge_basis_one_of CHECK ((charge_basis = ANY (ARRAY['no-rule'::text, 'free-fractions'::text, 'free-quota'::text, 'ladder'::text, 'annual-access'::text, 'per-visit'::text])))
+constraint wms.site_visit site_visit_charge_n_positive CHECK ((charge_n > 0))
+constraint wms.site_visit site_visit_charge_product_id_fk FOREIGN KEY (company_id, project_id, charge_product_id) REFERENCES wms.product(company_id, project_id, id)
+constraint wms.site_visit site_visit_charge_shape CHECK ((((outcome = 'admitted'::text) = (charge_basis IS NOT NULL)) AND ((charge_product_id IS NULL) OR (charge_basis = ANY (ARRAY['ladder'::text, 'per-visit'::text])))))
 constraint wms.site_visit site_visit_company_id_fk FOREIGN KEY (company_id) REFERENCES wms.company(id)
 constraint wms.site_visit site_visit_credential_id_fk FOREIGN KEY (company_id, project_id, credential_id) REFERENCES wms.access_credential(company_id, project_id, id)
 constraint wms.site_visit site_visit_customer_id_fk FOREIGN KEY (company_id, customer_id) REFERENCES wms.customer(company_id, id)
@@ -2929,6 +2936,7 @@ END)
 constraint wms.site_visit site_visit_void_shape CHECK ((((voided_at IS NULL) = (void_reason IS NULL)) AND ((voided_by IS NULL) OR (voided_at IS NOT NULL))))
 constraint wms.site_visit site_visit_voided_by_fk FOREIGN KEY (company_id, voided_by) REFERENCES wms.user_account(company_id, id)
 index wms.site_visit site_visit_agreement_id_idx CREATE INDEX site_visit_agreement_id_idx ON wms.site_visit USING btree (company_id, agreement_id)
+index wms.site_visit site_visit_charge_product_id_idx CREATE INDEX site_visit_charge_product_id_idx ON wms.site_visit USING btree (company_id, charge_product_id)
 index wms.site_visit site_visit_credential_id_idx CREATE INDEX site_visit_credential_id_idx ON wms.site_visit USING btree (company_id, credential_id)
 index wms.site_visit site_visit_customer_id_idx CREATE INDEX site_visit_customer_id_idx ON wms.site_visit USING btree (company_id, customer_id)
 index wms.site_visit site_visit_external_id_idx CREATE UNIQUE INDEX site_visit_external_id_idx ON wms.site_visit USING btree (company_id, source, external_id) WHERE (external_id IS NOT NULL)
@@ -3951,5 +3959,5 @@ journal 1792952313199 b04f99d3f6c19ac508ebc304ce9ec2237ef28b77e48ea13664c37457ea
 journal 1792954475945 9314378d7dfb21885c2811e4fe94349e28f78895b02bc520bb49ff813b7abf21
 journal 1792963337527 f9d94b2631da7fd4aa199f12f7b126d912d2618f93565389dab6efc3fb32886d
 journal 1792964774291 575d9404cde4feb3468d43c2645301f94e48b4960341cda4dc4d6d7b432065a0
-journal 1793086720116 eb5367d4dc53ed2642ec259e508fb11f520c59b7ccb2d75c38ee87d3ab9c0af8
+journal 1793114716490 fddd34bf8e7c1eadc319cddcf6b5a274974e7993317a4fc32d01ed89ce216655
 pgboss-version 42

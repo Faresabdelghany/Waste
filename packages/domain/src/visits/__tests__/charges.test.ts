@@ -1,7 +1,7 @@
 import assert from "node:assert/strict"
 import { describe, test } from "node:test"
 
-import { feePayingAgreement, householdPropertyOf, identifyVisit, isCounted, likelyTrades, normaliseCredentialValue, ruleOn, visitCharge, type CredentialFacts, type VisitFacts, type VisitRuleFacts } from "../charges"
+import { businessAgreementOf, feePayingAgreement, householdPropertyOf, identifyVisit, isCounted, likelyTrades, normaliseCredentialValue, ruleOn, visitCharge, type CredentialFacts, type VisitFacts, type VisitRuleFacts } from "../charges"
 
 const PARKVEJ = "property-parkvej"
 const GARDEN = "fraction-garden"
@@ -38,9 +38,11 @@ describe("identifyVisit", () => {
     assert.equal(identifyVisit({ by: "card", credential: null }, AGREEMENT).refusalReason, "unknown-identifier")
   })
 
-  test("a business's credential is admitted under the Agreement it names, fee-paying or not", () => {
+  test("a business's credential is admitted under the Agreement it names while that Agreement pays", () => {
     const holder = { kind: "business", customerId: "customer-byg", agreementId: "agreement-byg" } as const
-    assert.deepEqual(identifyVisit({ by: "plate", credential: credential({ holder }) }, null), { outcome: "admitted", refusalReason: null, credentialId: "credential-ab12345", holder })
+    assert.deepEqual(identifyVisit({ by: "plate", credential: credential({ holder }) }, "agreement-byg"), { outcome: "admitted", refusalReason: null, credentialId: "credential-ab12345", holder })
+    assert.equal(businessAgreementOf({ by: "plate", credential: credential({ holder }) }), "agreement-byg")
+    assert.equal(businessAgreementOf({ by: "plate", credential: credential() }), null)
   })
 
   test("a household is admitted under its fee-paying Agreement, and refused not-fee-paying without one", () => {
@@ -50,10 +52,18 @@ describe("identifyVisit", () => {
     assert.deepEqual(identifyVisit({ by: "property", propertyId: PARKVEJ }, null), { outcome: "refused", refusalReason: "not-fee-paying", credentialId: null, holder: { kind: "household", propertyId: PARKVEJ, agreementId: null } })
   })
 
-  test("a blocked credential is refused before the household is asked whether it pays", () => {
-    const blocked = identifyVisit({ by: "card", credential: credential({ blocked: true }) }, null)
+  test("a household that no longer pays is not-fee-paying before its blocked credential is asked about, in the design's order", () => {
+    assert.equal(identifyVisit({ by: "card", credential: credential({ blocked: true }) }, null).refusalReason, "not-fee-paying")
+    const blocked = identifyVisit({ by: "card", credential: credential({ blocked: true }) }, AGREEMENT)
     assert.equal(blocked.refusalReason, "credential-blocked")
     assert.equal(blocked.credentialId, "credential-ab12345")
+  })
+
+  test("a business's credential whose Agreement no longer pays — cancelled, or out of force on the day — is not-fee-paying, its customer and agreement recorded", () => {
+    const holder = { kind: "business", customerId: "customer-byg", agreementId: "agreement-byg" } as const
+    assert.deepEqual(identifyVisit({ by: "plate", credential: credential({ holder }) }, null), { outcome: "refused", refusalReason: "not-fee-paying", credentialId: "credential-ab12345", holder })
+    assert.equal(identifyVisit({ by: "plate", credential: credential({ holder, blocked: true }) }, null).refusalReason, "not-fee-paying")
+    assert.equal(identifyVisit({ by: "plate", credential: credential({ holder, blocked: true }) }, "agreement-byg").refusalReason, "credential-blocked")
   })
 
   test("the household asked of is the address's Property or the credential's, never a business's", () => {
@@ -149,7 +159,8 @@ describe("likelyTrades", () => {
 })
 
 describe("normaliseCredentialValue", () => {
-  test("upper case, no spaces", () => {
+  test("upper case, no spaces and no hyphens: one plate is one value however it is written", () => {
     assert.equal(normaliseCredentialValue(" ab 12 345 "), "AB12345")
+    assert.equal(normaliseCredentialValue("AB-12 345"), "AB12345")
   })
 })
