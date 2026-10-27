@@ -7,6 +7,7 @@ import { afterEach, describe, test } from "node:test"
 
 import { DEFAULT_LOCAL_LOGIN_PASSWORD, E2E_TESTER_LOGIN, ensureLogins, MINIMUM_PASSWORD_LENGTH, parseExtraLogins, parseStatusEnv, planLocalLogins, type LocalLoginsPlan } from "../local-stack/logins"
 import { ensureSigningKeys, generateSigningKey, renderSigningKeys } from "../local-stack/signing-keys"
+import { startWithOneRetry, type SupabaseRunner } from "../local-stack/start"
 import { DEMO_ACCOUNT_EMAILS } from "../seed/demo"
 
 describe("generateSigningKey", () => {
@@ -185,5 +186,41 @@ describe("parseStatusEnv", () => {
   test("reads NAME=\"value\" lines and skips everything else", () => {
     const output = ['Stopped services: [supabase_studio_waste]', 'API_URL="http://127.0.0.1:54321"', 'PUBLISHABLE_KEY="sb_publishable_abc"', "SECRET_KEY=sb_secret_def", "", "not a variable"].join("\n")
     assert.deepEqual(parseStatusEnv(output), { API_URL: "http://127.0.0.1:54321", PUBLISHABLE_KEY: "sb_publishable_abc", SECRET_KEY: "sb_secret_def" })
+  })
+})
+
+describe("startWithOneRetry", () => {
+  const scripted = (codes: number[]) => {
+    const calls: string[] = []
+    const run: SupabaseRunner = (args) => {
+      calls.push(args.join(" "))
+      return args[0] === "stop" ? 0 : (codes.shift() ?? 0)
+    }
+    return { calls, run }
+  }
+  const quiet = () => {}
+
+  test("a start that succeeds runs once, and nothing else", () => {
+    const { calls, run } = scripted([0])
+    assert.equal(startWithOneRetry(run, ["db", "start"], { volumeExisted: false, log: quiet }), 0)
+    assert.deepEqual(calls, ["db start"])
+  })
+
+  test("a failed start that created the volume drops it in the stop, so the retry sets the database up afresh", () => {
+    const { calls, run } = scripted([1, 0])
+    assert.equal(startWithOneRetry(run, ["start", "-x", "studio"], { volumeExisted: false, log: quiet }), 0)
+    assert.deepEqual(calls, ["start -x studio", "stop --no-backup", "start -x studio"])
+  })
+
+  test("a volume there before the first attempt is kept by the stop", () => {
+    const { calls, run } = scripted([1, 0])
+    startWithOneRetry(run, ["db", "start"], { volumeExisted: true, log: quiet })
+    assert.deepEqual(calls, ["db start", "stop", "db start"])
+  })
+
+  test("a second failure is the command's: its exit code, and no third start", () => {
+    const { calls, run } = scripted([1, 3])
+    assert.equal(startWithOneRetry(run, ["db", "start"], { volumeExisted: false, log: quiet }), 3)
+    assert.equal(calls.filter((call) => call === "db start").length, 2)
   })
 })

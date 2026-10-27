@@ -24,7 +24,7 @@ import { containersModule, inventoryModule } from "./containers"
 import { fleetDriversModule, fleetVehiclesModule } from "./fleet"
 import { liveModule } from "./live"
 import { masterDataModule } from "./master-data"
-import { accessModule, organisationModule, serviceProvidersModule } from "./organisation"
+import { accessModule, organisationModule, serviceProvidersModule, teamModule } from "./organisation"
 import { accountingModule } from "./accounting"
 import { paymentsModule } from "./payments"
 import { pickupsModule } from "./pickups"
@@ -82,6 +82,8 @@ export const SERVER_MODULES: readonly ServerModule[] = [
   organisationModule,
   serviceProvidersModule,
   accessModule,
+  // A provider's team (#291 C24), after the providers its accounts name.
+  teamModule,
   customersModule,
   planningAreasModule,
   collectionCalendarsModule,
@@ -144,9 +146,14 @@ export const SERVER_MODULE_KEYS: readonly string[] = SERVER_MODULES.map((module)
  * the one action to look for). A module the grants do not cover is never
  * requested — the store marks it not granted and tells nobody (Issue #200)
  * — so nobody meets a refusal for a pane they cannot open, a driver on the
- * Driver App least of all (Issue #145).
+ * Driver App least of all (Issue #145). A module read for a Service
+ * Provider's account alone (`providersOnly`) is read only where `provider`
+ * says the account is one (#291 C24).
  */
-export function viewableModules(grants: readonly { moduleKey: string; actions: readonly string[] }[], modules: readonly ServerModule[]): ServerModule[] {
+export function viewableModules(grants: readonly { moduleKey: string; actions: readonly string[] }[], modules: readonly ServerModule[], { provider = false }: { provider?: boolean } = {}): ServerModule[] {
   const viewed = new Set<string>(grants.filter((grant) => grant.actions.includes("view")).map((grant) => grant.moduleKey))
-  return modules.filter((module) => viewed.has(moduleKeyOf(module.workspaceId, module.moduleId)))
+  return modules.filter((module) => viewed.has(moduleKeyOf(module.workspaceId, module.moduleId)) && (provider || module.providersOnly !== true))
 }
+
+/** The modules tried where `/me` could not be read: every one an office account may be refused nothing by (#291 C24: a provider's own are its alone). */
+export const MODULES_WITHOUT_ME: readonly ServerModule[] = SERVER_MODULES.filter((module) => module.providersOnly !== true)

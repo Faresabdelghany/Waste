@@ -44,7 +44,7 @@ import { newId } from "../ids"
 import { afterCursor, fetchLimit, pageOf } from "../pagination"
 import { describeProblem, invalidRequest, problem, validate } from "../problem"
 import { requireContainerType, requireServiceFrequency, requireWasteFraction } from "./references"
-import { created, describeCreated, describeJson, IdParam, lockRow, refuseDuplicate, stampsOf } from "./shared"
+import { created, describeCreated, describeJson, IdParam, lockRow, refuseDuplicate, stampsOf, strengthFor } from "./shared"
 
 const MODULE = "commercial.products"
 const ProductPage = Page(Product)
@@ -273,7 +273,7 @@ export function productRoutes(guard: MiddlewareHandler<AuthEnv>) {
         if (found === undefined) throw noSuchProduct(id)
         // The rules below read the row and what names it, so they are judged under its lock — the project's first, parent before child, which a project's work order charges are replaced under too.
         await lockRow(tx, project, { companyId: principal.companyId, id: found.projectId })
-        await lockRow(tx, product, { companyId: principal.companyId, id })
+        await lockRow(tx, product, { companyId: principal.companyId, id }, strengthFor(product, patch))
         const current = (await findProduct(tx, principal, id)) ?? found
         await requireReferences(tx, { companyId: principal.companyId, projectId: current.projectId }, patch)
         // A work order charged at the product keeps it sold by the job (M14 of #293), or the work order would be charged nothing unseen.

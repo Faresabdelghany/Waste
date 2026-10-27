@@ -451,12 +451,15 @@ export function userRoutes(guard: MiddlewareHandler<AuthEnv>) {
         // written after, so the row is locked before the read: a transfer in
         // flight to this very account has committed by the time it is read,
         // and the account is refused as the primary administrator it now is
-        // (routes/shared.ts on why a rule the API holds needs the lock).
-        await lockRow(tx, userAccount, { companyId, id })
+        // (routes/shared.ts on why a rule the API holds needs the lock). A
+        // change of access writes the account's provider (`accessColumns`),
+        // a key column the Service Provider Access rows name, so it takes the
+        // lock `for update`.
+        const shape = accessOf(patch)
+        await lockRow(tx, userAccount, { companyId, id }, shape === undefined ? "no key update" : "update")
         const current = await findUser(tx, principal, id)
         if (current === undefined) throw noSuchUser(id)
 
-        const shape = accessOf(patch)
         if (current.primaryAdministrator) {
           if (patch.roleId !== undefined && patch.roleId !== current.roleId) throw problem(409, { detail: PRIMARY_ROLE })
           if (shape !== undefined && shape.kind !== "all-projects") throw problem(409, { detail: PRIMARY_ACCESS })

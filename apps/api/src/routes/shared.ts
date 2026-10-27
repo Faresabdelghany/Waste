@@ -69,7 +69,7 @@ import { providerShape } from "@waste/contracts/places"
 import type { ProblemFieldError } from "@waste/contracts/problem"
 import type { Tx } from "@waste/db/client"
 import { instantOf, stampsOf } from "@waste/db/commands/resolution-rows"
-import { lockRow, lockRows, nextNumber, type Series, type TenantTable } from "@waste/db/commands/shared"
+import { lockRow, lockRows, nextNumber, strengthFor, type Series, type TenantTable } from "@waste/db/commands/shared"
 import { RECORDED_AFTER_IT_HAPPENED } from "@waste/domain/execution/commands"
 import { and, eq, getTableName, gte, lt, sql, type SQL } from "drizzle-orm"
 import type { PgColumn, PgTable } from "drizzle-orm/pg-core"
@@ -79,7 +79,7 @@ import * as z from "zod"
 
 import { checkConstraintOf, exclusionConstraintOf, invalidRequest, problem, uniqueConstraintOf } from "../problem"
 
-export { instantOf, lockRow, lockRows, nextNumber, stampsOf, type Series, type TenantTable }
+export { instantOf, lockRow, lockRows, nextNumber, stampsOf, strengthFor, type Series, type TenantTable }
 
 /** The path parameter of every `/<resource>/:id` route. */
 export const IdParam = z.object({ id: Id })
