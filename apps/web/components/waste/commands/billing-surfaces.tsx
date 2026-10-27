@@ -267,6 +267,26 @@ export function RunBillingSurface({ label }: PrimarySurfaceProps) {
                 </div>
               ))}
             </dl>
+            {/* Caught up (#447): ready events from earlier periods no run invoiced, counted above; the period's own come first under the run's ceiling. */}
+            {(preview.answer.catchUp.length > 0 || preview.answer.catchUpDeferredCount > 0) && (
+              <div className="space-y-1">
+                <h4 className="text-xs font-medium text-muted-foreground">Caught up from earlier periods</h4>
+                {preview.answer.catchUp.length > 0 && (
+                  <ul className="max-h-48 overflow-y-auto text-sm" data-testid="preview-catch-up">
+                    {preview.answer.catchUp.map((line) => (
+                      <li key={line.billableEventId}>
+                        {customerName(line.customerId)} · {line.description} · {formatMinor(line.netMinor, line.currency)}
+                      </li>
+                    ))}
+                  </ul>
+                )}
+                {preview.answer.catchUpDeferredCount > 0 && (
+                  <p className="text-sm text-muted-foreground" data-testid="preview-catch-up-deferred">
+                    {preview.answer.catchUpDeferredCount} more left for a later run: the events of this period fill the run.
+                  </p>
+                )}
+              </div>
+            )}
             <div className="space-y-1">
               <h4 className="text-xs font-medium text-muted-foreground">Excluded customers</h4>
               {preview.answer.exclusions.length === 0 ? (

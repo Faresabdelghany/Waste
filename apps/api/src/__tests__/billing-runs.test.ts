@@ -219,6 +219,8 @@ describe("the billing run endpoints", { skip: database.skip || owner.skip }, () 
         ],
         exclusions: [{ customerId: fx.customers.bo.id, reason: "all-events-blocked", eventCount: 2 }],
         heldEventCount: 0,
+        catchUp: [],
+        catchUpDeferredCount: 0,
       })
       assert.deepEqual(await written(), before, "no run, no invoice, no event, no number taken")
       await refused(await lars("/billing-runs/preview", { method: "POST", body: period("2026-10-01", "2026-10-10") }), 400)

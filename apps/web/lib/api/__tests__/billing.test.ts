@@ -416,7 +416,7 @@ describe("the billing runs module", () => {
   })
 
   test("previews through the client, writing nothing, and runs through the store's create", async () => {
-    const preview: BillingRunPreview = { eventCount: 3, invoiceCount: 1, totals: [{ currency: "DKK", netMinor: 66650, vatMinor: 16663 }], exclusions: [{ customerId: osterbro.id, reason: "all-events-blocked", eventCount: 1 }], heldEventCount: 0 }
+    const preview: BillingRunPreview = { eventCount: 3, invoiceCount: 1, totals: [{ currency: "DKK", netMinor: 66650, vatMinor: 16663 }], exclusions: [{ customerId: osterbro.id, reason: "all-events-blocked", eventCount: 1 }], heldEventCount: 0, catchUp: [], catchUpDeferredCount: 0 }
     const { fetch, calls } = scripted([() => json(preview), () => json(detail, 201, { location: `/billing-runs/${run.id}` })])
     const body = billingRunBody({ projectId: "project-copenhagen", periodFrom: "2026-09-01", periodTo: "2026-09-30" }, resolverOver(state))
     if ("message" in (body as object)) throw new Error("refused")

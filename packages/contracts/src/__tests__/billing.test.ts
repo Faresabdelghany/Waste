@@ -83,10 +83,11 @@ describe("BillingRunCreate and BillingRunPreview", () => {
   })
 
   test("the preview answers the counts, the totals per currency and the exclusions, writing nothing", () => {
-    const preview = { eventCount: 3, invoiceCount: 2, totals: [{ currency: "DKK", netMinor: 24_690, vatMinor: 6_172 }, { currency: "EUR", netMinor: 900, vatMinor: 225 }], exclusions: [{ customerId: THIRD, reason: "all-events-blocked", eventCount: 1 }], heldEventCount: 2 }
+    const preview = { eventCount: 3, invoiceCount: 2, totals: [{ currency: "DKK", netMinor: 24_690, vatMinor: 6_172 }, { currency: "EUR", netMinor: 900, vatMinor: 225 }], exclusions: [{ customerId: THIRD, reason: "all-events-blocked", eventCount: 1 }], heldEventCount: 2, catchUp: [{ billableEventId: ID, kind: "manual", customerId: THIRD, description: "Restaffald 240 L · 2026-09-14", serviceDate: "2026-09-14", currency: "DKK", netMinor: 10_000, vatMinor: 2_500 }], catchUpDeferredCount: 0 }
     assert.deepEqual(BillingRunPreview.parse(preview), preview)
-    assert.deepEqual(BillingRunPreview.parse({ eventCount: 0, invoiceCount: 0, totals: [], exclusions: [], heldEventCount: 0 }), { eventCount: 0, invoiceCount: 0, totals: [], exclusions: [], heldEventCount: 0 })
+    assert.deepEqual(BillingRunPreview.parse({ eventCount: 0, invoiceCount: 0, totals: [], exclusions: [], heldEventCount: 0, catchUp: [], catchUpDeferredCount: 0 }), { eventCount: 0, invoiceCount: 0, totals: [], exclusions: [], heldEventCount: 0, catchUp: [], catchUpDeferredCount: 0 })
     assert.deepEqual(refusal(BillingRunPreview.safeParse({ ...preview, totals: [{ currency: "kr", netMinor: 1, vatMinor: 0 }] })).map((issue) => issue.path), ["totals.0.currency"])
+    assert.deepEqual(refusal(BillingRunPreview.safeParse({ ...preview, catchUp: [{ ...preview.catchUp[0], kind: "late" }] })).map((issue) => issue.path), ["catchUp.0.kind"])
   })
 })
 

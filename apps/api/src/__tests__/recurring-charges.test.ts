@@ -155,6 +155,8 @@ describe("recurring charges in a billing run", { skip: database.skip || owner.sk
       totals: [{ currency: "DKK", netMinor: 308_484, vatMinor: 77_121 }],
       exclusions: [{ customerId: fx.customers.bo.id, eventCount: 2, reason: "all-events-blocked" }],
       heldEventCount: 0,
+      catchUp: [],
+      catchUpDeferredCount: 0,
     })
     const done = await run(october())
     assert.deepEqual(
@@ -246,8 +248,8 @@ describe("recurring charges in a billing run", { skip: database.skip || owner.sk
     const [first, second] = await Promise.all([olivia("/billing-runs", { method: "POST", body: march }), olivia("/billing-runs", { method: "POST", body: march })])
     assert.deepEqual([first.status, second.status], [201, 201])
     const counts = [BillingRunDetail.parse(await first.json()).eventCount, BillingRunDetail.parse(await second.json()).eventCount].sort((x, y) => x - y)
-    // March and April for the five monthly cases priced now, the garden bin included; the first and second quarters of 2027.
-    assert.deepEqual(counts, [0, 10])
+    // March and April for the five monthly cases priced now, the garden bin included; the first and second quarters of 2027; and the garden bin's October charge, blocked at October's run and repriced since, caught up (#447).
+    assert.deepEqual(counts, [0, 11])
     const minted = await charges(["2027-01-01", "2027-03-01", "2027-04-01"])
     const keys = minted.map((row) => `${row.subscriptionId}/${row.periodFrom}`)
     assert.equal(new Set(keys).size, keys.length, "one charge per subscription and period")
