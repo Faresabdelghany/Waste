@@ -18,6 +18,7 @@ import * as auditModule from "../audit"
 import * as availabilityModule from "../availability"
 import * as billableEventsModule from "../billable-events"
 import * as billingModule from "../billing"
+import * as bulkyModule from "../bulky"
 import * as catalogueModule from "../catalogue"
 import * as applicationsModule from "../applications"
 import * as collectionCalendarsModule from "../collection-calendars"
@@ -92,6 +93,7 @@ const MODULES: Readonly<Record<string, Record<string, unknown>>> = {
   "availability": availabilityModule,
   "billable-events": billableEventsModule,
   "billing": billingModule,
+  "bulky": bulkyModule,
   "catalogue": catalogueModule,
   "collection-calendars": collectionCalendarsModule,
   "containers": containersModule,

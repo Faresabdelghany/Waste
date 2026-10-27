@@ -254,8 +254,8 @@ describe("what the door answers and stores", () => {
   })
 
   test("the driver's route read is the detail with each pickup's place joined: the address, the point or null, the place's instructions or null, the container's label and the fraction's name", () => {
-    const pickup = { id: THIRD, projectId: OTHER, routeId: ID, containerId: COMPANY, position: 1, status: "planned", origin: "generation", service: "empty", reason: null, contaminantCodeId: null, note: null, propertyId: ID, sharedCollectionPointId: null, wasteFractionId: OTHER, arrivedAt: null, outcomeAt: null, subscriptionId: null, warehouseId: null, replacementContainerId: null, ...STAMPS }
-    const joined = { ...pickup, address: "Parkvej 18, 2100 København Ø", driverInstructions: "Gate code 4711", location: POINT, containerLabel: "BIN-82014", wasteFractionName: "Residual waste", replacementContainerLabel: null }
+    const pickup = { id: THIRD, projectId: OTHER, routeId: ID, containerId: COMPANY, position: 1, status: "planned", origin: "generation", service: "empty", reason: null, contaminantCodeId: null, note: null, propertyId: ID, sharedCollectionPointId: null, wasteFractionId: OTHER, arrivedAt: null, outcomeAt: null, subscriptionId: null, warehouseId: null, replacementContainerId: null, bulkyBookingId: null, ...STAMPS }
+    const joined = { ...pickup, address: "Parkvej 18, 2100 København Ø", driverInstructions: "Gate code 4711", location: POINT, containerLabel: "BIN-82014", wasteFractionName: "Residual waste", replacementContainerLabel: null, bulkyItems: [] }
     assert.deepEqual(DriverPickup.parse(joined), joined)
     assert.deepEqual(DriverPickup.parse({ ...joined, location: null }), { ...joined, location: null }, "a property not yet geocoded has no point")
     assert.deepEqual(DriverPickup.parse({ ...joined, driverInstructions: null }), { ...joined, driverInstructions: null }, "a place that tells the driver nothing")

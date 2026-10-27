@@ -8,7 +8,8 @@
 // The route reads them as the stop time its Duration adds to the drive — over
 // the stops still planned, the set the optimiser's Plan orders — and as the
 // load it compares with its planned vehicle's payload, over the stops it
-// serves, planned or completed, that load waste: an emptying and a swap, never
+// serves, planned or completed, that load waste: an emptying, a swap and a
+// bulky collection (O11), never
 // a delivery's empty container, a repair or a wash. Capacity is a reading, never a constraint on
 // the optimiser: a route tips at its station once, at the end, so a heavier
 // route is told it is over, for the office to plan a tip (#350 owns reloads).
@@ -36,14 +37,18 @@ export const WORK_ORDER_SERVICE_SECONDS = {
   wash: 600,
 } as const satisfies Record<WorkOrderService, number>
 
+/** A bulky collection's time at the stop (O11 of #290): items carried out by hand, whatever they are. */
+export const BULKY_SERVICE_SECONDS = 600
+
 /** Its container's volume times its fraction's density, whole kilograms, or null where either is unknown. */
 export function expectedKg(stop: { volumeLitres: number | null; densityKgPerCubicMetre: number | null }): number | null {
   if (stop.volumeLitres === null || stop.densityKgPerCubicMetre === null) return null
   return roundHalfAwayFromZero((stop.volumeLitres * stop.densityKgPerCubicMetre) / 1000)
 }
 
-/** A stop's seconds at the kerb: an emptying its container type's, a work order its service's. */
+/** A stop's seconds at the kerb: an emptying its container type's, a work order its service's, a bulky collection its own. */
 export function serviceSecondsOf(stop: { service: PickupService; containerServiceSeconds: number | null }): number {
+  if (stop.service === "bulky") return BULKY_SERVICE_SECONDS
   if (stop.service !== "empty") return WORK_ORDER_SERVICE_SECONDS[stop.service]
   return stop.containerServiceSeconds ?? UNKNOWN_SERVICE_SECONDS
 }
@@ -76,8 +81,8 @@ export type RouteWorkload = {
 /** Whether the route serves the stop: one done or still to do, never one skipped or failed. */
 const serves = (stop: WorkloadStop) => stop.status === "planned" || stop.status === "completed"
 
-/** Whether the stop puts waste on the truck: an emptying, and a swap's full container; a delivery's is empty, and a repair or a wash loads nothing. */
-const loadsWaste = (stop: WorkloadStop) => stop.service === "empty" || stop.service === "swap"
+/** Whether the stop puts waste on the truck: an emptying, a swap's full container and a bulky collection's items, whose weight nothing says; a delivery's is empty, and a repair or a wash loads nothing. */
+const loadsWaste = (stop: WorkloadStop) => stop.service === "empty" || stop.service === "swap" || stop.service === "bulky"
 
 /** A route's workload, against its planned vehicle's payload. */
 export function routeWorkload(stops: readonly WorkloadStop[], capacityKg: number | null): RouteWorkload {

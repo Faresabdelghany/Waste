@@ -100,7 +100,7 @@ import type { ServiceDay } from "@waste/domain/route-schemes/recurrence"
 import type { VehicleStatus } from "@waste/domain/resources/vocabulary"
 import { count } from "@waste/domain/text"
 import type { RoutingIdentity } from "@waste/routing/provider"
-import { and, asc, eq, gt, gte, inArray, isNull, lte } from "drizzle-orm"
+import { and, asc, count as countRows, eq, gt, gte, inArray, isNull, lte } from "drizzle-orm"
 import { Hono, type MiddlewareHandler } from "hono"
 import { describeRoute } from "hono-openapi"
 
@@ -149,6 +149,19 @@ export const dispatchedNeedsADriver = (label: string): string => `Route ${label}
 const ASSIGNMENT_IS_THE_SESSIONS = "the session's driver and vehicle are its actual assignment"
 export const ORDER_IS_FROZEN = "its order is frozen"
 const DAY_IS_FIXED = "the day it runs is fixed"
+
+/** What a route moved off the day its bulky collections were booked for is told (O11 of #290). */
+export const bulkyKeepsTheDay = (route: string, stops: number): string =>
+  `Route ${route} carries ${stops === 1 ? "a bulky collection" : `${stops} bulky collections`} booked for its day; take ${stops === 1 ? "its stop" : "their stops"} off before the route moves`
+
+/** Refuses a move of a route that carries a planned bulky collection: the customer booked its day. */
+async function refuseBulkyMoved(tx: Tx, scope: Scope, current: RouteRow): Promise<void> {
+  const [row] = await tx
+    .select({ stops: countRows() })
+    .from(pickup)
+    .where(and(eq(pickup.companyId, scope.companyId), eq(pickup.routeId, current.id), eq(pickup.service, "bulky"), eq(pickup.status, "planned")))
+  if ((row?.stops ?? 0) > 0) throw problem(409, { detail: bulkyKeepsTheDay(labelOf(current), row.stops) })
+}
 
 /** What a body naming a station that takes none of what the route collects is told, at `unloadingStationId`. */
 export const acceptsNone = (station: string): string => `${station} accepts none of this route's waste fractions`
@@ -765,7 +778,7 @@ export function routeRoutes(guard: MiddlewareHandler<AuthEnv>, { now = () => new
         operationId: "rescheduleRoute",
         summary: "Move the day a route runs, or its start",
         description:
-          "The `reschedule` command: moves `operatingDate`, the day the route runs, or `plannedStartTime`, a time on the project's clock (null clears it); at least one must be given. The `serviceDate` never moves: with the scheme and the group it is the route's identity (ADR-0002). A route that has started is refused (409): the day it runs is fixed; a completed or cancelled one does not change. Where the route names both a planned driver and a planned vehicle, moving the day judges the driver's licence again on the new operating date, refused at `operatingDate` with the reason. A planned vehicle or trailer out of use, or a planned driver absent, on the new day (O6 of #290) is refused (409) naming the period, and the override below never takes that back. Then the new day is judged against the project's calendar (O5 of #290), the rule generation keeps: a holiday on the project's list is a day the route does not run on unless its scheme collects on holidays, and a day of the project's weekend unless its scheme serves that weekday — for the office's ad-hoc route, which has no scheme, every holiday and weekend day. A move onto such a day is refused (409, `Sat 10 Oct is a Saturday of the project's weekend; confirm the move to run route RC-1042 on a non-working day`) until the body says `acceptNonWorkingDay: true`; the flag alone moves nothing, and a move onto a working day ignores it. " +
+          "The `reschedule` command: moves `operatingDate`, the day the route runs, or `plannedStartTime`, a time on the project's clock (null clears it); at least one must be given. The `serviceDate` never moves: with the scheme and the group it is the route's identity (ADR-0002). A route that has started is refused (409): the day it runs is fixed; a completed or cancelled one does not change. Where the route names both a planned driver and a planned vehicle, moving the day judges the driver's licence again on the new operating date, refused at `operatingDate` with the reason. A planned vehicle or trailer out of use, or a planned driver absent, on the new day (O6 of #290) is refused (409) naming the period, and the override below never takes that back. Then the new day is judged against the project's calendar (O5 of #290), the rule generation keeps: a holiday on the project's list is a day the route does not run on unless its scheme collects on holidays, and a day of the project's weekend unless its scheme serves that weekday — for the office's ad-hoc route, which has no scheme, every holiday and weekend day. A route carrying a planned bulky collection (O11 of #290) does not move off its day, which the customer booked (409, naming how many; take their stops off first). A move onto such a day is refused (409, `Sat 10 Oct is a Saturday of the project's weekend; confirm the move to run route RC-1042 on a non-working day`) until the body says `acceptNonWorkingDay: true`; the flag alone moves nothing, and a move onto a working day ignores it. " +
           HOLDS +
           " Under the route's row lock.",
         security: BEARER_SECURITY,
@@ -794,6 +807,8 @@ export function routeRoutes(guard: MiddlewareHandler<AuthEnv>, { now = () => new
         if (operatingDate !== current.operatingDate) {
           await refuseCrewAway(tx, scope, { vehicleId: current.plannedVehicleId, trailerId: current.plannedTrailerId, driverId: current.plannedDriverId }, oneDay(operatingDate), "a route")
         }
+        // A bulky collection is booked for its route's day (O11 of #290): the route does not move off it while one is planned on it.
+        if (operatingDate !== current.operatingDate) await refuseBulkyMoved(tx, scope, current)
         // The 409 that needs the body, after its 400s: a day the route does not run on by its calendar is taken knowingly or not at all.
         if (operatingDate !== current.operatingDate && body.acceptNonWorkingDay !== true) {
           const reading = await operatingDayOf(tx, scope, current, operatingDate)
@@ -816,7 +831,7 @@ export function routeRoutes(guard: MiddlewareHandler<AuthEnv>, { now = () => new
         operationId: "releaseRouteHold",
         summary: "Hand a held route back to its scheme",
         description:
-          "The `release-hold` command (#226): clears the hold `assign` or `reschedule` put on a `planned` route (`heldAt`), so the route follows its scheme again, and in the same transaction asks a generation run of the route's scheme from the project's today — or the scheme's first day, if later — through the route's service date, so the run's drift stamp is today's as any Generate's would be (a service date already past, or beyond the walk's 366 days, alone), which brings back the scheme's operating date, planned start and Planned Assignment. The run is asked as the scheme's Generate asks one, under the scheme's key: where a run of the scheme is already queued or in flight, that run absorbs the request, and one that does not reach the day, or that read the route before the hand-back, leaves it to the next run — the nightly plan-ahead or the next Generate. A run of the scheme is the schemes module's to ask (`edit` on `route-studio.schemes`, as Generate): for a caller without it, for a draft scheme, which generates nothing, and where no worker has made the queue yet, no run is asked and the route is still handed back, the next run bringing it back. The answer is the route as it now stands, its hold cleared, before any run has brought it back. A planned route that is not held is refused (409), and so is a route past `planned`, which is never held, and the office's ad-hoc route, which has no scheme to hand it back to (#111). Takes no body. Under the route's row lock; no event is written, as for `reschedule`.",
+          "The `release-hold` command (#226): clears the hold `assign` or `reschedule` put on a `planned` route (`heldAt`), so the route follows its scheme again, and in the same transaction asks a generation run of the route's scheme from the project's today — or the scheme's first day, if later — through the route's service date, so the run's drift stamp is today's as any Generate's would be (a service date already past, or beyond the walk's 366 days, alone), which brings back the scheme's operating date, planned start and Planned Assignment — the operating date alone kept where the route carries a planned bulky collection, booked for its day (O11 of #347). The run is asked as the scheme's Generate asks one, under the scheme's key: where a run of the scheme is already queued or in flight, that run absorbs the request, and one that does not reach the day, or that read the route before the hand-back, leaves it to the next run — the nightly plan-ahead or the next Generate. A run of the scheme is the schemes module's to ask (`edit` on `route-studio.schemes`, as Generate): for a caller without it, for a draft scheme, which generates nothing, and where no worker has made the queue yet, no run is asked and the route is still handed back, the next run bringing it back. The answer is the route as it now stands, its hold cleared, before any run has brought it back. A planned route that is not held is refused (409), and so is a route past `planned`, which is never held, and the office's ad-hoc route, which has no scheme to hand it back to (#111). Takes no body. Under the route's row lock; no event is written, as for `reschedule`.",
         security: BEARER_SECURITY,
         responses: {
           200: describeJson("The route, its hold cleared; a run of its scheme over its service date is asked.", RouteDetail),

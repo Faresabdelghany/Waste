@@ -22,7 +22,7 @@ const ROUTE = "01a0d3a5-e5e0-7000-8000-000000000004"
 const STAMP = new Date("2026-10-05T12:00:00Z")
 const OPENED = new Date("2026-10-05T12:00:01Z")
 
-type Statement = { kind: "update" | "insert" | "select"; table: string; values?: Record<string, unknown>; locked?: boolean }
+type Statement = { kind: "update" | "insert" | "select"; table: string; values?: Record<string, unknown>; locked?: string }
 
 /** A `tx` that records each statement by kind and table, answering the counter, the inserted rows, the alert `alertRow` describes and, once linked, that alert as the update leaves it. */
 const scripted = (alertRow?: { status: string; ticketId: string | null }) => {
@@ -50,12 +50,12 @@ const scripted = (alertRow?: { status: string; ticketId: string | null }) => {
       from: (table: Table) => ({
         where: () => {
           const name = getTableName(table)
-          const statement: Statement = { kind: "select", table: name, locked: false }
+          const statement: Statement = { kind: "select", table: name }
           statements.push(statement)
           const rows = name === "alert" && alertRow !== undefined ? [{ id: ALERT, ...alertRow }] : name === "ticket" ? [{ number: 8831 }] : []
           const limited = Object.assign(Promise.resolve(rows), {
-            for: () => {
-              statement.locked = true
+            for: (strength: string) => {
+              statement.locked = strength
               return Promise.resolve(rows)
             },
           })
@@ -84,7 +84,7 @@ const draft = (alertId: string | null = null): TicketDraft => ({
 /** Ids that count up from a pinned clock, so the suite can name them. */
 const minter = () => createIdMinter(() => STAMP.getTime())
 
-const shape = (statements: readonly Statement[]) => statements.map((statement) => `${statement.kind} ${statement.table}${statement.locked ? " for update" : ""}`)
+const shape = (statements: readonly Statement[]) => statements.map((statement) => `${statement.kind} ${statement.table}${statement.locked === undefined ? "" : ` for ${statement.locked}`}`)
 
 describe("openTicket", () => {
   test("takes the number from the counter, writes the row, appends the created event and emits ticket-opened, in that order, and names no alert it was not given", async () => {
@@ -121,7 +121,7 @@ describe("openTicket", () => {
     const { tx, statements } = scripted({ status: "new", ticketId: null })
     const SOURCE = "01a0d3a5-e5e0-7000-8000-000000000009"
     const { row } = await openTicket(tx, { companyId: COMPANY, draft: draft(ALERT), createdBy: null, sourceEventId: SOURCE, newId: minter(), now: () => OPENED })
-    assert.deepEqual(shape(statements), ["update company", "insert ticket", "insert ticket_event", "select alert for update", "select alert", "update alert", "insert outbox_event"])
+    assert.deepEqual(shape(statements), ["update company", "insert ticket", "insert ticket_event", "select alert for no key update", "select alert", "update alert", "insert outbox_event"])
     const linked = statements[5]
     assert.deepEqual(linked.values, { ticketId: row.id }, "the alert now names the ticket")
     assert.deepEqual([statements[1].values?.createdBy, statements[1].values?.sourceEventId], [null, SOURCE], "an event's ticket: no person, the event's id")
@@ -135,7 +135,7 @@ describe("openTicket", () => {
       assert.match((error as { message: string }).message, /This alert is resolved and does not change/)
       return true
     })
-    assert.deepEqual(shape(resolved.statements), ["update company", "insert ticket", "insert ticket_event", "select alert for update", "select alert"], "nothing after the refusal: the transaction is the caller's to roll back")
+    assert.deepEqual(shape(resolved.statements), ["update company", "insert ticket", "insert ticket_event", "select alert for no key update", "select alert"], "nothing after the refusal: the transaction is the caller's to roll back")
 
     const taken = scripted({ status: "acknowledged", ticketId: "01a0d3a5-e5e0-7000-8000-00000000000a" })
     await assert.rejects(openTicket(taken.tx, { companyId: COMPANY, draft: draft(ALERT), createdBy: OLIVIA, sourceEventId: null, newId: minter(), now: () => OPENED }), (error: unknown) => {

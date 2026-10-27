@@ -43,6 +43,7 @@ import { GENERATE_ROUTES_QUEUE } from "@waste/db/commands/generation"
 import { migrateDatabase } from "@waste/db/migrate"
 import { agreement, subscription, subscriptionPause } from "@waste/db/schema/agreements"
 import { driverAbsence, vehicleUnavailability } from "@waste/db/schema/availability"
+import { bulkyBooking, bulkySchedule } from "@waste/db/schema/bulky"
 import { containerType, product, wasteFraction } from "@waste/db/schema/catalogue"
 import { collectionCalendar, collectionCalendarHoliday } from "@waste/db/schema/collection-calendars"
 import { container, containerServicePlacement } from "@waste/db/schema/containers"
@@ -498,6 +499,39 @@ describe("generation against a migrated database", { skip }, () => {
       await ownerPool.db.update(routeScheme).set({ holidayPolicy: "shift-next" }).where(eq(routeScheme.id, a.scheme))
       await generateA()
     }
+  })
+
+  test("a route carrying a planned bulky collection keeps the booking's day, held or not; the stop gone, the next run brings the scheme's day back (O11 of #347)", async () => {
+    const scoped = { companyId: a.company, projectId: a.project }
+    const rowOf = async (id: string) => (await ownerPool.db.select().from(route).where(eq(route.id, id)))[0]
+    const thursday = (await routesOfA()).find((row) => row.serviceDate === "2026-10-08")
+    assert.ok(thursday, "the holiday Thursday's route, shifted by the scheme's policy")
+    const shifted = thursday.operatingDate
+    const [job] = await ownerPool.db.insert(product).values({ ...scoped, name: "Bulky collection", kind: "additional-service", unit: "job", status: "active" }).returning({ id: product.id })
+    const [schedule] = await ownerPool.db
+      .insert(bulkySchedule)
+      .values({ ...scoped, planningAreaId: a.planningArea, frequency: "weekly", serviceDays: ["wednesday"], holidayPolicy: "skip", slotsPerDay: 5, productId: job.id, validFrom: OPENED })
+      .returning({ id: bulkySchedule.id })
+    const [booking] = await ownerPool.db
+      .insert(bulkyBooking)
+      .values({ ...scoped, customerId: a.customer, agreementId: a.agreement, propertyId: a.parkvej, wasteFractionId: a.wasteFraction, day: "2026-10-07", planningAreaId: a.planningArea, scheduleId: schedule.id, productId: job.id })
+      .returning({ id: bulkyBooking.id })
+    // The office moved the route onto the booking's day without a hold, then routed the booking on it.
+    await ownerPool.db.update(route).set({ operatingDate: "2026-10-07" }).where(eq(route.id, thursday.id))
+    const [stop] = await ownerPool.db
+      .insert(pickup)
+      .values({ ...scoped, routeId: thursday.id, containerId: null, position: 9, origin: "office", service: "bulky", bulkyBookingId: booking.id, propertyId: a.parkvej, wasteFractionId: a.wasteFraction })
+      .returning({ id: pickup.id })
+    try {
+      await generateA()
+      assert.equal((await rowOf(thursday.id)).operatingDate, "2026-10-07", "the booking's day stands")
+    } finally {
+      await ownerPool.db.delete(pickup).where(eq(pickup.id, stop.id))
+      await ownerPool.db.delete(bulkyBooking).where(eq(bulkyBooking.id, booking.id))
+      await ownerPool.db.delete(bulkySchedule).where(eq(bulkySchedule.id, schedule.id))
+      await generateA()
+    }
+    assert.equal((await rowOf(thursday.id)).operatingDate, shifted, "the scheme's day again")
   })
 
   test("a group's driver absent or its vehicle out of use on a route's day (O6 of #290): the run writes the route without them and warns; a held route keeps the office's crew and only warns; the period gone, the next run writes the group's crew back", async () => {

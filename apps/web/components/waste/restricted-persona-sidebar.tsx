@@ -43,6 +43,7 @@ import { ProgressCircle } from "@/components/progress-circle"
 import { AccountMenu } from "@/components/auth/account-menu"
 import { useApiConfigured } from "@/components/waste/api-session-store"
 import { useBusinessRecordStore, useServerModuleState } from "@/components/waste/business-record-store"
+import { useProviderWorkspace } from "@/components/waste/provider-account"
 import { ROUTES_MODULE } from "@/lib/api/records/routes"
 import {
   resolveActiveRouteSummaries,
@@ -103,10 +104,14 @@ const serviceProviderNavItems: PersonaNavItem[] = [
   { label: "Team", href: "/service-provider-workspace/team", icon: UsersThree },
 ]
 
+/** The workspace's landing, which on the Pilot is its routes (#291 C24): the fixture dashboard's figures are the prototype's. */
+const PROVIDER_LANDING = "/service-provider-workspace"
+
 /**
  * The service provider manager sidebar mirrors the operator AppSidebar's layout and
  * typography — compact rows, search field, Active Routes group — scoped to
- * NordRen ApS pages and route days.
+ * NordRen ApS pages and route days in fixture mode, and on the Pilot to the
+ * provider `/me` names, with no Dashboard.
  */
 function ServiceProviderManagerSidebar() {
   const pathname = usePathname()
@@ -115,6 +120,8 @@ function ServiceProviderManagerSidebar() {
   const apiConfigured = useApiConfigured()
   const { starredRouteIds } = useActiveRoutes("service-provider")
   const { getRecords } = useBusinessRecordStore()
+  const provider = useProviderWorkspace()
+  const navItems = apiConfigured ? serviceProviderNavItems.filter((item) => item.href !== PROVIDER_LANDING) : serviceProviderNavItems
 
   // On the Pilot a pin is a starred route the API holds, read from its rows alone (#248).
   const routesOnApi = useServerModuleState(ROUTES_MODULE.workspaceId, ROUTES_MODULE.moduleId)
@@ -129,10 +136,12 @@ function ServiceProviderManagerSidebar() {
     [apiConfigured, getRecords, routesOnApi, starredRouteIds],
   )
 
-  const isItemActive = (href: string): boolean =>
-    href === "/service-provider-workspace"
-      ? pathname === "/service-provider-workspace"
-      : pathname.startsWith(href)
+  const isItemActive = (href: string): boolean => {
+    if (href === PROVIDER_LANDING) return pathname === PROVIDER_LANDING
+    // On the Pilot the landing is the routes.
+    if (apiConfigured && pathname === PROVIDER_LANDING) return href === `${PROVIDER_LANDING}/routes`
+    return pathname.startsWith(href)
+  }
 
   return (
     <Sidebar className="border-none shadow-none">
@@ -144,7 +153,7 @@ function ServiceProviderManagerSidebar() {
             </div>
             <div className="flex flex-col">
               <span className="text-sm font-semibold">Waste</span>
-              <span className="text-xs text-sidebar-foreground/60">NordRen ApS</span>
+              <span className="text-xs text-sidebar-foreground/60">{apiConfigured ? provider?.legalName ?? "" : "NordRen ApS"}</span>
             </div>
           </div>
         </div>
@@ -167,7 +176,7 @@ function ServiceProviderManagerSidebar() {
         <SidebarGroup className="px-2 py-1">
           <SidebarGroupContent>
             <SidebarMenu className="gap-0.5">
-              {serviceProviderNavItems.map((item) => {
+              {navItems.map((item) => {
                 const ItemIcon = item.icon
                 return (
                   <SidebarMenuItem key={item.href}>

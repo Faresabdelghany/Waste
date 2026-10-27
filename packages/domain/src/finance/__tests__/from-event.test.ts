@@ -11,7 +11,7 @@ import { describe, test } from "node:test"
 import { OUTBOX_KINDS, PICKUP_OUTCOMES, type OutboxKind } from "../../execution/vocabulary"
 import { PRODUCT_UNITS } from "../../registry/vocabulary"
 import { TICKET_RESOLUTIONS } from "../../resolution/vocabulary"
-import { BILLABLE_RESOLUTIONS, billableActionsFor, billableFor, chargesJob, chargesTicketWork, isBillableResolution, PICKUP_EVENT_KINDS, reversalOf, type EventFacts, type ExceptionFacts, type JobChargeFacts, type LiveEventFacts, type PickupEventFacts, type PlacementFacts, type TicketChargeFacts, type TicketCompletedFacts } from "../from-event"
+import { BILLABLE_RESOLUTIONS, billableActionsFor, billableFor, chargesJob, chargedAsJob, chargesTicketWork, isBillableResolution, PICKUP_EVENT_KINDS, reversalOf, type EventFacts, type ExceptionFacts, type JobChargeFacts, type LiveEventFacts, type PickupEventFacts, type PlacementFacts, type TicketChargeFacts, type TicketCompletedFacts } from "../from-event"
 import type { PriceRow } from "../pricing"
 
 const ROUTE = "route"
@@ -190,6 +190,15 @@ describe("billableFor a completed work order (M14 of #293)", () => {
     assert.deepEqual(blocked({ agreement: null, subscriptionId: null }), ["no-subscription", JOB, null], "no agreement reachable")
     assert.deepEqual(blocked({ agreement: null, subscriptionId: null, product: { id: JOB, status: "inactive", unit: "job", vatPercent: 25 } }), ["no-subscription", null, null], "no agreement is judged first: a product picked would price under nothing")
     assert.equal(chargesJob(job()), true)
+  })
+
+  test("charges a bulky collection (O11 of #290) as a job, at its booking's product on the booking's agreement, with no subscription", () => {
+    const action = billableFor(office({ service: "bulky", containerTypeId: null, job: job({ subscriptionId: null }) }))
+    const draft = action?.action === "record" ? action.draft : undefined
+    assert.deepEqual([draft?.kind, draft?.agreementId, draft?.subscriptionId, draft?.productId, draft?.price?.unitPriceMinor], ["job", AGREEMENT, null, JOB, 45_000])
+    assert.deepEqual(billableFor(office({ service: "bulky", kind: "pickup-corrected", outcome: "skipped", liveEvent: live() })), { action: "cancel", eventId: LIVE, reason: "pickup-corrected" })
+    assert.equal(chargedAsJob("bulky"), true)
+    assert.equal(chargedAsJob("empty"), false)
   })
 
   test("is charged once: a completion of a work order that already has a live event is nothing, and its correction away from completed cancels it", () => {

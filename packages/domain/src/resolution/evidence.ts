@@ -87,6 +87,7 @@ const VISIT_VERBS: Readonly<Record<Exclude<PickupService, "empty">, { done: stri
   swap: { done: "swapped", do: "swap" },
   repair: { done: "repaired", do: "repair" },
   wash: { done: "washed", do: "wash" },
+  bulky: { done: "collected", do: "collect" },
 }
 
 /** The reply that quotes the stop's record, `when` being its time already written on the project's clock. */
@@ -94,7 +95,7 @@ export function replyFromRecord(evidence: StopEvidence, when: string | null): st
   if (evidence.outcome === "planned" || when === null) return evidence.service === "empty" ? "The collection has not been recorded yet." : "The visit has not been recorded yet."
   const emptying = evidence.service === "empty"
   const verbs = evidence.service === "empty" ? { done: "collected", do: "collect" } : VISIT_VERBS[evidence.service]
-  const what = emptying ? "the bin" : "the container"
+  const what = emptying ? "the bin" : evidence.service === "bulky" ? "the bulky items" : "the container"
   const happened = (evidence.reason === null ? undefined : WHAT_HAPPENED[evidence.reason]) ?? (emptying ? "the collection did not take place" : "the visit did not take place")
   if (evidence.corrected) {
     const visit = emptying ? "the collection" : "the visit"

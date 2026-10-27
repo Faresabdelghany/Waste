@@ -33,6 +33,7 @@ import { outboxEvent, pickup, proofOfService, route } from "@waste/db/schema/exe
 import { billableEvent, billingRun, billingRunExclusion, invoice, invoiceLine, priceList, priceListRow, ticketKindProduct, workOrderProduct } from "@waste/db/schema/finance"
 import { driver, vehicle } from "@waste/db/schema/fleet"
 import { vehicleType } from "@waste/db/schema/fleet-types"
+import { bulkyBooking, bulkyBookingItem, bulkySchedule } from "@waste/db/schema/bulky"
 import { company, project } from "@waste/db/schema/organisation"
 import { pickupExceptionRule, pickupExceptionRuleStep } from "@waste/db/schema/pickup-exceptions"
 import { warehouse } from "@waste/db/schema/places"
@@ -199,7 +200,7 @@ export async function placeBin(pool: Database, tenant: FinanceTenant, label: str
 
 /** A stop to seed: a container's, or — with `containerId` null — an address-only one, which only the office adds (#111). */
 /** A stop as a test seeds it; an emptying unless it says a work order, a delivery naming the subscription it books (O3b of #290). */
-export type StopSeed = { containerId: string | null; propertyId: string; status?: PickupStatus; wasteFractionId?: string; origin?: PickupOrigin; service?: PickupService; subscriptionId?: string; warehouseId?: string; replacementContainerId?: string }
+export type StopSeed = { containerId: string | null; propertyId: string; status?: PickupStatus; wasteFractionId?: string; origin?: PickupOrigin; service?: PickupService; subscriptionId?: string; warehouseId?: string; replacementContainerId?: string; bulkyBookingId?: string }
 
 export type SeededRoute = { id: string; number: number; serviceDate: string; pickupIds: string[] }
 
@@ -266,6 +267,7 @@ export async function seedCompletedRoute(pool: Database, tenant: FinanceTenant, 
           subscriptionId: stop.subscriptionId ?? null,
           warehouseId: stop.warehouseId ?? null,
           replacementContainerId: stop.replacementContainerId ?? null,
+          bulkyBookingId: stop.bulkyBookingId ?? null,
           propertyId: stop.propertyId,
           sharedCollectionPointId: null,
           wasteFractionId: stop.wasteFractionId ?? tenant.fractions.residual.id,
@@ -277,6 +279,21 @@ export async function seedCompletedRoute(pool: Database, tenant: FinanceTenant, 
     )
   })
   return { id, number, serviceDate, pickupIds }
+}
+
+/** A Bulky Booking at a property under an agreement on the day, of the centrum area's schedule charging the bulky product (O11 of #290): what a bulky collection's stop names. */
+export async function seedBulkyBooking(pool: Database, tenant: FinanceTenant, booking: { agreementId: string; customerId: string; propertyId: string; day?: string }): Promise<{ id: string }> {
+  const { companyId } = tenant
+  const projectId = tenant.projects.copenhagen.id
+  const id = testId()
+  await withCompany(pool.db, companyId, async (tx: Tx) => {
+    // One schedule of the area is in force at a time: the first booking makes it, the next ones book under it.
+    const [held] = await tx.select({ id: bulkySchedule.id }).from(bulkySchedule).where(eq(bulkySchedule.companyId, companyId)).limit(1)
+    const scheduleId = held?.id ?? testId()
+    if (held === undefined) await tx.insert(bulkySchedule).values({ id: scheduleId, companyId, projectId, planningAreaId: tenant.planningAreas.centrum.id, frequency: "weekly", serviceDays: ["monday"], holidayPolicy: "skip", slotsPerDay: 10, productId: tenant.products.bulky.id, validFrom: "2026-01-01", validTo: null })
+    await tx.insert(bulkyBooking).values({ id, companyId, projectId, customerId: booking.customerId, agreementId: booking.agreementId, propertyId: booking.propertyId, wasteFractionId: tenant.fractions.residual.id, day: booking.day ?? FIXTURE_DAY, planningAreaId: tenant.planningAreas.centrum.id, scheduleId, productId: tenant.products.bulky.id })
+  })
+  return { id }
 }
 
 /** Moves a pickup's status the way a correction does, without the proof: what a `pickup-corrected` event's facts read. */
@@ -386,6 +403,9 @@ export async function dropFinanceTenant(pool: Database, owner: Database, company
     await tx.delete(ticket).where(eq(ticket.companyId, companyId))
     await tx.delete(outboxEvent).where(eq(outboxEvent.companyId, companyId))
     await tx.delete(pickup).where(eq(pickup.companyId, companyId))
+    await tx.delete(bulkyBookingItem).where(eq(bulkyBookingItem.companyId, companyId))
+    await tx.delete(bulkyBooking).where(eq(bulkyBooking.companyId, companyId))
+    await tx.delete(bulkySchedule).where(eq(bulkySchedule.companyId, companyId))
     await tx.delete(route).where(eq(route.companyId, companyId))
     await tx.delete(collectionGroup).where(eq(collectionGroup.companyId, companyId))
     await tx.delete(routeScheme).where(eq(routeScheme.companyId, companyId))

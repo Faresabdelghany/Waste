@@ -138,6 +138,7 @@ import { Page, PageRequest } from "@waste/contracts/pagination"
 import type { Problem } from "@waste/contracts/problem"
 import { Route } from "@waste/contracts/routes"
 import type { Tx } from "@waste/db/client"
+import { bulkyItemsOf } from "@waste/db/commands/bulky-bookings"
 import { tableObjectName } from "@waste/db/names"
 import { wasteFraction } from "@waste/db/schema/catalogue"
 import { container } from "@waste/db/schema/containers"
@@ -337,7 +338,9 @@ async function openSessionOf(tx: Tx, companyId: string, profile: DriverProfile):
  * two project keys hold every pickup to one place that is there, so a row
  * with neither address is a broken invariant and thrown, not a client's. The
  * container is a left join: an address-only stop the office added (#111)
- * names none, and is on the list with its address and a null label.
+ * names none, and is on the list with its address and a null label; a bulky
+ * collection (O11 of #290) carries its booking's items, what the driver
+ * takes away.
  */
 async function driverPickupsOfRoute(tx: Tx, companyId: string, routeId: string): Promise<DriverPickup[]> {
   // A swap's replacement, by its label (O3b of #290): what the driver brings.
@@ -363,6 +366,11 @@ async function driverPickupsOfRoute(tx: Tx, companyId: string, routeId: string):
     .leftJoin(sharedCollectionPoint, and(eq(sharedCollectionPoint.companyId, pickup.companyId), eq(sharedCollectionPoint.id, pickup.sharedCollectionPointId)))
     .where(and(eq(pickup.companyId, companyId), eq(pickup.routeId, routeId)))
     .orderBy(asc(pickup.position), asc(pickup.id))
+  const items = await bulkyItemsOf(
+    tx,
+    companyId,
+    rows.flatMap((row) => (row.bulkyBookingId === null ? [] : [row.bulkyBookingId])),
+  )
   return rows.map(({ propertyAddress, propertyLocation, propertyInstructions, pointAddress, pointLocation, pointInstructions, containerLabel, replacementContainerLabel, wasteFractionName, ...stop }) => {
     const address = propertyAddress ?? pointAddress
     if (address === null) throw new Error(`pickup ${stop.id} names no place that is there`)
@@ -370,7 +378,8 @@ async function driverPickupsOfRoute(tx: Tx, companyId: string, routeId: string):
     const location = (propertyLocation ?? pointLocation) as FlatPoint | null
     // The place's own words for the driver; a property's `notes` are the office's and never reach a phone.
     const driverInstructions = propertyInstructions ?? pointInstructions
-    return { ...pickupOf(stop), address, driverInstructions, location, containerLabel, wasteFractionName, replacementContainerLabel }
+    const bulkyItems = stop.bulkyBookingId === null ? [] : (items.get(stop.bulkyBookingId) ?? [])
+    return { ...pickupOf(stop), address, driverInstructions, location, containerLabel, wasteFractionName, replacementContainerLabel, bulkyItems }
   })
 }
 
