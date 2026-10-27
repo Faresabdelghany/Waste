@@ -152,8 +152,10 @@ async function credentialOn(tx: Tx, scope: Scope, kind: "plate" | "card", value:
     .where(and(eq(accessCredential.companyId, scope.companyId), eq(accessCredential.projectId, scope.projectId), eq(accessCredential.kind, kind), eq(accessCredential.value, value), validOn(accessCredential, day)))
     .limit(1)
   if (row === undefined) return null
-  const holder: CredentialFacts["holder"] =
-    row.propertyId !== null ? { kind: "household", propertyId: row.propertyId } : { kind: "business", customerId: row.customerId ?? "", agreementId: row.agreementId ?? "" }
+  if (row.propertyId !== null) return { id: row.id, blocked: row.blockedAt !== null, holder: { kind: "household", propertyId: row.propertyId } }
+  // access_credential_holder_shape: a credential without a Property names its customer and its agreement.
+  if (row.customerId === null || row.agreementId === null) throw new Error(`credentialOn: access credential ${row.id} names no holder`)
+  const holder: CredentialFacts["holder"] = { kind: "business", customerId: row.customerId, agreementId: row.agreementId }
   return { id: row.id, blocked: row.blockedAt !== null, holder }
 }
 
