@@ -73,7 +73,7 @@ import { property, sharedCollectionPoint } from "@waste/db/schema/customers"
 import { uniqueConstraintOf } from "@waste/db/sqlstate"
 import { bulkyBooking } from "@waste/db/schema/bulky"
 import { pickup, proofOfService, route } from "@waste/db/schema/execution"
-import { bulkyBookingStatus, notTheBookingsDay, onlyABookedBooking } from "@waste/domain/execution/bulky"
+import { bulkyBookingStatus, LIVE_STOP_STATUSES, notTheBookingsDay, onlyABookedBooking } from "@waste/domain/execution/bulky"
 import { pickupCorrection, pickupTransition } from "@waste/domain/execution/transitions"
 import { SERVICE_NOUNS } from "@waste/domain/execution/services"
 import type { OfficeStopService, PickupService, PickupStatus } from "@waste/domain/execution/vocabulary"
@@ -219,7 +219,7 @@ async function bulkyStopOf(tx: Tx, scope: Scope, bookingId: string, parent: Rout
       stopRoute: route.number,
     })
     .from(bulkyBooking)
-    .leftJoin(pickup, and(eq(pickup.companyId, bulkyBooking.companyId), eq(pickup.bulkyBookingId, bulkyBooking.id), inArray(pickup.status, ["planned", "completed"])))
+    .leftJoin(pickup, and(eq(pickup.companyId, bulkyBooking.companyId), eq(pickup.bulkyBookingId, bulkyBooking.id), inArray(pickup.status, LIVE_STOP_STATUSES)))
     .leftJoin(route, and(eq(route.companyId, pickup.companyId), eq(route.id, pickup.routeId)))
     .where(and(eq(bulkyBooking.companyId, scope.companyId), eq(bulkyBooking.id, bookingId)))
     .limit(1)

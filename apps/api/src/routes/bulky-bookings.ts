@@ -27,7 +27,7 @@ import { agreement } from "@waste/db/schema/agreements"
 import { bulkyBooking } from "@waste/db/schema/bulky"
 import { property, sharedCollectionPoint } from "@waste/db/schema/customers"
 import { pickup } from "@waste/db/schema/execution"
-import { bulkyBookingStatus, onlyABookedBooking } from "@waste/domain/execution/bulky"
+import { bulkyBookingStatus, LIVE_STOP_STATUSES, onlyABookedBooking } from "@waste/domain/execution/bulky"
 import type { BulkyBookingStatus, PickupStatus } from "@waste/domain/execution/vocabulary"
 import { and, asc, eq, gt, gte, inArray, isNotNull, isNull, lte, type SQL } from "drizzle-orm"
 import { Hono, type MiddlewareHandler } from "hono"
@@ -50,7 +50,12 @@ const BookingPage = Page(BulkyBooking)
 type ClockOptions = { now?: () => Date }
 
 /** The planned or completed stop naming a booking: at most one, which `pickup_bulky_booking_id_key` holds. */
-const liveStop = and(eq(pickup.companyId, bulkyBooking.companyId), eq(pickup.bulkyBookingId, bulkyBooking.id), inArray(pickup.status, ["planned", "completed"]))
+const liveStop = and(eq(pickup.companyId, bulkyBooking.companyId), eq(pickup.bulkyBookingId, bulkyBooking.id), inArray(pickup.status, LIVE_STOP_STATUSES))
+
+/** What a booking for a customer who is not active is told: a status gates a new reference. */
+export const INACTIVE_CUSTOMER = "The customer is inactive; a bulky collection is booked for an active customer"
+/** What a query naming a project and a place of another is told. */
+const NOT_THE_PROJECTS_PLACE = "Not a place of the project the query names"
 
 const columns = {
   id: bulkyBooking.id,
@@ -229,11 +234,11 @@ export function bulkyBookingRoutes(guard: MiddlewareHandler<AuthEnv>, { now = ()
         operationId: "getBulkyAvailability",
         summary: "The days a place may be booked for a bulky collection",
         description:
-          "The days of the window, both ends included, a place — `propertyId` or `sharedCollectionPointId`, one of the two, of a project the caller works in (400 at the field otherwise) — may book a bulky collection on: the days of the Bulky Schedule of the planning area the place lies in on each day, its location inside the area's boundary in force that day, after the project's today on its clock, in date order. Each day names its slots, how many bookings not cancelled hold one, how many are left — a full day is listed with none left, and a booking of it is refused — and the schedule and area they are counted under; where two scheduled areas hold the place on a day, the lowest area code's. The days are the schedule's occurrences (`generateOccurrences`): a skipped holiday is no day, and a shifted one is offered on the day it moved to. The window is at most 92 days. A place with no location, or in no planning area with a bulky schedule over the window, is refused (409).",
+          "The days of the window, both ends included, a place — `propertyId` or `sharedCollectionPointId`, one of the two, of a project the caller works in (400 at the field otherwise), and of `projectId` where the query names one (400 at `projectId` for a project the caller does not work in, at the place's field for a place of another) — may book a bulky collection on: the days of the Bulky Schedule of the planning area the place lies in on each day, its location inside the area's boundary in force that day, after the project's today on its clock, in date order. Each day names its slots, how many bookings not cancelled hold one, how many are left — a full day is listed with none left, and a booking of it is refused — and the schedule and area they are counted under; where two scheduled areas hold the place on a day, the lowest area code's. The days are the schedule's occurrences (`generateOccurrences`): a skipped holiday is no day, and a shifted one is offered on the day it moved to. The window is at most 92 days. A place with no location, or in no planning area with a bulky schedule over the window, is refused (409).",
         security: BEARER_SECURITY,
         responses: {
           200: describeJson("The place's days with their slots.", BulkyAvailability),
-          400: describeProblem("The query names no place or two, a day that is not a calendar day, a window ending before it starts or longer than 92 days, or a place of a project this account does not work in."),
+          400: describeProblem("The query names no place or two, a project this account does not work in or a place not of the project it names, a day that is not a calendar day, a window ending before it starts or longer than 92 days, or a place of a project this account does not work in."),
           ...commonProblems("view"),
           409: describeProblem("The place has no location, or lies in no planning area with a bulky schedule over the window."),
         },
@@ -242,10 +247,13 @@ export function bulkyBookingRoutes(guard: MiddlewareHandler<AuthEnv>, { now = ()
       requireGrant(MODULE, "view"),
       validate("query", BulkyAvailabilityQuery),
       async (c) => {
-        const { propertyId, sharedCollectionPointId, from, to } = c.req.valid("query")
+        const { projectId: named, propertyId, sharedCollectionPointId, from, to } = c.req.valid("query")
         const tx = c.get("tx")
         const principal = c.get("principal")
+        if (named !== undefined) requireProject(principal, named, "projectId", "query")
         const projectId = await placeProject(tx, principal, { propertyId, sharedCollectionPointId })
+        if (named !== undefined && named !== projectId)
+          throw invalidRequest("query", [{ path: propertyId !== undefined ? "propertyId" : "sharedCollectionPointId", message: NOT_THE_PROJECTS_PLACE }])
         const scope: Scope = { companyId: principal.companyId, projectId }
         const today = await projectToday(tx, scope, now)()
         const days = await bulkyDaysAt(tx, scope, { propertyId: propertyId ?? null, sharedCollectionPointId: sharedCollectionPointId ?? null }, { from, to }, today)
@@ -257,13 +265,13 @@ export function bulkyBookingRoutes(guard: MiddlewareHandler<AuthEnv>, { now = ()
       describeRoute({
         operationId: "createBulkyBooking",
         summary: "Book a bulky collection",
-        description: `Books a bulky collection for a customer: at one of the two places — a property or a shared collection point of the agreement's project — on a day, of a waste fraction, with its items (at least one, each a description and a count), charged to an agreement of a project the caller works in (400 at \`agreementId\` otherwise). The customer is the company's (400) and the agreement's (400 at \`customerId\`), the place the project's (400 at its field) and the fraction the company's (400). Then the rows: the place served — an active property, an open or restricted point (409); the agreement signed, in force on the day, and serving the place that day through a subscription there (409 each); then the day: ${DAY_REFUSALS} (409). The booking takes one slot of its day under its schedule's row lock, so two bookings of the last slot take turns and the second is refused. It freezes the area, the schedule and the schedule's product — what its completion is charged at — and stands \`booked\` until the office routes it as a stop (\`POST /routes/{id}/pickups\` with \`service: bulky\`). The same statement answers the citizen portal's door (#383).`,
+        description: `Books a bulky collection for a customer: at one of the two places — a property or a shared collection point of the agreement's project — on a day, of a waste fraction, with its items (at least one, each a description and a count), charged to an agreement of a project the caller works in (400 at \`agreementId\` otherwise). The customer is the company's (400) and the agreement's (400 at \`customerId\`), the place the project's (400 at its field) and the fraction the company's (400). Then the rows: the customer active (409), the place served — an active property, an open or restricted point (409); the agreement signed, in force on the day, and serving the place that day through a subscription there (409 each); then the day: ${DAY_REFUSALS} (409). The booking takes one slot of its day under its schedule's row lock, so two bookings of the last slot take turns and the second is refused. It freezes the area, the schedule and the schedule's product — what its completion is charged at — and stands \`booked\` until the office routes it as a stop (\`POST /routes/{id}/pickups\` with \`service: bulky\`). The same statement answers the citizen portal's door (#383).`,
         security: BEARER_SECURITY,
         responses: {
           201: describeCreated("The booking, booked, with its items.", BulkyBooking),
           400: describeProblem("The body is missing a field, names a member the server owns, no place or two, no item or too many, an agreement of a project this account does not work in or of another customer, or a customer, place or fraction that is not the company's or the project's."),
           ...commonProblems("create"),
-          409: describeProblem(`The place is not served; the agreement is not signed, not in force on the day, or serves nothing at the place; ${DAY_REFUSALS}.`),
+          409: describeProblem(`The customer is inactive; the place is not served; the agreement is not signed, not in force on the day, or serves nothing at the place; ${DAY_REFUSALS}.`),
         },
       }),
       guard,
@@ -280,13 +288,14 @@ export function bulkyBookingRoutes(guard: MiddlewareHandler<AuthEnv>, { now = ()
           .limit(1)
         if (found === undefined) throw invalidRequest("body", [{ path: "agreementId", message: NOT_AN_AGREEMENT }])
         const scope: Scope = { companyId: principal.companyId, projectId: found.projectId }
-        await requireCustomer(tx, principal.companyId, body.customerId)
+        const customerStatus = await requireCustomer(tx, principal.companyId, body.customerId)
         const propertyStatus = await requireProperty(tx, scope, body.propertyId)
         const pointStatus = await requireSharedCollectionPoint(tx, scope, body.sharedCollectionPointId)
         await requireWasteFraction(tx, principal.companyId, body.wasteFractionId)
         const place = { propertyId: body.propertyId ?? null, sharedCollectionPointId: body.sharedCollectionPointId ?? null }
         // The agreement's customer is the body's own field, a 400 asked before any 409.
         await requireChargeableAgreement(tx, scope, { customerId: body.customerId, agreementId: body.agreementId, place, day: body.day }, { customerOnly: true })
+        if (customerStatus !== undefined && customerStatus !== "active") throw problem(409, { detail: INACTIVE_CUSTOMER })
         refuseUnservedPlace(placeOf(propertyStatus, pointStatus), "booking")
         const today = await projectToday(tx, scope, now)()
         const id = await bookBulky(tx, scope, newId(), { ...body, place, note: body.note ?? null, bookedBy: principal.user.id }, today)

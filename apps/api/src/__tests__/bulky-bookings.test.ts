@@ -19,6 +19,7 @@ import { dayFull, NO_BULKY_SCHEDULE, NO_LOCATION, notABulkyDay, notAfterToday, n
 
 import { createApp } from "../app"
 import { bookingsOutside, unofferedBulkyProduct } from "../routes/bulky-schedules"
+import { INACTIVE_CUSTOMER } from "../routes/bulky-bookings"
 import { BOOKING_CANCELLED, NOT_A_BULKY_BOOKING } from "../routes/pickups"
 import { bulkyKeepsTheDay } from "../routes/routes"
 import { A_JOB_IS_SOLD_BY_THE_JOB } from "../routes/work-order-charges"
@@ -248,5 +249,39 @@ describe("bulky-waste booking (O11 of #290)", { skip: database.skip || owner.ski
     })
     assert.equal((await post(olivia, `/bulky-bookings/${made.id}/cancel`, { reason: "Customer took it to the recycling centre" })).status, 200)
     assert.equal((await refused(await post(olivia, `/pickups/${stop.id}/correct-outcome`, { outcome: "completed", note: "The driver collected it after all" }), 409)).detail, BOOKING_CANCELLED)
+  })
+
+  test("the availability names its project where asked, and a booking is refused a customer who is not active", async () => {
+    const answer = await days(`projectId=${a.projects.copenhagen.id}&propertyId=${ids.home}&from=${NEXT_TUESDAY}&to=${NEXT_TUESDAY}`)
+    assert.deepEqual(answer.days.map((day) => day.day), [NEXT_TUESDAY])
+    assert.deepEqual((await refused(await olivia(`/bulky-bookings/availability?projectId=${a.projects.harbor.id}&propertyId=${ids.home}&from=${NEXT_TUESDAY}&to=${NEXT_TUESDAY}`), 400)).errors?.map((error) => error.path), ["propertyId"])
+    assert.deepEqual((await refused(await olivia(`/bulky-bookings/availability?projectId=${testId()}&propertyId=${ids.home}&from=${NEXT_TUESDAY}&to=${NEXT_TUESDAY}`), 400)).errors?.map((error) => error.path), ["projectId"])
+    await withCompany(pool.db, a.companyId, async (tx: Tx) => {
+      await tx.update(customer).set({ status: "inactive" }).where(eq(customer.id, ids.stranger))
+    })
+    assert.equal((await refused(await post(olivia, "/bulky-bookings", booking({ customerId: ids.stranger, agreementId: ids.strangers })), 409)).detail, INACTIVE_CUSTOMER)
+  })
+
+  test("where two scheduled areas hold the place, a day is the lower area code's schedule's while it is in force, and the other's days are not offered", async () => {
+    const first = testId()
+    await withCompany(pool.db, a.companyId, async (tx: Tx) => {
+      await tx.insert(planningArea).values({ id: first, companyId: a.companyId, projectId: a.projects.copenhagen.id, code: "BLK-AAA", name: "Inner bulky", purpose: "service-operations" })
+    })
+    assert.equal((await olivia(`/planning-areas/${first}/boundaries`, { method: "POST", body: { boundary: CENTRUM, validFrom: "2026-01-01" } })).status, 201)
+    const wednesdays = await created(
+      olivia,
+      "/bulky-schedules",
+      await post(olivia, "/bulky-schedules", { projectId: a.projects.copenhagen.id, planningAreaId: first, frequency: "weekly", serviceDays: ["wednesday"], slotsPerDay: 3, productId: ids.bulky, validFrom: "2027-03-20" }),
+      BulkySchedule,
+    )
+    const answer = await days(`propertyId=${ids.home}&from=2027-03-15&to=2027-03-31`)
+    assert.deepEqual(
+      answer.days.map((day) => [day.day, day.scheduleId]),
+      [
+        [THIRD_TUESDAY, schedule.id],
+        ["2027-03-24", wednesdays.id],
+        ["2027-03-31", wednesdays.id],
+      ],
+    )
   })
 })

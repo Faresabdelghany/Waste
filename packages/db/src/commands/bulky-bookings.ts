@@ -8,7 +8,8 @@
 // A place's days are the days of the Bulky Schedule of the planning area it
 // lies in (`@waste/domain/execution/bulky`): its location inside the area's
 // boundary in force on the day, under a schedule in force that day. Areas may
-// overlap, so a day two schedules serve is the lowest area code's. A day's
+// overlap, so a day is governed by the lowest area code's schedule in force
+// that day, and offered only where that schedule collects. A day's
 // slots are counted over the bookings not cancelled that hold one of its
 // schedule's slots that day, whatever their stop did; a booking takes its
 // slot under the schedule's row lock, so two bookings of the last slot take
@@ -19,9 +20,10 @@
 // not; what is judged here is what the rows say: the agreement signed, the
 // customer's and in force on the day, the place one it serves that day, then
 // the day itself. Each refusal is a 409 `Refused` in the domain's sentence.
-import { bulkyDays, NO_BULKY_SCHEDULE, NO_LOCATION, refuseBulkyDay, type BulkySchedule } from "@waste/domain/execution/bulky"
+import { bulkyDays, dayFull, NO_BULKY_SCHEDULE, NO_LOCATION, refuseBulkyDay, type BulkySchedule } from "@waste/domain/execution/bulky"
 import type { RecurrenceFrequency } from "@waste/domain/planning/vocabulary"
-import { SHIFT_SEARCH_DAYS, type HolidayList, type HolidayPolicy } from "@waste/domain/route-schemes/occurrences"
+import { holidayListOf } from "@waste/domain/planning/generation"
+import { SHIFT_SEARCH_DAYS, type HolidayPolicy, type SchemeCalendar } from "@waste/domain/route-schemes/occurrences"
 import { addDays, type ServiceDay, type WeekRotation } from "@waste/domain/route-schemes/recurrence"
 import { and, asc, count, eq, gte, inArray, isNull, lte, or, sql, type SQL } from "drizzle-orm"
 
@@ -71,36 +73,48 @@ async function locationOf(tx: Tx, scope: Scope, place: BulkyPlace): Promise<SQL 
     : sql`(select ${sharedCollectionPoint.location} from ${sharedCollectionPoint} where ${sharedCollectionPoint.companyId} = ${scope.companyId} and ${sharedCollectionPoint.id} = ${place.sharedCollectionPointId})`
 }
 
-/** The project's calendar near the window: its weekend, and its holidays as far either side as the walk of `bulkyDays` and a shift from its edge may reach. */
-async function calendarNear(tx: Tx, scope: Scope, window: { from: string; to: string }): Promise<{ weekend: ServiceDay[]; holidays: HolidayList }> {
+/** The project's calendar near the window: its weekend, and its holidays, named as generation names them, as far either side as the walk of `bulkyDays` and a shift from its edge may reach. */
+async function calendarNear(tx: Tx, scope: Scope, window: { from: string; to: string }): Promise<SchemeCalendar> {
   const [row] = await tx
     .select({ weekend: project.weekend, holidayList: project.holidayList })
     .from(project)
     .where(and(eq(project.companyId, scope.companyId), eq(project.id, scope.projectId)))
     .limit(1)
   if (row === undefined) throw new Error(`calendarNear: no project ${scope.projectId}`)
-  if (row.holidayList === null) return { weekend: row.weekend as ServiceDay[], holidays: new Map() }
-  const holidays = await tx
-    .select({ day: collectionCalendarHoliday.day, name: collectionCalendarHoliday.name })
-    .from(collectionCalendarHoliday)
-    .where(
-      and(
-        eq(collectionCalendarHoliday.companyId, scope.companyId),
-        eq(collectionCalendarHoliday.projectId, scope.projectId),
-        gte(collectionCalendarHoliday.day, addDays(window.from, -2 * SHIFT_SEARCH_DAYS)),
-        lte(collectionCalendarHoliday.day, addDays(window.to, 2 * SHIFT_SEARCH_DAYS)),
-      ),
-    )
-  return { weekend: row.weekend as ServiceDay[], holidays: new Map(holidays.map((holiday) => [holiday.day, holiday.name ?? "Holiday"])) }
+  const holidays =
+    row.holidayList === null
+      ? []
+      : await tx
+          .select({ day: collectionCalendarHoliday.day, name: collectionCalendarHoliday.name })
+          .from(collectionCalendarHoliday)
+          .where(
+            and(
+              eq(collectionCalendarHoliday.companyId, scope.companyId),
+              eq(collectionCalendarHoliday.projectId, scope.projectId),
+              gte(collectionCalendarHoliday.day, addDays(window.from, -2 * SHIFT_SEARCH_DAYS)),
+              lte(collectionCalendarHoliday.day, addDays(window.to, 2 * SHIFT_SEARCH_DAYS)),
+            ),
+          )
+  return { weekend: row.weekend as ServiceDay[], holidays: holidayListOf(holidays, row.holidayList) }
 }
+
+/** A day of the place with what a booking of it freezes: its schedule's product too. */
+type PlaceDay = BulkyPlaceDay & { productId: string }
 
 /**
  * The days a place may be booked on inside the window, both ends included,
- * after the project's today, in date order: each day of the schedule of the
- * area the place lies in that day, with its slots. A place with no location,
- * or in no scheduled area over the whole window, is refused (409).
+ * after the project's today, in date order: each day of the schedule
+ * governing the place that day, with its slots. A day is governed by the
+ * schedule in force that day of the lowest area code among the areas holding
+ * the place that day, and is offered only where that schedule collects. A
+ * place with no location, or in no scheduled area over the whole window, is
+ * refused (409).
  */
 export async function bulkyDaysAt(tx: Tx, scope: Scope, place: BulkyPlace, window: { from: string; to: string }, today: string): Promise<BulkyPlaceDay[]> {
+  return (await placeDays(tx, scope, place, window, today)).map(({ productId: _product, ...day }) => day)
+}
+
+async function placeDays(tx: Tx, scope: Scope, place: BulkyPlace, window: { from: string; to: string }, today: string): Promise<PlaceDay[]> {
   const location = await locationOf(tx, scope, place)
   if (location === null) throw refused(409, NO_LOCATION)
   // The schedules in force over the window, each with the periods its area's boundary held the place.
@@ -116,6 +130,7 @@ export async function bulkyDaysAt(tx: Tx, scope: Scope, place: BulkyPlace, windo
         validFrom: bulkySchedule.validFrom,
         validTo: bulkySchedule.validTo,
         slotsPerDay: bulkySchedule.slotsPerDay,
+        productId: bulkySchedule.productId,
       },
       code: planningArea.code,
       boundaryFrom: planningAreaBoundary.validFrom,
@@ -138,7 +153,19 @@ export async function bulkyDaysAt(tx: Tx, scope: Scope, place: BulkyPlace, windo
     .orderBy(asc(planningArea.code), asc(bulkySchedule.id))
   if (reaching.length === 0) throw refused(409, NO_BULKY_SCHEDULE)
 
+  // In area-code order: the first schedule in force holding the place on a day governs it.
   const scheduleIds = [...new Set(reaching.map((row) => row.schedule.id))]
+  const governs = (id: string, day: string): boolean =>
+    reaching.some(
+      (row) =>
+        row.schedule.id === id &&
+        row.schedule.validFrom <= day &&
+        (row.schedule.validTo === null || row.schedule.validTo > day) &&
+        row.boundaryFrom <= day &&
+        (row.boundaryTo === null || row.boundaryTo > day),
+    )
+  const governing = (day: string): string | undefined => scheduleIds.find((id) => governs(id, day))
+
   const counted = await tx
     .select({ scheduleId: bulkyBooking.scheduleId, day: bulkyBooking.day, booked: count() })
     .from(bulkyBooking)
@@ -146,11 +173,9 @@ export async function bulkyDaysAt(tx: Tx, scope: Scope, place: BulkyPlace, windo
     .groupBy(bulkyBooking.scheduleId, bulkyBooking.day)
   const calendar = await calendarNear(tx, scope, window)
 
-  // The rows come in area-code order, so the first schedule to claim a day is the one it is booked under.
-  const days = new Map<string, BulkyPlaceDay>()
+  const days: PlaceDay[] = []
   for (const id of scheduleIds) {
-    const rows = reaching.filter((row) => row.schedule.id === id)
-    const { schedule } = rows[0]
+    const { schedule } = reaching.find((row) => row.schedule.id === id)!
     const booked = new Map(counted.filter((row) => row.scheduleId === id).map((row) => [row.day, row.booked]))
     const recurring: BulkySchedule = {
       frequency: schedule.frequency as RecurrenceFrequency,
@@ -162,12 +187,10 @@ export async function bulkyDaysAt(tx: Tx, scope: Scope, place: BulkyPlace, windo
       slotsPerDay: schedule.slotsPerDay,
     }
     for (const day of bulkyDays(recurring, calendar, window, booked)) {
-      if (day.day <= today || days.has(day.day)) continue
-      const contained = rows.some((row) => row.boundaryFrom <= day.day && (row.boundaryTo === null || row.boundaryTo > day.day))
-      if (contained) days.set(day.day, { ...day, planningAreaId: schedule.planningAreaId, scheduleId: id })
+      if (day.day > today && governing(day.day) === id) days.push({ ...day, planningAreaId: schedule.planningAreaId, scheduleId: id, productId: schedule.productId })
     }
   }
-  return [...days.values()].sort((a, b) => a.day.localeCompare(b.day))
+  return days.sort((a, b) => a.day.localeCompare(b.day))
 }
 
 /** What a booking is made of, the caller having proved each id the project's. */
@@ -222,24 +245,18 @@ export async function requireChargeableAgreement(tx: Tx, scope: Scope, input: Pi
  * sentence otherwise). Answers the day with its schedule, area and product.
  */
 export async function takeBulkySlot(tx: Tx, scope: Scope, place: BulkyPlace, day: string, today: string): Promise<{ scheduleId: string; planningAreaId: string; productId: string }> {
-  const window = { from: day, to: day }
-  const before = await bulkyDaysAt(tx, scope, place, window, today)
-  const found = before.find((candidate) => candidate.day === day)
-  if (found === undefined) {
-    const refusal = refuseBulkyDay(before, day, today)
-    throw refused(409, refusal ?? NO_BULKY_SCHEDULE)
-  }
+  const days = await placeDays(tx, scope, place, { from: day, to: day }, today)
+  const before = refuseBulkyDay(days, day, today)
+  if (before !== undefined) throw refused(409, before)
+  const found = days.find((candidate) => candidate.day === day)!
   await lockRow(tx, bulkySchedule, { companyId: scope.companyId, id: found.scheduleId })
-  // Read again under the lock: a booking that took the last slot meanwhile is counted now.
-  const after = await bulkyDaysAt(tx, scope, place, window, today)
-  const refusal = refuseBulkyDay(after, day, today)
-  if (refusal !== undefined) throw refused(409, refusal)
-  const [schedule] = await tx
-    .select({ productId: bulkySchedule.productId })
-    .from(bulkySchedule)
-    .where(and(eq(bulkySchedule.companyId, scope.companyId), eq(bulkySchedule.id, found.scheduleId)))
-    .limit(1)
-  return { scheduleId: found.scheduleId, planningAreaId: found.planningAreaId, productId: schedule.productId }
+  // Counted again under the lock: a booking that took the last slot meanwhile is counted now.
+  const [{ booked }] = await tx
+    .select({ booked: count() })
+    .from(bulkyBooking)
+    .where(and(eq(bulkyBooking.companyId, scope.companyId), eq(bulkyBooking.scheduleId, found.scheduleId), eq(bulkyBooking.day, day), isNull(bulkyBooking.cancelledAt)))
+  if (booked >= found.slots) throw refused(409, dayFull(day))
+  return { scheduleId: found.scheduleId, planningAreaId: found.planningAreaId, productId: found.productId }
 }
 
 /** The booking made: the agreement judged, the slot taken, the row and its items written. Answers its id. */

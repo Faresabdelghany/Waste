@@ -174,9 +174,10 @@ export type BulkyBookingListQuery = z.infer<typeof BulkyBookingListQuery>
 export const WINDOW_TOO_WIDE = `Ask for ${BULKY_WINDOW_DAYS_MAX} days at most`
 const spanDays = (from: string, to: string): number => Math.round((Date.parse(`${to}T00:00:00Z`) - Date.parse(`${from}T00:00:00Z`)) / 86_400_000) + 1
 
-/** `GET /bulky-bookings/availability`: the place, and the window of days, both ends included. */
+/** `GET /bulky-bookings/availability`: the place, optionally under the project it is of, and the window of days, both ends included. */
 export const BulkyAvailabilityQuery = z
   .strictObject({
+    projectId: Id.optional(),
     propertyId: Id.optional(),
     sharedCollectionPointId: Id.optional(),
     from: IsoDate,

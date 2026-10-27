@@ -454,7 +454,9 @@ async function generate(tx: Tx, runId: string, companyId: string, at: Date): Pro
     // A refresh: what differs is written, and only that. A held route (#209) keeps its day and its Planned Assignment, ends included, as the office left them.
     const current = existingRouteOf.get(decision.routeId)!
     const held = current.heldAt !== null
-    const operatingDate = held ? current.operatingDate : decision.operatingDate
+    // A planned bulky collection is booked for the route's day (O11 of #347): the route keeps it, held or not.
+    const carriesBooking = pickupsOf(decision.routeId).some((row) => row.service === "bulky" && row.status === "planned")
+    const operatingDate = held || carriesBooking ? current.operatingDate : decision.operatingDate
     // The crew on its day: an unheld route's the group's less whoever is away, a held one's the office's as it stands, each with the run's warning.
     const kept = held ? keptAssignmentOf(current) : assignment
     const crew = crewOnRoute(held ? { ...kept, plannedTrailerId: current.plannedTrailerId } : kept, operatingDate, routeLabel(current.number), held)
