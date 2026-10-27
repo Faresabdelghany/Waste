@@ -192,7 +192,7 @@ describe("parseStatusEnv", () => {
 describe("startWithOneRetry", () => {
   const scripted = (codes: number[]) => {
     const calls: string[] = []
-    const run: SupabaseRunner = async (args) => {
+    const run: SupabaseRunner = (args) => {
       calls.push(args.join(" "))
       return args[0] === "stop" ? 0 : (codes.shift() ?? 0)
     }
@@ -200,27 +200,27 @@ describe("startWithOneRetry", () => {
   }
   const quiet = () => {}
 
-  test("a start that succeeds runs once, and nothing else", async () => {
+  test("a start that succeeds runs once, and nothing else", () => {
     const { calls, run } = scripted([0])
-    assert.deepEqual(await startWithOneRetry(run, ["db", "start"], { ci: true, log: quiet }), { code: 0, attempts: 1 })
+    assert.equal(startWithOneRetry(run, ["db", "start"], { volumeExisted: false, log: quiet }), 0)
     assert.deepEqual(calls, ["db start"])
   })
 
-  test("a failed start on CI stops the stack without a backup, so its ports are free, and starts once more", async () => {
+  test("a failed start that created the volume drops it in the stop, so the retry sets the database up afresh", () => {
     const { calls, run } = scripted([1, 0])
-    assert.deepEqual(await startWithOneRetry(run, ["start", "-x", "studio"], { ci: true, log: quiet }), { code: 0, attempts: 2 })
+    assert.equal(startWithOneRetry(run, ["start", "-x", "studio"], { volumeExisted: false, log: quiet }), 0)
     assert.deepEqual(calls, ["start -x studio", "stop --no-backup", "start -x studio"])
   })
 
-  test("locally the stop between the two starts keeps the data volume", async () => {
+  test("a volume there before the first attempt is kept by the stop", () => {
     const { calls, run } = scripted([1, 0])
-    await startWithOneRetry(run, ["db", "start"], { ci: false, log: quiet })
+    startWithOneRetry(run, ["db", "start"], { volumeExisted: true, log: quiet })
     assert.deepEqual(calls, ["db start", "stop", "db start"])
   })
 
-  test("a second failure is the command's: its exit code, and no third start", async () => {
+  test("a second failure is the command's: its exit code, and no third start", () => {
     const { calls, run } = scripted([1, 3])
-    assert.deepEqual(await startWithOneRetry(run, ["db", "start"], { ci: true, log: quiet }), { code: 3, attempts: 2 })
+    assert.equal(startWithOneRetry(run, ["db", "start"], { volumeExisted: false, log: quiet }), 3)
     assert.equal(calls.filter((call) => call === "db start").length, 2)
   })
 })

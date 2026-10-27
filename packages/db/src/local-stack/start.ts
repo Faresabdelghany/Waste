@@ -6,26 +6,21 @@
 // followed by one stop, which removes this project's containers and frees
 // the ports, and one more start; a second failure is the command's.
 //
-// The stop keeps the data volume on a developer's machine, whatever was in
-// it before the failed start, and drops it on CI (`--no-backup`), where the
-// runner holds nothing a half-initialised volume could be worth keeping for.
+// The stop keeps the database volume when there was one before the first
+// attempt, so a developer's data survives a failed start. A volume the
+// failed attempt created itself is dropped (`--no-backup`): Postgres may
+// have initialised it before the CLI's own setup ran, and a retry that found
+// it would take it as set up. A CI runner never has one, so it always drops.
 
-/** Runs the Supabase CLI with these arguments and resolves to its exit code. */
-export type SupabaseRunner = (args: readonly string[]) => Promise<number>
+/** Runs the Supabase CLI with these arguments and returns its exit code. */
+export type SupabaseRunner = (args: readonly string[]) => number
 
-/** The stop run between the two starts: data kept locally, dropped on CI. */
-export function stopArguments(ci: boolean): string[] {
-  return ci ? ["stop", "--no-backup"] : ["stop"]
-}
-
-export type StartOutcome = { code: number; attempts: 1 | 2 }
-
-export async function startWithOneRetry(run: SupabaseRunner, startArguments: readonly string[], options: { ci: boolean; log?: (line: string) => void }): Promise<StartOutcome> {
-  const first = await run(startArguments)
-  if (first === 0) return { code: 0, attempts: 1 }
+export function startWithOneRetry(run: SupabaseRunner, startArguments: readonly string[], options: { volumeExisted: boolean; log?: (line: string) => void }): number {
+  const first = run(startArguments)
+  if (first === 0) return 0
   const log = options.log ?? console.error
-  const stop = stopArguments(options.ci)
+  const stop = options.volumeExisted ? ["stop"] : ["stop", "--no-backup"]
   log(`@waste/db: supabase ${startArguments.join(" ")} exited ${first}; running supabase ${stop.join(" ")} to free its ports, then one retry (#437)`)
-  await run(stop)
-  return { code: await run(startArguments), attempts: 2 }
+  run(stop)
+  return run(startArguments)
 }

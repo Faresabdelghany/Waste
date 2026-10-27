@@ -42,17 +42,19 @@ runs:
       shell: bash
       run: |
         mkdir -p "${{ steps.key.outputs.dir }}"
-        docker image ls --format '{{.Repository}}:{{.Tag}}' | grep -v '<none>' | sort -u > "${RUNNER_TEMP}/supabase-images-before.txt"
+        docker image ls --format '{{.Repository}}:{{.Tag}}' | { grep -v '<none>' || true; } | sort -u > "${RUNNER_TEMP}/supabase-images-before.txt"
     - name: Start
       shell: bash
-      run: ${{ inputs.command }}
+      env:
+        COMMAND: ${{ inputs.command }}
+      run: bash -c "$COMMAND"
     - name: Save the images the start pulled
       id: save
       if: steps.restore.outputs.cache-hit != 'true'
       shell: bash
       run: |
         set -euo pipefail
-        docker image ls --format '{{.Repository}}:{{.Tag}}' | grep -v '<none>' | sort -u > "${RUNNER_TEMP}/supabase-images-after.txt"
+        docker image ls --format '{{.Repository}}:{{.Tag}}' | { grep -v '<none>' || true; } | sort -u > "${RUNNER_TEMP}/supabase-images-after.txt"
         comm -13 "${RUNNER_TEMP}/supabase-images-before.txt" "${RUNNER_TEMP}/supabase-images-after.txt" > "${RUNNER_TEMP}/supabase-images-pulled.txt"
         echo "The start pulled:"
         cat "${RUNNER_TEMP}/supabase-images-pulled.txt"
