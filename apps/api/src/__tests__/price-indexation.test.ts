@@ -10,11 +10,16 @@ import { IndexResult } from "@waste/contracts/finance"
 import { Page } from "@waste/contracts/pagination"
 import { PriceList, PriceListRow, PriceResolution } from "@waste/contracts/price-lists"
 import { ServiceProviderPrice } from "@waste/contracts/service-provider-prices"
-import { createDb, type Database } from "@waste/db/client"
+import { createDb, type Database, type Tx } from "@waste/db/client"
+import { product } from "@waste/db/schema/catalogue"
+import { priceListRow } from "@waste/db/schema/finance"
+import { withCompany } from "@waste/db/tenant"
+import { eq } from "drizzle-orm"
 import { nothingToIndex } from "@waste/domain/finance/indexation"
 
 import { createApp } from "../app"
-import { INDEX_PRICE_BELOW_ZERO } from "../routes/indexation"
+import { INDEX_BELOW_ZERO, WRITE_BATCH } from "../routes/indexation"
+import { unofferedProduct } from "../routes/statuses"
 import { callingAs, type Call } from "./calls"
 import { created } from "./created"
 import { databaseUnderTest } from "./database"
@@ -130,7 +135,7 @@ describe("Apply index over many prices", { skip: database.skip }, () => {
 
     test("refuses a price below zero at basisPoints, a preview too, and a list or a caller it does not reach", async () => {
       const below = await refused(await send(olivia, `/price-lists/${list.id}/index`, { ...index, basisPoints: -20_000, dryRun: true }), 400)
-      assert.deepEqual(below.errors, [{ path: "basisPoints", message: INDEX_PRICE_BELOW_ZERO }])
+      assert.deepEqual(below.errors, [{ path: "basisPoints", message: INDEX_BELOW_ZERO }])
       await refused(await send(olivia, `/price-lists/${list.id}/index`, { ...index, base: "bid" }), 400)
       const theirs = await create(other, "/price-lists", { projectId: b.projects.copenhagen.id, code: "pl-theirs", name: "Theirs", validFrom: JANUARY }, PriceList)
       await refused(await send(olivia, `/price-lists/${theirs.id}/index`, index), 404)
@@ -160,7 +165,7 @@ describe("Apply index over many prices", { skip: database.skip }, () => {
       assert.ok(next !== undefined)
       assert.deepEqual(
         [next.unitPriceMinor, next.productId, next.customerKind, next.note, next.indexedFromId, next.indexLabel, next.indexBasisPoints, next.validFrom, next.validTo],
-        [10_372, products.residual.id, null, "Kerbside", running.id, "CPI 2027", 320, NEW_YEAR, null],
+        [10_372, products.residual.id, null, null, running.id, "CPI 2027", 320, NEW_YEAR, null],
       )
       const glass = all.get(indexed[1].indexedId ?? "")
       assert.deepEqual([glass?.unitPriceMinor, glass?.customerKind, glass?.validFrom, glass?.validTo], [344, "organisation", NEW_YEAR, LATER], "the successor keeps the conditions and the old end")
@@ -192,6 +197,29 @@ describe("Apply index over many prices", { skip: database.skip }, () => {
       const all = new Map((await rows()).map((row) => [row.id, row]))
       const tail = all.get(residual?.indexedId ?? "")
       assert.equal(all.get(tail?.indexedFromId ?? "")?.indexedFromId, running.id, "the chain runs back to the row typed in")
+    })
+  })
+
+  describe("a list larger than one statement takes", () => {
+    test("is indexed in batches: every row ended and its successor written, in one request", async () => {
+      // A successor binds about seventeen parameters and Postgres takes 65 535 a statement: 4 000 rows are past one statement's worth.
+      const count = 4_000
+      assert.ok(count > WRITE_BATCH && count * 17 > 65_535)
+      const list = await create(olivia, "/price-lists", { projectId: a.projects.copenhagen.id, code: "pl-idx-large", name: "Large", validFrom: JANUARY }, PriceList)
+      const projectId = a.projects.copenhagen.id
+      const productIds = Array.from({ length: count }, () => testId())
+      await withCompany(pool.db, a.companyId, async (tx: Tx) => {
+        for (let start = 0; start < count; start += 1_000) {
+          const ids = productIds.slice(start, start + 1_000)
+          await tx.insert(product).values(ids.map((id, offset) => ({ id, companyId: a.companyId, projectId, name: `Bulk ${start + offset}`, kind: "additional-service", status: "active", unit: "job", vatPercent: 25 })))
+          await tx.insert(priceListRow).values(ids.map((productId, offset) => ({ id: testId(), companyId: a.companyId, projectId, priceListId: list.id, productId, unitPriceMinor: 1_000 + start + offset, validFrom: JANUARY })))
+        }
+      })
+      const result = await answered(await send(olivia, `/price-lists/${list.id}/index`, { label: "CPI", basisPoints: 1_000, appliedFrom: NEW_YEAR }), 201)
+      assert.equal(result.lines.length, count)
+      assert.ok(result.lines.every((line) => line.skipped === null && line.indexedId !== null && line.toMinor === Math.round(line.fromMinor * 1.1)))
+      const written = await withCompany(pool.db, a.companyId, (tx: Tx) => tx.select({ validTo: priceListRow.validTo }).from(priceListRow).where(eq(priceListRow.priceListId, list.id)))
+      assert.deepEqual([written.length, written.filter((row) => row.validTo === NEW_YEAR).length], [2 * count, count])
     })
   })
 
@@ -251,6 +279,19 @@ describe("Apply index over many prices", { skip: database.skip }, () => {
       const award = await refused(await send(olivia, "/service-provider-prices/index", { ...body, serviceAreaAssignmentId: testId() }), 400)
       assert.deepEqual(award.errors?.map((error) => error.path), ["serviceAreaAssignmentId"])
       await refused(await send(ungranted, "/service-provider-prices/index", { ...body, serviceProviderId: b.serviceProviders.nordren.id }), 403)
+    })
+
+    test("a price whose product is no longer active: the bulk index leaves it, and the single index refuses it, since the next row is a new reference to the product", async () => {
+      const award = await seedServiceArea(pool, a, { code: "CA-IDX-3", validFrom: JANUARY, validTo: null, assignment: { serviceProviderId: a.serviceProviders.cityhaul.id } })
+      const offered = await create(olivia, "/products", { projectId: a.projects.copenhagen.id, name: "Offered, then not", kind: "additional-service", unit: "job", status: "active", vatPercent: 25 }, Product)
+      const price = await create(olivia, "/service-provider-prices", { serviceAreaAssignmentId: award.assignmentId, productId: offered.id, bidMinor: 2_000, validFrom: JANUARY }, ServiceProviderPrice)
+      const retiring = await olivia(`/products/${offered.id}`, { method: "PATCH", body: { status: "inactive" } })
+      assert.equal(retiring.status, 200)
+      const preview = await answered(await send(olivia, "/service-provider-prices/index", { serviceAreaAssignmentId: award.assignmentId, label: "CPI", basisPoints: 500, base: "bid", appliedFrom: JULY, dryRun: true }), 200)
+      assert.deepEqual(preview.lines.map((line) => line.skipped), ["product-not-active"])
+      const single = await refused(await send(olivia, `/service-provider-prices/${price.id}/index`, { label: "CPI", basisPoints: 500, base: "bid", appliedFrom: JULY }), 409)
+      assert.equal(single.detail, unofferedProduct("inactive"))
+      assert.equal((await prices(`serviceAreaAssignmentId=${award.assignmentId}`)).length, 1, "a refused index ends nothing")
     })
   })
 })
