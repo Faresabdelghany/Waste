@@ -71,12 +71,14 @@ import { product } from "@waste/db/schema/catalogue"
 import { container, containerServicePlacement } from "@waste/db/schema/containers"
 import { property, sharedCollectionPoint } from "@waste/db/schema/customers"
 import { uniqueConstraintOf } from "@waste/db/sqlstate"
+import { bulkyBooking } from "@waste/db/schema/bulky"
 import { pickup, proofOfService, route } from "@waste/db/schema/execution"
+import { bulkyBookingStatus, notTheBookingsDay, onlyABookedBooking } from "@waste/domain/execution/bulky"
 import { pickupCorrection, pickupTransition } from "@waste/domain/execution/transitions"
 import { SERVICE_NOUNS } from "@waste/domain/execution/services"
 import type { OfficeStopService, PickupService, PickupStatus } from "@waste/domain/execution/vocabulary"
 import { isLedgerService, reservedContainerOf, takenContainerOf, type LedgerService } from "@waste/domain/execution/work-orders"
-import { and, asc, desc, eq, gt, gte, lte, max } from "drizzle-orm"
+import { and, asc, desc, eq, gt, gte, inArray, lte, max } from "drizzle-orm"
 import { Hono, type MiddlewareHandler } from "hono"
 import { describeRoute } from "hono-openapi"
 
@@ -94,7 +96,7 @@ import { requireDeparture, type ContainerRef } from "./lifecycle"
 import { requireProperty, requireSharedCollectionPoint, requireWarehouse, requireWasteFraction, type Scope } from "./references"
 import { lockedRoute, ORDER_IS_FROZEN, requireNotStarted, requireRan } from "./routes"
 import type { ClockOptions } from "./scheme-groups"
-import { created, describeCreated, describeJson, IdParam, lockRow, stamp } from "./shared"
+import { created, describeCreated, describeJson, IdParam, lockRow, refuseDuplicate, stamp } from "./shared"
 import { bookTicket, requireBookableTicket, requireTicketForStop, ticketHearsOfStop } from "./ticket-stops"
 import { correctLedgerWork } from "./work-orders"
 import { requireTag } from "./pickup-exceptions"
@@ -167,6 +169,49 @@ async function stopOf(tx: Tx, scope: Scope, body: PickupAdd, serviceDate: string
   await requireWasteFraction(tx, scope.companyId, body.wasteFractionId)
   refuseUnservedPlace(placeOf(propertyStatus, pointStatus), "stop")
   return { label: null, at: { containerId: null, propertyId: body.propertyId ?? null, sharedCollectionPointId: body.sharedCollectionPointId ?? null, wasteFractionId: body.wasteFractionId } }
+}
+
+/** What a body naming a bulky booking of another project is told, at `bulkyBookingId`. */
+export const NOT_A_BULKY_BOOKING = "Not a bulky booking of this project"
+/** What a correction to completed of a bulky collection whose booking was routed again since is told. */
+export const BOOKED_AGAIN = "The bulky booking has another stop planned or done since; take that stop off before this one is corrected to completed"
+
+/**
+ * A bulky collection's stop (O11 of #290): the booking the body names, of
+ * the route's project (400 at `bulkyBookingId`), locked once found — the
+ * route's lock taken first — then booked (409 in the domain's sentence: a
+ * routed one names its stop) and for the day the route runs on (409). The
+ * stop is at the booking's place, of its fraction, with no container.
+ */
+async function bulkyStopOf(tx: Tx, scope: Scope, bookingId: string, parent: RouteRow): Promise<StopPlace & { containerId: null; bulkyBookingId: string }> {
+  const [found] = await tx
+    .select({ id: bulkyBooking.id })
+    .from(bulkyBooking)
+    .where(and(eq(bulkyBooking.companyId, scope.companyId), eq(bulkyBooking.projectId, scope.projectId), eq(bulkyBooking.id, bookingId)))
+    .limit(1)
+  if (found === undefined) throw invalidRequest("body", [{ path: "bulkyBookingId", message: NOT_A_BULKY_BOOKING }])
+  await lockRow(tx, bulkyBooking, { companyId: scope.companyId, id: bookingId })
+  const [row] = await tx
+    .select({
+      day: bulkyBooking.day,
+      propertyId: bulkyBooking.propertyId,
+      sharedCollectionPointId: bulkyBooking.sharedCollectionPointId,
+      wasteFractionId: bulkyBooking.wasteFractionId,
+      cancelledAt: bulkyBooking.cancelledAt,
+      stopStatus: pickup.status,
+      stopPosition: pickup.position,
+      stopRoute: route.number,
+    })
+    .from(bulkyBooking)
+    .leftJoin(pickup, and(eq(pickup.companyId, bulkyBooking.companyId), eq(pickup.bulkyBookingId, bulkyBooking.id), inArray(pickup.status, ["planned", "completed"])))
+    .leftJoin(route, and(eq(route.companyId, pickup.companyId), eq(route.id, pickup.routeId)))
+    .where(and(eq(bulkyBooking.companyId, scope.companyId), eq(bulkyBooking.id, bookingId)))
+    .limit(1)
+  const status = bulkyBookingStatus({ cancelledAt: row.cancelledAt, stopStatus: row.stopStatus as PickupStatus | null })
+  if (status === "routed" && row.stopRoute !== null) throw problem(409, { detail: `${onlyABookedBooking(status, "route")} (route ${routeLabel(row.stopRoute)}, stop ${row.stopPosition})` })
+  if (status !== "booked") throw problem(409, { detail: onlyABookedBooking(status, "route") })
+  if (row.day !== parent.operatingDate) throw problem(409, { detail: notTheBookingsDay(row.day, parent.operatingDate) })
+  return { containerId: null, propertyId: row.propertyId, sharedCollectionPointId: row.sharedCollectionPointId, wasteFractionId: row.wasteFractionId, bulkyBookingId: bookingId }
 }
 
 /** A ledger work order's bookings (O3b of #290), null where its service books none. */
@@ -496,7 +541,14 @@ export function pickupRoutes(guard: MiddlewareHandler<AuthEnv>, { now = () => ne
         const scope: Scope = { companyId: principal.companyId, projectId: parent.projectId }
         // The ticket the stop is booked to answer (O3c of #290): the body's own field, judged before the stop's place is read.
         const asked = body.ticketId == null ? undefined : await requireTicketForStop(tx, principal, scope, body.ticketId, { service: body.service, containerId: body.containerId ?? null })
-        const stop = isLedgerService(body.service) ? await ledgerStopOf(tx, principal, scope, body, parent.serviceDate) : { ...(await stopOf(tx, scope, body, parent.serviceDate)), replacementLabel: null, booking: NO_BOOKING }
+        // A bulky collection (O11 of #290) is its booking's: the place and the fraction are the booking's.
+        const bulky = body.service === "bulky" && body.bulkyBookingId != null ? await bulkyStopOf(tx, scope, body.bulkyBookingId, parent) : undefined
+        const stop =
+          bulky !== undefined
+            ? { label: null, at: { containerId: null, propertyId: bulky.propertyId, sharedCollectionPointId: bulky.sharedCollectionPointId, wasteFractionId: bulky.wasteFractionId }, replacementLabel: null, booking: NO_BOOKING }
+            : isLedgerService(body.service)
+              ? await ledgerStopOf(tx, principal, scope, body, parent.serviceDate)
+              : { ...(await stopOf(tx, scope, body, parent.serviceDate)), replacementLabel: null, booking: NO_BOOKING }
         const [last] = await tx
           .select({ position: max(pickup.position) })
           .from(pickup)
@@ -523,7 +575,7 @@ export function pickupRoutes(guard: MiddlewareHandler<AuthEnv>, { now = () => ne
         const row = await insertHolding(
           tx,
           principal,
-          { id: newId(), ...scope, routeId: parent.id, position: (last?.position ?? 0) + 1, origin: "office", service: body.service, note: body.note ?? null, ...stop.at, ...stop.booking },
+          { id: newId(), ...scope, routeId: parent.id, position: (last?.position ?? 0) + 1, origin: "office", service: body.service, note: body.note ?? null, ...stop.at, ...stop.booking, bulkyBookingId: bulky?.bulkyBookingId ?? null },
           held,
         )
         if (answering !== undefined) await bookTicket(tx, principal, answering, { pickupId: row.id, routeId: parent.id, position: row.position, routeLabel: labelOf(parent), service: body.service })
@@ -609,11 +661,14 @@ export function pickupRoutes(guard: MiddlewareHandler<AuthEnv>, { now = () => ne
         await requireTag(tx, principal.companyId, current, contaminantCodeId)
         const tagged = contaminantCodeId !== undefined ? contaminantCodeId : outcome === "completed" || reason === "contamination" ? current.contaminantCodeId : null
         const at = now()
-        const [row] = await tx
-          .update(pickup)
-          .set({ status: transition.to, reason: reason ?? null, outcomeAt: at, contaminantCodeId: tagged })
-          .where(and(pickupScope(principal), eq(pickup.id, id)))
-          .returning(pickupColumns)
+        // A bulky booking has one live stop (O11 of #290): a missed one corrected to completed meets the stop it was routed again on.
+        const [row] = await refuseDuplicate({ pickup_bulky_booking_id_key: BOOKED_AGAIN }, () =>
+          tx
+            .update(pickup)
+            .set({ status: transition.to, reason: reason ?? null, outcomeAt: at, contaminantCodeId: tagged })
+            .where(and(pickupScope(principal), eq(pickup.id, id)))
+            .returning(pickupColumns),
+        )
         if (row === undefined) throw noSuchPickup(id)
         await tx.insert(proofOfService).values({
           id: newId(),

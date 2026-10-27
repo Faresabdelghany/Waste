@@ -17,7 +17,7 @@ describe("the ledger's work orders", () => {
   })
 
   test("a delivery books its subscription, a removal its warehouse, a swap the replacement and the warehouse; nothing else books either", () => {
-    assert.deepEqual(BOOKED_WITH, { empty: [], deliver: ["subscriptionId"], remove: ["warehouseId"], swap: ["replacementContainerId", "warehouseId"], repair: [], wash: [] })
+    assert.deepEqual(BOOKED_WITH, { empty: [], deliver: ["subscriptionId"], remove: ["warehouseId"], swap: ["replacementContainerId", "warehouseId"], repair: [], wash: [], bulky: [] })
   })
 
   test("a completed delivery issues, a removal returns, a swap returns the container taken and issues its replacement, in that order", () => {

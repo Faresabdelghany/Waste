@@ -41,6 +41,6 @@ describe("an extra emptying", () => {
 
 describe("a service in a sentence", () => {
   test("is its noun: an emptying, a delivery, a removal, a swap, a repair, a wash", () => {
-    assert.deepEqual(SERVICE_NOUNS, { empty: "emptying", deliver: "delivery", remove: "removal", swap: "swap", repair: "repair", wash: "wash" })
+    assert.deepEqual(SERVICE_NOUNS, { empty: "emptying", deliver: "delivery", remove: "removal", swap: "swap", repair: "repair", wash: "wash", bulky: "bulky collection" })
   })
 })
