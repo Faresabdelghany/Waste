@@ -85,7 +85,7 @@ const ready: BillableEvent = {
   currency: "DKK",
   priceListRowId: "01a0d2a4-a280-7029-8000-000000000003",
   blockReason: null,
-  links: { routeId: ROUTE, pickupId: PICKUP, ticketId: null, reversesEventId: null, proofId: null },
+  links: { routeId: ROUTE, pickupId: PICKUP, ticketId: null, reversesEventId: null, proofId: null, visitId: null },
   charge: null,
   sourceEventId: "01a0d2a4-a280-7060-8000-000000000001",
   createdBy: null,
@@ -97,8 +97,8 @@ const ready: BillableEvent = {
   hold: null,
   invoiceLineId: null,
 }
-const blocked: BillableEvent = { ...ready, id: "01a0d2a4-a280-7050-8000-000000000002", kind: "ticket", status: "blocked", productId: null, unitPriceMinor: null, netMinor: null, vatPercent: null, vatMinor: null, currency: null, priceListRowId: null, blockReason: "no-product", links: { routeId: ROUTE, pickupId: null, ticketId: TICKET, reversesEventId: null, proofId: null } }
-const manual: BillableEvent = { ...ready, id: "01a0d2a4-a280-7050-8000-000000000003", kind: "manual", productId: bulky.id, quantity: 2, unitPriceMinor: 30000, netMinor: 60000, vatMinor: 15000, priceListRowId: null, links: { routeId: null, pickupId: null, ticketId: null, reversesEventId: null, proofId: null }, sourceEventId: null, createdBy: ADMIN, overrideReason: "Agreed on the phone", note: "Two sofas" }
+const blocked: BillableEvent = { ...ready, id: "01a0d2a4-a280-7050-8000-000000000002", kind: "ticket", status: "blocked", productId: null, unitPriceMinor: null, netMinor: null, vatPercent: null, vatMinor: null, currency: null, priceListRowId: null, blockReason: "no-product", links: { routeId: ROUTE, pickupId: null, ticketId: TICKET, reversesEventId: null, proofId: null, visitId: null } }
+const manual: BillableEvent = { ...ready, id: "01a0d2a4-a280-7050-8000-000000000003", kind: "manual", productId: bulky.id, quantity: 2, unitPriceMinor: 30000, netMinor: 60000, vatMinor: 15000, priceListRowId: null, links: { routeId: null, pickupId: null, ticketId: null, reversesEventId: null, proofId: null, visitId: null }, sourceEventId: null, createdBy: ADMIN, overrideReason: "Agreed on the phone", note: "Two sofas" }
 
 const NO_CONTEXT = (fixtures: readonly BusinessRecord[]): MappingContext => ({ fixtures, resolve: NOTHING_RESOLVED, companyRecordId: FIXTURE_COMPANY_ID, now: NOW })
 const copenhagenRecord = projectAdapter.toRecord(copenhagen, NO_CONTEXT(fixturesOf("configure", "organization")))
@@ -195,7 +195,7 @@ describe("the billable events module", () => {
   })
 
   test("shows a recurring charge by its charge period's first and last days and the days it charged, a run's and nobody's (#291 C2)", () => {
-    const charge: BillableEvent = { ...ready, id: "01a0d2a4-a280-7050-8000-000000000004", kind: "subscription", serviceDate: "2026-11-16", subscriptionId: "01a0d2a4-a280-7013-8000-000000000001", unitPriceMinor: 5500, netMinor: 5500, vatMinor: 1375, links: { routeId: null, pickupId: null, ticketId: null, reversesEventId: null, proofId: null }, charge: { periodFrom: "2026-11-01", periodTo: "2026-12-01", chargedDays: 15, periodDays: 30 }, sourceEventId: null }
+    const charge: BillableEvent = { ...ready, id: "01a0d2a4-a280-7050-8000-000000000004", kind: "subscription", serviceDate: "2026-11-16", subscriptionId: "01a0d2a4-a280-7013-8000-000000000001", unitPriceMinor: 5500, netMinor: 5500, vatMinor: 1375, links: { routeId: null, pickupId: null, ticketId: null, reversesEventId: null, proofId: null, visitId: null }, charge: { periodFrom: "2026-11-01", periodTo: "2026-12-01", chargedDays: 15, periodDays: 30 }, sourceEventId: null }
     const record = billableEventAdapter.toRecord(charge, context(eventFixtures))
     assert.equal(record.name, "Recurring charge · Residual waste · 240L bin")
     assert.equal(record.facts.Kind, "Recurring charge")

@@ -150,6 +150,8 @@ function originOf(event: BillableEvent, context: MappingContext): string {
       return "Completed work order"
     case "pickup-exception":
       return "Pickup exception charged by its project's rules"
+    case "visit":
+      return "Recycling-centre visit charged by its project's Visit Rule"
   }
 }
 
