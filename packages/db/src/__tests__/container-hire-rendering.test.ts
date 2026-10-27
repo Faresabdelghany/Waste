@@ -9,7 +9,9 @@
 // Postgres has no ALTER for a check; finance-rendering.test.ts spells them out
 // and registry-rendering.test.ts the product, so here they are read from the
 // schema, less what a later migration added: M5b's `pickup-exception` kind
-// (#293, 0046), its value and its clause of the kind's shape. Then the migration, which has to be exactly those statements and
+// (#293, 0046), its value and its clause of the kind's shape, and the
+// recycling-centre visit's `visit` kind and unit (#393, 0052), its clause of
+// the kind's shape and the product's value. Then the migration, which has to be exactly those statements and
 // below them the new table's fence, its `updated_at` trigger and its audit
 // trigger, a set of its project read under `commercial.products`. The file is
 // found by its name, not its number, which it takes at its turn. No database.
@@ -42,15 +44,22 @@ const EVENT_SHAPES = ["billable_event_kind_shape", "billable_event_origin_shape"
 /** The event's kinds as 0044 wrote them: today's through `hire`, before M5b's `pickup-exception` (#293). */
 const KINDS_AS_OF_0044 = BILLABLE_EVENT_KINDS.slice(0, BILLABLE_EVENT_KINDS.indexOf("hire") + 1)
 
+/** The product's units as 0044 wrote them: today's before the recycling-centre visit's (#393). */
+const UNITS_AS_OF_0044 = PRODUCT_UNITS.filter((unit) => unit !== "visit")
+
 /** The clause M5b added to the kind's shape (#293), which 0044's spelling lacks. */
 const EXCEPTION_CLAUSE = ` when 'pickup-exception' then ${ref("billable_event", "pickup_id")} is not null and ${ref("billable_event", "ticket_id")} is null and ${ref("billable_event", "reverses_event_id")} is null`
 
-/** The event's checks as 0044 spelled them: today's, the kind's shape less M5b's clause. */
+/** The clause 0052 added to the kind's shape (#393), which 0044's spelling lacks too. */
+const VISIT_CLAUSE = ` when 'visit' then ${ref("billable_event", "visit_id")} is not null and ${ref("billable_event", "pickup_id")} is null and ${ref("billable_event", "ticket_id")} is null and ${ref("billable_event", "reverses_event_id")} is null`
+
+/** The event's checks as 0044 spelled them: today's, the kind's shape less M5b's clause and 0052's. */
 const checksAsOf0044 = (): Map<string, string> => {
   const checks = new Map(checksOf(billableEvent))
   const kindShape = checks.get("billable_event_kind_shape") ?? ""
   assert.ok(kindShape.includes(EXCEPTION_CLAUSE), "today's kind shape carries M5b's clause")
-  checks.set("billable_event_kind_shape", kindShape.replace(EXCEPTION_CLAUSE, ""))
+  assert.ok(kindShape.includes(VISIT_CLAUSE), "today's kind shape carries the visit's clause")
+  checks.set("billable_event_kind_shape", kindShape.replace(EXCEPTION_CLAUSE, "").replace(VISIT_CLAUSE, ""))
   return checks
 }
 
@@ -75,7 +84,7 @@ const generated = (): string[] => [
   partialUniqueIndex("billable_event", "billable_event_hire_charge_idx", ["company_id", "placement_id", "charge_period_from"], `${ref("billable_event", "kind")} = 'hire'`),
   index("billable_event", "billable_event_placement_id_idx", "company_id", "placement_id"),
   alter("product", `ADD CONSTRAINT "product_free_days_shape" CHECK (${FREE_DAYS_SHAPE})`),
-  alter("product", `ADD ${oneOfCheck("product", "unit", ...PRODUCT_UNITS)}`),
+  alter("product", `ADD ${oneOfCheck("product", "unit", ...UNITS_AS_OF_0044)}`),
   alter("billable_event", `ADD ${oneOfCheck("billable_event", "kind", ...KINDS_AS_OF_0044)}`),
   ...EVENT_SHAPES.map((name) => respelt("billable_event", checksAsOf0044(), name)),
 ]
@@ -96,7 +105,7 @@ describe("container hire as drizzle-kit writes it", () => {
 
   test("the vocabularies the checks spell: the five work orders, the day, and the two kinds", () => {
     assert.deepEqual([...WORK_ORDER_SERVICES], ["deliver", "remove", "swap", "repair", "wash"])
-    assert.deepEqual([...PRODUCT_UNITS], ["pickup", "month", "job", "day"])
+    assert.deepEqual([...UNITS_AS_OF_0044], ["pickup", "month", "job", "day"])
     assert.deepEqual(KINDS_AS_OF_0044.slice(-2), ["job", "hire"])
     assert.equal(FREE_DAYS_MAX, 366)
   })

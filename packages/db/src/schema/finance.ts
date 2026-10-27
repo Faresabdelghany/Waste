@@ -112,6 +112,7 @@ import { company, project, serviceProvider } from "./organisation"
 import { planningArea } from "./planning-areas"
 import { companyReference, projectKey, projectReference, tenantIndex, tenantReference, tenantUnique, type ProjectTable } from "./references"
 import { ticket } from "./resolution"
+import { siteVisit } from "./site-visits"
 import { wms } from "./wms"
 
 const instant = () => timestamp({ withTimezone: true })
@@ -367,6 +368,8 @@ export const billableEvent = wms.table(
     reversesEventId: uuid(),
     /** On a `pickup-exception` (#293 M5): the proof that recorded the exception — the driver's failure, skip or completion, or the office's correction — the charge's evidence. A soft uuid, as `source_event_id` is: `proof_of_service` keys a row by its id alone, with no tenant key to reference, and both are ledger rows never deleted. */
     evidenceProofId: uuid(),
+    /** On a `visit` (#393): the Site Visit its Visit Rule charges. */
+    visitId: uuid(),
     /** On a `subscription` event, a recurring charge (#291 C2): the charge period, half-open, and how many of its days were charged of the days it has — what the unit price was prorated by. On a `hire` event (M14 of #293) the calendar month, its charged days (the quantity) and the month's days. */
     chargePeriodFrom: date(),
     chargePeriodTo: date(),
@@ -402,6 +405,7 @@ export const billableEvent = wms.table(
     // The pickup of the route the event names: the key carries the route on both sides, the proof's and the ticket's shape.
     projectReference(t, [t.routeId, t.pickupId], pickup, [pickup.routeId, pickup.id]),
     projectReference(t, [t.ticketId], ticket),
+    projectReference(t, [t.visitId], siteVisit),
     // The hire's placement, through its container: the placement's project key, the stock ledger's reference.
     projectReference(t, [t.containerId, t.placementId], containerServicePlacement, [containerServicePlacement.containerId, containerServicePlacement.id]),
     // The reversed event is one of the same project, through the table's own project key.
@@ -431,13 +435,15 @@ export const billableEvent = wms.table(
     check(tableObjectName(t.id.table, "override_shape", "billableEvent"), sql`(${t.kind} = 'manual' and ${t.priceListRowId} is null and ${t.blockReason} is null) = (${t.overrideReason} is not null)`),
     // A pickup names its route: Postgres leaves a composite key with a null member unchecked.
     check(tableObjectName(t.id.table, "pickup_shape", "billableEvent"), sql`${t.pickupId} is null or ${t.routeId} is not null`),
-    // What each kind names: a pickup its pickup, a ticket its ticket, a manual event neither and its person, a reversal the event it undoes and nothing of its own, with a net that is there and zero or less — a reversal is never blocked, and `null <= 0` is not false, so the null is refused by name — a recurring charge its subscription alone, a work order's job its stop (M14 of #293), a hire its subscription and its placement, and a Pickup Exception's charge its pickup (#293 M5).
+    // What each kind names: a pickup its pickup, a ticket its ticket, a manual event neither and its person, a reversal the event it undoes and nothing of its own, with a net that is there and zero or less — a reversal is never blocked, and `null <= 0` is not false, so the null is refused by name — a recurring charge its subscription alone, a work order's job its stop (M14 of #293), a hire its subscription and its placement, a Pickup Exception's charge its pickup (#293 M5), and a recycling-centre visit's its visit (#393).
     check(
       tableObjectName(t.id.table, "kind_shape", "billableEvent"),
-      sql`case ${t.kind} when 'pickup' then ${t.pickupId} is not null and ${t.ticketId} is null and ${t.reversesEventId} is null when 'ticket' then ${t.ticketId} is not null and ${t.pickupId} is null and ${t.reversesEventId} is null when 'manual' then ${t.pickupId} is null and ${t.ticketId} is null and ${t.reversesEventId} is null and ${t.createdBy} is not null when 'reversal' then ${t.reversesEventId} is not null and ${t.pickupId} is null and ${t.ticketId} is null and ${t.netMinor} is not null and ${t.netMinor} <= 0 when 'subscription' then ${t.subscriptionId} is not null and ${t.pickupId} is null and ${t.ticketId} is null and ${t.reversesEventId} is null when 'job' then ${t.pickupId} is not null and ${t.ticketId} is null and ${t.reversesEventId} is null when 'hire' then ${t.subscriptionId} is not null and ${t.placementId} is not null and ${t.pickupId} is null and ${t.ticketId} is null and ${t.reversesEventId} is null when 'pickup-exception' then ${t.pickupId} is not null and ${t.ticketId} is null and ${t.reversesEventId} is null else false end`,
+      sql`case ${t.kind} when 'pickup' then ${t.pickupId} is not null and ${t.ticketId} is null and ${t.reversesEventId} is null when 'ticket' then ${t.ticketId} is not null and ${t.pickupId} is null and ${t.reversesEventId} is null when 'manual' then ${t.pickupId} is null and ${t.ticketId} is null and ${t.reversesEventId} is null and ${t.createdBy} is not null when 'reversal' then ${t.reversesEventId} is not null and ${t.pickupId} is null and ${t.ticketId} is null and ${t.netMinor} is not null and ${t.netMinor} <= 0 when 'subscription' then ${t.subscriptionId} is not null and ${t.pickupId} is null and ${t.ticketId} is null and ${t.reversesEventId} is null when 'job' then ${t.pickupId} is not null and ${t.ticketId} is null and ${t.reversesEventId} is null when 'hire' then ${t.subscriptionId} is not null and ${t.placementId} is not null and ${t.pickupId} is null and ${t.ticketId} is null and ${t.reversesEventId} is null when 'pickup-exception' then ${t.pickupId} is not null and ${t.ticketId} is null and ${t.reversesEventId} is null when 'visit' then ${t.visitId} is not null and ${t.pickupId} is null and ${t.ticketId} is null and ${t.reversesEventId} is null else false end`,
     ),
     // Only a Pickup Exception's charge names its evidence (#293 M5).
     check(tableObjectName(t.id.table, "evidence_shape", "billableEvent"), sql`${t.evidenceProofId} is null or ${t.kind} = 'pickup-exception'`),
+    // Only a recycling-centre visit's charge names its visit (#393).
+    check(tableObjectName(t.id.table, "visit_shape", "billableEvent"), sql`${t.visitId} is null or ${t.kind} = 'visit'`),
     // An event is a person's or the consumer's, never both and never neither; a recurring charge and a hire are the billing run's, neither (#291 C2, M14 of #293).
     check(
       tableObjectName(t.id.table, "origin_shape", "billableEvent"),
@@ -466,6 +472,7 @@ export const billableEvent = wms.table(
     tenantIndex(t, t.routeId),
     tenantIndex(t, t.pickupId),
     tenantIndex(t, t.ticketId),
+    tenantIndex(t, t.visitId),
     tenantIndex(t, t.placementId),
     tenantIndex(t, t.priceListRowId),
     // An event is reversed once: a reversal's idempotency key, since one correction may reverse a pickup's two charges (#293 M5).

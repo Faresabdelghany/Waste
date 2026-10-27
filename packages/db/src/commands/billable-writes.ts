@@ -212,6 +212,7 @@ export type ComposedEvent = {
   ticketId: string | null
   reversesEventId: string | null
   evidenceProofId: string | null
+  visitId: string | null
   subscriptionId: string | null
   sourceEventId: string | null
   createdBy: string | null
@@ -241,6 +242,7 @@ export function billableEventShapeIssue(row: ComposedEvent): string | undefined 
   if ((row.kind === "manual" && row.priceListRowId === null && row.blockReason === null) !== (row.overrideReason !== null)) return "a manual event priced by hand carries the reason, and nothing else does (billable_event_override_shape)"
   if (row.pickupId !== null && row.routeId === null) return "a pickup is named with its route (billable_event_pickup_shape)"
   if (row.evidenceProofId !== null && row.kind !== "pickup-exception") return "only a Pickup Exception's charge names its evidence (billable_event_evidence_shape)"
+  if (row.visitId !== null && row.kind !== "visit") return "only a recycling-centre visit's charge names its visit (billable_event_visit_shape)"
   switch (row.kind) {
     case "pickup":
       if (row.pickupId === null || row.ticketId !== null || row.reversesEventId !== null) return "a pickup event names its pickup and no ticket and no reversal (billable_event_kind_shape)"
@@ -256,6 +258,9 @@ export function billableEventShapeIssue(row: ComposedEvent): string | undefined 
       break
     case "pickup-exception":
       if (row.pickupId === null || row.ticketId !== null || row.reversesEventId !== null) return "a Pickup Exception's charge names its pickup and no ticket and no reversal (billable_event_kind_shape)"
+      break
+    case "visit":
+      if (row.visitId === null || row.pickupId !== null || row.ticketId !== null || row.reversesEventId !== null) return "a recycling-centre visit's charge names its visit and no pickup, no ticket and no reversal (billable_event_kind_shape)"
       break
     case "subscription":
       if (row.subscriptionId === null || row.pickupId !== null || row.ticketId !== null || row.reversesEventId !== null) return "a recurring charge names its subscription and no pickup, no ticket and no reversal (billable_event_kind_shape)"

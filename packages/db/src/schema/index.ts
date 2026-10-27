@@ -58,3 +58,5 @@ export * from "./emissions"
 // A customer's Applications and the office's Decisions on them (M7 of #293).
 export * from "./applications"
 export * from "./sustainability"
+// Recycling-centre visits (M4 of #293): the register, the ledger and the Visit Rules.
+export * from "./site-visits"
