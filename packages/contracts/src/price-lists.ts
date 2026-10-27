@@ -30,6 +30,7 @@
 // VAT rate and the list's currency.
 import { CustomerKind } from "./customers"
 import { IsoDate } from "./dates"
+import { indexBody } from "./finance"
 import { Id } from "./ids"
 import { Currency } from "./organisation"
 import { PageRequest } from "./pagination"
@@ -109,10 +110,20 @@ export const PriceListRow = z
     unitPriceMinor: NonNegativeMinor,
     ...conditions,
     note: Paragraph.nullable(),
+    /** The row this one was indexed from (#291 C8); null on a row written by hand. */
+    indexedFromId: Id.nullable(),
+    /** What the indexation was: `CPI 2027`. */
+    indexLabel: Label.nullable(),
+    /** 320 for +3.2 %; a negative figure is a deflator. */
+    indexBasisPoints: z.int().nullable(),
     ...Validity.shape,
   })
   .refine(validityOrdered, endsAfterItStarts)
 export type PriceListRow = z.infer<typeof PriceListRow>
+
+/** `POST /price-lists/:id/index`: an Apply index over the list's rows from `appliedFrom`, each row in force ended on it and its successor written at the indexed price; `dryRun` previews it. */
+export const PriceListIndex = z.strictObject(indexBody)
+export type PriceListIndex = z.infer<typeof PriceListIndex>
 
 /** `POST /price-lists/:id/rows`: the list is the path's and the project the list's, so neither is here; every condition may be given as null, the two-field convention. */
 export const PriceListRowCreate = z

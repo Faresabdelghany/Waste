@@ -61,6 +61,13 @@
 // the event as drizzle-kit writes it today, the stage "0048", onto 0046's,
 // and the exclusion onto 0010's, first of all; hire-review-rendering.test.ts
 // pins 0048.
+//
+// The price indexation (#291 C8) gave a price row its chain: the row it was
+// indexed from with its key and index, the label, the basis points and their
+// shape. `CHANGED_BY_INDEXATION` maps the row's table as drizzle-kit writes
+// it today onto 0010's, the key and the index are left out of 0010
+// (`ADDED_BY_INDEXATION`), and price-indexation-rendering.test.ts pins the
+// migration.
 import assert from "node:assert/strict"
 import { readdir, readFile } from "node:fs/promises"
 import { join } from "node:path"
@@ -403,16 +410,8 @@ const invoiceTable = (asOf: "0010" | "0037" | "0041"): string =>
 /** What 0037 (#291 C4) and 0041 (#291 C5) changed on the sixteen: the invoice's CREATE TABLE as drizzle-kit generates it now onto what 0010 says. */
 const CHANGED_LATER_ON_INVOICE = new Map([[invoiceTable("0041"), invoiceTable("0010")]])
 
-const expected = [
-  createTable("price_list", "dated", [
-    '"code" text NOT NULL',
-    '"name" text NOT NULL',
-    '"currency" text NOT NULL',
-    '"is_default" boolean DEFAULT false NOT NULL',
-    '"notes" text',
-    uniqueKey("price_list_project_key", "company_id", "project_id", "id"),
-    validityCheck("price_list"),
-  ]),
+/** A price row's CREATE TABLE as 0010 created it, and as the indexation (#291 C8) grew it with its chain. */
+const priceListRowTable = (asOf: "0010" | "indexation"): string =>
   createTable("price_list_row", "dated", [
     '"price_list_id" uuid NOT NULL',
     '"product_id" uuid NOT NULL',
@@ -423,12 +422,39 @@ const expected = [
     '"waste_fraction_id" uuid',
     '"customer_id" uuid',
     '"note" text',
+    ...(asOf === "indexation" ? ['"indexed_from_id" uuid', '"index_label" text', '"index_basis_points" integer'] : []),
     `"condition_key" text GENERATED ALWAYS AS (${CONDITION_KEY}) STORED NOT NULL`,
     uniqueKey("price_list_row_project_key", "company_id", "project_id", "id"),
     validityCheck("price_list_row"),
     oneOfCheck("price_list_row", "customer_kind", "person", "organisation"),
     `CONSTRAINT "price_list_row_unit_price_not_negative" CHECK (${ref("price_list_row", "unit_price_minor")} >= 0)`,
+    ...(asOf === "indexation"
+      ? [
+          `CONSTRAINT "price_list_row_index_shape" CHECK ((${ref("price_list_row", "indexed_from_id")} is null) = (${ref("price_list_row", "index_label")} is null) and (${ref("price_list_row", "indexed_from_id")} is null) = (${ref("price_list_row", "index_basis_points")} is null) and ${ref("price_list_row", "indexed_from_id")} <> ${ref("price_list_row", "id")})`,
+        ]
+      : []),
+  ])
+
+/** What the indexation changed (#291 C8): the price row's CREATE TABLE as drizzle-kit generates it now onto what 0010 created. */
+const CHANGED_BY_INDEXATION = new Map([[priceListRowTable("indexation"), priceListRowTable("0010")]])
+
+/** What the indexation added beside the table: the chain's key into the table itself and its index. */
+const ADDED_BY_INDEXATION = [
+  projectFkTo("price_list_row", "indexed_from_id", "price_list_row"),
+  index("price_list_row", "price_list_row_indexed_from_id_idx", "company_id", "indexed_from_id"),
+]
+
+const expected = [
+  createTable("price_list", "dated", [
+    '"code" text NOT NULL',
+    '"name" text NOT NULL',
+    '"currency" text NOT NULL',
+    '"is_default" boolean DEFAULT false NOT NULL',
+    '"notes" text',
+    uniqueKey("price_list_project_key", "company_id", "project_id", "id"),
+    validityCheck("price_list"),
   ]),
+  priceListRowTable("0010"),
   createTable("service_area", "dated", [
     '"code" text NOT NULL',
     '"name" text NOT NULL',
@@ -927,8 +953,12 @@ const asOf0010 = (statement: string): string => CHANGED_IN_0028.reduce((text, [t
 /** The sixteen tables' CREATE TABLE statements as drizzle-kit writes them today, mapped back to 0010: 0036's index left out, 0028's casts mapped back, then 0036's event. */
 const tablesAsOf0010 = async (): Promise<string[]> =>
   (await statementsFor(tables))
-    .filter((statement) => !ADDED_IN_0036.includes(statement) && !ADDED_IN_0044.includes(statement) && !ADDED_IN_0046.includes(statement) && !ADDED_IN_0048.includes(statement))
+    .filter(
+      (statement) =>
+        !ADDED_IN_0036.includes(statement) && !ADDED_IN_0044.includes(statement) && !ADDED_IN_0046.includes(statement) && !ADDED_IN_0048.includes(statement) && !ADDED_BY_INDEXATION.includes(statement),
+    )
     .map(asOf0010)
+    .map((statement) => CHANGED_BY_INDEXATION.get(statement) ?? statement)
     .map((statement) => CHANGED_IN_0048.get(statement) ?? statement)
     .map((statement) => CHANGED_IN_0046.get(statement) ?? statement)
     .map((statement) => CHANGED_IN_0036.get(statement) ?? statement)
@@ -967,7 +997,8 @@ describe("the Finance & Contracting tables as drizzle-kit writes them", () => {
     for (const statement of CHANGED_IN_0046.keys()) assert.ok(asOf0046.includes(statement), statement.split("\n")[0])
     const asOf0044 = asOf0046.map((statement) => CHANGED_IN_0046.get(statement) ?? statement)
     for (const statement of CHANGED_IN_0036.keys()) assert.ok(asOf0044.includes(statement), statement.split("\n")[0])
-    for (const statement of [...ADDED_IN_0036, ...ADDED_IN_0044, ...ADDED_IN_0046, ...ADDED_IN_0048]) assert.ok(today.includes(statement), statement)
+    for (const statement of CHANGED_BY_INDEXATION.keys()) assert.ok(today.includes(statement), statement.split("\n")[0])
+    for (const statement of [...ADDED_IN_0036, ...ADDED_IN_0044, ...ADDED_IN_0046, ...ADDED_IN_0048, ...ADDED_BY_INDEXATION]) assert.ok(today.includes(statement), statement)
     const alterations = await statementsBetween({ product: productAsOf0004 }, { product })
     for (const statement of ADDED_TO_PRODUCT_IN_0044) assert.ok(alterations.includes(statement), statement)
   })
