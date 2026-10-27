@@ -119,6 +119,7 @@ export const DEMO_IDS = {
     "service-provider-foreman": "01a0d2a4-a280-7004-8000-000000000009",
     driver: "01a0d2a4-a280-7004-8000-00000000000a",
     "integration-writer": "01a0d2a4-a280-7004-8000-00000000000b",
+    "site-attendant": "01a0d2a4-a280-7004-8000-00000000000c",
   } satisfies Record<SystemRoleKey, string>,
   users: DEMO_USER_IDS,
   serviceProviderAccess: {

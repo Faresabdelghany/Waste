@@ -82,12 +82,12 @@ export const PRODUCT_KIND_LABELS: Readonly<Record<ProductKind, string>> = {
 }
 
 /** A Product's unit, as a price is quoted per it: `/pickup`. */
-export const UNIT_SUFFIX: Readonly<Record<ProductUnit, string>> = { pickup: "/pickup", month: "/mo", job: "/job", day: "/day" }
+export const UNIT_SUFFIX: Readonly<Record<ProductUnit, string>> = { pickup: "/pickup", month: "/mo", job: "/job", day: "/day", visit: "/visit" }
 
 /** A price row's customer-kind condition, as the prototype's Customer type read: a person is a household, an organisation is commercial. */
 export const CUSTOMER_KIND_LABELS: Readonly<Record<CustomerKind, string>> = { person: "Person", organisation: "Organisation" }
 
-export const EVENT_KIND_LABELS: Readonly<Record<BillableEventKind, string>> = { pickup: "Pickup", ticket: "Ticket", manual: "Manual", reversal: "Reversal", subscription: "Recurring charge", job: "Work order", hire: "Hire", "pickup-exception": "Pickup exception" }
+export const EVENT_KIND_LABELS: Readonly<Record<BillableEventKind, string>> = { pickup: "Pickup", ticket: "Ticket", manual: "Manual", reversal: "Reversal", subscription: "Recurring charge", job: "Work order", hire: "Hire", "pickup-exception": "Pickup exception", visit: "Recycling-centre visit" }
 
 /** Why an event is blocked, each a sentence saying what to do. */
 export const BLOCK_REASON_LABELS: Readonly<Record<BlockReason, string>> = {
@@ -100,7 +100,7 @@ export const BLOCK_REASON_LABELS: Readonly<Record<BlockReason, string>> = {
   "amount-too-large": "Amount too large",
 }
 
-export const CANCEL_REASON_LABELS: Readonly<Record<CancelReason, string>> = { "pickup-corrected": "Pickup corrected", duplicate: "Duplicate", "not-delivered": "Not delivered", other: "Other" }
+export const CANCEL_REASON_LABELS: Readonly<Record<CancelReason, string>> = { "pickup-corrected": "Pickup corrected", "visit-voided": "Visit voided", duplicate: "Duplicate", "not-delivered": "Not delivered", other: "Other" }
 
 export const CREDIT_REASON_LABELS: Readonly<Record<CreditReason, string>> = {
   "service-not-delivered": "Service not delivered",
@@ -128,8 +128,8 @@ export const optionsOf = <Token extends string>(tokens: readonly Token[], labels
 export const PRODUCT_KIND_OPTIONS = optionsOf(PRODUCT_KINDS, PRODUCT_KIND_LABELS)
 export const PRODUCT_UNIT_OPTIONS = PRODUCT_UNITS.map((value) => ({ value, label: `Per ${value}` }))
 export const CUSTOMER_KIND_OPTIONS = optionsOf(CUSTOMER_KINDS, CUSTOMER_KIND_LABELS)
-/** The office's three: the consumer's `pickup-corrected` is never a person's to give. */
-export const OFFICE_CANCEL_REASONS = CANCEL_REASONS.filter((reason): reason is Exclude<CancelReason, "pickup-corrected"> => reason !== "pickup-corrected")
+/** The office's three: the consumer's `pickup-corrected` and `visit-voided` (M4 of #293) are never a person's to give. */
+export const OFFICE_CANCEL_REASONS = CANCEL_REASONS.filter((reason): reason is Exclude<CancelReason, "pickup-corrected" | "visit-voided"> => reason !== "pickup-corrected" && reason !== "visit-voided")
 export const CREDIT_REASON_OPTIONS = optionsOf(CREDIT_REASONS, CREDIT_REASON_LABELS)
 export { BILLABLE_EVENT_KINDS, BLOCK_REASONS }
 

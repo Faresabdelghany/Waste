@@ -146,6 +146,18 @@ _Avoid_: Carbon factor, emission rate
 A place residents bring waste to themselves, on a project's public map: a recycling centre (staffed, with opening hours, many fractions) or a bring bank (bins on a street, usually open always). It carries the fractions it takes, weekly hours, dated exceptions, and whether the project's holidays close it.
 _Avoid_: Unloading Station (where the operation's own vehicles empty), Depot, container (a bring bank's bins are not the platform's Containers), genbrugsstation in copy that is not Danish
 
+**Access Credential**:
+A vehicle plate or an access card a project's recycling centres admit by, effective-dated and ended or blocked, never deleted. A business holds one under its Customer, its visits charged to the Agreement the credential names; a household under its Property. Its value is stored upper case with no spaces or hyphens, so a plate is one value however it is written, and one credential of a plate or card number is in force at a time.
+_Avoid_: Permit, pass, badge, key card, licence (a driver's)
+
+**Site Visit**:
+One arrival at a recycling centre, recorded by the attendant at check-in or by the gate: the site, the instant and the project's day, how it was identified (a plate, a card, or the Property the attendant found), the fractions brought, and whom it was for. Admitted or refused with the reason — a refused visit is still recorded — and voided with a reason when it was a mistake, never deleted, since the ledger is the evidence for its charge.
+_Avoid_: Drop-off (a Drop-off Point is the place), check-in (the attendant's act that records one), trip, pickup
+
+**Visit Rule**:
+A project's effective-dated rule for charging its recycling centres' visits: a household's free visits per calendar year and a ladder of per-visit products after them, the last step repeating; the free fractions, whose visits are neither counted nor charged; a business's per-visit product and the annual-access product whose subscription includes its visits; and the threshold of visits in a window that flags a Property as a likely trade. One is in force per project at a time.
+_Avoid_: Quota (one part of the rule), tariff, price list (the rule names products; the Price List prices them)
+
 **Stock Movement**:
 An append-only record of receipt, issue, return, transfer, adjustment, or decommission.
 _Avoid_: Inventory quantity, balance edit

@@ -44,6 +44,13 @@
 // a cancellation by the reading it stamps. The driver's `pickup-failed` and
 // `pickup-skipped` are read for the exception alone.
 //
+// A Site Visit's two events (#393, M4 of #293) are Finance's since M4a: a
+// `site-visit-recorded` of an admitted visit is a `visit` event at the step
+// its Visit Rule charges, priced through `priceDraft` on its day and
+// idempotent by the source event like any other, and a `site-visit-voided`
+// cancels the visit's live charge, or reverses it once invoiced. Each begins
+// with the visit's own row lock, as a pickup's events do with the pickup's.
+//
 // One job, one transaction: the reads and the write commit together, and a
 // handler that throws — a payload that does not parse, a row the event names
 // that is not there, a shape the domain drafted that the table would refuse —
@@ -58,22 +65,26 @@
 // past it and not failed under it — the retention a week, written over the
 // relay's defaults on the three queues at every start.
 import { PickupDetail } from "@waste/contracts/pickups"
+import { SiteVisit } from "@waste/contracts/site-visits"
 import { Ticket } from "@waste/contracts/tickets"
 import type { Tx } from "@waste/db/client"
 import { cancelLiveEvent, eventBySource, ONE_REVERSAL_PER_EVENT, ONE_ROW_PER_SOURCE_EVENT, recordBillableEvent, reversalOfEvent } from "@waste/db/commands/billable-writes"
 import { eventOf, type EventReading } from "@waste/db/commands/billing-shapes"
+import { lockRow } from "@waste/db/commands/shared"
+import { visitById } from "@waste/db/commands/site-visits"
+import { siteVisit } from "@waste/db/schema/site-visits"
 import { uniqueConstraintOf } from "@waste/db/sqlstate"
 import { newId } from "@waste/db/ids"
 import { withCompany } from "@waste/db/tenant"
 import type { OutboxKind } from "@waste/domain/execution/vocabulary"
-import { billableActionsFor, PICKUP_EVENT_KINDS, type BillableAction, type EventFacts } from "@waste/domain/finance/from-event"
+import { billableActionsFor, PICKUP_EVENT_KINDS, VISIT_EVENT_KINDS, type BillableAction, type EventFacts } from "@waste/domain/finance/from-event"
 
 import { defineOutboxConsumer, type RelayedEvent } from "../outbox/subscribe"
 import type { JobContext } from "./definition"
-import { pickupFacts, pickupRow, ticketFacts, ticketRow } from "./finance-facts"
+import { pickupFacts, pickupRow, ticketFacts, ticketRow, visitFacts } from "./finance-facts"
 
 /** The kinds this consumer takes, one queue each: what Finance reads of the outbox (§3's table; `unload-recorded` is the deferred tonnage component's). */
-export const FINANCE_EVENT_KINDS = [...PICKUP_EVENT_KINDS, "ticket-completed"] as const satisfies readonly OutboxKind[]
+export const FINANCE_EVENT_KINDS = [...PICKUP_EVENT_KINDS, "ticket-completed", ...VISIT_EVENT_KINDS] as const satisfies readonly OutboxKind[]
 
 /** The job's data as the relay sends it: the seam's `RelayedEvent`, under the name this module always used. */
 export type PublishedEvent = RelayedEvent
@@ -108,6 +119,15 @@ async function factsOf(tx: Tx, event: PublishedEvent) {
       const found = await ticketRow(tx, event.companyId, answered.id)
       if (found === undefined) throw new Error(`ticket-completed ${event.id} names ticket ${answered.id}, which is not in company ${event.companyId}`)
       return { facts: await ticketFacts(tx, event.companyId, answered.id, found), live: [] }
+    }
+    case "site-visit-recorded":
+    case "site-visit-voided": {
+      const answered = SiteVisit.parse(event.payload)
+      // The visit's row lock first: its recording and its void, on two queues, take turns, and the second reads the first's charge.
+      await lockRow(tx, siteVisit, { companyId: event.companyId, id: answered.id })
+      const found = await visitById(tx, event.companyId, answered.id)
+      if (found === undefined) throw new Error(`${event.kind} ${event.id} names site visit ${answered.id}, which is not in company ${event.companyId}`)
+      return await visitFacts(tx, event.companyId, event.kind, found)
     }
     default:
       return { facts: { kind: event.kind } as EventFacts, live: [] }
@@ -163,7 +183,8 @@ export const RECORD_BILLABLE_EVENTS_QUEUE_OPTIONS = { retryLimit: 5, retryDelay:
 export const recordBillableEvents = defineOutboxConsumer({
   name: "finance",
   kinds: FINANCE_EVENT_KINDS,
-  description: "Records a Billable Event from each pickup-completed, pickup-corrected and ticket-completed the relay publishes, and a Pickup Exception's charge from a pickup's completion, failure, skip or correction, or cancels or reverses a pickup's live charges on a correction; one row of a kind per outbox event however often it is delivered.",
+  description:
+    "Records a Billable Event from each pickup-completed, pickup-corrected and ticket-completed the relay publishes, a Pickup Exception's charge from a pickup's completion, failure, skip or correction, and a recycling-centre visit's charge from site-visit-recorded, or cancels or reverses a pickup's live charges on a correction and a visit's on site-visit-voided; one row of a kind per outbox event however often it is delivered.",
   queueOptions: RECORD_BILLABLE_EVENTS_QUEUE_OPTIONS,
   handler: (event, context) => recordBillableEventFor(event, context),
 })

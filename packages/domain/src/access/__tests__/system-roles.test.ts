@@ -6,12 +6,12 @@ import { ACTIONS, MODULE_KEYS } from "../modules"
 import { SYSTEM_ROLES, SYSTEM_ROLE_KEYS, systemRoleKept, systemRoleScopeKept } from "../system-roles"
 
 describe("the seeded system roles", () => {
-  test("the eleven roles of the spec, in order, each with its copy and system true", () => {
+  test("the eleven roles of the spec and the Site attendant (M4 of #293), in order, each with its copy and system true", () => {
     assert.deepEqual(
       SYSTEM_ROLES.map((role) => role.key),
       [...SYSTEM_ROLE_KEYS],
     )
-    assert.equal(SYSTEM_ROLES.length, 11)
+    assert.equal(SYSTEM_ROLES.length, 12)
     for (const role of SYSTEM_ROLES) {
       assert.ok(role.name.length > 0, `${role.key} has no name`)
       assert.ok(role.scope.length > 0, `${role.key} has no scope`)
@@ -128,5 +128,27 @@ describe("the seeded system roles", () => {
       driver.grants.map((grant) => ({ moduleKey: grant.moduleKey, actions: [...grant.actions] })),
       [{ moduleKey: "operate.driver-app", actions: ["view", "edit"] }],
     )
+  })
+
+  test("the Site attendant (M4 of #293) checks visitors in and reads the ledger and the register, and nothing else", () => {
+    const attendant = SYSTEM_ROLES.find((role) => role.key === "site-attendant")
+    assert.ok(attendant)
+    assert.deepEqual(
+      attendant.grants.map((grant) => ({ moduleKey: grant.moduleKey, actions: [...grant.actions] })),
+      [
+        { moduleKey: "customers.site-access", actions: ["view"] },
+        { moduleKey: "operate.site-visits", actions: ["view", "create"] },
+      ],
+    )
+  })
+
+  test("the recycling centres' visits and register (M4 of #293) go to the office's roles and never to a Service Provider's", () => {
+    const actionsOn = (key: string, moduleKey: string) => SYSTEM_ROLES.find((role) => role.key === key)?.grants.find((grant) => grant.moduleKey === moduleKey)?.actions
+    for (const moduleKey of ["operate.site-visits", "customers.site-access"]) {
+      for (const key of ["service-provider-manager", "service-provider-foreman", "driver", "integration-writer"]) assert.equal(actionsOn(key, moduleKey), undefined, `${key} on ${moduleKey}`)
+      assert.deepEqual(actionsOn("company-administrator", moduleKey), ["view", "edit", "create", "delete"])
+    }
+    assert.deepEqual(actionsOn("customer-service", "customers.site-access"), ["view", "edit", "create"])
+    assert.deepEqual(actionsOn("dispatcher", "operate.site-visits"), ["view", "edit", "create"])
   })
 })

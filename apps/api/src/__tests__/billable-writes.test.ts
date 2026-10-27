@@ -74,7 +74,7 @@ const shape = (statements: readonly Statement[]) => statements.map((statement) =
 /** Ids that count up from a pinned clock, so the suite can name them. */
 const minter = () => createIdMinter(() => STAMP.getTime())
 
-const NO_LINKS = { routeId: null, pickupId: null, ticketId: null, reversesEventId: null, proofId: null }
+const NO_LINKS = { routeId: null, pickupId: null, ticketId: null, reversesEventId: null, proofId: null, visitId: null }
 
 /** A manual event priced by the resolver at 100.00 kr, 25 % VAT. */
 const priced: BillableEventDraft = {
@@ -126,7 +126,7 @@ describe("recordBillableEvent", () => {
     const { tx, statements } = scripted()
     await assert.rejects(record(tx, { ...priced, kind: "pickup", links: { ...NO_LINKS, routeId: ROUTE, pickupId: PICKUP } }, { createdBy: OLIVIA, sourceEventId: SOURCE }), /never both and never neither \(billable_event_origin_shape\)/)
     await assert.rejects(record(tx, priced, { createdBy: null, sourceEventId: null }), /has its person \(billable_event_kind_shape\)/)
-    await assert.rejects(record(tx, { ...priced, kind: "reversal", links: { ...NO_LINKS, reversesEventId: ROW, proofId: null } }), /negated on a reversal \(billable_event_amounts_shape\)/, "a reversal's net is negated")
+    await assert.rejects(record(tx, { ...priced, kind: "reversal", links: { ...NO_LINKS, reversesEventId: ROW, proofId: null, visitId: null } }), /negated on a reversal \(billable_event_amounts_shape\)/, "a reversal's net is negated")
     await assert.rejects(record(tx, { ...priced, blockReason: "no-price-row" }), /billable_event_priced_shape/)
     await assert.rejects(record(tx, { ...priced, price: { ...priced.price!, priceListRowId: null } }), /billable_event_override_shape/)
     await assert.rejects(record(tx, { ...priced, kind: "pickup", price: { ...priced.price!, priceListRowId: null }, links: { ...NO_LINKS, routeId: ROUTE, pickupId: PICKUP } }, { createdBy: null, sourceEventId: SOURCE }), /a priced pickup event names the row that won/, "a resolver-priced pickup event with no row")
@@ -152,6 +152,7 @@ describe("billableEventShapeIssue", () => {
     ticketId: null,
     reversesEventId: null,
     evidenceProofId: null,
+    visitId: null,
     subscriptionId: null,
     sourceEventId: null,
     createdBy: OLIVIA,

@@ -66,6 +66,7 @@ import * as serviceAreasModule from "../service-areas"
 import * as serviceProviderPricesModule from "../service-provider-prices"
 import * as pickupExceptionsModule from "../pickup-exceptions"
 import * as sessionsModule from "../sessions"
+import * as siteVisitsModule from "../site-visits"
 import * as settlementsModule from "../settlements"
 import * as sortingGuideModule from "../sorting-guide"
 import * as stockModule from "../stock"
@@ -76,6 +77,7 @@ import * as ticketsModule from "../tickets"
 import * as unloadsModule from "../unloads"
 import * as validityModule from "../validity"
 import * as vehicleTypesModule from "../vehicle-types"
+import * as visitRulesModule from "../visit-rules"
 import * as weightControlModule from "../weight-control"
 import * as workOrderChargesModule from "../work-order-charges"
 import { Int4, INT4_MAX, INT4_MIN, NonNegativeInt, NonNegativeMinor, NonNegativeTotal, PositiveInt } from "../resource"
@@ -140,6 +142,7 @@ const MODULES: Readonly<Record<string, Record<string, unknown>>> = {
   "service-areas": serviceAreasModule,
   "service-provider-prices": serviceProviderPricesModule,
   "sessions": sessionsModule,
+  "site-visits": siteVisitsModule,
   "settlements": settlementsModule,
   "sorting-guide": sortingGuideModule,
   "stock": stockModule,
@@ -150,6 +153,7 @@ const MODULES: Readonly<Record<string, Record<string, unknown>>> = {
   "unloads": unloadsModule,
   "validity": validityModule,
   "vehicle-types": vehicleTypesModule,
+  "visit-rules": visitRulesModule,
   "weight-control": weightControlModule,
   "work-order-charges": workOrderChargesModule,
 }

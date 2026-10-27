@@ -1,4 +1,4 @@
-// The eleven roles every company is seeded with: their copy and the grants
+// The twelve roles every company is seeded with: their copy and the grants
 // they start with. This is `DEFAULT_ROLE_ACCESS` from
 // apps/web/lib/data/role-permissions.ts, moved here so the database seed and
 // the web read one source (Issue #70): the names, scopes and descriptions are
@@ -34,6 +34,7 @@ export const SYSTEM_ROLE_KEYS = [
   "service-provider-foreman",
   "driver",
   "integration-writer",
+  "site-attendant",
 ] as const
 
 /** The key of a seeded role. Null in the database for a custom one. */
@@ -70,10 +71,15 @@ const VIEW_EDIT: readonly Action[] = ["view", "edit"]
 const VIEW_EDIT_CREATE: readonly Action[] = ["view", "edit", "create"]
 const VIEW: readonly Action[] = ["view"]
 
-/** Every module of a workspace, with the same actions: the web's `workspaceGrant`, expanded against the vocabulary. */
-function workspace(id: WorkspaceKey, actions: readonly Action[]): Grant[] {
-  return modulesOf(id).map((moduleKey) => ({ moduleKey, actions }))
+/** Every module of a workspace, with the same actions: the web's `workspaceGrant`, expanded against the vocabulary, less any module named in `except`. */
+function workspace(id: WorkspaceKey, actions: readonly Action[], except: readonly ModuleKey[] = []): Grant[] {
+  return modulesOf(id)
+    .filter((moduleKey) => !except.includes(moduleKey))
+    .map((moduleKey) => ({ moduleKey, actions }))
 }
+
+/** The modules of the recycling centres' visits (M4 of #293): the plates, the cards and a household's visit history are personal data the office keeps, never a Service Provider's to read. */
+const VISIT_MODULES: readonly ModuleKey[] = ["operate.site-visits", "customers.site-access"]
 
 /** One module's actions, for the charters that name a single surface. */
 function only(moduleKey: ModuleKey, actions: readonly Action[]): Grant {
@@ -224,7 +230,7 @@ export const SYSTEM_ROLES: readonly SystemRole[] = [
       workspace("service-providers", VIEW_EDIT),
       workspace("fleet", VIEW_EDIT),
       workspace("route-studio", VIEW),
-      workspace("operate", VIEW),
+      workspace("operate", VIEW, VISIT_MODULES),
       // The restricted service provider workspace reads these grants live:
       // fleet is fully self-managed, tickets can be raised, and service
       // provider users are fully administered by the manager. The routes it
@@ -253,7 +259,7 @@ export const SYSTEM_ROLES: readonly SystemRole[] = [
       workspace("service-providers", VIEW),
       workspace("fleet", VIEW_EDIT),
       workspace("route-studio", VIEW),
-      workspace("operate", VIEW),
+      workspace("operate", VIEW, VISIT_MODULES),
     ),
   },
   {
@@ -279,5 +285,14 @@ export const SYSTEM_ROLES: readonly SystemRole[] = [
       only("configure.integrations", VIEW_EDIT),
       only("configure.privacy", VIEW),
     ),
+  },
+  {
+    key: "site-attendant",
+    name: "Site attendant",
+    scope: "Assigned projects",
+    description: "Recycling-centre check-in and the visit ledger",
+    system: true,
+    // A recycling centre's staff (M4 of #293): the check-in records a visit and the ledger reads it, the register of plates and cards is read to answer a visitor, and nothing else. The web lands the role on `/check-in`, as a driver's lands on `/driver`.
+    grants: charter(only("operate.site-visits", ["view", "create"]), only("customers.site-access", VIEW)),
   },
 ]

@@ -68,9 +68,11 @@ import type { Tx } from "../client"
 import type { IdMinter } from "../ids"
 import { agreement } from "../schema/agreements"
 import { product } from "../schema/catalogue"
-import { customer } from "../schema/customers"
+import { customer, property } from "../schema/customers"
+import { dropOffPoint } from "../schema/drop-off-points"
 import { billableEvent, billingRun, billingRunExclusion, invoiceLine } from "../schema/finance"
 import { project } from "../schema/organisation"
+import { siteVisit } from "../schema/site-visits"
 import { exclusionColumns, runColumns, type EventRow, type ExclusionRow, type RunRow } from "./billing-shapes"
 import { issueInvoice, type LineDraft } from "./invoice-writes"
 import { projectToday, type Scope } from "./project-clock"
@@ -92,7 +94,15 @@ export const tooManyEvents = (ready: number): string => `${grouped(ready)} ready
 export type BillingPeriod = { periodFrom: string; periodTo: string }
 
 /** A ready event with what its lines and its grouping read beside it: the agreement's number and payer, the product's two names. */
-export type ReadyEvent = EventRow & { agreementNumber: string; payerCustomerId: string; productName: string; invoiceName: string | null }
+export type ReadyEvent = EventRow & {
+  agreementNumber: string
+  payerCustomerId: string
+  productName: string
+  invoiceName: string | null
+  /** A recycling-centre visit's (#393): the site's name, and the plate or the card as read, or the Property's name where the attendant found it by its address; null on every other kind. */
+  visitSite: string | null
+  visitIdentifier: string | null
+}
 
 /** One invoice to issue: a payer's events in one currency, with their totals. */
 export type Group = { payerCustomerId: string; currency: string; events: ReadyEvent[]; netMinor: number; vatMinor: number }
@@ -188,10 +198,22 @@ export async function selectBilling(tx: Tx, scope: Scope, period: BillingPeriod,
   const event = alias(billableEvent, "event")
   const { companyId: _companyId, ...columns } = getTableColumns(event)
   const selected = tx
-    .select({ ...columns, agreementNumber: agreement.number, payerCustomerId: agreement.payerCustomerId, productName: product.name, invoiceName: product.invoiceName })
+    .select({
+      ...columns,
+      agreementNumber: agreement.number,
+      payerCustomerId: agreement.payerCustomerId,
+      productName: product.name,
+      invoiceName: product.invoiceName,
+      visitSite: dropOffPoint.name,
+      visitIdentifier: sql<string | null>`coalesce(${siteVisit.identifierValue}, ${property.name})`,
+    })
     .from(event)
     .innerJoin(agreement, and(eq(agreement.companyId, event.companyId), eq(agreement.id, event.agreementId)))
     .innerJoin(product, and(eq(product.companyId, event.companyId), eq(product.id, event.productId)))
+    // A visit's line names its site and its identifier (#393): 24.1 asks that the invoice list plate, date and site.
+    .leftJoin(siteVisit, and(eq(siteVisit.companyId, event.companyId), eq(siteVisit.id, event.visitId)))
+    .leftJoin(dropOffPoint, and(eq(dropOffPoint.companyId, siteVisit.companyId), eq(dropOffPoint.id, siteVisit.siteId)))
+    .leftJoin(property, and(eq(property.companyId, siteVisit.companyId), eq(property.id, siteVisit.propertyId)))
     .where(ready(tx, scope, period, event))
     .orderBy(asc(agreement.number), asc(event.serviceDate), asc(product.name), asc(event.id))
   const events: ReadyEvent[] = await (lock ? selected.for("update", { of: event }) : selected)
@@ -272,9 +294,10 @@ export async function previewBilling(tx: Tx, scope: Scope, period: BillingPeriod
   }
 }
 
-/** A line's text: the product's invoice name (or its name) and the service date; a recurring charge's, its charge period's first and last days and, where it charged fewer, how many of its days. */
+/** A line's text: the product's invoice name (or its name) and the service date; a recycling-centre visit's, its site and its identifier after them (#393); a recurring charge's, its charge period's first and last days and, where it charged fewer, how many of its days. */
 function descriptionOf(event: ReadyEvent): string {
   const name = event.invoiceName ?? event.productName
+  if (event.visitSite !== null) return [name, event.serviceDate, event.visitSite, event.visitIdentifier].filter((part) => part !== null).join(" · ")
   if (event.chargePeriodFrom === null || event.chargePeriodTo === null || event.chargedDays === null || event.periodDays === null) return `${name} · ${event.serviceDate}`
   const days = event.chargedDays === event.periodDays ? "" : ` · ${event.chargedDays} of ${event.periodDays} days`
   return `${name} · ${event.chargePeriodFrom} – ${addDays(event.chargePeriodTo, -1)}${days}`

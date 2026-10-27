@@ -106,6 +106,12 @@ export const AUDITED_TABLES = [
   "bulky_schedule",
   "bulky_booking",
   "bulky_booking_item",
+  "access_credential",
+  "site_visit",
+  "site_visit_fraction",
+  "visit_rule",
+  "visit_rule_step",
+  "visit_rule_free_fraction",
 ] as const
 export type AuditedTable = (typeof AUDITED_TABLES)[number]
 

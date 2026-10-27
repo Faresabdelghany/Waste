@@ -57,6 +57,7 @@ import {
   weightReview,
 } from "@waste/db/schema/finance"
 import { driver, vehicle, vehicleCompartment, vehicleCompartmentFraction } from "@waste/db/schema/fleet"
+import { accessCredential, siteVisit, siteVisitFraction, visitRule, visitRuleFreeFraction, visitRuleStep } from "@waste/db/schema/site-visits"
 import { fuelEmissionFactor, vehicleTypeConsumption } from "@waste/db/schema/emissions"
 import { containerTypeVehicleType, vehicleType } from "@waste/db/schema/fleet-types"
 import { generationMatch, generationRun } from "@waste/db/schema/generation"
@@ -366,6 +367,13 @@ export async function dropTenant(pool: Database, companyId: string, owner?: Data
     await tx.delete(settlement).where(eq(settlement.companyId, companyId))
     await tx.delete(billingRun).where(eq(billingRun.companyId, companyId))
     await tx.delete(billableEvent).where(eq(billableEvent.companyId, companyId))
+    // Recycling-centre visits (M4 of #293): a charge names its visit, so the ledger goes after the events and before the sites, the credentials, the agreements and the properties it names; a rule's sets before the products they name.
+    await tx.delete(siteVisitFraction).where(eq(siteVisitFraction.companyId, companyId))
+    await tx.delete(siteVisit).where(eq(siteVisit.companyId, companyId))
+    await tx.delete(accessCredential).where(eq(accessCredential.companyId, companyId))
+    await tx.delete(visitRuleStep).where(eq(visitRuleStep.companyId, companyId))
+    await tx.delete(visitRuleFreeFraction).where(eq(visitRuleFreeFraction.companyId, companyId))
+    await tx.delete(visitRule).where(eq(visitRule.companyId, companyId))
     await tx.delete(serviceProviderPrice).where(eq(serviceProviderPrice.companyId, companyId))
     await tx.delete(serviceAreaAssignment).where(eq(serviceAreaAssignment.companyId, companyId))
     await tx.delete(serviceAreaWasteFraction).where(eq(serviceAreaWasteFraction.companyId, companyId))

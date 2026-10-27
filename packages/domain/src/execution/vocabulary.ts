@@ -90,9 +90,9 @@ export const COMMAND_OUTCOMES = ["applied", "rejected"] as const
 /** Why a station refused a load (O9 of #290): the facility's side of an unload, apart from weight review's `rejected`, which is the office rejecting a weighbridge reading. */
 export const UNLOAD_REFUSAL_REASONS = ["contamination", "fraction-not-accepted", "hazardous", "overweight", "other"] as const
 /** What the outbox tells the other contexts: Execution's twelve, then Resolution's three (Issue #109), which Finance reads, then Finance's two (Issue #112), which the export reads. */
-export const OUTBOX_KINDS = ["route-dispatched", "route-started", "route-completed", "route-cancelled", "route-reassigned", "pickup-completed", "pickup-failed", "pickup-skipped", "pickup-problem-reported", "pickup-corrected", "unload-recorded", "command-rejected", "ticket-opened", "ticket-completed", "ticket-rejected", "invoice-issued", "settlement-closed", "application-decided"] as const
+export const OUTBOX_KINDS = ["route-dispatched", "route-started", "route-completed", "route-cancelled", "route-reassigned", "pickup-completed", "pickup-failed", "pickup-skipped", "pickup-problem-reported", "pickup-corrected", "unload-recorded", "command-rejected", "ticket-opened", "ticket-completed", "ticket-rejected", "invoice-issued", "settlement-closed", "application-decided", "site-visit-recorded", "site-visit-voided"] as const
 /** What an outbox event is about; the payload is that resource on the wire. */
-export const OUTBOX_AGGREGATES = ["route", "pickup", "unload", "command", "ticket", "invoice", "settlement", "application"] as const
+export const OUTBOX_AGGREGATES = ["route", "pickup", "unload", "command", "ticket", "invoice", "settlement", "application", "site-visit"] as const
 /** A contaminant code's: in use, or retired from new tags while the stops tagged with it keep it. */
 export const CONTAMINANT_CODE_STATUSES = ["active", "inactive"] as const
 

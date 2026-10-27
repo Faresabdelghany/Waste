@@ -219,6 +219,48 @@ column pgboss.warning 5 created_on timestamp with time zone not-null default=now
 constraint pgboss.warning warning_pkey PRIMARY KEY (id)
 index pgboss.warning warning_i1 CREATE INDEX warning_i1 ON pgboss.warning USING btree (created_on DESC)
 index pgboss.warning warning_pkey CREATE UNIQUE INDEX warning_pkey ON pgboss.warning USING btree (id)
+relation wms.access_credential kind=table owner=<owner> persistence=p rls=true force-rls=true replica-identity=d acl=[<owner>=DELETE,INSERT,MAINTAIN,REFERENCES,SELECT,TRIGGER,TRUNCATE,UPDATE/<owner> wms_api=DELETE,INSERT,SELECT,UPDATE/<owner> wms_worker=SELECT/<owner>]
+column wms.access_credential 1 id uuid not-null default=wms.uuidv7()
+column wms.access_credential 2 company_id uuid not-null
+column wms.access_credential 3 project_id uuid not-null
+column wms.access_credential 4 created_at timestamp with time zone not-null default=now()
+column wms.access_credential 5 updated_at timestamp with time zone not-null default=now()
+column wms.access_credential 6 valid_from date not-null
+column wms.access_credential 7 valid_to date
+column wms.access_credential 8 kind text not-null
+column wms.access_credential 9 value text not-null
+column wms.access_credential 10 label text
+column wms.access_credential 11 customer_id uuid
+column wms.access_credential 12 agreement_id uuid
+column wms.access_credential 13 property_id uuid
+column wms.access_credential 14 blocked_at timestamp with time zone
+column wms.access_credential 15 blocked_reason text
+constraint wms.access_credential access_credential_agreement_id_fk FOREIGN KEY (company_id, project_id, agreement_id) REFERENCES wms.agreement(company_id, project_id, id)
+constraint wms.access_credential access_credential_blocked_shape CHECK (((blocked_at IS NULL) = (blocked_reason IS NULL)))
+constraint wms.access_credential access_credential_company_id_fk FOREIGN KEY (company_id) REFERENCES wms.company(id)
+constraint wms.access_credential access_credential_customer_id_fk FOREIGN KEY (company_id, customer_id) REFERENCES wms.customer(company_id, id)
+constraint wms.access_credential access_credential_holder_shape CHECK (
+CASE
+    WHEN (property_id IS NOT NULL) THEN ((customer_id IS NULL) AND (agreement_id IS NULL))
+    ELSE ((customer_id IS NOT NULL) AND (agreement_id IS NOT NULL))
+END)
+constraint wms.access_credential access_credential_kind_one_of CHECK ((kind = ANY (ARRAY['plate'::text, 'card'::text])))
+constraint wms.access_credential access_credential_no_overlap EXCLUDE USING gist (company_id WITH =, project_id WITH =, kind WITH =, value WITH =, daterange(valid_from, valid_to, '[)'::text) WITH &&)
+constraint wms.access_credential access_credential_pkey PRIMARY KEY (id)
+constraint wms.access_credential access_credential_project_id_fk FOREIGN KEY (company_id, project_id) REFERENCES wms.project(company_id, id)
+constraint wms.access_credential access_credential_project_key UNIQUE (company_id, project_id, id)
+constraint wms.access_credential access_credential_property_id_fk FOREIGN KEY (company_id, project_id, property_id) REFERENCES wms.property(company_id, project_id, id)
+constraint wms.access_credential access_credential_validity CHECK (((valid_to IS NULL) OR (valid_to > valid_from)))
+constraint wms.access_credential access_credential_value_shape CHECK ((value ~ '^[A-Z0-9]+$'::text))
+index wms.access_credential access_credential_agreement_id_idx CREATE INDEX access_credential_agreement_id_idx ON wms.access_credential USING btree (company_id, agreement_id)
+index wms.access_credential access_credential_customer_id_idx CREATE INDEX access_credential_customer_id_idx ON wms.access_credential USING btree (company_id, customer_id)
+index wms.access_credential access_credential_no_overlap CREATE INDEX access_credential_no_overlap ON wms.access_credential USING gist (company_id, project_id, kind, value, daterange(valid_from, valid_to, '[)'::text))
+index wms.access_credential access_credential_pkey CREATE UNIQUE INDEX access_credential_pkey ON wms.access_credential USING btree (id)
+index wms.access_credential access_credential_project_key CREATE UNIQUE INDEX access_credential_project_key ON wms.access_credential USING btree (company_id, project_id, id)
+index wms.access_credential access_credential_property_id_idx CREATE INDEX access_credential_property_id_idx ON wms.access_credential USING btree (company_id, property_id)
+trigger wms.access_credential access_credential_audit_trail enabled=O CREATE TRIGGER access_credential_audit_trail AFTER INSERT OR DELETE OR UPDATE ON wms.access_credential FOR EACH ROW EXECUTE FUNCTION wms.audit_row('', '')
+trigger wms.access_credential access_credential_touch_updated_at enabled=O CREATE TRIGGER access_credential_touch_updated_at BEFORE UPDATE ON wms.access_credential FOR EACH ROW EXECUTE FUNCTION wms.touch_updated_at()
+policy wms.access_credential access_credential_tenant_fence permissive ALL to=wms_api using=(company_id = ( SELECT wms.current_company_id() AS current_company_id)) check=(company_id = ( SELECT wms.current_company_id() AS current_company_id))
 relation wms.accounting_account kind=table owner=<owner> persistence=p rls=true force-rls=true replica-identity=d acl=[<owner>=DELETE,INSERT,MAINTAIN,REFERENCES,SELECT,TRIGGER,TRUNCATE,UPDATE/<owner> wms_api=DELETE,INSERT,SELECT,UPDATE/<owner> wms_worker=SELECT/<owner>]
 column wms.accounting_account 1 id uuid not-null default=wms.uuidv7()
 column wms.accounting_account 2 company_id uuid not-null
@@ -619,6 +661,7 @@ column wms.billable_event 36 evidence_proof_id uuid
 column wms.billable_event 37 held_at timestamp with time zone
 column wms.billable_event 38 held_by uuid
 column wms.billable_event 39 hold_reason text
+column wms.billable_event 40 visit_id uuid
 constraint wms.billable_event billable_event_agreement_id_fk FOREIGN KEY (company_id, project_id, agreement_id) REFERENCES wms.agreement(company_id, project_id, id)
 constraint wms.billable_event billable_event_amounts_shape CHECK (((net_minor IS NULL) OR (net_minor = ((
 CASE kind
@@ -626,7 +669,7 @@ CASE kind
     ELSE 1
 END * (unit_price_minor)::bigint) * quantity))))
 constraint wms.billable_event billable_event_block_reason_one_of CHECK ((block_reason = ANY (ARRAY['no-subscription'::text, 'agreement-draft'::text, 'no-price-list'::text, 'no-price-row'::text, 'no-product'::text, 'no-vat-rate'::text, 'amount-too-large'::text])))
-constraint wms.billable_event billable_event_cancel_reason_one_of CHECK ((cancel_reason = ANY (ARRAY['pickup-corrected'::text, 'duplicate'::text, 'not-delivered'::text, 'other'::text])))
+constraint wms.billable_event billable_event_cancel_reason_one_of CHECK ((cancel_reason = ANY (ARRAY['pickup-corrected'::text, 'visit-voided'::text, 'duplicate'::text, 'not-delivered'::text, 'other'::text])))
 constraint wms.billable_event billable_event_cancel_shape CHECK ((((cancelled_at IS NULL) = (cancel_reason IS NULL)) AND ((cancelled_by IS NULL) OR (cancelled_at IS NOT NULL))))
 constraint wms.billable_event billable_event_cancelled_by_fk FOREIGN KEY (company_id, cancelled_by) REFERENCES wms.user_account(company_id, id)
 constraint wms.billable_event billable_event_charge_shape CHECK ((((kind = ANY (ARRAY['subscription'::text, 'hire'::text])) = (charge_period_from IS NOT NULL)) AND ((kind = 'hire'::text) = (placement_id IS NOT NULL)) AND ((placement_id IS NULL) = (container_id IS NULL)) AND ((charge_period_from IS NULL) = (charge_period_to IS NULL)) AND ((charge_period_from IS NULL) = (charged_days IS NULL)) AND ((charge_period_from IS NULL) = (period_days IS NULL)) AND ((charge_period_to IS NULL) OR (charge_period_to > charge_period_from)) AND ((charged_days IS NULL) OR ((charged_days > 0) AND (charged_days <= period_days)))))
@@ -636,7 +679,7 @@ constraint wms.billable_event billable_event_created_by_fk FOREIGN KEY (company_
 constraint wms.billable_event billable_event_evidence_shape CHECK (((evidence_proof_id IS NULL) OR (kind = 'pickup-exception'::text)))
 constraint wms.billable_event billable_event_held_by_fk FOREIGN KEY (company_id, held_by) REFERENCES wms.user_account(company_id, id)
 constraint wms.billable_event billable_event_hold_shape CHECK ((((held_at IS NULL) = (hold_reason IS NULL)) AND ((held_by IS NULL) OR (held_at IS NOT NULL)) AND ((held_at IS NULL) OR (block_reason IS NULL))))
-constraint wms.billable_event billable_event_kind_one_of CHECK ((kind = ANY (ARRAY['pickup'::text, 'ticket'::text, 'manual'::text, 'reversal'::text, 'subscription'::text, 'job'::text, 'hire'::text, 'pickup-exception'::text])))
+constraint wms.billable_event billable_event_kind_one_of CHECK ((kind = ANY (ARRAY['pickup'::text, 'ticket'::text, 'manual'::text, 'reversal'::text, 'subscription'::text, 'job'::text, 'hire'::text, 'pickup-exception'::text, 'visit'::text])))
 constraint wms.billable_event billable_event_kind_shape CHECK (
 CASE kind
     WHEN 'pickup'::text THEN ((pickup_id IS NOT NULL) AND (ticket_id IS NULL) AND (reverses_event_id IS NULL))
@@ -647,6 +690,7 @@ CASE kind
     WHEN 'job'::text THEN ((pickup_id IS NOT NULL) AND (ticket_id IS NULL) AND (reverses_event_id IS NULL))
     WHEN 'hire'::text THEN ((subscription_id IS NOT NULL) AND (placement_id IS NOT NULL) AND (pickup_id IS NULL) AND (ticket_id IS NULL) AND (reverses_event_id IS NULL))
     WHEN 'pickup-exception'::text THEN ((pickup_id IS NOT NULL) AND (ticket_id IS NULL) AND (reverses_event_id IS NULL))
+    WHEN 'visit'::text THEN ((visit_id IS NOT NULL) AND (pickup_id IS NULL) AND (ticket_id IS NULL) AND (reverses_event_id IS NULL))
     ELSE false
 END)
 constraint wms.billable_event billable_event_origin_shape CHECK (
@@ -671,6 +715,8 @@ constraint wms.billable_event billable_event_row_shape CHECK (((price_list_row_i
 constraint wms.billable_event billable_event_subscription_id_fk FOREIGN KEY (company_id, project_id, subscription_id) REFERENCES wms.subscription(company_id, project_id, id)
 constraint wms.billable_event billable_event_ticket_id_fk FOREIGN KEY (company_id, project_id, ticket_id) REFERENCES wms.ticket(company_id, project_id, id)
 constraint wms.billable_event billable_event_vat_shape CHECK (((vat_minor IS NULL) OR ((vat_minor)::numeric = round((((net_minor)::numeric * (vat_percent)::numeric) / 100.0)))))
+constraint wms.billable_event billable_event_visit_id_fk FOREIGN KEY (company_id, project_id, visit_id) REFERENCES wms.site_visit(company_id, project_id, id)
+constraint wms.billable_event billable_event_visit_shape CHECK (((visit_id IS NULL) OR (kind = 'visit'::text)))
 index wms.billable_event billable_event_agreement_id_idx CREATE INDEX billable_event_agreement_id_idx ON wms.billable_event USING btree (company_id, agreement_id)
 index wms.billable_event billable_event_cancelled_by_idx CREATE INDEX billable_event_cancelled_by_idx ON wms.billable_event USING btree (company_id, cancelled_by)
 index wms.billable_event billable_event_created_by_idx CREATE INDEX billable_event_created_by_idx ON wms.billable_event USING btree (company_id, created_by)
@@ -690,6 +736,7 @@ index wms.billable_event billable_event_source_event_id_idx CREATE UNIQUE INDEX 
 index wms.billable_event billable_event_subscription_charge_idx CREATE UNIQUE INDEX billable_event_subscription_charge_idx ON wms.billable_event USING btree (company_id, subscription_id, charge_period_from) WHERE (kind = 'subscription'::text)
 index wms.billable_event billable_event_subscription_id_idx CREATE INDEX billable_event_subscription_id_idx ON wms.billable_event USING btree (company_id, subscription_id)
 index wms.billable_event billable_event_ticket_id_idx CREATE INDEX billable_event_ticket_id_idx ON wms.billable_event USING btree (company_id, ticket_id)
+index wms.billable_event billable_event_visit_id_idx CREATE INDEX billable_event_visit_id_idx ON wms.billable_event USING btree (company_id, visit_id)
 trigger wms.billable_event billable_event_touch_updated_at enabled=O CREATE TRIGGER billable_event_touch_updated_at BEFORE UPDATE ON wms.billable_event FOR EACH ROW EXECUTE FUNCTION wms.touch_updated_at()
 policy wms.billable_event billable_event_tenant_fence permissive ALL to=wms_api using=(company_id = ( SELECT wms.current_company_id() AS current_company_id)) check=(company_id = ( SELECT wms.current_company_id() AS current_company_id))
 relation wms.billing_run kind=table owner=<owner> persistence=p rls=true force-rls=true replica-identity=d acl=[<owner>=DELETE,INSERT,MAINTAIN,REFERENCES,SELECT,TRIGGER,TRUNCATE,UPDATE/<owner> wms_api=DELETE,INSERT,SELECT,UPDATE/<owner> wms_worker=SELECT/<owner>]
@@ -1688,9 +1735,9 @@ column wms.outbox_event 8 aggregate_id uuid not-null
 column wms.outbox_event 9 occurred_at timestamp with time zone not-null
 column wms.outbox_event 10 payload jsonb not-null
 column wms.outbox_event 11 published_at timestamp with time zone
-constraint wms.outbox_event outbox_event_aggregate_kind_one_of CHECK ((aggregate_kind = ANY (ARRAY['route'::text, 'pickup'::text, 'unload'::text, 'command'::text, 'ticket'::text, 'invoice'::text, 'settlement'::text, 'application'::text])))
+constraint wms.outbox_event outbox_event_aggregate_kind_one_of CHECK ((aggregate_kind = ANY (ARRAY['route'::text, 'pickup'::text, 'unload'::text, 'command'::text, 'ticket'::text, 'invoice'::text, 'settlement'::text, 'application'::text, 'site-visit'::text])))
 constraint wms.outbox_event outbox_event_company_id_fk FOREIGN KEY (company_id) REFERENCES wms.company(id)
-constraint wms.outbox_event outbox_event_kind_one_of CHECK ((kind = ANY (ARRAY['route-dispatched'::text, 'route-started'::text, 'route-completed'::text, 'route-cancelled'::text, 'route-reassigned'::text, 'pickup-completed'::text, 'pickup-failed'::text, 'pickup-skipped'::text, 'pickup-problem-reported'::text, 'pickup-corrected'::text, 'unload-recorded'::text, 'command-rejected'::text, 'ticket-opened'::text, 'ticket-completed'::text, 'ticket-rejected'::text, 'invoice-issued'::text, 'settlement-closed'::text, 'application-decided'::text])))
+constraint wms.outbox_event outbox_event_kind_one_of CHECK ((kind = ANY (ARRAY['route-dispatched'::text, 'route-started'::text, 'route-completed'::text, 'route-cancelled'::text, 'route-reassigned'::text, 'pickup-completed'::text, 'pickup-failed'::text, 'pickup-skipped'::text, 'pickup-problem-reported'::text, 'pickup-corrected'::text, 'unload-recorded'::text, 'command-rejected'::text, 'ticket-opened'::text, 'ticket-completed'::text, 'ticket-rejected'::text, 'invoice-issued'::text, 'settlement-closed'::text, 'application-decided'::text, 'site-visit-recorded'::text, 'site-visit-voided'::text])))
 constraint wms.outbox_event outbox_event_pkey PRIMARY KEY (id)
 constraint wms.outbox_event outbox_event_project_id_fk FOREIGN KEY (company_id, project_id) REFERENCES wms.project(company_id, id)
 index wms.outbox_event outbox_event_aggregate_id_idx CREATE INDEX outbox_event_aggregate_id_idx ON wms.outbox_event USING btree (company_id, aggregate_id)
@@ -2141,7 +2188,7 @@ constraint wms.product product_project_id_name_key UNIQUE (company_id, project_i
 constraint wms.product product_project_key UNIQUE (company_id, project_id, id)
 constraint wms.product product_service_frequency_id_fk FOREIGN KEY (company_id, project_id, service_frequency_id) REFERENCES wms.service_frequency(company_id, project_id, id)
 constraint wms.product product_status_one_of CHECK ((status = ANY (ARRAY['draft'::text, 'active'::text, 'inactive'::text])))
-constraint wms.product product_unit_one_of CHECK ((unit = ANY (ARRAY['pickup'::text, 'month'::text, 'job'::text, 'day'::text])))
+constraint wms.product product_unit_one_of CHECK ((unit = ANY (ARRAY['pickup'::text, 'month'::text, 'job'::text, 'day'::text, 'visit'::text])))
 constraint wms.product product_vat_percent_range CHECK (((vat_percent >= 0) AND (vat_percent <= 100)))
 constraint wms.product product_waste_fraction_id_fk FOREIGN KEY (company_id, waste_fraction_id) REFERENCES wms.waste_fraction(company_id, id)
 index wms.product product_container_type_id_idx CREATE INDEX product_container_type_id_idx ON wms.product USING btree (company_id, container_type_id)
@@ -2959,6 +3006,95 @@ index wms.shared_collection_point_member shared_collection_point_member_property
 trigger wms.shared_collection_point_member shared_collection_point_member_audit_trail enabled=O CREATE TRIGGER shared_collection_point_member_audit_trail AFTER INSERT OR DELETE OR UPDATE ON wms.shared_collection_point_member FOR EACH ROW EXECUTE FUNCTION wms.audit_row('shared_collection_point', 'shared_collection_point_id')
 trigger wms.shared_collection_point_member shared_collection_point_member_touch_updated_at enabled=O CREATE TRIGGER shared_collection_point_member_touch_updated_at BEFORE UPDATE ON wms.shared_collection_point_member FOR EACH ROW EXECUTE FUNCTION wms.touch_updated_at()
 policy wms.shared_collection_point_member shared_collection_point_member_tenant_fence permissive ALL to=wms_api using=(company_id = ( SELECT wms.current_company_id() AS current_company_id)) check=(company_id = ( SELECT wms.current_company_id() AS current_company_id))
+relation wms.site_visit kind=table owner=<owner> persistence=p rls=true force-rls=true replica-identity=d acl=[<owner>=DELETE,INSERT,MAINTAIN,REFERENCES,SELECT,TRIGGER,TRUNCATE,UPDATE/<owner> wms_api=DELETE,INSERT,SELECT,UPDATE/<owner> wms_worker=SELECT/<owner>]
+column wms.site_visit 1 id uuid not-null default=wms.uuidv7()
+column wms.site_visit 2 company_id uuid not-null
+column wms.site_visit 3 project_id uuid not-null
+column wms.site_visit 4 created_at timestamp with time zone not-null default=now()
+column wms.site_visit 5 updated_at timestamp with time zone not-null default=now()
+column wms.site_visit 6 site_id uuid not-null
+column wms.site_visit 7 occurred_at timestamp with time zone not-null
+column wms.site_visit 8 service_date date not-null
+column wms.site_visit 9 source text not-null
+column wms.site_visit 10 external_id text
+column wms.site_visit 11 identification text not-null
+column wms.site_visit 12 identifier_value text
+column wms.site_visit 13 credential_id uuid
+column wms.site_visit 14 property_id uuid
+column wms.site_visit 15 customer_id uuid
+column wms.site_visit 16 agreement_id uuid
+column wms.site_visit 17 outcome text not-null
+column wms.site_visit 18 refusal_reason text
+column wms.site_visit 19 recorded_by uuid
+column wms.site_visit 20 note text
+column wms.site_visit 21 charge_basis text
+column wms.site_visit 22 charge_n integer
+column wms.site_visit 23 charge_product_id uuid
+column wms.site_visit 24 voided_at timestamp with time zone
+column wms.site_visit 25 voided_by uuid
+column wms.site_visit 26 void_reason text
+constraint wms.site_visit site_visit_agreement_id_fk FOREIGN KEY (company_id, project_id, agreement_id) REFERENCES wms.agreement(company_id, project_id, id)
+constraint wms.site_visit site_visit_charge_basis_one_of CHECK ((charge_basis = ANY (ARRAY['no-rule'::text, 'free-fractions'::text, 'free-quota'::text, 'ladder'::text, 'annual-access'::text, 'per-visit'::text])))
+constraint wms.site_visit site_visit_charge_n_positive CHECK ((charge_n > 0))
+constraint wms.site_visit site_visit_charge_product_id_fk FOREIGN KEY (company_id, project_id, charge_product_id) REFERENCES wms.product(company_id, project_id, id)
+constraint wms.site_visit site_visit_charge_shape CHECK ((((outcome = 'admitted'::text) = (charge_basis IS NOT NULL)) AND ((charge_product_id IS NULL) OR (charge_basis = ANY (ARRAY['ladder'::text, 'per-visit'::text])))))
+constraint wms.site_visit site_visit_company_id_fk FOREIGN KEY (company_id) REFERENCES wms.company(id)
+constraint wms.site_visit site_visit_credential_id_fk FOREIGN KEY (company_id, project_id, credential_id) REFERENCES wms.access_credential(company_id, project_id, id)
+constraint wms.site_visit site_visit_customer_id_fk FOREIGN KEY (company_id, customer_id) REFERENCES wms.customer(company_id, id)
+constraint wms.site_visit site_visit_holder_shape CHECK (((NOT ((property_id IS NOT NULL) AND (customer_id IS NOT NULL))) AND ((customer_id IS NULL) OR (agreement_id IS NOT NULL)) AND ((outcome <> 'admitted'::text) OR (agreement_id IS NOT NULL))))
+constraint wms.site_visit site_visit_identification_one_of CHECK ((identification = ANY (ARRAY['plate'::text, 'card'::text, 'property'::text])))
+constraint wms.site_visit site_visit_identifier_shape CHECK (((identification = 'property'::text) = (identifier_value IS NULL)))
+constraint wms.site_visit site_visit_outcome_one_of CHECK ((outcome = ANY (ARRAY['admitted'::text, 'refused'::text])))
+constraint wms.site_visit site_visit_outcome_shape CHECK (((outcome = 'refused'::text) = (refusal_reason IS NOT NULL)))
+constraint wms.site_visit site_visit_pkey PRIMARY KEY (id)
+constraint wms.site_visit site_visit_project_id_fk FOREIGN KEY (company_id, project_id) REFERENCES wms.project(company_id, id)
+constraint wms.site_visit site_visit_project_key UNIQUE (company_id, project_id, id)
+constraint wms.site_visit site_visit_property_id_fk FOREIGN KEY (company_id, project_id, property_id) REFERENCES wms.property(company_id, project_id, id)
+constraint wms.site_visit site_visit_recorded_by_fk FOREIGN KEY (company_id, recorded_by) REFERENCES wms.user_account(company_id, id)
+constraint wms.site_visit site_visit_refusal_reason_one_of CHECK ((refusal_reason = ANY (ARRAY['unknown-identifier'::text, 'not-fee-paying'::text, 'credential-blocked'::text])))
+constraint wms.site_visit site_visit_site_id_fk FOREIGN KEY (company_id, project_id, site_id) REFERENCES wms.drop_off_point(company_id, project_id, id)
+constraint wms.site_visit site_visit_source_one_of CHECK ((source = ANY (ARRAY['staff'::text, 'gate'::text])))
+constraint wms.site_visit site_visit_source_shape CHECK (
+CASE source
+    WHEN 'staff'::text THEN ((recorded_by IS NOT NULL) AND (external_id IS NULL))
+    ELSE (recorded_by IS NULL)
+END)
+constraint wms.site_visit site_visit_void_shape CHECK ((((voided_at IS NULL) = (void_reason IS NULL)) AND ((voided_by IS NULL) OR (voided_at IS NOT NULL))))
+constraint wms.site_visit site_visit_voided_by_fk FOREIGN KEY (company_id, voided_by) REFERENCES wms.user_account(company_id, id)
+index wms.site_visit site_visit_agreement_id_idx CREATE INDEX site_visit_agreement_id_idx ON wms.site_visit USING btree (company_id, agreement_id)
+index wms.site_visit site_visit_charge_product_id_idx CREATE INDEX site_visit_charge_product_id_idx ON wms.site_visit USING btree (company_id, charge_product_id)
+index wms.site_visit site_visit_credential_id_idx CREATE INDEX site_visit_credential_id_idx ON wms.site_visit USING btree (company_id, credential_id)
+index wms.site_visit site_visit_customer_id_idx CREATE INDEX site_visit_customer_id_idx ON wms.site_visit USING btree (company_id, customer_id)
+index wms.site_visit site_visit_external_id_idx CREATE UNIQUE INDEX site_visit_external_id_idx ON wms.site_visit USING btree (company_id, source, external_id) WHERE (external_id IS NOT NULL)
+index wms.site_visit site_visit_pkey CREATE UNIQUE INDEX site_visit_pkey ON wms.site_visit USING btree (id)
+index wms.site_visit site_visit_project_id_service_date_idx CREATE INDEX site_visit_project_id_service_date_idx ON wms.site_visit USING btree (company_id, project_id, service_date)
+index wms.site_visit site_visit_project_key CREATE UNIQUE INDEX site_visit_project_key ON wms.site_visit USING btree (company_id, project_id, id)
+index wms.site_visit site_visit_property_id_service_date_idx CREATE INDEX site_visit_property_id_service_date_idx ON wms.site_visit USING btree (company_id, property_id, service_date)
+index wms.site_visit site_visit_recorded_by_idx CREATE INDEX site_visit_recorded_by_idx ON wms.site_visit USING btree (company_id, recorded_by)
+index wms.site_visit site_visit_site_id_idx CREATE INDEX site_visit_site_id_idx ON wms.site_visit USING btree (company_id, site_id)
+index wms.site_visit site_visit_voided_by_idx CREATE INDEX site_visit_voided_by_idx ON wms.site_visit USING btree (company_id, voided_by)
+trigger wms.site_visit site_visit_audit_trail enabled=O CREATE TRIGGER site_visit_audit_trail AFTER INSERT OR DELETE OR UPDATE ON wms.site_visit FOR EACH ROW EXECUTE FUNCTION wms.audit_row('', '')
+trigger wms.site_visit site_visit_touch_updated_at enabled=O CREATE TRIGGER site_visit_touch_updated_at BEFORE UPDATE ON wms.site_visit FOR EACH ROW EXECUTE FUNCTION wms.touch_updated_at()
+policy wms.site_visit site_visit_tenant_fence permissive ALL to=wms_api using=(company_id = ( SELECT wms.current_company_id() AS current_company_id)) check=(company_id = ( SELECT wms.current_company_id() AS current_company_id))
+relation wms.site_visit_fraction kind=table owner=<owner> persistence=p rls=true force-rls=true replica-identity=d acl=[<owner>=DELETE,INSERT,MAINTAIN,REFERENCES,SELECT,TRIGGER,TRUNCATE,UPDATE/<owner> wms_api=DELETE,INSERT,SELECT,UPDATE/<owner> wms_worker=SELECT/<owner>]
+column wms.site_visit_fraction 1 id uuid not-null default=wms.uuidv7()
+column wms.site_visit_fraction 2 company_id uuid not-null
+column wms.site_visit_fraction 3 project_id uuid not-null
+column wms.site_visit_fraction 4 created_at timestamp with time zone not-null default=now()
+column wms.site_visit_fraction 5 updated_at timestamp with time zone not-null default=now()
+column wms.site_visit_fraction 6 visit_id uuid not-null
+column wms.site_visit_fraction 7 waste_fraction_id uuid not-null
+constraint wms.site_visit_fraction site_visit_fraction_company_id_fk FOREIGN KEY (company_id) REFERENCES wms.company(id)
+constraint wms.site_visit_fraction site_visit_fraction_membership_key UNIQUE (company_id, visit_id, waste_fraction_id)
+constraint wms.site_visit_fraction site_visit_fraction_pkey PRIMARY KEY (id)
+constraint wms.site_visit_fraction site_visit_fraction_visit_id_fk FOREIGN KEY (company_id, project_id, visit_id) REFERENCES wms.site_visit(company_id, project_id, id)
+constraint wms.site_visit_fraction site_visit_fraction_waste_fraction_id_fk FOREIGN KEY (company_id, waste_fraction_id) REFERENCES wms.waste_fraction(company_id, id)
+index wms.site_visit_fraction site_visit_fraction_membership_key CREATE UNIQUE INDEX site_visit_fraction_membership_key ON wms.site_visit_fraction USING btree (company_id, visit_id, waste_fraction_id)
+index wms.site_visit_fraction site_visit_fraction_pkey CREATE UNIQUE INDEX site_visit_fraction_pkey ON wms.site_visit_fraction USING btree (id)
+index wms.site_visit_fraction site_visit_fraction_waste_fraction_id_idx CREATE INDEX site_visit_fraction_waste_fraction_id_idx ON wms.site_visit_fraction USING btree (company_id, waste_fraction_id)
+trigger wms.site_visit_fraction site_visit_fraction_audit_trail enabled=O CREATE TRIGGER site_visit_fraction_audit_trail AFTER INSERT OR DELETE OR UPDATE ON wms.site_visit_fraction FOR EACH ROW EXECUTE FUNCTION wms.audit_row('site_visit', 'visit_id')
+trigger wms.site_visit_fraction site_visit_fraction_touch_updated_at enabled=O CREATE TRIGGER site_visit_fraction_touch_updated_at BEFORE UPDATE ON wms.site_visit_fraction FOR EACH ROW EXECUTE FUNCTION wms.touch_updated_at()
+policy wms.site_visit_fraction site_visit_fraction_tenant_fence permissive ALL to=wms_api using=(company_id = ( SELECT wms.current_company_id() AS current_company_id)) check=(company_id = ( SELECT wms.current_company_id() AS current_company_id))
 relation wms.sorting_guide_item kind=table owner=<owner> persistence=p rls=true force-rls=true replica-identity=d acl=[<owner>=DELETE,INSERT,MAINTAIN,REFERENCES,SELECT,TRIGGER,TRUNCATE,UPDATE/<owner> wms_api=DELETE,INSERT,SELECT,UPDATE/<owner> wms_worker=SELECT/<owner>]
 column wms.sorting_guide_item 1 id uuid not-null default=wms.uuidv7() acl=[wms_public=SELECT/<owner>]
 column wms.sorting_guide_item 2 company_id uuid not-null acl=[wms_public=SELECT/<owner>]
@@ -3663,6 +3799,79 @@ index wms.vehicle_unavailability vehicle_unavailability_project_id_valid_from_id
 trigger wms.vehicle_unavailability vehicle_unavailability_audit_trail enabled=O CREATE TRIGGER vehicle_unavailability_audit_trail AFTER INSERT OR DELETE OR UPDATE ON wms.vehicle_unavailability FOR EACH ROW EXECUTE FUNCTION wms.audit_row('vehicle', 'vehicle_id')
 trigger wms.vehicle_unavailability vehicle_unavailability_touch_updated_at enabled=O CREATE TRIGGER vehicle_unavailability_touch_updated_at BEFORE UPDATE ON wms.vehicle_unavailability FOR EACH ROW EXECUTE FUNCTION wms.touch_updated_at()
 policy wms.vehicle_unavailability vehicle_unavailability_tenant_fence permissive ALL to=wms_api using=(company_id = ( SELECT wms.current_company_id() AS current_company_id)) check=(company_id = ( SELECT wms.current_company_id() AS current_company_id))
+relation wms.visit_rule kind=table owner=<owner> persistence=p rls=true force-rls=true replica-identity=d acl=[<owner>=DELETE,INSERT,MAINTAIN,REFERENCES,SELECT,TRIGGER,TRUNCATE,UPDATE/<owner> wms_api=DELETE,INSERT,SELECT,UPDATE/<owner> wms_worker=SELECT/<owner>]
+column wms.visit_rule 1 id uuid not-null default=wms.uuidv7()
+column wms.visit_rule 2 company_id uuid not-null
+column wms.visit_rule 3 project_id uuid not-null
+column wms.visit_rule 4 created_at timestamp with time zone not-null default=now()
+column wms.visit_rule 5 updated_at timestamp with time zone not-null default=now()
+column wms.visit_rule 6 valid_from date not-null
+column wms.visit_rule 7 valid_to date
+column wms.visit_rule 8 free_visits integer not-null default=0
+column wms.visit_rule 9 business_visit_product_id uuid
+column wms.visit_rule 10 annual_access_product_id uuid
+column wms.visit_rule 11 trade_threshold integer
+column wms.visit_rule 12 trade_window_days integer
+constraint wms.visit_rule visit_rule_annual_access_product_id_fk FOREIGN KEY (company_id, project_id, annual_access_product_id) REFERENCES wms.product(company_id, project_id, id)
+constraint wms.visit_rule visit_rule_business_visit_product_id_fk FOREIGN KEY (company_id, project_id, business_visit_product_id) REFERENCES wms.product(company_id, project_id, id)
+constraint wms.visit_rule visit_rule_company_id_fk FOREIGN KEY (company_id) REFERENCES wms.company(id)
+constraint wms.visit_rule visit_rule_free_visits_range CHECK (((free_visits >= 0) AND (free_visits <= 366)))
+constraint wms.visit_rule visit_rule_no_overlap EXCLUDE USING gist (company_id WITH =, project_id WITH =, daterange(valid_from, valid_to, '[)'::text) WITH &&)
+constraint wms.visit_rule visit_rule_pkey PRIMARY KEY (id)
+constraint wms.visit_rule visit_rule_project_id_fk FOREIGN KEY (company_id, project_id) REFERENCES wms.project(company_id, id)
+constraint wms.visit_rule visit_rule_project_key UNIQUE (company_id, project_id, id)
+constraint wms.visit_rule visit_rule_trade_shape CHECK ((((trade_threshold IS NULL) = (trade_window_days IS NULL)) AND ((trade_threshold IS NULL) OR ((trade_threshold >= 1) AND (trade_threshold <= 1000))) AND ((trade_window_days IS NULL) OR ((trade_window_days >= 1) AND (trade_window_days <= 366)))))
+constraint wms.visit_rule visit_rule_validity CHECK (((valid_to IS NULL) OR (valid_to > valid_from)))
+index wms.visit_rule visit_rule_annual_access_product_id_idx CREATE INDEX visit_rule_annual_access_product_id_idx ON wms.visit_rule USING btree (company_id, annual_access_product_id)
+index wms.visit_rule visit_rule_business_visit_product_id_idx CREATE INDEX visit_rule_business_visit_product_id_idx ON wms.visit_rule USING btree (company_id, business_visit_product_id)
+index wms.visit_rule visit_rule_no_overlap CREATE INDEX visit_rule_no_overlap ON wms.visit_rule USING gist (company_id, project_id, daterange(valid_from, valid_to, '[)'::text))
+index wms.visit_rule visit_rule_pkey CREATE UNIQUE INDEX visit_rule_pkey ON wms.visit_rule USING btree (id)
+index wms.visit_rule visit_rule_project_id_idx CREATE INDEX visit_rule_project_id_idx ON wms.visit_rule USING btree (company_id, project_id)
+index wms.visit_rule visit_rule_project_key CREATE UNIQUE INDEX visit_rule_project_key ON wms.visit_rule USING btree (company_id, project_id, id)
+trigger wms.visit_rule visit_rule_audit_trail enabled=O CREATE TRIGGER visit_rule_audit_trail AFTER INSERT OR DELETE OR UPDATE ON wms.visit_rule FOR EACH ROW EXECUTE FUNCTION wms.audit_row('', '')
+trigger wms.visit_rule visit_rule_touch_updated_at enabled=O CREATE TRIGGER visit_rule_touch_updated_at BEFORE UPDATE ON wms.visit_rule FOR EACH ROW EXECUTE FUNCTION wms.touch_updated_at()
+policy wms.visit_rule visit_rule_tenant_fence permissive ALL to=wms_api using=(company_id = ( SELECT wms.current_company_id() AS current_company_id)) check=(company_id = ( SELECT wms.current_company_id() AS current_company_id))
+relation wms.visit_rule_free_fraction kind=table owner=<owner> persistence=p rls=true force-rls=true replica-identity=d acl=[<owner>=DELETE,INSERT,MAINTAIN,REFERENCES,SELECT,TRIGGER,TRUNCATE,UPDATE/<owner> wms_api=DELETE,INSERT,SELECT,UPDATE/<owner> wms_worker=SELECT/<owner>]
+column wms.visit_rule_free_fraction 1 id uuid not-null default=wms.uuidv7()
+column wms.visit_rule_free_fraction 2 company_id uuid not-null
+column wms.visit_rule_free_fraction 3 project_id uuid not-null
+column wms.visit_rule_free_fraction 4 created_at timestamp with time zone not-null default=now()
+column wms.visit_rule_free_fraction 5 updated_at timestamp with time zone not-null default=now()
+column wms.visit_rule_free_fraction 6 rule_id uuid not-null
+column wms.visit_rule_free_fraction 7 waste_fraction_id uuid not-null
+constraint wms.visit_rule_free_fraction visit_rule_free_fraction_company_id_fk FOREIGN KEY (company_id) REFERENCES wms.company(id)
+constraint wms.visit_rule_free_fraction visit_rule_free_fraction_membership_key UNIQUE (company_id, rule_id, waste_fraction_id)
+constraint wms.visit_rule_free_fraction visit_rule_free_fraction_pkey PRIMARY KEY (id)
+constraint wms.visit_rule_free_fraction visit_rule_free_fraction_rule_id_fk FOREIGN KEY (company_id, project_id, rule_id) REFERENCES wms.visit_rule(company_id, project_id, id)
+constraint wms.visit_rule_free_fraction visit_rule_free_fraction_waste_fraction_id_fk FOREIGN KEY (company_id, waste_fraction_id) REFERENCES wms.waste_fraction(company_id, id)
+index wms.visit_rule_free_fraction visit_rule_free_fraction_membership_key CREATE UNIQUE INDEX visit_rule_free_fraction_membership_key ON wms.visit_rule_free_fraction USING btree (company_id, rule_id, waste_fraction_id)
+index wms.visit_rule_free_fraction visit_rule_free_fraction_pkey CREATE UNIQUE INDEX visit_rule_free_fraction_pkey ON wms.visit_rule_free_fraction USING btree (id)
+index wms.visit_rule_free_fraction visit_rule_free_fraction_waste_fraction_id_idx CREATE INDEX visit_rule_free_fraction_waste_fraction_id_idx ON wms.visit_rule_free_fraction USING btree (company_id, waste_fraction_id)
+trigger wms.visit_rule_free_fraction visit_rule_free_fraction_audit_trail enabled=O CREATE TRIGGER visit_rule_free_fraction_audit_trail AFTER INSERT OR DELETE OR UPDATE ON wms.visit_rule_free_fraction FOR EACH ROW EXECUTE FUNCTION wms.audit_row('visit_rule', 'rule_id')
+trigger wms.visit_rule_free_fraction visit_rule_free_fraction_touch_updated_at enabled=O CREATE TRIGGER visit_rule_free_fraction_touch_updated_at BEFORE UPDATE ON wms.visit_rule_free_fraction FOR EACH ROW EXECUTE FUNCTION wms.touch_updated_at()
+policy wms.visit_rule_free_fraction visit_rule_free_fraction_tenant_fence permissive ALL to=wms_api using=(company_id = ( SELECT wms.current_company_id() AS current_company_id)) check=(company_id = ( SELECT wms.current_company_id() AS current_company_id))
+relation wms.visit_rule_step kind=table owner=<owner> persistence=p rls=true force-rls=true replica-identity=d acl=[<owner>=DELETE,INSERT,MAINTAIN,REFERENCES,SELECT,TRIGGER,TRUNCATE,UPDATE/<owner> wms_api=DELETE,INSERT,SELECT,UPDATE/<owner> wms_worker=SELECT/<owner>]
+column wms.visit_rule_step 1 id uuid not-null default=wms.uuidv7()
+column wms.visit_rule_step 2 company_id uuid not-null
+column wms.visit_rule_step 3 project_id uuid not-null
+column wms.visit_rule_step 4 created_at timestamp with time zone not-null default=now()
+column wms.visit_rule_step 5 updated_at timestamp with time zone not-null default=now()
+column wms.visit_rule_step 6 rule_id uuid not-null
+column wms.visit_rule_step 7 position integer not-null
+column wms.visit_rule_step 8 product_id uuid not-null
+constraint wms.visit_rule_step visit_rule_step_company_id_fk FOREIGN KEY (company_id) REFERENCES wms.company(id)
+constraint wms.visit_rule_step visit_rule_step_pkey PRIMARY KEY (id)
+constraint wms.visit_rule_step visit_rule_step_position_positive CHECK (("position" > 0))
+constraint wms.visit_rule_step visit_rule_step_product_id_fk FOREIGN KEY (company_id, project_id, product_id) REFERENCES wms.product(company_id, project_id, id)
+constraint wms.visit_rule_step visit_rule_step_project_id_fk FOREIGN KEY (company_id, project_id) REFERENCES wms.project(company_id, id)
+constraint wms.visit_rule_step visit_rule_step_rule_id_fk FOREIGN KEY (company_id, project_id, rule_id) REFERENCES wms.visit_rule(company_id, project_id, id)
+constraint wms.visit_rule_step visit_rule_step_rule_position_key UNIQUE (company_id, rule_id, "position")
+index wms.visit_rule_step visit_rule_step_pkey CREATE UNIQUE INDEX visit_rule_step_pkey ON wms.visit_rule_step USING btree (id)
+index wms.visit_rule_step visit_rule_step_product_id_idx CREATE INDEX visit_rule_step_product_id_idx ON wms.visit_rule_step USING btree (company_id, product_id)
+index wms.visit_rule_step visit_rule_step_rule_position_key CREATE UNIQUE INDEX visit_rule_step_rule_position_key ON wms.visit_rule_step USING btree (company_id, rule_id, "position")
+trigger wms.visit_rule_step visit_rule_step_audit_trail enabled=O CREATE TRIGGER visit_rule_step_audit_trail AFTER INSERT OR DELETE OR UPDATE ON wms.visit_rule_step FOR EACH ROW EXECUTE FUNCTION wms.audit_row('visit_rule', 'rule_id')
+trigger wms.visit_rule_step visit_rule_step_touch_updated_at enabled=O CREATE TRIGGER visit_rule_step_touch_updated_at BEFORE UPDATE ON wms.visit_rule_step FOR EACH ROW EXECUTE FUNCTION wms.touch_updated_at()
+policy wms.visit_rule_step visit_rule_step_tenant_fence permissive ALL to=wms_api using=(company_id = ( SELECT wms.current_company_id() AS current_company_id)) check=(company_id = ( SELECT wms.current_company_id() AS current_company_id))
 relation wms.warehouse kind=table owner=<owner> persistence=p rls=true force-rls=true replica-identity=d acl=[<owner>=DELETE,INSERT,MAINTAIN,REFERENCES,SELECT,TRIGGER,TRUNCATE,UPDATE/<owner> wms_api=DELETE,INSERT,SELECT,UPDATE/<owner> wms_worker=SELECT/<owner>]
 column wms.warehouse 1 id uuid not-null default=wms.uuidv7()
 column wms.warehouse 2 company_id uuid not-null
@@ -3878,4 +4087,5 @@ journal 1792963337527 f9d94b2631da7fd4aa199f12f7b126d912d2618f93565389dab6efc3fb
 journal 1792964774291 575d9404cde4feb3468d43c2645301f94e48b4960341cda4dc4d6d7b432065a0
 journal 1793086298088 3aa024a0b1c207b537d4b52cc6c9c09f295500483b1bc53e66c27a5fa0ed1bf8
 journal 1793117570372 0cf12010a83bd55fbf734aea83b3699d1636d710d1cc52cd63b5b586441a72af
+journal 1793122833651 fddd34bf8e7c1eadc319cddcf6b5a274974e7993317a4fc32d01ed89ce216655
 pgboss-version 42

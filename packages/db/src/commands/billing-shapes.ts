@@ -66,6 +66,7 @@ export const eventColumns = {
   ticketId: billableEvent.ticketId,
   reversesEventId: billableEvent.reversesEventId,
   evidenceProofId: billableEvent.evidenceProofId,
+  visitId: billableEvent.visitId,
   chargePeriodFrom: billableEvent.chargePeriodFrom,
   chargePeriodTo: billableEvent.chargePeriodTo,
   chargedDays: billableEvent.chargedDays,
@@ -94,13 +95,14 @@ export type EventReading = EventRow & { invoiceLineId: string | null; reversalId
 /** The reading a row has the instant it is written: no line and no reversal name it yet, by construction. */
 export const UNNAMED = { invoiceLineId: null, reversalId: null }
 
-/** The five links as the wire carries them, off the row's five columns: the evidence a Pickup Exception's charge names is its `proofId` (#293 M5). */
-export const linksOf = (row: Pick<EventRow, "routeId" | "pickupId" | "ticketId" | "reversesEventId" | "evidenceProofId">): BillableEventLinks => ({
+/** The six links as the wire carries them, off the row's six columns: the evidence a Pickup Exception's charge names is its `proofId` (#293 M5), and a recycling-centre visit's charge its `visitId` (#393). */
+export const linksOf = (row: Pick<EventRow, "routeId" | "pickupId" | "ticketId" | "reversesEventId" | "evidenceProofId" | "visitId">): BillableEventLinks => ({
   routeId: row.routeId,
   pickupId: row.pickupId,
   ticketId: row.ticketId,
   reversesEventId: row.reversesEventId,
   proofId: row.evidenceProofId,
+  visitId: row.visitId,
 })
 
 /** The status the domain reads off a row and the two rows that may name it. */

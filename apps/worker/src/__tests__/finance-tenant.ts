@@ -32,6 +32,8 @@ import { customer, property } from "@waste/db/schema/customers"
 import { outboxEvent, pickup, proofOfService, route } from "@waste/db/schema/execution"
 import { billableEvent, billingRun, billingRunExclusion, invoice, invoiceLine, priceList, priceListRow, ticketKindProduct, workOrderProduct } from "@waste/db/schema/finance"
 import { driver, vehicle } from "@waste/db/schema/fleet"
+import { dropOffPoint, dropOffPointFraction } from "@waste/db/schema/drop-off-points"
+import { accessCredential, siteVisit, siteVisitFraction, visitRule, visitRuleFreeFraction, visitRuleStep } from "@waste/db/schema/site-visits"
 import { vehicleType } from "@waste/db/schema/fleet-types"
 import { bulkyBooking, bulkyBookingItem, bulkySchedule } from "@waste/db/schema/bulky"
 import { company, project } from "@waste/db/schema/organisation"
@@ -395,6 +397,15 @@ export async function dropFinanceTenant(pool: Database, owner: Database, company
   await withCompany(pool.db, companyId, async (tx: Tx) => {
     await tx.delete(billingRun).where(eq(billingRun.companyId, companyId))
     await tx.delete(billableEvent).where(eq(billableEvent.companyId, companyId))
+    // Recycling-centre visits (M4 of #293): a charge names its visit, and a visit its site, its credential, its agreement and its property.
+    await tx.delete(siteVisitFraction).where(eq(siteVisitFraction.companyId, companyId))
+    await tx.delete(siteVisit).where(eq(siteVisit.companyId, companyId))
+    await tx.delete(accessCredential).where(eq(accessCredential.companyId, companyId))
+    await tx.delete(visitRuleStep).where(eq(visitRuleStep.companyId, companyId))
+    await tx.delete(visitRuleFreeFraction).where(eq(visitRuleFreeFraction.companyId, companyId))
+    await tx.delete(visitRule).where(eq(visitRule.companyId, companyId))
+    await tx.delete(dropOffPointFraction).where(eq(dropOffPointFraction.companyId, companyId))
+    await tx.delete(dropOffPoint).where(eq(dropOffPoint.companyId, companyId))
     await tx.delete(priceListRow).where(eq(priceListRow.companyId, companyId))
     await tx.delete(pickupExceptionRuleStep).where(eq(pickupExceptionRuleStep.companyId, companyId))
     await tx.delete(pickupExceptionRule).where(eq(pickupExceptionRule.companyId, companyId))
