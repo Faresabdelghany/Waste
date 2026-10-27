@@ -20,6 +20,8 @@ import type { BulkyBookingStatus, PickupStatus } from "./vocabulary"
 
 /** The most items one booking lists. */
 export const BULKY_ITEMS_MAX = 20
+/** The most of one item a booking lists. */
+export const BULKY_ITEM_QUANTITY_MAX = 100
 /** The most days one availability read spans, both ends included. */
 export const BULKY_WINDOW_DAYS_MAX = 92
 

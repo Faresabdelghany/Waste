@@ -11,7 +11,7 @@
 // the fraction and the items; the area, the schedule and the product are the
 // server's, read from the place and the day. Its status is a reading, and its
 // stop the office's Add stop (`PickupAdd.bulkyBookingId`).
-import { BULKY_ITEMS_MAX, BULKY_WINDOW_DAYS_MAX } from "@waste/domain/execution/bulky"
+import { BULKY_ITEM_QUANTITY_MAX, BULKY_ITEMS_MAX, BULKY_WINDOW_DAYS_MAX } from "@waste/domain/execution/bulky"
 import { BULKY_BOOKING_STATUSES } from "@waste/domain/execution/vocabulary"
 import * as z from "zod"
 
@@ -25,7 +25,7 @@ import { weekRotationShape, WEEK_ROTATION_WITH_FORTNIGHTLY } from "./route-schem
 import { Label, Paragraph } from "./text"
 import { endsAfterItStarts, Validity, ValidityCreate, validityOrdered } from "./validity"
 
-export { BULKY_ITEMS_MAX, BULKY_WINDOW_DAYS_MAX }
+export { BULKY_ITEM_QUANTITY_MAX, BULKY_ITEMS_MAX, BULKY_WINDOW_DAYS_MAX }
 
 /** Where a booking stands: booked, routed by a planned stop, collected by a completed one, or cancelled. */
 export const BulkyBookingStatus = z.enum(BULKY_BOOKING_STATUSES)
@@ -88,7 +88,7 @@ export type BulkyScheduleListQuery = z.infer<typeof BulkyScheduleListQuery>
 /** One item a booking lists: what it is, and how many. */
 export const BulkyItem = z.strictObject({
   description: Label,
-  quantity: PositiveInt.max(100),
+  quantity: PositiveInt.max(BULKY_ITEM_QUANTITY_MAX),
 })
 export type BulkyItem = z.infer<typeof BulkyItem>
 
