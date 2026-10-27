@@ -54,7 +54,10 @@
 // answer a ticket (O3c of #290), whose completion the ticket's charge (#291 C3)
 // already is; and blocked where the product is retired or not sold by the job
 // (`no-product`) or no agreement is reachable (`no-subscription`), for the
-// office to act on rather than a silent charge or a silent nothing.
+// office to act on rather than a silent charge or a silent nothing. A bulky
+// collection (O11 of #290) is charged the same way, at the product its
+// booking froze, to the agreement the booking names: the worker reads both
+// off the booking into the same facts.
 //
 // Two of the facts are the table's word and not the payload's, because
 // pg-boss delivers at least once and in no promised order (part B): the
@@ -181,7 +184,7 @@ export type PickupEventFacts<Row extends PriceRow = PriceRow> = {
   service: PickupService
   /** Whether the stop was booked to answer a ticket (O3c of #290): the ticket's charge is the one, never a job's. */
   bookedForTicket: boolean
-  /** The `job` product the project names for a work order's service, with the agreement it charges and its pricing (M14 of #293); null where the project names none. */
+  /** The `job` product the project names for a work order's service, or a bulky collection's booking's, with the agreement it charges and its pricing (M14 of #293, O11 of #290); null where none is named. */
   job: JobChargeFacts<Row> | null
   /** The stop as a Pickup Exception (#293 M5); null where it is none the rules may charge. */
   exception: ExceptionFacts<Row> | null
@@ -294,9 +297,12 @@ const NO_LINKS: BillableEventLinks = { routeId: null, pickupId: null, ticketId: 
 /** Whether a work order may be charged at the project's product: one sold by the job, while it is offered — a retired one is the office's to replace, never a silent charge. */
 export const chargesJob = (job: JobChargeFacts): boolean => job.product.unit === "job" && job.product.status === "active"
 
+/** The office's services charged as a job once done: the work orders, and a bulky collection (O11 of #290) at its booking's product. */
+export const chargedAsJob = (service: PickupService): boolean => isWorkOrderService(service) || service === "bulky"
+
 /** A completed work order's event (M14 of #293): nothing for an emptying, a stop booked for a ticket or a service the project prices nothing for; blocked where the product will not do or no agreement is reachable; otherwise priced by the resolver as a pickup is. */
 function jobDraft<Row extends PriceRow>(facts: PickupEventFacts<Row>, labels: PriceLabels): BillableEventDraft | undefined {
-  if (!isWorkOrderService(facts.service) || facts.bookedForTicket || facts.job === null) return undefined
+  if (!chargedAsJob(facts.service) || facts.bookedForTicket || facts.job === null) return undefined
   const { job } = facts
   const base = { kind: "job" as const, serviceDate: facts.serviceDate, quantity: 1, links: { ...NO_LINKS, routeId: facts.routeId, pickupId: facts.pickupId } }
   // The agreement first, as a pickup's placement is: with none reachable a product would price under nothing, so the block says what to fix.

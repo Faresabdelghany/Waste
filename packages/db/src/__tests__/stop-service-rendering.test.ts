@@ -15,7 +15,6 @@ import { readFile } from "node:fs/promises"
 import { join } from "node:path"
 import { describe, test } from "node:test"
 
-import { PICKUP_SERVICES } from "@waste/domain/execution/vocabulary"
 
 import { MIGRATIONS_FOLDER } from "../migrate"
 import { wasteFraction } from "../schema/catalogue"
@@ -40,7 +39,7 @@ describe("the stop's service as drizzle-kit writes it", () => {
       'ALTER TABLE "wms"."pickup" DROP CONSTRAINT "pickup_route_id_container_id_key";',
       `ALTER TABLE "wms"."pickup" ADD COLUMN "service" text DEFAULT 'empty' NOT NULL;`,
       `CREATE UNIQUE INDEX "pickup_route_id_container_id_key" ON "wms"."pickup" USING btree ("company_id","route_id","container_id") WHERE ${ref("pickup", "origin")} = 'generation';`,
-      `ALTER TABLE "wms"."pickup" ADD CONSTRAINT "pickup_service_one_of" CHECK (${ref("pickup", "service")} in (${list(...PICKUP_SERVICES)}));`,
+      `ALTER TABLE "wms"."pickup" ADD CONSTRAINT "pickup_service_one_of" CHECK (${ref("pickup", "service")} in (${list("empty", "deliver", "remove", "swap", "repair", "wash")}));`,
       `ALTER TABLE "wms"."pickup" ADD CONSTRAINT "pickup_service_origin_shape" CHECK (${ref("pickup", "service")} = 'empty' or ${ref("pickup", "origin")} = 'office');`,
       `ALTER TABLE "wms"."pickup" ADD CONSTRAINT "pickup_service_container_shape" CHECK (${ref("pickup", "service")} = 'empty' or ${ref("pickup", "container_id")} is not null);`,
     ])

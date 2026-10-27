@@ -17,14 +17,14 @@ import { userAccount } from "../schema/access"
 import { product, wasteFraction } from "../schema/catalogue"
 import { container } from "../schema/containers"
 import { property, sharedCollectionPoint } from "../schema/customers"
-import { pickup, proofOfService, route, session } from "../schema/execution"
+import { proofOfService, route, session } from "../schema/execution"
 import { company, project } from "../schema/organisation"
 import { contaminantCode, contaminantCodeFraction, pickupExceptionRule, pickupExceptionRuleStep } from "../schema/pickup-exceptions"
 import { auditTrail, PICKUP_EXCEPTIONS_AUDITED } from "../sql/audit-trail"
 import { excludeOverlapping } from "../sql/exclude-overlapping"
 import { handWrittenStatements, normalised, statementsOf } from "../sql/hand-written"
 import { checksOf, list, ref } from "./rendering"
-import { pickupAsOf0032 } from "./pickup-as-of"
+import { pickupAsOf0032, pickupAsOf0038 } from "./pickup-as-of"
 import { proofAsOf0029 } from "./proof-as-of"
 import { statementsBetween } from "./specimen"
 
@@ -34,7 +34,7 @@ const referenced = { company, project, route, session, userAccount, container, p
 const created = { contaminantCode, contaminantCodeFraction, pickupExceptionRule, pickupExceptionRuleStep }
 
 /** What drizzle-kit writes for 0038: the four tables, and the pickup and the proof from their earlier spellings to today's. */
-const generated = (): Promise<string[]> => statementsBetween({ ...referenced, pickup: pickupAsOf0032, proofOfService: proofAsOf0029 }, { ...referenced, pickup, proofOfService, ...created })
+const generated = (): Promise<string[]> => statementsBetween({ ...referenced, pickup: pickupAsOf0032, proofOfService: proofAsOf0029 }, { ...referenced, pickup: pickupAsOf0038, proofOfService, ...created })
 
 /** What the four owe the file below drizzle-kit's statements: fence and trigger each, the rule's exclusion constraint, then their audit trail. */
 const handWritten = [

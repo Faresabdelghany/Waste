@@ -792,6 +792,121 @@ index wms.billing_run_exclusion billing_run_exclusion_customer_id_idx CREATE IND
 index wms.billing_run_exclusion billing_run_exclusion_pkey CREATE UNIQUE INDEX billing_run_exclusion_pkey ON wms.billing_run_exclusion USING btree (id)
 index wms.billing_run_exclusion billing_run_exclusion_project_id_idx CREATE INDEX billing_run_exclusion_project_id_idx ON wms.billing_run_exclusion USING btree (company_id, project_id)
 policy wms.billing_run_exclusion billing_run_exclusion_tenant_fence permissive ALL to=wms_api using=(company_id = ( SELECT wms.current_company_id() AS current_company_id)) check=(company_id = ( SELECT wms.current_company_id() AS current_company_id))
+relation wms.bulky_booking kind=table owner=<owner> persistence=p rls=true force-rls=true replica-identity=d acl=[<owner>=DELETE,INSERT,MAINTAIN,REFERENCES,SELECT,TRIGGER,TRUNCATE,UPDATE/<owner> wms_api=DELETE,INSERT,SELECT,UPDATE/<owner> wms_worker=SELECT/<owner>]
+column wms.bulky_booking 1 id uuid not-null default=wms.uuidv7()
+column wms.bulky_booking 2 company_id uuid not-null
+column wms.bulky_booking 3 project_id uuid not-null
+column wms.bulky_booking 4 created_at timestamp with time zone not-null default=now()
+column wms.bulky_booking 5 updated_at timestamp with time zone not-null default=now()
+column wms.bulky_booking 6 customer_id uuid not-null
+column wms.bulky_booking 7 agreement_id uuid not-null
+column wms.bulky_booking 8 property_id uuid
+column wms.bulky_booking 9 shared_collection_point_id uuid
+column wms.bulky_booking 10 waste_fraction_id uuid not-null
+column wms.bulky_booking 11 day date not-null
+column wms.bulky_booking 12 planning_area_id uuid not-null
+column wms.bulky_booking 13 schedule_id uuid not-null
+column wms.bulky_booking 14 product_id uuid not-null
+column wms.bulky_booking 15 note text
+column wms.bulky_booking 16 booked_by uuid
+column wms.bulky_booking 17 cancelled_at timestamp with time zone
+column wms.bulky_booking 18 cancelled_by uuid
+column wms.bulky_booking 19 cancel_reason text
+constraint wms.bulky_booking bulky_booking_agreement_id_fk FOREIGN KEY (company_id, project_id, agreement_id) REFERENCES wms.agreement(company_id, project_id, id)
+constraint wms.bulky_booking bulky_booking_booked_by_fk FOREIGN KEY (company_id, booked_by) REFERENCES wms.user_account(company_id, id)
+constraint wms.bulky_booking bulky_booking_cancel_shape CHECK ((((cancelled_at IS NULL) = (cancel_reason IS NULL)) AND ((cancelled_by IS NULL) OR (cancelled_at IS NOT NULL))))
+constraint wms.bulky_booking bulky_booking_cancelled_by_fk FOREIGN KEY (company_id, cancelled_by) REFERENCES wms.user_account(company_id, id)
+constraint wms.bulky_booking bulky_booking_company_id_fk FOREIGN KEY (company_id) REFERENCES wms.company(id)
+constraint wms.bulky_booking bulky_booking_customer_id_fk FOREIGN KEY (company_id, customer_id) REFERENCES wms.customer(company_id, id)
+constraint wms.bulky_booking bulky_booking_pkey PRIMARY KEY (id)
+constraint wms.bulky_booking bulky_booking_place_exactly_one CHECK (((((property_id IS NOT NULL))::integer + ((shared_collection_point_id IS NOT NULL))::integer) = 1))
+constraint wms.bulky_booking bulky_booking_planning_area_id_fk FOREIGN KEY (company_id, project_id, planning_area_id) REFERENCES wms.planning_area(company_id, project_id, id)
+constraint wms.bulky_booking bulky_booking_product_id_fk FOREIGN KEY (company_id, project_id, product_id) REFERENCES wms.product(company_id, project_id, id)
+constraint wms.bulky_booking bulky_booking_project_id_fk FOREIGN KEY (company_id, project_id) REFERENCES wms.project(company_id, id)
+constraint wms.bulky_booking bulky_booking_project_key UNIQUE (company_id, project_id, id)
+constraint wms.bulky_booking bulky_booking_property_id_fk FOREIGN KEY (company_id, project_id, property_id) REFERENCES wms.property(company_id, project_id, id)
+constraint wms.bulky_booking bulky_booking_schedule_id_fk FOREIGN KEY (company_id, project_id, schedule_id) REFERENCES wms.bulky_schedule(company_id, project_id, id)
+constraint wms.bulky_booking bulky_booking_shared_collection_point_id_fk FOREIGN KEY (company_id, project_id, shared_collection_point_id) REFERENCES wms.shared_collection_point(company_id, project_id, id)
+constraint wms.bulky_booking bulky_booking_waste_fraction_id_fk FOREIGN KEY (company_id, waste_fraction_id) REFERENCES wms.waste_fraction(company_id, id)
+index wms.bulky_booking bulky_booking_agreement_id_idx CREATE INDEX bulky_booking_agreement_id_idx ON wms.bulky_booking USING btree (company_id, agreement_id)
+index wms.bulky_booking bulky_booking_booked_by_idx CREATE INDEX bulky_booking_booked_by_idx ON wms.bulky_booking USING btree (company_id, booked_by)
+index wms.bulky_booking bulky_booking_cancelled_by_idx CREATE INDEX bulky_booking_cancelled_by_idx ON wms.bulky_booking USING btree (company_id, cancelled_by)
+index wms.bulky_booking bulky_booking_customer_id_idx CREATE INDEX bulky_booking_customer_id_idx ON wms.bulky_booking USING btree (company_id, customer_id)
+index wms.bulky_booking bulky_booking_pkey CREATE UNIQUE INDEX bulky_booking_pkey ON wms.bulky_booking USING btree (id)
+index wms.bulky_booking bulky_booking_planning_area_id_idx CREATE INDEX bulky_booking_planning_area_id_idx ON wms.bulky_booking USING btree (company_id, planning_area_id)
+index wms.bulky_booking bulky_booking_product_id_idx CREATE INDEX bulky_booking_product_id_idx ON wms.bulky_booking USING btree (company_id, product_id)
+index wms.bulky_booking bulky_booking_project_id_idx CREATE INDEX bulky_booking_project_id_idx ON wms.bulky_booking USING btree (company_id, project_id)
+index wms.bulky_booking bulky_booking_project_key CREATE UNIQUE INDEX bulky_booking_project_key ON wms.bulky_booking USING btree (company_id, project_id, id)
+index wms.bulky_booking bulky_booking_property_id_idx CREATE INDEX bulky_booking_property_id_idx ON wms.bulky_booking USING btree (company_id, property_id)
+index wms.bulky_booking bulky_booking_schedule_id_day_idx CREATE INDEX bulky_booking_schedule_id_day_idx ON wms.bulky_booking USING btree (company_id, schedule_id, day)
+index wms.bulky_booking bulky_booking_shared_collection_point_id_idx CREATE INDEX bulky_booking_shared_collection_point_id_idx ON wms.bulky_booking USING btree (company_id, shared_collection_point_id)
+index wms.bulky_booking bulky_booking_waste_fraction_id_idx CREATE INDEX bulky_booking_waste_fraction_id_idx ON wms.bulky_booking USING btree (company_id, waste_fraction_id)
+trigger wms.bulky_booking bulky_booking_audit_trail enabled=O CREATE TRIGGER bulky_booking_audit_trail AFTER INSERT OR DELETE OR UPDATE ON wms.bulky_booking FOR EACH ROW EXECUTE FUNCTION wms.audit_row('', '')
+trigger wms.bulky_booking bulky_booking_touch_updated_at enabled=O CREATE TRIGGER bulky_booking_touch_updated_at BEFORE UPDATE ON wms.bulky_booking FOR EACH ROW EXECUTE FUNCTION wms.touch_updated_at()
+policy wms.bulky_booking bulky_booking_tenant_fence permissive ALL to=wms_api using=(company_id = ( SELECT wms.current_company_id() AS current_company_id)) check=(company_id = ( SELECT wms.current_company_id() AS current_company_id))
+relation wms.bulky_booking_item kind=table owner=<owner> persistence=p rls=true force-rls=true replica-identity=d acl=[<owner>=DELETE,INSERT,MAINTAIN,REFERENCES,SELECT,TRIGGER,TRUNCATE,UPDATE/<owner> wms_api=DELETE,INSERT,SELECT,UPDATE/<owner> wms_worker=SELECT/<owner>]
+column wms.bulky_booking_item 1 id uuid not-null default=wms.uuidv7()
+column wms.bulky_booking_item 2 company_id uuid not-null
+column wms.bulky_booking_item 3 project_id uuid not-null
+column wms.bulky_booking_item 4 created_at timestamp with time zone not-null default=now()
+column wms.bulky_booking_item 5 updated_at timestamp with time zone not-null default=now()
+column wms.bulky_booking_item 6 booking_id uuid not-null
+column wms.bulky_booking_item 7 position integer not-null
+column wms.bulky_booking_item 8 description text not-null
+column wms.bulky_booking_item 9 quantity integer not-null
+constraint wms.bulky_booking_item bulky_booking_item_booking_id_fk FOREIGN KEY (company_id, project_id, booking_id) REFERENCES wms.bulky_booking(company_id, project_id, id)
+constraint wms.bulky_booking_item bulky_booking_item_booking_id_position_key UNIQUE (company_id, booking_id, "position")
+constraint wms.bulky_booking_item bulky_booking_item_company_id_fk FOREIGN KEY (company_id) REFERENCES wms.company(id)
+constraint wms.bulky_booking_item bulky_booking_item_description_given CHECK ((length(btrim(description)) > 0))
+constraint wms.bulky_booking_item bulky_booking_item_pkey PRIMARY KEY (id)
+constraint wms.bulky_booking_item bulky_booking_item_position_positive CHECK (("position" > 0))
+constraint wms.bulky_booking_item bulky_booking_item_project_id_fk FOREIGN KEY (company_id, project_id) REFERENCES wms.project(company_id, id)
+constraint wms.bulky_booking_item bulky_booking_item_quantity_positive CHECK ((quantity > 0))
+index wms.bulky_booking_item bulky_booking_item_booking_id_position_key CREATE UNIQUE INDEX bulky_booking_item_booking_id_position_key ON wms.bulky_booking_item USING btree (company_id, booking_id, "position")
+index wms.bulky_booking_item bulky_booking_item_pkey CREATE UNIQUE INDEX bulky_booking_item_pkey ON wms.bulky_booking_item USING btree (id)
+index wms.bulky_booking_item bulky_booking_item_project_id_idx CREATE INDEX bulky_booking_item_project_id_idx ON wms.bulky_booking_item USING btree (company_id, project_id)
+trigger wms.bulky_booking_item bulky_booking_item_audit_trail enabled=O CREATE TRIGGER bulky_booking_item_audit_trail AFTER INSERT OR DELETE OR UPDATE ON wms.bulky_booking_item FOR EACH ROW EXECUTE FUNCTION wms.audit_row('bulky_booking', 'booking_id')
+trigger wms.bulky_booking_item bulky_booking_item_touch_updated_at enabled=O CREATE TRIGGER bulky_booking_item_touch_updated_at BEFORE UPDATE ON wms.bulky_booking_item FOR EACH ROW EXECUTE FUNCTION wms.touch_updated_at()
+policy wms.bulky_booking_item bulky_booking_item_tenant_fence permissive ALL to=wms_api using=(company_id = ( SELECT wms.current_company_id() AS current_company_id)) check=(company_id = ( SELECT wms.current_company_id() AS current_company_id))
+relation wms.bulky_schedule kind=table owner=<owner> persistence=p rls=true force-rls=true replica-identity=d acl=[<owner>=DELETE,INSERT,MAINTAIN,REFERENCES,SELECT,TRIGGER,TRUNCATE,UPDATE/<owner> wms_api=DELETE,INSERT,SELECT,UPDATE/<owner> wms_worker=SELECT/<owner>]
+column wms.bulky_schedule 1 id uuid not-null default=wms.uuidv7()
+column wms.bulky_schedule 2 company_id uuid not-null
+column wms.bulky_schedule 3 project_id uuid not-null
+column wms.bulky_schedule 4 created_at timestamp with time zone not-null default=now()
+column wms.bulky_schedule 5 updated_at timestamp with time zone not-null default=now()
+column wms.bulky_schedule 6 valid_from date not-null
+column wms.bulky_schedule 7 valid_to date
+column wms.bulky_schedule 8 planning_area_id uuid not-null
+column wms.bulky_schedule 9 frequency text not-null
+column wms.bulky_schedule 10 service_days text[] not-null
+column wms.bulky_schedule 11 week_rotation text
+column wms.bulky_schedule 12 holiday_policy text not-null
+column wms.bulky_schedule 13 slots_per_day integer not-null
+column wms.bulky_schedule 14 product_id uuid not-null
+constraint wms.bulky_schedule bulky_schedule_company_id_fk FOREIGN KEY (company_id) REFERENCES wms.company(id)
+constraint wms.bulky_schedule bulky_schedule_frequency_one_of CHECK ((frequency = ANY (ARRAY['daily'::text, 'weekly'::text, 'every-2-weeks'::text, 'every-3-weeks'::text, 'every-4-weeks'::text, 'monthly'::text])))
+constraint wms.bulky_schedule bulky_schedule_holiday_policy_one_of CHECK ((holiday_policy = ANY (ARRAY['shift-next'::text, 'shift-prev'::text, 'skip'::text, 'collect'::text])))
+constraint wms.bulky_schedule bulky_schedule_no_overlap EXCLUDE USING gist (company_id WITH =, planning_area_id WITH =, daterange(valid_from, valid_to, '[)'::text) WITH &&)
+constraint wms.bulky_schedule bulky_schedule_pkey PRIMARY KEY (id)
+constraint wms.bulky_schedule bulky_schedule_planning_area_id_fk FOREIGN KEY (company_id, project_id, planning_area_id) REFERENCES wms.planning_area(company_id, project_id, id)
+constraint wms.bulky_schedule bulky_schedule_product_id_fk FOREIGN KEY (company_id, project_id, product_id) REFERENCES wms.product(company_id, project_id, id)
+constraint wms.bulky_schedule bulky_schedule_project_id_fk FOREIGN KEY (company_id, project_id) REFERENCES wms.project(company_id, id)
+constraint wms.bulky_schedule bulky_schedule_project_key UNIQUE (company_id, project_id, id)
+constraint wms.bulky_schedule bulky_schedule_service_days_non_empty CHECK ((cardinality(service_days) > 0))
+constraint wms.bulky_schedule bulky_schedule_service_days_subset_of CHECK ((service_days <@ ARRAY['monday'::text, 'tuesday'::text, 'wednesday'::text, 'thursday'::text, 'friday'::text, 'saturday'::text, 'sunday'::text]))
+constraint wms.bulky_schedule bulky_schedule_slots_per_day_positive CHECK ((slots_per_day > 0))
+constraint wms.bulky_schedule bulky_schedule_validity CHECK (((valid_to IS NULL) OR (valid_to > valid_from)))
+constraint wms.bulky_schedule bulky_schedule_week_rotation_one_of CHECK ((week_rotation = ANY (ARRAY['odd'::text, 'even'::text])))
+constraint wms.bulky_schedule bulky_schedule_week_rotation_shape CHECK (((frequency = 'every-2-weeks'::text) = (week_rotation IS NOT NULL)))
+index wms.bulky_schedule bulky_schedule_no_overlap CREATE INDEX bulky_schedule_no_overlap ON wms.bulky_schedule USING gist (company_id, planning_area_id, daterange(valid_from, valid_to, '[)'::text))
+index wms.bulky_schedule bulky_schedule_pkey CREATE UNIQUE INDEX bulky_schedule_pkey ON wms.bulky_schedule USING btree (id)
+index wms.bulky_schedule bulky_schedule_planning_area_id_idx CREATE INDEX bulky_schedule_planning_area_id_idx ON wms.bulky_schedule USING btree (company_id, planning_area_id)
+index wms.bulky_schedule bulky_schedule_product_id_idx CREATE INDEX bulky_schedule_product_id_idx ON wms.bulky_schedule USING btree (company_id, product_id)
+index wms.bulky_schedule bulky_schedule_project_id_idx CREATE INDEX bulky_schedule_project_id_idx ON wms.bulky_schedule USING btree (company_id, project_id)
+index wms.bulky_schedule bulky_schedule_project_key CREATE UNIQUE INDEX bulky_schedule_project_key ON wms.bulky_schedule USING btree (company_id, project_id, id)
+trigger wms.bulky_schedule bulky_schedule_audit_trail enabled=O CREATE TRIGGER bulky_schedule_audit_trail AFTER INSERT OR DELETE OR UPDATE ON wms.bulky_schedule FOR EACH ROW EXECUTE FUNCTION wms.audit_row('', '')
+trigger wms.bulky_schedule bulky_schedule_touch_updated_at enabled=O CREATE TRIGGER bulky_schedule_touch_updated_at BEFORE UPDATE ON wms.bulky_schedule FOR EACH ROW EXECUTE FUNCTION wms.touch_updated_at()
+policy wms.bulky_schedule bulky_schedule_tenant_fence permissive ALL to=wms_api using=(company_id = ( SELECT wms.current_company_id() AS current_company_id)) check=(company_id = ( SELECT wms.current_company_id() AS current_company_id))
 relation wms.collection_calendar kind=table owner=<owner> persistence=p rls=true force-rls=true replica-identity=d acl=[<owner>=DELETE,INSERT,MAINTAIN,REFERENCES,SELECT,TRIGGER,TRUNCATE,UPDATE/<owner> wms_api=DELETE,INSERT,SELECT,UPDATE/<owner> wms_worker=SELECT/<owner>]
 column wms.collection_calendar 1 id uuid not-null default=wms.uuidv7()
 column wms.collection_calendar 2 company_id uuid not-null
@@ -1726,6 +1841,9 @@ CASE
     ELSE NULL::uuid
 END)
 column wms.pickup 24 contaminant_code_id uuid
+column wms.pickup 25 bulky_booking_id uuid
+constraint wms.pickup pickup_bulky_booking_id_fk FOREIGN KEY (company_id, project_id, bulky_booking_id) REFERENCES wms.bulky_booking(company_id, project_id, id)
+constraint wms.pickup pickup_bulky_shape CHECK ((((service = 'bulky'::text) = (bulky_booking_id IS NOT NULL)) AND ((service <> 'bulky'::text) OR (container_id IS NULL))))
 constraint wms.pickup pickup_company_id_fk FOREIGN KEY (company_id) REFERENCES wms.company(id)
 constraint wms.pickup pickup_container_id_fk FOREIGN KEY (company_id, project_id, container_id) REFERENCES wms.container(company_id, project_id, id)
 constraint wms.pickup pickup_container_shape CHECK (((container_id IS NOT NULL) OR (origin = 'office'::text)))
@@ -1744,8 +1862,8 @@ constraint wms.pickup pickup_replacement_container_id_fk FOREIGN KEY (company_id
 constraint wms.pickup pickup_replacement_shape CHECK ((((service = 'swap'::text) = (replacement_container_id IS NOT NULL)) AND ((replacement_container_id IS NULL) OR (replacement_container_id <> container_id))))
 constraint wms.pickup pickup_route_id_fk FOREIGN KEY (company_id, project_id, route_id) REFERENCES wms.route(company_id, project_id, id)
 constraint wms.pickup pickup_route_id_project_key UNIQUE (company_id, project_id, route_id, id)
-constraint wms.pickup pickup_service_container_shape CHECK (((service = 'empty'::text) OR (container_id IS NOT NULL)))
-constraint wms.pickup pickup_service_one_of CHECK ((service = ANY (ARRAY['empty'::text, 'deliver'::text, 'remove'::text, 'swap'::text, 'repair'::text, 'wash'::text])))
+constraint wms.pickup pickup_service_container_shape CHECK (((service = ANY (ARRAY['empty'::text, 'bulky'::text])) OR (container_id IS NOT NULL)))
+constraint wms.pickup pickup_service_one_of CHECK ((service = ANY (ARRAY['empty'::text, 'deliver'::text, 'remove'::text, 'swap'::text, 'repair'::text, 'wash'::text, 'bulky'::text])))
 constraint wms.pickup pickup_service_origin_shape CHECK (((service = 'empty'::text) OR (origin = 'office'::text)))
 constraint wms.pickup pickup_shared_collection_point_id_fk FOREIGN KEY (company_id, project_id, shared_collection_point_id) REFERENCES wms.shared_collection_point(company_id, project_id, id)
 constraint wms.pickup pickup_status_one_of CHECK ((status = ANY (ARRAY['planned'::text, 'completed'::text, 'skipped'::text, 'failed'::text])))
@@ -1754,6 +1872,8 @@ constraint wms.pickup pickup_subscription_shape CHECK (((service = 'deliver'::te
 constraint wms.pickup pickup_warehouse_id_fk FOREIGN KEY (company_id, project_id, warehouse_id) REFERENCES wms.warehouse(company_id, project_id, id)
 constraint wms.pickup pickup_warehouse_shape CHECK (((service = ANY (ARRAY['remove'::text, 'swap'::text])) = (warehouse_id IS NOT NULL)))
 constraint wms.pickup pickup_waste_fraction_id_fk FOREIGN KEY (company_id, waste_fraction_id) REFERENCES wms.waste_fraction(company_id, id)
+index wms.pickup pickup_bulky_booking_id_idx CREATE INDEX pickup_bulky_booking_id_idx ON wms.pickup USING btree (company_id, bulky_booking_id)
+index wms.pickup pickup_bulky_booking_id_key CREATE UNIQUE INDEX pickup_bulky_booking_id_key ON wms.pickup USING btree (company_id, bulky_booking_id) WHERE ((bulky_booking_id IS NOT NULL) AND (status = ANY (ARRAY['planned'::text, 'completed'::text])))
 index wms.pickup pickup_container_id_idx CREATE INDEX pickup_container_id_idx ON wms.pickup USING btree (company_id, container_id)
 index wms.pickup pickup_contaminant_code_id_idx CREATE INDEX pickup_contaminant_code_id_idx ON wms.pickup USING btree (company_id, contaminant_code_id)
 index wms.pickup pickup_pkey CREATE UNIQUE INDEX pickup_pkey ON wms.pickup USING btree (id)
@@ -2009,10 +2129,15 @@ column wms.price_list_row 14 waste_fraction_id uuid
 column wms.price_list_row 15 customer_id uuid
 column wms.price_list_row 16 note text
 column wms.price_list_row 17 condition_key text not-null generated=(((((((((COALESCE((planning_area_id)::text, ''::text) || '/'::text) || COALESCE(customer_kind, ''::text)) || '/'::text) || COALESCE((container_type_id)::text, ''::text)) || '/'::text) || COALESCE((waste_fraction_id)::text, ''::text)) || '/'::text) || COALESCE((customer_id)::text, ''::text)))
+column wms.price_list_row 18 indexed_from_id uuid
+column wms.price_list_row 19 index_label text
+column wms.price_list_row 20 index_basis_points integer
 constraint wms.price_list_row price_list_row_company_id_fk FOREIGN KEY (company_id) REFERENCES wms.company(id)
 constraint wms.price_list_row price_list_row_container_type_id_fk FOREIGN KEY (company_id, container_type_id) REFERENCES wms.container_type(company_id, id)
 constraint wms.price_list_row price_list_row_customer_id_fk FOREIGN KEY (company_id, customer_id) REFERENCES wms.customer(company_id, id)
 constraint wms.price_list_row price_list_row_customer_kind_one_of CHECK ((customer_kind = ANY (ARRAY['person'::text, 'organisation'::text])))
+constraint wms.price_list_row price_list_row_index_shape CHECK ((((indexed_from_id IS NULL) = (index_label IS NULL)) AND ((indexed_from_id IS NULL) = (index_basis_points IS NULL)) AND (indexed_from_id <> id)))
+constraint wms.price_list_row price_list_row_indexed_from_id_fk FOREIGN KEY (company_id, project_id, indexed_from_id) REFERENCES wms.price_list_row(company_id, project_id, id)
 constraint wms.price_list_row price_list_row_no_overlap EXCLUDE USING gist (company_id WITH =, price_list_id WITH =, product_id WITH =, condition_key WITH =, daterange(valid_from, valid_to, '[)'::text) WITH &&)
 constraint wms.price_list_row price_list_row_pkey PRIMARY KEY (id)
 constraint wms.price_list_row price_list_row_planning_area_id_fk FOREIGN KEY (company_id, project_id, planning_area_id) REFERENCES wms.planning_area(company_id, project_id, id)
@@ -2025,6 +2150,7 @@ constraint wms.price_list_row price_list_row_validity CHECK (((valid_to IS NULL)
 constraint wms.price_list_row price_list_row_waste_fraction_id_fk FOREIGN KEY (company_id, waste_fraction_id) REFERENCES wms.waste_fraction(company_id, id)
 index wms.price_list_row price_list_row_container_type_id_idx CREATE INDEX price_list_row_container_type_id_idx ON wms.price_list_row USING btree (company_id, container_type_id)
 index wms.price_list_row price_list_row_customer_id_idx CREATE INDEX price_list_row_customer_id_idx ON wms.price_list_row USING btree (company_id, customer_id)
+index wms.price_list_row price_list_row_indexed_from_id_idx CREATE INDEX price_list_row_indexed_from_id_idx ON wms.price_list_row USING btree (company_id, indexed_from_id)
 index wms.price_list_row price_list_row_no_overlap CREATE INDEX price_list_row_no_overlap ON wms.price_list_row USING gist (company_id, price_list_id, product_id, condition_key, daterange(valid_from, valid_to, '[)'::text))
 index wms.price_list_row price_list_row_pkey CREATE UNIQUE INDEX price_list_row_pkey ON wms.price_list_row USING btree (id)
 index wms.price_list_row price_list_row_planning_area_id_idx CREATE INDEX price_list_row_planning_area_id_idx ON wms.price_list_row USING btree (company_id, planning_area_id)
@@ -3959,5 +4085,7 @@ journal 1792952313199 b04f99d3f6c19ac508ebc304ce9ec2237ef28b77e48ea13664c37457ea
 journal 1792954475945 9314378d7dfb21885c2811e4fe94349e28f78895b02bc520bb49ff813b7abf21
 journal 1792963337527 f9d94b2631da7fd4aa199f12f7b126d912d2618f93565389dab6efc3fb32886d
 journal 1792964774291 575d9404cde4feb3468d43c2645301f94e48b4960341cda4dc4d6d7b432065a0
-journal 1793114716490 fddd34bf8e7c1eadc319cddcf6b5a274974e7993317a4fc32d01ed89ce216655
+journal 1793086298088 3aa024a0b1c207b537d4b52cc6c9c09f295500483b1bc53e66c27a5fa0ed1bf8
+journal 1793117570372 0cf12010a83bd55fbf734aea83b3699d1636d710d1cc52cd63b5b586441a72af
+journal 1793122833651 fddd34bf8e7c1eadc319cddcf6b5a274974e7993317a4fc32d01ed89ce216655
 pgboss-version 42

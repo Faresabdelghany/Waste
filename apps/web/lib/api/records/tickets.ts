@@ -227,6 +227,19 @@ function routeOfStop(stopServerId: string, context: MappingContext): string | un
   return typeof routeWebId === "string" && routeWebId !== "" ? context.resolve.serverIdOf(routeWebId) : undefined
 }
 
+/**
+ * The project a ticket is opened in, as a server id: the office's, a project
+ * the organisation module holds; a Service Provider's (#291 C24), its route's
+ * project, which it reads by the id chip its route names since it reads no
+ * project (`projectServerIdOf`, then the chip).
+ */
+function ticketProjectOf(record: BusinessRecord, context: MappingContext): string | LocalRefusal {
+  const loaded = projectServerIdOf(record, context)
+  if (!isLocalRefusal(loaded)) return loaded
+  const webId = typed(record, "projectId") ?? record.projectIds?.[0]
+  return (webId === undefined ? undefined : referencedServerId(webId, "project", context)) ?? loaded
+}
+
 /** Whether a loaded row is an alert — the alerts' own rule, spelled here since their adapter is built on this one's. */
 const isAlertRecord = ofKind("alert", ["Alert"])
 
@@ -248,7 +261,7 @@ const A_TIME = "Give the time as a date and a time"
  * is about, and the alert it answers (`alertId`, the alert's Open ticket).
  */
 export function toTicketCreateBody(record: BusinessRecord, context: MappingContext): unknown | LocalRefusal {
-  const projectId = projectServerIdOf(record, context)
+  const projectId = ticketProjectOf(record, context)
   if (isLocalRefusal(projectId)) return projectId
   const subject = typed(record, "subject") ?? (record.name.trim() === "" ? undefined : record.name.trim())
   if (subject === undefined) return refusal("subject", "A ticket needs a subject")

@@ -101,7 +101,7 @@ import { describeProblem, invalidRequest, problem, validate } from "../problem"
 import { refuseStranded } from "./periods"
 import { requireDepot, requireServiceProvider, requireVehicleType, requireWasteFraction, type Scope } from "./references"
 import { groupsInForceNaming, type ClockOptions } from "./scheme-groups"
-import { created, describeCreated, describeJson, IdParam, lockRow, refuseDuplicate, requireProviderShape, stamp, stampsOf } from "./shared"
+import { created, describeCreated, describeJson, IdParam, lockRow, refuseDuplicate, requireProviderShape, stamp, stampsOf, strengthFor } from "./shared"
 import { groupsName, liveAllocationsName, liveAllocationsNaming } from "./statuses"
 
 const MODULE = "fleet.vehicles"
@@ -502,7 +502,7 @@ export function vehicleRoutes(guard: MiddlewareHandler<AuthEnv>, { now = () => n
         // The row every rule below is held against, locked before it is read
         // (routes/shared.ts): a retirement and an allocation being made are two
         // halves of one rule, and they serialise here.
-        await lockRow(tx, vehicle, { companyId: principal.companyId, id })
+        await lockRow(tx, vehicle, { companyId: principal.companyId, id }, strengthFor(vehicle, patch))
         const current = await findVehicle(tx, principal, id)
         if (current === undefined) throw noSuchVehicle(id)
         const within: Scope = { companyId: principal.companyId, projectId: current.projectId }

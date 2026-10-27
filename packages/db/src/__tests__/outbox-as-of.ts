@@ -2,7 +2,7 @@
 // outbox's vocabulary as Execution's, Resolution's and Finance's news, before
 // the Registry's decided application (M7 of #293); and as 0040 left it, before
 // the recycling-centre visits' two kinds about a `site-visit` (#393, migration
-// 0052). finance-rendering.test.ts diffs to 0010's, applications-rendering.test.ts
+// 0054). finance-rendering.test.ts diffs to 0010's, applications-rendering.test.ts
 // from 0010's to 0040's and site-visits-rendering.test.ts from 0040's, since an
 // applied file is never edited and the schema module spells the table as it is today.
 import { OUTBOX_AGGREGATES, OUTBOX_KINDS } from "@waste/domain/execution/vocabulary"

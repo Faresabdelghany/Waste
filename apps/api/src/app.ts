@@ -99,6 +99,8 @@ import { settlementRoutes } from "./routes/settlements"
 import { sharedCollectionPointRoutes } from "./routes/shared-collection-points"
 import { siteVisitRoutes } from "./routes/site-visits"
 import { pickupExceptionRoutes } from "./routes/pickup-exceptions"
+import { bulkyBookingRoutes } from "./routes/bulky-bookings"
+import { bulkyScheduleRoutes } from "./routes/bulky-schedules"
 import { sortingGuideRoutes } from "./routes/sorting-guide"
 import { sustainabilityRoutes } from "./routes/sustainability"
 import { ticketChargeRoutes } from "./routes/ticket-charges"
@@ -299,6 +301,9 @@ export function createApp({
   // The Pickup Exceptions (M5 of #293): the company's contaminant codes, the projects' charge rules, and a place's exception history.
   app.route("/", contaminantCodeRoutes(guard))
   app.route("/", pickupExceptionRoutes(guard, { now }))
+  // Bulky-waste booking (O11 of #290): the areas' schedules of collection days, and the bookings that take a slot of one on the project's clock.
+  app.route("/", bulkyScheduleRoutes(guard))
+  app.route("/", bulkyBookingRoutes(guard, { now }))
   // Recycling-centre visits (M4 of #293): the register of plates and cards, the attendant's check-in and the ledger — a check-in's instant and a void's stamp take the app's clock — and the projects' Visit Rules.
   app.route("/", accessCredentialRoutes(guard))
   app.route("/", siteVisitRoutes(guard, { now }))

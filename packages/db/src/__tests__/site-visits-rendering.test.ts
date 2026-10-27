@@ -36,7 +36,7 @@ const NEW_TABLES = { accessCredential, siteVisit, siteVisitFraction, visitRule, 
 
 const alter = (table: string, statement: string): string => `ALTER TABLE "wms"."${table}" ${statement};`
 
-/** The clause 0052 adds to the event's kind shape. */
+/** The clause 0054 adds to the event's kind shape. */
 const VISIT_CLAUSE = `when 'visit' then ${ref("billable_event", "visit_id")} is not null and ${ref("billable_event", "pickup_id")} is null and ${ref("billable_event", "ticket_id")} is null and ${ref("billable_event", "reverses_event_id")} is null`
 
 /** What drizzle-kit wrote into the contexts before: the checks dropped, the visit's column, key and index, and the checks added again. */

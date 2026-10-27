@@ -10,7 +10,7 @@
 // and registry-rendering.test.ts the product, so here they are read from the
 // schema, less what a later migration added: M5b's `pickup-exception` kind
 // (#293, 0046), its value and its clause of the kind's shape, and the
-// recycling-centre visit's `visit` kind and unit (#393, 0052), its clause of
+// recycling-centre visit's `visit` kind and unit (#393, 0054), its clause of
 // the kind's shape and the product's value. Then the migration, which has to be exactly those statements and
 // below them the new table's fence, its `updated_at` trigger and its audit
 // trigger, a set of its project read under `commercial.products`. The file is
@@ -50,10 +50,10 @@ const UNITS_AS_OF_0044 = PRODUCT_UNITS.filter((unit) => unit !== "visit")
 /** The clause M5b added to the kind's shape (#293), which 0044's spelling lacks. */
 const EXCEPTION_CLAUSE = ` when 'pickup-exception' then ${ref("billable_event", "pickup_id")} is not null and ${ref("billable_event", "ticket_id")} is null and ${ref("billable_event", "reverses_event_id")} is null`
 
-/** The clause 0052 added to the kind's shape (#393), which 0044's spelling lacks too. */
+/** The clause 0054 added to the kind's shape (#393), which 0044's spelling lacks too. */
 const VISIT_CLAUSE = ` when 'visit' then ${ref("billable_event", "visit_id")} is not null and ${ref("billable_event", "pickup_id")} is null and ${ref("billable_event", "ticket_id")} is null and ${ref("billable_event", "reverses_event_id")} is null`
 
-/** The event's checks as 0044 spelled them: today's, the kind's shape less M5b's clause and 0052's. */
+/** The event's checks as 0044 spelled them: today's, the kind's shape less M5b's clause and 0054's. */
 const checksAsOf0044 = (): Map<string, string> => {
   const checks = new Map(checksOf(billableEvent))
   const kindShape = checks.get("billable_event_kind_shape") ?? ""

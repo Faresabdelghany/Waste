@@ -17,6 +17,8 @@
 export const MODULE_KEYS = [
   // Tickets
   "operate.tickets",
+  // Bulky Bookings (O11 of #290): a customer's bulky items booked onto a collection day of their area, routed as a stop.
+  "operate.bulky-bookings",
   "operate.exceptions",
   "operate.driver-app",
   // The recycling centres' visit ledger and the attendant's check-in (M4 of #293).

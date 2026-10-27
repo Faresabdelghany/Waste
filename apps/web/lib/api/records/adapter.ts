@@ -186,6 +186,12 @@ export type ServerModule = {
   derivedFrom?: readonly string[]
   /** Whether its records are read on the project's day (a boundary in force, a container's serving): the store reads it again once that day turns (#232). */
   readsTheDay?: true
+  /**
+   * Whether it is read for a Service Provider's account alone (#291 C24): a
+   * module whose routes the API opens to an office account under another
+   * grant, whose rows the office reads in their own module.
+   */
+  providersOnly?: true
 }
 
 /** The client the adapters call through; the type is client.ts's, named here so records/ imports one thing. */

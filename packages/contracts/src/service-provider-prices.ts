@@ -14,7 +14,7 @@
 // assignment's is the route's question. A Service Provider's manager reads
 // the prices of its own assignments through the list, bounded by the route.
 import { IsoDate } from "./dates"
-import { IndexBase } from "./finance"
+import { IndexBase, indexBody } from "./finance"
 import { Id } from "./ids"
 import { Currency } from "./organisation"
 import { ProjectScopedListQuery } from "./queries"
@@ -93,3 +93,25 @@ export const ServiceProviderPriceListQuery = ProjectScopedListQuery.extend({
   validOn: IsoDate.optional(),
 })
 export type ServiceProviderPriceListQuery = z.infer<typeof ServiceProviderPriceListQuery>
+
+/**
+ * `POST /service-provider-prices/index`: an Apply index over many prices
+ * (#291 C8), every price under one provider's assignments or under one
+ * award, each in force on `appliedFrom` ended on it and its successor written
+ * over the bid or the current fee; `dryRun` previews it. Exactly one of the
+ * two scopes.
+ */
+export const ServiceProviderPriceBulkIndex = z
+  .strictObject({
+    /** Every price under the assignments naming this provider, in the caller's projects. */
+    serviceProviderId: Id.optional(),
+    /** Every price under this award. */
+    serviceAreaAssignmentId: Id.optional(),
+    base: IndexBase,
+    ...indexBody,
+  })
+  .refine((body) => (body.serviceProviderId === undefined) !== (body.serviceAreaAssignmentId === undefined), {
+    message: "Name either a provider or an award",
+    path: ["serviceProviderId"],
+  })
+export type ServiceProviderPriceBulkIndex = z.infer<typeof ServiceProviderPriceBulkIndex>

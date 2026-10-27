@@ -82,6 +82,7 @@ import { contaminantCode, contaminantCodeFraction, pickupExceptionRule, pickupEx
 import { planningArea, planningAreaBoundary } from "@waste/db/schema/planning-areas"
 import { alert, ticket, ticketBooking, ticketEvent, ticketSla } from "@waste/db/schema/resolution"
 import { application, applicationDecision } from "@waste/db/schema/applications"
+import { bulkyBooking, bulkyBookingItem, bulkySchedule } from "@waste/db/schema/bulky"
 import { collectionGroup, collectionGroupContainer, collectionGroupContainerType, collectionGroupFraction, routeScheme } from "@waste/db/schema/route-schemes"
 import { withCompany } from "@waste/db/tenant"
 import { normaliseGrants, type Grant } from "@waste/domain/access/grants"
@@ -398,6 +399,10 @@ export async function dropTenant(pool: Database, companyId: string, owner?: Data
     await tx.delete(plan).where(eq(plan.companyId, companyId))
     await tx.delete(session).where(eq(session.companyId, companyId))
     await tx.delete(pickup).where(eq(pickup.companyId, companyId))
+    // The bulky bookings (O11 of #290) after the stops that name them, before the schedules, places, agreements and products they name.
+    await tx.delete(bulkyBookingItem).where(eq(bulkyBookingItem.companyId, companyId))
+    await tx.delete(bulkyBooking).where(eq(bulkyBooking.companyId, companyId))
+    await tx.delete(bulkySchedule).where(eq(bulkySchedule.companyId, companyId))
     // A stop and its proofs name the code they were tagged with, so the codes go after them, before the fractions they apply to.
     await tx.delete(contaminantCodeFraction).where(eq(contaminantCodeFraction.companyId, companyId))
     await tx.delete(contaminantCode).where(eq(contaminantCode.companyId, companyId))

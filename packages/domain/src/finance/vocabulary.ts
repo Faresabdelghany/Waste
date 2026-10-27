@@ -74,6 +74,8 @@ export const WEIGHT_REVIEW_DECISIONS = ["approved", "rejected", "corrected"] as 
 export const WEIGHT_REVIEW_STATUSES = ["captured", "approved", "rejected", "corrected"] as const
 /** What an indexation multiplied: the locked bid, or the fee it replaced. */
 export const INDEX_BASES = ["bid", "current-fee"] as const
+/** Why an Apply index over many prices leaves a row as it is (#291 C8): it already starts on the index day, it starts later, or its successor would be a new reference to a product no longer active. A reading on the answer, never a column. */
+export const INDEX_SKIP_REASONS = ["starts-on-index-day", "scheduled", "product-not-active"] as const
 /** How a project's invoices are referenced for payment (#291 C4): none, or a Danish FI card — 71 the reference alone, 75 the reference and a text line. A Norwegian KID or a Swedish OCR is a later value here. */
 export const PAYMENT_REFERENCE_SCHEMES = ["none", "fik-71", "fik-75"] as const
 /** Where a payment came from (#291 C6): registered by the office, or a line of an imported bank statement. A card provider (#293 M15) is a later value here. */
@@ -92,6 +94,7 @@ export type SettlementEventKind = (typeof SETTLEMENT_EVENT_KINDS)[number]
 export type WeightReviewDecision = (typeof WEIGHT_REVIEW_DECISIONS)[number]
 export type WeightReviewStatus = (typeof WEIGHT_REVIEW_STATUSES)[number]
 export type IndexBase = (typeof INDEX_BASES)[number]
+export type IndexSkipReason = (typeof INDEX_SKIP_REASONS)[number]
 export type PaymentReferenceScheme = (typeof PAYMENT_REFERENCE_SCHEMES)[number]
 export type PaymentSource = (typeof PAYMENT_SOURCES)[number]
 
@@ -125,6 +128,7 @@ export const FINANCE_VOCABULARIES = {
   WEIGHT_REVIEW_DECISIONS,
   WEIGHT_REVIEW_STATUSES,
   INDEX_BASES,
+  INDEX_SKIP_REASONS,
   PAYMENT_REFERENCE_SCHEMES,
   PAYMENT_SOURCES,
   ACCOUNTING_SOURCE_KINDS,

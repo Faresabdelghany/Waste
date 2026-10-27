@@ -369,8 +369,22 @@
     {
       "idx": 52,
       "version": "7",
-      "when": 1793114716490,
-      "tag": "0052_site_visits",
+      "when": 1793086298088,
+      "tag": "0052_price_indexation",
+      "breakpoints": true
+    },
+    {
+      "idx": 53,
+      "version": "7",
+      "when": 1793117570372,
+      "tag": "0053_bulky_booking",
+      "breakpoints": true
+    },
+    {
+      "idx": 54,
+      "version": "7",
+      "when": 1793122833651,
+      "tag": "0054_site_visits",
       "breakpoints": true
     }
   ]

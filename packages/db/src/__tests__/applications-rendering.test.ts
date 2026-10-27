@@ -34,7 +34,7 @@ const fileStatements = async (): Promise<string[]> => statementsOf(await readFil
 /** The tables the two name, the same on both sides of the diff. */
 const referenced = { company, project, customer, property, sharedCollectionPoint, subscription, userAccount }
 
-/** What drizzle-kit writes for 0040: the two tables, and the outbox from its 0010 spelling to its 0040 one (outbox-as-of.ts; 0052 grew it again). */
+/** What drizzle-kit writes for 0040: the two tables, and the outbox from its 0010 spelling to its 0040 one (outbox-as-of.ts; 0054 grew it again). */
 const generated = (): Promise<string[]> => statementsBetween({ ...referenced, outboxEvent: outboxEventAsOf0010 }, { ...referenced, outboxEvent: outboxEventAsOf0040, application, applicationDecision })
 
 const decision = (column: string) => ref("application_decision", column)

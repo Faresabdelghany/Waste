@@ -12,7 +12,7 @@ import { describe, test } from "node:test"
 import { defineVocabularyTests } from "../../__tests__/vocabulary"
 import * as vocabulary from "../vocabulary"
 
-defineVocabularyTests("Execution", vocabulary, vocabulary.EXECUTION_VOCABULARIES, 15, ["DRIVER_PICKUP_REASONS", "CLOSING_REASONS", "OFFICE_STOP_SERVICES", "WORK_ORDER_SERVICES", "OFFICE_CANCEL_REASON_CODES", "PICKUP_EXCEPTION_REASONS", "CODED_PROOF_KINDS"])
+defineVocabularyTests("Execution", vocabulary, vocabulary.EXECUTION_VOCABULARIES, 16, ["DRIVER_PICKUP_REASONS", "CLOSING_REASONS", "OFFICE_STOP_SERVICES", "WORK_ORDER_SERVICES", "OFFICE_CANCEL_REASON_CODES", "PICKUP_EXCEPTION_REASONS", "CODED_PROOF_KINDS"])
 
 describe("the Execution vocabulary's own rules", () => {
   test("the route and pickup statuses are #97 B's, verbatim, and the outcomes are the statuses less planned", () => {
@@ -33,10 +33,15 @@ describe("the Execution vocabulary's own rules", () => {
     assert.deepEqual([...vocabulary.PICKUP_ORIGINS], ["generation", "office"])
   })
 
-  test("a stop empties its container, or is one of the office's work orders; the office books every service of the list, a delivery, a removal and a swap with their ledger moves (O3 of #290)", () => {
-    assert.deepEqual([...vocabulary.PICKUP_SERVICES], ["empty", "deliver", "remove", "swap", "repair", "wash"])
-    assert.deepEqual([...vocabulary.OFFICE_STOP_SERVICES], ["empty", "deliver", "remove", "swap", "repair", "wash"])
+  test("a stop empties its container, or is one of the office's work orders or a bulky booking's collection; the office books every service of the list, a delivery, a removal and a swap with their ledger moves (O3 of #290)", () => {
+    assert.deepEqual([...vocabulary.PICKUP_SERVICES], ["empty", "deliver", "remove", "swap", "repair", "wash", "bulky"])
+    assert.deepEqual([...vocabulary.OFFICE_STOP_SERVICES], ["empty", "deliver", "remove", "swap", "repair", "wash", "bulky"])
     for (const service of vocabulary.OFFICE_STOP_SERVICES) assert.ok((vocabulary.PICKUP_SERVICES as readonly string[]).includes(service), service)
+  })
+
+  test("a bulky booking is booked, routed, collected or cancelled (O11 of #290), and a bulky collection is no work order a project prices by its service", () => {
+    assert.deepEqual([...vocabulary.BULKY_BOOKING_STATUSES], ["booked", "routed", "collected", "cancelled"])
+    assert.equal(vocabulary.isWorkOrderService("bulky"), false)
   })
 
   test("a route is cancelled for one of the office's eight reasons, or by a run that no longer plans it (O5 of #290): the office's codes are the list less the run's", () => {

@@ -11,7 +11,7 @@ export type ServiceStop = { id: string; containerId: string | null; origin: Pick
 const TAKEN_OFF: ReadonlySet<PickupReason> = new Set(["removed-by-dispatcher", "regeneration"])
 
 /** Each service as a sentence names it: "a planned delivery", "the ledger refused the removal". */
-export const SERVICE_NOUNS: Readonly<Record<PickupService, string>> = { empty: "emptying", deliver: "delivery", remove: "removal", swap: "swap", repair: "repair", wash: "wash" }
+export const SERVICE_NOUNS: Readonly<Record<PickupService, string>> = { empty: "emptying", deliver: "delivery", remove: "removal", swap: "swap", repair: "repair", wash: "wash", bulky: "bulky collection" }
 
 /** Whether a stop empties its container: an emptying, or a stop read from before the service. */
 export const empties = (stop: Pick<ServiceStop, "service">): boolean => (stop.service ?? "empty") === "empty"

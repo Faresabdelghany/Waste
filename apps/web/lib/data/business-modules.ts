@@ -1204,6 +1204,25 @@ const operate: WorkspaceDefinition = {
       ],
     },
     {
+      // Bulky Bookings (O11 of #290): on the API only, so no fixture records; the module's surfaces are O11b's.
+      id: "bulky-bookings",
+      label: "Bulky Bookings",
+      title: "Bulky Bookings",
+      description: "A customer's bulky items booked onto a collection day of their planning area, a slot of the day's capacity each, routed by the office as a stop and charged once collected.",
+      entityLabel: "Bulky booking",
+      contextLabel: "Customer · place",
+      valueLabel: "Day",
+      primaryAction: "Book bulky collection",
+      metrics: [],
+      lifecycle: ["Booked", "Routed", "Collected", "Cancelled"],
+      rules: [
+        "A booking takes one slot of its day; a full day is not offered.",
+        "The office routes a booking onto a route running on its day, as a stop at the booking's address.",
+        "A collected booking is charged at its schedule's product to the agreement it names.",
+      ],
+      records: [],
+    },
+    {
       id: "pickups",
       label: "Pickups",
       title: "Pickups",
@@ -3656,6 +3675,7 @@ const operateWithoutRouteStudio: WorkspaceDefinition = {
     "Manage customer and operational tickets, then triage the exceptions and alerts that require resolution work.",
   modules: [
     requireWorkspaceModule(operate, "tickets"),
+    requireWorkspaceModule(operate, "bulky-bookings"),
     requireWorkspaceModule(operate, "exceptions"),
     // Retained as a data contract for route evidence and existing schemas,
     // but omitted from office navigation and public routing.

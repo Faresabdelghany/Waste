@@ -13,9 +13,10 @@
 // the body leaves out is deleted; the new ones go in one insert. Two writes
 // to one project's set take turns under a transaction-scoped advisory lock on
 // the set, so neither merges into the other. Not `lockRow` on the project,
-// as a set whose parent the API locks would be: `FOR UPDATE` on a project
-// row blocks every insert whose key names it — a ticket, a route, a stop —
-// until the set is saved, and the set's rule is the set's alone.
+// as a set whose parent the API locks would be: the set's rule is the set's
+// alone, and the project's row lock is held for a whole billing run, an
+// accounting export or a payment's allocation, none of which an SLA save
+// should wait for.
 //
 // The project is a path's row: one the caller does not work in, or another
 // company's, is the family's 404, as a read of the project would be.
