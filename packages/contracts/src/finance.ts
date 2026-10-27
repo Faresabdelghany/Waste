@@ -31,6 +31,7 @@ import {
   CREDIT_REASONS,
   EXCLUSION_REASONS,
   INDEX_BASES,
+  INDEX_SKIP_REASONS,
   INVOICE_KINDS,
   PAYMENT_REFERENCE_SCHEMES,
   SETTLEMENT_EVENT_KINDS,
@@ -41,7 +42,10 @@ import {
 import { BIC_PATTERN, DEFAULT_PAYMENT_TERMS_DAYS, FIK_CREDITOR_PATTERN, IBAN_PATTERN, PAYMENT_REFERENCE_PATTERN, PAYMENT_TERMS_MAX, VAT_NUMBER_PATTERN } from "@waste/domain/finance/payment"
 import * as z from "zod"
 
+import { IsoDate } from "./dates"
 import { Id } from "./ids"
+import { Int4, NonNegativeMinor } from "./resource"
+import { Label } from "./text"
 
 /** What a Billable Event was made of: a pickup, a ticket, a person's entry, or the reversal of an invoiced event. */
 export const BillableEventKind = z.enum(BILLABLE_EVENT_KINDS)
@@ -94,6 +98,53 @@ export type WeightReviewStatus = z.infer<typeof WeightReviewStatus>
 /** What an indexation multiplied: the locked bid, or the fee it replaced. */
 export const IndexBase = z.enum(INDEX_BASES)
 export type IndexBase = z.infer<typeof IndexBase>
+
+/** Why an Apply index over many prices leaves a row as it is (#291 C8). */
+export const IndexSkipReason = z.enum(INDEX_SKIP_REASONS)
+export type IndexSkipReason = z.infer<typeof IndexSkipReason>
+
+/**
+ * What every Apply index over many prices takes (#291 C8): the label, the
+ * basis points and the first day the new prices hold, as the single provider
+ * index takes them, and `dryRun`, the preview, which answers the plan and
+ * writes nothing.
+ */
+export const indexBody = {
+  /** What the indexation is: `CPI 2027`. */
+  label: Label,
+  /** 320 for +3.2 %; negative allowed, a deflator. Within an `integer`, the column it is kept in. */
+  basisPoints: Int4,
+  /** The first day the new prices hold. */
+  appliedFrom: IsoDate,
+  /** The preview: the plan answered, nothing written. */
+  dryRun: z.boolean().optional(),
+}
+
+/** One row of an Apply index's plan: indexed at a price, with the successor's id once written, or skipped with why. */
+export const IndexLine = z.object({
+  /** The row judged: a price list row or a service provider price. */
+  id: Id,
+  productId: Id,
+  /** What the row charges now. */
+  fromMinor: NonNegativeMinor,
+  /** The successor's price; null on a skipped row. */
+  toMinor: NonNegativeMinor.nullable(),
+  /** The successor written; null on a skipped row and throughout a preview. */
+  indexedId: Id.nullable(),
+  /** Why the row stays as it is; null on an indexed row. */
+  skipped: IndexSkipReason.nullable(),
+})
+export type IndexLine = z.infer<typeof IndexLine>
+
+/** What an Apply index over many prices answers: the body's index again, and one line per row in force on the day or starting after it, oldest first. */
+export const IndexResult = z.object({
+  dryRun: z.boolean(),
+  label: Label,
+  basisPoints: z.int(),
+  appliedFrom: IsoDate,
+  lines: z.array(IndexLine),
+})
+export type IndexResult = z.infer<typeof IndexResult>
 
 /** The prefix an invoice's number is shown with: `INV-26007188`. Presentation, spelled once. */
 export const INVOICE_NUMBER_PREFIX = "INV-"

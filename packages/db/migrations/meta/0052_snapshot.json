@@ -1,5 +1,5 @@
 {
-  "id": "7705b648-ba81-4c7c-ad8f-fb9127dd993d",
+  "id": "ce898c50-cfa8-47bb-bf25-d14f587aba7a",
   "prevId": "a87d60c9-b795-4899-a0bc-07bbbaf1f5a4",
   "version": "7",
   "dialect": "postgresql",
@@ -10289,12 +10289,6 @@
           "type": "uuid",
           "primaryKey": false,
           "notNull": false
-        },
-        "bulky_booking_id": {
-          "name": "bulky_booking_id",
-          "type": "uuid",
-          "primaryKey": false,
-          "notNull": false
         }
       },
       "indexes": {
@@ -10322,28 +10316,6 @@
           ],
           "isUnique": true,
           "where": "\"wms\".\"pickup\".\"origin\" = 'generation'",
-          "concurrently": false,
-          "method": "btree",
-          "with": {}
-        },
-        "pickup_bulky_booking_id_key": {
-          "name": "pickup_bulky_booking_id_key",
-          "columns": [
-            {
-              "expression": "company_id",
-              "isExpression": false,
-              "asc": true,
-              "nulls": "last"
-            },
-            {
-              "expression": "bulky_booking_id",
-              "isExpression": false,
-              "asc": true,
-              "nulls": "last"
-            }
-          ],
-          "isUnique": true,
-          "where": "\"wms\".\"pickup\".\"bulky_booking_id\" is not null and \"wms\".\"pickup\".\"status\" in ('planned', 'completed')",
           "concurrently": false,
           "method": "btree",
           "with": {}
@@ -10607,27 +10579,6 @@
           "concurrently": false,
           "method": "btree",
           "with": {}
-        },
-        "pickup_bulky_booking_id_idx": {
-          "name": "pickup_bulky_booking_id_idx",
-          "columns": [
-            {
-              "expression": "company_id",
-              "isExpression": false,
-              "asc": true,
-              "nulls": "last"
-            },
-            {
-              "expression": "bulky_booking_id",
-              "isExpression": false,
-              "asc": true,
-              "nulls": "last"
-            }
-          ],
-          "isUnique": false,
-          "concurrently": false,
-          "method": "btree",
-          "with": {}
         }
       },
       "foreignKeys": {
@@ -10803,24 +10754,6 @@
           "onDelete": "no action",
           "onUpdate": "no action"
         },
-        "pickup_bulky_booking_id_fk": {
-          "name": "pickup_bulky_booking_id_fk",
-          "tableFrom": "pickup",
-          "tableTo": "bulky_booking",
-          "schemaTo": "wms",
-          "columnsFrom": [
-            "company_id",
-            "project_id",
-            "bulky_booking_id"
-          ],
-          "columnsTo": [
-            "company_id",
-            "project_id",
-            "id"
-          ],
-          "onDelete": "no action",
-          "onUpdate": "no action"
-        },
         "pickup_contaminant_code_id_fk": {
           "name": "pickup_contaminant_code_id_fk",
           "tableFrom": "pickup",
@@ -10863,7 +10796,7 @@
         },
         "pickup_service_one_of": {
           "name": "pickup_service_one_of",
-          "value": "\"wms\".\"pickup\".\"service\" in ('empty', 'deliver', 'remove', 'swap', 'repair', 'wash', 'bulky')"
+          "value": "\"wms\".\"pickup\".\"service\" in ('empty', 'deliver', 'remove', 'swap', 'repair', 'wash')"
         },
         "pickup_service_origin_shape": {
           "name": "pickup_service_origin_shape",
@@ -10871,11 +10804,7 @@
         },
         "pickup_service_container_shape": {
           "name": "pickup_service_container_shape",
-          "value": "\"wms\".\"pickup\".\"service\" in ('empty', 'bulky') or \"wms\".\"pickup\".\"container_id\" is not null"
-        },
-        "pickup_bulky_shape": {
-          "name": "pickup_bulky_shape",
-          "value": "(\"wms\".\"pickup\".\"service\" = 'bulky') = (\"wms\".\"pickup\".\"bulky_booking_id\" is not null) and (\"wms\".\"pickup\".\"service\" <> 'bulky' or \"wms\".\"pickup\".\"container_id\" is null)"
+          "value": "\"wms\".\"pickup\".\"service\" = 'empty' or \"wms\".\"pickup\".\"container_id\" is not null"
         },
         "pickup_subscription_shape": {
           "name": "pickup_subscription_shape",
@@ -19385,6 +19314,24 @@
           "primaryKey": false,
           "notNull": false
         },
+        "indexed_from_id": {
+          "name": "indexed_from_id",
+          "type": "uuid",
+          "primaryKey": false,
+          "notNull": false
+        },
+        "index_label": {
+          "name": "index_label",
+          "type": "text",
+          "primaryKey": false,
+          "notNull": false
+        },
+        "index_basis_points": {
+          "name": "index_basis_points",
+          "type": "integer",
+          "primaryKey": false,
+          "notNull": false
+        },
         "condition_key": {
           "name": "condition_key",
           "type": "text",
@@ -19528,6 +19475,27 @@
           "concurrently": false,
           "method": "btree",
           "with": {}
+        },
+        "price_list_row_indexed_from_id_idx": {
+          "name": "price_list_row_indexed_from_id_idx",
+          "columns": [
+            {
+              "expression": "company_id",
+              "isExpression": false,
+              "asc": true,
+              "nulls": "last"
+            },
+            {
+              "expression": "indexed_from_id",
+              "isExpression": false,
+              "asc": true,
+              "nulls": "last"
+            }
+          ],
+          "isUnique": false,
+          "concurrently": false,
+          "method": "btree",
+          "with": {}
         }
       },
       "foreignKeys": {
@@ -19662,6 +19630,24 @@
           ],
           "onDelete": "no action",
           "onUpdate": "no action"
+        },
+        "price_list_row_indexed_from_id_fk": {
+          "name": "price_list_row_indexed_from_id_fk",
+          "tableFrom": "price_list_row",
+          "tableTo": "price_list_row",
+          "schemaTo": "wms",
+          "columnsFrom": [
+            "company_id",
+            "project_id",
+            "indexed_from_id"
+          ],
+          "columnsTo": [
+            "company_id",
+            "project_id",
+            "id"
+          ],
+          "onDelete": "no action",
+          "onUpdate": "no action"
         }
       },
       "compositePrimaryKeys": {},
@@ -19689,6 +19675,10 @@
         "price_list_row_unit_price_not_negative": {
           "name": "price_list_row_unit_price_not_negative",
           "value": "\"wms\".\"price_list_row\".\"unit_price_minor\" >= 0"
+        },
+        "price_list_row_index_shape": {
+          "name": "price_list_row_index_shape",
+          "value": "(\"wms\".\"price_list_row\".\"indexed_from_id\" is null) = (\"wms\".\"price_list_row\".\"index_label\" is null) and (\"wms\".\"price_list_row\".\"indexed_from_id\" is null) = (\"wms\".\"price_list_row\".\"index_basis_points\" is null) and \"wms\".\"price_list_row\".\"indexed_from_id\" <> \"wms\".\"price_list_row\".\"id\""
         }
       },
       "isRLSEnabled": false
@@ -25067,1034 +25057,6 @@
         "pickup_exception_rule_step_position_positive": {
           "name": "pickup_exception_rule_step_position_positive",
           "value": "\"wms\".\"pickup_exception_rule_step\".\"position\" > 0"
-        }
-      },
-      "isRLSEnabled": false
-    },
-    "wms.bulky_booking": {
-      "name": "bulky_booking",
-      "schema": "wms",
-      "columns": {
-        "id": {
-          "name": "id",
-          "type": "uuid",
-          "primaryKey": true,
-          "notNull": true,
-          "default": "wms.uuidv7()"
-        },
-        "company_id": {
-          "name": "company_id",
-          "type": "uuid",
-          "primaryKey": false,
-          "notNull": true
-        },
-        "project_id": {
-          "name": "project_id",
-          "type": "uuid",
-          "primaryKey": false,
-          "notNull": true
-        },
-        "created_at": {
-          "name": "created_at",
-          "type": "timestamp with time zone",
-          "primaryKey": false,
-          "notNull": true,
-          "default": "now()"
-        },
-        "updated_at": {
-          "name": "updated_at",
-          "type": "timestamp with time zone",
-          "primaryKey": false,
-          "notNull": true,
-          "default": "now()"
-        },
-        "customer_id": {
-          "name": "customer_id",
-          "type": "uuid",
-          "primaryKey": false,
-          "notNull": true
-        },
-        "agreement_id": {
-          "name": "agreement_id",
-          "type": "uuid",
-          "primaryKey": false,
-          "notNull": true
-        },
-        "property_id": {
-          "name": "property_id",
-          "type": "uuid",
-          "primaryKey": false,
-          "notNull": false
-        },
-        "shared_collection_point_id": {
-          "name": "shared_collection_point_id",
-          "type": "uuid",
-          "primaryKey": false,
-          "notNull": false
-        },
-        "waste_fraction_id": {
-          "name": "waste_fraction_id",
-          "type": "uuid",
-          "primaryKey": false,
-          "notNull": true
-        },
-        "day": {
-          "name": "day",
-          "type": "date",
-          "primaryKey": false,
-          "notNull": true
-        },
-        "planning_area_id": {
-          "name": "planning_area_id",
-          "type": "uuid",
-          "primaryKey": false,
-          "notNull": true
-        },
-        "schedule_id": {
-          "name": "schedule_id",
-          "type": "uuid",
-          "primaryKey": false,
-          "notNull": true
-        },
-        "product_id": {
-          "name": "product_id",
-          "type": "uuid",
-          "primaryKey": false,
-          "notNull": true
-        },
-        "note": {
-          "name": "note",
-          "type": "text",
-          "primaryKey": false,
-          "notNull": false
-        },
-        "booked_by": {
-          "name": "booked_by",
-          "type": "uuid",
-          "primaryKey": false,
-          "notNull": false
-        },
-        "cancelled_at": {
-          "name": "cancelled_at",
-          "type": "timestamp with time zone",
-          "primaryKey": false,
-          "notNull": false
-        },
-        "cancelled_by": {
-          "name": "cancelled_by",
-          "type": "uuid",
-          "primaryKey": false,
-          "notNull": false
-        },
-        "cancel_reason": {
-          "name": "cancel_reason",
-          "type": "text",
-          "primaryKey": false,
-          "notNull": false
-        }
-      },
-      "indexes": {
-        "bulky_booking_schedule_id_day_idx": {
-          "name": "bulky_booking_schedule_id_day_idx",
-          "columns": [
-            {
-              "expression": "company_id",
-              "isExpression": false,
-              "asc": true,
-              "nulls": "last"
-            },
-            {
-              "expression": "schedule_id",
-              "isExpression": false,
-              "asc": true,
-              "nulls": "last"
-            },
-            {
-              "expression": "day",
-              "isExpression": false,
-              "asc": true,
-              "nulls": "last"
-            }
-          ],
-          "isUnique": false,
-          "concurrently": false,
-          "method": "btree",
-          "with": {}
-        },
-        "bulky_booking_project_id_idx": {
-          "name": "bulky_booking_project_id_idx",
-          "columns": [
-            {
-              "expression": "company_id",
-              "isExpression": false,
-              "asc": true,
-              "nulls": "last"
-            },
-            {
-              "expression": "project_id",
-              "isExpression": false,
-              "asc": true,
-              "nulls": "last"
-            }
-          ],
-          "isUnique": false,
-          "concurrently": false,
-          "method": "btree",
-          "with": {}
-        },
-        "bulky_booking_customer_id_idx": {
-          "name": "bulky_booking_customer_id_idx",
-          "columns": [
-            {
-              "expression": "company_id",
-              "isExpression": false,
-              "asc": true,
-              "nulls": "last"
-            },
-            {
-              "expression": "customer_id",
-              "isExpression": false,
-              "asc": true,
-              "nulls": "last"
-            }
-          ],
-          "isUnique": false,
-          "concurrently": false,
-          "method": "btree",
-          "with": {}
-        },
-        "bulky_booking_agreement_id_idx": {
-          "name": "bulky_booking_agreement_id_idx",
-          "columns": [
-            {
-              "expression": "company_id",
-              "isExpression": false,
-              "asc": true,
-              "nulls": "last"
-            },
-            {
-              "expression": "agreement_id",
-              "isExpression": false,
-              "asc": true,
-              "nulls": "last"
-            }
-          ],
-          "isUnique": false,
-          "concurrently": false,
-          "method": "btree",
-          "with": {}
-        },
-        "bulky_booking_property_id_idx": {
-          "name": "bulky_booking_property_id_idx",
-          "columns": [
-            {
-              "expression": "company_id",
-              "isExpression": false,
-              "asc": true,
-              "nulls": "last"
-            },
-            {
-              "expression": "property_id",
-              "isExpression": false,
-              "asc": true,
-              "nulls": "last"
-            }
-          ],
-          "isUnique": false,
-          "concurrently": false,
-          "method": "btree",
-          "with": {}
-        },
-        "bulky_booking_shared_collection_point_id_idx": {
-          "name": "bulky_booking_shared_collection_point_id_idx",
-          "columns": [
-            {
-              "expression": "company_id",
-              "isExpression": false,
-              "asc": true,
-              "nulls": "last"
-            },
-            {
-              "expression": "shared_collection_point_id",
-              "isExpression": false,
-              "asc": true,
-              "nulls": "last"
-            }
-          ],
-          "isUnique": false,
-          "concurrently": false,
-          "method": "btree",
-          "with": {}
-        },
-        "bulky_booking_waste_fraction_id_idx": {
-          "name": "bulky_booking_waste_fraction_id_idx",
-          "columns": [
-            {
-              "expression": "company_id",
-              "isExpression": false,
-              "asc": true,
-              "nulls": "last"
-            },
-            {
-              "expression": "waste_fraction_id",
-              "isExpression": false,
-              "asc": true,
-              "nulls": "last"
-            }
-          ],
-          "isUnique": false,
-          "concurrently": false,
-          "method": "btree",
-          "with": {}
-        },
-        "bulky_booking_planning_area_id_idx": {
-          "name": "bulky_booking_planning_area_id_idx",
-          "columns": [
-            {
-              "expression": "company_id",
-              "isExpression": false,
-              "asc": true,
-              "nulls": "last"
-            },
-            {
-              "expression": "planning_area_id",
-              "isExpression": false,
-              "asc": true,
-              "nulls": "last"
-            }
-          ],
-          "isUnique": false,
-          "concurrently": false,
-          "method": "btree",
-          "with": {}
-        },
-        "bulky_booking_product_id_idx": {
-          "name": "bulky_booking_product_id_idx",
-          "columns": [
-            {
-              "expression": "company_id",
-              "isExpression": false,
-              "asc": true,
-              "nulls": "last"
-            },
-            {
-              "expression": "product_id",
-              "isExpression": false,
-              "asc": true,
-              "nulls": "last"
-            }
-          ],
-          "isUnique": false,
-          "concurrently": false,
-          "method": "btree",
-          "with": {}
-        },
-        "bulky_booking_booked_by_idx": {
-          "name": "bulky_booking_booked_by_idx",
-          "columns": [
-            {
-              "expression": "company_id",
-              "isExpression": false,
-              "asc": true,
-              "nulls": "last"
-            },
-            {
-              "expression": "booked_by",
-              "isExpression": false,
-              "asc": true,
-              "nulls": "last"
-            }
-          ],
-          "isUnique": false,
-          "concurrently": false,
-          "method": "btree",
-          "with": {}
-        },
-        "bulky_booking_cancelled_by_idx": {
-          "name": "bulky_booking_cancelled_by_idx",
-          "columns": [
-            {
-              "expression": "company_id",
-              "isExpression": false,
-              "asc": true,
-              "nulls": "last"
-            },
-            {
-              "expression": "cancelled_by",
-              "isExpression": false,
-              "asc": true,
-              "nulls": "last"
-            }
-          ],
-          "isUnique": false,
-          "concurrently": false,
-          "method": "btree",
-          "with": {}
-        }
-      },
-      "foreignKeys": {
-        "bulky_booking_company_id_fk": {
-          "name": "bulky_booking_company_id_fk",
-          "tableFrom": "bulky_booking",
-          "tableTo": "company",
-          "schemaTo": "wms",
-          "columnsFrom": [
-            "company_id"
-          ],
-          "columnsTo": [
-            "id"
-          ],
-          "onDelete": "no action",
-          "onUpdate": "no action"
-        },
-        "bulky_booking_project_id_fk": {
-          "name": "bulky_booking_project_id_fk",
-          "tableFrom": "bulky_booking",
-          "tableTo": "project",
-          "schemaTo": "wms",
-          "columnsFrom": [
-            "company_id",
-            "project_id"
-          ],
-          "columnsTo": [
-            "company_id",
-            "id"
-          ],
-          "onDelete": "no action",
-          "onUpdate": "no action"
-        },
-        "bulky_booking_customer_id_fk": {
-          "name": "bulky_booking_customer_id_fk",
-          "tableFrom": "bulky_booking",
-          "tableTo": "customer",
-          "schemaTo": "wms",
-          "columnsFrom": [
-            "company_id",
-            "customer_id"
-          ],
-          "columnsTo": [
-            "company_id",
-            "id"
-          ],
-          "onDelete": "no action",
-          "onUpdate": "no action"
-        },
-        "bulky_booking_agreement_id_fk": {
-          "name": "bulky_booking_agreement_id_fk",
-          "tableFrom": "bulky_booking",
-          "tableTo": "agreement",
-          "schemaTo": "wms",
-          "columnsFrom": [
-            "company_id",
-            "project_id",
-            "agreement_id"
-          ],
-          "columnsTo": [
-            "company_id",
-            "project_id",
-            "id"
-          ],
-          "onDelete": "no action",
-          "onUpdate": "no action"
-        },
-        "bulky_booking_property_id_fk": {
-          "name": "bulky_booking_property_id_fk",
-          "tableFrom": "bulky_booking",
-          "tableTo": "property",
-          "schemaTo": "wms",
-          "columnsFrom": [
-            "company_id",
-            "project_id",
-            "property_id"
-          ],
-          "columnsTo": [
-            "company_id",
-            "project_id",
-            "id"
-          ],
-          "onDelete": "no action",
-          "onUpdate": "no action"
-        },
-        "bulky_booking_shared_collection_point_id_fk": {
-          "name": "bulky_booking_shared_collection_point_id_fk",
-          "tableFrom": "bulky_booking",
-          "tableTo": "shared_collection_point",
-          "schemaTo": "wms",
-          "columnsFrom": [
-            "company_id",
-            "project_id",
-            "shared_collection_point_id"
-          ],
-          "columnsTo": [
-            "company_id",
-            "project_id",
-            "id"
-          ],
-          "onDelete": "no action",
-          "onUpdate": "no action"
-        },
-        "bulky_booking_waste_fraction_id_fk": {
-          "name": "bulky_booking_waste_fraction_id_fk",
-          "tableFrom": "bulky_booking",
-          "tableTo": "waste_fraction",
-          "schemaTo": "wms",
-          "columnsFrom": [
-            "company_id",
-            "waste_fraction_id"
-          ],
-          "columnsTo": [
-            "company_id",
-            "id"
-          ],
-          "onDelete": "no action",
-          "onUpdate": "no action"
-        },
-        "bulky_booking_planning_area_id_fk": {
-          "name": "bulky_booking_planning_area_id_fk",
-          "tableFrom": "bulky_booking",
-          "tableTo": "planning_area",
-          "schemaTo": "wms",
-          "columnsFrom": [
-            "company_id",
-            "project_id",
-            "planning_area_id"
-          ],
-          "columnsTo": [
-            "company_id",
-            "project_id",
-            "id"
-          ],
-          "onDelete": "no action",
-          "onUpdate": "no action"
-        },
-        "bulky_booking_schedule_id_fk": {
-          "name": "bulky_booking_schedule_id_fk",
-          "tableFrom": "bulky_booking",
-          "tableTo": "bulky_schedule",
-          "schemaTo": "wms",
-          "columnsFrom": [
-            "company_id",
-            "project_id",
-            "schedule_id"
-          ],
-          "columnsTo": [
-            "company_id",
-            "project_id",
-            "id"
-          ],
-          "onDelete": "no action",
-          "onUpdate": "no action"
-        },
-        "bulky_booking_product_id_fk": {
-          "name": "bulky_booking_product_id_fk",
-          "tableFrom": "bulky_booking",
-          "tableTo": "product",
-          "schemaTo": "wms",
-          "columnsFrom": [
-            "company_id",
-            "project_id",
-            "product_id"
-          ],
-          "columnsTo": [
-            "company_id",
-            "project_id",
-            "id"
-          ],
-          "onDelete": "no action",
-          "onUpdate": "no action"
-        },
-        "bulky_booking_booked_by_fk": {
-          "name": "bulky_booking_booked_by_fk",
-          "tableFrom": "bulky_booking",
-          "tableTo": "user_account",
-          "schemaTo": "wms",
-          "columnsFrom": [
-            "company_id",
-            "booked_by"
-          ],
-          "columnsTo": [
-            "company_id",
-            "id"
-          ],
-          "onDelete": "no action",
-          "onUpdate": "no action"
-        },
-        "bulky_booking_cancelled_by_fk": {
-          "name": "bulky_booking_cancelled_by_fk",
-          "tableFrom": "bulky_booking",
-          "tableTo": "user_account",
-          "schemaTo": "wms",
-          "columnsFrom": [
-            "company_id",
-            "cancelled_by"
-          ],
-          "columnsTo": [
-            "company_id",
-            "id"
-          ],
-          "onDelete": "no action",
-          "onUpdate": "no action"
-        }
-      },
-      "compositePrimaryKeys": {},
-      "uniqueConstraints": {
-        "bulky_booking_project_key": {
-          "name": "bulky_booking_project_key",
-          "nullsNotDistinct": false,
-          "columns": [
-            "company_id",
-            "project_id",
-            "id"
-          ]
-        }
-      },
-      "policies": {},
-      "checkConstraints": {
-        "bulky_booking_place_exactly_one": {
-          "name": "bulky_booking_place_exactly_one",
-          "value": "(\"wms\".\"bulky_booking\".\"property_id\" is not null)::int + (\"wms\".\"bulky_booking\".\"shared_collection_point_id\" is not null)::int = 1"
-        },
-        "bulky_booking_cancel_shape": {
-          "name": "bulky_booking_cancel_shape",
-          "value": "(\"wms\".\"bulky_booking\".\"cancelled_at\" is null) = (\"wms\".\"bulky_booking\".\"cancel_reason\" is null) and (\"wms\".\"bulky_booking\".\"cancelled_by\" is null or \"wms\".\"bulky_booking\".\"cancelled_at\" is not null)"
-        }
-      },
-      "isRLSEnabled": false
-    },
-    "wms.bulky_booking_item": {
-      "name": "bulky_booking_item",
-      "schema": "wms",
-      "columns": {
-        "id": {
-          "name": "id",
-          "type": "uuid",
-          "primaryKey": true,
-          "notNull": true,
-          "default": "wms.uuidv7()"
-        },
-        "company_id": {
-          "name": "company_id",
-          "type": "uuid",
-          "primaryKey": false,
-          "notNull": true
-        },
-        "project_id": {
-          "name": "project_id",
-          "type": "uuid",
-          "primaryKey": false,
-          "notNull": true
-        },
-        "created_at": {
-          "name": "created_at",
-          "type": "timestamp with time zone",
-          "primaryKey": false,
-          "notNull": true,
-          "default": "now()"
-        },
-        "updated_at": {
-          "name": "updated_at",
-          "type": "timestamp with time zone",
-          "primaryKey": false,
-          "notNull": true,
-          "default": "now()"
-        },
-        "booking_id": {
-          "name": "booking_id",
-          "type": "uuid",
-          "primaryKey": false,
-          "notNull": true
-        },
-        "position": {
-          "name": "position",
-          "type": "integer",
-          "primaryKey": false,
-          "notNull": true
-        },
-        "description": {
-          "name": "description",
-          "type": "text",
-          "primaryKey": false,
-          "notNull": true
-        },
-        "quantity": {
-          "name": "quantity",
-          "type": "integer",
-          "primaryKey": false,
-          "notNull": true
-        }
-      },
-      "indexes": {
-        "bulky_booking_item_project_id_idx": {
-          "name": "bulky_booking_item_project_id_idx",
-          "columns": [
-            {
-              "expression": "company_id",
-              "isExpression": false,
-              "asc": true,
-              "nulls": "last"
-            },
-            {
-              "expression": "project_id",
-              "isExpression": false,
-              "asc": true,
-              "nulls": "last"
-            }
-          ],
-          "isUnique": false,
-          "concurrently": false,
-          "method": "btree",
-          "with": {}
-        }
-      },
-      "foreignKeys": {
-        "bulky_booking_item_company_id_fk": {
-          "name": "bulky_booking_item_company_id_fk",
-          "tableFrom": "bulky_booking_item",
-          "tableTo": "company",
-          "schemaTo": "wms",
-          "columnsFrom": [
-            "company_id"
-          ],
-          "columnsTo": [
-            "id"
-          ],
-          "onDelete": "no action",
-          "onUpdate": "no action"
-        },
-        "bulky_booking_item_project_id_fk": {
-          "name": "bulky_booking_item_project_id_fk",
-          "tableFrom": "bulky_booking_item",
-          "tableTo": "project",
-          "schemaTo": "wms",
-          "columnsFrom": [
-            "company_id",
-            "project_id"
-          ],
-          "columnsTo": [
-            "company_id",
-            "id"
-          ],
-          "onDelete": "no action",
-          "onUpdate": "no action"
-        },
-        "bulky_booking_item_booking_id_fk": {
-          "name": "bulky_booking_item_booking_id_fk",
-          "tableFrom": "bulky_booking_item",
-          "tableTo": "bulky_booking",
-          "schemaTo": "wms",
-          "columnsFrom": [
-            "company_id",
-            "project_id",
-            "booking_id"
-          ],
-          "columnsTo": [
-            "company_id",
-            "project_id",
-            "id"
-          ],
-          "onDelete": "no action",
-          "onUpdate": "no action"
-        }
-      },
-      "compositePrimaryKeys": {},
-      "uniqueConstraints": {
-        "bulky_booking_item_booking_id_position_key": {
-          "name": "bulky_booking_item_booking_id_position_key",
-          "nullsNotDistinct": false,
-          "columns": [
-            "company_id",
-            "booking_id",
-            "position"
-          ]
-        }
-      },
-      "policies": {},
-      "checkConstraints": {
-        "bulky_booking_item_description_given": {
-          "name": "bulky_booking_item_description_given",
-          "value": "length(btrim(\"wms\".\"bulky_booking_item\".\"description\")) > 0"
-        },
-        "bulky_booking_item_quantity_positive": {
-          "name": "bulky_booking_item_quantity_positive",
-          "value": "\"wms\".\"bulky_booking_item\".\"quantity\" > 0"
-        },
-        "bulky_booking_item_position_positive": {
-          "name": "bulky_booking_item_position_positive",
-          "value": "\"wms\".\"bulky_booking_item\".\"position\" > 0"
-        }
-      },
-      "isRLSEnabled": false
-    },
-    "wms.bulky_schedule": {
-      "name": "bulky_schedule",
-      "schema": "wms",
-      "columns": {
-        "id": {
-          "name": "id",
-          "type": "uuid",
-          "primaryKey": true,
-          "notNull": true,
-          "default": "wms.uuidv7()"
-        },
-        "company_id": {
-          "name": "company_id",
-          "type": "uuid",
-          "primaryKey": false,
-          "notNull": true
-        },
-        "project_id": {
-          "name": "project_id",
-          "type": "uuid",
-          "primaryKey": false,
-          "notNull": true
-        },
-        "created_at": {
-          "name": "created_at",
-          "type": "timestamp with time zone",
-          "primaryKey": false,
-          "notNull": true,
-          "default": "now()"
-        },
-        "updated_at": {
-          "name": "updated_at",
-          "type": "timestamp with time zone",
-          "primaryKey": false,
-          "notNull": true,
-          "default": "now()"
-        },
-        "valid_from": {
-          "name": "valid_from",
-          "type": "date",
-          "primaryKey": false,
-          "notNull": true
-        },
-        "valid_to": {
-          "name": "valid_to",
-          "type": "date",
-          "primaryKey": false,
-          "notNull": false
-        },
-        "planning_area_id": {
-          "name": "planning_area_id",
-          "type": "uuid",
-          "primaryKey": false,
-          "notNull": true
-        },
-        "frequency": {
-          "name": "frequency",
-          "type": "text",
-          "primaryKey": false,
-          "notNull": true
-        },
-        "service_days": {
-          "name": "service_days",
-          "type": "text[]",
-          "primaryKey": false,
-          "notNull": true
-        },
-        "week_rotation": {
-          "name": "week_rotation",
-          "type": "text",
-          "primaryKey": false,
-          "notNull": false
-        },
-        "holiday_policy": {
-          "name": "holiday_policy",
-          "type": "text",
-          "primaryKey": false,
-          "notNull": true
-        },
-        "slots_per_day": {
-          "name": "slots_per_day",
-          "type": "integer",
-          "primaryKey": false,
-          "notNull": true
-        },
-        "product_id": {
-          "name": "product_id",
-          "type": "uuid",
-          "primaryKey": false,
-          "notNull": true
-        }
-      },
-      "indexes": {
-        "bulky_schedule_project_id_idx": {
-          "name": "bulky_schedule_project_id_idx",
-          "columns": [
-            {
-              "expression": "company_id",
-              "isExpression": false,
-              "asc": true,
-              "nulls": "last"
-            },
-            {
-              "expression": "project_id",
-              "isExpression": false,
-              "asc": true,
-              "nulls": "last"
-            }
-          ],
-          "isUnique": false,
-          "concurrently": false,
-          "method": "btree",
-          "with": {}
-        },
-        "bulky_schedule_planning_area_id_idx": {
-          "name": "bulky_schedule_planning_area_id_idx",
-          "columns": [
-            {
-              "expression": "company_id",
-              "isExpression": false,
-              "asc": true,
-              "nulls": "last"
-            },
-            {
-              "expression": "planning_area_id",
-              "isExpression": false,
-              "asc": true,
-              "nulls": "last"
-            }
-          ],
-          "isUnique": false,
-          "concurrently": false,
-          "method": "btree",
-          "with": {}
-        },
-        "bulky_schedule_product_id_idx": {
-          "name": "bulky_schedule_product_id_idx",
-          "columns": [
-            {
-              "expression": "company_id",
-              "isExpression": false,
-              "asc": true,
-              "nulls": "last"
-            },
-            {
-              "expression": "product_id",
-              "isExpression": false,
-              "asc": true,
-              "nulls": "last"
-            }
-          ],
-          "isUnique": false,
-          "concurrently": false,
-          "method": "btree",
-          "with": {}
-        }
-      },
-      "foreignKeys": {
-        "bulky_schedule_company_id_fk": {
-          "name": "bulky_schedule_company_id_fk",
-          "tableFrom": "bulky_schedule",
-          "tableTo": "company",
-          "schemaTo": "wms",
-          "columnsFrom": [
-            "company_id"
-          ],
-          "columnsTo": [
-            "id"
-          ],
-          "onDelete": "no action",
-          "onUpdate": "no action"
-        },
-        "bulky_schedule_project_id_fk": {
-          "name": "bulky_schedule_project_id_fk",
-          "tableFrom": "bulky_schedule",
-          "tableTo": "project",
-          "schemaTo": "wms",
-          "columnsFrom": [
-            "company_id",
-            "project_id"
-          ],
-          "columnsTo": [
-            "company_id",
-            "id"
-          ],
-          "onDelete": "no action",
-          "onUpdate": "no action"
-        },
-        "bulky_schedule_planning_area_id_fk": {
-          "name": "bulky_schedule_planning_area_id_fk",
-          "tableFrom": "bulky_schedule",
-          "tableTo": "planning_area",
-          "schemaTo": "wms",
-          "columnsFrom": [
-            "company_id",
-            "project_id",
-            "planning_area_id"
-          ],
-          "columnsTo": [
-            "company_id",
-            "project_id",
-            "id"
-          ],
-          "onDelete": "no action",
-          "onUpdate": "no action"
-        },
-        "bulky_schedule_product_id_fk": {
-          "name": "bulky_schedule_product_id_fk",
-          "tableFrom": "bulky_schedule",
-          "tableTo": "product",
-          "schemaTo": "wms",
-          "columnsFrom": [
-            "company_id",
-            "project_id",
-            "product_id"
-          ],
-          "columnsTo": [
-            "company_id",
-            "project_id",
-            "id"
-          ],
-          "onDelete": "no action",
-          "onUpdate": "no action"
-        }
-      },
-      "compositePrimaryKeys": {},
-      "uniqueConstraints": {
-        "bulky_schedule_project_key": {
-          "name": "bulky_schedule_project_key",
-          "nullsNotDistinct": false,
-          "columns": [
-            "company_id",
-            "project_id",
-            "id"
-          ]
-        }
-      },
-      "policies": {},
-      "checkConstraints": {
-        "bulky_schedule_validity": {
-          "name": "bulky_schedule_validity",
-          "value": "\"wms\".\"bulky_schedule\".\"valid_to\" is null or \"wms\".\"bulky_schedule\".\"valid_to\" > \"wms\".\"bulky_schedule\".\"valid_from\""
-        },
-        "bulky_schedule_frequency_one_of": {
-          "name": "bulky_schedule_frequency_one_of",
-          "value": "\"wms\".\"bulky_schedule\".\"frequency\" in ('daily', 'weekly', 'every-2-weeks', 'every-3-weeks', 'every-4-weeks', 'monthly')"
-        },
-        "bulky_schedule_service_days_subset_of": {
-          "name": "bulky_schedule_service_days_subset_of",
-          "value": "\"wms\".\"bulky_schedule\".\"service_days\" <@ ARRAY['monday', 'tuesday', 'wednesday', 'thursday', 'friday', 'saturday', 'sunday']::text[]"
-        },
-        "bulky_schedule_service_days_non_empty": {
-          "name": "bulky_schedule_service_days_non_empty",
-          "value": "cardinality(\"wms\".\"bulky_schedule\".\"service_days\") > 0"
-        },
-        "bulky_schedule_week_rotation_one_of": {
-          "name": "bulky_schedule_week_rotation_one_of",
-          "value": "\"wms\".\"bulky_schedule\".\"week_rotation\" in ('odd', 'even')"
-        },
-        "bulky_schedule_holiday_policy_one_of": {
-          "name": "bulky_schedule_holiday_policy_one_of",
-          "value": "\"wms\".\"bulky_schedule\".\"holiday_policy\" in ('shift-next', 'shift-prev', 'skip', 'collect')"
-        },
-        "bulky_schedule_week_rotation_shape": {
-          "name": "bulky_schedule_week_rotation_shape",
-          "value": "(\"wms\".\"bulky_schedule\".\"frequency\" = 'every-2-weeks') = (\"wms\".\"bulky_schedule\".\"week_rotation\" is not null)"
-        },
-        "bulky_schedule_slots_per_day_positive": {
-          "name": "bulky_schedule_slots_per_day_positive",
-          "value": "\"wms\".\"bulky_schedule\".\"slots_per_day\" > 0"
         }
       },
       "isRLSEnabled": false

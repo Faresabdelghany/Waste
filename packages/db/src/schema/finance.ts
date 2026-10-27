@@ -166,6 +166,12 @@ export const priceListRow = wms.table(
     /** The negotiated row: it matches its customer alone and always wins for them. */
     customerId: uuid(),
     note: text(),
+    /** The row this one was indexed from (#291 C8); null on a row written by hand. */
+    indexedFromId: uuid(),
+    /** What the indexation was: `CPI 2027`. */
+    indexLabel: text(),
+    /** 320 for +3.2 %; a negative figure is a deflator. */
+    indexBasisPoints: integer(),
     /** The condition set as one NOT NULL value the exclusion constraint can key on, since a nullable column may not be in its key. Never on the wire. */
     conditionKey: text()
       .notNull()
@@ -180,10 +186,17 @@ export const priceListRow = wms.table(
     tenantReference(t, [t.containerTypeId], containerType),
     tenantReference(t, [t.wasteFractionId], wasteFraction),
     tenantReference(t, [t.customerId], customer),
+    // The row this one was indexed from is a row of the same project, through the table's own project key, as a provider price's is.
+    projectReference(t, [t.indexedFromId], t as ProjectTable),
     projectKey(t),
     validPeriod(t),
     oneOf(t.customerKind, CUSTOMER_KINDS),
     check(tableObjectName(t.id.table, "unit_price_not_negative", "priceListRow"), sql`${t.unitPriceMinor} >= 0`),
+    // The three index columns are null together or none of them, and a row is not indexed from itself; a null passes the last, as the provider price's shape.
+    check(
+      tableObjectName(t.id.table, "index_shape", "priceListRow"),
+      sql`(${t.indexedFromId} is null) = (${t.indexLabel} is null) and (${t.indexedFromId} is null) = (${t.indexBasisPoints} is null) and ${t.indexedFromId} <> ${t.id}`,
+    ),
     // The resolver's read: the rows of a list for a product.
     tenantIndex(t, t.priceListId, t.productId),
     tenantIndex(t, t.productId),
@@ -191,6 +204,7 @@ export const priceListRow = wms.table(
     tenantIndex(t, t.containerTypeId),
     tenantIndex(t, t.wasteFractionId),
     tenantIndex(t, t.customerId),
+    tenantIndex(t, t.indexedFromId),
   ],
 )
 
