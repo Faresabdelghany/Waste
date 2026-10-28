@@ -37,7 +37,7 @@ import { useResolutionPickers } from "./resolution-pickers"
  * opened in its module's details. `initial` is what it opens on (an alert's
  * words and links), `extra` what rides along unseen (the alert it answers).
  */
-function ResolutionCreateDialog({
+export function ResolutionCreateDialog({
   module,
   schema,
   make,

@@ -4,8 +4,9 @@
 // customer, the property, the agreement, the driver, the vehicle — and the
 // rows Resolution names beside them: the accounts a ticket is assigned to
 // (Users & roles), the routes and the re-collection's route (Route Studio),
-// the containers, the shared points and the tickets themselves. Each reads
-// the module the store loaded and offers nothing before it has answered.
+// the containers, the shared points and the tickets themselves — an alert's
+// ticket and a sub-ticket's parent. Each reads the module the store loaded
+// and offers nothing before it has answered.
 //
 // A picker hides no row by status — a status gates a new reference and never
 // an existing one, and the API's 409 says why (#79) — but for one: the
@@ -47,6 +48,9 @@ const optionOf = (record: BusinessRecord, ...said: Array<string | undefined>): B
   value: record.id,
   label: [record.name, ...said, record.status === "Active" ? undefined : record.status].filter(Boolean).join(" · "),
 })
+
+/** A ticket as a picker offers it: its number, its subject, its status. */
+const ticketOption = (record: BusinessRecord): BusinessFormOption => ({ value: record.id, label: [record.facts[TICKET_NUMBER_FACT], record.name, record.status].filter(Boolean).join(" · ") })
 
 /** The rows of the project the form names, every row where it names none; a row of no project serves every one. */
 const inProject = (records: readonly BusinessRecord[], projectId: string | undefined) =>
@@ -107,7 +111,10 @@ export function useResolutionPickers(): RelationPickers {
       case "agreementId":
         return optional(inProject(agreements.records, projectId).filter(isAgreementRecord).map((record) => optionOf(record)))
       case "ticketId":
-        return inProject(tickets.records, projectId).map((record) => ({ value: record.id, label: [record.facts[TICKET_NUMBER_FACT], record.name, record.status].filter(Boolean).join(" · ") }))
+        return inProject(tickets.records, projectId).map(ticketOption)
+      // The case a ticket is part of (7.10 of #290): a ticket of its project, optional.
+      case "parentTicketId":
+        return optional(inProject(tickets.records, projectId).map(ticketOption))
       default:
         return undefined
     }
