@@ -65,6 +65,7 @@
 // clearing them; a body's seasons are held to one name each and to no day
 // shared, which a list always shows whole, and a daily scheme carries none,
 // a pair a patch may see half of and the route holds against the stored row.
+import { PLAN_AHEAD_DAYS_DEFAULT, PLAN_AHEAD_DAYS_MAX } from "@waste/domain/planning/lifecycle"
 import { OCCURRENCE_STATUSES, SERVICE_DAYS } from "@waste/domain/planning/vocabulary"
 import { MONTH_DAY_SOURCE, overlappingSeasons, SEASONS_MAX } from "@waste/domain/route-schemes/seasons"
 import * as z from "zod"
@@ -73,7 +74,7 @@ import { IsoDate, IsoDateTime, IsoTime } from "./dates"
 import { Id } from "./ids"
 import { eachOnce, HolidayPolicy, RecurrenceFrequency, RouteSchemeStatus, SchemeEditPolicy, SeasonFrequency, ServiceDays, ServiceType, StopSource, WeekRotation } from "./planning"
 import { ProjectScopedListQuery } from "./queries"
-import { changesSomething, eachOnceSentence, PositiveInt, somethingToChange, stamped } from "./resource"
+import { changesSomething, eachOnceSentence, NonNegativeInt, PositiveInt, somethingToChange, stamped } from "./resource"
 import { Label } from "./text"
 import { endsAfterItStarts, Validity, ValidityCreate, validityOrdered } from "./validity"
 
@@ -369,6 +370,11 @@ const groupsWithinServiceDays = (body: { serviceDays?: unknown; collectionGroups
   })
 }
 
+export const PLAN_AHEAD_DAYS_BOUND = `The nightly job plans at most ${PLAN_AHEAD_DAYS_MAX} days ahead`
+
+/** How many days from tomorrow the nightly job keeps a scheme planned (O21 of #290): a whole number in 1..28. */
+export const PlanAheadDays = PositiveInt.max(PLAN_AHEAD_DAYS_MAX, PLAN_AHEAD_DAYS_BOUND)
+
 const RouteSchemeFields = {
   ...stamped,
   projectId: Id,
@@ -387,9 +393,13 @@ const RouteSchemeFields = {
   holidayPolicy: HolidayPolicy,
   /** How a later edit of the running scheme applies (#38): ask each time, apply to future collections, or this collection only. */
   editPolicy: SchemeEditPolicy,
-  /** Whether the nightly job keeps the coming week planned. */
+  /** Whether the nightly job keeps the coming days planned. */
   planAhead: z.boolean(),
+  /** How many days from tomorrow it keeps planned (O21 of #290). */
+  planAheadDays: PlanAheadDays,
   status: RouteSchemeStatus,
+  /** When the office archived the scheme (O21 of #290), null while it plans: an archived scheme is never planned or edited again, and nothing it made is erased. */
+  archivedAt: IsoDateTime.nullable(),
   /** Where the routes depart from, a depot of the project; null while unsaid. */
   depotId: Id.nullable(),
   /** Where the routes empty, a station of the company; null while unsaid. */
@@ -424,7 +434,8 @@ export const RouteSchemeCreate = z
     plannedStartTime: IsoTime.nullable().optional(),
     holidayPolicy: HolidayPolicy.default("skip").describe("Defaults to skip when absent: a collection on a holiday is dropped."),
     editPolicy: SchemeEditPolicy.default("ask").describe("Defaults to ask when absent: an edit of the running scheme asks whether it applies to every future collection or to the next one only."),
-    planAhead: z.boolean().default(true).describe("Defaults to true when absent: the nightly job keeps the coming week planned."),
+    planAhead: z.boolean().default(true).describe("Defaults to true when absent: the nightly job keeps the coming days planned."),
+    planAheadDays: PlanAheadDays.default(PLAN_AHEAD_DAYS_DEFAULT).describe(`Defaults to ${PLAN_AHEAD_DAYS_DEFAULT} when absent: the nightly job plans tomorrow through a week ahead.`),
     status: RouteSchemeStatus.default("draft").describe("Defaults to draft when absent: a draft accepts partial configuration, a validated scheme is held to the structural rules."),
     /** A depot of the project (Issue #101). */
     depotId: Id.nullable().optional(),
@@ -465,6 +476,7 @@ export const RouteSchemePatch = z
     holidayPolicy: HolidayPolicy.optional(),
     editPolicy: SchemeEditPolicy.optional(),
     planAhead: z.boolean().optional(),
+    planAheadDays: PlanAheadDays.optional(),
     status: RouteSchemeStatus.optional(),
     /** A depot of the project; null clears it. */
     depotId: Id.nullable().optional(),
@@ -496,8 +508,50 @@ export const RouteSchemeListQuery = ProjectScopedListQuery.extend({
   planAhead: z.stringbool({ truthy: ["true"], falsy: ["false"], case: "sensitive" }).optional(),
   /** The day the period is read against; absent asks for every scheme, whenever it ran. */
   validOn: IsoDate.optional(),
+  /** `true` the archived schemes alone, `false` the ones still planning; absent both. */
+  archived: z.stringbool({ truthy: ["true"], falsy: ["false"], case: "sensitive" }).optional(),
 })
 export type RouteSchemeListQuery = z.infer<typeof RouteSchemeListQuery>
+
+/**
+ * `POST /route-schemes/:id/archive` (O21 of #290): the scheme's delete,
+ * which erases nothing. `effectiveFrom` is the first day the scheme no
+ * longer runs, tomorrow on the project's clock when absent and never sooner.
+ */
+export const RouteSchemeArchive = z.strictObject({
+  effectiveFrom: IsoDate.optional(),
+})
+export type RouteSchemeArchive = z.infer<typeof RouteSchemeArchive>
+
+/** `POST /route-schemes/:id/successor` (O21 of #290): the next version of the scheme's name, from `validFrom`, the day the scheme gives way to it. */
+export const RouteSchemeSuccessorCreate = z.strictObject({
+  validFrom: IsoDate,
+})
+export type RouteSchemeSuccessorCreate = z.infer<typeof RouteSchemeSuccessorCreate>
+
+/** What ending a scheme from a day did to its routes: the planned ones cancelled, those trimmed for an office stop they carry, and the dispatched or running ones left for the office. */
+export const SchemeEndingCounts = z.object({
+  cancelled: NonNegativeInt,
+  trimmed: NonNegativeInt,
+  /** `ready` or `active` routes on or after the day, which stay; cancel one by hand where it must not run. */
+  kept: NonNegativeInt,
+})
+export type SchemeEndingCounts = z.infer<typeof SchemeEndingCounts>
+
+/** The archive's answer: the scheme as it now stands, and what became of its routes. */
+export const RouteSchemeArchived = z.object({
+  scheme: RouteScheme,
+  routes: SchemeEndingCounts,
+})
+export type RouteSchemeArchived = z.infer<typeof RouteSchemeArchived>
+
+/** The successor's answer: the scheme it took over from, ended on the day, the new version, and what became of the predecessor's routes from that day. */
+export const RouteSchemeSuccession = z.object({
+  predecessor: RouteScheme,
+  successor: RouteScheme,
+  routes: SchemeEndingCounts,
+})
+export type RouteSchemeSuccession = z.infer<typeof RouteSchemeSuccession>
 
 /** The longest window the occurrence read walks: a year, as the generation job's walk cap. */
 export const OCCURRENCE_WINDOW_MAX_DAYS = 366

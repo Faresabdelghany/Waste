@@ -60,7 +60,8 @@
 // O17 of #290 added
 // @waste/domain/route-schemes/seasons: route-schemes.ts reads the month-day
 // pattern the database's checks read, and the overlap rule of a scheme's
-// seasons.
+// seasons. O21 of #290 added @waste/domain/planning/lifecycle: route-schemes.ts
+// reads the Plan Ahead window's bounds the database's check reads.
 import path from "node:path"
 import { fileURLToPath } from "node:url"
 
@@ -87,6 +88,7 @@ definePurityTests({
     "@waste/domain/imports/vocabulary",
     "@waste/domain/insight/sustainability",
     "@waste/domain/insight/vocabulary",
+    "@waste/domain/planning/lifecycle",
     "@waste/domain/planning/vocabulary",
     "@waste/domain/registry/applications",
     "@waste/domain/registry/vocabulary",

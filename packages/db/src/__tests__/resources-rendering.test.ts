@@ -53,7 +53,7 @@ import { company, project, serviceProvider } from "../schema/organisation"
 import { depot, unloadingStation, unloadingStationFraction, warehouse } from "../schema/places"
 import { planningArea } from "../schema/planning-areas"
 import { companyReference, projectKey, projectReference, tenantIndex, tenantReference, tenantUnique } from "../schema/references"
-import { collectionGroup, routeScheme } from "../schema/route-schemes"
+import { collectionGroup } from "../schema/route-schemes"
 import { stockMovement } from "../schema/stock"
 import { wms } from "../schema/wms"
 import { excludeOverlappingWindow } from "../sql/exclude-overlapping-window"
@@ -443,6 +443,51 @@ const routeSchemeAsOf0006 = wms.table(
   ],
 )
 
+/** route_scheme as 0007 left it, before the scheme lifecycle's migration (O21 of #290) gave it its Plan Ahead window and archive mark. */
+const routeSchemeAsOf0007 = wms.table(
+  "route_scheme",
+  {
+    ...id,
+    ...projectScoped,
+    ...timestamps,
+    ...validity,
+    name: text().notNull(),
+    planningAreaId: uuid(),
+    serviceType: text().notNull(),
+    frequency: text().notNull(),
+    serviceDays: text().array().notNull(),
+    weekRotation: text(),
+    plannedStartTime: time(),
+    holidayPolicy: text().notNull().default("skip"),
+    editPolicy: text().notNull().default("ask"),
+    planAhead: boolean().notNull().default(true),
+    status: text().notNull().default("draft"),
+    depotId: uuid(),
+    unloadingStationId: uuid(),
+  },
+  (t) => [
+    companyReference(t, company),
+    tenantReference(t, [t.projectId], project),
+    projectReference(t, [t.planningAreaId], planningArea),
+    projectReference(t, [t.depotId], depot),
+    tenantReference(t, [t.unloadingStationId], unloadingStation),
+    projectKey(t),
+    validPeriod(t),
+    oneOf(t.serviceType, SERVICE_TYPES),
+    oneOf(t.frequency, RECURRENCE_FREQUENCIES),
+    subsetOf(t.serviceDays, SERVICE_DAYS),
+    nonEmpty(t.serviceDays),
+    oneOf(t.weekRotation, WEEK_ROTATIONS),
+    oneOf(t.holidayPolicy, HOLIDAY_POLICIES),
+    oneOf(t.editPolicy, SCHEME_EDIT_POLICIES),
+    oneOf(t.status, ROUTE_SCHEME_STATUSES),
+    check(tableObjectName(t.id.table, "week_rotation_shape", "routeScheme"), sql`(${t.frequency} = 'every-2-weeks') = (${t.weekRotation} is not null)`),
+    tenantIndex(t, t.planningAreaId),
+    tenantIndex(t, t.depotId),
+    tenantIndex(t, t.unloadingStationId),
+  ],
+)
+
 /** collection_group's own columns and checks as of 0006, less the vehicle type token, which the two states below add back in their spelling. */
 const groupColumns = {
   ...id,
@@ -559,7 +604,7 @@ async function fileStatements(): Promise<{ all: string[]; guardAt: number; witho
 const generatedAlterations = async (): Promise<string[]> => [
   ...(await statementsBetween(
     { collectionGroup: collectionGroupAsOf0006, routeScheme: routeSchemeAsOf0006, containerServicePlacement: containerServicePlacementAsOf0004 },
-    { collectionGroup: collectionGroupBetween, routeScheme, containerServicePlacement },
+    { collectionGroup: collectionGroupBetween, routeScheme: routeSchemeAsOf0007, containerServicePlacement },
   )),
   ...(await statementsBetween({ collectionGroup: collectionGroupBetween }, { collectionGroup })),
 ]

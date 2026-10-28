@@ -2594,6 +2594,9 @@ column wms.route_scheme 17 plan_ahead boolean not-null default=true
 column wms.route_scheme 18 status text not-null default='draft'::text acl=[wms_public=SELECT/<owner>]
 column wms.route_scheme 19 depot_id uuid
 column wms.route_scheme 20 unloading_station_id uuid
+column wms.route_scheme 21 plan_ahead_days integer not-null default=7
+column wms.route_scheme 22 archived_at timestamp with time zone
+constraint wms.route_scheme route_scheme_archived_shape CHECK (((archived_at IS NULL) OR (NOT plan_ahead)))
 constraint wms.route_scheme route_scheme_company_id_fk FOREIGN KEY (company_id) REFERENCES wms.company(id)
 constraint wms.route_scheme route_scheme_depot_id_fk FOREIGN KEY (company_id, project_id, depot_id) REFERENCES wms.depot(company_id, project_id, id)
 constraint wms.route_scheme route_scheme_edit_policy_one_of CHECK ((edit_policy = ANY (ARRAY['ask'::text, 'future'::text, 'single'::text])))
@@ -2601,6 +2604,7 @@ constraint wms.route_scheme route_scheme_frequency_one_of CHECK ((frequency = AN
 constraint wms.route_scheme route_scheme_holiday_policy_one_of CHECK ((holiday_policy = ANY (ARRAY['shift-next'::text, 'shift-prev'::text, 'skip'::text, 'collect'::text])))
 constraint wms.route_scheme route_scheme_no_overlap EXCLUDE USING gist (company_id WITH =, project_id WITH =, name WITH =, daterange(valid_from, valid_to, '[)'::text) WITH &&)
 constraint wms.route_scheme route_scheme_pkey PRIMARY KEY (id)
+constraint wms.route_scheme route_scheme_plan_ahead_days_range CHECK (((plan_ahead_days >= 1) AND (plan_ahead_days <= 28)))
 constraint wms.route_scheme route_scheme_planning_area_id_fk FOREIGN KEY (company_id, project_id, planning_area_id) REFERENCES wms.planning_area(company_id, project_id, id)
 constraint wms.route_scheme route_scheme_project_id_fk FOREIGN KEY (company_id, project_id) REFERENCES wms.project(company_id, id)
 constraint wms.route_scheme route_scheme_project_key UNIQUE (company_id, project_id, id)
