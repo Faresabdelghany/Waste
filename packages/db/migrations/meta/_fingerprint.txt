@@ -4116,8 +4116,10 @@ column wms.waste_fraction 6 name text not-null acl=[wms_public=SELECT/<owner>]
 column wms.waste_fraction 7 waste_code text
 column wms.waste_fraction 8 treatment text
 column wms.waste_fraction 9 density_kg_per_cubic_metre integer
+column wms.waste_fraction 10 hazardous boolean not-null default=false
 constraint wms.waste_fraction waste_fraction_company_id_fk FOREIGN KEY (company_id) REFERENCES wms.company(id)
 constraint wms.waste_fraction waste_fraction_density_kg_per_cubic_metre_range CHECK (((density_kg_per_cubic_metre >= 1) AND (density_kg_per_cubic_metre <= 2000)))
+constraint wms.waste_fraction waste_fraction_hazardous_shape CHECK ((hazardous OR (waste_code IS NULL) OR (waste_code !~~ '%*'::text)))
 constraint wms.waste_fraction waste_fraction_key_key UNIQUE (company_id, key)
 constraint wms.waste_fraction waste_fraction_key_lowercase CHECK ((key = lower(key)))
 constraint wms.waste_fraction waste_fraction_name_key UNIQUE (company_id, name)
@@ -4303,4 +4305,5 @@ journal 1793199855626 709fe6bc0aa2d71a4a8a365c80e79db143341dd82867c0e2fdbd062aa7
 journal 1793204881720 aa541b7673882e81a831ab7f9b7f2bfc1c237d88f7204f890826d641a965be95
 journal 1793207368395 fbe151d4ba9945172963cf2e6667189ae6f64e362e64a82f9aa7639b7bea994e
 journal 1793209754047 d2803c779f561da8247f43444f21b6f7564f1af6d5eb86d7208b59961a27c9c4
+journal 1793213958062 3e4f0b485e465f3836018f545d415793a377728d22334fe5b59d8e0b44ea8066
 pgboss-version 42

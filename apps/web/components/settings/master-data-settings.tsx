@@ -299,7 +299,12 @@ export function MasterDataSettings() {
                       )}
                     </TableCell>
                     <TableCell className="text-sm text-muted-foreground">{detail}</TableCell>
-                    {kind === "waste-fraction" && <TableCell className="whitespace-nowrap font-mono text-sm text-muted-foreground">{record.facts["Waste code"] ?? "—"}</TableCell>}
+                    {kind === "waste-fraction" && (
+                      <TableCell className="whitespace-nowrap text-sm text-muted-foreground">
+                        <span className="font-mono">{record.facts["Waste code"] ?? "—"}</span>
+                        {record.facts.Hazardous === "Yes" && <span className="ml-2 font-medium text-destructive">Hazardous</span>}
+                      </TableCell>
+                    )}
                     <TableCell className="whitespace-nowrap text-sm text-muted-foreground">{scope}</TableCell>
                     <TableCell className="whitespace-nowrap text-sm text-muted-foreground">{record.updated}</TableCell>
                     <TableCell className="whitespace-nowrap text-right">
