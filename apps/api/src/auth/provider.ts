@@ -70,6 +70,35 @@ export function providerIdOf(principal: Principal): string | null {
   return principal.serviceProvider?.id ?? null
 }
 
+/**
+ * Whether the provider serves the scheme on the day (#474): `servesRoute`'s
+ * sentence asked of a scheme rather than a route — an assignment of the
+ * provider, valid on the day, whose area is valid on it too and names the
+ * planning area the scheme names. What a proposal is held to: a provider
+ * proposes a change only for a scheme it serves on the day the change would
+ * apply from, whichever side opens it. A scheme with no planning area is
+ * served by nobody.
+ */
+export async function servesScheme(tx: Tx, scope: { companyId: string; serviceProviderId: string; routeSchemeId: string }, day: string): Promise<boolean> {
+  const [served] = await tx
+    .select({ one: sql`1` })
+    .from(serviceAreaAssignment)
+    .innerJoin(serviceArea, and(eq(serviceArea.companyId, serviceAreaAssignment.companyId), eq(serviceArea.id, serviceAreaAssignment.serviceAreaId)))
+    .innerJoin(serviceAreaPlanningArea, and(eq(serviceAreaPlanningArea.companyId, serviceArea.companyId), eq(serviceAreaPlanningArea.serviceAreaId, serviceArea.id)))
+    .innerJoin(routeScheme, and(eq(routeScheme.companyId, serviceAreaAssignment.companyId), eq(routeScheme.id, scope.routeSchemeId)))
+    .where(
+      and(
+        eq(serviceAreaAssignment.companyId, scope.companyId),
+        eq(serviceAreaAssignment.serviceProviderId, scope.serviceProviderId),
+        eq(serviceAreaPlanningArea.planningAreaId, routeScheme.planningAreaId),
+        validOn(serviceAreaAssignment, day),
+        validOn(serviceArea, day),
+      ),
+    )
+    .limit(1)
+  return served !== undefined
+}
+
 /** The columns of a route row the predicate reads: the `route` table's own, or an alias's. */
 export type RouteColumns = { companyId: PgColumn; routeSchemeId: PgColumn; operatingDate: PgColumn }
 

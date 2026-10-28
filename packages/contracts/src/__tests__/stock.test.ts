@@ -3,7 +3,9 @@ import { describe, test } from "node:test"
 
 import { ADJUSTMENT_TARGETS, STOCK_PLACES } from "@waste/domain/resources/vocabulary"
 
-import { Adjust, AdjustmentTarget, AssetState, Decommission, OCCURRED_WINDOW_ORDERED, Receive, Return, StockMovement, StockMovementListQuery, StockPlace, Transfer, WAREHOUSE_WITH_A_STOCK_PLACE } from "../stock"
+import { STOCK_MINIMUMS_MAX } from "@waste/domain/resources/stock-balance"
+
+import { Adjust, AdjustmentTarget, AssetState, Decommission, EACH_TYPE_ONCE, OCCURRED_WINDOW_ORDERED, Receive, Return, StockBalance, StockBalanceQuery, StockMinimumsSet, StockMovement, StockMovementListQuery, StockPlace, Transfer, WAREHOUSE_WITH_A_STOCK_PLACE } from "../stock"
 import { refusal } from "./expect"
 
 const ID = "01a0d3a5-e5e0-7000-8000-000000000001"
@@ -118,5 +120,28 @@ describe("StockMovementListQuery", () => {
     assert.deepEqual(refusal(StockMovementListQuery.safeParse({ from: LATER, to: WHEN })), [{ path: "to", message: OCCURRED_WINDOW_ORDERED }])
     assert.equal(StockMovementListQuery.safeParse({ from: WHEN, to: WHEN }).success, true, "one instant is a window")
     assert.equal(StockMovementListQuery.safeParse({ kind: "borrow" }).success, false)
+  })
+})
+
+describe("a warehouse's stock balance and minimums (O30 of #290, row 9.8)", () => {
+  test("a balance is counts by where they stand, the minimum or null, and whether it is below", () => {
+    const balance = { projectId: ID, warehouseId: OTHER, containerTypeId: THIRD, inWarehouse: 2, inMaintenance: 1, minimum: 5, belowMinimum: true }
+    assert.deepEqual(StockBalance.parse(balance), balance)
+    assert.equal(StockBalance.safeParse({ ...balance, minimum: null, belowMinimum: false }).success, true)
+    assert.equal(StockBalance.safeParse({ ...balance, inWarehouse: -1 }).success, false)
+  })
+
+  test("the balances are asked of a project or a warehouse, and nothing else", () => {
+    assert.deepEqual(StockBalanceQuery.parse({ projectId: ID, warehouseId: OTHER }), { projectId: ID, warehouseId: OTHER })
+    assert.equal(StockBalanceQuery.safeParse({ limit: 50 }).success, false)
+  })
+
+  test("the minimums are a set, each type once with a positive count, an empty set clearing it, bounded", () => {
+    assert.deepEqual(StockMinimumsSet.parse({ minimums: [{ containerTypeId: THIRD, minimum: 4 }] }), { minimums: [{ containerTypeId: THIRD, minimum: 4 }] })
+    assert.equal(StockMinimumsSet.safeParse({ minimums: [] }).success, true)
+    assert.deepEqual(refusal(StockMinimumsSet.safeParse({ minimums: [{ containerTypeId: THIRD, minimum: 4 }, { containerTypeId: THIRD, minimum: 2 }] })), [{ path: "minimums", message: EACH_TYPE_ONCE }])
+    assert.deepEqual(refusal(StockMinimumsSet.safeParse({ minimums: [{ containerTypeId: THIRD, minimum: 0 }] })).map((issue) => issue.path), ["minimums.0.minimum"], "no minimum is no row, never a zero")
+    assert.equal(StockMinimumsSet.safeParse({ minimums: [{ containerTypeId: THIRD, minimum: 1, warehouseId: ID }] }).success, false, "the warehouse is the path's")
+    assert.equal(StockMinimumsSet.safeParse({ minimums: Array.from({ length: STOCK_MINIMUMS_MAX + 1 }, () => ({ containerTypeId: THIRD, minimum: 1 })) }).success, false)
   })
 })

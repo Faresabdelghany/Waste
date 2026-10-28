@@ -66,7 +66,7 @@ import { plan, planLeg, planStop, routingQuota } from "@waste/db/schema/routing"
 import { dropOffPoint, dropOffPointException, dropOffPointFraction, dropOffPointHours } from "@waste/db/schema/drop-off-points"
 import { sortingGuideItem } from "@waste/db/schema/sorting-guide"
 import { depot, unloadingStation, unloadingStationFraction, warehouse } from "@waste/db/schema/places"
-import { stockMovement } from "@waste/db/schema/stock"
+import { stockMinimum, stockMovement } from "@waste/db/schema/stock"
 import { wasteFractionEmissionFactor } from "@waste/db/schema/sustainability"
 import {
   customer,
@@ -83,6 +83,7 @@ import { planningArea, planningAreaBoundary } from "@waste/db/schema/planning-ar
 import { alert, ticket, ticketBooking, ticketEvent, ticketSla } from "@waste/db/schema/resolution"
 import { application, applicationDecision } from "@waste/db/schema/applications"
 import { bulkyBooking, bulkyBookingItem, bulkySchedule } from "@waste/db/schema/bulky"
+import { serviceProviderActivity } from "@waste/db/schema/service-provider-activities"
 import { collectionGroup, collectionGroupContainer, collectionGroupContainerType, collectionGroupFraction, routeScheme, routeSchemeSeason } from "@waste/db/schema/route-schemes"
 import { withCompany } from "@waste/db/tenant"
 import { normaliseGrants, type Grant } from "@waste/domain/access/grants"
@@ -397,6 +398,8 @@ export async function dropTenant(pool: Database, companyId: string, owner?: Data
     await tx.delete(dropOffPointHours).where(eq(dropOffPointHours.companyId, companyId))
     await tx.delete(dropOffPointException).where(eq(dropOffPointException.companyId, companyId))
     await tx.delete(dropOffPoint).where(eq(dropOffPoint.companyId, companyId))
+    // The providers' activities (#474) before the schemes, groups, awards, providers and accounts they name.
+    await tx.delete(serviceProviderActivity).where(eq(serviceProviderActivity.companyId, companyId))
     await tx.delete(plan).where(eq(plan.companyId, companyId))
     await tx.delete(session).where(eq(session.companyId, companyId))
     await tx.delete(pickup).where(eq(pickup.companyId, companyId))
@@ -425,6 +428,7 @@ export async function dropTenant(pool: Database, companyId: string, owner?: Data
     await tx.delete(driver).where(eq(driver.companyId, companyId))
     await tx.delete(unloadingStationFraction).where(eq(unloadingStationFraction.companyId, companyId))
     await tx.delete(unloadingStation).where(eq(unloadingStation.companyId, companyId))
+    await tx.delete(stockMinimum).where(eq(stockMinimum.companyId, companyId))
     await tx.delete(warehouse).where(eq(warehouse.companyId, companyId))
     await tx.delete(depot).where(eq(depot.companyId, companyId))
     await tx.delete(containerTypeVehicleType).where(eq(containerTypeVehicleType.companyId, companyId))
