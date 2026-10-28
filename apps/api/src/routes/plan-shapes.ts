@@ -13,7 +13,7 @@
 // (#132 §1), at the priority that class gives it.
 import type { ActivePlan, Plan, PlanLeg } from "@waste/contracts/plans"
 import type { Tx } from "@waste/db/client"
-import { ensurePlan as ensureCompanyPlan, planStopIds, type EnsuredPlan, type PlanRoute } from "@waste/db/commands/plans"
+import { ensurePlan as ensureCompanyPlan, type EnsuredPlan, type PlanRoute } from "@waste/db/commands/plans"
 import { QueueMissing, type JobSender } from "@waste/db/jobs"
 import { pickup, route } from "@waste/db/schema/execution"
 import { plan, planLeg, planStop } from "@waste/db/schema/routing"
@@ -113,25 +113,47 @@ export type SequencedStop = { id: string; position: number; status: string; reas
 /** A Plan's stops held outside their window (O14 of #290), in its order. */
 type StopWarnings = ActivePlan["stopWarnings"]
 
-/** Each Plan's stops it holds outside their window, by its id: the rows that carry a warning alone. */
-async function stopWarningsByPlan(tx: Tx, companyId: string, planIds: readonly string[]): Promise<Map<string, StopWarnings>> {
+/** A Plan's stop as its readings take it: a pickup, or an unload visit on the way (O15 of #290). */
+type PlanStopRow = { planId: string; kind: string; pickupId: string | null; unloadingStationId: string | null; position: number; warning: string | null }
+
+/** Each Plan's stops in its order, by its id. */
+async function planStopsByPlan(tx: Tx, companyId: string, planIds: readonly string[]): Promise<Map<string, PlanStopRow[]>> {
   if (planIds.length === 0) return new Map()
   const rows = await tx
-    .select({ planId: planStop.planId, pickupId: planStop.pickupId, position: planStop.position, warning: planStop.windowWarning })
+    .select({ planId: planStop.planId, kind: planStop.kind, pickupId: planStop.pickupId, unloadingStationId: planStop.unloadingStationId, position: planStop.position, warning: planStop.windowWarning })
     .from(planStop)
-    .where(and(eq(planStop.companyId, companyId), inArray(planStop.planId, [...planIds]), isNotNull(planStop.windowWarning)))
+    .where(and(eq(planStop.companyId, companyId), inArray(planStop.planId, [...planIds])))
     .orderBy(asc(planStop.position))
-  const byPlan = new Map<string, StopWarnings>()
+  return Map.groupBy(rows, (row) => row.planId)
+}
+
+/** What a Plan's stops say over the route's stops today. */
+type PlanStopsReading = { named: string[]; stopWarnings: StopWarnings; unloads: ActivePlan["unloads"] }
+
+/**
+ * A Plan's pickups in its order; the ones it holds outside their window, each
+ * at its place among the Plan's pickups; and the unload visits it makes on
+ * the way, each after the last of the route's stops the Plan visits before it.
+ * A visit with none of the route's stops before it says nothing, and is left.
+ */
+function planStopsReading(rows: readonly PlanStopRow[], present: ReadonlySet<string>): PlanStopsReading {
+  const reading: PlanStopsReading = { named: [], stopWarnings: [], unloads: [] }
+  let after: string | null = null
   for (const row of rows) {
-    const bucket = byPlan.get(row.planId) ?? []
-    bucket.push({ pickupId: row.pickupId, position: row.position, warning: row.warning as PlanStopWarning })
-    byPlan.set(row.planId, bucket)
+    if (row.kind === "unload") {
+      if (after !== null && row.unloadingStationId !== null) reading.unloads.push({ afterPickupId: after, unloadingStationId: row.unloadingStationId })
+      continue
+    }
+    if (row.pickupId === null) continue
+    reading.named.push(row.pickupId)
+    if (row.warning !== null) reading.stopWarnings.push({ pickupId: row.pickupId, position: reading.named.length, warning: row.warning as PlanStopWarning })
+    if (present.has(row.pickupId)) after = row.pickupId
   }
-  return byPlan
+  return reading
 }
 
 /** The `ActivePlan` reading over its row and the route's stops today: `stale` is a reading, never a status (#124 §2). */
-const activePlanOf = (row: PlanRow, stops: readonly SequencedStop[], named: readonly string[], stopWarnings: StopWarnings = []): ActivePlan => ({
+const activePlanOf = (row: PlanRow, stops: readonly SequencedStop[], { named, stopWarnings, unloads }: PlanStopsReading): ActivePlan => ({
   id: row.id,
   solver: row.solver as PlanSolver,
   status: row.status as PlanStatus,
@@ -145,6 +167,7 @@ const activePlanOf = (row: PlanRow, stops: readonly SequencedStop[], named: read
   }),
   deferredUntil: row.deferredUntil === null ? null : row.deferredUntil.toISOString(),
   stopWarnings,
+  unloads,
 })
 
 export type PlanContext = {
@@ -174,8 +197,9 @@ export async function planContextOf(tx: Tx, companyId: string, routeRef: { activ
     .where(and(eq(plan.companyId, companyId), eq(plan.id, routeRef.activePlanId)))
     .limit(1)
   if (row === undefined) return { activePlan: null, sequence: sequenceOver(baseline) }
-  const [named, warnings] = await Promise.all([planStopIds(tx, { companyId, planId: row.id }), stopWarningsByPlan(tx, companyId, [row.id])])
-  return { activePlan: activePlanOf(row, stops, named, warnings.get(row.id)), sequence: sequenceOver(executionOrder(baseline, named)) }
+  const rows = (await planStopsByPlan(tx, companyId, [row.id])).get(row.id) ?? []
+  const reading = planStopsReading(rows, new Set(stops.map((stop) => stop.id)))
+  return { activePlan: activePlanOf(row, stops, reading), sequence: sequenceOver(executionOrder(baseline, reading.named)) }
 }
 
 /**
@@ -203,13 +227,13 @@ export async function sequencesOfRoutes(tx: Tx, principal: Principal, routeIds: 
       .select({ routeId: planStop.routeId, pickupId: planStop.pickupId })
       .from(planStop)
       .innerJoin(route, and(eq(route.companyId, planStop.companyId), eq(route.activePlanId, planStop.planId)))
-      .where(and(eq(planStop.companyId, principal.companyId), reachesThroughRoute(tx, principal, planStop), inArray(route.id, ids)))
+      .where(and(eq(planStop.companyId, principal.companyId), reachesThroughRoute(tx, principal, planStop), inArray(route.id, ids), isNotNull(planStop.pickupId)))
       .orderBy(asc(planStop.position)),
   ])
   const stopsByRoute = Map.groupBy(stops, (stop) => stop.routeId)
   const namedByRoute = Map.groupBy(named, (stop) => stop.routeId)
   for (const routeId of ids) {
-    const order = (namedByRoute.get(routeId) ?? []).map((stop) => stop.pickupId)
+    const order = (namedByRoute.get(routeId) ?? []).flatMap((stop) => (stop.pickupId === null ? [] : [stop.pickupId]))
     for (const [id, ordinal] of sequenceOver(executionOrder(baselineIds(stopsByRoute.get(routeId) ?? []), order))) sequences.set(id, ordinal)
   }
   return sequences
@@ -222,18 +246,14 @@ export function sequenceIn(sequences: ReadonlyMap<string, number>, stop: { id: s
   return sequence
 }
 
-/** The `ActivePlan` of every route asked for, by route, in four statements over the page's ids: what the live list carries beside each row. */
+/** The `ActivePlan` of every route asked for, by route, in three statements over the page's ids: what the live list carries beside each row. */
 export async function activePlansByRoute(tx: Tx, companyId: string, rows: readonly { id: string; activePlanId: string | null }[]): Promise<Map<string, ActivePlan>> {
   const withPlans = rows.filter((row) => row.activePlanId !== null)
   if (withPlans.length === 0) return new Map()
   const planIds = withPlans.map((row) => row.activePlanId as string)
-  const [plans, named, stops, warnings] = await Promise.all([
+  const [plans, planStops, stops] = await Promise.all([
     tx.select(planColumns).from(plan).where(and(eq(plan.companyId, companyId), inArray(plan.id, planIds))),
-    tx
-      .select({ planId: planStop.planId, pickupId: planStop.pickupId, position: planStop.position })
-      .from(planStop)
-      .where(and(eq(planStop.companyId, companyId), inArray(planStop.planId, planIds)))
-      .orderBy(asc(planStop.position)),
+    planStopsByPlan(tx, companyId, planIds),
     tx
       .select({ id: pickup.id, routeId: pickup.routeId, position: pickup.position, status: pickup.status, reason: pickup.reason })
       .from(pickup)
@@ -246,15 +266,8 @@ export async function activePlansByRoute(tx: Tx, companyId: string, rows: readon
           ),
         ),
       ),
-    stopWarningsByPlan(tx, companyId, planIds),
   ])
   const planById = new Map(plans.map((row) => [row.id, row] as const))
-  const namedByPlan = new Map<string, string[]>()
-  for (const stop of named) {
-    const bucket = namedByPlan.get(stop.planId) ?? []
-    bucket.push(stop.pickupId)
-    namedByPlan.set(stop.planId, bucket)
-  }
   const stopsByRoute = new Map<string, SequencedStop[]>()
   for (const stop of stops) {
     const bucket = stopsByRoute.get(stop.routeId) ?? []
@@ -265,7 +278,9 @@ export async function activePlansByRoute(tx: Tx, companyId: string, rows: readon
   for (const row of withPlans) {
     const planRow = planById.get(row.activePlanId as string)
     if (planRow === undefined) continue
-    readings.set(row.id, activePlanOf(planRow, stopsByRoute.get(row.id) ?? [], namedByPlan.get(planRow.id) ?? [], warnings.get(planRow.id)))
+    const routeStops = stopsByRoute.get(row.id) ?? []
+    const reading = planStopsReading(planStops.get(planRow.id) ?? [], new Set(routeStops.map((stop) => stop.id)))
+    readings.set(row.id, activePlanOf(planRow, routeStops, reading))
   }
   return readings
 }

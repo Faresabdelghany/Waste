@@ -6,7 +6,9 @@
 // sequence differs visibly from the baseline in demos and in the e2e.
 //
 // It keeps the provider's rules that shape a caller — fifty waypoints a
-// directions request, fifty locations an optimisation — and answers a
+// directions request, fifty locations an optimisation, a stop sent with a
+// reload two (O15 of #290), whose order goes to the station whenever no
+// stop left fits the vehicle — and answers a
 // scripted quota state (#132 §7): a reading per family that counts down by
 // one per answered call, and responses handed out one per call, in order —
 // the minute's 429, the day's 403 with its headers, the key's 403 without
@@ -98,26 +100,42 @@ export class FakeProvider implements RoutingProvider {
   optimise(request: OptimiseRequest): Promise<ProviderAnswer<OptimiseResult>> {
     return Promise.resolve(
       this.call<OptimiseResult>("optimisation", () => {
-        if (request.stops.length > MAX_STOPS) return { refused: `the request has ${request.stops.length} stops; one optimisation takes at most ${MAX_STOPS}` }
+        const reload = request.station ? (request.reload ?? null) : null
+        // A shipment is two locations, its pickup and its delivery, as vroom-express counts them (O15 of #290).
+        const locations = request.stops.length * (reload ? 2 : 1)
+        if (locations > MAX_STOPS) return { refused: `the request has ${locations} locations; one optimisation takes at most ${MAX_STOPS}` }
         const remaining = request.stops.map((stop, index) => ({ stop, index }))
         const order: number[] = []
+        const unloads: number[] = []
         let at = request.depot
+        let load = 0
         while (remaining.length > 0) {
-          let nearest = 0
-          let best = haversine(at, remaining[0].stop)
-          for (let candidate = 1; candidate < remaining.length; candidate += 1) {
+          // The nearest stop the vehicle can take on; none, and it unloads at the station first. An empty vehicle takes any.
+          const fits = (index: number) => reload === null || load === 0 || load + (reload.amounts[index] ?? 0) <= reload.capacityKg
+          let nearest = -1
+          let best = Number.POSITIVE_INFINITY
+          for (let candidate = 0; candidate < remaining.length; candidate += 1) {
             const distance = haversine(at, remaining[candidate].stop)
-            if (distance < best) {
+            if (fits(remaining[candidate].index) && distance < best) {
               nearest = candidate
               best = distance
             }
           }
+          if (nearest < 0) {
+            unloads.push(order.length)
+            at = request.station as Position2D
+            load = 0
+            continue
+          }
           const [next] = remaining.splice(nearest, 1)
           order.push(next.index)
+          load += reload?.amounts[next.index] ?? 0
           at = next.stop
         }
-        const trip: Position2D[] = [request.depot, ...order.map((index) => request.stops[index]), ...(request.station ? [request.station] : []), request.depot]
-        return { result: { order, legs: legsAlong(distinctConsecutive(trip)), waitingSeconds: 0, provenance: PROVENANCE } }
+        const station = request.station
+        const driven = order.flatMap((index, place) => (station && unloads.includes(place) ? [station, request.stops[index]] : [request.stops[index]]))
+        const trip: Position2D[] = [request.depot, ...driven, ...(station ? [station] : []), request.depot]
+        return { result: { order, ...(unloads.length > 0 ? { unloads } : {}), legs: legsAlong(distinctConsecutive(trip)), waitingSeconds: 0, provenance: PROVENANCE } }
       }),
     )
   }

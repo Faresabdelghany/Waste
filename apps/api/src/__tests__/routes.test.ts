@@ -12,6 +12,7 @@ import { unloadingStation, unloadingStationFraction } from "@waste/db/schema/pla
 import { driver, vehicle } from "@waste/db/schema/fleet"
 import { withCompany } from "@waste/db/tenant"
 import { ROUTING_MEASURE_QUEUE } from "@waste/db/commands/plans"
+import { UNLOAD_SECONDS } from "@waste/domain/routing/reloads"
 import { PGBOSS_SCHEMA } from "@waste/db/sql/pgboss"
 import { and, asc, eq, sql } from "drizzle-orm"
 import { PgBoss } from "pg-boss"
@@ -246,6 +247,45 @@ describe("the route endpoints", { skip: database.skip || owner.skip }, () => {
         assert.deepEqual((await read(route.id)).activePlan?.stopWarnings, [{ pickupId: route.pickupIds[0], position: 1, warning: "window-unreachable" }])
       } finally {
         await setShift(noShift)
+      }
+    })
+
+    test("answers the unload visits its active Plan makes on the way, each after the stop it follows, a stop warning's place counting the pickups alone, and the verdict working each visit (O15 of #290)", async () => {
+      const route = await fresh({ ...mads() })
+      const setShift = (values: Partial<typeof driver.$inferInsert>) => withCompany(pool.db, a.companyId, async (tx: Tx) => tx.update(driver).set(values).where(eq(driver.id, fleet.drivers.mads.id)))
+      await setShift({ shiftStart: "07:00", shiftEnd: "15:00", breakMinutes: null, breakWindowStart: null, breakWindowEnd: null })
+      try {
+        const planId = testId()
+        await ownerPool.db.insert(plan).values({ id: planId, companyId: a.companyId, projectId: route.projectId, routeId: route.id, solver: "manual", status: "ready", fingerprint: "o15", trip: "full", provider: "fake", distanceMetres: 9_000, durationSeconds: 2_400 })
+        const [first, second, third] = route.pickupIds
+        const row = (position: number, stop: { pickupId: string; windowWarning?: "window-unreachable" } | "unload") => ({
+          companyId: a.companyId,
+          projectId: route.projectId,
+          routeId: route.id,
+          planId,
+          position,
+          ...(stop === "unload" ? { kind: "unload", unloadingStationId: fleet.stations.amager.id } : stop),
+        })
+        await ownerPool.db.insert(planStop).values([row(1, { pickupId: second }), row(2, "unload"), row(3, { pickupId: first, windowWarning: "window-unreachable" }), row(4, { pickupId: third })])
+        await ownerPool.db.update(routeTable).set({ activePlanId: planId, plannedStartTime: null }).where(eq(routeTable.id, route.id))
+        const detail = await read(route.id)
+        assert.deepEqual(detail.activePlan?.unloads, [{ afterPickupId: second, unloadingStationId: fleet.stations.amager.id }])
+        assert.deepEqual(detail.activePlan?.stopWarnings, [{ pickupId: first, position: 2, warning: "window-unreachable" }], "second among the Plan's pickups, the visit before it not counted")
+        assert.deepEqual(
+          detail.pickups.map((stop) => [stop.id, stop.sequence]),
+          [
+            [second, 1],
+            [first, 2],
+            [third, 3],
+          ],
+        )
+        // 40 minutes' drive, three bins at the kerb and one visit to the station.
+        assert.equal(detail.shift.workSeconds, 2_400 + detail.workload.stopSeconds + UNLOAD_SECONDS)
+        const listed = (await (await olivia(`/routes?limit=200&plannedDriverId=${fleet.drivers.mads.id}`)).json()) as { items: unknown[] }
+        const item = listed.items.map((entry) => RouteListItem.parse(entry)).find((entry) => entry.id === route.id)
+        assert.deepEqual([item?.activePlan?.unloads, item?.shift.workSeconds], [detail.activePlan?.unloads, detail.shift.workSeconds], "the list reads it as the detail does")
+      } finally {
+        await setShift({ shiftStart: null, shiftEnd: null, breakMinutes: null, breakWindowStart: null, breakWindowEnd: null })
       }
     })
 

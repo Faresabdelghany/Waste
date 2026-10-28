@@ -14,6 +14,7 @@
 // read — and is pg-boss's to retry. The quota engine (quota.ts) sits above
 // this and decides what each answer means for the job.
 import type { LineString, Position2D } from "@waste/contracts/geojson"
+import type { Reload } from "@waste/domain/routing/reloads"
 import type { RoutingQuotaFamily } from "@waste/domain/routing/vocabulary"
 
 /** The routing profile every trip here drives, until something needs another: OpenRouteService's heavy-goods profile. */
@@ -72,6 +73,14 @@ export type OptimiseRequest = {
   breaks?: readonly { seconds: number; window: readonly [number, number] }[]
   /** The unloading station, visited after every stop and before the return (#124 §3), when the Route names one. */
   station?: Position2D | null
+  /**
+   * The payload and each stop's load, by its index into `stops`, where the
+   * stops outweigh the vehicle (O15 of #290, `reloadOf` of
+   * @waste/domain/routing/reloads): the solver then visits the station on the
+   * way whenever the vehicle is full, as well as after the last stop. Only
+   * with a station; each stop then counts as two of the request's locations.
+   */
+  reload?: Reload | null
 }
 
 export type OptimiseResult = {
@@ -84,7 +93,13 @@ export type OptimiseResult = {
    * stops' windows dropped, and `order` and `legs` here cover the rest only.
    */
   unassigned?: number[]
-  /** The closed trip's legs — depot, the stops in `order`, the station where given, back to the depot — one per consecutive pair of distinct points, so two stops at one address span no leg. */
+  /**
+   * The unload visits on the way (O15 of #290), on a request with a reload:
+   * each the count of stops in `order` driven before it, ascending. The visit
+   * after the last stop is the trip's own; absent or empty, there is no other.
+   */
+  unloads?: number[]
+  /** The closed trip's legs — depot, the stops in `order` with the station at each of `unloads`, the station where given, back to the depot — one per consecutive pair of distinct points, so two stops at one address span no leg. */
   legs: RoutedLeg[]
   /** Seconds the order waits for a stop's or a break's window to open (O14 of #290), the station's device never counted; 0 where nothing waits. */
   waitingSeconds: number

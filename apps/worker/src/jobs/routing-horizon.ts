@@ -123,6 +123,7 @@ async function planRoute(context: JobContext, companyId: string, routeId: string
         operatingDate: route.operatingDate,
         plannedStartTime: route.plannedStartTime,
         plannedDriverId: route.plannedDriverId,
+        plannedVehicleId: route.plannedVehicleId,
         depotId: route.depotId,
         unloadingStationId: route.unloadingStationId,
         activePlanId: route.activePlanId,

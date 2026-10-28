@@ -13,6 +13,7 @@
 // judges in order behind the start.
 import type { DriverPickup, DriverRouteDetail } from "@waste/contracts/driver-commands"
 import type { FlatPoint } from "@waste/contracts/geojson"
+import type { ActivePlan } from "@waste/contracts/plans"
 import type { Route } from "@waste/contracts/routes"
 import type { Session } from "@waste/contracts/sessions"
 import type { DriverPickupReason, PickupStatus, RouteStatus } from "@waste/domain/execution/vocabulary"
@@ -34,6 +35,23 @@ const waits = (waiting: readonly QueueEntry[], routeId: string, kinds: readonly 
 /** The stops in the order they are driven: the active Plan's `sequence` where the read carries one, the generated `position` otherwise. */
 export function stopsInOrder<Stop extends Pick<DriverPickup, "position" | "sequence">>(pickups: readonly Stop[]): Stop[] {
   return [...pickups].sort((a, b) => (a.sequence ?? a.position) - (b.sequence ?? b.position) || a.position - b.position)
+}
+
+/** One entry of the route screen's list: a stop, or an unload visit the active Plan makes on the way (O15 of #290). */
+export type RouteEntry<Stop> = { kind: "stop"; stop: Stop } | { kind: "unload"; unloadingStationId: string }
+
+/**
+ * The stops in the order they are driven with the active Plan's unload
+ * visits between them, each after the stop it follows: where the vehicle is
+ * full, it empties at the station and goes on. A visit after a stop the read
+ * does not carry is left out, and a Plan from an API before them has none.
+ */
+export function entriesInOrder<Stop extends Pick<DriverPickup, "id" | "position" | "sequence">>(pickups: readonly Stop[], plan: Pick<ActivePlan, "unloads"> | null): RouteEntry<Stop>[] {
+  const unloads = plan?.unloads ?? []
+  return stopsInOrder(pickups).flatMap((stop): RouteEntry<Stop>[] => [
+    { kind: "stop", stop },
+    ...unloads.filter((unload) => unload.afterPickupId === stop.id).map((unload): RouteEntry<Stop> => ({ kind: "unload", unloadingStationId: unload.unloadingStationId })),
+  ])
 }
 
 /**

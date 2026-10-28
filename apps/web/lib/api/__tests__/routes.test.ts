@@ -103,7 +103,7 @@ const planned: Route = {
   cancelledAt: null,
   progress: { planned: 3, completed: 0, skipped: 0, failed: 0, total: 3, fraction: 0 },
 }
-const plan: ActivePlan = { id: "01a0d2a4-a280-7032-8000-000000000001", solver: "manual", status: "ready", trip: "full", distanceMetres: 18_400, durationSeconds: 2_700, stale: false, deferredUntil: null, stopWarnings: [] }
+const plan: ActivePlan = { id: "01a0d2a4-a280-7032-8000-000000000001", solver: "manual", status: "ready", trip: "full", distanceMetres: 18_400, durationSeconds: 2_700, stale: false, deferredUntil: null, stopWarnings: [], unloads: [] }
 /** A route whose stops take and weigh nothing known (O10 of #290). */
 const NO_WORKLOAD: RouteWorkload = { stopSeconds: 0, expectedKg: null, unexpectedStops: 0, capacityKg: null, overCapacityKg: null }
 /** A route whose driver has no shift on record (O14 of #290). */
@@ -636,6 +636,14 @@ describe("the dispatch day's tooling (O5 of #290)", () => {
     assert.deepEqual([measured.facts.Duration, measured.facts["Stop time"], measured.facts["Expected load"]], ["2 h 15 min", "1 h 30 min", "8,200 kg of 12,000 kg"])
     const over = routeAdapter.toRecord(detailOf(planned, { activePlan: plan, workload: { ...loads, expectedKg: 14_200, overCapacityKg: 2_200 } }), context())
     assert.equal(over.facts["Expected load"], "14,200 kg of 12,000 kg: over by 2,200 kg, plan a tip")
+    // Its Plan unloads on the way (O15 of #290): no tip left to plan, and how often the vehicle empties before its last stop.
+    const unloads = [{ afterPickupId: "01a0d2a4-a280-7031-8000-000000000003", unloadingStationId: "01a0d2a4-a280-7031-8000-000000000009" }]
+    const reloaded = routeAdapter.toRecord(detailOf(planned, { activePlan: { ...plan, unloads }, workload: { ...loads, expectedKg: 14_200, overCapacityKg: 2_200 } }), context())
+    assert.deepEqual(
+      [reloaded.facts["Expected load"], reloaded.facts["Unloads on the way"]],
+      ["14,200 kg of 12,000 kg: over by 2,200 kg, so its Plan unloads on the way", "1 visit to the unloading station before the last stop, where the vehicle is full"],
+    )
+    assert.equal(over.facts["Unloads on the way"], undefined)
     const partly = routeAdapter.toRecord(detailOf(planned, { workload: { ...loads, capacityKg: null, overCapacityKg: null, unexpectedStops: 3 } }), context())
     assert.deepEqual([partly.facts.Duration, partly.facts["Stop time"], partly.facts["Expected load"]], [undefined, "1 h 30 min", "8,200 kg, 3 stops not counted"], "no Plan, no drive to add the stops to")
     const unknown = routeAdapter.toRecord(detailOf(planned, { workload: NO_WORKLOAD }), context())
