@@ -19,6 +19,8 @@ import {
   schemeLicenceDay,
   schemeStructureIssues,
   serviceDaysWithoutGroup,
+  vehicleOfAnotherType,
+  vehicleTypesMismatched,
   type GroupStructure,
   type SchemeStructure,
 } from "../checks"
@@ -149,6 +151,38 @@ describe("resourcesOnTwoGroups", () => {
       "Vehicle WH-24 is on two collection groups that run on monday: B, D",
       "Driver Mads Jensen is on two collection groups that run on monday: A, D",
     ])
+  })
+})
+
+describe("vehicleTypesMismatched", () => {
+  const rearLoader = { id: "type-rear", label: "Rear loader" }
+  const crane = { id: "type-crane", label: "Glass crane" }
+
+  test("names a rule group whose vehicle is of another type than its stop rule asks for, in group order", () => {
+    const groups: GroupStructure[] = [
+      { ...rule("North", ["monday"]), vehicle: wh24, vehicleType: rearLoader, ruleVehicleType: crane },
+      { ...rule("South", ["monday"]), vehicle: wh25, vehicleType: crane, ruleVehicleType: crane },
+      { ...rule("East", ["tuesday"]), vehicle: wh25, vehicleType: crane, ruleVehicleType: rearLoader },
+    ]
+    assert.deepEqual(vehicleTypesMismatched(groups), [vehicleOfAnotherType("North", "WH-24", "Rear loader", "Glass crane"), vehicleOfAnotherType("East", "WH-25", "Glass crane", "Rear loader")])
+    assert.equal(vehicleOfAnotherType("North", "WH-24", "Rear loader", "Glass crane"), "Vehicle WH-24 of collection group North is a rear loader, and its stop rule asks for a glass crane")
+  })
+
+  test("asks nothing of a group without a vehicle, a rule asking for no type, a manual group, or a parked one", () => {
+    assert.deepEqual(
+      vehicleTypesMismatched([
+        { ...rule("No vehicle", ["monday"]), vehicle: null, ruleVehicleType: crane },
+        { ...rule("Any type", ["monday"]), vehicle: wh24, vehicleType: rearLoader, ruleVehicleType: null },
+        { ...manual("Picked", ["monday"]), vehicle: wh24, vehicleType: rearLoader, ruleVehicleType: crane },
+        { ...rule("Parked", []), vehicle: wh24, vehicleType: rearLoader, ruleVehicleType: crane },
+      ]),
+      [],
+    )
+  })
+
+  test("joins the structural rules after the two-groups sentences", () => {
+    const scheme: SchemeStructure = { ...sound, collectionGroups: [{ ...rule("Residual", ["monday", "thursday"]), vehicle: wh24, vehicleType: rearLoader, ruleVehicleType: crane }, manual("Glass", ["thursday"])] }
+    assert.deepEqual(schemeStructureIssues(scheme), [vehicleOfAnotherType("Residual", "WH-24", "Rear loader", "Glass crane")])
   })
 })
 
