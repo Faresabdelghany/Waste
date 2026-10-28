@@ -443,6 +443,97 @@ describe("OpenRouteService optimisation, VROOM behind /vroom/v0 (#171)", () => {
     assert.match(misordered.kind === "refused" ? misordered.sentence : "", /station/)
   })
 
+  describe("with a reload, where the stops outweigh the vehicle (O15 of #290)", () => {
+    const c: Position2D = [12.515, 55.7]
+    const reload = { capacityKg: 1000, amounts: [600, 600, 300] }
+    const reloaded = vroomBody(
+      [
+        step("start", depot, { arrival: 0, duration: 0, distance: 0 }),
+        step("pickup", a, { id: 2, arrival: 40, duration: 40, distance: 320 }),
+        step("delivery", station, { id: 2, arrival: 100, duration: 100, distance: 1100, setup: 900 }),
+        step("pickup", b, { id: 1, arrival: 1060, duration: 160, distance: 1900 }),
+        step("pickup", c, { id: 3, arrival: 1100, duration: 200, distance: 2300, waiting_time: 30 }),
+        step("delivery", station, { id: 1, arrival: 1180, duration: 250, distance: 2900, setup: 900 }),
+        step("delivery", station, { id: 3, arrival: 2080, duration: 250, distance: 2900 }),
+        step("end", depot, { arrival: 2250, duration: 420, distance: 4500 }),
+      ],
+      [depot, a, station, b, c, station, depot],
+    )
+
+    test("sends each stop as a shipment, its load picked up at the stop and delivered at the station with the unload's time once a visit, and the vehicle's payload; no window holds the station back", async () => {
+      const server = recording(json(200, reloaded))
+      await new OpenRouteServiceProvider({ apiKey: KEY, fetch: server.fetch }).optimise({ profile: "driving-hgv", depot, stops: [b, a, c], serviceSeconds: [30, 30, 30], station, reload })
+      assert.deepEqual(server.requests[0].body, {
+        shipments: [
+          { amount: [600], pickup: { id: 1, location: b, service: 30 }, delivery: { id: 1, location: station, setup: 900 } },
+          { amount: [600], pickup: { id: 2, location: a, service: 30 }, delivery: { id: 2, location: station, setup: 900 } },
+          { amount: [300], pickup: { id: 3, location: c, service: 30 }, delivery: { id: 3, location: station, setup: 900 } },
+        ],
+        vehicles: [{ id: 1, profile: "driving-hgv", start: depot, end: depot, capacity: [1000], time_window: [0, 777_600] }],
+        options: { g: true },
+      })
+    })
+
+    test("answers the order over the stops, the unload visits on the way by the stops before each, and a leg per pair of distinct points: the loads one visit delivers are one point", async () => {
+      const result = answered(await new OpenRouteServiceProvider({ apiKey: KEY, fetch: recording(json(200, reloaded)).fetch }).optimise({ profile: "driving-hgv", depot, stops: [b, a, c], station, reload }))
+      assert.deepEqual(result.order, [1, 0, 2])
+      assert.deepEqual(result.unloads, [1])
+      assert.deepEqual(
+        result.legs.map((leg) => [leg.metres, leg.seconds]),
+        [
+          [320, 40],
+          [780, 60],
+          [800, 60],
+          [400, 40],
+          [600, 50],
+          [1600, 170],
+        ],
+      )
+      assert.equal(result.waitingSeconds, 30, "the stops' waiting, never the station's")
+    })
+
+    test("a windowed stop left unassigned is one stop, though VROOM lists its pickup and its delivery", async () => {
+      const left = vroomBody(
+        [
+          step("start", depot, { arrival: 0, duration: 0, distance: 0 }),
+          step("pickup", a, { id: 2, arrival: 40, duration: 40, distance: 320 }),
+          step("delivery", station, { id: 2, arrival: 100, duration: 100, distance: 1100 }),
+          step("end", depot, { arrival: 200, duration: 200, distance: 2000 }),
+        ],
+        [depot, a, station, depot],
+        [
+          { id: 1, location: b, type: "pickup" },
+          { id: 1, location: station, type: "delivery" },
+        ],
+      )
+      const result = answered(
+        await new OpenRouteServiceProvider({ apiKey: KEY, fetch: recording(json(200, left)).fetch }).optimise({ profile: "driving-hgv", depot, stops: [b, a], station, timeWindows: [[0, 60], null], reload: { capacityKg: 1000, amounts: [600, 600] } }),
+      )
+      assert.deepEqual([result.order, result.unassigned, result.unloads], [[1], [0], undefined])
+    })
+
+    test("an answer that ends without the station, or unloads before the first stop, is a refusal", async () => {
+      const unended = vroomBody(
+        [
+          step("start", depot, { arrival: 0, duration: 0, distance: 0 }),
+          step("pickup", a, { id: 2, arrival: 40, duration: 40, distance: 320 }),
+          step("delivery", station, { id: 2, arrival: 100, duration: 100, distance: 1100 }),
+          step("pickup", b, { id: 1, arrival: 160, duration: 160, distance: 1900 }),
+          step("end", depot, { arrival: 200, duration: 200, distance: 2500 }),
+        ],
+        [depot, a, station, b, depot],
+      )
+      const refused = await new OpenRouteServiceProvider({ apiKey: KEY, fetch: recording(json(200, unended)).fetch }).optimise({ profile: "driving-hgv", depot, stops: [b, a], station, reload: { capacityKg: 1000, amounts: [600, 600] } })
+      assert.match(refused.kind === "refused" ? refused.sentence : "", /station before the last stop|does not visit/)
+    })
+
+    test("a reload without a station is no reload: the stops go as jobs", async () => {
+      const server = recording(json(200, roundTrip))
+      await new OpenRouteServiceProvider({ apiKey: KEY, fetch: server.fetch }).optimise({ profile: "driving-hgv", depot, stops: [b, a], reload: { capacityKg: 1000, amounts: [600, 600] } })
+      assert.ok("jobs" in (server.requests[0].body as Record<string, unknown>))
+    })
+  })
+
   test("VROOM's own error is the provider's sentence", async () => {
     const answer = await new OpenRouteServiceProvider({ apiKey: KEY, fetch: recording(json(400, { code: 2, error: "Too many locations (53) in query, maximum is set to 50" })).fetch }).optimise({ profile: "driving-hgv", depot, stops: [b, a] })
     assert.deepEqual(answer, { kind: "refused", status: 400, sentence: "Too many locations (53) in query, maximum is set to 50", quota: null })

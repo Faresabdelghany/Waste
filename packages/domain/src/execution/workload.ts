@@ -10,9 +10,11 @@
 // load it compares with its planned vehicle's payload, over the stops it
 // serves, planned or completed, that load waste: an emptying, a swap and a
 // bulky collection (O11), never
-// a delivery's empty container, a repair or a wash. Capacity is a reading, never a constraint on
-// the optimiser: a route tips at its station once, at the end, so a heavier
-// route is told it is over, for the office to plan a tip (#350 owns reloads).
+// a delivery's empty container, a repair or a wash. Where the load runs
+// over the payload on a full trip, the route's Plan unloads on the way
+// (O15 of #290, @waste/domain/routing/reloads), each stop's load read here
+// (`stopLoadKg`); without a payload, a station or loads that say so, the route
+// tips once at the end and a heavier one is told it is over.
 // The optimiser is sent each stop's service; its cost is the drive alone, so
 // a stop's seconds never change the order, and they stay out of a Plan's
 // fingerprint (`@waste/domain/routing/fingerprint`).
@@ -82,7 +84,12 @@ export type RouteWorkload = {
 const serves = (stop: WorkloadStop) => stop.status === "planned" || stop.status === "completed"
 
 /** Whether the stop puts waste on the truck: an emptying, a swap's full container and a bulky collection's items, whose weight nothing says; a delivery's is empty, and a repair or a wash loads nothing. */
-const loadsWaste = (stop: WorkloadStop) => stop.service === "empty" || stop.service === "swap" || stop.service === "bulky"
+const loadsWaste = (stop: Pick<WorkloadStop, "service">) => stop.service === "empty" || stop.service === "swap" || stop.service === "bulky"
+
+/** The kilograms a stop puts on the truck, as a Plan's reloads read it: its expected weight where it loads waste, nothing where it loads none, null where its weight cannot be expected. */
+export function stopLoadKg(stop: Pick<WorkloadStop, "service" | "volumeLitres" | "densityKgPerCubicMetre">): number | null {
+  return loadsWaste(stop) ? expectedKg(stop) : 0
+}
 
 /** A route's workload, against its planned vehicle's payload. */
 export function routeWorkload(stops: readonly WorkloadStop[], capacityKg: number | null): RouteWorkload {

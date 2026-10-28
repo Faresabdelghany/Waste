@@ -1,5 +1,5 @@
 {
-  "id": "e3b31282-7e2b-471f-a4b8-c027449a77ce",
+  "id": "7a13487d-acfe-4828-88ef-3a5b83cfe244",
   "prevId": "0d6a74aa-d1c5-478d-828e-641b19a32caa",
   "version": "7",
   "dialect": "postgresql",
@@ -5884,19 +5884,6 @@
           "type": "uuid",
           "primaryKey": false,
           "notNull": false
-        },
-        "plan_ahead_days": {
-          "name": "plan_ahead_days",
-          "type": "integer",
-          "primaryKey": false,
-          "notNull": true,
-          "default": 7
-        },
-        "archived_at": {
-          "name": "archived_at",
-          "type": "timestamp with time zone",
-          "primaryKey": false,
-          "notNull": false
         }
       },
       "indexes": {
@@ -6101,14 +6088,6 @@
         "route_scheme_week_rotation_shape": {
           "name": "route_scheme_week_rotation_shape",
           "value": "(\"wms\".\"route_scheme\".\"frequency\" = 'every-2-weeks') = (\"wms\".\"route_scheme\".\"week_rotation\" is not null)"
-        },
-        "route_scheme_plan_ahead_days_range": {
-          "name": "route_scheme_plan_ahead_days_range",
-          "value": "\"wms\".\"route_scheme\".\"plan_ahead_days\" between 1 and 28"
-        },
-        "route_scheme_archived_shape": {
-          "name": "route_scheme_archived_shape",
-          "value": "\"wms\".\"route_scheme\".\"archived_at\" is null or not \"wms\".\"route_scheme\".\"plan_ahead\""
         }
       },
       "isRLSEnabled": false
@@ -23362,11 +23341,24 @@
           "primaryKey": false,
           "notNull": true
         },
+        "kind": {
+          "name": "kind",
+          "type": "text",
+          "primaryKey": false,
+          "notNull": true,
+          "default": "'pickup'"
+        },
         "pickup_id": {
           "name": "pickup_id",
           "type": "uuid",
           "primaryKey": false,
-          "notNull": true
+          "notNull": false
+        },
+        "unloading_station_id": {
+          "name": "unloading_station_id",
+          "type": "uuid",
+          "primaryKey": false,
+          "notNull": false
         },
         "position": {
           "name": "position",
@@ -23414,6 +23406,27 @@
             },
             {
               "expression": "pickup_id",
+              "isExpression": false,
+              "asc": true,
+              "nulls": "last"
+            }
+          ],
+          "isUnique": false,
+          "concurrently": false,
+          "method": "btree",
+          "with": {}
+        },
+        "plan_stop_unloading_station_id_idx": {
+          "name": "plan_stop_unloading_station_id_idx",
+          "columns": [
+            {
+              "expression": "company_id",
+              "isExpression": false,
+              "asc": true,
+              "nulls": "last"
+            },
+            {
+              "expression": "unloading_station_id",
               "isExpression": false,
               "asc": true,
               "nulls": "last"
@@ -23513,6 +23526,22 @@
           ],
           "onDelete": "no action",
           "onUpdate": "no action"
+        },
+        "plan_stop_unloading_station_id_fk": {
+          "name": "plan_stop_unloading_station_id_fk",
+          "tableFrom": "plan_stop",
+          "tableTo": "unloading_station",
+          "schemaTo": "wms",
+          "columnsFrom": [
+            "company_id",
+            "unloading_station_id"
+          ],
+          "columnsTo": [
+            "company_id",
+            "id"
+          ],
+          "onDelete": "no action",
+          "onUpdate": "no action"
         }
       },
       "compositePrimaryKeys": {},
@@ -23542,9 +23571,17 @@
           "name": "plan_stop_position_positive",
           "value": "\"wms\".\"plan_stop\".\"position\" > 0"
         },
+        "plan_stop_kind_one_of": {
+          "name": "plan_stop_kind_one_of",
+          "value": "\"wms\".\"plan_stop\".\"kind\" in ('pickup', 'unload')"
+        },
         "plan_stop_window_warning_one_of": {
           "name": "plan_stop_window_warning_one_of",
           "value": "\"wms\".\"plan_stop\".\"window_warning\" in ('windows-disjoint', 'window-unreachable')"
+        },
+        "plan_stop_kind_shape": {
+          "name": "plan_stop_kind_shape",
+          "value": "case \"wms\".\"plan_stop\".\"kind\" when 'pickup' then \"wms\".\"plan_stop\".\"pickup_id\" is not null and \"wms\".\"plan_stop\".\"unloading_station_id\" is null else \"wms\".\"plan_stop\".\"pickup_id\" is null and \"wms\".\"plan_stop\".\"unloading_station_id\" is not null and \"wms\".\"plan_stop\".\"window_warning\" is null end"
         }
       },
       "isRLSEnabled": false

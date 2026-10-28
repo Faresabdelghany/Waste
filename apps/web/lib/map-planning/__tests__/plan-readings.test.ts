@@ -27,6 +27,7 @@ const active = (overrides: Partial<ActivePlan> = {}): ActivePlan => ({
   stale: false,
   deferredUntil: null,
   stopWarnings: [],
+  unloads: [],
   ...overrides,
 })
 
@@ -56,6 +57,15 @@ const routePlan = (overrides: Partial<RoutePlan> = {}): RoutePlan => ({ id: PLAN
 describe("activePlanOf: the active Plan a route's record carries (lib/data/routes.ts)", () => {
   test("reads the JSON the routes adapter writes under the key", () => {
     assert.deepEqual(activePlanOf({ submittedValues: { [ROUTE_ACTIVE_PLAN_KEY]: JSON.stringify(active()) } }), active())
+  })
+
+  test("carries the unload visits a Plan makes on the way (O15 of #290), letting go an entry that does not read as one; a record written before them holds none", () => {
+    const visit = { afterPickupId: "01a0d3a5-e5e0-7000-8000-0000000000b1", unloadingStationId: "01a0d3a5-e5e0-7000-8000-0000000000c1" }
+    const written = { ...active(), unloads: [visit, { afterPickupId: 3 }] }
+    assert.deepEqual(activePlanOf({ submittedValues: { [ROUTE_ACTIVE_PLAN_KEY]: JSON.stringify(written) } })?.unloads, [visit])
+    const before: Partial<ActivePlan> = active()
+    delete before.unloads
+    assert.deepEqual(activePlanOf({ submittedValues: { [ROUTE_ACTIVE_PLAN_KEY]: JSON.stringify(before) } })?.unloads, [])
   })
 
   test("no Plan: the key absent, \"null\" for a route without one, or anything that does not read as one", () => {

@@ -17,6 +17,12 @@
 // other reason is the provider's sentence, so the column has no closed list
 // (#132 §4).
 //
+// A Plan's stop is one of the Route's pickups or, since O15 of #290, an
+// unload visit on the way: where the vehicle is full before its last stop the
+// Plan empties it at the Route's Unloading Station and goes on, the visit a
+// `plan_stop` of kind `unload` naming the station and no pickup. The visit
+// after the last stop is the full trip's own end and is never written.
+//
 // `routing_quota` (#171, migration 0014) is what the quota engine knows of
 // each request family — the provider's last reading and since when the
 // family is exhausted or its key refused — written by the worker after every
@@ -25,7 +31,7 @@
 // per company like every table (the tenant fence), so with the Pilot's one
 // company it is one row per provider and family, and a second company on
 // the same key is Gate B (#132 §1, ADR-0009).
-import { PLAN_SOLVERS, PLAN_STATUSES, PLAN_STOP_WARNINGS, PLAN_TRIPS, ROUTING_QUOTA_FAMILIES } from "@waste/domain/routing/vocabulary"
+import { PLAN_SOLVERS, PLAN_STATUSES, PLAN_STOP_KINDS, PLAN_STOP_WARNINGS, PLAN_TRIPS, ROUTING_QUOTA_FAMILIES } from "@waste/domain/routing/vocabulary"
 import { sql } from "drizzle-orm"
 import { check, date, integer, text, timestamp, uuid } from "drizzle-orm/pg-core"
 
@@ -35,6 +41,7 @@ import { id, projectScoped, recorded, tenant, timestamps } from "./columns"
 import { pickup, route } from "./execution"
 import { geometry, validGeometry } from "./geometry"
 import { company, project } from "./organisation"
+import { unloadingStation } from "./places"
 import { companyReference, projectKey, projectReference, tenantIndex, tenantReference, tenantUnique } from "./references"
 import { wms } from "./wms"
 
@@ -97,8 +104,13 @@ export const planStop = wms.table(
     ...recorded,
     routeId: uuid().notNull(),
     planId: uuid().notNull(),
-    pickupId: uuid().notNull(),
-    /** The execution order the Plan holds, 1..n over the Route's pickups. */
+    /** A pickup of the Route, or an unload visit on the way at its Unloading Station (O15 of #290). */
+    kind: text().notNull().default("pickup"),
+    /** The pickup a `pickup` stop is; null on an unload visit. */
+    pickupId: uuid(),
+    /** The station an `unload` visit empties at, the Route's as the Plan was asked; null on a pickup. */
+    unloadingStationId: uuid(),
+    /** The execution order the Plan holds, 1..n over the Route's pickups and the unload visits between them. */
     position: integer().notNull(),
     /** Why the optimiser ordered this stop outside its Service Window (O14 of #290), or null for a stop it kept inside one, or that has none. */
     windowWarning: text(),
@@ -110,13 +122,21 @@ export const planStop = wms.table(
     // Carries the route both ways: a stop names a plan of the route it names, and a pickup of that same route.
     projectReference(t, [t.routeId, t.planId], plan, [plan.routeId, plan.id]),
     projectReference(t, [t.routeId, t.pickupId], pickup, [pickup.routeId, pickup.id]),
+    tenantReference(t, [t.unloadingStationId], unloadingStation),
     tenantUnique(t, t.planId, t.position),
     tenantUnique(t, t.planId, t.pickupId),
     positive(t.position),
+    oneOf(t.kind, PLAN_STOP_KINDS),
     oneOf(t.windowWarning, PLAN_STOP_WARNINGS),
+    // A pickup names its pickup, an unload visit its station, and only a pickup has a window to warn of.
+    check(
+      tableObjectName(t.id.table, "kind_shape", "planStop"),
+      sql`case ${t.kind} when 'pickup' then ${t.pickupId} is not null and ${t.unloadingStationId} is null else ${t.pickupId} is null and ${t.unloadingStationId} is not null and ${t.windowWarning} is null end`,
+    ),
     // Nothing references the ledgers, so no key leads with the project; the sweep and any project read take this index, Execution's own practice.
     tenantIndex(t, t.projectId),
     tenantIndex(t, t.pickupId),
+    tenantIndex(t, t.unloadingStationId),
   ],
 )
 

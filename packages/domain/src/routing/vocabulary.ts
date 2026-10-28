@@ -28,6 +28,15 @@ export type PlanTrip = (typeof PLAN_TRIPS)[number]
 export const PLAN_STOP_WARNINGS = ["windows-disjoint", "window-unreachable"] as const
 export type PlanStopWarning = (typeof PLAN_STOP_WARNINGS)[number]
 
+/**
+ * What a Plan's stop is (O15 of #290): one of the Route's Pickups, or a
+ * planned unload visit at its Unloading Station on the way, where the vehicle
+ * is full before its last stop and empties to go on (reloads.ts). The visit
+ * after the last stop is the full trip's own end, never a stop of its own.
+ */
+export const PLAN_STOP_KINDS = ["pickup", "unload"] as const
+export type PlanStopKind = (typeof PLAN_STOP_KINDS)[number]
+
 /** Who is waiting on a routing job: a person (a reorder, an Optimise click, a preview) or the horizon. Priority reads it first (#132 §1). */
 export const ROUTING_JOB_CLASSES = ["interactive", "batch"] as const
 export type RoutingJobClass = (typeof ROUTING_JOB_CLASSES)[number]
@@ -66,4 +75,6 @@ export const ROUTING_VOCABULARIES = {
   ROUTING_JOB_CLASSES,
   ROUTING_QUOTA_FAMILIES,
   OPTIMISE_FALLBACKS,
+  PLAN_STOP_WARNINGS,
+  PLAN_STOP_KINDS,
 } as const

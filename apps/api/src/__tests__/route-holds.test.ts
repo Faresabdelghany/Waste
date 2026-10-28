@@ -11,7 +11,10 @@
 // collection it takes away, on a weekday the days no longer hold: one that
 // adds a day releases nothing (#226). `release-hold` hands one planned route
 // back to its scheme and asks a generation run over its service date; a send
-// the queue absorbs or cannot take still hands it back. What generation does
+// the queue absorbs or cannot take still hands it back. A change of holiday
+// inputs — a calendar's holidays written or replaced, the scheme's policy, the
+// project's weekend or whether it has a list — releases the held routes it
+// re-decides, and a list renamed releases nothing (#226). What generation does
 // with a held route is the worker's
 // (apps/worker generation.test.ts). Each test makes its own draft scheme, so
 // no structural rule stands between an edit and what it releases, and writes
@@ -390,6 +393,113 @@ describe("the hold on a route (#209)", { skip: database.skip }, () => {
       assert.match((await readProblem(notPlanned)).detail ?? "", /is ready; only a planned route is held/)
       const withBody = await office.call(`/routes/${held}/release-hold`, { method: "POST", body: { note: "x" } })
       assert.equal(withBody.status, 400)
+    })
+  })
+
+  // A change of holiday inputs releases the held routes it re-decides (#226,
+  // `holidayReleases` in the domain): the calendar's holidays, written or
+  // replaced, the scheme's policy, and the project's weekend or whether it has
+  // a list. The tests run in order: the first makes Copenhagen's 2027
+  // calendar, the rest replace its 2026 one's holidays, and the block gives the project a holiday list for the block and take it
+  // away after. Mondays 12 Oct to 2 Nov 2026 carry the holidays; a held route the
+  // office moved stands on the Tuesday after.
+  describe("a change of holiday inputs (#226)", () => {
+    /** Copenhagen's 2026 calendar, and the holidays the fixtures gave it, which every set below keeps. */
+    let calendarId: string
+    let kept: { day: string; name: string | null }[]
+    const patchProject = async (values: unknown) => await ok(await olivia(`/projects/${a.projects.copenhagen.id}`, { method: "PATCH", body: values }))
+    const putHolidays = async (days: string[]) =>
+      await ok(await olivia(`/collection-calendars/${calendarId}/holidays`, { method: "PUT", body: { holidays: [...kept, ...days.map((day) => ({ day, name: "Test Day" }))] } }))
+    /** A scheme of the policy given, its one group on Mondays. */
+    const schemeOf = async (name: string, holidayPolicy: string) => {
+      const made = await schemeWith(name, ["Round 1"])
+      await patchScheme(made.scheme.id, { holidayPolicy })
+      return { scheme: made.scheme, group: made.groups[0] }
+    }
+    /** A route held where the office moved it: on the day given rather than its Monday. */
+    const movedTo = async (id: string, operatingDate: string) => {
+      const moved = await commanded(id, "reschedule", { operatingDate })
+      assert.deepEqual([moved.operatingDate, moved.heldAt], [operatingDate, HELD])
+    }
+
+    before(async () => {
+      const page = (await ok(await olivia(`/collection-calendars?projectId=${a.projects.copenhagen.id}&validOn=2026-10-12`))) as { items: { id: string; holidays: { day: string; name: string | null }[] }[] }
+      assert.equal(page.items.length, 1)
+      calendarId = page.items[0].id
+      kept = page.items[0].holidays
+      await patchProject({ holidayList: "Test holidays" })
+    })
+    after(async () => {
+      await patchProject({ holidayList: null, weekend: ["saturday", "sunday"] })
+    })
+
+    test("a calendar created with holidays releases the held route on one under shift-next; the route on a plain day keeps its hold", async () => {
+      const { scheme, group } = await schemeOf("Holiday Create Mondays", "shift-next")
+      const [onHoliday, plain] = await Promise.all(["2027-01-04", "2027-01-11"].map((day) => routeOn(scheme, group, day)))
+      await hold(onHoliday, plain)
+      const response = await olivia("/collection-calendars", {
+        method: "POST",
+        body: { projectId: a.projects.copenhagen.id, name: "Copenhagen Central 2027", validFrom: "2027-01-01", validTo: "2028-01-01", holidays: [{ day: "2027-01-04", name: "Test Day" }] },
+      })
+      assert.equal(response.status, 201, JSON.stringify(await response.clone().json()))
+      assert.deepEqual(await holds(scheme.id), { [onHoliday]: false, [plain]: true }, "Monday 4 Jan moves to Tuesday with its neighbours; the 11th is untouched")
+    })
+
+    test("a calendar's holidays replaced release the held routes they re-decide, each under its own scheme's policy: not one the scheme collects on, and not one the office moved off the new holiday", async () => {
+      const shifted = await schemeOf("Holiday Put Mondays", "shift-next")
+      const collected = await schemeOf("Holiday Collect Mondays", "collect")
+      const onHoliday = await routeOn(shifted.scheme, shifted.group, MONDAYS[1])
+      const officeDay = await routeOn(shifted.scheme, shifted.group, MONDAYS[2])
+      const officeOff = await routeOn(shifted.scheme, shifted.group, MONDAYS[3])
+      const collectedOn = await routeOn(collected.scheme, collected.group, MONDAYS[1])
+      await hold(onHoliday, collectedOn)
+      await movedTo(officeDay, "2026-10-27")
+      await movedTo(officeOff, "2026-11-03")
+
+      await putHolidays([MONDAYS[0], MONDAYS[1], "2026-10-27", MONDAYS[3]])
+      assert.deepEqual(await holds(shifted.scheme.id), { [onHoliday]: false, [officeDay]: false, [officeOff]: true }, "the 19th's collection moves; the Tuesday the office chose became a holiday; the 2nd's the office had moved already")
+      assert.deepEqual(await holds(collected.scheme.id), { [collectedOn]: true }, "a holiday the scheme collects on moves nothing")
+
+      await putHolidays([MONDAYS[0], MONDAYS[1], "2026-10-27", MONDAYS[3]])
+      assert.deepEqual(await holds(shifted.scheme.id), { [onHoliday]: false, [officeDay]: false, [officeOff]: true }, "the same set again releases nothing more")
+    })
+
+    test("a scheme's holiday policy changed releases its held routes the policy re-decides, and no other scheme's", async () => {
+      // The holidays stand on 12 and 19 Oct, 27 Oct and 2 Nov.
+      const { scheme, group } = await schemeOf("Holiday Policy Mondays", "shift-next")
+      const other = await schemeOf("Holiday Policy Others", "shift-next")
+      const whereShifted = await routeOn(scheme, group, MONDAYS[1])
+      const plain = await routeOn(scheme, group, "2026-11-09")
+      const theirs = await routeOn(other.scheme, other.group, MONDAYS[1])
+      await movedTo(whereShifted, "2026-10-20")
+      await hold(plain)
+      await movedTo(theirs, "2026-10-20")
+
+      await patchScheme(scheme.id, { name: "Holiday Policy Mondays · renamed" })
+      assert.deepEqual(await holds(scheme.id), { [whereShifted]: true, [plain]: true }, "an edit beside the policy releases nothing")
+      await patchScheme(scheme.id, { holidayPolicy: "skip" })
+      assert.deepEqual(await holds(scheme.id), { [whereShifted]: false, [plain]: true }, "the 19th's collection is skipped now: the route held where the shift put it goes back to be cancelled")
+      assert.deepEqual(await holds(other.scheme.id), { [theirs]: true }, "another scheme's policy did not change")
+    })
+
+    test("the project's weekend changed, or its holiday list set or taken away, releases the held routes it re-decides; a list renamed changes no day and releases nothing", async () => {
+      // The holidays stand on 12 and 19 Oct, 27 Oct and 2 Nov.
+      const { scheme, group } = await schemeOf("Holiday Project Mondays", "shift-next")
+      const lands = await routeOn(scheme, group, MONDAYS[3])
+      const plain = await routeOn(scheme, group, "2026-11-09")
+      await movedTo(lands, "2026-11-03")
+      await hold(plain)
+
+      await patchProject({ holidayList: "Renamed holidays" })
+      assert.deepEqual(await holds(scheme.id), { [lands]: true, [plain]: true }, "a rename changes no day")
+      await patchProject({ weekend: ["saturday", "sunday", "tuesday"] })
+      assert.deepEqual(await holds(scheme.id), { [lands]: false, [plain]: true }, "the 2nd's shift lands on Wednesday now, the route held on Tuesday goes with it")
+
+      const shiftedTwice = await routeOn(scheme, group, MONDAYS[1])
+      await movedTo(shiftedTwice, "2026-10-21")
+      await patchProject({ holidayList: null })
+      assert.deepEqual(await holds(scheme.id), { [lands]: false, [plain]: true, [shiftedTwice]: false }, "no list, no holidays: the 19th is collected on its Monday again")
+      await patchProject({ holidayList: "Test holidays", weekend: ["saturday", "sunday"] })
     })
   })
 })

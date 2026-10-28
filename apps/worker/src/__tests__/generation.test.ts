@@ -28,7 +28,9 @@
 // office held (#209) keeps its day, start and Planned Assignment through a
 // run that still refreshes its pickups and its note, the hold alone writing
 // nothing, and a cancel still cancels it and clears the hold — but under a
-// skipped holiday a route the office held on another day stays (#226); a
+// skipped holiday a route the office held on another day stays (#226), and
+// one the API released after a holiday input changed moves with its
+// neighbours on the next run (#226); a
 // route created or refreshed on a day its group's driver is absent, or its
 // vehicle out of use, is written without them with the run's warning, a held
 // one keeps the office's crew and only warns, and the period gone, the next
@@ -58,7 +60,8 @@ import { planningArea, planningAreaBoundary } from "@waste/db/schema/planning-ar
 import { collectionGroup, collectionGroupContainer, collectionGroupFraction, routeScheme, routeSchemeSeason } from "@waste/db/schema/route-schemes"
 import { PGBOSS_SCHEMA } from "@waste/db/sql/pgboss"
 import { withCompany } from "@waste/db/tenant"
-import { NO_LONGER_SERVES_DATE, NO_PLANNING_AREA, REMOVED_FROM_DAY_PLAN } from "@waste/domain/planning/generation"
+import { holidayReleases, NO_LONGER_SERVES_DATE, NO_PLANNING_AREA, REMOVED_FROM_DAY_PLAN } from "@waste/domain/planning/generation"
+import type { ServiceDay } from "@waste/domain/planning/vocabulary"
 import { and, asc, eq, sql } from "drizzle-orm"
 import { PgBoss } from "pg-boss"
 
@@ -497,6 +500,34 @@ describe("generation against a migrated database", { skip }, () => {
     } finally {
       // The scheme shifts holidays again: the route comes back, the scheme's, for the tests after.
       await ownerPool.db.update(routeScheme).set({ holidayPolicy: "shift-next" }).where(eq(routeScheme.id, a.scheme))
+      await generateA()
+    }
+  })
+
+  test("a holiday taken away: the route held where the shift put it stays there until the release the API makes (#226), and the next run then brings it back to its day as it does every unheld route", async () => {
+    // The glass route of the day is ready by now, frozen, so the residual route alone is read.
+    const thursdays = async () => (await routesOfA()).filter((row) => row.serviceDate === "2026-10-08" && row.collectionGroupId === a.residualGroup).map((row) => [row.operatingDate, row.heldAt !== null, row.note])
+    const residualThursday = (await routesOfA()).find((row) => row.serviceDate === "2026-10-08" && row.collectionGroupId === a.residualGroup)
+    assert.ok(residualThursday, "the holiday Thursday's residual route, shifted to Friday")
+    const [holiday] = await ownerPool.db.select().from(collectionCalendarHoliday).where(eq(collectionCalendarHoliday.id, a.holiday))
+    // Held where the shift put it, for its crew alone: the office's day is the scheme's.
+    await ownerPool.db.update(route).set({ heldAt: NOW }).where(eq(route.id, residualThursday.id))
+    try {
+      await ownerPool.db.delete(collectionCalendarHoliday).where(eq(collectionCalendarHoliday.id, a.holiday))
+      await generateA()
+      assert.deepEqual(await thursdays(), [["2026-10-09", true, null]], "held, it stays on Friday, the shift's note gone with the holiday")
+
+      // The API's release of a calendar change judges it by the domain's rule and clears the hold.
+      const before = { holidayPolicy: "shift-next" as const, calendar: { weekend: ["saturday", "sunday"] as ServiceDay[], holidays: new Map([["2026-10-08", "Test Day"]]) } }
+      const after = { ...before, calendar: { ...before.calendar, holidays: new Map<string, string>() } }
+      assert.equal(holidayReleases({ serviceDate: "2026-10-08", operatingDate: "2026-10-09" }, before, after), true)
+      await ownerPool.db.update(route).set({ heldAt: null }).where(eq(route.id, residualThursday.id))
+      await generateA()
+      assert.deepEqual(await thursdays(), [["2026-10-08", false, null]], "released, it is collected on its Thursday")
+    } finally {
+      // Test Day again, the hold gone: the routes shift back, the scheme's, for the tests after.
+      await ownerPool.db.insert(collectionCalendarHoliday).values(holiday).onConflictDoNothing()
+      await ownerPool.db.update(route).set({ heldAt: null }).where(eq(route.id, residualThursday.id))
       await generateA()
     }
   })

@@ -25,8 +25,9 @@ import type { Point } from "@waste/contracts/geojson"
 import { planFingerprint, type FingerprintPosition } from "@waste/domain/routing/fingerprint"
 import { routingJobPriority } from "@waste/domain/routing/jobs"
 import { activeOnCreation, answersRequest, tripOf } from "@waste/domain/routing/plans"
+import { unloadsAlong, withUnloads, type Reload } from "@waste/domain/routing/reloads"
 import { SUPERSEDED, type PlanSolver, type PlanTrip, type RoutingJobClass } from "@waste/domain/routing/vocabulary"
-import { asc, eq, and, desc, inArray, lt, ne, sql } from "drizzle-orm"
+import { asc, eq, and, desc, inArray, isNotNull, lt, ne, sql } from "drizzle-orm"
 
 import type { Tx } from "../client"
 import { jobHeld, sendInTransaction, type Send, type SendInTransactionOptions } from "../jobs"
@@ -34,6 +35,7 @@ import { property, sharedCollectionPoint } from "../schema/customers"
 import { pickup, route } from "../schema/execution"
 import { depot, unloadingStation } from "../schema/places"
 import { plan, planStop } from "../schema/routing"
+import { reloadOver, routeLoad } from "./route-load"
 import { routeTiming } from "./stop-timing"
 
 /** The queue a `baseline` or `manual` Plan's measurement is sent to and worked on. */
@@ -86,6 +88,8 @@ export type NewPlan = {
   fingerprint: string
   /** The known sequence, written at creation for `manual` and `baseline` (#124 §1); an `optimiser` Plan has none until it is solved. */
   stops?: readonly string[]
+  /** The unload visits on the way through that sequence (O15 of #290, `unloadsAlong`), each after so many of its stops, at the route's station. */
+  unloads?: { after: readonly number[]; unloadingStationId: string }
 }
 
 /** Writes the Plan `calculating` with its creation-time stops, and answers its id. */
@@ -103,15 +107,15 @@ export async function createPlan(tx: Tx, input: NewPlan): Promise<string> {
       fingerprint: input.fingerprint,
     })
     .returning({ id: plan.id })
-  const stops = input.stops ?? []
+  const stops = withUnloads(input.stops ?? [], input.unloads?.after ?? [])
   if (stops.length > 0) {
     await tx.insert(planStop).values(
-      stops.map((pickupId, index) => ({
+      stops.map((stop, index) => ({
         companyId: input.companyId,
         projectId: input.projectId,
         routeId: input.routeId,
         planId: created.id,
-        pickupId,
+        ...(stop.kind === "pickup" ? { pickupId: stop.pickupId } : { kind: "unload", unloadingStationId: input.unloads?.unloadingStationId }),
         position: index + 1,
       })),
     )
@@ -185,14 +189,14 @@ export async function routingJobHeld(tx: Tx, queue: string, planId: string): Pro
   return rows[0]?.held === true
 }
 
-/** One Plan's stops in its order: the pickup ids position 1..n. */
+/** One Plan's pickups in its order, the unload visits between them left out (O15 of #290). */
 export async function planStopIds(tx: Tx, keys: { companyId: string; planId: string }): Promise<string[]> {
   const rows = await tx
     .select({ pickupId: planStop.pickupId })
     .from(planStop)
-    .where(and(eq(planStop.companyId, keys.companyId), eq(planStop.planId, keys.planId)))
+    .where(and(eq(planStop.companyId, keys.companyId), eq(planStop.planId, keys.planId), isNotNull(planStop.pickupId)))
     .orderBy(asc(planStop.position))
-  return rows.map((row) => row.pickupId)
+  return rows.flatMap((row) => (row.pickupId === null ? [] : [row.pickupId]))
 }
 
 const positionOf = (location: Point | null): FingerprintPosition | null => (location === null ? null : [location.coordinates[0], location.coordinates[1]])
@@ -234,7 +238,7 @@ async function fingerprintParts(tx: Tx, companyId: string, routeRow: { id: strin
   return { trip, ...ends, stops: orderedPickupIds.map((id) => at.get(id) ?? id) }
 }
 
-/** What a Plan is keyed on of its route: the ends, and the clock the optimiser is sent (O14 of #290). */
+/** What a Plan is keyed on of its route: the ends, the clock the optimiser is sent (O14 of #290), and the vehicle whose payload its reloads read (O15). */
 export type PlanRoute = {
   id: string
   depotId: string | null
@@ -242,6 +246,7 @@ export type PlanRoute = {
   operatingDate: string
   plannedStartTime: string | null
   plannedDriverId: string | null
+  plannedVehicleId: string | null
 }
 
 /**
@@ -249,9 +254,11 @@ export type PlanRoute = {
  * the ends the result depends on and each stop's place (#124 §4, corrected by
  * #132 §6) — and, for the optimiser on a timed route (O14 of #290), each
  * stop's window and service with the departure and the driver's break, the
- * request `routing.optimise` sends (`routeTiming`). The one spelling the
- * cache lookup below and the horizon's question — does the active Plan still
- * answer the route? — share.
+ * request `routing.optimise` sends (`routeTiming`) — and, where the stops
+ * outweigh the planned vehicle on a full trip, each stop's load and the
+ * payload (O15, `routeLoad`), which place the unload visits on the way. The one
+ * spelling the cache lookup below and the horizon's question — does the
+ * active Plan still answer the route? — share.
  */
 export async function planKey(
   tx: Tx,
@@ -259,11 +266,13 @@ export async function planKey(
   routeRow: PlanRoute,
   request: { solver: PlanSolver; orderedPickupIds: readonly string[] },
   routing: { name: string; profile: string },
-): Promise<{ trip: PlanTrip; fingerprint: string }> {
-  const [parts, timing] = await Promise.all([
+): Promise<{ trip: PlanTrip; fingerprint: string; reload: Reload | null }> {
+  const [parts, timing, load] = await Promise.all([
     fingerprintParts(tx, companyId, routeRow, request.solver, request.orderedPickupIds),
     request.solver === "optimiser" ? routeTiming(tx, companyId, routeRow, request.orderedPickupIds) : undefined,
+    routeLoad(tx, companyId, routeRow, request.orderedPickupIds),
   ])
+  const reload = reloadOver(load, { solver: request.solver, trip: parts.trip, pickupIds: request.orderedPickupIds })
   const timed = timing?.timed === true ? timing : undefined
   const fingerprint = planFingerprint({
     provider: routing.name,
@@ -281,8 +290,9 @@ export async function planKey(
             breaks: timed.breaks.map((pause) => `${pause.window[0]}-${pause.window[1]}+${pause.seconds}`).join(";"),
           },
         }),
+    reload,
   })
-  return { trip: parts.trip, fingerprint }
+  return { trip: parts.trip, fingerprint, reload }
 }
 
 export type EnsuredPlan = { planId: string; created: boolean }
@@ -304,7 +314,7 @@ export async function ensurePlan(
   request: { solver: PlanSolver; orderedPickupIds: readonly string[]; class: RoutingJobClass },
   { routing, send: sendJob }: { routing: { name: string; profile: string }; send: Send },
 ): Promise<EnsuredPlan> {
-  const { trip, fingerprint } = await planKey(tx, companyId, routeRow, request, routing)
+  const { trip, fingerprint, reload } = await planKey(tx, companyId, routeRow, request, routing)
   const queue = routingQueueOf(request.solver)
   const send = async (planId: string) => {
     // The Plan's id keys the singleton: one live job per Plan, and Plans of one (route, fingerprint) are already
@@ -348,6 +358,10 @@ export async function ensurePlan(
     provider: routing.name,
     fingerprint,
     stops: request.solver === "optimiser" ? [] : request.orderedPickupIds,
+    // A known order unloads where the vehicle fills along it; the optimiser places its own visits when it answers.
+    ...(request.solver !== "optimiser" && reload !== null && routeRow.unloadingStationId !== null
+      ? { unloads: { after: unloadsAlong(reload.amounts, reload.capacityKg), unloadingStationId: routeRow.unloadingStationId } }
+      : {}),
   })
   if (activeOnCreation(request.solver)) await activatePlan(tx, { companyId, routeId: routeRow.id, planId })
   await send(planId)

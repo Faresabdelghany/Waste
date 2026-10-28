@@ -75,7 +75,7 @@ import type { PickupOrigin, PickupReason, PickupService, PickupStatus, RouteStat
 import { ruleSignature } from "../route-schemes/container-drift"
 import { WALK_CAP_DAYS } from "../route-schemes/generation"
 import { holidayLabel, holidayNamesFor, withCarriedNames } from "../route-schemes/holiday-names"
-import { formatOccurrenceShortDate, generateOccurrences, NO_HOLIDAYS, shiftedNote, type HolidayList, type HolidayPolicy, type Occurrence, type SchemeCalendar } from "../route-schemes/occurrences"
+import { formatOccurrenceShortDate, generateOccurrences, holidayDecision, NO_HOLIDAYS, shiftedNote, type HolidayList, type HolidayPolicy, type Occurrence, type SchemeCalendar } from "../route-schemes/occurrences"
 import { addDays, serviceDayOf, type SchemeRecurrence } from "../route-schemes/recurrence"
 import type { RecurrenceFrequency, SeasonFrequency, ServiceDay, StopSource, WeekRotation } from "./vocabulary"
 
@@ -177,6 +177,34 @@ export const skippedHoliday = (holiday: string | undefined): string => `Skipped 
 /** A collection the policy skips that the office held on another day (#226): "Kept on Fri 9 Oct by the office, off Christmas Day". */
 export const keptOffHoliday = (operatingDate: string, holiday: string | undefined): string =>
   `Kept on ${formatOccurrenceShortDate(operatingDate)} by the office, off ${holiday ?? "Holiday"}`
+
+/** A scheme's holiday inputs: its policy and its project's calendar, as a run judges a date by them. */
+export type HolidayInputs = { holidayPolicy: HolidayPolicy; calendar: SchemeCalendar }
+
+/** Where the scheme puts the collection of a recurrence date: the day it runs on, or null where the policy skips it. */
+const collectedOn = (serviceDate: string, inputs: HolidayInputs): string | null => {
+  const decision = holidayDecision(serviceDate, inputs.holidayPolicy, inputs.calendar)
+  return decision.status === "skipped" ? null : decision.date
+}
+
+/** A day the scheme moves a collection off: a holiday under any policy but collect. */
+const movesOff = (date: string, inputs: HolidayInputs): boolean => inputs.holidayPolicy !== "collect" && inputs.calendar.holidays.has(date)
+
+/**
+ * Whether a change of holiday inputs — the scheme's policy, the project's
+ * weekend or holiday list, a calendar's holidays — releases a held route
+ * (#226). A route that stands where the scheme put its collection, the
+ * office having held only its start or assignment, is released where the
+ * change puts the collection elsewhere or skips it, so it moves with its
+ * neighbours. A route the office moved to another day keeps it, unless the
+ * change makes that day one the scheme moves a collection off. A holiday the
+ * scheme collects on moves nothing, so it releases nothing.
+ */
+export function holidayReleases(route: { serviceDate: string; operatingDate: string }, before: HolidayInputs, after: HolidayInputs): boolean {
+  const was = collectedOn(route.serviceDate, before)
+  if (route.operatingDate === was) return collectedOn(route.serviceDate, after) !== was
+  return !movesOff(route.operatingDate, before) && movesOff(route.operatingDate, after)
+}
 
 /** The run's warning for a day with no boundary of the scheme's planning area in force: rule groups match nothing that day. */
 export const noBoundaryInForce = (serviceDate: string): string => `No planning area boundary in force on ${serviceDate}; rule groups match no containers that day`

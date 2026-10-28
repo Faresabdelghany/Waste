@@ -149,7 +149,7 @@ export function planRoutes(guard: MiddlewareHandler<AuthEnv>, { routing, jobs }:
         requireNotStarted(current, ORDER_IS_FROZEN)
         const open = (await pickupsOfRoute(tx, principal.companyId, current.id)).filter((stop) => stop.status === "planned")
         if (open.length === 0) throw problem(409, { detail: nothingToOrder(labelOf(current)) })
-        const { solver, fallback } = optimiseSolver({ openStops: open.length, hasDepot: current.depotId !== null })
+        const { solver, fallback } = optimiseSolver({ openStops: open.length, hasDepot: current.depotId !== null, hasStation: current.unloadingStationId !== null })
         const { planId, created } = await ensurePlan(tx, principal, current, { solver, orderedPickupIds: open.map((stop) => stop.id) }, { routing, jobs })
         const answered = await findPlan(tx, principal, planId)
         if (answered === undefined) throw noSuchPlan(planId)

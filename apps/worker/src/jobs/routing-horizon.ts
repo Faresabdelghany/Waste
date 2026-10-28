@@ -123,6 +123,7 @@ async function planRoute(context: JobContext, companyId: string, routeId: string
         operatingDate: route.operatingDate,
         plannedStartTime: route.plannedStartTime,
         plannedDriverId: route.plannedDriverId,
+        plannedVehicleId: route.plannedVehicleId,
         depotId: route.depotId,
         unloadingStationId: route.unloadingStationId,
         activePlanId: route.activePlanId,
@@ -147,7 +148,7 @@ async function planRoute(context: JobContext, companyId: string, routeId: string
     if (open.length === 0) return "outside"
     const active = row.activePlanId === null ? null : await activePlanOf(tx, companyId, row.activePlanId)
     const optimisationWaiting = active?.solver === "manual" && (await optimisationAskedAfter(tx, companyId, routeId, active.id))
-    const request = horizonRequest({ open, hasDepot: row.depotId !== null, active, optimisationWaiting })
+    const request = horizonRequest({ open, hasDepot: row.depotId !== null, hasStation: row.unloadingStationId !== null, active, optimisationWaiting })
     if (request === null) return "waiting"
     const routing = { name: context.routing.name, profile: DEFAULT_PROFILE }
     // A failed active Plan answers nothing (#231): `ensurePlan` reuses only a ready or calculating match, so the route is asked a new Plan.

@@ -12,13 +12,13 @@ import { after, before, describe, test } from "node:test"
 
 import type { Position2D } from "@waste/contracts/geojson"
 import { createDb, type Database, type Tx } from "@waste/db/client"
-import { ROUTING_MEASURE_QUEUE, ROUTING_OPTIMISE_QUEUE, routingSendOptions, type RoutingJobData } from "@waste/db/commands/plans"
+import { ensurePlan, ROUTING_MEASURE_QUEUE, ROUTING_OPTIMISE_QUEUE, routingSendOptions, type RoutingJobData } from "@waste/db/commands/plans"
 import { migrateDatabase } from "@waste/db/migrate"
 import { agreement } from "@waste/db/schema/agreements"
-import { containerType } from "@waste/db/schema/catalogue"
+import { containerType, wasteFraction } from "@waste/db/schema/catalogue"
 import { property } from "@waste/db/schema/customers"
 import { route } from "@waste/db/schema/execution"
-import { driver } from "@waste/db/schema/fleet"
+import { driver, vehicle } from "@waste/db/schema/fleet"
 import { depot, unloadingStation } from "@waste/db/schema/places"
 import { plan, planLeg, planStop, routingQuota } from "@waste/db/schema/routing"
 import { PGBOSS_SCHEMA } from "@waste/db/sql/pgboss"
@@ -195,6 +195,96 @@ describe("routing's jobs under the quota engine", { skip: roles.skip }, () => {
   const clearQuota = () => withCompany(api.db, tenant.companyId, (tx: Tx) => tx.delete(routingQuota).where(eq(routingQuota.companyId, tenant.companyId)))
   const jobsOf = (planId: string) =>
     owner.sql.unsafe<JobRow[]>(`select id, state, data, priority, retry_count, extract(epoch from start_after)::float8 as start_epoch from ${PGBOSS_SCHEMA}.job where singleton_key = $1 order by created_on, id`, [planId])
+
+  // First, while the queues hold no job of another test's: each job here is fetched as the next one.
+  describe("multi-trip unloading: a route its vehicle cannot carry in one load (O15 of #290)", () => {
+    /** Each 240 L bin at 100 kg/m³ is 24 kg, and WH-24 carries 30: the two stops are a load too many. */
+    async function overloaded<T>(run: () => Promise<T>): Promise<T> {
+      const weigh = (density: number | null, capacityKg: number | null) =>
+        withCompany(api.db, tenant.companyId, async (tx: Tx) => {
+          await tx.update(wasteFraction).set({ densityKgPerCubicMetre: density }).where(eq(wasteFraction.id, tenant.fractionId))
+          await tx.update(vehicle).set({ capacityKg }).where(eq(vehicle.id, tenant.vehicleId))
+        })
+      await weigh(100, 30)
+      try {
+        return await run()
+      } finally {
+        await weigh(null, null)
+      }
+    }
+    const kindsOf = async (planId: string) =>
+      (await withCompany(api.db, tenant.companyId, (tx: Tx) => tx.select({ kind: planStop.kind, pickupId: planStop.pickupId, station: planStop.unloadingStationId }).from(planStop).where(eq(planStop.planId, planId)).orderBy(asc(planStop.position)))).map((row) =>
+        row.kind === "unload" ? `unload@${row.station === stationId ? "station" : row.station}` : row.pickupId,
+      )
+
+    test("the optimiser is sent each stop's load and the payload, unloads on the way when the vehicle is full, and the Plan writes the visit between the pickups it comes after, its legs through the station", async () => {
+      const sent: OptimiseRequest[] = []
+      const fake = new FakeProvider()
+      const recording: RoutingProvider = { name: fake.name, maxWaypoints: fake.maxWaypoints, measure: (request) => fake.measure(request), optimise: (request) => (sent.push(request), fake.optimise(request)) }
+      const { engine } = engineOf({}, recording)
+      await overloaded(async () => {
+        const seeded = await routeWith("full")
+        const planId = await planOf(seeded, "optimiser", "full")
+        await routingOptimise.handler([await inHand(ROUTING_OPTIMISE_QUEUE, planId)], contextOf(engine))
+        assert.deepEqual(sent.at(-1)?.reload, { capacityKg: 30, amounts: [24, 24] })
+        assert.equal((await planRow(planId)).status, "ready")
+        // Parkvej first from the depot, then the station, since Havnegade will not fit on top.
+        assert.deepEqual(await kindsOf(planId), [seeded.pickupIds[1], "unload@station", seeded.pickupIds[0]])
+        assert.deepEqual(
+          (await legsOf(planId)).map((leg) => leg.path.coordinates),
+          [
+            [DEPOT, PARKVEJ],
+            [PARKVEJ, STATION],
+            [STATION, HAVNEGADE],
+            [HAVNEGADE, STATION],
+            [STATION, DEPOT],
+          ],
+        )
+        assert.equal(await activeOf(seeded.id), planId)
+      })
+    })
+
+    test("within the payload, or without one, the request carries no reload and the station stays last, once", async () => {
+      const sent: OptimiseRequest[] = []
+      const fake = new FakeProvider()
+      const recording: RoutingProvider = { name: fake.name, maxWaypoints: fake.maxWaypoints, measure: (request) => fake.measure(request), optimise: (request) => (sent.push(request), fake.optimise(request)) }
+      const { engine } = engineOf({}, recording)
+      const seeded = await routeWith("full")
+      const planId = await planOf(seeded, "optimiser", "full")
+      await routingOptimise.handler([await inHand(ROUTING_OPTIMISE_QUEUE, planId)], contextOf(engine))
+      assert.equal(sent.at(-1)?.reload, undefined)
+      assert.ok(!(await kindsOf(planId)).some((kind) => kind?.startsWith("unload")))
+    })
+
+    test("a dispatcher's order is cut where the vehicle fills along it: the Plan written with the visit, its measurement driven through the station", async () => {
+      const { engine } = engineOf()
+      await overloaded(async () => {
+        const seeded = await routeWith("full")
+        const [row] = await withCompany(api.db, tenant.companyId, (tx: Tx) =>
+          tx
+            .select({ id: route.id, projectId: route.projectId, depotId: route.depotId, unloadingStationId: route.unloadingStationId, operatingDate: route.operatingDate, plannedStartTime: route.plannedStartTime, plannedDriverId: route.plannedDriverId, plannedVehicleId: route.plannedVehicleId })
+            .from(route)
+            .where(eq(route.id, seeded.id)),
+        )
+        const { planId } = await withCompany(api.db, tenant.companyId, (tx: Tx) =>
+          ensurePlan(tx, tenant.companyId, row, { solver: "manual", orderedPickupIds: seeded.pickupIds, class: "interactive" }, { routing: { name: "fake", profile: "driving-hgv" }, send: (queue, data, options) => boss.send(queue, data, options ?? {}) }),
+        )
+        assert.deepEqual(await kindsOf(planId), [seeded.pickupIds[0], "unload@station", seeded.pickupIds[1]])
+        const [job] = await boss.fetch<RoutingJobData>(ROUTING_MEASURE_QUEUE)
+        await routingMeasure.handler([job], contextOf(engine))
+        assert.deepEqual(
+          (await legsOf(planId)).map((leg) => leg.path.coordinates),
+          [
+            [DEPOT, HAVNEGADE],
+            [HAVNEGADE, STATION],
+            [STATION, PARKVEJ],
+            [PARKVEJ, STATION],
+            [STATION, DEPOT],
+          ],
+        )
+      })
+    })
+  })
 
   describe("routing.measure", () => {
     test("an answered measurement writes the legs and totals, and moves the company's quota row to the provider's reading", async () => {
