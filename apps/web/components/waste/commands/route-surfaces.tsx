@@ -20,6 +20,10 @@
 // one request and says what became of each; a route's details offer Optimise
 // on a route that has not started and list its Plans, the active one marked.
 //
+// Balance day (O15 of #290) beside it weighs a project's day, proposes moving
+// stops off the routes over their payload or shift, and moves the ticked ones
+// with the proposal's token.
+//
 // Moving stops (O23 of #290): on a route that has not started, Move stops
 // sends ticked open stops to another route of the project, Split route sends
 // them to a new route of its day, and Merge route takes in every open stop of
@@ -52,18 +56,19 @@ import { shownOn } from "@/lib/api/records/clock"
 import { CONTAINERS_MODULE } from "@/lib/api/records/containers"
 import { LIVE_MODULE, routeSessions, whileWatched } from "@/lib/api/records/live"
 import { CORRECT_PICKUP, PICKUPS_MODULE, pickupProofs, proofLine, proofObjectNoun, REMOVE_PICKUP } from "@/lib/api/records/pickups"
-import { ADD_STOP, ASSIGN_ROUTE, callsignOf, CANCEL_ROUTE, DISPATCH_ROUTE, dispatchRoutes, isHeldRoute, MERGE_ROUTE, MOVE_STOPS, OPTIMISE_ROUTE, planLine, RELEASE_HOLD, REORDER_ROUTE, RESCHEDULE_ROUTE, routeCommandLog, routeDetail, routePlans, ROUTES_MODULE, SPLIT_ROUTE } from "@/lib/api/records/routes"
+import { ORGANISATION_MODULE } from "@/lib/data/containers"
+import { ADD_STOP, applyBalance, ASSIGN_ROUTE, balanceMoveLine, callsignOf, CANCEL_ROUTE, dayLoadLine, DISPATCH_ROUTE, dispatchRoutes, previewBalance, isHeldRoute, MERGE_ROUTE, MOVE_STOPS, OPTIMISE_ROUTE, planLine, RELEASE_HOLD, REORDER_ROUTE, RESCHEDULE_ROUTE, routeCommandLog, routeDetail, routePlans, ROUTES_MODULE, SPLIT_ROUTE } from "@/lib/api/records/routes"
 import { DRIVERS_MODULE, VEHICLES_MODULE } from "@/lib/data/allocations"
 import type { BusinessFormValues } from "@/lib/data/business-form-types"
 import { PROPERTIES_MODULE, SHARED_POINTS_MODULE } from "@/lib/data/properties"
 import { getModuleDefinition, type BusinessRecord } from "@/lib/data/business-modules"
 import { BULKY_BOOKINGS_MODULE, bookingsForRoute } from "@/lib/data/bulky"
 import { MASTER_DATA_MODULE, masterDataKindOf } from "@/lib/data/master-data"
-import { contaminantCodeOptions, createRouteRecord, DISPATCH_DAY_FORM, dispatchDayRows, PICKUP_COMMAND_FORMS, pickupReasonLabel, ROUTE_COMMAND_FORMS, ROUTE_CREATE_FORM, routeCommandValues, routesToJoin, type PickupCommandWithForm, type RouteCommandWithForm } from "@/lib/data/routes"
+import { BALANCE_DAY_FORM, contaminantCodeOptions, createRouteRecord, DISPATCH_DAY_FORM, dispatchDayRows, PICKUP_COMMAND_FORMS, pickupReasonLabel, ROUTE_COMMAND_FORMS, ROUTE_CREATE_FORM, routeCommandValues, routesToJoin, type PickupCommandWithForm, type RouteCommandWithForm } from "@/lib/data/routes"
 import type { Pickup } from "@waste/contracts/pickups"
 import type { ProofObjectLink } from "@waste/contracts/proof-objects"
 import type { ProofOfService } from "@waste/contracts/proofs"
-import type { RouteDetail, RouteDispatchResult } from "@waste/contracts/routes"
+import type { RouteBalancePreview, RouteDetail, RouteDispatchResult } from "@waste/contracts/routes"
 import type { Session } from "@waste/contracts/sessions"
 
 /** The route's own read, as a one-row history the surface reads again after each command. */
@@ -75,12 +80,156 @@ const ROUTE_COMMAND_OF: Readonly<Record<RouteCommandWithForm, string>> = { assig
 /** The statuses a stop may be added in (#111): a route that has not started. */
 const TAKES_A_STOP = new Set(["planned", "ready"])
 
-/** The routes module's primary actions on the Pilot: Dispatch day (O5 of #290), then New route (#111). */
+/** The routes module's primary actions on the Pilot: Dispatch day (O5 of #290), Balance day (O15), then New route (#111). */
 export function RoutesPrimarySurface() {
   return (
     <>
       <DispatchDaySurface />
+      <BalanceDaySurface />
       <NewRouteSurface />
+    </>
+  )
+}
+
+/**
+ * Balance day (O15 of #290): a project's day, then what the API proposes —
+ * stops moved off the routes over their vehicle's payload or their driver's
+ * shift onto routes of the day that can take them, each route before and after
+ * — every move ticked. Nothing moves until Apply sends the ticked moves with
+ * the preview's token; a day that changed since is the API's 409, read here as
+ * a sentence to preview again. Each move is the API's Move stops, and each
+ * route it touched is asked a new Plan; the routes and the stops are read
+ * again after.
+ */
+function BalanceDaySurface() {
+  const client = useApiClient()
+  const { refreshModule } = useBusinessRecordStore()
+  const pickers = useRelationPickers()
+  const moduleReady = useModuleReady(ROUTES_MODULE)
+  const projects = useServerModuleState(ORGANISATION_MODULE.workspaceId, ORGANISATION_MODULE.moduleId)
+  const routeName = useServerNames(ROUTES_MODULE, "route")
+  const stopName = useServerNames(PICKUPS_MODULE, "pickup")
+  const [step, setStep] = useState<"closed" | "day" | "proposal">("closed")
+  const [day, setDay] = useState<{ projectId: string; operatingDate: string } | null>(null)
+  const [proposal, setProposal] = useState<RouteBalancePreview | null>(null)
+  const [unticked, setUnticked] = useState<ReadonlySet<string>>(new Set())
+  const [answered, setAnswered] = useState<string | null>(null)
+  const [busy, setBusy] = useState(false)
+  const ticked = proposal?.moves.filter((move) => !unticked.has(move.pickupId)) ?? []
+  const projectServerId = day === null ? undefined : projects?.serverIds.get(day.projectId)
+
+  const pickDay = (values: BusinessFormValues) => {
+    const projectId = typeof values.projectId === "string" ? values.projectId : ""
+    const operatingDate = typeof values.operatingDate === "string" ? values.operatingDate : ""
+    const serverId = projects?.serverIds.get(projectId)
+    if (client === null || serverId === undefined) {
+      toast.error("The day was not weighed", { description: "The project has not been read from the API yet." })
+      return
+    }
+    setDay({ projectId, operatingDate })
+    setUnticked(new Set())
+    setAnswered(null)
+    setProposal(null)
+    setBusy(true)
+    previewBalance(client, { projectId: serverId, operatingDate })
+      .then(
+        (preview) => {
+          setProposal(preview)
+          setStep("proposal")
+        },
+        (error: unknown) => toast.error("The day was not weighed", { description: problemSentence(problemOfError(error)) }),
+      )
+      .finally(() => setBusy(false))
+  }
+
+  const applyTicked = () => {
+    if (busy || client === null || proposal === null || day === null || projectServerId === undefined || ticked.length === 0) return
+    setBusy(true)
+    applyBalance(client, { projectId: projectServerId, operatingDate: day.operatingDate, token: proposal.token, moves: ticked.map((move) => ({ pickupId: move.pickupId, toRouteId: move.toRouteId })) })
+      .then(
+        (result) => {
+          const said = `${result.moved} ${result.moved === 1 ? "stop" : "stops"} moved`
+          setAnswered(`${said}; ${result.routes.length} ${result.routes.length === 1 ? "route" : "routes"} asked a new Plan.`)
+          toast.success(said, { description: "Each route the moves touched is measured again." })
+          // The stops moved between routes, and each touched route's order is asked again.
+          void refreshModule(ROUTES_MODULE.workspaceId, ROUTES_MODULE.moduleId)
+          void refreshModule(PICKUPS_MODULE.workspaceId, PICKUPS_MODULE.moduleId)
+        },
+        (error: unknown) => toast.error("The day was not balanced", { description: problemSentence(problemOfError(error)) }),
+      )
+      .finally(() => setBusy(false))
+  }
+
+  const close = () => {
+    if (busy) return
+    setStep("closed")
+    setAnswered(null)
+  }
+
+  return (
+    <>
+      <Button size="sm" variant="outline" disabled={!moduleReady || client === null || !pickers.readyFor(BALANCE_DAY_FORM)} onClick={() => setStep("day")}>
+        Balance day
+      </Button>
+      {step === "day" && (
+        <BusinessRecordFormDialog
+          schema={BALANCE_DAY_FORM}
+          open
+          onOpenChange={(isOpen) => !isOpen && !busy && setStep("closed")}
+          onSubmit={pickDay}
+          relationOptions={(field, values) => pickers.options(field, values, undefined, {})}
+          initialValueOverrides={day ?? {}}
+        />
+      )}
+      {step === "proposal" && day !== null && proposal !== null && (
+        <Dialog open onOpenChange={(isOpen) => !isOpen && close()}>
+          <DialogContent className="sm:max-w-2xl" data-testid="balance-day">
+            <DialogHeader>
+              <DialogTitle>Balance day</DialogTitle>
+              <DialogDescription>
+                The routes of {day.operatingDate} that have not started. A stop moves only onto a route of the same service provider whose vehicle carries its fraction and whose day reaches its window. The times after are estimates until the routes are measured again.
+              </DialogDescription>
+            </DialogHeader>
+            {answered !== null ? (
+              <p className="text-sm" data-testid="balance-day-result">
+                {answered}
+              </p>
+            ) : (
+              <>
+                {proposal.moves.length === 0 ? (
+                  <p className="text-sm text-muted-foreground">No route of the day runs over its payload or its shift where another can take its stops: nothing to move.</p>
+                ) : (
+                  <ul className="divide-y divide-border/60 border-y border-border/60 text-sm" data-testid="balance-day-moves">
+                    {proposal.moves.map((move) => (
+                      <DispatchDayRow key={move.pickupId} checked={!unticked.has(move.pickupId)} onToggle={(checked) => setUnticked((was) => toggled(was, move.pickupId, !checked))}>
+                        {balanceMoveLine(stopName(move.pickupId), routeName(move.fromRouteId), routeName(move.toRouteId))}
+                      </DispatchDayRow>
+                    ))}
+                  </ul>
+                )}
+                <ul className="text-xs text-muted-foreground" data-testid="balance-day-routes">
+                  {proposal.routes.map((weighed) => (
+                    <li key={weighed.routeId} className="py-0.5">
+                      {routeName(weighed.routeId)}: {dayLoadLine(weighed.before)}
+                      {JSON.stringify(weighed.before) === JSON.stringify(weighed.after) ? "" : ` → ${dayLoadLine(weighed.after)}`}
+                    </li>
+                  ))}
+                </ul>
+              </>
+            )}
+            <DialogFooter>
+              <Button variant="outline" disabled={busy} onClick={close}>
+                {answered === null ? "Back" : "Close"}
+              </Button>
+              {answered === null && proposal.moves.length > 0 && (
+                <Button disabled={busy || ticked.length === 0} onClick={applyTicked}>
+                  Move {ticked.length} {ticked.length === 1 ? "stop" : "stops"}
+                </Button>
+              )}
+            </DialogFooter>
+          </DialogContent>
+        </Dialog>
+      )}
     </>
   )
 }

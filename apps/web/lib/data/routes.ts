@@ -244,6 +244,15 @@ export const DISPATCH_DAY_FORM: BusinessFormSchema = {
   execution: { kind: "append-event", completionMessage: "Routes dispatched." },
 }
 
+/** Balance day (O15 of #290): the project's day whose routes the API weighs, before it proposes any move. */
+export const BALANCE_DAY_FORM: BusinessFormSchema = {
+  ...DISPATCH_DAY_FORM,
+  title: "Balance day",
+  description: "The project's routes of the day that have not started, weighed against their vehicles' payload and their drivers' shifts. Pick the day; nothing moves until you apply what the balance proposes.",
+  submitLabel: "Propose a balance",
+  execution: { kind: "append-event", completionMessage: "Day balanced." },
+}
+
 /**
  * The routes Dispatch day offers (O5 of #290): the project's routes running
  * on the day that are still planned, by their number — a ready one is

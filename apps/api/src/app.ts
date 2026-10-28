@@ -78,6 +78,7 @@ import { liveRoutes } from "./routes/live"
 import { meRoutes } from "./routes/me"
 import { pickupRoutes } from "./routes/pickups"
 import { stopMoveRoutes } from "./routes/stop-moves"
+import { routeBalanceRoutes } from "./routes/route-balance"
 import { planningAreaRoutes } from "./routes/planning-areas"
 import { priceListRoutes } from "./routes/price-lists"
 import { productRoutes } from "./routes/products"
@@ -294,6 +295,7 @@ export function createApp({
   app.route("/", pickupRoutes(guard, { now }))
   // Moving stops between routes, splitting and merging them (O23 of #290): commands over two routes and their stops.
   app.route("/", stopMoveRoutes(guard, { now }))
+  app.route("/", routeBalanceRoutes(guard, { now, routing, jobs }))
   // Proof objects (O1 of #290) call Storage, so, like the preview, their guard ends the principal's transaction and each handler reads its fence in a short one of its own.
   app.route("/", proofObjectRoutes(identify({ pool, verifier }), { pool, storage, now, log: log ?? console.error }))
   app.route("/", unloadRoutes(guard, { now }))

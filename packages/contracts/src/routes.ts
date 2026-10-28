@@ -24,6 +24,7 @@
 // latest point a proof carried, when the device was last seen, whether it is
 // paused — for the dashboard, paged like every list.
 import type { RouteShift as DomainRouteShift } from "@waste/domain/execution/shift"
+import { BALANCE_MOVES_MAX } from "@waste/domain/routing/balance"
 import type { RouteWorkload as DomainRouteWorkload } from "@waste/domain/execution/workload"
 import * as z from "zod"
 
@@ -319,6 +320,59 @@ export type RouteSplit = z.infer<typeof RouteSplit>
 /** `POST /routes/:id/merge` (O23 of #290): every open stop of the route the body names moved onto this one, and that route cancelled as `merged`. */
 export const RouteMerge = z.strictObject({ routeId: Id })
 export type RouteMerge = z.infer<typeof RouteMerge>
+
+/** `POST /routes/balance-preview` (O15 of #290): the day of one project the balance weighs. */
+export const RouteBalanceDay = z.strictObject({ projectId: Id, operatingDate: IsoDate })
+export type RouteBalanceDay = z.infer<typeof RouteBalanceDay>
+
+/** A route's day as the balance weighs it — the route read's arithmetic, its drive estimated where moves change it — before the moves or after them. */
+export const RouteDayLoad = z.object({
+  kg: NonNegativeInt,
+  workSeconds: NonNegativeInt,
+  /** How far the load runs over the planned vehicle's payload, 0 within it; null without a payload. */
+  overCapacityKg: NonNegativeInt.nullable(),
+  /** How far the work runs outside the planned driver's shift, 0 within it; null without a shift. */
+  overShiftSeconds: NonNegativeInt.nullable(),
+})
+export type RouteDayLoad = z.infer<typeof RouteDayLoad>
+
+/** One stop the balance moves: off the route it is on, onto another of the day. */
+export const RouteBalanceMove = z.object({ pickupId: Id, fromRouteId: Id, toRouteId: Id })
+export type RouteBalanceMove = z.infer<typeof RouteBalanceMove>
+
+/**
+ * `POST /routes/balance-preview`'s answer: the moves the balance proposes,
+ * every route of the day before and after them, and the token the apply
+ * carries back, which says the day as it was read.
+ */
+export const RouteBalancePreview = z.object({
+  token: z.string().min(1),
+  moves: z.array(RouteBalanceMove),
+  routes: z.array(z.object({ routeId: Id, before: RouteDayLoad, after: RouteDayLoad })),
+})
+export type RouteBalancePreview = z.infer<typeof RouteBalancePreview>
+
+export const EACH_BALANCED_STOP_ONCE = eachOnceSentence("pickup", "a stop moves once")
+
+/** `POST /routes/balance` (O15 of #290): the moves of a preview the office accepts, all of them or some, with the preview's token; at most `BALANCE_MOVES_MAX`. */
+export const RouteBalanceApply = z.strictObject({
+  projectId: Id,
+  operatingDate: IsoDate,
+  token: z.string().min(1).max(128),
+  moves: z
+    .array(z.strictObject({ pickupId: Id, toRouteId: Id }))
+    .min(1)
+    .max(BALANCE_MOVES_MAX)
+    .refine((moves) => eachOnce(moves.map((move) => move.pickupId)), { message: EACH_BALANCED_STOP_ONCE }),
+})
+export type RouteBalanceApply = z.infer<typeof RouteBalanceApply>
+
+/** `POST /routes/balance`'s answer: how many stops moved, and each route they touched with the Plan it was asked — null for one left with no open stop to order. */
+export const RouteBalanceResult = z.object({
+  moved: NonNegativeInt,
+  routes: z.array(z.object({ routeId: Id, planId: Id.nullable() })),
+})
+export type RouteBalanceResult = z.infer<typeof RouteBalanceResult>
 
 /** A page of routes: one project's, one scheme's, one group's, over a window of operating days, on one service date, of one status, planned for one driver or one vehicle. */
 export const RouteListQuery = ProjectScopedListQuery.extend({

@@ -100,6 +100,7 @@ definePurityTests({
     "@waste/domain/resources/emissions",
     "@waste/domain/resources/vocabulary",
     "@waste/domain/route-schemes/seasons",
+    "@waste/domain/routing/balance",
     "@waste/domain/routing/vocabulary",
     "@waste/domain/sorting-guide/search",
     "@waste/domain/sorting-guide/vocabulary",
