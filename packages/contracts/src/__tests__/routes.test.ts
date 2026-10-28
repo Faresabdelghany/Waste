@@ -77,6 +77,7 @@ const pickup = {
   warehouseId: null,
   replacementContainerId: null,
   bulkyBookingId: null,
+  movedFromPickupId: null,
   ...STAMPS,
 }
 
