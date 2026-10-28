@@ -93,7 +93,6 @@ import { MIGRATIONS_FOLDER } from "../migrate"
 import { tableObjectName } from "../names"
 import { reviewStatus, WEIGHT_REVIEW_STATE, weightReviewOf } from "../query/weight-review"
 import { userAccount } from "../schema/access"
-import { agreement } from "../schema/agreements"
 import { containerType, product, serviceFrequency, wasteFraction } from "../schema/catalogue"
 import { oneOf, positive } from "../schema/checks"
 import { id, projectScoped, recorded, tenant, timestamps, validity, validPeriod } from "../schema/columns"
@@ -824,36 +823,51 @@ const productAsOf0004 = wms.table(
   ],
 )
 
+const agreementColumns = {
+  ...id,
+  ...projectScoped,
+  ...timestamps,
+  ...validity,
+  number: text().notNull(),
+  customerId: uuid().notNull(),
+  payerCustomerId: uuid().notNull(),
+  status: text().notNull(),
+  billingCadence: text().notNull(),
+  currency: text().notNull(),
+  notes: text(),
+}
+
 /** agreement as 0004 left it: no price list. */
-const agreementAsOf0004 = wms.table(
-  "agreement",
-  {
-    ...id,
-    ...projectScoped,
-    ...timestamps,
-    ...validity,
-    number: text().notNull(),
-    customerId: uuid().notNull(),
-    payerCustomerId: uuid().notNull(),
-    status: text().notNull(),
-    billingCadence: text().notNull(),
-    currency: text().notNull(),
-    notes: text(),
-  },
-  (t) => [
-    companyReference(t, company),
-    tenantReference(t, [t.projectId], project),
-    tenantReference(t, [t.customerId], customer),
-    tenantReference(t, [t.payerCustomerId], customer),
-    projectKey(t),
-    validPeriod(t),
-    oneOf(t.status, AGREEMENT_STATUSES),
-    oneOf(t.billingCadence, BILLING_CADENCES),
-    tenantIndex(t, t.number),
-    tenantIndex(t, t.customerId),
-    tenantIndex(t, t.payerCustomerId),
-  ],
-)
+const agreementAsOf0004 = wms.table("agreement", agreementColumns, (t) => [
+  companyReference(t, company),
+  tenantReference(t, [t.projectId], project),
+  tenantReference(t, [t.customerId], customer),
+  tenantReference(t, [t.payerCustomerId], customer),
+  projectKey(t),
+  validPeriod(t),
+  oneOf(t.status, AGREEMENT_STATUSES),
+  oneOf(t.billingCadence, BILLING_CADENCES),
+  tenantIndex(t, t.number),
+  tenantIndex(t, t.customerId),
+  tenantIndex(t, t.payerCustomerId),
+])
+
+/** agreement as 0010 left it, with its price list, before 0056's service window (O14 of #290). */
+const agreementAsOf0010 = wms.table("agreement", { ...agreementColumns, priceListId: uuid() }, (t) => [
+  companyReference(t, company),
+  tenantReference(t, [t.projectId], project),
+  tenantReference(t, [t.customerId], customer),
+  tenantReference(t, [t.payerCustomerId], customer),
+  projectReference(t, [t.priceListId], priceList),
+  projectKey(t),
+  validPeriod(t),
+  oneOf(t.status, AGREEMENT_STATUSES),
+  oneOf(t.billingCadence, BILLING_CADENCES),
+  tenantIndex(t, t.number),
+  tenantIndex(t, t.customerId),
+  tenantIndex(t, t.payerCustomerId),
+  tenantIndex(t, t.priceListId),
+])
 
 /** unload as 0008 left it: no project key, since nothing pointed at it. */
 const unloadAsOf0008 = wms.table(
@@ -994,7 +1008,7 @@ const tablesAsOf0010 = async (): Promise<string[]> =>
 
 /** The ALTER TABLEs as drizzle-kit writes them: the five altered tables from their last spelling to today's, in one diff. */
 const generatedAlterations = async (): Promise<string[]> =>
-  (await statementsBetween({ company: companyAsOf0009, product: productAsOf0004, agreement: agreementAsOf0004, unload: unloadAsOf0008, outboxEvent: outboxEventAsOf0009 }, { company: companyAsOf0010, product, agreement, unload: unloadAsOf0010, outboxEvent: outboxEventAsOf0010 })).filter(
+  (await statementsBetween({ company: companyAsOf0009, product: productAsOf0004, agreement: agreementAsOf0004, unload: unloadAsOf0008, outboxEvent: outboxEventAsOf0009 }, { company: companyAsOf0010, product, agreement: agreementAsOf0010, unload: unloadAsOf0010, outboxEvent: outboxEventAsOf0010 })).filter(
     (statement) => !ADDED_TO_PRODUCT_IN_0044.includes(statement),
   )
 

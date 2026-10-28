@@ -117,7 +117,7 @@ export class FakeProvider implements RoutingProvider {
           at = next.stop
         }
         const trip: Position2D[] = [request.depot, ...order.map((index) => request.stops[index]), ...(request.station ? [request.station] : []), request.depot]
-        return { result: { order, legs: legsAlong(distinctConsecutive(trip)), provenance: PROVENANCE } }
+        return { result: { order, legs: legsAlong(distinctConsecutive(trip)), waitingSeconds: 0, provenance: PROVENANCE } }
       }),
     )
   }

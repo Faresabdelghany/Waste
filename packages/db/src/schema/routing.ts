@@ -25,7 +25,7 @@
 // per company like every table (the tenant fence), so with the Pilot's one
 // company it is one row per provider and family, and a second company on
 // the same key is Gate B (#132 §1, ADR-0009).
-import { PLAN_SOLVERS, PLAN_STATUSES, PLAN_TRIPS, ROUTING_QUOTA_FAMILIES } from "@waste/domain/routing/vocabulary"
+import { PLAN_SOLVERS, PLAN_STATUSES, PLAN_STOP_WARNINGS, PLAN_TRIPS, ROUTING_QUOTA_FAMILIES } from "@waste/domain/routing/vocabulary"
 import { sql } from "drizzle-orm"
 import { check, date, integer, text, timestamp, uuid } from "drizzle-orm/pg-core"
 
@@ -56,6 +56,8 @@ export const plan = wms.table(
     /** The totals, the sum of the legs; written with `ready` and never before. */
     distanceMetres: integer(),
     durationSeconds: integer(),
+    /** The seconds the optimiser's order waits for a stop's or a break's window to open (O14 of #290); written with an optimiser's `ready`, null for every other Plan. */
+    waitingSeconds: integer(),
     /** When a quota-deferred job resumes (#132 §4): written on deferral, cleared when it runs, only ever beside `calculating`. */
     deferredUntil: timestamp({ withTimezone: true }),
     /** Why a `failed` Plan failed: the provider's sentence, or the structured `superseded`. */
@@ -81,6 +83,7 @@ export const plan = wms.table(
     ),
     check(tableObjectName(t.id.table, "failure_shape", "plan"), sql`(${t.status} = 'failed') = (${t.failureReason} is not null)`),
     check(tableObjectName(t.id.table, "deferred_shape", "plan"), sql`${t.deferredUntil} is null or ${t.status} = 'calculating'`),
+    check(tableObjectName(t.id.table, "waiting_shape", "plan"), sql`${t.waitingSeconds} is null or (${t.waitingSeconds} >= 0 and ${t.status} = 'ready' and ${t.solver} = 'optimiser')`),
     // The cache lookup: a request whose fingerprint equals a ready Plan's consumes no call (#124 §4).
     tenantIndex(t, t.fingerprint),
   ],
@@ -97,6 +100,8 @@ export const planStop = wms.table(
     pickupId: uuid().notNull(),
     /** The execution order the Plan holds, 1..n over the Route's pickups. */
     position: integer().notNull(),
+    /** Why the optimiser ordered this stop outside its Service Window (O14 of #290), or null for a stop it kept inside one, or that has none. */
+    windowWarning: text(),
   },
   (t) => [
     companyReference(t, company),
@@ -108,6 +113,7 @@ export const planStop = wms.table(
     tenantUnique(t, t.planId, t.position),
     tenantUnique(t, t.planId, t.pickupId),
     positive(t.position),
+    oneOf(t.windowWarning, PLAN_STOP_WARNINGS),
     // Nothing references the ledgers, so no key leads with the project; the sweep and any project read take this index, Execution's own practice.
     tenantIndex(t, t.projectId),
     tenantIndex(t, t.pickupId),

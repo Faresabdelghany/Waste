@@ -116,7 +116,17 @@ async function optimisationAskedAfter(tx: Tx, companyId: string, routeId: string
 async function planRoute(context: JobContext, companyId: string, routeId: string, horizon: Horizon, occasion: Occasion): Promise<Turn> {
   return withCompany(context.api.db, companyId, async (tx: Tx): Promise<Turn> => {
     const [row] = await tx
-      .select({ id: route.id, projectId: route.projectId, status: route.status, operatingDate: route.operatingDate, depotId: route.depotId, unloadingStationId: route.unloadingStationId, activePlanId: route.activePlanId })
+      .select({
+        id: route.id,
+        projectId: route.projectId,
+        status: route.status,
+        operatingDate: route.operatingDate,
+        plannedStartTime: route.plannedStartTime,
+        plannedDriverId: route.plannedDriverId,
+        depotId: route.depotId,
+        unloadingStationId: route.unloadingStationId,
+        activePlanId: route.activePlanId,
+      })
       .from(route)
       .where(and(eq(route.companyId, companyId), eq(route.id, routeId)))
       .for("update")

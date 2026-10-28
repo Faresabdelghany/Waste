@@ -14,9 +14,11 @@ import type { Position2D } from "@waste/contracts/geojson"
 import { createDb, type Database, type Tx } from "@waste/db/client"
 import { ROUTING_MEASURE_QUEUE, ROUTING_OPTIMISE_QUEUE, routingSendOptions, type RoutingJobData } from "@waste/db/commands/plans"
 import { migrateDatabase } from "@waste/db/migrate"
+import { agreement } from "@waste/db/schema/agreements"
 import { containerType } from "@waste/db/schema/catalogue"
 import { property } from "@waste/db/schema/customers"
 import { route } from "@waste/db/schema/execution"
+import { driver } from "@waste/db/schema/fleet"
 import { depot, unloadingStation } from "@waste/db/schema/places"
 import { plan, planLeg, planStop, routingQuota } from "@waste/db/schema/routing"
 import { PGBOSS_SCHEMA } from "@waste/db/sql/pgboss"
@@ -183,6 +185,10 @@ describe("routing's jobs under the quota engine", { skip: roles.skip }, () => {
   const planRow = async (planId: string) => (await withCompany(api.db, tenant.companyId, (tx: Tx) => tx.select().from(plan).where(eq(plan.id, planId))))[0]
   const legsOf = (planId: string) => withCompany(api.db, tenant.companyId, (tx: Tx) => tx.select().from(planLeg).where(eq(planLeg.planId, planId)).orderBy(asc(planLeg.position)))
   const stopsOf = async (planId: string) => (await withCompany(api.db, tenant.companyId, (tx: Tx) => tx.select({ pickupId: planStop.pickupId }).from(planStop).where(eq(planStop.planId, planId)).orderBy(asc(planStop.position)))).map((row) => row.pickupId)
+  const warningsOf = async (planId: string) =>
+    (await withCompany(api.db, tenant.companyId, (tx: Tx) => tx.select({ pickupId: planStop.pickupId, warning: planStop.windowWarning }).from(planStop).where(eq(planStop.planId, planId)).orderBy(asc(planStop.position))))
+      .filter((row) => row.warning !== null)
+      .map((row) => [row.pickupId, row.warning])
   const activeOf = async (routeId: string) => (await withCompany(api.db, tenant.companyId, (tx: Tx) => tx.select({ activePlanId: route.activePlanId }).from(route).where(eq(route.id, routeId))))[0].activePlanId
   const quotaRow = async (family: "directions" | "optimisation") =>
     (await withCompany(api.db, tenant.companyId, (tx: Tx) => tx.select().from(routingQuota).where(eq(routingQuota.family, family))))[0]
@@ -374,6 +380,94 @@ describe("routing's jobs under the quota engine", { skip: roles.skip }, () => {
         )
       } finally {
         await typed(null)
+      }
+    })
+
+    test("sends each stop's window — its property's hours where they meet its agreement's — the departure and the driver's break, and writes the waiting on the ready Plan (O14 of #290)", async () => {
+      const sent: OptimiseRequest[] = []
+      const fake = new FakeProvider()
+      const recording: RoutingProvider = {
+        name: fake.name,
+        maxWaypoints: fake.maxWaypoints,
+        measure: (request) => fake.measure(request),
+        optimise: (request: OptimiseRequest) => {
+          sent.push(request)
+          return fake.optimise(request)
+        },
+      }
+      const timed = (values: { property: [string, string] | null; agreement: [string, string] | null; shift: boolean }) =>
+        withCompany(api.db, tenant.companyId, async (tx: Tx) => {
+          await tx
+            .update(property)
+            .set({ serviceWindowStart: values.property?.[0] ?? null, serviceWindowEnd: values.property?.[1] ?? null })
+            .where(eq(property.id, tenant.properties.parkvej.id))
+          await tx
+            .update(agreement)
+            .set({ serviceWindowStart: values.agreement?.[0] ?? null, serviceWindowEnd: values.agreement?.[1] ?? null })
+            .where(eq(agreement.id, tenant.agreementId))
+          await tx
+            .update(driver)
+            .set(values.shift ? { shiftStart: "07:00", shiftEnd: "15:00", breakMinutes: 30, breakWindowStart: "11:00", breakWindowEnd: "12:30" } : { shiftStart: null, shiftEnd: null, breakMinutes: null, breakWindowStart: null, breakWindowEnd: null })
+            .where(eq(driver.id, tenant.driverId))
+        })
+      try {
+        // Parkvej opens 08:00–12:00 and AGR-1, which BIN-1 serves under there, promises 09:00–14:00: BIN-1 is served 09:00–12:00; BIN-2 at Havnegade any time.
+        await timed({ property: ["08:00", "12:00"], agreement: ["09:00", "14:00"], shift: true })
+        const { engine } = engineOf({}, recording)
+        const seeded = await routeWith("depot")
+        await withCompany(api.db, tenant.companyId, (tx: Tx) => tx.update(route).set({ plannedStartTime: "07:00" }).where(eq(route.id, seeded.id)))
+        const planId = await planOf(seeded, "optimiser", "stops-only")
+        await routingOptimise.handler([await inHand(ROUTING_OPTIMISE_QUEUE, planId)], contextOf(engine))
+        assert.deepEqual(sent.at(-1)?.timeWindows, [null, [32_400, 43_200]])
+        assert.equal(sent.at(-1)?.departure, 25_200)
+        assert.deepEqual(sent.at(-1)?.breaks, [{ seconds: 1_800, window: [39_600, 45_000] }])
+        const solved = await planRow(planId)
+        assert.deepEqual([solved.status, solved.waitingSeconds], ["ready", 0], "the fake waits for nothing")
+
+        // The two never overlap: BIN-1 is planned with no window, the stop flagged, the route still optimised.
+        await timed({ property: ["08:00", "12:00"], agreement: ["13:00", "14:00"], shift: false })
+        const disjoint = await routeWith("depot")
+        const flagged = await planOf(disjoint, "optimiser", "stops-only")
+        await routingOptimise.handler([await inHand(ROUTING_OPTIMISE_QUEUE, flagged)], contextOf(engine))
+        assert.deepEqual(sent.at(-1)?.timeWindows, [null, null])
+        assert.equal((await planRow(flagged)).status, "ready")
+        assert.deepEqual(await warningsOf(flagged), [[disjoint.pickupIds[1], "windows-disjoint"]])
+        assert.equal(await activeOf(disjoint.id), flagged)
+      } finally {
+        await timed({ property: null, agreement: null, shift: false })
+      }
+    })
+
+    test("a stop no order reaches inside its window is asked for again without it: the stored Plan holds every pickup, that one flagged (O14 of #290)", async () => {
+      const sent: OptimiseRequest[] = []
+      const fake = new FakeProvider()
+      // The provider leaves the first stop unassigned whenever it carries a window, as VROOM does when the window cannot be met.
+      const strict: RoutingProvider = {
+        name: fake.name,
+        maxWaypoints: fake.maxWaypoints,
+        measure: (request) => fake.measure(request),
+        optimise: async (request: OptimiseRequest) => {
+          sent.push(request)
+          const answer = await fake.optimise(request)
+          if (answer.kind !== "answered" || (request.timeWindows?.[0] ?? null) === null) return answer
+          return { ...answer, result: { ...answer.result, order: answer.result.order.filter((index) => index !== 0), unassigned: [0] } }
+        },
+      }
+      const windowed = (start: string | null, end: string | null) =>
+        withCompany(api.db, tenant.companyId, (tx: Tx) => tx.update(property).set({ serviceWindowStart: start, serviceWindowEnd: end }).where(eq(property.id, tenant.properties.havnegade.id)))
+      try {
+        await windowed("05:00", "05:30")
+        const { engine } = engineOf({}, strict)
+        const seeded = await routeWith("depot")
+        const planId = await planOf(seeded, "optimiser", "stops-only")
+        await routingOptimise.handler([await inHand(ROUTING_OPTIMISE_QUEUE, planId)], contextOf(engine))
+        assert.equal(sent.length, 2, "one more call, without the window it could not meet")
+        assert.deepEqual(sent.map((request) => request.timeWindows?.[0] ?? null), [[18_000, 19_800], null])
+        assert.equal((await planRow(planId)).status, "ready")
+        assert.deepEqual([...(await stopsOf(planId))].sort(), [...seeded.pickupIds].sort(), "every pickup is in the stored Plan")
+        assert.deepEqual(await warningsOf(planId), [[seeded.pickupIds[0], "window-unreachable"]])
+      } finally {
+        await windowed(null, null)
       }
     })
 

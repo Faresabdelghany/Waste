@@ -87,6 +87,7 @@ const property = {
   location: POINT,
   notes: "Gate code at the caretaker.",
   driverInstructions: "Gate code 4711; the bins stand behind the garage.",
+  serviceWindow: { from: "07:00", to: "12:00" },
   status: "active",
   parties: [{ customerId: THIRD, role: "owner" }],
   ...STAMPS,

@@ -53,6 +53,7 @@ import { create, get, listAll, patch, put } from "../client"
 import { hasPrefix, inheritedPresentation, isLocalRefusal, ofKind, patchOf, stampFacts, statusLabel, typed, typedFlag, webIdOf, type Client, type LocalRefusal, type MappingContext, type ResourceAdapter, type ServerModule } from "./adapter"
 import { DRIVER_AVAILABILITY_ACTIONS, VEHICLE_AVAILABILITY_ACTIONS } from "./availability"
 import { userAdapter } from "./organisation"
+import { shiftFact, shiftOf, shiftValues } from "./time-windows"
 import {
   createStatusOf,
   depotServerIdOf,
@@ -419,6 +420,7 @@ export const driverAdapter: ResourceAdapter<Driver> = {
       ...(driver.workforceReference === null ? {} : { "Workforce reference": driver.workforceReference }),
       ...(driver.licenceNumber === null ? {} : { "Licence number": driver.licenceNumber }),
       ...(depot === undefined ? {} : { "Home depot": depot.name ?? depot.webId }),
+      Shift: driver.shift === null ? "None on record" : shiftFact(driver.shift),
       "App access": account === undefined ? "None" : (account.name ?? account.webId),
       ...(project.name === undefined ? {} : { Project: project.name }),
     }
@@ -448,6 +450,7 @@ export const driverAdapter: ResourceAdapter<Driver> = {
         licenceExpiry: driver.licenceExpiry ?? "",
         driverAppAccess: account !== undefined,
         linkedUserId: account?.webId ?? "",
+        ...shiftValues(driver.shift),
       },
     }
   },
@@ -471,6 +474,8 @@ export const driverAdapter: ResourceAdapter<Driver> = {
     if (isLocalRefusal(userAccountId)) return userAccountId
     const status = createStatusOf(record, DRIVER_STATUSES, "a driver")
     if (isLocalRefusal(status)) return status
+    const shift = shiftOf(record)
+    if (isLocalRefusal(shift)) return shift
     const workforceReference = typed(record, "workforceReference")
     const licenceNumber = typed(record, "licenceNumber")
     return {
@@ -485,6 +490,7 @@ export const driverAdapter: ResourceAdapter<Driver> = {
       ...(licenceExpiry === null ? {} : { licenceExpiry }),
       ...(userAccountId == null ? {} : { userAccountId }),
       ...(status === undefined ? {} : { status }),
+      ...(shift === null ? {} : { shift }),
     }
   },
   toPatchBody: (before, after, context) => {
@@ -504,12 +510,15 @@ export const driverAdapter: ResourceAdapter<Driver> = {
     if (isLocalRefusal(userAccountId)) return userAccountId
     const status = patchStatusOf(before, after, DRIVER_STATUSES, "a driver")
     if (isLocalRefusal(status)) return status
+    const shift = shiftOf(after)
+    if (isLocalRefusal(shift)) return shift
     const body = patchOf(before, after, (record) => {
       const provider = providerServerIdOf(record, context)
       const depot = depotServerIdOf(record, "homeDepotId", context)
       const licence = licenceTokenOf(record, "licenceClass")
       const expiry = expiryOf(record)
       const account = accountServerIdOf(record, context)
+      const shifted = shiftOf(record)
       return {
         name: typed(record, "driverName") ?? record.name,
         workforceReference: typed(record, "workforceReference") ?? null,
@@ -520,6 +529,8 @@ export const driverAdapter: ResourceAdapter<Driver> = {
         licenceNumber: typed(record, "licenceNumber") ?? null,
         licenceExpiry: isLocalRefusal(expiry) ? undefined : expiry,
         userAccountId: isLocalRefusal(account) ? undefined : account,
+        // Whole, the break with it, whenever any of its fields moved.
+        shift: isLocalRefusal(shifted) ? undefined : shifted,
       }
     })
     return withStatus(body, before, status, DRIVER_STATUSES)

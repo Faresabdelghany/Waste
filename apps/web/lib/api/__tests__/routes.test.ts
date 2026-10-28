@@ -15,7 +15,7 @@ import type { Driver, Vehicle } from "@waste/contracts/fleet"
 import type { Project } from "@waste/contracts/organisation"
 import type { Depot, UnloadingStation } from "@waste/contracts/places"
 import { PickupAdd } from "@waste/contracts/pickups"
-import { DISPATCH_MANY_MAX, PickupOrderSet, Route, RouteAssign, RouteMerge, RouteMoveStops, RouteSplit, RouteCancel, RouteCreate, RouteDetail, RouteDispatchMany, RouteReleaseHold, RouteReschedule, type RouteWorkload } from "@waste/contracts/routes"
+import { DISPATCH_MANY_MAX, PickupOrderSet, Route, RouteAssign, RouteMerge, RouteMoveStops, RouteSplit, RouteCancel, RouteCreate, RouteDetail, RouteDispatchMany, RouteReleaseHold, RouteReschedule, type RouteShift, type RouteWorkload } from "@waste/contracts/routes"
 import type { ActivePlan, Plan } from "@waste/contracts/plans"
 
 import { FIXTURE_COMPANY_ID, getModuleDefinition, type BusinessRecord } from "../../data/business-modules"
@@ -72,7 +72,7 @@ const compartment = { position: 1, name: null, capacityKg: null, volumeLitres: n
 const wh24: Vehicle = { id: "01a0d2a4-a280-7013-8000-000000000001", ...STAMPS, projectId: copenhagen.id, registration: "CN 42 018", callsign: "WH-24", kind: "powered-vehicle", vehicleTypeId: "01a0d2a4-a280-7008-8000-000000000001", ownership: "company", serviceProviderId: null, status: "active", capacityKg: 18_000, requiredLicenceClass: "c", homeDepotId: nordhavn.id, fuel: "hvo", telematicsDeviceId: null, notes: null, compartments: [compartment] }
 const wh31: Vehicle = { ...wh24, id: "01a0d2a4-a280-7013-8000-000000000002", registration: "CN 42 031", callsign: "WH-31" }
 const trailer: Vehicle = { ...wh24, id: "01a0d2a4-a280-7013-8000-000000000005", registration: "TR 12 012", callsign: "WH-T12", kind: "trailer", requiredLicenceClass: "ce", fuel: null, compartments: [] }
-const mads: Driver = { id: "01a0d2a4-a280-7014-8000-000000000001", ...STAMPS, projectId: copenhagen.id, name: "Mads Jensen", workforceReference: null, employment: "employee", serviceProviderId: null, homeDepotId: null, licenceClass: "ce", licenceNumber: null, licenceExpiry: "2028-12-31", userAccountId: null, status: "active", notes: null }
+const mads: Driver = { id: "01a0d2a4-a280-7014-8000-000000000001", ...STAMPS, projectId: copenhagen.id, name: "Mads Jensen", workforceReference: null, employment: "employee", serviceProviderId: null, homeDepotId: null, licenceClass: "ce", licenceNumber: null, licenceExpiry: "2028-12-31", userAccountId: null, status: "active", notes: null, shift: null }
 const freja: Driver = { ...mads, id: "01a0d2a4-a280-7014-8000-000000000002", name: "Freja Nielsen" }
 
 const schemeId = "01a0d2a4-a280-7016-8000-000000000001"
@@ -103,10 +103,12 @@ const planned: Route = {
   cancelledAt: null,
   progress: { planned: 3, completed: 0, skipped: 0, failed: 0, total: 3, fraction: 0 },
 }
-const plan: ActivePlan = { id: "01a0d2a4-a280-7032-8000-000000000001", solver: "manual", status: "ready", trip: "full", distanceMetres: 18_400, durationSeconds: 2_700, stale: false, deferredUntil: null }
+const plan: ActivePlan = { id: "01a0d2a4-a280-7032-8000-000000000001", solver: "manual", status: "ready", trip: "full", distanceMetres: 18_400, durationSeconds: 2_700, stale: false, deferredUntil: null, stopWarnings: [] }
 /** A route whose stops take and weigh nothing known (O10 of #290). */
 const NO_WORKLOAD: RouteWorkload = { stopSeconds: 0, expectedKg: null, unexpectedStops: 0, capacityKg: null, overCapacityKg: null }
-const detailOf = (route: Route, over: Partial<RouteDetail> = {}): RouteDetail => ({ ...route, pickups: [], activePlan: null, workload: NO_WORKLOAD, session: null, sessions: [], unloads: [], ...over })
+/** A route whose driver has no shift on record (O14 of #290). */
+const NO_SHIFT: RouteShift = { shift: null, startsAt: null, workSeconds: null, overShiftSeconds: null }
+const detailOf = (route: Route, over: Partial<RouteDetail> = {}): RouteDetail => ({ ...route, pickups: [], activePlan: null, workload: NO_WORKLOAD, shift: NO_SHIFT, session: null, sessions: [], unloads: [], ...over })
 
 // What the store has loaded when the routes load: the organisation, the places, the fleet.
 const noResolve = (moduleFixtures: readonly BusinessRecord[]): MappingContext => ({ fixtures: moduleFixtures, resolve: NOTHING_RESOLVED, companyRecordId: FIXTURE_COMPANY_ID, now: NOW })
@@ -638,6 +640,39 @@ describe("the dispatch day's tooling (O5 of #290)", () => {
     assert.deepEqual([partly.facts.Duration, partly.facts["Stop time"], partly.facts["Expected load"]], [undefined, "1 h 30 min", "8,200 kg, 3 stops not counted"], "no Plan, no drive to add the stops to")
     const unknown = routeAdapter.toRecord(detailOf(planned, { workload: NO_WORKLOAD }), context())
     assert.deepEqual([unknown.facts["Stop time"], unknown.facts["Expected load"]], [undefined, undefined], "a route with no stops says neither")
+  })
+
+  test("a route reads its planned driver's shift and the server's over-shift verdict, and says nothing of a shift a driver lacks (O14 of #290)", () => {
+    const shift = { from: "07:00", to: "15:00", breakMinutes: 30, breakWindow: { from: "11:00", to: "12:30" } }
+    const over = routeAdapter.toRecord(detailOf(planned, { activePlan: plan, shift: { shift, startsAt: "07:30", workSeconds: 30_600, overShiftSeconds: 3_600 } }), context())
+    assert.deepEqual([over.facts.Shift, over.facts["Shift check"]], ["07:00–15:00 · 30 min break 11:00–12:30", "Over shift by 1 h 00 min: 8 h 30 min of work from 07:30"])
+    const within = routeAdapter.toRecord(detailOf(planned, { activePlan: plan, shift: { shift: { ...shift, breakMinutes: null, breakWindow: null }, startsAt: "07:00", workSeconds: 3_600, overShiftSeconds: 0 } }), context())
+    assert.deepEqual([within.facts.Shift, within.facts["Shift check"]], ["07:00–15:00", "Within the shift: 1 h 00 min of work from 07:00"])
+    const unmeasured = routeAdapter.toRecord(detailOf(planned, { shift: { shift, startsAt: "07:00", workSeconds: null, overShiftSeconds: null } }), context())
+    assert.deepEqual([unmeasured.facts.Shift, unmeasured.facts["Shift check"]], ["07:00–15:00 · 30 min break 11:00–12:30", undefined], "no verdict before a Plan is measured")
+    const none = routeAdapter.toRecord(detailOf(planned), context())
+    assert.deepEqual([none.facts.Shift, none.facts["Shift check"]], [undefined, undefined])
+  })
+
+  test("a Plan that holds stops outside their service window names each by its place in the order and says why (O14 of #290)", () => {
+    const warned = routeAdapter.toRecord(
+      detailOf(planned, {
+        activePlan: {
+          ...plan,
+          solver: "optimiser",
+          stopWarnings: [
+            { pickupId: "01a0d2a4-a280-7031-8000-000000000001", position: 2, warning: "windows-disjoint" },
+            { pickupId: "01a0d2a4-a280-7031-8000-000000000002", position: 5, warning: "window-unreachable" },
+          ],
+        },
+      }),
+      context(),
+    )
+    assert.equal(
+      warned.facts["Window warnings"],
+      "Stop 2: its property's access hours and its agreement's service window never overlap, so it was planned without a window; Stop 5: no order reached it inside its service window, so it was planned outside it",
+    )
+    assert.equal(routeAdapter.toRecord(detailOf(planned, { activePlan: plan }), context()).facts["Window warnings"], undefined)
   })
 
   test("assign names the service provider by server id, a cleared one as null, and the route reads it back", () => {

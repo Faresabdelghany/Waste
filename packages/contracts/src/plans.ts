@@ -12,12 +12,16 @@
 // reads into its CHECKs, so the two cannot drift.
 import * as z from "zod"
 
-import { OPTIMISE_FALLBACKS, PLAN_SOLVERS, PLAN_STATUSES, PLAN_TRIPS } from "@waste/domain/routing/vocabulary"
+import { OPTIMISE_FALLBACKS, PLAN_SOLVERS, PLAN_STATUSES, PLAN_STOP_WARNINGS, PLAN_TRIPS } from "@waste/domain/routing/vocabulary"
 
 import { IsoDate, IsoDateTime } from "./dates"
 import { LineString } from "./geojson"
 import { Id } from "./ids"
 import { NonNegativeInt, PositiveInt, stamped } from "./resource"
+
+/** Why an optimiser's Plan holds a stop outside its Service Window (O14 of #290). */
+export const PlanStopWarning = z.enum(PLAN_STOP_WARNINGS)
+export type PlanStopWarning = z.infer<typeof PlanStopWarning>
 
 export const PlanSolver = z.enum(PLAN_SOLVERS)
 export type PlanSolver = z.infer<typeof PlanSolver>
@@ -95,5 +99,11 @@ export const ActivePlan = z.object({
   /** A reading, never a status: the route's stops moved under the Plan (#124 §2), so its sequence covers them only in part. */
   stale: z.boolean(),
   deferredUntil: IsoDateTime.nullable(),
+  /**
+   * The stops the Plan holds outside their Service Window (O14 of #290), by
+   * their place in its order: windows that never overlap, or a window no
+   * order reached. The Plan keeps every stop; this says which to look at.
+   */
+  stopWarnings: z.array(z.object({ pickupId: Id, position: PositiveInt, warning: PlanStopWarning })),
 })
 export type ActivePlan = z.infer<typeof ActivePlan>

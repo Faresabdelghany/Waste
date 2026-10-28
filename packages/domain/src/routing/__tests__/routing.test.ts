@@ -249,6 +249,23 @@ describe("the fingerprint (#124 §4, corrected by #132 §6: request inputs only)
     assert.notEqual(planFingerprint(ab), planFingerprint(ba))
   })
 
+  test("a stop's window and seconds at the kerb (O14 of #290) key it, travelling with the stop through the optimiser's sort; absent, it keys by its place as before", () => {
+    const optimiser = { ...inputs, solver: "optimiser" as const }
+    const times = [
+      { window: [28_800, 36_000] as const, serviceSeconds: 30 },
+      { window: null, serviceSeconds: 30 },
+      { window: "disjoint" as const, serviceSeconds: 60 },
+    ]
+    const timed = planFingerprint({ ...optimiser, stopTimes: times })
+    assert.notEqual(timed, planFingerprint(optimiser))
+    assert.match(timed, /@28800-36000\+30/)
+    assert.match(timed, /@any\+30/)
+    assert.match(timed, /@disjoint\+60/)
+    const swapped = { ...optimiser, stops: [inputs.stops[1], inputs.stops[0], inputs.stops[2]] as [number, number][], stopTimes: [times[1], times[0], times[2]] }
+    assert.equal(planFingerprint(swapped), timed, "a set of timed stops")
+    assert.notEqual(planFingerprint({ ...optimiser, stopTimes: [{ window: [28_800, 39_600], serviceSeconds: 30 }, times[1], times[2]] }), timed, "a moved window")
+  })
+
   test("stop order counts for baseline and manual, and not for optimiser, whose stops are a set", () => {
     const swapped = { ...inputs, stops: [inputs.stops[1], inputs.stops[0], inputs.stops[2]] as [number, number][] }
     assert.notEqual(planFingerprint(inputs), planFingerprint(swapped))

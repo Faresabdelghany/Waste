@@ -26,7 +26,7 @@
 // reading of a chip.
 import { ofKind } from "@/lib/api/records/adapter"
 
-import type { BusinessFormField, BusinessFormOption, BusinessFormSchema, BusinessFormValues } from "./business-form-types"
+import type { BusinessFormField, BusinessFormOption, BusinessFormSchema, BusinessFormSection, BusinessFormValues } from "./business-form-types"
 import type { BusinessRecord, ModuleLocation } from "./business-modules"
 import { isPriceListRecord, PRICE_ROWS_MODULE, PRODUCTS_MODULE } from "./commercial"
 
@@ -99,21 +99,36 @@ const PRICE_LIST_ON_API: BusinessFormField = {
   description: "The list the agreement's work is priced under: one of the project's, in the agreement's currency.",
 }
 
+/** The window the agreement promises its stops are served in (O14 of #290), the API's alone. */
+const SERVICE_WINDOW_SECTION: BusinessFormSection = {
+  id: "service-window",
+  title: "Service window",
+  description: "When in the day the agreement's stops are served. Route optimisation keeps each stop inside it and its property's access hours. Blank both for any time.",
+  fields: [
+    { id: "serviceWindowStart", label: "Served from", type: "time" },
+    { id: "serviceWindowEnd", label: "Served until", type: "time" },
+  ],
+}
+
 /**
  * The registry's agreement form as the API takes it: the fields above gone,
  * the price list the API's, a section that lost fields losing the words that
  * were about them, and the one left holding the price list and the notes
- * called so. Fixture mode keeps the registry's form whole.
+ * called so, then the service window (O14 of #290). Fixture mode keeps the
+ * registry's form whole.
  */
 export function agreementFormSchemaOnApi(schema: BusinessFormSchema): BusinessFormSchema {
   return {
     ...schema,
-    sections: schema.sections.flatMap((section) => {
-      const fields = section.fields.filter((field) => !FIXTURE_ONLY_AGREEMENT_FIELDS.has(field.id)).map((field) => (field.id === PRICE_LIST_ON_API.id ? PRICE_LIST_ON_API : field))
-      if (fields.length === 0) return []
-      if (fields.length === section.fields.length) return [{ ...section, fields }]
-      return [{ id: section.id, title: section.id === NOTES_SECTION ? "Price list and notes" : section.title, fields }]
-    }),
+    sections: [
+      ...schema.sections.flatMap((section) => {
+        const fields = section.fields.filter((field) => !FIXTURE_ONLY_AGREEMENT_FIELDS.has(field.id)).map((field) => (field.id === PRICE_LIST_ON_API.id ? PRICE_LIST_ON_API : field))
+        if (fields.length === 0) return []
+        if (fields.length === section.fields.length) return [{ ...section, fields }]
+        return [{ id: section.id, title: section.id === NOTES_SECTION ? "Price list and notes" : section.title, fields }]
+      }),
+      SERVICE_WINDOW_SECTION,
+    ],
   }
 }
 

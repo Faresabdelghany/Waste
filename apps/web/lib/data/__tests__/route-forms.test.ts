@@ -55,7 +55,7 @@ const route: Route = {
   cancelledAt: null,
   progress: { planned: 3, completed: 0, skipped: 0, failed: 0, total: 3, fraction: 0 },
 }
-const freja: Driver = { id: "01a0d2a4-a280-7014-8000-000000000002", ...STAMPS, projectId: route.projectId, name: "Freja Nielsen", workforceReference: null, employment: "employee", serviceProviderId: null, homeDepotId: null, licenceClass: "ce", licenceNumber: null, licenceExpiry: null, userAccountId: null, status: "active", notes: null }
+const freja: Driver = { id: "01a0d2a4-a280-7014-8000-000000000002", ...STAMPS, projectId: route.projectId, name: "Freja Nielsen", workforceReference: null, employment: "employee", serviceProviderId: null, homeDepotId: null, licenceClass: "ce", licenceNumber: null, licenceExpiry: null, userAccountId: null, status: "active", notes: null, shift: null }
 const frejaRecord = driverAdapter.toRecord(freja, { fixtures: [], resolve: NOTHING_RESOLVED, now: NOW })
 const state: ServerRecordsState = new Map([["fleet.drivers", loaded({ records: [frejaRecord], serverIds: new Map([[frejaRecord.id, freja.id]]) }, 1)]])
 const context: MappingContext = { fixtures: [], resolve: resolverOver(state), companyRecordId: FIXTURE_COMPANY_ID, now: NOW }

@@ -329,6 +329,80 @@ describe("OpenRouteService optimisation, VROOM behind /vroom/v0 (#171)", () => {
     )
   })
 
+  test("sends each stop's window, the departure and the driver's break on one clock from midnight (O14 of #290), and reads the waiting off the steps", async () => {
+    const timed = vroomBody(
+      [
+        step("start", depot, { arrival: 25_200, duration: 0, distance: 0 }),
+        step("job", a, { id: 2, job: 2, arrival: 25_240, duration: 40, distance: 320 }),
+        step("break", a, { id: 1, arrival: 25_240, duration: 40, distance: 320, service: 1_800, waiting_time: 14_360 }),
+        step("job", b, { id: 1, job: 1, arrival: 41_440, duration: 80, distance: 640, waiting_time: 2_000 }),
+        step("end", depot, { arrival: 43_530, duration: 170, distance: 1300 }),
+      ],
+      line,
+    )
+    const server = recording(json(200, timed, QUOTA_HEADERS))
+    const result = answered(
+      await new OpenRouteServiceProvider({ apiKey: KEY, fetch: server.fetch }).optimise({
+        profile: "driving-hgv",
+        depot,
+        stops: [b, a],
+        timeWindows: [[43_200, 46_800], null],
+        departure: 25_200,
+        breaks: [{ seconds: 1_800, window: [39_600, 45_000] }],
+      }),
+    )
+    assert.deepEqual(server.requests[0].body, {
+      jobs: [
+        { id: 1, location: b, time_windows: [[43_200, 46_800]] },
+        { id: 2, location: a },
+      ],
+      vehicles: [{ id: 1, profile: "driving-hgv", start: depot, end: depot, time_window: [25_200, 777_600], breaks: [{ id: 1, time_windows: [[39_600, 45_000]], service: 1_800 }] }],
+      options: { g: true },
+    })
+    assert.equal(result.waitingSeconds, 16_360, "the stop's wait and the break's")
+    assert.deepEqual(result.order, [1, 0], "a break is no stop")
+    assert.deepEqual(
+      result.legs.map((leg) => leg.seconds),
+      [40, 40, 90],
+      "a leg is the drive, never the wait",
+    )
+  })
+
+  test("a stop's own window stands on a trip with a station, whose week-long wait is never the route's waiting", async () => {
+    const withStation = vroomBody(
+      [
+        step("start", depot, { arrival: 0, duration: 0, distance: 0 }),
+        step("job", a, { id: 2, job: 2, arrival: 40, duration: 40, distance: 320 }),
+        step("job", b, { id: 1, job: 1, arrival: 28_800, duration: 80, distance: 640, waiting_time: 28_720 }),
+        step("job", station, { id: 3, job: 3, arrival: 604_800, duration: 200, distance: 1400, waiting_time: 575_880 }),
+        step("end", depot, { arrival: 604_990, duration: 390, distance: 2900 }),
+      ],
+      [depot, a, b, station, depot],
+    )
+    const server = recording(json(200, withStation))
+    const result = answered(await new OpenRouteServiceProvider({ apiKey: KEY, fetch: server.fetch }).optimise({ profile: "driving-hgv", depot, stops: [b, a], timeWindows: [[28_800, 36_000], null], station }))
+    assert.deepEqual((server.requests[0].body as { jobs: unknown[] }).jobs, [
+      { id: 1, location: b, time_windows: [[28_800, 36_000]] },
+      { id: 2, location: a, time_windows: [[0, 604_799]] },
+      { id: 3, location: station, time_windows: [[604_800, 691_200]] },
+    ])
+    assert.equal(result.waitingSeconds, 28_720)
+  })
+
+  test("a windowed stop left unassigned is answered, not refused: the order and legs over the rest, and which stops were left, for the caller to ask again without their windows (O14 of #290)", async () => {
+    const unassigned = vroomBody(
+      [step("start", depot, { arrival: 0, duration: 0, distance: 0 }), step("job", a, { id: 2, job: 2, arrival: 40, duration: 40, distance: 320 }), step("end", depot, { arrival: 80, duration: 80, distance: 640 })],
+      [depot, a, depot],
+      [{ id: 1, location: b, type: "job" }],
+    )
+    const result = answered(await new OpenRouteServiceProvider({ apiKey: KEY, fetch: recording(json(200, unassigned)).fetch }).optimise({ profile: "driving-hgv", depot, stops: [b, a], timeWindows: [[0, 60], null] }))
+    assert.deepEqual([result.order, result.unassigned], [[1], [0]])
+    assert.equal(result.legs.length, 2, "depot to the stop it ordered, and back")
+    // A stop without a window left unassigned is no window's doing: refused, as before.
+    const unwindowed = await new OpenRouteServiceProvider({ apiKey: KEY, fetch: recording(json(200, unassigned)).fetch }).optimise({ profile: "driving-hgv", depot, stops: [b, a], timeWindows: [null, [0, 60]] })
+    assert.match(unwindowed.kind === "refused" ? unwindowed.sentence : "", /left 1 stop unassigned/)
+  })
+
   test("two stops at one address are both ordered and one point of the trip: no leg between them", async () => {
     const shared = vroomBody(
       [

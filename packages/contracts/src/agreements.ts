@@ -35,6 +35,7 @@ import { Currency } from "./organisation"
 import { PageRequest } from "./pagination"
 import { ProjectScopedListQuery } from "./queries"
 import { changesSomething, PositiveInt, somethingToChange, stamped } from "./resource"
+import { TimeWindow } from "./shifts"
 import { Label, Paragraph } from "./text"
 import { endsAfterItStarts, Validity, ValidityCreate, validityOrdered } from "./validity"
 
@@ -66,6 +67,8 @@ export const Agreement = z
     notes: Paragraph.nullable(),
     /** The Price List the agreement is priced under (Issue #112), a list of the project in the agreement's currency; null is the project's default list. */
     priceListId: Id.nullable(),
+    /** The window the agreement promises its stops are served in (O14 of #290), on the project's clock; null is any time. A stop's window is where it and its property's access hours overlap. */
+    serviceWindow: TimeWindow.nullable(),
     ...Validity.shape,
   })
   .refine(validityOrdered, endsAfterItStarts)
@@ -83,6 +86,8 @@ export const AgreementCreate = z
     notes: Paragraph.nullable().optional(),
     /** A list of the project in the agreement's currency; absent or null is the project's default list. */
     priceListId: Id.nullable().optional(),
+    /** Absent or null is any time of the day. */
+    serviceWindow: TimeWindow.nullable().optional(),
     ...ValidityCreate,
   })
   .refine(validityOrdered, endsAfterItStarts)
@@ -100,6 +105,8 @@ export const AgreementPatch = z
     notes: Paragraph.nullable().optional(),
     /** Null clears the list back to the project's default. */
     priceListId: Id.nullable().optional(),
+    /** Written whole; null clears it to any time of the day. */
+    serviceWindow: TimeWindow.nullable().optional(),
     validFrom: IsoDate.optional(),
     /** Null reopens the period; a day ends it. */
     validTo: IsoDate.nullable().optional(),

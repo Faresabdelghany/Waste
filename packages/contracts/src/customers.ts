@@ -54,6 +54,7 @@ import { FlatPoint } from "./geojson"
 import { Id } from "./ids"
 import { ProjectScopedListQuery } from "./queries"
 import { changesSomething, PositiveInt, somethingToChange, stamped } from "./resource"
+import { TimeWindow } from "./shifts"
 import { Label, Paragraph } from "./text"
 
 /** A person or an organisation. */
@@ -208,6 +209,8 @@ export const Property = z.object({
   notes: Paragraph.nullable(),
   /** What the driver is told at the place — the gate code, where the bins stand: the Driver App's stop shows it. */
   driverInstructions: Paragraph.nullable(),
+  /** The property's access hours (O14 of #290): when in the day a stop here may be served, on the project's clock; null is any time. */
+  serviceWindow: TimeWindow.nullable(),
   status: PropertyStatus,
   /** Who the property's customers are and as what; replaced whole through its own route. */
   parties: Parties,
@@ -224,6 +227,7 @@ export const PropertyCreate = z
     location: FlatPoint.nullable().optional(),
     notes: Paragraph.nullable().optional(),
     driverInstructions: Paragraph.nullable().optional(),
+    serviceWindow: TimeWindow.nullable().optional(),
     status: PropertyStatus.default("active").describe("Defaults to active when absent: a property is registered in order to be served."),
     parties: PartiesBody.default([]).describe("The parties the property starts with; none when absent."),
   })
@@ -240,6 +244,8 @@ export const PropertyPatch = z
     location: FlatPoint.nullable().optional(),
     notes: Paragraph.nullable().optional(),
     driverInstructions: Paragraph.nullable().optional(),
+    /** Written whole; null clears it to any time of the day. */
+    serviceWindow: TimeWindow.nullable().optional(),
     status: PropertyStatus.optional(),
   })
   .refine(changesSomething, somethingToChange)

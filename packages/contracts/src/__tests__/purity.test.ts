@@ -54,7 +54,9 @@
 // availability window by the domain's caps. M4 of #293 added
 // @waste/domain/visits/vocabulary and @waste/domain/visits/charges:
 // site-visits.ts reads the visits' lists and normalises a plate or a card
-// as the API stores and matches it.
+// as the API stores and matches it. O14 of #290 added
+// @waste/domain/execution/shift: shifts.ts holds a window and a shift to the
+// domain's rules in the domain's sentences, with the break's bounds.
 import path from "node:path"
 import { fileURLToPath } from "node:url"
 
@@ -68,6 +70,7 @@ definePurityTests({
     "@waste/domain/audit/vocabulary",
     "@waste/domain/execution/bulky",
     "@waste/domain/execution/proof-shapes",
+    "@waste/domain/execution/shift",
     "@waste/domain/execution/unloads",
     "@waste/domain/execution/vocabulary",
     "@waste/domain/execution/work-orders",

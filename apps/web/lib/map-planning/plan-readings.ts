@@ -18,7 +18,7 @@
 // Plan since, and the Plan a Retry answered while it is still on its way,
 // are fresher, and a reading takes them over the record's.
 import type { ActivePlan, Plan, PlanDetail } from "@waste/contracts/plans"
-import { PLAN_SOLVERS, PLAN_STATUSES, PLAN_TRIPS } from "@waste/domain/routing/vocabulary"
+import { PLAN_SOLVERS, PLAN_STATUSES, PLAN_STOP_WARNINGS, PLAN_TRIPS } from "@waste/domain/routing/vocabulary"
 
 import { typed } from "@/lib/api/records/adapter"
 import type { BusinessRecord } from "@/lib/data/business-modules"
@@ -42,11 +42,22 @@ export function activePlanOf(record: Pick<BusinessRecord, "submittedValues"> | u
     return null
   }
   if (typeof value !== "object" || value === null) return null
-  const { id, solver, status, trip, distanceMetres, durationSeconds, stale, deferredUntil } = value as Record<string, unknown>
+  const { id, solver, status, trip, distanceMetres, durationSeconds, stale, deferredUntil, stopWarnings } = value as Record<string, unknown>
   if (typeof id !== "string" || !oneOf(PLAN_SOLVERS, solver) || !oneOf(PLAN_STATUSES, status) || !oneOf(PLAN_TRIPS, trip)) return null
   if (!wholeOrNull(distanceMetres) || !wholeOrNull(durationSeconds) || typeof stale !== "boolean") return null
   if (deferredUntil !== null && typeof deferredUntil !== "string") return null
-  return { id, solver, status, trip, distanceMetres, durationSeconds, stale, deferredUntil }
+  return { id, solver, status, trip, distanceMetres, durationSeconds, stale, deferredUntil, stopWarnings: stopWarningsOf(stopWarnings) }
+}
+
+/** The stops a Plan holds outside their window (O14 of #290), as the record carries them: an entry that does not read as one is let go, and a record written before them holds none. */
+function stopWarningsOf(value: unknown): ActivePlan["stopWarnings"] {
+  if (!Array.isArray(value)) return []
+  return value.flatMap((entry) => {
+    if (typeof entry !== "object" || entry === null) return []
+    const { pickupId, position, warning } = entry as Record<string, unknown>
+    if (typeof pickupId !== "string" || typeof position !== "number" || !Number.isInteger(position) || position < 1 || !oneOf(PLAN_STOP_WARNINGS, warning)) return []
+    return [{ pickupId, position, warning }]
+  })
 }
 
 /** The Plan a route's reading is taken from, at its freshest. */
