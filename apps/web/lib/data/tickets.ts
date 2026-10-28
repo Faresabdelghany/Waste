@@ -27,6 +27,7 @@ import type { BusinessRecord, ModuleLocation } from "./business-modules"
 import { PRODUCTS_MODULE } from "./commercial"
 import { mintedRecord, ORGANISATION_MODULE } from "./containers"
 import { CONTACTS_MODULE, NO_ONE, PROPERTIES_MODULE, SHARED_POINTS_MODULE } from "./properties"
+import { TICKET_TEAMS_MODULE } from "./ticket-teams"
 
 /** Configure › Users & roles: the accounts a ticket is assigned to, where the access module is switched. */
 export const ACCESS_MODULE: ModuleLocation = { workspaceId: accessModule.workspaceId, moduleId: accessModule.moduleId }
@@ -90,6 +91,7 @@ export const TICKET_FORM: BusinessFormSchema = {
         { id: "occurredAt", label: "Occurred", type: "datetime", description: "When it happened, on the project's clock; now when blank." },
         due,
         assignee("Who works it; nobody when blank."),
+        { id: "teamId", label: "Team", type: "select", relation: TICKET_TEAMS_MODULE, description: "The team it waits with. Left blank, the project's default team for the kind; None for no team." },
       ],
     },
     { id: "links", title: "What it is about", fields: TICKET_LINK_FIELDS },
@@ -231,9 +233,11 @@ export const MINE = "Mine"
  * The tickets list's categories on the Pilot (#147), read off a row for the
  * person looking: open or closed, the status, the kind, the priority, the
  * assignee — "Mine" among the values where the ticket is `/me`'s account's —
- * where it came from, and what its due date reads as (O4 of #290: overdue,
- * on track, met, breached or none). Team and the configured type are no
- * category: the wire has neither.
+ * the team it waits with (O30 of #290) — with Open and an Assignee of
+ * Unassigned, the team's queue, which anyone with the tickets grant takes
+ * from — where it came from, and what its due date reads as (O4 of #290:
+ * overdue, on track, met, breached or none). The configured type is no
+ * category: the wire has none.
  */
 export function ticketListReaders(accountId: string | null): FilterValueReaders {
   return {
@@ -242,6 +246,7 @@ export function ticketListReaders(accountId: string | null): FilterValueReaders 
     kinds: (record) => singleFilterValue(record.facts.Kind),
     priorities: (record) => singleFilterValue(record.facts.Priority),
     assignees: (record) => [...singleFilterValue(record.facts.Assignee), ...(accountId !== null && record.submittedValues?.[ASSIGNEE_ACCOUNT_KEY] === accountId ? [MINE] : [])],
+    teams: (record) => singleFilterValue(record.facts.Team),
     sources: (record) => singleFilterValue(record.facts["Opened via"]),
     sla: (record) => singleFilterValue(record.facts[TICKET_SLA_FACT]),
   }

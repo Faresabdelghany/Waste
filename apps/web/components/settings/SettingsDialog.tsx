@@ -60,6 +60,7 @@ import { HolidayListsSettings } from "@/components/settings/holiday-lists-settin
 import { SortingGuideSettings } from "@/components/settings/sorting-guide-settings"
 import { FinanceSettingsOnApi } from "@/components/settings/finance-settings-on-api"
 import { TicketSlaSettings } from "@/components/settings/ticket-sla-settings"
+import { TicketTeamsSettings } from "@/components/settings/ticket-teams-settings"
 import { PickupExceptionChargesSettings } from "@/components/settings/pickup-exception-charges-settings"
 import { BulkySchedulesSettings } from "@/components/settings/bulky-schedules-settings"
 import { EmissionFactorsSettings } from "@/components/settings/emission-factors-settings"
@@ -70,6 +71,7 @@ import { HOLIDAY_LISTS_SETTINGS_PANE_ID, MASTER_DATA_SETTINGS_PANE_ID } from "@/
 import { ASSET_MANAGEMENT_SETTINGS_PANE_ID, FINANCE_ON_API_SETTINGS_PANE_ID, FINANCE_SETTINGS_PANE_ID, settingsPaneOffered, settingsPaneOpened } from "@/lib/data/settings-panes"
 import { SORTING_GUIDE_SETTINGS_PANE_ID } from "@/lib/data/sorting-guide"
 import { TICKET_SLA_SETTINGS_PANE_ID } from "@/lib/data/ticket-sla"
+import { TICKET_TEAMS_SETTINGS_PANE_ID } from "@/lib/data/ticket-teams"
 import { PICKUP_EXCEPTION_CHARGES_SETTINGS_PANE_ID } from "@/lib/data/pickup-exception-rules"
 import { BULKY_SCHEDULES_SETTINGS_PANE_ID } from "@/lib/data/bulky"
 import { VISIT_RULES_SETTINGS_PANE_ID } from "@/lib/data/site-visits"
@@ -175,6 +177,8 @@ const settingsSections: Array<{
       { id: "ticket-comms", label: "Tickets & communication", icon: Bell },
       // A project's ticket SLA on the API (O4 of #290): offered with the adapter configured.
       { id: TICKET_SLA_SETTINGS_PANE_ID, label: "Ticket SLA", icon: Timer },
+      // The ticket teams on the API (O30 of #290): offered with the adapter configured.
+      { id: TICKET_TEAMS_SETTINGS_PANE_ID, label: "Ticket teams", icon: UsersThree },
       // The fleet's emission factors on the API (M10 of #293): offered with the adapter configured.
       { id: EMISSION_FACTORS_SETTINGS_PANE_ID, label: "Emission factors", icon: Leaf },
     ],
@@ -1364,6 +1368,11 @@ const visiblePaneDefinitions: Record<string, SettingsPaneDefinition> = {
     description: "How long a ticket has from opening to its due date, by priority, for every kind or for one kind.",
     groups: [],
   },
+  [TICKET_TEAMS_SETTINGS_PANE_ID]: {
+    title: "Ticket teams",
+    description: "The teams the company's tickets wait with, and each project's default team per kind.",
+    groups: [],
+  },
   [FINANCE_ON_API_SETTINGS_PANE_ID]: {
     title: "Finance & invoicing",
     description: "What the company's invoices print, and when each project's invoices are due, the payment reference they carry and whether its hires and jobs wait for review.",
@@ -1498,6 +1507,7 @@ function isFullPanelPane(paneId: string): boolean {
     paneId === MASTER_DATA_SETTINGS_PANE_ID ||
     paneId === SORTING_GUIDE_SETTINGS_PANE_ID ||
     paneId === TICKET_SLA_SETTINGS_PANE_ID ||
+    paneId === TICKET_TEAMS_SETTINGS_PANE_ID ||
     paneId === FINANCE_ON_API_SETTINGS_PANE_ID ||
     paneId === PICKUP_EXCEPTION_CHARGES_SETTINGS_PANE_ID ||
     paneId === BULKY_SCHEDULES_SETTINGS_PANE_ID ||
@@ -1911,6 +1921,8 @@ function SettingsPane({
         <SortingGuideSettings />
       ) : paneId === TICKET_SLA_SETTINGS_PANE_ID ? (
         <TicketSlaSettings />
+      ) : paneId === TICKET_TEAMS_SETTINGS_PANE_ID ? (
+        <TicketTeamsSettings />
       ) : paneId === FINANCE_ON_API_SETTINGS_PANE_ID ? (
         <FinanceSettingsOnApi />
       ) : paneId === PICKUP_EXCEPTION_CHARGES_SETTINGS_PANE_ID ? (
