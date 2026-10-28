@@ -1,5 +1,5 @@
 {
-  "id": "2dbaab2b-29aa-4fa7-b40d-74b1935098a8",
+  "id": "ff231f3a-3d5e-4b24-baa4-bdf1921cb129",
   "prevId": "297a1415-15b0-4b4a-9ad3-45bd26ca3ebc",
   "version": "7",
   "dialect": "postgresql",
@@ -24628,7 +24628,7 @@
       "checkConstraints": {
         "import_run_kind_one_of": {
           "name": "import_run_kind_one_of",
-          "value": "\"wms\".\"import_run\".\"kind\" in ('customers', 'properties', 'containers', 'agreements', 'waste-fractions', 'container-types', 'vehicle-types')"
+          "value": "\"wms\".\"import_run\".\"kind\" in ('customers', 'properties', 'containers', 'agreements', 'waste-fractions', 'container-types', 'vehicle-types', 'vehicles', 'drivers')"
         },
         "import_run_row_count_positive": {
           "name": "import_run_row_count_positive",

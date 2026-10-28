@@ -12,6 +12,8 @@ import { Agreement, Subscription } from "@waste/contracts/agreements"
 import { AuditEvent, CHANGE_REASON_HEADER } from "@waste/contracts/audit"
 import { ContainerType, Product, WasteFraction } from "@waste/contracts/catalogue"
 import { Container } from "@waste/contracts/containers"
+import { Driver, Vehicle } from "@waste/contracts/fleet"
+import { Depot } from "@waste/contracts/places"
 import { Customer, Property, SharedCollectionPoint } from "@waste/contracts/customers"
 import { ImportBatchResult, ImportPreview, ImportRun, ImportRunRow, type ImportKind, type ImportRowResult } from "@waste/contracts/imports"
 import { Page } from "@waste/contracts/pagination"
@@ -162,7 +164,7 @@ describe("the import endpoints", { skip: database.skip || owner.skip }, () => {
     })
 
     test("refuses a kind there is no import of, and a role without the import's grant", async () => {
-      assert.equal((await olivia("/imports/templates/vehicles")).status, 400)
+      assert.equal((await olivia("/imports/templates/collection-routes")).status, 400)
       assert.equal((await lars("/imports/templates/customers")).status, 403)
     })
   })
@@ -395,6 +397,63 @@ describe("the import endpoints", { skip: database.skip || owner.skip }, () => {
       assert.equal(refused.status, 400)
       const response = await viewer("/imports/preview", { method: "POST", body: { kind: "container-types", fileName: "types.csv", rows: rowsOf({ name: "Sack" }) } })
       assert.equal(response.status, 403, "the viewer does not view the master data")
+    })
+
+    test("writes the fleet (O30 of #290): vehicles by registration with their type by key and compartments by fraction key, drivers by workforce reference, a depot by name", async () => {
+      const residualFraction = await create(olivia, "/waste-fractions", { key: "residual-fleet", name: "Residual (fleet)" }, WasteFraction)
+      const paper = await create(olivia, "/waste-fractions", { key: "paper-fleet", name: "Paper (fleet)" }, WasteFraction)
+      const loader = await create(olivia, "/vehicle-types", { key: "fleet-loader", name: "Fleet loader" }, VehicleType)
+      const yard = await create(olivia, "/depots", { projectId: copenhagen, code: "DEP-IMP", name: "Import yard", address: "Kajvej 1", location: { type: "Point", coordinates: [12.6, 55.7] } }, Depot)
+      await create(olivia, "/vehicles", { projectId: harbor, registration: "HB 10 001", kind: "powered-vehicle", vehicleTypeId: loader.id, requiredLicenceClass: "c", compartments: [{ wasteFractionIds: [residualFraction.id] }] }, Vehicle)
+      const vehicles = await commit(
+        olivia,
+        "vehicles",
+        rowsOf(
+          { registration: "CN 10 001", kind: "powered-vehicle", "vehicle type": "fleet-loader", "licence class": "C", compartments: "Left: residual-fleet; Right: paper-fleet", "home depot": "Import yard" },
+          { registration: "CN 10 001", kind: "powered-vehicle", "vehicle type": "fleet-loader", "licence class": "c", compartments: "Left: residual-fleet; Right: paper-fleet", fuel: "hvo" },
+          { registration: "CN 10 001", kind: "powered-vehicle", "vehicle type": "fleet-loader", "licence class": "c", compartments: "Left: residual-fleet; Right: paper-fleet" },
+          { registration: "CN 10 001", kind: "trailer", "vehicle type": "fleet-loader", "licence class": "c" },
+          { registration: "HB 10 001", kind: "powered-vehicle", "vehicle type": "fleet-loader", "licence class": "c" },
+          { registration: "CN 10 002", kind: "powered-vehicle", "vehicle type": "fleet-loader", "licence class": "c", compartments: "glass-fleet" },
+          { registration: "CN 10 003", kind: "powered-vehicle", "vehicle type": "fleet-loader", "licence class": "c", "home depot": "Nowhere" },
+        ),
+        copenhagen,
+      )
+      assert.deepEqual(vehicles.rows.map(outcome), [
+        { row: 2, outcome: "created", key: "registration CN 10 001", detail: null },
+        { row: 3, outcome: "updated", key: "registration CN 10 001", detail: null },
+        { row: 4, outcome: "unchanged", key: "registration CN 10 001", detail: null },
+        { row: 5, outcome: "refused", key: "registration CN 10 001", detail: "kind: CN 10 001 is a powered-vehicle; a vehicle's kind is set once" },
+        { row: 6, outcome: "refused", key: "registration HB 10 001", detail: "registration: This company already has a vehicle registered HB 10 001, in another project" },
+        { row: 7, outcome: "refused", key: "registration CN 10 002", detail: "compartments: No waste fraction of this company has the key glass-fleet" },
+        { row: 8, outcome: "refused", key: "registration CN 10 003", detail: "home depot: No depot of this project is named Nowhere" },
+      ])
+      const made = await read(`/vehicles/${vehicles.rows[0]!.resourceId}`, Vehicle)
+      assert.deepEqual([made.projectId, made.vehicleTypeId, made.requiredLicenceClass, made.fuel, made.homeDepotId], [copenhagen, loader.id, "c", "hvo", yard.id])
+      assert.deepEqual(made.compartments.map((compartment) => [compartment.position, compartment.name, compartment.wasteFractionIds]), [
+        [1, "Left", [residualFraction.id]],
+        [2, "Right", [paper.id]],
+      ])
+
+      const drivers = await commit(
+        olivia,
+        "drivers",
+        rowsOf(
+          { "workforce reference": "EMP-9001", name: "Mads Import", employment: "Employee", "licence class": "c", "licence expiry": "2029-06-30" },
+          { "workforce reference": "EMP-9001", name: "Mads Import", employment: "employee", "home depot": "Import yard" },
+          { "workforce reference": "EMP-9002", name: "Kim Import", employment: "employee", "licence expiry": "30/06/2029" },
+          { "workforce reference": "EMP-9003", name: "Sam Import", employment: "service-provider" },
+        ),
+        copenhagen,
+      )
+      assert.deepEqual(drivers.rows.map(outcome).slice(0, 3), [
+        { row: 2, outcome: "created", key: "workforce reference EMP-9001", detail: null },
+        { row: 3, outcome: "updated", key: "workforce reference EMP-9001", detail: null },
+        { row: 4, outcome: "refused", key: "workforce reference EMP-9002", detail: "licence expiry: a day as YYYY-MM-DD" },
+      ])
+      assert.equal(drivers.rows[3]!.outcome, "refused", "service-provider employment names its provider")
+      const mads = await read(`/drivers/${drivers.rows[0]!.resourceId}`, Driver)
+      assert.deepEqual([mads.employment, mads.licenceClass, mads.licenceExpiry, mads.homeDepotId], ["employee", "c", "2029-06-30", yard.id])
     })
 
     test("writes agreements with a subscription per row, both or neither, matched on the number and the first day", async () => {

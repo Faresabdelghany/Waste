@@ -87,6 +87,7 @@ import { newId } from "../ids"
 import { afterCursor, fetchLimit, pageOf } from "../pagination"
 import { describeProblem, invalidRequest, problem, validate } from "../problem"
 import { IMPORT_MODULES, importRow, type ImportContext } from "./import-rows"
+import type { ClockOptions } from "./scheme-groups"
 import { created, describeCreated, describeJson, IdParam, lockRow, stampsOf } from "./shared"
 
 const MODULE = "improve.imports"
@@ -193,9 +194,9 @@ function requireColumns(kind: ImportKind, rows: readonly ImportRowValues[], path
 }
 
 /** The context the rows of one request are written in, once the project and the target module's `view` are the caller's. */
-function contextFor(tx: Tx, principal: Principal, kind: ImportKind, projectId: string | null): ImportContext {
+function contextFor(tx: Tx, principal: Principal, kind: ImportKind, projectId: string | null, now: () => Date): ImportContext {
   requireAllowed(principal.grants, IMPORT_MODULES[kind], "view")
-  return { tx, principal, projectId, memo: {} }
+  return { tx, principal, projectId, now, memo: {} }
 }
 
 const TEMPLATE_SEPARATORS = { comma: ",", semicolon: ";" } as const
@@ -203,7 +204,7 @@ const TEMPLATE_SEPARATORS = { comma: ",", semicolon: ";" } as const
 /** The reason an import's writes are recorded under when its request gives none, bounded as a reason is. */
 export const importReason = (fileName: string): string => `CSV import ${fileName}`.slice(0, PARAGRAPH_MAX)
 
-export function importRoutes(guard: MiddlewareHandler<AuthEnv>) {
+export function importRoutes(guard: MiddlewareHandler<AuthEnv>, { now = () => new Date() }: ClockOptions = {}) {
   return new Hono<AuthEnv>()
     .get(
       "/imports/templates/:kind",
@@ -258,7 +259,7 @@ export function importRoutes(guard: MiddlewareHandler<AuthEnv>) {
         const tx = c.get("tx")
         const principal = c.get("principal")
         if (projectId !== undefined) requireProject(principal, projectId)
-        const context = contextFor(tx, principal, kind, projectId ?? null)
+        const context = contextFor(tx, principal, kind, projectId ?? null, now)
         requireColumns(kind, rows, "rows")
         const results: ImportRowResult[] = []
         try {
@@ -403,7 +404,7 @@ export function importRoutes(guard: MiddlewareHandler<AuthEnv>) {
         const run = await findRun(tx, principal, id)
         if (run === undefined) throw noSuchRun(id)
         const kind = run.kind as ImportKind
-        const context = contextFor(tx, principal, kind, run.projectId)
+        const context = contextFor(tx, principal, kind, run.projectId, now)
         requireColumns(kind, rows, "rows")
         if (changeReasonOf(c.req.header(CHANGE_REASON_HEADER)) === null) await actAs(tx, { userAccountId: principal.user.id, reason: importReason(run.fileName) })
 

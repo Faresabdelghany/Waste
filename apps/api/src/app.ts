@@ -364,7 +364,7 @@ export function createApp({
   // A customer's sustainability report (M13 of #293), likewise.
   app.route("/", sustainabilityRoutes(guard))
   // The CSV import (#291 slice 12): a preview, then a run written a batch at a time through the families' own writes.
-  app.route("/", importRoutes(guard))
+  app.route("/", importRoutes(guard, { now }))
 
   app.get(
     "/openapi.json",

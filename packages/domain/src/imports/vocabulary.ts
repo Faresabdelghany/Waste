@@ -7,7 +7,8 @@
 // the company's Customers, a project's Properties with their parties, a
 // project's containers, a project's Agreements with their Subscriptions, and
 // the company's catalogue — its waste fractions, container types and vehicle
-// types with the container types each services (O30 of #290, row 1.18).
+// types with the container types each services (O30 of #290, row 1.18) — and
+// a project's fleet, its vehicles with their compartments and its drivers.
 // `COMPANY_IMPORT_KINDS` are the company's and name no project; every other
 // kind is a project's.
 // A row's outcome is what the import did with it: made a record, changed one
@@ -25,7 +26,7 @@
 // two.
 
 /** What a file imports. */
-export const IMPORT_KINDS = ["customers", "properties", "containers", "agreements", "waste-fractions", "container-types", "vehicle-types"] as const
+export const IMPORT_KINDS = ["customers", "properties", "containers", "agreements", "waste-fractions", "container-types", "vehicle-types", "vehicles", "drivers"] as const
 
 /** What became of one row. */
 export const IMPORT_ROW_OUTCOMES = ["created", "updated", "unchanged", "refused"] as const

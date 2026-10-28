@@ -32,6 +32,8 @@ describe("the kinds a role imports", () => {
         ["waste-fractions", "configure.master", false],
         ["container-types", "configure.master", false],
         ["vehicle-types", "configure.master", false],
+        ["vehicles", "fleet.vehicles", true],
+        ["drivers", "fleet.drivers", true],
       ],
     )
     // The web's project rule is the contracts': a project's kinds and no other.

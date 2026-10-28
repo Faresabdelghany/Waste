@@ -1,7 +1,7 @@
-// The catalogue's CSV import (O30 of #290, row 1.18) as the migration writes
-// it: the run's kinds grow by the waste fractions, the container types and
-// the vehicle types, and a run of any of the company's kinds names no
-// project. drizzle-kit's four statements, two checks dropped and added again
+// The CSV import of the catalogue and the fleet (O30 of #290, row 1.18) as
+// the migration writes it: the run's kinds grow by the waste fractions, the
+// container types, the vehicle types, the vehicles and the drivers, and a run
+// of any of the company's kinds names no project. drizzle-kit's four statements, two checks dropped and added again
 // in their grown spelling, are the whole file under its header: no table is
 // new and no run present is of a new kind. The file is found by its name,
 // not its number. No database.
@@ -20,7 +20,7 @@ import { projectShape } from "./imports-as-of"
 import { checksOf, list, ref } from "./rendering"
 
 async function migrationName(): Promise<string> {
-  const file = (await readdir(MIGRATIONS_FOLDER)).find((name) => /^\d{4}_catalogue_import\.sql$/.test(name))
+  const file = (await readdir(MIGRATIONS_FOLDER)).find((name) => /^\d{4}_catalogue_and_fleet_import\.sql$/.test(name))
   assert.ok(file !== undefined, "the catalogue import's migration")
   return file
 }
@@ -40,7 +40,7 @@ describe("the catalogue import's migration", () => {
     assert.deepEqual(generated, expected)
     const text = await readFile(join(MIGRATIONS_FOLDER, file), "utf8")
     assert.deepEqual(statementsOf(text), expected)
-    assert.match(text, /^-- The catalogue's CSV import \(O30 of #290, row 1\.18\)/)
+    assert.match(text, /^-- The CSV import of the catalogue and the fleet \(O30 of #290, row 1\.18\)/)
   })
 
   test("the schema's checks are the ones the file adds", () => {

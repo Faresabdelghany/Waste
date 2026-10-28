@@ -35,12 +35,13 @@ describe("ImportPreviewRequest and ImportRunCreate", () => {
     assert.equal(ImportRunCreate.safeParse({ kind: "agreements", projectId: PROJECT, fileName: "a.csv", rowCount: 3 }).success, true)
   })
 
-  test("the catalogue is the company's (O30 of #290): a file of fractions, container types or vehicle types names no project", () => {
+  test("the catalogue is the company's and the fleet a project's (O30 of #290): a file of fractions, container types or vehicle types names no project, one of vehicles or drivers its project", () => {
+    for (const kind of ["vehicles", "drivers"] as const) assert.deepEqual(refusal(ImportRunCreate.safeParse({ kind, fileName: "fleet.csv", rowCount: 3 })), [{ path: "projectId", message: PROJECT_REQUIRED }], kind)
     for (const kind of ["waste-fractions", "container-types", "vehicle-types"] as const) {
       assert.equal(ImportRunCreate.safeParse({ kind, fileName: "catalogue.csv", rowCount: 3 }).success, true, kind)
       assert.deepEqual(refusal(ImportRunCreate.safeParse({ kind, projectId: PROJECT, fileName: "catalogue.csv", rowCount: 3 })), [{ path: "projectId", message: PROJECT_REFUSED }], kind)
     }
-    assert.deepEqual([...PROJECT_IMPORT_KINDS], ["properties", "containers", "agreements"])
+    assert.deepEqual([...PROJECT_IMPORT_KINDS], ["properties", "containers", "agreements", "vehicles", "drivers"])
   })
 
   test("number rows from 2, the header being row 1, each once, and bound the preview and the batch", () => {
