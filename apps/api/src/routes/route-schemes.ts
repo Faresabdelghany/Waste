@@ -119,7 +119,7 @@ import { periodAfter, requireOrdered } from "./periods"
 import { requireDepot, requirePlanningArea, requireUnloadingStation, type Scope } from "./references"
 import { releaseHolds, schemeReleases } from "./route-holds"
 import { groupsReleasing, requireGroupEdit, writeGroupEdit } from "./scheme-edit"
-import { storedSeasonsOf, writeSeasons } from "./scheme-seasons"
+import { sameSeasons, storedSeasonsOf, writeSeasons } from "./scheme-seasons"
 import {
   findScheme,
   fleetOf,
@@ -387,7 +387,8 @@ export function routeSchemeRoutes(guard: MiddlewareHandler<AuthEnv>, { now = () 
         await requireUnloadingStation(tx, principal.companyId, patch.unloadingStationId)
         if (patch.validFrom !== undefined || patch.validTo !== undefined) requireOrdered(periodAfter(current, patch))
         // The seasons the edit leaves the scheme with, held with its cadence (scheme-seasons.ts).
-        const seasonsLeft = seasons ?? (await storedSeasonsOf(tx, principal.companyId, id))
+        const storedSeasons = await storedSeasonsOf(tx, principal.companyId, id)
+        const seasonsLeft = seasons ?? storedSeasons
         requireRecurrence({ ...merged, seasons: seasonsLeft })
 
         const groups = (await groupsOf(tx, principal.companyId, [id])).get(id) ?? []
@@ -425,7 +426,8 @@ export function routeSchemeRoutes(guard: MiddlewareHandler<AuthEnv>, { now = () 
           await releaseHolds(tx, principal, current.projectId, { collectionGroupIds: groups.filter((group) => group.release.kind === "all").map((group) => group.groupId) }, { kind: "all" })
           for (const { groupId, release } of groups) if (release.kind === "days") await releaseHolds(tx, principal, current.projectId, { collectionGroupIds: [groupId] }, release)
         }
-        if (seasons !== undefined) await writeSeasons(tx, scope, id, seasons, { replacing: true })
+        // A set restated as it stands writes nothing, so the audit trail records only a change.
+        if (seasons !== undefined && !sameSeasons(seasons, storedSeasons)) await writeSeasons(tx, scope, id, seasons, { replacing: true })
         if (edit === undefined) return c.json(schemeOf(row, groups, (await generationsOf(tx, principal.companyId, new Map([[id, groups]]))).get(id) ?? NEVER_GENERATED, seasonsLeft))
         await writeGroupEdit(tx, scope, id, edit)
         return c.json(await schemeWithGroups(tx, principal.companyId, row))

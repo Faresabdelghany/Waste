@@ -9,7 +9,9 @@ import { WasteFraction } from "@waste/contracts/catalogue"
 import { Page } from "@waste/contracts/pagination"
 import { Occurrence, RouteScheme } from "@waste/contracts/route-schemes"
 import { createDb, type Database } from "@waste/db/client"
+import { routeSchemeSeason } from "@waste/db/schema/route-schemes"
 import { isoWeek } from "@waste/domain/route-schemes/recurrence"
+import { eq } from "drizzle-orm"
 import * as z from "zod"
 
 import { createApp } from "../app"
@@ -105,6 +107,10 @@ describe("a route scheme's seasons", { skip: database.skip }, () => {
     const written = await scheme("Garden replaced", { seasons: [SUMMER] })
     assert.deepEqual((await ok(await patch(written.id, { seasons: [WINTER] }))).seasons, [WINTER])
     assert.deepEqual((await ok(await patch(written.id, { name: "Garden renamed" }))).seasons, [WINTER], "a patch without seasons leaves them")
+    const [before] = await pool.db.select({ id: routeSchemeSeason.id }).from(routeSchemeSeason).where(eq(routeSchemeSeason.routeSchemeId, written.id))
+    assert.deepEqual((await ok(await patch(written.id, { seasons: [WINTER] }))).seasons, [WINTER])
+    const [after] = await pool.db.select({ id: routeSchemeSeason.id }).from(routeSchemeSeason).where(eq(routeSchemeSeason.routeSchemeId, written.id))
+    assert.equal(after?.id, before?.id, "the set restated as it stands is not written again")
     assert.deepEqual((await ok(await patch(written.id, { seasons: [] }))).seasons, [])
     assert.deepEqual((await ok(await olivia(`/route-schemes/${written.id}`))).seasons, [])
     const rows = await occurrences(written.id, "2026-07-01", "2026-07-31")

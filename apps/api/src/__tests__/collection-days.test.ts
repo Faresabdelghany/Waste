@@ -12,7 +12,7 @@ import { customer, property } from "@waste/db/schema/customers"
 import { route } from "@waste/db/schema/execution"
 import { generationMatch, generationRun } from "@waste/db/schema/generation"
 import { project } from "@waste/db/schema/organisation"
-import { collectionGroup, collectionGroupContainer, routeScheme } from "@waste/db/schema/route-schemes"
+import { collectionGroup, collectionGroupContainer, routeScheme, routeSchemeSeason } from "@waste/db/schema/route-schemes"
 import { withCompany } from "@waste/db/tenant"
 import { eq } from "drizzle-orm"
 
@@ -194,6 +194,37 @@ describe("the collection days by address on the public door", { skip: database.s
       assert.ok(lines.includes("STATUS:CANCELLED"))
       assert.ok(lines.includes("X-WR-TIMEZONE:Europe/Copenhagen"))
       assert.ok(!lines.some((line) => line.includes("Mikkel")), "no customer data")
+    })
+  })
+
+  describe("a scheme's season (O17 of #290)", () => {
+    test("plans the page and the feed at the season's cadence, as generation does, and the scheme's own once the season is gone", async () => {
+      // October every other week, the even ones: week 41 (the 5th and the 8th) is not served, week 42 is.
+      const seasonId = testId()
+      await withCompany(pool.db, a.companyId, async (tx) => {
+        await tx.insert(routeSchemeSeason).values({ id: seasonId, companyId: a.companyId, projectId: a.projects.copenhagen.id, routeSchemeId: ids.scheme, name: "October", startsOn: "10-01", endsOn: "11-01", frequency: "every-2-weeks", weekRotation: "even" })
+      })
+      try {
+        const answer = await days(`/public/${slug}/addresses/${ids.parkvej1}/collection-days?weeks=2`)
+        assert.deepEqual(
+          answer.days.map((day) => [day.date, day.fractions.join("+"), day.status]),
+          [
+            ["2026-10-13", "Residual", "collected"],
+            ["2026-10-15", "Glass", "skipped"],
+          ],
+          "the odd week has no day; the even week stands",
+        )
+        const feed = await get(`/public/${slug}/addresses/${ids.parkvej1}/collection-days.ics?weeks=2`)
+        assert.equal(feed.status, 200)
+        const lines = (await feed.text()).split("\r\n")
+        assert.ok(!lines.includes("DTSTART;VALUE=DATE:20261005") && !lines.includes("DTSTART;VALUE=DATE:20261008"), "no event in the week the season does not serve")
+      } finally {
+        await withCompany(pool.db, a.companyId, async (tx) => {
+          await tx.delete(routeSchemeSeason).where(eq(routeSchemeSeason.id, seasonId))
+        })
+      }
+      const weekly = await days(`/public/${slug}/addresses/${ids.parkvej1}/collection-days?weeks=2`)
+      assert.equal(weekly.days.length, 4, "the season gone, every week is served")
     })
   })
 

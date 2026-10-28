@@ -3,8 +3,9 @@
 // its rotation to every-2-weeks, its two month-days to days every year has
 // and apart from each other. Then migration 0055, which is exactly those
 // statements, then what the table owes the file by migrations/README.md: its
-// fence and trigger, and its audit trail as its scheme's set
-// (`SEASONS_AUDITED`). No database.
+// fence and trigger, its audit trail as its scheme's set
+// (`SEASONS_AUDITED`), and the public door's grant and policy, since the
+// collection days read a season (`SEASONS_DOOR`). No database.
 import assert from "node:assert/strict"
 import { readFile } from "node:fs/promises"
 import { join } from "node:path"
@@ -18,6 +19,7 @@ import { company, project } from "../schema/organisation"
 import { routeScheme, routeSchemeSeason } from "../schema/route-schemes"
 import { auditTrail, SEASONS_AUDITED } from "../sql/audit-trail"
 import { handWrittenStatements, normalised, statementsOf } from "../sql/hand-written"
+import { SEASONS_DOOR, seasonsDoorStatements } from "../sql/public-door"
 import { checksOf, list, ref } from "./rendering"
 import { statementsBetween } from "./specimen"
 
@@ -28,8 +30,8 @@ const referenced = { company, project, routeScheme }
 /** What drizzle-kit writes for 0055: the one table. */
 const generated = (): Promise<string[]> => statementsBetween(referenced, { ...referenced, routeSchemeSeason })
 
-/** What the table owes the file below drizzle-kit's statements: its fence and trigger, then its audit trail. */
-const handWritten = [...handWrittenStatements(routeSchemeSeason), ...SEASONS_AUDITED.flatMap(auditTrail)]
+/** What the table owes the file below drizzle-kit's statements: its fence and trigger, its audit trail, then the public door's grant and policy. */
+const handWritten = [...handWrittenStatements(routeSchemeSeason), ...SEASONS_AUDITED.flatMap(auditTrail), ...seasonsDoorStatements()]
 
 const fileStatements = async (): Promise<string[]> => statementsOf(await readFile(join(MIGRATIONS_FOLDER, MIGRATION), "utf8"))
 
@@ -65,7 +67,14 @@ describe("migration 0055", () => {
     assert.deepEqual(statements.slice(0, head.length), head)
   })
 
-  test("and carries below them the table's fence, trigger and audit trail, in that order", async () => {
+  test("the public door reads a season's days and cadence under its scheme and its keys, nothing more, under one policy", () => {
+    assert.deepEqual(SEASONS_DOOR.map(({ columns }) => columns.length), [8])
+    const statements = seasonsDoorStatements()
+    assert.equal(statements.filter((statement) => statement.startsWith("GRANT SELECT (")).length, 1)
+    assert.equal(statements.filter((statement) => statement.startsWith("CREATE POLICY ")).length, 1)
+  })
+
+  test("and carries below them the table's fence, trigger, audit trail and public door, in that order", async () => {
     const statements = await fileStatements()
     const head = (await generated()).length
     assert.deepEqual(statements.slice(head), handWritten.map(normalised))

@@ -1,10 +1,11 @@
 // A Route Scheme's Seasons (O17 of #290): the set read with the scheme and
 // written whole with it. A create writes the body's seasons; a patch that
 // carries `seasons` replaces the stored set — its rows gone, the body's
-// written — under the scheme's row lock, which the patch already holds. The
-// set's own rules (one name each, no day shared, a daily scheme none) are the
-// contracts'; the route holds the last against the merged row, since a patch
-// may carry half the pair. A season moves the dates the scheme collects on,
+// written — under the scheme's row lock, which the patch already holds; a set
+// restated as it stands writes nothing, so the audit trail records changes
+// alone. The set's own rules (one name each, no day shared, a daily scheme
+// none) are the contracts'; the route holds the last against the merged row,
+// since a patch may carry half the pair. A season moves the dates the scheme collects on,
 // as a change of frequency does, so it releases no hold (routes/route-holds.ts).
 import type { SchemeSeason } from "@waste/contracts/route-schemes"
 import type { Tx } from "@waste/db/client"
@@ -42,6 +43,12 @@ export async function seasonsOf(tx: Tx, companyId: string, schemeIds: readonly s
 /** One scheme's seasons as the domain reads them for its occurrences. */
 export async function storedSeasonsOf(tx: Tx, companyId: string, schemeId: string): Promise<StoredSeason[]> {
   return (await seasonsOf(tx, companyId, [schemeId])).get(schemeId) ?? []
+}
+
+/** Whether two sets hold the same seasons, whatever order the body gave them in. */
+export function sameSeasons(a: readonly SchemeSeason[], b: readonly SchemeSeason[]): boolean {
+  const spelled = (seasons: readonly SchemeSeason[]) => JSON.stringify([...seasons].sort((x, y) => x.startsOn.localeCompare(y.startsOn)).map(({ name, startsOn, endsOn, frequency, weekRotation }) => [name, startsOn, endsOn, frequency, weekRotation]))
+  return spelled(a) === spelled(b)
 }
 
 /** The scheme's seasons replaced whole by the body's: the stored rows gone, the body's written. The caller holds the scheme's row lock. */

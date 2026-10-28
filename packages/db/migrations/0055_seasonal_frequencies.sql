@@ -2,7 +2,9 @@
 -- of every year (month-days, half-open, over the new year where the end comes
 -- first) in which the scheme serves its service days at the season's own
 -- cadence. Below drizzle-kit's statements: the table's fence and trigger,
--- then its audit trail as part of its scheme's set. Nothing present changes
+-- its audit trail as part of its scheme's set, then the public door's grant
+-- and policy, since the collection days a resident reads plan by season too.
+-- Nothing present changes
 -- meaning: a scheme with no season runs at its own cadence all year, as
 -- every scheme did before.
 CREATE TABLE "wms"."route_scheme_season" (
@@ -38,3 +40,7 @@ CREATE POLICY "route_scheme_season_tenant_fence" ON "wms"."route_scheme_season" 
 CREATE TRIGGER "route_scheme_season_touch_updated_at" BEFORE UPDATE ON "wms"."route_scheme_season" FOR EACH ROW EXECUTE FUNCTION wms.touch_updated_at();
 --> statement-breakpoint
 CREATE TRIGGER "route_scheme_season_audit_trail" AFTER INSERT OR UPDATE OR DELETE ON "wms"."route_scheme_season" FOR EACH ROW EXECUTE FUNCTION wms.audit_row('route_scheme', 'route_scheme_id');
+--> statement-breakpoint
+GRANT SELECT ("company_id", "project_id", "route_scheme_id", "name", "starts_on", "ends_on", "frequency", "week_rotation") ON "wms"."route_scheme_season" TO wms_public;
+--> statement-breakpoint
+CREATE POLICY "route_scheme_season_public_door" ON "wms"."route_scheme_season" AS PERMISSIVE FOR SELECT TO wms_public USING ("company_id" = (select wms.current_company_id()) and exists (select 1 from "wms"."project" "published" where "published"."company_id" = "route_scheme_season"."company_id" and "published"."id" = "route_scheme_season"."project_id" and "published"."public_slug" is not null));
