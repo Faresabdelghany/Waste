@@ -336,7 +336,7 @@ export async function schemesOf(tx: Tx, companyId: string, rows: readonly Scheme
   const found = await groupsOf(tx, companyId, rows.map((row) => row.id))
   const groups = new Map(rows.map((row) => [row.id, found.get(row.id) ?? []]))
   const generations = await generationsOf(tx, companyId, groups)
-  // The seasons before the warnings: a scheme is judged at the cadence in force on its day (O17 of #290).
+  // The seasons before the warnings: each is a cadence the scheme is judged at (O17 of #290).
   const seasons = await seasonsOf(tx, companyId, rows.map((row) => row.id))
   const read = rows.map((row) => ({ row, groups: groups.get(row.id) ?? [], generation: generations.get(row.id) ?? NEVER_GENERATED, seasons: seasons.get(row.id) ?? [] }))
   const warnings = await schemeWarningsOf(tx, companyId, read.map(({ row, ...rest }) => ({ ...row, ...rest })), now)

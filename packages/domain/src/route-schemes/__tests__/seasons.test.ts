@@ -8,7 +8,8 @@ import { describe, test } from "node:test"
 import { generateOccurrences, NO_HOLIDAYS } from "../occurrences"
 import { cadenceOn, isoWeek, matchesRecurrence, recurrenceFromValues, serviceDayOf, type SchemeRecurrence } from "../recurrence"
 import { SCHEME_SEASONS_KEY, seasonProblems, seasonsFromValues, seasonsValue, storedSeasonsFromValues, type StoredSchemeSeason } from "../scheme-seasons"
-import { isMonthDay, overlappingSeasons, seasonContains, seasonLastDay, seasonOn, seasonSpanLabel, seasonStartOf, seasonsOverlap, type SchemeSeason } from "../seasons"
+import { isMonthDay, overlappingSeasons, seasonContains, seasonLastDay, seasonOn, seasonsCoverYear, seasonSpanLabel, seasonStartOf, seasonsOverlap, type SchemeSeason } from "../seasons"
+import { schemeFrequencyReconciliationWarnings } from "../validation"
 
 const calendar = { holidays: NO_HOLIDAYS, weekend: ["saturday", "sunday"] as const }
 
@@ -179,5 +180,23 @@ describe("a scheme record's seasons", () => {
     assert.deepEqual(recurrenceFromValues(values)?.seasons, [summer, winter])
     assert.equal(recurrenceFromValues({ ...values, frequency: "daily" })?.seasons, undefined)
     assert.equal(recurrenceFromValues({ ...values, [SCHEME_SEASONS_KEY]: undefined })?.seasons, undefined)
+  })
+})
+
+describe("a scheme's seasons against its containers' promises", () => {
+  const promises = [{ containerName: "BIN-W", promisedName: "Every week", promisedRate: 1, servedDays: ["monday" as const] }]
+  const under = "Recurrence Every 2 weeks under-serves 1 container promised Every week (BIN-W) — raise the frequency or adjust the promised service frequency"
+
+  test("each season's cadence is judged beside the scheme's own and named with its days", () => {
+    assert.deepEqual(schemeFrequencyReconciliationWarnings({ frequency: "weekly", promises, seasons: [winter] }), [`Winter (1 Nov – 31 Mar): ${under}`])
+    assert.deepEqual(schemeFrequencyReconciliationWarnings({ frequency: "every-2-weeks", promises, seasons: [summer] }), [under], "the summer keeps the promise; the rest of the year breaks it")
+    assert.deepEqual(schemeFrequencyReconciliationWarnings({ frequency: "weekly", promises }), [], "no seasons, the scheme's own cadence alone")
+  })
+
+  test("seasons that hold the whole year leave the scheme's own cadence out", () => {
+    const year = [summer, { ...winter, startsOn: "10-01", endsOn: "05-01", frequency: "weekly" as const, weekRotation: undefined }]
+    assert.ok(seasonsCoverYear(year))
+    assert.ok(!seasonsCoverYear([summer, winter]))
+    assert.deepEqual(schemeFrequencyReconciliationWarnings({ frequency: "every-2-weeks", promises, seasons: year }), [])
   })
 })

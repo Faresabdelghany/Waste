@@ -151,17 +151,29 @@ describe("a route scheme's frequency warnings", { skip: database.skip }, () => {
     assert.deepEqual(listed?.warnings, [under("Every 2 weeks", "1 container", "Every week", "BIN-W")], "a page carries them too")
   })
 
-  test("a scheme is judged at the cadence in force on its day: a winter season every second week under-serves the weekly promise in winter, and not once the scheme is judged outside it (O17 of #290)", async () => {
-    const winter = { name: "Winter", startsOn: "10-15", endsOn: "04-01", frequency: "every-2-weeks", weekRotation: "odd" }
-    // Judged today, 28 October: inside the winter season.
-    const inWinter = await scheme("Promises in winter", { collectionGroups: [picked("Monday", ["monday"], [ids.weeklyBin])], seasons: [winter] })
-    assert.deepEqual(inWinter.warnings, [under("Every 2 weeks", "1 container", "Every week", "BIN-W")])
-    assert.deepEqual((await read(inWinter.id)).warnings, inWinter.warnings)
-    // The same scheme from May on is judged on its first day, outside every season: weekly keeps the weekly promise.
-    const inSpring = await scheme("Promises in spring", { collectionGroups: [picked("Monday", ["monday"], [ids.weeklyBin])], seasons: [winter], validFrom: "2027-05-03" })
-    assert.deepEqual(inSpring.warnings, [])
-    // The season cleared, the winter-judged scheme runs weekly and is in step again.
-    const cleared = await olivia(`/route-schemes/${inWinter.id}`, { method: "PATCH", body: { seasons: [] } })
+  test("a scheme is judged at every cadence it runs at in a year: a winter season every second week under-serves the weekly promise, named, whether it is in force today or not (O17 of #290)", async () => {
+    const winter = { name: "Winter", startsOn: "11-01", endsOn: "04-01", frequency: "every-2-weeks", weekRotation: "odd" }
+    const named = `Winter (1 Nov – 31 Mar): ${under("Every 2 weeks", "1 container", "Every week", "BIN-W")}`
+    // Judged today, 28 October, before the winter: the season warns now, the weekly cadence keeps the promise.
+    const beforeWinter = await scheme("Promises before winter", { collectionGroups: [picked("Monday", ["monday"], [ids.weeklyBin])], seasons: [winter] })
+    assert.deepEqual(beforeWinter.warnings, [named])
+    assert.deepEqual((await read(beforeWinter.id)).warnings, beforeWinter.warnings)
+    // From May, judged on its first day: still the winter's warning.
+    const fromMay = await scheme("Promises from May", { collectionGroups: [picked("Monday", ["monday"], [ids.weeklyBin])], seasons: [winter], validFrom: "2027-05-03" })
+    assert.deepEqual(fromMay.warnings, [named])
+    // Seasons that hold the whole year leave the scheme's own cadence no day: an every-2-weeks scheme of a weekly winter and summer warns of nothing.
+    const allYear = await scheme("Promises all year", {
+      collectionGroups: [picked("Monday", ["monday"], [ids.weeklyBin])],
+      frequency: "every-2-weeks",
+      weekRotation: "odd",
+      seasons: [
+        { ...winter, frequency: "weekly", weekRotation: null },
+        { name: "Summer", startsOn: "04-01", endsOn: "11-01", frequency: "weekly", weekRotation: null },
+      ],
+    })
+    assert.deepEqual(allYear.warnings, [])
+    // The season cleared, the weekly scheme is in step again.
+    const cleared = await olivia(`/route-schemes/${beforeWinter.id}`, { method: "PATCH", body: { seasons: [] } })
     assert.equal(cleared.status, 200, JSON.stringify(await cleared.clone().json()))
     assert.deepEqual(RouteScheme.parse(await cleared.json()).warnings, [])
   })

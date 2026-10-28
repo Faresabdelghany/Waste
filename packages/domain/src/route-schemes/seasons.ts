@@ -91,6 +91,11 @@ export function seasonsOverlap(a: Pick<SchemeSeason, "startsOn" | "endsOn">, b: 
   return YEAR.some((day) => seasonContains(a, `2001-${day}`) && seasonContains(b, `2001-${day}`))
 }
 
+/** Whether the seasons hold every day of the year between them, leaving the scheme's own cadence no day to run on. */
+export function seasonsCoverYear(seasons: readonly Pick<SchemeSeason, "startsOn" | "endsOn">[]): boolean {
+  return seasons.length > 0 && YEAR.every((day) => seasons.some((season) => seasonContains(season, `2001-${day}`)))
+}
+
 /** The first pair of seasons of a list that share a day, by their places in it; none when the seasons keep apart. */
 export function overlappingSeasons(seasons: readonly Pick<SchemeSeason, "startsOn" | "endsOn">[]): [number, number] | undefined {
   for (let later = 1; later < seasons.length; later += 1) {

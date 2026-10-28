@@ -18,6 +18,7 @@ import {
   type RecurrenceFrequency,
   type ServiceDay,
 } from "./recurrence"
+import { seasonsCoverYear, seasonSpanLabel, type SchemeSeason } from "./seasons"
 
 /** Container selection carried by the wizard: one shared list, or one per day. */
 export type SchemeDayPlans = {
@@ -150,6 +151,11 @@ export type SchemeFrequencyReconciliationInput = {
   /** The scheme's recurrence cadence. */
   frequency: RecurrenceFrequency
   promises: SchemeFrequencyPromise[]
+  /**
+   * The scheme's seasons (O17 of #290): every cadence it runs at in a year is
+   * judged against the promise, so a winter that breaks one warns in May.
+   */
+  seasons?: readonly SchemeSeason[]
 }
 
 /**
@@ -274,18 +280,31 @@ export function servedFrequencyPromises<C extends { id: string }>(
  * whose served days are known is collected at the cadence's rate on each of
  * them (`occurrencesPerWeek`), and its days are named where it is collected
  * on more than one. One warning per promised cadence and served days,
- * containers named up to three. All non-blocking.
+ * containers named up to three. A scheme with seasons (O17 of #290) is judged
+ * at every cadence it runs at in a year — its own, unless the seasons hold
+ * every day, and each season's, named with its days — so a season that breaks
+ * a promise warns when it is written, not when it begins. All non-blocking.
  */
 export function schemeFrequencyReconciliationWarnings(
   reconciliation: SchemeFrequencyReconciliationInput,
 ): string[] {
-  const { frequency } = reconciliation
+  const seasons = reconciliation.seasons ?? []
+  // The scheme's own cadence runs on the days no season holds, if there is one; each season's under its name and span.
+  const own = seasonsCoverYear(seasons) ? [] : cadenceWarnings(reconciliation.frequency, reconciliation.promises)
+  const seasonal = seasons.flatMap((season) =>
+    cadenceWarnings(season.frequency, reconciliation.promises).map((warning) => `${season.name} (${seasonSpanLabel(season)}): ${warning}`),
+  )
+  return [...own, ...seasonal]
+}
+
+/** One cadence's warnings against the promises: under-served first, then over-served. */
+function cadenceWarnings(frequency: RecurrenceFrequency, promises: readonly SchemeFrequencyPromise[]): string[] {
   const schemeLabel = RECURRENCE_FREQUENCY_LABELS[frequency]
   const groups = new Map<
     string,
     { promisedName: string; promisedRate: number; servedRate: number; served: string; names: string[] }
   >()
-  for (const promise of reconciliation.promises) {
+  for (const promise of promises) {
     const days = promise.servedDays
     const known = days !== undefined && days.length > 0
     const servedRate = known ? occurrencesPerWeek(frequency, days) : RECURRENCE_WEEKLY_RATES[frequency]
