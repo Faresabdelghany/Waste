@@ -327,6 +327,14 @@ describe("the office's create", () => {
     assert.deepEqual(ticketAdapter.toCreateBody?.(minted({ subject: "x", description: "x", kind: "other", alertId: added.id }), context(resolverOver(withMinted))), { path: "alertId", message: "Pick an alert the API holds" }, "a container's row is no alert")
   })
 
+  test("may name the case it is a sub-ticket of, by server id and held to a ticket (7.10 of #290)", () => {
+    const withParent: ServerRecordsState = new Map([...state, ["operate.tickets", current]])
+    const body = ticketAdapter.toCreateBody?.(minted({ subject: "Replace the lock", description: "The gate's lock is broken", kind: "other", parentTicketId: record.id }), context(resolverOver(withParent)))
+    assert.deepEqual(body, { projectId: copenhagen.id, subject: "Replace the lock", description: "The gate's lock is broken", kind: "other", links: { parentTicketId: missed.id } })
+    assert.ok(TicketCreate.safeParse(body).success)
+    assert.deepEqual(ticketAdapter.toCreateBody?.(minted({ subject: "x", description: "x", kind: "other", parentTicketId: bin.id }), context(resolverOver(withParent))), { path: "parentTicketId", message: "Pick a parent ticket the API holds" }, "a container's row is no ticket")
+  })
+
   test("is refused here, naming the field, before the API sees a body it would refuse", () => {
     const create = ticketAdapter.toCreateBody
     assert.deepEqual(create?.(minted({ ...typedValues, subject: " " }), context()), { path: "subject", message: "A ticket needs a subject" })

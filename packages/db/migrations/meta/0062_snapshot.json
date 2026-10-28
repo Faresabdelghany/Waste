@@ -1,5 +1,5 @@
 {
-  "id": "a690c57b-390f-414b-8e13-da8ed607398b",
+  "id": "d1b64cf6-49a8-485d-95d3-fbd62604c424",
   "prevId": "92355102-2180-4ff6-b384-e204363cf791",
   "version": "7",
   "dialect": "postgresql",
@@ -1984,6 +1984,54 @@
           "primaryKey": false,
           "notNull": true
         },
+        "address_id": {
+          "name": "address_id",
+          "type": "uuid",
+          "primaryKey": false,
+          "notNull": false
+        },
+        "street_name": {
+          "name": "street_name",
+          "type": "text",
+          "primaryKey": false,
+          "notNull": false
+        },
+        "house_number": {
+          "name": "house_number",
+          "type": "text",
+          "primaryKey": false,
+          "notNull": false
+        },
+        "floor": {
+          "name": "floor",
+          "type": "text",
+          "primaryKey": false,
+          "notNull": false
+        },
+        "door": {
+          "name": "door",
+          "type": "text",
+          "primaryKey": false,
+          "notNull": false
+        },
+        "postcode": {
+          "name": "postcode",
+          "type": "text",
+          "primaryKey": false,
+          "notNull": false
+        },
+        "post_town": {
+          "name": "post_town",
+          "type": "text",
+          "primaryKey": false,
+          "notNull": false
+        },
+        "municipality_code": {
+          "name": "municipality_code",
+          "type": "text",
+          "primaryKey": false,
+          "notNull": false
+        },
         "registry_id": {
           "name": "registry_id",
           "type": "text",
@@ -2127,6 +2175,18 @@
         "property_location_valid": {
           "name": "property_location_valid",
           "value": "extensions.st_isvalid(\"wms\".\"property\".\"location\") and not extensions.st_isempty(\"wms\".\"property\".\"location\") and extensions.st_xmin(\"wms\".\"property\".\"location\") >= -180 and extensions.st_xmax(\"wms\".\"property\".\"location\") <= 180 and extensions.st_ymin(\"wms\".\"property\".\"location\") >= -90 and extensions.st_ymax(\"wms\".\"property\".\"location\") <= 90"
+        },
+        "property_address_shape": {
+          "name": "property_address_shape",
+          "value": "(\"wms\".\"property\".\"address_id\" is null) = (\"wms\".\"property\".\"street_name\" is null) and (\"wms\".\"property\".\"address_id\" is null) = (\"wms\".\"property\".\"house_number\" is null) and (\"wms\".\"property\".\"address_id\" is null) = (\"wms\".\"property\".\"postcode\" is null) and (\"wms\".\"property\".\"address_id\" is null) = (\"wms\".\"property\".\"post_town\" is null) and (\"wms\".\"property\".\"address_id\" is null) = (\"wms\".\"property\".\"municipality_code\" is null) and (\"wms\".\"property\".\"address_id\" is not null or (\"wms\".\"property\".\"floor\" is null and \"wms\".\"property\".\"door\" is null))"
+        },
+        "property_postcode_shape": {
+          "name": "property_postcode_shape",
+          "value": "\"wms\".\"property\".\"postcode\" ~ '^[0-9]{4}$'"
+        },
+        "property_municipality_code_shape": {
+          "name": "property_municipality_code_shape",
+          "value": "\"wms\".\"property\".\"municipality_code\" ~ '^[0-9]{4}$'"
         }
       },
       "isRLSEnabled": false
@@ -4939,12 +4999,6 @@
           "primaryKey": false,
           "notNull": false
         },
-        "rule_planning_area_id": {
-          "name": "rule_planning_area_id",
-          "type": "uuid",
-          "primaryKey": false,
-          "notNull": false
-        },
         "service_provider_id": {
           "name": "service_provider_id",
           "type": "uuid",
@@ -4997,27 +5051,6 @@
             },
             {
               "expression": "rule_vehicle_type_id",
-              "isExpression": false,
-              "asc": true,
-              "nulls": "last"
-            }
-          ],
-          "isUnique": false,
-          "concurrently": false,
-          "method": "btree",
-          "with": {}
-        },
-        "collection_group_rule_planning_area_id_idx": {
-          "name": "collection_group_rule_planning_area_id_idx",
-          "columns": [
-            {
-              "expression": "company_id",
-              "isExpression": false,
-              "asc": true,
-              "nulls": "last"
-            },
-            {
-              "expression": "rule_planning_area_id",
               "isExpression": false,
               "asc": true,
               "nulls": "last"
@@ -5152,24 +5185,6 @@
           "onDelete": "no action",
           "onUpdate": "no action"
         },
-        "collection_group_rule_planning_area_id_fk": {
-          "name": "collection_group_rule_planning_area_id_fk",
-          "tableFrom": "collection_group",
-          "tableTo": "planning_area",
-          "schemaTo": "wms",
-          "columnsFrom": [
-            "company_id",
-            "project_id",
-            "rule_planning_area_id"
-          ],
-          "columnsTo": [
-            "company_id",
-            "project_id",
-            "id"
-          ],
-          "onDelete": "no action",
-          "onUpdate": "no action"
-        },
         "collection_group_vehicle_id_fk": {
           "name": "collection_group_vehicle_id_fk",
           "tableFrom": "collection_group",
@@ -5245,10 +5260,6 @@
         "collection_group_rule_shape": {
           "name": "collection_group_rule_shape",
           "value": "\"wms\".\"collection_group\".\"stop_source\" = 'rule' or \"wms\".\"collection_group\".\"rule_vehicle_type_id\" is null"
-        },
-        "collection_group_rule_area_shape": {
-          "name": "collection_group_rule_area_shape",
-          "value": "\"wms\".\"collection_group\".\"stop_source\" = 'rule' or \"wms\".\"collection_group\".\"rule_planning_area_id\" is null"
         }
       },
       "isRLSEnabled": false

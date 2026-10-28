@@ -74,6 +74,7 @@ import type { RoutingIdentity } from "@waste/routing/provider"
 import { QuotaEngine, STANDARD_PLAN } from "@waste/routing/quota"
 import { providerNameFromEnv } from "@waste/routing/select"
 
+import type { AddressRegister } from "./address-register/register"
 import { liveRoutes } from "./routes/live"
 import { positionRoutes } from "./routes/positions"
 import { meRoutes } from "./routes/me"
@@ -85,6 +86,7 @@ import { priceListRoutes } from "./routes/price-lists"
 import { productRoutes } from "./routes/products"
 import { projectRoutes } from "./routes/projects"
 import { reportRoutes } from "./routes/reports"
+import { addressLookup, addressRoutes } from "./routes/addresses"
 import { propertyRoutes } from "./routes/properties"
 import { propertyGroupRoutes } from "./routes/property-groups"
 import { publicRoutes } from "./routes/public"
@@ -166,6 +168,8 @@ export type AppOptions = {
   peer?: (c: Context) => string | undefined
   /** How many proxies in front of the API append to X-Forwarded-For (PUBLIC_TRUSTED_PROXIES): 0, the default, ignores the header. */
   trustedProxies?: number
+  /** The address register the lookup and a property's `addressId` ask (#291 C13); null where ADDRESS_PROVIDER names none, and the lookup answers 503. server.ts builds it from the environment, with the token; a test injects the fake, scripted down where it needs the 502. */
+  addressRegister?: AddressRegister | null
   /** The proofs' Storage (O1 of #290), which signs uploads and reads of photos and signatures; null where the deployment holds no service-role key, and its routes answer 503. server.ts builds it from the environment; a test injects a fake. */
   storage?: ProofStorage | null
 }
@@ -186,6 +190,7 @@ export function createApp({
   peer = () => undefined,
   trustedProxies = 0,
   storage = null,
+  addressRegister = null,
 }: AppOptions) {
   const app = new Hono()
   app.onError(errorHandler(log))
@@ -252,7 +257,10 @@ export function createApp({
   app.route("/", wasteFractionEmissionFactorRoutes(guard))
   app.route("/", productRoutes(guard))
   app.route("/", customerRoutes(guard))
-  app.route("/", propertyRoutes(guard))
+  // The address lookup calls the register (#291 C13), so, like the preview, its guard ends the principal's transaction; a property's write reads its `addressId` from the register before its guard opens the request's.
+  const addressOptions = { register: addressRegister, log: log ?? console.error }
+  app.route("/", addressRoutes(identify({ pool, verifier }), addressOptions))
+  app.route("/", propertyRoutes(guard, addressLookup(identify({ pool, verifier }), addressOptions)))
   app.route("/", propertyGroupRoutes(guard))
   app.route("/", sharedCollectionPointRoutes(guard))
   // A termination asks generation runs of the schemes whose planned routes stop at its containers (#291), so it takes the clock and the job sender.

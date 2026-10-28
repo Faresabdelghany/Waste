@@ -388,6 +388,11 @@ jobs:
       # (apps/web/e2e-api/map-routes.spec.ts) asserts the legs it measured,
       # and no OpenRouteService credential exists on the public repository.
       ROUTING_PROVIDER: fake
+      # The fake address register (apps/api/src/address-register/select.ts),
+      # named, since unset is no register at all and the picker scenario in
+      # registry-round-trips.spec.ts picks from it; no Dataforsyningen token
+      # exists here.
+      ADDRESS_PROVIDER: fake
     steps:
       - uses: actions/checkout@v7
       - uses: pnpm/action-setup@v6
