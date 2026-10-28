@@ -1,8 +1,9 @@
 // Optimisation as a job (#171, decided on #124 and #132): `routing.optimise`
 // takes an `optimiser` Plan — sent by `POST /routes/:id/optimise` for a route
-// of fifty open stops or fewer that names a depot, forty-nine on a full trip
-// whose station is a location too (#170, `optimiseSolver`) —
-// orders the route's open stops through the provider's optimiser, and writes
+// that names a depot (#170, `optimiseSolver`) — orders the route's open stops
+// through the provider's optimiser, in one request or, above fifty stops
+// (forty-nine on a full trip, whose station is a location too), in parts
+// (O15 of #290, `ordered` below), and writes
 // the answer: the stops in the solver's order (the Plan's sequence, written
 // on `ready` for a solved one, #124 §1), the legs, the totals, the
 // provenance, `calculating → ready`, and the Plan made the route's active one
@@ -58,10 +59,13 @@ import { plan, planLeg, planStop } from "@waste/db/schema/routing"
 import { withCompany } from "@waste/db/tenant"
 import { orderIsOpen } from "@waste/domain/execution/transitions"
 import type { RouteStatus } from "@waste/domain/execution/vocabulary"
+import { OPTIMISER_MAX_PARTS, sweepParts } from "@waste/domain/routing/parts"
 import { isSuperseded, optimiserMaxStops } from "@waste/domain/routing/plans"
-import { withUnloads } from "@waste/domain/routing/reloads"
-import { SUPERSEDED, type PlanStopWarning, type PlanTrip } from "@waste/domain/routing/vocabulary"
-import { DEFAULT_PROFILE, type OptimiseRequest, type RoutedLeg } from "@waste/routing/provider"
+import { shipsReload, unloadsAlong, withUnloads } from "@waste/domain/routing/reloads"
+import { SUPERSEDED, type PlanStopWarning, type PlanTrip, type RoutingJobClass } from "@waste/domain/routing/vocabulary"
+import { distinctConsecutive } from "@waste/routing/geodesy"
+import { DEFAULT_PROFILE, type OptimiseRequest, type OptimiseResult, type RoutedLeg } from "@waste/routing/provider"
+import type { Outcome } from "@waste/routing/quota"
 import { and, asc, eq } from "drizzle-orm"
 import type { Job } from "pg-boss"
 
@@ -116,9 +120,9 @@ async function gather(tx: Tx, keys: { planId: string; companyId: string; provide
     .where(and(eq(pickup.routeId, found.routeId), eq(pickup.status, "planned")))
     .orderBy(asc(pickup.position), asc(pickup.id))
   if (stops.length === 0) return { kind: "refused", sentence: "the route has no open pickups to order" }
-  // A full trip's station is a location of the request too, so it takes one stop fewer.
-  const most = optimiserMaxStops(found.trip as PlanTrip)
-  if (stops.length > most) return { kind: "refused", sentence: `the route has ${stops.length} open pickups, and one optimisation takes at most ${most}${found.trip === "full" ? " beside its unloading station" : ""}` }
+  // Above one request's size the stops are ordered in parts (O15 of #290), each a request; a full trip's station is a location of each, so its parts take one stop fewer.
+  const most = OPTIMISER_MAX_PARTS * optimiserMaxStops(found.trip as PlanTrip)
+  if (stops.length > most) return { kind: "refused", sentence: `the route has ${stops.length} open pickups, and the optimiser takes at most ${most} in ${OPTIMISER_MAX_PARTS} requests` }
   const points: Position2D[] = []
   for (const stop of stops) {
     const at = positionOf(stop.property) ?? positionOf(stop.point)
@@ -128,7 +132,7 @@ async function gather(tx: Tx, keys: { planId: string; companyId: string; provide
   // Each with its seconds at the kerb (O10 of #290) and its window (O14), on the clock the fingerprint read, and its load (O15).
   const pickupIds = stops.map((stop) => stop.id)
   const [timing, load] = await Promise.all([routeTiming(tx, keys.companyId, ends, pickupIds), routeLoad(tx, keys.companyId, ends, pickupIds)])
-  const reload = reloadOver(load, { solver: "optimiser", trip: found.trip as PlanTrip, pickupIds })
+  const reload = reloadOver(load, { trip: found.trip as PlanTrip, pickupIds })
   const warnings = new Map<number, PlanStopWarning>()
   const timeWindows = stops.map((stop, index) => {
     const window = timing.stops.get(stop.id)?.window ?? null
@@ -167,6 +171,83 @@ function shaped(gathered: Extract<Gathered, { kind: "request" }>, order: readonl
   return { pickupIds: order.map((index) => gathered.pickupIds[index]), unloads: [...unloads], legs }
 }
 
+type Request = Extract<Gathered, { kind: "request" }>
+
+/**
+ * The route's stops ordered: in one request where they fit one, else in
+ * parts swept around the depot (O15 of #290, `sweepParts`), each part's
+ * request starting at the stop the part before it ended at, at the time it
+ * finished there, and only the last going home by way of the station. A
+ * part's stops no order reached inside their windows are asked for again
+ * without them, one call more, each such stop flagged. A reload rides the one
+ * request while its stops fit one as shipments (`shipsReload`); a larger
+ * route's order is cut where the vehicle fills along it and the trip measured
+ * through the station, a directions request per fifty waypoints. The driver's
+ * break is sent only to a route asked in one request: no part knows whether
+ * the break falls in its own stretch of the day, and the over-shift verdict
+ * counts the break whatever the Plan says.
+ */
+async function ordered(engine: JobContext["routing"], gathered: Request, jobClass: RoutingJobClass): Promise<Outcome<OptimiseResult>> {
+  const { request } = gathered
+  const parts = sweepParts(request.depot, request.stops, optimiserMaxStops(gathered.trip as PlanTrip))
+  const ships = request.reload != null && parts.length === 1 && shipsReload(request.stops.length)
+  const answer = await engine.optimiseInParts(parts.length, { class: jobClass }, async (optimise): Promise<Outcome<OptimiseResult>> => {
+    const order: number[] = []
+    const legs: RoutedLeg[] = []
+    let waitingSeconds = 0
+    let unloads: number[] | undefined
+    let departure = request.departure ?? null
+    let provenance: OptimiseResult["provenance"] = { engineVersion: null, graphDate: null }
+    for (const [part, indices] of parts.entries()) {
+      const last = part === parts.length - 1
+      const pick = <T>(values: readonly T[] | undefined) => (values === undefined ? undefined : indices.map((index) => values[index]))
+      const asked: OptimiseRequest = {
+        profile: request.profile,
+        depot: request.depot,
+        ...(part > 0 ? { start: request.stops[order[order.length - 1]] } : {}),
+        ...(last ? {} : { returns: false }),
+        stops: indices.map((index) => request.stops[index]),
+        ...(request.serviceSeconds === undefined ? {} : { serviceSeconds: pick(request.serviceSeconds) }),
+        ...(request.timeWindows === undefined ? {} : { timeWindows: pick(request.timeWindows) }),
+        departure,
+        ...(parts.length === 1 && request.breaks !== undefined ? { breaks: request.breaks } : {}),
+        station: last ? request.station : null,
+        ...(ships ? { reload: request.reload } : {}),
+      }
+      let outcome = await optimise(asked)
+      // The stops no order reached inside their windows are asked for again without them: the Plan keeps every stop, each such one flagged.
+      const left = outcome.kind === "answered" ? (outcome.result.unassigned ?? []) : []
+      if (left.length > 0) {
+        for (const index of left) gathered.warnings.set(indices[index], "window-unreachable")
+        outcome = await optimise({ ...asked, timeWindows: (asked.timeWindows ?? []).map((window, index) => (left.includes(index) ? null : window)) })
+        const still = outcome.kind === "answered" ? (outcome.result.unassigned ?? []) : []
+        if (still.length > 0) return { kind: "refused", sentence: `the optimiser left ${still.length} ${still.length === 1 ? "stop" : "stops"} unassigned even without their time windows` }
+      }
+      if (outcome.kind !== "answered") return outcome
+      const { result } = outcome
+      if (result.unloads !== undefined) unloads = result.unloads.map((before) => order.length + before)
+      order.push(...result.order.map((index) => indices[index]))
+      legs.push(...result.legs)
+      waitingSeconds += result.waitingSeconds
+      departure = result.finishSeconds ?? departure
+      provenance = result.provenance
+    }
+    return { kind: "answered", result: { order, legs, waitingSeconds, finishSeconds: departure, ...(unloads === undefined ? {} : { unloads }), provenance } }
+  })
+  if (answer.kind !== "answered" || request.reload == null || ships || !request.station) return answer
+  // Too many stops for shipments: the order cut where the vehicle fills along it, and the trip measured through the station.
+  const after = unloadsAlong(
+    answer.result.order.map((index) => request.reload?.amounts[index] ?? 0),
+    request.reload.capacityKg,
+  )
+  if (after.length === 0) return answer
+  const { station } = request
+  const driven = answer.result.order.flatMap((index, place) => (after.includes(place) ? [station, request.stops[index]] : [request.stops[index]]))
+  const measured = await engine.measure(distinctConsecutive([request.depot, ...driven, station, request.depot]), { class: jobClass })
+  if (measured.kind !== "answered") return measured
+  return { kind: "answered", result: { ...answer.result, unloads: after, legs: measured.result.legs, provenance: measured.result.provenance } }
+}
+
 async function optimiseOne(job: Job<RoutingJobData>, context: JobContext): Promise<Disposition["status"]> {
   const { planId, companyId } = job.data
   const engine = context.routing
@@ -181,21 +262,13 @@ async function optimiseOne(job: Job<RoutingJobData>, context: JobContext): Promi
     return "completed"
   }
   adoptRows(engine, gathered.quota)
-  const before = learnedAt(engine, "optimisation")
-  let outcome: Awaited<ReturnType<typeof engine.optimise>>
+  const before = { optimisation: learnedAt(engine, "optimisation"), directions: learnedAt(engine, "directions") }
+  let outcome: Outcome<OptimiseResult>
   try {
-    outcome = await engine.optimise(gathered.request, { class: classOf(job.data) })
-    // The stops no order reached inside their windows are asked for again without them: the Plan keeps every stop, each such one flagged.
-    const left = outcome.kind === "answered" ? (outcome.result.unassigned ?? []) : []
-    if (left.length > 0) {
-      for (const index of left) gathered.warnings.set(index, "window-unreachable")
-      const timeWindows = (gathered.request.timeWindows ?? []).map((window, index) => (left.includes(index) ? null : window))
-      outcome = await engine.optimise({ ...gathered.request, timeWindows }, { class: classOf(job.data) })
-      const still = outcome.kind === "answered" ? (outcome.result.unassigned ?? []) : []
-      if (still.length > 0) outcome = { kind: "refused", sentence: `the optimiser left ${still.length} ${still.length === 1 ? "stop" : "stops"} unassigned even without their time windows` }
-    }
+    outcome = await ordered(engine, gathered, classOf(job.data))
   } finally {
-    await recordLearned(context, companyId, "optimisation", before)
+    await recordLearned(context, companyId, "optimisation", before.optimisation)
+    await recordLearned(context, companyId, "directions", before.directions)
   }
   // The answer is shaped before anything is written: one that does not fit the trip it was asked for is final, since a retry would pay for the same answer again.
   let solved: ReturnType<typeof shaped> | undefined

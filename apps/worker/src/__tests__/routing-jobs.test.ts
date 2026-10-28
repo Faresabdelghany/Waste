@@ -17,7 +17,8 @@ import { migrateDatabase } from "@waste/db/migrate"
 import { agreement } from "@waste/db/schema/agreements"
 import { containerType, wasteFraction } from "@waste/db/schema/catalogue"
 import { property } from "@waste/db/schema/customers"
-import { route } from "@waste/db/schema/execution"
+import { container } from "@waste/db/schema/containers"
+import { pickup, route } from "@waste/db/schema/execution"
 import { driver, vehicle } from "@waste/db/schema/fleet"
 import { depot, unloadingStation } from "@waste/db/schema/places"
 import { plan, planLeg, planStop, routingQuota } from "@waste/db/schema/routing"
@@ -197,6 +198,36 @@ describe("routing's jobs under the quota engine", { skip: roles.skip }, () => {
     owner.sql.unsafe<JobRow[]>(`select id, state, data, priority, retry_count, extract(epoch from start_after)::float8 as start_epoch from ${PGBOSS_SCHEMA}.job where singleton_key = $1 order by created_on, id`, [planId])
 
   // First, while the queues hold no job of another test's: each job here is fetched as the next one.
+  describe("a route above one request's size, optimised in parts (O15 of #290)", () => {
+    test("fifty-one stops on a full trip are two requests admitted together: the first ends at its last stop, the second starts there and goes home by the station, and the Plan holds every stop once with legs end to end", async () => {
+      const sent: OptimiseRequest[] = []
+      const fake = new FakeProvider()
+      const recording: RoutingProvider = { name: fake.name, maxWaypoints: fake.maxWaypoints, measure: (request) => fake.measure(request), optimise: (request) => (sent.push(request), fake.optimise(request)) }
+      const { engine } = engineOf({}, recording)
+      // Parkvej once and fifty of the office's own stops at Havnegade: the office may book an address-only stop again and again.
+      const seeded = await seedRoute(api, tenant, { status: "planned", pickups: [{ container: "bin1", status: "planned" }, ...Array.from({ length: 50 }, () => ({ container: null, status: "planned" as const }))] })
+      await withCompany(api.db, tenant.companyId, (tx: Tx) => tx.update(route).set({ depotId, unloadingStationId: stationId }).where(eq(route.id, seeded.id)))
+      const planId = await planOf(seeded, "optimiser", "full")
+      await routingOptimise.handler([await inHand(ROUTING_OPTIMISE_QUEUE, planId)], contextOf(engine))
+      assert.equal((await planRow(planId)).status, "ready")
+      assert.deepEqual(
+        sent.map((request) => [request.stops.length, request.returns ?? true, request.station === null ? "no station" : "station"]),
+        [
+          [26, false, "no station"],
+          [25, true, "station"],
+        ],
+      )
+      const ended = sent[0]
+      assert.equal(sent[0].start, undefined, "the first part leaves the depot")
+      assert.ok(sent[1].start !== undefined && ended.stops.some((stop) => stop[0] === sent[1].start?.[0] && stop[1] === sent[1].start?.[1]), "the second starts at a stop of the first")
+      assert.deepEqual((await stopsOf(planId)).sort(), [...seeded.pickupIds].sort())
+      const legs = (await legsOf(planId)).map((leg) => leg.path.coordinates)
+      assert.deepEqual([legs[0][0], legs.at(-1)?.at(-1), legs.at(-1)?.[0]], [DEPOT, DEPOT, STATION])
+      for (const [index, leg] of legs.entries()) if (index > 0) assert.deepEqual(leg[0], legs[index - 1].at(-1), `leg ${index + 1} starts where leg ${index} ends`)
+      assert.equal(await activeOf(seeded.id), planId)
+    })
+  })
+
   describe("multi-trip unloading: a route its vehicle cannot carry in one load (O15 of #290)", () => {
     /** Each 240 L bin at 100 kg/m³ is 24 kg, and WH-24 carries 30: the two stops are a load too many. */
     async function overloaded<T>(run: () => Promise<T>): Promise<T> {
@@ -241,6 +272,35 @@ describe("routing's jobs under the quota engine", { skip: roles.skip }, () => {
           ],
         )
         assert.equal(await activeOf(seeded.id), planId)
+      })
+    })
+
+    test("a route with more stops than shipments fit is ordered without them, cut where the vehicle fills along that order, and its trip measured through the station (O15 of #290)", async () => {
+      const sent: OptimiseRequest[] = []
+      const fake = new FakeProvider()
+      const recording: RoutingProvider = { name: fake.name, maxWaypoints: fake.maxWaypoints, measure: (request) => fake.measure(request), optimise: (request) => (sent.push(request), fake.optimise(request)) }
+      const { engine } = engineOf({}, recording)
+      await overloaded(async () => {
+        // Twenty-six bins of 24 kg each on a vehicle that carries 30: as shipments they would be fifty-two locations.
+        const seeded = await seedRoute(api, tenant, { status: "planned", pickups: [{ container: "bin1", status: "planned" }, ...Array.from({ length: 25 }, () => ({ container: null, status: "planned" as const }))] })
+        const bins = Array.from({ length: 25 }, () => testId())
+        await withCompany(api.db, tenant.companyId, async (tx: Tx) => {
+          await tx.insert(container).values(bins.map((id, index) => ({ id, companyId: tenant.companyId, projectId: tenant.projectId, label: `BIN-O15-${seeded.number}-${index}`, containerTypeId: tenant.containerTypeId, ownership: "company" })))
+          for (const [index, id] of bins.entries()) await tx.update(pickup).set({ containerId: id }).where(eq(pickup.id, seeded.pickupIds[index + 1]))
+          await tx.update(route).set({ depotId, unloadingStationId: stationId }).where(eq(route.id, seeded.id))
+        })
+        const planId = await planOf(seeded, "optimiser", "full")
+        const directionsBefore = fake.calls.directions
+        await routingOptimise.handler([await inHand(ROUTING_OPTIMISE_QUEUE, planId)], contextOf(engine))
+        assert.equal((await planRow(planId)).status, "ready")
+        assert.deepEqual([sent.length, sent[0].reload], [1, undefined], "one request, its stops as jobs")
+        const kinds = await kindsOf(planId)
+        // No two bins fit on top of one another: the vehicle empties before every stop but the first.
+        assert.deepEqual([kinds.filter((kind) => kind === "unload@station").length, kinds[0] === "unload@station", kinds.length], [25, false, 51])
+        // The trip's fifty-four points — the depot, twenty-six stops, twenty-five visits, the station and home — are two directions requests.
+        assert.equal(fake.calls.directions - directionsBefore, 2)
+        const legs = (await legsOf(planId)).map((leg) => leg.path.coordinates)
+        assert.deepEqual([legs[0][0], legs.at(-1)?.at(-1)], [DEPOT, DEPOT])
       })
     })
 

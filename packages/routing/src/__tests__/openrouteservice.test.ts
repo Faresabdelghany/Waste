@@ -443,6 +443,20 @@ describe("OpenRouteService optimisation, VROOM behind /vroom/v0 (#171)", () => {
     assert.match(misordered.kind === "refused" ? misordered.sentence : "", /station/)
   })
 
+  test("a part of a larger route starts where the part before ended and, but for the last, has no end: it says when its last stop is done (O15 of #290)", async () => {
+    const open = vroomBody(
+      [
+        step("start", b, { arrival: 1_000, duration: 0, distance: 0 }),
+        step("job", a, { id: 1, job: 1, arrival: 1_040, duration: 40, distance: 320, waiting_time: 20, service: 30 }),
+      ],
+      [b, a],
+    )
+    const server = recording(json(200, open))
+    const result = answered(await new OpenRouteServiceProvider({ apiKey: KEY, fetch: server.fetch }).optimise({ profile: "driving-hgv", depot, start: b, returns: false, stops: [a], serviceSeconds: [30], departure: 1_000 }))
+    assert.deepEqual((server.requests[0].body as { vehicles: unknown[] }).vehicles, [{ id: 1, profile: "driving-hgv", start: b, time_window: [1_000, 777_600] }])
+    assert.deepEqual([result.order, result.legs.length, result.finishSeconds], [[0], 1, 1_040 + 20 + 30])
+  })
+
   describe("with a reload, where the stops outweigh the vehicle (O15 of #290)", () => {
     const c: Position2D = [12.515, 55.7]
     const reload = { capacityKg: 1000, amounts: [600, 600, 300] }

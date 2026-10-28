@@ -1,6 +1,7 @@
 import assert from "node:assert/strict"
 import { describe, test } from "node:test"
 
+import { OPTIMISER_MAX_PARTS } from "../parts"
 import { activeOnCreation, answersRequest, executionOrder, horizonRequest, isSuperseded, OPTIMISER_MAX_LOCATIONS, OPTIMISER_MAX_STOPS, optimiserMaxStops, optimiseSolver, planIsStale, tripOf } from "../plans"
 import { FINGERPRINT_DECIMALS, planFingerprint, roundCoordinate } from "../fingerprint"
 import { routingJobPriority } from "../jobs"
@@ -27,27 +28,30 @@ describe("the routing vocabularies", () => {
 })
 
 describe("which solver an Optimise request gets (#124 §4, #171)", () => {
-  test("fifty open stops or fewer, from a depot: the optimiser, no fallback", () => {
+  test("from a depot, the optimiser, no fallback: in one request, or above fifty stops in parts (O15 of #290)", () => {
     assert.deepEqual(optimiseSolver({ openStops: 50, hasDepot: true }), { solver: "optimiser", fallback: null })
     assert.deepEqual(optimiseSolver({ openStops: 1, hasDepot: true }), { solver: "optimiser", fallback: null })
+    assert.deepEqual(optimiseSolver({ openStops: 51, hasDepot: true }), { solver: "optimiser", fallback: null })
+    assert.deepEqual(optimiseSolver({ openStops: OPTIMISER_MAX_PARTS * OPTIMISER_MAX_STOPS, hasDepot: true }), { solver: "optimiser", fallback: null })
   })
 
-  test("more than fifty: a baseline measurement, and the token that says why", () => {
-    assert.deepEqual(optimiseSolver({ openStops: 51, hasDepot: true }), { solver: "baseline", fallback: "too-many-stops" })
+  test("more than its parts hold: a baseline measurement, and the token that says why", () => {
+    assert.deepEqual(optimiseSolver({ openStops: OPTIMISER_MAX_PARTS * OPTIMISER_MAX_STOPS + 1, hasDepot: true }), { solver: "baseline", fallback: "too-many-stops" })
   })
 
   test("a route that names no depot: a baseline, since the optimiser orders from the depot", () => {
     assert.deepEqual(optimiseSolver({ openStops: 12, hasDepot: false }), { solver: "baseline", fallback: "no-depot" })
   })
 
-  test("a full trip's station is a location of the request too: fifty open stops with a depot and a station are fifty-one locations, a baseline; forty-nine go to the optimiser", () => {
-    assert.deepEqual(optimiseSolver({ openStops: 50, hasDepot: true, hasStation: true }), { solver: "baseline", fallback: "too-many-stops" })
-    assert.deepEqual(optimiseSolver({ openStops: 49, hasDepot: true, hasStation: true }), { solver: "optimiser", fallback: null })
+  test("a full trip's station is a location of each request too: its parts hold forty-nine stops, so its ceiling is ten parts of forty-nine", () => {
     assert.deepEqual([optimiserMaxStops("full"), optimiserMaxStops("stops-only")], [OPTIMISER_MAX_LOCATIONS - 1, OPTIMISER_MAX_LOCATIONS])
+    const full = { hasDepot: true, hasStation: true }
+    assert.deepEqual(optimiseSolver({ openStops: OPTIMISER_MAX_PARTS * 49, ...full }), { solver: "optimiser", fallback: null })
+    assert.deepEqual(optimiseSolver({ openStops: OPTIMISER_MAX_PARTS * 49 + 1, ...full }), { solver: "baseline", fallback: "too-many-stops" })
   })
 
   test("both at once reads the size first, the older of the two rules", () => {
-    assert.deepEqual(optimiseSolver({ openStops: 80, hasDepot: false }), { solver: "baseline", fallback: "too-many-stops" })
+    assert.deepEqual(optimiseSolver({ openStops: 1_000, hasDepot: false }), { solver: "baseline", fallback: "too-many-stops" })
   })
 })
 
@@ -162,16 +166,15 @@ describe("what the horizon asks of a route (#172: generation and the sweep, over
     assert.deepEqual(horizonRequest({ open: ["a", "b"], hasDepot: false, active: null, ...none }), { solver: "baseline", orderedPickupIds: ["a", "b"] })
   })
 
-  test("more than fifty open stops are measured as a baseline, depot or not; fifty still go to the optimiser", () => {
-    const open = Array.from({ length: 51 }, (_, index) => `stop-${index + 1}`)
-    const asked = horizonRequest({ open, hasDepot: true, active: null, ...none })
+  test("more open stops than ten parts hold are measured as a baseline, depot or not; fewer go to the optimiser, in parts above one request (O15 of #290)", () => {
+    const open = Array.from({ length: OPTIMISER_MAX_PARTS * 49 + 1 }, (_, index) => `stop-${index + 1}`)
+    // A full trip's parts hold forty-nine: its station takes a location of each request.
+    const asked = horizonRequest({ open, hasDepot: true, hasStation: true, active: null, ...none })
     assert.equal(asked?.solver, "baseline")
     assert.deepEqual(asked?.orderedPickupIds.slice(0, 2), ["stop-1", "stop-2"])
-    assert.equal(asked?.orderedPickupIds.length, 51)
-    assert.equal(horizonRequest({ open: open.slice(0, 50), hasDepot: true, active: null, ...none })?.solver, "optimiser")
-    // A full trip's station takes a location: fifty open stops beside it are measured, forty-nine optimised.
-    assert.equal(horizonRequest({ open: open.slice(0, 50), hasDepot: true, hasStation: true, active: null, ...none })?.solver, "baseline")
-    assert.equal(horizonRequest({ open: open.slice(0, 49), hasDepot: true, hasStation: true, active: null, ...none })?.solver, "optimiser")
+    assert.equal(asked?.orderedPickupIds.length, open.length)
+    assert.equal(horizonRequest({ open: open.slice(1), hasDepot: true, hasStation: true, active: null, ...none })?.solver, "optimiser")
+    assert.equal(horizonRequest({ open: open.slice(0, 51), hasDepot: true, active: null, ...none })?.solver, "optimiser")
   })
 
   test("under a machine's order — an optimiser's or a baseline — the size rule again: a stale machine order is simply asked anew", () => {

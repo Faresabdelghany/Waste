@@ -53,6 +53,14 @@ export type MeasureResult = {
 export type OptimiseRequest = {
   profile: string
   depot: Position2D
+  /**
+   * Where the vehicle starts, where not at the depot: a part of a route above
+   * one request's size (O15 of #290) starts at the stop the part before it
+   * ended at, at the time it finished there (`departure`).
+   */
+  start?: Position2D
+  /** Whether the vehicle goes back to the depot after its last stop; a part that is not a route's last ends at its last stop. True where absent. */
+  returns?: boolean
   stops: readonly Position2D[]
   /**
    * Each stop's seconds at the kerb, by its index into `stops` (O10 of #290),
@@ -103,6 +111,13 @@ export type OptimiseResult = {
   legs: RoutedLeg[]
   /** Seconds the order waits for a stop's or a break's window to open (O14 of #290), the station's device never counted; 0 where nothing waits. */
   waitingSeconds: number
+  /**
+   * When the last stop is done, seconds on the request's clock — its arrival,
+   * any waiting and its service — which the next part of a route above one
+   * request's size leaves at (O15 of #290); null where the answer says nothing
+   * of it.
+   */
+  finishSeconds: number | null
   provenance: Provenance
 }
 

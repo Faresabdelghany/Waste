@@ -1,6 +1,7 @@
 // The pure rules of a Plan's life (#124 §2–3). The tables, the jobs and the
 // API are I/O around these two readings; anything that needs a row lock or a
 // clock lives with the writer, not here.
+import { OPTIMISER_MAX_PARTS, partsNeeded } from "./parts"
 import type { OptimiseFallback, PlanSolver, PlanStatus, PlanTrip } from "./vocabulary"
 
 /**
@@ -26,27 +27,29 @@ export const tripOf = ({ hasDepot, hasStation }: { hasDepot: boolean; hasStation
 /** The locations one optimisation request takes (#118): vroom-express counts a job as one and a shipment as two, the vehicle's start and end as none. */
 export const OPTIMISER_MAX_LOCATIONS = 50
 
-/** The optimiser's ceiling on a stops-only trip, one location a stop; above it a Plan is `baseline`, measured and read "Not optimised". */
+/** The stops one optimisation request takes on a stops-only trip, one location a stop. */
 export const OPTIMISER_MAX_STOPS = OPTIMISER_MAX_LOCATIONS
 
 /**
- * The open stops one optimisation takes on this trip: a full trip sends its
- * station as a job of its own (held last by its window), one location more,
- * so it orders one stop fewer than a stops-only trip.
+ * The open stops one optimisation request takes on this trip: a full trip
+ * sends its station as a job of its own (held last by its window), one
+ * location more, so it orders one stop fewer than a stops-only trip. A route
+ * above it is optimised in parts of this size (./parts.ts).
  */
 export const optimiserMaxStops = (trip: PlanTrip): number => OPTIMISER_MAX_LOCATIONS - (trip === "full" ? 1 : 0)
 
 /**
- * The solver an Optimise request gets (#124 §4, #171): the optimiser for
- * fifty open stops or fewer from a depot — forty-nine on a full trip, whose
- * station is a location of the request too — and otherwise a `baseline`
- * measurement of the generated order with the token that says why — the size
- * first, the older rule, when both hold. The optimiser orders from the depot
- * (the provider's vehicle starts and ends there), so a route naming none has
- * nothing to order from.
+ * The solver an Optimise request gets (#124 §4, #171): the optimiser for the
+ * open stops of a route from a depot, in as many requests as they need up to
+ * `OPTIMISER_MAX_PARTS` (O15 of #290: fifty stops a request, forty-nine on a
+ * full trip, whose station is a location of the request too), and otherwise
+ * a `baseline` measurement of the generated order with the token that says
+ * why — the size first, the older rule, when both hold. The optimiser orders
+ * from the depot (the provider's vehicle starts and ends there), so a route
+ * naming none has nothing to order from.
  */
 export function optimiseSolver({ openStops, hasDepot, hasStation = false }: { openStops: number; hasDepot: boolean; hasStation?: boolean }): { solver: "optimiser"; fallback: null } | { solver: "baseline"; fallback: OptimiseFallback } {
-  if (openStops > optimiserMaxStops(tripOf({ hasDepot, hasStation }))) return { solver: "baseline", fallback: "too-many-stops" }
+  if (partsNeeded(openStops, optimiserMaxStops(tripOf({ hasDepot, hasStation }))) > OPTIMISER_MAX_PARTS) return { solver: "baseline", fallback: "too-many-stops" }
   if (!hasDepot) return { solver: "baseline", fallback: "no-depot" }
   return { solver: "optimiser", fallback: null }
 }
@@ -110,8 +113,8 @@ export function answersRequest({ solver, status, named, asked }: { solver: PlanS
  * What the horizon asks of a route it plans (#172): generation for a route
  * it creates or reshapes, the sweep for one whose active Plan is missing or
  * no longer answers it. The open stops in baseline order under the Optimise
- * request's size rule — the optimiser for fifty or fewer from a depot, a
- * `baseline` measurement otherwise (#124 §4) — unless the active Plan is a
+ * request's size rule — the optimiser from a depot, in parts where the stops
+ * need them, a `baseline` measurement otherwise (#124 §4) — unless the active Plan is a
  * dispatcher's `manual` one, which the next run never undoes (#124's
  * clobber): then a new `manual` Plan over the order the driver already reads
  * (`executionOrder`), the dispatcher's sequence of the stops it names and the

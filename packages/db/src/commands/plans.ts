@@ -272,7 +272,7 @@ export async function planKey(
     request.solver === "optimiser" ? routeTiming(tx, companyId, routeRow, request.orderedPickupIds) : undefined,
     routeLoad(tx, companyId, routeRow, request.orderedPickupIds),
   ])
-  const reload = reloadOver(load, { solver: request.solver, trip: parts.trip, pickupIds: request.orderedPickupIds })
+  const reload = reloadOver(load, { trip: parts.trip, pickupIds: request.orderedPickupIds })
   const timed = timing?.timed === true ? timing : undefined
   const fingerprint = planFingerprint({
     provider: routing.name,

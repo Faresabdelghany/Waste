@@ -440,7 +440,7 @@ describe("the horizon: generation's routing jobs and routing.sweep-horizon", { s
     assert.deepEqual([await planCount(), await jobCount()], [plans, jobs])
   })
 
-  test("a route of more than fifty stops, and one naming no depot, get a baseline Plan instead: active from creation, its stops the generated order, measured on routing.measure", async () => {
+  test("a route of more than fifty stops is optimised in parts (O15 of #290), and one naming no depot gets a baseline Plan instead: active from creation, its stops the generated order, measured on routing.measure", async () => {
     await generate(a.hospitalScheme)
     await generate(a.plainScheme)
     const [wednesday, nextWednesday] = await routesOf(a.hospitalScheme)
@@ -451,15 +451,10 @@ describe("the horizon: generation's routing jobs and routing.sweep-horizon", { s
     )
     for (const row of [nextWednesday, nextTuesday]) assert.deepEqual(await plansOf(row.id), [], `${row.operatingDate} lies beyond the horizon`)
     const [hospital] = await plansOf(wednesday.id)
-    assert.deepEqual([hospital.solver, hospital.status, hospital.trip], ["baseline", "calculating", "full"])
-    assert.equal(await activeOf(wednesday.id), hospital.id)
-    const hospitalPickups = await pickupsOf(wednesday.id)
-    assert.equal(hospitalPickups.length, HOSPITAL_BINS)
-    assert.deepEqual(
-      await stopsOf(hospital.id),
-      hospitalPickups.map((row) => row.id),
-      "the fifty-one stops in the generated order",
-    )
+    assert.deepEqual([hospital.solver, hospital.status, hospital.trip], ["optimiser", "calculating", "full"])
+    assert.equal(await activeOf(wednesday.id), null, "an optimiser Plan is made active when it is ready")
+    assert.equal((await pickupsOf(wednesday.id)).length, HOSPITAL_BINS)
+    assert.deepEqual(await stopsOf(hospital.id), [], "the solver writes its stops when it answers")
     const [plain] = await plansOf(tuesday.id)
     assert.deepEqual([plain.solver, plain.status, plain.trip], ["baseline", "calculating", "stops-only"])
     assert.equal(await activeOf(tuesday.id), plain.id)
@@ -467,7 +462,7 @@ describe("the horizon: generation's routing jobs and routing.sweep-horizon", { s
     assert.deepEqual(
       (await jobsOf([hospital.id, plain.id])).map((job) => [job.name, job.data.class, job.priority]),
       [
-        [ROUTING_MEASURE_QUEUE, "batch", batchPriority["2026-10-07"]],
+        [ROUTING_OPTIMISE_QUEUE, "batch", batchPriority["2026-10-07"]],
         [ROUTING_MEASURE_QUEUE, "batch", batchPriority["2026-10-06"]],
       ],
     )
@@ -706,7 +701,8 @@ describe("the horizon: generation's routing jobs and routing.sweep-horizon", { s
     assert.deepEqual(readings, [
       ["optimiser", false, ROUTING_OPTIMISE_QUEUE, a.company, "batch", batchPriority["2026-10-04"]],
       ["baseline", true, ROUTING_MEASURE_QUEUE, b.company, "batch", batchPriority["2026-10-05"]],
-      ["baseline", true, ROUTING_MEASURE_QUEUE, a.company, "batch", batchPriority["2026-10-07"]],
+      // The hospital's fifty-one stops are optimised in parts (O15 of #290), so the optimiser's Plan waits to be made active.
+      ["optimiser", false, ROUTING_OPTIMISE_QUEUE, a.company, "batch", batchPriority["2026-10-07"]],
       ["manual", true, ROUTING_MEASURE_QUEUE, a.company, "batch", batchPriority["2026-10-08"]],
       ["baseline", true, ROUTING_MEASURE_QUEUE, a.company, "batch", batchPriority["2026-10-09"]],
       ["baseline", true, ROUTING_MEASURE_QUEUE, a.company, "batch", batchPriority["2026-10-10"]],

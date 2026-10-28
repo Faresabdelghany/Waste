@@ -1,8 +1,9 @@
 // The Plan endpoints (#170, decided on #124 and #132): `GET /routes/:id/plans`
 // lists a route's Plans, `GET /plans/:id` answers one with its legs — fetched
-// only when a map draws — and `POST /routes/:id/optimise` asks for one: fifty
-// stops or fewer from a depot go to the optimiser, more, or a route naming no
-// depot, become a `baseline` measurement read "Not optimised" (#124 §4,
+// only when a map draws — and `POST /routes/:id/optimise` asks for one: a
+// route's stops from a depot go to the optimiser, in parts above one
+// request's fifty (O15 of #290), and a route above ten parts, or naming no
+// depot, becomes a `baseline` measurement read "Not optimised" (#124 §4,
 // #171), the answer carrying the token that says which (`fallback`), both
 // through `ensurePlan`
 // (routes/plan-shapes.ts): the fingerprint's cache first, a `ready` match
@@ -124,7 +125,7 @@ export function planRoutes(guard: MiddlewareHandler<AuthEnv>, { routing, jobs }:
         operationId: "optimiseRoute",
         summary: "Ask for a Plan over a route's open stops",
         description:
-          "Asks the routing provider for an ordered, measured Plan over the route's open pickups: fifty or fewer, from the route's depot, go to the optimiser; otherwise the request becomes a `baseline` measurement of the generated order, read \"Not optimised\", and the answer's `fallback` says why — `too-many-stops` (#124 §4: one optimisation call takes at most fifty locations) or `no-depot` (the optimiser orders the stops from the depot, #171); `fallback` is null when the optimiser took it. Answers at once with the Plan — 202 `calculating` when this request created it and its job now waits for the worker, 200 when an identical request's Plan already stood: a `ready` one is re-activated and consumes no provider call, a `calculating` one is already on its way (two clicks are one job). Accepted while the routing quota is exhausted — the Plan answers `calculating` and, once the worker's quota engine has deferred it, `deferredUntil` — and the route beneath is never gated: dispatch and execution go on over the generated order, drawn dashed. A route that has started is refused (409): the sequence is frozen (ADR-0002); a completed or cancelled one does not change. Takes no body. Under the route's row lock.",
+          "Asks the routing provider for an ordered, measured Plan over the route's open pickups: from the route's depot they go to the optimiser — one request takes fifty locations, a full trip's unloading station one of them, so a larger route is optimised in parts swept around the depot, a request each (O15 of #290) — and otherwise the request becomes a `baseline` measurement of the generated order, read \"Not optimised\", and the answer's `fallback` says why — `too-many-stops` (more than ten requests' worth: 500 stops, 490 on a full trip) or `no-depot` (the optimiser orders the stops from the depot, #171); `fallback` is null when the optimiser took it. Answers at once with the Plan — 202 `calculating` when this request created it and its job now waits for the worker, 200 when an identical request's Plan already stood: a `ready` one is re-activated and consumes no provider call, a `calculating` one is already on its way (two clicks are one job). Accepted while the routing quota is exhausted — the Plan answers `calculating` and, once the worker's quota engine has deferred it, `deferredUntil` — and the route beneath is never gated: dispatch and execution go on over the generated order, drawn dashed. A route that has started is refused (409): the sequence is frozen (ADR-0002); a completed or cancelled one does not change. Takes no body. Under the route's row lock.",
         security: BEARER_SECURITY,
         responses: {
           200: describeJson("An identical request's Plan already stood: re-activated if it was ready, or still calculating; with the reason it is a baseline, when it is.", OptimiseAnswer),

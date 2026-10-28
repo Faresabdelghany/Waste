@@ -232,6 +232,26 @@ export class QuotaEngine {
   }
 
   /**
+   * Orders a route above one request's size in `parts` requests (O15 of
+   * #290), admitted whole before the first, as a chunked measurement is: a
+   * batch job runs only while the family stays at or above its reserve after
+   * every part. `run` asks each part through the `optimise` it is handed —
+   * the part before answering what the next starts from — and may ask one
+   * again, which is paced and counted as any call; a part that does not
+   * answer ends the job whole.
+   */
+  async optimiseInParts<Result>(
+    parts: number,
+    { class: jobClass }: { class: RoutingJobClass },
+    run: (optimise: (request: OptimiseRequest) => Promise<Outcome<OptimiseResult>>) => Promise<Outcome<Result>>,
+  ): Promise<Outcome<Result>> {
+    const { refusal, taken } = this.admit("optimisation", jobClass, parts)
+    if (refusal !== null) return refusal
+    let made = 0
+    return run((request) => this.call("optimisation", () => this.provider.optimise(request), made++ < taken))
+  }
+
+  /**
    * Whether a job of this class may make `calls` calls of the family now:
    * the refusal it gets instead, when not, and how many of its calls the
    * minute's allowance already counts for it (`taken`, an engine that does

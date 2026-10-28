@@ -9,7 +9,7 @@
 import type { PickupService } from "@waste/domain/execution/vocabulary"
 import { stopLoadKg } from "@waste/domain/execution/workload"
 import { reloadOf, type Reload } from "@waste/domain/routing/reloads"
-import type { PlanSolver, PlanTrip } from "@waste/domain/routing/vocabulary"
+import type { PlanTrip } from "@waste/domain/routing/vocabulary"
 import { and, eq, inArray } from "drizzle-orm"
 
 import type { Tx } from "../client"
@@ -46,5 +46,5 @@ export async function routeLoad(tx: Tx, companyId: string, routeRow: { plannedVe
 }
 
 /** The reload a request over these pickups, in this order, carries; null for one that tips once at the end. */
-export const reloadOver = (load: RouteLoad, request: { solver: PlanSolver; trip: PlanTrip; pickupIds: readonly string[] }): Reload | null =>
-  reloadOf({ solver: request.solver, trip: request.trip, capacityKg: load.capacityKg, stopKg: request.pickupIds.map((id) => load.kg.get(id) ?? null) })
+export const reloadOver = (load: RouteLoad, request: { trip: PlanTrip; pickupIds: readonly string[] }): Reload | null =>
+  reloadOf({ trip: request.trip, capacityKg: load.capacityKg, stopKg: request.pickupIds.map((id) => load.kg.get(id) ?? null) })
