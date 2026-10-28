@@ -113,6 +113,7 @@ export const AUDITED_TABLES = [
   "visit_rule_step",
   "visit_rule_free_fraction",
   "route_scheme_season",
+  "decommission_reason",
 ] as const
 export type AuditedTable = (typeof AUDITED_TABLES)[number]
 

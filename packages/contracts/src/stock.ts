@@ -23,15 +23,16 @@
 // neither may put a container into service. Both lists are the vocabulary's,
 // which the domain's `MOVEMENT_SHAPES` is built from too, so what a command
 // may ask for and what the ledger allows cannot drift.
-import { ADJUSTMENT_TARGETS, STOCK_PLACES } from "@waste/domain/resources/vocabulary"
+import { ADJUSTMENT_TARGETS, DECOMMISSION_REASON_STATUSES, STOCK_PLACES } from "@waste/domain/resources/vocabulary"
 import * as z from "zod"
 
 import { IsoDate, IsoDateTime } from "./dates"
 import { Id } from "./ids"
+import { PageRequest } from "./pagination"
 import { ProjectScopedListQuery } from "./queries"
-import { recorded } from "./resource"
+import { changesSomething, recorded, somethingToChange, stamped } from "./resource"
 import { AssetStatus, StockMovementKind, StockPlaceKind } from "./resources"
-import { Label, Paragraph } from "./text"
+import { Label, Paragraph, Slug } from "./text"
 
 /** A place in stock: a warehouse, or maintenance at one. */
 export const StockPlace = z.enum(STOCK_PLACES)
@@ -70,7 +71,10 @@ export const StockMovement = z.object({
   occurredAt: IsoDateTime,
   /** The account that recorded it. */
   recordedBy: Id,
+  /** Why, in the person's words; a decommission's note beside its reason. */
   reason: Paragraph.nullable(),
+  /** Why a decommission scrapped the container, one of the company's Decommission Reasons (O30 of #290); null on every other movement. */
+  decommissionReasonId: Id.nullable(),
   /** A delivery note, a ticket. */
   reference: Label.nullable(),
   /** The movement an adjustment corrects, if it corrects one. */
@@ -118,7 +122,10 @@ export const Decommission = z.strictObject({
   /** Required when the container is in service, refused when it is not: the route knows which. */
   validTo: IsoDate.optional(),
   ...occurred,
-  reason: Paragraph,
+  /** Why: one of the company's active Decommission Reasons (O30 of #290). */
+  decommissionReasonId: Id,
+  /** A note beside the reason, in the person's words. */
+  reason: Paragraph.optional(),
   reference: Label.optional(),
 })
 export type Decommission = z.infer<typeof Decommission>
@@ -156,3 +163,38 @@ export const StockMovementListQuery = ProjectScopedListQuery.extend({
   to: IsoDateTime.optional(),
 }).refine((query) => query.from === undefined || query.to === undefined || Date.parse(query.to) >= Date.parse(query.from), { message: OCCURRED_WINDOW_ORDERED, path: ["to"] })
 export type StockMovementListQuery = z.infer<typeof StockMovementListQuery>
+
+/** A Decommission Reason's state (O30 of #290): offered for a new decommission, or retired from them. */
+export const DecommissionReasonStatus = z.enum(DECOMMISSION_REASON_STATUSES)
+export type DecommissionReasonStatus = z.infer<typeof DecommissionReasonStatus>
+
+/** Why a container is scrapped (O30 of #290, row 9.6): the company's own list, which a decommission names. */
+export const DecommissionReason = z.object({
+  ...stamped,
+  /** The stable slug a report quotes; unique per company, set once. */
+  code: Slug(),
+  /** What a person reads; unique per company. */
+  name: Label,
+  status: DecommissionReasonStatus,
+})
+export type DecommissionReason = z.infer<typeof DecommissionReason>
+
+export const DecommissionReasonCreate = z.strictObject({
+  code: Slug(),
+  name: Label,
+  status: DecommissionReasonStatus.default("active"),
+})
+export type DecommissionReasonCreate = z.infer<typeof DecommissionReasonCreate>
+
+/** The name and the status: the code is the slug a report quotes, and a reason that needs another one is another reason. */
+export const DecommissionReasonPatch = z
+  .strictObject({
+    name: Label.optional(),
+    status: DecommissionReasonStatus.optional(),
+  })
+  .refine(changesSomething, somethingToChange)
+export type DecommissionReasonPatch = z.infer<typeof DecommissionReasonPatch>
+
+/** A page of reasons: every one of the company's, or one status's. */
+export const DecommissionReasonListQuery = PageRequest.extend({ status: DecommissionReasonStatus.optional() })
+export type DecommissionReasonListQuery = z.infer<typeof DecommissionReasonListQuery>

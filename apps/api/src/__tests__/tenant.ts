@@ -66,7 +66,7 @@ import { plan, planLeg, planStop, routingQuota } from "@waste/db/schema/routing"
 import { dropOffPoint, dropOffPointException, dropOffPointFraction, dropOffPointHours } from "@waste/db/schema/drop-off-points"
 import { sortingGuideItem } from "@waste/db/schema/sorting-guide"
 import { depot, unloadingStation, unloadingStationFraction, warehouse } from "@waste/db/schema/places"
-import { stockMovement } from "@waste/db/schema/stock"
+import { decommissionReason, stockMovement } from "@waste/db/schema/stock"
 import { wasteFractionEmissionFactor } from "@waste/db/schema/sustainability"
 import {
   customer,
@@ -407,6 +407,7 @@ export async function dropTenant(pool: Database, companyId: string, owner?: Data
     // A stop and its proofs name the code they were tagged with, so the codes go after them, before the fractions they apply to.
     await tx.delete(contaminantCodeFraction).where(eq(contaminantCodeFraction.companyId, companyId))
     await tx.delete(contaminantCode).where(eq(contaminantCode.companyId, companyId))
+    await tx.delete(decommissionReason).where(eq(decommissionReason.companyId, companyId))
     await tx.delete(generationMatch).where(eq(generationMatch.companyId, companyId))
     await tx.delete(route).where(eq(route.companyId, companyId))
     await tx.delete(generationRun).where(eq(generationRun.companyId, companyId))

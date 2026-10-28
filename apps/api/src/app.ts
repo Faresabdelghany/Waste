@@ -49,6 +49,7 @@ import { billableEventRoutes } from "./routes/billable-events"
 import { billingRunRoutes } from "./routes/billing-runs"
 import { catalogueRoutes } from "./routes/catalogue"
 import { contaminantCodeRoutes } from "./routes/contaminant-codes"
+import { decommissionReasonRoutes } from "./routes/decommission-reasons"
 import { collectionCalendarRoutes } from "./routes/collection-calendars"
 import { collectionGroupRoutes } from "./routes/collection-groups"
 import { companyRoutes } from "./routes/company"
@@ -309,6 +310,7 @@ export function createApp({
   app.route("/", ticketSlaRoutes(guard))
   // The Pickup Exceptions (M5 of #293): the company's contaminant codes, the projects' charge rules, and a place's exception history.
   app.route("/", contaminantCodeRoutes(guard))
+  app.route("/", decommissionReasonRoutes(guard))
   app.route("/", pickupExceptionRoutes(guard, { now }))
   // Bulky-waste booking (O11 of #290): the areas' schedules of collection days, and the bookings that take a slot of one on the project's clock.
   app.route("/", bulkyScheduleRoutes(guard))

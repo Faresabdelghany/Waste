@@ -170,6 +170,10 @@ _Avoid_: Quota (one part of the rule), tariff, price list (the rule names produc
 An append-only record of receipt, issue, return, transfer, adjustment, or decommission.
 _Avoid_: Inventory quantity, balance edit
 
+**Decommission Reason**:
+Why a container was scrapped: one of the company's own list, kept in the master data, which a decommission names beside an optional note. A reason is retired rather than deleted, so a decommission given it still reads it.
+_Avoid_: Scrap code, disposal reason, retirement reason
+
 **Hauler / Service Provider**:
 An external organization, typically a hauler, that delivers collection work for a company within awarded Service Areas and is settled for it through Settlements.
 _Avoid_: Contractor, customer, project

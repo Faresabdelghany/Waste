@@ -3,7 +3,7 @@ import { describe, test } from "node:test"
 
 import { ADJUSTMENT_TARGETS, STOCK_PLACES } from "@waste/domain/resources/vocabulary"
 
-import { Adjust, AdjustmentTarget, AssetState, Decommission, OCCURRED_WINDOW_ORDERED, Receive, Return, StockMovement, StockMovementListQuery, StockPlace, Transfer, WAREHOUSE_WITH_A_STOCK_PLACE } from "../stock"
+import { Adjust, AdjustmentTarget, AssetState, Decommission, DecommissionReason, DecommissionReasonCreate, DecommissionReasonListQuery, DecommissionReasonPatch, OCCURRED_WINDOW_ORDERED, Receive, Return, StockMovement, StockMovementListQuery, StockPlace, Transfer, WAREHOUSE_WITH_A_STOCK_PLACE } from "../stock"
 import { refusal } from "./expect"
 
 const ID = "01a0d3a5-e5e0-7000-8000-000000000001"
@@ -26,6 +26,7 @@ const movement = {
   occurredAt: WHEN,
   recordedBy: ID,
   reason: null,
+  decommissionReasonId: null,
   reference: "DN-2048",
   correctsMovementId: null,
 }
@@ -78,13 +79,13 @@ describe("the command bodies", () => {
     for (const key of owned) assert.match(refusal(Return.safeParse({ warehouseId: OTHER, validTo: "2026-10-01", [key]: THIRD }))[0].message, new RegExp(key), key)
   })
 
-  test("transfer arrives at a warehouse or in maintenance at one; decommission needs a reason and takes validTo for the route to judge", () => {
+  test("transfer arrives at a warehouse or in maintenance at one; decommission names its reason, a note beside it if any, and takes validTo for the route to judge", () => {
     assert.deepEqual(Transfer.parse({ warehouseId: OTHER }), { warehouseId: OTHER, toKind: "warehouse" })
     assert.equal(Transfer.safeParse({ warehouseId: OTHER, toKind: "service" }).success, false)
-    assert.deepEqual(Decommission.parse({ reason: "Crushed" }), { reason: "Crushed" })
-    assert.deepEqual(Decommission.parse({ reason: "Crushed", validTo: "2026-10-01" }), { reason: "Crushed", validTo: "2026-10-01" })
-    assert.deepEqual(refusal(Decommission.safeParse({})).map((issue) => issue.path), ["reason"])
-    assert.match(refusal(Decommission.safeParse({ reason: "Crushed", warehouseId: OTHER }))[0].message, /warehouseId/, "scrap has no warehouse")
+    assert.deepEqual(Decommission.parse({ decommissionReasonId: THIRD }), { decommissionReasonId: THIRD }, "the note is optional (O30 of #290)")
+    assert.deepEqual(Decommission.parse({ decommissionReasonId: THIRD, reason: "Crushed", validTo: "2026-10-01" }), { decommissionReasonId: THIRD, reason: "Crushed", validTo: "2026-10-01" })
+    assert.deepEqual(refusal(Decommission.safeParse({ reason: "Crushed" })).map((issue) => issue.path), ["decommissionReasonId"], "the reason is the company's, by id")
+    assert.match(refusal(Decommission.safeParse({ decommissionReasonId: THIRD, warehouseId: OTHER }))[0].message, /warehouseId/, "scrap has no warehouse")
     for (const key of owned) assert.match(refusal(Transfer.safeParse({ warehouseId: OTHER, [key]: THIRD }))[0].message, new RegExp(key), key)
   })
 
@@ -118,5 +119,18 @@ describe("StockMovementListQuery", () => {
     assert.deepEqual(refusal(StockMovementListQuery.safeParse({ from: LATER, to: WHEN })), [{ path: "to", message: OCCURRED_WINDOW_ORDERED }])
     assert.equal(StockMovementListQuery.safeParse({ from: WHEN, to: WHEN }).success, true, "one instant is a window")
     assert.equal(StockMovementListQuery.safeParse({ kind: "borrow" }).success, false)
+  })
+})
+
+describe("a Decommission Reason (O30 of #290, row 9.6)", () => {
+  test("is the company's, by a slug and a name, active or retired; the create is active unless said, the patch the name and the status", () => {
+    const reason = { id: ID, createdAt: WHEN, updatedAt: WHEN, code: "worn-out", name: "Worn out", status: "active" }
+    assert.deepEqual(DecommissionReason.parse(reason), reason)
+    assert.deepEqual(DecommissionReasonCreate.parse({ code: "fire", name: "Fire" }), { code: "fire", name: "Fire", status: "active" })
+    assert.equal(DecommissionReasonCreate.safeParse({ code: "Fire", name: "Fire" }).success, false, "a lowercase slug")
+    assert.equal(DecommissionReasonPatch.safeParse({ code: "fire" }).success, false, "the code is set once")
+    assert.equal(DecommissionReasonPatch.safeParse({}).success, false)
+    assert.deepEqual(DecommissionReasonPatch.parse({ status: "inactive" }), { status: "inactive" })
+    assert.deepEqual(DecommissionReasonListQuery.parse({ status: "inactive" }), { status: "inactive", limit: 50 })
   })
 })
