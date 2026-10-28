@@ -48,7 +48,8 @@ CREATE INDEX "service_provider_activity_route_scheme_id_idx" ON "wms"."service_p
 CREATE INDEX "service_provider_activity_collection_group_id_idx" ON "wms"."service_provider_activity" USING btree ("company_id","collection_group_id");--> statement-breakpoint
 CREATE INDEX "service_provider_activity_successor_scheme_id_idx" ON "wms"."service_provider_activity" USING btree ("company_id","successor_scheme_id");--> statement-breakpoint
 CREATE INDEX "service_provider_activity_opened_by_idx" ON "wms"."service_provider_activity" USING btree ("company_id","opened_by");--> statement-breakpoint
-CREATE INDEX "service_provider_activity_closed_by_idx" ON "wms"."service_provider_activity" USING btree ("company_id","closed_by");--> statement-breakpointALTER TABLE "wms"."service_provider_activity" ENABLE ROW LEVEL SECURITY, FORCE ROW LEVEL SECURITY;
+CREATE INDEX "service_provider_activity_closed_by_idx" ON "wms"."service_provider_activity" USING btree ("company_id","closed_by");--> statement-breakpoint
+ALTER TABLE "wms"."service_provider_activity" ENABLE ROW LEVEL SECURITY, FORCE ROW LEVEL SECURITY;
 --> statement-breakpoint
 CREATE POLICY "service_provider_activity_tenant_fence" ON "wms"."service_provider_activity" AS PERMISSIVE FOR ALL TO wms_api USING ("company_id" = (select wms.current_company_id())) WITH CHECK ("company_id" = (select wms.current_company_id()));
 --> statement-breakpoint
