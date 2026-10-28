@@ -4,8 +4,13 @@
 // (`timeout`) — attached when it is 100 m or better and that recent, and
 // otherwise the command goes without one. The three seconds are this
 // helper's bound too, since a browser does not count a permission prompt
-// still on screen against `timeout`. No `watchPosition`: a position travels
-// only with the driver's actions, never continuously or in the background.
+// still on screen against `timeout`. This helper is a tap's alone and never
+// watches. #125's Q7 and Q14 kept every position to the driver's actions;
+// O8 of #290 (decided on #344) consciously reverses that for an open
+// session: while it runs, unpaused, with its route's screen shown, the
+// position recorder (position-recorder.ts) watches the phone for the
+// office's track. Never on the start screen, while paused, after the route
+// ends, or in the background.
 //
 // High accuracy is asked for because a stop is a kerb, not a district; a
 // phone whose satellite fix is cold answers late or coarse, and the command

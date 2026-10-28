@@ -56,8 +56,8 @@ describe("the Execution vocabulary's own rules", () => {
     assert.deepEqual([...vocabulary.PROOF_KINDS], ["arrival", "completion", "skip", "failure", "problem", "route-started", "route-ended", "photo", "weight", "signature", "note", "correction"])
   })
 
-  test("the fourteen command kinds leave out the device's retry and the Ticket's reschedule, and the receipt stores two outcomes", () => {
-    assert.equal(vocabulary.DRIVER_COMMAND_KINDS.length, 14)
+  test("the fifteen command kinds leave out the device's retry and the Ticket's reschedule, and the receipt stores two outcomes", () => {
+    assert.equal(vocabulary.DRIVER_COMMAND_KINDS.length, 15)
     for (const notACommand of ["retry-sync", "reschedule-stop", "start-break", "end-break"]) {
       assert.equal((vocabulary.DRIVER_COMMAND_KINDS as readonly string[]).includes(notACommand), false, notACommand)
     }

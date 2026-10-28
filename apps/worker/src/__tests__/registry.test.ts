@@ -25,6 +25,7 @@ import { planAheadJob } from "../jobs/plan-ahead"
 import { FINANCE_EVENT_KINDS, RECORD_BILLABLE_EVENTS_QUEUE_OPTIONS, recordBillableEvents } from "../jobs/record-billable-events"
 import { BATCH_SIZE, RELAY_INTERVAL_SECONDS, relayOutbox } from "../jobs/relay-outbox"
 import { OUTBOX_CONSUMERS, OUTBOX_ROUTES, routesOf } from "../outbox/routes"
+import { purgePositionsJob } from "../jobs/purge-positions"
 import { purgeProofObjectsJob } from "../jobs/purge-proof-objects"
 import { sweepHorizonJob } from "../jobs/routing-horizon"
 import { runScheduledBilling } from "../jobs/run-billing"
@@ -142,6 +143,7 @@ describe("the job registry", () => {
       "finance.run-billing",
       "execution.purge-proof-objects",
       "resolution.alert-rules",
+      "execution.purge-positions",
     ])
   })
 
@@ -161,6 +163,15 @@ describe("the job registry", () => {
     assert.deepEqual(purgeProofObjectsJob.scheduleData, { source: "schedule" })
     assert.deepEqual(purgeProofObjectsJob.scheduleOptions, { tz: "UTC", missed: "once" })
     assert.deepEqual(purgeProofObjectsJob.queueOptions, { retryLimit: 0, deleteAfterSeconds: 604_800 })
+  })
+
+  test("holds the positions' purge (O8 of #290): nightly at 03:40 UTC, after the horizon sweep and before the proofs', once for every night missed, sent as the schedule's, no retry — the next night sweeps everything past the days", () => {
+    assert.ok(JOBS.includes(purgePositionsJob))
+    assert.equal(purgePositionsJob.queue, "execution.purge-positions")
+    assert.equal(purgePositionsJob.schedule, "40 3 * * *")
+    assert.deepEqual(purgePositionsJob.scheduleData, { source: "schedule" })
+    assert.deepEqual(purgePositionsJob.scheduleOptions, { tz: "UTC", missed: "once" })
+    assert.deepEqual(purgePositionsJob.queueOptions, { retryLimit: 0, deleteAfterSeconds: 604_800 })
   })
 
   test("holds routing's horizon sweep (#172, #132 §2): nightly at 03:30 UTC, half an hour after Plan Ahead, once for every night missed, sent as the schedule's, no retry — the next night is the retry", () => {

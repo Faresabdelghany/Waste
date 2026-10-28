@@ -20,12 +20,15 @@
 // B): its consumer, three entries on `pickup-completed`, `pickup-corrected`
 // and `ticket-completed`, and the monthly `finance.run-billing`. A consumer
 // is `...defineOutboxConsumer({ ... })` spread into the list, one entry per
-// kind (../outbox/subscribe.ts).
+// kind (../outbox/subscribe.ts). Execution's two nightly purges keep what a
+// driver's day leaves for no longer than it is owed: the proofs' objects (O1
+// of #290) and the positions (O8 of #290).
 import { alertRulesJob, ALERT_RULES_QUEUE, rulesSchedule } from "./alert-rules"
 import type { AnyJob } from "./definition"
 import { generateRoutes } from "./generate-routes"
 import { heartbeat } from "./heartbeat"
 import { planAheadJob } from "./plan-ahead"
+import { purgePositionsJob } from "./purge-positions"
 import { purgeProofObjectsJob } from "./purge-proof-objects"
 import { relayOutbox } from "./relay-outbox"
 import { sweepHorizonJob } from "./routing-horizon"
@@ -34,7 +37,7 @@ import { routingOptimise } from "./routing-optimise"
 import { runScheduledBilling } from "./run-billing"
 import { OUTBOX_CONSUMERS } from "../outbox/routes"
 
-export const JOBS: readonly AnyJob[] = [heartbeat, generateRoutes, planAheadJob, routingMeasure, routingOptimise, sweepHorizonJob, relayOutbox, ...OUTBOX_CONSUMERS, runScheduledBilling, purgeProofObjectsJob, alertRulesJob]
+export const JOBS: readonly AnyJob[] = [heartbeat, generateRoutes, planAheadJob, routingMeasure, routingOptimise, sweepHorizonJob, relayOutbox, ...OUTBOX_CONSUMERS, runScheduledBilling, purgeProofObjectsJob, alertRulesJob, purgePositionsJob]
 
 /** The registry with the alert rules on the cadence `WORKER_RULES_INTERVAL_SECONDS` sets (O4 of #290); the registry as it is where it is unset. */
 export const jobsWithRulesEvery = (seconds: number | undefined): readonly AnyJob[] =>

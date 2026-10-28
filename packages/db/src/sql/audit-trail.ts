@@ -56,7 +56,7 @@ import { collectionCalendar, collectionCalendarHoliday } from "../schema/collect
 import { container, containerServicePlacement } from "../schema/containers"
 import { dropOffPoint, dropOffPointException, dropOffPointFraction, dropOffPointHours } from "../schema/drop-off-points"
 import { customer, property, propertyGroup, propertyGroupMember, propertyParty, sharedCollectionPoint, sharedCollectionPointMember } from "../schema/customers"
-import { driverCommand, outboxEvent, pickup, proofOfService, route, session, unload } from "../schema/execution"
+import { driverCommand, outboxEvent, pickup, proofOfService, route, session, sessionPosition, unload } from "../schema/execution"
 import { accountingAccount, accountingExport, accountingExportLine, accountingExportVoucher, accountingProductAccount, accountingSettings, accountingVatCode, billableEvent, billingRun, billingRunExclusion, invoice, invoiceLine, priceList, priceListRow, serviceArea, serviceAreaAssignment, serviceAreaPlanningArea, serviceAreaWasteFraction, serviceProviderPrice, settlement, settlementEvent, settlementLine, payment, paymentAllocation, ticketKindProduct, weightReview, workOrderProduct } from "../schema/finance"
 import { contaminantCode, contaminantCodeFraction, pickupExceptionRule, pickupExceptionRuleStep } from "../schema/pickup-exceptions"
 import { driver, vehicle, vehicleCompartment, vehicleCompartmentFraction } from "../schema/fleet"
@@ -259,6 +259,7 @@ export const EXEMPT: readonly Exempt[] = [
   ...[stockMovement, vehicleAllocationEvent, proofOfService, unload, driverCommand, ticketEvent, ticketBooking, billingRunExclusion, invoice, invoiceLine, settlementEvent, weightReview, applicationDecision, payment, paymentAllocation, accountingExport, accountingExportVoucher, accountingExportLine].map((table) => ({ table, why: LEDGER })),
   ...[route, pickup, session].map((table) => ({ table, why: EXECUTION })),
   { table: outboxEvent, why: "the outbox: a transport, stamped as it is relayed" },
+  { table: sessionPosition, why: "a ledger of where a session's vehicle was, appended by the driver door in bulk and removed only by the retention purge (O8 of #290); a trail of it would keep the coordinates the purge removes" },
   ...[generationRun, generationMatch].map((table) => ({ table, why: GENERATION })),
   ...[plan, planStop, planLeg, routingQuota].map((table) => ({ table, why: ROUTING })),
   { table: ticket, why: "a ticket's history is its ledger, ticket_event, appended by every command" },

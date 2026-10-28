@@ -264,6 +264,10 @@ _Avoid_: Route, actual assignment, pickup
 The durable, ordered queue on a driver's device of the commands their actions produce, each kept until the server has answered it. It carries actions through a loss of connectivity and is never the source of truth: the server's records and its receipts are.
 _Avoid_: Outbox (the server-side outbox that publishes events between contexts), offline mode, cache
 
+**Position**:
+Where a Session's vehicle was at one instant, as the driver's device recorded it while the Session ran unpaused with its Route on screen; the Positions of a Session in order are its **Track**. Personal location data, kept for the retention days and then deleted. A Proof of Service's location is the place an action was recorded, not a Position.
+_Avoid_: GPS ping, breadcrumb, trace, telemetry (as the record)
+
 **Scenario**:
 An editable planning hypothesis containing selected assumptions and constraints, from which Plans are calculated and compared. A flagged future capability, not part of the current model: until it exists, a Plan records its own inputs.
 _Avoid_: Plan, production configuration

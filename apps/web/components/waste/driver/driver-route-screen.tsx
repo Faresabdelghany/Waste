@@ -31,6 +31,7 @@ import type { DriverMe, DriverPickup, DriverRouteDetail, DriverUnloadingStation 
 import type { ProofBytes } from "@/lib/driver/commands"
 import type { DriverAppController, Tap } from "@/lib/driver/driver-app"
 import { STOP_PHOTOS } from "@/lib/driver/proof-images"
+import { sessionRecords } from "@/lib/driver/position-recorder"
 import { DRIVER_REASON_LABELS, endRouteWarning, entriesInOrder, mapsHref, PICKUP_STATUS_LABELS, ROUTE_STATUS_LABELS, routeActions, routeMapsHref, stopActions, stopCollects, stopServices, stopsInOrder, waitingOn } from "@/lib/driver/route-view"
 
 /** A photo taken with a stop's exception goes first, then the exception: the queue sends in the order of the taps. */
@@ -87,6 +88,7 @@ function RouteDetailView({ detail, me }: { detail: DriverRouteDetail; me: Driver
             <h1 className="text-xl font-semibold">{detail.label}</h1>
             <p className="text-sm text-muted-foreground">{operatingDay(detail.operatingDate)}</p>
             <p className="text-sm text-muted-foreground">{progressLine(detail.progress)}</p>
+            {sessionRecords(detail, me.driver.id) && <p className="text-sm text-muted-foreground">Your position is shared with the office while this route runs and this screen is open.</p>}
           </div>
           <div className="flex shrink-0 flex-col items-end gap-1 whitespace-nowrap">
             <Badge variant={detail.status === "active" ? "default" : "secondary"}>{ROUTE_STATUS_LABELS[detail.status]}</Badge>

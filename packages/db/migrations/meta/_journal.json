@@ -421,6 +421,13 @@
       "when": 1793182222276,
       "tag": "0059_scheme_lifecycle",
       "breakpoints": true
+    },
+    {
+      "idx": 60,
+      "version": "7",
+      "when": 1793188451416,
+      "tag": "0060_live_positions",
+      "breakpoints": true
     }
   ]
 }

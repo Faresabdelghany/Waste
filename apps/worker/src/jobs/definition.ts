@@ -75,6 +75,8 @@ export type JobContext = {
   proofStorage?: ProofStorage
   /** How many days a photo or a signature is kept, `PROOF_RETENTION_DAYS`: a Pilot setting, never a code default; undefined, the purge removes nothing. */
   proofRetentionDays?: number
+  /** How many days a position is kept, `POSITION_RETENTION_DAYS` (O8 of #290): a Pilot setting; undefined, the purge keeps the domain's ceiling of thirty. */
+  positionRetentionDays?: number
 }
 
 /**

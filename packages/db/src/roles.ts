@@ -7,9 +7,11 @@
 // (sql/publication.ts), and writes nothing; the worker's pg-boss connects as
 // WORKER_ROLE (Issue #97 part B), which carries BYPASSRLS for the one kind of
 // statement in the system that reads across tenants, a sweep for work to do,
-// and SELECT on every wms table and no write right on any (sql/worker.ts) —
-// every write the worker makes runs as API_ROLE under `withCompany`, fenced
-// like a request's; the public door's anonymous reads run as PUBLIC_ROLE
+// and SELECT on every wms table and no write right on any (sql/worker.ts)
+// but DELETE on the one ledger whose retention its purge holds,
+// `session_position` (sql/retention-purge.ts, O8 of #290) — every other
+// write the worker makes runs as API_ROLE under `withCompany`, fenced like a
+// request's; the public door's anonymous reads run as PUBLIC_ROLE
 // (Issue #293, ADR-0010), which logs in as nobody — the API's connection sets
 // it for a public request's transaction alone — and SELECTs exactly the
 // columns sql/public-door.ts names, under policies of its own. Spelled once

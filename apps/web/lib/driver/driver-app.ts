@@ -55,6 +55,17 @@
 //
 // A command older than 48 h is still sent and comes back rejected, the
 // recorded answer ADR-0004 wants.
+//
+// Positions (O8 of #290). While a route's screen is shown and the door's last
+// read of it has this driver's session open and not paused — and no pause or
+// end of it waits in the queue — the recorder (position-recorder.ts) watches
+// the phone. Its open batch is the queue's one `collecting` row, rewritten on
+// every kept fix, which the drain passes over and a reload closes into a
+// command; a closed batch is a `record-positions` command minted then, so it
+// takes its place in the queue's order at its close, and a pause or an
+// end-route tap closes the open batch before the tap's own command. Positions
+// are no action of the driver's: they are not counted among the actions
+// waiting, nor is a rejection of one shown — the server keeps its receipt.
 import type { DriverMe, DriverRouteDetail } from "@waste/contracts/driver-commands"
 
 import type { ApiClient } from "../api/client"
@@ -64,6 +75,7 @@ import { createExternalStore, type ExternalStore } from "../external-store"
 import type { CommandQueueStore, QueueEntry } from "./command-queue"
 import { BATCH_LIMIT, createCommandIds, pickupIdOf, takesLocation, type ObjectKind, type PilotBody, type PilotCommand, type PilotCommandKind, type ProofBytes } from "./commands"
 import { lookupFix } from "./location"
+import { createPositionRecorder, sessionRecords, type PositionBatch, type PositionWatcher } from "./position-recorder"
 import { NO_PROOF_STORAGE_TYPE, outOfReach, putObject, readDriverMe, readDriverRoute, sendCommands, signProofUpload } from "./reads"
 import { BROWSER_TIMERS, type Timers } from "./timers"
 
@@ -119,7 +131,8 @@ export type Tap = {
 export type DriverAppOptions = {
   /** The Command Queue's storage; a failure to open it leaves this page's commands in memory. */
   openQueue: () => Promise<CommandQueueStore>
-  geolocation?: Pick<Geolocation, "getCurrentPosition"> | null
+  /** The phone's position: a lookup per located tap, and a watch while a session's route is on screen (O8 of #290). */
+  geolocation?: (Pick<Geolocation, "getCurrentPosition"> & Partial<PositionWatcher>) | null
   now?: () => number
   fill?: (bytes: Uint8Array) => Uint8Array
   timers?: Timers
@@ -176,7 +189,11 @@ export function createDriverApp({ openQueue, geolocation = null, now = Date.now,
   let disposed = false
 
   const mine = (): QueueEntry[] => (session === null ? [] : entries.filter((entry) => entry.owner === session?.who))
-  const publishWaiting = () => store.set((state) => ({ ...state, waiting: mine() }))
+  /** The driver's own actions waiting: what the banner counts and a stop shows as sending, positions left out. */
+  const actions = (): QueueEntry[] => mine().filter((entry) => entry.command.kind !== "record-positions")
+  /** What the drain has to send: everything of the signed-in login's but the open batch. */
+  const owing = (): QueueEntry[] => mine().filter((entry) => entry.state !== "collecting")
+  const publishWaiting = () => store.set((state) => ({ ...state, waiting: actions() }))
 
   const persist = async (entry: QueueEntry) => {
     try {
@@ -192,6 +209,69 @@ export function createDriverApp({ openQueue, geolocation = null, now = Date.now,
     } catch (error) {
       log("the Command Queue could not remove answered commands; the server replays them", error)
     }
+  }
+
+  /** Queues a closed batch as a `record-positions` command of its own, minted now: its place in the queue's order is its close. */
+  const queuePositions = async (owner: string, batch: PositionBatch) => {
+    const command = { id: nextId(), kind: "record-positions", routeId: batch.routeId, occurredAt: new Date(now()).toISOString(), deviceId, body: { points: batch.points } } as PilotCommand
+    const entry: QueueEntry = { owner, state: "ready", command }
+    entries = [...entries, entry]
+    await persist(entry)
+  }
+
+  /** The open batch's row, and whose it is: rewritten on every kept fix so a reload finds it. */
+  let collecting: QueueEntry | null = null
+  const recorder = createPositionRecorder({
+    geolocation,
+    now,
+    timers,
+    changed: (batch) => {
+      const previous = collecting
+      const owner = previous?.owner ?? session?.who
+      if (batch === null || owner === undefined) {
+        collecting = null
+        if (previous !== null) {
+          entries = entries.filter((entry) => entry !== previous)
+          void forget([previous.command.id])
+        }
+        return
+      }
+      const id = previous?.command.id ?? nextId()
+      const next: QueueEntry = { owner, state: "collecting", command: { id, kind: "record-positions", routeId: batch.routeId, occurredAt: new Date(now()).toISOString(), deviceId, body: { points: batch.points } } as PilotCommand }
+      collecting = next
+      entries = previous === null ? [...entries, next] : entries.map((entry) => (entry === previous ? next : entry))
+      void persist(next)
+    },
+    closed: (batch) => {
+      const owner = session?.who
+      if (owner === undefined) return
+      void queuePositions(owner, batch).then(drain)
+    },
+  })
+
+  /**
+   * The route to record for: one on screen whose last read has this
+   * driver's session open and not paused, and no pause or end of which waits
+   * in the queue — the tap that would stop it already made. The session's
+   * start bounds the fixes, as the door does.
+   */
+  const recordingFor = (): { routeId: string; since: string } | null => {
+    if (disposed || !loaded || !session?.client) return null
+    const state = store.getSnapshot()
+    const driverId = state.me?.driver.id
+    for (const id of watched.keys()) {
+      const read = state.routes[id]
+      if (read?.status !== "ready") continue
+      const open = read.detail.session
+      if (open === null || !sessionRecords(read.detail, driverId)) continue
+      if (mine().some((entry) => entry.command.routeId === id && (entry.command.kind === "pause" || entry.command.kind === "end-route"))) continue
+      return { routeId: id, since: open.startedAt }
+    }
+    return null
+  }
+  const syncRecording = () => {
+    const target = recordingFor()
+    recorder.follow(target?.routeId ?? null, target?.since)
   }
 
   const open = (): Promise<void> =>
@@ -213,6 +293,13 @@ export function createDriverApp({ openQueue, geolocation = null, now = Date.now,
       for (const [index, entry] of recovered.entries()) if (entry !== stored[index]) await persist(entry)
       entries = recovered
       nextId = createCommandIds({ now, ...(fill === undefined ? {} : { fill }), after: entries.at(-1)?.command.id })
+      // An open batch the last page left is closed into a command now, under an id of this page's: a reload while offline loses no fix.
+      for (const entry of recovered.filter((candidate) => candidate.state === "collecting")) {
+        entries = entries.filter((candidate) => candidate !== entry)
+        await forget([entry.command.id])
+        const points = entry.command.kind === "record-positions" ? entry.command.body.points : []
+        if (points.length > 0) await queuePositions(entry.owner, { routeId: entry.command.routeId, points })
+      }
       publishWaiting()
     })())
 
@@ -241,6 +328,7 @@ export function createDriverApp({ openQueue, geolocation = null, now = Date.now,
     try {
       const me = await withDeadline(client, readDriverMe)
       store.set((state) => ({ ...state, me, status: "ready", refusal: null, unreachable: false }))
+      syncRecording()
       return true
     } catch (error) {
       failedRead(problemOfError(error))
@@ -252,6 +340,7 @@ export function createDriverApp({ openQueue, geolocation = null, now = Date.now,
     try {
       const detail = await withDeadline(client, (under) => readDriverRoute(under, id))
       store.set((state) => ({ ...state, routes: { ...state.routes, [id]: { status: "ready", detail } }, unreachable: false }))
+      syncRecording()
       return true
     } catch (error) {
       const problem = problemOfError(error)
@@ -260,6 +349,7 @@ export function createDriverApp({ openQueue, geolocation = null, now = Date.now,
         return false
       }
       store.set((state) => ({ ...state, routes: { ...state.routes, [id]: { status: "missing", sentence: problemSentence(problem) } }, unreachable: false }))
+      syncRecording()
       return true
     }
   }
@@ -291,7 +381,7 @@ export function createDriverApp({ openQueue, geolocation = null, now = Date.now,
 
   const scheduleRetry = () => {
     if (disposed) return
-    if (mine().length === 0) {
+    if (owing().length === 0) {
       if (retryTimer !== null) timers.clear(retryTimer)
       retryTimer = null
       return
@@ -333,7 +423,7 @@ export function createDriverApp({ openQueue, geolocation = null, now = Date.now,
       const rejection: Rejection = { commandId: command.id, kind: command.kind, routeId: command.routeId, pickupId: pickupIdOf(command), sentence }
       entries = entries.filter((candidate) => candidate.command.id !== command.id)
       fresh.add(command.id)
-      store.set((state) => ({ ...state, unreachable: false, rejections: [...state.rejections, rejection], waiting: mine() }))
+      store.set((state) => ({ ...state, unreachable: false, rejections: [...state.rejections, rejection], waiting: actions() }))
       await forget([command.id])
       return "refused"
     }
@@ -350,6 +440,8 @@ export function createDriverApp({ openQueue, geolocation = null, now = Date.now,
     if (!loaded || current?.client == null) return
     const sendable: QueueEntry[] = []
     for (const entry of mine()) {
+      // The open batch is not sent as it stands, and holds nothing back: it takes its place in the order when it closes.
+      if (entry.state === "collecting") continue
       if (entry.state !== "ready") break
       sendable.push(entry)
     }
@@ -395,7 +487,8 @@ export function createDriverApp({ openQueue, geolocation = null, now = Date.now,
     const done = batch.filter((entry) => answered.has(entry.command.id))
     const rejections: Rejection[] = done.flatMap((entry) => {
       const row = answered.get(entry.command.id)
-      if (row?.outcome !== "rejected") return []
+      // A position refused is no action of the driver's to mend: the server keeps its receipt.
+      if (row?.outcome !== "rejected" || entry.command.kind === "record-positions") return []
       const { id, kind, routeId } = entry.command
       return [{ commandId: id, kind, routeId, pickupId: pickupIdOf(entry.command), sentence: row.problem === undefined ? "The server rejected this action" : problemSentence(row.problem) }]
     })
@@ -413,7 +506,7 @@ export function createDriverApp({ openQueue, geolocation = null, now = Date.now,
     try {
       await refresh()
     } finally {
-      store.set((state) => ({ ...state, waiting: mine(), ...(heldBack ? { unreachable: true } : {}) }))
+      store.set((state) => ({ ...state, waiting: actions(), ...(heldBack ? { unreachable: true } : {}) }))
     }
     if (!heldBack && sendable.length > batch.length) again = true
   }
@@ -455,16 +548,19 @@ export function createDriverApp({ openQueue, geolocation = null, now = Date.now,
     store,
     setSession: (next) => {
       const before = session
+      // Another person, or none: the open batch is closed under the one who was signed in, and the recording stops until the next one's reads.
+      if (before?.who !== next?.who) recorder.follow(null)
       session = next
       if (before?.who !== next?.who) {
         // Another person: nothing the last one read or was told stays on screen.
         aged.clear()
         fresh.clear()
-        store.set({ ...INITIAL, waiting: mine() })
+        store.set({ ...INITIAL, waiting: actions() })
         if (loaded && next?.client) void refresh().then(drain)
         return
       }
       publishWaiting()
+      syncRecording()
       if (!loaded || !next?.client || next.client === before?.client) return
       // A new token: what waited for one is sent, and what could not be read without one is read.
       const { status, unreachable } = store.getSnapshot()
@@ -485,6 +581,7 @@ export function createDriverApp({ openQueue, geolocation = null, now = Date.now,
         const count = (watched.get(id) ?? 1) - 1
         if (count > 0) watched.set(id, count)
         else watched.delete(id)
+        syncRecording()
       }
     },
     refresh,
@@ -496,6 +593,8 @@ export function createDriverApp({ openQueue, geolocation = null, now = Date.now,
       const owner = session?.who
       if (owner === undefined) throw new Error("Nobody is signed in")
       await open()
+      // The fixes kept before a pause or the route's end go first, so the door takes them while the session still runs.
+      if (tap.kind === "pause" || tap.kind === "end-route") recorder.close()
       const occurredAt = new Date(now()).toISOString()
       const id = nextId()
       const located = takesLocation(tap.kind)
@@ -507,6 +606,7 @@ export function createDriverApp({ openQueue, geolocation = null, now = Date.now,
       entries = [...entries, entry]
       publishWaiting()
       await persist(entry)
+      syncRecording()
       if (located) void locate(entry)
       void drain()
       return id
@@ -523,15 +623,16 @@ export function createDriverApp({ openQueue, geolocation = null, now = Date.now,
       store.set((state) => ({ ...state, rejections: state.rejections.filter((rejection) => rejection.commandId !== commandId) }))
     },
     discardWaiting: async () => {
-      const discarded = mine().map((entry) => entry.command.id)
+      const discarded = owing().map((entry) => entry.command.id)
       const gone = new Set(discarded)
       entries = entries.filter((entry) => !gone.has(entry.command.id))
-      store.set((state) => ({ ...state, refused: null, waiting: mine() }))
+      store.set((state) => ({ ...state, refused: null, waiting: actions() }))
       await forget(discarded)
       scheduleRetry()
     },
     dispose: () => {
       disposed = true
+      recorder.dispose()
       if (retryTimer !== null) timers.clear(retryTimer)
       retryTimer = null
       queue?.close()

@@ -26,7 +26,7 @@ import { collectionCalendar, collectionCalendarHoliday } from "@waste/db/schema/
 import { vehicleAllocation, vehicleAllocationEvent } from "@waste/db/schema/allocations"
 import { driverAbsence, vehicleUnavailability } from "@waste/db/schema/availability"
 import { container, containerServicePlacement } from "@waste/db/schema/containers"
-import { driverCommand, outboxEvent, pickup, proofOfService, route, session, unload } from "@waste/db/schema/execution"
+import { driverCommand, outboxEvent, pickup, proofOfService, route, session, sessionPosition, unload } from "@waste/db/schema/execution"
 import {
   accountingAccount,
   accountingExport,
@@ -352,6 +352,7 @@ export async function dropTenant(pool: Database, companyId: string, owner?: Data
     await owner.db.delete(ticketEvent).where(eq(ticketEvent.companyId, companyId))
     await owner.db.delete(applicationDecision).where(eq(applicationDecision.companyId, companyId))
     await owner.db.delete(proofOfService).where(eq(proofOfService.companyId, companyId))
+    await owner.db.delete(sessionPosition).where(eq(sessionPosition.companyId, companyId))
     await owner.db.delete(unload).where(eq(unload.companyId, companyId))
     await owner.db.delete(driverCommand).where(eq(driverCommand.companyId, companyId))
     await owner.db.delete(vehicleAllocationEvent).where(eq(vehicleAllocationEvent.companyId, companyId))

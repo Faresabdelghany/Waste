@@ -16,7 +16,9 @@ import {
   DriverPickup,
   DriverRouteDetail,
   EACH_COMMAND_ONCE,
+  FIXES_IN_ORDER,
   OBJECT_KEY_SHAPE,
+  POSITIONS_MAX,
   PROBLEM_WITH_A_REJECTION,
   WireOutcome,
 } from "../driver-commands"
@@ -52,12 +54,13 @@ const bodies: Record<DriverCommandKind, object> = {
   pause: {},
   resume: {},
   "end-route": { note: "Done for today", location: POINT },
+  "record-positions": { points: [{ at: "2026-10-05T06:18:00.000Z", location: POINT, accuracyM: 9 }, { at: WHEN, location: POINT, accuracyM: 14, speedKmh: 32, headingDeg: 270 }] },
 }
 
 const command = (kind: DriverCommandKind, body: object = bodies[kind]) => ({ ...envelope, kind, body })
 
 describe("DriverCommand", () => {
-  test("is the discriminated union over the fourteen kinds, each a strict envelope around a strict body", () => {
+  test("is the discriminated union over the fifteen kinds, each a strict envelope around a strict body", () => {
     assert.deepEqual(Object.keys(COMMAND_BODIES).sort(), [...DRIVER_COMMAND_KINDS].sort())
     for (const kind of DRIVER_COMMAND_KINDS) assert.deepEqual(DriverCommand.parse(command(kind)), command(kind), kind)
     assert.equal(DriverCommand.safeParse(command("reschedule-stop" as DriverCommandKind, {})).success, false, "a Ticket's, not a command")
@@ -87,6 +90,7 @@ describe("DriverCommand", () => {
       pause: ["note", "x"],
       resume: ["pickupId", THIRD],
       "end-route": ["pickupId", THIRD],
+      "record-positions": ["location", POINT],
     }
     for (const kind of DRIVER_COMMAND_KINDS) {
       const [member, value] = foreign[kind]
@@ -139,13 +143,43 @@ describe("DriverCommand", () => {
   })
 })
 
+describe("record-positions (O8 of #290)", () => {
+  const fix = (minute: number, over: object = {}) => ({ at: `2026-10-05T06:${String(minute).padStart(2, "0")}:00.000Z`, location: POINT, accuracyM: 10, ...over })
+  const positions = (points: object[]) => DriverCommand.safeParse(command("record-positions", { points }))
+
+  test("carries one to sixty fixes, the Driver App's batch", () => {
+    assert.equal(POSITIONS_MAX, 60)
+    assert.deepEqual(refusal(positions([])).map((issue) => issue.path), ["body.points"])
+    assert.equal(positions(Array.from({ length: POSITIONS_MAX }, (_, index) => ({ ...fix(0), at: new Date(Date.parse(WHEN) + index * 1000).toISOString() }))).success, true)
+    assert.deepEqual(refusal(positions(Array.from({ length: POSITIONS_MAX + 1 }, (_, index) => ({ ...fix(0), at: new Date(Date.parse(WHEN) + index * 1000).toISOString() })))).map((issue) => issue.path), ["body.points"])
+  })
+
+  test("its fixes are in the order they were taken, one per instant", () => {
+    assert.deepEqual(refusal(positions([fix(20), fix(18)])), [{ path: "body.points", message: FIXES_IN_ORDER }])
+    assert.deepEqual(refusal(positions([fix(20), fix(20)])), [{ path: "body.points", message: FIXES_IN_ORDER }])
+  })
+
+  test("a fix is a strict point with its instant and accuracy, and a speed and a heading only within what a road vehicle and a compass can say", () => {
+    for (const member of ["at", "location", "accuracyM"]) {
+      const without: Record<string, unknown> = fix(10)
+      delete without[member]
+      assert.deepEqual(refusal(positions([without])).map((issue) => issue.path), [`body.points.0.${member}`], member)
+    }
+    assert.match(refusal(positions([fix(10, { altitudeM: 12 })]))[0].message, /altitudeM/)
+    assert.deepEqual(refusal(positions([fix(10, { accuracyM: 0 })])).map((issue) => issue.path), ["body.points.0.accuracyM"])
+    assert.equal(positions([fix(10, { speedKmh: 0, headingDeg: 0 }), fix(11, { speedKmh: 300, headingDeg: 359 })]).success, true)
+    for (const over of [{ speedKmh: 301 }, { speedKmh: -1 }, { speedKmh: 12.5 }, { headingDeg: 360 }, { headingDeg: -1 }]) assert.equal(positions([fix(10, over)]).success, false, JSON.stringify(over))
+    assert.equal(positions([fix(10, { location: { type: "Point", coordinates: [12.5951, 55.7089, 10] } })]).success, false, "a flat point")
+  })
+})
+
 describe("the batch", () => {
   test("reads envelopes loosely, so a body that fails its kind is that command's rejection and not the batch's 400", () => {
     const loose = { ...envelope, kind: "skip-pickup", body: { pickupId: THIRD, reason: "lunch" } }
     assert.deepEqual(DriverCommandEnvelope.parse(loose), loose)
     assert.equal(DriverCommand.safeParse(loose).success, false)
     assert.deepEqual(refusal(COMMAND_BODIES["skip-pickup"].safeParse(loose.body)).map((issue) => issue.path), ["reason"], "the body against its kind, afterwards")
-    assert.equal(DriverCommandEnvelope.safeParse({ ...loose, kind: "retry-sync" }).success, false, "the kind is still one of the fourteen")
+    assert.equal(DriverCommandEnvelope.safeParse({ ...loose, kind: "retry-sync" }).success, false, "the kind is still one of the fifteen")
     assert.match(refusal(DriverCommandEnvelope.safeParse({ ...loose, extra: 1 }))[0].message, /extra/)
   })
 
