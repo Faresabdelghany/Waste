@@ -63,7 +63,9 @@
 // seasons. O21 of #290 added @waste/domain/planning/lifecycle: route-schemes.ts
 // reads the Plan Ahead window's bounds the database's check reads. O8 of
 // #290 added @waste/domain/execution/positions: driver-commands.ts bounds a
-// `record-positions` by the batch the Driver App closes, one spelling.
+// `record-positions` by the batch the Driver App closes, one spelling. C13
+// of #291 added @waste/domain/registry/address: addresses.ts checks a
+// postcode and a municipality code by the shape the domain spells.
 import path from "node:path"
 import { fileURLToPath } from "node:url"
 
@@ -93,6 +95,7 @@ definePurityTests({
     "@waste/domain/insight/vocabulary",
     "@waste/domain/planning/lifecycle",
     "@waste/domain/planning/vocabulary",
+    "@waste/domain/registry/address",
     "@waste/domain/registry/applications",
     "@waste/domain/registry/vocabulary",
     "@waste/domain/registry/waste-code",

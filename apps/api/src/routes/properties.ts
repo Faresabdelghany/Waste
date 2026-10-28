@@ -49,6 +49,7 @@ import { requireProject } from "../auth/projects"
 import { requireGrant } from "../auth/require"
 import { afterCursor, fetchLimit, pageOf } from "../pagination"
 import { describeProblem, validate } from "../problem"
+import { foundAddress } from "./addresses"
 import { entriesOf } from "./members"
 import {
   createProperty,
@@ -82,7 +83,8 @@ const heldBy = (tx: Tx, companyId: string, customerId: string) =>
       ),
   )
 
-export function propertyRoutes(guard: MiddlewareHandler<AuthEnv>) {
+/** `lookup` reads a body's `addressId` from the address register before the guard opens the request's transaction (routes/addresses.ts, #291 C13). */
+export function propertyRoutes(guard: MiddlewareHandler<AuthEnv>, lookup: MiddlewareHandler) {
   return new Hono<AuthEnv>()
     .get(
       "/properties",
@@ -134,22 +136,25 @@ export function propertyRoutes(guard: MiddlewareHandler<AuthEnv>) {
         operationId: "createProperty",
         summary: "Register a property",
         description:
-          "Registers a service address in one project, which must be a project the caller works in. The name is unique inside the project and the registry identifier, where given, inside the company. The status defaults to `active` and the location is null until the address is geocoded; a location outside the WGS 84 range is refused before the database sees it. `parties` is the list the property starts with, each naming a customer of this company, so registering a property with its owner is one request. The server mints the id.",
+          "Registers a service address in one project, which must be a project the caller works in. The name is unique inside the project and the registry identifier, where given, inside the company. The status defaults to `active` and the location is null until the address is geocoded; a location outside the WGS 84 range is refused before the database sees it. The address is typed (`address`), or found in the address register (`addressId`, from `GET /addresses`): then the register's designation is the address, its parts are stored beside it, and its BFE number and access point are the registry identifier and the location wherever the body sets neither, so the property is geocoded as it is created. `parties` is the list the property starts with, each naming a customer of this company, so registering a property with its owner is one request. The server mints the id.",
         security: BEARER_SECURITY,
         responses: {
           201: describeCreated("The property as it was written.", Property),
           400: describeProblem(
-            "The body is missing a field, names a member the server owns, names a project this account does not work in, holds a point outside the WGS 84 range, names the same customer and role twice, or names a party that is not a customer of this company.",
+            "The body is missing a field, names a member the server owns, names a project this account does not work in, holds a point outside the WGS 84 range, names the same customer and role twice, names a party that is not a customer of this company, gives both `address` and `addressId`, or names an `addressId` the register does not hold.",
           ),
           401: describeProblem("No usable token (see WWW-Authenticate)."),
           403: describeProblem("No active account here, or the caller's role does not allow `create` on `customers.properties`."),
           409: describeProblem("The project already has a property with that name, or the company one with that registry identifier."),
+          502: describeProblem("The body names an `addressId` and the address register did not answer: try again, or type the address and place the point by hand."),
+          503: describeProblem("The body names an `addressId` on a deployment with no address register: type the address."),
         },
       }),
+      lookup,
       guard,
       requireGrant(MODULE, "create"),
       validate("json", PropertyCreate),
-      async (c) => created(c, "/properties", await createProperty(c.get("tx"), c.get("principal"), c.req.valid("json"))),
+      async (c) => created(c, "/properties", await createProperty(c.get("tx"), c.get("principal"), c.req.valid("json"), foundAddress(c))),
     )
     .get(
       "/properties/:id",
@@ -185,24 +190,27 @@ export function propertyRoutes(guard: MiddlewareHandler<AuthEnv>) {
         operationId: "patchProperty",
         summary: "Change a property",
         description:
-          "Changes one property of a project the caller works in; every field is optional and at least one must be given. A null clears the registry identifier, the notes, the driver's instructions or the geocode. The project is not patchable, since a record does not move between projects, and the parties are a set, so they are `PUT /properties/{id}/parties`.",
+          "Changes one property of a project the caller works in; every field is optional and at least one must be given. A null clears the registry identifier, the notes, the driver's instructions or the geocode. An `addressId` found in the address register replaces the address with the register's, its parts, and its BFE number and access point wherever the patch sets neither; a typed `address`, or `addressId: null`, lets the register's id and parts go. The project is not patchable, since a record does not move between projects, and the parties are a set, so they are `PUT /properties/{id}/parties`.",
         security: BEARER_SECURITY,
         responses: {
           200: describeJson("The property as it now stands.", Property),
           400: describeProblem(
-            "The path does not hold an id, or the patch is empty, names a field the caller does not own (the project and the parties included), or holds a point outside the WGS 84 range.",
+            "The path does not hold an id, or the patch is empty, names a field the caller does not own (the project and the parties included), holds a point outside the WGS 84 range, gives both `address` and `addressId`, or names an `addressId` the register does not hold.",
           ),
           401: describeProblem("No usable token (see WWW-Authenticate)."),
           403: describeProblem("No active account here, or the caller's role does not allow `edit` on `customers.properties`."),
           404: describeProblem("No property with that id in the projects this account works in."),
           409: describeProblem("The project already has another property with that name, or the company one with that registry identifier."),
+          502: describeProblem("The patch names an `addressId` and the address register did not answer: try again, or type the address and place the point by hand."),
+          503: describeProblem("The patch names an `addressId` on a deployment with no address register: type the address."),
         },
       }),
+      lookup,
       guard,
       requireGrant(MODULE, "edit"),
       validate("param", IdParam),
       validate("json", PropertyPatch),
-      async (c) => c.json(await patchProperty(c.get("tx"), c.get("principal"), c.req.valid("param").id, c.req.valid("json"))),
+      async (c) => c.json(await patchProperty(c.get("tx"), c.get("principal"), c.req.valid("param").id, c.req.valid("json"), foundAddress(c))),
     )
     .put(
       "/properties/:id/parties",

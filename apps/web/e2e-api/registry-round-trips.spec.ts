@@ -573,6 +573,59 @@ test("Properties: created in the browser with its owner and its point, read back
   await expect(page.getByText("The property is inactive; a subscription needs an active property")).toBeVisible()
 })
 
+test("Properties: found in the address register through the picker, geocoded as it is created, and typed over in the edit, which lets the register's address go (#291 C13)", async ({ page, api }) => {
+  const project = await projectNamed(api, TESTER_PROJECT)
+  const name = uniqueName("E2E Found property")
+  // The tenant persists across runs, and a BFE number is one property's: the office's own number is typed first, which a pick keeps.
+  const registryId = uniqueName("E2E-BFE")
+  await openLoaded(page, "/customers?module=properties", "/properties")
+
+  await page.getByRole("main").getByRole("button", { name: "New property" }).click()
+  const dialog = page.getByRole("dialog")
+  await expect(dialog.getByRole("heading", { name: "Create property" })).toBeVisible()
+  await pickOne(page, dialog, "Operating project", /^Copenhagen Central/)
+  await dialog.getByLabel("Property name").fill(name)
+  await dialog.getByLabel("Property registry identifier").fill(registryId)
+  await pickOne(page, dialog, "Property type", /^Residential/)
+
+  // The fake register (ADDRESS_PROVIDER=fake) holds Strandvejen 100 in Hellerup, placed at its access point.
+  await dialog.getByLabel("Find in the address register").fill("strandvejen 100")
+  await dialog.getByRole("option", { name: "Strandvejen 100, 2900 Hellerup" }).click()
+  await expect(dialog.getByText("Found in the address register")).toBeVisible()
+  await expect(dialog.getByLabel("Service address")).toHaveValue("Strandvejen 100, 2900 Hellerup")
+  await expect(dialog.getByLabel("Latitude")).toHaveValue("55.7316")
+  await expect(dialog.getByLabel("Property registry identifier")).toHaveValue(registryId)
+  await expect(dialog.getByText(/Klimadatastyrelsen/)).toBeVisible()
+
+  const [created] = await Promise.all([answerOf(page, "POST", "/properties"), dialog.getByRole("button", { name: "Create property" }).click()])
+  expect(created.status()).toBe(201)
+  const sent = JSON.parse(created.request().postData() ?? "{}") as Record<string, unknown>
+  expect(sent.address).toBeUndefined()
+  const property = (await created.json()) as Property
+  expect(property).toMatchObject({
+    projectId: project.id,
+    name,
+    address: "Strandvejen 100, 2900 Hellerup",
+    addressId: sent.addressId,
+    addressParts: { streetName: "Strandvejen", houseNumber: "100", postcode: "2900", postTown: "Hellerup", municipalityCode: "0157" },
+    registryId,
+    location: { type: "Point", coordinates: [12.5781, 55.7316] },
+  })
+
+  // The edit types over the address: it is the office's own again, and the register's id goes as a null beside the text.
+  const sheet = page.getByRole("dialog").filter({ has: page.getByTestId("place-commands") })
+  await expect(sheet.getByRole("heading", { name })).toBeVisible()
+  await sheet.getByRole("button", { name: "Edit property" }).click()
+  const edit = page.getByRole("dialog").filter({ has: page.getByRole("heading", { name: "Edit property" }) })
+  await expect(edit.getByText("Found in the address register")).toBeVisible()
+  await edit.getByLabel("Service address").fill("Strandvejen 100 (gate in the back), 2900 Hellerup")
+  await expect(edit.getByLabel("Find in the address register")).toBeVisible()
+  const [patched] = await Promise.all([answerOf(page, "PATCH", `/properties/${property.id}`), edit.getByRole("button", { name: "Save changes" }).click()])
+  expect(patched.status()).toBe(200)
+  expect(JSON.parse(patched.request().postData() ?? "{}")).toEqual({ address: "Strandvejen 100 (gate in the back), 2900 Hellerup", addressId: null })
+  expect(await patched.json()).toMatchObject({ addressId: null, addressParts: null, location: property.location })
+})
+
 test("Property groups: gathered in the browser with a member, read back, and a member added in another role while the first keeps its own", async ({ page, api }) => {
   const project = await projectNamed(api, TESTER_PROJECT)
   const first = await propertyThroughApi(api, project.id)
