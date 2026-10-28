@@ -33,6 +33,12 @@
 export const SERVICE_DAYS = ["monday", "tuesday", "wednesday", "thursday", "friday", "saturday", "sunday"] as const
 /** How often a Route Scheme recurs; `every-4-weeks` is kept for stored records, the forms offer the other five. */
 export const RECURRENCE_FREQUENCIES = ["daily", "weekly", "every-2-weeks", "every-3-weeks", "every-4-weeks", "monthly"] as const
+/**
+ * The cadences a Season of a Route Scheme may run at (O17 of #290): every
+ * scheme cadence but `daily`. A season changes how often the scheme's service
+ * days are served, and a daily season would serve days the scheme does not.
+ */
+export const SEASON_FREQUENCIES = ["weekly", "every-2-weeks", "every-3-weeks", "every-4-weeks", "monthly"] as const satisfies readonly (typeof RECURRENCE_FREQUENCIES)[number][]
 /** Which ISO-week parity an `every-2-weeks` scheme serves. */
 export const WEEK_ROTATIONS = ["odd", "even"] as const
 /** What a scheme does with a collection that falls on a holiday. */
@@ -56,6 +62,7 @@ export const GENERATION_RUN_STATUSES = ["queued", "running", "succeeded", "faile
 
 export type ServiceDay = (typeof SERVICE_DAYS)[number]
 export type RecurrenceFrequency = (typeof RECURRENCE_FREQUENCIES)[number]
+export type SeasonFrequency = (typeof SEASON_FREQUENCIES)[number]
 export type WeekRotation = (typeof WEEK_ROTATIONS)[number]
 export type HolidayPolicy = (typeof HOLIDAY_POLICIES)[number]
 export type OccurrenceStatus = (typeof OCCURRENCE_STATUSES)[number]
@@ -80,6 +87,7 @@ export const DEFAULT_WEEKEND = ["saturday", "sunday"] as const satisfies readonl
 export const PLANNING_VOCABULARIES = {
   SERVICE_DAYS,
   RECURRENCE_FREQUENCIES,
+  SEASON_FREQUENCIES,
   WEEK_ROTATIONS,
   HOLIDAY_POLICIES,
   OCCURRENCE_STATUSES,

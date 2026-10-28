@@ -188,6 +188,10 @@ _Avoid_: Holiday calendar, holiday picker, calendar (for the list itself)
 An effective-dated recurring template — geography, calendar, recurrence, service days, stop selection, default assignment (vehicle, driver, depot, unloading station), and a planned start time — from which service work is generated. The effective period may be open-ended: an omitted effective-to means the scheme continues per its recurrence and calendar until explicitly ended or expired through later configuration. The scheme owns the rules that determine its stops through its Collection Groups: by default a group's Stop Matching Rule resolves the eligible containers at every generation; an explicitly picked container list is the small-scale alternative. Assignment (vehicle, driver, service provider) lives on the groups; the scheme keeps the planning area, calendar, recurrence, depot, and unloading station.
 _Avoid_: Route, plan, pickup setting, collection week
 
+**Season**:
+A stretch of every year — a first day and a last day, the same each year, over the new year where it ends before it starts — in which a Route Scheme serves its service days at another cadence than its own (garden waste weekly in summer, every other week in winter). A scheme's seasons share no day; outside every season the scheme runs at its own cadence, and a daily scheme has none. Not a period of the scheme: the scheme's effective period still bounds every season.
+_Avoid_: Period, version, seasonal depot
+
 **Collection Group**:
 One unit of planning inside a Route Scheme: the service days it runs on (a subset of the scheme's), its waste fractions, a vehicle, a default driver, an optional Service Provider, and its stop source — a Stop Matching Rule or explicitly picked containers, never both. Generation writes one Route per group per applicable day; a scheme without explicit groups has one implicit group. Every service day has at least one group, and no vehicle, driver, or container is on two groups the same day.
 _Avoid_: Route, run, leg, assignment (unqualified), route scheme

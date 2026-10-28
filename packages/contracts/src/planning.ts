@@ -25,6 +25,7 @@ import {
   RECURRENCE_FREQUENCIES,
   ROUTE_SCHEME_STATUSES,
   SCHEME_EDIT_POLICIES,
+  SEASON_FREQUENCIES,
   SERVICE_DAYS,
   SERVICE_TYPES,
   STOP_SOURCES,
@@ -44,6 +45,10 @@ export type ServiceDay = z.infer<typeof ServiceDay>
 /** How often a Route Scheme recurs. */
 export const RecurrenceFrequency = z.enum(RECURRENCE_FREQUENCIES)
 export type RecurrenceFrequency = z.infer<typeof RecurrenceFrequency>
+
+/** The cadences a season of a scheme may run at: every scheme cadence but daily (O17 of #290). */
+export const SeasonFrequency = z.enum(SEASON_FREQUENCIES)
+export type SeasonFrequency = z.infer<typeof SeasonFrequency>
 
 /** Which ISO-week parity an every-2-weeks scheme serves. */
 export const WeekRotation = z.enum(WEEK_ROTATIONS)

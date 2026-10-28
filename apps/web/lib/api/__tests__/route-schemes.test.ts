@@ -27,6 +27,7 @@ import { draftGroups } from "@waste/domain/route-schemes/draft"
 import type { GuidedSchemeData } from "@waste/domain/route-schemes/quick-create"
 import { collectionGroupsOfRecord, collectionGroupsToValues, type CollectionGroup as SchemeGroup } from "@waste/domain/route-schemes/groups"
 import { effectiveSchemeStatus, schemeLiveValidation } from "@waste/domain/route-schemes/lifecycle"
+import { SCHEME_SEASONS_KEY, seasonsValue, storedSeasonsFromValues } from "@waste/domain/route-schemes/scheme-seasons"
 
 import { FIXTURE_COMPANY_ID, getModuleDefinition, type BusinessRecord } from "../../data/business-modules"
 import { ROUTE_SCHEMES_MODULE, schemeValuesOfDraft } from "../../data/route-schemes"
@@ -98,6 +99,7 @@ const central: RouteScheme = {
   depotId: NORDHAVN_DEPOT,
   unloadingStationId: null,
   collectionGroups: [groupOf({ id: CENTRAL_GROUP_ID, routeSchemeId: CENTRAL_ID, name: "RS-Central · Week A", vehicleId: WH24, driverId: MADS })],
+  seasons: [],
   generation: { lastGeneratedAt: null, groups: [] },
   warnings: [],
   validFrom: "2026-06-01",
@@ -374,6 +376,7 @@ describe("a scheme the quick form makes", () => {
           driverId: null,
         },
       ],
+      seasons: [],
       validFrom: "2026-10-05",
     })
     assert.ok(RouteSchemeCreate.safeParse(body).success, JSON.stringify(RouteSchemeCreate.safeParse(body).error?.issues))
@@ -483,6 +486,7 @@ describe("a scheme the guided setup makes (#178)", () => {
         { name: "North", days: ["monday"], stopSource: "rule", rule: { wasteFractionIds: [residual.id], containerTypeIds: [bin240.id], vehicleTypeId: null }, containerIds: null, serviceProviderId: null, vehicleId: WH24, driverId: MADS },
         { name: "South", days: ["thursday"], stopSource: "rule", rule: { wasteFractionIds: [residual.id], containerTypeIds: [bin240.id], vehicleTypeId: null }, containerIds: null, serviceProviderId: null, vehicleId: NR08, driverId: null },
       ],
+      seasons: [],
       validFrom: "2026-10-05",
     })
   })
@@ -696,5 +700,30 @@ describe("the occurrence read", () => {
     const { fetch, calls } = scripted([() => json(rows)])
     assert.deepEqual(await schemeOccurrences(clientOver(fetch), CENTRAL_ID, { from: "2026-10-01", to: "2026-12-31" }), rows)
     assert.deepEqual(calls.map(request), [`GET /route-schemes/${CENTRAL_ID}/occurrences?from=2026-10-01&to=2026-12-31`])
+  })
+})
+
+describe("a scheme's seasons (O17 of #290)", () => {
+  const summer = { name: "Summer", startsOn: "05-01", endsOn: "10-01", frequency: "weekly", weekRotation: null } as const
+  const winter = { name: "Winter", startsOn: "11-01", endsOn: "04-01", frequency: "every-2-weeks", weekRotation: "odd" } as const
+
+  test("ride on the record as JSON and as a fact naming them, and none is an empty set", () => {
+    const record = recordOf({ ...central, seasons: [summer, winter] })
+    assert.deepEqual(storedSeasonsFromValues(record.submittedValues), [summer, winter])
+    assert.equal(record.facts?.Seasons, "Summer, Winter")
+    const plain = recordOf(central)
+    assert.equal(plain.submittedValues?.[SCHEME_SEASONS_KEY], "[]")
+    assert.equal(plain.facts?.Seasons, undefined)
+  })
+
+  test("an edit sends the set whole where it moved, an empty set where it was cleared, and nothing where it stands", () => {
+    const before = recordOf({ ...central, seasons: [summer] })
+    const moved = { ...before, submittedValues: { ...before.submittedValues, [SCHEME_SEASONS_KEY]: seasonsValue([summer, winter]) } }
+    assert.deepEqual(routeSchemeAdapter.toPatchBody?.(before, moved, context()), { seasons: [summer, winter] })
+    const cleared = { ...before, submittedValues: { ...before.submittedValues, [SCHEME_SEASONS_KEY]: "[]" } }
+    assert.deepEqual(routeSchemeAdapter.toPatchBody?.(before, cleared, context()), { seasons: [] })
+    const renamed = { ...before, submittedValues: { ...before.submittedValues, schemeName: "Renamed" } }
+    assert.deepEqual(routeSchemeAdapter.toPatchBody?.(before, renamed, context()), { name: "Renamed" })
+    assert.ok(RouteSchemePatch.safeParse({ seasons: [summer, winter] }).success)
   })
 })

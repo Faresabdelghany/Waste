@@ -83,7 +83,7 @@ import { planningArea, planningAreaBoundary } from "@waste/db/schema/planning-ar
 import { alert, ticket, ticketBooking, ticketEvent, ticketSla } from "@waste/db/schema/resolution"
 import { application, applicationDecision } from "@waste/db/schema/applications"
 import { bulkyBooking, bulkyBookingItem, bulkySchedule } from "@waste/db/schema/bulky"
-import { collectionGroup, collectionGroupContainer, collectionGroupContainerType, collectionGroupFraction, routeScheme } from "@waste/db/schema/route-schemes"
+import { collectionGroup, collectionGroupContainer, collectionGroupContainerType, collectionGroupFraction, routeScheme, routeSchemeSeason } from "@waste/db/schema/route-schemes"
 import { withCompany } from "@waste/db/tenant"
 import { normaliseGrants, type Grant } from "@waste/domain/access/grants"
 import { SYSTEM_ROLES, type SystemRoleKey } from "@waste/domain/access/system-roles"
@@ -413,6 +413,7 @@ export async function dropTenant(pool: Database, companyId: string, owner?: Data
     await tx.delete(collectionGroupContainerType).where(eq(collectionGroupContainerType.companyId, companyId))
     await tx.delete(collectionGroupFraction).where(eq(collectionGroupFraction.companyId, companyId))
     await tx.delete(collectionGroup).where(eq(collectionGroup.companyId, companyId))
+    await tx.delete(routeSchemeSeason).where(eq(routeSchemeSeason.companyId, companyId))
     await tx.delete(routeScheme).where(eq(routeScheme.companyId, companyId))
     await tx.delete(driverAbsence).where(eq(driverAbsence.companyId, companyId))
     await tx.delete(vehicleUnavailability).where(eq(vehicleUnavailability.companyId, companyId))

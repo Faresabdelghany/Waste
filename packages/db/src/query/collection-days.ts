@@ -16,12 +16,12 @@
 // listed stops and a rule group's latest match (`generation_match`, the set
 // the last run wrote for it), each counted only for the source the group now
 // takes its stops from. Of those groups' schemes, the validated ones are
-// planned, with the routes already standing for those groups in the window
+// planned at their cadence and their seasons', with the routes already standing for those groups in the window
 // and the project's working week and holidays near it, as generation reads
 // them.
 import { holidayListOf, schemeRecurrenceOf, type ExistingRoute, type GenerationWindow } from "@waste/domain/planning/generation"
 import { lookbackOf, type ServedContainer, type ServingGroup, type ServingScheme } from "@waste/domain/planning/collection-days"
-import type { RecurrenceFrequency, ServiceDay, StopSource, WeekRotation } from "@waste/domain/planning/vocabulary"
+import type { RecurrenceFrequency, SeasonFrequency, ServiceDay, StopSource, WeekRotation } from "@waste/domain/planning/vocabulary"
 import type { RouteStatus } from "@waste/domain/execution/vocabulary"
 import { SHIFT_SEARCH_DAYS, type HolidayPolicy, type SchemeCalendar } from "@waste/domain/route-schemes/occurrences"
 import { addDays } from "@waste/domain/route-schemes/recurrence"
@@ -37,7 +37,7 @@ import { property } from "../schema/customers"
 import { route } from "../schema/execution"
 import { generationMatch } from "../schema/generation"
 import { project } from "../schema/organisation"
-import { collectionGroup, collectionGroupContainer, routeScheme } from "../schema/route-schemes"
+import { collectionGroup, collectionGroupContainer, routeScheme, routeSchemeSeason } from "../schema/route-schemes"
 import { validOn } from "./valid-on"
 
 /** A project's property, as a search names it. */
@@ -215,6 +215,24 @@ export async function readCollectionDayInputs(tx: Tx, scope: ScopedProject, prop
     })
     .from(routeScheme)
     .where(and(fenced(routeScheme), inArray(routeScheme.id, [...serving.keys()]), eq(routeScheme.status, "validated")))
+  // The schemes' seasons (O17 of #290): the cadence for part of every year, which generation plans by too.
+  const seasons =
+    schemes.length === 0
+      ? []
+      : await tx
+          .select({
+            routeSchemeId: routeSchemeSeason.routeSchemeId,
+            name: routeSchemeSeason.name,
+            startsOn: routeSchemeSeason.startsOn,
+            endsOn: routeSchemeSeason.endsOn,
+            frequency: routeSchemeSeason.frequency,
+            weekRotation: routeSchemeSeason.weekRotation,
+          })
+          .from(routeSchemeSeason)
+          .where(and(fenced(routeSchemeSeason), inArray(routeSchemeSeason.routeSchemeId, schemes.map((scheme) => scheme.id))))
+          .orderBy(asc(routeSchemeSeason.startsOn))
+  const seasonsOf = (schemeId: string) =>
+    seasons.filter((season) => season.routeSchemeId === schemeId).map(({ routeSchemeId: _scheme, ...season }) => ({ ...season, frequency: season.frequency as SeasonFrequency, weekRotation: season.weekRotation as WeekRotation | null }))
   const groupIds = schemes.flatMap((scheme) => (serving.get(scheme.id) ?? []).map((group) => group.id))
   const standing =
     groupIds.length === 0
@@ -251,6 +269,7 @@ export async function readCollectionDayInputs(tx: Tx, scope: ScopedProject, prop
           weekRotation: scheme.weekRotation as WeekRotation | null,
           validFrom: scheme.validFrom,
           validTo: scheme.validTo,
+          seasons: seasonsOf(scheme.id),
         }),
         holidayPolicy: scheme.holidayPolicy as HolidayPolicy,
         groups: schemeGroups,

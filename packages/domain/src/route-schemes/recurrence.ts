@@ -10,6 +10,7 @@
 //     every-2-weeks → ISO-week parity of date == the scheme's week rotation
 //     once-a-month → dayOfMonth(date) <= 7 (the first occurrence of each
 //                    selected weekday in the month)
+//     the cadence is the season's in force on the date, if any (seasons.ts)
 //   Route identity = (schemeId, serviceDate) — deterministic, so
 //   regeneration can upsert instead of duplicating.
 //
@@ -18,6 +19,8 @@
 // here so its importers did not move.
 
 import { RECURRENCE_FREQUENCIES, SERVICE_DAYS, type WEEK_ROTATIONS } from "../planning/vocabulary"
+import { seasonsFromValues } from "./scheme-seasons"
+import { seasonOn, seasonStartOf, type SchemeSeason } from "./seasons"
 
 export { SERVICE_DAYS }
 
@@ -118,6 +121,12 @@ export type SchemeRecurrence = {
   effectiveTo: string
   /** Planned start time ("06:30"); carried for facts, not used in date math. */
   startTime?: string
+  /**
+   * The cadences the scheme runs at for part of every year (O17 of #290,
+   * seasons.ts); outside every season the frequency above. The seasons share
+   * no day. Absent or empty, the scheme runs at one cadence all year.
+   */
+  seasons?: readonly SchemeSeason[]
 }
 
 const parseIso = (iso: string) => new Date(`${iso}T00:00:00Z`)
@@ -181,29 +190,52 @@ const ANCHORED_WEEK_INTERVALS: Partial<Record<RecurrenceFrequency, number>> = {
   "every-4-weeks": 4,
 }
 
+/** The cadence a recurrence runs at on one date: its own, or that of the season in force, anchored as seasons.ts says. */
+export type CadenceOn = {
+  frequency: RecurrenceFrequency
+  weekRotation?: WeekRotation
+  /** The day an every-3/4-weeks count starts from; empty where there is none. */
+  anchor: string
+  /** The season in force on the date, if any. */
+  season?: SchemeSeason
+}
+
+/** The cadence the recurrence runs at on the date: the season's in force there, or the scheme's own. */
+export function cadenceOn(recurrence: SchemeRecurrence, iso: string): CadenceOn {
+  const season = seasonOn(recurrence.seasons, iso)
+  if (season === undefined) {
+    return { frequency: recurrence.frequency, ...(recurrence.weekRotation === undefined ? {} : { weekRotation: recurrence.weekRotation }), anchor: recurrence.effectiveFrom }
+  }
+  // Each year's stretch counts from its own first day, or from the scheme's where the scheme starts inside it.
+  const start = seasonStartOf(season, iso)
+  const anchor = recurrence.effectiveFrom && recurrence.effectiveFrom > start ? recurrence.effectiveFrom : start
+  return { frequency: season.frequency, ...(season.weekRotation === undefined ? {} : { weekRotation: season.weekRotation }), anchor, season }
+}
+
 export function matchesRecurrence(recurrence: SchemeRecurrence, iso: string): boolean {
   if (recurrence.effectiveFrom && iso < recurrence.effectiveFrom) return false
   if (recurrence.effectiveTo && iso > recurrence.effectiveTo) return false
+  const cadence = cadenceOn(recurrence, iso)
   // Daily serves every weekday, whatever the stored service days say.
-  if (recurrence.frequency === "daily") return true
+  if (cadence.frequency === "daily") return true
   if (!recurrence.serviceDays.includes(serviceDayOf(iso))) return false
   if (
-    recurrence.frequency === "every-2-weeks" &&
-    isoWeekRotation(iso) !== recurrence.weekRotation
+    cadence.frequency === "every-2-weeks" &&
+    isoWeekRotation(iso) !== cadence.weekRotation
   ) {
     return false
   }
   // Without an effective-from there is no anchor week; the cadence then
   // degrades to weekly rather than matching nothing (the form requires From).
-  const interval = ANCHORED_WEEK_INTERVALS[recurrence.frequency]
+  const interval = ANCHORED_WEEK_INTERVALS[cadence.frequency]
   if (
     interval &&
-    recurrence.effectiveFrom &&
-    weeksFromEffectiveFrom(recurrence, iso) % interval !== 0
+    cadence.anchor &&
+    weeksFromEffectiveFrom({ effectiveFrom: cadence.anchor }, iso) % interval !== 0
   ) {
     return false
   }
-  if (recurrence.frequency === "monthly" && parseIso(iso).getUTCDate() > 7) return false
+  if (cadence.frequency === "monthly" && parseIso(iso).getUTCDate() > 7) return false
   return true
 }
 
@@ -339,7 +371,8 @@ const isRotation = (value: unknown): value is WeekRotation =>
  * `route-studio.schemes` field ids, also kept on created records as
  * `submittedValues`). Returns null while the recurrence is still incomplete:
  * no frequency, no service day, no effective-from, or an every-2-weeks
- * frequency without a week rotation.
+ * frequency without a week rotation. The seasons ride along where the record
+ * carries a set the date math may read (scheme-seasons.ts).
  */
 export function recurrenceFromValues(
   values: Record<string, string | boolean | undefined>,
@@ -357,6 +390,8 @@ export function recurrenceFromValues(
   if (effectiveTo && !isIsoDate(effectiveTo)) return null
   const weekRotation = isRotation(values.weekRotation) ? values.weekRotation : undefined
   if (frequency === "every-2-weeks" && !weekRotation) return null
+  // A daily scheme has no seasons (O17 of #290); any other carries the record's, where it has some.
+  const seasons = frequency === "daily" ? [] : seasonsFromValues(values)
   return {
     frequency,
     serviceDays,
@@ -366,5 +401,6 @@ export function recurrenceFromValues(
     ...(typeof values.plannedStartTime === "string" && values.plannedStartTime
       ? { startTime: values.plannedStartTime }
       : {}),
+    ...(seasons.length === 0 ? {} : { seasons }),
   }
 }

@@ -2624,6 +2624,38 @@ policy wms.route_scheme route_scheme_public_door permissive SELECT to=wms_public
    FROM wms.project published
   WHERE ((published.company_id = route_scheme.company_id) AND (published.id = route_scheme.project_id) AND (published.public_slug IS NOT NULL))))) check=none
 policy wms.route_scheme route_scheme_tenant_fence permissive ALL to=wms_api using=(company_id = ( SELECT wms.current_company_id() AS current_company_id)) check=(company_id = ( SELECT wms.current_company_id() AS current_company_id))
+relation wms.route_scheme_season kind=table owner=<owner> persistence=p rls=true force-rls=true replica-identity=d acl=[<owner>=DELETE,INSERT,MAINTAIN,REFERENCES,SELECT,TRIGGER,TRUNCATE,UPDATE/<owner> wms_api=DELETE,INSERT,SELECT,UPDATE/<owner> wms_worker=SELECT/<owner>]
+column wms.route_scheme_season 1 id uuid not-null default=wms.uuidv7()
+column wms.route_scheme_season 2 company_id uuid not-null acl=[wms_public=SELECT/<owner>]
+column wms.route_scheme_season 3 project_id uuid not-null acl=[wms_public=SELECT/<owner>]
+column wms.route_scheme_season 4 created_at timestamp with time zone not-null default=now()
+column wms.route_scheme_season 5 updated_at timestamp with time zone not-null default=now()
+column wms.route_scheme_season 6 route_scheme_id uuid not-null acl=[wms_public=SELECT/<owner>]
+column wms.route_scheme_season 7 name text not-null acl=[wms_public=SELECT/<owner>]
+column wms.route_scheme_season 8 starts_on text not-null acl=[wms_public=SELECT/<owner>]
+column wms.route_scheme_season 9 ends_on text not-null acl=[wms_public=SELECT/<owner>]
+column wms.route_scheme_season 10 frequency text not-null acl=[wms_public=SELECT/<owner>]
+column wms.route_scheme_season 11 week_rotation text acl=[wms_public=SELECT/<owner>]
+constraint wms.route_scheme_season route_scheme_season_company_id_fk FOREIGN KEY (company_id) REFERENCES wms.company(id)
+constraint wms.route_scheme_season route_scheme_season_ends_on_shape CHECK ((ends_on ~ '^((01|03|05|07|08|10|12)-(0[1-9]|[12][0-9]|3[01])|(04|06|09|11)-(0[1-9]|[12][0-9]|30)|02-(0[1-9]|1[0-9]|2[0-8]))$'::text))
+constraint wms.route_scheme_season route_scheme_season_frequency_one_of CHECK ((frequency = ANY (ARRAY['weekly'::text, 'every-2-weeks'::text, 'every-3-weeks'::text, 'every-4-weeks'::text, 'monthly'::text])))
+constraint wms.route_scheme_season route_scheme_season_pkey PRIMARY KEY (id)
+constraint wms.route_scheme_season route_scheme_season_project_id_fk FOREIGN KEY (company_id, project_id) REFERENCES wms.project(company_id, id)
+constraint wms.route_scheme_season route_scheme_season_route_scheme_id_fk FOREIGN KEY (company_id, project_id, route_scheme_id) REFERENCES wms.route_scheme(company_id, project_id, id)
+constraint wms.route_scheme_season route_scheme_season_route_scheme_id_name_key UNIQUE (company_id, route_scheme_id, name)
+constraint wms.route_scheme_season route_scheme_season_span CHECK ((starts_on <> ends_on))
+constraint wms.route_scheme_season route_scheme_season_starts_on_shape CHECK ((starts_on ~ '^((01|03|05|07|08|10|12)-(0[1-9]|[12][0-9]|3[01])|(04|06|09|11)-(0[1-9]|[12][0-9]|30)|02-(0[1-9]|1[0-9]|2[0-8]))$'::text))
+constraint wms.route_scheme_season route_scheme_season_week_rotation_one_of CHECK ((week_rotation = ANY (ARRAY['odd'::text, 'even'::text])))
+constraint wms.route_scheme_season route_scheme_season_week_rotation_shape CHECK (((frequency = 'every-2-weeks'::text) = (week_rotation IS NOT NULL)))
+index wms.route_scheme_season route_scheme_season_pkey CREATE UNIQUE INDEX route_scheme_season_pkey ON wms.route_scheme_season USING btree (id)
+index wms.route_scheme_season route_scheme_season_project_id_idx CREATE INDEX route_scheme_season_project_id_idx ON wms.route_scheme_season USING btree (company_id, project_id)
+index wms.route_scheme_season route_scheme_season_route_scheme_id_name_key CREATE UNIQUE INDEX route_scheme_season_route_scheme_id_name_key ON wms.route_scheme_season USING btree (company_id, route_scheme_id, name)
+trigger wms.route_scheme_season route_scheme_season_audit_trail enabled=O CREATE TRIGGER route_scheme_season_audit_trail AFTER INSERT OR DELETE OR UPDATE ON wms.route_scheme_season FOR EACH ROW EXECUTE FUNCTION wms.audit_row('route_scheme', 'route_scheme_id')
+trigger wms.route_scheme_season route_scheme_season_touch_updated_at enabled=O CREATE TRIGGER route_scheme_season_touch_updated_at BEFORE UPDATE ON wms.route_scheme_season FOR EACH ROW EXECUTE FUNCTION wms.touch_updated_at()
+policy wms.route_scheme_season route_scheme_season_public_door permissive SELECT to=wms_public using=((company_id = ( SELECT wms.current_company_id() AS current_company_id)) AND (EXISTS ( SELECT 1
+   FROM wms.project published
+  WHERE ((published.company_id = route_scheme_season.company_id) AND (published.id = route_scheme_season.project_id) AND (published.public_slug IS NOT NULL))))) check=none
+policy wms.route_scheme_season route_scheme_season_tenant_fence permissive ALL to=wms_api using=(company_id = ( SELECT wms.current_company_id() AS current_company_id)) check=(company_id = ( SELECT wms.current_company_id() AS current_company_id))
 relation wms.routing_quota kind=table owner=<owner> persistence=p rls=true force-rls=true replica-identity=d acl=[<owner>=DELETE,INSERT,MAINTAIN,REFERENCES,SELECT,TRIGGER,TRUNCATE,UPDATE/<owner> wms_api=DELETE,INSERT,SELECT,UPDATE/<owner> wms_worker=SELECT/<owner>]
 column wms.routing_quota 1 id uuid not-null default=wms.uuidv7()
 column wms.routing_quota 2 company_id uuid not-null
@@ -4115,4 +4147,5 @@ journal 1793117570372 0cf12010a83bd55fbf734aea83b3699d1636d710d1cc52cd63b5b58644
 journal 1793122833651 fddd34bf8e7c1eadc319cddcf6b5a274974e7993317a4fc32d01ed89ce216655
 journal 1793171628420 0fde43652c55b3a47f1abdd683139b9c1f7f368895a38765d4315da4e99f00ec
 journal 1793174294074 9f8a53244ab3c25c383f6b2e788c2de5bdff4c797a91765ca7839ff20a9e38ca
+journal 1793177580649 01fe8bafb789dc34ac91a51fe178c57f3554bde9065bde1d1d8e3cb9274b5335
 pgboss-version 42

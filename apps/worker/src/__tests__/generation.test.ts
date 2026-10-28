@@ -55,7 +55,7 @@ import { generationMatch, generationRun } from "@waste/db/schema/generation"
 import { company, project, serviceProvider } from "@waste/db/schema/organisation"
 import { depot, unloadingStation } from "@waste/db/schema/places"
 import { planningArea, planningAreaBoundary } from "@waste/db/schema/planning-areas"
-import { collectionGroup, collectionGroupContainer, collectionGroupFraction, routeScheme } from "@waste/db/schema/route-schemes"
+import { collectionGroup, collectionGroupContainer, collectionGroupFraction, routeScheme, routeSchemeSeason } from "@waste/db/schema/route-schemes"
 import { PGBOSS_SCHEMA } from "@waste/db/sql/pgboss"
 import { withCompany } from "@waste/db/tenant"
 import { NO_LONGER_SERVES_DATE, NO_PLANNING_AREA, REMOVED_FROM_DAY_PLAN } from "@waste/domain/planning/generation"
@@ -857,5 +857,24 @@ describe("generation against a migrated database", { skip }, () => {
     assert.equal(resumed.unlocated, 1)
     assert.deepEqual(await stopsOn(b.residualGroup, "2026-10-15"), [b.bin1, b.bin3], "the Thursday after: bin 1 is back")
     assert.deepEqual(await stopsOn(b.glassGroup, "2026-10-15"), [b.glassBin], "and so is the pick")
+  })
+
+  test("a season runs the scheme at its own cadence (O17 of #290): every other week in summer, the routes between not written; the season gone, the next run writes them", async () => {
+    // A summer of even weeks; 7 Jun 2027 is in week 23, 14 Jun in week 24. Far from every other test's window.
+    const summer = { from: "2027-06-07", to: "2027-06-20" }
+    const [season] = await ownerPool.db
+      .insert(routeSchemeSeason)
+      .values({ companyId: a.company, projectId: a.project, routeSchemeId: a.scheme, name: "Summer", startsOn: "06-01", endsOn: "09-01", frequency: "every-2-weeks", weekRotation: "even" })
+      .returning({ id: routeSchemeSeason.id })
+    const residualDays = async () => (await routesOfA()).filter((row) => row.collectionGroupId === a.residualGroup && row.serviceDate >= summer.from && row.serviceDate <= summer.to && row.status === "planned").map((row) => row.serviceDate)
+    try {
+      const seasonal = await generateA(summer)
+      assert.equal(seasonal.run.status, "succeeded")
+      assert.deepEqual(await residualDays(), ["2027-06-14", "2027-06-17"], "the even week's Monday and Thursday only")
+    } finally {
+      await ownerPool.db.delete(routeSchemeSeason).where(eq(routeSchemeSeason.id, season.id))
+    }
+    await generateA(summer)
+    assert.deepEqual(await residualDays(), ["2027-06-07", "2027-06-10", "2027-06-14", "2027-06-17"], "weekly again, the identities of the season's routes kept")
   })
 })

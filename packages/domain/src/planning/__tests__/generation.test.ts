@@ -75,6 +75,19 @@ describe("schemeRecurrenceOf and holidayListOf", () => {
     assert.deepEqual(schemeRecurrenceOf({ ...stored, frequency: "weekly", weekRotation: null, validTo: null }), { frequency: "weekly", serviceDays: ["monday"], effectiveFrom: "2026-10-01", effectiveTo: "" })
   })
 
+  test("the rows' seasons become the domain's, a null rotation left out; no seasons is none", () => {
+    const stored = { frequency: "weekly" as const, serviceDays: ["monday" as const], weekRotation: null, validFrom: "2026-10-01", validTo: null }
+    const seasons = [
+      { name: "Winter", startsOn: "11-01", endsOn: "04-01", frequency: "every-2-weeks" as const, weekRotation: "odd" as const },
+      { name: "Spring", startsOn: "04-01", endsOn: "05-01", frequency: "every-3-weeks" as const, weekRotation: null },
+    ]
+    assert.deepEqual(schemeRecurrenceOf({ ...stored, seasons }).seasons, [
+      { name: "Winter", startsOn: "11-01", endsOn: "04-01", frequency: "every-2-weeks", weekRotation: "odd" },
+      { name: "Spring", startsOn: "04-01", endsOn: "05-01", frequency: "every-3-weeks" },
+    ])
+    assert.equal("seasons" in schemeRecurrenceOf({ ...stored, seasons: [] }), false)
+  })
+
   test("a project without a holiday list reads no holidays whatever its calendars hold; with one, a carried name wins and the list names the rest", () => {
     const rows = [
       { day: "2026-12-25", name: null },

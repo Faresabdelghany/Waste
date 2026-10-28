@@ -57,6 +57,10 @@
 // as the API stores and matches it. O14 of #290 added
 // @waste/domain/execution/shift: shifts.ts holds a window and a shift to the
 // domain's rules in the domain's sentences, with the break's bounds.
+// O17 of #290 added
+// @waste/domain/route-schemes/seasons: route-schemes.ts reads the month-day
+// pattern the database's checks read, and the overlap rule of a scheme's
+// seasons.
 import path from "node:path"
 import { fileURLToPath } from "node:url"
 
@@ -93,6 +97,7 @@ definePurityTests({
     "@waste/domain/resources/drop-off-points",
     "@waste/domain/resources/emissions",
     "@waste/domain/resources/vocabulary",
+    "@waste/domain/route-schemes/seasons",
     "@waste/domain/routing/vocabulary",
     "@waste/domain/sorting-guide/search",
     "@waste/domain/sorting-guide/vocabulary",

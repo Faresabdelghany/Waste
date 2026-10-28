@@ -77,7 +77,7 @@ import { WALK_CAP_DAYS } from "../route-schemes/generation"
 import { holidayLabel, holidayNamesFor, withCarriedNames } from "../route-schemes/holiday-names"
 import { formatOccurrenceShortDate, generateOccurrences, NO_HOLIDAYS, shiftedNote, type HolidayList, type HolidayPolicy, type Occurrence, type SchemeCalendar } from "../route-schemes/occurrences"
 import { addDays, serviceDayOf, type SchemeRecurrence } from "../route-schemes/recurrence"
-import type { RecurrenceFrequency, ServiceDay, StopSource, WeekRotation } from "./vocabulary"
+import type { RecurrenceFrequency, SeasonFrequency, ServiceDay, StopSource, WeekRotation } from "./vocabulary"
 
 export { WALK_CAP_DAYS }
 
@@ -106,6 +106,17 @@ export type StoredRecurrence = {
   weekRotation: WeekRotation | null
   validFrom: string
   validTo: string | null
+  /** The scheme's seasons as their rows carry them (O17 of #290); absent or empty for a scheme with one cadence all year. */
+  seasons?: readonly StoredSeason[]
+}
+
+/** A season as its row carries it: the rotation null for every cadence but every-2-weeks. */
+export type StoredSeason = {
+  name: string
+  startsOn: string
+  endsOn: string
+  frequency: SeasonFrequency
+  weekRotation: WeekRotation | null
 }
 
 /**
@@ -121,6 +132,11 @@ export function schemeRecurrenceOf(scheme: StoredRecurrence): SchemeRecurrence {
     ...(scheme.weekRotation === null ? {} : { weekRotation: scheme.weekRotation }),
     effectiveFrom: scheme.validFrom,
     effectiveTo: scheme.validTo === null ? "" : addDays(scheme.validTo, -1),
+    ...(scheme.seasons === undefined || scheme.seasons.length === 0
+      ? {}
+      : {
+          seasons: scheme.seasons.map(({ weekRotation, ...season }) => ({ ...season, ...(weekRotation === null ? {} : { weekRotation }) })),
+        }),
   }
 }
 
