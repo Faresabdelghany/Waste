@@ -65,6 +65,7 @@ import { BEARER_SECURITY, type AuthEnv, type Principal } from "../auth/principal
 import { requireGrant } from "../auth/require"
 import { describeProblem, invalidRequest, problem, validate } from "../problem"
 import { detailOf, findRoute, labelOf, noSuchRoute, pickupsOfRoute, routeScope, type PickupRow, type RouteRow } from "./execution-shapes"
+import { pickupFitStops, refuseMisfit } from "./fleet-fit"
 import { addOfficeStop, takeOffStop } from "./pickups"
 import type { Scope } from "./references"
 import { cancelLockedRoute, createAdHocRoute, lockedRoute, ORDER_IS_FROZEN, requireNotStarted } from "./routes"
@@ -156,6 +157,20 @@ export async function moveStops(tx: Tx, principal: Principal, from: RouteRow, to
     if (emptiedAlready(stop, joined)) throw problem(409, { detail: emptiedThereAlready(await containerLabel(tx, principal.companyId, row.containerId as string), labelOf(to)) })
     joined.push(stop)
   }
+  // The route's planned vehicle serves what joins it (O7 of #290): the stops' fractions, their containers, one trip's weight of each.
+  if (to.plannedVehicleId !== null) {
+    await refuseMisfit(
+      tx,
+      principal.companyId,
+      to.plannedVehicleId,
+      await pickupFitStops(
+        tx,
+        principal.companyId,
+        moving.map((row) => row.id),
+      ),
+      `route ${labelOf(from)}`,
+    )
+  }
   const tickets = await ticketsBookedTo(
     tx,
     principal,
@@ -176,7 +191,7 @@ const STATES =
   "Both routes are `planned` or `ready`: one that runs is refused (409, `Route RC-1042 is active; its order is frozen`) and a completed or cancelled one does not change. On a `ready` route the driver's device sees the change through the reads it already makes, and an active Plan reads stale until the route is measured again."
 
 const MOVE =
-  "Each stop moved is taken off where it stood — `skipped` with the reason `removed-by-dispatcher`, its note naming the route it went to, `pickup-skipped` written — and the office's own stop of the same work is added to the other route as `POST /routes/{id}/pickups` adds one, after its last position, in the order the stops stood: judged on that route's service date (a container with no placement then, a bulky booking for another day, a work order's container no longer where its move takes it from, the same work planned there already are each a 409 in Add stop's words), and booked for the open ticket the stop answered, where it answered one. An emptying is refused onto a route that empties the container already (409, `Route RC-1043 empties container BIN-7 already; take one of the two stops off instead`). Generation never brings back the stop taken off nor skips or doubles the office's, so the move outlives the next run with no hold. A refusal rolls back the whole move. Under both routes' row locks, taken in id order; both routes' `updatedAt` move."
+  "Each stop moved is taken off where it stood — `skipped` with the reason `removed-by-dispatcher`, its note naming the route it went to, `pickup-skipped` written — and the office's own stop of the same work is added to the other route as `POST /routes/{id}/pickups` adds one, after its last position, in the order the stops stood: judged on that route's service date (a container with no placement then, a bulky booking for another day, a work order's container no longer where its move takes it from, the same work planned there already are each a 409 in Add stop's words), and booked for the open ticket the stop answered, where it answered one. An emptying is refused onto a route that empties the container already (409, `Route RC-1043 empties container BIN-7 already; take one of the two stops off instead`), and a stop the route's planned vehicle cannot serve (O7 of #290) — a fraction none of its compartments carries, a container its type does not lift, a stop heavier than one trip of its fraction — is refused (409, `WH-24 has no compartment for Glass, which 2 stops of route RC-1042 collect`). Generation never brings back the stop taken off nor skips or doubles the office's, so the move outlives the next run with no hold. A refusal rolls back the whole move. Under both routes' row locks, taken in id order; both routes' `updatedAt` move."
 
 const problems = (grants: string) => ({
   401: describeProblem("No usable token (see WWW-Authenticate)."),
@@ -232,7 +247,7 @@ export function stopMoveRoutes(guard: MiddlewareHandler<AuthEnv>, { now = () => 
       describeRoute({
         operationId: "splitRoute",
         summary: "Split stops off onto a new route",
-        description: `Splits the route (O23 of #290): a new ad-hoc route (#111) is made on the route's operating date — its service date too, as \`POST /routes\` makes one — with the route's depot, unloading station, planned start and service provider, and the vehicle, the driver and the note the body names, where it names them, judged as \`POST /routes\` judges them (400 at the field, the licence on the day, then 409s for a vehicle or driver out of service or away that day); then the open stops \`pickupIds\` names move onto it. The stops are open stops of this route, each once (400 at \`pickupIds\` counting the ids that are not), and leave the route some of its open stops (400; a move to another route takes them all). ${STATES} ${MOVE} The \`route-reassigned\` event is written for the new route where it names a driver or a vehicle.`,
+        description: `Splits the route (O23 of #290): a new ad-hoc route (#111) is made on the route's operating date — its service date too, as \`POST /routes\` makes one — with the route's depot, unloading station, planned start and service provider, and the vehicle, the driver and the note the body names, where it names them, judged as \`POST /routes\` judges them (400 at the field, the licence on the day, then 409s for a vehicle or driver out of service or away that day, allocated that day with another crew, or on another route of the day — taken with \`acceptSameDay\` where the times are not both known, never at once; O7 of #290); then the open stops \`pickupIds\` names move onto it. The stops are open stops of this route, each once (400 at \`pickupIds\` counting the ids that are not), and leave the route some of its open stops (400; a move to another route takes them all). ${STATES} ${MOVE} The \`route-reassigned\` event is written for the new route where it names a driver or a vehicle.`,
         security: BEARER_SECURITY,
         responses: {
           201: describeCreated("The new route, planned, with the stops moved onto it.", RouteDetail),
@@ -271,6 +286,7 @@ export function stopMoveRoutes(guard: MiddlewareHandler<AuthEnv>, { now = () => 
             note: body.note ?? null,
             plannedStartTime: current.plannedStartTime,
             plannedServiceProviderId: current.plannedServiceProviderId,
+            acceptSameDay: body.acceptSameDay === true,
           },
           at,
           { endsKnown: true },

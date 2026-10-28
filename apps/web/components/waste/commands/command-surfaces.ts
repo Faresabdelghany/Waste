@@ -37,7 +37,8 @@ import { ApplicationCommandsSurface } from "./application-surfaces"
 import { BookBulkySurface, BulkyBookingCommandsSurface } from "./bulky-surfaces"
 import { CredentialCommandsSurface, RegisterCredentialSurface, SiteVisitCommandsSurface, SiteVisitsPrimarySurface } from "./site-visit-surfaces"
 import { AllocateSurface, AllocationCommandsSurface } from "./allocation-surfaces"
-import { DriverAbsenceSurface, VehicleUnavailabilitySurface } from "./availability-surfaces"
+import { DriverAbsenceSurface } from "./availability-surfaces"
+import { VehicleRowSurface } from "./compartment-surfaces"
 import { AddManualEventSurface, BillingRunSurface, EventCommandsSurface, InvoiceSurface, RunBillingSurface } from "./billing-surfaces"
 import { BILLING_LIST, EVENTS_LIST, INVOICES_LIST, PAYMENTS_LIST, PRICE_ROWS_LIST } from "./commercial-lists"
 import { AddContainerSurface, ContainerCommandsSurface } from "./container-surfaces"
@@ -145,7 +146,7 @@ export const COMMAND_SURFACES: Readonly<Record<string, CommandSurface>> = {
   "fleet.vehicle-planning": { primary: AllocateSurface, rowActions: AllocationCommandsSurface },
   // O6 of #290: a driver's absences and a vehicle's periods out of use, in the row's details; the row itself by its own form as before.
   "fleet.drivers": { primary: "form", rowActions: DriverAbsenceSurface, genericEdit: true },
-  "fleet.vehicles": { primary: "form", rowActions: VehicleUnavailabilitySurface, genericEdit: true },
+  "fleet.vehicles": { primary: "form", rowActions: VehicleRowSurface, genericEdit: true },
   // Slice 9b (#184): each place by its own form, its set replaced whole by its Edit; the status by the lifecycle's actions.
   "customers.properties": { primary: AddPropertySurface, rowActions: PropertyCommandsSurface },
   "customers.groups": { primary: AddPropertyGroupSurface, rowActions: PropertyGroupCommandsSurface },

@@ -89,7 +89,9 @@ describe("the hold on a route (#209)", { skip: database.skip }, () => {
   }
   const read = async (id: string): Promise<RouteDetail> => RouteDetail.parse(await ok(await olivia(`/routes/${id}`)))
   const heldAt = async (id: string): Promise<string | null> => (await read(id)).heldAt
-  const commanded = async (id: string, action: string, values?: unknown): Promise<RouteDetail> => RouteDetail.parse(await ok(await olivia(`/routes/${id}/${action}`, { method: "POST", body: values })))
+  // The fixture Monday's routes share its crew without times; the same-day rule (O7 of #290) is crew-day.test.ts's, so the crew commands here say `acceptSameDay`.
+  const sameDay = (action: string, values: unknown) => (["assign", "reschedule"].includes(action) && typeof values === "object" && values !== null && Object.keys(values).length > 0 ? { ...values, acceptSameDay: true } : values)
+  const commanded = async (id: string, action: string, values?: unknown): Promise<RouteDetail> => RouteDetail.parse(await ok(await olivia(`/routes/${id}/${action}`, { method: "POST", body: sameDay(action, values) })))
   const patchScheme = async (id: string, values: unknown): Promise<RouteScheme> => RouteScheme.parse(await ok(await olivia(`/route-schemes/${id}`, { method: "PATCH", body: values })))
   const patchGroup = async (id: string, values: unknown): Promise<CollectionGroup> => CollectionGroup.parse(await ok(await olivia(`/collection-groups/${id}`, { method: "PATCH", body: values })))
   /** A start no route has had yet, a minute later each time: a command that changes nothing holds nothing. */

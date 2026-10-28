@@ -728,7 +728,7 @@ export type GroupShape = {
   name: string
   days: readonly string[]
   stopSource: string
-  rule?: { wasteFractionIds: readonly string[] } | null
+  rule?: { wasteFractionIds: readonly string[]; vehicleTypeId?: string | null } | null
   containerIds?: readonly string[] | null
   vehicleId?: string | null
   driverId?: string | null
@@ -741,7 +741,10 @@ function named<Row>(id: string | null | undefined, rows: ReadonlyMap<string, Row
   return { id, label: row === undefined ? id : label(row) }
 }
 
-const structureOf = (group: GroupShape, fleet: FleetRows): GroupStructure => ({
+/** A vehicle type as a sentence names it: its name where read, its id where not. */
+const typeNamed = (id: string | null | undefined, names: ReadonlyMap<string, string>): NamedResource | null => (id == null ? null : { id, label: names.get(id) ?? id })
+
+const structureOf = (group: GroupShape, fleet: FleetRows, types: ReadonlyMap<string, string>): GroupStructure => ({
   name: group.name,
   days: group.days,
   stopSource: group.stopSource,
@@ -749,7 +752,20 @@ const structureOf = (group: GroupShape, fleet: FleetRows): GroupStructure => ({
   containerCount: group.containerIds?.length ?? 0,
   vehicle: named(group.vehicleId, fleet.vehicles, vehicleLabel),
   driver: named(group.driverId, fleet.drivers, (row) => row.name),
+  vehicleType: typeNamed(group.vehicleId == null ? null : fleet.vehicles.get(group.vehicleId)?.vehicleTypeId, types),
+  ruleVehicleType: typeNamed(group.rule?.vehicleTypeId, types),
 })
+
+/** The names of the vehicle types a sentence spells, by id: one statement, read only once an issue exists. */
+async function typeNamesOf(tx: Tx, companyId: string, ids: readonly (string | null | undefined)[]): Promise<Map<string, string>> {
+  const asked = [...new Set(ids.filter((id): id is string => id != null))]
+  if (asked.length === 0) return new Map()
+  const rows = await tx
+    .select({ id: vehicleType.id, name: vehicleType.name })
+    .from(vehicleType)
+    .where(and(eq(vehicleType.companyId, companyId), inArray(vehicleType.id, asked)))
+  return new Map(rows.map((row) => [row.id, row.name] as const))
+}
 
 /** A group's picks as the two-groups-one-day rule reads them. */
 export const pickOf = (group: GroupShape): ContainerPick => ({ group: group.name, days: group.days, containerIds: group.containerIds ?? [] })
@@ -772,17 +788,22 @@ export async function requireStructure(
   groups: readonly GroupShape[],
 ): Promise<void> {
   if (scheme.status !== "validated") return
-  const structure = (fleet: FleetRows) => ({
+  const structure = (fleet: FleetRows, types: ReadonlyMap<string, string> = new Map()) => ({
     serviceDays: scheme.serviceDays,
     hasPlanningArea: scheme.planningAreaId !== null,
-    collectionGroups: groups.map((group) => structureOf(group, fleet)),
+    collectionGroups: groups.map((group) => structureOf(group, fleet, types)),
   })
-  const issues = schemeStructureIssues(structure(NO_FLEET))
+  // A rule group's vehicle against the type its rule asks for (O7 of #290) needs the vehicle's row for its type, so such a scheme reads its fleet first.
+  const typed = groups.some((group) => group.stopSource === "rule" && group.vehicleId != null && group.rule?.vehicleTypeId != null)
+  const read = typed ? await fleetOf(tx, scope, groups, "either") : NO_FLEET
+  const issues = schemeStructureIssues(structure(read))
   if (issues.length === 0) return
   // The labels only spell the sentences: a scheme naming no fleet has nothing to label, and the id-first result is the answer as it stands.
   const fleetNamed = groups.some((group) => group.vehicleId != null || group.driverId != null)
   if (!fleetNamed) throw problem(409, { detail: issues.join(". ") })
-  const spelled = schemeStructureIssues(structure(await fleetOf(tx, scope, groups, "either")))
+  const fleet = typed ? read : await fleetOf(tx, scope, groups, "either")
+  const types = await typeNamesOf(tx, scope.companyId, [...groups.map((group) => group.rule?.vehicleTypeId), ...[...fleet.vehicles.values()].map((row) => row.vehicleTypeId)])
+  const spelled = schemeStructureIssues(structure(fleet, types))
   throw problem(409, { detail: spelled.join(". ") })
 }
 

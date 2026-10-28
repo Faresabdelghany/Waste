@@ -2,6 +2,7 @@ import assert from "node:assert/strict"
 import { describe, test } from "node:test"
 
 import { routeShift } from "../../execution/shift"
+import type { FitVehicle } from "../../resources/fleet-fit"
 import { BALANCE_MOVES_MAX, balanceDay, canTake, type BalanceRoute, type BalanceStop } from "../balance"
 import { UNLOAD_SECONDS } from "../reloads"
 
@@ -14,13 +15,13 @@ const near = (east: number, north = 0): [number, number] => [ORIGIN[0] + east / 
 let next = 0
 const stop = (overrides: Partial<BalanceStop> = {}): BalanceStop => {
   next += 1
-  return { id: `stop-${String(next).padStart(3, "0")}`, position: next, status: "planned", containerId: `bin-${next}`, service: "empty", at: near(next * 10), kg: 50, serviceSeconds: 60, wasteFractionId: GLASS, window: null, ...overrides }
+  return { id: `stop-${String(next).padStart(3, "0")}`, position: next, status: "planned", containerId: `bin-${next}`, service: "empty", at: near(next * 10), kg: 50, serviceSeconds: 60, wasteFractionId: GLASS, containerTypeId: null, window: null, ...overrides }
 }
 
 const route = (id: string, stops: BalanceStop[], overrides: Partial<BalanceRoute> = {}): BalanceRoute => ({
   id,
   serviceProviderId: null,
-  fractions: null,
+  vehicle: null,
   capacityKg: 1_000,
   shift: null,
   plannedStartTime: "07:00",
@@ -32,6 +33,9 @@ const route = (id: string, stops: BalanceStop[], overrides: Partial<BalanceRoute
   stops,
   ...overrides,
 })
+
+/** A vehicle whose one compartment carries the fractions, of the capacity given and lifting the container types given (null: any). */
+const carrying = (fractions: string[], { capacityKg = null, lifts = null }: { capacityKg?: number | null; lifts?: string[] | null } = {}): FitVehicle => ({ capacityKg: null, compartments: [{ capacityKg, wasteFractionIds: fractions }], liftsContainerTypeIds: lifts })
 
 /** A route over its payload by one stop of 50 kg: three stops on a vehicle that carries 100. */
 const overloaded = (overrides: Partial<BalanceRoute> = {}) => route("a-over", [stop(), stop(), stop()], { capacityKg: 100, ...overrides })
@@ -103,9 +107,17 @@ describe("balancing a day across vehicles (O15 of #290)", () => {
     })
 
     test("a route whose vehicle carries the stop's fraction, or names none", () => {
-      assert.deepEqual(balanceDay([overloaded(), light({ fractions: [PAPER] })]).moves, [])
-      assert.equal(balanceDay([overloaded(), light({ fractions: [PAPER, GLASS] })]).moves.length, 1)
-      assert.equal(balanceDay([overloaded(), light({ fractions: null })]).moves.length, 1)
+      assert.deepEqual(balanceDay([overloaded(), light({ vehicle: carrying([PAPER]) })]).moves, [])
+      assert.equal(balanceDay([overloaded(), light({ vehicle: carrying([PAPER, GLASS]) })]).moves.length, 1)
+      assert.equal(balanceDay([overloaded(), light({ vehicle: carrying([]) })]).moves.length, 1)
+      assert.equal(balanceDay([overloaded(), light({ vehicle: null })]).moves.length, 1)
+    })
+
+    test("a route whose vehicle lifts the stop's container and takes its weight on one trip, as a move judges it", () => {
+      const binned = () => route("a-over", [stop({ containerTypeId: "bin-660" }), stop({ containerTypeId: "bin-660" }), stop({ containerTypeId: "bin-660" })], { capacityKg: 100 })
+      assert.deepEqual(balanceDay([binned(), light({ vehicle: carrying([GLASS], { lifts: ["bin-240"] }) })]).moves, [])
+      assert.equal(balanceDay([binned(), light({ vehicle: carrying([GLASS], { lifts: ["bin-240", "bin-660"] }) })]).moves.length, 1)
+      assert.deepEqual(balanceDay([overloaded(), light({ vehicle: carrying([GLASS], { capacityKg: 40 }) })]).moves, [], "a compartment of 40 kg takes no stop of 50")
     })
 
     test("never an emptying onto a route that empties the container already", () => {

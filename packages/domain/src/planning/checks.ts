@@ -43,6 +43,10 @@
 // `groupDriverIssue` is the sentence or nothing; the route answers it as a
 // 400 on `driverId`, the same words an allocation refuses with.
 //
+// O7 of #290 adds a fifth structural rule over the fleet: a rule group's
+// vehicle is of the type its stop rule asks for (`vehicleTypesMismatched`),
+// listed after the two-groups sentences — the web warned of it alone before.
+//
 // Whether a group runs at all is a predicate of its own (Issue #101, last
 // review round): `days: []` is a parked group — no delete exists, a group that
 // no longer runs is parked — and a parked group plans nothing, so it neither
@@ -74,6 +78,10 @@ export type GroupStructure = {
   vehicle?: NamedResource | null
   /** The default driver, likewise. */
   driver?: NamedResource | null
+  /** The vehicle's type, by id and the name a sentence reads; absent where the caller has not read it. */
+  vehicleType?: NamedResource | null
+  /** The vehicle type the group's stop rule asks for, likewise; null where it asks for none. */
+  ruleVehicleType?: NamedResource | null
 }
 
 /** A Route Scheme as the structural rules see it: the days it serves, whether it has a Planning Area, and its groups in position order. */
@@ -132,7 +140,29 @@ export function schemeStructureIssues(scheme: SchemeStructure): string[] {
 
   if (byRule && !scheme.hasPlanningArea) issues.push(NO_PLANNING_AREA_FOR_RULE)
   issues.push(...resourcesOnTwoGroups(scheme.collectionGroups))
+  issues.push(...vehicleTypesMismatched(scheme.collectionGroups))
   return issues
+}
+
+/** The sentence for a rule group whose vehicle is of another type than its stop rule asks for (O7 of #290). */
+export const vehicleOfAnotherType = (group: string, vehicle: string, type: string, asked: string): string =>
+  `Vehicle ${vehicle} of collection group ${group} is a ${type.toLowerCase()}, and its stop rule asks for a ${asked.toLowerCase()}`
+
+/**
+ * Every rule group that runs and whose vehicle is of another type than its
+ * stop rule asks for, in group order (O7 of #290, #290's row 2.15): the rule's
+ * type is what generation matches the containers by, through the type's
+ * compatibility set, so the group's own vehicle would be sent to containers it
+ * was not matched for. A group without a vehicle, a rule asking for no type, a
+ * manual group and a parked one are asked nothing; nor is a group whose
+ * vehicle's type the caller has not read.
+ */
+export function vehicleTypesMismatched(groups: readonly GroupStructure[]): string[] {
+  return groups.flatMap((group) => {
+    const { vehicle, vehicleType, ruleVehicleType } = group
+    if (group.stopSource !== "rule" || !groupRuns(group) || vehicle == null || vehicleType == null || ruleVehicleType == null) return []
+    return vehicleType.id === ruleVehicleType.id ? [] : [vehicleOfAnotherType(group.name, vehicle.label, vehicleType.label, ruleVehicleType.label)]
+  })
 }
 
 /** A count as a sentence spells it: "two collection groups"; past nine, digits. */

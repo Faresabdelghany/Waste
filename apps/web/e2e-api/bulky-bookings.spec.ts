@@ -95,7 +95,7 @@ test("a place's bulky days come from its area's schedule; a booking takes the da
   expect((await problemOf(full)).detail).toBe(`${first.day} is fully booked: every bulky collection slot that day is taken`)
 
   // The office routes it: an ad-hoc route of its day for the seeded driver, the booking added as its stop, and the route dispatched.
-  const route = await made<{ id: string }>(api, "/routes", { projectId: project.id, operatingDate: first.day, driverId: driver.id })
+  const route = await made<{ id: string }>(api, "/routes", { projectId: project.id, operatingDate: first.day, driverId: driver.id, acceptSameDay: true })
   const stop = await made<{ id: string; service: string; containerId: string | null; propertyId: string | null; bulkyBookingId: string | null }>(api, `/routes/${route.id}/pickups`, { service: "bulky", bulkyBookingId: booking.id })
   expect({ service: stop.service, containerId: stop.containerId, propertyId: stop.propertyId, bulkyBookingId: stop.bulkyBookingId }).toEqual({ service: "bulky", containerId: null, propertyId: property.id, bulkyBookingId: booking.id })
   const routed = (await (await api.get(`/bulky-bookings/${booking.id}`)).json()) as Booking

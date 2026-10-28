@@ -12,7 +12,9 @@
 //
 // A stop may go only where it could be put by hand: a route of the same
 // service provider (or of the company's own, both), whose vehicle carries its
-// fraction (a vehicle naming none carries any), that empties its container
+// fraction, lifts its container and takes its weight on one trip, as the
+// stop moves judge it (`firstMisfit`, resources/fleet-fit; a vehicle naming
+// no fraction carries any), that empties its container
 // not already (`emptiedAlready`), and whose working day reaches the stop's
 // window. Each round takes, of every stop of the route furthest over and every
 // route that can take it, the move that costs the receiving route least —
@@ -24,6 +26,7 @@
 // one, the routes' new Plans measuring the drive once the moves are applied.
 import { routeShift, secondsOfDay, type DriverShift } from "../execution/shift"
 import { emptiedAlready, type MovingStop } from "../execution/stop-moves"
+import { firstMisfit, type FitVehicle } from "../resources/fleet-fit"
 
 /** The most moves one balance proposes and applies: the office reads each, and every route they touch is asked a new Plan. */
 export const BALANCE_MOVES_MAX = 50
@@ -44,6 +47,8 @@ export type BalanceStop = MovingStop & {
   kg: number
   serviceSeconds: number
   wasteFractionId: string
+  /** Its container's type, or null for a stop at no container. */
+  containerTypeId: string | null
   /** Seconds of the operating date it may be served between, or null for any time. */
   window: readonly [number, number] | null
 }
@@ -52,8 +57,8 @@ export type BalanceStop = MovingStop & {
 export type BalanceRoute = {
   id: string
   serviceProviderId: string | null
-  /** The fractions its planned vehicle carries; null where the vehicle names none, or there is no vehicle. */
-  fractions: readonly string[] | null
+  /** Its planned vehicle as the fleet rules read it (@waste/domain/resources/fleet-fit), or null without one. */
+  vehicle: FitVehicle | null
   capacityKg: number | null
   shift: DriverShift | null
   plannedStartTime: string | null
@@ -151,10 +156,10 @@ function excess(working: Working, load: DayLoad): number {
 
 const within = (load: DayLoad): boolean => (load.overCapacityKg ?? 0) === 0 && (load.overShiftSeconds ?? 0) === 0
 
-/** Whether the route can take the stop as the office could by hand: its provider, its vehicle's fractions, its container not emptied there already, its window inside the route's working day. */
+/** Whether the route can take the stop as the office could by hand: its vehicle fits it as a move judges one (`firstMisfit`: the fraction, the container, one trip's weight), its container not emptied there already, its window inside the route's working day. */
 export function canTake(route: BalanceRoute, stop: BalanceStop, stops: readonly BalanceStop[], startsAt: string | null): boolean {
   if (stop.status !== "planned" || stop.at === null) return false
-  if (route.fractions !== null && !route.fractions.includes(stop.wasteFractionId)) return false
+  if (route.vehicle !== null && firstMisfit(route.vehicle, [{ wasteFractionId: stop.wasteFractionId, kg: stop.kg, containerTypeId: stop.containerTypeId }]) !== undefined) return false
   if (emptiedAlready(stop, stops)) return false
   if (stop.window === null) return true
   const [from, to] = workingWindow(route, startsAt)

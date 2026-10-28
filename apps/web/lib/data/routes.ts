@@ -101,6 +101,13 @@ export const ROUTE_COMMAND_FORMS: Readonly<Record<RouteCommandWithForm, Business
     { id: "serviceProviderId", label: "Service provider", type: "select", relation: SERVICE_PROVIDERS_MODULE, description: "The company that runs the route, where it is not your own." },
     { id: "depotId", label: "Depot", type: "select", relation: DEPOTS_MODULE },
     { id: "unloadingStationId", label: "Unloading station", type: "select", relation: DEPOTS_MODULE },
+    {
+      id: "acceptSameDay",
+      label: "Plan the crew beside another route of the day",
+      type: "checkbox",
+      defaultValue: false,
+      description: "A driver, vehicle or trailer on another route of the day whose times are not both known — a planned start and a measured Plan — is taken only when you say so. Two routes whose times overlap are refused whatever you say.",
+    },
   ]),
   reschedule: routeForm("Reschedule", "The day the route runs, or its planned start. Its service date, the day its scheme named, never moves.", "Reschedule", [
     { id: "operatingDate", label: "Operating date", type: "date", required: true },
@@ -111,6 +118,13 @@ export const ROUTE_COMMAND_FORMS: Readonly<Record<RouteCommandWithForm, Business
       type: "checkbox",
       defaultValue: false,
       description: "A holiday on the project's calendar, or a weekend day its scheme does not serve, is taken only when you say so; without it such a move is refused with the day named.",
+    },
+    {
+      id: "acceptSameDay",
+      label: "Plan the crew beside another route of the day",
+      type: "checkbox",
+      defaultValue: false,
+      description: "A driver, vehicle or trailer on another route of the day whose times are not both known — a planned start and a measured Plan — is taken only when you say so. Two routes whose times overlap are refused whatever you say.",
     },
   ]),
   cancel: routeForm("Cancel route", "The route will not run. Its open stops are skipped, an active route's session ends, and the reason becomes its deviation.", "Cancel route", [
@@ -159,6 +173,13 @@ export const ROUTE_CREATE_FORM: BusinessFormSchema = {
         { id: "vehicleId", label: "Vehicle", type: "select", relation: VEHICLES_MODULE },
         { id: "driverId", label: "Driver", type: "select", relation: DRIVERS_MODULE, description: "A route is dispatched to its planned driver." },
         { id: "note", label: "Note", type: "textarea" },
+        {
+          id: "acceptSameDay",
+          label: "Plan the crew beside another route of the day",
+          type: "checkbox",
+          defaultValue: false,
+          description: "A driver, vehicle or trailer on another route of the day whose times are not both known — a planned start and a measured Plan — is taken only when you say so. Two routes whose times overlap are refused whatever you say.",
+        },
       ],
     },
   ],

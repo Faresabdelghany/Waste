@@ -311,6 +311,34 @@ describe("the vehicle allocation endpoints", { skip: database.skip || owner.skip
     })
   })
 
+  describe("what the vehicle carries (O7 of #290)", () => {
+    test("refuses a fraction none of the vehicle's compartments carries, and a required capacity above one trip of it, each at its field, on the create and the change", async () => {
+      const glass = await create(olivia, "/waste-fractions", { key: "glass-o7", name: "Glass" }, WasteFraction)
+      const kitted = await olivia(`/vehicles/${fleet.vehicles.wh25.id}/compartments`, { method: "PUT", body: { compartments: [{ capacityKg: 3000, wasteFractionIds: [glass.id] }, { capacityKg: 5000, wasteFractionIds: [residual.id] }] } })
+      assert.equal(kitted.status, 200, JSON.stringify(await kitted.clone().json()))
+      const day = "2026-10-27"
+      const wh25 = (values: Record<string, unknown>) => body(day, "06:00", "10:00", { vehicleId: fleet.vehicles.wh25.id, ...values })
+
+      const metal = await create(olivia, "/waste-fractions", { key: "metal-o7", name: "Metal" }, WasteFraction)
+      const uncarried = await refused(await post(wh25({ wasteFractionId: metal.id })), 400)
+      assert.deepEqual(uncarried.errors, [{ path: "wasteFractionId", message: "WH-25 has no compartment for Metal" }])
+      const heavy = await refused(await post(wh25({ wasteFractionId: glass.id, requiredCapacityKg: 3500 })), 400)
+      assert.deepEqual(heavy.errors, [{ path: "requiredCapacityKg", message: "WH-25 takes 3000 kg of Glass on one trip, less than the 3500 kg required" }])
+      const whole = await refused(await post(wh25({ requiredCapacityKg: 9000 })), 400)
+      assert.deepEqual(whole.errors, [{ path: "requiredCapacityKg", message: "WH-25's payload is 8000 kg, less than the 9000 kg required" }], "without a fraction, every compartment")
+
+      const taken = await allocate(wh25({ wasteFractionId: glass.id, requiredCapacityKg: 3000 }))
+      const changing = await refused(await command(taken.id, "change", { wasteFractionId: residual.id, requiredCapacityKg: 6000, reason: "Residual instead" }), 400)
+      assert.deepEqual(changing.errors, [{ path: "requiredCapacityKg", message: "WH-25 takes 5000 kg of Residual waste on one trip, less than the 6000 kg required" }])
+      const changed = await commanded(taken.id, "change", { wasteFractionId: residual.id, requiredCapacityKg: 5000, reason: "Residual instead" })
+      assert.deepEqual([changed.wasteFractionId, changed.requiredCapacityKg], [residual.id, 5000])
+      const noted = await commanded(taken.id, "change", { note: "Moved a crate", reason: "Note" })
+      assert.equal(noted.note, "Moved a crate", "a change moving neither the vehicle, the fraction nor the capacity asks nothing of them")
+      // WH-24 has no compartments in the fixtures: it carries anything, and says no payload.
+      await allocate(body(day, "06:00", "10:00", { wasteFractionId: metal.id, requiredCapacityKg: 99_000 }))
+    })
+  })
+
   describe("GET /vehicle-allocations", () => {
     test("lists the caller's projects' allocations in id order, filters them, and answers exactly the windows that touch", async () => {
       const day = "2026-10-11"

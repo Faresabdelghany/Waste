@@ -5,7 +5,7 @@ import { formatDistance, formatDuration } from "../lib/map-planning/format"
 import { addDays, dayIn } from "./dispatched-route"
 import { chainLanded, expect, test } from "./fixtures"
 import { uniqueName } from "./env"
-import { routeRead, schemeWithRoutes, type ApiRoute } from "./routes-support"
+import { routeRead, routeWithCrewFree, schemeWithRoutes, type ApiRoute } from "./routes-support"
 import { listAll } from "./tester"
 
 // Map Planning's routes on the Pilot (Issue #179, slice 6 of #81): the
@@ -145,12 +145,13 @@ test("until the API's routes and stops are read the map draws no route: nothing 
 })
 
 test("a click on an API route's line opens its card with the route's own facts, and Open route lands on its details", async ({ api, page }) => {
-  const { routes } = await schemeWithRoutes(api, uniqueName("E2E Map card"))
-  const [route] = routes
+  // WH-24 is a rear loader: the scheme's rule asks for one, so its routes hold no container WH-24 cannot lift (O7 of #290).
+  const { routes } = await schemeWithRoutes(api, uniqueName("E2E Map card"), 14, { vehicleType: "Rear loader" })
   // Assigned through the API, so the card has a vehicle and a driver to show.
   const vehicle = (await listAll<{ id: string; callsign: string | null }>(api, "/vehicles")).find((row) => row.callsign === "WH-24")
   const driver = (await listAll<{ id: string; name: string }>(api, "/drivers")).find((row) => row.name === "Mads Jensen")
-  const assigned = await api.post(`/routes/${route.id}/assign`, { data: { vehicleId: vehicle?.id, driverId: driver?.id } })
+  const route = await routeWithCrewFree(api, routes, { driverId: driver?.id, vehicleId: vehicle?.id })
+  const assigned = await api.post(`/routes/${route.id}/assign`, { data: { vehicleId: vehicle?.id, driverId: driver?.id, acceptSameDay: true } })
   expect(assigned.status(), await assigned.text()).toBe(200)
 
   await openMapPlanning(page)

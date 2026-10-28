@@ -1,7 +1,7 @@
 import { dispatchedRouteFor, driverNamed, SEEDED_DRIVER } from "./dispatched-route"
 import { E2E, uniqueName } from "./env"
 import { expect, freshContext, signIn, test } from "./fixtures"
-import { answerOf, onCopenhagenClock, openRoute, pick, routeRead, schemeWithRoutes, toasts } from "./routes-support"
+import { answerOf, onCopenhagenClock, openRoute, pick, routeRead, routeWithCrewFree, schemeWithRoutes, toasts } from "./routes-support"
 import { ensureTester, listAll, roleNamed } from "./tester"
 
 // Route Studio's routes, stops and Live board on the API (Issue #179, slice
@@ -60,10 +60,11 @@ test("a generated route is the API's row: listed under its label, opened under t
 })
 
 test("the dispatcher's commands: an unassigned dispatch is the API's 409, assign names the driver and the vehicle, reschedule moves the start, dispatch makes it Ready, and cancel's reason is its deviation", async ({ api, page }) => {
-  const { routes } = await schemeWithRoutes(api, uniqueName("E2E Dispatch"))
-  const [route] = routes
+  // WH-24 is a rear loader: the scheme's rule asks for one, so its routes hold no container WH-24 cannot lift (O7 of #290).
+  const { routes } = await schemeWithRoutes(api, uniqueName("E2E Dispatch"), 14, { vehicleType: "Rear loader" })
   const driver = await driverNamed(api, SEEDED_DRIVER.name)
   const vehicle = (await listAll<{ id: string; callsign: string | null }>(api, "/vehicles")).find((row) => row.callsign === "WH-24")
+  const route = await routeWithCrewFree(api, routes, { driverId: driver.id, vehicleId: vehicle?.id })
   const details = await openRoute(page, route)
   const commands = details.getByTestId("route-commands")
 
@@ -76,9 +77,11 @@ test("the dispatcher's commands: an unassigned dispatch is the API's 409, assign
   const assign = page.getByRole("dialog", { name: "Assign" })
   await pick(assign, page, "Vehicle", "WH-24 · CN 42 018 · Active")
   await pick(assign, page, "Driver", "Mads Jensen · Active")
+  // The seeded crew runs today's other routes, untimed: planned beside them knowingly (O7 of #290).
+  await assign.getByRole("checkbox", { name: /^Plan the crew beside another route of the day/ }).check()
   const [assigned] = await Promise.all([answerOf(page, "POST", `/routes/${route.id}/assign`), assign.getByRole("button", { name: "Assign" }).click()])
   expect(assigned.status()).toBe(200)
-  expect(assigned.request().postDataJSON()).toEqual({ vehicleId: vehicle?.id, driverId: driver.id })
+  expect(assigned.request().postDataJSON()).toEqual({ vehicleId: vehicle?.id, driverId: driver.id, acceptSameDay: true })
   await expect(assign).toBeHidden()
   await expect(details).toContainText("Mads Jensen")
 
@@ -282,12 +285,12 @@ test("the Live board is read again every 30 s while it is shown (#213's re-read,
 
 test("a Dispatcher, who views neither the organisation nor the depots, sees the routes of their project and assigns one (#217)", async ({ api, browser }) => {
   const { routes } = await schemeWithRoutes(api, uniqueName("E2E Dispatcher"))
-  const [route] = routes
   const { user } = await ensureTester(api, E2E.testerEmail)
   const dispatcher = await roleNamed(api, "Dispatcher")
   const moved = await api.patch(`/users/${user.id}`, { data: { roleId: dispatcher.id } })
   expect(moved.status(), await moved.text()).toBe(200)
   const driver = await driverNamed(api, SEEDED_DRIVER.name)
+  const route = await routeWithCrewFree(api, routes, { driverId: driver.id })
   const context = await freshContext(browser)
   try {
     const page = await context.newPage()
@@ -306,9 +309,10 @@ test("a Dispatcher, who views neither the organisation nor the depots, sees the 
     await assign.click()
     const dialog = page.getByRole("dialog", { name: "Assign" })
     await pick(dialog, page, "Driver", "Mads Jensen · Active")
+    await dialog.getByRole("checkbox", { name: /^Plan the crew beside another route of the day/ }).check()
     const [assigned] = await Promise.all([answerOf(page, "POST", `/routes/${route.id}/assign`), dialog.getByRole("button", { name: "Assign" }).click()])
     expect(assigned.status()).toBe(200)
-    expect(assigned.request().postDataJSON()).toEqual({ driverId: driver.id })
+    expect(assigned.request().postDataJSON()).toEqual({ driverId: driver.id, acceptSameDay: true })
   } finally {
     await context.close()
     // Back to the tester's own shape, which the other specs stand on.

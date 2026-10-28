@@ -57,6 +57,8 @@ export type VehicleRow = {
   kind: VehicleKind
   status: VehicleStatus
   requiredLicenceClass: LicenceClass
+  /** Its `vehicle_type`: what a group's stop rule asks for (O7 of #290). */
+  vehicleTypeId: string
 }
 
 /** How a person names a vehicle: the yard's callsign (`WH-24`) where it has one, the plate otherwise. */
@@ -70,6 +72,7 @@ export const vehicleColumns = {
   kind: vehicle.kind,
   status: vehicle.status,
   requiredLicenceClass: vehicle.requiredLicenceClass,
+  vehicleTypeId: vehicle.vehicleTypeId,
 }
 
 /**

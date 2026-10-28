@@ -141,7 +141,8 @@ describe("the ad-hoc route and the extra pickup", { skip: database.skip || owner
     assert.equal(response.status, 200, JSON.stringify(await response.clone().json()))
     return RouteDetail.parse(await response.json())
   }
-  const create = (values: Record<string, unknown>, call = olivia) => call("/routes", { method: "POST", body: { projectId: a.projects.copenhagen.id, operatingDate: TUESDAY, ...values } })
+  // The fixture Monday's routes share its crew without times; the same-day rule (O7 of #290) is crew-day.test.ts's, so the crew commands here say `acceptSameDay`.
+  const create = (values: Record<string, unknown>, call = olivia) => call("/routes", { method: "POST", body: { projectId: a.projects.copenhagen.id, operatingDate: TUESDAY, acceptSameDay: true, ...values } })
   const made = async (values: Record<string, unknown> = {}, call = olivia): Promise<RouteDetail> => await created(call, "/routes", await create(values, call), RouteDetail)
   const add = (routeId: string, values: Record<string, unknown>, call = olivia) => call(`/routes/${routeId}/pickups`, { method: "POST", body: values })
   const added = async (routeId: string, values: Record<string, unknown>, call = olivia): Promise<PickupDetail> => await created(call, `/routes/${routeId}/pickups`, await add(routeId, values, call), PickupDetail, "/pickups")
@@ -203,9 +204,9 @@ describe("the ad-hoc route and the extra pickup", { skip: database.skip || owner
 
     test("an ad-hoc route moves like any other — assign and reschedule hold nothing, since no run reads it, release-hold refuses it, and it dispatches to its driver", async () => {
       const route = await made({ vehicleId: fleet.vehicles.wh24.id })
-      const assigned = RouteDetail.parse(await (await olivia(`/routes/${route.id}/assign`, { method: "POST", body: { driverId: fleet.drivers.mads.id } })).json())
+      const assigned = RouteDetail.parse(await (await olivia(`/routes/${route.id}/assign`, { method: "POST", body: { driverId: fleet.drivers.mads.id, acceptSameDay: true } })).json())
       assert.deepEqual([assigned.planned.driverId, assigned.heldAt], [fleet.drivers.mads.id, null])
-      const moved = RouteDetail.parse(await (await olivia(`/routes/${route.id}/reschedule`, { method: "POST", body: { operatingDate: "2026-10-07", plannedStartTime: "07:00" } })).json())
+      const moved = RouteDetail.parse(await (await olivia(`/routes/${route.id}/reschedule`, { method: "POST", body: { operatingDate: "2026-10-07", plannedStartTime: "07:00", acceptSameDay: true } })).json())
       assert.deepEqual([moved.operatingDate, moved.serviceDate, moved.plannedStartTime, moved.heldAt], ["2026-10-07", TUESDAY, "07:00", null], "the service date stays the day it was made for")
       assert.equal((await refused(await olivia(`/routes/${route.id}/release-hold`, { method: "POST", body: {} }), 409)).detail, adHocNeverHeld(route.label))
       const dispatched = RouteDetail.parse(await (await olivia(`/routes/${route.id}/dispatch`, { method: "POST" })).json())

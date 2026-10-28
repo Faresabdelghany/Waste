@@ -84,7 +84,7 @@ export type RouteWorkload = {
 const serves = (stop: WorkloadStop) => stop.status === "planned" || stop.status === "completed"
 
 /** Whether the stop puts waste on the truck: an emptying, a swap's full container and a bulky collection's items, whose weight nothing says; a delivery's is empty, and a repair or a wash loads nothing. */
-const loadsWaste = (stop: Pick<WorkloadStop, "service">) => stop.service === "empty" || stop.service === "swap" || stop.service === "bulky"
+export const loadsWaste = (stop: Pick<WorkloadStop, "service">): boolean => stop.service === "empty" || stop.service === "swap" || stop.service === "bulky"
 
 /** The kilograms a stop puts on the truck, as a Plan's reloads read it: its expected weight where it loads waste, nothing where it loads none, null where its weight cannot be expected. */
 export function stopLoadKg(stop: Pick<WorkloadStop, "service" | "volumeLitres" | "densityKgPerCubicMetre">): number | null {

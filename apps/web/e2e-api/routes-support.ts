@@ -32,18 +32,22 @@ export type Scheme = { id: string; name: string; projectId: string; editPolicy: 
 const WEEKDAYS = ["monday", "tuesday", "wednesday", "thursday", "friday"] as const
 
 /** A validated scheme made through the API for the run, uniquely named and never cleaned up: one rule group, Residual inside Indre By Operations, on `serviceDays` from `validFrom`, from the depot named `depot` where one is. */
-export async function createScheme(api: APIRequestContext, name: string, { serviceDays, validFrom, depot }: { serviceDays: readonly string[]; validFrom: string; depot?: string }): Promise<Scheme> {
-  const [project, areas, fractions, depots] = await Promise.all([
+export async function createScheme(api: APIRequestContext, name: string, { serviceDays, validFrom, depot, vehicleType }: { serviceDays: readonly string[]; validFrom: string; depot?: string; vehicleType?: string }): Promise<Scheme> {
+  const [project, areas, fractions, depots, types] = await Promise.all([
     projectNamed(api, "Copenhagen Central"),
     listAll<Named>(api, "/planning-areas"),
     listAll<Named>(api, "/waste-fractions"),
     depot === undefined ? Promise.resolve<Named[]>([]) : listAll<Named>(api, "/depots"),
+    vehicleType === undefined ? Promise.resolve<Named[]>([]) : listAll<Named>(api, "/vehicle-types"),
   ])
   const area = areas.find((row) => row.name === "Indre By Operations")
   const residual = fractions.find((row) => row.name === "Residual")
   expect(area && residual, "the seed holds Indre By Operations and Residual").toBeTruthy()
   const depotId = depots.find((row) => row.name === depot)?.id
   if (depot !== undefined) expect(depotId, `the seed holds ${depot}`).toBeTruthy()
+  // A rule asking for a vehicle type matches only the containers that type lifts, so a vehicle of it can serve every stop (O7 of #290).
+  const vehicleTypeId = types.find((row) => row.name === vehicleType)?.id ?? null
+  if (vehicleType !== undefined) expect(vehicleTypeId, `the seed holds ${vehicleType}`).toBeTruthy()
   const created = await api.post("/route-schemes", {
     data: {
       projectId: project.id,
@@ -56,7 +60,7 @@ export async function createScheme(api: APIRequestContext, name: string, { servi
       status: "validated",
       validFrom,
       ...(depotId === undefined ? {} : { depotId }),
-      collectionGroups: [{ name, days: serviceDays, stopSource: "rule", rule: { wasteFractionIds: [residual?.id], containerTypeIds: [], vehicleTypeId: null } }],
+      collectionGroups: [{ name, days: serviceDays, stopSource: "rule", rule: { wasteFractionIds: [residual?.id], containerTypeIds: [], vehicleTypeId } }],
     },
   })
   expect(created.status(), await created.text()).toBe(201)
@@ -64,14 +68,34 @@ export async function createScheme(api: APIRequestContext, name: string, { servi
 }
 
 /** A scheme made for the run and its routes, generated over `days` from tomorrow, in the order they run: every one planned, unassigned, the scheme's own. */
-export async function schemeWithRoutes(api: APIRequestContext, name: string, days = 14, { depot }: { depot?: string } = {}): Promise<{ scheme: Scheme; routes: ApiRoute[] }> {
+export async function schemeWithRoutes(api: APIRequestContext, name: string, days = 14, { depot, vehicleType }: { depot?: string; vehicleType?: string } = {}): Promise<{ scheme: Scheme; routes: ApiRoute[] }> {
   const from = addDays(dayIn("Europe/Copenhagen"), 1)
-  const scheme = await createScheme(api, name, { serviceDays: WEEKDAYS, validFrom: from, depot })
+  const scheme = await createScheme(api, name, { serviceDays: WEEKDAYS, validFrom: from, depot, vehicleType })
   await generate(api, scheme.id, { from, to: addDays(from, days - 1) })
   const routes = (await listAll<ApiRoute>(api, "/routes", { routeSchemeId: scheme.id })).sort((a, b) => a.operatingDate.localeCompare(b.operatingDate) || a.number - b.number)
   expect(routes.length, `${name} generated routes`).toBeGreaterThan(0)
   expect(routes.map((route) => [route.status, route.routeSchemeId, route.planned.driverId])).toEqual(routes.map(() => ["planned", scheme.id, null]))
   return { scheme, routes }
+}
+
+/**
+ * The first of the routes on a day its crew runs no other route of (O7 of
+ * #290): the API refuses one driver or truck on two routes at once, and every
+ * scheme these tests generate starts at the same time, so two tests crewing
+ * the first route of theirs with the seeded crew would book it twice.
+ */
+export async function routeWithCrewFree(api: APIRequestContext, routes: readonly ApiRoute[], crew: { driverId?: string; vehicleId?: string }): Promise<ApiRoute> {
+  const window = { from: routes[0].operatingDate, to: routes[routes.length - 1].operatingDate }
+  const busy = new Set<string>()
+  for (const [field, id] of [["plannedDriverId", crew.driverId], ["plannedVehicleId", crew.vehicleId]] as const) {
+    if (id === undefined) continue
+    for (const other of await listAll<ApiRoute>(api, "/routes", { [field]: id, ...window })) {
+      if (other.status === "planned" || other.status === "ready" || other.status === "active") busy.add(other.operatingDate)
+    }
+  }
+  const free = routes.find((route) => !busy.has(route.operatingDate))
+  expect(free, `a day between ${window.from} and ${window.to} the crew runs no other route of`).toBeTruthy()
+  return free as ApiRoute
 }
 
 /** Picks `option` in the select whose label starts with `label`. */

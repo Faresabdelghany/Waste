@@ -247,7 +247,8 @@ describe("driver absences and vehicle unavailability", { skip: database.skip || 
 
     test("an ad-hoc route, an assign and a reschedule refuse a crew away on the operating date, naming the period; the day back is free", async () => {
       const mads = fleet.drivers.mads.id
-      const adHoc = (values: Record<string, unknown>) => olivia("/routes", { method: "POST", body: { projectId: a.projects.copenhagen.id, ...values } })
+      // The fixture Monday's routes share its crew without times; the same-day rule (O7 of #290) is crew-day.test.ts's, so the crew commands here say `acceptSameDay`.
+      const adHoc = (values: Record<string, unknown>) => olivia("/routes", { method: "POST", body: { projectId: a.projects.copenhagen.id, acceptSameDay: true, ...values } })
       assert.equal((await refused(await adHoc({ operatingDate: "2026-10-13", driverId: mads }), 409)).detail, "Mads Jensen is absent Mon 12 Oct – Wed 14 Oct (holiday); a route needs a driver who is there")
       assert.equal((await refused(await adHoc({ operatingDate: "2026-10-15", vehicleId: nr12.id }), 409)).detail, "NR-12 is unavailable on Thu 15 Oct (maintenance); a route needs a vehicle that is there")
       assert.equal((await adHoc({ operatingDate: "2026-10-15", driverId: mads })).status, 201, "Thursday is his first day back")
@@ -261,8 +262,8 @@ describe("driver absences and vehicle unavailability", { skip: database.skip || 
       // A route Mads is planned on the Friday before moves onto his holiday: refused; onto the Thursday he is back, taken.
       const before = await fresh({ operatingDate: "2026-10-09", plannedDriverId: mads })
       assert.equal((await refused(await command(before.id, "reschedule", { operatingDate: "2026-10-12" }), 409)).detail, "Mads Jensen is absent Mon 12 Oct – Wed 14 Oct (holiday); a route needs a driver who is there")
-      assert.equal((await commanded(before.id, "reschedule", { operatingDate: "2026-10-15" })).operatingDate, "2026-10-15")
-      assert.equal((await commanded(before.id, "reschedule", { plannedStartTime: "06:00" })).plannedStartTime, "06:00", "the start alone asks nothing of the day")
+      assert.equal((await commanded(before.id, "reschedule", { operatingDate: "2026-10-15", acceptSameDay: true })).operatingDate, "2026-10-15")
+      assert.equal((await commanded(before.id, "reschedule", { plannedStartTime: "06:00", acceptSameDay: true })).plannedStartTime, "06:00", "the start alone asks nothing of the day")
     })
 
     test("a dispatch whose planned driver is absent, or whose planned vehicle or trailer is out of use, on the operating date is refused, the period recorded after the assign without a refusal of its own", async () => {

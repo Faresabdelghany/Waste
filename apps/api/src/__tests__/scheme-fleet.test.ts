@@ -357,6 +357,26 @@ describe("the fleet and place fields of the scheme and group endpoints", { skip:
   })
 
   describe("a validated scheme's vehicles and drivers", () => {
+    test("refuses a rule group whose vehicle is of another type than its stop rule asks for, and asks a draft nothing (O7 of #290)", async () => {
+      const asking = (typeId: string) => ({ rule: { wasteFractionIds: [residual.id], containerTypeIds: [], vehicleTypeId: typeId } })
+      const mismatched = await refused(
+        await post(
+          body("Crane rule, rear loader", {
+            status: "validated",
+            collectionGroups: [ruleGroup("North", ["monday", "thursday"], { vehicleId: fleet.vehicles.wh24.id, ...asking(planning.vehicleTypes.glassCrane.id) })],
+          }),
+        ),
+        409,
+      )
+      assert.equal(mismatched.detail, "Vehicle WH-24 of collection group North is a rear loader, and its stop rule asks for a glass crane")
+      const matched = await scheme("Rear loader rule", { status: "validated", collectionGroups: [ruleGroup("North", ["monday", "thursday"], { vehicleId: fleet.vehicles.wh24.id, ...asking(planning.vehicleTypes.rearLoader.id) })] })
+      assert.equal(matched.status, "validated")
+      const draft = await scheme("Crane rule, draft", { collectionGroups: [ruleGroup("North", ["monday", "thursday"], { vehicleId: fleet.vehicles.wh24.id, ...asking(planning.vehicleTypes.glassCrane.id) })] })
+      assert.equal(draft.status, "draft", "a draft accepts partial configuration")
+      const validating = await refused(await olivia(`/route-schemes/${draft.id}`, { method: "PATCH", body: { status: "validated" } }), 409)
+      assert.equal(validating.detail, "Vehicle WH-24 of collection group North is a rear loader, and its stop rule asks for a glass crane", "validating it asks")
+    })
+
     test("refuses one vehicle or one driver on two groups that run on a shared day, listing them, and takes them on disjoint days", async () => {
       const vehicle = await refused(
         await post(

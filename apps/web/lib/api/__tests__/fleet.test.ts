@@ -21,18 +21,20 @@ import { problemSentence } from "../problem"
 import { NOTHING_RESOLVED, type MappingContext } from "../records/adapter"
 import {
   A_POWERED_VEHICLE_HAS_A_COMPARTMENT as LOCAL_A_POWERED_VEHICLE_HAS_A_COMPARTMENT,
+  compartmentDraftsOf,
   compartmentsOfRecord,
   driverAdapter,
   fleetDriversModule,
   fleetVehiclesModule,
   PROVIDER_WITH_PROVIDER_EMPLOYMENT as LOCAL_PROVIDER_WITH_PROVIDER_EMPLOYMENT,
+  SET_COMPARTMENTS,
   vehicleAdapter,
 } from "../records/fleet"
 import { vehicleTypeAdapter, wasteFractionAdapter } from "../records/master-data"
 import { isServerBacked, SERVER_MODULE_KEYS } from "../records/modules"
 import { projectAdapter, serviceProviderAdapter } from "../records/organisation"
 import { depotAdapter } from "../records/places"
-import { loaded, loadModule, resolverOver, writeRecord, type ServerRecordsState } from "../records/server-records"
+import { commandRecord, loaded, loadModule, resolverOver, writeRecord, type ServerRecordsState } from "../records/server-records"
 import { bodyOf, clientOver, json, problem, scripted } from "./scripted-fetch"
 
 const NOW = new Date("2026-09-30T12:00:00Z")
@@ -118,10 +120,10 @@ const made = (moduleId: string, recordKind: string, status: string, name: string
   submittedValues,
 })
 
-/** The record without the typed key the adapter keeps the compartments under, for a comparison of the form's fields alone. */
+/** The record without the typed keys the adapter keeps the compartments under, for a comparison of the form's fields alone. */
 const formValuesOf = (record: BusinessRecord) => {
   const values = { ...record.submittedValues }
-  for (const key of Object.keys(values)) if (!/^[a-z][A-Za-z]*$/.test(key) || key === "compartmentSet") delete values[key]
+  for (const key of Object.keys(values)) if (!/^[a-z][A-Za-z]*$/.test(key) || key === "compartmentSet" || key === "compartmentDrafts") delete values[key]
   return values
 }
 
@@ -337,7 +339,7 @@ describe("a vehicle", () => {
     assert.equal(split.facts.Compartments, "2")
     assert.equal(split.submittedValues?.compartments, "Left: Residual; Right: Mixed")
     const recut: BusinessRecord = { ...split, submittedValues: { ...split.submittedValues, wasteFractionIds: fractionWebId(glass) } }
-    assert.deepEqual(vehicleAdapter.toPatchBody(split, recut, context()), { path: "wasteFractionIds", message: "WH-24 has 2 compartments: their fractions are set compartment by compartment on the API" })
+    assert.deepEqual(vehicleAdapter.toPatchBody(split, recut, context()), { path: "wasteFractionIds", message: "WH-24 has 2 compartments: set their fractions under Compartments in its details" })
     assert.deepEqual(vehicleAdapter.toPatchBody(split, { ...split, submittedValues: { ...split.submittedValues, capacity: "17000" } }, context()), { vehicle: { capacityKg: 17_000 } }, "the vehicle itself still patches")
     const emptied: BusinessRecord = { ...record, submittedValues: { ...record.submittedValues, wasteFractionIds: "" } }
     assert.deepEqual(vehicleAdapter.toPatchBody(record, emptied, context()), { path: "wasteFractionIds", message: A_POWERED_VEHICLE_HAS_A_COMPARTMENT })
@@ -352,6 +354,52 @@ describe("a vehicle", () => {
     const uncalled = patch({ assetReference: "" }) as { vehicle: unknown }
     assert.deepEqual(uncalled, { vehicle: { callsign: null } })
     assert.ok(VehiclePatch.safeParse(uncalled.vehicle).success)
+  })
+
+  describe("the compartments, set whole from the vehicle's details (O7 of #290)", () => {
+    const split = () => vehicleAdapter.toRecord({ ...wh24, compartments: [compartment([residual.id, mixed.id], { name: "Body", capacityKg: 8_000, volumeLitres: 16_000 }), compartment([glass.id], { position: 2, capacityKg: 3_000 })] }, context())
+    const set = (record: BusinessRecord, input: unknown) => vehicleAdapter.commands?.[SET_COMPARTMENTS].toBody?.(input as Record<string, unknown>, record, context())
+
+    test("are read back as the editor's drafts, each compartment's fractions by the web id the store knows them under", () => {
+      assert.deepEqual(compartmentDraftsOf(split()), [
+        { name: "Body", capacityKg: "8000", volumeLitres: "16000", wasteFractionIds: [fractionWebId(residual), fractionWebId(mixed)] },
+        { name: "", capacityKg: "3000", volumeLitres: "", wasteFractionIds: [fractionWebId(glass)] },
+      ])
+      assert.deepEqual(compartmentDraftsOf(vehicleAdapter.toRecord(trailer, context())), [])
+    })
+
+    test("go out as the PUT's body the contract accepts, a blank name or figure left out", () => {
+      const body = set(split(), {
+        compartments: [
+          { name: " Left ", capacityKg: "5000", volumeLitres: "", wasteFractionIds: [fractionWebId(residual)] },
+          { name: "", capacityKg: "", volumeLitres: "9000", wasteFractionIds: [fractionWebId(glass), fractionWebId(mixed)] },
+        ],
+      })
+      assert.deepEqual(body, { compartments: [{ name: "Left", capacityKg: 5_000, wasteFractionIds: [residual.id] }, { volumeLitres: 9_000, wasteFractionIds: [glass.id, mixed.id] }] })
+      assert.ok(VehicleCompartmentsSet.safeParse(body).success)
+    })
+
+    test("are refused here, at the compartment, for what the API would refuse", () => {
+      const draft = { name: "", capacityKg: "", volumeLitres: "", wasteFractionIds: [fractionWebId(residual)] }
+      assert.deepEqual(set(split(), { compartments: [] }), { path: "compartments", message: A_POWERED_VEHICLE_HAS_A_COMPARTMENT })
+      assert.deepEqual(set(split(), { compartments: [draft, { ...draft, wasteFractionIds: [] }] }), { path: "compartments.1.wasteFractionIds", message: "Pick the fractions compartment 2 carries" })
+      assert.deepEqual(set(split(), { compartments: [{ ...draft, capacityKg: "3.5" }] }), { path: "compartments.0.capacityKg", message: "A compartment's capacity is a whole number of kilograms, 1 or more" })
+      assert.deepEqual(set(split(), { compartments: [{ ...draft, volumeLitres: "0" }] }), { path: "compartments.0.volumeLitres", message: "A compartment's volume is a whole number of litres, 1 or more" })
+      assert.deepEqual(set(split(), { compartments: [{ ...draft, wasteFractionIds: ["fraction-unknown"] }] }), { path: "compartments.0.wasteFractionIds", message: "Pick fractions the API holds" })
+      assert.deepEqual(set(vehicleAdapter.toRecord(trailer, context()), { compartments: [] }), { compartments: [] }, "a trailer may carry none")
+    })
+
+    test("are put through the vehicle's own route by the store's command, which answers the vehicle as it now stands", async () => {
+      const record = split()
+      const reset = { ...wh24, compartments: [compartment([glass.id], { capacityKg: 4_000 })] }
+      const { fetch, calls } = scripted([() => json(reset)])
+      const current = loaded({ records: [record], serverIds: new Map([[record.id, wh24.id]]) }, 1)
+      const outcome = await commandRecord(clientOver(fetch), fleetVehiclesModule, current, record, SET_COMPARTMENTS, { compartments: [{ name: "", capacityKg: "4000", volumeLitres: "", wasteFractionIds: [fractionWebId(glass)] }] }, { fixtures: vehicleFixtures, state, now: NOW })
+      assert.deepEqual(calls.map((call) => `${call.init.method} ${call.url}`), [`PUT http://api.test/vehicles/${wh24.id}/compartments`])
+      assert.deepEqual(bodyOf(calls[0]), { compartments: [{ capacityKg: 4_000, wasteFractionIds: [glass.id] }] })
+      assert.equal(outcome.kind, "done")
+      if (outcome.kind === "done") assert.deepEqual(compartmentDraftsOf(outcome.record), [{ name: "", capacityKg: "4000", volumeLitres: "", wasteFractionIds: [fractionWebId(glass)] }])
+    })
   })
 
   test("the update patches the vehicle, then puts the whole list through its own route, and answers the vehicle as it now stands", async () => {
