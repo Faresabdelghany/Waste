@@ -2,10 +2,10 @@
 // the run, the company's with an optional project, and its rows, a ledger.
 // Then migration 0020, which has to begin with exactly those statements and
 // carry below them the run's fence and trigger and the rows' fence and
-// revoke. Migration 0064 (O30 of #290, row 1.18) grew the kinds by the
+// revoke. Migration 0068 (O30 of #290, row 1.18) grew the kinds by the
 // catalogue's three and made a run of any of the company's kinds name no
 // project: `expectedAsOf("0020")` is what 0020 says, and
-// catalogue-import-rendering.test.ts pins 0064. No database.
+// catalogue-import-rendering.test.ts pins 0068. No database.
 import assert from "node:assert/strict"
 import { readFile } from "node:fs/promises"
 import { join } from "node:path"
@@ -33,7 +33,7 @@ const createLedger = (name: string, lines: string[]): string =>
 /** The kinds 0020 wrote: the customers and a project's three. */
 const KINDS_AS_OF_0020 = ["customers", "properties", "containers", "agreements"]
 
-const expectedAsOf = (asOf: "0020" | "0064") => [
+const expectedAsOf = (asOf: "0020" | "0068") => [
   createTable("import_run", "tenant", [
     '"project_id" uuid',
     '"kind" text NOT NULL',
@@ -70,7 +70,7 @@ const expectedAsOf = (asOf: "0020" | "0064") => [
   index("import_run", "import_run_project_id_idx", "company_id", "project_id"),
   index("import_run", "import_run_requested_by_idx", "company_id", "requested_by"),
 ]
-const expected = expectedAsOf("0064")
+const expected = expectedAsOf("0068")
 
 const fileStatements = async (): Promise<string[]> => statementsOf(await readFile(join(MIGRATIONS_FOLDER, MIGRATION), "utf8"))
 

@@ -44,6 +44,18 @@ import type { ActivitySide } from "@waste/domain/service-providers/activities"
 
 const { workspaceId, moduleId } = PROVIDER_ACTIVITIES_MODULE
 const SERVICE_AREAS_MODULE = { workspaceId: "service-providers", moduleId: "service-areas" } as const
+const VEHICLES_MODULE = { workspaceId: "fleet", moduleId: "vehicles" } as const
+const DRIVERS_MODULE = { workspaceId: "fleet", moduleId: "drivers" } as const
+
+/** The crew a vehicle change picks from: the powered vehicles and the drivers the account reads — a provider's own fleet alone, which the API fences. */
+function useCrewOptions(): { vehicles: BusinessFormOption[]; drivers: BusinessFormOption[] } {
+  const vehicles = useServerModuleState(VEHICLES_MODULE.workspaceId, VEHICLES_MODULE.moduleId)
+  const drivers = useServerModuleState(DRIVERS_MODULE.workspaceId, DRIVERS_MODULE.moduleId)
+  return {
+    vehicles: optionsOf(vehicles?.records, (record) => record.submittedValues?.resourceKind === "powered-vehicle"),
+    drivers: optionsOf(drivers?.records, () => true),
+  }
+}
 
 const optionsOf = (records: readonly BusinessRecord[] | undefined, keep: (record: BusinessRecord) => boolean, label: (record: BusinessRecord) => string = (record) => record.name): BusinessFormOption[] =>
   (records ?? []).filter(keep).map((record) => ({ value: record.id, label: label(record) }))
@@ -64,6 +76,7 @@ export function LogActivitySurface({ label }: PrimarySurfaceProps) {
   const areas = useServerModuleState(SERVICE_AREAS_MODULE.workspaceId, SERVICE_AREAS_MODULE.moduleId)
   const providers = useServerModuleState(SERVICE_PROVIDERS_MODULE.workspaceId, SERVICE_PROVIDERS_MODULE.moduleId)
   const organisation = useServerModuleState(ORGANISATION_MODULE.workspaceId, ORGANISATION_MODULE.moduleId)
+  const crew = useCrewOptions()
   const { upsertRecord } = useBusinessRecordStore()
   const openRecord = useOpenRecord(moduleId)
   const [open, setOpen] = useState(false)
@@ -72,6 +85,7 @@ export function LogActivitySurface({ label }: PrimarySurfaceProps) {
   const schema = activityOpenForm(side, {
     // A proposal is about a scheme's group: the routes generation wrote, never the office's ad-hoc ones.
     routes: optionsOf(routes?.records, (record) => typeof record.submittedValues?.schemeId === "string" && record.submittedValues.schemeId !== "", (record) => [record.name, record.context].filter(Boolean).join(" · ")),
+    ...crew,
     serviceAreas: optionsOf(areas?.records, (record) => serviceAreaKindOf(record) === "service-area"),
     providers: optionsOf(providers?.records, () => true),
     projects: optionsOf(organisation?.records, (record) => record.recordKind === "Project"),
@@ -109,6 +123,7 @@ export function ActivityCommandsSurface({ record }: RowSurfaceProps) {
   const { side } = useSide()
   const moduleReady = useModuleReady(PROVIDER_ACTIVITIES_MODULE)
   const offered = useCommandOffered(PROVIDER_ACTIVITIES_MODULE)
+  const crew = useCrewOptions()
   const { upsertRecord } = useBusinessRecordStore()
   const { busy, run, save } = useCommandRunner(PROVIDER_ACTIVITIES_MODULE, record.id)
   const [asking, setAsking] = useState<ActivityOffer | null>(null)
@@ -152,7 +167,7 @@ export function ActivityCommandsSurface({ record }: RowSurfaceProps) {
       )}
       {correcting && kind !== undefined && (
         <BusinessRecordFormDialog
-          schema={activityCorrectionForm(kind)}
+          schema={activityCorrectionForm(kind, crew)}
           open
           onOpenChange={(isOpen) => !isOpen && setCorrecting(false)}
           onSubmit={correct}

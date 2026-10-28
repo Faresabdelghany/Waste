@@ -28,10 +28,10 @@ type Snapshot = Parameters<typeof generateMigration>[0]
 const snapshot = async (n: string): Promise<Snapshot> => JSON.parse(await readFile(join(MIGRATIONS_FOLDER, "meta", `${n}_snapshot.json`), "utf8")) as Snapshot
 
 /** The kinds the migration wrote: the four before it, the catalogue's three and the fleet's two; the calendars' and the areas' migration grew the list again. */
-const KINDS_AS_OF_0064 = ["customers", "properties", "containers", "agreements", "waste-fractions", "container-types", "vehicle-types", "vehicles", "drivers"]
+const KINDS_AS_OF_0068 = ["customers", "properties", "containers", "agreements", "waste-fractions", "container-types", "vehicle-types", "vehicles", "drivers"]
 
-const KIND_ONE_OF = `ALTER TABLE "wms"."import_run" ADD CONSTRAINT "import_run_kind_one_of" CHECK (${ref("import_run", "kind")} in (${list(...KINDS_AS_OF_0064)}));`
-const PROJECT_SHAPE = `ALTER TABLE "wms"."import_run" ADD CONSTRAINT "import_run_project_shape" CHECK (${projectShape("0064")});`
+const KIND_ONE_OF = `ALTER TABLE "wms"."import_run" ADD CONSTRAINT "import_run_kind_one_of" CHECK (${ref("import_run", "kind")} in (${list(...KINDS_AS_OF_0068)}));`
+const PROJECT_SHAPE = `ALTER TABLE "wms"."import_run" ADD CONSTRAINT "import_run_project_shape" CHECK (${projectShape("0068")});`
 
 describe("the catalogue import's migration", () => {
   test("is drizzle-kit's statements alone: the two checks dropped and added in their grown spelling", async () => {
@@ -46,6 +46,6 @@ describe("the catalogue import's migration", () => {
   })
 
   test("the schema's project check is the one the file adds", () => {
-    assert.equal(checksOf(importRun).get("import_run_project_shape"), projectShape("0064"))
+    assert.equal(checksOf(importRun).get("import_run_project_shape"), projectShape("0068"))
   })
 })

@@ -8,8 +8,9 @@
 // Its `number` is the company's running count, `ACT-<n>` in a sentence, taken
 // as the highest plus one under the company's row lock, as an Application's
 // is. A proposal names the scheme and the Collection Group it is about, the
-// days it asks the group to run on and the first day they apply; an approved
-// one names the scheme version its approval wrote. A compliance follow-up
+// days a route-day change asks the group to run on, or the vehicle and
+// driver a vehicle change asks it to run with, and the first day they apply;
+// an approved one names the scheme version its approval wrote. A compliance follow-up
 // names its due day, and a note nothing more. `activity_kind_shape` holds
 // each kind to its columns and `activity_status_shape` each kind to its
 // statuses; `activity_closed_shape` holds a closed row to who closed it and
@@ -27,6 +28,7 @@ import { id, projectScoped, timestamps } from "./columns"
 import { serviceArea } from "./finance"
 import { company, project, serviceProvider } from "./organisation"
 import { companyReference, projectKey, projectReference, tenantIndex, tenantReference, tenantUnique } from "./references"
+import { driver, vehicle } from "./fleet"
 import { collectionGroup, routeScheme } from "./route-schemes"
 import { wms } from "./wms"
 
@@ -54,6 +56,9 @@ export const serviceProviderActivity = wms.table(
     serviceDays: text().array(),
     /** The first day a proposal applies from. */
     effectiveFrom: date(),
+    /** A vehicle change's vehicle for the group, and its driver where the proposal names one (#474, part 2). */
+    vehicleId: uuid(),
+    driverId: uuid(),
     /** The scheme version an approval wrote. */
     successorSchemeId: uuid(),
     openedBy: uuid().notNull(),
@@ -69,6 +74,8 @@ export const serviceProviderActivity = wms.table(
     projectReference(t, [t.routeSchemeId], routeScheme),
     projectReference(t, [t.collectionGroupId], collectionGroup),
     projectReference(t, [t.successorSchemeId], routeScheme),
+    projectReference(t, [t.vehicleId], vehicle),
+    projectReference(t, [t.driverId], driver),
     tenantReference(t, [t.openedBy], userAccount),
     tenantReference(t, [t.closedBy], userAccount),
     tenantUnique(t, t.number),
@@ -76,10 +83,10 @@ export const serviceProviderActivity = wms.table(
     oneOf(t.status, SERVICE_PROVIDER_ACTIVITY_STATUSES),
     subsetOf(t.serviceDays, SERVICE_DAYS),
     check(tableObjectName(t.id.table, "subject_given", "serviceProviderActivity"), sql`length(btrim(${t.subject})) > 0`),
-    // Each kind carries its own columns and none of another's.
+    // Each kind carries its own columns and none of another's: a proposal its scheme, group and first day, a route-day change its days, a vehicle change its vehicle and maybe a driver, a follow-up its due day.
     check(
       tableObjectName(t.id.table, "kind_shape", "serviceProviderActivity"),
-      sql`case ${t.kind} when 'route-day-change' then ${t.routeSchemeId} is not null and ${t.collectionGroupId} is not null and cardinality(${t.serviceDays}) > 0 and ${t.effectiveFrom} is not null and ${t.dueOn} is null when 'compliance-follow-up' then ${t.dueOn} is not null and ${t.routeSchemeId} is null and ${t.collectionGroupId} is null and ${t.serviceDays} is null and ${t.effectiveFrom} is null else ${t.dueOn} is null and ${t.routeSchemeId} is null and ${t.collectionGroupId} is null and ${t.serviceDays} is null and ${t.effectiveFrom} is null end`,
+      sql`case ${t.kind} when 'route-day-change' then ${t.routeSchemeId} is not null and ${t.collectionGroupId} is not null and cardinality(${t.serviceDays}) > 0 and ${t.effectiveFrom} is not null and ${t.dueOn} is null and ${t.vehicleId} is null and ${t.driverId} is null when 'vehicle-change' then ${t.routeSchemeId} is not null and ${t.collectionGroupId} is not null and ${t.vehicleId} is not null and ${t.effectiveFrom} is not null and ${t.serviceDays} is null and ${t.dueOn} is null when 'compliance-follow-up' then ${t.dueOn} is not null and ${t.routeSchemeId} is null and ${t.collectionGroupId} is null and ${t.serviceDays} is null and ${t.effectiveFrom} is null and ${t.vehicleId} is null and ${t.driverId} is null else ${t.dueOn} is null and ${t.routeSchemeId} is null and ${t.collectionGroupId} is null and ${t.serviceDays} is null and ${t.effectiveFrom} is null and ${t.vehicleId} is null and ${t.driverId} is null end`,
     ),
     // A proposal moves through its Approval's statuses, every other kind through open and closed.
     check(
@@ -98,6 +105,8 @@ export const serviceProviderActivity = wms.table(
     tenantIndex(t, t.routeSchemeId),
     tenantIndex(t, t.collectionGroupId),
     tenantIndex(t, t.successorSchemeId),
+    tenantIndex(t, t.vehicleId),
+    tenantIndex(t, t.driverId),
     tenantIndex(t, t.openedBy),
     tenantIndex(t, t.closedBy),
   ],

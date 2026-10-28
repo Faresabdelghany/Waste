@@ -22,7 +22,7 @@ type Scheme = {
   editPolicy: string
   plannedStartTime: string | null
   serviceDays: string[]
-  collectionGroups: { id: string; name: string; days: string[]; rule: { wasteFractionIds: string[] } | null }[]
+  collectionGroups: { id: string; name: string; days: string[]; rule: { wasteFractionIds: string[]; containerTypeIds: string[]; vehicleTypeId: string | null; planningAreaId: string | null } | null }[]
 }
 type Named = { id: string; name: string }
 
@@ -225,7 +225,8 @@ test("a service day added to a validated scheme is one PATCH of the days and the
   expect(patched.status(), await patched.text()).toBe(200)
   expect(patched.request().postDataJSON()).toEqual({
     serviceDays: ["monday", "thursday", "saturday"],
-    collectionGroups: [{ id: group.id, name: group.name, days: ["monday", "thursday", "saturday"], stopSource: "rule", rule: group.rule, containerIds: null, serviceProviderId: null, vehicleId: null, driverId: null }],
+    // The rule as it was read, its own planning area said only where the group has one (O30 of #290): this one matches within the scheme's.
+    collectionGroups: [{ id: group.id, name: group.name, days: ["monday", "thursday", "saturday"], stopSource: "rule", rule: { wasteFractionIds: group.rule?.wasteFractionIds, containerTypeIds: group.rule?.containerTypeIds, vehicleTypeId: group.rule?.vehicleTypeId }, containerIds: null, serviceProviderId: null, vehicleId: null, driverId: null }],
   })
   await expect(dialog).toBeHidden()
   // One request for the whole edit: no draft first, no group of its own, no second patch.

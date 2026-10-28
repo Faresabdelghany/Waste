@@ -17,11 +17,15 @@ import { RouteScheme } from "@waste/contracts/route-schemes"
 import { ServiceProviderActivity } from "@waste/contracts/service-provider-activities"
 import { createDb, type Database, type Tx } from "@waste/db/client"
 import { role, roleGrant, serviceProviderAccess, userAccount } from "@waste/db/schema/access"
+import { vehicle } from "@waste/db/schema/fleet"
 import { withCompany } from "@waste/db/tenant"
+import { and, eq } from "drizzle-orm"
 import { normaliseGrants } from "@waste/domain/access/grants"
-import { OFFICE_CLOSES_FOLLOW_UPS, OFFICE_DECIDES, OFFICE_RAISES_FOLLOW_UPS, SAME_DAYS } from "@waste/domain/service-providers/activities"
+import { OFFICE_CLOSES_FOLLOW_UPS, OFFICE_DECIDES, OFFICE_RAISES_FOLLOW_UPS, SAME_CREW, SAME_DAYS } from "@waste/domain/service-providers/activities"
 
+import { notOwnFleet } from "../auth/provider"
 import { createApp } from "../app"
+import { NOT_A_POWERED_VEHICLE } from "../routes/references"
 import { dispatchedFrom } from "../routes/scheme-lifecycle"
 import { appliesFromTomorrow, KIND_CARRIES_NOT, NOT_A_GROUP_OF_THE_SCHEME, notOwnProvider, notServed } from "../routes/service-provider-activities"
 import { callingAs, type Call } from "./calls"
@@ -85,6 +89,8 @@ describe("service provider activities (#474)", { skip: database.skip || owner.sk
       await tx.insert(role).values({ id: deskRole, companyId: a.companyId, key: null, name: "Contract desk", scope: "Company", description: "Decides the providers' activities", system: false })
       const grants = normaliseGrants([{ moduleKey: "service-providers.activities", actions: ["view", "create", "edit"] }])
       await tx.insert(roleGrant).values(grants.flatMap((grant) => grant.actions.map((action) => ({ companyId: a.companyId, roleId: deskRole, moduleKey: grant.moduleKey, action }))))
+      // WH-25 is NordRen's own truck: the one its manager may propose.
+      await tx.update(vehicle).set({ ownership: "service-provider", serviceProviderId: a.serviceProviders.nordren.id }).where(and(eq(vehicle.companyId, a.companyId), eq(vehicle.id, fleet.vehicles.wh25.id)))
       await tx.insert(userAccount).values({ id: deskAccount.id, companyId: a.companyId, authUserId: deskAccount.authUserId, email: deskAccount.email, fullName: deskAccount.fullName, roleId: deskRole, allProjects: true })
     })
     const app = createApp({ probe: pool, pool, verifier: keys.verifier, now: () => NOW })
@@ -254,6 +260,60 @@ describe("service provider activities (#474)", { skip: database.skip || owner.sk
       assert.equal((await refused(await lars(`/service-provider-activities/${proposal.id}`, { method: "PATCH", body: { serviceDays: ["tuesday"] } }), 400)).errors?.[0]?.message, SAME_DAYS)
       await ok(await commanded(lars, proposal.id, "withdraw"))
       await refused(await lars(`/service-provider-activities/${proposal.id}`, { method: "PATCH", body: { subject: "Too late" } }), 409)
+    })
+  })
+
+  describe("a vehicle change (#474, part 2)", () => {
+    const vehicleBody = (scheme: RouteScheme, values: Record<string, unknown> = {}) => ({
+      kind: "vehicle-change",
+      projectId: a.projects.copenhagen.id,
+      serviceProviderId: a.serviceProviders.nordren.id,
+      subject: "Organic round on NordRen's own truck",
+      routeSchemeId: scheme.id,
+      collectionGroupId: scheme.collectionGroups[0].id,
+      vehicleId: fleet.vehicles.wh25.id,
+      effectiveFrom: FROM,
+      ...values,
+    })
+
+    test("Lars proposes his own truck; another's or a trailer is refused at the field, and the office may name any of the project's", async () => {
+      const organic = await schemeNamed("Organic crew")
+      const proposal = await open(lars, vehicleBody(organic))
+      assert.equal(proposal.kind, "vehicle-change")
+      assert.equal(proposal.status, "pending-approval")
+      assert.equal(proposal.vehicleId, fleet.vehicles.wh25.id)
+      assert.equal(proposal.driverId, null)
+      const atVehicle = async (call: Call, body: unknown) => (await refused(await call("/service-provider-activities", { method: "POST", body }), 400)).errors?.[0]
+      assert.deepEqual(await atVehicle(lars, vehicleBody(organic, { vehicleId: fleet.vehicles.wh24.id })), { path: "vehicleId", message: notOwnFleet("vehicle", "NordRen ApS") })
+      assert.deepEqual(await atVehicle(lars, vehicleBody(organic, { vehicleId: fleet.vehicles.trailer.id })), { path: "vehicleId", message: NOT_A_POWERED_VEHICLE })
+      assert.equal((await open(olivia, vehicleBody(organic, { vehicleId: fleet.vehicles.wh24.id }))).vehicleId, fleet.vehicles.wh24.id)
+    })
+
+    test("must move the crew", async () => {
+      const crewed = await schemeNamed("Organic crewed", { collectionGroups: [{ name: "Organic", days: ["tuesday"], stopSource: "rule", rule: { wasteFractionIds: [ex.fractions.residual.id], containerTypeIds: [], vehicleTypeId: null }, vehicleId: fleet.vehicles.wh25.id }] })
+      const problem = await refused(await lars("/service-provider-activities", { method: "POST", body: vehicleBody(crewed) }), 400)
+      assert.deepEqual(problem.errors, [{ path: "vehicleId", message: SAME_CREW }])
+    })
+
+    test("the office approves it: the next version's group runs with the proposed truck from the day", async () => {
+      const organic = await schemeNamed("Organic recrewed")
+      const proposal = await open(lars, vehicleBody(organic))
+      const approved = ServiceProviderActivity.parse(await ok(await commanded(olivia, proposal.id, "approve")))
+      assert.equal(approved.status, "approved")
+      assert.ok(approved.successorSchemeId)
+      const successor = await scheme(approved.successorSchemeId)
+      assert.equal(successor.validFrom, FROM)
+      assert.deepEqual(successor.serviceDays, ["tuesday"], "a vehicle change moves no day")
+      assert.deepEqual(successor.collectionGroups.map((group) => [group.name, group.days, group.vehicleId]), [["Organic", ["tuesday"], fleet.vehicles.wh25.id]])
+      assert.equal((await scheme(organic.id)).collectionGroups[0].vehicleId, null, "the predecessor ran as it was")
+    })
+
+    test("is corrected in its own members: the truck, never the days", async () => {
+      const organic = await schemeNamed("Organic corrected crew")
+      const proposal = await open(olivia, vehicleBody(organic, { vehicleId: fleet.vehicles.wh24.id }))
+      const moved = ServiceProviderActivity.parse(await ok(await olivia(`/service-provider-activities/${proposal.id}`, { method: "PATCH", body: { vehicleId: fleet.vehicles.wh25.id } })))
+      assert.equal(moved.vehicleId, fleet.vehicles.wh25.id)
+      assert.deepEqual((await refused(await olivia(`/service-provider-activities/${proposal.id}`, { method: "PATCH", body: { serviceDays: ["monday"] } }), 400)).errors, [{ path: "serviceDays", message: KIND_CARRIES_NOT }])
     })
   })
 

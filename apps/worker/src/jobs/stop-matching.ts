@@ -6,8 +6,9 @@
 // "Active-agreement gate" the prototype approximated with a container status;
 // `agreement.status` gates nothing until #79 decides (#97 §6.22) — with the
 // placement's fraction and the subscription's place on that day, whether the
-// place has a location, and whether that location lies inside the boundary
-// of the scheme's planning area in force on that day. Geography is
+// place has a location, and which of the run's planning areas — the scheme's
+// and its rule groups' own (O30 of #290) — hold that location inside their
+// boundary in force on that day. Geography is
 // containment in the boundary in force, never a stored area id: the
 // Registry's `container` carries none on purpose, and a boundary that moves
 // next month leaves this week's routes as they were. And whether a pause of
@@ -23,11 +24,12 @@
 // containers could not be placed. The days travel as one `text[]` parameter
 // cast to `date[]` in the statement: postgres.js serialises a JavaScript
 // array as a text array and infers no element type of its own, so the cast
-// is where the days become dates. The boundary is a `left join`: a day with
-// none in force, or a scheme with no planning area, answers every container
-// as not contained, and the job says so on the run as a warning, never a
-// throw. At most one boundary of an area is in force on a day
-// (`planning_area_boundary_no_overlap`), so the join multiplies nothing.
+// is where the days become dates. The areas are an array subquery per row,
+// so a container lies in none, one or several: a day with no boundary in
+// force, or a run with no planning area, answers every container as in
+// none, and the job says so on the run as a warning, never a throw. At most
+// one boundary of an area is in force on a day
+// (`planning_area_boundary_no_overlap`), so an area is named once.
 // `st_contains` is qualified, as every function this package's SQL calls is,
 // so it resolves whatever the connecting role's search path says. The
 // statement runs on the API role's transaction under `withCompany`, so the
@@ -51,17 +53,17 @@ type Row = {
   property_id: string | null
   shared_collection_point_id: string | null
   located: boolean
-  contained: boolean
+  contained_in: string[]
   paused: boolean
 }
 
 /**
  * The stop candidates of a project for each of the days, keyed by day: the
- * containers eligible that day with where they stand against the planning
- * area's boundary in force. A day with no eligible container is an empty
- * list, so every day asked for is a key.
+ * containers eligible that day with the planning areas of `planningAreaIds`
+ * whose boundary in force holds them. A day with no eligible container is an
+ * empty list, so every day asked for is a key.
  */
-export async function stopCandidatesByDay(tx: Tx, scope: { companyId: string; projectId: string }, planningAreaId: string | null, days: readonly string[]): Promise<Map<string, StopCandidate[]>> {
+export async function stopCandidatesByDay(tx: Tx, scope: { companyId: string; projectId: string }, planningAreaIds: readonly string[], days: readonly string[]): Promise<Map<string, StopCandidate[]>> {
   const byDay = new Map<string, StopCandidate[]>(days.map((day) => [day, []]))
   if (days.length === 0) return byDay
   const place = sql`coalesce(${property.location}, ${sharedCollectionPoint.location})`
@@ -74,7 +76,13 @@ export async function stopCandidatesByDay(tx: Tx, scope: { companyId: string; pr
       ${subscription.propertyId} as property_id,
       ${subscription.sharedCollectionPointId} as shared_collection_point_id,
       (${place} is not null) as located,
-      (${planningAreaBoundary.boundary} is not null and ${place} is not null and extensions.st_contains(${planningAreaBoundary.boundary}, ${place})) as contained,
+      array(
+        select ${planningAreaBoundary.planningAreaId}::text from ${planningAreaBoundary}
+        where ${planningAreaBoundary.companyId} = ${container.companyId} and ${planningAreaBoundary.planningAreaId} = any(${sql.param([...planningAreaIds])}::text[]::uuid[])
+          and ${validOn(planningAreaBoundary, sql`d.day`)}
+          and ${place} is not null and extensions.st_contains(${planningAreaBoundary.boundary}, ${place})
+        order by 1
+      ) as contained_in,
       exists (
         select 1 from ${subscriptionPause}
         where ${subscriptionPause.companyId} = ${subscription.companyId} and ${subscriptionPause.subscriptionId} = ${subscription.id} and ${validOn(subscriptionPause, sql`d.day`)}
@@ -92,9 +100,6 @@ export async function stopCandidatesByDay(tx: Tx, scope: { companyId: string; pr
       and ${validOn(agreement, sql`d.day`)}
     left join ${property} on ${property.companyId} = ${subscription.companyId} and ${property.id} = ${subscription.propertyId}
     left join ${sharedCollectionPoint} on ${sharedCollectionPoint.companyId} = ${subscription.companyId} and ${sharedCollectionPoint.id} = ${subscription.sharedCollectionPointId}
-    left join ${planningAreaBoundary}
-      on ${planningAreaBoundary.companyId} = ${container.companyId} and ${planningAreaBoundary.planningAreaId} = ${planningAreaId}
-      and ${validOn(planningAreaBoundary, sql`d.day`)}
     order by d.day, ${container.label}, ${container.id}
   `)
   for (const row of rows) {
@@ -106,7 +111,7 @@ export async function stopCandidatesByDay(tx: Tx, scope: { companyId: string; pr
       propertyId: row.property_id,
       sharedCollectionPointId: row.shared_collection_point_id,
       located: row.located,
-      contained: row.contained,
+      containedIn: row.contained_in,
       paused: row.paused,
     })
   }
@@ -114,9 +119,10 @@ export async function stopCandidatesByDay(tx: Tx, scope: { companyId: string; pr
 }
 
 /**
- * Whether the scheme's planning area has a boundary in force on each day:
- * the run's warning for the days that have none, where rule groups match
- * nothing. Asked once for the walk, in one statement.
+ * Whether a planning area — the scheme's, or a rule group's own — has a
+ * boundary in force on each day: the run's warning for the days that have
+ * none, where the rule groups matching within it match nothing. Asked once
+ * per area for the walk, in one statement.
  */
 export async function daysWithBoundary(tx: Tx, companyId: string, planningAreaId: string, days: readonly string[]): Promise<Set<string>> {
   if (days.length === 0) return new Set()

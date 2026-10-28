@@ -48,19 +48,40 @@
 // not declared descending on purpose: drizzle-kit renders `DESC` as `DESC
 // NULLS LAST`, while `ORDER BY id DESC` means nulls first, and the mismatch
 // costs a sort where the plain index gives an Index Scan Backward.
-import { STOCK_MOVEMENT_KINDS, STOCK_PLACE_KINDS } from "@waste/domain/resources/vocabulary"
+import { DECOMMISSION_REASON_STATUSES, STOCK_MOVEMENT_KINDS, STOCK_PLACE_KINDS } from "@waste/domain/resources/vocabulary"
 import { sql } from "drizzle-orm"
-import { check, index, text, timestamp, uuid } from "drizzle-orm/pg-core"
+import { check, index, integer, text, timestamp, uuid } from "drizzle-orm/pg-core"
 
 import { tableObjectName } from "../names"
 import { userAccount } from "./access"
-import { oneOf } from "./checks"
-import { id, projectScoped, recorded } from "./columns"
+import { containerType } from "./catalogue"
+import { lowercase, oneOf, positive } from "./checks"
+import { id, projectScoped, recorded, tenant, timestamps } from "./columns"
 import { container, containerServicePlacement } from "./containers"
 import { company, project } from "./organisation"
 import { warehouse } from "./places"
-import { companyReference, projectReference, tenantIndex, tenantKey, tenantReference } from "./references"
+import { companyReference, projectReference, tenantIndex, tenantKey, tenantReference, tenantUnique } from "./references"
 import { wms } from "./wms"
+
+// Why a container was scrapped (O30 of #290, row 9.6): the company's own list,
+// which the office keeps under Settings › Master data beside its contaminant
+// codes, and which a decommission names. A reason is retired by its status,
+// never deleted: a decommission names the reason it was given, and a status
+// gates a new decommission, never an existing one.
+export const decommissionReason = wms.table(
+  "decommission_reason",
+  {
+    ...id,
+    ...tenant,
+    ...timestamps,
+    /** The stable slug a report quotes: `worn-out`. Set once; unique per company. */
+    code: text().notNull(),
+    /** What a person reads; unique per company. */
+    name: text().notNull(),
+    status: text().notNull().default("active"),
+  },
+  (t) => [companyReference(t, company), tenantUnique(t, t.code), tenantUnique(t, t.name), tenantKey(t), lowercase(t.code), oneOf(t.status, DECOMMISSION_REASON_STATUSES)],
+)
 
 export const stockMovement = wms.table(
   "stock_movement",
@@ -82,7 +103,10 @@ export const stockMovement = wms.table(
     occurredAt: timestamp({ withTimezone: true }).notNull(),
     /** The caller's account. */
     recordedBy: uuid().notNull(),
+    /** Why, in the person's words; a decommission's note beside its reason. */
     reason: text(),
+    /** Why a decommission scrapped the container, one of the company's reasons (O30 of #290); a decommission's alone, and never null on one. */
+    decommissionReasonId: uuid(),
     /** A delivery note, a ticket. */
     reference: text(),
     /** The movement an adjustment corrects, if it corrects one. */
@@ -97,6 +121,7 @@ export const stockMovement = wms.table(
     // The placement of this container and no other: the key carries the container on both sides.
     projectReference(t, [t.containerId, t.placementId], containerServicePlacement, [containerServicePlacement.containerId, containerServicePlacement.id]),
     tenantReference(t, [t.recordedBy], userAccount),
+    tenantReference(t, [t.decommissionReasonId], decommissionReason),
     // The ledger's own key, for the pointer at the row an adjustment corrects: the same table on both sides.
     tenantReference(t, [t.correctsMovementId], t),
     tenantKey(t),
@@ -107,6 +132,8 @@ export const stockMovement = wms.table(
     check(tableObjectName(t.id.table, "from_shape", "stockMovement"), sql`(${t.fromKind} in ('warehouse', 'maintenance')) = (${t.fromWarehouseId} is not null)`),
     check(tableObjectName(t.id.table, "to_shape", "stockMovement"), sql`(${t.toKind} in ('warehouse', 'maintenance')) = (${t.toWarehouseId} is not null)`),
     check(tableObjectName(t.id.table, "placement_shape", "stockMovement"), sql`(${t.fromKind} = 'service' or ${t.toKind} = 'service') = (${t.placementId} is not null)`),
+    // A decommission says why, by one of the company's reasons, and no other movement does (O30 of #290).
+    check(tableObjectName(t.id.table, "decommission_reason_shape", "stockMovement"), sql`(${t.kind} = 'decommission') = (${t.decommissionReasonId} is not null)`),
     // The pairs each kind allows: the table @waste/domain/resources/asset-state spells as MOVEMENT_SHAPES, as one CASE.
     check(
       tableObjectName(t.id.table, "kind_shape", "stockMovement"),
@@ -120,5 +147,36 @@ export const stockMovement = wms.table(
     tenantIndex(t, t.placementId),
     tenantIndex(t, t.recordedBy),
     tenantIndex(t, t.correctsMovementId),
+    tenantIndex(t, t.decommissionReasonId),
+  ],
+)
+
+// A warehouse's Stock Minimum (O30 of #290, row 9.8): how many containers of a
+// type the office wants on its shelves at least. The balance is a query over
+// the ledger (`GET /stock-balances`), never a stored count; this row is the
+// office's number beside it, and a type below it reads "below minimum". No
+// alert and no order follow from it. One row per warehouse and type; a type
+// with no minimum has no row, so the number is a positive count. A
+// warehouse's minimums are a set replaced whole (`PUT /warehouses/:id/stock-minimums`).
+export const stockMinimum = wms.table(
+  "stock_minimum",
+  {
+    ...id,
+    ...projectScoped,
+    ...timestamps,
+    warehouseId: uuid().notNull(),
+    containerTypeId: uuid().notNull(),
+    /** The fewest containers of the type the warehouse should hold, in stock and not in maintenance. */
+    minimum: integer().notNull(),
+  },
+  (t) => [
+    companyReference(t, company),
+    tenantReference(t, [t.projectId], project),
+    projectReference(t, [t.warehouseId], warehouse),
+    tenantReference(t, [t.containerTypeId], containerType),
+    tenantUnique(t, t.warehouseId, t.containerTypeId),
+    positive(t.minimum),
+    tenantIndex(t, t.projectId),
+    tenantIndex(t, t.containerTypeId),
   ],
 )

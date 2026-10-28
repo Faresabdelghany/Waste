@@ -1,5 +1,5 @@
 {
-  "id": "ff231f3a-3d5e-4b24-baa4-bdf1921cb129",
+  "id": "f71db80f-fb6f-4557-9619-a40a598cdf55",
   "prevId": "297a1415-15b0-4b4a-9ad3-45bd26ca3ebc",
   "version": "7",
   "dialect": "postgresql",
@@ -8406,6 +8406,193 @@
       },
       "policies": {},
       "checkConstraints": {},
+      "isRLSEnabled": false
+    },
+    "wms.stock_minimum": {
+      "name": "stock_minimum",
+      "schema": "wms",
+      "columns": {
+        "id": {
+          "name": "id",
+          "type": "uuid",
+          "primaryKey": true,
+          "notNull": true,
+          "default": "wms.uuidv7()"
+        },
+        "company_id": {
+          "name": "company_id",
+          "type": "uuid",
+          "primaryKey": false,
+          "notNull": true
+        },
+        "project_id": {
+          "name": "project_id",
+          "type": "uuid",
+          "primaryKey": false,
+          "notNull": true
+        },
+        "created_at": {
+          "name": "created_at",
+          "type": "timestamp with time zone",
+          "primaryKey": false,
+          "notNull": true,
+          "default": "now()"
+        },
+        "updated_at": {
+          "name": "updated_at",
+          "type": "timestamp with time zone",
+          "primaryKey": false,
+          "notNull": true,
+          "default": "now()"
+        },
+        "warehouse_id": {
+          "name": "warehouse_id",
+          "type": "uuid",
+          "primaryKey": false,
+          "notNull": true
+        },
+        "container_type_id": {
+          "name": "container_type_id",
+          "type": "uuid",
+          "primaryKey": false,
+          "notNull": true
+        },
+        "minimum": {
+          "name": "minimum",
+          "type": "integer",
+          "primaryKey": false,
+          "notNull": true
+        }
+      },
+      "indexes": {
+        "stock_minimum_project_id_idx": {
+          "name": "stock_minimum_project_id_idx",
+          "columns": [
+            {
+              "expression": "company_id",
+              "isExpression": false,
+              "asc": true,
+              "nulls": "last"
+            },
+            {
+              "expression": "project_id",
+              "isExpression": false,
+              "asc": true,
+              "nulls": "last"
+            }
+          ],
+          "isUnique": false,
+          "concurrently": false,
+          "method": "btree",
+          "with": {}
+        },
+        "stock_minimum_container_type_id_idx": {
+          "name": "stock_minimum_container_type_id_idx",
+          "columns": [
+            {
+              "expression": "company_id",
+              "isExpression": false,
+              "asc": true,
+              "nulls": "last"
+            },
+            {
+              "expression": "container_type_id",
+              "isExpression": false,
+              "asc": true,
+              "nulls": "last"
+            }
+          ],
+          "isUnique": false,
+          "concurrently": false,
+          "method": "btree",
+          "with": {}
+        }
+      },
+      "foreignKeys": {
+        "stock_minimum_company_id_fk": {
+          "name": "stock_minimum_company_id_fk",
+          "tableFrom": "stock_minimum",
+          "tableTo": "company",
+          "schemaTo": "wms",
+          "columnsFrom": [
+            "company_id"
+          ],
+          "columnsTo": [
+            "id"
+          ],
+          "onDelete": "no action",
+          "onUpdate": "no action"
+        },
+        "stock_minimum_project_id_fk": {
+          "name": "stock_minimum_project_id_fk",
+          "tableFrom": "stock_minimum",
+          "tableTo": "project",
+          "schemaTo": "wms",
+          "columnsFrom": [
+            "company_id",
+            "project_id"
+          ],
+          "columnsTo": [
+            "company_id",
+            "id"
+          ],
+          "onDelete": "no action",
+          "onUpdate": "no action"
+        },
+        "stock_minimum_warehouse_id_fk": {
+          "name": "stock_minimum_warehouse_id_fk",
+          "tableFrom": "stock_minimum",
+          "tableTo": "warehouse",
+          "schemaTo": "wms",
+          "columnsFrom": [
+            "company_id",
+            "project_id",
+            "warehouse_id"
+          ],
+          "columnsTo": [
+            "company_id",
+            "project_id",
+            "id"
+          ],
+          "onDelete": "no action",
+          "onUpdate": "no action"
+        },
+        "stock_minimum_container_type_id_fk": {
+          "name": "stock_minimum_container_type_id_fk",
+          "tableFrom": "stock_minimum",
+          "tableTo": "container_type",
+          "schemaTo": "wms",
+          "columnsFrom": [
+            "company_id",
+            "container_type_id"
+          ],
+          "columnsTo": [
+            "company_id",
+            "id"
+          ],
+          "onDelete": "no action",
+          "onUpdate": "no action"
+        }
+      },
+      "compositePrimaryKeys": {},
+      "uniqueConstraints": {
+        "stock_minimum_warehouse_id_container_type_id_key": {
+          "name": "stock_minimum_warehouse_id_container_type_id_key",
+          "nullsNotDistinct": false,
+          "columns": [
+            "company_id",
+            "warehouse_id",
+            "container_type_id"
+          ]
+        }
+      },
+      "policies": {},
+      "checkConstraints": {
+        "stock_minimum_minimum_positive": {
+          "name": "stock_minimum_minimum_positive",
+          "value": "\"wms\".\"stock_minimum\".\"minimum\" > 0"
+        }
+      },
       "isRLSEnabled": false
     },
     "wms.stock_movement": {
@@ -24628,7 +24815,7 @@
       "checkConstraints": {
         "import_run_kind_one_of": {
           "name": "import_run_kind_one_of",
-          "value": "\"wms\".\"import_run\".\"kind\" in ('customers', 'properties', 'containers', 'agreements', 'waste-fractions', 'container-types', 'vehicle-types', 'vehicles', 'drivers')"
+          "value": "\"wms\".\"import_run\".\"kind\" in ('customers', 'properties', 'containers', 'agreements')"
         },
         "import_run_row_count_positive": {
           "name": "import_run_row_count_positive",
@@ -24636,7 +24823,7 @@
         },
         "import_run_project_shape": {
           "name": "import_run_project_shape",
-          "value": "(\"wms\".\"import_run\".\"kind\" in ('customers', 'waste-fractions', 'container-types', 'vehicle-types')) = (\"wms\".\"import_run\".\"project_id\" is null)"
+          "value": "(\"wms\".\"import_run\".\"kind\" = 'customers') = (\"wms\".\"import_run\".\"project_id\" is null)"
         },
         "import_run_counts_shape": {
           "name": "import_run_counts_shape",

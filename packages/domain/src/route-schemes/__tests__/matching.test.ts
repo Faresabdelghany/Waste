@@ -114,6 +114,28 @@ describe("container-type rule filter", () => {
   })
 })
 
+describe("a rule group's own planning area (O30 of #290, row 2.17)", () => {
+  const north = { ...container("n1", "Residual", "Two-wheel bin · 240 L"), submittedValues: { planningAreaId: "area-north" } }
+  const own = (planningAreaId?: string) =>
+    parseCollectionGroups(JSON.stringify([{ id: "g1", name: "Residual", days: ["monday"], fractions: ["Residual"], stopSource: "rule", containerIds: [], ...(planningAreaId ? { planningAreaId } : {}) }]))
+
+  test("is read from the stored group and matches within that area instead of the scheme's", () => {
+    const groups = own("area-north")
+    assert.equal(groups[0].planningAreaId, "area-north")
+    const resolution = resolveCollectionGroupPlans({ groups, serviceDays: ["monday"], areaId: "area-indreby", containers: [...containers, north] })
+    assert.deepEqual(resolution.plans[0].containerIds, ["n1"])
+    const onScheme = resolveCollectionGroupPlans({ groups: own(), serviceDays: ["monday"], areaId: "area-indreby", containers: [...containers, north] })
+    assert.deepEqual(onScheme.plans[0].containerIds, ["c1", "c2", "c3"], "no area of its own: the scheme's")
+  })
+
+  test("keeps the explicit group shape, since the legacy keys have no home for it", () => {
+    const values = collectionGroupsToValues(own("area-north"), ["monday"])
+    assert.equal(values.stopSelection, "")
+    assert.equal(collectionGroupsOf(values, { serviceDays: ["monday"] })[0].planningAreaId, "area-north")
+    assert.equal(collectionGroupsToValues(own(), ["monday"]).stopSelection, "rule", "without one, the one group running every day is the legacy shape as before")
+  })
+})
+
 describe("container types with a thousands separator round-trip (issue #43)", () => {
   test("the stored comma list keeps 1,100 L and 2,500 L whole", () => {
     const plans = matchPlansToValues({
