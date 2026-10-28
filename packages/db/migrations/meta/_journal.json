@@ -435,6 +435,13 @@
       "when": 1793190991835,
       "tag": "0061_stale_positions",
       "breakpoints": true
+    },
+    {
+      "idx": 62,
+      "version": "7",
+      "when": 1793200697099,
+      "tag": "0062_service_provider_activities",
+      "breakpoints": true
     }
   ]
 }

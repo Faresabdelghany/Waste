@@ -137,6 +137,19 @@ const restrictedWorkspaceDefinitions: Record<
         showFilters: true,
       },
       {
+        id: "activities",
+        workspaceId: "service-providers",
+        moduleId: "activities",
+        moduleIds: ["activities"],
+        workspaceLabel: "Activities",
+        workspaceDescription:
+          "NordRen ApS proposals, compliance follow-ups and notes with the office.",
+        describeOnApi: (provider) => `${provider}'s proposals to the office, its compliance follow-ups and its notes — a proposal changes nothing until the office approves it.`,
+        navigationBasePath: "/service-provider-workspace/activities",
+        showWorkspaceActions: true,
+        showFilters: true,
+      },
+      {
         id: "team",
         workspaceId: "service-providers",
         moduleId: "service-provider-workspace",
