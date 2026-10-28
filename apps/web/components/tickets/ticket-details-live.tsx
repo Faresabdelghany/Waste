@@ -12,6 +12,10 @@
 // The composer writes a comment, an internal note unless said to be the
 // customer's. No attachment and no SMS: the pilot has neither (#126).
 //
+// A ticket lists its sub-tickets (7.10 of #290), the loaded tickets naming
+// it as their parent, and an open one offers New sub-ticket: New ticket on
+// its project, naming it.
+//
 // A ticket about a stop shows what the stop recorded (M6 of #293): the
 // outcome, when, where, its proofs with their photos and signatures, and the
 // reply that quotes them, which Reply with the record writes on the
@@ -33,9 +37,11 @@ import { useBusinessRecordStore, useServerModuleState, whenSaved } from "@/compo
 import { ProofObject } from "@/components/waste/commands/route-surfaces"
 import { useCommandRunner, useRelationPickers, useRowHistory, useServerNames } from "@/components/waste/commands/use-command-support"
 import { useProofObjectLinks } from "@/components/waste/commands/use-proof-object-links"
+import { useApiSession } from "@/components/waste/api-session-store"
 import { useCommandOffered, useIsProviderAccount } from "@/components/waste/provider-account"
 import { PATCH_RECORD } from "@/lib/data/provider-workspace"
 import type { ApiClient } from "@/lib/api/client"
+import { allows } from "@/lib/api/grants"
 import { statusLabel, webIdOf } from "@/lib/api/records/adapter"
 import { ALERT_PREFIX, ALERTS_MODULE } from "@/lib/api/records/alerts"
 import { shownOn } from "@/lib/api/records/clock"
@@ -58,6 +64,7 @@ import {
   TICKET_NUMBER_FACT,
   TICKET_SLA_FACT,
   TICKETS_MODULE,
+  ticketOpened,
   type TicketCommandName,
 } from "@/lib/api/records/tickets"
 import { AGREEMENTS_MODULE } from "@/lib/data/agreements"
@@ -67,13 +74,14 @@ import type { BusinessFormValues } from "@/lib/data/business-form-types"
 import type { BusinessRecord, ModuleLocation } from "@/lib/data/business-modules"
 import { CONTACTS_MODULE, NO_ONE, PROPERTIES_MODULE, SHARED_POINTS_MODULE } from "@/lib/data/properties"
 import { bookableRoutes, bookAStopWaits, bookStopForm, bookStopInput, bookStopValues, offersBookAStop } from "@/lib/data/ticket-stops"
-import { ACCESS_MODULE, replyWithEvidenceForm, TICKET_COMMAND_FORMS, TICKET_EDIT_FORM, updateTicketRecord, type TicketCommandWithForm } from "@/lib/data/tickets"
+import { ACCESS_MODULE, createTicketRecord, offersSubTicket, replyWithEvidenceForm, subTicketsOf, subTicketValues, TICKET_COMMAND_FORMS, TICKET_EDIT_FORM, TICKET_FORM, updateTicketRecord, type TicketCommandWithForm } from "@/lib/data/tickets"
 import { cn } from "@/lib/utils"
 import type { StopEvidence, TicketDetail, TicketEvent } from "@waste/contracts/tickets"
 import type { StopTicketKind } from "@waste/domain/execution/ticket-stops"
 import { TICKET_KINDS, TICKET_PRIORITIES, type TicketStatus } from "@waste/domain/resolution/vocabulary"
 
 import { useResolutionPickers } from "./resolution-pickers"
+import { ResolutionCreateDialog } from "./resolution-surfaces"
 
 const { workspaceId, moduleId } = TICKETS_MODULE
 
@@ -143,7 +151,7 @@ function priorityClasses(priority: string): string {
   return "border-border bg-muted/60 text-muted-foreground"
 }
 
-type Open = { kind: "command"; name: TicketCommandWithForm; values: BusinessFormValues } | { kind: "edit" } | { kind: "reply" } | { kind: "book" }
+type Open = { kind: "command"; name: TicketCommandWithForm; values: BusinessFormValues } | { kind: "edit" } | { kind: "reply" } | { kind: "book" } | { kind: "sub-ticket" }
 
 export function LiveTicketDetailsDialog({ record, onClose }: { record: BusinessRecord; onClose: () => void }) {
   const state = useServerModuleState(workspaceId, moduleId)
@@ -178,6 +186,9 @@ export function LiveTicketDetailsDialog({ record, onClose }: { record: BusinessR
   const visibility = threads.includes(chosen) ? chosen : threads[0]
   const [sending, setSending] = useState(false)
   const [saving, setSaving] = useState(false)
+  // A sub-ticket is a create in this module: the create grant, and the office's alone.
+  const { me } = useApiSession()
+  const opensTickets = threads === OFFICE_THREADS && allows(me?.role.grants, `${workspaceId}.${moduleId}`, "create")
 
   const value = (key: string) => (typeof live.submittedValues?.[key] === "string" ? (live.submittedValues[key] as string) : "")
   const projectId = value("projectId") || live.projectIds?.[0]
@@ -257,6 +268,8 @@ export function LiveTicketDetailsDialog({ record, onClose }: { record: BusinessR
   // Book a stop (O3c of #290): on an open ticket a stop answers, once the routes are read.
   const bookable = offeredStop(ADD_STOP) && offersBookAStop(value("kind"), status)
   const bookingWaits = bookAStopWaits(routesState)
+  const subTickets = subTicketsOf(state?.records ?? [], live.id)
+  const subTicketOffered = opensTickets && offersSubTicket(status)
   const links = TICKET_LINKS.flatMap(([key, , fact]) => {
     const webId = value(key)
     if (webId === "") return []
@@ -446,6 +459,33 @@ export function LiveTicketDetailsDialog({ record, onClose }: { record: BusinessR
                 )}
               </section>
 
+              {(subTicketOffered || subTickets.length > 0) && (
+                <section data-testid="ticket-sub-tickets">
+                  <div className="flex items-center justify-between gap-2">
+                    <h3 className="text-xs font-semibold uppercase tracking-wide text-muted-foreground">Sub-tickets</h3>
+                    {subTicketOffered && (
+                      <Button type="button" variant="outline" size="sm" className="h-7 text-xs" disabled={!offered || !pickers.readyFor(TICKET_FORM)} onClick={() => setOpen({ kind: "sub-ticket" })}>
+                        New sub-ticket
+                      </Button>
+                    )}
+                  </div>
+                  {subTickets.length === 0 ? (
+                    <p className="mt-3 text-sm text-muted-foreground">None yet.</p>
+                  ) : (
+                    <div className="mt-3 divide-y divide-border/60 border-y border-border/60">
+                      {subTickets.map((child) => (
+                        <Row key={child.id} label={child.facts[TICKET_NUMBER_FACT] ?? "New"} value={child.name}>
+                          <Link href={getBusinessModuleHref(workspaceId, moduleId, child.id)} className="inline-flex min-w-0 items-center gap-1 underline-offset-4 hover:underline">
+                            <span className="truncate">{child.name}</span>
+                            <span className="shrink-0 text-xs text-muted-foreground">· {child.status}</span>
+                          </Link>
+                        </Row>
+                      ))}
+                    </div>
+                  )}
+                </section>
+              )}
+
               {(bookable || live.facts["Booked stop"] !== undefined) && (
                 <section data-testid="ticket-booking">
                   <div className="flex items-center justify-between gap-2">
@@ -554,6 +594,18 @@ export function LiveTicketDetailsDialog({ record, onClose }: { record: BusinessR
           onSubmit={book}
           relationOptions={(field, values) => stopPickers.options(field, values, projectId)}
           initialValueOverrides={bookStopValues(live)}
+        />
+      )}
+      {open?.kind === "sub-ticket" && (
+        <ResolutionCreateDialog
+          module={TICKETS_MODULE}
+          schema={TICKET_FORM}
+          pickers={pickers}
+          open
+          onOpenChange={(isOpen) => !isOpen && setOpen(null)}
+          initial={subTicketValues(live)}
+          make={(values, now) => createTicketRecord(values, { now })}
+          created={ticketOpened}
         />
       )}
       {open?.kind === "reply" && (

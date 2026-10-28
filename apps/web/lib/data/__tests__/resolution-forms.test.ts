@@ -19,7 +19,7 @@ import { ALERT_COMMAND_FORMS, ALERT_FORM, ALERT_LIST_INITIAL, alertListReaders, 
 import type { BusinessFormSchema, BusinessFormValues } from "../business-form-types"
 import { FIXTURE_COMPANY_ID, type BusinessRecord } from "../business-modules"
 import { NO_ONE } from "../properties"
-import { createTicketRecord, MINE, opennessOf, recollectionStopOptions, TICKET_COMMAND_FORMS, TICKET_EDIT_FORM, TICKET_FORM, TICKET_LIST_INITIAL, ticketListReaders, updateTicketRecord } from "../tickets"
+import { createTicketRecord, MINE, offersSubTicket, opennessOf, recollectionStopOptions, subTicketsOf, subTicketValues, TICKET_COMMAND_FORMS, TICKET_EDIT_FORM, TICKET_FORM, TICKET_LIST_INITIAL, ticketListReaders, updateTicketRecord } from "../tickets"
 
 const NOW = new Date("2026-10-01T10:00:00Z")
 const STAMPS = { createdAt: "2026-10-01T08:00:00.000Z", updatedAt: "2026-10-01T08:00:00.000Z" }
@@ -85,13 +85,14 @@ describe("New ticket", () => {
     sharedCollectionPointId: web("customers.shared"),
     agreementId: web("customers.agreements"),
     driverId: web("fleet.drivers"),
+    parentTicketId: web("operate.tickets"),
   }
 
   test("names exactly the fields TicketCreate carries, and every one reaches the body", () => {
     assert.deepEqual(new Set(fieldIdsOf(TICKET_FORM)), new Set(Object.keys(filled)))
     const body = ticketAdapter.toCreateBody?.(createTicketRecord(filled, { now: 1 }), context) as Record<string, unknown>
     assert.ok(TicketCreate.safeParse(body).success, JSON.stringify(body))
-    assert.deepEqual(body.links, { routeId: ids.route, pickupId: ids.pickup, containerId: ids.container, propertyId: ids.property, sharedCollectionPointId: ids.point, customerId: ids.customer, agreementId: ids.agreement, driverId: ids.driver })
+    assert.deepEqual(body.links, { routeId: ids.route, pickupId: ids.pickup, containerId: ids.container, propertyId: ids.property, sharedCollectionPointId: ids.point, customerId: ids.customer, agreementId: ids.agreement, driverId: ids.driver, parentTicketId: ids.ticket })
     assert.equal(body.assigneeUserAccountId, ids.user)
     assert.equal(body.answerFromRecord, false, "the opt-out reaches the body")
   })
@@ -104,6 +105,36 @@ describe("New ticket", () => {
 
   test("the edit names the case's own words and its patch is the contracts'", () => {
     assert.deepEqual(fieldIdsOf(TICKET_EDIT_FORM), ["subject", "description"])
+  })
+})
+
+describe("sub-tickets (7.10 of #290)", () => {
+  const parent: BusinessRecord = { ...row(`ticket-${ids.ticket}`, "Ticket"), name: "Missed collection at Adelgade 12", status: "Open", facts: { Number: "T-1001" }, submittedValues: { projectId: projectRecord.id, status: "open", kind: "missed-collection", priority: "high" } }
+  const child = (id: string, number: string, parentTicketId: string, status = "Open"): BusinessRecord => ({ ...row(id, "Ticket"), status, facts: { Number: number }, submittedValues: { parentTicketId, status: status.toLowerCase() } })
+
+  test("New sub-ticket opens New ticket in the parent's project, naming the parent, its kind and priority taken over", () => {
+    const values = subTicketValues(parent)
+    assert.deepEqual(values, { projectId: projectRecord.id, parentTicketId: parent.id, kind: "missed-collection", priority: "high" })
+    for (const key of Object.keys(values)) assert.ok(fieldIdsOf(TICKET_FORM).includes(key), `${key} is a field of New ticket`)
+    const body = ticketAdapter.toCreateBody?.(createTicketRecord({ ...values, subject: "Replace the lock", description: "The gate's lock is broken" }, { now: 3 }), context) as Record<string, unknown>
+    assert.ok(TicketCreate.safeParse(body).success, JSON.stringify(body))
+    assert.deepEqual(body.links, { parentTicketId: ids.ticket })
+  })
+
+  test("a ticket's sub-tickets are the loaded tickets naming it as their parent, by number, a row not yet numbered last", () => {
+    const later = child("ticket-b", "T-1010", parent.id)
+    const earlier = child("ticket-a", "T-1003", parent.id, "Completed")
+    const unnumbered = { ...child("operate-ticket-5", "", parent.id), facts: {} }
+    const another = child("ticket-c", "T-1004", "ticket-elsewhere")
+    assert.deepEqual(subTicketsOf([later, another, unnumbered, parent, earlier], parent.id).map((record) => record.id), ["ticket-a", "ticket-b", "operate-ticket-5"])
+    assert.deepEqual(subTicketsOf([another], parent.id), [])
+  })
+
+  test("is offered on an open case alone: a closed one is reopened first", () => {
+    assert.equal(offersSubTicket("open"), true)
+    assert.equal(offersSubTicket("in-progress"), true)
+    assert.equal(offersSubTicket("completed"), false)
+    assert.equal(offersSubTicket("rejected"), false)
   })
 })
 
