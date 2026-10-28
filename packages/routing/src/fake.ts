@@ -107,7 +107,8 @@ export class FakeProvider implements RoutingProvider {
         const remaining = request.stops.map((stop, index) => ({ stop, index }))
         const order: number[] = []
         const unloads: number[] = []
-        let at = request.depot
+        const start = request.start ?? request.depot
+        let at = start
         let load = 0
         while (remaining.length > 0) {
           // The nearest stop the vehicle can take on; none, and it unloads at the station first. An empty vehicle takes any.
@@ -134,8 +135,13 @@ export class FakeProvider implements RoutingProvider {
         }
         const station = request.station
         const driven = order.flatMap((index, place) => (station && unloads.includes(place) ? [station, request.stops[index]] : [request.stops[index]]))
-        const trip: Position2D[] = [request.depot, ...driven, ...(station ? [station] : []), request.depot]
-        return { result: { order, ...(unloads.length > 0 ? { unloads } : {}), legs: legsAlong(distinctConsecutive(trip)), waitingSeconds: 0, provenance: PROVENANCE } }
+        // A part of a larger route that is not its last ends at its last stop (O15 of #290).
+        const home = request.returns === false ? [] : [...(station ? [station] : []), request.depot]
+        const trip: Position2D[] = [start, ...driven, ...home]
+        // Its last stop done: the drive to it from the departure, and every stop's service, nothing waited.
+        const toLast = legsAlong(distinctConsecutive([start, ...driven])).reduce((sum, leg) => sum + leg.seconds, 0)
+        const finishSeconds = order.length === 0 ? null : (request.departure ?? 0) + toLast + order.reduce((sum, index) => sum + (request.serviceSeconds?.[index] ?? 0), 0)
+        return { result: { order, ...(unloads.length > 0 ? { unloads } : {}), legs: legsAlong(distinctConsecutive(trip)), waitingSeconds: 0, finishSeconds, provenance: PROVENANCE } }
       }),
     )
   }

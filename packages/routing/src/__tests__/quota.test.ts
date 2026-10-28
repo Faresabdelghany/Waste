@@ -102,6 +102,25 @@ describe("the reserve, read off the provider before each call (#132 §1)", () =>
     assert.equal(enough.fake.calls.directions, 3)
   })
 
+  test("a route optimised in parts counts every part before its first (O15 of #290): a batch that would cross the reserve midway defers without a call, one that would not asks each", async () => {
+    const parts = (engine: QuotaEngine) =>
+      engine.optimiseInParts(3, { class: "batch" }, async (optimise) => {
+        for (const part of [0, 1, 2]) {
+          const outcome = await optimise({ profile: PROFILE, depot, stops: [stops[part]], returns: part === 2 })
+          if (outcome.kind !== "answered") return outcome
+        }
+        return { kind: "answered" as const, result: "three parts" }
+      })
+    const short = harness()
+    short.engine.adopt("optimisation", stored({ remaining: 102, limit: 500, resetAt: new Date(RESET) }))
+    assert.equal((await parts(short.engine)).kind, "deferred")
+    assert.equal(short.fake.calls.optimisation, 0)
+    const enough = harness()
+    enough.engine.adopt("optimisation", stored({ remaining: 103, limit: 500, resetAt: new Date(RESET) }))
+    assert.deepEqual(await parts(enough.engine), { kind: "answered", result: "three parts" })
+    assert.equal(enough.fake.calls.optimisation, 3)
+  })
+
   test("an interactive job that would run out midway defers too, rather than spend into a refusal — told apart from a family exhausted", async () => {
     const { engine, fake } = harness()
     engine.adopt("directions", stored({ remaining: 2, limit: 2000, resetAt: new Date(RESET) }))

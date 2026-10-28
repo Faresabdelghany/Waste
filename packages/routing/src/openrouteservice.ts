@@ -155,7 +155,9 @@ const HORIZON = STATION_OPENS + 2 * DAY_SECONDS
  * date's midnight, so a stop's window and a break's are a day's and the
  * station's, a week in, opens after every one of them; a stop without a
  * window on a trip with a station is held to the week before it. The vehicle
- * is bounded by the horizon alone, never by its shift's end.
+ * is bounded by the horizon alone, never by its shift's end. A part of a route
+ * above one request's size (O15 of #290) starts where the part before it
+ * ended, and only the route's last part comes back to the depot.
  *
  * A request with a reload (O15 of #290) sends each stop as a shipment
  * instead: its load picked up at the stop and delivered at the station, the
@@ -169,7 +171,7 @@ const HORIZON = STATION_OPENS + 2 * DAY_SECONDS
  * reads its visits off the trip as driven, so a Plan can be optimistic, never
  * wrong about where it goes.
  */
-function vroomRequest({ profile, depot, stops, serviceSeconds, timeWindows, departure, breaks, station, reload }: OptimiseRequest) {
+function vroomRequest({ profile, depot, start, returns, stops, serviceSeconds, timeWindows, departure, breaks, station, reload }: OptimiseRequest) {
   const reloading = station && reload ? reload : null
   const stopTask = (location: Position2D, index: number) => {
     const service = serviceSeconds?.[index]
@@ -185,8 +187,8 @@ function vroomRequest({ profile, depot, stops, serviceSeconds, timeWindows, depa
   const vehicle = {
     id: 1,
     profile,
-    start: depot,
-    end: depot,
+    start: start ?? depot,
+    ...(returns === false ? {} : { end: depot }),
     ...(reloading ? { capacity: [reloading.capacityKg] } : {}),
     ...(timed ? { time_window: [departure ?? 0, HORIZON] } : {}),
     ...(breaks && breaks.length > 0 ? { breaks: breaks.map((pause, index) => ({ id: index + 1, time_windows: [[pause.window[0], pause.window[1]]], service: pause.seconds })) } : {}),
@@ -250,10 +252,14 @@ function vroomResult(body: unknown, request: OptimiseRequest): OptimiseResult | 
   const waitingSeconds = route.steps
     .filter((step): step is Record<string, unknown> => isRecord(step) && ((step.type === visit && taskOf(step) !== stationId) || step.type === "break"))
     .reduce((sum, step) => sum + (typeof step.waiting_time === "number" ? step.waiting_time : 0), 0)
+  // When the last stop is done: its arrival, its wait for a window, its service — where the next part of the route leaves from.
+  const lastVisit = route.steps.filter((step): step is Record<string, unknown> => isRecord(step) && step.type === visit && taskOf(step) !== stationId).at(-1)
+  const finishSeconds = lastVisit !== undefined && typeof lastVisit.arrival === "number" ? lastVisit.arrival + (typeof lastVisit.waiting_time === "number" ? lastVisit.waiting_time : 0) + (typeof lastVisit.service === "number" ? lastVisit.service : 0) : null
   return {
     order,
     legs,
     waitingSeconds,
+    finishSeconds,
     ...(unloads.length > 0 ? { unloads } : {}),
     ...(missing.size > 0 ? { unassigned: [...missing].sort((a, b) => a - b) } : {}),
     provenance: { engineVersion: null, graphDate: null },

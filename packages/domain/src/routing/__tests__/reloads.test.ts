@@ -5,7 +5,7 @@ import { routeShift } from "../../execution/shift"
 import { stopLoadKg } from "../../execution/workload"
 import { planFingerprint } from "../fingerprint"
 import { OPTIMISER_MAX_LOCATIONS } from "../plans"
-import { RELOAD_MAX_STOPS, reloadOf, UNLOAD_SECONDS, unloadsAlong, withUnloads } from "../reloads"
+import { RELOAD_MAX_STOPS, reloadOf, shipsReload, UNLOAD_SECONDS, unloadsAlong, withUnloads } from "../reloads"
 import { PLAN_STOP_KINDS } from "../vocabulary"
 
 describe("a Plan's stops (O15 of #290)", () => {
@@ -26,7 +26,7 @@ describe("what a stop puts on the truck", () => {
 })
 
 describe("whether a request unloads on the way", () => {
-  const over = { solver: "optimiser" as const, trip: "full" as const, capacityKg: 1000, stopKg: [400, 400, 400] }
+  const over = { trip: "full" as const, capacityKg: 1000, stopKg: [400, 400, 400] }
 
   test("a full trip whose stops weigh more than the payload does, each load as given", () => {
     assert.deepEqual(reloadOf(over), { capacityKg: 1000, amounts: [400, 400, 400] })
@@ -42,13 +42,12 @@ describe("whether a request unloads on the way", () => {
     assert.deepEqual(reloadOf({ ...over, stopKg: [null, 2500, 300] }), { capacityKg: 1000, amounts: [0, 1000, 300] })
   })
 
-  test("an optimiser request takes reloads while its stops fit one request as shipments, two locations each; a measured order at any size", () => {
+  test("the optimiser places a reload's visits itself while the stops fit one request as shipments, two locations each; a larger order is cut where the vehicle fills", () => {
     assert.equal(RELOAD_MAX_STOPS * 2, OPTIMISER_MAX_LOCATIONS)
-    const many = Array.from({ length: RELOAD_MAX_STOPS + 1 }, () => 100)
-    assert.equal(reloadOf({ ...over, stopKg: many }), null)
-    assert.notEqual(reloadOf({ ...over, stopKg: many.slice(1) }), null)
-    assert.notEqual(reloadOf({ ...over, solver: "manual", stopKg: many }), null)
-    assert.notEqual(reloadOf({ ...over, solver: "baseline", stopKg: many }), null)
+    assert.deepEqual([shipsReload(RELOAD_MAX_STOPS), shipsReload(RELOAD_MAX_STOPS + 1)], [true, false])
+    // The reload itself is the same at any size: the loads and the payload.
+    const many = Array.from({ length: 200 }, () => 100)
+    assert.deepEqual(reloadOf({ ...over, stopKg: many })?.amounts.length, 200)
   })
 })
 

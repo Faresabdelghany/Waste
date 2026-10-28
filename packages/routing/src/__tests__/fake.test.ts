@@ -116,6 +116,19 @@ describe("the deterministic fake provider (#169, #131)", () => {
     assert.equal((await new FakeProvider().optimise({ profile: "driving-hgv", depot, stops: many.slice(1), station, reload: { capacityKg: 100, amounts: many.map(() => 10) } })).kind, "answered")
   })
 
+  test("a part of a larger route starts where the part before it ended and, but for the last, ends at its last stop; it says when that stop is done (O15 of #290)", async () => {
+    const open = answered(await fake.optimise({ profile: "driving-hgv", depot, start: stops[1], stops: [stops[0], stops[2]], returns: false, departure: 1_000, serviceSeconds: [30, 60] }))
+    // From stop 1, stop 2 is nearer than stop 0: two legs, none home.
+    assert.deepEqual([open.order, open.legs.map((leg) => leg.geometry.coordinates.at(-1))], [
+      [1, 0],
+      [stops[2], stops[0]],
+    ])
+    assert.deepEqual(open.legs[0].geometry.coordinates[0], stops[1])
+    assert.equal(open.finishSeconds, 1_000 + open.legs[0].seconds + open.legs[1].seconds + 90)
+    const last = answered(await fake.optimise({ profile: "driving-hgv", depot, start: stops[1], stops: [stops[0]], station }))
+    assert.deepEqual(last.legs.map((leg) => leg.geometry.coordinates.at(-1)), [stops[0], station, depot], "the last part goes home by the station")
+  })
+
   test("carries its provenance: the response-side facts #132 keeps off the fingerprint", async () => {
     const { provenance } = answered(await fake.measure({ profile: "driving-hgv", points: [depot, station] }))
     assert.deepEqual(provenance, { engineVersion: "fake", graphDate: null })

@@ -16,12 +16,12 @@
 // the vehicle carries its payload. vroom-express counts a shipment as two
 // locations against the fifty one request takes, and the vehicle's start and
 // end as none, so a request with reloads holds half the stops one without
-// does. A known order — a dispatcher's or the generated one — is cut where the
-// next stop would not fit (`unloadsAlong`), the fewest visits that order can
-// make.
+// does. A known order — a dispatcher's or the generated one, or the
+// optimiser's over more stops than shipments fit (`shipsReload`) — is cut
+// where the next stop would not fit (`unloadsAlong`), the fewest visits that
+// order can make.
 import { OPTIMISER_MAX_LOCATIONS } from "./plans"
-import type { PlanSolver, PlanTrip } from "./vocabulary"
-
+import type { PlanTrip } from "./vocabulary"
 
 /** The stops one optimisation with reloads takes: each stop is a shipment, two locations. */
 export const RELOAD_MAX_STOPS = OPTIMISER_MAX_LOCATIONS / 2
@@ -35,17 +35,22 @@ export type Reload = { capacityKg: number; amounts: readonly number[] }
 /**
  * The reload a request over these stops carries, or null for one that tips
  * once at the end as before: a full trip, a payload known, and the stops'
- * loads over it. An optimiser request takes reloads only while its stops fit
- * one request as shipments (`RELOAD_MAX_STOPS`); a larger one is ordered as
- * before, one tip at the end and its load read as over.
+ * loads over it.
  */
-export function reloadOf({ solver, trip, capacityKg, stopKg }: { solver: PlanSolver; trip: PlanTrip; capacityKg: number | null; stopKg: readonly (number | null)[] }): Reload | null {
+export function reloadOf({ trip, capacityKg, stopKg }: { trip: PlanTrip; capacityKg: number | null; stopKg: readonly (number | null)[] }): Reload | null {
   if (trip !== "full" || capacityKg === null || capacityKg <= 0) return null
   const amounts = stopKg.map((kg) => Math.min(Math.max(kg ?? 0, 0), capacityKg))
   if (amounts.reduce((sum, kg) => sum + kg, 0) <= capacityKg) return null
-  if (solver === "optimiser" && amounts.length > RELOAD_MAX_STOPS) return null
   return { capacityKg, amounts }
 }
+
+/**
+ * Whether the optimiser places a reload's visits itself, its stops sent as
+ * shipments in one request (`RELOAD_MAX_STOPS`); above that its order is
+ * found without them and cut where the vehicle fills along it, as a known
+ * order is (`unloadsAlong`), and measured through the station.
+ */
+export const shipsReload = (stops: number): boolean => stops <= RELOAD_MAX_STOPS
 
 /**
  * The unload visits along a known order: before each stop the vehicle cannot
