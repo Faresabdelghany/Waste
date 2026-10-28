@@ -96,7 +96,7 @@ describe("a route's crew against the rest of its day", { skip: database.skip || 
   const post = (path: string, body: Record<string, unknown>) => olivia(path, { method: "POST", body })
   const refused = async (response: Response, status = 409) => {
     assert.equal(response.status, status, JSON.stringify(await response.clone().json()))
-    return (await readProblem(response)).detail
+    return (await readProblem(response)).detail ?? ""
   }
   const ok = async (response: Response, status = 200) => {
     assert.equal(response.status, status, JSON.stringify(await response.clone().json()))

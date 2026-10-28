@@ -39,7 +39,7 @@ describe("what a vehicle carries", () => {
 
   test("is anything where no compartment names a fraction, as the Balance day reads a vehicle", () => {
     assert.equal(fractionsCarried([]), null)
-    assert.equal(fractionsCarried([{ capacityKg: 4_000, wasteFractionIds: [] }]), null)
+    assert.equal(fractionsCarried([{ wasteFractionIds: [] }]), null)
     assert.equal(carriesFraction(null, glass), true)
     assert.equal(carriesFraction([paper], glass), false)
     assert.equal(carriesFraction([paper, glass], glass), true)
@@ -63,8 +63,8 @@ describe("how much of a fraction a vehicle takes on one trip", () => {
   test("is every compartment's without a fraction, and unknown where nothing says one", () => {
     assert.equal(payloadFor(twoChambers, null), 8_000, "the compartments hold less than the payload")
     assert.equal(payloadFor({ ...twoChambers, compartments: [] }, null), 12_000)
-    assert.equal(payloadFor({ capacityKg: null, compartments: [{ capacityKg: 2_000, wasteFractionIds: [glass] }, { capacityKg: 3_000, wasteFractionIds: [paper] }], liftsContainerTypeIds: null }, null), 5_000)
-    assert.equal(payloadFor({ capacityKg: null, compartments: [{ capacityKg: null, wasteFractionIds: [glass] }], liftsContainerTypeIds: null }, glass), null)
+    assert.equal(payloadFor({ capacityKg: null, compartments: [{ capacityKg: 2_000, wasteFractionIds: [glass] }, { capacityKg: 3_000, wasteFractionIds: [paper] }] }, null), 5_000)
+    assert.equal(payloadFor({ capacityKg: null, compartments: [{ capacityKg: null, wasteFractionIds: [glass] }] }, glass), null)
   })
 })
 
