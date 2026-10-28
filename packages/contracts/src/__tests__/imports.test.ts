@@ -5,7 +5,7 @@
 import assert from "node:assert/strict"
 import { describe, test } from "node:test"
 
-import { IMPORT_BATCH_MAX, IMPORT_ROWS_MAX } from "@waste/domain/imports/vocabulary"
+import { IMPORT_BATCH_MAX, IMPORT_BOUNDARY_MAX, IMPORT_ROWS_MAX } from "@waste/domain/imports/vocabulary"
 
 import {
   ImportBatch,
@@ -13,6 +13,10 @@ import {
   ImportPreview,
   ImportPreviewRequest,
   ImportRunCreate,
+  BOUNDARY_COLUMN,
+  cellTooLong,
+  IMPORT_CELL_MAX,
+  PROJECT_IMPORT_KINDS,
   PROJECT_REFUSED,
   PROJECT_REQUIRED,
 } from "../imports"
@@ -32,6 +36,22 @@ describe("ImportPreviewRequest and ImportRunCreate", () => {
     assert.deepEqual(refusal(ImportPreviewRequest.safeParse({ kind: "properties", fileName: "p.csv", rows: [row(2)] })), [{ path: "projectId", message: PROJECT_REQUIRED }])
     assert.deepEqual(refusal(ImportRunCreate.safeParse({ kind: "customers", projectId: PROJECT, fileName: "c.csv", rowCount: 3 })), [{ path: "projectId", message: PROJECT_REFUSED }])
     assert.equal(ImportRunCreate.safeParse({ kind: "agreements", projectId: PROJECT, fileName: "a.csv", rowCount: 3 }).success, true)
+  })
+
+  test("the catalogue is the company's and the fleet a project's (O30 of #290): a file of fractions, container types or vehicle types names no project, one of vehicles or drivers its project", () => {
+    for (const kind of ["vehicles", "drivers"] as const) assert.deepEqual(refusal(ImportRunCreate.safeParse({ kind, fileName: "fleet.csv", rowCount: 3 })), [{ path: "projectId", message: PROJECT_REQUIRED }], kind)
+    for (const kind of ["waste-fractions", "container-types", "vehicle-types"] as const) {
+      assert.equal(ImportRunCreate.safeParse({ kind, fileName: "catalogue.csv", rowCount: 3 }).success, true, kind)
+      assert.deepEqual(refusal(ImportRunCreate.safeParse({ kind, projectId: PROJECT, fileName: "catalogue.csv", rowCount: 3 })), [{ path: "projectId", message: PROJECT_REFUSED }], kind)
+    }
+    assert.deepEqual([...PROJECT_IMPORT_KINDS], ["properties", "containers", "agreements", "vehicles", "drivers", "collection-calendars", "planning-areas"])
+  })
+
+  test("hold a cell to a paragraph's length, and a planning area's boundary to some thousands of vertices (O30 of #290)", () => {
+    const long = "x".repeat(IMPORT_CELL_MAX + 1)
+    assert.deepEqual(refusal(ImportBatch.safeParse({ rows: [row(2, { name: long })] })), [{ path: "rows.0.values.name", message: cellTooLong(IMPORT_CELL_MAX) }])
+    assert.equal(ImportBatch.safeParse({ rows: [row(2, { [BOUNDARY_COLUMN]: long })] }).success, true)
+    assert.equal(ImportBatch.safeParse({ rows: [row(2, { [BOUNDARY_COLUMN]: "x".repeat(IMPORT_BOUNDARY_MAX + 1) })] }).success, false)
   })
 
   test("number rows from 2, the header being row 1, each once, and bound the preview and the batch", () => {

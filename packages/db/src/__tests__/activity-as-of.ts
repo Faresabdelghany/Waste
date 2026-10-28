@@ -1,12 +1,11 @@
 // The `service_provider_activity` table as an earlier migration left it:
 // 0063 (#474, part 1) with three kinds, the route-day change the one
 // proposal, and no vehicle or driver; 0067 (part 2) with the vehicle change
-// and its vehicle and driver; 0068 (part 3) with the stop-set change.
+// and its vehicle and driver; 0071 (part 3) with the stop-set change.
 // Today's, with the waste-fraction change (part 4), is
 // src/schema/service-provider-activities.ts itself. One spelling here, so the
-// rendering tests of 0063, 0067, 0068 and the waste-fraction change cannot
-// drift on what an era said. The numbers of 0068 and later are provisional
-// until their turn in the migration queue. Another
+// rendering tests of 0063, 0067, 0071 and the waste-fraction change cannot
+// drift on what an era said. Another
 // table object of the same name is fine, since nothing connects to a
 // database. Not a suite of its own: only ever imported.
 import { SERVICE_DAYS } from "@waste/domain/planning/vocabulary"
@@ -29,8 +28,8 @@ import { wms } from "../schema/wms"
 export const KINDS_AS_OF_0063 = ["route-day-change", "compliance-follow-up", "coordination-note"] as const
 /** The kinds 0067 held an Activity to. */
 export const KINDS_AS_OF_0067 = [...KINDS_AS_OF_0063, "vehicle-change"] as const
-/** The kinds 0068 held an Activity to. */
-export const KINDS_AS_OF_0068 = [...KINDS_AS_OF_0067, "stop-set-change"] as const
+/** The kinds 0071 held an Activity to. */
+export const KINDS_AS_OF_0071 = [...KINDS_AS_OF_0067, "stop-set-change"] as const
 
 export const serviceProviderActivityAsOf0063 = wms.table(
   "service_provider_activity",
@@ -185,7 +184,7 @@ export const serviceProviderActivityAsOf0067 = wms.table(
   ],
 )
 
-export const serviceProviderActivityAsOf0068 = wms.table(
+export const serviceProviderActivityAsOf0071 = wms.table(
   "service_provider_activity",
   {
     ...id,
@@ -232,7 +231,7 @@ export const serviceProviderActivityAsOf0068 = wms.table(
     tenantReference(t, [t.openedBy], userAccount),
     tenantReference(t, [t.closedBy], userAccount),
     tenantUnique(t, t.number),
-    oneOf(t.kind, KINDS_AS_OF_0068),
+    oneOf(t.kind, KINDS_AS_OF_0071),
     oneOf(t.status, SERVICE_PROVIDER_ACTIVITY_STATUSES),
     subsetOf(t.serviceDays, SERVICE_DAYS),
     check(tableObjectName(t.id.table, "subject_given", "serviceProviderActivity"), sql`length(btrim(${t.subject})) > 0`),

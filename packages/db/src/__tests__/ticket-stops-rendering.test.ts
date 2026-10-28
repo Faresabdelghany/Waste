@@ -1,8 +1,9 @@
 // The stop a ticket is answered by (O3c of #290) as drizzle-kit writes it:
 // the booked route and pickup on the ticket, a pickup of that route through
 // the project key the re-collection's stop reaches, both or neither, and one
-// ticket per stop — six statements diffed from the ticket as 0033 left it
-// (ticket-as-of.ts), since an applied file is never edited;
+// ticket per stop — six statements diffed from the ticket as 0033 left it to
+// the ticket as 0035 left it, before 0070 gave it its team (ticket-as-of.ts),
+// since an applied file is never edited;
 // resolution-rendering.test.ts maps today's table back (`CHANGED_LATER`).
 // Then migration 0035, which is exactly those statements under its header:
 // no table is new, so nothing is hand-written, and no ticket present names a
@@ -35,7 +36,7 @@ const referenced = { company, project, userAccount, route, pickup, container, pr
 export const BOOKED_SHAPE = `(${ref("ticket", "booked_route_id")} is null) = (${ref("ticket", "booked_pickup_id")} is null)`
 
 describe("the stop a ticket is answered by, as drizzle-kit writes it", () => {
-  const generated = statementsBetween({ ...referenced, ticket: ticketAsOf("0033") }, { ...referenced, ticket })
+  const generated = statementsBetween({ ...referenced, ticket: ticketAsOf("0033") }, { ...referenced, ticket: ticketAsOf("0035") })
 
   test("the booked route and pickup, a pickup of that route, both or neither, one ticket per stop", async () => {
     assert.deepEqual(await generated, [

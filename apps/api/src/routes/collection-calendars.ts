@@ -221,6 +221,92 @@ async function calendarWithHolidays(tx: Tx, companyId: string, row: Row): Promis
   return calendarOf(row, await holidaysFor(tx, companyId, row.id))
 }
 
+// The writes the routes and the calendars' CSV import (routes/import-rows.ts,
+// O30 of #290) share, so an imported row is held to every rule a form's is and
+// refused in the same sentence.
+
+/** Writes a calendar in a project the caller works in, with the holidays it starts with; the held routes those holidays re-decide go back to their schemes. */
+export async function createCalendar(tx: Tx, principal: Principal, body: CollectionCalendarCreate): Promise<CollectionCalendar> {
+  const { holidays, ...values } = body
+  requireProject(principal, values.projectId)
+  const before = holidays.length === 0 ? undefined : await projectCalendarOf(tx, principal.companyId, values.projectId)
+  const [row] = await refuseOverlap({ [CALENDAR_RUNNING]: CALENDAR_RUNNING_SENTENCE }, () =>
+    refuseDuplicate({ [NAME_TAKEN]: nameTaken(values.name) }, () =>
+      tx
+        .insert(collectionCalendar)
+        .values({ ...values, id: newId(), companyId: principal.companyId })
+        .returning(columns),
+    ),
+  )
+  await writeHolidays(tx, { companyId: principal.companyId, projectId: row.projectId, id: row.id }, holidays)
+  if (before !== undefined) await releaseHolidayHolds(tx, principal.companyId, row.projectId, { before, after: await projectCalendarOf(tx, principal.companyId, row.projectId) })
+  return calendarOf(row, byDay(holidays))
+}
+
+/** Renames a calendar or moves its period, under its row lock: a move that would strand a holiday is refused. The 404 where the caller reaches no such calendar. */
+export async function patchCalendar(tx: Tx, principal: Principal, id: string, patch: CollectionCalendarPatch): Promise<CollectionCalendar> {
+  // The row this patch counts holidays against, locked before it is
+  // read: a shortening and a replacement of the set are the two halves
+  // of one rule, and they serialise here (routes/shared.ts).
+  await lockRow(tx, collectionCalendar, { companyId: principal.companyId, id }, strengthFor(collectionCalendar, patch))
+  const current = await findCalendar(tx, principal, id)
+  if (current === undefined) throw noSuchCalendar(id)
+
+  if (patch.validFrom !== undefined || patch.validTo !== undefined) {
+    const period = periodAfter(current, patch)
+    requireOrdered(period)
+    await refuseStranded(tx, collectionCalendarHoliday, strandedHolidayDays({ companyId: principal.companyId, id }, period), strandedHolidays)
+  }
+
+  const sentences: Record<string, string> = patch.name === undefined ? {} : { [NAME_TAKEN]: nameTaken(patch.name) }
+  const [row] = await refuseOverlap({ [CALENDAR_RUNNING]: CALENDAR_RUNNING_SENTENCE }, () =>
+    refuseDuplicate(sentences, () =>
+      tx
+        .update(collectionCalendar)
+        .set(patch)
+        .where(and(scope(principal), eq(collectionCalendar.id, id)))
+        .returning(columns),
+    ),
+  )
+  if (row === undefined) throw noSuchCalendar(id)
+  return await calendarWithHolidays(tx, principal.companyId, row)
+}
+
+/** Replaces a calendar's holidays, each inside its period; the held routes the new set re-decides go back to their schemes. The 404 where the caller reaches no such calendar. */
+export async function replaceCalendarHolidays(tx: Tx, principal: Principal, id: string, holidays: readonly Holiday[]): Promise<CollectionCalendar> {
+  // The calendar's own row is stamped first: the set is part of the
+  // calendar on the wire, so replacing it changes the calendar, the
+  // update is what says so, and it is also what answers "no such
+  // calendar here" — it runs the caller's own scope. It takes the row
+  // lock too, so a patch shortening the period waits for this or this
+  // for it, and the period read back is the one the days are held to.
+  const [row] = await tx
+    .update(collectionCalendar)
+    .set(stamp())
+    .where(and(scope(principal), eq(collectionCalendar.id, id)))
+    .returning(columns)
+  if (row === undefined) throw noSuchCalendar(id)
+  requireHolidaysWithin(row, holidays)
+  const before = await projectCalendarOf(tx, principal.companyId, row.projectId)
+  await tx
+    .delete(collectionCalendarHoliday)
+    .where(and(eq(collectionCalendarHoliday.companyId, principal.companyId), eq(collectionCalendarHoliday.collectionCalendarId, id)))
+  await writeHolidays(tx, { companyId: principal.companyId, projectId: row.projectId, id: row.id }, holidays)
+  // The held routes the new set re-decides go back to their schemes (#226, routes/route-holds.ts).
+  await releaseHolidayHolds(tx, principal.companyId, row.projectId, { before, after: await projectCalendarOf(tx, principal.companyId, row.projectId) })
+  return calendarOf(row, byDay(holidays))
+}
+
+/** A project's calendar with this name, with its holidays; undefined where there is none. */
+export async function calendarByName(tx: Tx, principal: Principal, projectId: string, name: string): Promise<CollectionCalendar | undefined> {
+  const [row] = await tx
+    .select(columns)
+    .from(collectionCalendar)
+    .where(and(scope(principal), eq(collectionCalendar.projectId, projectId), eq(collectionCalendar.name, name)))
+    .limit(1)
+  return row === undefined ? undefined : await calendarWithHolidays(tx, principal.companyId, row)
+}
+
 export function collectionCalendarRoutes(guard: MiddlewareHandler<AuthEnv>) {
   return new Hono<AuthEnv>()
     .get(
@@ -288,24 +374,7 @@ export function collectionCalendarRoutes(guard: MiddlewareHandler<AuthEnv>) {
       guard,
       requireGrant(MODULE, "create"),
       validate("json", CollectionCalendarCreate),
-      async (c) => {
-        const { holidays, ...values } = c.req.valid("json")
-        const tx = c.get("tx")
-        const principal = c.get("principal")
-        requireProject(principal, values.projectId)
-        const before = holidays.length === 0 ? undefined : await projectCalendarOf(tx, principal.companyId, values.projectId)
-        const [row] = await refuseOverlap({ [CALENDAR_RUNNING]: CALENDAR_RUNNING_SENTENCE }, () =>
-          refuseDuplicate({ [NAME_TAKEN]: nameTaken(values.name) }, () =>
-            tx
-              .insert(collectionCalendar)
-              .values({ ...values, id: newId(), companyId: principal.companyId })
-              .returning(columns),
-          ),
-        )
-        await writeHolidays(tx, { companyId: principal.companyId, projectId: row.projectId, id: row.id }, holidays)
-        if (before !== undefined) await releaseHolidayHolds(tx, principal.companyId, row.projectId, { before, after: await projectCalendarOf(tx, principal.companyId, row.projectId) })
-        return created(c, "/collection-calendars", calendarOf(row, byDay(holidays)))
-      },
+      async (c) => created(c, "/collection-calendars", await createCalendar(c.get("tx"), c.get("principal"), c.req.valid("json"))),
     )
     .get(
       "/collection-calendars/:id",
@@ -356,38 +425,7 @@ export function collectionCalendarRoutes(guard: MiddlewareHandler<AuthEnv>) {
       requireGrant(MODULE, "edit"),
       validate("param", IdParam),
       validate("json", CollectionCalendarPatch),
-      async (c) => {
-        const { id } = c.req.valid("param")
-        const patch = c.req.valid("json")
-        const tx = c.get("tx")
-        const principal = c.get("principal")
-
-        // The row this patch counts holidays against, locked before it is
-        // read: a shortening and a replacement of the set are the two halves
-        // of one rule, and they serialise here (routes/shared.ts).
-        await lockRow(tx, collectionCalendar, { companyId: principal.companyId, id }, strengthFor(collectionCalendar, patch))
-        const current = await findCalendar(tx, principal, id)
-        if (current === undefined) throw noSuchCalendar(id)
-
-        if (patch.validFrom !== undefined || patch.validTo !== undefined) {
-          const period = periodAfter(current, patch)
-          requireOrdered(period)
-          await refuseStranded(tx, collectionCalendarHoliday, strandedHolidayDays({ companyId: principal.companyId, id }, period), strandedHolidays)
-        }
-
-        const sentences: Record<string, string> = patch.name === undefined ? {} : { [NAME_TAKEN]: nameTaken(patch.name) }
-        const [row] = await refuseOverlap({ [CALENDAR_RUNNING]: CALENDAR_RUNNING_SENTENCE }, () =>
-          refuseDuplicate(sentences, () =>
-            tx
-              .update(collectionCalendar)
-              .set(patch)
-              .where(and(scope(principal), eq(collectionCalendar.id, id)))
-              .returning(columns),
-          ),
-        )
-        if (row === undefined) throw noSuchCalendar(id)
-        return c.json(await calendarWithHolidays(tx, principal.companyId, row))
-      },
+      async (c) => c.json(await patchCalendar(c.get("tx"), c.get("principal"), c.req.valid("param").id, c.req.valid("json"))),
     )
     .put(
       "/collection-calendars/:id/holidays",
@@ -411,33 +449,6 @@ export function collectionCalendarRoutes(guard: MiddlewareHandler<AuthEnv>) {
       requireGrant(MODULE, "edit"),
       validate("param", IdParam),
       validate("json", CollectionCalendarHolidaysSet),
-      async (c) => {
-        const { id } = c.req.valid("param")
-        const { holidays } = c.req.valid("json")
-        const tx = c.get("tx")
-        const principal = c.get("principal")
-
-        // The calendar's own row is stamped first: the set is part of the
-        // calendar on the wire, so replacing it changes the calendar, the
-        // update is what says so, and it is also what answers "no such
-        // calendar here" — it runs the caller's own scope. It takes the row
-        // lock too, so a patch shortening the period waits for this or this
-        // for it, and the period read back is the one the days are held to.
-        const [row] = await tx
-          .update(collectionCalendar)
-          .set(stamp())
-          .where(and(scope(principal), eq(collectionCalendar.id, id)))
-          .returning(columns)
-        if (row === undefined) throw noSuchCalendar(id)
-        requireHolidaysWithin(row, holidays)
-        const before = await projectCalendarOf(tx, principal.companyId, row.projectId)
-        await tx
-          .delete(collectionCalendarHoliday)
-          .where(and(eq(collectionCalendarHoliday.companyId, principal.companyId), eq(collectionCalendarHoliday.collectionCalendarId, id)))
-        await writeHolidays(tx, { companyId: principal.companyId, projectId: row.projectId, id: row.id }, holidays)
-        // The held routes the new set re-decides go back to their schemes (#226, routes/route-holds.ts).
-        await releaseHolidayHolds(tx, principal.companyId, row.projectId, { before, after: await projectCalendarOf(tx, principal.companyId, row.projectId) })
-        return c.json(calendarOf(row, byDay(holidays)))
-      },
+      async (c) => c.json(await replaceCalendarHolidays(c.get("tx"), c.get("principal"), c.req.valid("param").id, c.req.valid("json").holidays)),
     )
 }

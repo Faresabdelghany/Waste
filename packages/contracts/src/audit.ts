@@ -116,6 +116,9 @@ export const AUDITED_TABLES = [
   "service_provider_activity",
   "stock_minimum",
   "decommission_reason",
+  "team",
+  "team_member",
+  "ticket_team_default",
   "service_provider_activity_container",
   "service_provider_activity_fraction",
 ] as const

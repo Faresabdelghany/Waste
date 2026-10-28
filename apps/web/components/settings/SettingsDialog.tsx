@@ -59,6 +59,9 @@ import { CollectionCalendarsSettings } from "@/components/settings/collection-ca
 import { HolidayListsSettings } from "@/components/settings/holiday-lists-settings"
 import { SortingGuideSettings } from "@/components/settings/sorting-guide-settings"
 import { FinanceSettingsOnApi } from "@/components/settings/finance-settings-on-api"
+import { PrivacySettingsOnApi } from "@/components/settings/privacy-settings-on-api"
+import { IntegrationsSettingsOnApi } from "@/components/settings/integrations-settings-on-api"
+import { PortalsSettingsOnApi } from "@/components/settings/portals-settings-on-api"
 import { TicketSlaSettings } from "@/components/settings/ticket-sla-settings"
 import { PickupExceptionChargesSettings } from "@/components/settings/pickup-exception-charges-settings"
 import { BulkySchedulesSettings } from "@/components/settings/bulky-schedules-settings"
@@ -67,7 +70,7 @@ import { MasterDataSettings } from "@/components/settings/master-data-settings"
 import { useApiConfigured, useApiSession } from "@/components/waste/api-session-store"
 import { profileOf, type AccountProfile } from "@/lib/data/account-profile"
 import { HOLIDAY_LISTS_SETTINGS_PANE_ID, MASTER_DATA_SETTINGS_PANE_ID } from "@/lib/data/business-links"
-import { ASSET_MANAGEMENT_SETTINGS_PANE_ID, FINANCE_ON_API_SETTINGS_PANE_ID, FINANCE_SETTINGS_PANE_ID, settingsPaneOffered, settingsPaneOpened } from "@/lib/data/settings-panes"
+import { ASSET_MANAGEMENT_SETTINGS_PANE_ID, FINANCE_ON_API_SETTINGS_PANE_ID, FINANCE_SETTINGS_PANE_ID, PRIVACY_ON_API_SETTINGS_PANE_ID, PRIVACY_SETTINGS_PANE_ID, INTEGRATIONS_ON_API_SETTINGS_PANE_ID, INTEGRATIONS_SETTINGS_PANE_ID, PORTALS_ON_API_SETTINGS_PANE_ID, PORTALS_SETTINGS_PANE_ID, settingsPaneOffered, settingsPaneOpened } from "@/lib/data/settings-panes"
 import { SORTING_GUIDE_SETTINGS_PANE_ID } from "@/lib/data/sorting-guide"
 import { TICKET_SLA_SETTINGS_PANE_ID } from "@/lib/data/ticket-sla"
 import { PICKUP_EXCEPTION_CHARGES_SETTINGS_PANE_ID } from "@/lib/data/pickup-exception-rules"
@@ -187,11 +190,17 @@ const settingsSections: Array<{
       { id: FINANCE_SETTINGS_PANE_ID, label: "Finance & invoicing", icon: CreditCard },
       { id: FINANCE_ON_API_SETTINGS_PANE_ID, label: "Finance & invoicing", icon: CreditCard },
       { id: "pricing", label: "Commercial defaults", icon: Tag },
-      { id: "integrations", label: "Integrations", icon: LinkSimple },
-      { id: "portals", label: "Portals & branding", icon: PaintBrush },
+      // The browser's pane in fixture mode; on the Pilot the API's (#487), the services the deployment calls.
+      { id: INTEGRATIONS_SETTINGS_PANE_ID, label: "Integrations", icon: LinkSimple },
+      { id: INTEGRATIONS_ON_API_SETTINGS_PANE_ID, label: "Integrations", icon: LinkSimple },
+      // The browser's pane in fixture mode; on the Pilot the API's (#487), the projects' public pages and the Driver App.
+      { id: PORTALS_SETTINGS_PANE_ID, label: "Portals & branding", icon: PaintBrush },
+      { id: PORTALS_ON_API_SETTINGS_PANE_ID, label: "Portals & branding", icon: PaintBrush },
       // The Sorting Guide on the API (#293): offered with the adapter configured, since it has no fixtures.
       { id: SORTING_GUIDE_SETTINGS_PANE_ID, label: "Sorting guide", icon: Recycle },
-      { id: "privacy", label: "Privacy, audit & retention", icon: ShieldCheck },
+      // The browser's pane in fixture mode; on the Pilot the API's (#487), the company's audit history.
+      { id: PRIVACY_SETTINGS_PANE_ID, label: "Privacy, audit & retention", icon: ShieldCheck },
+      { id: PRIVACY_ON_API_SETTINGS_PANE_ID, label: "Privacy, audit & retention", icon: ShieldCheck },
     ],
   },
   {
@@ -1482,6 +1491,21 @@ const visiblePaneDefinitions: Record<string, SettingsPaneDefinition> = {
   integrations: paneDefinitions.integrations,
   portals: paneDefinitions.portals,
   privacy: paneDefinitions.privacy,
+  [PORTALS_ON_API_SETTINGS_PANE_ID]: {
+    title: "Portals & branding",
+    description: "What each project's residents find on its public pages, and which of its drivers use the Driver App.",
+    groups: [],
+  },
+  [INTEGRATIONS_ON_API_SETTINGS_PANE_ID]: {
+    title: "Integrations",
+    description: "The services this deployment calls, which way data goes, and their state.",
+    groups: [],
+  },
+  [PRIVACY_ON_API_SETTINGS_PANE_ID]: {
+    title: "Privacy, audit & retention",
+    description: "Who changed what across the company, newest first, and the controls the platform enforces.",
+    groups: [],
+  },
 }
 
 /**
@@ -1499,6 +1523,9 @@ function isFullPanelPane(paneId: string): boolean {
     paneId === SORTING_GUIDE_SETTINGS_PANE_ID ||
     paneId === TICKET_SLA_SETTINGS_PANE_ID ||
     paneId === FINANCE_ON_API_SETTINGS_PANE_ID ||
+    paneId === PRIVACY_ON_API_SETTINGS_PANE_ID ||
+    paneId === INTEGRATIONS_ON_API_SETTINGS_PANE_ID ||
+    paneId === PORTALS_ON_API_SETTINGS_PANE_ID ||
     paneId === PICKUP_EXCEPTION_CHARGES_SETTINGS_PANE_ID ||
     paneId === BULKY_SCHEDULES_SETTINGS_PANE_ID ||
     paneId === EMISSION_FACTORS_SETTINGS_PANE_ID ||
@@ -1913,6 +1940,12 @@ function SettingsPane({
         <TicketSlaSettings />
       ) : paneId === FINANCE_ON_API_SETTINGS_PANE_ID ? (
         <FinanceSettingsOnApi />
+      ) : paneId === PRIVACY_ON_API_SETTINGS_PANE_ID ? (
+        <PrivacySettingsOnApi />
+      ) : paneId === INTEGRATIONS_ON_API_SETTINGS_PANE_ID ? (
+        <IntegrationsSettingsOnApi />
+      ) : paneId === PORTALS_ON_API_SETTINGS_PANE_ID ? (
+        <PortalsSettingsOnApi />
       ) : paneId === PICKUP_EXCEPTION_CHARGES_SETTINGS_PANE_ID ? (
         <PickupExceptionChargesSettings />
       ) : paneId === BULKY_SCHEDULES_SETTINGS_PANE_ID ? (
