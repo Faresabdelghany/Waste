@@ -7,7 +7,7 @@ import { Container, ContainerServicePlacement } from "@waste/contracts/container
 import { Customer, Property } from "@waste/contracts/customers"
 import { Id } from "@waste/contracts/ids"
 import { Page } from "@waste/contracts/pagination"
-import { StockMovement } from "@waste/contracts/stock"
+import { DecommissionReason, StockMovement } from "@waste/contracts/stock"
 import { ENDS_AFTER_IT_STARTS } from "@waste/contracts/validity"
 import { createDb, type Database } from "@waste/db/client"
 import { containerServicePlacement } from "@waste/db/schema/containers"
@@ -97,6 +97,9 @@ describe("the container lifecycle commands and the ledger's reads", { skip: data
   let theirContainer: Container
   /** Who the agreements are with, and what they subscribe to: for a test that writes an agreement of its own. */
   let customer: Customer
+  /** Why the containers here are scrapped (O30 of #290), and a reason the office retired. */
+  let wornOut: DecommissionReason
+  let retired: DecommissionReason
   let collection: Product
 
   before(async () => {
@@ -128,6 +131,8 @@ describe("the container lifecycle commands and the ledger's reads", { skip: data
     residual = await create(olivia, "/waste-fractions", { key: "residual", name: "Residual waste" }, WasteFraction)
     const weekly = await create(olivia, "/service-frequencies", { projectId: a.projects.copenhagen.id, name: "Weekly", collectionsPerWeek: 1 }, ServiceFrequency)
     customer = await create(olivia, "/customers", { kind: "organisation", name: "Acme Housing" }, Customer)
+    wornOut = await create(olivia, "/decommission-reasons", { code: "worn-out", name: "Worn out" }, DecommissionReason)
+    retired = await create(olivia, "/decommission-reasons", { code: "obsolete-type", name: "Obsolete type", status: "inactive" }, DecommissionReason)
     collection = await create(
       olivia,
       "/products",
@@ -190,7 +195,7 @@ describe("the container lifecycle commands and the ledger's reads", { skip: data
   const transfer = (into: Container, warehouseId: string, body: Record<string, unknown> = {}) => command(into, "transfer", { warehouseId, ...body })
   const giveBack = (into: Container, warehouseId: string, validTo: string, body: Record<string, unknown> = {}) =>
     command(into, "return", { warehouseId, validTo, ...body })
-  const decommission = (into: Container, body: Record<string, unknown> = {}) => command(into, "decommission", { reason: "Crushed", ...body })
+  const decommission = (into: Container, body: Record<string, unknown> = {}) => command(into, "decommission", { decommissionReasonId: wornOut.id, reason: "Crushed", ...body })
   const adjust = (into: Container, body: Record<string, unknown>) => command(into, "adjust", { reason: "The ledger was wrong", ...body })
   /** A container received into the west warehouse: the state most commands start from (stock-fixtures.ts). */
   const stocked = (label: string, values: Record<string, unknown> = {}, warehouseId = west): Promise<Container> =>
@@ -472,6 +477,18 @@ describe("the container lifecycle commands and the ledger's reads", { skip: data
     })
   })
 
+  describe("POST /containers/:id/decommission names its reason (O30 of #290, row 9.6)", () => {
+    test("one of the company's active reasons, a note beside it optional; another company's is a 400 at the field, a retired one a 409, and nothing is written", async () => {
+      const into = await stocked("BIN-5095")
+      const theirs = await create(other, "/decommission-reasons", { code: "worn-out", name: "Worn out" }, DecommissionReason)
+      assert.deepEqual((await refusedCommand(into, "decommission", { decommissionReasonId: theirs.id }, 400)).errors, [{ path: "decommissionReasonId", message: "Not a decommission reason of this company" }])
+      assert.equal((await refusedCommand(into, "decommission", { decommissionReasonId: retired.id }, 409)).detail, 'The decommission reason "Obsolete type" is retired; a decommission names an active one')
+      assert.equal((await one(into.id)).assetState?.status, "in-warehouse", "a refused decommission writes nothing")
+      const scrapped = await command(into, "decommission", { decommissionReasonId: wornOut.id })
+      assert.deepEqual([scrapped.decommissionReasonId, scrapped.reason], [wornOut.id, null], "no note")
+    })
+  })
+
   describe("POST /containers/:id/decommission", () => {
     test("scraps a container in stock, and once retired refuses every command but an adjustment", async () => {
       const into = await stocked("BIN-5050")
@@ -481,9 +498,10 @@ describe("the container lifecycle commands and the ledger's reads", { skip: data
         ["decommission", "warehouse", west, "scrap", null, null, "Crushed by the lift"],
       )
       assert.deepEqual((await one(into.id)).assetState, stateAfter(scrapped, "retired"))
-      assert.equal((await refusedCommand(into, "decommission", { reason: "Again" }, 409)).detail, "Container BIN-5050 is already retired")
+      assert.equal((await refusedCommand(into, "decommission", { decommissionReasonId: wornOut.id, reason: "Again" }, 409)).detail, "Container BIN-5050 is already retired")
       assert.equal((await refusedCommand(into, "transfer", { warehouseId: east }, 409)).detail, "Container BIN-5050 is retired")
-      assert.deepEqual((await refusedCommand(into, "decommission", {}, 400)).errors?.map((error) => error.path), ["reason"], "a reason is the contracts' rule")
+      assert.deepEqual((await refusedCommand(into, "decommission", {}, 400)).errors?.map((error) => error.path), ["decommissionReasonId"], "a reason is the contracts' rule")
+      assert.equal(scrapped.decommissionReasonId, wornOut.id, "the reason it was given (O30 of #290)")
 
       const found = await adjust(into, { toKind: "warehouse", warehouseId: east, reason: "It was the bin next to it", correctsMovementId: scrapped.id })
       assert.deepEqual([found.kind, found.fromKind, found.toKind, found.toWarehouseId, found.correctsMovementId], ["adjustment", "scrap", "warehouse", east, scrapped.id], "the correction door leaves scrap")
@@ -492,16 +510,16 @@ describe("the container lifecycle commands and the ledger's reads", { skip: data
 
     test("in service requires validTo and ends the placement with the movement; out of service refuses it", async () => {
       const unrecorded = await container("BIN-5051")
-      assert.equal((await refusedCommand(unrecorded, "decommission", { reason: "x" }, 409)).detail, "Container BIN-5051 has no stock record; receive it first")
+      assert.equal((await refusedCommand(unrecorded, "decommission", { decommissionReasonId: wornOut.id, reason: "x" }, 409)).detail, "Container BIN-5051 has no stock record; receive it first")
       const inStock = await stocked("BIN-5052")
-      const saysNothing = await refusedCommand(inStock, "decommission", { reason: "x", validTo: APRIL }, 400)
+      const saysNothing = await refusedCommand(inStock, "decommission", { decommissionReasonId: wornOut.id, reason: "x", validTo: APRIL }, 400)
       assert.deepEqual(saysNothing.errors, [{ path: "validTo", message: VALID_TO_SAYS_NOTHING }])
 
       const placed = await place(inStock)
-      const withoutAnEnd = await refusedCommand(inStock, "decommission", { reason: "x" }, 400)
+      const withoutAnEnd = await refusedCommand(inStock, "decommission", { decommissionReasonId: wornOut.id, reason: "x" }, 400)
       assert.deepEqual(withoutAnEnd.errors, [{ path: "validTo", message: GIVE_VALID_TO }])
       assert.equal((await onePlacement(placed.id)).validTo, null, "still open")
-      const beyond = await refusedCommand(inStock, "decommission", { reason: "x", validTo: JANUARY }, 400)
+      const beyond = await refusedCommand(inStock, "decommission", { decommissionReasonId: wornOut.id, reason: "x", validTo: JANUARY }, 400)
       assert.deepEqual(beyond.errors, [{ path: "validTo", message: ENDS_AFTER_IT_STARTS }])
 
       const scrapped = await decommission(inStock, { validTo: APRIL, reason: "Burnt out on site" })
@@ -789,7 +807,7 @@ describe("the container lifecycle commands and the ledger's reads", { skip: data
 
       const backwards = await refusedCommand(into, "return", { warehouseId: west, validTo: JANUARY }, 400)
       assert.deepEqual(backwards.errors, [{ path: "validTo", message: ENDS_AFTER_IT_STARTS }], "an end on or before every placement's start")
-      assert.deepEqual((await refusedCommand(into, "decommission", { reason: "Crushed", validTo: JANUARY }, 400)).errors, [{ path: "validTo", message: ENDS_AFTER_IT_STARTS }])
+      assert.deepEqual((await refusedCommand(into, "decommission", { decommissionReasonId: wornOut.id, reason: "Crushed", validTo: JANUARY }, 400)).errors, [{ path: "validTo", message: ENDS_AFTER_IT_STARTS }])
 
       const returned = await giveBack(into, west, JULY)
       assert.equal(returned.placementId, placementId)

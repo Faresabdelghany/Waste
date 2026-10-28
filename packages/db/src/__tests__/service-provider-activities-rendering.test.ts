@@ -4,24 +4,27 @@
 // closed row to who closed it, a rejection to its reason and an approval to
 // the scheme version it wrote. Then migration 0063, which is exactly those
 // statements, then the table's fence and trigger and its audit trail
-// (`SERVICE_PROVIDER_ACTIVITIES_AUDITED`). No database.
+// (`SERVICE_PROVIDER_ACTIVITIES_AUDITED`). The table is spelled as 0063 left
+// it (activity-as-of.ts): 0064 gave it the vehicle change, which
+// vehicle-change-rendering.test.ts pins. No database.
 import assert from "node:assert/strict"
 import { readFile } from "node:fs/promises"
 import { join } from "node:path"
 import { describe, test } from "node:test"
 
+import { getTableName } from "drizzle-orm"
+
 import { SERVICE_DAYS } from "@waste/domain/planning/vocabulary"
-import { PROPOSAL_KINDS } from "@waste/domain/service-providers/activities"
-import { SERVICE_PROVIDER_ACTIVITY_KINDS, SERVICE_PROVIDER_ACTIVITY_STATUSES } from "@waste/domain/service-providers/vocabulary"
+import { SERVICE_PROVIDER_ACTIVITY_STATUSES } from "@waste/domain/service-providers/vocabulary"
 
 import { MIGRATIONS_FOLDER } from "../migrate"
 import { userAccount } from "../schema/access"
 import { serviceArea } from "../schema/finance"
 import { company, project, serviceProvider } from "../schema/organisation"
 import { collectionGroup, routeScheme } from "../schema/route-schemes"
-import { serviceProviderActivity } from "../schema/service-provider-activities"
 import { auditTrail, SERVICE_PROVIDER_ACTIVITIES_AUDITED } from "../sql/audit-trail"
 import { handWrittenStatements, normalised, statementsOf } from "../sql/hand-written"
+import { KINDS_AS_OF_0063, serviceProviderActivityAsOf0063 as serviceProviderActivity } from "./activity-as-of"
 import { checksOf, list, ref } from "./rendering"
 import { statementsBetween } from "./specimen"
 
@@ -63,16 +66,16 @@ describe("the activities as drizzle-kit writes them", () => {
 describe("the checks", () => {
   test("its kind and status are the vocabulary's, its days weekdays, and its subject given", () => {
     const checks = checksOf(serviceProviderActivity)
-    assert.equal(checks.get("service_provider_activity_kind_one_of"), `${column("kind")} in (${list(...SERVICE_PROVIDER_ACTIVITY_KINDS)})`)
+    assert.equal(checks.get("service_provider_activity_kind_one_of"), `${column("kind")} in (${list(...KINDS_AS_OF_0063)})`)
     assert.equal(checks.get("service_provider_activity_status_one_of"), `${column("status")} in (${list(...SERVICE_PROVIDER_ACTIVITY_STATUSES)})`)
     assert.equal(checks.get("service_provider_activity_service_days_subset_of"), `${column("service_days")} <@ ARRAY[${list(...SERVICE_DAYS)}]::text[]`)
     assert.equal(checks.get("service_provider_activity_subject_given"), `length(btrim(${column("subject")})) > 0`)
   })
 
-  test("a proposal moves through its Approval's statuses, the domain's proposal kinds named once", () => {
+  test("a proposal moves through its Approval's statuses, the route-day change the one proposal in 0063", () => {
     assert.equal(
       checksOf(serviceProviderActivity).get("service_provider_activity_status_shape"),
-      `case when ${column("kind")} in (${list(...PROPOSAL_KINDS)}) then ${column("status")} in ('pending-approval', 'approved', 'rejected', 'withdrawn') else ${column("status")} in ('open', 'completed', 'cancelled') end`,
+      `case when ${column("kind")} in (${list("route-day-change")}) then ${column("status")} in ('pending-approval', 'approved', 'rejected', 'withdrawn') else ${column("status")} in ('open', 'completed', 'cancelled') end`,
     )
   })
 
@@ -84,6 +87,6 @@ describe("the checks", () => {
   })
 
   test("the Activity is audited under its module", () => {
-    assert.deepEqual(SERVICE_PROVIDER_ACTIVITIES_AUDITED.map((entry) => [entry.table, entry.module, entry.parent]), [[serviceProviderActivity, "service-providers.activities", undefined]])
+    assert.deepEqual(SERVICE_PROVIDER_ACTIVITIES_AUDITED.map((entry) => [getTableName(entry.table), entry.module, entry.parent]), [["service_provider_activity", "service-providers.activities", undefined]])
   })
 })

@@ -22,6 +22,7 @@ const OTHER = "01a0d3a5-e5e0-7000-8000-000000000002"
 const BASE = { projectId: ID, serviceProviderId: OTHER, subject: "Organic route to Wednesday" } as const
 const PROPOSAL = { ...BASE, kind: "route-day-change", routeSchemeId: ID, collectionGroupId: OTHER, serviceDays: ["wednesday"], effectiveFrom: "2026-11-04" } as const
 const FOLLOW_UP = { ...BASE, kind: "compliance-follow-up", subject: "Insurance document renewal", dueOn: "2026-11-12" } as const
+const VEHICLE = { ...BASE, kind: "vehicle-change", routeSchemeId: ID, collectionGroupId: OTHER, vehicleId: ID, effectiveFrom: "2026-11-04" } as const
 const NOTE = { ...BASE, kind: "coordination-note", subject: "Harbour access closed Friday", body: "The harbour gate is closed for works." } as const
 
 const fails = (result: { success: boolean }) => !result.success
@@ -64,12 +65,24 @@ describe("a create", () => {
   })
 })
 
+describe("a vehicle change", () => {
+  test("names its group, its vehicle and its day, its driver where it moves one, and no days", () => {
+    assert.deepEqual(ServiceProviderActivityCreate.parse(VEHICLE), VEHICLE)
+    assert.equal(ServiceProviderActivityCreate.safeParse({ ...VEHICLE, driverId: OTHER }).success, true)
+    const { vehicleId: _, ...unnamed } = VEHICLE
+    assert.ok(fails(ServiceProviderActivityCreate.safeParse(unnamed)))
+    assert.ok(fails(ServiceProviderActivityCreate.safeParse({ ...VEHICLE, serviceDays: ["monday"] })))
+    assert.ok(fails(ServiceProviderActivityCreate.safeParse({ ...PROPOSAL, vehicleId: ID })), "a route-day change names no vehicle")
+  })
+})
+
 describe("a patch", () => {
   test("changes something", () => {
     assert.ok(fails(ServiceProviderActivityPatch.safeParse({})))
     assert.equal(ServiceProviderActivityPatch.safeParse({ subject: "Moved" }).success, true)
     assert.equal(ServiceProviderActivityPatch.safeParse({ serviceDays: ["thursday"], effectiveFrom: "2026-11-11" }).success, true)
     assert.equal(ServiceProviderActivityPatch.safeParse({ body: null, serviceAreaId: null }).success, true)
+    assert.equal(ServiceProviderActivityPatch.safeParse({ vehicleId: ID, driverId: null }).success, true)
   })
 
   test("never moves the kind, the provider or the project", () => {
@@ -106,6 +119,8 @@ describe("the resource and its list", () => {
       collectionGroupId: OTHER,
       serviceDays: ["wednesday"],
       effectiveFrom: "2026-11-04",
+      vehicleId: null,
+      driverId: null,
       successorSchemeId: OTHER,
       openedBy: ID,
       closedBy: OTHER,

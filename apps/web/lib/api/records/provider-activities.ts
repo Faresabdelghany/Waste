@@ -9,7 +9,8 @@
 // award's project, or the project the office picked. The status moves by
 // command alone (approve, reject, withdraw, complete, cancel), so the adapter
 // lists no statuses; a patch corrects an open Activity's own words, a
-// proposal's days and day, a follow-up's due day. The words and forms are
+// route-day change's days, a vehicle change's vehicle and driver, a
+// proposal's day, a follow-up's due day. The words and forms are
 // lib/data/provider-activities.ts'; the routes are
 // apps/api/src/routes/service-provider-activities.ts.
 import type { ServiceProviderActivity, ServiceProviderActivityCreate, ServiceProviderActivityPatch } from "@waste/contracts/service-provider-activities"
@@ -33,6 +34,8 @@ const AREA_PREFIX = "service-area"
 const PROJECT_PREFIX = "project"
 const SCHEME_PREFIX = "scheme"
 const GROUP_PREFIX = "group"
+const VEHICLE_PREFIX = "vehicle"
+const DRIVER_PREFIX = "driver"
 
 /** The schemes and the routes an approval changes: read again once the API took it. */
 const SCHEMES_KEY = "route-studio.schemes"
@@ -52,6 +55,8 @@ export function toActivityRecord(activity: ServiceProviderActivity, context: Map
     ...(activity.serviceAreaId === null ? {} : { "Service area": nameVia(context, AREA_PREFIX, activity.serviceAreaId) }),
     ...(activity.routeSchemeId === null ? {} : { "Route scheme": nameVia(context, SCHEME_PREFIX, activity.routeSchemeId) }),
     ...(activity.serviceDays === null ? {} : { "New days": daysText(activity.serviceDays) }),
+    ...(activity.vehicleId === null ? {} : { "New vehicle": nameVia(context, VEHICLE_PREFIX, activity.vehicleId) }),
+    ...(activity.driverId === null ? {} : { "New driver": nameVia(context, DRIVER_PREFIX, activity.driverId) }),
     ...(activity.effectiveFrom === null ? {} : { From: activity.effectiveFrom }),
     ...(activity.dueOn === null ? {} : { Due: activity.dueOn }),
     ...(activity.successorSchemeId === null ? {} : { "New version": nameVia(context, SCHEME_PREFIX, activity.successorSchemeId) }),
@@ -84,6 +89,8 @@ export function toActivityRecord(activity: ServiceProviderActivity, context: Map
       dueOn: activity.dueOn ?? "",
       serviceDays: activity.serviceDays?.join(",") ?? "",
       effectiveFrom: activity.effectiveFrom ?? "",
+      vehicleId: activity.vehicleId === null ? "" : webIdVia(context, VEHICLE_PREFIX, activity.vehicleId),
+      driverId: activity.driverId === null ? "" : webIdVia(context, DRIVER_PREFIX, activity.driverId),
     },
   }
 }
@@ -94,6 +101,8 @@ const DAYS_REFUSED = "Pick the days the group should run on"
 const PROVIDER_REFUSED = "Pick the service provider"
 const PROJECT_REFUSED = "Pick the service area it is about, or the project"
 const AREA_REFUSED = "Pick a service area the API holds"
+const VEHICLE_REFUSED = "Pick the vehicle the group should run with"
+const DRIVER_REFUSED = "Pick a driver the API holds"
 
 /** The days a form names, each a weekday, Monday first; undefined for none, a refusal for a word that is no day. */
 function daysOf(record: BusinessRecord, key: string): ServiceDay[] | undefined | LocalRefusal {
@@ -112,7 +121,7 @@ function serverIdAt(record: BusinessRecord, key: string, prefix: string, context
 
 /** What a create is about: a proposal's route's project, scheme and group, or a follow-up's or a note's award's project or the picked project. */
 function subjectOf(record: BusinessRecord, kind: ServiceProviderActivityCreate["kind"], context: MappingContext) {
-  if (kind === "route-day-change") {
+  if (kind === "route-day-change" || kind === "vehicle-change") {
     const routeId = typed(record, "routeId")
     const route = routeId === undefined ? undefined : context.resolve.find((candidate) => candidate.id === routeId)
     if (route === undefined) return refusal("routeId", ROUTE_REFUSED)
@@ -134,7 +143,7 @@ function subjectOf(record: BusinessRecord, kind: ServiceProviderActivityCreate["
 
 export function toActivityCreateBody(record: BusinessRecord, context: MappingContext): ServiceProviderActivityCreate | LocalRefusal {
   const kind = typed(record, ACTIVITY_KIND_KEY)
-  if (kind !== "route-day-change" && kind !== "compliance-follow-up" && kind !== "coordination-note") return refusal("kind", KIND_REFUSED)
+  if (kind !== "route-day-change" && kind !== "vehicle-change" && kind !== "compliance-follow-up" && kind !== "coordination-note") return refusal("kind", KIND_REFUSED)
   const serviceProviderId = serverIdAt(record, "serviceProviderId", PROVIDER_PREFIX, context, PROVIDER_REFUSED) ?? refusal("serviceProviderId", PROVIDER_REFUSED)
   if (isLocalRefusal(serviceProviderId)) return serviceProviderId
   const subject = typed(record, "subject")
@@ -149,6 +158,15 @@ export function toActivityCreateBody(record: BusinessRecord, context: MappingCon
     if (effectiveFrom === undefined) return refusal("effectiveFrom", "Pick the first day the group runs on its new days")
     return { ...base, kind, routeSchemeId: about.routeSchemeId as string, collectionGroupId: about.collectionGroupId as string, serviceDays, effectiveFrom }
   }
+  if (kind === "vehicle-change") {
+    const vehicleId = serverIdAt(record, "vehicleId", VEHICLE_PREFIX, context, VEHICLE_REFUSED) ?? refusal("vehicleId", VEHICLE_REFUSED)
+    if (isLocalRefusal(vehicleId)) return vehicleId
+    const driverId = serverIdAt(record, "driverId", DRIVER_PREFIX, context, DRIVER_REFUSED)
+    if (isLocalRefusal(driverId)) return driverId
+    const effectiveFrom = typed(record, "effectiveFrom")
+    if (effectiveFrom === undefined) return refusal("effectiveFrom", "Pick the first day the group runs with the vehicle")
+    return { ...base, kind, routeSchemeId: about.routeSchemeId as string, collectionGroupId: about.collectionGroupId as string, vehicleId, ...(driverId === undefined ? {} : { driverId }), effectiveFrom }
+  }
   const area = about.serviceAreaId === undefined ? {} : { serviceAreaId: about.serviceAreaId }
   if (kind === "compliance-follow-up") {
     const dueOn = typed(record, "dueOn")
@@ -159,7 +177,7 @@ export function toActivityCreateBody(record: BusinessRecord, context: MappingCon
 }
 
 /** A correction: the words, a proposal's days and day, a follow-up's due day, each where it moved. */
-export function toActivityPatchBody(before: BusinessRecord, after: BusinessRecord): ServiceProviderActivityPatch | null | LocalRefusal {
+export function toActivityPatchBody(before: BusinessRecord, after: BusinessRecord, context: MappingContext): ServiceProviderActivityPatch | null | LocalRefusal {
   const kind = typed(before, ACTIVITY_KIND_KEY)
   const body: ServiceProviderActivityPatch = {}
   const moved = (key: string) => (typed(after, key) ?? "") !== (typed(before, key) ?? "")
@@ -174,7 +192,17 @@ export function toActivityPatchBody(before: BusinessRecord, after: BusinessRecor
     if (isLocalRefusal(days)) return days
     body.serviceDays = days
   }
-  if (kind === "route-day-change" && moved("effectiveFrom")) {
+  if (kind === "vehicle-change" && moved("vehicleId")) {
+    const vehicleId = serverIdAt(after, "vehicleId", VEHICLE_PREFIX, context, VEHICLE_REFUSED) ?? refusal("vehicleId", VEHICLE_REFUSED)
+    if (isLocalRefusal(vehicleId)) return vehicleId
+    body.vehicleId = vehicleId
+  }
+  if (kind === "vehicle-change" && moved("driverId")) {
+    const driverId = serverIdAt(after, "driverId", DRIVER_PREFIX, context, DRIVER_REFUSED)
+    if (isLocalRefusal(driverId)) return driverId
+    body.driverId = driverId ?? null
+  }
+  if ((kind === "route-day-change" || kind === "vehicle-change") && moved("effectiveFrom")) {
     const day = typed(after, "effectiveFrom")
     if (day === undefined) return refusal("effectiveFrom", "Pick the first day the group runs on its new days")
     body.effectiveFrom = day

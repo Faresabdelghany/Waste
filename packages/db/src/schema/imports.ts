@@ -8,7 +8,8 @@
 // `import_run` is current state, `timestamps` and the trigger: its counts
 // move as its batches land. It is the company's, since a Customers file
 // belongs to no project; a project's kinds name the project they were
-// imported into, a Customers run none (`import_run_project_shape`). The
+// imported into, a run of the company's kinds — the Customers and, since O30
+// of #290, the catalogue — none (`import_run_project_shape`). The
 // counts never pass the rows the file was said to hold
 // (`import_run_counts_shape`), and the run is complete when they reach it — a
 // reading, never a column. `import_run_row` is a ledger, `recorded` and the
@@ -19,18 +20,19 @@
 // and every other outcome names the record it made or matched and carries no
 // sentence (`import_run_row_outcome_shape`). `resource_id` is a soft uuid, as
 // `outbox_event.aggregate_id` is: the record is a customer's, a property's, a
-// container's, an agreement's or a subscription's by the run's kind, and a
+// container's, an agreement's, a subscription's, a waste fraction's, a
+// container type's or a vehicle type's by the run's kind, and a
 // key could point at one table only.
 //
 // Neither table is audited: a run is the import's own log, as a generation
 // run is, and its rows a ledger, which carries its own history.
-import { IMPORT_KINDS, IMPORT_ROW_OUTCOMES } from "@waste/domain/imports/vocabulary"
+import { COMPANY_IMPORT_KINDS, IMPORT_KINDS, IMPORT_ROW_OUTCOMES } from "@waste/domain/imports/vocabulary"
 import { sql } from "drizzle-orm"
 import { check, integer, text, uuid } from "drizzle-orm/pg-core"
 
 import { tableObjectName } from "../names"
 import { userAccount } from "./access"
-import { oneOf, positive } from "./checks"
+import { literal, oneOf, positive } from "./checks"
 import { id, recorded, tenant, timestamps } from "./columns"
 import { company, project } from "./organisation"
 import { companyReference, tenantIndex, tenantKey, tenantReference, tenantUnique } from "./references"
@@ -64,8 +66,8 @@ export const importRun = wms.table(
     tenantKey(t),
     oneOf(t.kind, IMPORT_KINDS),
     positive(t.rowCount),
-    // A project's kinds name their project, the company's Customers none.
-    check(tableObjectName(t.id.table, "project_shape", "importRun"), sql`(${t.kind} = 'customers') = (${t.projectId} is null)`),
+    // A project's kinds name their project, the company's — its Customers and its catalogue (O30 of #290) — none.
+    check(tableObjectName(t.id.table, "project_shape", "importRun"), sql`(${t.kind} in (${sql.raw(COMPANY_IMPORT_KINDS.map(literal).join(", "))})) = (${t.projectId} is null)`),
     // Never fewer than none, never more than the file held.
     check(
       tableObjectName(t.id.table, "counts_shape", "importRun"),

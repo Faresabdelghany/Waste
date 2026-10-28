@@ -65,6 +65,7 @@
 import type { ProductStatus } from "@waste/contracts/catalogue"
 import type { CustomerStatus, PropertyStatus, SharedCollectionPointStatus } from "@waste/contracts/customers"
 import type { ContaminantCodeStatus } from "@waste/contracts/pickup-exceptions"
+import type { DecommissionReasonStatus } from "@waste/contracts/stock"
 import type { TeamStatus } from "@waste/contracts/ticket-teams"
 import { vehicleAllocation } from "@waste/db/schema/allocations"
 import type { AllocationStatus, DriverStatus, VehicleStatus, WarehouseStatus } from "@waste/domain/resources/vocabulary"
@@ -235,6 +236,15 @@ export const retiredCode = (code: string, by: "a tag" | "a rule"): string => `Th
 export function refuseRetiredCode(status: ContaminantCodeStatus, code: string, by: "a tag" | "a rule"): void {
   if (status === "active") return
   throw problem(409, { detail: retiredCode(code, by) })
+}
+
+/** What a decommission naming a retired reason is told (O30 of #290). */
+export const retiredReason = (name: string): string => `The decommission reason ${JSON.stringify(name)} is retired; a decommission names an active one`
+
+/** A Decommission Reason a new decommission names: active, or the sentence. */
+export function refuseRetiredReason(status: DecommissionReasonStatus, name: string): void {
+  if (status === "active") return
+  throw problem(409, { detail: retiredReason(name) })
 }
 
 /** What a ticket or a project's default naming a retired team is told (O30 of #290, row 7.20). */

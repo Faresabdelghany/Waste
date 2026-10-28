@@ -37,6 +37,7 @@ import * as geojsonModule from "../geojson"
 import * as healthModule from "../health"
 import * as idsModule from "../ids"
 import * as importsModule from "../imports"
+import * as integrationsModule from "../integrations"
 import * as invoicesModule from "../invoices"
 import * as meModule from "../me"
 import * as organisationModule from "../organisation"
@@ -118,6 +119,7 @@ const MODULES: Readonly<Record<string, Record<string, unknown>>> = {
   "health": healthModule,
   "ids": idsModule,
   "imports": importsModule,
+  "integrations": integrationsModule,
   "invoices": invoicesModule,
   "me": meModule,
   "organisation": organisationModule,

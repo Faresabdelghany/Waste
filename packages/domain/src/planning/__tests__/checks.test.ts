@@ -75,6 +75,12 @@ describe("schemeStructureIssues", () => {
     assert.deepEqual(schemeStructureIssues({ ...sound, hasPlanningArea: false, collectionGroups: [manual("Glass", ["monday", "thursday"])] }), [])
   })
 
+  test("a rule group with a planning area of its own needs none of the scheme's; one without still does (O30 of #290, row 2.17)", () => {
+    const own = (name: string, days: readonly string[]): GroupStructure => ({ ...rule(name, days), hasOwnPlanningArea: true })
+    assert.deepEqual(schemeStructureIssues({ ...sound, hasPlanningArea: false, collectionGroups: [own("Residual", ["monday", "thursday"]), manual("Glass", ["thursday"])] }), [])
+    assert.deepEqual(schemeStructureIssues({ ...sound, hasPlanningArea: false, collectionGroups: [own("Residual", ["monday", "thursday"]), rule("Paper", ["monday"])] }), [NO_PLANNING_AREA_FOR_RULE])
+  })
+
   test("lists every sentence that holds, the days first, the groups next, the planning area, then the vehicles and drivers on two groups", () => {
     assert.deepEqual(
       schemeStructureIssues({

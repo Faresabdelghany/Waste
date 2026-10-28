@@ -41,9 +41,9 @@
 // to answer it, `booked_route_id` and `booked_pickup_id`, with its check, the
 // same way: today's ticket carries them, `CHANGED_LATER` maps it onto 0009's,
 // `ADDED_IN_0035` is left out, and ticket-stops-rendering.test.ts pins its
-// statements. Migration 0064 (O30 of #290, row 7.20) gave the ticket its
+// statements. Migration 0070 (O30 of #290, row 7.20) gave the ticket its
 // team, `team_id`, the same way: `CHANGED_LATER` maps it onto 0009's,
-// `ADDED_IN_0064` is left out, and ticket-teams-rendering.test.ts pins its
+// `ADDED_IN_0070` is left out, and ticket-teams-rendering.test.ts pins its
 // statements.
 import assert from "node:assert/strict"
 import { readFile } from "node:fs/promises"
@@ -104,7 +104,7 @@ const stampsShape = (() => {
 })()
 
 /** ticket as drizzle-kit wrote it as of 0009, as it wrote it since 0016 (#111) — the re-collection's stop and the check that it names its route — and as it wrote it since 0031 (#291 slice 23b), its sources grown by `service-provider`. */
-const ticketTable = (asOf: "0009" | "0016" | "0031" | "0033" | "0035" | "0064"): string =>
+const ticketTable = (asOf: "0009" | "0016" | "0031" | "0033" | "0035" | "0070"): string =>
   createTable("ticket", "project", [
     '"number" integer NOT NULL',
     '"kind" text NOT NULL',
@@ -116,7 +116,7 @@ const ticketTable = (asOf: "0009" | "0016" | "0031" | "0033" | "0035" | "0064"):
     `"occurred_at" ${INSTANT} NOT NULL`,
     `"due_at" ${INSTANT}`,
     '"assignee_user_account_id" uuid',
-    ...(asOf >= "0064" ? ['"team_id" uuid'] : []),
+    ...(asOf >= "0070" ? ['"team_id" uuid'] : []),
     '"created_by" uuid',
     '"source_event_id" uuid',
     '"route_id" uuid',
@@ -225,7 +225,7 @@ const ADDED_IN_0034 = [RULE_KEY_INDEX]
 
 /** What 0016 (#111), 0031 (#291 slice 23b), 0033 (#291 C3), 0034 and 0035 (O4 and O3c of #290) changed on the three: the ticket's, the history's and the alert's CREATE TABLE as drizzle-kit generates them now onto what 0009 says. */
 const CHANGED_LATER = new Map([
-  [ticketTable("0064"), ticketTable("0009")],
+  [ticketTable("0070"), ticketTable("0009")],
   [ticketEventTable("0031"), ticketEventTable("0009")],
   [alertTable("0034"), alertTable("0009")],
 ])
@@ -239,13 +239,13 @@ const ADDED_IN_0033 = [CHARGE_PRODUCT_FK, CHARGE_PRODUCT_INDEX]
 /** What 0035 added to the ticket beside the columns and the check: the key through the route, one ticket per stop, the route's index. */
 const ADDED_IN_0035 = [BOOKED_PICKUP_FK, BOOKED_PICKUP_KEY, BOOKED_ROUTE_INDEX]
 
-/** What 0064 added to the ticket beside the column: the key to its team and the team's queue index. */
+/** What 0070 added to the ticket beside the column: the key to its team and the team's queue index. */
 const TEAM_FK = tenantFk("ticket", "team_id", "team")
 const TEAM_INDEX = index("ticket", "ticket_team_id_status_idx", "company_id", "team_id", "status")
-const ADDED_IN_0064 = [TEAM_FK, TEAM_INDEX]
+const ADDED_IN_0070 = [TEAM_FK, TEAM_INDEX]
 
 const expected = [
-  ticketTable("0064"),
+  ticketTable("0070"),
   ticketEventTable("0031"),
   alertTable("0034"),
   companyFk("ticket"),
@@ -394,7 +394,7 @@ const generatedAlterations = (): Promise<string[]> => statementsBetween({ compan
 
 /** Everything drizzle-kit wrote at the head of 0009: the three tables as they were generated as of 0009 — the ticket without the product its completion charges or the re-collection's stop and with 0009's sources, what 0033 and 0016 added left out — and the two altered ones. */
 const generatedHead = async (): Promise<string[]> => [
-  ...(await statementsFor(tables)).filter((statement) => !ADDED_IN_0016.includes(statement) && !ADDED_IN_0033.includes(statement) && !ADDED_IN_0034.includes(statement) && !ADDED_IN_0035.includes(statement) && !ADDED_IN_0064.includes(statement)).map((statement) => CHANGED_LATER.get(statement) ?? statement),
+  ...(await statementsFor(tables)).filter((statement) => !ADDED_IN_0016.includes(statement) && !ADDED_IN_0033.includes(statement) && !ADDED_IN_0034.includes(statement) && !ADDED_IN_0035.includes(statement) && !ADDED_IN_0070.includes(statement)).map((statement) => CHANGED_LATER.get(statement) ?? statement),
   ...(await generatedAlterations()),
 ]
 
