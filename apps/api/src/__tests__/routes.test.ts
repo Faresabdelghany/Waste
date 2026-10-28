@@ -110,7 +110,9 @@ describe("the route endpoints", { skip: database.skip || owner.skip }, () => {
     return RouteDetail.parse(await response.json())
   }
   const page = async (call: Call, query = "?limit=200") => RoutePage.parse(await (await call(`/routes${query}`)).json())
-  const command = (id: string, action: string, values?: unknown, call = olivia) => call(`/routes/${id}/${action}`, { method: "POST", body: values })
+  // The fixture Monday's routes share its crew without times; the same-day rule (O7 of #290) is crew-day.test.ts's, so the crew commands here say `acceptSameDay`.
+  const sameDay = (action: string, values: unknown) => (["assign", "reschedule", "split"].includes(action) && typeof values === "object" && values !== null && Object.keys(values).length > 0 ? { ...values, acceptSameDay: true } : values)
+  const command = (id: string, action: string, values?: unknown, call = olivia) => call(`/routes/${id}/${action}`, { method: "POST", body: sameDay(action, values) })
   const commanded = async (id: string, action: string, values?: unknown, call = olivia): Promise<RouteDetail> => {
     const response = await command(id, action, values, call)
     assert.equal(response.status, 200, JSON.stringify(await response.clone().json()))

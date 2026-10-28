@@ -82,7 +82,7 @@ describe("the ledger's work orders", { skip: database.skip || owner.skip }, () =
   }
   /** A ready route for Mads on WH-24 on the day, Mads's session open on it. */
   const running = async (): Promise<RouteDetail> => {
-    const route = await created(olivia, "/routes", await olivia("/routes", { method: "POST", body: { projectId: a.projects.copenhagen.id, operatingDate: DAY, driverId: fleet.drivers.mads.id, vehicleId: fleet.vehicles.wh24.id } }), RouteDetail)
+    const route = await created(olivia, "/routes", await olivia("/routes", { method: "POST", body: { projectId: a.projects.copenhagen.id, operatingDate: DAY, driverId: fleet.drivers.mads.id, vehicleId: fleet.vehicles.wh24.id, acceptSameDay: true } }), RouteDetail)
     return route
   }
   const add = (routeId: string, values: Record<string, unknown>) => olivia(`/routes/${routeId}/pickups`, { method: "POST", body: values })

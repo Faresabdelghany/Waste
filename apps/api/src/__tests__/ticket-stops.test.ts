@@ -70,7 +70,7 @@ describe("a stop booked to answer a ticket", { skip: database.skip || owner.skip
     return into
   }
   const running = async (): Promise<RouteDetail> =>
-    await created(olivia, "/routes", await olivia("/routes", { method: "POST", body: { projectId: a.projects.copenhagen.id, operatingDate: DAY, driverId: fleet.drivers.mads.id, vehicleId: fleet.vehicles.wh24.id } }), RouteDetail)
+    await created(olivia, "/routes", await olivia("/routes", { method: "POST", body: { projectId: a.projects.copenhagen.id, operatingDate: DAY, driverId: fleet.drivers.mads.id, vehicleId: fleet.vehicles.wh24.id, acceptSameDay: true } }), RouteDetail)
   const add = (routeId: string, values: Record<string, unknown>) => olivia(`/routes/${routeId}/pickups`, { method: "POST", body: values })
   const added = async (routeId: string, values: Record<string, unknown>): Promise<PickupDetail> => await created(olivia, `/routes/${routeId}/pickups`, await add(routeId, values), PickupDetail, "/pickups")
   /** A ticket the office opens at Parkvej, of the kind, about the container where one is named. */

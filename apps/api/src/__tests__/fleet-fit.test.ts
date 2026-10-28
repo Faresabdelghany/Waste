@@ -103,7 +103,8 @@ describe("fleet rules on the server", { skip: database.skip || owner.skip }, () 
   })
 
   const route = (values: Parameters<typeof seedRoute>[4] = {}) => seedRoute(pool, a, fleet, ex, values)
-  const assign = (id: string, body: Record<string, unknown>) => olivia(`/routes/${id}/assign`, { method: "POST", body })
+  // The fixture Monday's routes share its crew without times; the same-day rule (O7 of #290) is crew-day.test.ts's, so the crew commands here say `acceptSameDay`.
+  const assign = (id: string, body: Record<string, unknown>) => olivia(`/routes/${id}/assign`, { method: "POST", body: { ...body, acceptSameDay: true } })
   const refused = async (response: Response, status: number) => {
     assert.equal(response.status, status, JSON.stringify(await response.clone().json()))
     return await readProblem(response)
@@ -177,7 +178,7 @@ describe("fleet rules on the server", { skip: database.skip || owner.skip }, () 
     test("a split's new route takes only a vehicle that serves the stops split onto it", async () => {
       await kit([{ wasteFractionIds: [ex.fractions.glass.id] }])
       const from = await route()
-      const splitting = await olivia(`/routes/${from.id}/split`, { method: "POST", body: { pickupIds: [from.pickupIds[0], from.pickupIds[1]], vehicleId: fleet.vehicles.wh25.id } })
+      const splitting = await olivia(`/routes/${from.id}/split`, { method: "POST", body: { pickupIds: [from.pickupIds[0], from.pickupIds[1]], vehicleId: fleet.vehicles.wh25.id, acceptSameDay: true } })
       assert.equal((await refused(splitting, 409)).detail, `WH-25 has no compartment for Residual waste, which 2 stops of route ${from.label} collect`)
     })
 

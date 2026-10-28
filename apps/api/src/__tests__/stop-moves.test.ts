@@ -117,7 +117,8 @@ describe("moving stops, splitting and merging routes", { skip: database.skip || 
     assert.equal(response.status, 200, JSON.stringify(await response.clone().json()))
     return RouteDetail.parse(await response.json())
   }
-  const split = (from: string, body: Record<string, unknown>, call = olivia) => call(`/routes/${from}/split`, { method: "POST", body })
+  // The fixture Monday's routes share its crew without times; the same-day rule (O7 of #290) is crew-day.test.ts's, so the crew commands here say `acceptSameDay`.
+  const split = (from: string, body: Record<string, unknown>, call = olivia) => call(`/routes/${from}/split`, { method: "POST", body: { ...body, acceptSameDay: true } })
   const merge = (into: string, body: Record<string, unknown>, call = olivia) => call(`/routes/${into}/merge`, { method: "POST", body })
   const eventsAbout = async (ids: readonly string[]) =>
     await withCompany(pool.db, a.companyId, async (tx: Tx) =>
