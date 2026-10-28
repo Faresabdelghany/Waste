@@ -34,7 +34,7 @@ test("the office adds a team, makes it a project's default for a kind, and a tic
     expect(created.request().postDataJSON()).toEqual({ name, status: "active", memberUserAccountIds: [] })
     team = (await created.json()) as ApiTeam
     await expect(toasts(page)).toContainText("Team added")
-    await expect(pane.getByRole("cell", { name })).toBeVisible()
+    await expect(pane.getByRole("cell", { name, exact: true })).toBeVisible()
 
     // Copenhagen Central's complaints go to the new team.
     const read = answerOf(page, "GET", `/projects/${project.id}/ticket-team-defaults`)
