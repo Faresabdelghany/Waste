@@ -23,19 +23,30 @@ export const activeOnCreation = (solver: PlanSolver): boolean => solver !== "opt
 export const tripOf = ({ hasDepot, hasStation }: { hasDepot: boolean; hasStation: boolean }): PlanTrip =>
   hasDepot && hasStation ? "full" : "stops-only"
 
-/** The optimiser's ceiling: one optimisation request takes at most fifty locations (#118); above it a Plan is `baseline`, measured and read "Not optimised". */
-export const OPTIMISER_MAX_STOPS = 50
+/** The locations one optimisation request takes (#118): vroom-express counts a job as one and a shipment as two, the vehicle's start and end as none. */
+export const OPTIMISER_MAX_LOCATIONS = 50
+
+/** The optimiser's ceiling on a stops-only trip, one location a stop; above it a Plan is `baseline`, measured and read "Not optimised". */
+export const OPTIMISER_MAX_STOPS = OPTIMISER_MAX_LOCATIONS
+
+/**
+ * The open stops one optimisation takes on this trip: a full trip sends its
+ * station as a job of its own (held last by its window), one location more,
+ * so it orders one stop fewer than a stops-only trip.
+ */
+export const optimiserMaxStops = (trip: PlanTrip): number => OPTIMISER_MAX_LOCATIONS - (trip === "full" ? 1 : 0)
 
 /**
  * The solver an Optimise request gets (#124 §4, #171): the optimiser for
- * fifty open stops or fewer from a depot, and otherwise a `baseline`
+ * fifty open stops or fewer from a depot — forty-nine on a full trip, whose
+ * station is a location of the request too — and otherwise a `baseline`
  * measurement of the generated order with the token that says why — the size
  * first, the older rule, when both hold. The optimiser orders from the depot
  * (the provider's vehicle starts and ends there), so a route naming none has
  * nothing to order from.
  */
-export function optimiseSolver({ openStops, hasDepot }: { openStops: number; hasDepot: boolean }): { solver: "optimiser"; fallback: null } | { solver: "baseline"; fallback: OptimiseFallback } {
-  if (openStops > OPTIMISER_MAX_STOPS) return { solver: "baseline", fallback: "too-many-stops" }
+export function optimiseSolver({ openStops, hasDepot, hasStation = false }: { openStops: number; hasDepot: boolean; hasStation?: boolean }): { solver: "optimiser"; fallback: null } | { solver: "baseline"; fallback: OptimiseFallback } {
+  if (openStops > optimiserMaxStops(tripOf({ hasDepot, hasStation }))) return { solver: "baseline", fallback: "too-many-stops" }
   if (!hasDepot) return { solver: "baseline", fallback: "no-depot" }
   return { solver: "optimiser", fallback: null }
 }
@@ -113,17 +124,19 @@ export function answersRequest({ solver, status, named, asked }: { solver: PlanS
 export function horizonRequest({
   open,
   hasDepot,
+  hasStation = false,
   active,
   optimisationWaiting,
 }: {
   open: readonly string[]
   hasDepot: boolean
+  hasStation?: boolean
   active: { solver: PlanSolver; named: readonly string[] } | null
   /** An optimiser Plan asked after the active one is still calculating. */
   optimisationWaiting: boolean
 }): { solver: PlanSolver; orderedPickupIds: string[] } | null {
   if (active?.solver === "manual") return optimisationWaiting ? null : { solver: "manual", orderedPickupIds: executionOrder(open, active.named) }
-  return { solver: optimiseSolver({ openStops: open.length, hasDepot }).solver, orderedPickupIds: [...open] }
+  return { solver: optimiseSolver({ openStops: open.length, hasDepot, hasStation }).solver, orderedPickupIds: [...open] }
 }
 
 /**

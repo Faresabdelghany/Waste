@@ -162,7 +162,12 @@ const HORIZON = STATION_OPENS + 2 * DAY_SECONDS
  * vehicle carrying its payload, so the solver goes to the station whenever
  * the vehicle is full and once more after the last stop, and no window holds
  * the station back. Each visit takes the unload's time once, however many
- * loads it delivers (`setup`, spent on arriving at a new place).
+ * loads it delivers (`setup`, spent on arriving at a new place). Nothing
+ * makes a visit deliver every load aboard, where a truck tips them all: the
+ * solver may carry a load on to a later visit, planning fewer visits than the
+ * truck makes. The setup each visit costs makes that unlikely, and the Plan
+ * reads its visits off the trip as driven, so a Plan can be optimistic, never
+ * wrong about where it goes.
  */
 function vroomRequest({ profile, depot, stops, serviceSeconds, timeWindows, departure, breaks, station, reload }: OptimiseRequest) {
   const reloading = station && reload ? reload : null

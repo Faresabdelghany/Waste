@@ -19,10 +19,9 @@
 // does. A known order — a dispatcher's or the generated one — is cut where the
 // next stop would not fit (`unloadsAlong`), the fewest visits that order can
 // make.
+import { OPTIMISER_MAX_LOCATIONS } from "./plans"
 import type { PlanSolver, PlanTrip } from "./vocabulary"
 
-/** The locations one optimisation request takes (#118): vroom-express counts a job as one and a shipment as two. */
-export const OPTIMISER_MAX_LOCATIONS = 50
 
 /** The stops one optimisation with reloads takes: each stop is a shipment, two locations. */
 export const RELOAD_MAX_STOPS = OPTIMISER_MAX_LOCATIONS / 2

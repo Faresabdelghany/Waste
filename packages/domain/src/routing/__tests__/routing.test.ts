@@ -1,7 +1,7 @@
 import assert from "node:assert/strict"
 import { describe, test } from "node:test"
 
-import { activeOnCreation, answersRequest, executionOrder, horizonRequest, isSuperseded, OPTIMISER_MAX_STOPS, optimiseSolver, planIsStale, tripOf } from "../plans"
+import { activeOnCreation, answersRequest, executionOrder, horizonRequest, isSuperseded, OPTIMISER_MAX_LOCATIONS, OPTIMISER_MAX_STOPS, optimiserMaxStops, optimiseSolver, planIsStale, tripOf } from "../plans"
 import { FINGERPRINT_DECIMALS, planFingerprint, roundCoordinate } from "../fingerprint"
 import { routingJobPriority } from "../jobs"
 import { OPTIMISE_FALLBACKS, PLAN_SOLVERS, PLAN_STATUSES, PLAN_TRIPS, ROUTING_JOB_CLASSES, ROUTING_QUOTA_FAMILIES, ROUTING_VOCABULARIES, SUPERSEDED } from "../vocabulary"
@@ -38,6 +38,12 @@ describe("which solver an Optimise request gets (#124 §4, #171)", () => {
 
   test("a route that names no depot: a baseline, since the optimiser orders from the depot", () => {
     assert.deepEqual(optimiseSolver({ openStops: 12, hasDepot: false }), { solver: "baseline", fallback: "no-depot" })
+  })
+
+  test("a full trip's station is a location of the request too: fifty open stops with a depot and a station are fifty-one locations, a baseline; forty-nine go to the optimiser", () => {
+    assert.deepEqual(optimiseSolver({ openStops: 50, hasDepot: true, hasStation: true }), { solver: "baseline", fallback: "too-many-stops" })
+    assert.deepEqual(optimiseSolver({ openStops: 49, hasDepot: true, hasStation: true }), { solver: "optimiser", fallback: null })
+    assert.deepEqual([optimiserMaxStops("full"), optimiserMaxStops("stops-only")], [OPTIMISER_MAX_LOCATIONS - 1, OPTIMISER_MAX_LOCATIONS])
   })
 
   test("both at once reads the size first, the older of the two rules", () => {
@@ -163,6 +169,9 @@ describe("what the horizon asks of a route (#172: generation and the sweep, over
     assert.deepEqual(asked?.orderedPickupIds.slice(0, 2), ["stop-1", "stop-2"])
     assert.equal(asked?.orderedPickupIds.length, 51)
     assert.equal(horizonRequest({ open: open.slice(0, 50), hasDepot: true, active: null, ...none })?.solver, "optimiser")
+    // A full trip's station takes a location: fifty open stops beside it are measured, forty-nine optimised.
+    assert.equal(horizonRequest({ open: open.slice(0, 50), hasDepot: true, hasStation: true, active: null, ...none })?.solver, "baseline")
+    assert.equal(horizonRequest({ open: open.slice(0, 49), hasDepot: true, hasStation: true, active: null, ...none })?.solver, "optimiser")
   })
 
   test("under a machine's order — an optimiser's or a baseline — the size rule again: a stale machine order is simply asked anew", () => {

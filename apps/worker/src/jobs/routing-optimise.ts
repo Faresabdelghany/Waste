@@ -1,6 +1,7 @@
 // Optimisation as a job (#171, decided on #124 and #132): `routing.optimise`
 // takes an `optimiser` Plan — sent by `POST /routes/:id/optimise` for a route
-// of fifty open stops or fewer that names a depot (#170, `optimiseSolver`) —
+// of fifty open stops or fewer that names a depot, forty-nine on a full trip
+// whose station is a location too (#170, `optimiseSolver`) —
 // orders the route's open stops through the provider's optimiser, and writes
 // the answer: the stops in the solver's order (the Plan's sequence, written
 // on `ready` for a solved one, #124 §1), the legs, the totals, the
@@ -57,7 +58,7 @@ import { plan, planLeg, planStop } from "@waste/db/schema/routing"
 import { withCompany } from "@waste/db/tenant"
 import { orderIsOpen } from "@waste/domain/execution/transitions"
 import type { RouteStatus } from "@waste/domain/execution/vocabulary"
-import { isSuperseded, OPTIMISER_MAX_STOPS } from "@waste/domain/routing/plans"
+import { isSuperseded, optimiserMaxStops } from "@waste/domain/routing/plans"
 import { withUnloads } from "@waste/domain/routing/reloads"
 import { SUPERSEDED, type PlanStopWarning, type PlanTrip } from "@waste/domain/routing/vocabulary"
 import { DEFAULT_PROFILE, type OptimiseRequest, type RoutedLeg } from "@waste/routing/provider"
@@ -115,7 +116,9 @@ async function gather(tx: Tx, keys: { planId: string; companyId: string; provide
     .where(and(eq(pickup.routeId, found.routeId), eq(pickup.status, "planned")))
     .orderBy(asc(pickup.position), asc(pickup.id))
   if (stops.length === 0) return { kind: "refused", sentence: "the route has no open pickups to order" }
-  if (stops.length > OPTIMISER_MAX_STOPS) return { kind: "refused", sentence: `the route has ${stops.length} open pickups, and one optimisation takes at most ${OPTIMISER_MAX_STOPS}` }
+  // A full trip's station is a location of the request too, so it takes one stop fewer.
+  const most = optimiserMaxStops(found.trip as PlanTrip)
+  if (stops.length > most) return { kind: "refused", sentence: `the route has ${stops.length} open pickups, and one optimisation takes at most ${most}${found.trip === "full" ? " beside its unloading station" : ""}` }
   const points: Position2D[] = []
   for (const stop of stops) {
     const at = positionOf(stop.property) ?? positionOf(stop.point)

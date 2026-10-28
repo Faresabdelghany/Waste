@@ -28,12 +28,12 @@ export const FAKE_SPEED_METRES_PER_SECOND = 10
 /**
  * The provider's own per-request limits (#118), kept so a caller that forgets
  * to chunk is refused here too: fifty waypoints a directions request, and
- * fifty stops an optimisation, as the domain's OPTIMISER_MAX_STOPS reads the
- * provider's fifty locations — whether its depot and station count against
- * them is unverified (#118), so the fake counts the stops alone.
+ * fifty locations an optimisation, counted as vroom-express counts them — a
+ * job one, a shipment two, the vehicle's start and end none — so a station
+ * held last as a job is one of them (OPTIMISER_MAX_LOCATIONS).
  */
 const MAX_WAYPOINTS = 50
-const MAX_STOPS = 50
+const MAX_LOCATIONS = 50
 
 /** Great-circle distance, whole metres. */
 export const haversineMetres = (a: Position2D, b: Position2D): number => Math.round(haversine(a, b))
@@ -101,9 +101,9 @@ export class FakeProvider implements RoutingProvider {
     return Promise.resolve(
       this.call<OptimiseResult>("optimisation", () => {
         const reload = request.station ? (request.reload ?? null) : null
-        // A shipment is two locations, its pickup and its delivery, as vroom-express counts them (O15 of #290).
-        const locations = request.stops.length * (reload ? 2 : 1)
-        if (locations > MAX_STOPS) return { refused: `the request has ${locations} locations; one optimisation takes at most ${MAX_STOPS}` }
+        // A shipment is two locations, its pickup and its delivery, and a station held last by its window one more, as vroom-express counts them (O15 of #290).
+        const locations = request.stops.length * (reload ? 2 : 1) + (request.station && !reload ? 1 : 0)
+        if (locations > MAX_LOCATIONS) return { refused: `the request has ${locations} locations; one optimisation takes at most ${MAX_LOCATIONS}` }
         const remaining = request.stops.map((stop, index) => ({ stop, index }))
         const order: number[] = []
         const unloads: number[] = []

@@ -101,6 +101,14 @@ describe("the deterministic fake provider (#169, #131)", () => {
     assert.equal(light.legs.length, 5)
   })
 
+  test("counts a station held last as one of its fifty locations: fifty stops on a full trip are refused, as vroom-express refuses fifty-one jobs; forty-nine are answered", async () => {
+    const many = Array.from({ length: 50 }, (_, index): Position2D => [12.5 + index / 1000, 55.7])
+    const full = await new FakeProvider().optimise({ profile: "driving-hgv", depot, stops: many, station })
+    assert.match(full.kind === "refused" ? full.sentence : "", /51 locations/)
+    assert.equal((await new FakeProvider().optimise({ profile: "driving-hgv", depot, stops: many.slice(1), station })).kind, "answered")
+    assert.equal((await new FakeProvider().optimise({ profile: "driving-hgv", depot, stops: many })).kind, "answered", "without a station, fifty stops are fifty locations")
+  })
+
   test("counts a stop sent with a reload as two locations, a shipment's pickup and delivery: twenty-six such stops are refused", async () => {
     const many = Array.from({ length: 26 }, (_, index): Position2D => [12.5 + index / 1000, 55.7])
     const answer = await new FakeProvider().optimise({ profile: "driving-hgv", depot, stops: many, station, reload: { capacityKg: 100, amounts: many.map(() => 10) } })
