@@ -75,6 +75,8 @@ import {
 import { Page, PageRequest } from "@waste/contracts/pagination"
 import type { Tx } from "@waste/db/client"
 import { vehicleAllocation, vehicleAllocationEvent } from "@waste/db/schema/allocations"
+import { wasteFraction } from "@waste/db/schema/catalogue"
+import { allocationOverPayload, carriesFraction, fractionsCarried, noCompartmentFor, payloadFor } from "@waste/domain/resources/fleet-fit"
 import { licenceRefusal, licenceSentence } from "@waste/domain/resources/licence"
 import type { AllocationAction, AllocationStatus } from "@waste/domain/resources/vocabulary"
 import { and, asc, eq, gt, inArray, ne, sql, type SQL } from "drizzle-orm"
@@ -89,6 +91,7 @@ import { afterCursor, fetchLimit, pageOf } from "../pagination"
 import { describeProblem, invalidRequest, problem, validate } from "../problem"
 import { daysThrough, refuseCrewAway } from "./availability-rules"
 import { dayInTimezone, lastDayInside } from "./days"
+import { fitsOf } from "./fleet-fit"
 import { findDriver, findVehicle, projectTimezone, vehicleLabel, type DriverRow, type VehicleRow } from "./fleet-lookups"
 import { requireDepot, requireWasteFraction, type Scope } from "./references"
 import { created, describeCreated, describeJson, IdParam, lockRow, refuseOverlap, stampsOf } from "./shared"
@@ -231,9 +234,9 @@ type Reservation = {
 type Reserved = { vehicle: VehicleRow | null; driver: DriverRow | null; trailer: VehicleRow | null }
 
 /** Which parts of a reservation a body moved: everything on the create, the fields a change carries, either bound moving the window. */
-type Moved = { vehicleId: boolean; driverId: boolean; trailerId: boolean; window: boolean; depotId: boolean; wasteFractionId: boolean }
+type Moved = { vehicleId: boolean; driverId: boolean; trailerId: boolean; window: boolean; depotId: boolean; wasteFractionId: boolean; requiredCapacityKg: boolean }
 
-const EVERYTHING: Moved = { vehicleId: true, driverId: true, trailerId: true, window: true, depotId: true, wasteFractionId: true }
+const EVERYTHING: Moved = { vehicleId: true, driverId: true, trailerId: true, window: true, depotId: true, wasteFractionId: true, requiredCapacityKg: true }
 
 /** What a change body moved, read off the fields it carries; a null carried is a move too, to nothing. */
 const movedBy = (body: Omit<VehicleAllocationChange, "reason">): Moved => ({
@@ -243,6 +246,7 @@ const movedBy = (body: Omit<VehicleAllocationChange, "reason">): Moved => ({
   window: body.plannedFrom !== undefined || body.plannedTo !== undefined,
   depotId: body.depotId !== undefined,
   wasteFractionId: body.wasteFractionId !== undefined,
+  requiredCapacityKg: body.requiredCapacityKg !== undefined,
 })
 
 /**
@@ -260,6 +264,38 @@ const movedBy = (body: Omit<VehicleAllocationChange, "reason">): Moved => ({
  * read only where a rule or an overlap sentence needs it, and its status is
  * never asked; the rows read are handed back for the sentences.
  */
+/**
+ * The vehicle carries what the allocation plans (O7 of #290): its fraction in
+ * one of its compartments (400 at `wasteFractionId`; a vehicle whose
+ * compartments name none carries any), and its required capacity within what
+ * one trip takes — of the fraction where it names one, the compartments
+ * carrying it within the vehicle's payload (400 at `requiredCapacityKg`). An
+ * allocation naming neither, or a vehicle saying no payload, is asked nothing.
+ */
+async function requireCarries(tx: Tx, scope: Scope, reservation: Reservation): Promise<void> {
+  if (reservation.wasteFractionId === null && reservation.requiredCapacityKg === null) return
+  const fit = (await fitsOf(tx, scope.companyId, [reservation.vehicleId])).get(reservation.vehicleId)
+  if (fit === undefined) return
+  const fraction = reservation.wasteFractionId === null ? null : await fractionName(tx, scope.companyId, reservation.wasteFractionId)
+  if (reservation.wasteFractionId !== null && !carriesFraction(fractionsCarried(fit.compartments), reservation.wasteFractionId)) {
+    throw invalidRequest("body", [{ path: "wasteFractionId", message: noCompartmentFor(fit.label, fraction ?? reservation.wasteFractionId) }])
+  }
+  const payloadKg = payloadFor(fit, reservation.wasteFractionId)
+  if (reservation.requiredCapacityKg !== null && payloadKg !== null && reservation.requiredCapacityKg > payloadKg) {
+    throw invalidRequest("body", [{ path: "requiredCapacityKg", message: allocationOverPayload(fit.label, payloadKg, reservation.requiredCapacityKg, fraction) }])
+  }
+}
+
+/** A fraction's name for a sentence. */
+async function fractionName(tx: Tx, companyId: string, id: string): Promise<string | null> {
+  const [row] = await tx
+    .select({ name: wasteFraction.name })
+    .from(wasteFraction)
+    .where(and(eq(wasteFraction.companyId, companyId), eq(wasteFraction.id, id)))
+    .limit(1)
+  return row?.name ?? null
+}
+
 async function holdReservation(tx: Tx, scope: Scope, reservation: Reservation, moved: Moved, except?: string): Promise<Reserved> {
   if (moved.window && !windowOrdered(reservation)) throw invalidRequest("body", [{ path: "plannedTo", message: WINDOW_ENDS_AFTER_IT_STARTS }])
 
@@ -300,6 +336,8 @@ async function holdReservation(tx: Tx, scope: Scope, reservation: Reservation, m
 
   if (moved.depotId) await requireDepot(tx, scope, reservation.depotId)
   if (moved.wasteFractionId) await requireWasteFraction(tx, scope.companyId, reservation.wasteFractionId)
+  // The vehicle carries what the allocation plans (O7 of #290), judged when the vehicle, the fraction or the capacity moved.
+  if (moved.vehicleId || moved.wasteFractionId || moved.requiredCapacityKg) await requireCarries(tx, scope, reservation)
 
   // The statuses last, 409s after every 400: what the body named afresh is in service.
   if (vehicle !== null && moved.vehicleId) refuseRetiredVehicle(vehicle.status, vehicleLabel(vehicle), "an allocation")
@@ -380,7 +418,7 @@ async function setStatus(tx: Tx, principal: Principal, id: string, status: Alloc
 }
 
 const RESERVATION_RULES =
-  "The vehicle is a powered vehicle of that project; the trailer, where given, a trailer of it and not the vehicle of another live allocation over the window; the driver, where given, a driver of that project who holds the licence class the vehicle requires on the window's last day, the last instant inside it rendered in the project's timezone, so a window ending at midnight is judged on the day before — refused at `driverId` with the reason (no class on record, a class too low, a licence expiring before the window ends); the depot one of that project's, the waste fraction this company's. The window is two instants and the end comes after the start. Then, after every such 400, the statuses: a vehicle or a trailer named afresh is in service and a driver named afresh is active — a retired, an inactive or a suspended one is refused (409) naming the row, its status and what the allocation needs, since the id is right and the row is there; and then whether each is there over the window's days on the project's clock (O6 of #290) — a vehicle or a trailer out of use, or a driver absent, on any of them is refused (409) naming the period — asked of what the body names afresh, and of the whole crew where the window moves."
+  "The vehicle is a powered vehicle of that project; the trailer, where given, a trailer of it and not the vehicle of another live allocation over the window; the driver, where given, a driver of that project who holds the licence class the vehicle requires on the window's last day, the last instant inside it rendered in the project's timezone, so a window ending at midnight is judged on the day before — refused at `driverId` with the reason (no class on record, a class too low, a licence expiring before the window ends); the depot one of that project's, the waste fraction this company's. The vehicle carries what the allocation plans (O7 of #290): its waste fraction in one of its compartments (a vehicle whose compartments name none carries any), refused at `wasteFractionId` (`WH-24 has no compartment for Glass`), and its `requiredCapacityKg` within what one trip takes — of the fraction where it names one, the capacity of the compartments carrying it within the vehicle's payload — refused at `requiredCapacityKg` (`WH-24 takes 3000 kg of Glass on one trip, less than the 3500 kg required`); judged when the vehicle, the fraction or the capacity moves. The window is two instants and the end comes after the start. Then, after every such 400, the statuses: a vehicle or a trailer named afresh is in service and a driver named afresh is active — a retired, an inactive or a suspended one is refused (409) naming the row, its status and what the allocation needs, since the id is right and the row is there; and then whether each is there over the window's days on the project's clock (O6 of #290) — a vehicle or a trailer out of use, or a driver absent, on any of them is refused (409) naming the period — asked of what the body names afresh, and of the whole crew where the window moves."
 
 export function vehicleAllocationRoutes(guard: MiddlewareHandler<AuthEnv>) {
   return new Hono<AuthEnv>()
@@ -444,7 +482,7 @@ export function vehicleAllocationRoutes(guard: MiddlewareHandler<AuthEnv>) {
         responses: {
           201: describeCreated("The allocation as it was written.", VehicleAllocation),
           400: describeProblem(
-            "The body is missing a field, names a member the server owns, names a project this account does not work in, ends on or before the instant it starts, asks to be created `released`, names a vehicle that is not a powered vehicle of that project, a trailer that is not a trailer of it or is another live allocation's vehicle over the window, a driver who is not that project's or may not take the vehicle on the window's last day, a depot that is not that project's, or a waste fraction that is not this company's — each at the field that is wrong.",
+            "The body is missing a field, names a member the server owns, names a project this account does not work in, ends on or before the instant it starts, asks to be created `released`, names a vehicle that is not a powered vehicle of that project, a trailer that is not a trailer of it or is another live allocation's vehicle over the window, a driver who is not that project's or may not take the vehicle on the window's last day, a depot that is not that project's, a waste fraction that is not this company's or that the vehicle has no compartment for, or a required capacity above what the vehicle takes on one trip — each at the field that is wrong.",
           ),
           401: describeProblem("No usable token (see WWW-Authenticate)."),
           403: describeProblem("No active account here, or the caller's role does not allow `create` on `fleet.vehicle-planning`."),
@@ -521,7 +559,7 @@ export function vehicleAllocationRoutes(guard: MiddlewareHandler<AuthEnv>) {
         responses: {
           200: describeJson("The allocation as it now stands.", VehicleAllocation),
           400: describeProblem(
-            "The path does not hold an id, or the body changes nothing beside the reason, has no reason, names a member the caller does not own (the project and the status included), leaves the window ending on or before its start, or names a vehicle, trailer, driver, depot or fraction the create would refuse at its field — each at the field that is wrong.",
+            "The path does not hold an id, or the body changes nothing beside the reason, has no reason, names a member the caller does not own (the project and the status included), leaves the window ending on or before its start, or names a vehicle, trailer, driver, depot, fraction or capacity the create would refuse at its field — each at the field that is wrong.",
           ),
           401: describeProblem("No usable token (see WWW-Authenticate)."),
           403: describeProblem("No active account here, or the caller's role does not allow `edit` on `fleet.vehicle-planning`."),
