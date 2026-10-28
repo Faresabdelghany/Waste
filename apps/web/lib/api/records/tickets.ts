@@ -40,6 +40,7 @@ import { isBillableResolution, OPEN_TICKET_STATUSES, TICKET_KINDS, TICKET_PRIORI
 import { isAgreementRecord } from "@/lib/data/agreements"
 import { FIXTURE_COMPANY_ID, type BusinessRecord, type ModuleLocation } from "@/lib/data/business-modules"
 import { isPropertyRecord, isSharedPointRecord, NO_ONE } from "@/lib/data/properties"
+import { TICKET_TEAM_PREFIX } from "@/lib/data/ticket-teams"
 
 import { command, create, get, listAll, patch } from "../client"
 import { inheritedPresentation, isLocalRefusal, ofKind, patchOf, said, stampFacts, statusLabel, statusToken, typed, webIdOf, type Client, type CommandInput, type LocalRefusal, type MappingContext, type RecordAction, type RecordCommand, type ResourceAdapter, type ServerModule } from "./adapter"
@@ -50,6 +51,7 @@ import { isCompanyRecord, userAdapter } from "./organisation"
 import { pickupAdapter } from "./pickups"
 import { projectServerIdOf, referenced, refusal } from "./places"
 import { productAdapter } from "./pricing"
+import { isTicketTeamRecord } from "./ticket-teams"
 import { nameVia, referencedServerId, webIdVia } from "./references"
 import { customerAdapter } from "./registry"
 import { routeAdapter } from "./routes"
@@ -139,6 +141,8 @@ export function toTicketRecord(ticket: Ticket, context: MappingContext): Busines
     Kind: statusLabel(ticket.kind),
     Priority: statusLabel(ticket.priority),
     Assignee: assignee ?? "Unassigned",
+    // The team it waits with (O30 of #290), by name once the teams are loaded; the list's Team category reads it.
+    Team: ticket.teamId === null ? "No team" : nameVia(context, TICKET_TEAM_PREFIX, ticket.teamId),
     // The wire's source under a fact of its own: the fixtures' "Source" is another vocabulary.
     "Opened via": statusLabel(ticket.source),
     Occurred: shownOn(ticket.occurredAt, project.timezone),
@@ -184,6 +188,7 @@ export function toTicketRecord(ticket: Ticket, context: MappingContext): Busines
       dueAt: ticket.dueAt === null ? "" : wallClockIn(ticket.dueAt, project.timezone),
       assigneeUserAccountId: ticket.assigneeUserAccountId === null ? "" : webIdVia(context, "user", ticket.assigneeUserAccountId),
       [ASSIGNEE_ACCOUNT_KEY]: ticket.assigneeUserAccountId ?? "",
+      teamId: ticket.teamId === null ? NO_ONE : webIdVia(context, TICKET_TEAM_PREFIX, ticket.teamId),
       ...linked,
       resolution: ticket.resolution ?? "",
       recollectionRouteId: ticket.recollectionRouteId === null ? "" : webIdVia(context, "route", ticket.recollectionRouteId),
@@ -281,6 +286,8 @@ export function toTicketCreateBody(record: BusinessRecord, context: MappingConte
   if (isLocalRefusal(dueAt)) return dueAt
   const assignee = assigneeOf(typed(record, "assigneeUserAccountId"), "assigneeUserAccountId", context)
   if (isLocalRefusal(assignee)) return assignee
+  const team = teamOf(typed(record, "teamId"), context)
+  if (isLocalRefusal(team)) return team
   const links: Record<string, string> = {}
   for (const [key, prefix, fact, owns] of OFFICE_TICKET_LINKS) {
     const serverId = linkOf(record, key, prefix, fact, owns, context)
@@ -304,6 +311,8 @@ export function toTicketCreateBody(record: BusinessRecord, context: MappingConte
     ...(occurredAt === undefined ? {} : { occurredAt }),
     ...(dueAt === undefined ? {} : { dueAt }),
     ...(assignee === null ? {} : { assigneeUserAccountId: assignee }),
+    // Blank leaves it to the project's default team for the kind; the picker's None is none.
+    ...(team === undefined ? {} : { teamId: team }),
     ...(Object.keys(links).length === 0 ? {} : { links }),
     ...(alertId === undefined ? {} : { alertId }),
     // The API answers a missed collection its stop's record answers unless told not to (M6 of #293): only the opt-out goes out.
@@ -311,7 +320,20 @@ export function toTicketCreateBody(record: BusinessRecord, context: MappingConte
   }
 }
 
-/** `PATCH /tickets/:id`: what moved of the case's own fields — never the status, the assignee, the source or the links. */
+/** The team a form names: undefined for blank, null for the picker's None, the team's server id, or a refusal for a team the API does not hold. */
+function teamOf(webId: string | undefined, context: MappingContext): string | null | undefined | LocalRefusal {
+  if (webId === undefined) return undefined
+  if (webId === NO_ONE) return null
+  return referencedServerId(webId, TICKET_TEAM_PREFIX, context, { owns: isTicketTeamRecord }) ?? refusal("teamId", "Pick a team the API holds")
+}
+
+/** The team a record names for a patch to compare: as `teamOf`, a team the API does not hold read as unsaid. */
+function teamRead(record: BusinessRecord, context: MappingContext): string | null | undefined {
+  const team = teamOf(typed(record, "teamId"), context)
+  return isLocalRefusal(team) ? undefined : team
+}
+
+/** `PATCH /tickets/:id`: what moved of the case's own fields, its team among them — never the status, the assignee, the source or the links. */
 export function toTicketPatchBody(before: BusinessRecord, after: BusinessRecord, context: MappingContext): unknown | null | LocalRefusal {
   for (const [key, tokens, sentence] of [
     ["kind", TICKET_KINDS, KIND_SENTENCE],
@@ -325,6 +347,8 @@ export function toTicketPatchBody(before: BusinessRecord, after: BusinessRecord,
   const timezone = projectTimezoneOf(after, context)
   const due = instantIn(after, "dueAt", timezone, A_TIME)
   if (isLocalRefusal(due)) return due
+  const team = teamOf(typed(after, "teamId"), context)
+  if (isLocalRefusal(team)) return team
   return patchOf(before, after, (record) => ({
     subject: typed(record, "subject"),
     description: typed(record, "description"),
@@ -332,6 +356,8 @@ export function toTicketPatchBody(before: BusinessRecord, after: BusinessRecord,
     priority: typed(record, "priority") === undefined ? undefined : statusToken(typed(record, "priority") as string),
     // A cleared due is null, which clears it; the instant is compared, not the spelling.
     dueAt: typed(record, "dueAt") === undefined ? null : instantOn(typed(record, "dueAt") as string, timezone),
+    // Handed to another team, or to none with the picker's None; refused above where the team is not one the API holds.
+    teamId: teamRead(record, context),
   }))
 }
 
