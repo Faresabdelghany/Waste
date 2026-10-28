@@ -1,8 +1,9 @@
 // Measurement as a job (#169, decided on #124 and #132; the quota engine of
 // #171): `routing.measure` takes a `baseline` or `manual` Plan whose stops
 // were written at creation (#124 §1: the sequence is written exactly once, on
-// creation for a known sequence), asks the provider through the quota engine
-// for the legs of its trip — in chunks above fifty waypoints, consecutive
+// creation for a known sequence), its unload visits on the way among them at
+// the station each names (O15 of #290), asks the provider through the quota
+// engine for the legs of its trip — in chunks above fifty waypoints, consecutive
 // chunks sharing a point — and writes what came back: the legs, the totals,
 // the provenance, `calculating → ready`. The queue is `exclusive` with the
 // Plan's id as `singletonKey`, so one Plan never holds two live jobs — two
@@ -35,6 +36,7 @@ import { isSuperseded } from "@waste/domain/routing/plans"
 import { SUPERSEDED, type PlanSolver } from "@waste/domain/routing/vocabulary"
 import { distinctConsecutive } from "@waste/routing/geodesy"
 import { asc, eq } from "drizzle-orm"
+import { alias } from "drizzle-orm/pg-core"
 import type { Job } from "pg-boss"
 
 import { defineJob, type JobContext, type JobQueueOptions } from "./definition"
@@ -67,17 +69,20 @@ async function gather(tx: Tx, keys: { planId: string; companyId: string; provide
   if (!ends) return { kind: "done", status: "without its route" }
   // A measurement of an order nobody reads any more makes no call (#132 §4).
   if (isSuperseded({ solver: found.solver as PlanSolver, planId, activePlanId: ends.activePlanId })) return { kind: "refused", sentence: SUPERSEDED }
+  // The Plan's stops in its order: its pickups at their places and its unload visits on the way at their station (O15 of #290).
+  const visitStation = alias(unloadingStation, "visit_station")
   const stops = await tx
-    .select({ position: planStop.position, property: property.location, point: sharedCollectionPoint.location })
+    .select({ position: planStop.position, kind: planStop.kind, property: property.location, point: sharedCollectionPoint.location, station: visitStation.location })
     .from(planStop)
-    .innerJoin(pickup, eq(planStop.pickupId, pickup.id))
+    .leftJoin(pickup, eq(planStop.pickupId, pickup.id))
     .leftJoin(property, eq(pickup.propertyId, property.id))
     .leftJoin(sharedCollectionPoint, eq(pickup.sharedCollectionPointId, sharedCollectionPoint.id))
+    .leftJoin(visitStation, eq(planStop.unloadingStationId, visitStation.id))
     .where(eq(planStop.planId, planId))
     .orderBy(asc(planStop.position))
   const points: Position2D[] = []
   for (const stop of stops) {
-    const at = positionOf(stop.property) ?? positionOf(stop.point)
+    const at = stop.kind === "unload" ? positionOf(stop.station) : (positionOf(stop.property) ?? positionOf(stop.point))
     if (!at) return { kind: "refused", sentence: `stop ${stop.position} has no location to route` }
     points.push(at)
   }

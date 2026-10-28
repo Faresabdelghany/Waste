@@ -1,6 +1,7 @@
 // Optimisation as a job (#171, decided on #124 and #132): `routing.optimise`
 // takes an `optimiser` Plan — sent by `POST /routes/:id/optimise` for a route
-// of fifty open stops or fewer that names a depot (#170, `optimiseSolver`) —
+// of fifty open stops or fewer that names a depot, forty-nine on a full trip
+// whose station is a location too (#170, `optimiseSolver`) —
 // orders the route's open stops through the provider's optimiser, and writes
 // the answer: the stops in the solver's order (the Plan's sequence, written
 // on `ready` for a solved one, #124 §1), the legs, the totals, the
@@ -35,6 +36,12 @@
 // route. The waiting the windows make is written on the ready Plan, for the
 // over-shift verdict.
 //
+// A route whose stops outweigh its planned vehicle on a full trip (O15 of
+// #290, `routeLoad`, the read the fingerprint makes too) sends each stop's
+// load and the payload: the solver visits the station whenever the vehicle is
+// full, and the Plan writes each such visit as an unload stop at the route's
+// station between the pickups it comes after.
+//
 // Everything else is routing.measure's rule (routing-plans.ts): the read and
 // the write in two fenced transactions around a call made outside both, what
 // cannot be optimised final, the quota's answers the engine's.
@@ -42,6 +49,7 @@ import type { Position2D } from "@waste/contracts/geojson"
 import type { Tx } from "@waste/db/client"
 import { activateSolved, classOf, ROUTING_OPTIMISE_QUEUE, type RoutingJobData } from "@waste/db/commands/plans"
 import { quotaRows, type QuotaRow } from "@waste/db/commands/routing-quota"
+import { reloadOver, routeLoad } from "@waste/db/commands/route-load"
 import { routeTiming } from "@waste/db/commands/stop-timing"
 import { property, sharedCollectionPoint } from "@waste/db/schema/customers"
 import { pickup, route } from "@waste/db/schema/execution"
@@ -50,8 +58,9 @@ import { plan, planLeg, planStop } from "@waste/db/schema/routing"
 import { withCompany } from "@waste/db/tenant"
 import { orderIsOpen } from "@waste/domain/execution/transitions"
 import type { RouteStatus } from "@waste/domain/execution/vocabulary"
-import { isSuperseded, OPTIMISER_MAX_STOPS } from "@waste/domain/routing/plans"
-import { SUPERSEDED, type PlanStopWarning } from "@waste/domain/routing/vocabulary"
+import { isSuperseded, optimiserMaxStops } from "@waste/domain/routing/plans"
+import { withUnloads } from "@waste/domain/routing/reloads"
+import { SUPERSEDED, type PlanStopWarning, type PlanTrip } from "@waste/domain/routing/vocabulary"
 import { DEFAULT_PROFILE, type OptimiseRequest, type RoutedLeg } from "@waste/routing/provider"
 import { and, asc, eq } from "drizzle-orm"
 import type { Job } from "pg-boss"
@@ -64,7 +73,7 @@ export { ROUTING_OPTIMISE_QUEUE }
 
 /** What the first transaction reads: the request and the pickups its stops are, or the sentence that ends the Plan. */
 type Gathered =
-  | { kind: "request"; request: OptimiseRequest; routeId: string; pickupIds: string[]; trip: string; operatingDate: string; quota: QuotaRow[]; warnings: Map<number, PlanStopWarning> }
+  | { kind: "request"; request: OptimiseRequest; routeId: string; pickupIds: string[]; trip: string; operatingDate: string; quota: QuotaRow[]; warnings: Map<number, PlanStopWarning>; unloadingStationId: string | null }
   | { kind: "refused"; sentence: string }
   | { kind: "done"; status: string }
 
@@ -81,6 +90,8 @@ async function gather(tx: Tx, keys: { planId: string; companyId: string; provide
       operatingDate: route.operatingDate,
       plannedStartTime: route.plannedStartTime,
       plannedDriverId: route.plannedDriverId,
+      plannedVehicleId: route.plannedVehicleId,
+      unloadingStationId: route.unloadingStationId,
       depot: depot.location,
       station: unloadingStation.location,
     })
@@ -105,15 +116,19 @@ async function gather(tx: Tx, keys: { planId: string; companyId: string; provide
     .where(and(eq(pickup.routeId, found.routeId), eq(pickup.status, "planned")))
     .orderBy(asc(pickup.position), asc(pickup.id))
   if (stops.length === 0) return { kind: "refused", sentence: "the route has no open pickups to order" }
-  if (stops.length > OPTIMISER_MAX_STOPS) return { kind: "refused", sentence: `the route has ${stops.length} open pickups, and one optimisation takes at most ${OPTIMISER_MAX_STOPS}` }
+  // A full trip's station is a location of the request too, so it takes one stop fewer.
+  const most = optimiserMaxStops(found.trip as PlanTrip)
+  if (stops.length > most) return { kind: "refused", sentence: `the route has ${stops.length} open pickups, and one optimisation takes at most ${most}${found.trip === "full" ? " beside its unloading station" : ""}` }
   const points: Position2D[] = []
   for (const stop of stops) {
     const at = positionOf(stop.property) ?? positionOf(stop.point)
     if (!at) return { kind: "refused", sentence: `stop ${stop.position} has no location to route` }
     points.push(at)
   }
-  // Each with its seconds at the kerb (O10 of #290) and its window (O14), on the clock the fingerprint read.
-  const timing = await routeTiming(tx, keys.companyId, ends, stops.map((stop) => stop.id))
+  // Each with its seconds at the kerb (O10 of #290) and its window (O14), on the clock the fingerprint read, and its load (O15).
+  const pickupIds = stops.map((stop) => stop.id)
+  const [timing, load] = await Promise.all([routeTiming(tx, keys.companyId, ends, pickupIds), routeLoad(tx, keys.companyId, ends, pickupIds)])
+  const reload = reloadOver(load, { solver: "optimiser", trip: found.trip as PlanTrip, pickupIds })
   const warnings = new Map<number, PlanStopWarning>()
   const timeWindows = stops.map((stop, index) => {
     const window = timing.stops.get(stop.id)?.window ?? null
@@ -130,17 +145,26 @@ async function gather(tx: Tx, keys: { planId: string; companyId: string; provide
     departure: timing.departure,
     ...(timing.breaks.length > 0 ? { breaks: timing.breaks } : {}),
     station: found.trip === "full" ? station : null,
+    ...(reload === null ? {} : { reload }),
   }
   const quota = await quotaRows(tx, { companyId: keys.companyId, provider: keys.provider })
-  return { kind: "request", request, routeId: found.routeId, pickupIds: stops.map((stop) => stop.id), trip: found.trip, operatingDate: ends.operatingDate, quota, warnings }
+  return { kind: "request", request, routeId: found.routeId, pickupIds, trip: found.trip, operatingDate: ends.operatingDate, quota, warnings, unloadingStationId: ends.unloadingStationId }
 }
 
-/** The solver's order as the Plan's stops and its legs as the Plan keeps them: a stops-only Plan the legs between its first and last stop, a full one every leg of the closed trip. Throws when the answer does not fit the trip asked for. */
-function shaped(gathered: Extract<Gathered, { kind: "request" }>, order: readonly number[], trip: readonly RoutedLeg[]): { pickupIds: string[]; legs: RoutedLeg[] } {
+/**
+ * The solver's order as the Plan's stops and its legs as the Plan keeps them:
+ * a stops-only Plan the legs between its first and last stop, a full one
+ * every leg of the closed trip, the station at each unload visit on the way
+ * (O15 of #290). Throws when the answer does not fit the trip asked for.
+ */
+function shaped(gathered: Extract<Gathered, { kind: "request" }>, order: readonly number[], unloads: readonly number[], trip: readonly RoutedLeg[]): { pickupIds: string[]; unloads: number[]; legs: RoutedLeg[] } {
   const { request } = gathered
-  const tripPoints: Position2D[] = [request.depot, ...order.map((index) => request.stops[index]), ...(request.station ? [request.station] : []), request.depot]
-  const legs = gathered.trip === "full" ? legsWithin(tripPoints, trip, 0, tripPoints.length - 1) : legsWithin(tripPoints, trip, 1, order.length)
-  return { pickupIds: order.map((index) => gathered.pickupIds[index]), legs }
+  const { station } = request
+  if (unloads.length > 0 && (!station || gathered.unloadingStationId === null)) throw new Error("the optimiser unloaded on the way of a trip with no station")
+  const driven = order.flatMap((index, place) => (station && unloads.includes(place) ? [station, request.stops[index]] : [request.stops[index]]))
+  const tripPoints: Position2D[] = [request.depot, ...driven, ...(station ? [station] : []), request.depot]
+  const legs = gathered.trip === "full" ? legsWithin(tripPoints, trip, 0, tripPoints.length - 1) : legsWithin(tripPoints, trip, 1, driven.length)
+  return { pickupIds: order.map((index) => gathered.pickupIds[index]), unloads: [...unloads], legs }
 }
 
 async function optimiseOne(job: Job<RoutingJobData>, context: JobContext): Promise<Disposition["status"]> {
@@ -174,10 +198,10 @@ async function optimiseOne(job: Job<RoutingJobData>, context: JobContext): Promi
     await recordLearned(context, companyId, "optimisation", before)
   }
   // The answer is shaped before anything is written: one that does not fit the trip it was asked for is final, since a retry would pay for the same answer again.
-  let solved: { pickupIds: string[]; legs: RoutedLeg[] } | undefined
+  let solved: ReturnType<typeof shaped> | undefined
   if (outcome.kind === "answered") {
     try {
-      solved = shaped(gathered, outcome.result.order, outcome.result.legs)
+      solved = shaped(gathered, outcome.result.order, outcome.result.unloads ?? [], outcome.result.legs)
     } catch (error) {
       const sentence = `the provider's answer did not fit the trip: ${error instanceof Error ? error.message : String(error)}`
       await withCompany(context.api.db, companyId, (tx: Tx) => failPlan(tx, planId, sentence, context.log, ROUTING_OPTIMISE_QUEUE))
@@ -206,9 +230,19 @@ async function optimiseOne(job: Job<RoutingJobData>, context: JobContext): Promi
           return "completed"
         }
         const { provenance } = outcome.result
-        const { pickupIds, legs } = solved as NonNullable<typeof solved>
+        const { pickupIds, unloads, legs } = solved as NonNullable<typeof solved>
         const warningOf = new Map([...gathered.warnings].map(([index, warning]) => [gathered.pickupIds[index], warning] as const))
-        await tx.insert(planStop).values(pickupIds.map((pickupId, index) => ({ companyId, projectId: locked.projectId, routeId: locked.routeId, planId, pickupId, position: index + 1, windowWarning: warningOf.get(pickupId) ?? null })))
+        // The pickups in the solver's order, its unload visits on the way between them at the route's station (O15 of #290).
+        await tx.insert(planStop).values(
+          withUnloads(pickupIds, unloads).map((stop, index) => ({
+            companyId,
+            projectId: locked.projectId,
+            routeId: locked.routeId,
+            planId,
+            position: index + 1,
+            ...(stop.kind === "pickup" ? { pickupId: stop.pickupId, windowWarning: warningOf.get(stop.pickupId) ?? null } : { kind: "unload", unloadingStationId: gathered.unloadingStationId }),
+          })),
+        )
         if (legs.length > 0) {
           await tx.insert(planLeg).values(legs.map((leg, index) => ({ companyId, projectId: locked.projectId, routeId: locked.routeId, planId, position: index + 1, path: leg.geometry, metres: leg.metres, seconds: leg.seconds })))
         }

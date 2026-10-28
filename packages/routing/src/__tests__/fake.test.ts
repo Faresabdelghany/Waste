@@ -83,6 +83,39 @@ describe("the deterministic fake provider (#169, #131)", () => {
     for (const leg of result.legs) assert.notDeepEqual(leg.geometry.coordinates[0], leg.geometry.coordinates[1])
   })
 
+  test("with a reload (O15 of #290), takes the nearest stop the vehicle can carry and unloads at the station when none can", async () => {
+    const result = answered(await fake.optimise({ profile: "driving-hgv", depot, stops, station, reload: { capacityKg: 1000, amounts: [600, 600, 600] } }))
+    // Stop 1 from the depot; neither other fits on top, so the station; from there stop 2 is nearer than 0; the station again; then 0.
+    assert.deepEqual([result.order, result.unloads], [
+      [1, 2, 0],
+      [1, 2],
+    ])
+    // depot → 1 → station → 2 → station → 0 → station → depot: seven legs.
+    assert.deepEqual(
+      result.legs.map((leg) => leg.geometry.coordinates.at(-1)),
+      [stops[1], station, stops[2], station, stops[0], station, depot],
+    )
+    // Within the payload it unloads once, at the end, as without one.
+    const light = answered(await fake.optimise({ profile: "driving-hgv", depot, stops, station, reload: { capacityKg: 1000, amounts: [300, 300, 300] } }))
+    assert.equal(light.unloads, undefined)
+    assert.equal(light.legs.length, 5)
+  })
+
+  test("counts a station held last as one of its fifty locations: fifty stops on a full trip are refused, as vroom-express refuses fifty-one jobs; forty-nine are answered", async () => {
+    const many = Array.from({ length: 50 }, (_, index): Position2D => [12.5 + index / 1000, 55.7])
+    const full = await new FakeProvider().optimise({ profile: "driving-hgv", depot, stops: many, station })
+    assert.match(full.kind === "refused" ? full.sentence : "", /51 locations/)
+    assert.equal((await new FakeProvider().optimise({ profile: "driving-hgv", depot, stops: many.slice(1), station })).kind, "answered")
+    assert.equal((await new FakeProvider().optimise({ profile: "driving-hgv", depot, stops: many })).kind, "answered", "without a station, fifty stops are fifty locations")
+  })
+
+  test("counts a stop sent with a reload as two locations, a shipment's pickup and delivery: twenty-six such stops are refused", async () => {
+    const many = Array.from({ length: 26 }, (_, index): Position2D => [12.5 + index / 1000, 55.7])
+    const answer = await new FakeProvider().optimise({ profile: "driving-hgv", depot, stops: many, station, reload: { capacityKg: 100, amounts: many.map(() => 10) } })
+    assert.equal(answer.kind, "refused")
+    assert.equal((await new FakeProvider().optimise({ profile: "driving-hgv", depot, stops: many.slice(1), station, reload: { capacityKg: 100, amounts: many.map(() => 10) } })).kind, "answered")
+  })
+
   test("carries its provenance: the response-side facts #132 keeps off the fingerprint", async () => {
     const { provenance } = answered(await fake.measure({ profile: "driving-hgv", points: [depot, station] }))
     assert.deepEqual(provenance, { engineVersion: "fake", graphDate: null })

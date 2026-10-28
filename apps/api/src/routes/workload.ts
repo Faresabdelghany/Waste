@@ -11,8 +11,9 @@
 // Beside it, the route's day against its planned driver's shift (O14 of
 // #290), the over-shift verdict (`routeShift`, @waste/domain/execution/shift):
 // the planned start, the active Plan's drive and the waiting its windows
-// made, the stop time above and the break, against the shift. A page's is
-// two statements more, over its drivers and its active Plans.
+// made, the stop time above, the unload visits the Plan makes on the way
+// (O15) and the break, against the shift. A page's is three statements more,
+// over its drivers, its active Plans and their unload visits.
 import type { RouteShift, RouteWorkload } from "@waste/contracts/routes"
 import type { Tx } from "@waste/db/client"
 import { shiftColumns, shiftOf } from "@waste/db/commands/stop-timing"
@@ -20,7 +21,7 @@ import { containerType, wasteFraction } from "@waste/db/schema/catalogue"
 import { container } from "@waste/db/schema/containers"
 import { pickup } from "@waste/db/schema/execution"
 import { driver, vehicle } from "@waste/db/schema/fleet"
-import { plan } from "@waste/db/schema/routing"
+import { plan, planStop } from "@waste/db/schema/routing"
 import { routeShift } from "@waste/domain/execution/shift"
 import { routeWorkload, type WorkloadStop } from "@waste/domain/execution/workload"
 import type { PickupService, PickupStatus } from "@waste/domain/execution/vocabulary"
@@ -93,7 +94,7 @@ export async function shiftsByRoute(
   if (routes.length === 0) return new Map()
   const driverIds = [...new Set(routes.flatMap((row) => (row.plannedDriverId === null ? [] : [row.plannedDriverId])))]
   const planIds = routes.flatMap((row) => (row.activePlanId === null ? [] : [row.activePlanId]))
-  const [drivers, plans] = await Promise.all([
+  const [drivers, plans, unloads] = await Promise.all([
     driverIds.length === 0
       ? []
       : tx
@@ -106,7 +107,15 @@ export async function shiftsByRoute(
           .select({ id: plan.id, durationSeconds: plan.durationSeconds, waitingSeconds: plan.waitingSeconds })
           .from(plan)
           .where(and(eq(plan.companyId, companyId), inArray(plan.id, planIds))),
+    planIds.length === 0
+      ? []
+      : tx
+          .select({ planId: planStop.planId, visits: count() })
+          .from(planStop)
+          .where(and(eq(planStop.companyId, companyId), inArray(planStop.planId, planIds), eq(planStop.kind, "unload")))
+          .groupBy(planStop.planId),
   ])
+  const visits = new Map(unloads.map((row) => [row.planId, row.visits]))
   const shifts = new Map(drivers.map((row) => [row.id, shiftOf(row)]))
   const measured = new Map(plans.map((row) => [row.id, row]))
   return new Map(
@@ -120,6 +129,7 @@ export async function shiftsByRoute(
           driveSeconds: active?.durationSeconds ?? null,
           waitingSeconds: active?.waitingSeconds ?? null,
           stopSeconds: (workloads.get(row.id) ?? NO_WORKLOAD).stopSeconds,
+          unloads: active === undefined ? 0 : (visits.get(active.id) ?? 0),
         }),
       ]
     }),

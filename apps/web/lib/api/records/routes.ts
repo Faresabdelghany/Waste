@@ -189,7 +189,9 @@ export function toRouteRecord(route: RouteRead, context: MappingContext): Busine
   const workload = "workload" in route ? route.workload : undefined
   if (plan?.distanceMetres != null) facts.Distance = formatDistance(plan.distanceMetres)
   if (plan?.durationSeconds != null) facts.Duration = formatDuration(plan.durationSeconds + (workload?.stopSeconds ?? 0))
-  if (workload !== undefined) Object.assign(facts, workloadFacts(workload))
+  if (workload !== undefined) Object.assign(facts, workloadFacts(workload, plan?.unloads.length ?? 0))
+  const unloads = plan?.unloads ?? []
+  if (unloads.length > 0) facts["Unloads on the way"] = unloadsFact(unloads.length)
   if ("shift" in route && route.shift !== undefined) Object.assign(facts, shiftFacts(route.shift))
   const warned = plan?.stopWarnings ?? []
   if (warned.length > 0) facts["Window warnings"] = warned.map((stop) => `Stop ${stop.position}: ${STOP_WARNING_SENTENCES[stop.warning]}`).join("; ")
@@ -534,21 +536,25 @@ const kilograms = (value: number) => `${new Intl.NumberFormat("en").format(value
 /**
  * What a route's stops take and weigh (O10 of #290), as its facts say it: the
  * time at the kerb its Duration adds to the drive, and the load its stops are
- * expected to weigh against the planned vehicle's payload — over it, the
- * office plans a tip, since the optimiser is never held to it. Neither where
- * the route has no stop to say it of.
+ * expected to weigh against the planned vehicle's payload — over it, its
+ * Plan unloads on the way where it has unload visits (O15 of #290), and the
+ * office plans a tip where it has none. Neither where the route has no stop
+ * to say it of.
  */
-export function workloadFacts(workload: RouteWorkload): Record<string, string> {
+export function workloadFacts(workload: RouteWorkload, unloadsOnTheWay = 0): Record<string, string> {
   const facts: Record<string, string> = {}
   if (workload.stopSeconds > 0) facts["Stop time"] = formatDuration(workload.stopSeconds)
   if (workload.expectedKg !== null) {
     const against = workload.capacityKg === null ? kilograms(workload.expectedKg) : `${kilograms(workload.expectedKg)} of ${kilograms(workload.capacityKg)}`
-    const over = workload.overCapacityKg !== null && workload.overCapacityKg > 0 ? `: over by ${kilograms(workload.overCapacityKg)}, plan a tip` : ""
+    const over = workload.overCapacityKg !== null && workload.overCapacityKg > 0 ? `: over by ${kilograms(workload.overCapacityKg)}, ${unloadsOnTheWay > 0 ? "so its Plan unloads on the way" : "plan a tip"}` : ""
     const uncounted = workload.unexpectedStops > 0 ? `, ${workload.unexpectedStops} ${workload.unexpectedStops === 1 ? "stop" : "stops"} not counted` : ""
     facts["Expected load"] = `${against}${over}${uncounted}`
   }
   return facts
 }
+
+/** The unload visits a route's Plan makes on the way (O15 of #290), as its facts say them: where the vehicle is full before its last stop, it empties and goes on. */
+export const unloadsFact = (visits: number): string => `${visits} ${visits === 1 ? "visit" : "visits"} to the unloading station before the last stop, where the vehicle is full`
 
 /** What the office is told of a stop its Plan holds outside its Service Window (O14 of #290): planned all the same, and the record or the route to look at. */
 export const STOP_WARNING_SENTENCES: Readonly<Record<PlanStopWarning, string>> = {

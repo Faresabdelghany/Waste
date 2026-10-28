@@ -123,7 +123,7 @@ describe("Route", () => {
   })
 
   test("a listed route carries its active Plan's reading, or null, and holds the label to the number like the rest (#173)", () => {
-    const activePlan = { id: OTHER, solver: "manual", status: "calculating", trip: "full", distanceMetres: null, durationSeconds: null, stale: false, deferredUntil: "2026-10-05T09:00:30.000Z", stopWarnings: [] }
+    const activePlan = { id: OTHER, solver: "manual", status: "calculating", trip: "full", distanceMetres: null, durationSeconds: null, stale: false, deferredUntil: "2026-10-05T09:00:30.000Z", stopWarnings: [], unloads: [] }
     assert.deepEqual(RouteListItem.parse({ ...route, activePlan, workload, shift }), { ...route, activePlan, workload, shift })
     assert.deepEqual(RouteListItem.parse({ ...route, activePlan: null, workload, shift }), { ...route, activePlan: null, workload, shift })
     assert.equal(RouteListItem.safeParse({ ...route, workload }).success, false, "the reading is there, null or not")

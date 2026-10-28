@@ -11,7 +11,10 @@
 // date's midnight; the shift's end is never sent as a bound, so a route too
 // long for its shift is still planned, and told so: the over-shift verdict
 // (`routeShift`) reads the route's start, the active Plan's drive and the
-// waiting its windows made, the stop time and the break against the shift.
+// waiting its windows made, the stop time, the unload visits it makes on the
+// way (O15) and the break against the shift.
+
+import { UNLOAD_SECONDS } from "../routing/reloads"
 
 /** A break's minutes: the bounds the database and the wire hold it to. */
 export const BREAK_MINUTES = { min: 1, max: 240 } as const
@@ -105,6 +108,8 @@ export type RouteShiftInput = {
   waitingSeconds: number | null
   /** Seconds at the stops still planned (`routeWorkload`). */
   stopSeconds: number
+  /** The unload visits its active Plan makes on the way (O15 of #290), each `UNLOAD_SECONDS` at the station; none where absent. */
+  unloads?: number
 }
 
 /** A route's day against its driver's shift. */
@@ -113,19 +118,19 @@ export type RouteShift = {
   shift: DriverShift | null
   /** When the route leaves: the planned start, the shift's start without one; null where neither says. */
   startsAt: string | null
-  /** The working time it plans: the drive, the waiting, the stop time and the break; null without a measured Plan. */
+  /** The working time it plans: the drive, the waiting, the stop time, the unloads on the way and the break; null without a measured Plan. */
   workSeconds: number | null
   /** How far the route runs outside the shift — starting before it or ending after it — 0 within it; null without a shift or a measured Plan. */
   overShiftSeconds: number | null
 }
 
-/** The over-shift verdict: the route's planned day — leaving at its start, working its drive, waiting, stops and break — against its driver's shift. */
+/** The over-shift verdict: the route's planned day — leaving at its start, working its drive, waiting, stops, unloads on the way and break — against its driver's shift. */
 export function routeShift(input: RouteShiftInput): RouteShift {
   const { shift } = input
   const startsAt = departureOf(input.plannedStartTime, shift)
   if (input.driveSeconds === null) return { shift, startsAt, workSeconds: null, overShiftSeconds: null }
   const breakSeconds = (shift?.breakMinutes ?? 0) * 60
-  const workSeconds = input.driveSeconds + (input.waitingSeconds ?? 0) + input.stopSeconds + breakSeconds
+  const workSeconds = input.driveSeconds + (input.waitingSeconds ?? 0) + input.stopSeconds + (input.unloads ?? 0) * UNLOAD_SECONDS + breakSeconds
   if (shift === null || startsAt === null) return { shift, startsAt, workSeconds, overShiftSeconds: null }
   const start = secondsOfDay(startsAt)
   const early = Math.max(0, secondsOfDay(shift.from) - start)

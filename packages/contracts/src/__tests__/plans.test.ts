@@ -67,16 +67,23 @@ describe("OptimiseAnswer: the Plan an Optimise request got, and why it is a base
 
 describe("ActivePlan: the reading a route carries (#132 §5)", () => {
   test("parses with its staleness and deferral, totals null while measuring", () => {
-    const measuring = { id: IDS.id, solver: "manual", status: "calculating", trip: "stops-only", distanceMetres: null, durationSeconds: null, stale: false, deferredUntil: null, stopWarnings: [] }
+    const measuring = { id: IDS.id, solver: "manual", status: "calculating", trip: "stops-only", distanceMetres: null, durationSeconds: null, stale: false, deferredUntil: null, stopWarnings: [], unloads: [] }
     assert.deepEqual(ActivePlan.parse(measuring), measuring)
     const stale = { ...measuring, status: "ready", distanceMetres: 900, durationSeconds: 90, stale: true }
     assert.deepEqual(ActivePlan.parse(stale), stale)
   })
 
   test("names the stops it holds outside their service window by their place in its order, and only the warnings the vocabulary holds (O14 of #290)", () => {
-    const warned = { id: IDS.id, solver: "optimiser", status: "ready", trip: "full", distanceMetres: 900, durationSeconds: 90, stale: false, deferredUntil: null, stopWarnings: [{ pickupId: IDS.id, position: 3, warning: "window-unreachable" }] }
+    const warned = { id: IDS.id, solver: "optimiser", status: "ready", trip: "full", distanceMetres: 900, durationSeconds: 90, stale: false, deferredUntil: null, stopWarnings: [{ pickupId: IDS.id, position: 3, warning: "window-unreachable" }], unloads: [] }
     assert.deepEqual(ActivePlan.parse(warned), warned)
     assert.equal(ActivePlan.safeParse({ ...warned, stopWarnings: [{ pickupId: IDS.id, position: 3, warning: "late" }] }).success, false)
     assert.equal(ActivePlan.safeParse({ ...warned, stopWarnings: [{ pickupId: IDS.id, position: 0, warning: "windows-disjoint" }] }).success, false)
+  })
+
+  test("carries the unload visits it makes on the way, each after the stop it follows at a station, both by id (O15 of #290)", () => {
+    const reloaded = { id: IDS.id, solver: "optimiser", status: "ready", trip: "full", distanceMetres: 900, durationSeconds: 90, stale: false, deferredUntil: null, stopWarnings: [], unloads: [{ afterPickupId: IDS.id, unloadingStationId: IDS.id }] }
+    assert.deepEqual(ActivePlan.parse(reloaded), reloaded)
+    assert.equal(ActivePlan.safeParse({ ...reloaded, unloads: [{ afterPickupId: "stop 3", unloadingStationId: IDS.id }] }).success, false)
+    assert.equal(ActivePlan.safeParse({ ...reloaded, unloads: undefined }).success, false)
   })
 })

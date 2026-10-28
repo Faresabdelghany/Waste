@@ -17,7 +17,7 @@ import { readFile } from "node:fs/promises"
 import { join } from "node:path"
 import { describe, test } from "node:test"
 
-import { PLAN_SOLVERS, PLAN_STATUSES, PLAN_STOP_WARNINGS, PLAN_TRIPS } from "@waste/domain/routing/vocabulary"
+import { PLAN_SOLVERS, PLAN_STATUSES, PLAN_STOP_KINDS, PLAN_STOP_WARNINGS, PLAN_TRIPS } from "@waste/domain/routing/vocabulary"
 
 import { MIGRATIONS_FOLDER } from "../migrate"
 import { route } from "../schema/execution"
@@ -66,29 +66,45 @@ const planTable = (asOf: "0013" | "0056"): string =>
     ...(asOf >= "0056" ? [`CONSTRAINT "plan_waiting_shape" CHECK (${ref("plan", "waiting_seconds")} is null or (${ref("plan", "waiting_seconds")} >= 0 and ${ref("plan", "status")} = 'ready' and ${ref("plan", "solver")} = 'optimiser'))`] : []),
   ])
 
-/** plan_stop as 0013 made it, and as drizzle-kit writes it since 0056, with why the optimiser ordered a stop outside its window. */
-const planStopTable = (asOf: "0013" | "0056"): string =>
+/**
+ * plan_stop as 0013 made it, as drizzle-kit writes it since 0056, with why the
+ * optimiser ordered a stop outside its window, and since 0058 (O15 of #290),
+ * with its kind — a pickup or an unload visit on the way — and the station a
+ * visit names, its pickup no longer required.
+ */
+const planStopTable = (asOf: "0013" | "0056" | "0058"): string =>
   createLedger("plan_stop", [
     '"route_id" uuid NOT NULL',
     '"plan_id" uuid NOT NULL',
-    '"pickup_id" uuid NOT NULL',
+    ...(asOf >= "0058" ? [`"kind" text DEFAULT 'pickup' NOT NULL`, '"pickup_id" uuid', '"unloading_station_id" uuid'] : ['"pickup_id" uuid NOT NULL']),
     '"position" integer NOT NULL',
     ...(asOf >= "0056" ? ['"window_warning" text'] : []),
     uniqueKey("plan_stop_plan_id_position_key", "company_id", "plan_id", "position"),
     uniqueKey("plan_stop_plan_id_pickup_id_key", "company_id", "plan_id", "pickup_id"),
     positiveCheck("plan_stop", "position"),
+    ...(asOf >= "0058" ? [oneOfCheck("plan_stop", "kind", ...PLAN_STOP_KINDS)] : []),
     ...(asOf >= "0056" ? [oneOfCheck("plan_stop", "window_warning", ...PLAN_STOP_WARNINGS)] : []),
+    ...(asOf >= "0058"
+      ? [
+          `CONSTRAINT "plan_stop_kind_shape" CHECK (case ${ref("plan_stop", "kind")} when 'pickup' then ${ref("plan_stop", "pickup_id")} is not null and ${ref("plan_stop", "unloading_station_id")} is null else ${ref("plan_stop", "pickup_id")} is null and ${ref("plan_stop", "unloading_station_id")} is not null and ${ref("plan_stop", "window_warning")} is null end)`,
+        ]
+      : []),
   ])
 
-/** What 0056 changed: the plan's and its stops' CREATE TABLEs as drizzle-kit generates them now onto what 0013 says; time-windows-rendering.test.ts pins the statements. */
-const CHANGED_IN_0056 = new Map([
+/** What 0056 and 0058 changed: the plan's and its stops' CREATE TABLEs as drizzle-kit generates them now onto what 0013 says; time-windows-rendering.test.ts and multi-trip-rendering.test.ts pin the statements. */
+const CHANGED_SINCE_0013 = new Map([
   [planTable("0056"), planTable("0013")],
-  [planStopTable("0056"), planStopTable("0013")],
+  [planStopTable("0058"), planStopTable("0013")],
 ])
+
+/** What 0058 added beside the stops' table: the station's key and its index, which 0013 never wrote. */
+const STATION_KEY = foreignKey("plan_stop", "plan_stop_unloading_station_id_fk", ["company_id", "unloading_station_id"], "unloading_station", ["company_id", "id"])
+const STATION_INDEX = index("plan_stop", "plan_stop_unloading_station_id_idx", "company_id", "unloading_station_id")
+const ADDED_IN_0058 = new Set([STATION_KEY, STATION_INDEX])
 
 const expected = [
   planTable("0056"),
-  planStopTable("0056"),
+  planStopTable("0058"),
   createLedger("plan_leg", [
     '"route_id" uuid NOT NULL',
     '"plan_id" uuid NOT NULL',
@@ -109,6 +125,7 @@ const expected = [
   projectFkTo("plan_stop", "route_id", "route"),
   planFk("plan_stop"),
   foreignKey("plan_stop", "plan_stop_route_id_pickup_id_fk", ["company_id", "project_id", "route_id", "pickup_id"], "pickup", ["company_id", "project_id", "route_id", "id"]),
+  STATION_KEY,
   companyFk("plan_leg"),
   projectFk("plan_leg"),
   projectFkTo("plan_leg", "route_id", "route"),
@@ -116,6 +133,7 @@ const expected = [
   index("plan", "plan_fingerprint_idx", "company_id", "fingerprint"),
   index("plan_stop", "plan_stop_project_id_idx", "company_id", "project_id"),
   index("plan_stop", "plan_stop_pickup_id_idx", "company_id", "pickup_id"),
+  STATION_INDEX,
   index("plan_leg", "plan_leg_project_id_idx", "company_id", "project_id"),
 ]
 
@@ -129,7 +147,10 @@ const handWritten = Object.values(tables).flatMap((table) => handWrittenStatemen
 const generatedAlterations = (): Promise<string[]> => statementsBetween({ route: routeAsOf("0012") }, { route: routeAsOf("0013") })
 
 /** Everything drizzle-kit wrote at the head of 0013: the three tables and the altered route. */
-const generatedHead = async (): Promise<string[]> => [...(await statementsFor(tables)).map((statement) => CHANGED_IN_0056.get(statement) ?? statement), ...(await generatedAlterations())]
+const generatedHead = async (): Promise<string[]> => [
+  ...(await statementsFor(tables)).filter((statement) => !ADDED_IN_0058.has(statement)).map((statement) => CHANGED_SINCE_0013.get(statement) ?? statement),
+  ...(await generatedAlterations()),
+]
 
 const fileStatements = async (): Promise<string[]> => statementsOf(await readFile(join(MIGRATIONS_FOLDER, MIGRATION), "utf8"))
 
@@ -174,7 +195,7 @@ describe("the Routing tables as drizzle-kit writes them", () => {
 describe("the checks of this context", () => {
   test("every check renders without parameters, and the three one_of checks read the routing vocabulary", () => {
     assert.deepEqual([...checksOf(plan).keys()], ["plan_solver_one_of", "plan_status_one_of", "plan_trip_one_of", "plan_totals_shape", "plan_failure_shape", "plan_deferred_shape", "plan_waiting_shape"])
-    assert.deepEqual([...checksOf(planStop).keys()], ["plan_stop_position_positive", "plan_stop_window_warning_one_of"])
+    assert.deepEqual([...checksOf(planStop).keys()], ["plan_stop_position_positive", "plan_stop_kind_one_of", "plan_stop_window_warning_one_of", "plan_stop_kind_shape"])
     assert.deepEqual([...checksOf(planLeg).keys()], ["plan_leg_position_positive", "plan_leg_path_valid", "plan_leg_measure_shape"])
     const checks = checksOf(plan)
     for (const solver of PLAN_SOLVERS) assert.ok(checks.get("plan_solver_one_of")?.includes(`'${solver}'`), solver)

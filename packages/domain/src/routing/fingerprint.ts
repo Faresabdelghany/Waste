@@ -19,6 +19,7 @@
 // re-minted at the same place, key alike, so an equal fingerprint does not
 // say a Plan names the request's stops — the cache asks that too
 // (`answersRequest`, ./plans.ts; #212).
+import type { Reload } from "./reloads"
 import type { PlanSolver } from "./vocabulary"
 
 /** Five decimals ≈ 1.1 m at Danish latitudes: the "about a metre" #124 meant, pinned. */
@@ -60,6 +61,12 @@ export type FingerprintInputs = {
   stopTimes?: readonly { window: readonly [number, number] | null | "disjoint"; serviceSeconds: number }[]
   /** Every constraint that can affect the result, flat scalars only. */
   constraints?: Readonly<Record<string, string | number | boolean>>
+  /**
+   * The payload and each stop's load, by its index into `stops`, where the
+   * request unloads on the way (O15 of #290, `reloadOf`); absent, a request
+   * tips once at the end and keys as before.
+   */
+  reload?: Reload | null
 }
 
 const spell = (position: FingerprintPosition): string => `${roundCoordinate(position[0]).toFixed(FINGERPRINT_DECIMALS)},${roundCoordinate(position[1]).toFixed(FINGERPRINT_DECIMALS)}`
@@ -83,10 +90,15 @@ const spellTime = (time: NonNullable<FingerprintInputs["stopTimes"]>[number] | u
  * when they can move the order: without one the solver's cost is the drive,
  * so they never change the order or a leg, and spelling them would send
  * every active Plan back to the provider once for an answer it already holds.
- * A timed request's departure and break are its `constraints`.
+ * A timed request's departure and break are its `constraints`, and a request
+ * that unloads on the way (O15) spells each stop's load beside it and the
+ * payload among them.
  */
 export function planFingerprint(inputs: FingerprintInputs): string {
-  const stops = inputs.stops.map((stop, index) => (typeof stop === "string" ? `none(${stop})` : spell(stop)) + spellTime(inputs.stopTimes?.[index]))
+  const { reload } = inputs
+  const stops = inputs.stops.map(
+    (stop, index) => (typeof stop === "string" ? `none(${stop})` : spell(stop)) + spellTime(inputs.stopTimes?.[index]) + (reload ? `~${reload.amounts[index] ?? 0}` : ""),
+  )
   if (inputs.solver === "optimiser") stops.sort()
   return [
     `provider=${inputs.provider}`,
@@ -96,6 +108,6 @@ export function planFingerprint(inputs: FingerprintInputs): string {
     `depot=${inputs.depot ? spell(inputs.depot) : "none"}`,
     `station=${inputs.station ? spell(inputs.station) : "none"}`,
     `stops=${stops.join(";")}`,
-    `constraints=${spellRecord(inputs.constraints)}`,
+    `constraints=${spellRecord(reload ? { ...inputs.constraints, capacityKg: reload.capacityKg } : inputs.constraints)}`,
   ].join("|")
 }

@@ -9,7 +9,7 @@ import { describe, test } from "node:test"
 
 import type { QueueEntry } from "../command-queue"
 import type { PilotCommand } from "../commands"
-import { endRouteWarning, EXTRA_EMPTYING, MAPS_STOPS_MAX, mapsHref, routeActions, routeMapsHref, routesInDayOrder, stopActions, stopCollects, stopServices, stopsInOrder, unreachableBanner, waitingOn } from "../route-view"
+import { endRouteWarning, entriesInOrder, EXTRA_EMPTYING, MAPS_STOPS_MAX, mapsHref, routeActions, routeMapsHref, routesInDayOrder, stopActions, stopCollects, stopServices, stopsInOrder, unreachableBanner, waitingOn } from "../route-view"
 import { pickup, pickupId, route, ROUTE_ID, routeDetail } from "./driver-fixtures"
 
 const queued = (command: Pick<PilotCommand, "kind" | "body"> & { routeId?: string }): QueueEntry =>
@@ -21,6 +21,20 @@ describe("the stops", () => {
     assert.deepEqual(stopsInOrder(pickups).map((stop) => stop.position), [2, 3, 1])
     const unsequenced = [pickup(2, { sequence: undefined }), pickup(1, { sequence: undefined })]
     assert.deepEqual(stopsInOrder(unsequenced).map((stop) => stop.position), [1, 2])
+  })
+
+  test("carry the active Plan's unload visits on the way, each after the stop it follows (O15 of #290); a visit after a stop the read lacks, or a Plan without them, adds nothing", () => {
+    const pickups = [pickup(1, { sequence: 2 }), pickup(2, { sequence: 1 }), pickup(3, { sequence: 3 })]
+    const station = "01950000-0000-7000-8000-000000000501"
+    const entries = entriesInOrder(pickups, { unloads: [{ afterPickupId: pickupId(1), unloadingStationId: station }, { afterPickupId: pickupId(9), unloadingStationId: station }] })
+    assert.deepEqual(
+      entries.map((entry) => (entry.kind === "stop" ? entry.stop.position : entry.unloadingStationId)),
+      [2, 1, station, 3],
+    )
+    assert.deepEqual(
+      entriesInOrder(pickups, null).map((entry) => entry.kind),
+      ["stop", "stop", "stop"],
+    )
   })
 
   test("say what they collect beneath the address: the container and the fraction, or at an address-only stop the office added, the fraction alone (#111)", () => {

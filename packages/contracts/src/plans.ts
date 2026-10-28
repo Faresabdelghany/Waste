@@ -87,7 +87,9 @@ export type PlanDetail = z.infer<typeof PlanDetail>
  * The active Plan as a route's read carries it (#124 §5): what every
  * per-route sentence of #132 §5 needs — Not measured (no Plan at all) ·
  * Measuring… · Waiting until `deferredUntil` · the totals · failed · Stale —
- * off the route alone, never a join to the quota.
+ * off the route alone, never a join to the quota. A stop warning's
+ * `position` is its place among the Plan's pickups, the unload visits not
+ * counted.
  */
 export const ActivePlan = z.object({
   id: Id,
@@ -105,5 +107,12 @@ export const ActivePlan = z.object({
    * order reached. The Plan keeps every stop; this says which to look at.
    */
   stopWarnings: z.array(z.object({ pickupId: Id, position: PositiveInt, warning: PlanStopWarning })),
+  /**
+   * The unload visits the Plan makes on the way (O15 of #290), in its order:
+   * where the vehicle is full before its last stop it empties at the station
+   * and goes on, each visit after the stop it follows. The visit after the
+   * last stop is the full trip's end and is not listed.
+   */
+  unloads: z.array(z.object({ afterPickupId: Id, unloadingStationId: Id })),
 })
 export type ActivePlan = z.infer<typeof ActivePlan>

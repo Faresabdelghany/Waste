@@ -2,7 +2,8 @@
 
 // The Driver App's route screen (Issue #145), from `GET /driver/routes/:id`:
 // the stops in the order they are driven (the Plan's `sequence` where there
-// is one, else `position`), each with its address, container (none at an
+// is one, else `position`), with the Plan's unload visits on the way between
+// them (O15 of #290), each with its address, container (none at an
 // address-only stop the office added, #111), fraction and status, the
 // place's instructions to the driver where it has some (never the office's
 // own notes), and an "Open in Maps" link over its own point, and per stop:
@@ -17,7 +18,7 @@
 // else is sent and the server decides (lib/driver/route-view.ts).
 import Link from "next/link"
 import { useEffect, useState } from "react"
-import { ArrowLeft, Camera, CheckCircle, FlagCheckered, Info, MapPin, MapTrifold, NavigationArrow, NotePencil, Pause, Play, Scales, Signature, SkipForward, Warning, XCircle } from "@phosphor-icons/react/dist/ssr"
+import { ArrowLeft, Camera, CheckCircle, FlagCheckered, Info, MapPin, MapTrifold, NavigationArrow, NotePencil, Pause, Play, Scales, Signature, SkipForward, Truck, Warning, XCircle } from "@phosphor-icons/react/dist/ssr"
 
 import { Badge } from "@/components/ui/badge"
 import { Button } from "@/components/ui/button"
@@ -26,11 +27,11 @@ import { EndRouteDialog, NoteDialog, ReasonDialog, UnloadDialog, WeightDialog } 
 import { DriverFrame } from "@/components/waste/driver/driver-frame"
 import { PhotoDialog, SignatureDialog } from "@/components/waste/driver/driver-proof-dialogs"
 import { RejectionList, operatingDay, progressLine } from "@/components/waste/driver/driver-parts"
-import type { DriverMe, DriverPickup, DriverRouteDetail } from "@waste/contracts/driver-commands"
+import type { DriverMe, DriverPickup, DriverRouteDetail, DriverUnloadingStation } from "@waste/contracts/driver-commands"
 import type { ProofBytes } from "@/lib/driver/commands"
 import type { DriverAppController, Tap } from "@/lib/driver/driver-app"
 import { STOP_PHOTOS } from "@/lib/driver/proof-images"
-import { DRIVER_REASON_LABELS, endRouteWarning, mapsHref, PICKUP_STATUS_LABELS, ROUTE_STATUS_LABELS, routeActions, routeMapsHref, stopActions, stopCollects, stopServices, stopsInOrder, waitingOn } from "@/lib/driver/route-view"
+import { DRIVER_REASON_LABELS, endRouteWarning, entriesInOrder, mapsHref, PICKUP_STATUS_LABELS, ROUTE_STATUS_LABELS, routeActions, routeMapsHref, stopActions, stopCollects, stopServices, stopsInOrder, waitingOn } from "@/lib/driver/route-view"
 
 /** A photo taken with a stop's exception goes first, then the exception: the queue sends in the order of the taps. */
 async function withPhoto(app: DriverAppController, photo: ProofBytes | null, routeId: string, pickupId: string, then: Tap): Promise<void> {
@@ -71,6 +72,8 @@ function RouteDetailView({ detail, me }: { detail: DriverRouteDetail; me: Driver
   const routeMaps = routeMapsHref(detail, state.waiting)
   // What each stop is for, read once for the route rather than per card.
   const services = stopServices(detail.pickups)
+  // A stop's number counts the stops alone, the unload visits between them unnumbered.
+  const numbers = new Map(stopsInOrder(detail.pickups).map((stop, index) => [stop.id, index + 1]))
   const [dialog, setDialog] = useState<"report" | "unload" | "end" | null>(null)
   const close = (open: boolean) => {
     if (!open) setDialog(null)
@@ -139,11 +142,17 @@ function RouteDetailView({ detail, me }: { detail: DriverRouteDetail; me: Driver
       </section>
 
       <ol className="flex flex-col gap-3" aria-label="Stops">
-        {stopsInOrder(detail.pickups).map((stop, index) => (
-          <li key={stop.id}>
-            <StopCard detail={detail} stop={stop} number={index + 1} service={services.get(stop.id) ?? null} />
-          </li>
-        ))}
+        {entriesInOrder(detail.pickups, detail.activePlan).map((entry, index) =>
+          entry.kind === "stop" ? (
+            <li key={entry.stop.id}>
+              <StopCard detail={detail} stop={entry.stop} number={numbers.get(entry.stop.id) ?? index + 1} service={services.get(entry.stop.id) ?? null} />
+            </li>
+          ) : (
+            <li key={`unload-${index}`}>
+              <UnloadCard station={me.unloadingStations.find((candidate) => candidate.id === entry.unloadingStationId)} recordable={actions.unload} onRecord={() => setDialog("unload")} />
+            </li>
+          ),
+        )}
       </ol>
 
       <ReasonDialog
@@ -159,6 +168,36 @@ function RouteDetailView({ detail, me }: { detail: DriverRouteDetail; me: Driver
       <UnloadDialog open={dialog === "unload"} onOpenChange={close} me={me} onConfirm={(body) => void app.tap({ kind: "record-unload", routeId: detail.id, body })} />
       <EndRouteDialog open={dialog === "end"} onOpenChange={close} warning={endRouteWarning(detail, state.waiting)} onConfirm={() => void app.tap({ kind: "end-route", routeId: detail.id, body: {} })} />
     </main>
+  )
+}
+
+/** An unload visit the active Plan makes on the way (O15 of #290): the vehicle is full here, so it empties at the station and goes on. */
+function UnloadCard({ station, recordable, onRecord }: { station: DriverUnloadingStation | undefined; recordable: boolean; onRecord: () => void }) {
+  const maps = station === undefined ? null : mapsHref(station.location)
+  return (
+    <article aria-label="Unload on the way" className="flex flex-col gap-3 rounded-xl border border-dashed p-4">
+      <div className="flex items-start gap-3">
+        <Truck aria-hidden className="mt-0.5 shrink-0" />
+        <div className="min-w-0">
+          <h2 className="font-semibold">Unload at {station?.name ?? "the unloading station"}</h2>
+          <p className="text-sm text-muted-foreground">The vehicle is full here: empty it at the station, then go on to the next stop.</p>
+        </div>
+      </div>
+      <div className="flex flex-wrap gap-2">
+        {maps !== null && (
+          <Button asChild variant="ghost" size="sm">
+            <a href={maps} target="_blank" rel="noopener noreferrer">
+              <NavigationArrow aria-hidden />
+              Open in Maps
+            </a>
+          </Button>
+        )}
+        <Button variant="outline" size="sm" disabled={!recordable} onClick={onRecord}>
+          <Scales aria-hidden />
+          Record unload
+        </Button>
+      </div>
+    </article>
   )
 }
 

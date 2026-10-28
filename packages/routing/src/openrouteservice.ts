@@ -26,7 +26,9 @@
 // when every stop's has closed, so one optimisation call orders the whole
 // trip and spends no directions call (#132's cost). An answer that leaves a
 // stop unassigned or visits the station early is a refusal in so many
-// words, never a Plan. A stop's window and the driver's breaks (O14 of #290)
+// words, never a Plan. A Route whose stops outweigh its vehicle (O15 of
+// #290) sends them as shipments to the station instead, and the answer's
+// station visits before the last stop are its unloads on the way. A stop's window and the driver's breaks (O14 of #290)
 // ride the same clock, seconds from the operating date's midnight: the
 // windows are hard, so a stop no order reaches inside its own is
 // unassigned, and the answer says which for the caller to ask again without
@@ -43,6 +45,7 @@
 // answer. A body the answer does not read is let go, so the pooled
 // connection is free for the next call.
 import type { Position2D } from "@waste/contracts/geojson"
+import { UNLOAD_SECONDS } from "@waste/domain/routing/reloads"
 
 import { samePosition } from "./geodesy"
 import { decodePolyline } from "./polyline"
@@ -153,55 +156,86 @@ const HORIZON = STATION_OPENS + 2 * DAY_SECONDS
  * station's, a week in, opens after every one of them; a stop without a
  * window on a trip with a station is held to the week before it. The vehicle
  * is bounded by the horizon alone, never by its shift's end.
+ *
+ * A request with a reload (O15 of #290) sends each stop as a shipment
+ * instead: its load picked up at the stop and delivered at the station, the
+ * vehicle carrying its payload, so the solver goes to the station whenever
+ * the vehicle is full and once more after the last stop, and no window holds
+ * the station back. Each visit takes the unload's time once, however many
+ * loads it delivers (`setup`, spent on arriving at a new place). Nothing
+ * makes a visit deliver every load aboard, where a truck tips them all: the
+ * solver may carry a load on to a later visit, planning fewer visits than the
+ * truck makes. The setup each visit costs makes that unlikely, and the Plan
+ * reads its visits off the trip as driven, so a Plan can be optimistic, never
+ * wrong about where it goes.
  */
-function vroomRequest({ profile, depot, stops, serviceSeconds, timeWindows, departure, breaks, station }: OptimiseRequest) {
-  const jobs: Record<string, unknown>[] = stops.map((location, index) => {
+function vroomRequest({ profile, depot, stops, serviceSeconds, timeWindows, departure, breaks, station, reload }: OptimiseRequest) {
+  const reloading = station && reload ? reload : null
+  const stopTask = (location: Position2D, index: number) => {
     const service = serviceSeconds?.[index]
-    const window = timeWindows?.[index] ?? (station ? ([0, STATION_OPENS - 1] as const) : null)
+    const window = timeWindows?.[index] ?? (station && !reloading ? ([0, STATION_OPENS - 1] as const) : null)
     return { id: index + 1, location, ...(service === undefined ? {} : { service }), ...(window === null ? {} : { time_windows: [[window[0], window[1]]] }) }
-  })
-  if (station) jobs.push({ id: stops.length + 1, location: station, time_windows: [[STATION_OPENS, STATION_OPENS + DAY_SECONDS]] })
+  }
+  const jobs: Record<string, unknown>[] = reloading ? [] : stops.map(stopTask)
+  if (station && !reloading) jobs.push({ id: stops.length + 1, location: station, time_windows: [[STATION_OPENS, STATION_OPENS + DAY_SECONDS]] })
+  const shipments = reloading
+    ? stops.map((location, index) => ({ amount: [reloading.amounts[index] ?? 0], pickup: stopTask(location, index), delivery: { id: index + 1, location: station, setup: UNLOAD_SECONDS } }))
+    : []
   const timed = station || (departure ?? null) !== null || (breaks?.length ?? 0) > 0 || (timeWindows?.some((window) => window !== null) ?? false)
   const vehicle = {
     id: 1,
     profile,
     start: depot,
     end: depot,
+    ...(reloading ? { capacity: [reloading.capacityKg] } : {}),
     ...(timed ? { time_window: [departure ?? 0, HORIZON] } : {}),
     ...(breaks && breaks.length > 0 ? { breaks: breaks.map((pause, index) => ({ id: index + 1, time_windows: [[pause.window[0], pause.window[1]]], service: pause.seconds })) } : {}),
   }
-  return { jobs, vehicles: [vehicle], options: { g: true } }
+  return { ...(reloading ? { shipments } : { jobs }), vehicles: [vehicle], options: { g: true } }
 }
 
 type Step = Waypoint & { seconds: number }
 
+/** A step's task id: VROOM answers it as `id`, older versions as `job`. */
+const taskOf = (step: Record<string, unknown>): unknown => step.id ?? step.job
+
 /** VROOM's answer as the order over the stops and the closed trip's legs; a refusal where it did not order every stop with the station last. */
 function vroomResult(body: unknown, request: OptimiseRequest): OptimiseResult | { refused: string } {
   const { stops, station } = request
+  const reloading = Boolean(station && request.reload)
   if (!isRecord(body)) throw unreadable("the optimisation answer is not an object")
   if (typeof body.code === "number" && body.code !== 0) return { refused: typeof body.error === "string" ? body.error : `the optimiser answered code ${body.code}` }
-  const unassigned = Array.isArray(body.unassigned) ? body.unassigned.length : 0
   const stationId = stops.length + 1
-  const left = (Array.isArray(body.unassigned) ? body.unassigned : []).map((job) => (isRecord(job) && typeof job.id === "number" ? job.id : -1))
+  // A shipment left is listed as its pickup and its delivery, one stop.
+  const left = [...new Set((Array.isArray(body.unassigned) ? body.unassigned : []).map((task) => (isRecord(task) && typeof task.id === "number" ? task.id : -1)))]
   // Only a stop with a window may be left: anything else — the station, a stop without one — is a refusal as it always was.
   const windowedLeft = left.every((id) => id >= 1 && id <= stops.length && (request.timeWindows?.[id - 1] ?? null) !== null)
-  if (unassigned > 0 && !windowedLeft) return { refused: `the optimiser left ${unassigned} ${unassigned === 1 ? "stop" : "stops"} unassigned` }
+  if (left.length > 0 && !windowedLeft) return { refused: `the optimiser left ${left.length} ${left.length === 1 ? "stop" : "stops"} unassigned` }
   const missing = new Set(left.map((id) => id - 1))
   if (!Array.isArray(body.routes) || body.routes.length !== 1 || !isRecord(body.routes[0])) throw unreadable("the optimisation answer does not hold one route")
   const route = body.routes[0]
   if (typeof route.geometry !== "string" || !Array.isArray(route.steps)) throw unreadable("the optimised route has no geometry or no steps; the request asks for g")
-  const steps = route.steps.filter((step): step is Record<string, unknown> => isRecord(step) && (step.type === "start" || step.type === "job" || step.type === "end"))
-  const jobIds = steps.filter((step) => step.type === "job").map((step) => step.id ?? step.job)
-  const order = jobIds.filter((id) => id !== stationId).map((id) => (typeof id === "number" ? id - 1 : -1))
+  const visit = reloading ? "pickup" : "job"
+  const steps = route.steps.filter((step): step is Record<string, unknown> => isRecord(step) && (step.type === "start" || step.type === visit || step.type === "delivery" || step.type === "end"))
+  // The trip as visits: a stop, or the station — one visit however many loads it takes in a row.
+  const visits = steps.filter((step) => step.type === visit || step.type === "delivery").map((step) => (step.type === "delivery" || taskOf(step) === stationId ? "station" : taskOf(step)))
+  const trip = visits.filter((task, index) => task !== "station" || visits[index - 1] !== "station")
+  const order = trip.filter((task) => task !== "station").map((id) => (typeof id === "number" ? id - 1 : -1))
   if (order.length + missing.size !== stops.length || new Set(order).size !== order.length || order.some((index) => index < 0 || index >= stops.length || missing.has(index))) {
     throw unreadable(`the optimised route does not visit each of the ${stops.length - missing.size} stops it assigned once`)
   }
-  if (station && jobIds.at(-1) !== stationId) return { refused: "the optimiser visited the unloading station before the last stop" }
+  if (station && trip.at(-1) !== "station") return { refused: "the optimiser visited the unloading station before the last stop" }
+  const unloads: number[] = []
+  trip.forEach((task, index) => {
+    if (task === "station" && index < trip.length - 1) unloads.push(trip.slice(0, index).filter((other) => other !== "station").length)
+  })
+  if (unloads.length > 0 && !reloading) return { refused: "the optimiser visited the unloading station before the last stop" }
+  if (unloads.includes(0)) return { refused: "the optimiser visited the unloading station before the first stop" }
   const visited: Step[] = steps.map((step, index) => {
     if (typeof step.distance !== "number" || typeof step.duration !== "number") throw unreadable(`step ${index + 1} has no distance or duration; the request asks for g`)
     return { at: position(step.location, `step ${index + 1}`), metres: step.distance, seconds: step.duration }
   })
-  // Two stops at one address are one point of the trip, spanning no leg.
+  // Two stops at one address are one point of the trip, spanning no leg, as are the loads one station visit takes.
   const points = visited.filter((step, index) => index === 0 || !samePosition(step.at, visited[index - 1].at))
   const line = decodePolyline(route.geometry)
   if (line.length < 2) throw unreadable("the optimised route's geometry has fewer than two vertices")
@@ -212,11 +246,18 @@ function vroomResult(body: unknown, request: OptimiseRequest): OptimiseResult | 
     points.map((step) => step.at),
     measures,
   )
-  // Waiting for a stop's window or a break's, never the week the station's device waits.
+  // Waiting for a stop's window or a break's, never the week the station's device waits, nor at the station on a reload.
   const waitingSeconds = route.steps
-    .filter((step): step is Record<string, unknown> => isRecord(step) && ((step.type === "job" && (step.id ?? step.job) !== stationId) || step.type === "break"))
+    .filter((step): step is Record<string, unknown> => isRecord(step) && ((step.type === visit && taskOf(step) !== stationId) || step.type === "break"))
     .reduce((sum, step) => sum + (typeof step.waiting_time === "number" ? step.waiting_time : 0), 0)
-  return { order, legs, waitingSeconds, ...(missing.size > 0 ? { unassigned: [...missing].sort((a, b) => a - b) } : {}), provenance: { engineVersion: null, graphDate: null } }
+  return {
+    order,
+    legs,
+    waitingSeconds,
+    ...(unloads.length > 0 ? { unloads } : {}),
+    ...(missing.size > 0 ? { unassigned: [...missing].sort((a, b) => a - b) } : {}),
+    provenance: { engineVersion: null, graphDate: null },
+  }
 }
 
 export class OpenRouteServiceProvider implements RoutingProvider {

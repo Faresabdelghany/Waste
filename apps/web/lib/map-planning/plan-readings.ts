@@ -42,11 +42,21 @@ export function activePlanOf(record: Pick<BusinessRecord, "submittedValues"> | u
     return null
   }
   if (typeof value !== "object" || value === null) return null
-  const { id, solver, status, trip, distanceMetres, durationSeconds, stale, deferredUntil, stopWarnings } = value as Record<string, unknown>
+  const { id, solver, status, trip, distanceMetres, durationSeconds, stale, deferredUntil, stopWarnings, unloads } = value as Record<string, unknown>
   if (typeof id !== "string" || !oneOf(PLAN_SOLVERS, solver) || !oneOf(PLAN_STATUSES, status) || !oneOf(PLAN_TRIPS, trip)) return null
   if (!wholeOrNull(distanceMetres) || !wholeOrNull(durationSeconds) || typeof stale !== "boolean") return null
   if (deferredUntil !== null && typeof deferredUntil !== "string") return null
-  return { id, solver, status, trip, distanceMetres, durationSeconds, stale, deferredUntil, stopWarnings: stopWarningsOf(stopWarnings) }
+  return { id, solver, status, trip, distanceMetres, durationSeconds, stale, deferredUntil, stopWarnings: stopWarningsOf(stopWarnings), unloads: unloadsOf(unloads) }
+}
+
+/** The unload visits a Plan makes on the way (O15 of #290), as the record carries them: an entry that does not read as one is let go, and a record written before them holds none. */
+function unloadsOf(value: unknown): ActivePlan["unloads"] {
+  if (!Array.isArray(value)) return []
+  return value.flatMap((entry) => {
+    if (typeof entry !== "object" || entry === null) return []
+    const { afterPickupId, unloadingStationId } = entry as Record<string, unknown>
+    return typeof afterPickupId === "string" && typeof unloadingStationId === "string" ? [{ afterPickupId, unloadingStationId }] : []
+  })
 }
 
 /** The stops a Plan holds outside their window (O14 of #290), as the record carries them: an entry that does not read as one is let go, and a record written before them holds none. */
