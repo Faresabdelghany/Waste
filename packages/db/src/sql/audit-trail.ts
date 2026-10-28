@@ -68,7 +68,7 @@ import { company, project, serviceProvider } from "../schema/organisation"
 import { depot, unloadingStation, unloadingStationFraction, warehouse } from "../schema/places"
 import { planningArea, planningAreaBoundary } from "../schema/planning-areas"
 import { alert, ticket, ticketBooking, ticketEvent, ticketSla } from "../schema/resolution"
-import { serviceProviderActivity } from "../schema/service-provider-activities"
+import { serviceProviderActivity, serviceProviderActivityContainer } from "../schema/service-provider-activities"
 import { application, applicationDecision } from "../schema/applications"
 import { bulkyBooking, bulkyBookingItem, bulkySchedule } from "../schema/bulky"
 import { collectionGroup, collectionGroupContainer, collectionGroupContainerType, collectionGroupFraction, routeScheme, routeSchemeSeason } from "../schema/route-schemes"
@@ -245,7 +245,12 @@ export const SEASONS_AUDITED: readonly Audited[] = [{ table: routeSchemeSeason, 
 /** Service Provider Activities (#474): each move of an Activity audited under the module it is read in, its history. */
 export const SERVICE_PROVIDER_ACTIVITIES_AUDITED: readonly Audited[] = [{ table: serviceProviderActivity, module: "service-providers.activities" }]
 
-export const AUDITED: readonly Audited[] = [...AUDITED_AT_0019, ...SUBSCRIPTION_PAUSE_AUDITED, ...TICKET_SLA_AUDITED, ...DROP_OFF_AUDITED, ...ABSENCES_AUDITED, ...TICKET_CHARGE_AUDITED, ...PICKUP_EXCEPTIONS_AUDITED, ...EMISSIONS_AUDITED, ...APPLICATIONS_AUDITED, ...SUSTAINABILITY_AUDITED, ...CONTAINER_HIRE_AUDITED, ...ACCOUNTING_AUDITED, ...BULKY_AUDITED, ...SITE_VISITS_AUDITED, ...SEASONS_AUDITED, ...SERVICE_PROVIDER_ACTIVITIES_AUDITED]
+/** A stop-set change's containers (#474, part 3): the activity's set, replaced whole with it, audited under its activity. */
+export const STOP_SET_PROPOSALS_AUDITED: readonly Audited[] = [
+  { table: serviceProviderActivityContainer, module: "service-providers.activities", parent: setOf(serviceProviderActivity, serviceProviderActivityContainer.activityId) },
+]
+
+export const AUDITED: readonly Audited[] = [...AUDITED_AT_0019, ...SUBSCRIPTION_PAUSE_AUDITED, ...TICKET_SLA_AUDITED, ...DROP_OFF_AUDITED, ...ABSENCES_AUDITED, ...TICKET_CHARGE_AUDITED, ...PICKUP_EXCEPTIONS_AUDITED, ...EMISSIONS_AUDITED, ...APPLICATIONS_AUDITED, ...SUSTAINABILITY_AUDITED, ...CONTAINER_HIRE_AUDITED, ...ACCOUNTING_AUDITED, ...BULKY_AUDITED, ...SITE_VISITS_AUDITED, ...SEASONS_AUDITED, ...SERVICE_PROVIDER_ACTIVITIES_AUDITED, ...STOP_SET_PROPOSALS_AUDITED]
 
 /** The audited tables by name, for a test that reads a migrated database's triggers. */
 export const AUDITED_TABLE_NAMES: ReadonlySet<string> = new Set(AUDITED.map((entry) => getTableName(entry.table)))

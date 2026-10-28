@@ -4,15 +4,14 @@
 // `vehicle-change`, each kind still carries its own columns and none of
 // another's, and the vehicle change moves through an Approval's statuses as
 // the domain's proposal kinds say. Migration 0064 is exactly those
-// statements, diffed from the table as 0063 left it (activity-as-of.ts): a
-// column on an audited table owes no hand-written statement. No database.
+// statements, diffed from the table as 0063 left it to the table as 0064
+// left it (activity-as-of.ts; part 3 grew it again): a column on an audited
+// table owes no hand-written statement. No database.
 import assert from "node:assert/strict"
 import { readFile } from "node:fs/promises"
 import { join } from "node:path"
 import { describe, test } from "node:test"
 
-import { PROPOSAL_KINDS } from "@waste/domain/service-providers/activities"
-import { SERVICE_PROVIDER_ACTIVITY_KINDS } from "@waste/domain/service-providers/vocabulary"
 
 import { MIGRATIONS_FOLDER } from "../migrate"
 import { userAccount } from "../schema/access"
@@ -20,9 +19,8 @@ import { serviceArea } from "../schema/finance"
 import { driver, vehicle } from "../schema/fleet"
 import { company, project, serviceProvider } from "../schema/organisation"
 import { collectionGroup, routeScheme } from "../schema/route-schemes"
-import { serviceProviderActivity } from "../schema/service-provider-activities"
 import { normalised, statementsOf } from "../sql/hand-written"
-import { serviceProviderActivityAsOf0063 } from "./activity-as-of"
+import { KINDS_AS_OF_0064, serviceProviderActivityAsOf0063, serviceProviderActivityAsOf0064 as serviceProviderActivity } from "./activity-as-of"
 import { checksOf, list, ref } from "./rendering"
 import { statementsBetween } from "./specimen"
 
@@ -52,10 +50,9 @@ describe("the vehicle change as drizzle-kit writes it", () => {
 
   test("the kind's list grows by the vehicle change, and it moves through an Approval's statuses", () => {
     const checks = checksOf(serviceProviderActivity)
-    assert.equal(SERVICE_PROVIDER_ACTIVITY_KINDS.at(-1), "vehicle-change")
-    assert.equal(checks.get("service_provider_activity_kind_one_of"), `${column("kind")} in (${list(...SERVICE_PROVIDER_ACTIVITY_KINDS)})`)
-    assert.deepEqual([...PROPOSAL_KINDS], ["route-day-change", "vehicle-change"])
-    assert.match(checks.get("service_provider_activity_status_shape") ?? "", new RegExp(`in \\(${list(...PROPOSAL_KINDS)}\\) then`))
+    assert.equal(KINDS_AS_OF_0064.at(-1), "vehicle-change")
+    assert.equal(checks.get("service_provider_activity_kind_one_of"), `${column("kind")} in (${list(...KINDS_AS_OF_0064)})`)
+    assert.match(checks.get("service_provider_activity_status_shape") ?? "", new RegExp(`in \\(${list("route-day-change", "vehicle-change")}\\) then`))
   })
 
   test("a vehicle change carries its vehicle and no days; no other kind carries a vehicle or a driver", () => {

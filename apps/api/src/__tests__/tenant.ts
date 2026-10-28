@@ -83,7 +83,7 @@ import { planningArea, planningAreaBoundary } from "@waste/db/schema/planning-ar
 import { alert, ticket, ticketBooking, ticketEvent, ticketSla } from "@waste/db/schema/resolution"
 import { application, applicationDecision } from "@waste/db/schema/applications"
 import { bulkyBooking, bulkyBookingItem, bulkySchedule } from "@waste/db/schema/bulky"
-import { serviceProviderActivity } from "@waste/db/schema/service-provider-activities"
+import { serviceProviderActivity, serviceProviderActivityContainer } from "@waste/db/schema/service-provider-activities"
 import { collectionGroup, collectionGroupContainer, collectionGroupContainerType, collectionGroupFraction, routeScheme, routeSchemeSeason } from "@waste/db/schema/route-schemes"
 import { withCompany } from "@waste/db/tenant"
 import { normaliseGrants, type Grant } from "@waste/domain/access/grants"
@@ -399,6 +399,7 @@ export async function dropTenant(pool: Database, companyId: string, owner?: Data
     await tx.delete(dropOffPointException).where(eq(dropOffPointException.companyId, companyId))
     await tx.delete(dropOffPoint).where(eq(dropOffPoint.companyId, companyId))
     // The providers' activities (#474) before the schemes, groups, awards, providers and accounts they name.
+    await tx.delete(serviceProviderActivityContainer).where(eq(serviceProviderActivityContainer.companyId, companyId))
     await tx.delete(serviceProviderActivity).where(eq(serviceProviderActivity.companyId, companyId))
     await tx.delete(plan).where(eq(plan.companyId, companyId))
     await tx.delete(session).where(eq(session.companyId, companyId))

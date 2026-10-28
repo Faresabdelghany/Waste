@@ -2886,11 +2886,12 @@ constraint wms.service_provider_activity service_provider_activity_closed_shape 
 constraint wms.service_provider_activity service_provider_activity_collection_group_id_fk FOREIGN KEY (company_id, project_id, collection_group_id) REFERENCES wms.collection_group(company_id, project_id, id)
 constraint wms.service_provider_activity service_provider_activity_company_id_fk FOREIGN KEY (company_id) REFERENCES wms.company(id)
 constraint wms.service_provider_activity service_provider_activity_driver_id_fk FOREIGN KEY (company_id, project_id, driver_id) REFERENCES wms.driver(company_id, project_id, id)
-constraint wms.service_provider_activity service_provider_activity_kind_one_of CHECK ((kind = ANY (ARRAY['route-day-change'::text, 'compliance-follow-up'::text, 'coordination-note'::text, 'vehicle-change'::text])))
+constraint wms.service_provider_activity service_provider_activity_kind_one_of CHECK ((kind = ANY (ARRAY['route-day-change'::text, 'compliance-follow-up'::text, 'coordination-note'::text, 'vehicle-change'::text, 'stop-set-change'::text])))
 constraint wms.service_provider_activity service_provider_activity_kind_shape CHECK (
 CASE kind
     WHEN 'route-day-change'::text THEN ((route_scheme_id IS NOT NULL) AND (collection_group_id IS NOT NULL) AND (cardinality(service_days) > 0) AND (effective_from IS NOT NULL) AND (due_on IS NULL) AND (vehicle_id IS NULL) AND (driver_id IS NULL))
     WHEN 'vehicle-change'::text THEN ((route_scheme_id IS NOT NULL) AND (collection_group_id IS NOT NULL) AND (vehicle_id IS NOT NULL) AND (effective_from IS NOT NULL) AND (service_days IS NULL) AND (due_on IS NULL))
+    WHEN 'stop-set-change'::text THEN ((route_scheme_id IS NOT NULL) AND (collection_group_id IS NOT NULL) AND (effective_from IS NOT NULL) AND (service_days IS NULL) AND (due_on IS NULL) AND (vehicle_id IS NULL) AND (driver_id IS NULL))
     WHEN 'compliance-follow-up'::text THEN ((due_on IS NOT NULL) AND (route_scheme_id IS NULL) AND (collection_group_id IS NULL) AND (service_days IS NULL) AND (effective_from IS NULL) AND (vehicle_id IS NULL) AND (driver_id IS NULL))
     ELSE ((due_on IS NULL) AND (route_scheme_id IS NULL) AND (collection_group_id IS NULL) AND (service_days IS NULL) AND (effective_from IS NULL) AND (vehicle_id IS NULL) AND (driver_id IS NULL))
 END)
@@ -2906,7 +2907,7 @@ constraint wms.service_provider_activity service_provider_activity_service_provi
 constraint wms.service_provider_activity service_provider_activity_status_one_of CHECK ((status = ANY (ARRAY['pending-approval'::text, 'approved'::text, 'rejected'::text, 'withdrawn'::text, 'open'::text, 'completed'::text, 'cancelled'::text])))
 constraint wms.service_provider_activity service_provider_activity_status_shape CHECK (
 CASE
-    WHEN (kind = ANY (ARRAY['route-day-change'::text, 'vehicle-change'::text])) THEN (status = ANY (ARRAY['pending-approval'::text, 'approved'::text, 'rejected'::text, 'withdrawn'::text]))
+    WHEN (kind = ANY (ARRAY['route-day-change'::text, 'vehicle-change'::text, 'stop-set-change'::text])) THEN (status = ANY (ARRAY['pending-approval'::text, 'approved'::text, 'rejected'::text, 'withdrawn'::text]))
     ELSE (status = ANY (ARRAY['open'::text, 'completed'::text, 'cancelled'::text]))
 END)
 constraint wms.service_provider_activity service_provider_activity_subject_given CHECK ((length(btrim(subject)) > 0))
@@ -2928,6 +2929,31 @@ index wms.service_provider_activity service_provider_activity_vehicle_id_idx CRE
 trigger wms.service_provider_activity service_provider_activity_audit_trail enabled=O CREATE TRIGGER service_provider_activity_audit_trail AFTER INSERT OR DELETE OR UPDATE ON wms.service_provider_activity FOR EACH ROW EXECUTE FUNCTION wms.audit_row('', '')
 trigger wms.service_provider_activity service_provider_activity_touch_updated_at enabled=O CREATE TRIGGER service_provider_activity_touch_updated_at BEFORE UPDATE ON wms.service_provider_activity FOR EACH ROW EXECUTE FUNCTION wms.touch_updated_at()
 policy wms.service_provider_activity service_provider_activity_tenant_fence permissive ALL to=wms_api using=(company_id = ( SELECT wms.current_company_id() AS current_company_id)) check=(company_id = ( SELECT wms.current_company_id() AS current_company_id))
+relation wms.service_provider_activity_container kind=table owner=<owner> persistence=p rls=true force-rls=true replica-identity=d acl=[<owner>=DELETE,INSERT,MAINTAIN,REFERENCES,SELECT,TRIGGER,TRUNCATE,UPDATE/<owner> wms_api=DELETE,INSERT,SELECT,UPDATE/<owner> wms_worker=SELECT/<owner>]
+column wms.service_provider_activity_container 1 id uuid not-null default=wms.uuidv7()
+column wms.service_provider_activity_container 2 company_id uuid not-null
+column wms.service_provider_activity_container 3 project_id uuid not-null
+column wms.service_provider_activity_container 4 created_at timestamp with time zone not-null default=now()
+column wms.service_provider_activity_container 5 updated_at timestamp with time zone not-null default=now()
+column wms.service_provider_activity_container 6 activity_id uuid not-null
+column wms.service_provider_activity_container 7 container_id uuid not-null
+column wms.service_provider_activity_container 8 position integer not-null
+constraint wms.service_provider_activity_container service_provider_activity_container_activity_id_fk FOREIGN KEY (company_id, project_id, activity_id) REFERENCES wms.service_provider_activity(company_id, project_id, id)
+constraint wms.service_provider_activity_container service_provider_activity_container_activity_id_position_key UNIQUE (company_id, activity_id, "position")
+constraint wms.service_provider_activity_container service_provider_activity_container_company_id_fk FOREIGN KEY (company_id) REFERENCES wms.company(id)
+constraint wms.service_provider_activity_container service_provider_activity_container_container_id_fk FOREIGN KEY (company_id, project_id, container_id) REFERENCES wms.container(company_id, project_id, id)
+constraint wms.service_provider_activity_container service_provider_activity_container_membership_key UNIQUE (company_id, activity_id, container_id)
+constraint wms.service_provider_activity_container service_provider_activity_container_pkey PRIMARY KEY (id)
+constraint wms.service_provider_activity_container service_provider_activity_container_position_positive CHECK (("position" > 0))
+constraint wms.service_provider_activity_container service_provider_activity_container_project_id_fk FOREIGN KEY (company_id, project_id) REFERENCES wms.project(company_id, id)
+index wms.service_provider_activity_container service_provider_activity_container_activity_id_position_key CREATE UNIQUE INDEX service_provider_activity_container_activity_id_position_key ON wms.service_provider_activity_container USING btree (company_id, activity_id, "position")
+index wms.service_provider_activity_container service_provider_activity_container_container_id_idx CREATE INDEX service_provider_activity_container_container_id_idx ON wms.service_provider_activity_container USING btree (company_id, container_id)
+index wms.service_provider_activity_container service_provider_activity_container_membership_key CREATE UNIQUE INDEX service_provider_activity_container_membership_key ON wms.service_provider_activity_container USING btree (company_id, activity_id, container_id)
+index wms.service_provider_activity_container service_provider_activity_container_pkey CREATE UNIQUE INDEX service_provider_activity_container_pkey ON wms.service_provider_activity_container USING btree (id)
+index wms.service_provider_activity_container service_provider_activity_container_project_id_idx CREATE INDEX service_provider_activity_container_project_id_idx ON wms.service_provider_activity_container USING btree (company_id, project_id)
+trigger wms.service_provider_activity_container service_provider_activity_container_audit_trail enabled=O CREATE TRIGGER service_provider_activity_container_audit_trail AFTER INSERT OR DELETE OR UPDATE ON wms.service_provider_activity_container FOR EACH ROW EXECUTE FUNCTION wms.audit_row('service_provider_activity', 'activity_id')
+trigger wms.service_provider_activity_container service_provider_activity_container_touch_updated_at enabled=O CREATE TRIGGER service_provider_activity_container_touch_updated_at BEFORE UPDATE ON wms.service_provider_activity_container FOR EACH ROW EXECUTE FUNCTION wms.touch_updated_at()
+policy wms.service_provider_activity_container service_provider_activity_container_tenant_fence permissive ALL to=wms_api using=(company_id = ( SELECT wms.current_company_id() AS current_company_id)) check=(company_id = ( SELECT wms.current_company_id() AS current_company_id))
 relation wms.service_provider_price kind=table owner=<owner> persistence=p rls=true force-rls=true replica-identity=d acl=[<owner>=DELETE,INSERT,MAINTAIN,REFERENCES,SELECT,TRIGGER,TRUNCATE,UPDATE/<owner> wms_api=DELETE,INSERT,SELECT,UPDATE/<owner> wms_worker=SELECT/<owner>]
 column wms.service_provider_price 1 id uuid not-null default=wms.uuidv7()
 column wms.service_provider_price 2 company_id uuid not-null
@@ -4282,4 +4308,5 @@ journal 1793190991835 4479beffde868c9a521b9ff1b6f44dd1b13dbb0e1293a3dabb1f48108c
 journal 1793199855626 709fe6bc0aa2d71a4a8a365c80e79db143341dd82867c0e2fdbd062aa7bcc9b3
 journal 1793204881720 aa541b7673882e81a831ab7f9b7f2bfc1c237d88f7204f890826d641a965be95
 journal 1793206864189 d09c47b341e15b5c9c919bbced5e64b308524015740618eae1263d94d816e2b3
+journal 1793211229692 ab9df765d72e64095403123cc17acf2f34f85c3caecb8ebea81a0321043ac64b
 pgboss-version 42
