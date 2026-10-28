@@ -146,9 +146,10 @@ async function containerLabel(tx: Tx, companyId: string, id: string): Promise<st
  * The stops moved, in the order they stand on the route they leave: each
  * emptying first held against the stops of the route it joins, then every
  * stop taken off and added there, its open ticket with it. Both routes are
- * locked and judged by the caller; their `updatedAt` moves.
+ * locked and judged by the caller; their `updatedAt` moves. The balance of a
+ * day (routes/route-balance.ts, O15 of #290) moves its stops through it too.
  */
-async function moveStops(tx: Tx, principal: Principal, from: RouteRow, to: RouteRow, moving: readonly PickupRow[], at: Date): Promise<void> {
+export async function moveStops(tx: Tx, principal: Principal, from: RouteRow, to: RouteRow, moving: readonly PickupRow[], at: Date): Promise<void> {
   const joined = (await pickupsOfRoute(tx, principal.companyId, to.id)).map(asMoving)
   for (const row of moving) {
     const stop = asMoving(row)

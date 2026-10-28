@@ -15,7 +15,7 @@ import type { Driver, Vehicle } from "@waste/contracts/fleet"
 import type { Project } from "@waste/contracts/organisation"
 import type { Depot, UnloadingStation } from "@waste/contracts/places"
 import { PickupAdd } from "@waste/contracts/pickups"
-import { DISPATCH_MANY_MAX, PickupOrderSet, Route, RouteAssign, RouteMerge, RouteMoveStops, RouteSplit, RouteCancel, RouteCreate, RouteDetail, RouteDispatchMany, RouteReleaseHold, RouteReschedule, type RouteShift, type RouteWorkload } from "@waste/contracts/routes"
+import { DISPATCH_MANY_MAX, PickupOrderSet, Route, RouteAssign, RouteBalanceApply, RouteBalanceDay, RouteBalancePreview, RouteMerge, RouteMoveStops, RouteSplit, RouteCancel, RouteCreate, RouteDetail, RouteDispatchMany, RouteReleaseHold, RouteReschedule, type RouteShift, type RouteWorkload } from "@waste/contracts/routes"
 import type { ActivePlan, Plan } from "@waste/contracts/plans"
 
 import { FIXTURE_COMPANY_ID, getModuleDefinition, type BusinessRecord } from "../../data/business-modules"
@@ -31,9 +31,13 @@ import {
   addedStopBody,
   ASSIGN_ROUTE,
   CANCEL_ROUTE,
+  applyBalance,
+  balanceMoveLine,
+  dayLoadLine,
   DISPATCH_BATCH,
   DISPATCH_ROUTE,
   dispatchRoutes,
+  previewBalance,
   isHeldRoute,
   MADE_BY_THE_OFFICE,
   OPTIMISE_ROUTE,
@@ -755,6 +759,37 @@ describe("the dispatch day's tooling (O5 of #290)", () => {
     const none = scripted([])
     assert.deepEqual(await dispatchRoutes(clientOver(none.fetch), []), { results: [] })
     assert.equal(none.calls.length, 0)
+  })
+
+  test("Balance day (O15 of #290) previews a project's day and applies the moves the office kept, each body one the contract accepts", async () => {
+    const projectId = "01a0d2a4-a280-7002-8000-000000000001"
+    const day = { projectId, operatingDate: "2026-10-12" }
+    const preview = {
+      token: "a".repeat(64),
+      moves: [{ pickupId: "01a0d2a4-a280-7031-8000-000000000001", fromRouteId: planned.id, toRouteId: "01a0d2a4-a280-7030-8000-000000000099" }],
+      routes: [{ routeId: planned.id, before: { kg: 72, workSeconds: 3_600, overCapacityKg: 22, overShiftSeconds: null }, after: { kg: 48, workSeconds: 3_400, overCapacityKg: 0, overShiftSeconds: null } }],
+    }
+    const result = { moved: 1, routes: [{ routeId: planned.id, planId: "01a0d2a4-a280-7032-8000-000000000001" }] }
+    const { fetch, calls } = scripted([() => json(preview), () => json(result)])
+    assert.deepEqual(await previewBalance(clientOver(fetch), day), preview)
+    const body = { ...day, token: preview.token, moves: [{ pickupId: preview.moves[0].pickupId, toRouteId: preview.moves[0].toRouteId }] }
+    assert.deepEqual(await applyBalance(clientOver(fetch), body), result)
+    assert.deepEqual(
+      calls.map((call) => [call.init.method, call.url]),
+      [
+        ["POST", "http://api.test/routes/balance-preview"],
+        ["POST", "http://api.test/routes/balance"],
+      ],
+    )
+    assert.ok(RouteBalanceDay.safeParse(bodyOf(calls[0])).success)
+    assert.ok(RouteBalanceApply.safeParse(bodyOf(calls[1])).success)
+    assert.ok(RouteBalancePreview.safeParse(preview).success)
+  })
+
+  test("Balance day says each route's load and work, and how far over its payload or shift, and each move as the stop, where it leaves and where it joins", () => {
+    assert.equal(dayLoadLine({ kg: 14_200, workSeconds: 30_600, overCapacityKg: 2_200, overShiftSeconds: 1_800 }), "14,200 kg, 2,200 kg over the payload · 8 h 30 min, 30 min over the shift")
+    assert.equal(dayLoadLine({ kg: 8_200, workSeconds: 3_600, overCapacityKg: 0, overShiftSeconds: null }), "8,200 kg · 1 h 00 min")
+    assert.equal(balanceMoveLine("Parkvej 18", "RC-1042", "RC-1043"), "Parkvej 18: RC-1042 → RC-1043")
   })
 
   test("a route is read back as its details read it, for the row's measure once a Plan is ready", async () => {

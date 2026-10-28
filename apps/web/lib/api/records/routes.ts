@@ -52,7 +52,7 @@
 import type { DriverCommandReceipt } from "@waste/contracts/driver-commands"
 import type { PickupDetail } from "@waste/contracts/pickups"
 import type { OptimiseAnswer, Plan } from "@waste/contracts/plans"
-import type { Route, RouteDetail, RouteDispatchResults, RouteShift, RouteWorkload } from "@waste/contracts/routes"
+import type { Route, RouteBalanceApply, RouteBalanceDay, RouteBalancePreview, RouteBalanceResult, RouteDayLoad, RouteDetail, RouteDispatchResults, RouteShift, RouteWorkload } from "@waste/contracts/routes"
 import { OFFICE_CANCEL_REASON_CODES, OFFICE_STOP_SERVICES, type OfficeStopService } from "@waste/domain/execution/vocabulary"
 import { BOOKED_WITH, type BookedField } from "@waste/domain/execution/work-orders"
 import type { PlanStopWarning } from "@waste/domain/routing/vocabulary"
@@ -607,6 +607,26 @@ export async function dispatchRoutes(client: Client, routeIds: readonly string[]
   }
   return { results }
 }
+
+/** Balance day (O15 of #290): the moves the API proposes for a project's day, every route before and after, and the token the apply carries back. */
+export function previewBalance(client: Client, day: RouteBalanceDay): Promise<RouteBalancePreview> {
+  return command<RouteBalancePreview>(client, "/routes/balance-preview", day)
+}
+
+/** The moves of a balance preview the office accepted, applied with its token: the API moves each stop as Move stops does and asks each route it touched a new Plan. */
+export function applyBalance(client: Client, body: RouteBalanceApply): Promise<RouteBalanceResult> {
+  return command<RouteBalanceResult>(client, "/routes/balance", body)
+}
+
+/** A route's day in Balance day: its load and work, and how far over its payload or shift, before or after the moves. */
+export function dayLoadLine(load: RouteDayLoad): string {
+  const kg = load.overCapacityKg !== null && load.overCapacityKg > 0 ? `${kilograms(load.kg)}, ${kilograms(load.overCapacityKg)} over the payload` : kilograms(load.kg)
+  const work = load.overShiftSeconds !== null && load.overShiftSeconds > 0 ? `${formatDuration(load.workSeconds)}, ${formatDuration(load.overShiftSeconds)} over the shift` : formatDuration(load.workSeconds)
+  return `${kg} · ${work}`
+}
+
+/** What the office is told a balance moves: the stop, the route it leaves and the route it joins. */
+export const balanceMoveLine = (stop: string, from: string, to: string): string => `${stop}: ${from} → ${to}`
 
 /** What the driver's device sent for the route, applied and rejected, oldest first: its command log. */
 export function routeCommandLog(client: Client, serverId: string): Promise<DriverCommandReceipt[]> {
