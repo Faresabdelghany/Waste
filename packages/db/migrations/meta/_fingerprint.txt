@@ -1614,7 +1614,7 @@ column wms.import_run 12 refused_count integer not-null default=0
 column wms.import_run 13 requested_by uuid not-null
 constraint wms.import_run import_run_company_id_fk FOREIGN KEY (company_id) REFERENCES wms.company(id)
 constraint wms.import_run import_run_counts_shape CHECK (((created_count >= 0) AND (updated_count >= 0) AND (unchanged_count >= 0) AND (refused_count >= 0) AND ((((created_count + updated_count) + unchanged_count) + refused_count) <= row_count)))
-constraint wms.import_run import_run_kind_one_of CHECK ((kind = ANY (ARRAY['customers'::text, 'properties'::text, 'containers'::text, 'agreements'::text, 'waste-fractions'::text, 'container-types'::text, 'vehicle-types'::text, 'vehicles'::text, 'drivers'::text, 'collection-calendars'::text, 'planning-areas'::text])))
+constraint wms.import_run import_run_kind_one_of CHECK ((kind = ANY (ARRAY['customers'::text, 'properties'::text, 'containers'::text, 'agreements'::text, 'waste-fractions'::text, 'container-types'::text, 'vehicle-types'::text, 'vehicles'::text, 'drivers'::text])))
 constraint wms.import_run import_run_pkey PRIMARY KEY (id)
 constraint wms.import_run import_run_project_id_fk FOREIGN KEY (company_id, project_id) REFERENCES wms.project(company_id, id)
 constraint wms.import_run import_run_project_shape CHECK (((kind = ANY (ARRAY['customers'::text, 'waste-fractions'::text, 'container-types'::text, 'vehicle-types'::text])) = (project_id IS NULL)))
@@ -4275,5 +4275,4 @@ journal 1793190991835 4479beffde868c9a521b9ff1b6f44dd1b13dbb0e1293a3dabb1f48108c
 journal 1793199855626 709fe6bc0aa2d71a4a8a365c80e79db143341dd82867c0e2fdbd062aa7bcc9b3
 journal 1793204881720 aa541b7673882e81a831ab7f9b7f2bfc1c237d88f7204f890826d641a965be95
 journal 1793208191057 39fa2bbbea432325333ab472e2bbeb5082b9e57e679e1c0041ddf7fe7df76872
-journal 1793209049296 64275b21651c0614f779f558aa0d732f781137bd7a3d84380b2c419861502e64
 pgboss-version 42

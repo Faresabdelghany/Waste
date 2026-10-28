@@ -456,13 +456,6 @@
       "when": 1793208191057,
       "tag": "0064_catalogue_and_fleet_import",
       "breakpoints": true
-    },
-    {
-      "idx": 65,
-      "version": "7",
-      "when": 1793209049296,
-      "tag": "0065_calendars_and_areas_import",
-      "breakpoints": true
     }
   ]
 }
