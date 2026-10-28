@@ -73,8 +73,18 @@
 // charge: the `visit` kind and its clause of the kind's shape, the consumer's
 // `visit-voided` cancel reason, and the visit with its key, its index
 // (`ADDED_IN_0054`) and its own shape. `CHANGED_IN_0054` maps the event as
-// drizzle-kit writes it today, the stage "0054", onto 0048's, first of the event's chain;
-// site-visits-rendering.test.ts pins 0054.
+// drizzle-kit wrote it as of 0054 onto 0048's; site-visits-rendering.test.ts
+// pins 0054.
+//
+// Migration 0066 (O28 of #290, C32 of #291) gave it a weight charge: the
+// `weight` kind and its clause of the kind's shape, the consumer's
+// `weight-revised` cancel reason, the Unload with its key and index and the
+// share's kilograms with their check and the two's shape, the consumer's key
+// leaving the weight kind out and the weight kind's own key per event and
+// stop (`ADDED_IN_0066`). `CHANGED_IN_0066` maps the event as drizzle-kit
+// writes it today, the stage "0066", onto 0054's, and the consumer's key onto
+// 0046's, first of the event's chain; weight-charges-rendering.test.ts pins
+// 0066.
 import assert from "node:assert/strict"
 import { readdir, readFile } from "node:fs/promises"
 import { join } from "node:path"
@@ -173,11 +183,11 @@ const AMOUNTS_0010 = {
 const vatShape = (table: string, nullable: boolean): string =>
   `CONSTRAINT "${table}_vat_shape" CHECK (${nullable ? `${ref(table, "vat_minor")} is null or ` : ""}${ref(table, "vat_minor")} = round(${ref(table, "net_minor")} * ${ref(table, "vat_percent")} / 100.0))`
 
-/** The billable event as 0010 left it, as 0036 grew it with the recurring charge (#291 C2), as 0044 with container hire (M14 of #293), as 0046 with a Pickup Exception's charge (#293 M5b), as 0048 with the hold for review (M14 of #293), and as 0054 with a recycling-centre visit's charge (#393). */
-type EventAsOf = "0010" | "0036" | "0044" | "0046" | "0048" | "0054"
+/** The billable event as 0010 left it, as 0036 grew it with the recurring charge (#291 C2), as 0044 with container hire (M14 of #293), as 0046 with a Pickup Exception's charge (#293 M5b), as 0048 with the hold for review (M14 of #293), as 0054 with a recycling-centre visit's charge (#393), and as 0066 with a weight charge (O28 of #290). */
+type EventAsOf = "0010" | "0036" | "0044" | "0046" | "0048" | "0054" | "0066"
 
 /** The stages in order, so a spelling can say since when it holds. */
-const STAGES: readonly EventAsOf[] = ["0010", "0036", "0044", "0046", "0048", "0054"]
+const STAGES: readonly EventAsOf[] = ["0010", "0036", "0044", "0046", "0048", "0054", "0066"]
 const since = (asOf: EventAsOf, stage: EventAsOf): boolean => STAGES.indexOf(asOf) >= STAGES.indexOf(stage)
 
 /** The event's two vocabularies as 0010 spelled them, before the recurring charge's kind and block, and its kinds as 0036 left them. */
@@ -188,8 +198,11 @@ const BLOCK_REASONS_AS_OF_0010 = ["no-subscription", "agreement-draft", "no-pric
 const KINDS_AS_OF_0044 = [...KINDS_AS_OF_0036, "job", "hire"]
 /** The event's kinds as 0046 spelled them, before a recycling-centre visit's charge (#393). */
 const KINDS_AS_OF_0046 = [...KINDS_AS_OF_0044, "pickup-exception"]
+/** The event's kinds and cancel reasons as 0054 spelled them, before a weight charge (O28 of #290). */
+const KINDS_AS_OF_0054 = V.BILLABLE_EVENT_KINDS.filter((kind) => kind !== "weight")
+const CANCEL_REASONS_AS_OF_0054 = V.CANCEL_REASONS.filter((reason) => reason !== "weight-revised")
 /** The cancel reasons until 0054, before the consumer's `visit-voided` (#393). */
-const CANCEL_REASONS_AS_OF_0010 = V.CANCEL_REASONS.filter((reason) => reason !== "visit-voided")
+const CANCEL_REASONS_AS_OF_0010 = CANCEL_REASONS_AS_OF_0054.filter((reason) => reason !== "visit-voided")
 
 /** The event's kind CASE, spelled as the file spells it, kind by kind. */
 const kindShape = (asOf: EventAsOf): string => {
@@ -210,6 +223,7 @@ const kindShape = (asOf: EventAsOf): string => {
       : []),
     ...(since(asOf, "0046") ? [`when 'pickup-exception' then ${some("pickup_id")} and ${none("ticket_id")} and ${none("reverses_event_id")}`] : []),
     ...(since(asOf, "0054") ? [`when 'visit' then ${some("visit_id")} and ${none("pickup_id")} and ${none("ticket_id")} and ${none("reverses_event_id")}`] : []),
+    ...(since(asOf, "0066") ? [`when 'weight' then ${some("unload_id")} and ${some("pickup_id")} and ${none("ticket_id")} and ${none("reverses_event_id")}`] : []),
   ]
   return `CONSTRAINT "billable_event_kind_shape" CHECK (case ${column("kind")} ${clauses.join(" ")} else false end)`
 }
@@ -233,6 +247,9 @@ const EVIDENCE_SHAPE = `CONSTRAINT "billable_event_evidence_shape" CHECK (${ref(
 
 /** 0054's own shape: only a recycling-centre visit's charge names its visit. */
 const VISIT_SHAPE = `CONSTRAINT "billable_event_visit_shape" CHECK (${ref("billable_event", "visit_id")} is null or ${ref("billable_event", "kind")} = 'visit')`
+
+/** 0066's own shape: only a weight charge names its Unload, and it carries its share's kilograms with it. */
+const WEIGHT_SHAPE = `CONSTRAINT "billable_event_weight_shape" CHECK ((${ref("billable_event", "kind")} = 'weight') = (${ref("billable_event", "unload_id")} is not null) and (${ref("billable_event", "unload_id")} is null) = (${ref("billable_event", "weight_kg")} is null))`
 
 /** What 0054 added beside the table: the visit's key into its site visit, and its index. */
 export const ADDED_IN_0054 = [projectFkTo("billable_event", "visit_id", "site_visit"), index("billable_event", "billable_event_visit_id_idx", "company_id", "visit_id")]
@@ -284,6 +301,7 @@ const billableEventTable = (asOf: EventAsOf): string =>
     '"reverses_event_id" uuid',
     ...(since(asOf, "0046") ? ['"evidence_proof_id" uuid'] : []),
     ...(since(asOf, "0054") ? ['"visit_id" uuid'] : []),
+    ...(since(asOf, "0066") ? ['"unload_id" uuid', '"weight_kg" integer'] : []),
     ...(asOf !== "0010" ? CHARGE_COLUMNS : []),
     ...(since(asOf, "0044") ? ['"container_id" uuid', '"placement_id" uuid'] : []),
     '"source_event_id" uuid',
@@ -295,10 +313,11 @@ const billableEventTable = (asOf: EventAsOf): string =>
     '"cancel_reason" text',
     ...(since(asOf, "0048") ? [`"held_at" ${INSTANT}`, '"held_by" uuid', '"hold_reason" text'] : []),
     uniqueKey("billable_event_project_key", "company_id", "project_id", "id"),
-    oneOfCheck("billable_event", "kind", ...{ "0010": KINDS_AS_OF_0010, "0036": KINDS_AS_OF_0036, "0044": KINDS_AS_OF_0044, "0046": KINDS_AS_OF_0046, "0048": KINDS_AS_OF_0046, "0054": V.BILLABLE_EVENT_KINDS }[asOf]),
+    oneOfCheck("billable_event", "kind", ...{ "0010": KINDS_AS_OF_0010, "0036": KINDS_AS_OF_0036, "0044": KINDS_AS_OF_0044, "0046": KINDS_AS_OF_0046, "0048": KINDS_AS_OF_0046, "0054": KINDS_AS_OF_0054, "0066": V.BILLABLE_EVENT_KINDS }[asOf]),
     oneOfCheck("billable_event", "block_reason", ...(asOf !== "0010" ? V.BLOCK_REASONS : BLOCK_REASONS_AS_OF_0010)),
-    oneOfCheck("billable_event", "cancel_reason", ...(since(asOf, "0054") ? V.CANCEL_REASONS : CANCEL_REASONS_AS_OF_0010)),
+    oneOfCheck("billable_event", "cancel_reason", ...(since(asOf, "0066") ? V.CANCEL_REASONS : since(asOf, "0054") ? CANCEL_REASONS_AS_OF_0054 : CANCEL_REASONS_AS_OF_0010)),
     positiveCheck("billable_event", "quantity"),
+    ...(since(asOf, "0066") ? [positiveCheck("billable_event", "weight_kg")] : []),
     `CONSTRAINT "billable_event_priced_references" CHECK (${ref("billable_event", "block_reason")} is not null or (${ref("billable_event", "agreement_id")} is not null and ${ref("billable_event", "product_id")} is not null))`,
     `CONSTRAINT "billable_event_priced_shape" CHECK ((${ref("billable_event", "block_reason")} is null) = (${ref("billable_event", "net_minor")} is not null) and (${ref("billable_event", "net_minor")} is null) = (${ref("billable_event", "unit_price_minor")} is null) and (${ref("billable_event", "net_minor")} is null) = (${ref("billable_event", "vat_percent")} is null) and (${ref("billable_event", "net_minor")} is null) = (${ref("billable_event", "vat_minor")} is null) and (${ref("billable_event", "net_minor")} is null) = (${ref("billable_event", "currency")} is null))`,
     AMOUNTS_0010.billableEvent,
@@ -309,6 +328,7 @@ const billableEventTable = (asOf: EventAsOf): string =>
     kindShape(asOf),
     ...(since(asOf, "0046") ? [EVIDENCE_SHAPE] : []),
     ...(since(asOf, "0054") ? [VISIT_SHAPE] : []),
+    ...(since(asOf, "0066") ? [WEIGHT_SHAPE] : []),
     originShape(asOf),
     ...(asOf !== "0010" ? [chargeShape(asOf)] : []),
     `CONSTRAINT "billable_event_cancel_shape" CHECK ((${ref("billable_event", "cancelled_at")} is null) = (${ref("billable_event", "cancel_reason")} is null) and (${ref("billable_event", "cancelled_by")} is null or ${ref("billable_event", "cancelled_at")} is not null))`,
@@ -325,7 +345,15 @@ const ADDED_IN_0036 = [SUBSCRIPTION_CHARGE_INDEX]
 const SOURCE_INDEX = {
   "0010": partialUniqueIndex("billable_event", "billable_event_source_event_id_idx", ["company_id", "source_event_id"], `${ref("billable_event", "source_event_id")} is not null`),
   "0046": partialUniqueIndex("billable_event", "billable_event_source_event_id_idx", ["company_id", "source_event_id", "kind"], `${ref("billable_event", "source_event_id")} is not null and ${ref("billable_event", "kind")} <> 'reversal'`),
+  "0066": partialUniqueIndex("billable_event", "billable_event_source_event_id_idx", ["company_id", "source_event_id", "kind"], `${ref("billable_event", "source_event_id")} is not null and ${ref("billable_event", "kind")} not in ('reversal', 'weight')`),
 }
+
+/** What 0066 added beside the table (O28 of #290): the Unload's key and index, and a weight charge's own key, one per outbox event and stop. */
+export const ADDED_IN_0066 = [
+  projectFkTo("billable_event", "unload_id", "unload"),
+  partialUniqueIndex("billable_event", "billable_event_weight_charge_idx", ["company_id", "source_event_id", "pickup_id"], `${ref("billable_event", "kind")} = 'weight'`),
+  index("billable_event", "billable_event_unload_id_idx", "company_id", "unload_id"),
+]
 
 /** The reversed event's index as 0010 wrote it, a tenant index, and as 0046 made it the reversal's key: an event is reversed once. */
 const REVERSES_INDEX = {
@@ -345,7 +373,13 @@ const exclusionTable = (asOf: "0010" | "0048"): string =>
     positiveCheck("billing_run_exclusion", "event_count"),
   ])
 
-/** What 0054 changed (#393): the event's CREATE TABLE as drizzle-kit generates it now onto what it generated as of 0048. Applied first. */
+/** What 0066 changed (O28 of #290): the event's CREATE TABLE as drizzle-kit generates it now onto what it generated as of 0054, and the consumer's key onto 0046's. Applied first. */
+const CHANGED_IN_0066 = new Map([
+  [billableEventTable("0066"), billableEventTable("0054")],
+  [SOURCE_INDEX["0066"], SOURCE_INDEX["0046"]],
+])
+
+/** What 0054 changed (#393): the event's CREATE TABLE as drizzle-kit generated it as of 0054 onto what it generated as of 0048. Applied after `CHANGED_IN_0066`. */
 const CHANGED_IN_0054 = new Map([[billableEventTable("0054"), billableEventTable("0048")]])
 
 /** What 0048 changed (M14 of #293): the event's CREATE TABLE as drizzle-kit generated it as of 0048 onto what it generated as of 0046, and the exclusion's, as it generates it now, onto 0010's. Applied after `CHANGED_IN_0054`. */
@@ -997,9 +1031,11 @@ const tablesAsOf0010 = async (): Promise<string[]> =>
         !ADDED_IN_0046.includes(statement) &&
         !ADDED_IN_0048.includes(statement) &&
         !ADDED_BY_INDEXATION.includes(statement) &&
-        !ADDED_IN_0054.includes(statement),
+        !ADDED_IN_0054.includes(statement) &&
+        !ADDED_IN_0066.includes(statement),
     )
     .map(asOf0010)
+    .map((statement) => CHANGED_IN_0066.get(statement) ?? statement)
     .map((statement) => CHANGED_IN_0054.get(statement) ?? statement)
     .map((statement) => CHANGED_BY_INDEXATION.get(statement) ?? statement)
     .map((statement) => CHANGED_IN_0048.get(statement) ?? statement)
@@ -1035,15 +1071,17 @@ describe("the Finance & Contracting tables as drizzle-kit writes them", () => {
     // What 0036 changed is what the schema generates today once 0028's casts are mapped back, and what it added is today's too: each mapping maps something.
     const today = await statementsFor(tables)
     const castBack = today.map(asOf0010)
-    for (const statement of CHANGED_IN_0054.keys()) assert.ok(castBack.includes(statement), statement.split("\n")[0])
-    const asOf0048 = castBack.map((statement) => CHANGED_IN_0054.get(statement) ?? statement)
+    for (const statement of CHANGED_IN_0066.keys()) assert.ok(castBack.includes(statement), statement.split("\n")[0])
+    const asOf0054 = castBack.map((statement) => CHANGED_IN_0066.get(statement) ?? statement)
+    for (const statement of CHANGED_IN_0054.keys()) assert.ok(asOf0054.includes(statement), statement.split("\n")[0])
+    const asOf0048 = asOf0054.map((statement) => CHANGED_IN_0054.get(statement) ?? statement)
     for (const statement of CHANGED_IN_0048.keys()) assert.ok(asOf0048.includes(statement), statement.split("\n")[0])
     const asOf0046 = asOf0048.map((statement) => CHANGED_IN_0048.get(statement) ?? statement)
     for (const statement of CHANGED_IN_0046.keys()) assert.ok(asOf0046.includes(statement), statement.split("\n")[0])
     const asOf0044 = asOf0046.map((statement) => CHANGED_IN_0046.get(statement) ?? statement)
     for (const statement of CHANGED_IN_0036.keys()) assert.ok(asOf0044.includes(statement), statement.split("\n")[0])
     for (const statement of CHANGED_BY_INDEXATION.keys()) assert.ok(today.includes(statement), statement.split("\n")[0])
-    for (const statement of [...ADDED_IN_0036, ...ADDED_IN_0044, ...ADDED_IN_0046, ...ADDED_IN_0048, ...ADDED_BY_INDEXATION, ...ADDED_IN_0054]) assert.ok(today.includes(statement), statement)
+    for (const statement of [...ADDED_IN_0036, ...ADDED_IN_0044, ...ADDED_IN_0046, ...ADDED_IN_0048, ...ADDED_BY_INDEXATION, ...ADDED_IN_0054, ...ADDED_IN_0066]) assert.ok(today.includes(statement), statement)
     const alterations = await statementsBetween({ product: productAsOf0004 }, { product })
     for (const statement of ADDED_TO_PRODUCT_IN_0044) assert.ok(alterations.includes(statement), statement)
   })
@@ -1089,12 +1127,13 @@ describe("the Finance & Contracting tables as drizzle-kit writes them", () => {
 })
 
 describe("the checks of this context", () => {
-  test("the billable event carries its thirteen shape checks beside its three vocabularies and the count, each rendering without parameters", () => {
+  test("the billable event carries its fourteen shape checks beside its three vocabularies and the two counts, each rendering without parameters", () => {
     assert.deepEqual([...checksOf(billableEvent).keys()], [
       "billable_event_kind_one_of",
       "billable_event_block_reason_one_of",
       "billable_event_cancel_reason_one_of",
       "billable_event_quantity_positive",
+      "billable_event_weight_kg_positive",
       "billable_event_priced_references",
       "billable_event_priced_shape",
       "billable_event_amounts_shape",
@@ -1105,12 +1144,14 @@ describe("the checks of this context", () => {
       "billable_event_kind_shape",
       "billable_event_evidence_shape",
       "billable_event_visit_shape",
+      "billable_event_weight_shape",
       "billable_event_origin_shape",
       "billable_event_charge_shape",
       "billable_event_cancel_shape",
       "billable_event_hold_shape",
     ])
-    assert.equal(`CONSTRAINT "billable_event_kind_shape" CHECK (${checksOf(billableEvent).get("billable_event_kind_shape")})`, kindShape("0054"))
+    assert.equal(`CONSTRAINT "billable_event_kind_shape" CHECK (${checksOf(billableEvent).get("billable_event_kind_shape")})`, kindShape("0066"))
+    assert.equal(`CONSTRAINT "billable_event_weight_shape" CHECK (${checksOf(billableEvent).get("billable_event_weight_shape")})`, WEIGHT_SHAPE)
     assert.equal(`CONSTRAINT "billable_event_visit_shape" CHECK (${checksOf(billableEvent).get("billable_event_visit_shape")})`, VISIT_SHAPE)
     assert.equal(`CONSTRAINT "billable_event_evidence_shape" CHECK (${checksOf(billableEvent).get("billable_event_evidence_shape")})`, EVIDENCE_SHAPE)
     for (const kind of V.BILLABLE_EVENT_KINDS) assert.ok(checksOf(billableEvent).get("billable_event_kind_shape")?.includes(`when '${kind}' then`), kind)

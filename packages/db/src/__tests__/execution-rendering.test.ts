@@ -75,9 +75,14 @@
 // statements themselves.
 //
 // Migration 0054 (#393, M4 of #293) grew them by the recycling-centre visits'
-// two kinds on a `site-visit`, so `CHANGED_IN_0054`, first of the outbox's chain, maps the
-// outbox as drizzle-kit writes it now onto its 0040 spelling;
+// two kinds on a `site-visit`, so `CHANGED_IN_0054` maps the outbox as
+// drizzle-kit wrote it as of 0054 onto its 0040 spelling;
 // site-visits-rendering.test.ts pins the statements themselves.
+//
+// Migration 0066 (O28 of #290) grew the outbox's kinds by the weight
+// review's `weight-reviewed`, so `CHANGED_IN_0066`, now first of the outbox's
+// chain, maps the outbox as drizzle-kit writes it now onto its 0054
+// spelling; weight-charges-rendering.test.ts pins the statements themselves.
 //
 // Migration 0055 (O23 of #290) gave `pickup` the stop it was moved from, with
 // its route, and `pickup_moved_from_shape`, so `CHANGED_IN_0055`, now first
@@ -181,10 +186,11 @@ const stampsShape = (() => {
  * Execution's twelve kinds about four aggregates; as of 0009, Resolution's
  * three kinds and its ticket beside them (Issue #109); as of 0010, Finance's
  * two and its invoice and settlement after those (Issue #112); as of 0040, the
- * Registry's decided application after them (M7 of #293); today, the
- * recycling-centre visits' two after it (#393, migration 0054).
+ * Registry's decided application after them (M7 of #293); as of 0054, the
+ * recycling-centre visits' two after it (#393); today, the weight review's
+ * after those (O28 of #290, migration 0066).
  */
-const outboxEventTable = (asOf: "0008" | "0009" | "0010" | "0040" | "0054"): string =>
+const outboxEventTable = (asOf: "0008" | "0009" | "0010" | "0040" | "0054" | "0066"): string =>
   createTable("outbox_event", "project", [
     '"kind" text NOT NULL',
     '"aggregate_kind" text NOT NULL',
@@ -211,6 +217,7 @@ const outboxEventTable = (asOf: "0008" | "0009" | "0010" | "0040" | "0054"): str
       ...(asOf >= "0010" ? ["invoice-issued", "settlement-closed"] : []),
       ...(asOf >= "0040" ? ["application-decided"] : []),
       ...(asOf >= "0054" ? ["site-visit-recorded", "site-visit-voided"] : []),
+      ...(asOf >= "0066" ? ["weight-reviewed"] : []),
     ),
     oneOfCheck(
       "outbox_event",
@@ -306,7 +313,10 @@ const driverCommandTable = (asOf: "0008" | "0060"): string =>
 /** What 0060 changed on one of the seven (O8 of #290): the receipt's CREATE TABLE as drizzle-kit generates it now onto what 0008 says. Applied first of all; live-positions-rendering.test.ts pins the statements themselves. */
 const CHANGED_IN_0060 = new Map([[driverCommandTable("0060"), driverCommandTable("0008")]])
 
-/** What 0054 changed on one of the seven (#393): the outbox's CREATE TABLE as drizzle-kit generates it now onto what it generated as of 0040. Applied first of all. */
+/** What 0066 changed on one of the seven (O28 of #290): the outbox's CREATE TABLE as drizzle-kit generates it now onto what it generated as of 0054. Applied first of all. */
+const CHANGED_IN_0066 = new Map([[outboxEventTable("0066"), outboxEventTable("0054")]])
+
+/** What 0054 changed on one of the seven (#393): the outbox's CREATE TABLE as drizzle-kit generated it as of 0054 onto what it generated as of 0040. Applied after `CHANGED_IN_0066`. */
 const CHANGED_IN_0054 = new Map([[outboxEventTable("0054"), outboxEventTable("0040")]])
 
 /** What 0040 changed on one of the seven (M7 of #293): the outbox's CREATE TABLE as drizzle-kit generated it as of 0040 onto what it generated as of 0010. Applied after `CHANGED_IN_0054`, one file at a time. */
@@ -548,7 +558,7 @@ const expected = [
   proofTable("0038"),
   unloadTable("0045"),
   driverCommandTable("0060"),
-  outboxEventTable("0054"),
+  outboxEventTable("0066"),
   companyFk("route"),
   projectFk("route"),
   projectFkTo("route", "route_scheme_id", "route_scheme"),
@@ -710,6 +720,7 @@ const generatedHead = async (): Promise<string[]> => [
     .map((statement) => CHANGED_IN_0060.get(statement) ?? statement)
     .map((statement) => CHANGED_IN_0055.get(statement) ?? statement)
     .map((statement) => CHANGED_IN_0053.get(statement) ?? statement)
+    .map((statement) => CHANGED_IN_0066.get(statement) ?? statement)
     .map((statement) => CHANGED_IN_0054.get(statement) ?? statement)
     .map((statement) => CHANGED_IN_0045.get(statement) ?? statement)
     .map((statement) => CHANGED_IN_0040.get(statement) ?? statement)
@@ -763,7 +774,8 @@ describe("the Execution tables as drizzle-kit writes them", () => {
     for (const statement of ADDED_IN_0013) assert.ok(today.includes(statement), statement)
     for (const statement of CHANGED_IN_0012.keys()) assert.ok([...CHANGED_IN_0013.values()].includes(statement), statement.split("\n")[0])
     for (const statement of ADDED_IN_0012) assert.ok(today.includes(statement), statement)
-    for (const statement of CHANGED_IN_0054.keys()) assert.ok(today.includes(statement), statement.split("\n")[0])
+    for (const statement of CHANGED_IN_0066.keys()) assert.ok(today.includes(statement), statement.split("\n")[0])
+    for (const statement of CHANGED_IN_0054.keys()) assert.ok([...CHANGED_IN_0066.values()].includes(statement), statement.split("\n")[0])
     for (const statement of CHANGED_IN_0040.keys()) assert.ok([...CHANGED_IN_0054.values()].includes(statement), statement.split("\n")[0])
     for (const statement of CHANGED_IN_0045.keys()) assert.ok(today.includes(statement), statement.split("\n")[0])
     for (const statement of CHANGED_IN_0010.keys()) assert.ok(today.includes(statement) || [...CHANGED_IN_0040.values(), ...CHANGED_IN_0045.values()].includes(statement), statement.split("\n")[0])
@@ -779,6 +791,7 @@ describe("the Execution tables as drizzle-kit writes them", () => {
     assert.equal(CHANGED_IN_0038.size, 2, "the stop's and the proof's contaminant code")
     assert.equal(CHANGED_IN_0040.size, 1, "the outbox's decided application")
     assert.equal(CHANGED_IN_0054.size, 1, "the outbox's recycling-centre visits")
+    assert.equal(CHANGED_IN_0066.size, 1, "the outbox's weight review")
     assert.equal(CHANGED_IN_0053.size, 1, "the stop's bulky booking")
     assert.equal(CHANGED_IN_0055.size, 1, "the stop a moved stop was moved from")
     assert.equal(CHANGED_IN_0060.size, 1, "the receipt's record-positions")

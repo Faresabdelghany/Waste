@@ -380,10 +380,14 @@ export async function previewBilling(tx: Tx, scope: Scope, period: BillingPeriod
   }
 }
 
-/** A line's text: the product's invoice name (or its name) and the service date; a recycling-centre visit's, its site and its identifier after them (#393); a recurring charge's, its charge period's first and last days and, where it charged fewer, how many of its days. */
+/** Whole kilograms as an invoice reads them: 8,240 kg. */
+const kilograms = (kg: number): string => `${String(kg).replace(/\B(?=(\d{3})+(?!\d))/g, ",")} kg`
+
+/** A line's text: the product's invoice name (or its name) and the service date; a recycling-centre visit's, its site and its identifier after them (#393); a weight charge's, the kilograms it charged (O28 of #290); a recurring charge's, its charge period's first and last days and, where it charged fewer, how many of its days. */
 function descriptionOf(event: ReadyEvent): string {
   const name = event.invoiceName ?? event.productName
   if (event.visitSite !== null) return [name, event.serviceDate, event.visitSite, event.visitIdentifier].filter((part) => part !== null).join(" · ")
+  if (event.weightKg !== null) return `${name} · ${event.serviceDate} · ${kilograms(event.weightKg)}`
   if (event.chargePeriodFrom === null || event.chargePeriodTo === null || event.chargedDays === null || event.periodDays === null) return `${name} · ${event.serviceDate}`
   const days = event.chargedDays === event.periodDays ? "" : ` · ${event.chargedDays} of ${event.periodDays} days`
   return `${name} · ${event.chargePeriodFrom} – ${addDays(event.chargePeriodTo, -1)}${days}`

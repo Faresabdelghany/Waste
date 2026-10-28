@@ -45,6 +45,8 @@ export const BillableEventLinks = z.object({
   proofId: Id.nullable(),
   /** On a recycling-centre visit's charge (#393): the Site Visit it charges for. */
   visitId: Id.nullable(),
+  /** On a weight charge (O28 of #290): the Unload whose reviewed weight it charges a share of. */
+  unloadId: Id.nullable(),
 })
 export type BillableEventLinks = z.infer<typeof BillableEventLinks>
 
@@ -74,8 +76,10 @@ export const BillableEvent = z.object({
   agreementId: Id.nullable(),
   subscriptionId: Id.nullable(),
   productId: Id.nullable(),
-  /** In the product's unit; 1 for a pickup and a ticket. */
+  /** In the product's unit; 1 for a pickup and a ticket, and for a weight charge, one weighed load. */
   quantity: PositiveInt,
+  /** On a weight charge (O28 of #290): the stop's share of its Unload's reviewed net, whole kilograms, the unit price being the rate per tonne times it; null on every other kind. */
+  weightKg: PositiveInt.nullable(),
   /** The price as resolved and frozen; the five null together while blocked. A reversal's net and VAT are negative. */
   unitPriceMinor: Minor.nullable(),
   netMinor: Minor.nullable(),
