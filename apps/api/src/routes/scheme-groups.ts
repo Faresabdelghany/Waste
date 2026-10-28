@@ -118,6 +118,7 @@ import {
   requireWasteFraction,
   type Scope,
 } from "./references"
+import { schemeWarningsOf } from "./scheme-reconciliation"
 import { eachPresent, groupedBy, rowsPresent, whereNamed, type Named } from "./sets"
 import { instantOf, stamp, stampsOf, timeOf } from "./shared"
 import { refuseRetiredVehicle, refuseUnavailableDriver } from "./statuses"
@@ -186,7 +187,7 @@ export type GroupRow = Pick<typeof collectionGroup.$inferSelect, keyof typeof gr
 export const NEVER_GENERATED: SchemeGeneration = { lastGeneratedAt: null, groups: [] }
 
 /** The row on the wire, with the groups and the generation reading read for it. The coded fields are text with a CHECK in the database and an enum here; the vocabulary holds the two in lockstep. */
-export function schemeOf(row: SchemeRow, groups: CollectionGroup[], generation: SchemeGeneration): RouteScheme {
+export function schemeOf(row: SchemeRow, groups: CollectionGroup[], generation: SchemeGeneration, warnings: string[]): RouteScheme {
   return {
     id: row.id,
     projectId: row.projectId,
@@ -206,6 +207,7 @@ export function schemeOf(row: SchemeRow, groups: CollectionGroup[], generation: 
     unloadingStationId: row.unloadingStationId,
     collectionGroups: groups,
     generation,
+    warnings,
     validFrom: row.validFrom,
     validTo: row.validTo,
     ...stampsOf(row),
@@ -328,16 +330,18 @@ async function latestStamps(tx: Tx, companyId: string, groupIds: readonly string
 }
 
 /** Schemes on the wire, their groups and their generation read the way a page reads them: the groups first, since the stamps are the groups'. */
-export async function schemesOf(tx: Tx, companyId: string, rows: readonly SchemeRow[]): Promise<RouteScheme[]> {
+export async function schemesOf(tx: Tx, companyId: string, rows: readonly SchemeRow[], now: () => Date): Promise<RouteScheme[]> {
   const found = await groupsOf(tx, companyId, rows.map((row) => row.id))
   const groups = new Map(rows.map((row) => [row.id, found.get(row.id) ?? []]))
   const generations = await generationsOf(tx, companyId, groups)
-  return rows.map((row) => schemeOf(row, groups.get(row.id) ?? [], generations.get(row.id) ?? NEVER_GENERATED))
+  const read = rows.map((row) => ({ row, groups: groups.get(row.id) ?? [], generation: generations.get(row.id) ?? NEVER_GENERATED }))
+  const warnings = await schemeWarningsOf(tx, companyId, read.map(({ row, ...rest }) => ({ ...row, ...rest })), now)
+  return read.map(({ row, groups, generation }) => schemeOf(row, groups, generation, warnings.get(row.id) ?? []))
 }
 
 /** One scheme on the wire, read the way a page reads it. */
-export async function schemeWithGroups(tx: Tx, companyId: string, row: SchemeRow): Promise<RouteScheme> {
-  const [scheme] = await schemesOf(tx, companyId, [row])
+export async function schemeWithGroups(tx: Tx, companyId: string, row: SchemeRow, now: () => Date): Promise<RouteScheme> {
+  const [scheme] = await schemesOf(tx, companyId, [row], now)
   return scheme
 }
 

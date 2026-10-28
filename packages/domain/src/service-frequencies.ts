@@ -193,27 +193,42 @@ export function serviceFrequencyFactValue(id: string | null | undefined) {
   return (id && serviceFrequencyById.get(id)?.name) || EMPTY_FACT
 }
 
+/** The interval vocabulary alone, as `service_frequency` stores it: what the API's reconciliation reads (O22 of #290). */
+export type FrequencyInterval = Pick<
+  ServiceFrequencyDefinition,
+  "collectionsPerWeek" | "weeksBetween" | "daysBetween"
+>
+
 /**
- * A promise's nominal collections per week — the interval-vocabulary side of
- * the reconciliation comparison (issue #21 asks for interval comparison, not a
- * hard-coded cadence ladder).
- * weeks-between divides; days-between promises already state a weekly count.
- * The monthly definition carries no faithful interval fields by design, so it
- * reads the scheme-cadence rate. null = on demand — no standing cadence to
- * reconcile.
+ * An interval's nominal collections per week, the promise side of the
+ * reconciliation (issue #21 asks for interval comparison, not a hard-coded
+ * cadence ladder). weeks-between divides; days-between promises already
+ * state a weekly count; a rate with neither interval is the store's monthly
+ * (`service_frequency.collections_per_week`'s comment: 1 with neither
+ * interval is monthly), which reads the scheme-cadence rate. null = on
+ * demand — no standing cadence to reconcile.
  */
+export function intervalCollectionsPerWeek(interval: FrequencyInterval): number | null {
+  if (interval.collectionsPerWeek === null) return null
+  if (interval.weeksBetween !== null) return interval.collectionsPerWeek / interval.weeksBetween
+  if (interval.daysBetween !== null) return interval.collectionsPerWeek
+  return interval.collectionsPerWeek === 1 ? RECURRENCE_WEEKLY_RATES.monthly : interval.collectionsPerWeek
+}
+
+/** A catalog definition's nominal collections per week: its interval's (`intervalCollectionsPerWeek`). */
 export function promisedCollectionsPerWeek(
   definition: ServiceFrequencyDefinition,
 ): number | null {
-  if (definition.collectionsPerWeek === null) return null
-  if (definition.weeksBetween !== null) {
-    return definition.collectionsPerWeek / definition.weeksBetween
-  }
-  if (definition.schemeFrequency === "monthly") {
-    return RECURRENCE_WEEKLY_RATES.monthly
-  }
-  return definition.collectionsPerWeek
+  return intervalCollectionsPerWeek(definition)
 }
+
+/**
+ * Where a container read from the API carries its promise (O22 of #290): the
+ * effective frequency's collections per week, resolved from the API's
+ * interval, spelled as a number, or "" when it has no standing promise. A
+ * record carrying the key is never resolved against the fixture catalog.
+ */
+export const PROMISED_RATE_KEY = "promisedCollectionsPerWeek"
 
 /**
  * What the reconciliation validation needs to know about one linked
@@ -221,11 +236,19 @@ export function promisedCollectionsPerWeek(
  * name, and the promised rate on the shared collections-per-week scale.
  * Mirrors validation.ts SchemeFrequencyPromise structurally — validation
  * stays free of this module. null when the container carries no resolvable
- * standing promise (no frequency recorded, free text, or on demand).
+ * standing promise (no frequency recorded, free text, or on demand). A
+ * record read from the API names its promise under `PROMISED_RATE_KEY`.
  */
 export function schemeFrequencyPromiseOfRecord(
   record: ServiceFrequencySource & { name: string },
 ): { containerName: string; promisedName: string; promisedRate: number } | null {
+  const typed = record.submittedValues?.[PROMISED_RATE_KEY]
+  if (typeof typed === "string") {
+    const promisedRate = Number(typed)
+    const promisedName = record.facts["Service frequency"]
+    if (typed === "" || !Number.isFinite(promisedRate) || promisedRate <= 0 || !promisedName) return null
+    return { containerName: record.name, promisedName, promisedRate }
+  }
   const definition = serviceFrequencyOfRecord(record)
   if (!definition) return null
   const promisedRate = promisedCollectionsPerWeek(definition)

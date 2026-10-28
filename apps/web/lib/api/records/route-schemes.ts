@@ -59,6 +59,7 @@ import type { GenerationRequest, GenerationRun } from "@waste/contracts/generati
 import type { CollectionGroup as WireGroup, CollectionGroupCreate, CollectionGroupEntry, CollectionGroupPatch, Occurrence, OccurrenceQuery, RouteScheme, RouteSchemeCreate, RouteSchemePatch, StopMatchingRule } from "@waste/contracts/route-schemes"
 import { LAST_GENERATION_MATCHES_KEY, PREVIOUS_GENERATION_MATCHES_KEY, serializeGenerationMatches, type GenerationMatches } from "@waste/domain/route-schemes/container-drift"
 import { collectionGroupsOfRecord, collectionGroupsToValues, hasExplicitCollectionGroups, IMPLICIT_GROUP_ID, sharedServiceProvider, type CollectionGroup as SchemeGroup, type ResolvedCollectionGroup } from "@waste/domain/route-schemes/groups"
+import { SCHEME_API_WARNINGS_KEY } from "@waste/domain/route-schemes/lifecycle"
 import { addDays, parseServiceDays, sortServiceDays } from "@waste/domain/route-schemes/recurrence"
 import { SERVICE_TYPES, type ServiceType } from "@waste/domain/planning/vocabulary"
 
@@ -540,6 +541,8 @@ export const routeSchemeAdapter: ResourceAdapter<RouteScheme> = {
         ...(scheme.generation.lastGeneratedAt === null ? {} : { lastGeneratedAt: scheme.generation.lastGeneratedAt }),
         [LAST_GENERATION_MATCHES_KEY]: serializeGenerationMatches(last),
         [PREVIOUS_GENERATION_MATCHES_KEY]: serializeGenerationMatches(previous),
+        // The API's own reconciliation (O22 of #290), which the browser shows rather than judging the promises again.
+        [SCHEME_API_WARNINGS_KEY]: JSON.stringify(scheme.warnings),
       },
     }
   },

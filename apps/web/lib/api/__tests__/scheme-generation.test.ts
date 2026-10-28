@@ -53,6 +53,7 @@ const central: RouteScheme = {
   unloadingStationId: null,
   collectionGroups: [],
   generation: { lastGeneratedAt: null, groups: [] },
+  warnings: [],
   validFrom: "2026-06-01",
   validTo: null,
 }
