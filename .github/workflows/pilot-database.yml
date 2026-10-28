@@ -1,20 +1,26 @@
 # The one door to owner-level actions on the Pilot's database (Issue #152,
-# decided in #133; the procedures are supabase/README.md). Dispatched by hand
-# on main, one fixed operation per run, each its own job under the `pilot`
-# environment, which the repository owner approves before the job may read a
-# secret. No input is ever SQL, a shell command or a path: an operation is a
-# reviewed script below, and adding one is a reviewed change to this file.
+# decided in #133; the procedures are supabase/README.md). Since 2026-10-28
+# (ADR-0011) the release runs by itself once CI has passed on a commit pushed
+# to main, releasing exactly that commit; every operation, the release
+# included, can still be dispatched by hand on main. One fixed operation per
+# run, each its own job under the `pilot` environment, which admits main alone
+# and no longer asks for the owner's approval. No input is ever SQL, a shell
+# command or a path: an operation is a reviewed script below, and adding one
+# is a reviewed change to this file.
 #
 #   check           the journal check, the fingerprint against the committed
 #                   file (once nothing is pending), the service roles' LOGIN
 #                   state and the publication's tables; writes nothing
-#   release         a Pilot release, one approved run: the journal checked,
+#   release         a Pilot release, after CI on every push to main or by
+#                   hand: CI green on the commit, the journal checked,
 #                   an encrypted backup, the migrations, the seed on request,
 #                   the journal and the fingerprint checked again, one
 #                   release commit of this commit's tree on the deploy branch
 #                   `pilot` (Suga builds the Pilot image from it, #149) and
 #                   the build proved live — or, with deploy_api off, a
-#                   database-only release
+#                   database-only release. A `resolve` job without secrets
+#                   comes first and skips a commit older than the one the
+#                   deploy branch already releases
 #   reset-to-seed   the demo company swept and written back as the seed says,
 #                   inside the write barrier, after a safety backup
 #   grant-logins    LOGIN for exactly wms_api and wms_worker from the
@@ -27,9 +33,11 @@
 # Secrets are the `pilot` environment's and reach only the step that needs
 # them, as that step's environment: never a job's or the workflow's, never
 # printed, written to an artifact or put on a command line. The environment
-# admits main alone and asks the owner to approve every job that names it;
-# self-review prevention is off, since one person dispatches and approves:
-# this is a one-person approval boundary, not a two-person control. Every
+# admits main alone; the owner removed its required reviewer on 2026-10-28
+# (ADR-0011, superseding the approval gate of #133 and #152), so a job that
+# names it runs without approval. What guards the Pilot instead is in the
+# jobs: CI green on the exact commit, the journal check, an encrypted backup
+# before every migration, the fingerprint check and the live proof. Every
 # action is pinned by commit here, the one workflow that holds the owner's
 # secret; a job installs @waste/db's dependencies from the lockfile and
 # restores no cache. The workflow's token is read-only but for the release
@@ -38,6 +46,13 @@
 name: Pilot database
 
 on:
+  # The automatic release: CI finished on a push to main. Only a successful,
+  # pushed run of this repository releases (the resolve job's `if`), and it
+  # releases that run's head_sha, never a newer main.
+  workflow_run:
+    workflows: [CI]
+    types: [completed]
+    branches: [main]
   workflow_dispatch:
     inputs:
       operation:
@@ -77,6 +92,10 @@ permissions:
   contents: read
 
 # One operation at a time, and a migration is never cancelled by the next.
+# GitHub keeps one pending run per group: a third run arriving while one runs
+# and one waits replaces the waiting one, which shows as cancelled. For two
+# automatic releases that is harmless, since the later commit carries the
+# earlier; a hand dispatch replaced this way is dispatched again.
 concurrency:
   group: pilot-database
   cancel-in-progress: false
@@ -96,7 +115,7 @@ env:
 jobs:
   check:
     name: Check the Pilot's database
-    if: inputs.operation == 'check'
+    if: github.event_name == 'workflow_dispatch' && inputs.operation == 'check'
     runs-on: ubuntu-latest
     timeout-minutes: 30
     environment: pilot
@@ -128,12 +147,59 @@ jobs:
           DATABASE_ADMIN_URL: ${{ secrets.PILOT_DATABASE_ADMIN_URL }}
         run: node --import tsx scripts/pilot/state.ts
 
+  # What a release releases, decided without a secret: the commit (CI's
+  # head_sha after CI, this run's commit by hand), the settings (after CI the
+  # API deployed and no seed), and whether it goes on at all, since a commit
+  # older than the one the deploy branch already releases is skipped
+  # (packages/db/src/pilot/release.ts, judgeOrder). Inside the workflow's
+  # concurrency, so two releases decide and release one after the other.
+  resolve:
+    name: Resolve the release
+    if: >-
+      (github.event_name == 'workflow_dispatch' && inputs.operation == 'release') ||
+      (github.event_name == 'workflow_run' &&
+       github.event.workflow_run.conclusion == 'success' &&
+       github.event.workflow_run.event == 'push' &&
+       github.event.workflow_run.head_branch == 'main' &&
+       github.event.workflow_run.head_repository.full_name == github.repository)
+    runs-on: ubuntu-latest
+    timeout-minutes: 10
+    env:
+      RELEASE_COMMIT: ${{ github.event_name == 'workflow_run' && github.event.workflow_run.head_sha || github.sha }}
+      DEPLOY_API: ${{ github.event_name == 'workflow_run' || inputs.deploy_api }}
+      RUN_SEED: ${{ github.event_name != 'workflow_run' && inputs.run_seed }}
+    outputs:
+      commit: ${{ env.RELEASE_COMMIT }}
+      deploy_api: ${{ env.DEPLOY_API }}
+      run_seed: ${{ env.RUN_SEED }}
+      proceed: ${{ steps.order.outputs.proceed }}
+    steps:
+      - name: Require main
+        run: test "$GITHUB_REF" = refs/heads/main || { echo "::error::The Pilot is released from main only"; exit 1; }
+      - uses: actions/checkout@3d3c42e5aac5ba805825da76410c181273ba90b1 # v7
+        with:
+          ref: ${{ env.RELEASE_COMMIT }}
+          persist-credentials: false
+      - uses: ./.github/actions/pilot-node
+      - name: Release in main's order
+        id: order
+        working-directory: packages/db
+        env:
+          GITHUB_TOKEN: ${{ github.token }}
+        run: node --import tsx scripts/pilot/order.ts
+
   release:
     name: Release to the Pilot
-    if: inputs.operation == 'release'
+    needs: resolve
+    if: needs.resolve.outputs.proceed == 'true'
     runs-on: ubuntu-latest
     timeout-minutes: 30
     environment: pilot
+    # The resolve job's decision, for every step below: never a secret.
+    env:
+      RELEASE_COMMIT: ${{ needs.resolve.outputs.commit }}
+      DEPLOY_API: ${{ needs.resolve.outputs.deploy_api }}
+      RUN_SEED: ${{ needs.resolve.outputs.run_seed }}
     # `contents: write` for step 8 alone, the release commit on the deploy
     # branch, and `checks: read` for step 2, CI's proof of the commit; the
     # checkout below still keeps the token out of the tree, and each step
@@ -147,22 +213,23 @@ jobs:
         run: test "$GITHUB_REF" = refs/heads/main || { echo "::error::The Pilot is released from main only"; exit 1; }
       - name: Say what is released
         env:
-          DEPLOY_API: ${{ inputs.deploy_api }}
-          RUN_SEED: ${{ inputs.run_seed }}
+          TRIGGER: ${{ github.event_name }}
         run: |
           kind=$([ "$DEPLOY_API" = true ] && echo "a release of the database and the Pilot image: the $PILOT_DEPLOY_BRANCH branch gets this commit's tree" || echo "a database-only release: the $PILOT_DEPLOY_BRANCH branch does not move, no URL read")
-          echo "Commit $GITHUB_SHA: $kind; seed: $RUN_SEED" | tee -a "$GITHUB_STEP_SUMMARY"
+          by=$([ "$TRIGGER" = workflow_run ] && echo "after CI on main" || echo "by hand")
+          echo "Commit $RELEASE_COMMIT, $by: $kind; seed: $RUN_SEED" | tee -a "$GITHUB_STEP_SUMMARY"
+      # The released commit's tree, which after CI is not main's tip when main has moved on since.
       - uses: actions/checkout@3d3c42e5aac5ba805825da76410c181273ba90b1 # v7
         with:
+          ref: ${{ env.RELEASE_COMMIT }}
           persist-credentials: false
       - uses: ./.github/actions/pilot-node
       # 2. CI's proof of this commit, in place of the image the old step resolved: the check runs REQUIRED_CHECKS names (packages/db/src/pilot/release.ts, held to ci.yml's job names by a test) completed with success, else nothing is written. Suga builds the image from the deploy branch, whose tree step 8 makes this commit's, so the code the release deploys is this commit by construction.
       - name: Require CI green on this commit
-        if: inputs.deploy_api
+        if: env.DEPLOY_API == 'true'
         working-directory: packages/db
         env:
           GITHUB_TOKEN: ${{ github.token }}
-          RELEASE_COMMIT: ${{ github.sha }}
         run: node --import tsx scripts/pilot/check-ci.ts
       # 3. The journal agrees with main's migrations before anything is written.
       - name: Journal check
@@ -193,7 +260,7 @@ jobs:
         run: pnpm db:migrate
       # 6. The seed, only when asked.
       - name: Seed
-        if: inputs.run_seed
+        if: env.RUN_SEED == 'true'
         env:
           DATABASE_ADMIN_URL: ${{ secrets.PILOT_DATABASE_ADMIN_URL }}
         run: pnpm db:seed
@@ -207,19 +274,17 @@ jobs:
       # 8. One release commit on the deploy branch through GitHub's git data API, under the job's token (this step alone reads it): this commit's tree plus apps/pilot/release.json naming it, on the branch's head and this commit. Suga builds and rolls out from there, and the image writes the file into build.json, since Suga passes no commit into a build. Never forced: the branch's head is a parent, so it fast-forwards.
       - name: Deploy
         id: deploy
-        if: inputs.deploy_api
+        if: env.DEPLOY_API == 'true'
         working-directory: packages/db
         env:
           GITHUB_TOKEN: ${{ github.token }}
-          RELEASE_COMMIT: ${{ github.sha }}
         run: node --import tsx scripts/pilot/deploy.ts
       # 9. Three consecutive observations of the released build within ten minutes; the old build's answers while Suga builds count as not yet.
       - name: Prove it live
-        if: inputs.deploy_api
+        if: env.DEPLOY_API == 'true'
         working-directory: packages/db
         env:
           PILOT_API_URL: ${{ vars.PILOT_API_URL }}
-          RELEASE_COMMIT: ${{ github.sha }}
         run: node --import tsx scripts/pilot/observe.ts
       - name: Remove plaintext
         if: always()
@@ -227,7 +292,7 @@ jobs:
 
   reset-to-seed:
     name: Reset the Pilot to its seed
-    if: inputs.operation == 'reset-to-seed'
+    if: github.event_name == 'workflow_dispatch' && inputs.operation == 'reset-to-seed'
     runs-on: ubuntu-latest
     timeout-minutes: 30
     environment: pilot
@@ -338,7 +403,7 @@ jobs:
 
   grant-logins:
     name: Grant the app roles' logins
-    if: inputs.operation == 'grant-logins'
+    if: github.event_name == 'workflow_dispatch' && inputs.operation == 'grant-logins'
     runs-on: ubuntu-latest
     timeout-minutes: 30
     environment: pilot
@@ -359,7 +424,7 @@ jobs:
 
   restore:
     name: Restore the Pilot from a backup
-    if: inputs.operation == 'restore'
+    if: github.event_name == 'workflow_dispatch' && inputs.operation == 'restore'
     runs-on: ubuntu-latest
     timeout-minutes: 30
     environment: pilot
@@ -512,7 +577,7 @@ jobs:
 
   repair:
     name: Run an allow-listed repair
-    if: inputs.operation == 'repair'
+    if: github.event_name == 'workflow_dispatch' && inputs.operation == 'repair'
     runs-on: ubuntu-latest
     timeout-minutes: 30
     environment: pilot
@@ -536,7 +601,7 @@ jobs:
 
   recover-logins:
     name: Recover the app roles' logins
-    if: inputs.operation == 'recover-logins'
+    if: github.event_name == 'workflow_dispatch' && inputs.operation == 'recover-logins'
     runs-on: ubuntu-latest
     timeout-minutes: 30
     environment: pilot

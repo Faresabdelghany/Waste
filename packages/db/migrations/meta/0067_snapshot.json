@@ -1,6 +1,6 @@
 {
-  "id": "400f20b1-5c15-4dbc-a257-c14d93bdd41a",
-  "prevId": "ba71ce1e-7742-45aa-94c8-a497ea290dab",
+  "id": "b568d379-e4bd-48a2-8951-6c67ca05025f",
+  "prevId": "cc115fcf-cd34-4583-bf20-fbc65cb62db2",
   "version": "7",
   "dialect": "postgresql",
   "tables": {
@@ -1931,161 +1931,6 @@
         "customer_payment_terms_range": {
           "name": "customer_payment_terms_range",
           "value": "\"wms\".\"customer\".\"payment_terms_days\" between 0 and 365"
-        }
-      },
-      "isRLSEnabled": false
-    },
-    "wms.customer_contact": {
-      "name": "customer_contact",
-      "schema": "wms",
-      "columns": {
-        "id": {
-          "name": "id",
-          "type": "uuid",
-          "primaryKey": true,
-          "notNull": true,
-          "default": "wms.uuidv7()"
-        },
-        "company_id": {
-          "name": "company_id",
-          "type": "uuid",
-          "primaryKey": false,
-          "notNull": true
-        },
-        "created_at": {
-          "name": "created_at",
-          "type": "timestamp with time zone",
-          "primaryKey": false,
-          "notNull": true,
-          "default": "now()"
-        },
-        "updated_at": {
-          "name": "updated_at",
-          "type": "timestamp with time zone",
-          "primaryKey": false,
-          "notNull": true,
-          "default": "now()"
-        },
-        "customer_id": {
-          "name": "customer_id",
-          "type": "uuid",
-          "primaryKey": false,
-          "notNull": true
-        },
-        "name": {
-          "name": "name",
-          "type": "text",
-          "primaryKey": false,
-          "notNull": true
-        },
-        "role": {
-          "name": "role",
-          "type": "text",
-          "primaryKey": false,
-          "notNull": true
-        },
-        "email": {
-          "name": "email",
-          "type": "text",
-          "primaryKey": false,
-          "notNull": false
-        },
-        "phone": {
-          "name": "phone",
-          "type": "text",
-          "primaryKey": false,
-          "notNull": false
-        },
-        "status": {
-          "name": "status",
-          "type": "text",
-          "primaryKey": false,
-          "notNull": true
-        }
-      },
-      "indexes": {
-        "customer_contact_customer_id_idx": {
-          "name": "customer_contact_customer_id_idx",
-          "columns": [
-            {
-              "expression": "company_id",
-              "isExpression": false,
-              "asc": true,
-              "nulls": "last"
-            },
-            {
-              "expression": "customer_id",
-              "isExpression": false,
-              "asc": true,
-              "nulls": "last"
-            }
-          ],
-          "isUnique": false,
-          "concurrently": false,
-          "method": "btree",
-          "with": {}
-        }
-      },
-      "foreignKeys": {
-        "customer_contact_company_id_fk": {
-          "name": "customer_contact_company_id_fk",
-          "tableFrom": "customer_contact",
-          "tableTo": "company",
-          "schemaTo": "wms",
-          "columnsFrom": [
-            "company_id"
-          ],
-          "columnsTo": [
-            "id"
-          ],
-          "onDelete": "no action",
-          "onUpdate": "no action"
-        },
-        "customer_contact_customer_id_fk": {
-          "name": "customer_contact_customer_id_fk",
-          "tableFrom": "customer_contact",
-          "tableTo": "customer",
-          "schemaTo": "wms",
-          "columnsFrom": [
-            "company_id",
-            "customer_id"
-          ],
-          "columnsTo": [
-            "company_id",
-            "id"
-          ],
-          "onDelete": "no action",
-          "onUpdate": "no action"
-        }
-      },
-      "compositePrimaryKeys": {},
-      "uniqueConstraints": {
-        "customer_contact_tenant_key": {
-          "name": "customer_contact_tenant_key",
-          "nullsNotDistinct": false,
-          "columns": [
-            "company_id",
-            "id"
-          ]
-        }
-      },
-      "policies": {},
-      "checkConstraints": {
-        "customer_contact_role_one_of": {
-          "name": "customer_contact_role_one_of",
-          "value": "\"wms\".\"customer_contact\".\"role\" in ('primary', 'billing', 'operations', 'on-site', 'other')"
-        },
-        "customer_contact_status_one_of": {
-          "name": "customer_contact_status_one_of",
-          "value": "\"wms\".\"customer_contact\".\"status\" in ('active', 'inactive')"
-        },
-        "customer_contact_email_lowercase": {
-          "name": "customer_contact_email_lowercase",
-          "value": "\"wms\".\"customer_contact\".\"email\" = lower(\"wms\".\"customer_contact\".\"email\")"
-        },
-        "customer_contact_channel_shape": {
-          "name": "customer_contact_channel_shape",
-          "value": "\"wms\".\"customer_contact\".\"email\" is not null or \"wms\".\"customer_contact\".\"phone\" is not null"
         }
       },
       "isRLSEnabled": false
@@ -8612,6 +8457,114 @@
       "checkConstraints": {},
       "isRLSEnabled": false
     },
+    "wms.decommission_reason": {
+      "name": "decommission_reason",
+      "schema": "wms",
+      "columns": {
+        "id": {
+          "name": "id",
+          "type": "uuid",
+          "primaryKey": true,
+          "notNull": true,
+          "default": "wms.uuidv7()"
+        },
+        "company_id": {
+          "name": "company_id",
+          "type": "uuid",
+          "primaryKey": false,
+          "notNull": true
+        },
+        "created_at": {
+          "name": "created_at",
+          "type": "timestamp with time zone",
+          "primaryKey": false,
+          "notNull": true,
+          "default": "now()"
+        },
+        "updated_at": {
+          "name": "updated_at",
+          "type": "timestamp with time zone",
+          "primaryKey": false,
+          "notNull": true,
+          "default": "now()"
+        },
+        "code": {
+          "name": "code",
+          "type": "text",
+          "primaryKey": false,
+          "notNull": true
+        },
+        "name": {
+          "name": "name",
+          "type": "text",
+          "primaryKey": false,
+          "notNull": true
+        },
+        "status": {
+          "name": "status",
+          "type": "text",
+          "primaryKey": false,
+          "notNull": true,
+          "default": "'active'"
+        }
+      },
+      "indexes": {},
+      "foreignKeys": {
+        "decommission_reason_company_id_fk": {
+          "name": "decommission_reason_company_id_fk",
+          "tableFrom": "decommission_reason",
+          "tableTo": "company",
+          "schemaTo": "wms",
+          "columnsFrom": [
+            "company_id"
+          ],
+          "columnsTo": [
+            "id"
+          ],
+          "onDelete": "no action",
+          "onUpdate": "no action"
+        }
+      },
+      "compositePrimaryKeys": {},
+      "uniqueConstraints": {
+        "decommission_reason_code_key": {
+          "name": "decommission_reason_code_key",
+          "nullsNotDistinct": false,
+          "columns": [
+            "company_id",
+            "code"
+          ]
+        },
+        "decommission_reason_name_key": {
+          "name": "decommission_reason_name_key",
+          "nullsNotDistinct": false,
+          "columns": [
+            "company_id",
+            "name"
+          ]
+        },
+        "decommission_reason_tenant_key": {
+          "name": "decommission_reason_tenant_key",
+          "nullsNotDistinct": false,
+          "columns": [
+            "company_id",
+            "id"
+          ]
+        }
+      },
+      "policies": {},
+      "checkConstraints": {
+        "decommission_reason_code_lowercase": {
+          "name": "decommission_reason_code_lowercase",
+          "value": "\"wms\".\"decommission_reason\".\"code\" = lower(\"wms\".\"decommission_reason\".\"code\")"
+        },
+        "decommission_reason_status_one_of": {
+          "name": "decommission_reason_status_one_of",
+          "value": "\"wms\".\"decommission_reason\".\"status\" in ('active', 'inactive')"
+        }
+      },
+      "isRLSEnabled": false
+    },
     "wms.stock_minimum": {
       "name": "stock_minimum",
       "schema": "wms",
@@ -8889,6 +8842,12 @@
           "primaryKey": false,
           "notNull": false
         },
+        "decommission_reason_id": {
+          "name": "decommission_reason_id",
+          "type": "uuid",
+          "primaryKey": false,
+          "notNull": false
+        },
         "reference": {
           "name": "reference",
           "type": "text",
@@ -9055,6 +9014,27 @@
           "concurrently": false,
           "method": "btree",
           "with": {}
+        },
+        "stock_movement_decommission_reason_id_idx": {
+          "name": "stock_movement_decommission_reason_id_idx",
+          "columns": [
+            {
+              "expression": "company_id",
+              "isExpression": false,
+              "asc": true,
+              "nulls": "last"
+            },
+            {
+              "expression": "decommission_reason_id",
+              "isExpression": false,
+              "asc": true,
+              "nulls": "last"
+            }
+          ],
+          "isUnique": false,
+          "concurrently": false,
+          "method": "btree",
+          "with": {}
         }
       },
       "foreignKeys": {
@@ -9178,6 +9158,22 @@
           "onDelete": "no action",
           "onUpdate": "no action"
         },
+        "stock_movement_decommission_reason_id_fk": {
+          "name": "stock_movement_decommission_reason_id_fk",
+          "tableFrom": "stock_movement",
+          "tableTo": "decommission_reason",
+          "schemaTo": "wms",
+          "columnsFrom": [
+            "company_id",
+            "decommission_reason_id"
+          ],
+          "columnsTo": [
+            "company_id",
+            "id"
+          ],
+          "onDelete": "no action",
+          "onUpdate": "no action"
+        },
         "stock_movement_corrects_movement_id_fk": {
           "name": "stock_movement_corrects_movement_id_fk",
           "tableFrom": "stock_movement",
@@ -9231,6 +9227,10 @@
         "stock_movement_placement_shape": {
           "name": "stock_movement_placement_shape",
           "value": "(\"wms\".\"stock_movement\".\"from_kind\" = 'service' or \"wms\".\"stock_movement\".\"to_kind\" = 'service') = (\"wms\".\"stock_movement\".\"placement_id\" is not null)"
+        },
+        "stock_movement_decommission_reason_shape": {
+          "name": "stock_movement_decommission_reason_shape",
+          "value": "(\"wms\".\"stock_movement\".\"kind\" = 'decommission') = (\"wms\".\"stock_movement\".\"decommission_reason_id\" is not null)"
         },
         "stock_movement_kind_shape": {
           "name": "stock_movement_kind_shape",
@@ -30057,6 +30057,18 @@
           "primaryKey": false,
           "notNull": false
         },
+        "vehicle_id": {
+          "name": "vehicle_id",
+          "type": "uuid",
+          "primaryKey": false,
+          "notNull": false
+        },
+        "driver_id": {
+          "name": "driver_id",
+          "type": "uuid",
+          "primaryKey": false,
+          "notNull": false
+        },
         "successor_scheme_id": {
           "name": "successor_scheme_id",
           "type": "uuid",
@@ -30205,6 +30217,48 @@
             },
             {
               "expression": "successor_scheme_id",
+              "isExpression": false,
+              "asc": true,
+              "nulls": "last"
+            }
+          ],
+          "isUnique": false,
+          "concurrently": false,
+          "method": "btree",
+          "with": {}
+        },
+        "service_provider_activity_vehicle_id_idx": {
+          "name": "service_provider_activity_vehicle_id_idx",
+          "columns": [
+            {
+              "expression": "company_id",
+              "isExpression": false,
+              "asc": true,
+              "nulls": "last"
+            },
+            {
+              "expression": "vehicle_id",
+              "isExpression": false,
+              "asc": true,
+              "nulls": "last"
+            }
+          ],
+          "isUnique": false,
+          "concurrently": false,
+          "method": "btree",
+          "with": {}
+        },
+        "service_provider_activity_driver_id_idx": {
+          "name": "service_provider_activity_driver_id_idx",
+          "columns": [
+            {
+              "expression": "company_id",
+              "isExpression": false,
+              "asc": true,
+              "nulls": "last"
+            },
+            {
+              "expression": "driver_id",
               "isExpression": false,
               "asc": true,
               "nulls": "last"
@@ -30377,6 +30431,42 @@
           "onDelete": "no action",
           "onUpdate": "no action"
         },
+        "service_provider_activity_vehicle_id_fk": {
+          "name": "service_provider_activity_vehicle_id_fk",
+          "tableFrom": "service_provider_activity",
+          "tableTo": "vehicle",
+          "schemaTo": "wms",
+          "columnsFrom": [
+            "company_id",
+            "project_id",
+            "vehicle_id"
+          ],
+          "columnsTo": [
+            "company_id",
+            "project_id",
+            "id"
+          ],
+          "onDelete": "no action",
+          "onUpdate": "no action"
+        },
+        "service_provider_activity_driver_id_fk": {
+          "name": "service_provider_activity_driver_id_fk",
+          "tableFrom": "service_provider_activity",
+          "tableTo": "driver",
+          "schemaTo": "wms",
+          "columnsFrom": [
+            "company_id",
+            "project_id",
+            "driver_id"
+          ],
+          "columnsTo": [
+            "company_id",
+            "project_id",
+            "id"
+          ],
+          "onDelete": "no action",
+          "onUpdate": "no action"
+        },
         "service_provider_activity_opened_by_fk": {
           "name": "service_provider_activity_opened_by_fk",
           "tableFrom": "service_provider_activity",
@@ -30434,7 +30524,7 @@
       "checkConstraints": {
         "service_provider_activity_kind_one_of": {
           "name": "service_provider_activity_kind_one_of",
-          "value": "\"wms\".\"service_provider_activity\".\"kind\" in ('route-day-change', 'compliance-follow-up', 'coordination-note')"
+          "value": "\"wms\".\"service_provider_activity\".\"kind\" in ('route-day-change', 'compliance-follow-up', 'coordination-note', 'vehicle-change')"
         },
         "service_provider_activity_status_one_of": {
           "name": "service_provider_activity_status_one_of",
@@ -30450,482 +30540,15 @@
         },
         "service_provider_activity_kind_shape": {
           "name": "service_provider_activity_kind_shape",
-          "value": "case \"wms\".\"service_provider_activity\".\"kind\" when 'route-day-change' then \"wms\".\"service_provider_activity\".\"route_scheme_id\" is not null and \"wms\".\"service_provider_activity\".\"collection_group_id\" is not null and cardinality(\"wms\".\"service_provider_activity\".\"service_days\") > 0 and \"wms\".\"service_provider_activity\".\"effective_from\" is not null and \"wms\".\"service_provider_activity\".\"due_on\" is null when 'compliance-follow-up' then \"wms\".\"service_provider_activity\".\"due_on\" is not null and \"wms\".\"service_provider_activity\".\"route_scheme_id\" is null and \"wms\".\"service_provider_activity\".\"collection_group_id\" is null and \"wms\".\"service_provider_activity\".\"service_days\" is null and \"wms\".\"service_provider_activity\".\"effective_from\" is null else \"wms\".\"service_provider_activity\".\"due_on\" is null and \"wms\".\"service_provider_activity\".\"route_scheme_id\" is null and \"wms\".\"service_provider_activity\".\"collection_group_id\" is null and \"wms\".\"service_provider_activity\".\"service_days\" is null and \"wms\".\"service_provider_activity\".\"effective_from\" is null end"
+          "value": "case \"wms\".\"service_provider_activity\".\"kind\" when 'route-day-change' then \"wms\".\"service_provider_activity\".\"route_scheme_id\" is not null and \"wms\".\"service_provider_activity\".\"collection_group_id\" is not null and cardinality(\"wms\".\"service_provider_activity\".\"service_days\") > 0 and \"wms\".\"service_provider_activity\".\"effective_from\" is not null and \"wms\".\"service_provider_activity\".\"due_on\" is null and \"wms\".\"service_provider_activity\".\"vehicle_id\" is null and \"wms\".\"service_provider_activity\".\"driver_id\" is null when 'vehicle-change' then \"wms\".\"service_provider_activity\".\"route_scheme_id\" is not null and \"wms\".\"service_provider_activity\".\"collection_group_id\" is not null and \"wms\".\"service_provider_activity\".\"vehicle_id\" is not null and \"wms\".\"service_provider_activity\".\"effective_from\" is not null and \"wms\".\"service_provider_activity\".\"service_days\" is null and \"wms\".\"service_provider_activity\".\"due_on\" is null when 'compliance-follow-up' then \"wms\".\"service_provider_activity\".\"due_on\" is not null and \"wms\".\"service_provider_activity\".\"route_scheme_id\" is null and \"wms\".\"service_provider_activity\".\"collection_group_id\" is null and \"wms\".\"service_provider_activity\".\"service_days\" is null and \"wms\".\"service_provider_activity\".\"effective_from\" is null and \"wms\".\"service_provider_activity\".\"vehicle_id\" is null and \"wms\".\"service_provider_activity\".\"driver_id\" is null else \"wms\".\"service_provider_activity\".\"due_on\" is null and \"wms\".\"service_provider_activity\".\"route_scheme_id\" is null and \"wms\".\"service_provider_activity\".\"collection_group_id\" is null and \"wms\".\"service_provider_activity\".\"service_days\" is null and \"wms\".\"service_provider_activity\".\"effective_from\" is null and \"wms\".\"service_provider_activity\".\"vehicle_id\" is null and \"wms\".\"service_provider_activity\".\"driver_id\" is null end"
         },
         "service_provider_activity_status_shape": {
           "name": "service_provider_activity_status_shape",
-          "value": "case when \"wms\".\"service_provider_activity\".\"kind\" in ('route-day-change') then \"wms\".\"service_provider_activity\".\"status\" in ('pending-approval', 'approved', 'rejected', 'withdrawn') else \"wms\".\"service_provider_activity\".\"status\" in ('open', 'completed', 'cancelled') end"
+          "value": "case when \"wms\".\"service_provider_activity\".\"kind\" in ('route-day-change', 'vehicle-change') then \"wms\".\"service_provider_activity\".\"status\" in ('pending-approval', 'approved', 'rejected', 'withdrawn') else \"wms\".\"service_provider_activity\".\"status\" in ('open', 'completed', 'cancelled') end"
         },
         "service_provider_activity_closed_shape": {
           "name": "service_provider_activity_closed_shape",
           "value": "(\"wms\".\"service_provider_activity\".\"status\" in ('pending-approval', 'open')) = (\"wms\".\"service_provider_activity\".\"closed_by\" is null and \"wms\".\"service_provider_activity\".\"closed_at\" is null) and (\"wms\".\"service_provider_activity\".\"status\" <> 'rejected' or \"wms\".\"service_provider_activity\".\"close_reason\" is not null) and (\"wms\".\"service_provider_activity\".\"status\" = 'approved') = (\"wms\".\"service_provider_activity\".\"successor_scheme_id\" is not null)"
-        }
-      },
-      "isRLSEnabled": false
-    },
-    "wms.message": {
-      "name": "message",
-      "schema": "wms",
-      "columns": {
-        "id": {
-          "name": "id",
-          "type": "uuid",
-          "primaryKey": true,
-          "notNull": true,
-          "default": "wms.uuidv7()"
-        },
-        "company_id": {
-          "name": "company_id",
-          "type": "uuid",
-          "primaryKey": false,
-          "notNull": true
-        },
-        "project_id": {
-          "name": "project_id",
-          "type": "uuid",
-          "primaryKey": false,
-          "notNull": true
-        },
-        "created_at": {
-          "name": "created_at",
-          "type": "timestamp with time zone",
-          "primaryKey": false,
-          "notNull": true,
-          "default": "now()"
-        },
-        "updated_at": {
-          "name": "updated_at",
-          "type": "timestamp with time zone",
-          "primaryKey": false,
-          "notNull": true,
-          "default": "now()"
-        },
-        "template_id": {
-          "name": "template_id",
-          "type": "uuid",
-          "primaryKey": false,
-          "notNull": false
-        },
-        "customer_id": {
-          "name": "customer_id",
-          "type": "uuid",
-          "primaryKey": false,
-          "notNull": true
-        },
-        "contact_id": {
-          "name": "contact_id",
-          "type": "uuid",
-          "primaryKey": false,
-          "notNull": false
-        },
-        "channel": {
-          "name": "channel",
-          "type": "text",
-          "primaryKey": false,
-          "notNull": true
-        },
-        "purpose": {
-          "name": "purpose",
-          "type": "text",
-          "primaryKey": false,
-          "notNull": true
-        },
-        "recipient": {
-          "name": "recipient",
-          "type": "text",
-          "primaryKey": false,
-          "notNull": true
-        },
-        "subject": {
-          "name": "subject",
-          "type": "text",
-          "primaryKey": false,
-          "notNull": false
-        },
-        "body": {
-          "name": "body",
-          "type": "text",
-          "primaryKey": false,
-          "notNull": true
-        },
-        "status": {
-          "name": "status",
-          "type": "text",
-          "primaryKey": false,
-          "notNull": true
-        },
-        "attempts": {
-          "name": "attempts",
-          "type": "integer",
-          "primaryKey": false,
-          "notNull": true,
-          "default": 0
-        },
-        "provider": {
-          "name": "provider",
-          "type": "text",
-          "primaryKey": false,
-          "notNull": false
-        },
-        "provider_message_id": {
-          "name": "provider_message_id",
-          "type": "text",
-          "primaryKey": false,
-          "notNull": false
-        },
-        "reason": {
-          "name": "reason",
-          "type": "text",
-          "primaryKey": false,
-          "notNull": false
-        },
-        "sent_at": {
-          "name": "sent_at",
-          "type": "timestamp with time zone",
-          "primaryKey": false,
-          "notNull": false
-        }
-      },
-      "indexes": {
-        "message_project_id_idx": {
-          "name": "message_project_id_idx",
-          "columns": [
-            {
-              "expression": "company_id",
-              "isExpression": false,
-              "asc": true,
-              "nulls": "last"
-            },
-            {
-              "expression": "project_id",
-              "isExpression": false,
-              "asc": true,
-              "nulls": "last"
-            }
-          ],
-          "isUnique": false,
-          "concurrently": false,
-          "method": "btree",
-          "with": {}
-        },
-        "message_template_id_idx": {
-          "name": "message_template_id_idx",
-          "columns": [
-            {
-              "expression": "company_id",
-              "isExpression": false,
-              "asc": true,
-              "nulls": "last"
-            },
-            {
-              "expression": "template_id",
-              "isExpression": false,
-              "asc": true,
-              "nulls": "last"
-            }
-          ],
-          "isUnique": false,
-          "concurrently": false,
-          "method": "btree",
-          "with": {}
-        },
-        "message_customer_id_idx": {
-          "name": "message_customer_id_idx",
-          "columns": [
-            {
-              "expression": "company_id",
-              "isExpression": false,
-              "asc": true,
-              "nulls": "last"
-            },
-            {
-              "expression": "customer_id",
-              "isExpression": false,
-              "asc": true,
-              "nulls": "last"
-            }
-          ],
-          "isUnique": false,
-          "concurrently": false,
-          "method": "btree",
-          "with": {}
-        },
-        "message_contact_id_idx": {
-          "name": "message_contact_id_idx",
-          "columns": [
-            {
-              "expression": "company_id",
-              "isExpression": false,
-              "asc": true,
-              "nulls": "last"
-            },
-            {
-              "expression": "contact_id",
-              "isExpression": false,
-              "asc": true,
-              "nulls": "last"
-            }
-          ],
-          "isUnique": false,
-          "concurrently": false,
-          "method": "btree",
-          "with": {}
-        }
-      },
-      "foreignKeys": {
-        "message_company_id_fk": {
-          "name": "message_company_id_fk",
-          "tableFrom": "message",
-          "tableTo": "company",
-          "schemaTo": "wms",
-          "columnsFrom": [
-            "company_id"
-          ],
-          "columnsTo": [
-            "id"
-          ],
-          "onDelete": "no action",
-          "onUpdate": "no action"
-        },
-        "message_project_id_fk": {
-          "name": "message_project_id_fk",
-          "tableFrom": "message",
-          "tableTo": "project",
-          "schemaTo": "wms",
-          "columnsFrom": [
-            "company_id",
-            "project_id"
-          ],
-          "columnsTo": [
-            "company_id",
-            "id"
-          ],
-          "onDelete": "no action",
-          "onUpdate": "no action"
-        },
-        "message_template_id_fk": {
-          "name": "message_template_id_fk",
-          "tableFrom": "message",
-          "tableTo": "message_template",
-          "schemaTo": "wms",
-          "columnsFrom": [
-            "company_id",
-            "project_id",
-            "template_id"
-          ],
-          "columnsTo": [
-            "company_id",
-            "project_id",
-            "id"
-          ],
-          "onDelete": "no action",
-          "onUpdate": "no action"
-        },
-        "message_customer_id_fk": {
-          "name": "message_customer_id_fk",
-          "tableFrom": "message",
-          "tableTo": "customer",
-          "schemaTo": "wms",
-          "columnsFrom": [
-            "company_id",
-            "customer_id"
-          ],
-          "columnsTo": [
-            "company_id",
-            "id"
-          ],
-          "onDelete": "no action",
-          "onUpdate": "no action"
-        },
-        "message_contact_id_fk": {
-          "name": "message_contact_id_fk",
-          "tableFrom": "message",
-          "tableTo": "customer_contact",
-          "schemaTo": "wms",
-          "columnsFrom": [
-            "company_id",
-            "contact_id"
-          ],
-          "columnsTo": [
-            "company_id",
-            "id"
-          ],
-          "onDelete": "no action",
-          "onUpdate": "no action"
-        }
-      },
-      "compositePrimaryKeys": {},
-      "uniqueConstraints": {},
-      "policies": {},
-      "checkConstraints": {
-        "message_channel_one_of": {
-          "name": "message_channel_one_of",
-          "value": "\"wms\".\"message\".\"channel\" in ('email', 'sms')"
-        },
-        "message_purpose_one_of": {
-          "name": "message_purpose_one_of",
-          "value": "\"wms\".\"message\".\"purpose\" in ('service', 'billing')"
-        },
-        "message_status_one_of": {
-          "name": "message_status_one_of",
-          "value": "\"wms\".\"message\".\"status\" in ('queued', 'sent', 'failed', 'withheld')"
-        },
-        "message_attempts_range": {
-          "name": "message_attempts_range",
-          "value": "\"wms\".\"message\".\"attempts\" >= 0"
-        },
-        "message_sent_shape": {
-          "name": "message_sent_shape",
-          "value": "(\"wms\".\"message\".\"status\" = 'sent') = (\"wms\".\"message\".\"sent_at\" is not null and \"wms\".\"message\".\"provider\" is not null)"
-        }
-      },
-      "isRLSEnabled": false
-    },
-    "wms.message_template": {
-      "name": "message_template",
-      "schema": "wms",
-      "columns": {
-        "id": {
-          "name": "id",
-          "type": "uuid",
-          "primaryKey": true,
-          "notNull": true,
-          "default": "wms.uuidv7()"
-        },
-        "company_id": {
-          "name": "company_id",
-          "type": "uuid",
-          "primaryKey": false,
-          "notNull": true
-        },
-        "project_id": {
-          "name": "project_id",
-          "type": "uuid",
-          "primaryKey": false,
-          "notNull": true
-        },
-        "created_at": {
-          "name": "created_at",
-          "type": "timestamp with time zone",
-          "primaryKey": false,
-          "notNull": true,
-          "default": "now()"
-        },
-        "updated_at": {
-          "name": "updated_at",
-          "type": "timestamp with time zone",
-          "primaryKey": false,
-          "notNull": true,
-          "default": "now()"
-        },
-        "name": {
-          "name": "name",
-          "type": "text",
-          "primaryKey": false,
-          "notNull": true
-        },
-        "purpose": {
-          "name": "purpose",
-          "type": "text",
-          "primaryKey": false,
-          "notNull": true
-        },
-        "channel": {
-          "name": "channel",
-          "type": "text",
-          "primaryKey": false,
-          "notNull": true
-        },
-        "subject": {
-          "name": "subject",
-          "type": "text",
-          "primaryKey": false,
-          "notNull": false
-        },
-        "body": {
-          "name": "body",
-          "type": "text",
-          "primaryKey": false,
-          "notNull": true
-        },
-        "status": {
-          "name": "status",
-          "type": "text",
-          "primaryKey": false,
-          "notNull": true
-        }
-      },
-      "indexes": {},
-      "foreignKeys": {
-        "message_template_company_id_fk": {
-          "name": "message_template_company_id_fk",
-          "tableFrom": "message_template",
-          "tableTo": "company",
-          "schemaTo": "wms",
-          "columnsFrom": [
-            "company_id"
-          ],
-          "columnsTo": [
-            "id"
-          ],
-          "onDelete": "no action",
-          "onUpdate": "no action"
-        },
-        "message_template_project_id_fk": {
-          "name": "message_template_project_id_fk",
-          "tableFrom": "message_template",
-          "tableTo": "project",
-          "schemaTo": "wms",
-          "columnsFrom": [
-            "company_id",
-            "project_id"
-          ],
-          "columnsTo": [
-            "company_id",
-            "id"
-          ],
-          "onDelete": "no action",
-          "onUpdate": "no action"
-        }
-      },
-      "compositePrimaryKeys": {},
-      "uniqueConstraints": {
-        "message_template_project_key": {
-          "name": "message_template_project_key",
-          "nullsNotDistinct": false,
-          "columns": [
-            "company_id",
-            "project_id",
-            "id"
-          ]
-        },
-        "message_template_project_id_name_key": {
-          "name": "message_template_project_id_name_key",
-          "nullsNotDistinct": false,
-          "columns": [
-            "company_id",
-            "project_id",
-            "name"
-          ]
-        }
-      },
-      "policies": {},
-      "checkConstraints": {
-        "message_template_purpose_one_of": {
-          "name": "message_template_purpose_one_of",
-          "value": "\"wms\".\"message_template\".\"purpose\" in ('service', 'billing')"
-        },
-        "message_template_channel_one_of": {
-          "name": "message_template_channel_one_of",
-          "value": "\"wms\".\"message_template\".\"channel\" in ('email', 'sms')"
-        },
-        "message_template_status_one_of": {
-          "name": "message_template_status_one_of",
-          "value": "\"wms\".\"message_template\".\"status\" in ('active', 'inactive')"
-        },
-        "message_template_subject_shape": {
-          "name": "message_template_subject_shape",
-          "value": "(\"wms\".\"message_template\".\"channel\" = 'email') = (\"wms\".\"message_template\".\"subject\" is not null)"
         }
       },
       "isRLSEnabled": false

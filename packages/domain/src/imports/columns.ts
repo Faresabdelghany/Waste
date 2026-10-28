@@ -10,7 +10,18 @@
 // id: a customer by its registration number (a CVR number) or its e-mail, a
 // property by its address in the import's project, a container type by its
 // name, a product by its name, a price list by its code (case aside), a
-// shared collection point by its name. An empty cell leaves a field as it stands
+// shared collection point by its name. The catalogue (O30 of #290, row 1.18)
+// is matched the same way: a waste fraction and a vehicle type by their key,
+// the slug the rest of the system quotes, and a container type by its name;
+// and the fleet: a vehicle by its registration, the company's, and a driver
+// by the workforce reference, the company's where given, which the import
+// therefore asks of every row. A depot is named by its name in the import's
+// project, a service provider by its registration number in the company. A
+// collection calendar is matched on its name in the project, a row a holiday
+// of it, which the import adds or renames and never removes; a planning area
+// on its code, a row an area with the version of its boundary from a day,
+// read from a GeoJSON file's features (`planningAreaRows`, ./geojson).
+// An empty cell leaves a field as it stands
 // when a row matches a record, and is no value when it makes one.
 
 import type { ImportKind } from "./vocabulary"
@@ -76,6 +87,66 @@ export const IMPORT_COLUMNS: Readonly<Record<ImportKind, readonly ImportColumn[]
     column("quantity", false, "How many of the product; 1 when empty", "1"),
     column("subscription from", false, "The subscription's first day; the agreement's when empty. A subscription is matched on its product, its place and this day", "2026-01-01"),
     column("subscription to", false, "The first day it is no longer in force; open when empty", ""),
+  ],
+  "waste-fractions": [
+    column("key", true, "The stable slug the rest of the system quotes, lowercase; a fraction is matched on it", "hard-plastic"),
+    column("name", true, "What a person reads, unique in the company", "Hard plastic"),
+    column("waste code", false, "The European List of Waste entry, six digits, with an asterisk after a hazardous one", "200139"),
+    column("treatment", false, "reuse, recycling, energy-recovery or disposal", "recycling"),
+    column("density", false, "Kilograms per cubic metre as it lies in a container, 1 to 2000", "45"),
+  ],
+  "container-types": [
+    column("name", true, "The type's name, unique in the company; a container type is matched on it", "240 L bin"),
+    column("volume", false, "Litres, a whole number", "240"),
+    column("service seconds", false, "How long a stop at one takes, in seconds", "30"),
+  ],
+  "vehicle-types": [
+    column("key", true, "The stable slug the rest of the system quotes, lowercase; a vehicle type is matched on it", "rear-loader"),
+    column("name", true, "What a person reads, unique in the company", "Rear loader"),
+    column("description", false, "What the type is", "Two-axle rear loader with a bin lift"),
+    column("container types", false, "The container types a vehicle of the type services, by name, separated by semicolons. Replaces the type's set when given", "240 L bin; 660 L bin"),
+  ],
+  vehicles: [
+    column("registration", true, "The plate, unique in the company; a vehicle is matched on it", "CN 42 018"),
+    column("kind", true, "powered-vehicle or trailer; set once", "powered-vehicle"),
+    column("vehicle type", true, "The key of one of the company's vehicle types", "rear-loader"),
+    column("licence class", true, "The licence a driver needs to take it out: b, c or ce", "c"),
+    column("compartments", false, "Its compartments in position order, separated by semicolons, each its waste fractions by key separated by commas, a name before a colon where it has one. A powered vehicle has at least one. Replaces its compartments when given", "Left: residual; Right: paper, cardboard"),
+    column("callsign", false, "What the yard calls it, unique in the company", "WH-24"),
+    column("ownership", false, "company, service-provider or leased; company when empty, service-provider with a service provider", "company"),
+    column("service provider", false, "The registration number of the service provider that owns it, with service-provider ownership", ""),
+    column("status", false, "active, unavailable, maintenance or retired; active when empty", "active"),
+    column("capacity kg", false, "Its payload in kilograms", "11000"),
+    column("fuel", false, "diesel, hvo, biogas, electric, hybrid or other", "hvo"),
+    column("home depot", false, "The name of the project's depot it is based at", "Nordhavn depot"),
+    column("notes", false, "Notes for the office", ""),
+  ],
+  drivers: [
+    column("workforce reference", true, "The payroll or workforce system's reference, unique in the company; a driver is matched on it", "EMP-1042"),
+    column("name", true, "The driver's name", "Mads Jensen"),
+    column("employment", true, "employee, service-provider or temporary", "employee"),
+    column("service provider", false, "The registration number of the service provider that employs them, with service-provider employment", ""),
+    column("licence class", false, "b, c or ce", "c"),
+    column("licence number", false, "The driving licence's number", "DK-12345678"),
+    column("licence expiry", false, "The last day the licence is valid, YYYY-MM-DD", "2029-06-30"),
+    column("home depot", false, "The name of the project's depot they start from", "Nordhavn depot"),
+    column("status", false, "active, inactive or suspended; active when empty", "active"),
+    column("notes", false, "Notes for the office", ""),
+  ],
+  "collection-calendars": [
+    column("calendar", true, "The calendar's name, unique in the project; a calendar is matched on it", "Copenhagen 2027"),
+    column("valid from", true, "The calendar's first day, YYYY-MM-DD", "2027-01-01"),
+    column("valid to", false, "The first day it is no longer in force, YYYY-MM-DD; open when empty", "2028-01-01"),
+    column("day", false, "A holiday's day, YYYY-MM-DD, inside the calendar's period; a row without one writes the calendar alone", "2027-06-05"),
+    column("holiday", false, "The holiday's name", "Grundlovsdag"),
+  ],
+  "planning-areas": [
+    column("code", true, "The area's code, unique in the project and set once; an area is matched on it", "CPH-N"),
+    column("name", true, "The area's name, unique in the project", "Copenhagen North"),
+    column("purpose", true, "route-planning, service-operations or notification", "route-planning"),
+    column("boundary", false, "The area's outline as a GeoJSON Polygon, read from a GeoJSON file's feature", '{"type":"Polygon","coordinates":[[[12.5,55.7],[12.6,55.7],[12.6,55.8],[12.5,55.7]]]}'),
+    column("valid from", false, "The boundary's first day, YYYY-MM-DD; given with the boundary", "2027-01-01"),
+    column("valid to", false, "The first day the boundary is no longer in force, YYYY-MM-DD; open when empty", ""),
   ],
 }
 

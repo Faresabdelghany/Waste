@@ -21,7 +21,11 @@
 // counted from its `occurredAt` (`ticket_sla`, `slaTargetFor`), or never where
 // the project sets none (O4 of #290): the office's create when its body names
 // no due date, and every ticket the consumer opens — so a job the queue held
-// back hands its ticket no extra time.
+// back hands its ticket no extra time. A draft that names no team waits with
+// the project's default team for its kind (`ticket_team_default`, O30 of
+// #290, row 7.20), while that team is active, and with none otherwise: the
+// office's create when its body names none, and every ticket the consumer, a
+// work order or a weighbridge deviation opens.
 //
 // `appendTicketEvent` is the allocation's `appendEvent` rule (#101): every
 // write to the ticket's row is followed by one `ticket_event` in the same
@@ -43,7 +47,7 @@ import { and, eq, isNull, or } from "drizzle-orm"
 
 import type { Tx } from "../client"
 import { newId as processId, type IdMinter } from "../ids"
-import { ticket, ticketEvent, ticketSla } from "../schema/resolution"
+import { team, ticket, ticketEvent, ticketSla, ticketTeamDefault } from "../schema/resolution"
 import { linkAlert } from "./alert-links"
 import { emit } from "./outbox"
 import { eventColumns, ticketColumns, ticketOf, type TicketEventRow, type TicketRow } from "./resolution-rows"
@@ -65,6 +69,8 @@ export type TicketDraft = {
   /** The opener's due date, null for none, or `BY_SLA`: the project's target, none where it sets none. */
   dueAt: Date | null | typeof BY_SLA
   assigneeUserAccountId: string | null
+  /** The team it waits with, null for none; absent, the project's default team for the kind, none where it sets none. */
+  teamId?: string | null
   links: TicketLinks
   /** The alert the ticket answers, linked in the same transaction; null for none. */
   alertId: string | null
@@ -143,6 +149,7 @@ export async function appendTicketEvent(tx: Tx, ticketRef: TicketRef, event: Tic
 export async function openTicket(tx: Tx, input: OpenTicketInput): Promise<{ row: TicketRow; answered: Ticket }> {
   const { companyId, draft, createdBy, sourceEventId } = input
   const dueAt = draft.dueAt === BY_SLA ? await dueBySlaOf(tx, companyId, draft) : draft.dueAt
+  const teamId = draft.teamId === undefined ? await defaultTeamOf(tx, companyId, draft) : draft.teamId
   const number = await nextNumber(tx, companyId, "nextTicketNumber")
   const [row] = await tx
     .insert(ticket)
@@ -160,6 +167,7 @@ export async function openTicket(tx: Tx, input: OpenTicketInput): Promise<{ row:
       occurredAt: draft.occurredAt,
       dueAt,
       assigneeUserAccountId: draft.assigneeUserAccountId,
+      teamId,
       createdBy,
       sourceEventId,
       ...draft.links,
@@ -192,4 +200,15 @@ async function dueBySlaOf(tx: Tx, companyId: string, draft: Pick<TicketDraft, "p
     draft.priority,
   )
   return target === undefined ? null : dueBySla(draft.occurredAt, target.hours)
+}
+
+/** The project's default team for the draft's kind, while it takes tickets; null where the project names none or its team is retired. */
+async function defaultTeamOf(tx: Tx, companyId: string, draft: Pick<TicketDraft, "projectId" | "kind">): Promise<string | null> {
+  const [found] = await tx
+    .select({ teamId: ticketTeamDefault.teamId })
+    .from(ticketTeamDefault)
+    .innerJoin(team, and(eq(team.companyId, ticketTeamDefault.companyId), eq(team.id, ticketTeamDefault.teamId)))
+    .where(and(eq(ticketTeamDefault.companyId, companyId), eq(ticketTeamDefault.projectId, draft.projectId), eq(ticketTeamDefault.kind, draft.kind), eq(team.status, "active")))
+    .limit(1)
+  return found?.teamId ?? null
 }

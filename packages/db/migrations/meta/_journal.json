@@ -467,15 +467,64 @@
     {
       "idx": 66,
       "version": "7",
-      "when": 1793214024462,
-      "tag": "0066_contact_persons",
+      "when": 1793211869364,
+      "tag": "0066_decommission_reasons",
       "breakpoints": true
     },
     {
       "idx": 67,
       "version": "7",
-      "when": 1793215227133,
-      "tag": "0067_messaging",
+      "when": 1793213906391,
+      "tag": "0067_vehicle_change_proposals",
+      "breakpoints": true
+    },
+    {
+      "idx": 68,
+      "version": "7",
+      "when": 1793215474440,
+      "tag": "0068_catalogue_and_fleet_import",
+      "breakpoints": true
+    },
+    {
+      "idx": 69,
+      "version": "7",
+      "when": 1793216335264,
+      "tag": "0069_calendars_and_areas_import",
+      "breakpoints": true
+    },
+    {
+      "idx": 70,
+      "version": "7",
+      "when": 1793225274885,
+      "tag": "0070_ticket_teams",
+      "breakpoints": true
+    },
+    {
+      "idx": 71,
+      "version": "7",
+      "when": 1793227264394,
+      "tag": "0071_stop_set_proposals",
+      "breakpoints": true
+    },
+    {
+      "idx": 72,
+      "version": "7",
+      "when": 1793229147346,
+      "tag": "0072_waste_fraction_proposals",
+      "breakpoints": true
+    },
+    {
+      "idx": 73,
+      "version": "7",
+      "when": 1793231090634,
+      "tag": "0073_contact_persons",
+      "breakpoints": true
+    },
+    {
+      "idx": 74,
+      "version": "7",
+      "when": 1793231765311,
+      "tag": "0074_messaging",
       "breakpoints": true
     }
   ]

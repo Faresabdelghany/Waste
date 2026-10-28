@@ -19,6 +19,7 @@ import assert from "node:assert/strict"
 import { after, before, describe, test } from "node:test"
 
 import type { Point } from "@waste/contracts/geojson"
+import { DEFAULT_DECOMMISSION_REASONS } from "@waste/domain/resources/decommission-reasons"
 import { movementShape } from "@waste/domain/resources/asset-state"
 import { STOCK_MOVEMENT_KINDS, STOCK_PLACE_KINDS, type StockMovementKind, type StockPlaceKind } from "@waste/domain/resources/vocabulary"
 import { and, eq, getTableName, sql } from "drizzle-orm"
@@ -39,7 +40,8 @@ import { containerTypeVehicleType, vehicleType } from "../schema/fleet-types"
 import { company, project, serviceProvider } from "../schema/organisation"
 import { depot, unloadingStation, unloadingStationFraction, warehouse } from "../schema/places"
 import { collectionGroup, routeScheme } from "../schema/route-schemes"
-import { stockMovement } from "../schema/stock"
+import { decommissionReason, stockMovement } from "../schema/stock"
+import { decommissionReasonsBackfill, decommissionReasonsSeed } from "../sql/decommission-reasons"
 import { triggersOf } from "../sql/audit-trail"
 import { withCompany } from "../tenant"
 import { databaseUnderTest, freshDatabase, type FreshDatabase } from "./database"
@@ -85,6 +87,8 @@ const ids = (n: "a" | "b") => ({
   spare: `018f7c31-${n}000-7000-8000-0000000000e1`,
   other: `018f7c31-${n}000-7000-8000-0000000000e2`,
   third: `018f7c31-${n}000-7000-8000-0000000000e3`,
+  /** Why a decommission scraps a container (O30 of #290). */
+  reason: `018f7c31-${n}000-7000-8000-0000000000e4`,
   fourth: `018f7c31-${n}000-7000-8000-0000000000e4`,
   fifth: `018f7c31-${n}000-7000-8000-0000000000e5`,
   /** A second project of the same company, with a depot and a warehouse of its own that a record of the first may not name. */
@@ -152,6 +156,7 @@ async function seed(tx: Tx, n: "a" | "b"): Promise<void> {
   await tx.insert(vehicleCompartment).values({ id: own.compartment, ...scoped, vehicleId: own.vehicle, position: 1, name: "Body", capacityKg: 9000 })
   await tx.insert(vehicleCompartmentFraction).values({ id: own.compartmentFraction, ...scoped, vehicleCompartmentId: own.compartment, wasteFractionId: own.wasteFraction })
   await tx.insert(driver).values({ id: own.driver, ...scoped, name: "Mads Jensen", employment: "employee", licenceClass: "ce", userAccountId: own.account, status: "active", homeDepotId: own.depot })
+  await tx.insert(decommissionReason).values({ id: own.reason, ...tenant, code: "worn-out", name: "Worn out" })
   await tx.insert(stockMovement).values({ id: own.movement, ...scoped, containerId: own.container, kind: "receipt", fromKind: "supplier", toKind: "warehouse", toWarehouseId: own.warehouse, occurredAt: at(8, 1), recordedBy: own.account })
   await tx.insert(vehicleAllocation).values({ id: own.allocation, ...scoped, plannedFrom: at(6), plannedTo: at(14), vehicleId: own.vehicle, driverId: own.driver, depotId: own.depot })
   await tx.insert(vehicleAllocationEvent).values({ id: own.event, ...scoped, vehicleAllocationId: own.allocation, action: "allocate", status: "planned", vehicleId: own.vehicle, driverId: own.driver, depotId: own.depot, plannedFrom: at(6), plannedTo: at(14), recordedBy: own.account })
@@ -379,13 +384,36 @@ describe("the Resources tables against a fresh database", { skip: database.skip 
       await tx.update(collectionGroup).set({ ruleVehicleTypeId: a.vehicleType }).where(eq(collectionGroup.id, a.group))
     }))
 
+  test("a decommission names one of the company's reasons, and no other movement names one (O30 of #290, row 9.6)", () =>
+    seeded(async (tx) => {
+      const scrapped = { kind: "decommission", toKind: "scrap", toWarehouseId: null } as const
+      await assert.rejects(tx.transaction((savepoint) => savepoint.insert(stockMovement).values(movement(scrapped))), refusedWith("23514", /stock_movement_decommission_reason_shape/), "a decommission says why")
+      await assert.rejects(tx.transaction((savepoint) => savepoint.insert(stockMovement).values(movement({ decommissionReasonId: a.reason }))), refusedWith("23514", /stock_movement_decommission_reason_shape/), "a transfer says no reason")
+      await assert.rejects(tx.transaction((savepoint) => savepoint.insert(stockMovement).values(movement({ ...scrapped, decommissionReasonId: b.reason }))), refusedWith("23503", /stock_movement_decommission_reason_id_fk/), "another company's reason")
+      await tx.insert(stockMovement).values(movement({ ...scrapped, decommissionReasonId: a.reason, reason: "Split along the seam" }))
+    }))
+
+  test("the migration's seed gives every company the eight reasons, leaving one it holds by code, and its backfill gives a decommission without a reason its company's other", () =>
+    seeded(async (tx) => {
+      // A decommission as 0007 allowed it, without a reason: the shape check stands aside for it as it did before the migration.
+      await tx.execute(sql.raw('ALTER TABLE "wms"."stock_movement" DROP CONSTRAINT "stock_movement_decommission_reason_shape"'))
+      await tx.insert(stockMovement).values(movement({ kind: "decommission", toKind: "scrap", toWarehouseId: null, reason: "Cracked lid" }))
+      await tx.execute(sql.raw(decommissionReasonsSeed()))
+      await tx.execute(sql.raw(decommissionReasonsBackfill()))
+      const reasons = await tx.select({ code: decommissionReason.code, id: decommissionReason.id }).from(decommissionReason).where(eq(decommissionReason.companyId, a.company))
+      assert.deepEqual(reasons.map((reason) => reason.code).sort(), DEFAULT_DECOMMISSION_REASONS.map((reason) => reason.code).sort(), "the eight, the one held by code kept")
+      assert.equal(reasons.find((reason) => reason.code === "worn-out")?.id, a.reason, "the reason the company held is left as it stands")
+      const [scrapped] = await tx.select({ reasonId: stockMovement.decommissionReasonId, note: stockMovement.reason }).from(stockMovement).where(eq(stockMovement.id, a.spare))
+      assert.deepEqual(scrapped, { reasonId: reasons.find((reason) => reason.code === "other")?.id, note: "Cracked lid" }, "other, its text kept as the note")
+    }))
+
   test("the ledger's three place checks: a warehouse goes with a stock kind on its side, a placement with a service kind on either (23514)", () =>
     seeded(async (tx) => {
       await assert.rejects(tx.transaction((savepoint) => savepoint.insert(stockMovement).values(movement({ fromWarehouseId: null }))), refusedWith("23514", /stock_movement_from_shape/))
       await assert.rejects(tx.transaction((savepoint) => savepoint.insert(stockMovement).values(movement({ kind: "receipt", fromKind: "supplier", fromWarehouseId: a.warehouse, toKind: "warehouse" }))), refusedWith("23514", /stock_movement_from_shape/))
       await assert.rejects(tx.transaction((savepoint) => savepoint.insert(stockMovement).values(movement({ toWarehouseId: null }))), refusedWith("23514", /stock_movement_to_shape/))
       await assert.rejects(
-        tx.transaction((savepoint) => savepoint.insert(stockMovement).values(movement({ kind: "decommission", toKind: "scrap" }))),
+        tx.transaction((savepoint) => savepoint.insert(stockMovement).values(movement({ kind: "decommission", toKind: "scrap", decommissionReasonId: a.reason }))),
         refusedWith("23514", /stock_movement_to_shape/),
         "scrap has no warehouse",
       )
@@ -413,6 +441,8 @@ describe("the Resources tables against a fresh database", { skip: database.skip 
           toKind,
           toWarehouseId: toKind === "warehouse" || toKind === "maintenance" ? a.warehouse : null,
           placementId: fromKind === "service" || toKind === "service" ? a.placement : null,
+          // A decommission says why (O30 of #290), and nothing else does.
+          decommissionReasonId: kind === "decommission" ? a.reason : null,
         })
       let allowed = 0
       for (const kind of STOCK_MOVEMENT_KINDS) {
@@ -565,7 +595,7 @@ describe("the Resources tables against a fresh database", { skip: database.skip 
       // A later row with an earlier occurred_at is still the latest: recording order, not the clock on the person's word.
       await tx.insert(stockMovement).values(movement({ id: a.other, kind: "return", fromKind: "service", fromWarehouseId: null, toKind: "maintenance", placementId: a.placement, occurredAt: at(7, 2) }))
       assert.deepEqual((await fold())[0], { container: a.container, status: "in-maintenance", warehouseId: a.warehouse, placementId: a.placement, movementId: a.other, since: at(7, 2) })
-      await tx.insert(stockMovement).values(movement({ id: a.third, kind: "decommission", fromKind: "maintenance", toKind: "scrap", toWarehouseId: null, occurredAt: at(10, 2) }))
+      await tx.insert(stockMovement).values(movement({ id: a.third, kind: "decommission", fromKind: "maintenance", toKind: "scrap", toWarehouseId: null, occurredAt: at(10, 2), decommissionReasonId: a.reason }))
       assert.equal((await fold())[0].status, "retired")
       // The other company's containers are not in this company's fold, and the filter by status runs in SQL.
       const state = assetStateOf(tx, a.company, container.id)
