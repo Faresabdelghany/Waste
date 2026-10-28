@@ -646,20 +646,22 @@ export function WeightReviewSurface({ record }: RowSurfaceProps) {
     })
 
   return (
-    <section className="space-y-3" data-testid="weight-review-commands">
-      <h3 className="text-sm font-semibold">Weight review</h3>
-      {!moduleReady && <p className="text-sm text-muted-foreground">The weights are being read from the API; their reviews follow.</p>}
-      {correction !== undefined && <p className="text-sm text-muted-foreground">Corrected by {correction}: review that one.</p>}
-      <div className="flex flex-wrap gap-2">
-        {offered.map((name) => (
-          <Button key={name} variant="outline" size="sm" disabled={!moduleReady || busy} onClick={() => setOpen(name)}>
-            {WEIGHT_REVIEW_FORMS[name].submitLabel}
-          </Button>
-        ))}
-      </div>
-      {open !== null && <BusinessRecordFormDialog schema={WEIGHT_REVIEW_FORMS[open]} open onOpenChange={(isOpen) => !isOpen && setOpen(null)} onSubmit={(values) => send(open, values)} relationOptions={(field) => field.options ?? []} />}
+    <>
+      <section className="space-y-3" data-testid="weight-review-commands">
+        <h3 className="text-sm font-semibold">Weight review</h3>
+        {!moduleReady && <p className="text-sm text-muted-foreground">The weights are being read from the API; their reviews follow.</p>}
+        {correction !== undefined && <p className="text-sm text-muted-foreground">Corrected by {correction}: review that one.</p>}
+        <div className="flex flex-wrap gap-2">
+          {offered.map((name) => (
+            <Button key={name} variant="outline" size="sm" disabled={!moduleReady || busy} onClick={() => setOpen(name)}>
+              {WEIGHT_REVIEW_FORMS[name].submitLabel}
+            </Button>
+          ))}
+        </div>
+        {open !== null && <BusinessRecordFormDialog schema={WEIGHT_REVIEW_FORMS[open]} open onOpenChange={(isOpen) => !isOpen && setOpen(null)} onSubmit={(values) => send(open, values)} relationOptions={(field) => field.options ?? []} />}
+      </section>
       <TransferNote record={record} />
-    </section>
+    </>
   )
 }
 
@@ -709,7 +711,7 @@ function TransferNote({ record }: { record: BusinessRecord }) {
   }
 
   return (
-    <div className="space-y-2 pt-2" data-testid="transfer-note">
+    <section className="space-y-2" data-testid="transfer-note">
       <h3 className="text-sm font-semibold">Transfer note</h3>
       {withheld !== null ? (
         <p className="text-sm text-muted-foreground">{withheld}</p>
@@ -723,6 +725,6 @@ function TransferNote({ record }: { record: BusinessRecord }) {
           </Button>
         </div>
       )}
-    </div>
+    </section>
   )
 }
