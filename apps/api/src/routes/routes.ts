@@ -124,6 +124,7 @@ import { handBackWindow } from "./route-holds"
 import { created, describeCreated, describeJson, IdParam, lockRow, lockRows, nextNumber, stamp, timeOf } from "./shared"
 import { refuseUnavailableDriver } from "./statuses"
 import { oneDay, refuseCrewAway, refuseDispatchAway } from "./availability-rules"
+import { refuseMisfit, routeFitStops } from "./fleet-fit"
 
 const MODULE = "route-studio.routes"
 
@@ -701,7 +702,7 @@ export function routeRoutes(guard: MiddlewareHandler<AuthEnv>, { now = () => new
         description:
           "The `assign` command: moves the planned vehicle, driver, trailer, service provider, depot or unloading station of a route that has not started, any of them cleared with null; at least one field must be given. Under the route's row lock. A `planned` route stays `planned` and a `ready` one stays `ready` — a route already running is refused (409): the session's driver and vehicle are its actual assignment, and a swap mid-route is a Ticket's outcome later; a completed or cancelled route does not change. A `ready` route keeps a driver: it was dispatched to one, and a dispatched route without a driver would reach no device, so clearing `driverId` on it is refused (409, `Route RC-1042 is dispatched; assign another driver or cancel it`) where moving it to another driver is not. " +
           ASSIGN_RULES +
-          " A vehicle or trailer out of use, or a driver absent, on the operating date (O6 of #290) is refused (409) naming the period, after the statuses and for what the body names afresh alone. " +
+          " A vehicle or trailer out of use, or a driver absent, on the operating date (O6 of #290) is refused (409) naming the period, after the statuses and for what the body names afresh alone. A vehicle named afresh serves the route's open stops that load waste (O7 of #290), or is refused (409) in the first rule it breaks: a fraction none of its compartments carries (a vehicle whose compartments name none carries any; `WH-24 has no compartment for Glass, which 3 stops of route RC-1042 collect`), a container its type does not lift (a type the compatibility set names nothing for lifts any), a stop expected to weigh more than one trip takes of its fraction — the capacity of the compartments carrying it, within the vehicle's payload. A route heavier than one payload is not refused: its Plan unloads on the way, and `workload.overCapacityKg` says how far over. " +
           PROVIDER_ASSIGN +
           " " +
           HOLDS +
@@ -713,7 +714,7 @@ export function routeRoutes(guard: MiddlewareHandler<AuthEnv>, { now = () => new
             "The path does not hold an id, or the body changes nothing, names a member the command does not take, or names a vehicle, trailer, driver, service provider, depot or station the rules above refuse — each at the field that is wrong.",
           ),
           ...commandProblems("crew"),
-          409: describeProblem("The route is active, completed or cancelled, the body clears the driver of a ready route, or a vehicle or trailer named afresh is not active or is out of use on the operating date, or a driver named afresh is inactive, suspended or absent on it; the detail says which."),
+          409: describeProblem("The route is active, completed or cancelled, the body clears the driver of a ready route, or a vehicle or trailer named afresh is not active or is out of use on the operating date, or a driver named afresh is inactive, suspended or absent on it, or a vehicle named afresh cannot serve the route's open stops; the detail says which."),
         },
       }),
       guard,
@@ -777,6 +778,8 @@ export function routeRoutes(guard: MiddlewareHandler<AuthEnv>, { now = () => new
         if (trailer !== null) refuseVehicleNotActive(trailer.status, vehicleLabel(trailer), "trailer")
         if (driver !== null) refuseUnavailableDriver(driver.status, driver.name, "a route")
         await refuseCrewAway(tx, scope, { vehicleId: vehicle?.id, trailerId: trailer?.id, driverId: driver?.id }, oneDay(current.operatingDate), "a route")
+        // A vehicle named afresh serves the route's open stops (O7 of #290): their fractions, their containers, one trip's weight of each.
+        if (vehicle !== null) await refuseMisfit(tx, principal.companyId, vehicle.id, await routeFitStops(tx, principal.companyId, current.id), `route ${labelOf(current)}`)
 
         const at = now()
         const changed = (Object.keys(after) as Array<keyof Assignment>).some((key) => after[key] !== current[key])

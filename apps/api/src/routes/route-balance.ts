@@ -27,7 +27,6 @@ import { containerType, wasteFraction } from "@waste/db/schema/catalogue"
 import { container } from "@waste/db/schema/containers"
 import { property, sharedCollectionPoint } from "@waste/db/schema/customers"
 import { pickup, route } from "@waste/db/schema/execution"
-import { vehicleCompartment, vehicleCompartmentFraction } from "@waste/db/schema/fleet"
 import { plan, planStop } from "@waste/db/schema/routing"
 import type { JobSender } from "@waste/db/jobs"
 import { stopLoadKg } from "@waste/domain/execution/workload"
@@ -44,6 +43,7 @@ import { requireProject } from "../auth/projects"
 import { requireGrant } from "../auth/require"
 import { describeProblem, invalidRequest, problem, validate } from "../problem"
 import { findRoute, pickupsOfRoute, routeColumns, routeScope, type PickupRow, type RouteRow } from "./execution-shapes"
+import { fitsOf } from "./fleet-fit"
 import { ensurePlan } from "./plan-shapes"
 import type { ClockOptions } from "./scheme-groups"
 import { describeJson, lockRows } from "./shared"
@@ -86,7 +86,7 @@ async function weighDay(tx: Tx, principal: Principal, routes: readonly RouteRow[
   const planIds = routes.flatMap((row) => (row.activePlanId === null ? [] : [row.activePlanId]))
   const vehicleIds = [...new Set(routes.flatMap((row) => (row.plannedVehicleId === null ? [] : [row.plannedVehicleId])))]
   const workloads = await workloadsByRoute(tx, companyId, routes)
-  const [shifts, stops, plans, unloads, compartments] = await Promise.all([
+  const [shifts, stops, plans, unloads, fits] = await Promise.all([
     shiftsByRoute(tx, companyId, routes, workloads),
     routeIds.length === 0
       ? []
@@ -99,6 +99,7 @@ async function weighDay(tx: Tx, principal: Principal, routes: readonly RouteRow[
             containerId: pickup.containerId,
             service: pickup.service,
             wasteFractionId: pickup.wasteFractionId,
+            containerTypeId: container.containerTypeId,
             property: property.location,
             point: sharedCollectionPoint.location,
             volumeLitres: containerType.volumeLitres,
@@ -125,18 +126,10 @@ async function weighDay(tx: Tx, principal: Principal, routes: readonly RouteRow[
           .from(planStop)
           .where(and(eq(planStop.companyId, companyId), inArray(planStop.planId, planIds), eq(planStop.kind, "unload")))
           .groupBy(planStop.planId),
-    vehicleIds.length === 0
-      ? []
-      : tx
-          .select({ vehicleId: vehicleCompartment.vehicleId, wasteFractionId: vehicleCompartmentFraction.wasteFractionId })
-          .from(vehicleCompartment)
-          .innerJoin(vehicleCompartmentFraction, and(eq(vehicleCompartmentFraction.companyId, vehicleCompartment.companyId), eq(vehicleCompartmentFraction.vehicleCompartmentId, vehicleCompartment.id)))
-          .where(and(eq(vehicleCompartment.companyId, companyId), inArray(vehicleCompartment.vehicleId, vehicleIds))),
+    fitsOf(tx, companyId, vehicleIds),
   ])
   const measured = new Map(plans.map((row) => [row.id, row] as const))
   const visits = new Map(unloads.map((row) => [row.planId, row.visits] as const))
-  const fractions = new Map<string, string[]>()
-  for (const row of compartments) fractions.set(row.vehicleId, [...(fractions.get(row.vehicleId) ?? []), row.wasteFractionId])
   const stopsByRoute = Map.groupBy(stops, (stop) => stop.routeId)
   const balanced: BalanceRoute[] = []
   for (const row of routes) {
@@ -153,8 +146,8 @@ async function weighDay(tx: Tx, principal: Principal, routes: readonly RouteRow[
     balanced.push({
       id: row.id,
       serviceProviderId: row.plannedServiceProviderId,
-      // A vehicle whose compartments name no fraction carries any, as one with none planned does.
-      fractions: row.plannedVehicleId === null ? null : (fractions.get(row.plannedVehicleId) ?? null),
+      // The planned vehicle as a move judges it (O7 of #290): its compartments' fractions, the containers its type lifts, one trip's weight.
+      vehicle: row.plannedVehicleId === null ? null : (fits.get(row.plannedVehicleId) ?? null),
       capacityKg: workload?.capacityKg ?? null,
       shift: shifts.get(row.id)?.shift ?? null,
       plannedStartTime: row.plannedStartTime,
@@ -176,6 +169,7 @@ async function weighDay(tx: Tx, principal: Principal, routes: readonly RouteRow[
           kg: stopLoadKg({ service: stop.service as PickupService, volumeLitres: stop.volumeLitres, densityKgPerCubicMetre: stop.densityKgPerCubicMetre }) ?? 0,
           serviceSeconds: timed?.serviceSeconds ?? 0,
           wasteFractionId: stop.wasteFractionId,
+          containerTypeId: stop.containerTypeId,
           // A stop whose two windows never meet is served at no time of the day: it is not moved.
           window: window === "disjoint" ? [0, 0] : window,
         }
@@ -202,7 +196,7 @@ export function routeBalanceRoutes(guard: MiddlewareHandler<AuthEnv>, { now = ()
         operationId: "previewRouteBalance",
         summary: "Propose balancing a day's routes",
         description:
-          "Weighs the project's routes of `operatingDate` that are `planned` or `ready` (O15 of #290) — each one's expected kilograms against its planned vehicle's payload, and its work against its planned driver's shift as the route read weighs it: its active Plan's drive and waiting, its stops' time at the kerb, its unload visits on the way and the break — and proposes moving open stops off the routes that run over either onto routes of the day that can take them and stay within both: of the same service provider (or the company's own), whose vehicle carries the stop's fraction, that do not empty its container already, and whose working day reaches the stop's window. Each round moves, off the route furthest over, the stop that costs a receiving route least, at most fifty moves. Distances are straight lines read as roads, so `after` is an estimate until the routes are measured again. Nothing moves: `POST /routes/balance` applies what the office accepts, with the `token` this answers.",
+          "Weighs the project's routes of `operatingDate` that are `planned` or `ready` (O15 of #290) — each one's expected kilograms against its planned vehicle's payload, and its work against its planned driver's shift as the route read weighs it: its active Plan's drive and waiting, its stops' time at the kerb, its unload visits on the way and the break — and proposes moving open stops off the routes that run over either onto routes of the day that can take them and stay within both: of the same service provider (or the company's own), whose vehicle carries the stop's fraction, lifts its container and takes its weight on one trip (O7 of #290, as a move judges it), that do not empty its container already, and whose working day reaches the stop's window. Each round moves, off the route furthest over, the stop that costs a receiving route least, at most fifty moves. Distances are straight lines read as roads, so `after` is an estimate until the routes are measured again. Nothing moves: `POST /routes/balance` applies what the office accepts, with the `token` this answers.",
         security: BEARER_SECURITY,
         responses: {
           200: describeJson("The moves, every route of the day before and after them, and the day's token.", RouteBalancePreview),
