@@ -13,7 +13,7 @@
 // diffs from it to the ticket as 0033 left it, with that product and no
 // booked stop, which is where ticket-stops-rendering.test.ts diffs from to
 // the ticket as 0035 (O3c of #290) left it, with its booked stop and no team,
-// which 0064 (O30 of #290, row 7.20) gave it.
+// which 0070 (O30 of #290, row 7.20) gave it.
 import { TICKET_EVENT_KINDS, TICKET_KINDS, TICKET_PRIORITIES, TICKET_RESOLUTIONS, TICKET_STATUSES } from "@waste/domain/resolution/vocabulary"
 import { sql } from "drizzle-orm"
 import { check, getTableConfig, index, integer, text, timestamp, uniqueIndex, uuid } from "drizzle-orm/pg-core"

@@ -603,6 +603,22 @@ describe("an edit of a scheme", () => {
     assert.deepEqual(one(merged.calls), { collectionGroups: [entryOf(north, { days: [...WEEKDAYS] })] }, "no delete: South, left out, is parked; the one group of the legacy shape keeps its own name, North")
   })
 
+  test("a rule group's own planning area (O30 of #290): read as the area's web id, kept by an edit that leaves it, and said by an edit that gives one", async () => {
+    const north = groupOf({ id: "01a0d2a4-a280-701b-8000-0000000000a1", routeSchemeId: CENTRAL_ID, name: "North", days: ["monday", "tuesday", "wednesday"], rule: { wasteFractionIds: [residual.id], containerTypeIds: [], vehicleTypeId: rearLoader.id, planningAreaId: indreBy.id } })
+    const south = groupOf({ id: "01a0d2a4-a280-701b-8000-0000000000a2", routeSchemeId: CENTRAL_ID, name: "South", position: 2, days: ["thursday", "friday"] })
+    const scheme = { ...central, collectionGroups: [north, south] }
+    assert.deepEqual(collectionGroupsOfRecord(recordOf(scheme)).map((group) => group.planningAreaId), [areaRecord.id, undefined])
+
+    const renamed = await edited(scheme, withGroups((current) => [{ ...current[0], name: "North side" }, current[1]]), [schemeAnswer()])
+    assert.deepEqual(one(renamed.calls), { collectionGroups: [entryOf(north, { name: "North side" }), entryOf(south)] }, "the area rides on the rule as it was read")
+
+    const given = await edited(scheme, withGroups((current) => [current[0], { ...current[1], planningAreaId: areaRecord.id }]), [schemeAnswer()])
+    assert.deepEqual(one(given.calls), { collectionGroups: [entryOf(north), entryOf(south, { rule: { ...south.rule, planningAreaId: indreBy.id } })] })
+
+    const cleared = await edited(scheme, withGroups((current) => [{ ...current[0], planningAreaId: undefined }, current[1]]), [schemeAnswer()])
+    assert.deepEqual(one(cleared.calls), { collectionGroups: [entryOf(north, { rule: { wasteFractionIds: [residual.id], containerTypeIds: [], vehicleTypeId: rearLoader.id } }), entryOf(south)] }, "no area of its own: the scheme's")
+  })
+
   test("a group removed from the front is left out of the list, and the others are restated as they stand: nothing is renumbered", async () => {
     const [a, b, c] = ["a1", "a2", "a3"].map((n, index) => groupOf({ id: `01a0d2a4-a280-701b-8000-0000000000${n}`, routeSchemeId: CENTRAL_ID, name: `Group ${index + 1}`, position: index + 1, days: index === 2 ? ["friday"] : index === 1 ? ["wednesday", "thursday"] : ["monday", "tuesday"] }))
     const { calls } = await edited({ ...central, status: "draft", collectionGroups: [a, b, c] }, (row) => ({ ...withGroups((current) => current.slice(1))(row), status: "Draft" }), [schemeAnswer()])

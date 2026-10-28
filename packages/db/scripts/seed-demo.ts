@@ -50,6 +50,7 @@ const configuration = [
   count(counts.priceLists, "price list"),
   count(counts.priceListRows, "price row"),
   count(counts.contaminantCodes, "contaminant code"),
+  count(counts.decommissionReasons, "decommission reason"),
   count(counts.fuelEmissionFactors, "emission factor"),
 ].join(", ")
 console.log(

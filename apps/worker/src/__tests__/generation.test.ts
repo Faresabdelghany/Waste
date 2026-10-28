@@ -62,7 +62,7 @@ import { PGBOSS_SCHEMA } from "@waste/db/sql/pgboss"
 import { withCompany } from "@waste/db/tenant"
 import { holidayReleases, NO_LONGER_SERVES_DATE, NO_PLANNING_AREA, REMOVED_FROM_DAY_PLAN } from "@waste/domain/planning/generation"
 import type { ServiceDay } from "@waste/domain/planning/vocabulary"
-import { and, asc, eq, sql } from "drizzle-orm"
+import { and, asc, desc, eq, sql } from "drizzle-orm"
 import { PgBoss } from "pg-boss"
 
 import { createBoss, startBoss, type Boss } from "../boss"
@@ -929,5 +929,43 @@ describe("generation against a migrated database", { skip }, () => {
     }
     await generateA(summer)
     assert.deepEqual(await residualDays(), ["2027-06-07", "2027-06-10", "2027-06-14", "2027-06-17"], "weekly again, the identities of the season's routes kept")
+  })
+  test("a rule group may match within a planning area of its own (O30 of #290, row 2.17): its stops are the containers inside that area, its stamp signs that area, and a day the area has no boundary in force is warned by the group's name", async () => {
+    // Far from every other test's window: Monday 1 and Thursday 4 March 2027.
+    const march = { from: "2027-03-01", to: "2027-03-07" }
+    const amagerArea = "018f7c36-a000-7000-8000-000000000071"
+    const bareArea = "018f7c36-a000-7000-8000-000000000072"
+    const AROUND_AMAGER: Polygon = { type: "Polygon", coordinates: [[[12.6, 55.6], [12.64, 55.6], [12.64, 55.64], [12.6, 55.64], [12.6, 55.6]]] }
+    await ownerPool.db.insert(planningArea).values([
+      { id: amagerArea, companyId: a.company, projectId: a.project, code: "OP-AMA-01", name: "Amager", purpose: "route-planning" },
+      { id: bareArea, companyId: a.company, projectId: a.project, code: "OP-BAR-01", name: "Bare", purpose: "route-planning" },
+    ])
+    await ownerPool.db.insert(planningAreaBoundary).values({ companyId: a.company, projectId: a.project, validFrom: OPENED, planningAreaId: amagerArea, boundary: AROUND_AMAGER })
+    const residualOn = async (day: string): Promise<string[]> => {
+      const [row] = await ownerPool.db.select().from(route).where(and(eq(route.collectionGroupId, a.residualGroup), eq(route.serviceDate, day)))
+      return row === undefined ? [] : (await pickupsOf(row.id)).filter((stop) => stop.status === "planned").map((stop) => stop.containerId ?? "")
+    }
+    try {
+      await ownerPool.db.update(collectionGroup).set({ rulePlanningAreaId: amagerArea }).where(eq(collectionGroup.id, a.residualGroup))
+      const own = await generateA(march)
+      assert.equal(own.run.status, "succeeded")
+      assert.deepEqual(own.run.warnings, [])
+      assert.deepEqual(await residualOn("2027-03-01"), [a.bin4], "Amager's bin alone: the scheme's square is not this group's")
+      const [latest] = await ownerPool.db.select().from(generationMatch).where(eq(generationMatch.collectionGroupId, a.residualGroup)).orderBy(desc(generationMatch.id)).limit(1)
+      assert.equal(latest.ruleSignature, `${amagerArea}|${a.wasteFraction}||`, "the stamp signs the area the rule matched within")
+      assert.deepEqual([...latest.containerIds], [a.bin4])
+
+      await ownerPool.db.update(collectionGroup).set({ rulePlanningAreaId: bareArea }).where(eq(collectionGroup.id, a.residualGroup))
+      const bare = await generateA(march)
+      assert.deepEqual(bare.run.warnings, [
+        "No boundary of collection group Residual's planning area in force on 2027-03-01; it matches no containers that day",
+        "No boundary of collection group Residual's planning area in force on 2027-03-04; it matches no containers that day",
+      ])
+      assert.deepEqual(await residualOn("2027-03-01"), [])
+    } finally {
+      await ownerPool.db.update(collectionGroup).set({ rulePlanningAreaId: null }).where(eq(collectionGroup.id, a.residualGroup))
+    }
+    await generateA(march)
+    assert.deepEqual(await residualOn("2027-03-01"), [a.bin1], "the scheme's area again, its western half in force since October; bin 2's placement ended then")
   })
 })

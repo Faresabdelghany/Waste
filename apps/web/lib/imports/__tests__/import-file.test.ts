@@ -1,9 +1,12 @@
 import assert from "node:assert/strict"
 import { describe, test } from "node:test"
 
+import { PROJECT_IMPORT_KINDS } from "@waste/contracts/imports"
+import { NOT_A_FEATURE_COLLECTION } from "@waste/domain/imports/geojson"
 import { IMPORT_BATCH_MAX, IMPORT_KINDS, IMPORT_ROWS_MAX } from "@waste/domain/imports/vocabulary"
 
 import {
+  acceptedFiles,
   batchesOf,
   countsOf,
   IMPORT_KIND_OPTIONS,
@@ -18,6 +21,28 @@ import {
 
 const grants = (...entries: [string, ...string[]][]) => entries.map(([moduleKey, ...actions]) => ({ moduleKey, actions }))
 
+describe("a planning areas' GeoJSON file (O30 of #290)", () => {
+  const ring = [[12.5, 55.7], [12.6, 55.7], [12.6, 55.8], [12.5, 55.7]]
+  const geojson = JSON.stringify({ type: "FeatureCollection", features: [{ type: "Feature", properties: { code: "CPH-N", name: "North", purpose: "route-planning", valid_from: "2027-01-01" }, geometry: { type: "Polygon", coordinates: [ring] } }] })
+
+  test("is read feature by feature for the planning areas, and a CSV file still is", () => {
+    const reading = readImportFile("planning-areas", geojson)
+    assert.deepEqual(reading.blocking, [])
+    assert.deepEqual(reading.file.rows[0], { row: 2, values: { code: "CPH-N", name: "North", purpose: "route-planning", "valid from": "2027-01-01", boundary: JSON.stringify({ type: "Polygon", coordinates: [ring] }) } })
+    assert.equal(readImportFile("planning-areas", "code,name,purpose\nCPH-S,South,notification\n").file.rows[0]?.values.code, "CPH-S")
+  })
+
+  test("blocks a JSON file that is no FeatureCollection, and one without features", () => {
+    assert.deepEqual(readImportFile("planning-areas", '{"type":"Feature"}').blocking, [NOT_A_FEATURE_COLLECTION])
+    assert.deepEqual(readImportFile("planning-areas", '{"type":"FeatureCollection","features":[]}').blocking, ["The file has no features."])
+  })
+
+  test("is offered to the planning areas' picker alone", () => {
+    assert.match(acceptedFiles("planning-areas"), /\.geojson/)
+    assert.equal(acceptedFiles("customers"), ".csv,text/csv")
+  })
+})
+
 describe("the kinds a role imports", () => {
   test("every kind is offered once, each writing the module the API asks its grants on", () => {
     assert.deepEqual(IMPORT_KIND_OPTIONS.map((option) => option.kind), [...IMPORT_KINDS])
@@ -28,14 +53,24 @@ describe("the kinds a role imports", () => {
         ["properties", "customers.properties", true],
         ["containers", "resources.containers", true],
         ["agreements", "customers.agreements", true],
+        ["waste-fractions", "configure.master", false],
+        ["container-types", "configure.master", false],
+        ["vehicle-types", "configure.master", false],
+        ["vehicles", "fleet.vehicles", true],
+        ["drivers", "fleet.drivers", true],
+        ["collection-calendars", "configure.calendars", true],
+        ["planning-areas", "configure.areas", true],
       ],
     )
+    // The web's project rule is the contracts': a project's kinds and no other.
+    assert.deepEqual(IMPORT_KIND_OPTIONS.filter((option) => option.projectScoped).map((option) => option.kind), [...PROJECT_IMPORT_KINDS])
   })
 
   test("needs the import's create and, per kind, its module's create or edit", () => {
     assert.deepEqual(importableKinds(grants(["customers.contacts", "view", "create"])), [], "no import grant, no kind")
     const role = grants(["improve.imports", "view", "create"], ["customers.contacts", "view", "edit"], ["resources.containers", "view"], ["customers.agreements", "view", "create"])
     assert.deepEqual(importableKinds(role).map((option) => option.kind), ["customers", "agreements"])
+    assert.deepEqual(importableKinds([...role, ...grants(["configure.master", "view", "edit"])]).map((option) => option.kind), ["customers", "agreements", "waste-fractions", "container-types", "vehicle-types"], "the master data's edit opens the catalogue")
     assert.equal(mayImport(role), true)
     assert.equal(mayView(grants(["improve.imports", "view"])), true)
     assert.equal(mayImport(grants(["improve.imports", "view"])), false)
