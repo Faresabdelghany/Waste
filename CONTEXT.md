@@ -342,6 +342,10 @@ _Avoid_: Price update, repricing, tariff edit
 An effective-dated geographic and service responsibility awarded to a service provider. Its geographic scope references operator-owned Planning Areas — the service provider domain has no zone concept of its own — while the contract's own boundary text stays the authoritative legal boundary.
 _Avoid_: Contract area, operational area, route, service provider zone
 
+**Service Provider Activity**:
+One item of coordination between the office and one Service Provider about the work it holds under an award, numbered `ACT-<n>`: a proposal of a protected change, which asks for the office's Approval — a route-day change, a Collection Group of a scheme the provider serves run on other days from a day — a compliance follow-up the office raises with a due day, or a note either side keeps. An approved proposal is applied as the scheme's next version from its day; a refused one changes nothing. Every end is final, and overdue is a reading of a follow-up's due day, never a status. It restates no operational record: a route's assignment is the route's own.
+_Avoid_: Task, case (that is a Ticket), request (that is an Application), assignment notice
+
 **Service Area Assignment**:
 The effective-dated relationship that links an existing Service Area to one service provider. Assigning or transferring it changes the relationship and preserves the Service Area itself.
 _Avoid_: Contract area assignment, create service area, service provider area

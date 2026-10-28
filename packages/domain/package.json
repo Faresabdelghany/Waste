@@ -23,6 +23,7 @@
     "./fixtures/__tests__/*": null,
     "./sorting-guide/__tests__/*": null,
     "./visits/__tests__/*": null,
+    "./service-providers/__tests__/*": null,
     "./*": "./src/*.ts"
   },
   "scripts": {
