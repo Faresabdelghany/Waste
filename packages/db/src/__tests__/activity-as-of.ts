@@ -1,7 +1,7 @@
 // The `service_provider_activity` table as migration 0063 left it (#474,
 // part 1): three kinds, the route-day change the one proposal, and no
 // vehicle or driver. Today's, with the vehicle change (part 2, migration
-// 0064), is src/schema/service-provider-activities.ts itself. One spelling
+// 0067), is src/schema/service-provider-activities.ts itself. One spelling
 // here, so service-provider-activities-rendering.test.ts and
 // vehicle-change-rendering.test.ts cannot drift on what 0063 said. Another
 // table object of the same name is fine, since nothing connects to a

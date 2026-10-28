@@ -167,8 +167,20 @@ describe("a scheme edit that moves its collection groups, in one request (#205)"
     const [kept, added] = edited.collectionGroups
     assert.equal(kept.id, group.id, "the restated group keeps its id")
     assert.notEqual(added.id, group.id)
-    assert.deepEqual(added.rule, { wasteFractionIds: [residual.id], containerTypeIds: [], vehicleTypeId: null })
+    assert.deepEqual(added.rule, { wasteFractionIds: [residual.id], containerTypeIds: [], vehicleTypeId: null, planningAreaId: null })
     assert.deepEqual(await oneScheme(weekdays.id), edited)
+  })
+
+  test("a restated group's rule may take a planning area of its own and give it back (O30 of #290, row 2.17)", async () => {
+    const weekdays = await scheme("Own area", WEEKDAYS, [ruleGroup("Residual", WEEKDAYS)])
+    const [group] = weekdays.collectionGroups
+    const own = await patchedScheme(weekdays.id, { collectionGroups: [{ ...entryOf(group), rule: { ...group.rule, planningAreaId: planning.areas.centrum.id } }] })
+    assert.equal(own.collectionGroups[0].rule?.planningAreaId, planning.areas.centrum.id)
+    assert.ok(own.collectionGroups[0].updatedAt > group.updatedAt, "the area is the group's row")
+    const elsewhere = await refused(await patchScheme(weekdays.id, { collectionGroups: [{ ...entryOf(group), rule: { ...group.rule, planningAreaId: planning.areas.harbor.id } }] }), 400)
+    assert.deepEqual(elsewhere.errors, [{ path: "collectionGroups.0.rule.planningAreaId", message: "Not a planning area of this project" }])
+    const back = await patchedScheme(weekdays.id, { collectionGroups: [{ ...entryOf(own.collectionGroups[0]), rule: { ...group.rule, planningAreaId: null } }] })
+    assert.equal(back.collectionGroups[0].rule?.planningAreaId, null)
   })
 
   test("trades the containers of two manual groups that run on a shared day, which either list alone would refuse", async () => {

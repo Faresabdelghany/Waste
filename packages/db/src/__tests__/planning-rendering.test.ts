@@ -129,7 +129,7 @@ const routeSchemeTable = (resources: boolean): string =>
       : []),
   ])
 
-/** collection_group as drizzle-kit writes it today — the vehicle type a key, a vehicle and a driver — and as of 0006, with the token and its check. */
+/** collection_group as drizzle-kit writes it today — the vehicle type a key, a vehicle and a driver, and a rule's own planning area (O30 of #290) — and as of 0006, with the token and its check. */
 const collectionGroupTable = (resources: boolean): string =>
   createTable("collection_group", "project", [
     '"route_scheme_id" uuid NOT NULL',
@@ -137,7 +137,7 @@ const collectionGroupTable = (resources: boolean): string =>
     '"position" integer NOT NULL',
     '"days" text[] NOT NULL',
     '"stop_source" text NOT NULL',
-    ...(resources ? ['"rule_vehicle_type_id" uuid', '"service_provider_id" uuid', '"vehicle_id" uuid', '"driver_id" uuid'] : ['"rule_vehicle_type" text', '"service_provider_id" uuid']),
+    ...(resources ? ['"rule_vehicle_type_id" uuid', '"rule_planning_area_id" uuid', '"service_provider_id" uuid', '"vehicle_id" uuid', '"driver_id" uuid'] : ['"rule_vehicle_type" text', '"service_provider_id" uuid']),
     uniqueKey("collection_group_route_scheme_id_name_key", "company_id", "route_scheme_id", "name"),
     uniqueKey("collection_group_project_key", "company_id", "project_id", "id"),
     subsetCheck("collection_group", "days", ...DAYS),
@@ -145,6 +145,7 @@ const collectionGroupTable = (resources: boolean): string =>
     ...(resources ? [] : [oneOfCheck("collection_group", "rule_vehicle_type", "rear-loader", "organic-sealed", "paper-compactor", "glass-crane", "vacuum-tanker")]),
     positiveCheck("collection_group", "position"),
     `CONSTRAINT "collection_group_rule_shape" CHECK (${ref("collection_group", "stop_source")} = 'rule' or ${ref("collection_group", resources ? "rule_vehicle_type_id" : "rule_vehicle_type")} is null)`,
+    ...(resources ? [`CONSTRAINT "collection_group_rule_area_shape" CHECK (${ref("collection_group", "stop_source")} = 'rule' or ${ref("collection_group", "rule_planning_area_id")} is null)`] : []),
   ])
 
 /** What 0007 changed on two tables 0006 created: the statement as drizzle-kit generates it now, and as it generated it as of 0006. */
@@ -165,6 +166,9 @@ const ADDED_IN_0007 = [
   index("collection_group", "collection_group_rule_vehicle_type_id_idx", "company_id", "rule_vehicle_type_id"),
   index("collection_group", "collection_group_vehicle_id_idx", "company_id", "vehicle_id"),
   index("collection_group", "collection_group_driver_id_idx", "company_id", "driver_id"),
+  // The group planning area's migration (O30 of #290) gave a rule its own area: the key and its index.
+  projectFkTo("collection_group", "rule_planning_area_id", "planning_area"),
+  index("collection_group", "collection_group_rule_planning_area_id_idx", "company_id", "rule_planning_area_id"),
 ]
 
 const expected = [
@@ -236,6 +240,7 @@ const expected = [
   projectFkTo("collection_group", "route_scheme_id", "route_scheme"),
   tenantFk("collection_group", "service_provider_id", "service_provider"),
   tenantFk("collection_group", "rule_vehicle_type_id", "vehicle_type"),
+  projectFkTo("collection_group", "rule_planning_area_id", "planning_area"),
   projectFkTo("collection_group", "vehicle_id", "vehicle"),
   projectFkTo("collection_group", "driver_id", "driver"),
   companyFk("collection_group_fraction"),
@@ -259,6 +264,7 @@ const expected = [
   index("route_scheme", "route_scheme_unloading_station_id_idx", "company_id", "unloading_station_id"),
   index("collection_group", "collection_group_service_provider_id_idx", "company_id", "service_provider_id"),
   index("collection_group", "collection_group_rule_vehicle_type_id_idx", "company_id", "rule_vehicle_type_id"),
+  index("collection_group", "collection_group_rule_planning_area_id_idx", "company_id", "rule_planning_area_id"),
   index("collection_group", "collection_group_vehicle_id_idx", "company_id", "vehicle_id"),
   index("collection_group", "collection_group_driver_id_idx", "company_id", "driver_id"),
   index("collection_group_fraction", "collection_group_fraction_project_id_idx", "company_id", "project_id"),

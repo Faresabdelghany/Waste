@@ -3,7 +3,7 @@
 // project, and its three checks are replaced — the kind's list grows by
 // `vehicle-change`, each kind still carries its own columns and none of
 // another's, and the vehicle change moves through an Approval's statuses as
-// the domain's proposal kinds say. Migration 0064 is exactly those
+// the domain's proposal kinds say. Migration 0067 is exactly those
 // statements, diffed from the table as 0063 left it (activity-as-of.ts): a
 // column on an audited table owes no hand-written statement. No database.
 import assert from "node:assert/strict"
@@ -26,11 +26,11 @@ import { serviceProviderActivityAsOf0063 } from "./activity-as-of"
 import { checksOf, list, ref } from "./rendering"
 import { statementsBetween } from "./specimen"
 
-const MIGRATION = "0064_vehicle_change_proposals.sql"
+const MIGRATION = "0067_vehicle_change_proposals.sql"
 
 const referenced = { company, project, serviceProvider, serviceArea, routeScheme, collectionGroup, userAccount, vehicle, driver }
 
-/** What drizzle-kit writes for 0064: the activity from its 0063 spelling to today's. */
+/** What drizzle-kit writes for 0067: the activity from its 0063 spelling to today's. */
 const generated = (): Promise<string[]> => statementsBetween({ ...referenced, serviceProviderActivity: serviceProviderActivityAsOf0063 }, { ...referenced, serviceProviderActivity })
 
 const fileStatements = async (): Promise<string[]> => statementsOf(await readFile(join(MIGRATIONS_FOLDER, MIGRATION), "utf8"))
@@ -38,7 +38,7 @@ const fileStatements = async (): Promise<string[]> => statementsOf(await readFil
 const column = (name: string) => ref("service_provider_activity", name)
 
 describe("the vehicle change as drizzle-kit writes it", () => {
-  test("migration 0064 is exactly what the schema generates from 0063's table, and nothing hand-written", async () => {
+  test("migration 0067 is exactly what the schema generates from 0063's table, and nothing hand-written", async () => {
     assert.deepEqual(await fileStatements(), (await generated()).map(normalised))
   })
 

@@ -971,6 +971,7 @@ column wms.collection_group 11 service_provider_id uuid
 column wms.collection_group 12 rule_vehicle_type_id uuid
 column wms.collection_group 13 vehicle_id uuid
 column wms.collection_group 14 driver_id uuid
+column wms.collection_group 15 rule_planning_area_id uuid
 constraint wms.collection_group collection_group_company_id_fk FOREIGN KEY (company_id) REFERENCES wms.company(id)
 constraint wms.collection_group collection_group_days_subset_of CHECK ((days <@ ARRAY['monday'::text, 'tuesday'::text, 'wednesday'::text, 'thursday'::text, 'friday'::text, 'saturday'::text, 'sunday'::text]))
 constraint wms.collection_group collection_group_driver_id_fk FOREIGN KEY (company_id, project_id, driver_id) REFERENCES wms.driver(company_id, project_id, id)
@@ -980,6 +981,8 @@ constraint wms.collection_group collection_group_project_id_fk FOREIGN KEY (comp
 constraint wms.collection_group collection_group_project_key UNIQUE (company_id, project_id, id)
 constraint wms.collection_group collection_group_route_scheme_id_fk FOREIGN KEY (company_id, project_id, route_scheme_id) REFERENCES wms.route_scheme(company_id, project_id, id)
 constraint wms.collection_group collection_group_route_scheme_id_name_key UNIQUE (company_id, route_scheme_id, name)
+constraint wms.collection_group collection_group_rule_area_shape CHECK (((stop_source = 'rule'::text) OR (rule_planning_area_id IS NULL)))
+constraint wms.collection_group collection_group_rule_planning_area_id_fk FOREIGN KEY (company_id, project_id, rule_planning_area_id) REFERENCES wms.planning_area(company_id, project_id, id)
 constraint wms.collection_group collection_group_rule_shape CHECK (((stop_source = 'rule'::text) OR (rule_vehicle_type_id IS NULL)))
 constraint wms.collection_group collection_group_rule_vehicle_type_id_fk FOREIGN KEY (company_id, rule_vehicle_type_id) REFERENCES wms.vehicle_type(company_id, id)
 constraint wms.collection_group collection_group_service_provider_id_fk FOREIGN KEY (company_id, service_provider_id) REFERENCES wms.service_provider(company_id, id)
@@ -989,6 +992,7 @@ index wms.collection_group collection_group_driver_id_idx CREATE INDEX collectio
 index wms.collection_group collection_group_pkey CREATE UNIQUE INDEX collection_group_pkey ON wms.collection_group USING btree (id)
 index wms.collection_group collection_group_project_key CREATE UNIQUE INDEX collection_group_project_key ON wms.collection_group USING btree (company_id, project_id, id)
 index wms.collection_group collection_group_route_scheme_id_name_key CREATE UNIQUE INDEX collection_group_route_scheme_id_name_key ON wms.collection_group USING btree (company_id, route_scheme_id, name)
+index wms.collection_group collection_group_rule_planning_area_id_idx CREATE INDEX collection_group_rule_planning_area_id_idx ON wms.collection_group USING btree (company_id, rule_planning_area_id)
 index wms.collection_group collection_group_rule_vehicle_type_id_idx CREATE INDEX collection_group_rule_vehicle_type_id_idx ON wms.collection_group USING btree (company_id, rule_vehicle_type_id)
 index wms.collection_group collection_group_service_provider_id_idx CREATE INDEX collection_group_service_provider_id_idx ON wms.collection_group USING btree (company_id, service_provider_id)
 index wms.collection_group collection_group_vehicle_id_idx CREATE INDEX collection_group_vehicle_id_idx ON wms.collection_group USING btree (company_id, vehicle_id)
@@ -1265,6 +1269,28 @@ index wms.customer customer_tenant_key CREATE UNIQUE INDEX customer_tenant_key O
 trigger wms.customer customer_audit_trail enabled=O CREATE TRIGGER customer_audit_trail AFTER INSERT OR DELETE OR UPDATE ON wms.customer FOR EACH ROW EXECUTE FUNCTION wms.audit_row('', '')
 trigger wms.customer customer_touch_updated_at enabled=O CREATE TRIGGER customer_touch_updated_at BEFORE UPDATE ON wms.customer FOR EACH ROW EXECUTE FUNCTION wms.touch_updated_at()
 policy wms.customer customer_tenant_fence permissive ALL to=wms_api using=(company_id = ( SELECT wms.current_company_id() AS current_company_id)) check=(company_id = ( SELECT wms.current_company_id() AS current_company_id))
+relation wms.decommission_reason kind=table owner=<owner> persistence=p rls=true force-rls=true replica-identity=d acl=[<owner>=DELETE,INSERT,MAINTAIN,REFERENCES,SELECT,TRIGGER,TRUNCATE,UPDATE/<owner> wms_api=DELETE,INSERT,SELECT,UPDATE/<owner> wms_worker=SELECT/<owner>]
+column wms.decommission_reason 1 id uuid not-null default=wms.uuidv7()
+column wms.decommission_reason 2 company_id uuid not-null
+column wms.decommission_reason 3 created_at timestamp with time zone not-null default=now()
+column wms.decommission_reason 4 updated_at timestamp with time zone not-null default=now()
+column wms.decommission_reason 5 code text not-null
+column wms.decommission_reason 6 name text not-null
+column wms.decommission_reason 7 status text not-null default='active'::text
+constraint wms.decommission_reason decommission_reason_code_key UNIQUE (company_id, code)
+constraint wms.decommission_reason decommission_reason_code_lowercase CHECK ((code = lower(code)))
+constraint wms.decommission_reason decommission_reason_company_id_fk FOREIGN KEY (company_id) REFERENCES wms.company(id)
+constraint wms.decommission_reason decommission_reason_name_key UNIQUE (company_id, name)
+constraint wms.decommission_reason decommission_reason_pkey PRIMARY KEY (id)
+constraint wms.decommission_reason decommission_reason_status_one_of CHECK ((status = ANY (ARRAY['active'::text, 'inactive'::text])))
+constraint wms.decommission_reason decommission_reason_tenant_key UNIQUE (company_id, id)
+index wms.decommission_reason decommission_reason_code_key CREATE UNIQUE INDEX decommission_reason_code_key ON wms.decommission_reason USING btree (company_id, code)
+index wms.decommission_reason decommission_reason_name_key CREATE UNIQUE INDEX decommission_reason_name_key ON wms.decommission_reason USING btree (company_id, name)
+index wms.decommission_reason decommission_reason_pkey CREATE UNIQUE INDEX decommission_reason_pkey ON wms.decommission_reason USING btree (id)
+index wms.decommission_reason decommission_reason_tenant_key CREATE UNIQUE INDEX decommission_reason_tenant_key ON wms.decommission_reason USING btree (company_id, id)
+trigger wms.decommission_reason decommission_reason_audit_trail enabled=O CREATE TRIGGER decommission_reason_audit_trail AFTER INSERT OR DELETE OR UPDATE ON wms.decommission_reason FOR EACH ROW EXECUTE FUNCTION wms.audit_row('', '')
+trigger wms.decommission_reason decommission_reason_touch_updated_at enabled=O CREATE TRIGGER decommission_reason_touch_updated_at BEFORE UPDATE ON wms.decommission_reason FOR EACH ROW EXECUTE FUNCTION wms.touch_updated_at()
+policy wms.decommission_reason decommission_reason_tenant_fence permissive ALL to=wms_api using=(company_id = ( SELECT wms.current_company_id() AS current_company_id)) check=(company_id = ( SELECT wms.current_company_id() AS current_company_id))
 relation wms.depot kind=table owner=<owner> persistence=p rls=true force-rls=true replica-identity=d acl=[<owner>=DELETE,INSERT,MAINTAIN,REFERENCES,SELECT,TRIGGER,TRUNCATE,UPDATE/<owner> wms_api=DELETE,INSERT,SELECT,UPDATE/<owner> wms_sync=SELECT/<owner> wms_worker=SELECT/<owner>]
 column wms.depot 1 id uuid not-null default=wms.uuidv7()
 column wms.depot 2 company_id uuid not-null
@@ -3307,6 +3333,29 @@ policy wms.sorting_guide_item sorting_guide_item_public_door permissive SELECT t
    FROM wms.project published
   WHERE ((published.company_id = sorting_guide_item.company_id) AND (published.id = sorting_guide_item.project_id) AND (published.public_slug IS NOT NULL))))) check=none
 policy wms.sorting_guide_item sorting_guide_item_tenant_fence permissive ALL to=wms_api using=(company_id = ( SELECT wms.current_company_id() AS current_company_id)) check=(company_id = ( SELECT wms.current_company_id() AS current_company_id))
+relation wms.stock_minimum kind=table owner=<owner> persistence=p rls=true force-rls=true replica-identity=d acl=[<owner>=DELETE,INSERT,MAINTAIN,REFERENCES,SELECT,TRIGGER,TRUNCATE,UPDATE/<owner> wms_api=DELETE,INSERT,SELECT,UPDATE/<owner> wms_worker=SELECT/<owner>]
+column wms.stock_minimum 1 id uuid not-null default=wms.uuidv7()
+column wms.stock_minimum 2 company_id uuid not-null
+column wms.stock_minimum 3 project_id uuid not-null
+column wms.stock_minimum 4 created_at timestamp with time zone not-null default=now()
+column wms.stock_minimum 5 updated_at timestamp with time zone not-null default=now()
+column wms.stock_minimum 6 warehouse_id uuid not-null
+column wms.stock_minimum 7 container_type_id uuid not-null
+column wms.stock_minimum 8 minimum integer not-null
+constraint wms.stock_minimum stock_minimum_company_id_fk FOREIGN KEY (company_id) REFERENCES wms.company(id)
+constraint wms.stock_minimum stock_minimum_container_type_id_fk FOREIGN KEY (company_id, container_type_id) REFERENCES wms.container_type(company_id, id)
+constraint wms.stock_minimum stock_minimum_minimum_positive CHECK ((minimum > 0))
+constraint wms.stock_minimum stock_minimum_pkey PRIMARY KEY (id)
+constraint wms.stock_minimum stock_minimum_project_id_fk FOREIGN KEY (company_id, project_id) REFERENCES wms.project(company_id, id)
+constraint wms.stock_minimum stock_minimum_warehouse_id_container_type_id_key UNIQUE (company_id, warehouse_id, container_type_id)
+constraint wms.stock_minimum stock_minimum_warehouse_id_fk FOREIGN KEY (company_id, project_id, warehouse_id) REFERENCES wms.warehouse(company_id, project_id, id)
+index wms.stock_minimum stock_minimum_container_type_id_idx CREATE INDEX stock_minimum_container_type_id_idx ON wms.stock_minimum USING btree (company_id, container_type_id)
+index wms.stock_minimum stock_minimum_pkey CREATE UNIQUE INDEX stock_minimum_pkey ON wms.stock_minimum USING btree (id)
+index wms.stock_minimum stock_minimum_project_id_idx CREATE INDEX stock_minimum_project_id_idx ON wms.stock_minimum USING btree (company_id, project_id)
+index wms.stock_minimum stock_minimum_warehouse_id_container_type_id_key CREATE UNIQUE INDEX stock_minimum_warehouse_id_container_type_id_key ON wms.stock_minimum USING btree (company_id, warehouse_id, container_type_id)
+trigger wms.stock_minimum stock_minimum_audit_trail enabled=O CREATE TRIGGER stock_minimum_audit_trail AFTER INSERT OR DELETE OR UPDATE ON wms.stock_minimum FOR EACH ROW EXECUTE FUNCTION wms.audit_row('warehouse', 'warehouse_id')
+trigger wms.stock_minimum stock_minimum_touch_updated_at enabled=O CREATE TRIGGER stock_minimum_touch_updated_at BEFORE UPDATE ON wms.stock_minimum FOR EACH ROW EXECUTE FUNCTION wms.touch_updated_at()
+policy wms.stock_minimum stock_minimum_tenant_fence permissive ALL to=wms_api using=(company_id = ( SELECT wms.current_company_id() AS current_company_id)) check=(company_id = ( SELECT wms.current_company_id() AS current_company_id))
 relation wms.stock_movement kind=table owner=<owner> persistence=p rls=true force-rls=true replica-identity=d acl=[<owner>=DELETE,INSERT,MAINTAIN,REFERENCES,SELECT,TRIGGER,TRUNCATE,UPDATE/<owner> wms_api=INSERT,SELECT/<owner> wms_worker=SELECT/<owner>]
 column wms.stock_movement 1 id uuid not-null default=wms.uuidv7()
 column wms.stock_movement 2 company_id uuid not-null
@@ -3324,10 +3373,13 @@ column wms.stock_movement 13 recorded_by uuid not-null
 column wms.stock_movement 14 reason text
 column wms.stock_movement 15 reference text
 column wms.stock_movement 16 corrects_movement_id uuid
+column wms.stock_movement 17 decommission_reason_id uuid
 constraint wms.stock_movement stock_movement_company_id_fk FOREIGN KEY (company_id) REFERENCES wms.company(id)
 constraint wms.stock_movement stock_movement_container_id_fk FOREIGN KEY (company_id, project_id, container_id) REFERENCES wms.container(company_id, project_id, id)
 constraint wms.stock_movement stock_movement_container_id_placement_id_fk FOREIGN KEY (company_id, project_id, container_id, placement_id) REFERENCES wms.container_service_placement(company_id, project_id, container_id, id)
 constraint wms.stock_movement stock_movement_corrects_movement_id_fk FOREIGN KEY (company_id, corrects_movement_id) REFERENCES wms.stock_movement(company_id, id)
+constraint wms.stock_movement stock_movement_decommission_reason_id_fk FOREIGN KEY (company_id, decommission_reason_id) REFERENCES wms.decommission_reason(company_id, id)
+constraint wms.stock_movement stock_movement_decommission_reason_shape CHECK (((kind = 'decommission'::text) = (decommission_reason_id IS NOT NULL)))
 constraint wms.stock_movement stock_movement_from_kind_one_of CHECK ((from_kind = ANY (ARRAY['supplier'::text, 'warehouse'::text, 'maintenance'::text, 'service'::text, 'scrap'::text])))
 constraint wms.stock_movement stock_movement_from_shape CHECK (((from_kind = ANY (ARRAY['warehouse'::text, 'maintenance'::text])) = (from_warehouse_id IS NOT NULL)))
 constraint wms.stock_movement stock_movement_from_warehouse_id_fk FOREIGN KEY (company_id, project_id, from_warehouse_id) REFERENCES wms.warehouse(company_id, project_id, id)
@@ -3352,6 +3404,7 @@ constraint wms.stock_movement stock_movement_to_shape CHECK (((to_kind = ANY (AR
 constraint wms.stock_movement stock_movement_to_warehouse_id_fk FOREIGN KEY (company_id, project_id, to_warehouse_id) REFERENCES wms.warehouse(company_id, project_id, id)
 index wms.stock_movement stock_movement_container_id_idx CREATE INDEX stock_movement_container_id_idx ON wms.stock_movement USING btree (company_id, container_id, id)
 index wms.stock_movement stock_movement_corrects_movement_id_idx CREATE INDEX stock_movement_corrects_movement_id_idx ON wms.stock_movement USING btree (company_id, corrects_movement_id)
+index wms.stock_movement stock_movement_decommission_reason_id_idx CREATE INDEX stock_movement_decommission_reason_id_idx ON wms.stock_movement USING btree (company_id, decommission_reason_id)
 index wms.stock_movement stock_movement_from_warehouse_id_idx CREATE INDEX stock_movement_from_warehouse_id_idx ON wms.stock_movement USING btree (company_id, from_warehouse_id)
 index wms.stock_movement stock_movement_pkey CREATE UNIQUE INDEX stock_movement_pkey ON wms.stock_movement USING btree (id)
 index wms.stock_movement stock_movement_placement_id_idx CREATE INDEX stock_movement_placement_id_idx ON wms.stock_movement USING btree (company_id, placement_id)
@@ -4281,5 +4334,8 @@ journal 1793188451416 2908b29fc963fdd7f6371dbb1553734c92718138b9573b1d748bca9694
 journal 1793190991835 4479beffde868c9a521b9ff1b6f44dd1b13dbb0e1293a3dabb1f48108c9407d1
 journal 1793199855626 709fe6bc0aa2d71a4a8a365c80e79db143341dd82867c0e2fdbd062aa7bcc9b3
 journal 1793204881720 aa541b7673882e81a831ab7f9b7f2bfc1c237d88f7204f890826d641a965be95
-journal 1793206864189 d09c47b341e15b5c9c919bbced5e64b308524015740618eae1263d94d816e2b3
+journal 1793207368395 fbe151d4ba9945172963cf2e6667189ae6f64e362e64a82f9aa7639b7bea994e
+journal 1793209754047 d2803c779f561da8247f43444f21b6f7564f1af6d5eb86d7208b59961a27c9c4
+journal 1793211869364 88dca0166cac7011d2c8aaa25f55f494398ff828ebbb26e0edb30a2a4ba39211
+journal 1793213906391 d09c47b341e15b5c9c919bbced5e64b308524015740618eae1263d94d816e2b3
 pgboss-version 42

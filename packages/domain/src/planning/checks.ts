@@ -82,6 +82,8 @@ export type GroupStructure = {
   vehicleType?: NamedResource | null
   /** The vehicle type the group's stop rule asks for, likewise; null where it asks for none. */
   ruleVehicleType?: NamedResource | null
+  /** Whether a rule group matches within a planning area of its own (O30 of #290), which stands in for the scheme's; absent is none. */
+  hasOwnPlanningArea?: boolean
 }
 
 /** A Route Scheme as the structural rules see it: the days it serves, whether it has a Planning Area, and its groups in position order. */
@@ -100,7 +102,7 @@ export const ruleWithoutFraction = (group: string): string => `Collection group 
 /** The sentence for a manual group with nothing picked. */
 export const manualWithoutContainer = (group: string): string => `Collection group ${group} picks containers but names none`
 
-/** The sentence for a rule group with nowhere to match inside; said once, however many rule groups the scheme has. */
+/** The sentence for a rule group with nowhere to match inside — no area of its own and none of the scheme's; said once, however many rule groups the scheme has. */
 export const NO_PLANNING_AREA_FOR_RULE = "The scheme has no planning area and a collection group matches by rule"
 
 /** A group with no days is parked: it no longer runs, plans nothing, and holds nothing in service. */
@@ -131,7 +133,8 @@ export function schemeStructureIssues(scheme: SchemeStructure): string[] {
   let byRule = false
   for (const group of scheme.collectionGroups) {
     if (group.stopSource === "rule") {
-      byRule = true
+      // A group matching within its own area needs none of the scheme's.
+      if (group.hasOwnPlanningArea !== true) byRule = true
       if (group.fractionCount < 1) issues.push(ruleWithoutFraction(group.name))
     } else if (group.containerCount < 1) {
       issues.push(manualWithoutContainer(group.name))
