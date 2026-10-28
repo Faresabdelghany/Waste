@@ -1,7 +1,8 @@
 // The CSV import (#291 slice 12, row 20.1): the company's Customers, a
 // project's Properties with their parties, its containers and its
-// Agreements with their Subscriptions, from a file the browser has read into
-// rows (@waste/domain/imports/csv). The wire is @waste/contracts/imports.
+// Agreements with their Subscriptions, and the company's catalogue — waste
+// fractions, container types and vehicle types (O30 of #290, row 1.18) —
+// from a file the browser has read into rows (@waste/domain/imports/csv). The wire is @waste/contracts/imports.
 //
 // `GET /imports/templates/:kind` is a kind's header row as a CSV file.
 // `POST /imports/preview` is the dry run of one batch: every row written as
@@ -38,7 +39,7 @@
 // writes, since its ledger names the records it matched — a customer's CVR
 // number, an e-mail — and a role that cannot read those cannot read them
 // here; a run of another kind is a run that does not exist. A run of the
-// company's Customers names no project; a project's run is fenced by its
+// company's kinds — the Customers and the catalogue — names no project; a project's run is fenced by its
 // project like every project-scoped row.
 //
 // Every row a batch writes is in the audit log (#291 slice 9a) under the
@@ -148,7 +149,7 @@ const resultOf = (row: RowRow): ImportRowResult => ({
 
 const runRowOf = (row: RowRow): ImportRunRow => ({ id: row.id, ...resultOf(row), recordedAt: row.recordedAt.toISOString() })
 
-/** The runs this caller reads: the company's Customers runs, and the runs of the projects they work in. */
+/** The runs this caller reads: the runs of the company's kinds, and the runs of the projects they work in. */
 const runScope = (principal: Principal): SQL | undefined =>
   and(
     eq(importRun.companyId, principal.companyId),
@@ -238,12 +239,12 @@ export function importRoutes(guard: MiddlewareHandler<AuthEnv>) {
         operationId: "previewImport",
         summary: "What an import would do",
         description:
-          "A dry run of one batch of rows of one kind, at most 50: each row matched on its key and written exactly as the commit would write it — the family's own schema, references and rules — each in its own savepoint, and the whole rolled back, so nothing is stored. A row sees the batch's rows before it, as it would in the commit; a file is previewed a batch at a time, as it is committed. Each row answers `created`, `updated`, `unchanged` or `refused`, a refusal with the sentence the commit would record, the column it names first. Customers are the company's and name no project; every other kind names the project the file is imported into. The grants are `create` on `improve.imports` and `view` on the module the kind writes; a row the commit would refuse for the caller's `create` or `edit` there is refused here too.",
+          "A dry run of one batch of rows of one kind, at most 50: each row matched on its key and written exactly as the commit would write it — the family's own schema, references and rules — each in its own savepoint, and the whole rolled back, so nothing is stored. A row sees the batch's rows before it, as it would in the commit; a file is previewed a batch at a time, as it is committed. Each row answers `created`, `updated`, `unchanged` or `refused`, a refusal with the sentence the commit would record, the column it names first. Customers and the catalogue — waste fractions, container types and vehicle types — are the company's and name no project; every other kind names the project the file is imported into. The grants are `create` on `improve.imports` and `view` on the module the kind writes; a row the commit would refuse for the caller's `create` or `edit` there is refused here too.",
         security: BEARER_SECURITY,
         responses: {
           200: describeJson("Each row's outcome and the counts. Nothing was stored.", ImportPreview),
           400: describeProblem(
-            "The body is missing a field, names a member the server owns, gives a row number twice or holds more than 50 rows; a cell sits under a header the kind does not know; or the project is missing for a project's kind, given for Customers, or not one this account works in.",
+            "The body is missing a field, names a member the server owns, gives a row number twice or holds more than 50 rows; a cell sits under a header the kind does not know; or the project is missing for a project's kind, given for one of the company's, or not one this account works in.",
           ),
           401: describeProblem("No usable token (see WWW-Authenticate)."),
           403: describeProblem("No active account here, or the caller's role does not allow `create` on `improve.imports` or `view` on the module the kind writes."),
@@ -278,11 +279,11 @@ export function importRoutes(guard: MiddlewareHandler<AuthEnv>) {
         operationId: "createImportRun",
         summary: "Start an import",
         description:
-          "Makes the run a commit's batches belong to: the kind, the project for a project's kind (none for Customers), the file's name and how many rows it holds. It writes no row; `POST /imports/{id}/rows` does, a batch at a time. The run is complete when it has recorded as many rows as it was said to hold. The grants are `create` on `improve.imports` and `view` on the module the kind writes.",
+          "Makes the run a commit's batches belong to: the kind, the project for a project's kind (none for the company's: Customers and the catalogue), the file's name and how many rows it holds. It writes no row; `POST /imports/{id}/rows` does, a batch at a time. The run is complete when it has recorded as many rows as it was said to hold. The grants are `create` on `improve.imports` and `view` on the module the kind writes.",
         security: BEARER_SECURITY,
         responses: {
           201: describeCreated("The run, with nothing recorded yet.", ImportRun),
-          400: describeProblem("The body is missing a field or names a member the server owns, or the project is missing for a project's kind, given for Customers, or not one this account works in."),
+          400: describeProblem("The body is missing a field or names a member the server owns, or the project is missing for a project's kind, given for one of the company's, or not one this account works in."),
           401: describeProblem("No usable token (see WWW-Authenticate)."),
           403: describeProblem("No active account here, or the caller's role does not allow `create` on `improve.imports` or `view` on the module the kind writes."),
         },
@@ -309,7 +310,7 @@ export function importRoutes(guard: MiddlewareHandler<AuthEnv>) {
         operationId: "listImportRuns",
         summary: "The imports run here",
         description:
-          "One page of import runs, newest first: the company's Customers runs and the runs of the projects the caller works in, of the kinds whose module the caller views. `kind` narrows it to one kind, `projectId` to one of those projects; naming another is refused. Hand `nextCursor` back as `cursor` for the next page.",
+          "One page of import runs, newest first: the runs of the company's kinds and the runs of the projects the caller works in, of the kinds whose module the caller views. `kind` narrows it to one kind, `projectId` to one of those projects; naming another is refused. Hand `nextCursor` back as `cursor` for the next page.",
         security: BEARER_SECURITY,
         responses: {
           200: describeJson("One page of runs, newest first.", ImportRunPage),

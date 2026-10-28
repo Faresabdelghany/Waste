@@ -44,6 +44,7 @@ import { importTemplate, previewImport, sendImportBatch, startImportRun } from "
 import { ApiProblem, genericProblem, problemSentence, type Problem } from "@/lib/api/problem"
 import { problemOfError } from "@/lib/api/records/server-records"
 import { REASON_MAX } from "@/lib/data/action-decision"
+import { masterDataSettingsHref } from "@/lib/data/business-links"
 import { CSV_BOM, downloadCsv } from "@/lib/data/csv"
 import { batchesOf, countsOf, importableKinds, importReason, kindOption, mayView, readImportFile, templateSeparatorFor, textOf, type FileReading } from "@/lib/imports/import-file"
 
@@ -412,5 +413,11 @@ function recordsHref(kind: ImportKind): string {
       return "/resources?module=containers"
     case "agreements":
       return "/customers?module=agreements"
+    case "waste-fractions":
+      return masterDataSettingsHref("waste-fraction")
+    case "container-types":
+      return masterDataSettingsHref("container-type")
+    case "vehicle-types":
+      return masterDataSettingsHref("vehicle-type")
   }
 }

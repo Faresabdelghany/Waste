@@ -10,7 +10,10 @@
 // id: a customer by its registration number (a CVR number) or its e-mail, a
 // property by its address in the import's project, a container type by its
 // name, a product by its name, a price list by its code (case aside), a
-// shared collection point by its name. An empty cell leaves a field as it stands
+// shared collection point by its name. The catalogue (O30 of #290, row 1.18)
+// is matched the same way: a waste fraction and a vehicle type by their key,
+// the slug the rest of the system quotes, and a container type by its name.
+// An empty cell leaves a field as it stands
 // when a row matches a record, and is no value when it makes one.
 
 import type { ImportKind } from "./vocabulary"
@@ -76,6 +79,24 @@ export const IMPORT_COLUMNS: Readonly<Record<ImportKind, readonly ImportColumn[]
     column("quantity", false, "How many of the product; 1 when empty", "1"),
     column("subscription from", false, "The subscription's first day; the agreement's when empty. A subscription is matched on its product, its place and this day", "2026-01-01"),
     column("subscription to", false, "The first day it is no longer in force; open when empty", ""),
+  ],
+  "waste-fractions": [
+    column("key", true, "The stable slug the rest of the system quotes, lowercase; a fraction is matched on it", "hard-plastic"),
+    column("name", true, "What a person reads, unique in the company", "Hard plastic"),
+    column("waste code", false, "The European List of Waste entry, six digits, with an asterisk after a hazardous one", "200139"),
+    column("treatment", false, "reuse, recycling, energy-recovery or disposal", "recycling"),
+    column("density", false, "Kilograms per cubic metre as it lies in a container, 1 to 2000", "45"),
+  ],
+  "container-types": [
+    column("name", true, "The type's name, unique in the company; a container type is matched on it", "240 L bin"),
+    column("volume", false, "Litres, a whole number", "240"),
+    column("service seconds", false, "How long a stop at one takes, in seconds", "30"),
+  ],
+  "vehicle-types": [
+    column("key", true, "The stable slug the rest of the system quotes, lowercase; a vehicle type is matched on it", "rear-loader"),
+    column("name", true, "What a person reads, unique in the company", "Rear loader"),
+    column("description", false, "What the type is", "Two-axle rear loader with a bin lift"),
+    column("container types", false, "The container types a vehicle of the type services, by name, separated by semicolons. Replaces the type's set when given", "240 L bin; 660 L bin"),
   ],
 }
 

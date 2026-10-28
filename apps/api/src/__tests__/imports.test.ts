@@ -10,12 +10,13 @@ import { after, before, describe, test } from "node:test"
 
 import { Agreement, Subscription } from "@waste/contracts/agreements"
 import { AuditEvent, CHANGE_REASON_HEADER } from "@waste/contracts/audit"
-import { ContainerType, Product } from "@waste/contracts/catalogue"
+import { ContainerType, Product, WasteFraction } from "@waste/contracts/catalogue"
 import { Container } from "@waste/contracts/containers"
 import { Customer, Property, SharedCollectionPoint } from "@waste/contracts/customers"
 import { ImportBatchResult, ImportPreview, ImportRun, ImportRunRow, type ImportKind, type ImportRowResult } from "@waste/contracts/imports"
 import { Page } from "@waste/contracts/pagination"
 import { PriceList } from "@waste/contracts/price-lists"
+import { VehicleType } from "@waste/contracts/vehicle-types"
 import { createDb, type Database } from "@waste/db/client"
 import { IMPORT_COLUMNS } from "@waste/domain/imports/columns"
 
@@ -217,7 +218,7 @@ describe("the import endpoints", { skip: database.skip || owner.skip }, () => {
       assert.match(problem.errors?.[0]?.message ?? "", /^Not a column of a customers import; the columns are kind, name, registration number/)
 
       const named = await olivia("/imports/preview", { method: "POST", body: { kind: "customers", projectId: copenhagen, fileName: "c.csv", rows: rowsOf({ kind: "person", name: "X" }) } })
-      assert.deepEqual((await readProblem(named)).errors, [{ path: "projectId", message: "Customers are the company's, not a project's: an import of customers names no project" }])
+      assert.deepEqual((await readProblem(named)).errors, [{ path: "projectId", message: "These records are the company's, not a project's: an import of them names no project" }])
       const missing = await olivia("/imports/preview", { method: "POST", body: { kind: "properties", fileName: "p.csv", rows: rowsOf({ address: "X" }) } })
       assert.deepEqual((await readProblem(missing)).errors?.map((error) => error.path), ["projectId"])
       const outOfReach = await viewer("/imports/preview", { method: "POST", body: { kind: "properties", projectId: harbor, fileName: "p.csv", rows: rowsOf({ address: "X" }) } })
@@ -337,6 +338,63 @@ describe("the import endpoints", { skip: database.skip || owner.skip }, () => {
       ])
       const made = await read(`/containers/${result.rows[0]!.resourceId}`, Container)
       assert.deepEqual([made.projectId, made.containerTypeId, made.barcode, made.ownership], [copenhagen, bin.id, "5702", "customer"])
+    })
+
+    test("writes the catalogue (O30 of #290): waste fractions by key, container types by name, vehicle types by key with their container types by name", async () => {
+      const fractions = await commit(
+        olivia,
+        "waste-fractions",
+        rowsOf(
+          { key: "Hard-Plastic", name: "Hard plastic", "waste code": "200139", treatment: "Recycling" },
+          { key: "hard-plastic", name: "Hard plastics", density: "45" },
+          { key: "hard-plastic", name: "Hard plastics" },
+          { key: "glass", name: "Glass", density: "9999" },
+        ),
+      )
+      assert.deepEqual(fractions.rows.map(outcome), [
+        { row: 2, outcome: "created", key: "key hard-plastic", detail: null },
+        { row: 3, outcome: "updated", key: "key hard-plastic", detail: null },
+        { row: 4, outcome: "unchanged", key: "key hard-plastic", detail: null },
+        { row: 5, outcome: "refused", key: "key glass", detail: fractions.rows[3]!.detail },
+      ])
+      assert.match(fractions.rows[3]!.detail ?? "", /^density: /)
+      const fraction = await read(`/waste-fractions/${fractions.rows[0]!.resourceId}`, WasteFraction)
+      assert.deepEqual([fraction.key, fraction.name, fraction.wasteCode, fraction.treatment, fraction.densityKgPerCubicMetre], ["hard-plastic", "Hard plastics", "200139", "recycling", 45])
+
+      const types = await commit(olivia, "container-types", rowsOf({ name: "660 L bin", volume: "660", "service seconds": "40" }, { name: "240 L bin", "service seconds": "25" }, { name: "Igloo", volume: "a lot" }))
+      assert.deepEqual(types.rows.map(outcome), [
+        { row: 2, outcome: "created", key: "name 660 L bin", detail: null },
+        { row: 3, outcome: "updated", key: "name 240 L bin", detail: null },
+        { row: 4, outcome: "refused", key: "name Igloo", detail: "volume: a whole number no larger than 2147483647" },
+      ])
+      assert.equal(types.rows[1]!.resourceId, bin.id, "matched on the name")
+      assert.deepEqual([(await read(`/container-types/${bin.id}`, ContainerType)).volumeLitres, (await read(`/container-types/${bin.id}`, ContainerType)).serviceSeconds], [240, 25], "an empty cell leaves the volume")
+
+      const vehicles = await commit(
+        olivia,
+        "vehicle-types",
+        rowsOf(
+          { key: "rear-loader", name: "Rear loader", "container types": "240 L bin; 660 L bin" },
+          { key: "rear-loader", name: "Rear loader", description: "Two axles" },
+          { key: "rear-loader", name: "Rear loader", "container types": "660 L bin" },
+          { key: "crane", name: "Crane", "container types": "Igloo" },
+        ),
+      )
+      assert.deepEqual(vehicles.rows.map(outcome), [
+        { row: 2, outcome: "created", key: "key rear-loader", detail: null },
+        { row: 3, outcome: "updated", key: "key rear-loader", detail: null },
+        { row: 4, outcome: "updated", key: "key rear-loader", detail: null },
+        { row: 5, outcome: "refused", key: "key crane", detail: "container types: No container type of this company is named Igloo" },
+      ])
+      const loader = await read(`/vehicle-types/${vehicles.rows[0]!.resourceId}`, VehicleType)
+      assert.deepEqual([loader.description, loader.containerTypeIds], ["Two axles", [types.rows[0]!.resourceId]], "the set the last row named, the description an earlier one gave")
+    })
+
+    test("a catalogue file is the company's: it names no project, and the master data's grants are asked per row", async () => {
+      const refused = await olivia("/imports/preview", { method: "POST", body: { kind: "container-types", projectId: copenhagen, fileName: "types.csv", rows: rowsOf({ name: "Sack" }) } })
+      assert.equal(refused.status, 400)
+      const response = await viewer("/imports/preview", { method: "POST", body: { kind: "container-types", fileName: "types.csv", rows: rowsOf({ name: "Sack" }) } })
+      assert.equal(response.status, 403, "the viewer does not view the master data")
     })
 
     test("writes agreements with a subscription per row, both or neither, matched on the number and the first day", async () => {

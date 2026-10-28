@@ -2,7 +2,10 @@
 // the run, the company's with an optional project, and its rows, a ledger.
 // Then migration 0020, which has to begin with exactly those statements and
 // carry below them the run's fence and trigger and the rows' fence and
-// revoke. No database.
+// revoke. Migration 0064 (O30 of #290, row 1.18) grew the kinds by the
+// catalogue's three and made a run of any of the company's kinds name no
+// project: `expectedAsOf("0020")` is what 0020 says, and
+// catalogue-import-rendering.test.ts pins 0064. No database.
 import assert from "node:assert/strict"
 import { readFile } from "node:fs/promises"
 import { join } from "node:path"
@@ -13,6 +16,7 @@ import { IMPORT_KINDS, IMPORT_ROW_OUTCOMES } from "@waste/domain/imports/vocabul
 import { MIGRATIONS_FOLDER } from "../migrate"
 import { importRun, importRunRow } from "../schema/imports"
 import { handWrittenStatements, normalised, statementsOf } from "../sql/hand-written"
+import { projectShape } from "./imports-as-of"
 import { checksOf, COMPANY, companyFk, createTable, ID, index, oneOfCheck, positiveCheck, ref, tenantFk, uniqueKey } from "./rendering"
 import { statementsFor } from "./specimen"
 
@@ -26,7 +30,10 @@ const OUTCOME_SHAPE = `(${ref("import_run_row", "outcome")} = 'refused') = (${re
 const createLedger = (name: string, lines: string[]): string =>
   [`CREATE TABLE "wms"."${name}" (`, [ID, COMPANY, '"recorded_at" timestamp with time zone DEFAULT now() NOT NULL', ...lines].map((line) => `\t${line}`).join(",\n"), ");", ""].join("\n")
 
-const expected = [
+/** The kinds 0020 wrote: the customers and a project's three. */
+const KINDS_AS_OF_0020 = ["customers", "properties", "containers", "agreements"]
+
+const expectedAsOf = (asOf: "0020" | "0064") => [
   createTable("import_run", "tenant", [
     '"project_id" uuid',
     '"kind" text NOT NULL',
@@ -38,9 +45,9 @@ const expected = [
     '"refused_count" integer DEFAULT 0 NOT NULL',
     '"requested_by" uuid NOT NULL',
     uniqueKey("import_run_tenant_key", "company_id", "id"),
-    oneOfCheck("import_run", "kind", ...IMPORT_KINDS),
+    oneOfCheck("import_run", "kind", ...(asOf === "0020" ? KINDS_AS_OF_0020 : IMPORT_KINDS)),
     positiveCheck("import_run", "row_count"),
-    `CONSTRAINT "import_run_project_shape" CHECK ((${ref("import_run", "kind")} = 'customers') = (${ref("import_run", "project_id")} is null))`,
+    `CONSTRAINT "import_run_project_shape" CHECK (${projectShape(asOf)})`,
     `CONSTRAINT "import_run_counts_shape" CHECK (${COUNTS_SHAPE})`,
   ]),
   createLedger("import_run_row", [
@@ -63,6 +70,7 @@ const expected = [
   index("import_run", "import_run_project_id_idx", "company_id", "project_id"),
   index("import_run", "import_run_requested_by_idx", "company_id", "requested_by"),
 ]
+const expected = expectedAsOf("0064")
 
 const fileStatements = async (): Promise<string[]> => statementsOf(await readFile(join(MIGRATIONS_FOLDER, MIGRATION), "utf8"))
 
@@ -73,7 +81,7 @@ describe("the import's tables as drizzle-kit writes them", () => {
 
   test("migration 0020 is exactly that, then the run's fence and trigger and the rows' fence and revoke", async () => {
     const statements = await fileStatements()
-    assert.deepEqual(statements, [...expected, ...handWrittenStatements(importRun), ...handWrittenStatements(importRunRow)].map(normalised))
+    assert.deepEqual(statements, [...expectedAsOf("0020"), ...handWrittenStatements(importRun), ...handWrittenStatements(importRunRow)].map(normalised))
     assert.ok(statements.some((statement) => statement.startsWith('REVOKE UPDATE, DELETE ON "wms"."import_run_row"')), "the rows are a ledger")
     assert.ok(!statements.some((statement) => statement.includes('"import_run_row_touch_updated_at"')), "and have no trigger")
   })

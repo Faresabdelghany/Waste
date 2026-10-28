@@ -3,7 +3,8 @@
 // own schema, the record it names found by the key a person knows it by,
 // and the write made through the family's own create or patch
 // (customer-writes.ts, property-writes.ts, container-writes.ts,
-// agreements.ts) — never a second writer, so an imported record is held to
+// agreements.ts, and for the catalogue catalogue.ts and vehicle-types.ts) —
+// never a second writer, so an imported record is held to
 // every rule a form's is and a refusal says what a form's would.
 //
 // A row is written inside its own savepoint, so a refused row leaves nothing
@@ -21,7 +22,9 @@
 // import's project, case and spacing aside; a container by its label,
 // which is the company's, so a label in another project is refused; an
 // agreement by its number and its first day in the project; a subscription
-// by its product, its place and its first day under the agreement. Other
+// by its product, its place and its first day under the agreement; a waste
+// fraction and a vehicle type by their key, and a container type by its name
+// (O30 of #290). Other
 // records are named by the keys the template's column guide gives
 // (@waste/domain/imports/columns): a container type, a product and a shared
 // collection point by name, a price list by its code in force on the
@@ -40,9 +43,11 @@ import {
   SubscriptionCreate,
   SubscriptionPatch,
 } from "@waste/contracts/agreements"
+import { ContainerTypeCreate, ContainerTypePatch, WasteFractionCreate, WasteFractionPatch } from "@waste/contracts/catalogue"
 import { ContainerCreate, ContainerPatch } from "@waste/contracts/containers"
 import { CustomerCreate, CustomerPatch, PropertyCreate, PropertyPartyRole, PropertyPatch, type PropertyParty } from "@waste/contracts/customers"
 import { IsoDate } from "@waste/contracts/dates"
+import { VehicleTypeCreate, VehicleTypePatch } from "@waste/contracts/vehicle-types"
 import type { ImportKind, ImportRowResult, ImportRowValues } from "@waste/contracts/imports"
 import type { Tx } from "@waste/db/client"
 import { Refused } from "@waste/db/commands/shared"
@@ -59,9 +64,11 @@ import type { Principal } from "../auth/principal"
 import { requireAllowed } from "../auth/require"
 import { ProblemError, refusedProblem } from "../problem"
 import { agreementStarting, createAgreement, createSubscription, patchAgreement, patchSubscription, subscriptionStarting } from "./agreements"
+import { containerTypeByName, createContainerType, createWasteFraction, patchContainerType, patchWasteFraction, wasteFractionByKey } from "./catalogue"
 import { containerByLabel, containerOf, createContainer, findContainer, patchContainer } from "./container-writes"
 import { createCustomer, customersByKey, patchCustomer } from "./customer-writes"
 import { createProperty, patchProperty, propertiesAt, propertyWithParties, setPropertyParties } from "./property-writes"
+import { createVehicleType, patchVehicleType, replaceVehicleTypeContainerTypes, vehicleTypeByKey } from "./vehicle-types"
 
 /** The module each kind writes, whose grants a row is asked for. */
 export const IMPORT_MODULES: Readonly<Record<ImportKind, ModuleKey>> = {
@@ -69,6 +76,9 @@ export const IMPORT_MODULES: Readonly<Record<ImportKind, ModuleKey>> = {
   properties: "customers.properties",
   containers: "resources.containers",
   agreements: "customers.agreements",
+  "waste-fractions": "configure.master",
+  "container-types": "configure.master",
+  "vehicle-types": "configure.master",
 }
 
 /** What a row is written in: the request's transaction, the caller, and the project the file is imported into (none for Customers). */
@@ -123,6 +133,9 @@ const AGREEMENT_COLUMNS: Columns = {
   priceListId: "price list",
   notes: "notes",
 }
+const FRACTION_COLUMNS: Columns = { key: "key", name: "name", wasteCode: "waste code", treatment: "treatment", densityKgPerCubicMetre: "density" }
+const CONTAINER_TYPE_COLUMNS: Columns = { name: "name", volumeLitres: "volume", serviceSeconds: "service seconds" }
+const VEHICLE_TYPE_COLUMNS: Columns = { key: "key", name: "name", description: "description", containerTypeIds: "container types" }
 const SUBSCRIPTION_COLUMNS: Columns = {
   productId: "product",
   propertyId: "property",
@@ -561,6 +574,92 @@ async function writeSubscription(context: ImportContext, agreementId: string, { 
   return "updated"
 }
 
+// The catalogue (O30 of #290, row 1.18) -------------------------------------
+//
+// The company's, so a row names no project. A waste fraction and a vehicle
+// type are matched on their key, the slug the rest of the system quotes, set
+// once; a container type on its name. A vehicle type's container types are
+// named by name, separated by semicolons, and replace its set when given.
+
+async function importWasteFraction(context: ImportContext, cells: Cells): Promise<Written> {
+  const { tx, principal } = context
+  const key = coded(required(cells, "key"))!
+  required(cells, "name")
+  const body = parsed(
+    WasteFractionCreate,
+    { key, name: cells.name, wasteCode: cells["waste code"], treatment: coded(cells.treatment), densityKgPerCubicMetre: whole(cells, "density") },
+    FRACTION_COLUMNS,
+  )
+  const current = await wasteFractionByKey(tx, principal.companyId, key)
+  if (current === undefined) {
+    requireAllowed(principal.grants, IMPORT_MODULES["waste-fractions"], "create")
+    return { outcome: "created", resourceId: (await step(FRACTION_COLUMNS, () => createWasteFraction(tx, principal, body))).id }
+  }
+  const given = givenFields(cells, FRACTION_COLUMNS)
+  given.delete("key")
+  const patch = changes(current, body, given)
+  if (isEmpty(patch)) return { outcome: "unchanged", resourceId: current.id }
+  requireAllowed(principal.grants, IMPORT_MODULES["waste-fractions"], "edit")
+  await step(FRACTION_COLUMNS, () => patchWasteFraction(tx, principal, current.id, parsed(WasteFractionPatch, patch, FRACTION_COLUMNS)))
+  return { outcome: "updated", resourceId: current.id }
+}
+
+async function importContainerType(context: ImportContext, cells: Cells): Promise<Written> {
+  const { tx, principal } = context
+  const name = required(cells, "name")
+  const body = parsed(ContainerTypeCreate, { name, volumeLitres: whole(cells, "volume"), serviceSeconds: whole(cells, "service seconds") }, CONTAINER_TYPE_COLUMNS)
+  const current = await containerTypeByName(tx, principal.companyId, name)
+  if (current === undefined) {
+    requireAllowed(principal.grants, IMPORT_MODULES["container-types"], "create")
+    return { outcome: "created", resourceId: (await step(CONTAINER_TYPE_COLUMNS, () => createContainerType(tx, principal, body))).id }
+  }
+  const given = givenFields(cells, CONTAINER_TYPE_COLUMNS)
+  given.delete("name")
+  const patch = changes(current, body, given)
+  if (isEmpty(patch)) return { outcome: "unchanged", resourceId: current.id }
+  requireAllowed(principal.grants, IMPORT_MODULES["container-types"], "edit")
+  await step(CONTAINER_TYPE_COLUMNS, () => patchContainerType(tx, principal, current.id, parsed(ContainerTypePatch, patch, CONTAINER_TYPE_COLUMNS)))
+  return { outcome: "updated", resourceId: current.id }
+}
+
+/** `240 L bin; 660 L bin`: each a container type of the company by name, once; the row's refusal at the column otherwise. */
+async function containerTypesNamed(context: ImportContext, text: string): Promise<string[]> {
+  const ids: string[] = []
+  for (const name of text.split(";").map((part) => part.trim()).filter((part) => part !== "")) {
+    const found = await containerTypeByName(context.tx, context.principal.companyId, name)
+    if (found === undefined) throw refuse("container types", `No container type of this company is named ${name}`)
+    if (ids.includes(found.id)) throw refuse("container types", `${name} is named twice`)
+    ids.push(found.id)
+  }
+  return ids
+}
+
+const sameIds = (a: readonly string[], b: readonly string[]): boolean => a.length === b.length && [...a].sort().join(",") === [...b].sort().join(",")
+
+async function importVehicleType(context: ImportContext, cells: Cells): Promise<Written> {
+  const { tx, principal } = context
+  const key = coded(required(cells, "key"))!
+  required(cells, "name")
+  const containerTypeIds = cells["container types"] === undefined ? undefined : await containerTypesNamed(context, cells["container types"])
+  const body = parsed(VehicleTypeCreate, { key, name: cells.name, description: cells.description, containerTypeIds: containerTypeIds ?? [] }, VEHICLE_TYPE_COLUMNS)
+  const current = await vehicleTypeByKey(tx, principal.companyId, key)
+  if (current === undefined) {
+    requireAllowed(principal.grants, IMPORT_MODULES["vehicle-types"], "create")
+    return { outcome: "created", resourceId: (await step(VEHICLE_TYPE_COLUMNS, () => createVehicleType(tx, principal, body))).id }
+  }
+  const given = givenFields(cells, VEHICLE_TYPE_COLUMNS)
+  given.delete("key")
+  given.delete("containerTypeIds")
+  const { containerTypeIds: _set, ...fields } = body
+  const patch = changes(current, fields, given)
+  const setMoved = containerTypeIds !== undefined && !sameIds(current.containerTypeIds, containerTypeIds)
+  if (isEmpty(patch) && !setMoved) return { outcome: "unchanged", resourceId: current.id }
+  requireAllowed(principal.grants, IMPORT_MODULES["vehicle-types"], "edit")
+  if (!isEmpty(patch)) await step(VEHICLE_TYPE_COLUMNS, () => patchVehicleType(tx, principal, current.id, parsed(VehicleTypePatch, patch, VEHICLE_TYPE_COLUMNS)))
+  if (setMoved) await step(VEHICLE_TYPE_COLUMNS, () => replaceVehicleTypeContainerTypes(tx, principal, current.id, containerTypeIds))
+  return { outcome: "updated", resourceId: current.id }
+}
+
 // One row -----------------------------------------------------------------
 
 const IMPORTERS: Readonly<Record<ImportKind, (context: ImportContext, cells: Cells) => Promise<Written>>> = {
@@ -568,6 +667,9 @@ const IMPORTERS: Readonly<Record<ImportKind, (context: ImportContext, cells: Cel
   properties: importProperty,
   containers: importContainer,
   agreements: importAgreement,
+  "waste-fractions": importWasteFraction,
+  "container-types": importContainerType,
+  "vehicle-types": importVehicleType,
 }
 
 /** A row's cells as they are read: each trimmed, an empty one no cell at all, as the browser's reader sends them (@waste/domain/imports/csv) and whoever else sends a row. */
@@ -595,6 +697,11 @@ export function keyOf(kind: ImportKind, cells: Cells): string | null {
       const from = cells["subscription from"]
       return `${agreementKey}, ${cells.product}${place === undefined ? "" : ` at ${place}`}${from === undefined || from === cells["valid from"] ? "" : ` from ${from}`}`
     }
+    case "waste-fractions":
+    case "vehicle-types":
+      return cells.key === undefined ? null : `key ${cells.key.toLowerCase()}`
+    case "container-types":
+      return cells.name === undefined ? null : `name ${cells.name}`
   }
 }
 
