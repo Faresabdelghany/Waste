@@ -42,11 +42,13 @@
 //
 // The stops. The database answers, per service date, every container of the
 // project under a placement, subscription and agreement valid that day, with
-// its label, type and fraction, whether its place has a location and whether
-// that location is inside the boundary in force that day (the query is the
+// its label, type and fraction, whether its place has a location and which
+// of the day's planning areas — the scheme's and the rule groups' own (O30
+// of #290) — hold that location in their boundary in force that day (the query is the
 // worker's stop-matching module; the geography and the effective dating are
 // Postgres's). `resolveStops` takes it from there: a rule group's stops are
-// the candidates that are contained, located and match its rule — the
+// the candidates that are located, inside the area it matches within — its
+// own, else the scheme's — and match its rule — the
 // fraction one of the rule's, the container type one of the rule's where it
 // names any, and the type compatible with the rule's vehicle type where it
 // names one, through Resources' `container_type_vehicle_type` rows handed in
@@ -168,7 +170,7 @@ export const NO_LONGER_SERVES_DATE = "Scheme no longer serves this date"
 export const NO_LONGER_PLANS_GROUP = "Scheme no longer plans this collection group on this date"
 /** A stop taken off a planned route's list by a later run: the container left the rule, the boundary or its placement. */
 export const REMOVED_FROM_DAY_PLAN = "Removed from the scheme's day plan"
-/** A rule group on a scheme without a planning area matches nothing; said once per run. */
+/** A rule group with no planning area of its own on a scheme without one matches nothing; said once per run. */
 export const NO_PLANNING_AREA = "The scheme has no planning area, so its rule groups match no containers"
 
 /** The third sentence, and the holiday's name: "Skipped · Christmas Day". */
@@ -208,6 +210,9 @@ export function holidayReleases(route: { serviceDate: string; operatingDate: str
 
 /** The run's warning for a day with no boundary of the scheme's planning area in force: rule groups match nothing that day. */
 export const noBoundaryInForce = (serviceDate: string): string => `No planning area boundary in force on ${serviceDate}; rule groups match no containers that day`
+
+/** The run's warning for a day with no boundary in force of the planning area a rule group matches within of its own (O30 of #290): that group matches nothing that day. */
+export const noGroupBoundaryInForce = (group: string, serviceDate: string): string => `No boundary of collection group ${group}'s planning area in force on ${serviceDate}; it matches no containers that day`
 
 /** The route's deviation note for an occurrence the holiday policy touched: shifted off a holiday, or collecting on one; null for a plain date. */
 export function occurrenceNote(occurrence: Occurrence): string | null {
@@ -370,18 +375,35 @@ export type StopCandidate = {
   sharedCollectionPointId: string | null
   /** Whether the place has a location at all; without one containment cannot be judged. */
   located: boolean
-  /** Whether the location is inside the scheme's boundary in force that day; false where there is no location, no boundary or no planning area. */
-  contained: boolean
+  /**
+   * The planning areas, among those the day's rules match within — the
+   * scheme's and the rule groups' own (O30 of #290) — whose boundary in force
+   * that day holds the location; none where there is no location or no
+   * boundary.
+   */
+  containedIn: readonly string[]
   /** Whether a pause of its subscription is in force that day (#291): no group plans it, and it is not unlocated, since nobody wants it collected. */
   paused: boolean
 }
 
-/** A Stop Matching Rule by ids: the fractions it matches, the container types it is restricted to (none is no restriction), the vehicle type it asks for. */
+/** A Stop Matching Rule by ids: the fractions it matches, the container types it is restricted to (none is no restriction), the vehicle type it asks for, and the planning area it matches within — the group's own, else the scheme's (`ruleAreaOf`); null for none, which matches nothing. */
 export type StopRule = {
   fractionIds: readonly string[]
   containerTypeIds: readonly string[]
   vehicleTypeId: string | null
+  planningAreaId: string | null
 }
+
+/** The planning area a rule group matches within (O30 of #290, row 2.17): its own where it names one, the scheme's otherwise. */
+export const ruleAreaOf = (schemeAreaId: string | null, groupAreaId: string | null): string | null => groupAreaId ?? schemeAreaId
+
+/** The areas a day's candidates are judged against: the scheme's, then every rule's own, each once. */
+export function matchAreas(schemeAreaId: string | null, rules: readonly Pick<StopRule, "planningAreaId">[]): string[] {
+  return [...new Set([schemeAreaId, ...rules.map((rule) => rule.planningAreaId)].filter((id): id is string => id !== null))]
+}
+
+/** Whether a candidate's location lies inside the area its rule matches within. */
+const containedFor = (candidate: Pick<StopCandidate, "containedIn">, rule: Pick<StopRule, "planningAreaId">): boolean => rule.planningAreaId !== null && candidate.containedIn.includes(rule.planningAreaId)
 
 /** A collection group as the stop resolution reads it: a rule, or the containers picked in stop order. */
 export type StopGroup = {
@@ -427,7 +449,7 @@ const byLabel = (a: StopCandidate, b: StopCandidate): number => a.label.localeCo
  * stamp records, and where a rule group's stops start from.
  */
 export function ruleMatchSet(candidates: readonly StopCandidate[], rule: StopRule, compatible: ReadonlySet<string>): StopCandidate[] {
-  return candidates.filter((candidate) => candidate.contained && candidate.located && ruleMatches(candidate, rule, compatible)).sort(byLabel)
+  return candidates.filter((candidate) => containedFor(candidate, rule) && candidate.located && ruleMatches(candidate, rule, compatible)).sort(byLabel)
 }
 
 const stopOf = (candidate: StopCandidate, position: number): PlannedStop => ({
@@ -581,17 +603,17 @@ export function pickupChanges(existing: readonly ExistingPickup[], planned: read
 /** A rule group's drift stamp: the signature it matched under, and the sorted set it matched. */
 export type MatchStamp = { ruleSignature: string; containerIds: readonly string[] }
 
-/** The signature of a rule by ids, over the scheme's planning area: `ruleSignature`'s spelling, so the read and the write agree. */
-export function stopRuleSignature(rule: StopRule, planningAreaId: string | null): string {
+/** The signature of a rule by ids, over the planning area it matches within: `ruleSignature`'s spelling, so the read and the write agree. */
+export function stopRuleSignature(rule: StopRule): string {
   return ruleSignature(
     { fractions: [...rule.fractionIds], ...(rule.vehicleTypeId === null ? {} : { ruleVehicleType: rule.vehicleTypeId }), containerTypes: [...rule.containerTypeIds] },
-    planningAreaId ?? undefined,
+    rule.planningAreaId ?? undefined,
   )
 }
 
 /** The stamp a run would write for a rule group on the window's first day: the rule's own matches, sorted. */
-export function matchStampOf(rule: StopRule, planningAreaId: string | null, candidates: readonly StopCandidate[], compatible: ReadonlySet<string>): MatchStamp {
-  return { ruleSignature: stopRuleSignature(rule, planningAreaId), containerIds: ruleMatchSet(candidates, rule, compatible).map((candidate) => candidate.containerId).sort() }
+export function matchStampOf(rule: StopRule, candidates: readonly StopCandidate[], compatible: ReadonlySet<string>): MatchStamp {
+  return { ruleSignature: stopRuleSignature(rule), containerIds: ruleMatchSet(candidates, rule, compatible).map((candidate) => candidate.containerId).sort() }
 }
 
 /** Whether a stamp is written: the group has none, or its latest is under another signature or holds another set. An identical set writes nothing. */

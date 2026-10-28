@@ -12,7 +12,7 @@ import { Adjust, Decommission, Receive, Return, Transfer } from "@waste/contract
 
 import { NOTHING_RESOLVED, type MappingContext } from "../../api/records/adapter"
 import { containerAdapter, type ContainerCommand } from "../../api/records/containers"
-import { containerTypeAdapter, wasteFractionAdapter } from "../../api/records/master-data"
+import { containerTypeAdapter, decommissionReasonAdapter, wasteFractionAdapter } from "../../api/records/master-data"
 import { projectAdapter } from "../../api/records/organisation"
 import { loaded, resolverOver, type ServerRecordsState } from "../../api/records/server-records"
 import { FIXTURE_COMPANY_ID, getModuleDefinition } from "../business-modules"
@@ -31,9 +31,11 @@ const projectRecord = projectAdapter.toRecord(copenhagen, { fixtures: getModuleD
 const masterContext: MappingContext = { fixtures: [], resolve: NOTHING_RESOLVED, companyRecordId: FIXTURE_COMPANY_ID, now: NOW }
 const organicRecord = wasteFractionAdapter.toRecord(organic, masterContext)
 const bin240Record = containerTypeAdapter.toRecord(bin240, masterContext)
+const wornOutId = "01a0d2a4-a280-702e-8000-000000000001"
+const wornOutRecord = decommissionReasonAdapter.toRecord({ id: wornOutId, ...STAMPS, code: "worn-out", name: "Worn out", status: "active" }, masterContext)
 const state: ServerRecordsState = new Map([
   ["configure.organization", loaded({ records: [projectRecord], serverIds: new Map([[projectRecord.id, copenhagen.id]]) }, 1)],
-  ["configure.master", loaded({ records: [organicRecord, bin240Record], serverIds: new Map([[organicRecord.id, organic.id], [bin240Record.id, bin240.id]]) }, 1)],
+  ["configure.master", loaded({ records: [organicRecord, bin240Record, wornOutRecord], serverIds: new Map([[organicRecord.id, organic.id], [bin240Record.id, bin240.id], [wornOutRecord.id, wornOutId]]) }, 1)],
 ])
 const context: MappingContext = { fixtures: [], resolve: resolverOver(state), companyRecordId: FIXTURE_COMPANY_ID, now: NOW }
 
@@ -86,7 +88,7 @@ describe("the container's command dialogs", () => {
     issue: { subscriptionId, wasteFractionId: organicRecord.id, serviceFrequencyId: "", validFrom: "2026-10-01", occurredAt: "", reference: "" },
     return: { warehouseId: warehouse, toKind: "warehouse", lastDay: "2026-09-29", occurredAt: "", reason: "", reference: "" },
     transfer: { warehouseId: warehouse, toKind: "maintenance", occurredAt: "", reason: "Cracked lid", reference: "" },
-    decommission: { reason: "Burnt out", lastDay: "", occurredAt: "", reference: "" },
+    decommission: { decommissionReasonId: wornOutRecord.id, reason: "Burnt out", lastDay: "", occurredAt: "", reference: "" },
     adjust: { toKind: "warehouse", warehouseId: warehouse, reason: "Imported without its receipt", correctsMovementId: "", occurredAt: "" },
   }
   const contracts: Record<ContainerCommand, { safeParse: (value: unknown) => { success: boolean } }> = { receive: Receive, issue: ContainerServicePlacementCreate, return: Return, transfer: Transfer, decommission: Decommission, adjust: Adjust }

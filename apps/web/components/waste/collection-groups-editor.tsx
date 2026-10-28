@@ -59,6 +59,9 @@ import {
 } from "@waste/domain/route-schemes/recurrence"
 import { cn } from "@/lib/utils"
 
+/** The planning area picker's value for a rule group matching within the scheme's area. */
+const SCHEME_AREA = "__scheme-area__"
+
 /* ------------------------------ shared inputs ------------------------------ */
 
 export function RecordSelect({
@@ -736,6 +739,7 @@ export function CollectionGroupsEditor({
           serviceProviders={serviceProviders}
           areaId={planningAreaId}
           areaName={areas.find((area) => area.id === planningAreaId)?.name}
+          areas={areas.filter((area) => !projectId || !area.projectIds?.length || area.projectIds.includes(projectId))}
           projectIds={projectId ? [projectId] : undefined}
           from={effectiveFrom}
           projectName={projects.find((project) => project.id === projectId)?.name}
@@ -758,6 +762,7 @@ function CollectionGroupSpoke({
   serviceProviders,
   areaId,
   areaName,
+  areas,
   projectIds,
   from,
   projectName,
@@ -773,11 +778,16 @@ function CollectionGroupSpoke({
   serviceProviders: BusinessRecord[]
   areaId?: string
   areaName?: string
+  /** The project's planning areas, which a rule group may match within instead of the scheme's (O30 of #290). */
+  areas: BusinessRecord[]
   projectIds?: string[]
   from?: string
   projectName?: string
   onChange: (updates: Partial<CollectionGroup>) => void
 }) {
+  // A rule group's own area, else the scheme's: what its preview judges containers by, as generation does.
+  const ruleAreaId = group.planningAreaId ?? areaId
+  const ruleAreaName = group.planningAreaId === undefined ? areaName : (areas.find((area) => area.id === group.planningAreaId)?.name ?? group.planningAreaId)
   const rule: StopMatchRule = {
     fractions: group.fractions,
     ...(group.ruleVehicleType ? { vehicleType: group.ruleVehicleType } : {}),
@@ -882,7 +892,7 @@ function CollectionGroupSpoke({
           type="button"
           size="sm"
           variant={group.stopSource === "manual" ? "secondary" : "outline"}
-          onClick={() => onChange({ stopSource: "manual", ruleVehicleType: undefined })}
+          onClick={() => onChange({ stopSource: "manual", ruleVehicleType: undefined, planningAreaId: undefined })}
         >
           Pick containers manually
         </Button>
@@ -893,11 +903,37 @@ function CollectionGroupSpoke({
         </p>
       </div>
 
+      {group.stopSource === "rule" && (
+        <div className="space-y-2 md:max-w-sm">
+          <Label>Planning area</Label>
+          <Select value={group.planningAreaId ?? SCHEME_AREA} onValueChange={(value) => onChange({ planningAreaId: value === SCHEME_AREA ? undefined : value })}>
+            <SelectTrigger className="w-full">
+              <SelectValue />
+            </SelectTrigger>
+            <SelectContent>
+              <SelectItem value={SCHEME_AREA}>{areaName ? `The scheme's: ${areaName}` : "The scheme's"}</SelectItem>
+              {areas.map((area) => (
+                <SelectItem key={area.id} value={area.id}>
+                  {area.name}
+                </SelectItem>
+              ))}
+              {/* A value no offered row holds — an area not read from the API yet — shows as its id. */}
+              {group.planningAreaId && !areas.some((area) => area.id === group.planningAreaId) && (
+                <SelectItem value={group.planningAreaId} className="font-mono text-xs">
+                  {group.planningAreaId}
+                </SelectItem>
+              )}
+            </SelectContent>
+          </Select>
+          <p className="text-xs text-muted-foreground">The rule matches the containers inside this area. Another area than the scheme&apos;s narrows or moves this group alone.</p>
+        </div>
+      )}
+
       {group.stopSource === "rule" ? (
         <SchemeRuleEditor
           containers={containers}
-          areaId={areaId}
-          areaName={areaName}
+          areaId={ruleAreaId}
+          areaName={ruleAreaName}
           projectIds={projectIds}
           from={from}
           days={group.days}

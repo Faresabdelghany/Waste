@@ -9,12 +9,14 @@ import {
   containerDriftBetween,
   containerDriftWarning,
   generationMatchHistoryOf,
+  generationMatchesOf,
   parseGenerationMatches,
+  ruleSignature,
   serializeGenerationMatches,
   type GenerationMatches,
 } from "../container-drift"
 import { applySchemeGeneration, planSchemeGeneration } from "../generation"
-import { COLLECTION_GROUPS_KEY, collectionGroupsOf } from "../groups"
+import { COLLECTION_GROUPS_KEY, collectionGroupsOf, type CollectionGroup } from "../groups"
 import {
   recordGenerationRun,
   schemeAttention,
@@ -164,6 +166,22 @@ describe("the 10 % threshold", () => {
       containerDriftBetween(stamp(rule, thirty), stamp(`${AREA}|Organic||`, thirty.slice(0, 10)), groups),
       [],
     )
+  })
+})
+
+describe("a group's own planning area (O30 of #290)", () => {
+  const group = (planningAreaId?: string): CollectionGroup => ({ id: "group-a", name: "A", days: ["monday"], fractions: ["Residual"], stopSource: "rule", containerIds: [], ...(planningAreaId === undefined ? {} : { planningAreaId }) })
+  const plans = { plans: [] }
+
+  test("a group without one is signed with the scheme's area, as before", () => {
+    assert.equal(generationMatchesOf([group()], plans, AREA)["group-a"]?.rule, ruleSignature(group(), AREA))
+  })
+
+  test("a group with one is signed with its own, so moving it is a rule edit and never a drift", () => {
+    const own = generationMatchesOf([group("area-harbour")], plans, AREA)["group-a"]?.rule
+    assert.equal(own, ruleSignature(group(), "area-harbour"))
+    assert.notEqual(own, generationMatchesOf([group("area-north")], plans, AREA)["group-a"]?.rule)
+    assert.notEqual(own, generationMatchesOf([group()], plans, AREA)["group-a"]?.rule)
   })
 })
 

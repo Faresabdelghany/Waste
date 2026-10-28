@@ -114,13 +114,16 @@ const idSet = (message: string) => z.array(Id).max(CONTAINERS_MAX).refine((ids) 
  * How a rule group finds its stops: the fractions it matches (one or more),
  * the container types it is restricted to (none or more) and the vehicle type
  * it asks for, if any — one of the company's rows, applied by generation
- * through the type's compatibility set and never by name. The same shape is
+ * through the type's compatibility set and never by name — and the planning
+ * area it matches within where it is not the scheme's. The same shape is
  * the resource's `rule` and the body of `PUT /collection-groups/:id/stop-matching-rule`.
  */
 export const StopMatchingRule = z.strictObject({
   wasteFractionIds: idSet(EACH_FRACTION_ONCE).min(1),
   containerTypeIds: idSet(EACH_CONTAINER_TYPE_ONCE),
   vehicleTypeId: Id.nullable(),
+  /** A planning area of the scheme's project the rule matches within instead of the scheme's (O30 of #290, row 2.17); null, or absent in a body, is the scheme's. */
+  planningAreaId: Id.nullable().optional().describe("A planning area of the scheme's project the rule matches within instead of the scheme's; null or absent is the scheme's."),
 })
 export type StopMatchingRule = z.infer<typeof StopMatchingRule>
 

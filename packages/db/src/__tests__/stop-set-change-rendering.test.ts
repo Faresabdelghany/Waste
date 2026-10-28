@@ -5,7 +5,7 @@
 // a set of their own, `service_provider_activity_container`, each the
 // activity's project's, once, at its own position in stop order. Then the
 // migration, which is exactly those statements, diffed from the activity as
-// 0064 left it (activity-as-of.ts), then the set's fence and trigger and its
+// 0067 left it (activity-as-of.ts), then the set's fence and trigger and its
 // audit trail as its activity's set (`STOP_SET_PROPOSALS_AUDITED`). No
 // database.
 import assert from "node:assert/strict"
@@ -28,23 +28,23 @@ import { collectionGroup, routeScheme } from "../schema/route-schemes"
 import { serviceProviderActivity, serviceProviderActivityContainer } from "../schema/service-provider-activities"
 import { auditTrail, STOP_SET_PROPOSALS_AUDITED } from "../sql/audit-trail"
 import { handWrittenStatements, normalised, statementsOf } from "../sql/hand-written"
-import { serviceProviderActivityAsOf0064 } from "./activity-as-of"
+import { serviceProviderActivityAsOf0067 } from "./activity-as-of"
 import { checksOf, list, ref } from "./rendering"
 import { statementsBetween } from "./specimen"
 
-const MIGRATION = "0065_stop_set_proposals.sql"
+const MIGRATION = "0068_stop_set_proposals.sql"
 
 const referenced = { company, project, serviceProvider, serviceArea, routeScheme, collectionGroup, userAccount, vehicle, driver, container }
 
-/** What drizzle-kit writes: the activity from its 0064 spelling to today's, and the set. */
-const generated = (): Promise<string[]> => statementsBetween({ ...referenced, serviceProviderActivity: serviceProviderActivityAsOf0064 }, { ...referenced, serviceProviderActivity, serviceProviderActivityContainer })
+/** What drizzle-kit writes: the activity from its 0067 spelling to today's, and the set. */
+const generated = (): Promise<string[]> => statementsBetween({ ...referenced, serviceProviderActivity: serviceProviderActivityAsOf0067 }, { ...referenced, serviceProviderActivity, serviceProviderActivityContainer })
 
 const fileStatements = async (): Promise<string[]> => statementsOf(await readFile(join(MIGRATIONS_FOLDER, MIGRATION), "utf8"))
 
 const column = (name: string) => ref("service_provider_activity", name)
 
 describe("the stop-set change as drizzle-kit writes it", () => {
-  test("the migration is exactly what the schema generates from 0064's activity, then the set's fence, trigger and audit trail", async () => {
+  test("the migration is exactly what the schema generates from 0067's activity, then the set's fence, trigger and audit trail", async () => {
     assert.deepEqual(await fileStatements(), [...(await generated()), ...handWrittenStatements(serviceProviderActivityContainer), ...STOP_SET_PROPOSALS_AUDITED.flatMap(auditTrail)].map(normalised))
   })
 
