@@ -150,7 +150,7 @@ test("a click on an API route's line opens its card with the route's own facts, 
   // Assigned through the API, so the card has a vehicle and a driver to show.
   const vehicle = (await listAll<{ id: string; callsign: string | null }>(api, "/vehicles")).find((row) => row.callsign === "WH-24")
   const driver = (await listAll<{ id: string; name: string }>(api, "/drivers")).find((row) => row.name === "Mads Jensen")
-  const assigned = await api.post(`/routes/${route.id}/assign`, { data: { vehicleId: vehicle?.id, driverId: driver?.id } })
+  const assigned = await api.post(`/routes/${route.id}/assign`, { data: { vehicleId: vehicle?.id, driverId: driver?.id, acceptSameDay: true } })
   expect(assigned.status(), await assigned.text()).toBe(200)
 
   await openMapPlanning(page)

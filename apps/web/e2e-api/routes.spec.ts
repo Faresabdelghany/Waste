@@ -76,9 +76,11 @@ test("the dispatcher's commands: an unassigned dispatch is the API's 409, assign
   const assign = page.getByRole("dialog", { name: "Assign" })
   await pick(assign, page, "Vehicle", "WH-24 · CN 42 018 · Active")
   await pick(assign, page, "Driver", "Mads Jensen · Active")
+  // The seeded crew runs today's other routes, untimed: planned beside them knowingly (O7 of #290).
+  await assign.getByRole("checkbox", { name: /^Plan the crew beside another route of the day/ }).check()
   const [assigned] = await Promise.all([answerOf(page, "POST", `/routes/${route.id}/assign`), assign.getByRole("button", { name: "Assign" }).click()])
   expect(assigned.status()).toBe(200)
-  expect(assigned.request().postDataJSON()).toEqual({ vehicleId: vehicle?.id, driverId: driver.id })
+  expect(assigned.request().postDataJSON()).toEqual({ vehicleId: vehicle?.id, driverId: driver.id, acceptSameDay: true })
   await expect(assign).toBeHidden()
   await expect(details).toContainText("Mads Jensen")
 
@@ -306,9 +308,10 @@ test("a Dispatcher, who views neither the organisation nor the depots, sees the 
     await assign.click()
     const dialog = page.getByRole("dialog", { name: "Assign" })
     await pick(dialog, page, "Driver", "Mads Jensen · Active")
+    await dialog.getByRole("checkbox", { name: /^Plan the crew beside another route of the day/ }).check()
     const [assigned] = await Promise.all([answerOf(page, "POST", `/routes/${route.id}/assign`), dialog.getByRole("button", { name: "Assign" }).click()])
     expect(assigned.status()).toBe(200)
-    expect(assigned.request().postDataJSON()).toEqual({ driverId: driver.id })
+    expect(assigned.request().postDataJSON()).toEqual({ driverId: driver.id, acceptSameDay: true })
   } finally {
     await context.close()
     // Back to the tester's own shape, which the other specs stand on.

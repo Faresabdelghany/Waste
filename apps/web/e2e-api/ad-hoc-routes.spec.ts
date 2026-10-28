@@ -73,9 +73,11 @@ test("New route makes the office's own route on a project's day with no scheme; 
   await form.getByRole("textbox", { name: /^Operating date/ }).fill(today)
   await pick(form, page, "Driver", "Mads Jensen · Active")
   await form.getByRole("textbox", { name: /^Note/ }).fill(note)
+  // Mads runs today's other routes, untimed: planned beside them knowingly (O7 of #290).
+  await form.getByRole("checkbox", { name: /^Plan the crew beside another route of the day/ }).check()
   const [created] = await Promise.all([answerOf(page, "POST", "/routes"), form.getByRole("button", { name: "Create route" }).click()])
   expect(created.status(), await created.text()).toBe(201)
-  expect(created.request().postDataJSON()).toEqual({ projectId: project.id, operatingDate: today, driverId: driver.id, note })
+  expect(created.request().postDataJSON()).toEqual({ projectId: project.id, operatingDate: today, driverId: driver.id, note, acceptSameDay: true })
   const route = (await created.json()) as Omit<ApiRoute, "routeSchemeId"> & { routeSchemeId: string | null }
   expect({ scheme: route.routeSchemeId, status: route.status, serviceDate: route.serviceDate }).toEqual({ scheme: null, status: "planned", serviceDate: today })
   await expect(toasts(page)).toContainText("Route created")

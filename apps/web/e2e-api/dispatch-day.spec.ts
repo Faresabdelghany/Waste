@@ -55,7 +55,7 @@ test("Dispatch day sends a project's planned routes of a day, the ones left tick
   const uncrewed = await routeOfDay(api, uniqueName("E2E Dispatch day uncrewed"), day)
   const leftOut = await routeOfDay(api, uniqueName("E2E Dispatch day left out"), day)
   for (const route of [crewed, leftOut]) {
-    const assigned = await api.post(`/routes/${route.id}/assign`, { data: { driverId: driver.id } })
+    const assigned = await api.post(`/routes/${route.id}/assign`, { data: { driverId: driver.id, acceptSameDay: true } })
     expect(assigned.status(), await assigned.text()).toBe(200)
   }
 

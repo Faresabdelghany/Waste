@@ -116,9 +116,10 @@ export async function dispatchedRouteFor(api: APIRequestContext, { schemeName = 
   const chosen = planned.find((candidate) => candidate.operatingDate === today) ?? planned[0]
   if (chosen === undefined) throw new Error(`${schemeName} has no planned route left between ${window.from} and ${window.to}: earlier runs dispatched them all; reset the stack`)
 
-  await command(api, `/routes/${chosen.id}/assign`, { driverId: driver.id })
+  // The seeded driver runs other routes of today that earlier tests dispatched, none of them timed: the office plans them knowingly (O7 of #290).
+  await command(api, `/routes/${chosen.id}/assign`, { driverId: driver.id, acceptSameDay: true })
   // Today may be a day the project rests on (a weekend, a holiday): the office moves the route there knowingly (O5 of #290).
-  if (chosen.operatingDate !== today) await command(api, `/routes/${chosen.id}/reschedule`, { operatingDate: today, acceptNonWorkingDay: true })
+  if (chosen.operatingDate !== today) await command(api, `/routes/${chosen.id}/reschedule`, { operatingDate: today, acceptNonWorkingDay: true, acceptSameDay: true })
   const route = await command(api, `/routes/${chosen.id}/dispatch`)
   expect(route.status).toBe("ready")
   expect(route.operatingDate).toBe(today)
