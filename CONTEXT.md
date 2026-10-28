@@ -170,6 +170,10 @@ _Avoid_: Quota (one part of the rule), tariff, price list (the rule names produc
 An append-only record of receipt, issue, return, transfer, adjustment, or decommission.
 _Avoid_: Inventory quantity, balance edit
 
+**Stock Minimum**:
+The fewest containers of one type the office wants a Warehouse to hold in stock; a container in maintenance does not count towards it. The stock is read off the Stock Movements against it, "below minimum" where fewer stand there; nothing is alerted or ordered from it.
+_Avoid_: Reorder level, safety stock, par level
+
 **Hauler / Service Provider**:
 An external organization, typically a hauler, that delivers collection work for a company within awarded Service Areas and is settled for it through Settlements.
 _Avoid_: Contractor, customer, project

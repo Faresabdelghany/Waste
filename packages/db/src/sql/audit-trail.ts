@@ -73,7 +73,7 @@ import { bulkyBooking, bulkyBookingItem, bulkySchedule } from "../schema/bulky"
 import { collectionGroup, collectionGroupContainer, collectionGroupContainerType, collectionGroupFraction, routeScheme, routeSchemeSeason } from "../schema/route-schemes"
 import { plan, planLeg, planStop, routingQuota } from "../schema/routing"
 import { sortingGuideItem } from "../schema/sorting-guide"
-import { stockMovement } from "../schema/stock"
+import { stockMinimum, stockMovement } from "../schema/stock"
 import { wasteFractionEmissionFactor } from "../schema/sustainability"
 import { accessCredential, siteVisit, siteVisitFraction, visitRule, visitRuleFreeFraction, visitRuleStep } from "../schema/site-visits"
 
@@ -241,7 +241,10 @@ export const BULKY_AUDITED: readonly Audited[] = [
 /** A scheme's seasons (O17 of #290, migration 0057): the scheme's set, replaced whole with it. */
 export const SEASONS_AUDITED: readonly Audited[] = [{ table: routeSchemeSeason, module: "route-studio.schemes", parent: setOf(routeScheme, routeSchemeSeason.routeSchemeId) }]
 
-export const AUDITED: readonly Audited[] = [...AUDITED_AT_0019, ...SUBSCRIPTION_PAUSE_AUDITED, ...TICKET_SLA_AUDITED, ...DROP_OFF_AUDITED, ...ABSENCES_AUDITED, ...TICKET_CHARGE_AUDITED, ...PICKUP_EXCEPTIONS_AUDITED, ...EMISSIONS_AUDITED, ...APPLICATIONS_AUDITED, ...SUSTAINABILITY_AUDITED, ...CONTAINER_HIRE_AUDITED, ...ACCOUNTING_AUDITED, ...BULKY_AUDITED, ...SITE_VISITS_AUDITED, ...SEASONS_AUDITED]
+/** A warehouse's Stock Minimums (O30 of #290, row 9.8): a set under its warehouse, the warehouse's own module. */
+export const STOCK_MINIMUMS_AUDITED: readonly Audited[] = [{ table: stockMinimum, module: "resources.warehouses", parent: setOf(warehouse, stockMinimum.warehouseId) }]
+
+export const AUDITED: readonly Audited[] = [...AUDITED_AT_0019, ...SUBSCRIPTION_PAUSE_AUDITED, ...TICKET_SLA_AUDITED, ...DROP_OFF_AUDITED, ...ABSENCES_AUDITED, ...TICKET_CHARGE_AUDITED, ...PICKUP_EXCEPTIONS_AUDITED, ...EMISSIONS_AUDITED, ...APPLICATIONS_AUDITED, ...SUSTAINABILITY_AUDITED, ...CONTAINER_HIRE_AUDITED, ...ACCOUNTING_AUDITED, ...BULKY_AUDITED, ...SITE_VISITS_AUDITED, ...SEASONS_AUDITED, ...STOCK_MINIMUMS_AUDITED]
 
 /** The audited tables by name, for a test that reads a migrated database's triggers. */
 export const AUDITED_TABLE_NAMES: ReadonlySet<string> = new Set(AUDITED.map((entry) => getTableName(entry.table)))

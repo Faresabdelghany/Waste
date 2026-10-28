@@ -23,13 +23,14 @@
 // neither may put a container into service. Both lists are the vocabulary's,
 // which the domain's `MOVEMENT_SHAPES` is built from too, so what a command
 // may ask for and what the ledger allows cannot drift.
+import { STOCK_MINIMUMS_MAX } from "@waste/domain/resources/stock-balance"
 import { ADJUSTMENT_TARGETS, STOCK_PLACES } from "@waste/domain/resources/vocabulary"
 import * as z from "zod"
 
 import { IsoDate, IsoDateTime } from "./dates"
 import { Id } from "./ids"
 import { ProjectScopedListQuery } from "./queries"
-import { recorded } from "./resource"
+import { eachOnce, eachOnceSentence, NonNegativeInt, PositiveInt, recorded } from "./resource"
 import { AssetStatus, StockMovementKind, StockPlaceKind } from "./resources"
 import { Label, Paragraph } from "./text"
 
@@ -156,3 +157,56 @@ export const StockMovementListQuery = ProjectScopedListQuery.extend({
   to: IsoDateTime.optional(),
 }).refine((query) => query.from === undefined || query.to === undefined || Date.parse(query.to) >= Date.parse(query.from), { message: OCCURRED_WINDOW_ORDERED, path: ["to"] })
 export type StockMovementListQuery = z.infer<typeof StockMovementListQuery>
+
+/**
+ * A warehouse's stock of one container type (O30 of #290, row 9.8): the
+ * containers standing there by the ledger's projection — in stock, and in
+ * maintenance there — beside the office's Stock Minimum for the type, and
+ * whether the stock is below it. A reading, never stored.
+ */
+export const StockBalance = z.object({
+  projectId: Id,
+  warehouseId: Id,
+  containerTypeId: Id,
+  inWarehouse: NonNegativeInt,
+  inMaintenance: NonNegativeInt,
+  /** The office's minimum for the type at this warehouse; null where it set none. */
+  minimum: PositiveInt.nullable(),
+  /** Fewer in stock than the minimum; maintenance does not count towards it. */
+  belowMinimum: z.boolean(),
+})
+export type StockBalance = z.infer<typeof StockBalance>
+
+/** `GET /stock-balances`: one project's, or one warehouse's; every project the caller works in when neither. */
+export const StockBalanceQuery = z.strictObject({
+  projectId: Id.optional(),
+  warehouseId: Id.optional(),
+})
+export type StockBalanceQuery = z.infer<typeof StockBalanceQuery>
+
+/** The balances, ordered by warehouse, then container type: every type a warehouse holds or has a minimum for. Bounded by the warehouses and types, so one answer and no page. */
+export const StockBalances = z.object({ items: z.array(StockBalance) })
+export type StockBalances = z.infer<typeof StockBalances>
+
+/** One minimum of a warehouse: the type, and the fewest containers of it the warehouse should hold in stock. */
+export const StockMinimumEntry = z.strictObject({
+  containerTypeId: Id,
+  minimum: PositiveInt,
+})
+export type StockMinimumEntry = z.infer<typeof StockMinimumEntry>
+
+/** What a set naming a container type twice is told. */
+export const EACH_TYPE_ONCE = eachOnceSentence("container type", "a warehouse has one minimum per type")
+
+/** `PUT /warehouses/:id/stock-minimums`: the whole set, replacing what the warehouse had; an empty set clears it. */
+export const StockMinimumsSet = z.strictObject({
+  minimums: z
+    .array(StockMinimumEntry)
+    .max(STOCK_MINIMUMS_MAX)
+    .refine((entries) => eachOnce(entries, (entry) => entry.containerTypeId), { message: EACH_TYPE_ONCE }),
+})
+export type StockMinimumsSet = z.infer<typeof StockMinimumsSet>
+
+/** A warehouse's minimums as they stand, by container type in the order they were written. */
+export const StockMinimums = z.object({ warehouseId: Id, minimums: z.array(StockMinimumEntry) })
+export type StockMinimums = z.infer<typeof StockMinimums>

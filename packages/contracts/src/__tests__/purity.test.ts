@@ -63,7 +63,9 @@
 // seasons. O21 of #290 added @waste/domain/planning/lifecycle: route-schemes.ts
 // reads the Plan Ahead window's bounds the database's check reads. O8 of
 // #290 added @waste/domain/execution/positions: driver-commands.ts bounds a
-// `record-positions` by the batch the Driver App closes, one spelling.
+// `record-positions` by the batch the Driver App closes, one spelling. O30
+// of #290 added @waste/domain/resources/stock-balance: stock.ts bounds a
+// warehouse's set of Stock Minimums by the domain's cap.
 import path from "node:path"
 import { fileURLToPath } from "node:url"
 
@@ -101,6 +103,7 @@ definePurityTests({
     "@waste/domain/resolution/vocabulary",
     "@waste/domain/resources/drop-off-points",
     "@waste/domain/resources/emissions",
+    "@waste/domain/resources/stock-balance",
     "@waste/domain/resources/vocabulary",
     "@waste/domain/route-schemes/seasons",
     "@waste/domain/routing/balance",

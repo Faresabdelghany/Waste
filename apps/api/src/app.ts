@@ -118,6 +118,7 @@ import { vehicleAllocationRoutes } from "./routes/vehicle-allocations"
 import { vehicleTypeRoutes } from "./routes/vehicle-types"
 import { visitRuleRoutes } from "./routes/visit-rules"
 import { vehicleRoutes } from "./routes/vehicles"
+import { stockBalanceRoutes } from "./routes/stock-balances"
 import { warehouseRoutes } from "./routes/warehouses"
 import { wasteFractionEmissionFactorRoutes } from "./routes/waste-fraction-emission-factors"
 import { weightControlRoutes } from "./routes/weight-control"
@@ -273,6 +274,7 @@ export function createApp({
   // The fleet's emission factors (M10 of #293), master data beside the vehicle types whose consumption they measure.
   app.route("/", fuelEmissionFactorRoutes(guard))
   app.route("/", warehouseRoutes(guard))
+  app.route("/", stockBalanceRoutes(guard))
   app.route("/", depotRoutes(guard))
   app.route("/", dropOffPointRoutes(guard))
   app.route("/", unloadingStationRoutes(guard))

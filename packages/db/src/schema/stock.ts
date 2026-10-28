@@ -50,16 +50,17 @@
 // costs a sort where the plain index gives an Index Scan Backward.
 import { STOCK_MOVEMENT_KINDS, STOCK_PLACE_KINDS } from "@waste/domain/resources/vocabulary"
 import { sql } from "drizzle-orm"
-import { check, index, text, timestamp, uuid } from "drizzle-orm/pg-core"
+import { check, index, integer, text, timestamp, uuid } from "drizzle-orm/pg-core"
 
 import { tableObjectName } from "../names"
 import { userAccount } from "./access"
-import { oneOf } from "./checks"
-import { id, projectScoped, recorded } from "./columns"
+import { containerType } from "./catalogue"
+import { oneOf, positive } from "./checks"
+import { id, projectScoped, recorded, timestamps } from "./columns"
 import { container, containerServicePlacement } from "./containers"
 import { company, project } from "./organisation"
 import { warehouse } from "./places"
-import { companyReference, projectReference, tenantIndex, tenantKey, tenantReference } from "./references"
+import { companyReference, projectReference, tenantIndex, tenantKey, tenantReference, tenantUnique } from "./references"
 import { wms } from "./wms"
 
 export const stockMovement = wms.table(
@@ -120,5 +121,35 @@ export const stockMovement = wms.table(
     tenantIndex(t, t.placementId),
     tenantIndex(t, t.recordedBy),
     tenantIndex(t, t.correctsMovementId),
+  ],
+)
+
+// A warehouse's Stock Minimum (O30 of #290, row 9.8): how many containers of a
+// type the office wants on its shelves at least. The balance is a query over
+// the ledger (`GET /stock-balances`), never a stored count; this row is the
+// office's number beside it, and a type below it reads "below minimum". No
+// alert and no order follow from it. One row per warehouse and type; a type
+// with no minimum has no row, so the number is a positive count. A
+// warehouse's minimums are a set replaced whole (`PUT /warehouses/:id/stock-minimums`).
+export const stockMinimum = wms.table(
+  "stock_minimum",
+  {
+    ...id,
+    ...projectScoped,
+    ...timestamps,
+    warehouseId: uuid().notNull(),
+    containerTypeId: uuid().notNull(),
+    /** The fewest containers of the type the warehouse should hold, in stock and not in maintenance. */
+    minimum: integer().notNull(),
+  },
+  (t) => [
+    companyReference(t, company),
+    tenantReference(t, [t.projectId], project),
+    projectReference(t, [t.warehouseId], warehouse),
+    tenantReference(t, [t.containerTypeId], containerType),
+    tenantUnique(t, t.warehouseId, t.containerTypeId),
+    positive(t.minimum),
+    tenantIndex(t, t.projectId),
+    tenantIndex(t, t.containerTypeId),
   ],
 )
