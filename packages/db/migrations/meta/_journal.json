@@ -449,6 +449,13 @@
       "when": 1793204881720,
       "tag": "0063_service_provider_activities",
       "breakpoints": true
+    },
+    {
+      "idx": 64,
+      "version": "7",
+      "when": 1793206864189,
+      "tag": "0064_vehicle_change_proposals",
+      "breakpoints": true
     }
   ]
 }
