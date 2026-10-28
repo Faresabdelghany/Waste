@@ -14,6 +14,8 @@ export type BusinessFormFieldType =
   | "multiselect"
   | "checkbox"
   | "file"
+  /** A search of the address register on the API (#291 C13): the value is the register's id of the address picked, and a pick fills the fields `addressLookup` names. */
+  | "address-lookup"
 
 export type BusinessFormOption = {
   value: string
@@ -68,6 +70,16 @@ export type BusinessFormField = {
   min?: number
   max?: number
   unit?: string
+  /** An `address-lookup` field's fields: what a pick fills, and the typed address whose change lets the pick go (lib/data/address-lookup.ts). */
+  addressLookup?: AddressLookupFields
+}
+
+/** The fields an address picked from the register fills: the address always, the registry identifier and the point where they are blank. */
+export type AddressLookupFields = {
+  address: string
+  registryId: string
+  latitude: string
+  longitude: string
 }
 
 export type BusinessFormSection = {

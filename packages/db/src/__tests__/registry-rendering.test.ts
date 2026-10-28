@@ -63,6 +63,11 @@
 // CREATE TABLEs onto 0022's and 0010's, and time-windows-rendering.test.ts
 // pins the statements.
 //
+// Migration 0062 (#291 C13) gave `property` the address register's id and the
+// address's parts, with their shape checks: `CHANGED_IN_0062`, first of the
+// property's chain, maps today's CREATE TABLE onto 0056's, and
+// address-register-rendering.test.ts pins the statements.
+//
 // This is also what makes a change to the vocabulary a migration: the values
 // are spelled here as the file spells them, so adding one to a list in
 // @waste/domain/registry/vocabulary fails this test until a migration replaces
@@ -205,11 +210,17 @@ const ADDED_IN_0010 = [
   index("agreement", "agreement_price_list_id_idx", "company_id", "price_list_id"),
 ]
 
-/** property as drizzle-kit writes it today, with the service window 0056 added (O14 of #290); as of 0022, with the driver's instructions; and as of 0004, without either. */
-const propertyTable = (asOf: "0004" | "0022" | "0056"): string =>
+/** The address's parts 0062 added (#291 C13), in the schema's order. */
+const ADDRESS_PARTS = ["street_name", "house_number", "floor", "door", "postcode", "post_town", "municipality_code"]
+const PRESENT_WITH_THE_ID = ["street_name", "house_number", "postcode", "post_town", "municipality_code"]
+const ADDRESS_SHAPE = `${PRESENT_WITH_THE_ID.map((column) => `(${ref("property", "address_id")} is null) = (${ref("property", column)} is null)`).join(" and ")} and (${ref("property", "address_id")} is not null or (${ref("property", "floor")} is null and ${ref("property", "door")} is null))`
+
+/** property as drizzle-kit writes it today, with the address register's id and parts 0062 added (#291 C13); as of 0056, with the service window (O14 of #290); as of 0022, with the driver's instructions; and as of 0004, without any. */
+const propertyTable = (asOf: "0004" | "0022" | "0056" | "0062"): string =>
   createTable("property", "project", [
     '"name" text NOT NULL',
     '"address" text NOT NULL',
+    ...(asOf >= "0062" ? ['"address_id" uuid', ...ADDRESS_PARTS.map((column) => `"${column}" text`)] : []),
     '"registry_id" text',
     '"kind" text NOT NULL',
     '"location" geometry(Point, 4326)',
@@ -223,6 +234,13 @@ const propertyTable = (asOf: "0004" | "0022" | "0056"): string =>
     oneOfCheck("property", "kind", "residential", "commercial", "public", "mixed", "other"),
     oneOfCheck("property", "status", "active", "inactive"),
     geometryCheck("property", "location"),
+    ...(asOf >= "0062"
+      ? [
+          `CONSTRAINT "property_address_shape" CHECK (${ADDRESS_SHAPE})`,
+          `CONSTRAINT "property_postcode_shape" CHECK (${ref("property", "postcode")} ~ '^[0-9]{4}$')`,
+          `CONSTRAINT "property_municipality_code_shape" CHECK (${ref("property", "municipality_code")} ~ '^[0-9]{4}$')`,
+        ]
+      : []),
   ])
 
 /** shared_collection_point as drizzle-kit writes it today, with the driver's instructions 0022 added, and as of 0004, without. */
@@ -273,6 +291,9 @@ const customerTable = (terms: boolean): string =>
 
 /** What 0037 changed on one table 0004 created: the statement as drizzle-kit generates it now, and as it generated it as of 0004. */
 const CHANGED_IN_0037 = new Map([[customerTable(true), customerTable(false)]])
+
+/** What 0062 changed (#291 C13): the property's CREATE TABLE as drizzle-kit generates it now onto what it was before it. Applied first. */
+const CHANGED_IN_0062 = new Map([[propertyTable("0062"), propertyTable("0056")]])
 
 /** What 0056 changed (O14 of #290): the property's and the agreement's CREATE TABLEs as drizzle-kit generates them now onto what they were before it. Applied first, one file at a time. */
 const CHANGED_IN_0056 = new Map([
@@ -345,7 +366,7 @@ const expected = [
   ]),
   productTable("0054"),
   customerTable(true),
-  propertyTable("0056"),
+  propertyTable("0062"),
   createTable("property_party", "project", [
     '"property_id" uuid NOT NULL',
     '"customer_id" uuid NOT NULL',
@@ -498,6 +519,7 @@ describe("the Registry tables as drizzle-kit writes them", () => {
   const generatedHead = async (): Promise<string[]> => [
     ...(await statementsFor(tables))
       .filter((statement) => !ADDED_IN_0010.includes(statement))
+      .map((statement) => CHANGED_IN_0062.get(statement) ?? statement)
       .map((statement) => CHANGED_IN_0056.get(statement) ?? statement)
       .map((statement) => CHANGED_IN_0054.get(statement) ?? statement)
       .map((statement) => CHANGED_IN_0050.get(statement) ?? statement)
@@ -514,7 +536,8 @@ describe("the Registry tables as drizzle-kit writes them", () => {
     const today = await statementsFor(tables)
     for (const statement of CHANGED_IN_0007.keys()) assert.ok(today.includes(statement), statement.split("\n")[0])
     for (const statement of CHANGED_IN_0054.keys()) assert.ok(today.includes(statement), statement.split("\n")[0])
-    for (const statement of CHANGED_IN_0056.keys()) assert.ok(today.includes(statement), statement.split("\n")[0])
+    for (const statement of CHANGED_IN_0062.keys()) assert.ok(today.includes(statement), statement.split("\n")[0])
+    for (const statement of CHANGED_IN_0056.keys()) assert.ok(today.includes(statement) || [...CHANGED_IN_0062.values()].includes(statement), statement.split("\n")[0])
     for (const statement of CHANGED_IN_0010.keys()) assert.ok([...CHANGED_IN_0054.values(), ...CHANGED_IN_0056.values()].includes(statement), statement.split("\n")[0])
     for (const statement of CHANGED_IN_0022.keys()) assert.ok(today.includes(statement) || [...CHANGED_IN_0056.values()].includes(statement), statement.split("\n")[0])
     for (const statement of CHANGED_IN_0050.keys()) assert.ok(today.includes(statement), statement.split("\n")[0])

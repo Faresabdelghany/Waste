@@ -123,6 +123,17 @@ describe("parseEnv", () => {
     })
   })
 
+  test("names the address register, carries its token and reads its gateway as an http(s) URL (#291 C13)", () => {
+    assert.deepEqual(parseEnv({ ...base, ADDRESS_PROVIDER: "dataforsyningen", DATAFORSYNINGEN_TOKEN: "test-only-not-a-token", ADDRESS_REGISTER_URL: "https://register.example" }), {
+      ...expected,
+      ADDRESS_PROVIDER: "dataforsyningen",
+      DATAFORSYNINGEN_TOKEN: "test-only-not-a-token",
+      ADDRESS_REGISTER_URL: "https://register.example",
+    })
+    assert.deepEqual(parseEnv({ ...base, ADDRESS_PROVIDER: "", DATAFORSYNINGEN_TOKEN: "", ADDRESS_REGISTER_URL: "" }), expected, "empty: not set")
+    assert.throws(() => parseEnv({ ...base, ADDRESS_REGISTER_URL: "ftp://register.example" }), (error: unknown) => error instanceof Error && /ADDRESS_REGISTER_URL/.test(error.message))
+  })
+
   test("reads the public door's two knobs (ADR-0010): PUBLIC_REQUESTS_PER_MINUTE at least one, PUBLIC_TRUSTED_PROXIES zero or more, each absent unless set", () => {
     assert.deepEqual(parseEnv({ ...base, PUBLIC_REQUESTS_PER_MINUTE: "", PUBLIC_TRUSTED_PROXIES: "" }), expected, "empty: not set")
     assert.equal(parseEnv({ ...base, PUBLIC_REQUESTS_PER_MINUTE: "120" }).PUBLIC_REQUESTS_PER_MINUTE, 120)

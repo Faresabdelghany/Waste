@@ -62,6 +62,8 @@ const parkvej: Property = {
   projectId: copenhagen.id,
   name: "Parkvej 18",
   address: "Parkvej 18, 2100 København Ø",
+  addressId: null,
+  addressParts: null,
   registryId: "CPH-001882",
   kind: "residential",
   location: { type: "Point", coordinates: [12.5709, 55.7012] },
@@ -229,6 +231,7 @@ describe("a property", () => {
       projectId: FIXTURE_PROJECT_IDS.copenhagen,
       displayName: "Parkvej 18",
       serviceAddress: "Parkvej 18, 2100 København Ø",
+      addressId: "",
       registryId: "CPH-001882",
       propertyType: "residential",
       latitude: "55.7012",
@@ -314,6 +317,27 @@ describe("a property", () => {
     assert.deepEqual(made({ longitude: "east" }), { path: "longitude", message: "A coordinate is a number" })
     assert.deepEqual(made({ ownerIds: "company-nowhere" }), { path: "ownerIds", message: "Pick customers the API holds" })
     assert.deepEqual(made({ tenantIds: FIXTURE_PROJECT_IDS.copenhagen }), { path: "tenantIds", message: "Pick customers the API holds" }, "a row the store holds that is no customer is refused as one")
+  })
+
+  test("an address found in the register goes as its id, its designation the API's to write; typed over, the id goes as a null (#291 C13)", () => {
+    const DAR = "0a3f50a0-75ba-32b8-e044-0003ba298005"
+    const found = propertyAdapter.toCreateBody?.(createPropertyRecord({ ...PROPERTY_VALUES, addressId: DAR }, { now: MINTED }), context()) as Record<string, unknown>
+    assert.equal(found.addressId, DAR)
+    assert.equal(found.address, undefined, "never both: the API refuses the pair")
+    assert.ok(PropertyCreate.safeParse(found).success)
+    const typed = propertyAdapter.toCreateBody?.(createPropertyRecord(PROPERTY_VALUES, { now: MINTED }), context()) as Record<string, unknown>
+    assert.deepEqual([typed.address, typed.addressId], [PROPERTY_VALUES.serviceAddress, undefined])
+
+    const record = propertyAdapter.toRecord({ ...parkvej, addressId: DAR, addressParts: { streetName: "Parkvej", houseNumber: "18", floor: null, door: null, postcode: "2100", postTown: "København Ø", municipalityCode: "0101" } }, context())
+    assert.equal(record.facts?.["Address register"], "Found in the register")
+    const edit = (values: Record<string, string>): BusinessRecord => ({ ...record, submittedValues: { ...record.submittedValues, ...values } })
+    const OTHER = "0a3f50a0-75ba-32b8-e044-0003ba298006"
+    const moved = propertyAdapter.toPatchBody(record, edit({ addressId: OTHER, serviceAddress: "Parkvej 20, 2100 København Ø" }), context())
+    assert.deepEqual(moved, { property: { addressId: OTHER } })
+    assert.ok(PropertyPatch.safeParse((moved as { property: unknown }).property).success)
+    const typedOver = propertyAdapter.toPatchBody(record, edit({ addressId: "", serviceAddress: "Parkvej 18 (back gate), 2100 København Ø" }), context())
+    assert.deepEqual(typedOver, { property: { address: "Parkvej 18 (back gate), 2100 København Ø", addressId: null } })
+    assert.ok(PropertyPatch.safeParse((typedOver as { property: unknown }).property).success)
   })
 
   test("a patch says what moved of the property — a cleared registry id and notes as null, a point dropped as null, a status — and the parties as one whole set", () => {

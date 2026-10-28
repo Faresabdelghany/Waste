@@ -2,7 +2,7 @@
 // over its project and its provider, its kind and status read off the service
 // providers' vocabulary, each kind held to its own columns and statuses, a
 // closed row to who closed it, a rejection to its reason and an approval to
-// the scheme version it wrote. Then migration 0062, which is exactly those
+// the scheme version it wrote. Then migration 0063, which is exactly those
 // statements, then the table's fence and trigger and its audit trail
 // (`SERVICE_PROVIDER_ACTIVITIES_AUDITED`). No database.
 import assert from "node:assert/strict"
@@ -25,11 +25,11 @@ import { handWrittenStatements, normalised, statementsOf } from "../sql/hand-wri
 import { checksOf, list, ref } from "./rendering"
 import { statementsBetween } from "./specimen"
 
-const MIGRATION = "0062_service_provider_activities.sql"
+const MIGRATION = "0063_service_provider_activities.sql"
 
 const referenced = { company, project, serviceProvider, serviceArea, routeScheme, collectionGroup, userAccount }
 
-/** What drizzle-kit writes for 0062: the one table. */
+/** What drizzle-kit writes for 0063: the one table. */
 const generated = (): Promise<string[]> => statementsBetween(referenced, { ...referenced, serviceProviderActivity })
 
 const fileStatements = async (): Promise<string[]> => statementsOf(await readFile(join(MIGRATIONS_FOLDER, MIGRATION), "utf8"))
@@ -37,7 +37,7 @@ const fileStatements = async (): Promise<string[]> => statementsOf(await readFil
 const column = (name: string) => ref("service_provider_activity", name)
 
 describe("the activities as drizzle-kit writes them", () => {
-  test("migration 0062 is exactly what the schema generates, then the fence, the trigger and the audit trail", async () => {
+  test("migration 0063 is exactly what the schema generates, then the fence, the trigger and the audit trail", async () => {
     assert.deepEqual(await fileStatements(), [...(await generated()), ...handWrittenStatements(serviceProviderActivity), ...SERVICE_PROVIDER_ACTIVITIES_AUDITED.flatMap(auditTrail)].map(normalised))
   })
 

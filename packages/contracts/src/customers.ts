@@ -31,6 +31,15 @@
 // Point's is not nullable — the place is the record. Both are `FlatPoint`
 // (geojson.ts): the column is `geometry(Point, 4326)`, flat, so a third
 // ordinate is refused here at `coordinates` and never by PostGIS as a 500.
+//
+// A Property may be found in the address register (#291 C13): a body that
+// names the register's `addressId` instead of typing `address` is stored with
+// the register's designation as its address, its parts beside it, and the
+// register's BFE number and point wherever the body sets neither — a point
+// placed by hand at the bins' gate wins. Typing the address is still whole:
+// a register that does not answer leaves the office the typed address and a
+// point placed by hand, and a typed address is no longer the register's, so
+// a patch of `address` alone lets the register's id and parts go.
 import {
   CUSTOMER_KINDS,
   CUSTOMER_STATUSES,
@@ -49,6 +58,7 @@ import {
 } from "@waste/domain/registry/vocabulary"
 import * as z from "zod"
 
+import { AddressId, AddressParts } from "./addresses"
 import { PaymentTermsDays } from "./finance"
 import { FlatPoint } from "./geojson"
 import { Id } from "./ids"
@@ -198,8 +208,12 @@ export const Property = z.object({
   projectId: Id,
   /** The display name: `Parkvej 18`. */
   name: Label,
-  /** The service address as one text; a structured address arrives with the address lookup (#77). */
+  /** The service address as one text: the register's designation where the property was found there. */
   address: Paragraph,
+  /** The address register's id for the address (DAR, #291 C13); null where the address was typed. */
+  addressId: AddressId.nullable(),
+  /** The address's parts as the register holds them, with `addressId` and only with it. */
+  addressParts: AddressParts.nullable(),
   /** The property registry's identifier: a BFE number in Denmark. */
   registryId: Label.nullable(),
   kind: PropertyKind,
@@ -217,11 +231,21 @@ export const Property = z.object({
 })
 export type Property = z.infer<typeof Property>
 
+/** A body names the address one way: typed, or the register's. */
+const oneAddress = {
+  message: "Give the address typed, or the address register's addressId, not both",
+  path: ["addressId"],
+}
+const typedOrFound = (body: { address?: string; addressId?: string | null }) => !(body.address !== undefined && body.addressId != null)
+
 export const PropertyCreate = z
   .strictObject({
     projectId: Id,
     name: Label,
-    address: Paragraph,
+    /** Typed; or leave it out and name `addressId`, and the register's designation is stored. */
+    address: Paragraph.optional(),
+    /** The address register's id (`GET /addresses`): the address, its parts, and the BFE number and point the body does not set, read from the register. */
+    addressId: AddressId.optional(),
     registryId: Label.nullable().optional(),
     kind: PropertyKind,
     location: FlatPoint.nullable().optional(),
@@ -231,6 +255,8 @@ export const PropertyCreate = z
     status: PropertyStatus.default("active").describe("Defaults to active when absent: a property is registered in order to be served."),
     parties: PartiesBody.default([]).describe("The parties the property starts with; none when absent."),
   })
+  .refine(typedOrFound, oneAddress)
+  .refine((body) => body.address !== undefined || body.addressId !== undefined, { message: "Give the address, typed or as the address register's addressId", path: ["address"] })
   .refine((body) => noRepeatedParty(body.parties), partiesNamedOnce)
 export type PropertyCreate = z.infer<typeof PropertyCreate>
 
@@ -238,7 +264,10 @@ export type PropertyCreate = z.infer<typeof PropertyCreate>
 export const PropertyPatch = z
   .strictObject({
     name: Label.optional(),
+    /** Typed: the register's id and parts go with the text they no longer spell. */
     address: Paragraph.optional(),
+    /** The address register's id: the address and its parts read from the register, the BFE number and point too where the body sets neither; null lets the register's id and parts go and keeps the text. */
+    addressId: AddressId.nullable().optional(),
     registryId: Label.nullable().optional(),
     kind: PropertyKind.optional(),
     location: FlatPoint.nullable().optional(),
@@ -249,6 +278,7 @@ export const PropertyPatch = z
     status: PropertyStatus.optional(),
   })
   .refine(changesSomething, somethingToChange)
+  .refine(typedOrFound, oneAddress)
 export type PropertyPatch = z.infer<typeof PropertyPatch>
 
 /** The whole list, replacing what the property had. An empty list is a property nobody is billed for. */

@@ -19,6 +19,7 @@ import type {
   BusinessFormValue,
   BusinessFormValues,
 } from "@/lib/data/business-form-types"
+import { picksLetGoBy } from "@/lib/data/address-lookup"
 import { formReseeds, type FormSeedEdge } from "@/lib/data/business-form-seed"
 import { splitList } from "@waste/domain/record-values"
 import {
@@ -61,6 +62,7 @@ import {
   SelectValue,
 } from "@/components/ui/select"
 import { Textarea } from "@/components/ui/textarea"
+import { AddressLookupField } from "@/components/waste/address-lookup-field"
 
 type ReviewItem = {
   label: string
@@ -561,7 +563,12 @@ export function BusinessRecordFormDialog({
   if (schema.mode === "disabled" || !schema.execution) return null
 
   const updateValue = (fieldId: string, value: string | boolean) => {
-    setValues((current) => ({ ...current, [fieldId]: value }))
+    // An address typed over is the office's own again: the register's pick goes with it (#291 C13).
+    const letGo = Object.fromEntries(picksLetGoBy(fields, fieldId).map((lookupId) => [lookupId, ""]))
+    setValues((current) => ({ ...current, ...letGo, [fieldId]: value }))
+  }
+  const updateValues = (picked: BusinessFormValues) => {
+    setValues((current) => ({ ...current, ...picked }))
   }
 
   const advance = () => {
@@ -648,6 +655,7 @@ export function BusinessRecordFormDialog({
                       const options = fieldOptions(field, values, relationOptions)
                       const value = values[field.id]
                       const isWide =
+                        field.type === "address-lookup" ||
                         field.type === "textarea" ||
                         field.type === "checkbox" ||
                         field.type === "file"
@@ -752,6 +760,13 @@ export function BusinessRecordFormDialog({
                               onChange={(nextValue) =>
                                 updateValue(field.id, nextValue)
                               }
+                            />
+                          ) : field.type === "address-lookup" ? (
+                            <AddressLookupField
+                              field={field}
+                              values={values}
+                              onPick={updateValues}
+                              onLetGo={() => updateValue(field.id, "")}
                             />
                           ) : field.type === "file" ? (
                             <FileUploadField

@@ -19,7 +19,11 @@
 //
 // A property's location is the wire's point, both numbers or neither: blank
 // until the address is geocoded, and then its containers have no place on
-// the map. A point is always located.
+// the map. A point is always located. A property's address may be found in
+// the address register (#291 C13): the picker searches it through the API and
+// fills the address, and the BFE number and the point where they are blank,
+// so a property is geocoded as it is created; without the register the
+// address is typed and the point placed by hand, as before.
 import {
   PROPERTY_GROUP_MEMBER_ROLES,
   PROPERTY_GROUP_PURPOSES,
@@ -195,6 +199,15 @@ const memberRole = (tokens: readonly string[], labels: Readonly<Record<string, s
   description: "What a property added here joins as. A member already there keeps the role it holds.",
 })
 
+/** The address register's search (#291 C13): its value is the register's id of the address picked. */
+export const ADDRESS_LOOKUP_FIELD: BusinessFormField = {
+  id: "addressId",
+  label: "Find in the address register",
+  type: "address-lookup",
+  description: "Picks the address from the national register and places it on the map. Without it, type the address and place the point by hand.",
+  addressLookup: { address: "serviceAddress", registryId: "registryId", latitude: "latitude", longitude: "longitude" },
+}
+
 const propertyFields = (projectField: BusinessFormField): BusinessFormSchema["sections"] => [
   {
     id: "identity-address",
@@ -202,6 +215,7 @@ const propertyFields = (projectField: BusinessFormField): BusinessFormSchema["se
     fields: [
       projectField,
       { id: "displayName", label: "Property name", type: "text", required: true, placeholder: "Parkvej 18" },
+      ADDRESS_LOOKUP_FIELD,
       { id: "serviceAddress", label: "Service address", type: "textarea", required: true, placeholder: "Street and number, postal code and city" },
       { id: "registryId", label: "Property registry identifier", type: "text", description: "The property registry's number, a BFE number in Denmark; unique across the company." },
       { id: "propertyType", label: "Property type", type: "select", required: true, options: optionsOf(PROPERTY_KINDS, PROPERTY_KIND_LABELS) },

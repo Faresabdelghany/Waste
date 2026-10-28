@@ -77,11 +77,16 @@ const customer = {
   ...STAMPS,
 }
 
+/** An address register's id: a UUID of the register's, not a v7 of this system's. */
+const DAR_ID = "0a3f50a0-75ba-32b8-e044-0003ba298018"
+
 const property = {
   id: ID,
   projectId: OTHER,
   name: "Parkvej 18",
   address: "Parkvej 18, 2000 Frederiksberg",
+  addressId: DAR_ID,
+  addressParts: { streetName: "Parkvej", houseNumber: "18", floor: null, door: null, postcode: "2000", postTown: "Frederiksberg", municipalityCode: "0147" },
   registryId: "4001234567",
   kind: "residential",
   location: POINT,
@@ -196,7 +201,7 @@ describe("CustomerCreate and CustomerPatch", () => {
 describe("Property", () => {
   test("is the service address, with its parties and the point it was geocoded to", () => {
     assert.deepEqual(Property.parse(property), property)
-    const ungeocoded = { ...property, location: null, registryId: null, notes: null, driverInstructions: null, parties: [] }
+    const ungeocoded = { ...property, location: null, addressId: null, addressParts: null, registryId: null, notes: null, driverInstructions: null, parties: [] }
     assert.deepEqual(Property.parse(ungeocoded), ungeocoded)
   })
 
@@ -241,6 +246,18 @@ describe("PropertyCreate and PropertyPatch", () => {
       assert.deepEqual(refusal(PropertyCreate.safeParse(without)).map((issue) => issue.path), [key])
     }
     refusesWhatTheServerOwns(PropertyCreate, body)
+  })
+
+  test("take the address typed or as the address register's id, one of the two (#291 C13)", () => {
+    const { address: _typed, ...found } = { ...body, addressId: DAR_ID.toUpperCase() }
+    assert.equal(PropertyCreate.parse(found).addressId, DAR_ID, "the register's id is read lowercase")
+    assert.equal(PropertyCreate.parse(found).address, undefined)
+    assert.deepEqual(refusal(PropertyCreate.safeParse({ ...body, addressId: DAR_ID })), [{ path: "addressId", message: "Give the address typed, or the address register's addressId, not both" }])
+    assert.deepEqual(refusal(PropertyCreate.safeParse({ ...found, addressId: "Parkvej 18" })).map((issue) => issue.path), ["addressId"])
+    assert.deepEqual(PropertyPatch.parse({ addressId: DAR_ID }), { addressId: DAR_ID })
+    assert.deepEqual(PropertyPatch.parse({ addressId: null }), { addressId: null }, "null lets the register's id go")
+    assert.deepEqual(PropertyPatch.parse({ address: "Parkvej 20", addressId: null }), { address: "Parkvej 20", addressId: null })
+    assert.deepEqual(refusal(PropertyPatch.safeParse({ address: "Parkvej 20", addressId: DAR_ID })).map((issue) => issue.path), ["addressId"])
   })
 
   test("leave the parties to their own route: a patch does not carry them, and neither does the project", () => {
