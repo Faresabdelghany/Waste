@@ -65,6 +65,7 @@ const scheme = {
   unloadingStationId: null,
   collectionGroups: [ruleGroup, manualGroup],
   generation: { lastGeneratedAt: null, groups: [] },
+  warnings: [],
   validFrom: "2026-01-01",
   validTo: null,
   ...STAMPS,
