@@ -174,6 +174,10 @@ _Avoid_: Inventory quantity, balance edit
 The fewest containers of one type the office wants a Warehouse to hold in stock; a container in maintenance does not count towards it. The stock is read off the Stock Movements against it, "below minimum" where fewer stand there; nothing is alerted or ordered from it.
 _Avoid_: Reorder level, safety stock, par level
 
+**Decommission Reason**:
+Why a container was scrapped: one of the company's own list, kept in the master data, which a decommission names beside an optional note. A reason is retired rather than deleted, so a decommission given it still reads it.
+_Avoid_: Scrap code, disposal reason, retirement reason
+
 **Hauler / Service Provider**:
 An external organization, typically a hauler, that delivers collection work for a company within awarded Service Areas and is settled for it through Settlements.
 _Avoid_: Contractor, customer, project

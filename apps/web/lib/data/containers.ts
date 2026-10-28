@@ -170,7 +170,14 @@ export const CONTAINER_COMMAND_FORMS: Readonly<Record<OfferedContainerCommand, B
   ]),
   return: commandForm("Return", "Out of service into stock: the placement ends and the return is recorded together.", "Return", [warehouse(), stockPlace, lastDay(true, "The placement ends after this day."), occurredAt, reason(false), reference]),
   transfer: commandForm("Transfer", "From one place in stock to another, recorded on arrival.", "Transfer", [warehouse("Where it arrives."), stockPlace, occurredAt, reason(false), reference]),
-  decommission: commandForm("Decommission", "To scrap, from stock or from service. A retired container does not come back.", "Decommission", [reason(true), lastDay(false, "For a container in service: its placement ends after this day."), occurredAt, reference]),
+  decommission: commandForm("Decommission", "To scrap, from stock or from service. A retired container does not come back.", "Decommission", [
+    // The company's reasons, kept in Settings › Master data (O30 of #290); the note says more where the reason does not.
+    { id: "decommissionReasonId", label: "Reason", type: "select", required: true, relation: MASTER_DATA_MODULE, description: "One of the company's decommission reasons, kept in Settings › Master data." },
+    { id: "reason", label: "Note", type: "textarea" },
+    lastDay(false, "For a container in service: its placement ends after this day."),
+    occurredAt,
+    reference,
+  ]),
   adjust: commandForm("Adjust", "The correction door: where the ledger should have the container, never into or out of service.", "Adjust", [
     { id: "toKind", label: "The ledger should have it in", type: "select", required: true, options: ADJUSTMENT_TARGETS.map((value) => ({ value, label: PLACE_LABELS[value] })) },
     { ...warehouse(), required: false, visibleWhen: { fieldId: "toKind", notIn: ["scrap"] }, requiredWhen: { fieldId: "toKind", notIn: ["scrap"] } },

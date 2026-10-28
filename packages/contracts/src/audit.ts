@@ -115,6 +115,7 @@ export const AUDITED_TABLES = [
   "route_scheme_season",
   "service_provider_activity",
   "stock_minimum",
+  "decommission_reason",
 ] as const
 export type AuditedTable = (typeof AUDITED_TABLES)[number]
 
