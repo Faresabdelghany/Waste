@@ -971,6 +971,7 @@ column wms.collection_group 11 service_provider_id uuid
 column wms.collection_group 12 rule_vehicle_type_id uuid
 column wms.collection_group 13 vehicle_id uuid
 column wms.collection_group 14 driver_id uuid
+column wms.collection_group 15 rule_planning_area_id uuid
 constraint wms.collection_group collection_group_company_id_fk FOREIGN KEY (company_id) REFERENCES wms.company(id)
 constraint wms.collection_group collection_group_days_subset_of CHECK ((days <@ ARRAY['monday'::text, 'tuesday'::text, 'wednesday'::text, 'thursday'::text, 'friday'::text, 'saturday'::text, 'sunday'::text]))
 constraint wms.collection_group collection_group_driver_id_fk FOREIGN KEY (company_id, project_id, driver_id) REFERENCES wms.driver(company_id, project_id, id)
@@ -980,6 +981,8 @@ constraint wms.collection_group collection_group_project_id_fk FOREIGN KEY (comp
 constraint wms.collection_group collection_group_project_key UNIQUE (company_id, project_id, id)
 constraint wms.collection_group collection_group_route_scheme_id_fk FOREIGN KEY (company_id, project_id, route_scheme_id) REFERENCES wms.route_scheme(company_id, project_id, id)
 constraint wms.collection_group collection_group_route_scheme_id_name_key UNIQUE (company_id, route_scheme_id, name)
+constraint wms.collection_group collection_group_rule_area_shape CHECK (((stop_source = 'rule'::text) OR (rule_planning_area_id IS NULL)))
+constraint wms.collection_group collection_group_rule_planning_area_id_fk FOREIGN KEY (company_id, project_id, rule_planning_area_id) REFERENCES wms.planning_area(company_id, project_id, id)
 constraint wms.collection_group collection_group_rule_shape CHECK (((stop_source = 'rule'::text) OR (rule_vehicle_type_id IS NULL)))
 constraint wms.collection_group collection_group_rule_vehicle_type_id_fk FOREIGN KEY (company_id, rule_vehicle_type_id) REFERENCES wms.vehicle_type(company_id, id)
 constraint wms.collection_group collection_group_service_provider_id_fk FOREIGN KEY (company_id, service_provider_id) REFERENCES wms.service_provider(company_id, id)
@@ -989,6 +992,7 @@ index wms.collection_group collection_group_driver_id_idx CREATE INDEX collectio
 index wms.collection_group collection_group_pkey CREATE UNIQUE INDEX collection_group_pkey ON wms.collection_group USING btree (id)
 index wms.collection_group collection_group_project_key CREATE UNIQUE INDEX collection_group_project_key ON wms.collection_group USING btree (company_id, project_id, id)
 index wms.collection_group collection_group_route_scheme_id_name_key CREATE UNIQUE INDEX collection_group_route_scheme_id_name_key ON wms.collection_group USING btree (company_id, route_scheme_id, name)
+index wms.collection_group collection_group_rule_planning_area_id_idx CREATE INDEX collection_group_rule_planning_area_id_idx ON wms.collection_group USING btree (company_id, rule_planning_area_id)
 index wms.collection_group collection_group_rule_vehicle_type_id_idx CREATE INDEX collection_group_rule_vehicle_type_id_idx ON wms.collection_group USING btree (company_id, rule_vehicle_type_id)
 index wms.collection_group collection_group_service_provider_id_idx CREATE INDEX collection_group_service_provider_id_idx ON wms.collection_group USING btree (company_id, service_provider_id)
 index wms.collection_group collection_group_vehicle_id_idx CREATE INDEX collection_group_vehicle_id_idx ON wms.collection_group USING btree (company_id, vehicle_id)
@@ -4298,4 +4302,5 @@ journal 1793190991835 4479beffde868c9a521b9ff1b6f44dd1b13dbb0e1293a3dabb1f48108c
 journal 1793199855626 709fe6bc0aa2d71a4a8a365c80e79db143341dd82867c0e2fdbd062aa7bcc9b3
 journal 1793204881720 aa541b7673882e81a831ab7f9b7f2bfc1c237d88f7204f890826d641a965be95
 journal 1793207368395 fbe151d4ba9945172963cf2e6667189ae6f64e362e64a82f9aa7639b7bea994e
+journal 1793209754047 d2803c779f561da8247f43444f21b6f7564f1af6d5eb86d7208b59961a27c9c4
 pgboss-version 42

@@ -185,7 +185,7 @@ describe("the route scheme endpoints", { skip: database.skip }, () => {
       assert.equal(Id.parse(residualGroup.id), residualGroup.id)
       assert.deepEqual([residualGroup.position, bank.position], [1, 2], "positions 1..n in the body's order when absent")
       assert.equal(residualGroup.routeSchemeId, created.id)
-      assert.deepEqual(residualGroup.rule, { wasteFractionIds: [residual.id, glass.id], containerTypeIds: [bin.id], vehicleTypeId: planning.vehicleTypes.rearLoader.id })
+      assert.deepEqual(residualGroup.rule, { wasteFractionIds: [residual.id, glass.id], containerTypeIds: [bin.id], vehicleTypeId: planning.vehicleTypes.rearLoader.id, planningAreaId: null })
       assert.deepEqual(
         [created.depotId, created.unloadingStationId, residualGroup.vehicleId, residualGroup.driverId],
         [null, null, null, null],

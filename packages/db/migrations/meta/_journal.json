@@ -456,6 +456,13 @@
       "when": 1793207368395,
       "tag": "0064_stock_minimums",
       "breakpoints": true
+    },
+    {
+      "idx": 65,
+      "version": "7",
+      "when": 1793209754047,
+      "tag": "0065_group_planning_area",
+      "breakpoints": true
     }
   ]
 }
