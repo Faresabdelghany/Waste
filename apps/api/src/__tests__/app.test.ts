@@ -302,6 +302,8 @@ describe("GET /openapi.json", () => {
       "/route-schemes/{id}/occurrences",
       "/route-schemes/{id}/successor",
       "/routes",
+      "/routes/balance",
+      "/routes/balance-preview",
       "/routes/dispatch",
       "/routes/live",
       "/routes/{id}",
