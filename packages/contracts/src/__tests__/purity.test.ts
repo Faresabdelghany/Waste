@@ -54,7 +54,10 @@
 // availability window by the domain's caps. M4 of #293 added
 // @waste/domain/visits/vocabulary and @waste/domain/visits/charges:
 // site-visits.ts reads the visits' lists and normalises a plate or a card
-// as the API stores and matches it.
+// as the API stores and matches it. O17 of #290 added
+// @waste/domain/route-schemes/seasons: route-schemes.ts reads the month-day
+// pattern the database's checks read, and the overlap rule of a scheme's
+// seasons.
 import path from "node:path"
 import { fileURLToPath } from "node:url"
 
@@ -90,6 +93,7 @@ definePurityTests({
     "@waste/domain/resources/drop-off-points",
     "@waste/domain/resources/emissions",
     "@waste/domain/resources/vocabulary",
+    "@waste/domain/route-schemes/seasons",
     "@waste/domain/routing/vocabulary",
     "@waste/domain/sorting-guide/search",
     "@waste/domain/sorting-guide/vocabulary",

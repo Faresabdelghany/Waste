@@ -60,6 +60,7 @@ import type { CollectionGroup as WireGroup, CollectionGroupCreate, CollectionGro
 import { LAST_GENERATION_MATCHES_KEY, PREVIOUS_GENERATION_MATCHES_KEY, serializeGenerationMatches, type GenerationMatches } from "@waste/domain/route-schemes/container-drift"
 import { collectionGroupsOfRecord, collectionGroupsToValues, hasExplicitCollectionGroups, IMPLICIT_GROUP_ID, sharedServiceProvider, type CollectionGroup as SchemeGroup, type ResolvedCollectionGroup } from "@waste/domain/route-schemes/groups"
 import { addDays, parseServiceDays, sortServiceDays } from "@waste/domain/route-schemes/recurrence"
+import { SCHEME_SEASONS_KEY, seasonsValue, storedSeasonsFromValues } from "@waste/domain/route-schemes/scheme-seasons"
 import { SERVICE_TYPES, type ServiceType } from "@waste/domain/planning/vocabulary"
 
 import { FIXTURE_COMPANY_ID, type BusinessRecord } from "@/lib/data/business-modules"
@@ -511,6 +512,7 @@ export const routeSchemeAdapter: ResourceAdapter<RouteScheme> = {
         ...(explicit || groups[0]?.vehicleName === undefined ? {} : { Vehicle: groups[0].vehicleName }),
         ...(explicit || groups[0]?.driverName === undefined ? {} : { Driver: groups[0].driverName }),
         "Plan ahead": scheme.planAhead ? "On" : "Off",
+        ...(scheme.seasons.length === 0 ? {} : { Seasons: scheme.seasons.map((season) => season.name).join(", ") }),
       },
       companyId: context.companyRecordId ?? FIXTURE_COMPANY_ID,
       projectIds: [projectWebId],
@@ -537,6 +539,8 @@ export const routeSchemeAdapter: ResourceAdapter<RouteScheme> = {
         [SERVER_GROUP_IDS_KEY]: JSON.stringify(Object.fromEntries(running.map((group) => [webGroupIdOf.get(group.id), group.id]))),
         [SERVER_GROUP_NAMES_KEY]: JSON.stringify(Object.fromEntries(running.map((group) => [group.id, group.name]))),
         [RULE_MASTER_IDS_KEY]: JSON.stringify(ruleIds),
+        // The seasons whole (O17 of #290), sent back whole when an edit moves them.
+        [SCHEME_SEASONS_KEY]: seasonsValue(scheme.seasons),
         ...(scheme.generation.lastGeneratedAt === null ? {} : { lastGeneratedAt: scheme.generation.lastGeneratedAt }),
         [LAST_GENERATION_MATCHES_KEY]: serializeGenerationMatches(last),
         [PREVIOUS_GENERATION_MATCHES_KEY]: serializeGenerationMatches(previous),
@@ -578,6 +582,8 @@ export const routeSchemeAdapter: ResourceAdapter<RouteScheme> = {
       depotId: rest.depotId,
       unloadingStationId: rest.unloadingStationId,
       collectionGroups: groups,
+      // The seasons whole (O17 of #290), none where the record carries none.
+      seasons: storedSeasonsFromValues(record.submittedValues),
       validFrom,
       ...(validTo === null || validTo === undefined ? {} : { validTo }),
     }
@@ -599,6 +605,8 @@ export const routeSchemeAdapter: ResourceAdapter<RouteScheme> = {
       ...scheme,
       ...(statusAfter === statusBefore ? {} : { status: statusAfter as RouteSchemePatch["status"] }),
       ...(groups === null ? {} : { collectionGroups: groups }),
+      // The set whole where it moved; `[]` clears it.
+      ...(seasonsValue(storedSeasonsFromValues(after.submittedValues)) === seasonsValue(storedSeasonsFromValues(before.submittedValues)) ? {} : { seasons: storedSeasonsFromValues(after.submittedValues) }),
     })
     return body ?? null
   },

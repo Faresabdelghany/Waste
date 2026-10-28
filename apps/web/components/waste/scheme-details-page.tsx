@@ -122,6 +122,7 @@ import { useContainersPlaced } from "@/components/waste/use-containers-placed"
 import { validationWhenUnplaced } from "@/lib/data/route-schemes"
 import { useBusinessRecordStore, useServerModuleState, whenSaved } from "@/components/waste/business-record-store"
 import { SchemeNextCollections } from "@/components/waste/scheme-next-collections"
+import { SchemeSeasonsCard } from "@/components/waste/scheme-seasons"
 import {
   SchemeGenerateDialog,
   SchemeGenerationRunsSection,
@@ -491,6 +492,7 @@ export function SchemeDetailsPage({
             projectCalendar={projectCalendar}
             holidayPolicy={holidayPolicy}
             planAheadOn={planAheadOn}
+            storedRecord={schemes.find((candidate) => candidate.id === record.id) ?? record}
             blockingIssues={blockingIssues}
             draftPendingResave={draftPendingResave}
             onEdit={onEdit}
@@ -539,6 +541,7 @@ function SchemeDetailsTab({
   projectCalendar,
   holidayPolicy,
   planAheadOn,
+  storedRecord,
   blockingIssues,
   draftPendingResave,
   onEdit,
@@ -553,6 +556,8 @@ function SchemeDetailsTab({
   projectCalendar: ProjectCalendar
   holidayPolicy: HolidayPolicy
   planAheadOn: boolean
+  /** The record as the store holds it, which a write starts from: the display record carries render-time readings. */
+  storedRecord: BusinessRecord
   blockingIssues: readonly string[]
   /** Persisted Draft whose live validation is now clean — needs a re-save. */
   draftPendingResave: boolean
@@ -734,6 +739,9 @@ function SchemeDetailsTab({
           )}
           <StatRow label="Planned start time" value={plannedStartTime} />
         </DetailCard>
+
+        {/* The cadence for part of every year (O17 of #290). */}
+        <SchemeSeasonsCard record={storedRecord} frequency={recurrence?.frequency ?? stringValue(values, "frequency")} canEdit={onEdit !== undefined} />
 
         <DetailCard
           title={`Collection groups (${groups.length})`}

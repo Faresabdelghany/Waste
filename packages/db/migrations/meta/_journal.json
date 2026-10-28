@@ -386,6 +386,13 @@
       "when": 1793122833651,
       "tag": "0054_site_visits",
       "breakpoints": true
+    },
+    {
+      "idx": 55,
+      "version": "7",
+      "when": 1793170181912,
+      "tag": "0055_seasonal_frequencies",
+      "breakpoints": true
     }
   ]
 }

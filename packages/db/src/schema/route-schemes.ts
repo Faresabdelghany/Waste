@@ -55,13 +55,28 @@
 // 0007 too: `depot_id`, a `projectReference` to the project's depot, and
 // `unloading_station_id`, a `tenantReference` to the company's station, both
 // nullable while a draft says nothing about them.
-import { HOLIDAY_POLICIES, RECURRENCE_FREQUENCIES, ROUTE_SCHEME_STATUSES, SCHEME_EDIT_POLICIES, SERVICE_DAYS, SERVICE_TYPES, STOP_SOURCES, WEEK_ROTATIONS } from "@waste/domain/planning/vocabulary"
+//
+// `route_scheme_season` (O17 of #290, migration 0055) is one Season of a
+// scheme: a stretch of every year, from `starts_on` to the day before
+// `ends_on` — month-days, `mm-dd`, half-open like every period here and over
+// the new year where the end comes first — in which the scheme serves its
+// service days at the season's own cadence. `frequency` is any cadence but
+// daily (`SEASON_FREQUENCIES`), the rotation tied to every-2-weeks as the
+// scheme's is (`route_scheme_season_week_rotation_shape`), each month-day
+// held to a day every year has by `MONTH_DAY_SOURCE` (02-29 refused), and the
+// two days apart, since a season of the whole year is the scheme's own
+// cadence. That a scheme's seasons share no day is a rule over a cyclic
+// stretch no exclusion constraint spells; the API, the one writer, replaces
+// the set whole and refuses an overlap, and generation reads at most one
+// season on a date (`seasonOn`, @waste/domain/route-schemes/seasons).
+import { HOLIDAY_POLICIES, RECURRENCE_FREQUENCIES, ROUTE_SCHEME_STATUSES, SCHEME_EDIT_POLICIES, SEASON_FREQUENCIES, SERVICE_DAYS, SERVICE_TYPES, STOP_SOURCES, WEEK_ROTATIONS } from "@waste/domain/planning/vocabulary"
+import { MONTH_DAY_SOURCE } from "@waste/domain/route-schemes/seasons"
 import { sql } from "drizzle-orm"
 import { boolean, check, integer, text, time, unique, uuid } from "drizzle-orm/pg-core"
 
 import { tableObjectName } from "../names"
 import { containerType, wasteFraction } from "./catalogue"
-import { nonEmpty, oneOf, positive, subsetOf } from "./checks"
+import { literal, nonEmpty, oneOf, positive, subsetOf } from "./checks"
 import { id, projectScoped, timestamps, validity, validPeriod } from "./columns"
 import { container } from "./containers"
 import { driver, vehicle } from "./fleet"
@@ -236,5 +251,38 @@ export const collectionGroupContainer = wms.table(
     positive(t.position),
     tenantIndex(t, t.projectId),
     tenantIndex(t, t.containerId),
+  ],
+)
+
+export const routeSchemeSeason = wms.table(
+  "route_scheme_season",
+  {
+    ...id,
+    ...projectScoped,
+    ...timestamps,
+    routeSchemeId: uuid().notNull(),
+    /** Unique within the scheme: "Summer". */
+    name: text().notNull(),
+    /** The season's first day every year, `mm-dd`. */
+    startsOn: text().notNull(),
+    /** The first day out of the season every year, `mm-dd`; before `starts_on` for a season over the new year. */
+    endsOn: text().notNull(),
+    frequency: text().notNull(),
+    /** Which ISO-week parity an `every-2-weeks` season serves; given with that cadence and with nothing else. */
+    weekRotation: text(),
+  },
+  (t) => [
+    companyReference(t, company),
+    tenantReference(t, [t.projectId], project),
+    projectReference(t, [t.routeSchemeId], routeScheme),
+    tenantUnique(t, t.routeSchemeId, t.name),
+    oneOf(t.frequency, SEASON_FREQUENCIES),
+    oneOf(t.weekRotation, WEEK_ROTATIONS),
+    check(tableObjectName(t.id.table, "starts_on_shape", "routeSchemeSeason"), sql`${t.startsOn} ~ ${sql.raw(literal(MONTH_DAY_SOURCE))}`),
+    check(tableObjectName(t.id.table, "ends_on_shape", "routeSchemeSeason"), sql`${t.endsOn} ~ ${sql.raw(literal(MONTH_DAY_SOURCE))}`),
+    // A season that ends where it starts would be the whole year, which is the scheme's own cadence.
+    check(tableObjectName(t.id.table, "span", "routeSchemeSeason"), sql`${t.startsOn} <> ${t.endsOn}`),
+    check(tableObjectName(t.id.table, "week_rotation_shape", "routeSchemeSeason"), sql`(${t.frequency} = 'every-2-weeks') = (${t.weekRotation} is not null)`),
+    tenantIndex(t, t.projectId),
   ],
 )

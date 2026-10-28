@@ -56,12 +56,22 @@
 // `generation_run` and `generation_match` whenever the scheme is, never kept
 // on the scheme's row and never written by a body, so the one place it is
 // stored is the runs'.
+//
+// A scheme's Seasons (O17 of #290) are a set like a rule's fractions: a
+// stretch of every year, `startsOn` its first day and `endsOn` the first day
+// out of it (month-days, `mm-dd`, half-open, over the new year where the end
+// comes first), in which the scheme serves its service days at the season's
+// cadence. The create writes them and a patch replaces them whole, `[]`
+// clearing them; a body's seasons are held to one name each and to no day
+// shared, which a list always shows whole, and a daily scheme carries none,
+// a pair a patch may see half of and the route holds against the stored row.
 import { OCCURRENCE_STATUSES, SERVICE_DAYS } from "@waste/domain/planning/vocabulary"
+import { MONTH_DAY_SOURCE, overlappingSeasons, SEASONS_MAX } from "@waste/domain/route-schemes/seasons"
 import * as z from "zod"
 
 import { IsoDate, IsoDateTime, IsoTime } from "./dates"
 import { Id } from "./ids"
-import { eachOnce, HolidayPolicy, RecurrenceFrequency, RouteSchemeStatus, SchemeEditPolicy, ServiceDays, ServiceType, StopSource, WeekRotation } from "./planning"
+import { eachOnce, HolidayPolicy, RecurrenceFrequency, RouteSchemeStatus, SchemeEditPolicy, SeasonFrequency, ServiceDays, ServiceType, StopSource, WeekRotation } from "./planning"
 import { ProjectScopedListQuery } from "./queries"
 import { changesSomething, eachOnceSentence, PositiveInt, somethingToChange, stamped } from "./resource"
 import { Label } from "./text"
@@ -253,6 +263,64 @@ const eachGroupNameOnce = { message: EACH_GROUP_NAME_ONCE, path: ["collectionGro
 const groupNamesOnce = (body: { collectionGroups?: unknown }): boolean =>
   !Array.isArray(body.collectionGroups) || eachOnce(body.collectionGroups, (group: { name?: unknown }) => group?.name)
 
+/** The most seasons a scheme may have, the domain's bound (@waste/domain/route-schemes/seasons). */
+export { SEASONS_MAX }
+export const AT_MOST_SEASONS = `A scheme has at most ${SEASONS_MAX} seasons`
+
+/** What a month-day that is not a day every year has is told. */
+export const MONTH_DAY_SHAPE = "A day of the year, mm-dd, that every year has (29 February is not one)"
+/** A day of every calendar year, `mm-dd`: the database's check reads the same pattern. */
+export const MonthDay = z.string().regex(new RegExp(MONTH_DAY_SOURCE), MONTH_DAY_SHAPE)
+
+/** What a season that ends where it starts is told: that is the whole year, the scheme's own cadence. */
+export const SEASON_PART_OF_YEAR = "A season ends on another day than it starts; a season of the whole year is the scheme's own cadence"
+
+/**
+ * One season: a stretch of every year with its own cadence. The resource's
+ * entry and the body's are the same, since the set is replaced whole and an
+ * entry has no identity of its own beyond its name.
+ */
+export const SchemeSeason = z
+  .strictObject({
+    /** Unique within the scheme: "Summer". */
+    name: Label,
+    /** The season's first day every year. */
+    startsOn: MonthDay,
+    /** The first day out of the season every year; before `startsOn` for a season over the new year. */
+    endsOn: MonthDay,
+    frequency: SeasonFrequency,
+    /** Which ISO-week parity an every-2-weeks season serves; null for every other cadence. */
+    weekRotation: WeekRotation.nullable(),
+  })
+  .refine(weekRotationShape, weekRotationWithFortnightly)
+  .refine((season) => season.startsOn !== season.endsOn, { message: SEASON_PART_OF_YEAR, path: ["endsOn"] })
+export type SchemeSeason = z.infer<typeof SchemeSeason>
+
+export const EACH_SEASON_NAME_ONCE = "A season name is used once in a scheme"
+/** What a season sharing a day of the year with an earlier one is told, at the later. */
+export const SEASONS_KEEP_APART = "Seasons share no day: this one overlaps an earlier season"
+
+/** No two seasons share a name or a day; the later of an overlapping pair is the one refused. */
+const seasonsApart = (seasons: readonly SchemeSeason[], ctx: z.RefinementCtx) => {
+  if (!eachOnce(seasons, (season) => season.name)) ctx.addIssue({ code: "custom", message: EACH_SEASON_NAME_ONCE })
+  const pair = overlappingSeasons(seasons)
+  if (pair !== undefined) ctx.addIssue({ code: "custom", message: SEASONS_KEEP_APART, path: [pair[1]] })
+}
+
+/** A scheme's seasons, whole. */
+export const SchemeSeasons = z.array(SchemeSeason).max(SEASONS_MAX, AT_MOST_SEASONS).superRefine(seasonsApart)
+
+/** What a daily scheme given seasons is told: it serves every day all year, so a season has nothing to change. */
+export const DAILY_HAS_NO_SEASONS = "A daily scheme serves every day all year and has no seasons"
+const dailyHasNoSeasonsIssue = { message: DAILY_HAS_NO_SEASONS, path: ["seasons"] }
+
+/** A daily scheme carries no season. A half-seen pair is not judged. */
+export function dailyHasNoSeasons(value: { frequency?: string; seasons?: readonly unknown[] }): boolean {
+  const { frequency, seasons } = value
+  if (frequency === undefined || seasons === undefined) return true
+  return frequency !== "daily" || seasons.length === 0
+}
+
 /** What one rule group matched as of a run's first day: the rule it matched under, compared whole, and the containers, sorted. */
 export const GenerationMatchStamp = z.object({
   ruleSignature: z.string(),
@@ -326,6 +394,8 @@ const RouteSchemeFields = {
   depotId: Id.nullable(),
   /** Where the routes empty, a station of the company; null while unsaid. */
   unloadingStationId: Id.nullable(),
+  /** The seasons, by the day they start (O17 of #290); empty for a scheme at one cadence all year. */
+  seasons: z.array(SchemeSeason),
   /** By position. */
   collectionGroups: z.array(CollectionGroup),
   /** A reading of the runs, never written: see the header. */
@@ -356,11 +426,13 @@ export const RouteSchemeCreate = z
     unloadingStationId: Id.nullable().optional(),
     /** At least one: a scheme without explicit groups has one implicit group, which the server writes as a row. At most `GROUPS_MAX`. */
     collectionGroups: z.array(CollectionGroupCreate).min(1).max(GROUPS_MAX, AT_MOST_GROUPS),
+    seasons: SchemeSeasons.default([]).describe("Defaults to none when absent: the scheme runs at its own cadence all year."),
     ...ValidityCreate,
   })
   .refine(validityOrdered, endsAfterItStarts)
   .refine((body) => weekRotationShape({ ...body, weekRotation: body.weekRotation ?? null }), weekRotationWithFortnightly)
   .refine(dailyServesEveryDay, dailyServesEveryDayIssue)
+  .refine(dailyHasNoSeasons, dailyHasNoSeasonsIssue)
   .refine(groupNamesOnce, eachGroupNameOnce)
   .superRefine(groupsWithinServiceDays)
 export type RouteSchemeCreate = z.infer<typeof RouteSchemeCreate>
@@ -397,11 +469,14 @@ export const RouteSchemePatch = z
     validTo: IsoDate.nullable().optional(),
     /** The scheme's groups as the edit leaves them (#205); absent, the groups stay as they are. */
     collectionGroups: z.array(CollectionGroupEntry).min(1).max(GROUPS_MAX, AT_MOST_GROUPS_RESTATED).optional(),
+    /** The scheme's seasons whole (O17 of #290); `[]` clears them, absent leaves them as they are. */
+    seasons: SchemeSeasons.optional(),
   })
   .refine(changesSomething, somethingToChange)
   .refine(validityOrdered, endsAfterItStarts)
   .refine(weekRotationShape, weekRotationWithFortnightly)
   .refine(dailyServesEveryDay, dailyServesEveryDayIssue)
+  .refine(dailyHasNoSeasons, dailyHasNoSeasonsIssue)
   .refine(groupNamesOnce, eachGroupNameOnce)
   .refine(groupIdsOnce, eachGroupOnce)
   .superRefine(groupsWithinServiceDays)
@@ -471,5 +546,7 @@ export const Occurrence = z.object({
   status: OccurrenceStatus,
   /** The holiday's name on a shifted, skipped or holiday row. */
   note: z.string().optional(),
+  /** The season the recurrence day fell in, by name (O17 of #290); absent outside every season. */
+  season: z.string().optional(),
 })
 export type Occurrence = z.infer<typeof Occurrence>

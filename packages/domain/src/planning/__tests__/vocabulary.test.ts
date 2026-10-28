@@ -19,7 +19,7 @@ import { SERVICE_DAYS } from "../../route-schemes/recurrence"
 import { SCHEME_SERVICE_TYPES } from "../../route-schemes/scope"
 import * as vocabulary from "../vocabulary"
 
-defineVocabularyTests("Planning", vocabulary, vocabulary.PLANNING_VOCABULARIES, 12, ["DEFAULT_WEEKEND"])
+defineVocabularyTests("Planning", vocabulary, vocabulary.PLANNING_VOCABULARIES, 13, ["DEFAULT_WEEKEND"])
 
 /** The kebab token of a display string: `Container collection` is `container-collection`. */
 const tokenOf = (display: string): string => display.toLowerCase().replaceAll(" ", "-")

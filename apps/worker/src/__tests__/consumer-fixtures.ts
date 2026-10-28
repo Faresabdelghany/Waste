@@ -41,7 +41,7 @@ import { company, project } from "@waste/db/schema/organisation"
 import { depot, unloadingStation } from "@waste/db/schema/places"
 import { alert, ticket, ticketBooking, ticketEvent, ticketSla } from "@waste/db/schema/resolution"
 import { plan, planLeg, planStop, routingQuota } from "@waste/db/schema/routing"
-import { collectionGroup, routeScheme } from "@waste/db/schema/route-schemes"
+import { collectionGroup, routeScheme, routeSchemeSeason } from "@waste/db/schema/route-schemes"
 import { withCompany } from "@waste/db/tenant"
 import type { PickupOrigin, PickupReason, PickupStatus, RouteStatus } from "@waste/domain/execution/vocabulary"
 import { eq } from "drizzle-orm"
@@ -398,6 +398,7 @@ export async function dropConsumerTenant(pool: Database, owner: Database, compan
     await tx.delete(pickup).where(eq(pickup.companyId, companyId))
     await tx.delete(route).where(eq(route.companyId, companyId))
     await tx.delete(collectionGroup).where(eq(collectionGroup.companyId, companyId))
+    await tx.delete(routeSchemeSeason).where(eq(routeSchemeSeason.companyId, companyId))
     await tx.delete(routeScheme).where(eq(routeScheme.companyId, companyId))
     await tx.delete(driver).where(eq(driver.companyId, companyId))
     await tx.delete(vehicle).where(eq(vehicle.companyId, companyId))
