@@ -470,6 +470,13 @@
       "when": 1793211869364,
       "tag": "0066_decommission_reasons",
       "breakpoints": true
+    },
+    {
+      "idx": 67,
+      "version": "7",
+      "when": 1793213906391,
+      "tag": "0067_vehicle_change_proposals",
+      "breakpoints": true
     }
   ]
 }

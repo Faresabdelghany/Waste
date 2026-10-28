@@ -55,6 +55,9 @@ export const ServiceProviderActivity = z.object({
   serviceDays: ServiceDays.nullable(),
   /** The first day a proposal applies from; null for every other kind. */
   effectiveFrom: IsoDate.nullable(),
+  /** A vehicle change's vehicle for the group, and its driver where the proposal names one; null for every other kind. */
+  vehicleId: Id.nullable(),
+  driverId: Id.nullable(),
   /** The scheme version an approval wrote; null until a proposal is approved. */
   successorSchemeId: Id.nullable(),
   openedBy: Id,
@@ -98,13 +101,26 @@ export const CoordinationNoteCreate = z.strictObject({
 })
 export type CoordinationNoteCreate = z.infer<typeof CoordinationNoteCreate>
 
+/** A vehicle change: the group runs with this vehicle from `effectiveFrom`, and with this driver where one is named, else its own. */
+export const VehicleChangeCreate = z.strictObject({
+  ...createBase,
+  kind: z.literal("vehicle-change"),
+  routeSchemeId: Id,
+  collectionGroupId: Id,
+  vehicleId: Id,
+  driverId: Id.nullable().optional(),
+  effectiveFrom: IsoDate,
+})
+export type VehicleChangeCreate = z.infer<typeof VehicleChangeCreate>
+
 /** `POST /service-provider-activities`: the body its kind shapes. */
-export const ServiceProviderActivityCreate = z.discriminatedUnion("kind", [RouteDayChangeCreate, ComplianceFollowUpCreate, CoordinationNoteCreate])
+export const ServiceProviderActivityCreate = z.discriminatedUnion("kind", [RouteDayChangeCreate, ComplianceFollowUpCreate, CoordinationNoteCreate, VehicleChangeCreate])
 export type ServiceProviderActivityCreate = z.infer<typeof ServiceProviderActivityCreate>
 
 /**
  * What may be corrected while an Activity is open: its subject, body and
- * award, a follow-up's due day, and a proposal's days and first day. The
+ * award, a follow-up's due day, a route-day change's days, a vehicle change's
+ * vehicle and driver, and a proposal's first day. The
  * kind, the provider, the project and a proposal's scheme and group are its
  * own — another group's change is another proposal. A member the kind does
  * not carry is refused by the API at its field.
@@ -117,6 +133,8 @@ export const ServiceProviderActivityPatch = z
     dueOn: IsoDate.optional(),
     serviceDays: ProposedDays.optional(),
     effectiveFrom: IsoDate.optional(),
+    vehicleId: Id.optional(),
+    driverId: Id.nullable().optional(),
   })
   .refine(changesSomething, somethingToChange)
 export type ServiceProviderActivityPatch = z.infer<typeof ServiceProviderActivityPatch>

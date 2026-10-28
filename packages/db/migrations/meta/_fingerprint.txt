@@ -2905,16 +2905,20 @@ column wms.service_provider_activity 19 opened_by uuid not-null
 column wms.service_provider_activity 20 closed_by uuid
 column wms.service_provider_activity 21 closed_at timestamp with time zone
 column wms.service_provider_activity 22 close_reason text
+column wms.service_provider_activity 23 vehicle_id uuid
+column wms.service_provider_activity 24 driver_id uuid
 constraint wms.service_provider_activity service_provider_activity_closed_by_fk FOREIGN KEY (company_id, closed_by) REFERENCES wms.user_account(company_id, id)
 constraint wms.service_provider_activity service_provider_activity_closed_shape CHECK ((((status = ANY (ARRAY['pending-approval'::text, 'open'::text])) = ((closed_by IS NULL) AND (closed_at IS NULL))) AND ((status <> 'rejected'::text) OR (close_reason IS NOT NULL)) AND ((status = 'approved'::text) = (successor_scheme_id IS NOT NULL))))
 constraint wms.service_provider_activity service_provider_activity_collection_group_id_fk FOREIGN KEY (company_id, project_id, collection_group_id) REFERENCES wms.collection_group(company_id, project_id, id)
 constraint wms.service_provider_activity service_provider_activity_company_id_fk FOREIGN KEY (company_id) REFERENCES wms.company(id)
-constraint wms.service_provider_activity service_provider_activity_kind_one_of CHECK ((kind = ANY (ARRAY['route-day-change'::text, 'compliance-follow-up'::text, 'coordination-note'::text])))
+constraint wms.service_provider_activity service_provider_activity_driver_id_fk FOREIGN KEY (company_id, project_id, driver_id) REFERENCES wms.driver(company_id, project_id, id)
+constraint wms.service_provider_activity service_provider_activity_kind_one_of CHECK ((kind = ANY (ARRAY['route-day-change'::text, 'compliance-follow-up'::text, 'coordination-note'::text, 'vehicle-change'::text])))
 constraint wms.service_provider_activity service_provider_activity_kind_shape CHECK (
 CASE kind
-    WHEN 'route-day-change'::text THEN ((route_scheme_id IS NOT NULL) AND (collection_group_id IS NOT NULL) AND (cardinality(service_days) > 0) AND (effective_from IS NOT NULL) AND (due_on IS NULL))
-    WHEN 'compliance-follow-up'::text THEN ((due_on IS NOT NULL) AND (route_scheme_id IS NULL) AND (collection_group_id IS NULL) AND (service_days IS NULL) AND (effective_from IS NULL))
-    ELSE ((due_on IS NULL) AND (route_scheme_id IS NULL) AND (collection_group_id IS NULL) AND (service_days IS NULL) AND (effective_from IS NULL))
+    WHEN 'route-day-change'::text THEN ((route_scheme_id IS NOT NULL) AND (collection_group_id IS NOT NULL) AND (cardinality(service_days) > 0) AND (effective_from IS NOT NULL) AND (due_on IS NULL) AND (vehicle_id IS NULL) AND (driver_id IS NULL))
+    WHEN 'vehicle-change'::text THEN ((route_scheme_id IS NOT NULL) AND (collection_group_id IS NOT NULL) AND (vehicle_id IS NOT NULL) AND (effective_from IS NOT NULL) AND (service_days IS NULL) AND (due_on IS NULL))
+    WHEN 'compliance-follow-up'::text THEN ((due_on IS NOT NULL) AND (route_scheme_id IS NULL) AND (collection_group_id IS NULL) AND (service_days IS NULL) AND (effective_from IS NULL) AND (vehicle_id IS NULL) AND (driver_id IS NULL))
+    ELSE ((due_on IS NULL) AND (route_scheme_id IS NULL) AND (collection_group_id IS NULL) AND (service_days IS NULL) AND (effective_from IS NULL) AND (vehicle_id IS NULL) AND (driver_id IS NULL))
 END)
 constraint wms.service_provider_activity service_provider_activity_number_key UNIQUE (company_id, number)
 constraint wms.service_provider_activity service_provider_activity_opened_by_fk FOREIGN KEY (company_id, opened_by) REFERENCES wms.user_account(company_id, id)
@@ -2928,13 +2932,15 @@ constraint wms.service_provider_activity service_provider_activity_service_provi
 constraint wms.service_provider_activity service_provider_activity_status_one_of CHECK ((status = ANY (ARRAY['pending-approval'::text, 'approved'::text, 'rejected'::text, 'withdrawn'::text, 'open'::text, 'completed'::text, 'cancelled'::text])))
 constraint wms.service_provider_activity service_provider_activity_status_shape CHECK (
 CASE
-    WHEN (kind = 'route-day-change'::text) THEN (status = ANY (ARRAY['pending-approval'::text, 'approved'::text, 'rejected'::text, 'withdrawn'::text]))
+    WHEN (kind = ANY (ARRAY['route-day-change'::text, 'vehicle-change'::text])) THEN (status = ANY (ARRAY['pending-approval'::text, 'approved'::text, 'rejected'::text, 'withdrawn'::text]))
     ELSE (status = ANY (ARRAY['open'::text, 'completed'::text, 'cancelled'::text]))
 END)
 constraint wms.service_provider_activity service_provider_activity_subject_given CHECK ((length(btrim(subject)) > 0))
 constraint wms.service_provider_activity service_provider_activity_successor_scheme_id_fk FOREIGN KEY (company_id, project_id, successor_scheme_id) REFERENCES wms.route_scheme(company_id, project_id, id)
+constraint wms.service_provider_activity service_provider_activity_vehicle_id_fk FOREIGN KEY (company_id, project_id, vehicle_id) REFERENCES wms.vehicle(company_id, project_id, id)
 index wms.service_provider_activity service_provider_activity_closed_by_idx CREATE INDEX service_provider_activity_closed_by_idx ON wms.service_provider_activity USING btree (company_id, closed_by)
 index wms.service_provider_activity service_provider_activity_collection_group_id_idx CREATE INDEX service_provider_activity_collection_group_id_idx ON wms.service_provider_activity USING btree (company_id, collection_group_id)
+index wms.service_provider_activity service_provider_activity_driver_id_idx CREATE INDEX service_provider_activity_driver_id_idx ON wms.service_provider_activity USING btree (company_id, driver_id)
 index wms.service_provider_activity service_provider_activity_number_key CREATE UNIQUE INDEX service_provider_activity_number_key ON wms.service_provider_activity USING btree (company_id, number)
 index wms.service_provider_activity service_provider_activity_opened_by_idx CREATE INDEX service_provider_activity_opened_by_idx ON wms.service_provider_activity USING btree (company_id, opened_by)
 index wms.service_provider_activity service_provider_activity_pkey CREATE UNIQUE INDEX service_provider_activity_pkey ON wms.service_provider_activity USING btree (id)
@@ -2944,6 +2950,7 @@ index wms.service_provider_activity service_provider_activity_route_scheme_id_id
 index wms.service_provider_activity service_provider_activity_service_area_id_idx CREATE INDEX service_provider_activity_service_area_id_idx ON wms.service_provider_activity USING btree (company_id, service_area_id)
 index wms.service_provider_activity service_provider_activity_service_provider_id_idx CREATE INDEX service_provider_activity_service_provider_id_idx ON wms.service_provider_activity USING btree (company_id, service_provider_id)
 index wms.service_provider_activity service_provider_activity_successor_scheme_id_idx CREATE INDEX service_provider_activity_successor_scheme_id_idx ON wms.service_provider_activity USING btree (company_id, successor_scheme_id)
+index wms.service_provider_activity service_provider_activity_vehicle_id_idx CREATE INDEX service_provider_activity_vehicle_id_idx ON wms.service_provider_activity USING btree (company_id, vehicle_id)
 trigger wms.service_provider_activity service_provider_activity_audit_trail enabled=O CREATE TRIGGER service_provider_activity_audit_trail AFTER INSERT OR DELETE OR UPDATE ON wms.service_provider_activity FOR EACH ROW EXECUTE FUNCTION wms.audit_row('', '')
 trigger wms.service_provider_activity service_provider_activity_touch_updated_at enabled=O CREATE TRIGGER service_provider_activity_touch_updated_at BEFORE UPDATE ON wms.service_provider_activity FOR EACH ROW EXECUTE FUNCTION wms.touch_updated_at()
 policy wms.service_provider_activity service_provider_activity_tenant_fence permissive ALL to=wms_api using=(company_id = ( SELECT wms.current_company_id() AS current_company_id)) check=(company_id = ( SELECT wms.current_company_id() AS current_company_id))
@@ -4330,4 +4337,5 @@ journal 1793204881720 aa541b7673882e81a831ab7f9b7f2bfc1c237d88f7204f890826d641a9
 journal 1793207368395 fbe151d4ba9945172963cf2e6667189ae6f64e362e64a82f9aa7639b7bea994e
 journal 1793209754047 d2803c779f561da8247f43444f21b6f7564f1af6d5eb86d7208b59961a27c9c4
 journal 1793211869364 88dca0166cac7011d2c8aaa25f55f494398ff828ebbb26e0edb30a2a4ba39211
+journal 1793213906391 d09c47b341e15b5c9c919bbced5e64b308524015740618eae1263d94d816e2b3
 pgboss-version 42
