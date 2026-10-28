@@ -470,6 +470,13 @@
       "when": 1793214024462,
       "tag": "0066_contact_persons",
       "breakpoints": true
+    },
+    {
+      "idx": 67,
+      "version": "7",
+      "when": 1793215227133,
+      "tag": "0067_messaging",
+      "breakpoints": true
     }
   ]
 }

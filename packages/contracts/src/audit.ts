@@ -116,6 +116,7 @@ export const AUDITED_TABLES = [
   "service_provider_activity",
   "stock_minimum",
   "customer_contact",
+  "message_template",
 ] as const
 export type AuditedTable = (typeof AUDITED_TABLES)[number]
 

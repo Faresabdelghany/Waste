@@ -52,6 +52,7 @@ import {
   type ServerModule,
 } from "./adapter"
 import { ADD_CONTACT, ADD_CONTACT_ACTION, EDIT_CONTACT, EDIT_CONTACT_ACTION } from "./customer-contacts"
+import { SEND_MESSAGE, SEND_MESSAGE_ACTION } from "./messages"
 import { daysOrNoneOf, typedPaymentTerms } from "./organisation"
 
 const refusal = (path: string, message: string): LocalRefusal => ({ path, message })
@@ -169,8 +170,12 @@ export const customerAdapter: ResourceAdapter<Customer> = {
   },
   create: (client, body) => create<Customer>(client, "/customers", body).then((created) => created.body),
   update: (client, serverId, body) => patch<Customer>(client, `/customers/${serverId}`, body),
-  // Its Contact Persons (#291 C14), one at a time: the answer is the contact, so actions (records/customer-contacts.ts).
-  actions: { [ADD_CONTACT]: ADD_CONTACT_ACTION as RecordAction<unknown>, [EDIT_CONTACT]: EDIT_CONTACT_ACTION as RecordAction<unknown> },
+  // Its Contact Persons (#291 C14), one at a time, and a message sent to it or to one of them (#291 C15): each answers another resource, so actions (records/customer-contacts.ts, records/messages.ts).
+  actions: {
+    [ADD_CONTACT]: ADD_CONTACT_ACTION as RecordAction<unknown>,
+    [EDIT_CONTACT]: EDIT_CONTACT_ACTION as RecordAction<unknown>,
+    [SEND_MESSAGE]: SEND_MESSAGE_ACTION as RecordAction<unknown>,
+  },
 }
 
 /** Customers → Contacts & Companies. */

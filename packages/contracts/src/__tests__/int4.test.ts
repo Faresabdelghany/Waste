@@ -82,6 +82,7 @@ import * as unloadsModule from "../unloads"
 import * as validityModule from "../validity"
 import * as vehicleTypesModule from "../vehicle-types"
 import * as visitRulesModule from "../visit-rules"
+import * as messagingModule from "../messaging"
 import * as weightControlModule from "../weight-control"
 import * as workOrderChargesModule from "../work-order-charges"
 import { Int4, INT4_MAX, INT4_MIN, NonNegativeInt, NonNegativeMinor, NonNegativeTotal, PositiveInt } from "../resource"
@@ -97,6 +98,7 @@ const MODULES: Readonly<Record<string, Record<string, unknown>>> = {
   "alerts": alertsModule,
   "allocations": allocationsModule,
   "audit": auditModule,
+  "messaging": messagingModule,
   "availability": availabilityModule,
   "billable-events": billableEventsModule,
   "billing": billingModule,
