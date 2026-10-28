@@ -37,6 +37,7 @@ import {
   reasonForm,
   type ActivityOffer,
 } from "@/lib/data/provider-activities"
+import { masterDataKindOf } from "@/lib/data/master-data-kinds"
 import { SERVICE_PROVIDERS_MODULE, serviceAreaKindOf } from "@/lib/data/provider-money"
 import { PATCH_RECORD } from "@/lib/data/provider-workspace"
 import type { ServiceProviderActivityKind } from "@waste/domain/service-providers/vocabulary"
@@ -47,20 +48,24 @@ const SERVICE_AREAS_MODULE = { workspaceId: "service-providers", moduleId: "serv
 const VEHICLES_MODULE = { workspaceId: "fleet", moduleId: "vehicles" } as const
 const DRIVERS_MODULE = { workspaceId: "fleet", moduleId: "drivers" } as const
 const CONTAINERS_MODULE = { workspaceId: "resources", moduleId: "containers" } as const
+const MASTER_MODULE = { workspaceId: "configure", moduleId: "master" } as const
 
 /**
- * What a vehicle change and a stop-set change pick from: the powered vehicles
- * and the drivers the account reads — a provider's own fleet alone, which
- * the API fences — and the containers it reads.
+ * What a vehicle change, a stop-set change and a waste-fraction change pick
+ * from: the powered vehicles and the drivers the account reads — a
+ * provider's own fleet alone, which the API fences — the containers it
+ * reads, and the master data's waste fractions.
  */
-function useCrewOptions(): { vehicles: BusinessFormOption[]; drivers: BusinessFormOption[]; containers: BusinessFormOption[] } {
+function useCrewOptions(): { vehicles: BusinessFormOption[]; drivers: BusinessFormOption[]; containers: BusinessFormOption[]; fractions: BusinessFormOption[] } {
   const vehicles = useServerModuleState(VEHICLES_MODULE.workspaceId, VEHICLES_MODULE.moduleId)
   const drivers = useServerModuleState(DRIVERS_MODULE.workspaceId, DRIVERS_MODULE.moduleId)
   const containers = useServerModuleState(CONTAINERS_MODULE.workspaceId, CONTAINERS_MODULE.moduleId)
+  const master = useServerModuleState(MASTER_MODULE.workspaceId, MASTER_MODULE.moduleId)
   return {
     vehicles: optionsOf(vehicles?.records, (record) => record.submittedValues?.resourceKind === "powered-vehicle"),
     drivers: optionsOf(drivers?.records, () => true),
     containers: optionsOf(containers?.records, () => true),
+    fractions: optionsOf(master?.records, (record) => masterDataKindOf(record) === "waste-fraction"),
   }
 }
 

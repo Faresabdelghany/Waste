@@ -5,7 +5,8 @@
 // a set of their own, `service_provider_activity_container`, each the
 // activity's project's, once, at its own position in stop order. Then the
 // migration, which is exactly those statements, diffed from the activity as
-// 0064 left it (activity-as-of.ts), then the set's fence and trigger and its
+// 0064 left it to the activity as this migration left it (activity-as-of.ts;
+// part 4 grew it again), then the set's fence and trigger and its
 // audit trail as its activity's set (`STOP_SET_PROPOSALS_AUDITED`). No
 // database.
 import assert from "node:assert/strict"
@@ -15,8 +16,6 @@ import { describe, test } from "node:test"
 
 import { getTableName } from "drizzle-orm"
 
-import { PROPOSAL_KINDS } from "@waste/domain/service-providers/activities"
-import { SERVICE_PROVIDER_ACTIVITY_KINDS } from "@waste/domain/service-providers/vocabulary"
 
 import { MIGRATIONS_FOLDER } from "../migrate"
 import { userAccount } from "../schema/access"
@@ -25,10 +24,10 @@ import { serviceArea } from "../schema/finance"
 import { driver, vehicle } from "../schema/fleet"
 import { company, project, serviceProvider } from "../schema/organisation"
 import { collectionGroup, routeScheme } from "../schema/route-schemes"
-import { serviceProviderActivity, serviceProviderActivityContainer } from "../schema/service-provider-activities"
+import { serviceProviderActivityContainer } from "../schema/service-provider-activities"
 import { auditTrail, STOP_SET_PROPOSALS_AUDITED } from "../sql/audit-trail"
 import { handWrittenStatements, normalised, statementsOf } from "../sql/hand-written"
-import { serviceProviderActivityAsOf0064 } from "./activity-as-of"
+import { KINDS_AS_OF_0065, serviceProviderActivityAsOf0064, serviceProviderActivityAsOf0065 as serviceProviderActivity } from "./activity-as-of"
 import { checksOf, list, ref } from "./rendering"
 import { statementsBetween } from "./specimen"
 
@@ -62,10 +61,9 @@ describe("the stop-set change as drizzle-kit writes it", () => {
 
   test("the kind's list grows by the stop-set change, a proposal, which carries no days, vehicle or due day", () => {
     const checks = checksOf(serviceProviderActivity)
-    assert.equal(SERVICE_PROVIDER_ACTIVITY_KINDS.at(-1), "stop-set-change")
-    assert.equal(checks.get("service_provider_activity_kind_one_of"), `${column("kind")} in (${list(...SERVICE_PROVIDER_ACTIVITY_KINDS)})`)
-    assert.ok(PROPOSAL_KINDS.includes("stop-set-change" as never))
-    assert.match(checks.get("service_provider_activity_status_shape") ?? "", new RegExp(`in \\(${list(...PROPOSAL_KINDS)}\\) then`))
+    assert.equal(KINDS_AS_OF_0065.at(-1), "stop-set-change")
+    assert.equal(checks.get("service_provider_activity_kind_one_of"), `${column("kind")} in (${list(...KINDS_AS_OF_0065)})`)
+    assert.match(checks.get("service_provider_activity_status_shape") ?? "", new RegExp(`in \\(${list("route-day-change", "vehicle-change", "stop-set-change")}\\) then`))
     const branch = (checks.get("service_provider_activity_kind_shape") ?? "").split("when 'stop-set-change' then ")[1]?.split(" when ")[0] ?? ""
     for (const name of ["service_days", "due_on", "vehicle_id", "driver_id"]) assert.ok(branch.includes(`${column(name)} is null`), name)
     for (const name of ["route_scheme_id", "collection_group_id", "effective_from"]) assert.ok(branch.includes(`${column(name)} is not null`), name)
