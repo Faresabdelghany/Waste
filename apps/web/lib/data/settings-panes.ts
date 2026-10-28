@@ -22,6 +22,11 @@
 // controls the platform enforces; the browser's pane (`configure.privacy` —
 // the GPS purpose and the retention policies, C19's with no API yet) is
 // fixture mode's alone, and a link to either opens the one its mode has.
+// Integrations is the API's on the Pilot (#487,
+// `INTEGRATIONS_ON_API_SETTINGS_PANE_ID`): the services the deployment calls
+// and the latest import; the browser's pane (`configure.integrations` — the
+// fixtures' vendor connectors, which no API holds) is fixture mode's alone,
+// and a link to either opens the one its mode has.
 // Portals & branding is the API's on the Pilot (#487,
 // `PORTALS_ON_API_SETTINGS_PANE_ID`): each project's public pages and its
 // drivers' Driver App; the browser's pane (`configure.portals` — a customer
@@ -45,6 +50,10 @@ export const FINANCE_ON_API_SETTINGS_PANE_ID = "finance-invoicing"
 export const PRIVACY_SETTINGS_PANE_ID = "privacy"
 /** Settings › Privacy, audit & retention on the Pilot (#487): the company's audit history, the API's. */
 export const PRIVACY_ON_API_SETTINGS_PANE_ID = "privacy-audit"
+/** The fixtures' Integrations, where `configure.integrations` opens in fixture mode. */
+export const INTEGRATIONS_SETTINGS_PANE_ID = "integrations"
+/** Settings › Integrations on the Pilot (#487): the deployment's connections, the API's. */
+export const INTEGRATIONS_ON_API_SETTINGS_PANE_ID = "integrations-on-api"
 /** The fixtures' Portals & branding, where `configure.portals` opens in fixture mode. */
 export const PORTALS_SETTINGS_PANE_ID = "portals"
 /** Settings › Portals & branding on the Pilot (#487): the projects' public pages and the Driver App, the API's. */
@@ -54,19 +63,21 @@ export const COMMERCIAL_PRODUCTS_SETTINGS_PANE_ID = "commercial-products"
 
 /** Whether the Settings nav offers a pane, with the adapter configured or not. */
 export function settingsPaneOffered(paneId: string, configured: boolean): boolean {
-  if (paneId === MASTER_DATA_SETTINGS_PANE_ID || paneId === SORTING_GUIDE_SETTINGS_PANE_ID || paneId === TICKET_SLA_SETTINGS_PANE_ID || paneId === FINANCE_ON_API_SETTINGS_PANE_ID || paneId === PICKUP_EXCEPTION_CHARGES_SETTINGS_PANE_ID || paneId === EMISSION_FACTORS_SETTINGS_PANE_ID || paneId === BULKY_SCHEDULES_SETTINGS_PANE_ID || paneId === VISIT_RULES_SETTINGS_PANE_ID || paneId === PRIVACY_ON_API_SETTINGS_PANE_ID || paneId === PORTALS_ON_API_SETTINGS_PANE_ID) return configured
-  if (paneId === ASSET_MANAGEMENT_SETTINGS_PANE_ID || paneId === FINANCE_SETTINGS_PANE_ID || paneId === TICKETS_COMMUNICATION_SETTINGS_PANE_ID || paneId === PRIVACY_SETTINGS_PANE_ID || paneId === PORTALS_SETTINGS_PANE_ID) return !configured
+  if (paneId === MASTER_DATA_SETTINGS_PANE_ID || paneId === SORTING_GUIDE_SETTINGS_PANE_ID || paneId === TICKET_SLA_SETTINGS_PANE_ID || paneId === FINANCE_ON_API_SETTINGS_PANE_ID || paneId === PICKUP_EXCEPTION_CHARGES_SETTINGS_PANE_ID || paneId === EMISSION_FACTORS_SETTINGS_PANE_ID || paneId === BULKY_SCHEDULES_SETTINGS_PANE_ID || paneId === VISIT_RULES_SETTINGS_PANE_ID || paneId === PRIVACY_ON_API_SETTINGS_PANE_ID || paneId === INTEGRATIONS_ON_API_SETTINGS_PANE_ID || paneId === PORTALS_ON_API_SETTINGS_PANE_ID) return configured
+  if (paneId === ASSET_MANAGEMENT_SETTINGS_PANE_ID || paneId === FINANCE_SETTINGS_PANE_ID || paneId === TICKETS_COMMUNICATION_SETTINGS_PANE_ID || paneId === PRIVACY_SETTINGS_PANE_ID || paneId === INTEGRATIONS_SETTINGS_PANE_ID || paneId === PORTALS_SETTINGS_PANE_ID) return !configured
   return true
 }
 
-/** The pane a link to one opens: on the Pilot, Asset management's is Master data's, Finance & invoicing's, Privacy's and Portals & branding's the API's, and Tickets & communication's the Ticket SLA; in fixture mode, the API's Finance, Privacy and Portals panes are the browser's. */
+/** The pane a link to one opens: on the Pilot, Asset management's is Master data's, Finance & invoicing's, Privacy's, Integrations' and Portals & branding's the API's, and Tickets & communication's the Ticket SLA; in fixture mode, the API's Finance, Privacy, Integrations and Portals panes are the browser's. */
 export function settingsPaneOpened(paneId: string, configured: boolean): string {
   if (!configured) {
     if (paneId === FINANCE_ON_API_SETTINGS_PANE_ID) return FINANCE_SETTINGS_PANE_ID
     if (paneId === PRIVACY_ON_API_SETTINGS_PANE_ID) return PRIVACY_SETTINGS_PANE_ID
+    if (paneId === INTEGRATIONS_ON_API_SETTINGS_PANE_ID) return INTEGRATIONS_SETTINGS_PANE_ID
     return paneId === PORTALS_ON_API_SETTINGS_PANE_ID ? PORTALS_SETTINGS_PANE_ID : paneId
   }
   if (paneId === PRIVACY_SETTINGS_PANE_ID) return PRIVACY_ON_API_SETTINGS_PANE_ID
+  if (paneId === INTEGRATIONS_SETTINGS_PANE_ID) return INTEGRATIONS_ON_API_SETTINGS_PANE_ID
   if (paneId === PORTALS_SETTINGS_PANE_ID) return PORTALS_ON_API_SETTINGS_PANE_ID
   if (paneId === ASSET_MANAGEMENT_SETTINGS_PANE_ID) return MASTER_DATA_SETTINGS_PANE_ID
   if (paneId === FINANCE_SETTINGS_PANE_ID) return FINANCE_ON_API_SETTINGS_PANE_ID

@@ -65,6 +65,7 @@ import { availabilityRoutes } from "./routes/availability"
 import { driverRoutes } from "./routes/drivers"
 import { generationRoutes } from "./routes/generation"
 import { importRoutes } from "./routes/imports"
+import { integrationRoutes } from "./routes/integrations"
 import { invoiceRoutes } from "./routes/invoices"
 import { lifecycleRoutes } from "./routes/lifecycle"
 import { accessCredentialRoutes } from "./routes/access-credentials"
@@ -305,6 +306,8 @@ export function createApp({
   // The Plan endpoints (#170) share the routes module and its grant; the provider's name keys the fingerprints.
   app.route("/", planRoutes(guard, { routing, jobs }))
   app.route("/", routingQuotaRoutes(guard, { routing }))
+  // The deployment's connections for Settings › Integrations (#487): read off what was injected, never a call to the services.
+  app.route("/", integrationRoutes(guard, { routing, addressRegister, proofStorage: storage !== null }))
   // The preview calls the provider, so its guard ends the principal's transaction before the handler, which opens its own short ones around the call (#124 §4, #173).
   app.route("/", routingPreviewRoutes(identify({ pool, verifier }), { pool, engine: routingEngine, now, log: log ?? console.error }))
   app.route("/", pickupRoutes(guard, { now }))
