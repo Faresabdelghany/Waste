@@ -52,6 +52,7 @@ import { PROVIDER_PRICES_LIST, SERVICE_AREAS_LIST, SETTLEMENTS_LIST, WEIGHTS_LIS
 import { CreateServiceAreaSurface, OpenSettlementSurface, ProviderPriceCommandsSurface, ProviderPricesPrimarySurface, RecordUnloadSurface, ServiceAreaCommandsSurface, ServiceAreasRead, SettlementSurface, WeightReviewSurface } from "./provider-money-surfaces"
 import { InviteTeamMemberSurface, TeamMemberCommandsSurface } from "./team-surfaces"
 import { LiveBoardRefresh, LiveRouteSurface, PickupCommandsSurface, RouteCommandsSurface, RoutesPrimarySurface } from "./route-surfaces"
+import { WarehouseStockSurface } from "./stock-surfaces"
 
 /** What a primary surface is handed: the label the module's primary action carries. */
 export type PrimarySurfaceProps = { label: string }
@@ -144,6 +145,8 @@ export const COMMAND_SURFACES: Readonly<Record<string, CommandSurface>> = {
   "resources.containers": { primary: AddContainerSurface, rowActions: ContainerCommandsSurface },
   // The ledger is read-only on the wire: a movement is a container's command.
   "resources.inventory": { primary: null },
+  // O30 of #290: a warehouse by its own form as before, and its stock against its minimums in its details.
+  "resources.warehouses": { primary: "form", rowActions: WarehouseStockSurface, genericEdit: true },
   "fleet.vehicle-planning": { primary: AllocateSurface, rowActions: AllocationCommandsSurface },
   // O6 of #290: a driver's absences and a vehicle's periods out of use, in the row's details; the row itself by its own form as before.
   "fleet.drivers": { primary: "form", rowActions: DriverAbsenceSurface, genericEdit: true },
