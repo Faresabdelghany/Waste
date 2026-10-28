@@ -10,12 +10,15 @@ import { after, before, describe, test } from "node:test"
 
 import { Agreement, Subscription } from "@waste/contracts/agreements"
 import { AuditEvent, CHANGE_REASON_HEADER } from "@waste/contracts/audit"
-import { ContainerType, Product } from "@waste/contracts/catalogue"
+import { ContainerType, Product, WasteFraction } from "@waste/contracts/catalogue"
 import { Container } from "@waste/contracts/containers"
+import { Driver, Vehicle } from "@waste/contracts/fleet"
+import { Depot } from "@waste/contracts/places"
 import { Customer, Property, SharedCollectionPoint } from "@waste/contracts/customers"
 import { ImportBatchResult, ImportPreview, ImportRun, ImportRunRow, type ImportKind, type ImportRowResult } from "@waste/contracts/imports"
 import { Page } from "@waste/contracts/pagination"
 import { PriceList } from "@waste/contracts/price-lists"
+import { VehicleType } from "@waste/contracts/vehicle-types"
 import { createDb, type Database } from "@waste/db/client"
 import { IMPORT_COLUMNS } from "@waste/domain/imports/columns"
 
@@ -161,7 +164,7 @@ describe("the import endpoints", { skip: database.skip || owner.skip }, () => {
     })
 
     test("refuses a kind there is no import of, and a role without the import's grant", async () => {
-      assert.equal((await olivia("/imports/templates/vehicles")).status, 400)
+      assert.equal((await olivia("/imports/templates/collection-routes")).status, 400)
       assert.equal((await lars("/imports/templates/customers")).status, 403)
     })
   })
@@ -217,7 +220,7 @@ describe("the import endpoints", { skip: database.skip || owner.skip }, () => {
       assert.match(problem.errors?.[0]?.message ?? "", /^Not a column of a customers import; the columns are kind, name, registration number/)
 
       const named = await olivia("/imports/preview", { method: "POST", body: { kind: "customers", projectId: copenhagen, fileName: "c.csv", rows: rowsOf({ kind: "person", name: "X" }) } })
-      assert.deepEqual((await readProblem(named)).errors, [{ path: "projectId", message: "Customers are the company's, not a project's: an import of customers names no project" }])
+      assert.deepEqual((await readProblem(named)).errors, [{ path: "projectId", message: "These records are the company's, not a project's: an import of them names no project" }])
       const missing = await olivia("/imports/preview", { method: "POST", body: { kind: "properties", fileName: "p.csv", rows: rowsOf({ address: "X" }) } })
       assert.deepEqual((await readProblem(missing)).errors?.map((error) => error.path), ["projectId"])
       const outOfReach = await viewer("/imports/preview", { method: "POST", body: { kind: "properties", projectId: harbor, fileName: "p.csv", rows: rowsOf({ address: "X" }) } })
@@ -337,6 +340,120 @@ describe("the import endpoints", { skip: database.skip || owner.skip }, () => {
       ])
       const made = await read(`/containers/${result.rows[0]!.resourceId}`, Container)
       assert.deepEqual([made.projectId, made.containerTypeId, made.barcode, made.ownership], [copenhagen, bin.id, "5702", "customer"])
+    })
+
+    test("writes the catalogue (O30 of #290): waste fractions by key, container types by name, vehicle types by key with their container types by name", async () => {
+      const fractions = await commit(
+        olivia,
+        "waste-fractions",
+        rowsOf(
+          { key: "Hard-Plastic", name: "Hard plastic", "waste code": "200139", treatment: "Recycling" },
+          { key: "hard-plastic", name: "Hard plastics", density: "45" },
+          { key: "hard-plastic", name: "Hard plastics" },
+          { key: "glass", name: "Glass", density: "9999" },
+        ),
+      )
+      assert.deepEqual(fractions.rows.map(outcome), [
+        { row: 2, outcome: "created", key: "key hard-plastic", detail: null },
+        { row: 3, outcome: "updated", key: "key hard-plastic", detail: null },
+        { row: 4, outcome: "unchanged", key: "key hard-plastic", detail: null },
+        { row: 5, outcome: "refused", key: "key glass", detail: fractions.rows[3]!.detail },
+      ])
+      assert.match(fractions.rows[3]!.detail ?? "", /^density: /)
+      const fraction = await read(`/waste-fractions/${fractions.rows[0]!.resourceId}`, WasteFraction)
+      assert.deepEqual([fraction.key, fraction.name, fraction.wasteCode, fraction.treatment, fraction.densityKgPerCubicMetre], ["hard-plastic", "Hard plastics", "200139", "recycling", 45])
+
+      const types = await commit(olivia, "container-types", rowsOf({ name: "660 L bin", volume: "660", "service seconds": "40" }, { name: "240 L bin", "service seconds": "25" }, { name: "Igloo", volume: "a lot" }))
+      assert.deepEqual(types.rows.map(outcome), [
+        { row: 2, outcome: "created", key: "name 660 L bin", detail: null },
+        { row: 3, outcome: "updated", key: "name 240 L bin", detail: null },
+        { row: 4, outcome: "refused", key: "name Igloo", detail: "volume: a whole number no larger than 2147483647" },
+      ])
+      assert.equal(types.rows[1]!.resourceId, bin.id, "matched on the name")
+      assert.deepEqual([(await read(`/container-types/${bin.id}`, ContainerType)).volumeLitres, (await read(`/container-types/${bin.id}`, ContainerType)).serviceSeconds], [240, 25], "an empty cell leaves the volume")
+
+      const vehicles = await commit(
+        olivia,
+        "vehicle-types",
+        rowsOf(
+          { key: "rear-loader", name: "Rear loader", "container types": "240 L bin; 660 L bin" },
+          { key: "rear-loader", name: "Rear loader", description: "Two axles" },
+          { key: "rear-loader", name: "Rear loader", "container types": "660 L bin" },
+          { key: "crane", name: "Crane", "container types": "Igloo" },
+        ),
+      )
+      assert.deepEqual(vehicles.rows.map(outcome), [
+        { row: 2, outcome: "created", key: "key rear-loader", detail: null },
+        { row: 3, outcome: "updated", key: "key rear-loader", detail: null },
+        { row: 4, outcome: "updated", key: "key rear-loader", detail: null },
+        { row: 5, outcome: "refused", key: "key crane", detail: "container types: No container type of this company is named Igloo" },
+      ])
+      const loader = await read(`/vehicle-types/${vehicles.rows[0]!.resourceId}`, VehicleType)
+      assert.deepEqual([loader.description, loader.containerTypeIds], ["Two axles", [types.rows[0]!.resourceId]], "the set the last row named, the description an earlier one gave")
+    })
+
+    test("a catalogue file is the company's: it names no project, and the master data's grants are asked per row", async () => {
+      const refused = await olivia("/imports/preview", { method: "POST", body: { kind: "container-types", projectId: copenhagen, fileName: "types.csv", rows: rowsOf({ name: "Sack" }) } })
+      assert.equal(refused.status, 400)
+      const response = await viewer("/imports/preview", { method: "POST", body: { kind: "container-types", fileName: "types.csv", rows: rowsOf({ name: "Sack" }) } })
+      assert.equal(response.status, 403, "the viewer does not view the master data")
+    })
+
+    test("writes the fleet (O30 of #290): vehicles by registration with their type by key and compartments by fraction key, drivers by workforce reference, a depot by name", async () => {
+      const residualFraction = await create(olivia, "/waste-fractions", { key: "residual-fleet", name: "Residual (fleet)" }, WasteFraction)
+      const paper = await create(olivia, "/waste-fractions", { key: "paper-fleet", name: "Paper (fleet)" }, WasteFraction)
+      const loader = await create(olivia, "/vehicle-types", { key: "fleet-loader", name: "Fleet loader" }, VehicleType)
+      const yard = await create(olivia, "/depots", { projectId: copenhagen, code: "DEP-IMP", name: "Import yard", address: "Kajvej 1", location: { type: "Point", coordinates: [12.6, 55.7] } }, Depot)
+      await create(olivia, "/vehicles", { projectId: harbor, registration: "HB 10 001", kind: "powered-vehicle", vehicleTypeId: loader.id, requiredLicenceClass: "c", compartments: [{ wasteFractionIds: [residualFraction.id] }] }, Vehicle)
+      const vehicles = await commit(
+        olivia,
+        "vehicles",
+        rowsOf(
+          { registration: "CN 10 001", kind: "powered-vehicle", "vehicle type": "fleet-loader", "licence class": "C", compartments: "Left: residual-fleet; Right: paper-fleet", "home depot": "Import yard" },
+          { registration: "CN 10 001", kind: "powered-vehicle", "vehicle type": "fleet-loader", "licence class": "c", compartments: "Left: residual-fleet; Right: paper-fleet", fuel: "hvo" },
+          { registration: "CN 10 001", kind: "powered-vehicle", "vehicle type": "fleet-loader", "licence class": "c", compartments: "Left: residual-fleet; Right: paper-fleet" },
+          { registration: "CN 10 001", kind: "trailer", "vehicle type": "fleet-loader", "licence class": "c" },
+          { registration: "HB 10 001", kind: "powered-vehicle", "vehicle type": "fleet-loader", "licence class": "c" },
+          { registration: "CN 10 002", kind: "powered-vehicle", "vehicle type": "fleet-loader", "licence class": "c", compartments: "glass-fleet" },
+          { registration: "CN 10 003", kind: "powered-vehicle", "vehicle type": "fleet-loader", "licence class": "c", "home depot": "Nowhere" },
+        ),
+        copenhagen,
+      )
+      assert.deepEqual(vehicles.rows.map(outcome), [
+        { row: 2, outcome: "created", key: "registration CN 10 001", detail: null },
+        { row: 3, outcome: "updated", key: "registration CN 10 001", detail: null },
+        { row: 4, outcome: "unchanged", key: "registration CN 10 001", detail: null },
+        { row: 5, outcome: "refused", key: "registration CN 10 001", detail: "kind: CN 10 001 is a powered-vehicle; a vehicle's kind is set once" },
+        { row: 6, outcome: "refused", key: "registration HB 10 001", detail: "registration: This company already has a vehicle registered HB 10 001, in another project" },
+        { row: 7, outcome: "refused", key: "registration CN 10 002", detail: "compartments: No waste fraction of this company has the key glass-fleet" },
+        { row: 8, outcome: "refused", key: "registration CN 10 003", detail: "home depot: No depot of this project is named Nowhere" },
+      ])
+      const made = await read(`/vehicles/${vehicles.rows[0]!.resourceId}`, Vehicle)
+      assert.deepEqual([made.projectId, made.vehicleTypeId, made.requiredLicenceClass, made.fuel, made.homeDepotId], [copenhagen, loader.id, "c", "hvo", yard.id])
+      assert.deepEqual(made.compartments.map((compartment) => [compartment.position, compartment.name, compartment.wasteFractionIds]), [
+        [1, "Left", [residualFraction.id]],
+        [2, "Right", [paper.id]],
+      ])
+
+      const drivers = await commit(
+        olivia,
+        "drivers",
+        rowsOf(
+          { "workforce reference": "EMP-9001", name: "Mads Import", employment: "Employee", "licence class": "c", "licence expiry": "2029-06-30" },
+          { "workforce reference": "EMP-9001", name: "Mads Import", employment: "employee", "home depot": "Import yard" },
+          { "workforce reference": "EMP-9002", name: "Kim Import", employment: "employee", "licence expiry": "30/06/2029" },
+          { "workforce reference": "EMP-9003", name: "Sam Import", employment: "service-provider" },
+        ),
+        copenhagen,
+      )
+      assert.deepEqual(drivers.rows.map(outcome).slice(0, 3), [
+        { row: 2, outcome: "created", key: "workforce reference EMP-9001", detail: null },
+        { row: 3, outcome: "updated", key: "workforce reference EMP-9001", detail: null },
+        { row: 4, outcome: "refused", key: "workforce reference EMP-9002", detail: "licence expiry: a day as YYYY-MM-DD" },
+      ])
+      assert.equal(drivers.rows[3]!.outcome, "refused", "service-provider employment names its provider")
+      const mads = await read(`/drivers/${drivers.rows[0]!.resourceId}`, Driver)
+      assert.deepEqual([mads.employment, mads.licenceClass, mads.licenceExpiry, mads.homeDepotId], ["employee", "c", "2029-06-30", yard.id])
     })
 
     test("writes agreements with a subscription per row, both or neither, matched on the number and the first day", async () => {

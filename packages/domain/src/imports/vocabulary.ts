@@ -5,7 +5,12 @@
 //
 // A kind names the records a file holds, one import of one kind at a time:
 // the company's Customers, a project's Properties with their parties, a
-// project's containers, and a project's Agreements with their Subscriptions.
+// project's containers, a project's Agreements with their Subscriptions, and
+// the company's catalogue — its waste fractions, container types and vehicle
+// types with the container types each services (O30 of #290, row 1.18) — and
+// a project's fleet, its vehicles with their compartments and its drivers.
+// `COMPANY_IMPORT_KINDS` are the company's and name no project; every other
+// kind is a project's.
 // A row's outcome is what the import did with it: made a record, changed one
 // it matched, found one it matched with nothing to change, or refused it with
 // the API's own sentence.
@@ -21,7 +26,7 @@
 // two.
 
 /** What a file imports. */
-export const IMPORT_KINDS = ["customers", "properties", "containers", "agreements"] as const
+export const IMPORT_KINDS = ["customers", "properties", "containers", "agreements", "waste-fractions", "container-types", "vehicle-types", "vehicles", "drivers"] as const
 
 /** What became of one row. */
 export const IMPORT_ROW_OUTCOMES = ["created", "updated", "unchanged", "refused"] as const
@@ -36,6 +41,12 @@ export const IMPORT_ROWS_MAX = 10_000
 export const IMPORT_ROW_NUMBER_MAX = 2_147_483_647
 
 export type ImportKind = (typeof IMPORT_KINDS)[number]
+
+/** The kinds whose records are the company's, so whose import names no project. A value of `IMPORT_KINDS`, not a vocabulary. */
+export const COMPANY_IMPORT_KINDS = ["customers", "waste-fractions", "container-types", "vehicle-types"] as const satisfies readonly ImportKind[]
+
+/** Whether a kind's records are the company's and its import names no project. */
+export const isCompanyImportKind = (kind: ImportKind): boolean => (COMPANY_IMPORT_KINDS as readonly ImportKind[]).includes(kind)
 export type ImportRowOutcome = (typeof IMPORT_ROW_OUTCOMES)[number]
 
 /** Every list of this module by its name, for a test that walks them. */
