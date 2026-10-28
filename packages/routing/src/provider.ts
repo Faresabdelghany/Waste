@@ -63,7 +63,7 @@ export type OptimiseRequest = {
    * Each stop's window (O14 of #290), by its index into `stops`: the seconds
    * from the operating date's midnight its service may start between, or null
    * for a stop any time serves. Hard: a stop no order can reach inside its
-   * window is left unassigned, and the call refused.
+   * window is left unassigned, and the answer says which (`unassigned`).
    */
   timeWindows?: readonly (readonly [number, number] | null)[]
   /** When the vehicle leaves the depot, seconds from the operating date's midnight; the solver's own clock from zero where absent. */
@@ -75,8 +75,15 @@ export type OptimiseRequest = {
 }
 
 export type OptimiseResult = {
-  /** Indices into the request's `stops`, in the order the solver chose; every stop, once. */
+  /** Indices into the request's `stops`, in the order the solver chose; every stop once, but those `unassigned`. */
   order: number[]
+  /**
+   * The stops no order reached inside their windows (O14 of #290), by index,
+   * on a request that sent windows; absent or empty, the order holds every
+   * stop. A Plan never loses a stop, so the caller asks again with those
+   * stops' windows dropped, and `order` and `legs` here cover the rest only.
+   */
+  unassigned?: number[]
   /** The closed trip's legs — depot, the stops in `order`, the station where given, back to the depot — one per consecutive pair of distinct points, so two stops at one address span no leg. */
   legs: RoutedLeg[]
   /** Seconds the order waits for a stop's or a break's window to open (O14 of #290), the station's device never counted; 0 where nothing waits. */

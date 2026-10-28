@@ -17,7 +17,7 @@ import { readFile } from "node:fs/promises"
 import { join } from "node:path"
 import { describe, test } from "node:test"
 
-import { PLAN_SOLVERS, PLAN_STATUSES, PLAN_TRIPS } from "@waste/domain/routing/vocabulary"
+import { PLAN_SOLVERS, PLAN_STATUSES, PLAN_STOP_WARNINGS, PLAN_TRIPS } from "@waste/domain/routing/vocabulary"
 
 import { MIGRATIONS_FOLDER } from "../migrate"
 import { route } from "../schema/execution"
@@ -66,20 +66,29 @@ const planTable = (asOf: "0013" | "0055"): string =>
     ...(asOf >= "0055" ? [`CONSTRAINT "plan_waiting_shape" CHECK (${ref("plan", "waiting_seconds")} is null or (${ref("plan", "waiting_seconds")} >= 0 and ${ref("plan", "status")} = 'ready' and ${ref("plan", "solver")} = 'optimiser'))`] : []),
   ])
 
-/** What 0055 changed: the plan's CREATE TABLE as drizzle-kit generates it now onto what 0013 says; time-windows-rendering.test.ts pins the statements. */
-const CHANGED_IN_0055 = new Map([[planTable("0055"), planTable("0013")]])
-
-const expected = [
-  planTable("0055"),
+/** plan_stop as 0013 made it, and as drizzle-kit writes it since 0055, with why the optimiser ordered a stop outside its window. */
+const planStopTable = (asOf: "0013" | "0055"): string =>
   createLedger("plan_stop", [
     '"route_id" uuid NOT NULL',
     '"plan_id" uuid NOT NULL',
     '"pickup_id" uuid NOT NULL',
     '"position" integer NOT NULL',
+    ...(asOf >= "0055" ? ['"window_warning" text'] : []),
     uniqueKey("plan_stop_plan_id_position_key", "company_id", "plan_id", "position"),
     uniqueKey("plan_stop_plan_id_pickup_id_key", "company_id", "plan_id", "pickup_id"),
     positiveCheck("plan_stop", "position"),
-  ]),
+    ...(asOf >= "0055" ? [oneOfCheck("plan_stop", "window_warning", ...PLAN_STOP_WARNINGS)] : []),
+  ])
+
+/** What 0055 changed: the plan's and its stops' CREATE TABLEs as drizzle-kit generates them now onto what 0013 says; time-windows-rendering.test.ts pins the statements. */
+const CHANGED_IN_0055 = new Map([
+  [planTable("0055"), planTable("0013")],
+  [planStopTable("0055"), planStopTable("0013")],
+])
+
+const expected = [
+  planTable("0055"),
+  planStopTable("0055"),
   createLedger("plan_leg", [
     '"route_id" uuid NOT NULL',
     '"plan_id" uuid NOT NULL',
@@ -165,7 +174,7 @@ describe("the Routing tables as drizzle-kit writes them", () => {
 describe("the checks of this context", () => {
   test("every check renders without parameters, and the three one_of checks read the routing vocabulary", () => {
     assert.deepEqual([...checksOf(plan).keys()], ["plan_solver_one_of", "plan_status_one_of", "plan_trip_one_of", "plan_totals_shape", "plan_failure_shape", "plan_deferred_shape", "plan_waiting_shape"])
-    assert.deepEqual([...checksOf(planStop).keys()], ["plan_stop_position_positive"])
+    assert.deepEqual([...checksOf(planStop).keys()], ["plan_stop_position_positive", "plan_stop_window_warning_one_of"])
     assert.deepEqual([...checksOf(planLeg).keys()], ["plan_leg_position_positive", "plan_leg_path_valid", "plan_leg_measure_shape"])
     const checks = checksOf(plan)
     for (const solver of PLAN_SOLVERS) assert.ok(checks.get("plan_solver_one_of")?.includes(`'${solver}'`), solver)

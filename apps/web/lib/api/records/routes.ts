@@ -49,6 +49,7 @@ import type { OptimiseAnswer, Plan } from "@waste/contracts/plans"
 import type { Route, RouteDetail, RouteDispatchResults, RouteShift, RouteWorkload } from "@waste/contracts/routes"
 import { OFFICE_CANCEL_REASON_CODES, OFFICE_STOP_SERVICES, type OfficeStopService } from "@waste/domain/execution/vocabulary"
 import { BOOKED_WITH, type BookedField } from "@waste/domain/execution/work-orders"
+import type { PlanStopWarning } from "@waste/domain/routing/vocabulary"
 
 import { FIXTURE_COMPANY_ID, type BusinessRecord, type ModuleLocation } from "@/lib/data/business-modules"
 import { isSubscriptionRecord, PROPERTY_PREFIX, SHARED_POINT_PREFIX, SUBSCRIPTION_PREFIX } from "@/lib/data/agreements"
@@ -176,6 +177,8 @@ export function toRouteRecord(route: RouteRead, context: MappingContext): Busine
   if (plan?.durationSeconds != null) facts.Duration = formatDuration(plan.durationSeconds + (workload?.stopSeconds ?? 0))
   if (workload !== undefined) Object.assign(facts, workloadFacts(workload))
   if ("shift" in route && route.shift !== undefined) Object.assign(facts, shiftFacts(route.shift))
+  const warned = plan?.stopWarnings ?? []
+  if (warned.length > 0) facts["Window warnings"] = warned.map((stop) => `Stop ${stop.position}: ${STOP_WARNING_SENTENCES[stop.warning]}`).join("; ")
   if (route.cancelReasonCode !== null) facts["Cancel reason"] = statusLabel(route.cancelReasonCode)
   // A generated route's note is how it deviated from its scheme; the office's own route has no scheme to deviate from, and its note is the one New route took (#111).
   facts[route.routeSchemeId === null ? "Note" : "Deviation"] = route.note ?? "None"
@@ -475,6 +478,12 @@ export function workloadFacts(workload: RouteWorkload): Record<string, string> {
     facts["Expected load"] = `${against}${over}${uncounted}`
   }
   return facts
+}
+
+/** What the office is told of a stop its Plan holds outside its Service Window (O14 of #290): planned all the same, and the record or the route to look at. */
+export const STOP_WARNING_SENTENCES: Readonly<Record<PlanStopWarning, string>> = {
+  "windows-disjoint": "its property's access hours and its agreement's service window never overlap, so it was planned without a window",
+  "window-unreachable": "no order reached it inside its service window, so it was planned outside it",
 }
 
 /**

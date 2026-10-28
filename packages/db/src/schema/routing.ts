@@ -25,7 +25,7 @@
 // per company like every table (the tenant fence), so with the Pilot's one
 // company it is one row per provider and family, and a second company on
 // the same key is Gate B (#132 §1, ADR-0009).
-import { PLAN_SOLVERS, PLAN_STATUSES, PLAN_TRIPS, ROUTING_QUOTA_FAMILIES } from "@waste/domain/routing/vocabulary"
+import { PLAN_SOLVERS, PLAN_STATUSES, PLAN_STOP_WARNINGS, PLAN_TRIPS, ROUTING_QUOTA_FAMILIES } from "@waste/domain/routing/vocabulary"
 import { sql } from "drizzle-orm"
 import { check, date, integer, text, timestamp, uuid } from "drizzle-orm/pg-core"
 
@@ -100,6 +100,8 @@ export const planStop = wms.table(
     pickupId: uuid().notNull(),
     /** The execution order the Plan holds, 1..n over the Route's pickups. */
     position: integer().notNull(),
+    /** Why the optimiser ordered this stop outside its Service Window (O14 of #290), or null for a stop it kept inside one, or that has none. */
+    windowWarning: text(),
   },
   (t) => [
     companyReference(t, company),
@@ -111,6 +113,7 @@ export const planStop = wms.table(
     tenantUnique(t, t.planId, t.position),
     tenantUnique(t, t.planId, t.pickupId),
     positive(t.position),
+    oneOf(t.windowWarning, PLAN_STOP_WARNINGS),
     // Nothing references the ledgers, so no key leads with the project; the sweep and any project read take this index, Execution's own practice.
     tenantIndex(t, t.projectId),
     tenantIndex(t, t.pickupId),

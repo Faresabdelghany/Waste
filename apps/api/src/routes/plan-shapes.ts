@@ -17,10 +17,10 @@ import { ensurePlan as ensureCompanyPlan, planStopIds, type EnsuredPlan, type Pl
 import { QueueMissing, type JobSender } from "@waste/db/jobs"
 import { pickup, route } from "@waste/db/schema/execution"
 import { plan, planLeg, planStop } from "@waste/db/schema/routing"
-import type { PlanSolver, PlanStatus, PlanTrip } from "@waste/domain/routing/vocabulary"
+import type { PlanSolver, PlanStatus, PlanStopWarning, PlanTrip } from "@waste/domain/routing/vocabulary"
 import { executionOrder, planIsStale } from "@waste/domain/routing/plans"
 import { DEFAULT_PROFILE, type RoutingIdentity } from "@waste/routing/provider"
-import { and, asc, eq, inArray, type SQL } from "drizzle-orm"
+import { and, asc, eq, inArray, isNotNull, type SQL } from "drizzle-orm"
 
 import type { Principal } from "../auth/principal"
 import { inProjects } from "../auth/projects"
@@ -110,8 +110,28 @@ export async function legsOfPlan(tx: Tx, companyId: string, planId: string): Pro
 /** What the sequence and the staleness are read from: a stop's id, baseline place and state, however a caller spells the rest of it. */
 export type SequencedStop = { id: string; position: number; status: string; reason: string | null }
 
+/** A Plan's stops held outside their window (O14 of #290), in its order. */
+type StopWarnings = ActivePlan["stopWarnings"]
+
+/** Each Plan's stops it holds outside their window, by its id: the rows that carry a warning alone. */
+async function stopWarningsByPlan(tx: Tx, companyId: string, planIds: readonly string[]): Promise<Map<string, StopWarnings>> {
+  if (planIds.length === 0) return new Map()
+  const rows = await tx
+    .select({ planId: planStop.planId, pickupId: planStop.pickupId, position: planStop.position, warning: planStop.windowWarning })
+    .from(planStop)
+    .where(and(eq(planStop.companyId, companyId), inArray(planStop.planId, [...planIds]), isNotNull(planStop.windowWarning)))
+    .orderBy(asc(planStop.position))
+  const byPlan = new Map<string, StopWarnings>()
+  for (const row of rows) {
+    const bucket = byPlan.get(row.planId) ?? []
+    bucket.push({ pickupId: row.pickupId, position: row.position, warning: row.warning as PlanStopWarning })
+    byPlan.set(row.planId, bucket)
+  }
+  return byPlan
+}
+
 /** The `ActivePlan` reading over its row and the route's stops today: `stale` is a reading, never a status (#124 §2). */
-const activePlanOf = (row: PlanRow, stops: readonly SequencedStop[], named: readonly string[]): ActivePlan => ({
+const activePlanOf = (row: PlanRow, stops: readonly SequencedStop[], named: readonly string[], stopWarnings: StopWarnings = []): ActivePlan => ({
   id: row.id,
   solver: row.solver as PlanSolver,
   status: row.status as PlanStatus,
@@ -124,6 +144,7 @@ const activePlanOf = (row: PlanRow, stops: readonly SequencedStop[], named: read
     removed: stops.filter((stop) => stop.status === "skipped" && stop.reason === "regeneration").map((stop) => stop.id),
   }),
   deferredUntil: row.deferredUntil === null ? null : row.deferredUntil.toISOString(),
+  stopWarnings,
 })
 
 export type PlanContext = {
@@ -153,8 +174,8 @@ export async function planContextOf(tx: Tx, companyId: string, routeRef: { activ
     .where(and(eq(plan.companyId, companyId), eq(plan.id, routeRef.activePlanId)))
     .limit(1)
   if (row === undefined) return { activePlan: null, sequence: sequenceOver(baseline) }
-  const named = await planStopIds(tx, { companyId, planId: row.id })
-  return { activePlan: activePlanOf(row, stops, named), sequence: sequenceOver(executionOrder(baseline, named)) }
+  const [named, warnings] = await Promise.all([planStopIds(tx, { companyId, planId: row.id }), stopWarningsByPlan(tx, companyId, [row.id])])
+  return { activePlan: activePlanOf(row, stops, named, warnings.get(row.id)), sequence: sequenceOver(executionOrder(baseline, named)) }
 }
 
 /**
@@ -201,12 +222,12 @@ export function sequenceIn(sequences: ReadonlyMap<string, number>, stop: { id: s
   return sequence
 }
 
-/** The `ActivePlan` of every route asked for, by route, in three statements over the page's ids: what the live list carries beside each row. */
+/** The `ActivePlan` of every route asked for, by route, in four statements over the page's ids: what the live list carries beside each row. */
 export async function activePlansByRoute(tx: Tx, companyId: string, rows: readonly { id: string; activePlanId: string | null }[]): Promise<Map<string, ActivePlan>> {
   const withPlans = rows.filter((row) => row.activePlanId !== null)
   if (withPlans.length === 0) return new Map()
   const planIds = withPlans.map((row) => row.activePlanId as string)
-  const [plans, named, stops] = await Promise.all([
+  const [plans, named, stops, warnings] = await Promise.all([
     tx.select(planColumns).from(plan).where(and(eq(plan.companyId, companyId), inArray(plan.id, planIds))),
     tx
       .select({ planId: planStop.planId, pickupId: planStop.pickupId, position: planStop.position })
@@ -225,6 +246,7 @@ export async function activePlansByRoute(tx: Tx, companyId: string, rows: readon
           ),
         ),
       ),
+    stopWarningsByPlan(tx, companyId, planIds),
   ])
   const planById = new Map(plans.map((row) => [row.id, row] as const))
   const namedByPlan = new Map<string, string[]>()
@@ -243,7 +265,7 @@ export async function activePlansByRoute(tx: Tx, companyId: string, rows: readon
   for (const row of withPlans) {
     const planRow = planById.get(row.activePlanId as string)
     if (planRow === undefined) continue
-    readings.set(row.id, activePlanOf(planRow, stopsByRoute.get(row.id) ?? [], namedByPlan.get(planRow.id) ?? []))
+    readings.set(row.id, activePlanOf(planRow, stopsByRoute.get(row.id) ?? [], namedByPlan.get(planRow.id) ?? [], warnings.get(planRow.id)))
   }
   return readings
 }

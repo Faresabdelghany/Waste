@@ -29,7 +29,8 @@
 // words, never a Plan. A stop's window and the driver's breaks (O14 of #290)
 // ride the same clock, seconds from the operating date's midnight: the
 // windows are hard, so a stop no order reaches inside its own is
-// unassigned and the call refused, while the shift's end is never a bound —
+// unassigned, and the answer says which for the caller to ask again without
+// those windows (a Plan never loses a stop), while the shift's end is never a bound —
 // a route too long for its shift is ordered, and the verdict told it. The
 // waiting the windows make is read off the steps, the station's week apart.
 //
@@ -180,17 +181,20 @@ function vroomResult(body: unknown, request: OptimiseRequest): OptimiseResult | 
   if (!isRecord(body)) throw unreadable("the optimisation answer is not an object")
   if (typeof body.code === "number" && body.code !== 0) return { refused: typeof body.error === "string" ? body.error : `the optimiser answered code ${body.code}` }
   const unassigned = Array.isArray(body.unassigned) ? body.unassigned.length : 0
-  const windowed = request.timeWindows?.some((window) => window !== null) ?? false
-  if (unassigned > 0) return { refused: `the optimiser left ${unassigned} ${unassigned === 1 ? "stop" : "stops"} unassigned${windowed ? ": no order reaches them inside their time windows" : ""}` }
+  const stationId = stops.length + 1
+  const left = (Array.isArray(body.unassigned) ? body.unassigned : []).map((job) => (isRecord(job) && typeof job.id === "number" ? job.id : -1))
+  // Only a stop with a window may be left: anything else — the station, a stop without one — is a refusal as it always was.
+  const windowedLeft = left.every((id) => id >= 1 && id <= stops.length && (request.timeWindows?.[id - 1] ?? null) !== null)
+  if (unassigned > 0 && !windowedLeft) return { refused: `the optimiser left ${unassigned} ${unassigned === 1 ? "stop" : "stops"} unassigned` }
+  const missing = new Set(left.map((id) => id - 1))
   if (!Array.isArray(body.routes) || body.routes.length !== 1 || !isRecord(body.routes[0])) throw unreadable("the optimisation answer does not hold one route")
   const route = body.routes[0]
   if (typeof route.geometry !== "string" || !Array.isArray(route.steps)) throw unreadable("the optimised route has no geometry or no steps; the request asks for g")
   const steps = route.steps.filter((step): step is Record<string, unknown> => isRecord(step) && (step.type === "start" || step.type === "job" || step.type === "end"))
-  const stationId = stops.length + 1
   const jobIds = steps.filter((step) => step.type === "job").map((step) => step.id ?? step.job)
   const order = jobIds.filter((id) => id !== stationId).map((id) => (typeof id === "number" ? id - 1 : -1))
-  if (order.length !== stops.length || new Set(order).size !== stops.length || order.some((index) => index < 0 || index >= stops.length)) {
-    throw unreadable(`the optimised route does not visit each of the ${stops.length} stops once`)
+  if (order.length + missing.size !== stops.length || new Set(order).size !== order.length || order.some((index) => index < 0 || index >= stops.length || missing.has(index))) {
+    throw unreadable(`the optimised route does not visit each of the ${stops.length - missing.size} stops it assigned once`)
   }
   if (station && jobIds.at(-1) !== stationId) return { refused: "the optimiser visited the unloading station before the last stop" }
   const visited: Step[] = steps.map((step, index) => {
@@ -212,7 +216,7 @@ function vroomResult(body: unknown, request: OptimiseRequest): OptimiseResult | 
   const waitingSeconds = route.steps
     .filter((step): step is Record<string, unknown> => isRecord(step) && ((step.type === "job" && (step.id ?? step.job) !== stationId) || step.type === "break"))
     .reduce((sum, step) => sum + (typeof step.waiting_time === "number" ? step.waiting_time : 0), 0)
-  return { order, legs, waitingSeconds, provenance: { engineVersion: null, graphDate: null } }
+  return { order, legs, waitingSeconds, ...(missing.size > 0 ? { unassigned: [...missing].sort((a, b) => a - b) } : {}), provenance: { engineVersion: null, graphDate: null } }
 }
 
 export class OpenRouteServiceProvider implements RoutingProvider {

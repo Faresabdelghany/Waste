@@ -2035,6 +2035,7 @@ column wms.plan_stop 5 route_id uuid not-null
 column wms.plan_stop 6 plan_id uuid not-null
 column wms.plan_stop 7 pickup_id uuid not-null
 column wms.plan_stop 8 position integer not-null
+column wms.plan_stop 9 window_warning text
 constraint wms.plan_stop plan_stop_company_id_fk FOREIGN KEY (company_id) REFERENCES wms.company(id)
 constraint wms.plan_stop plan_stop_pkey PRIMARY KEY (id)
 constraint wms.plan_stop plan_stop_plan_id_pickup_id_key UNIQUE (company_id, plan_id, pickup_id)
@@ -2044,6 +2045,7 @@ constraint wms.plan_stop plan_stop_project_id_fk FOREIGN KEY (company_id, projec
 constraint wms.plan_stop plan_stop_route_id_fk FOREIGN KEY (company_id, project_id, route_id) REFERENCES wms.route(company_id, project_id, id)
 constraint wms.plan_stop plan_stop_route_id_pickup_id_fk FOREIGN KEY (company_id, project_id, route_id, pickup_id) REFERENCES wms.pickup(company_id, project_id, route_id, id)
 constraint wms.plan_stop plan_stop_route_id_plan_id_fk FOREIGN KEY (company_id, project_id, route_id, plan_id) REFERENCES wms.plan(company_id, project_id, route_id, id)
+constraint wms.plan_stop plan_stop_window_warning_one_of CHECK ((window_warning = ANY (ARRAY['windows-disjoint'::text, 'window-unreachable'::text])))
 index wms.plan_stop plan_stop_pickup_id_idx CREATE INDEX plan_stop_pickup_id_idx ON wms.plan_stop USING btree (company_id, pickup_id)
 index wms.plan_stop plan_stop_pkey CREATE UNIQUE INDEX plan_stop_pkey ON wms.plan_stop USING btree (id)
 index wms.plan_stop plan_stop_plan_id_pickup_id_key CREATE UNIQUE INDEX plan_stop_plan_id_pickup_id_key ON wms.plan_stop USING btree (company_id, plan_id, pickup_id)
@@ -4105,5 +4107,5 @@ journal 1792964774291 575d9404cde4feb3468d43c2645301f94e48b4960341cda4dc4d6d7b43
 journal 1793086298088 3aa024a0b1c207b537d4b52cc6c9c09f295500483b1bc53e66c27a5fa0ed1bf8
 journal 1793117570372 0cf12010a83bd55fbf734aea83b3699d1636d710d1cc52cd63b5b586441a72af
 journal 1793122833651 fddd34bf8e7c1eadc319cddcf6b5a274974e7993317a4fc32d01ed89ce216655
-journal 1793170257287 fe4887b13c628786077e50c76c7fce87c9bd6e03a7358bba59312768af19ffa1
+journal 1793172240849 9f8a53244ab3c25c383f6b2e788c2de5bdff4c797a91765ca7839ff20a9e38ca
 pgboss-version 42

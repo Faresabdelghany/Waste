@@ -389,14 +389,18 @@ describe("OpenRouteService optimisation, VROOM behind /vroom/v0 (#171)", () => {
     assert.equal(result.waitingSeconds, 28_720)
   })
 
-  test("a stop left unassigned on a request with windows is refused saying no order reaches it inside its window", async () => {
+  test("a windowed stop left unassigned is answered, not refused: the order and legs over the rest, and which stops were left, for the caller to ask again without their windows (O14 of #290)", async () => {
     const unassigned = vroomBody(
       [step("start", depot, { arrival: 0, duration: 0, distance: 0 }), step("job", a, { id: 2, job: 2, arrival: 40, duration: 40, distance: 320 }), step("end", depot, { arrival: 80, duration: 80, distance: 640 })],
       [depot, a, depot],
       [{ id: 1, location: b, type: "job" }],
     )
-    const left = await new OpenRouteServiceProvider({ apiKey: KEY, fetch: recording(json(200, unassigned)).fetch }).optimise({ profile: "driving-hgv", depot, stops: [b, a], timeWindows: [[0, 60], null] })
-    assert.match(left.kind === "refused" ? left.sentence : "", /left 1 stop unassigned: no order reaches them inside their time windows/)
+    const result = answered(await new OpenRouteServiceProvider({ apiKey: KEY, fetch: recording(json(200, unassigned)).fetch }).optimise({ profile: "driving-hgv", depot, stops: [b, a], timeWindows: [[0, 60], null] }))
+    assert.deepEqual([result.order, result.unassigned], [[1], [0]])
+    assert.equal(result.legs.length, 2, "depot to the stop it ordered, and back")
+    // A stop without a window left unassigned is no window's doing: refused, as before.
+    const unwindowed = await new OpenRouteServiceProvider({ apiKey: KEY, fetch: recording(json(200, unassigned)).fetch }).optimise({ profile: "driving-hgv", depot, stops: [b, a], timeWindows: [null, [0, 60]] })
+    assert.match(unwindowed.kind === "refused" ? unwindowed.sentence : "", /left 1 stop unassigned/)
   })
 
   test("two stops at one address are both ordered and one point of the trip: no leg between them", async () => {

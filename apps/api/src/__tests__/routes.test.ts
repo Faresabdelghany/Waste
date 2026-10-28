@@ -7,7 +7,7 @@ import { Route, RouteDetail, RouteDispatchResults, RouteListItem } from "@waste/
 import { containerType, wasteFraction } from "@waste/db/schema/catalogue"
 import { createDb, type Database, type Tx } from "@waste/db/client"
 import { driverCommand, outboxEvent, route as routeTable, session } from "@waste/db/schema/execution"
-import { plan } from "@waste/db/schema/routing"
+import { plan, planStop } from "@waste/db/schema/routing"
 import { unloadingStation, unloadingStationFraction } from "@waste/db/schema/places"
 import { driver, vehicle } from "@waste/db/schema/fleet"
 import { withCompany } from "@waste/db/tenant"
@@ -241,6 +241,9 @@ describe("the route endpoints", { skip: database.skip || owner.skip }, () => {
         assert.deepEqual(listed.items.map((item) => RouteListItem.parse(item)).find((item) => item.id === route.id)?.shift, verdict)
         await setShift({ shiftEnd: "09:00" })
         assert.equal((await read(route.id)).shift.overShiftSeconds, 0, "within a longer shift")
+        // A stop the Plan holds outside its window is named on the active Plan's reading, by its place in the order.
+        await ownerPool.db.insert(planStop).values({ companyId: a.companyId, projectId: route.projectId, routeId: route.id, planId, pickupId: route.pickupIds[0], position: 1, windowWarning: "window-unreachable" })
+        assert.deepEqual((await read(route.id)).activePlan?.stopWarnings, [{ pickupId: route.pickupIds[0], position: 1, warning: "window-unreachable" }])
       } finally {
         await setShift(noShift)
       }

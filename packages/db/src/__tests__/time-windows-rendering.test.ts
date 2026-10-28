@@ -1,6 +1,7 @@
 // Time windows, shifts and breaks (O14 of #290) as the migration writes them:
 // a property's and an agreement's service window, a driver's shift with its
-// one break, and an optimiser Plan's waiting seconds. drizzle-kit, diffing the
+// one break, an optimiser Plan's waiting seconds, and why a Plan's stop was
+// ordered outside its window. drizzle-kit, diffing the
 // snapshot before the migration against its own, writes exactly the columns
 // and their checks, and the file is them under its header: no table is new,
 // so nothing is hand-written, and every row present passes. The file is found
@@ -40,6 +41,7 @@ const GREW = [
   addColumn("driver", "break_window_start", "time"),
   addColumn("driver", "break_window_end", "time"),
   addColumn("plan", "waiting_seconds", "integer"),
+  addColumn("plan_stop", "window_warning", "text"),
   addCheck("property", "property_service_window", window("property", "service_window_start", "service_window_end")),
   addCheck("agreement", "agreement_service_window", window("agreement", "service_window_start", "service_window_end")),
   addCheck("driver", "driver_shift_window", window("driver", "shift_start", "shift_end")),
@@ -47,6 +49,7 @@ const GREW = [
   addCheck("driver", "driver_break_minutes_range", BREAK_RANGE),
   addCheck("driver", "driver_break_shape", BREAK_SHAPE),
   addCheck("plan", "plan_waiting_shape", WAITING_SHAPE),
+  addCheck("plan_stop", "plan_stop_window_warning_one_of", `${ref("plan_stop", "window_warning")} in ('windows-disjoint', 'window-unreachable')`),
 ]
 
 /** The migration's file name, by its name: it takes its number at its turn. */

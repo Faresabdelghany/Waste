@@ -26,10 +26,14 @@
 // The request rides the route's clock (O14 of #290, `routeTiming` from
 // @waste/db/commands/stop-timing, which the fingerprint reads too): each
 // stop's window — where its property's hours and its agreement's promise
-// overlap — the route's departure, and its planned driver's break. A stop
-// whose two windows never overlap is no request at all, and the Plan fails
-// naming it; the waiting the windows make is written on the ready Plan, for
-// the over-shift verdict.
+// overlap — the route's departure, and its planned driver's break. A Plan
+// never loses a stop, and one bad record never stops a route being optimised:
+// a stop whose two windows never overlap is sent with none, and a stop no
+// order reaches inside its window is asked for again without it, one more
+// call, each such stop kept on the Plan with its warning
+// (`plan_stop.window_warning`) for the office to mend the record or the
+// route. The waiting the windows make is written on the ready Plan, for the
+// over-shift verdict.
 //
 // Everything else is routing.measure's rule (routing-plans.ts): the read and
 // the write in two fenced transactions around a call made outside both, what
@@ -47,7 +51,7 @@ import { withCompany } from "@waste/db/tenant"
 import { orderIsOpen } from "@waste/domain/execution/transitions"
 import type { RouteStatus } from "@waste/domain/execution/vocabulary"
 import { isSuperseded, OPTIMISER_MAX_STOPS } from "@waste/domain/routing/plans"
-import { SUPERSEDED } from "@waste/domain/routing/vocabulary"
+import { SUPERSEDED, type PlanStopWarning } from "@waste/domain/routing/vocabulary"
 import { DEFAULT_PROFILE, type OptimiseRequest, type RoutedLeg } from "@waste/routing/provider"
 import { and, asc, eq } from "drizzle-orm"
 import type { Job } from "pg-boss"
@@ -60,7 +64,7 @@ export { ROUTING_OPTIMISE_QUEUE }
 
 /** What the first transaction reads: the request and the pickups its stops are, or the sentence that ends the Plan. */
 type Gathered =
-  | { kind: "request"; request: OptimiseRequest; routeId: string; pickupIds: string[]; trip: string; operatingDate: string; quota: QuotaRow[] }
+  | { kind: "request"; request: OptimiseRequest; routeId: string; pickupIds: string[]; trip: string; operatingDate: string; quota: QuotaRow[]; warnings: Map<number, PlanStopWarning> }
   | { kind: "refused"; sentence: string }
   | { kind: "done"; status: string }
 
@@ -110,12 +114,13 @@ async function gather(tx: Tx, keys: { planId: string; companyId: string; provide
   }
   // Each with its seconds at the kerb (O10 of #290) and its window (O14), on the clock the fingerprint read.
   const timing = await routeTiming(tx, keys.companyId, ends, stops.map((stop) => stop.id))
-  const timeWindows: (readonly [number, number] | null)[] = []
-  for (const stop of stops) {
+  const warnings = new Map<number, PlanStopWarning>()
+  const timeWindows = stops.map((stop, index) => {
     const window = timing.stops.get(stop.id)?.window ?? null
-    if (window === "disjoint") return { kind: "refused", sentence: `stop ${stop.position}'s property hours and its agreement's window never overlap, so no time of the day serves it` }
-    timeWindows.push(window)
-  }
+    if (window !== "disjoint") return window
+    warnings.set(index, "windows-disjoint")
+    return null
+  })
   const request: OptimiseRequest = {
     profile: DEFAULT_PROFILE,
     depot: home,
@@ -127,7 +132,7 @@ async function gather(tx: Tx, keys: { planId: string; companyId: string; provide
     station: found.trip === "full" ? station : null,
   }
   const quota = await quotaRows(tx, { companyId: keys.companyId, provider: keys.provider })
-  return { kind: "request", request, routeId: found.routeId, pickupIds: stops.map((stop) => stop.id), trip: found.trip, operatingDate: ends.operatingDate, quota }
+  return { kind: "request", request, routeId: found.routeId, pickupIds: stops.map((stop) => stop.id), trip: found.trip, operatingDate: ends.operatingDate, quota, warnings }
 }
 
 /** The solver's order as the Plan's stops and its legs as the Plan keeps them: a stops-only Plan the legs between its first and last stop, a full one every leg of the closed trip. Throws when the answer does not fit the trip asked for. */
@@ -156,6 +161,15 @@ async function optimiseOne(job: Job<RoutingJobData>, context: JobContext): Promi
   let outcome: Awaited<ReturnType<typeof engine.optimise>>
   try {
     outcome = await engine.optimise(gathered.request, { class: classOf(job.data) })
+    // The stops no order reached inside their windows are asked for again without them: the Plan keeps every stop, each such one flagged.
+    const left = outcome.kind === "answered" ? (outcome.result.unassigned ?? []) : []
+    if (left.length > 0) {
+      for (const index of left) gathered.warnings.set(index, "window-unreachable")
+      const timeWindows = (gathered.request.timeWindows ?? []).map((window, index) => (left.includes(index) ? null : window))
+      outcome = await engine.optimise({ ...gathered.request, timeWindows }, { class: classOf(job.data) })
+      const still = outcome.kind === "answered" ? (outcome.result.unassigned ?? []) : []
+      if (still.length > 0) outcome = { kind: "refused", sentence: `the optimiser left ${still.length} ${still.length === 1 ? "stop" : "stops"} unassigned even without their time windows` }
+    }
   } finally {
     await recordLearned(context, companyId, "optimisation", before)
   }
@@ -193,7 +207,8 @@ async function optimiseOne(job: Job<RoutingJobData>, context: JobContext): Promi
         }
         const { provenance } = outcome.result
         const { pickupIds, legs } = solved as NonNullable<typeof solved>
-        await tx.insert(planStop).values(pickupIds.map((pickupId, index) => ({ companyId, projectId: locked.projectId, routeId: locked.routeId, planId, pickupId, position: index + 1 })))
+        const warningOf = new Map([...gathered.warnings].map(([index, warning]) => [gathered.pickupIds[index], warning] as const))
+        await tx.insert(planStop).values(pickupIds.map((pickupId, index) => ({ companyId, projectId: locked.projectId, routeId: locked.routeId, planId, pickupId, position: index + 1, windowWarning: warningOf.get(pickupId) ?? null })))
         if (legs.length > 0) {
           await tx.insert(planLeg).values(legs.map((leg, index) => ({ companyId, projectId: locked.projectId, routeId: locked.routeId, planId, position: index + 1, path: leg.geometry, metres: leg.metres, seconds: leg.seconds })))
         }
