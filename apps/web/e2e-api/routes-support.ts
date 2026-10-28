@@ -78,6 +78,26 @@ export async function schemeWithRoutes(api: APIRequestContext, name: string, day
   return { scheme, routes }
 }
 
+/**
+ * The first of the routes on a day its crew runs no other route of (O7 of
+ * #290): the API refuses one driver or truck on two routes at once, and every
+ * scheme these tests generate starts at the same time, so two tests crewing
+ * the first route of theirs with the seeded crew would book it twice.
+ */
+export async function routeWithCrewFree(api: APIRequestContext, routes: readonly ApiRoute[], crew: { driverId?: string; vehicleId?: string }): Promise<ApiRoute> {
+  const window = { from: routes[0].operatingDate, to: routes[routes.length - 1].operatingDate }
+  const busy = new Set<string>()
+  for (const [field, id] of [["plannedDriverId", crew.driverId], ["plannedVehicleId", crew.vehicleId]] as const) {
+    if (id === undefined) continue
+    for (const other of await listAll<ApiRoute>(api, "/routes", { [field]: id, ...window })) {
+      if (other.status === "planned" || other.status === "ready" || other.status === "active") busy.add(other.operatingDate)
+    }
+  }
+  const free = routes.find((route) => !busy.has(route.operatingDate))
+  expect(free, `a day between ${window.from} and ${window.to} the crew runs no other route of`).toBeTruthy()
+  return free as ApiRoute
+}
+
 /** Picks `option` in the select whose label starts with `label`. */
 export async function pick(within: Locator, page: Page, label: string, option: string) {
   await within.getByRole("combobox", { name: new RegExp(`^${label}`) }).click()
