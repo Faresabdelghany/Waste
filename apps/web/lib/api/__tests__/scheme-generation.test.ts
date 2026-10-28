@@ -48,6 +48,8 @@ const central: RouteScheme = {
   holidayPolicy: "skip",
   editPolicy: "ask",
   planAhead: true,
+  planAheadDays: 7,
+  archivedAt: null,
   status: "validated",
   depotId: null,
   unloadingStationId: null,

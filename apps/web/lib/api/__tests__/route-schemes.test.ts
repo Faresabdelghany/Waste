@@ -27,6 +27,7 @@ import { draftGroups } from "@waste/domain/route-schemes/draft"
 import type { GuidedSchemeData } from "@waste/domain/route-schemes/quick-create"
 import { collectionGroupsOfRecord, collectionGroupsToValues, type CollectionGroup as SchemeGroup } from "@waste/domain/route-schemes/groups"
 import { effectiveSchemeStatus, schemeLiveValidation } from "@waste/domain/route-schemes/lifecycle"
+import { isSoftDeleted } from "@waste/domain/record-visibility"
 import { SCHEME_SEASONS_KEY, seasonsValue, storedSeasonsFromValues } from "@waste/domain/route-schemes/scheme-seasons"
 
 import { FIXTURE_COMPANY_ID, getModuleDefinition, type BusinessRecord } from "../../data/business-modules"
@@ -37,7 +38,7 @@ import { containerTypeAdapter, vehicleTypeAdapter, wasteFractionAdapter } from "
 import { isServerBacked, SERVER_MODULE_KEYS } from "../records/modules"
 import { projectAdapter, serviceProviderAdapter } from "../records/organisation"
 import { planningAreaAdapter } from "../records/planning"
-import { routeSchemeAdapter, routeSchemesModule, schemeOccurrences, SERVER_GROUP_IDS_KEY } from "../records/route-schemes"
+import { ARCHIVE_SCHEME, PLAN_AHEAD_DAYS_KEY, PLAN_AHEAD_DAYS_REFUSAL, routeSchemeAdapter, routeSchemesModule, schemeOccurrences, SERVER_GROUP_IDS_KEY, SUCCEED_SCHEME } from "../records/route-schemes"
 import { loaded, loadModule, resolverOver, writeRecord, type ModuleState, type ServerRecordsState } from "../records/server-records"
 import { bodyOf, clientOver, json, problem, scripted, type Call } from "./scripted-fetch"
 
@@ -95,6 +96,8 @@ const central: RouteScheme = {
   holidayPolicy: "skip",
   editPolicy: "ask",
   planAhead: true,
+  planAheadDays: 7,
+  archivedAt: null,
   status: "validated",
   depotId: NORDHAVN_DEPOT,
   unloadingStationId: null,
@@ -725,5 +728,59 @@ describe("a scheme's seasons (O17 of #290)", () => {
     const renamed = { ...before, submittedValues: { ...before.submittedValues, schemeName: "Renamed" } }
     assert.deepEqual(routeSchemeAdapter.toPatchBody?.(before, renamed, context()), { name: "Renamed" })
     assert.ok(RouteSchemePatch.safeParse({ seasons: [summer, winter] }).success)
+  })
+})
+
+describe("a scheme's lifecycle (O21 of #290)", () => {
+  const schemeAnswer = (over: Partial<RouteScheme> = {}) => () => json({ ...central, ...over })
+
+  test("reads its Plan Ahead window as days, and an archived scheme as the prototype's deleted one, which every list skips", () => {
+    const record = recordOf({ ...central, planAheadDays: 14 })
+    assert.equal(record.submittedValues?.[PLAN_AHEAD_DAYS_KEY], "14")
+    assert.equal(record.facts["Plan ahead window"], "14 days")
+    assert.equal(isSoftDeleted(record), false)
+    const archived = recordOf({ ...central, planAhead: false, archivedAt: "2026-09-30T12:00:00.000Z", validTo: "2026-10-01" })
+    assert.equal(isSoftDeleted(archived), true)
+    assert.equal(archived.facts.Archived, "2026-09-30")
+    assert.equal(archived.submittedValues?.archivedAt, "2026-09-30T12:00:00.000Z")
+  })
+
+  test("the window is the scheme's own field on its PATCH, held to 1..28 days before the API", async () => {
+    const { calls } = await edited(central, withValues({ [PLAN_AHEAD_DAYS_KEY]: "21" }), [schemeAnswer({ planAheadDays: 21 })])
+    assert.deepEqual(bodyOf(calls[0]), { planAheadDays: 21 })
+    assert.ok(RouteSchemePatch.safeParse(bodyOf(calls[0])).success)
+    const { record } = schemesState(central)
+    assert.deepEqual(routeSchemeAdapter.toPatchBody(record, withValues({ [PLAN_AHEAD_DAYS_KEY]: "29" })(record), context()), { path: PLAN_AHEAD_DAYS_KEY, message: PLAN_AHEAD_DAYS_REFUSAL })
+  })
+
+  test("a create leaves the week to the server's default and says another window where the record has one", () => {
+    const record = recordOf(central)
+    const body = routeSchemeAdapter.toCreateBody?.(record, context()) as Record<string, unknown>
+    assert.equal("planAheadDays" in body, false)
+    const fortnight = routeSchemeAdapter.toCreateBody?.(withValues({ [PLAN_AHEAD_DAYS_KEY]: "14" })(record), context()) as Record<string, unknown>
+    assert.equal(fortnight.planAheadDays, 14)
+    assert.ok(RouteSchemeCreate.safeParse(fortnight).success)
+  })
+
+  test("the archive is an action with the day it takes effect, or none for the API's tomorrow", async () => {
+    const action = routeSchemeAdapter.actions![ARCHIVE_SCHEME]
+    const record = recordOf(central)
+    assert.deepEqual(action.toBody?.({}, record, context()), {})
+    assert.deepEqual(action.toBody?.({ effectiveFrom: "2026-10-12" }, record, context()), { effectiveFrom: "2026-10-12" })
+    const answer = { scheme: { ...central, archivedAt: NOW.toISOString(), planAhead: false, validTo: "2026-10-01" }, routes: { cancelled: 2, trimmed: 1, kept: 0 } }
+    const { fetch, calls } = scripted([() => json(answer)])
+    assert.deepEqual(await action.run(clientOver(fetch), CENTRAL_ID, {}), answer)
+    assert.deepEqual(calls.map(request), [`POST /route-schemes/${CENTRAL_ID}/archive`])
+  })
+
+  test("the next version is an action naming the day it takes over, refused before the API without one", async () => {
+    const action = routeSchemeAdapter.actions![SUCCEED_SCHEME]
+    const record = recordOf(central)
+    assert.deepEqual(action.toBody?.({}, record, context()), { path: "validFrom", message: "Pick the day the next version takes over" })
+    assert.deepEqual(action.toBody?.({ validFrom: "2027-01-04" }, record, context()), { validFrom: "2027-01-04" })
+    const answer = { predecessor: { ...central, validTo: "2027-01-04" }, successor: { ...central, id: "01a0d2a4-a280-701a-8000-0000000000ff", validFrom: "2027-01-04" }, routes: { cancelled: 3, trimmed: 0, kept: 0 } }
+    const { fetch, calls } = scripted([() => json(answer, 201, { location: "/route-schemes/01a0d2a4-a280-701a-8000-0000000000ff" })])
+    assert.deepEqual(await action.run(clientOver(fetch), CENTRAL_ID, { validFrom: "2027-01-04" }), answer)
+    assert.deepEqual(calls.map(request), [`POST /route-schemes/${CENTRAL_ID}/successor`])
   })
 })

@@ -38,6 +38,20 @@
 // whose version has ended, a new polygon with a new start is the next
 // version, added through the area's boundaries route.
 //
+// Boundary version history (O21 of #290). The API holds an area's versions
+// one after another, never two in force on a day (`refuseOverlap`); the
+// record carries all of them, by the day each starts, as JSON under
+// `BOUNDARY_VERSIONS_KEY` — each version's id, its first day, its last day in
+// force and whether it is in force, upcoming or ended on the project's day —
+// which Areas & Zones lists. "Next version from" a day is the record's
+// `NEXT_VERSION_FROM_KEY` with the new drawing under `NEXT_VERSION_GEOMETRY_KEY`:
+// the write ends the version that would still be in force on that day there
+// (its `validTo` the day, the first day out) and adds the next from it, the
+// two requests in that order, since the API refuses the second while the
+// first overlaps it. The day comes after that version's start; a version
+// already ended before it is left as it stands, the next one added after the
+// gap.
+//
 // A calendar travels with its holidays, replaced whole through their own
 // route; the record spells them as the readers do — `holidayDates` as the
 // dates and `holidayNames` as the names, the shape the Holiday lists pane
@@ -210,6 +224,43 @@ export function parsePolygonText(text: string | undefined): FlatPolygon | undefi
 // Planning areas
 // ---------------------------------------------------------------------------
 
+/** Where an area record carries every boundary version (O21 of #290): JSON, by the day each starts. */
+export const BOUNDARY_VERSIONS_KEY = "boundaryVersions"
+/** Where a "Next version from" asks for the day the next boundary version starts. */
+export const NEXT_VERSION_FROM_KEY = "nextVersionFrom"
+/** Where it carries the next version's drawing, the geometry text the form reads three ways. */
+export const NEXT_VERSION_GEOMETRY_KEY = "nextVersionGeometry"
+
+/** One boundary version as the record lists it: its first day, its last day in force (null while open) and how it stands on the project's day. */
+export type BoundaryVersionRow = { id: string; validFrom: string; lastDay: string | null; standing: "in force" | "upcoming" | "ended" }
+
+/** An area's versions as the record lists them, by the day each starts, read against the project's day. */
+export function boundaryVersionRows(boundaries: readonly PlanningAreaBoundary[], day: string): BoundaryVersionRow[] {
+  return [...boundaries]
+    .sort((a, b) => a.validFrom.localeCompare(b.validFrom))
+    .map((version) => ({
+      id: version.id,
+      validFrom: version.validFrom,
+      lastDay: version.validTo === null ? null : lastDayIn(version.validTo),
+      standing: version.validFrom > day ? "upcoming" : version.validTo !== null && version.validTo <= day ? "ended" : "in force",
+    }))
+}
+
+/** The versions a record carries, as `boundaryVersionRows` wrote them; none for a record without. */
+export function boundaryVersionsOf(record: BusinessRecord): BoundaryVersionRow[] {
+  const raw = record.submittedValues?.[BOUNDARY_VERSIONS_KEY]
+  if (typeof raw !== "string" || raw === "") return []
+  try {
+    const parsed: unknown = JSON.parse(raw)
+    return Array.isArray(parsed) ? (parsed as BoundaryVersionRow[]) : []
+  } catch {
+    return []
+  }
+}
+
+/** What a next version from a day that does not follow the version before it is told. */
+export const nextVersionAfter = (validFrom: string): string => `The next version starts after the one before it does, on ${validFrom}`
+
 /** An area with every boundary version the API holds for it: what the read lists and a write answers. */
 export type PlanningAreaResource = PlanningArea & { boundaries: PlanningAreaBoundary[] }
 
@@ -241,7 +292,30 @@ function boundaryCreateOf(polygon: FlatPolygon, from: string | undefined, to: st
 /** What an area's update carries: a patch of the area, and one of the version the record reads or a version to add, each to its own route. */
 type PlanningAreaWrite = {
   area?: { name?: string; purpose?: string }
-  boundary?: { id: string; patch: { boundary?: FlatPolygon; validTo?: string | null } } | { create: { boundary: FlatPolygon; validFrom: string; validTo?: string } }
+  boundary?:
+    | { id: string; patch: { boundary?: FlatPolygon; validTo?: string | null } }
+    | { create: { boundary: FlatPolygon; validFrom: string; validTo?: string } }
+    /** The next version from a day (O21 of #290): the version still in force then ended on it, where one is, and the next added. */
+    | { successor: { endId: string | null; create: { boundary: FlatPolygon; validFrom: string } } }
+}
+
+/**
+ * The next version a record asks for, from the versions it carries: the one
+ * still in force on the day ended there, and the drawing added from it; null
+ * where the record asks for none, a refusal where it cannot be.
+ */
+function successorWriteOf(before: BusinessRecord, after: BusinessRecord): NonNullable<PlanningAreaWrite["boundary"]> | LocalRefusal | null {
+  const from = typed(after, NEXT_VERSION_FROM_KEY)
+  if (from === undefined || from === typed(before, NEXT_VERSION_FROM_KEY)) return null
+  const drawn = geometryOfText(typed(after, NEXT_VERSION_GEOMETRY_KEY))
+  if (drawn.kind === "malformed") return refusal(NEXT_VERSION_GEOMETRY_KEY, NOT_A_POLYGON)
+  if (drawn.kind !== "polygon") return refusal(NEXT_VERSION_GEOMETRY_KEY, "The next version needs its boundary: give the polygon it draws")
+  const versions = boundaryVersionsOf(before)
+  const latest = versions.at(-1)
+  if (latest !== undefined && from <= latest.validFrom) return refusal(NEXT_VERSION_FROM_KEY, nextVersionAfter(latest.validFrom))
+  // The version still in force on the day — open, or ending after it — ends there; one that ended before it stays as it is.
+  const ending = latest !== undefined && (latest.lastDay === null || latest.lastDay >= from) ? latest.id : null
+  return { successor: { endId: ending, create: { boundary: drawn.polygon, validFrom: from } } }
 }
 
 export const planningAreaAdapter: ResourceAdapter<PlanningAreaResource> = {
@@ -286,6 +360,8 @@ export const planningAreaAdapter: ResourceAdapter<PlanningAreaResource> = {
         areaCode: area.code,
         projectId: projectWebId,
         purpose: area.purpose,
+        // Every version, by the day each starts (O21 of #290): Areas & Zones' history.
+        [BOUNDARY_VERSIONS_KEY]: JSON.stringify(boundaryVersionRows(area.boundaries, day)),
         ...(version === null
           ? {}
           : {
@@ -319,6 +395,13 @@ export const planningAreaAdapter: ResourceAdapter<PlanningAreaResource> = {
   toPatchBody: (before, after) => {
     if (changedTyped(before, after, "areaCode")) return refusal("areaCode", "The reference is set once: an area that needs another reference is another area")
     if (changedTyped(before, after, "projectId")) return refusal("projectId", "An area stays in its project")
+    const successor = successorWriteOf(before, after)
+    if (successor !== null && "path" in successor) return successor
+    if (successor !== null) {
+      const renamed = patchOf(before, after, (record) => ({ name: typed(record, "areaName") ?? record.name, purpose: typed(record, "purpose") }))
+      const write: PlanningAreaWrite = { ...(renamed === null ? {} : { area: renamed }), boundary: successor }
+      return write
+    }
     const area = patchOf(before, after, (record) => ({ name: typed(record, "areaName") ?? record.name, purpose: typed(record, "purpose") }))
     const drawn = geometryOfText(typed(after, PLANNING_AREA_GEOMETRY_KEY))
     if (drawn.kind === "malformed") return refusal(PLANNING_AREA_GEOMETRY_KEY, NOT_A_POLYGON)
@@ -372,6 +455,12 @@ export const planningAreaAdapter: ResourceAdapter<PlanningAreaResource> = {
     }
     if (write.boundary !== undefined && "create" in write.boundary) {
       await create<PlanningAreaBoundary>(client, `/planning-areas/${serverId}/boundaries`, write.boundary.create)
+    }
+    // The next version (O21 of #290): the version in force on the day ended there first, since the API refuses an overlap, then the next added from it.
+    if (write.boundary !== undefined && "successor" in write.boundary) {
+      const { endId, create: next } = write.boundary.successor
+      if (endId !== null) await patch<PlanningAreaBoundary>(client, `/planning-area-boundaries/${endId}`, { validTo: next.validFrom })
+      await create<PlanningAreaBoundary>(client, `/planning-areas/${serverId}/boundaries`, next)
     }
     const area = write.area === undefined ? await get<PlanningArea>(client, `/planning-areas/${serverId}`) : await patch<PlanningArea>(client, `/planning-areas/${serverId}`, write.area)
     const boundaries = await listAll<PlanningAreaBoundary>(client, `/planning-areas/${serverId}/boundaries`)

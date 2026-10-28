@@ -118,6 +118,8 @@ import { StatRow } from "@/components/projects/StatRow"
 import { SidebarTrigger } from "@/components/ui/sidebar"
 import { BusinessFilterPopover } from "@/components/waste/business-filter-popover"
 import { useApiConfigured } from "@/components/waste/api-session-store"
+import { planAheadDaysOf, SchemeArchiveDialog, SchemePlanAheadWindowDialog, SchemeSuccessorDialog } from "@/components/waste/scheme-lifecycle"
+import { dayIn } from "@/lib/api/records/planning"
 import { useContainersPlaced } from "@/components/waste/use-containers-placed"
 import { validationWhenUnplaced } from "@/lib/data/route-schemes"
 import { useBusinessRecordStore, useServerModuleState, whenSaved } from "@/components/waste/business-record-store"
@@ -224,6 +226,8 @@ export function SchemeDetailsPage({
   // On the Pilot the scheme's routes are the API's (#179): the Routes tab lists them once the routes module has read them, and nothing before, under the dates the API plans.
   const routesRead = useServerModuleState("route-studio", "routes")?.status === "ready" || !onApi
   const [generateOpen, setGenerateOpen] = useState(false)
+  // The lifecycle's dialogs on the Pilot (O21 of #290): the Plan Ahead window, the next version, the archive.
+  const [lifecycleDialog, setLifecycleDialog] = useState<"window" | "successor" | "archive" | null>(null)
   const schemes = useModuleRecords("route-studio", "schemes")
   const allRoutes = useModuleRecords("route-studio", "routes")
   const allPickups = useModuleRecords("route-studio", "pickups")
@@ -284,6 +288,10 @@ export function SchemeDetailsPage({
   const canGenerate =
     schemeCanGenerateRoutes(record, today) && blockingIssues.length === 0
   const planAheadOn = isPlanAheadEnabled(record)
+  const planAheadDays = planAheadDaysOf(record)
+  // The day an archive or a new version is judged from: the project's, as the API judges it.
+  const projectToday = dayIn(new Date(), schemeProject === undefined ? undefined : stringValueOf(schemeProject, "timezone"))
+  const storedScheme = schemes.find((candidate) => candidate.id === record.id) ?? record
 
   // The scheme's generated routes, ordered by the date they operate on (D17).
   const schemeRoutes = useMemo(
@@ -347,7 +355,7 @@ export function SchemeDetailsPage({
       toast.success(enabled ? "Plan Ahead turned on" : "Plan Ahead turned off", {
         description: enabled
           ? onApi
-            ? `${record.name} keeps its next 7 days planned through the nightly plan-ahead run.`
+            ? `${record.name} keeps its next ${planAheadDays} days planned through the nightly plan-ahead run.`
             : `${record.name} generates its next 7 days automatically when Route Studio loads.`
           : `${record.name} stops auto-generating; already-generated routes remain.`,
       }),
@@ -434,7 +442,25 @@ export function SchemeDetailsPage({
                     {planAheadOn ? "Turn off Plan Ahead" : "Turn on Plan Ahead"}
                   </DropdownMenuItem>
                 )}
-                {onDelete && (
+                {onApi && !readOnly && (
+                  <>
+                    <DropdownMenuItem onSelect={() => setLifecycleDialog("window")}>
+                      <CalendarCheck className="h-4 w-4" />
+                      Plan Ahead window…
+                    </DropdownMenuItem>
+                    <DropdownMenuItem onSelect={() => setLifecycleDialog("successor")}>
+                      <PencilSimple className="h-4 w-4" />
+                      New version…
+                    </DropdownMenuItem>
+                    <DropdownMenuSeparator />
+                    <DropdownMenuItem className="text-destructive focus:text-destructive" onSelect={() => setLifecycleDialog("archive")}>
+                      <Trash className="h-4 w-4" />
+                      Archive scheme…
+                    </DropdownMenuItem>
+                  </>
+                )}
+                {/* On the Pilot a scheme is archived, never deleted: the fixture planner's delete is fixture mode's. */}
+                {onDelete && !onApi && (
                   <>
                     <DropdownMenuSeparator />
                     <DropdownMenuItem
@@ -451,6 +477,10 @@ export function SchemeDetailsPage({
           </div>
         </div>
       </header>
+
+      {onApi && lifecycleDialog === "window" && <SchemePlanAheadWindowDialog record={record} stored={storedScheme} open onOpenChange={(open) => !open && setLifecycleDialog(null)} />}
+      {onApi && lifecycleDialog === "successor" && <SchemeSuccessorDialog record={record} today={projectToday} open onOpenChange={(open) => !open && setLifecycleDialog(null)} />}
+      {onApi && lifecycleDialog === "archive" && <SchemeArchiveDialog record={record} today={projectToday} open onOpenChange={(open) => !open && setLifecycleDialog(null)} onArchived={onBack} />}
 
       <Tabs defaultValue="details" className="flex min-h-0 flex-1 flex-col">
         <div className="border-b border-border/40 px-4 py-3">
@@ -692,7 +722,7 @@ function SchemeDetailsTab({
             }
           />
           <StatRow label="Owner" value={record.owner} />
-          <StatRow label="Plan Ahead" value={planAheadOn ? "On" : "Off"} />
+          <StatRow label="Plan Ahead" value={planAheadOn ? (facts["Plan ahead window"] ? `On · ${facts["Plan ahead window"]} ahead` : "On") : "Off"} />
           {/* How an edit of the running scheme applies (issue #38), read the way the edit-save planner reads it. */}
           <StatRow
             label="Changes to a running scheme"

@@ -23,7 +23,21 @@ import { problemSentence } from "../problem"
 import { NOTHING_RESOLVED, type MappingContext, type Resolver } from "../records/adapter"
 import { isServerBacked, SERVER_MODULE_KEYS } from "../records/modules"
 import { companyAdapter, projectAdapter } from "../records/organisation"
-import { collectionCalendarAdapter, collectionCalendarsModule, geometryOfText, NOT_A_POLYGON, parsePolygonText, planningAreaAdapter, planningAreasModule, type PlanningAreaResource } from "../records/planning"
+import {
+  BOUNDARY_VERSIONS_KEY,
+  boundaryVersionsOf,
+  collectionCalendarAdapter,
+  collectionCalendarsModule,
+  geometryOfText,
+  NEXT_VERSION_FROM_KEY,
+  NEXT_VERSION_GEOMETRY_KEY,
+  nextVersionAfter,
+  NOT_A_POLYGON,
+  parsePolygonText,
+  planningAreaAdapter,
+  planningAreasModule,
+  type PlanningAreaResource,
+} from "../records/planning"
 import { loaded, resolverOver, writeRecord, type ServerRecordsState } from "../records/server-records"
 import { bodyOf, clientOver, json, problem, scripted } from "./scripted-fetch"
 
@@ -379,6 +393,56 @@ describe("an edited planning area", () => {
     const refused = scripted([() => problem(409, "This planning area already has a boundary in force over that period; end it first")])
     await assert.rejects(() => planningAreaAdapter.update(clientOver(refused.fetch), indreby.id, { area: { name: "Indre By" }, boundary: { id: indrebyBoundary.id, patch: { validTo: "2027-01-01" } } }))
     assert.equal(refused.calls.length, 1, "the area's patch is never sent when the version's is refused")
+  })
+})
+
+describe("an area's boundary version history (O21 of #290)", () => {
+  test("the record carries every version by the day each starts, its last day in force and how it stands on the project's day", () => {
+    const record = planningAreaAdapter.toRecord(withBoundaries(valby, [valbyUpcoming, valbyExpired, { ...indrebyBoundary, id: "019995e0-0000-7000-8000-0000000000e4", planningAreaId: valby.id, validFrom: "2026-01-01", validTo: "2027-01-01" }]), areaContext())
+    assert.equal(typeof record.submittedValues?.[BOUNDARY_VERSIONS_KEY], "string")
+    assert.deepEqual(boundaryVersionsOf(record), [
+      { id: valbyExpired.id, validFrom: "2025-01-01", lastDay: "2025-12-31", standing: "ended" },
+      { id: "019995e0-0000-7000-8000-0000000000e4", validFrom: "2026-01-01", lastDay: "2026-12-31", standing: "in force" },
+      { id: valbyUpcoming.id, validFrom: "2027-01-01", lastDay: null, standing: "upcoming" },
+    ])
+    assert.deepEqual(boundaryVersionsOf(planningAreaAdapter.toRecord(withBoundaries(nordhavn, []), areaContext())), [])
+  })
+
+  const before = planningAreaAdapter.toRecord(withBoundaries(indreby, [indrebyBoundary]), areaContext())
+  const asking = (record: BusinessRecord, values: Record<string, string>): BusinessRecord => ({ ...record, submittedValues: { ...record.submittedValues, ...values } })
+
+  test("next version from a day ends the version in force there and adds the next from it", () => {
+    const body = planningAreaAdapter.toPatchBody(before, asking(before, { [NEXT_VERSION_FROM_KEY]: "2027-01-01", [NEXT_VERSION_GEOMETRY_KEY]: JSON.stringify(polygon) }), areaContext())
+    assert.deepEqual(body, { boundary: { successor: { endId: indrebyBoundary.id, create: { boundary: polygon, validFrom: "2027-01-01" } } } })
+    assert.ok(PlanningAreaBoundaryCreate.safeParse((body as { boundary: { successor: { create: unknown } } }).boundary.successor.create).success)
+  })
+
+  test("a version that ended before the day is left as it stands, and the next is added after the gap", () => {
+    const ended = planningAreaAdapter.toRecord(withBoundaries(valby, [valbyExpired]), areaContext())
+    assert.deepEqual(planningAreaAdapter.toPatchBody(ended, asking(ended, { [NEXT_VERSION_FROM_KEY]: "2026-11-01", [NEXT_VERSION_GEOMETRY_KEY]: JSON.stringify(polygon) }), areaContext()), {
+      boundary: { successor: { endId: null, create: { boundary: polygon, validFrom: "2026-11-01" } } },
+    })
+  })
+
+  test("is refused before the API on or before the latest version's start, and without a drawing a map can draw", () => {
+    assert.deepEqual(planningAreaAdapter.toPatchBody(before, asking(before, { [NEXT_VERSION_FROM_KEY]: "2026-01-01", [NEXT_VERSION_GEOMETRY_KEY]: JSON.stringify(polygon) }), areaContext()), { path: NEXT_VERSION_FROM_KEY, message: nextVersionAfter("2026-01-01") })
+    assert.deepEqual(planningAreaAdapter.toPatchBody(before, asking(before, { [NEXT_VERSION_FROM_KEY]: "2027-01-01" }), areaContext()), { path: NEXT_VERSION_GEOMETRY_KEY, message: "The next version needs its boundary: give the polygon it draws" })
+    assert.deepEqual(planningAreaAdapter.toPatchBody(before, asking(before, { [NEXT_VERSION_FROM_KEY]: "2027-01-01", [NEXT_VERSION_GEOMETRY_KEY]: "[]" }), areaContext()), { path: NEXT_VERSION_GEOMETRY_KEY, message: NOT_A_POLYGON })
+  })
+
+  test("the update ends the version first and adds the next second, since the API refuses an overlap, then reads the versions back", async () => {
+    const next = { ...indrebyBoundary, id: "01a0d2a4-a280-7017-8000-0000000000aa", validFrom: "2027-01-01" }
+    const { fetch, calls } = scripted([() => json({ ...indrebyBoundary, validTo: "2027-01-01" }), () => json(next, 201), () => json(indreby), () => json({ items: [{ ...indrebyBoundary, validTo: "2027-01-01" }, next], nextCursor: null })])
+    const answer = await planningAreaAdapter.update(clientOver(fetch), indreby.id, { boundary: { successor: { endId: indrebyBoundary.id, create: { boundary: polygon, validFrom: "2027-01-01" } } } })
+    assert.deepEqual(calls.map((call) => `${call.init.method} ${call.url}`), [
+      `PATCH http://api.test/planning-area-boundaries/${indrebyBoundary.id}`,
+      `POST http://api.test/planning-areas/${indreby.id}/boundaries`,
+      `GET http://api.test/planning-areas/${indreby.id}`,
+      `GET http://api.test/planning-areas/${indreby.id}/boundaries?limit=200`,
+    ])
+    assert.deepEqual(bodyOf(calls[0]), { validTo: "2027-01-01" })
+    assert.deepEqual(bodyOf(calls[1]), { boundary: polygon, validFrom: "2027-01-01" })
+    assert.equal(answer.boundaries.length, 2)
   })
 })
 

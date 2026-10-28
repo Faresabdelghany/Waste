@@ -10,7 +10,7 @@
 
 import { useEffect, useMemo, useState } from "react"
 import { useSearchParams } from "next/navigation"
-import { PencilSimple, Plus } from "@phosphor-icons/react/dist/ssr"
+import { ListBullets, PencilSimple, Plus } from "@phosphor-icons/react/dist/ssr"
 import { toast } from "sonner"
 
 import {
@@ -36,6 +36,7 @@ import {
   TablePagination,
   useTablePagination,
 } from "@/components/ui/table-pagination"
+import { PlanningAreaVersionsDialog } from "@/components/settings/planning-area-versions"
 import { useApiConfigured } from "@/components/waste/api-session-store"
 import { BusinessRecordFormDialog } from "@/components/waste/business-record-form-dialog"
 import {
@@ -87,6 +88,8 @@ export function PlanningAreasSettings() {
   const [view, setView] = useState<AssetView>(defaultAssetView)
   const [isCreateOpen, setIsCreateOpen] = useState(false)
   const [editingArea, setEditingArea] = useState<BusinessRecord | null>(null)
+  // On the Pilot an area's boundary versions, with the next one from a day (O21 of #290).
+  const [versionsOf, setVersionsOf] = useState<BusinessRecord | null>(null)
 
   const schema = planningAreaSchema()
   const areasModule = planningAreasModule()
@@ -269,7 +272,7 @@ export function PlanningAreasSettings() {
                 <TableHead>Effective</TableHead>
                 <TableHead>Coverage</TableHead>
                 <TableHead>Status</TableHead>
-                <TableHead className="w-16" />
+                <TableHead className="w-24" />
               </TableRow>
             </TableHeader>
             <TableBody>
@@ -313,6 +316,11 @@ export function PlanningAreasSettings() {
                       </Badge>
                     </TableCell>
                     <TableCell className="whitespace-nowrap text-right">
+                      {configured && (
+                        <Button variant="ghost" size="icon" className="h-8 w-8" onClick={() => setVersionsOf(record)} aria-label={`Boundary versions of ${record.name}`}>
+                          <ListBullets className="h-4 w-4" />
+                        </Button>
+                      )}
                       <Button
                         variant="ghost"
                         size="icon"
@@ -344,6 +352,16 @@ export function PlanningAreasSettings() {
         onSubmit={handleCreate}
         relationOptions={relationOptions}
       />
+      {versionsOf && (
+        <PlanningAreaVersionsDialog
+          // The record as the store holds it now, so a version just added is listed.
+          record={areaRecords.find((candidate) => candidate.id === versionsOf.id) ?? versionsOf}
+          open
+          onOpenChange={(open) => {
+            if (!open) setVersionsOf(null)
+          }}
+        />
+      )}
       {editingArea && (
         <BusinessRecordFormDialog
           schema={editSchema}
