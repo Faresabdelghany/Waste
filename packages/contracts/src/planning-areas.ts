@@ -35,7 +35,7 @@
 import * as z from "zod"
 
 import { IsoDate } from "./dates"
-import { FlatPolygon } from "./geojson"
+import { FlatPolygon, Latitude, Longitude } from "./geojson"
 import { Id } from "./ids"
 import { PageRequest } from "./pagination"
 import { PlanningAreaPurpose } from "./planning"
@@ -131,3 +131,34 @@ export const PlanningAreaBoundaryVersionsQuery = PageRequest.extend({
   validOn: IsoDate.optional(),
 })
 export type PlanningAreaBoundaryVersionsQuery = z.infer<typeof PlanningAreaBoundaryVersionsQuery>
+
+/** A query string's decimal number, `12.5683` or `-0.5`, and nothing looser: no exponent, no hex, no blank. */
+const QueryDecimal = z.string().regex(/^-?\d+(\.\d+)?$/, { error: "a decimal number" }).transform(Number)
+
+/**
+ * The day and the purpose an address → zone read asks for (O29 of #290, row
+ * 1.13): the areas whose boundary in force on `on` holds the place. Absent,
+ * `on` is today on the project's clock and `purpose` the citizens' zones,
+ * `notification`.
+ */
+export const PlanningAreasAtQuery = z.object({
+  on: IsoDate.optional(),
+  purpose: PlanningAreaPurpose.default("notification"),
+})
+export type PlanningAreasAtQuery = z.infer<typeof PlanningAreasAtQuery>
+
+/** The same read for a point that is no property yet, such as an address picked from the register: the project, and the point as longitude and latitude. */
+export const PlanningAreasContainingQuery = PlanningAreasAtQuery.extend({
+  projectId: Id,
+  lng: QueryDecimal.pipe(Longitude),
+  lat: QueryDecimal.pipe(Latitude),
+})
+export type PlanningAreasContainingQuery = z.infer<typeof PlanningAreasContainingQuery>
+
+/** The areas holding the place on the day, in code order; none when the place has no point or no area holds it. Bounded by the project's areas, so one answer and no page. */
+export const PlanningAreasAt = z.object({
+  on: IsoDate,
+  purpose: PlanningAreaPurpose,
+  items: z.array(PlanningArea),
+})
+export type PlanningAreasAt = z.infer<typeof PlanningAreasAt>
