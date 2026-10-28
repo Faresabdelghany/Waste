@@ -428,6 +428,13 @@
       "when": 1793188451416,
       "tag": "0060_live_positions",
       "breakpoints": true
+    },
+    {
+      "idx": 61,
+      "version": "7",
+      "when": 1793190991835,
+      "tag": "0061_stale_positions",
+      "breakpoints": true
     }
   ]
 }

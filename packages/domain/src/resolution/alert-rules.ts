@@ -12,12 +12,20 @@
 // severity, source, words and subject — from the facts the worker read, and
 // what the note says when the worker resolves it because the condition has
 // cleared. Times and days come in already spelled on the project's clock.
+//
+// O8 of #290 added a fifth, decided on #344: a running session whose device
+// is still heard from but has sent no position for ten minutes — the phone's
+// location refused or lost, or the route's screen closed — raised from the
+// telemetry. A device not heard from at all is the silent session's alert,
+// not this one.
 import type { AlertKind, AlertRule, AlertSeverity, AlertSource } from "./vocabulary"
 
 /** A route is late this long after its planned start. */
 export const ROUTE_START_GRACE_MINUTES = 30
 /** A running route's device is silent after this long without a word. */
 export const SESSION_SILENCE_MINUTES = 15
+/** A running session's position is stale this long after its last fix, or after its start or its last resume without one. */
+export const POSITION_STALE_MINUTES = 10
 /** A licence is warned of this many days before it runs out. */
 export const LICENCE_WARNING_DAYS = 30
 /** How far back a rule looks for a new occurrence: a route planned, or a device last heard from, more than a day ago is history to read, not news to raise. */
@@ -29,6 +37,7 @@ export type RuleOccurrence =
   | { rule: "session-silent"; routeId: string; routeLabel: string; driverId: string; driverName: string; vehicleId: string | null; lastSeen: string }
   | { rule: "licence-expiring"; driverId: string; driverName: string; licenceExpiry: string; today: string }
   | { rule: "ticket-overdue"; ticketId: string; ticketLabel: string; subject: string; due: string }
+  | { rule: "position-stale"; routeId: string; routeLabel: string; driverId: string; driverName: string; vehicleId: string | null; lastFix: string | null }
 
 /** An alert as a rule raises it: everything but its project, its key and its instants. */
 export type RuleAlert = {
@@ -104,6 +113,22 @@ export function alertOfRule(occurrence: RuleOccurrence): RuleAlert {
         ...NO_SUBJECT,
         ticketId: occurrence.ticketId,
       }
+    case "position-stale":
+      return {
+        rule: occurrence.rule,
+        kind: "route-exception",
+        severity: "medium",
+        source: "telemetry",
+        title: `No position from ${occurrence.driverName} on ${occurrence.routeLabel}`,
+        details:
+          occurrence.lastFix === null
+            ? `The Driver App has sent no position since the session started, ${POSITION_STALE_MINUTES} minutes or more, though the device is heard from: its location may be off, or the route's screen closed.`
+            : `Last position at ${occurrence.lastFix}, and none for ${POSITION_STALE_MINUTES} minutes since, though the device is heard from: its location may be off, or the route's screen closed.`,
+        ...NO_SUBJECT,
+        routeId: occurrence.routeId,
+        vehicleId: occurrence.vehicleId,
+        driverId: occurrence.driverId,
+      }
   }
 }
 
@@ -113,4 +138,5 @@ export const CLEARED_NOTES: Readonly<Record<AlertRule, string>> = {
   "session-silent": "Cleared: the device was heard from again, or the session or the route ended.",
   "licence-expiring": "Cleared: the licence was renewed, or has run out and is raised again as expired, or the driver is no longer active.",
   "ticket-overdue": "Cleared: the ticket was closed, or given a later due date.",
+  "position-stale": "Cleared: a position came in, or the session was paused or ended, or the route ended.",
 }

@@ -92,6 +92,9 @@ export const SUBJECT_SHAPE = `(${column("route_id")} is not null)::int + (${colu
 /** A resolver only with a resolution, a resolution with a resolver unless a rule raised the alert, a note only with a resolution. */
 export const RESOLVED_SHAPE = `(${column("resolved_by")} is null or ${column("resolved_at")} is not null) and (${column("resolved_at")} is null or ${column("resolved_by")} is not null or ${column("rule")} is not null) and (${column("resolution_note")} is null or ${column("resolved_at")} is not null)`
 /** A rule and its occurrence together or not at all. */
+/** The rules 0034 spelled into `alert_rule_one_of`, before 0061 (O8 of #290) added `position-stale`. */
+export const ALERT_RULES_AS_OF_0034 = ["route-not-started", "session-silent", "licence-expiring", "ticket-overdue"] as const
+
 export const RULE_SHAPE = `(${column("rule")} is null) = (${column("rule_key")} is null)`
 /** One alert per occurrence, whatever its status, but for one the worker cleared. */
 export const RULE_KEY_INDEX = `CREATE UNIQUE INDEX "alert_rule_key_idx" ON "wms"."alert" USING btree ("company_id","rule_key") WHERE ${column("rule_key")} is not null and (${column("status")} <> 'resolved' or ${column("resolved_by")} is not null);`

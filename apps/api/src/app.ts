@@ -75,6 +75,7 @@ import { QuotaEngine, STANDARD_PLAN } from "@waste/routing/quota"
 import { providerNameFromEnv } from "@waste/routing/select"
 
 import { liveRoutes } from "./routes/live"
+import { positionRoutes } from "./routes/positions"
 import { meRoutes } from "./routes/me"
 import { pickupRoutes } from "./routes/pickups"
 import { stopMoveRoutes } from "./routes/stop-moves"
@@ -286,6 +287,7 @@ export function createApp({
   // clock, the instant a command is stamped with, and the skew an office
   // unload's `occurredAt` may run ahead of it.
   app.route("/", liveRoutes(guard, { now }))
+  app.route("/", positionRoutes(guard, { now }))
   app.route("/", routeRoutes(guard, { now, routing, jobs }))
   // The Plan endpoints (#170) share the routes module and its grant; the provider's name keys the fingerprints.
   app.route("/", planRoutes(guard, { routing, jobs }))

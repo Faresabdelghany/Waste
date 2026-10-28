@@ -20,9 +20,10 @@
 // selection, each route judged and answered on its own; `PickupOrderSet` names every open pickup of the
 // route once, in the order they will be visited (ADR-0002: the sequence is
 // frozen once a session has started, which the route holds). The live read
-// (`LiveRoute`) is a route with its open session and three readings — the
+// (`LiveRoute`) is a route with its open session and its readings — the
 // latest point a proof carried, when the device was last seen, whether it is
-// paused — for the dashboard, paged like every list.
+// paused, and since O8 of #290 its newest position and its estimates — for
+// the dashboard, paged like every list.
 import type { RouteShift as DomainRouteShift } from "@waste/domain/execution/shift"
 import { BALANCE_MOVES_MAX } from "@waste/domain/routing/balance"
 import type { RouteWorkload as DomainRouteWorkload } from "@waste/domain/execution/workload"
@@ -34,6 +35,7 @@ import { FlatPoint } from "./geojson"
 import { Id } from "./ids"
 import { Pickup } from "./pickups"
 import { ActivePlan } from "./plans"
+import { LiveEta, Position } from "./positions"
 import { dayWindowIsOrdered, dayWindowOrdered, ProjectScopedListQuery } from "./queries"
 import { changesSomething, eachOnce, eachOnceSentence, NonNegativeInt, PositiveInt, somethingToChange, stamped } from "./resource"
 import { Session } from "./sessions"
@@ -393,7 +395,7 @@ export type RouteListQuery = z.infer<typeof RouteListQuery>
 export const LiveRouteQuery = ProjectScopedListQuery
 export type LiveRouteQuery = z.infer<typeof LiveRouteQuery>
 
-/** A route as the live dashboard reads it: with its open session and three readings of it. */
+/** A route as the live dashboard reads it: with its open session and its readings. */
 export const LiveRoute = z
   .object({
     ...routeFields,
@@ -403,6 +405,10 @@ export const LiveRoute = z
     session: Session.nullable(),
     /** The latest point a proof carried, or null. */
     lastLocation: FlatPoint.nullable(),
+    /** The open session's newest position (O8 of #290), or null without one. */
+    lastPosition: Position.nullable(),
+    /** The next stop still to come and the trip's end, as the route's estimates read them (O8 of #290); null for a route without an active Plan. */
+    eta: LiveEta.nullable(),
     /** The open session's `lastSeenAt`, or null without one. */
     lastSeenAt: IsoDateTime.nullable(),
     /** Whether the open session is paused. */

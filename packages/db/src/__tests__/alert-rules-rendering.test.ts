@@ -6,7 +6,10 @@
 // resolution-rendering.test.ts maps today's table back. Then migration 0034,
 // which is exactly those statements under its header: no table is new, so
 // nothing is hand-written, and every row present passes the widened checks
-// and names no rule, so nothing is guarded. No database.
+// and names no rule, so nothing is guarded. Migration 0061 (O8 of #290) since
+// grew the rule's check by `position-stale`, so today's spelling of it is
+// mapped back onto 0034's four (`CHANGED_IN_0061`), and
+// stale-positions-rendering.test.ts pins 0061 itself. No database.
 import assert from "node:assert/strict"
 import { readFile } from "node:fs/promises"
 import { join } from "node:path"
@@ -22,7 +25,7 @@ import { driver, vehicle } from "../schema/fleet"
 import { company, project } from "../schema/organisation"
 import { alert, ticket } from "../schema/resolution"
 import { normalised, statementsOf } from "../sql/hand-written"
-import { alertAsOf0009, RESOLVED_SHAPE, RULE_KEY_INDEX, RULE_SHAPE, SUBJECT_SHAPE } from "./alert-as-of"
+import { ALERT_RULES_AS_OF_0034, alertAsOf0009, RESOLVED_SHAPE, RULE_KEY_INDEX, RULE_SHAPE, SUBJECT_SHAPE } from "./alert-as-of"
 import { checksOf, list, ref } from "./rendering"
 import { statementsBetween } from "./specimen"
 
@@ -32,8 +35,13 @@ const referenced = { company, project, route, vehicle, driver, container, ticket
 
 const column = (name: string) => ref("alert", name)
 
+const ruleCheck = (rules: readonly string[]) => `ALTER TABLE "wms"."alert" ADD CONSTRAINT "alert_rule_one_of" CHECK (${column("rule")} in (${list(...rules)}));`
+
+/** What 0061 changed of what 0034 wrote: the rule's check as drizzle-kit spells it today, onto 0034's four. */
+const CHANGED_IN_0061 = new Map([[ruleCheck(ALERT_RULES), ruleCheck(ALERT_RULES_AS_OF_0034)]])
+
 describe("the alert rules as drizzle-kit writes them", () => {
-  const generated = statementsBetween({ ...referenced, alert: alertAsOf0009 }, { ...referenced, alert })
+  const generated = statementsBetween({ ...referenced, alert: alertAsOf0009 }, { ...referenced, alert }).then((statements) => statements.map((statement) => CHANGED_IN_0061.get(statement) ?? statement))
 
   test("the rule and its occurrence, one alert per occurrence whatever its status, a ticket as a subject, and a rule's alert resolved by nobody", async () => {
     assert.deepEqual(await generated, [
@@ -42,7 +50,7 @@ describe("the alert rules as drizzle-kit writes them", () => {
       'ALTER TABLE "wms"."alert" ADD COLUMN "rule" text;',
       'ALTER TABLE "wms"."alert" ADD COLUMN "rule_key" text;',
       RULE_KEY_INDEX,
-      `ALTER TABLE "wms"."alert" ADD CONSTRAINT "alert_rule_one_of" CHECK (${column("rule")} in (${list(...ALERT_RULES)}));`,
+      ruleCheck(ALERT_RULES_AS_OF_0034),
       `ALTER TABLE "wms"."alert" ADD CONSTRAINT "alert_rule_shape" CHECK (${RULE_SHAPE});`,
       `ALTER TABLE "wms"."alert" ADD CONSTRAINT "alert_subject_shape" CHECK (${SUBJECT_SHAPE});`,
       `ALTER TABLE "wms"."alert" ADD CONSTRAINT "alert_resolved_shape" CHECK (${RESOLVED_SHAPE});`,

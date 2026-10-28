@@ -114,10 +114,10 @@ export type SequencedStop = { id: string; position: number; status: string; reas
 type StopWarnings = ActivePlan["stopWarnings"]
 
 /** A Plan's stop as its readings take it: a pickup, or an unload visit on the way (O15 of #290). */
-type PlanStopRow = { planId: string; kind: string; pickupId: string | null; unloadingStationId: string | null; position: number; warning: string | null }
+export type PlanStopRow = { planId: string; kind: string; pickupId: string | null; unloadingStationId: string | null; position: number; warning: string | null }
 
 /** Each Plan's stops in its order, by its id. */
-async function planStopsByPlan(tx: Tx, companyId: string, planIds: readonly string[]): Promise<Map<string, PlanStopRow[]>> {
+export async function planStopsByPlan(tx: Tx, companyId: string, planIds: readonly string[]): Promise<Map<string, PlanStopRow[]>> {
   if (planIds.length === 0) return new Map()
   const rows = await tx
     .select({ planId: planStop.planId, kind: planStop.kind, pickupId: planStop.pickupId, unloadingStationId: planStop.unloadingStationId, position: planStop.position, warning: planStop.windowWarning })

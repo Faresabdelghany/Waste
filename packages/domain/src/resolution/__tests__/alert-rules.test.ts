@@ -4,12 +4,17 @@
 import assert from "node:assert/strict"
 import { describe, test } from "node:test"
 
-import { alertOfRule, CLEARED_NOTES, LICENCE_WARNING_DAYS, ROUTE_START_GRACE_MINUTES, RULE_LOOKBACK_HOURS, SESSION_SILENCE_MINUTES } from "../alert-rules"
+import { alertOfRule, CLEARED_NOTES, LICENCE_WARNING_DAYS, POSITION_STALE_MINUTES, ROUTE_START_GRACE_MINUTES, RULE_LOOKBACK_HOURS, SESSION_SILENCE_MINUTES } from "../alert-rules"
 import { ALERT_RULES } from "../vocabulary"
 
 describe("the thresholds", () => {
   test("a route is late half an hour after its planned start, a device silent after a quarter of an hour, and a licence is warned of a month ahead", () => {
     assert.deepEqual([ROUTE_START_GRACE_MINUTES, SESSION_SILENCE_MINUTES, LICENCE_WARNING_DAYS, RULE_LOOKBACK_HOURS], [30, 15, 30, 24])
+  })
+
+  test("a position is stale after ten minutes without one (O8 of #290), sooner than a device is silent, so a phone heard from whose location is off is told apart", () => {
+    assert.equal(POSITION_STALE_MINUTES, 10)
+    assert.ok(POSITION_STALE_MINUTES < SESSION_SILENCE_MINUTES)
   })
 })
 
@@ -58,6 +63,18 @@ describe("what each rule's alert says", () => {
     assert.equal(alert.title, "T-1042 is overdue")
     assert.equal(alert.details, "Bin left out was due 2026-10-24 12:00.")
     assert.deepEqual([alert.ticketId, alert.routeId, alert.driverId, alert.vehicleId, alert.containerId], ["ticket", null, null, null, null])
+  })
+})
+
+describe("a stale position (O8 of #290)", () => {
+  test("is a medium route exception from the telemetry, about the route, its driver and its vehicle, naming the last fix or saying there was none", () => {
+    const stale = alertOfRule({ rule: "position-stale", routeId: "route", routeLabel: "RC-1042", driverId: "mads", driverName: "Mads Jensen", vehicleId: "truck", lastFix: "08:12" })
+    assert.deepEqual([stale.rule, stale.kind, stale.severity, stale.source], ["position-stale", "route-exception", "medium", "telemetry"])
+    assert.equal(stale.title, "No position from Mads Jensen on RC-1042")
+    assert.equal(stale.details, "Last position at 08:12, and none for 10 minutes since, though the device is heard from: its location may be off, or the route's screen closed.")
+    assert.deepEqual([stale.routeId, stale.driverId, stale.vehicleId, stale.ticketId, stale.containerId], ["route", "mads", "truck", null, null])
+    const none = alertOfRule({ rule: "position-stale", routeId: "route", routeLabel: "RC-1042", driverId: "mads", driverName: "Mads Jensen", vehicleId: null, lastFix: null })
+    assert.equal(none.details, "The Driver App has sent no position since the session started, 10 minutes or more, though the device is heard from: its location may be off, or the route's screen closed.")
   })
 })
 

@@ -1,5 +1,5 @@
 // The worker's alert rules (O4 of #290): every few minutes, across companies,
-// the four conditions the office should hear of without anyone raising them
+// the four conditions — five since O8, below — the office should hear of without anyone raising them
 // — a route still waiting half an hour after its planned start, a running
 // route's device silent for a quarter of an hour, an active driver's licence
 // within a month of running out or run out, and an open ticket past its due
@@ -22,10 +22,10 @@
 // licence run out — is a new key, its predecessor cleared.
 //
 // Small by design, since the Pilot's database is metered by its egress (#134):
-// the four raise statements read only the occurrences no alert names yet,
+// the five raise statements read only the occurrences no alert names yet,
 // and the clear statement only the open rule alerts whose condition no longer
 // holds, each with the few columns an alert or a resolution needs, so a quiet
-// tick reads five empty results. They read across companies as `wms_worker`,
+// tick reads six empty results. They read across companies as `wms_worker`,
 // one after another, since the Pilot's worker pool is two connections the
 // other sweeps share; the writes go per company as `wms_api` under
 // `withCompany`, only where there is something to raise or resolve. A route
@@ -34,11 +34,24 @@
 // is `WORKER_RULES_INTERVAL_SECONDS` (apps/pilot/README.md), five minutes
 // unless set, and a missed occurrence is skipped: the next tick reads the
 // same.
+//
+// O8 of #290 added the fifth, `position-stale`: a running, unpaused session
+// on an active route whose device was heard from within the silence window —
+// a device not heard from at all is `session-silent`'s — and whose newest
+// position, or its start or its last resume where none is newer, is ten
+// minutes old (`POSITION_STALE_MINUTES`). Its key is
+// `position-stale:<session>:<newest fix>` (`:none` before the first), so a
+// fix that comes in clears it and a later silence of the position is a new
+// occurrence. Once raised it stands while the position does, whether or not
+// the device goes silent too, and clears on a fix, a pause, or the session's
+// or the route's end. The newest fix is one probe into
+// `session_position_session_id_idx`, the last resume one into the session's
+// receipts, read only for the sessions running.
 import { routeLabel } from "@waste/contracts/execution"
 import { ticketLabel } from "@waste/contracts/resolution"
 import { alert } from "@waste/db/schema/resolution"
 import { withCompany } from "@waste/db/tenant"
-import { alertOfRule, CLEARED_NOTES, LICENCE_WARNING_DAYS, ROUTE_START_GRACE_MINUTES, RULE_LOOKBACK_HOURS, SESSION_SILENCE_MINUTES, type RuleOccurrence } from "@waste/domain/resolution/alert-rules"
+import { alertOfRule, CLEARED_NOTES, LICENCE_WARNING_DAYS, POSITION_STALE_MINUTES, ROUTE_START_GRACE_MINUTES, RULE_LOOKBACK_HOURS, SESSION_SILENCE_MINUTES, type RuleOccurrence } from "@waste/domain/resolution/alert-rules"
 import { ALERT_RULES, OPEN_TICKET_STATUSES, type AlertRule } from "@waste/domain/resolution/vocabulary"
 import { and, eq, inArray, ne, sql, type SQL } from "drizzle-orm"
 
@@ -70,6 +83,11 @@ const OPEN_TICKETS = sql.join(
 /** An instant as a key spells it: UTC, to the microsecond, as Postgres holds it. */
 const keyInstant = (column: SQL) => sql`to_char(${column} at time zone 'UTC', 'YYYY-MM-DD"T"HH24:MI:SS.US"Z"')`
 
+/** A session's newest fix, one backward probe into its track's index. */
+const NEWEST_FIX = sql`(select max(sp.fixed_at) from wms.session_position sp where sp.company_id = s.company_id and sp.session_id = s.id)`
+/** When the session last resumed, from its receipts; null where it never paused. */
+const LAST_RESUME = sql`(select max(dc.occurred_at) from wms.driver_command dc where dc.company_id = s.company_id and dc.session_id = s.id and dc.kind = 'resume' and dc.outcome = 'applied')`
+
 /** Each rule's key at the tick's instant, spelled once for the raise and the clear. */
 const keysAt = (now: SQL) => ({
   /** The route and its planned day and start: a route moved is a new occurrence. */
@@ -78,6 +96,8 @@ const keysAt = (now: SQL) => ({
   /** The expiry, and `:expired` once the project's today is past it: a licence that runs out while warned of is a second, graver occurrence, and its warning clears. */
   licence: sql`'licence-expiring:' || d.id || ':' || to_char(d.licence_expiry, 'YYYY-MM-DD') || case when d.licence_expiry < (${now} at time zone p.timezone)::date then ':expired' else '' end`,
   ticket: sql`'ticket-overdue:' || t.id || ':' || ${keyInstant(sql`t.due_at`)}`,
+  /** The session and its newest fix: a fix that comes in is a new occurrence, its predecessor cleared. */
+  position: sql`'position-stale:' || s.id || ':' || coalesce(${keyInstant(NEWEST_FIX)}, 'none')`,
 })
 
 /** An alert that holds its key: any but one the worker itself cleared — `alert_rule_key_idx`'s predicate. */
@@ -119,6 +139,21 @@ export async function occurrencesToRaise(worker: JobContext["worker"], at: Date)
        and s.last_seen_at > ${lookback}
        and ${noAlertWith(KEYS.session, sql`s.company_id`)}
   `)
+  const positions = await worker.db.execute<{ company_id: string; project_id: string; rule_key: string; route_id: string; number: number; driver_id: string; driver_name: string; vehicle_id: string; last_fix: string | null }>(sql`
+    select s.company_id, s.project_id, ${KEYS.position} as rule_key, s.route_id, r.number, s.driver_id, d.name as driver_name, s.vehicle_id,
+           to_char(${NEWEST_FIX} at time zone p.timezone, 'HH24:MI') as last_fix
+      from wms.session s
+      join wms.route r on r.company_id = s.company_id and r.id = s.route_id
+      join wms.driver d on d.company_id = s.company_id and d.id = s.driver_id
+      join wms.project p on p.company_id = s.company_id and p.id = s.project_id
+     where s.ended_at is null
+       and s.paused_at is null
+       and r.status = 'active'
+       -- heard from: a device not heard from at all is the silent session's alert
+       and s.last_seen_at > ${now} - make_interval(mins => ${SESSION_SILENCE_MINUTES})
+       and greatest(${NEWEST_FIX}, s.started_at, ${LAST_RESUME}) <= ${now} - make_interval(mins => ${POSITION_STALE_MINUTES})
+       and ${noAlertWith(KEYS.position, sql`s.company_id`)}
+  `)
   const licences = await worker.db.execute<{ company_id: string; project_id: string; rule_key: string; driver_id: string; driver_name: string; licence_expiry: string; today: string }>(sql`
     select d.company_id, d.project_id, ${KEYS.licence} as rule_key, d.id as driver_id, d.name as driver_name,
            to_char(d.licence_expiry, 'YYYY-MM-DD') as licence_expiry, to_char((${now} at time zone p.timezone)::date, 'YYYY-MM-DD') as today
@@ -143,6 +178,7 @@ export async function occurrencesToRaise(worker: JobContext["worker"], at: Date)
   return [
     ...routes.map((row) => ({ ...of(row), occurrence: { rule: "route-not-started" as const, routeId: row.route_id, routeLabel: routeLabel(Number(row.number)), operatingDate: row.operating_date, plannedStart: row.planned_start, driverId: row.driver_id, vehicleId: row.vehicle_id } })),
     ...sessions.map((row) => ({ ...of(row), occurrence: { rule: "session-silent" as const, routeId: row.route_id, routeLabel: routeLabel(Number(row.number)), driverId: row.driver_id, driverName: row.driver_name, vehicleId: row.vehicle_id, lastSeen: row.last_seen } })),
+    ...positions.map((row) => ({ ...of(row), occurrence: { rule: "position-stale" as const, routeId: row.route_id, routeLabel: routeLabel(Number(row.number)), driverId: row.driver_id, driverName: row.driver_name, vehicleId: row.vehicle_id, lastFix: row.last_fix } })),
     ...licences.map((row) => ({ ...of(row), occurrence: { rule: "licence-expiring" as const, driverId: row.driver_id, driverName: row.driver_name, licenceExpiry: row.licence_expiry, today: row.today } })),
     ...tickets.map((row) => ({ ...of(row), occurrence: { rule: "ticket-overdue" as const, ticketId: row.ticket_id, ticketLabel: ticketLabel(Number(row.number)), subject: row.subject, due: row.due } })),
   ]
@@ -175,6 +211,10 @@ export async function alertsToClear(worker: JobContext["worker"], at: Date): Pro
            select 1 from wms.driver d join wms.project p on p.company_id = d.company_id and p.id = d.project_id
             where d.company_id = a.company_id and d.id = a.driver_id and a.rule_key = ${KEYS.licence} and d.status = 'active'
               and d.licence_expiry <= (${now} at time zone p.timezone)::date + ${LICENCE_WARNING_DAYS}::int)
+         when 'position-stale' then not exists (
+           select 1 from wms.session s join wms.route r on r.company_id = s.company_id and r.id = s.route_id
+            where s.company_id = a.company_id and s.route_id = a.route_id and s.driver_id = a.driver_id and a.rule_key = ${KEYS.position}
+              and s.ended_at is null and s.paused_at is null and r.status = 'active')
          when 'ticket-overdue' then not exists (
            select 1 from wms.ticket t
             where t.company_id = a.company_id and t.id = a.ticket_id and a.rule_key = ${KEYS.ticket} and t.status in (${OPEN_TICKETS}) and t.due_at < ${now})
@@ -250,7 +290,7 @@ export async function runAlertRules({ api, worker, now, log }: JobContext): Prom
 
 export const alertRulesJob = defineJob<AlertRulesData>({
   queue: ALERT_RULES_QUEUE,
-  description: "Raises the alerts the worker's rules find — a route not started, a device silent, a licence running out, a ticket overdue — and resolves those whose condition has cleared (O4 of #290).",
+  description: "Raises the alerts the worker's rules find — a route not started, a device silent, a licence running out, a ticket overdue, a position stale — and resolves those whose condition has cleared (O4 and O8 of #290).",
   handler: async (_jobs, context) => await runAlertRules(context),
   schedule: rulesSchedule(),
   scheduleData: { source: "schedule" },
