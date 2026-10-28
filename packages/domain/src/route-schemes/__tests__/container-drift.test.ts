@@ -170,7 +170,7 @@ describe("the 10 % threshold", () => {
 })
 
 describe("a group's own planning area (O30 of #290)", () => {
-  const group = (planningAreaId?: string): CollectionGroup => ({ id: "group-a", name: "A", days: ["mon"], fractions: ["Residual"], stopSource: "rule", containerIds: [], ...(planningAreaId === undefined ? {} : { planningAreaId }) })
+  const group = (planningAreaId?: string): CollectionGroup => ({ id: "group-a", name: "A", days: ["monday"], fractions: ["Residual"], stopSource: "rule", containerIds: [], ...(planningAreaId === undefined ? {} : { planningAreaId }) })
   const plans = { plans: [] }
 
   test("a group without one is signed with the scheme's area, as before", () => {
