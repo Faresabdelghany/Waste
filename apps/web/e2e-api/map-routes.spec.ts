@@ -145,7 +145,8 @@ test("until the API's routes and stops are read the map draws no route: nothing 
 })
 
 test("a click on an API route's line opens its card with the route's own facts, and Open route lands on its details", async ({ api, page }) => {
-  const { routes } = await schemeWithRoutes(api, uniqueName("E2E Map card"))
+  // WH-24 is a rear loader: the scheme's rule asks for one, so its routes hold no container WH-24 cannot lift (O7 of #290).
+  const { routes } = await schemeWithRoutes(api, uniqueName("E2E Map card"), 14, { vehicleType: "Rear loader" })
   const [route] = routes
   // Assigned through the API, so the card has a vehicle and a driver to show.
   const vehicle = (await listAll<{ id: string; callsign: string | null }>(api, "/vehicles")).find((row) => row.callsign === "WH-24")

@@ -60,7 +60,8 @@ test("a generated route is the API's row: listed under its label, opened under t
 })
 
 test("the dispatcher's commands: an unassigned dispatch is the API's 409, assign names the driver and the vehicle, reschedule moves the start, dispatch makes it Ready, and cancel's reason is its deviation", async ({ api, page }) => {
-  const { routes } = await schemeWithRoutes(api, uniqueName("E2E Dispatch"))
+  // WH-24 is a rear loader: the scheme's rule asks for one, so its routes hold no container WH-24 cannot lift (O7 of #290).
+  const { routes } = await schemeWithRoutes(api, uniqueName("E2E Dispatch"), 14, { vehicleType: "Rear loader" })
   const [route] = routes
   const driver = await driverNamed(api, SEEDED_DRIVER.name)
   const vehicle = (await listAll<{ id: string; callsign: string | null }>(api, "/vehicles")).find((row) => row.callsign === "WH-24")

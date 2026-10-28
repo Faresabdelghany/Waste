@@ -32,18 +32,22 @@ export type Scheme = { id: string; name: string; projectId: string; editPolicy: 
 const WEEKDAYS = ["monday", "tuesday", "wednesday", "thursday", "friday"] as const
 
 /** A validated scheme made through the API for the run, uniquely named and never cleaned up: one rule group, Residual inside Indre By Operations, on `serviceDays` from `validFrom`, from the depot named `depot` where one is. */
-export async function createScheme(api: APIRequestContext, name: string, { serviceDays, validFrom, depot }: { serviceDays: readonly string[]; validFrom: string; depot?: string }): Promise<Scheme> {
-  const [project, areas, fractions, depots] = await Promise.all([
+export async function createScheme(api: APIRequestContext, name: string, { serviceDays, validFrom, depot, vehicleType }: { serviceDays: readonly string[]; validFrom: string; depot?: string; vehicleType?: string }): Promise<Scheme> {
+  const [project, areas, fractions, depots, types] = await Promise.all([
     projectNamed(api, "Copenhagen Central"),
     listAll<Named>(api, "/planning-areas"),
     listAll<Named>(api, "/waste-fractions"),
     depot === undefined ? Promise.resolve<Named[]>([]) : listAll<Named>(api, "/depots"),
+    vehicleType === undefined ? Promise.resolve<Named[]>([]) : listAll<Named>(api, "/vehicle-types"),
   ])
   const area = areas.find((row) => row.name === "Indre By Operations")
   const residual = fractions.find((row) => row.name === "Residual")
   expect(area && residual, "the seed holds Indre By Operations and Residual").toBeTruthy()
   const depotId = depots.find((row) => row.name === depot)?.id
   if (depot !== undefined) expect(depotId, `the seed holds ${depot}`).toBeTruthy()
+  // A rule asking for a vehicle type matches only the containers that type lifts, so a vehicle of it can serve every stop (O7 of #290).
+  const vehicleTypeId = types.find((row) => row.name === vehicleType)?.id ?? null
+  if (vehicleType !== undefined) expect(vehicleTypeId, `the seed holds ${vehicleType}`).toBeTruthy()
   const created = await api.post("/route-schemes", {
     data: {
       projectId: project.id,
@@ -56,7 +60,7 @@ export async function createScheme(api: APIRequestContext, name: string, { servi
       status: "validated",
       validFrom,
       ...(depotId === undefined ? {} : { depotId }),
-      collectionGroups: [{ name, days: serviceDays, stopSource: "rule", rule: { wasteFractionIds: [residual?.id], containerTypeIds: [], vehicleTypeId: null } }],
+      collectionGroups: [{ name, days: serviceDays, stopSource: "rule", rule: { wasteFractionIds: [residual?.id], containerTypeIds: [], vehicleTypeId } }],
     },
   })
   expect(created.status(), await created.text()).toBe(201)
@@ -64,9 +68,9 @@ export async function createScheme(api: APIRequestContext, name: string, { servi
 }
 
 /** A scheme made for the run and its routes, generated over `days` from tomorrow, in the order they run: every one planned, unassigned, the scheme's own. */
-export async function schemeWithRoutes(api: APIRequestContext, name: string, days = 14, { depot }: { depot?: string } = {}): Promise<{ scheme: Scheme; routes: ApiRoute[] }> {
+export async function schemeWithRoutes(api: APIRequestContext, name: string, days = 14, { depot, vehicleType }: { depot?: string; vehicleType?: string } = {}): Promise<{ scheme: Scheme; routes: ApiRoute[] }> {
   const from = addDays(dayIn("Europe/Copenhagen"), 1)
-  const scheme = await createScheme(api, name, { serviceDays: WEEKDAYS, validFrom: from, depot })
+  const scheme = await createScheme(api, name, { serviceDays: WEEKDAYS, validFrom: from, depot, vehicleType })
   await generate(api, scheme.id, { from, to: addDays(from, days - 1) })
   const routes = (await listAll<ApiRoute>(api, "/routes", { routeSchemeId: scheme.id })).sort((a, b) => a.operatingDate.localeCompare(b.operatingDate) || a.number - b.number)
   expect(routes.length, `${name} generated routes`).toBeGreaterThan(0)
