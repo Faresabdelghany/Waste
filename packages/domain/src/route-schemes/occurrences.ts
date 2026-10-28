@@ -166,6 +166,20 @@ export function shiftToWorkingDay(
   return cursor
 }
 
+/**
+ * What the holiday policy makes of one recurrence date: collected on it, on a
+ * holiday or not, skipped, or shifted to the nearest working day — the one
+ * rule `generateOccurrences` applies to every date, exported for a reader that
+ * asks it of a single date (the route hold's holiday release, #226).
+ */
+export function holidayDecision(date: string, holidayPolicy: HolidayPolicy, calendar: SchemeCalendar): { date: string; status: OccurrenceStatus; note?: string } {
+  const note = calendar.holidays.get(date)
+  if (note === undefined) return { date, status: "planned" }
+  if (holidayPolicy === "collect") return { date, status: "holiday", note }
+  if (holidayPolicy === "skip") return { date, status: "skipped", note }
+  return { date: shiftToWorkingDay(calendar, date, holidayPolicy === "shift-next" ? 1 : -1), status: "shifted", note }
+}
+
 const byDate = (a: Occurrence, b: Occurrence) =>
   a.date.localeCompare(b.date) || a.plannedDate.localeCompare(b.plannedDate)
 
@@ -187,19 +201,8 @@ export function generateOccurrences(input: GenerateOccurrencesInput): Occurrence
     // The season is the recurrence date's, which a shift does not move.
     const season = seasonOn(recurrence.seasons, cursor)
     const inSeason = season === undefined ? {} : { season: season.name }
-    const note = calendar.holidays.get(cursor)
-    if (note === undefined) {
-      rows.push({ n: null, date: cursor, plannedDate: cursor, week: isoWeek(cursor), status: "planned", ...inSeason })
-      continue
-    }
-    if (holidayPolicy === "collect") {
-      rows.push({ n: null, date: cursor, plannedDate: cursor, week: isoWeek(cursor), status: "holiday", note, ...inSeason })
-    } else if (holidayPolicy === "skip") {
-      rows.push({ n: null, date: cursor, plannedDate: cursor, week: isoWeek(cursor), status: "skipped", note, ...inSeason })
-    } else {
-      const shifted = shiftToWorkingDay(calendar, cursor, holidayPolicy === "shift-next" ? 1 : -1)
-      rows.push({ n: null, date: shifted, plannedDate: cursor, week: isoWeek(shifted), status: "shifted", note, ...inSeason })
-    }
+    const { date, status, note } = holidayDecision(cursor, holidayPolicy, calendar)
+    rows.push({ n: null, date, plannedDate: cursor, week: isoWeek(date), status, ...(note === undefined ? {} : { note }), ...inSeason })
   }
 
   rows.sort(byDate)

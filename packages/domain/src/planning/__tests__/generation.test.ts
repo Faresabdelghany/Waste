@@ -14,6 +14,7 @@ import type { SchemeRecurrence } from "../../route-schemes/recurrence"
 import {
   compatibilityKey,
   holidayListOf,
+  holidayReleases,
   keptOffHoliday,
   matchStampOf,
   NO_LONGER_PLANS_GROUP,
@@ -161,6 +162,33 @@ describe("planRoutes", () => {
     for (const existing of [route({ id: "r2", serviceDate: "2026-10-08", held: true }), route({ id: "r2", serviceDate: "2026-10-08", operatingDate: "2026-10-09" })]) {
       assert.deepEqual(skip(existing).decisions, [{ kind: "cancel", routeId: "r2", groupId: residual.id, serviceDate: "2026-10-08", note: "Skipped · Test Day" }], JSON.stringify(existing))
     }
+  })
+
+  test("a holiday input releases a held route the scheme's own decision moves under it, and keeps one the office put elsewhere unless its day becomes one the scheme moves off (#226)", () => {
+    const shiftNext = (calendar: SchemeCalendar) => ({ holidayPolicy: "shift-next" as const, calendar })
+    const held = (serviceDate: string, operatingDate = serviceDate) => ({ serviceDate, operatingDate })
+    // Held by an assign on Thursday 8 Oct, which becomes a holiday: its neighbours move to Friday, so it is released to move with them.
+    assert.equal(holidayReleases(held("2026-10-08"), shiftNext(restingWeekend), shiftNext(withHoliday)), true)
+    // The holiday taken away again: a route held where the shift put it goes back with its neighbours.
+    assert.equal(holidayReleases(held("2026-10-08", "2026-10-09"), shiftNext(withHoliday), shiftNext(restingWeekend)), true)
+    // A holiday on another day, or one collected on, moves nothing under it.
+    assert.equal(holidayReleases(held("2026-10-12"), shiftNext(restingWeekend), shiftNext(withHoliday)), false)
+    assert.equal(holidayReleases(held("2026-10-08"), { holidayPolicy: "collect", calendar: restingWeekend }, { holidayPolicy: "collect", calendar: withHoliday }), false)
+    // Under skip the collection goes, so the route held on it is released for the run to cancel.
+    assert.equal(holidayReleases(held("2026-10-08"), { holidayPolicy: "skip", calendar: restingWeekend }, { holidayPolicy: "skip", calendar: withHoliday }), true)
+    // A policy change re-decides the holiday: a route held where shift-next put it reads as moved by nobody once the policy is skip.
+    assert.equal(holidayReleases(held("2026-10-08", "2026-10-09"), shiftNext(withHoliday), { holidayPolicy: "skip", calendar: withHoliday }), true)
+    assert.equal(holidayReleases(held("2026-10-12"), shiftNext(withHoliday), { holidayPolicy: "skip", calendar: withHoliday }), false)
+    // A weekend change moves a shift's landing day: the route held where the shift landed is released.
+    const fridayHoliday: SchemeCalendar = { holidays: new Map([["2026-10-09", "Test Day"]]), weekend: ["saturday", "sunday"] }
+    assert.equal(holidayReleases(held("2026-10-09", "2026-10-12"), shiftNext(fridayHoliday), shiftNext({ ...fridayHoliday, weekend: ["sunday"] })), true)
+    // The office moved Thursday's collection to Friday: a holiday on Thursday leaves the office's day alone ...
+    assert.equal(holidayReleases(held("2026-10-08", "2026-10-09"), shiftNext(restingWeekend), shiftNext(withHoliday)), false)
+    // ... a holiday on the Friday it chose releases it, the scheme moving a collection off that day ...
+    assert.equal(holidayReleases(held("2026-10-08", "2026-10-09"), shiftNext(restingWeekend), shiftNext(fridayHoliday)), true)
+    // ... unless the policy collects on holidays, or the day was one the scheme moved off already when the office chose it.
+    assert.equal(holidayReleases(held("2026-10-08", "2026-10-09"), { holidayPolicy: "collect", calendar: restingWeekend }, { holidayPolicy: "collect", calendar: fridayHoliday }), false)
+    assert.equal(holidayReleases(held("2026-10-08", "2026-10-09"), shiftNext(fridayHoliday), shiftNext({ ...fridayHoliday, weekend: ["sunday"] })), false)
   })
 
   test("a ready, active or completed route is left; a route a person cancelled is left; one an earlier run cancelled is resurrected when its identity is planned again", () => {
