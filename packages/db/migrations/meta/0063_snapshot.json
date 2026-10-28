@@ -1,5 +1,5 @@
 {
-  "id": "7298ad82-f8f1-414f-b927-15f123449217",
+  "id": "297a1415-15b0-4b4a-9ad3-45bd26ca3ebc",
   "prevId": "d1b64cf6-49a8-485d-95d3-fbd62604c424",
   "version": "7",
   "dialect": "postgresql",
@@ -14276,227 +14276,6 @@
       },
       "isRLSEnabled": false
     },
-    "wms.team": {
-      "name": "team",
-      "schema": "wms",
-      "columns": {
-        "id": {
-          "name": "id",
-          "type": "uuid",
-          "primaryKey": true,
-          "notNull": true,
-          "default": "wms.uuidv7()"
-        },
-        "company_id": {
-          "name": "company_id",
-          "type": "uuid",
-          "primaryKey": false,
-          "notNull": true
-        },
-        "created_at": {
-          "name": "created_at",
-          "type": "timestamp with time zone",
-          "primaryKey": false,
-          "notNull": true,
-          "default": "now()"
-        },
-        "updated_at": {
-          "name": "updated_at",
-          "type": "timestamp with time zone",
-          "primaryKey": false,
-          "notNull": true,
-          "default": "now()"
-        },
-        "name": {
-          "name": "name",
-          "type": "text",
-          "primaryKey": false,
-          "notNull": true
-        },
-        "status": {
-          "name": "status",
-          "type": "text",
-          "primaryKey": false,
-          "notNull": true,
-          "default": "'active'"
-        }
-      },
-      "indexes": {},
-      "foreignKeys": {
-        "team_company_id_fk": {
-          "name": "team_company_id_fk",
-          "tableFrom": "team",
-          "tableTo": "company",
-          "schemaTo": "wms",
-          "columnsFrom": [
-            "company_id"
-          ],
-          "columnsTo": [
-            "id"
-          ],
-          "onDelete": "no action",
-          "onUpdate": "no action"
-        }
-      },
-      "compositePrimaryKeys": {},
-      "uniqueConstraints": {
-        "team_name_key": {
-          "name": "team_name_key",
-          "nullsNotDistinct": false,
-          "columns": [
-            "company_id",
-            "name"
-          ]
-        },
-        "team_tenant_key": {
-          "name": "team_tenant_key",
-          "nullsNotDistinct": false,
-          "columns": [
-            "company_id",
-            "id"
-          ]
-        }
-      },
-      "policies": {},
-      "checkConstraints": {
-        "team_status_one_of": {
-          "name": "team_status_one_of",
-          "value": "\"wms\".\"team\".\"status\" in ('active', 'inactive')"
-        }
-      },
-      "isRLSEnabled": false
-    },
-    "wms.team_member": {
-      "name": "team_member",
-      "schema": "wms",
-      "columns": {
-        "id": {
-          "name": "id",
-          "type": "uuid",
-          "primaryKey": true,
-          "notNull": true,
-          "default": "wms.uuidv7()"
-        },
-        "company_id": {
-          "name": "company_id",
-          "type": "uuid",
-          "primaryKey": false,
-          "notNull": true
-        },
-        "created_at": {
-          "name": "created_at",
-          "type": "timestamp with time zone",
-          "primaryKey": false,
-          "notNull": true,
-          "default": "now()"
-        },
-        "updated_at": {
-          "name": "updated_at",
-          "type": "timestamp with time zone",
-          "primaryKey": false,
-          "notNull": true,
-          "default": "now()"
-        },
-        "team_id": {
-          "name": "team_id",
-          "type": "uuid",
-          "primaryKey": false,
-          "notNull": true
-        },
-        "user_account_id": {
-          "name": "user_account_id",
-          "type": "uuid",
-          "primaryKey": false,
-          "notNull": true
-        }
-      },
-      "indexes": {
-        "team_member_user_account_id_idx": {
-          "name": "team_member_user_account_id_idx",
-          "columns": [
-            {
-              "expression": "company_id",
-              "isExpression": false,
-              "asc": true,
-              "nulls": "last"
-            },
-            {
-              "expression": "user_account_id",
-              "isExpression": false,
-              "asc": true,
-              "nulls": "last"
-            }
-          ],
-          "isUnique": false,
-          "concurrently": false,
-          "method": "btree",
-          "with": {}
-        }
-      },
-      "foreignKeys": {
-        "team_member_company_id_fk": {
-          "name": "team_member_company_id_fk",
-          "tableFrom": "team_member",
-          "tableTo": "company",
-          "schemaTo": "wms",
-          "columnsFrom": [
-            "company_id"
-          ],
-          "columnsTo": [
-            "id"
-          ],
-          "onDelete": "no action",
-          "onUpdate": "no action"
-        },
-        "team_member_team_id_fk": {
-          "name": "team_member_team_id_fk",
-          "tableFrom": "team_member",
-          "tableTo": "team",
-          "schemaTo": "wms",
-          "columnsFrom": [
-            "company_id",
-            "team_id"
-          ],
-          "columnsTo": [
-            "company_id",
-            "id"
-          ],
-          "onDelete": "no action",
-          "onUpdate": "no action"
-        },
-        "team_member_user_account_id_fk": {
-          "name": "team_member_user_account_id_fk",
-          "tableFrom": "team_member",
-          "tableTo": "user_account",
-          "schemaTo": "wms",
-          "columnsFrom": [
-            "company_id",
-            "user_account_id"
-          ],
-          "columnsTo": [
-            "company_id",
-            "id"
-          ],
-          "onDelete": "no action",
-          "onUpdate": "no action"
-        }
-      },
-      "compositePrimaryKeys": {},
-      "uniqueConstraints": {
-        "team_member_membership_key": {
-          "name": "team_member_membership_key",
-          "nullsNotDistinct": false,
-          "columns": [
-            "company_id",
-            "team_id",
-            "user_account_id"
-          ]
-        }
-      },
-      "policies": {},
-      "checkConstraints": {},
-      "isRLSEnabled": false
-    },
     "wms.ticket": {
       "name": "ticket",
       "schema": "wms",
@@ -14592,12 +14371,6 @@
         },
         "assignee_user_account_id": {
           "name": "assignee_user_account_id",
-          "type": "uuid",
-          "primaryKey": false,
-          "notNull": false
-        },
-        "team_id": {
-          "name": "team_id",
           "type": "uuid",
           "primaryKey": false,
           "notNull": false
@@ -14794,33 +14567,6 @@
             },
             {
               "expression": "assignee_user_account_id",
-              "isExpression": false,
-              "asc": true,
-              "nulls": "last"
-            },
-            {
-              "expression": "status",
-              "isExpression": false,
-              "asc": true,
-              "nulls": "last"
-            }
-          ],
-          "isUnique": false,
-          "concurrently": false,
-          "method": "btree",
-          "with": {}
-        },
-        "ticket_team_id_status_idx": {
-          "name": "ticket_team_id_status_idx",
-          "columns": [
-            {
-              "expression": "company_id",
-              "isExpression": false,
-              "asc": true,
-              "nulls": "last"
-            },
-            {
-              "expression": "team_id",
               "isExpression": false,
               "asc": true,
               "nulls": "last"
@@ -15171,22 +14917,6 @@
           "columnsFrom": [
             "company_id",
             "assignee_user_account_id"
-          ],
-          "columnsTo": [
-            "company_id",
-            "id"
-          ],
-          "onDelete": "no action",
-          "onUpdate": "no action"
-        },
-        "ticket_team_id_fk": {
-          "name": "ticket_team_id_fk",
-          "tableFrom": "ticket",
-          "tableTo": "team",
-          "schemaTo": "wms",
-          "columnsFrom": [
-            "company_id",
-            "team_id"
           ],
           "columnsTo": [
             "company_id",
@@ -16157,148 +15887,6 @@
         "ticket_sla_hours_range": {
           "name": "ticket_sla_hours_range",
           "value": "\"wms\".\"ticket_sla\".\"hours\" between 1 and 8760"
-        }
-      },
-      "isRLSEnabled": false
-    },
-    "wms.ticket_team_default": {
-      "name": "ticket_team_default",
-      "schema": "wms",
-      "columns": {
-        "id": {
-          "name": "id",
-          "type": "uuid",
-          "primaryKey": true,
-          "notNull": true,
-          "default": "wms.uuidv7()"
-        },
-        "company_id": {
-          "name": "company_id",
-          "type": "uuid",
-          "primaryKey": false,
-          "notNull": true
-        },
-        "project_id": {
-          "name": "project_id",
-          "type": "uuid",
-          "primaryKey": false,
-          "notNull": true
-        },
-        "created_at": {
-          "name": "created_at",
-          "type": "timestamp with time zone",
-          "primaryKey": false,
-          "notNull": true,
-          "default": "now()"
-        },
-        "updated_at": {
-          "name": "updated_at",
-          "type": "timestamp with time zone",
-          "primaryKey": false,
-          "notNull": true,
-          "default": "now()"
-        },
-        "kind": {
-          "name": "kind",
-          "type": "text",
-          "primaryKey": false,
-          "notNull": true
-        },
-        "team_id": {
-          "name": "team_id",
-          "type": "uuid",
-          "primaryKey": false,
-          "notNull": true
-        }
-      },
-      "indexes": {
-        "ticket_team_default_team_id_idx": {
-          "name": "ticket_team_default_team_id_idx",
-          "columns": [
-            {
-              "expression": "company_id",
-              "isExpression": false,
-              "asc": true,
-              "nulls": "last"
-            },
-            {
-              "expression": "team_id",
-              "isExpression": false,
-              "asc": true,
-              "nulls": "last"
-            }
-          ],
-          "isUnique": false,
-          "concurrently": false,
-          "method": "btree",
-          "with": {}
-        }
-      },
-      "foreignKeys": {
-        "ticket_team_default_company_id_fk": {
-          "name": "ticket_team_default_company_id_fk",
-          "tableFrom": "ticket_team_default",
-          "tableTo": "company",
-          "schemaTo": "wms",
-          "columnsFrom": [
-            "company_id"
-          ],
-          "columnsTo": [
-            "id"
-          ],
-          "onDelete": "no action",
-          "onUpdate": "no action"
-        },
-        "ticket_team_default_project_id_fk": {
-          "name": "ticket_team_default_project_id_fk",
-          "tableFrom": "ticket_team_default",
-          "tableTo": "project",
-          "schemaTo": "wms",
-          "columnsFrom": [
-            "company_id",
-            "project_id"
-          ],
-          "columnsTo": [
-            "company_id",
-            "id"
-          ],
-          "onDelete": "no action",
-          "onUpdate": "no action"
-        },
-        "ticket_team_default_team_id_fk": {
-          "name": "ticket_team_default_team_id_fk",
-          "tableFrom": "ticket_team_default",
-          "tableTo": "team",
-          "schemaTo": "wms",
-          "columnsFrom": [
-            "company_id",
-            "team_id"
-          ],
-          "columnsTo": [
-            "company_id",
-            "id"
-          ],
-          "onDelete": "no action",
-          "onUpdate": "no action"
-        }
-      },
-      "compositePrimaryKeys": {},
-      "uniqueConstraints": {
-        "ticket_team_default_project_id_kind_key": {
-          "name": "ticket_team_default_project_id_kind_key",
-          "nullsNotDistinct": false,
-          "columns": [
-            "company_id",
-            "project_id",
-            "kind"
-          ]
-        }
-      },
-      "policies": {},
-      "checkConstraints": {
-        "ticket_team_default_kind_one_of": {
-          "name": "ticket_team_default_kind_one_of",
-          "value": "\"wms\".\"ticket_team_default\".\"kind\" in ('missed-collection', 'overflow', 'access-issue', 'container-request', 'container-defect', 'proof-follow-up', 'complaint', 'reported-problem', 'rejected-command', 'internal-task', 'other')"
         }
       },
       "isRLSEnabled": false
@@ -29965,6 +29553,521 @@
         "visit_rule_step_position_positive": {
           "name": "visit_rule_step_position_positive",
           "value": "\"wms\".\"visit_rule_step\".\"position\" > 0"
+        }
+      },
+      "isRLSEnabled": false
+    },
+    "wms.service_provider_activity": {
+      "name": "service_provider_activity",
+      "schema": "wms",
+      "columns": {
+        "id": {
+          "name": "id",
+          "type": "uuid",
+          "primaryKey": true,
+          "notNull": true,
+          "default": "wms.uuidv7()"
+        },
+        "company_id": {
+          "name": "company_id",
+          "type": "uuid",
+          "primaryKey": false,
+          "notNull": true
+        },
+        "project_id": {
+          "name": "project_id",
+          "type": "uuid",
+          "primaryKey": false,
+          "notNull": true
+        },
+        "created_at": {
+          "name": "created_at",
+          "type": "timestamp with time zone",
+          "primaryKey": false,
+          "notNull": true,
+          "default": "now()"
+        },
+        "updated_at": {
+          "name": "updated_at",
+          "type": "timestamp with time zone",
+          "primaryKey": false,
+          "notNull": true,
+          "default": "now()"
+        },
+        "number": {
+          "name": "number",
+          "type": "integer",
+          "primaryKey": false,
+          "notNull": true
+        },
+        "kind": {
+          "name": "kind",
+          "type": "text",
+          "primaryKey": false,
+          "notNull": true
+        },
+        "status": {
+          "name": "status",
+          "type": "text",
+          "primaryKey": false,
+          "notNull": true
+        },
+        "service_provider_id": {
+          "name": "service_provider_id",
+          "type": "uuid",
+          "primaryKey": false,
+          "notNull": true
+        },
+        "service_area_id": {
+          "name": "service_area_id",
+          "type": "uuid",
+          "primaryKey": false,
+          "notNull": false
+        },
+        "subject": {
+          "name": "subject",
+          "type": "text",
+          "primaryKey": false,
+          "notNull": true
+        },
+        "body": {
+          "name": "body",
+          "type": "text",
+          "primaryKey": false,
+          "notNull": false
+        },
+        "due_on": {
+          "name": "due_on",
+          "type": "date",
+          "primaryKey": false,
+          "notNull": false
+        },
+        "route_scheme_id": {
+          "name": "route_scheme_id",
+          "type": "uuid",
+          "primaryKey": false,
+          "notNull": false
+        },
+        "collection_group_id": {
+          "name": "collection_group_id",
+          "type": "uuid",
+          "primaryKey": false,
+          "notNull": false
+        },
+        "service_days": {
+          "name": "service_days",
+          "type": "text[]",
+          "primaryKey": false,
+          "notNull": false
+        },
+        "effective_from": {
+          "name": "effective_from",
+          "type": "date",
+          "primaryKey": false,
+          "notNull": false
+        },
+        "successor_scheme_id": {
+          "name": "successor_scheme_id",
+          "type": "uuid",
+          "primaryKey": false,
+          "notNull": false
+        },
+        "opened_by": {
+          "name": "opened_by",
+          "type": "uuid",
+          "primaryKey": false,
+          "notNull": true
+        },
+        "closed_by": {
+          "name": "closed_by",
+          "type": "uuid",
+          "primaryKey": false,
+          "notNull": false
+        },
+        "closed_at": {
+          "name": "closed_at",
+          "type": "timestamp with time zone",
+          "primaryKey": false,
+          "notNull": false
+        },
+        "close_reason": {
+          "name": "close_reason",
+          "type": "text",
+          "primaryKey": false,
+          "notNull": false
+        }
+      },
+      "indexes": {
+        "service_provider_activity_project_id_idx": {
+          "name": "service_provider_activity_project_id_idx",
+          "columns": [
+            {
+              "expression": "company_id",
+              "isExpression": false,
+              "asc": true,
+              "nulls": "last"
+            },
+            {
+              "expression": "project_id",
+              "isExpression": false,
+              "asc": true,
+              "nulls": "last"
+            }
+          ],
+          "isUnique": false,
+          "concurrently": false,
+          "method": "btree",
+          "with": {}
+        },
+        "service_provider_activity_service_provider_id_idx": {
+          "name": "service_provider_activity_service_provider_id_idx",
+          "columns": [
+            {
+              "expression": "company_id",
+              "isExpression": false,
+              "asc": true,
+              "nulls": "last"
+            },
+            {
+              "expression": "service_provider_id",
+              "isExpression": false,
+              "asc": true,
+              "nulls": "last"
+            }
+          ],
+          "isUnique": false,
+          "concurrently": false,
+          "method": "btree",
+          "with": {}
+        },
+        "service_provider_activity_service_area_id_idx": {
+          "name": "service_provider_activity_service_area_id_idx",
+          "columns": [
+            {
+              "expression": "company_id",
+              "isExpression": false,
+              "asc": true,
+              "nulls": "last"
+            },
+            {
+              "expression": "service_area_id",
+              "isExpression": false,
+              "asc": true,
+              "nulls": "last"
+            }
+          ],
+          "isUnique": false,
+          "concurrently": false,
+          "method": "btree",
+          "with": {}
+        },
+        "service_provider_activity_route_scheme_id_idx": {
+          "name": "service_provider_activity_route_scheme_id_idx",
+          "columns": [
+            {
+              "expression": "company_id",
+              "isExpression": false,
+              "asc": true,
+              "nulls": "last"
+            },
+            {
+              "expression": "route_scheme_id",
+              "isExpression": false,
+              "asc": true,
+              "nulls": "last"
+            }
+          ],
+          "isUnique": false,
+          "concurrently": false,
+          "method": "btree",
+          "with": {}
+        },
+        "service_provider_activity_collection_group_id_idx": {
+          "name": "service_provider_activity_collection_group_id_idx",
+          "columns": [
+            {
+              "expression": "company_id",
+              "isExpression": false,
+              "asc": true,
+              "nulls": "last"
+            },
+            {
+              "expression": "collection_group_id",
+              "isExpression": false,
+              "asc": true,
+              "nulls": "last"
+            }
+          ],
+          "isUnique": false,
+          "concurrently": false,
+          "method": "btree",
+          "with": {}
+        },
+        "service_provider_activity_successor_scheme_id_idx": {
+          "name": "service_provider_activity_successor_scheme_id_idx",
+          "columns": [
+            {
+              "expression": "company_id",
+              "isExpression": false,
+              "asc": true,
+              "nulls": "last"
+            },
+            {
+              "expression": "successor_scheme_id",
+              "isExpression": false,
+              "asc": true,
+              "nulls": "last"
+            }
+          ],
+          "isUnique": false,
+          "concurrently": false,
+          "method": "btree",
+          "with": {}
+        },
+        "service_provider_activity_opened_by_idx": {
+          "name": "service_provider_activity_opened_by_idx",
+          "columns": [
+            {
+              "expression": "company_id",
+              "isExpression": false,
+              "asc": true,
+              "nulls": "last"
+            },
+            {
+              "expression": "opened_by",
+              "isExpression": false,
+              "asc": true,
+              "nulls": "last"
+            }
+          ],
+          "isUnique": false,
+          "concurrently": false,
+          "method": "btree",
+          "with": {}
+        },
+        "service_provider_activity_closed_by_idx": {
+          "name": "service_provider_activity_closed_by_idx",
+          "columns": [
+            {
+              "expression": "company_id",
+              "isExpression": false,
+              "asc": true,
+              "nulls": "last"
+            },
+            {
+              "expression": "closed_by",
+              "isExpression": false,
+              "asc": true,
+              "nulls": "last"
+            }
+          ],
+          "isUnique": false,
+          "concurrently": false,
+          "method": "btree",
+          "with": {}
+        }
+      },
+      "foreignKeys": {
+        "service_provider_activity_company_id_fk": {
+          "name": "service_provider_activity_company_id_fk",
+          "tableFrom": "service_provider_activity",
+          "tableTo": "company",
+          "schemaTo": "wms",
+          "columnsFrom": [
+            "company_id"
+          ],
+          "columnsTo": [
+            "id"
+          ],
+          "onDelete": "no action",
+          "onUpdate": "no action"
+        },
+        "service_provider_activity_project_id_fk": {
+          "name": "service_provider_activity_project_id_fk",
+          "tableFrom": "service_provider_activity",
+          "tableTo": "project",
+          "schemaTo": "wms",
+          "columnsFrom": [
+            "company_id",
+            "project_id"
+          ],
+          "columnsTo": [
+            "company_id",
+            "id"
+          ],
+          "onDelete": "no action",
+          "onUpdate": "no action"
+        },
+        "service_provider_activity_service_provider_id_fk": {
+          "name": "service_provider_activity_service_provider_id_fk",
+          "tableFrom": "service_provider_activity",
+          "tableTo": "service_provider",
+          "schemaTo": "wms",
+          "columnsFrom": [
+            "company_id",
+            "service_provider_id"
+          ],
+          "columnsTo": [
+            "company_id",
+            "id"
+          ],
+          "onDelete": "no action",
+          "onUpdate": "no action"
+        },
+        "service_provider_activity_service_area_id_fk": {
+          "name": "service_provider_activity_service_area_id_fk",
+          "tableFrom": "service_provider_activity",
+          "tableTo": "service_area",
+          "schemaTo": "wms",
+          "columnsFrom": [
+            "company_id",
+            "project_id",
+            "service_area_id"
+          ],
+          "columnsTo": [
+            "company_id",
+            "project_id",
+            "id"
+          ],
+          "onDelete": "no action",
+          "onUpdate": "no action"
+        },
+        "service_provider_activity_route_scheme_id_fk": {
+          "name": "service_provider_activity_route_scheme_id_fk",
+          "tableFrom": "service_provider_activity",
+          "tableTo": "route_scheme",
+          "schemaTo": "wms",
+          "columnsFrom": [
+            "company_id",
+            "project_id",
+            "route_scheme_id"
+          ],
+          "columnsTo": [
+            "company_id",
+            "project_id",
+            "id"
+          ],
+          "onDelete": "no action",
+          "onUpdate": "no action"
+        },
+        "service_provider_activity_collection_group_id_fk": {
+          "name": "service_provider_activity_collection_group_id_fk",
+          "tableFrom": "service_provider_activity",
+          "tableTo": "collection_group",
+          "schemaTo": "wms",
+          "columnsFrom": [
+            "company_id",
+            "project_id",
+            "collection_group_id"
+          ],
+          "columnsTo": [
+            "company_id",
+            "project_id",
+            "id"
+          ],
+          "onDelete": "no action",
+          "onUpdate": "no action"
+        },
+        "service_provider_activity_successor_scheme_id_fk": {
+          "name": "service_provider_activity_successor_scheme_id_fk",
+          "tableFrom": "service_provider_activity",
+          "tableTo": "route_scheme",
+          "schemaTo": "wms",
+          "columnsFrom": [
+            "company_id",
+            "project_id",
+            "successor_scheme_id"
+          ],
+          "columnsTo": [
+            "company_id",
+            "project_id",
+            "id"
+          ],
+          "onDelete": "no action",
+          "onUpdate": "no action"
+        },
+        "service_provider_activity_opened_by_fk": {
+          "name": "service_provider_activity_opened_by_fk",
+          "tableFrom": "service_provider_activity",
+          "tableTo": "user_account",
+          "schemaTo": "wms",
+          "columnsFrom": [
+            "company_id",
+            "opened_by"
+          ],
+          "columnsTo": [
+            "company_id",
+            "id"
+          ],
+          "onDelete": "no action",
+          "onUpdate": "no action"
+        },
+        "service_provider_activity_closed_by_fk": {
+          "name": "service_provider_activity_closed_by_fk",
+          "tableFrom": "service_provider_activity",
+          "tableTo": "user_account",
+          "schemaTo": "wms",
+          "columnsFrom": [
+            "company_id",
+            "closed_by"
+          ],
+          "columnsTo": [
+            "company_id",
+            "id"
+          ],
+          "onDelete": "no action",
+          "onUpdate": "no action"
+        }
+      },
+      "compositePrimaryKeys": {},
+      "uniqueConstraints": {
+        "service_provider_activity_number_key": {
+          "name": "service_provider_activity_number_key",
+          "nullsNotDistinct": false,
+          "columns": [
+            "company_id",
+            "number"
+          ]
+        },
+        "service_provider_activity_project_key": {
+          "name": "service_provider_activity_project_key",
+          "nullsNotDistinct": false,
+          "columns": [
+            "company_id",
+            "project_id",
+            "id"
+          ]
+        }
+      },
+      "policies": {},
+      "checkConstraints": {
+        "service_provider_activity_kind_one_of": {
+          "name": "service_provider_activity_kind_one_of",
+          "value": "\"wms\".\"service_provider_activity\".\"kind\" in ('route-day-change', 'compliance-follow-up', 'coordination-note')"
+        },
+        "service_provider_activity_status_one_of": {
+          "name": "service_provider_activity_status_one_of",
+          "value": "\"wms\".\"service_provider_activity\".\"status\" in ('pending-approval', 'approved', 'rejected', 'withdrawn', 'open', 'completed', 'cancelled')"
+        },
+        "service_provider_activity_service_days_subset_of": {
+          "name": "service_provider_activity_service_days_subset_of",
+          "value": "\"wms\".\"service_provider_activity\".\"service_days\" <@ ARRAY['monday', 'tuesday', 'wednesday', 'thursday', 'friday', 'saturday', 'sunday']::text[]"
+        },
+        "service_provider_activity_subject_given": {
+          "name": "service_provider_activity_subject_given",
+          "value": "length(btrim(\"wms\".\"service_provider_activity\".\"subject\")) > 0"
+        },
+        "service_provider_activity_kind_shape": {
+          "name": "service_provider_activity_kind_shape",
+          "value": "case \"wms\".\"service_provider_activity\".\"kind\" when 'route-day-change' then \"wms\".\"service_provider_activity\".\"route_scheme_id\" is not null and \"wms\".\"service_provider_activity\".\"collection_group_id\" is not null and cardinality(\"wms\".\"service_provider_activity\".\"service_days\") > 0 and \"wms\".\"service_provider_activity\".\"effective_from\" is not null and \"wms\".\"service_provider_activity\".\"due_on\" is null when 'compliance-follow-up' then \"wms\".\"service_provider_activity\".\"due_on\" is not null and \"wms\".\"service_provider_activity\".\"route_scheme_id\" is null and \"wms\".\"service_provider_activity\".\"collection_group_id\" is null and \"wms\".\"service_provider_activity\".\"service_days\" is null and \"wms\".\"service_provider_activity\".\"effective_from\" is null else \"wms\".\"service_provider_activity\".\"due_on\" is null and \"wms\".\"service_provider_activity\".\"route_scheme_id\" is null and \"wms\".\"service_provider_activity\".\"collection_group_id\" is null and \"wms\".\"service_provider_activity\".\"service_days\" is null and \"wms\".\"service_provider_activity\".\"effective_from\" is null end"
+        },
+        "service_provider_activity_status_shape": {
+          "name": "service_provider_activity_status_shape",
+          "value": "case when \"wms\".\"service_provider_activity\".\"kind\" in ('route-day-change') then \"wms\".\"service_provider_activity\".\"status\" in ('pending-approval', 'approved', 'rejected', 'withdrawn') else \"wms\".\"service_provider_activity\".\"status\" in ('open', 'completed', 'cancelled') end"
+        },
+        "service_provider_activity_closed_shape": {
+          "name": "service_provider_activity_closed_shape",
+          "value": "(\"wms\".\"service_provider_activity\".\"status\" in ('pending-approval', 'open')) = (\"wms\".\"service_provider_activity\".\"closed_by\" is null and \"wms\".\"service_provider_activity\".\"closed_at\" is null) and (\"wms\".\"service_provider_activity\".\"status\" <> 'rejected' or \"wms\".\"service_provider_activity\".\"close_reason\" is not null) and (\"wms\".\"service_provider_activity\".\"status\" = 'approved') = (\"wms\".\"service_provider_activity\".\"successor_scheme_id\" is not null)"
         }
       },
       "isRLSEnabled": false

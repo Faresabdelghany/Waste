@@ -105,6 +105,13 @@ describe("the seeded system roles", () => {
     for (const key of ["service-provider-manager", "service-provider-foreman", "driver", "integration-writer"]) assert.equal(actionsOn(key), undefined, key)
   })
 
+  test("the Service Provider Activities (#474) are opened by both sides' managers and decided by the office: the Operations Manager and the provider's manager create, the foreman reads", () => {
+    const actionsOn = (key: string) => SYSTEM_ROLES.find((role) => role.key === key)?.grants.find((grant) => grant.moduleKey === "service-providers.activities")?.actions
+    assert.deepEqual(actionsOn("company-administrator"), ["view", "edit", "create", "delete"])
+    for (const key of ["operations-manager", "service-provider-manager"]) assert.deepEqual(actionsOn(key), ["view", "edit", "create"], key)
+    for (const key of ["service-provider-foreman", "finance-specialist"]) assert.deepEqual(actionsOn(key), ["view"], key)
+  })
+
   test("every office role that may move a route may make one: edit on route-studio.routes comes with create, the ad-hoc route being a dispatcher's daily job (#111); the provider's manager crews the routes it runs and makes none (#291 slice 23b)", () => {
     const routes = (key: string) => SYSTEM_ROLES.find((role) => role.key === key)?.grants.find((grant) => grant.moduleKey === "route-studio.routes")?.actions ?? []
     const editors = SYSTEM_ROLES.filter((role) => routes(role.key).includes("edit")).map((role) => role.key)

@@ -65,6 +65,7 @@ import * as routesModule from "../routes"
 import * as routingPreviewModule from "../routing-preview"
 import * as routingQuotaModule from "../routing-quota"
 import * as serviceAreasModule from "../service-areas"
+import * as serviceProviderActivitiesModule from "../service-provider-activities"
 import * as serviceProviderPricesModule from "../service-provider-prices"
 import * as pickupExceptionsModule from "../pickup-exceptions"
 import * as sessionsModule from "../sessions"
@@ -146,6 +147,7 @@ const MODULES: Readonly<Record<string, Record<string, unknown>>> = {
   "routing-preview": routingPreviewModule,
   "routing-quota": routingQuotaModule,
   "service-areas": serviceAreasModule,
+  "service-provider-activities": serviceProviderActivitiesModule,
   "service-provider-prices": serviceProviderPricesModule,
   "sessions": sessionsModule,
   "shifts": shiftsModule,

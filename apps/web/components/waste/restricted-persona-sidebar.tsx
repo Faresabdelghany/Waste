@@ -6,6 +6,7 @@ import { usePathname, useRouter } from "next/navigation"
 import { useMemo, type ComponentType } from "react"
 import {
   CaretRight,
+  ClipboardText,
   ChartBar,
   HouseLine,
   MagnifyingGlass,
@@ -101,6 +102,7 @@ const serviceProviderNavItems: PersonaNavItem[] = [
   { label: "Routes", href: "/service-provider-workspace/routes", icon: Path },
   { label: "Fleet", href: "/service-provider-workspace/fleet", icon: Truck },
   { label: "Tickets", href: "/service-provider-workspace/tickets", icon: Ticket },
+  { label: "Activities", href: "/service-provider-workspace/activities", icon: ClipboardText },
   { label: "Team", href: "/service-provider-workspace/team", icon: UsersThree },
 ]
 
