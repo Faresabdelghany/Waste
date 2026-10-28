@@ -1,8 +1,11 @@
 // Who is served and where, on the wire (Issue #78): the Customer, the
 // Property, the parties between them, the Property Group and the Shared
-// Collection Point with its members. Nothing here is effective-dated
-// (ADR-0005): a party or a membership is present or absent, and a Customer, a
-// Property, a Group and a Point each carry a status instead.
+// Collection Point with its members. A party holds its role over a period
+// (ADR-0005, #374): an occupant moves in and out on a day, so the resource
+// says from when until when, while a body names the set in force today and
+// the server dates what it adds and ends. Nothing else here is effective-dated:
+// a membership is present or absent, and a Customer, a Property, a Group and a
+// Point each carry a status instead.
 //
 // A Customer is one record for a person and an organisation alike — the
 // prototype's "Contacts & Companies" is this one resource — so everything but
@@ -59,6 +62,7 @@ import {
 import * as z from "zod"
 
 import { AddressId, AddressParts } from "./addresses"
+import { IsoDate } from "./dates"
 import { PaymentTermsDays } from "./finance"
 import { FlatPoint } from "./geojson"
 import { Id } from "./ids"
@@ -195,6 +199,13 @@ export const PropertyParty = z.strictObject({
 })
 export type PropertyParty = z.infer<typeof PropertyParty>
 
+/** A party as the property reads it (#374): what the customer is to it, from its first day until the first day out, null while it runs. */
+export const PropertyPartyHeld = PropertyParty.extend({
+  validFrom: IsoDate,
+  validTo: IsoDate.nullable(),
+})
+export type PropertyPartyHeld = z.infer<typeof PropertyPartyHeld>
+
 const Parties = z.array(PropertyParty)
 const PartiesBody = Parties.max(SET_MAX)
 const partiesNamedOnce = {
@@ -226,8 +237,8 @@ export const Property = z.object({
   /** The property's access hours (O14 of #290): when in the day a stop here may be served, on the project's clock; null is any time. */
   serviceWindow: TimeWindow.nullable(),
   status: PropertyStatus,
-  /** Who the property's customers are and as what; replaced whole through its own route. */
-  parties: Parties,
+  /** Who the property's customers are and as what, in force on the project's today or from a later day (a move booked ahead), oldest first; the set in force today is replaced whole through its own route. */
+  parties: z.array(PropertyPartyHeld),
 })
 export type Property = z.infer<typeof Property>
 
@@ -281,7 +292,7 @@ export const PropertyPatch = z
   .refine(typedOrFound, oneAddress)
 export type PropertyPatch = z.infer<typeof PropertyPatch>
 
-/** The whole list, replacing what the property had. An empty list is a property nobody is billed for. */
+/** The whole list in force today, replacing what the property has today: a party left out ends today, one added begins today (#374). An empty list is a property nobody is billed for. */
 export const PropertyPartiesSet = z.strictObject({ parties: PartiesBody }).refine((body) => noRepeatedParty(body.parties), partiesNamedOnce)
 export type PropertyPartiesSet = z.infer<typeof PropertyPartiesSet>
 
