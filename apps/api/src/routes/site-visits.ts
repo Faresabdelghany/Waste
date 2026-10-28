@@ -23,6 +23,7 @@ import { FrequentVisitors, FrequentVisitorsQuery, SiteVisit, SiteVisitCheckIn, S
 import type { Tx } from "@waste/db/client"
 import { fractionsOf, likelyTradesOf, NOT_A_CENTRE, priceVisitCharge, recordVisit, siteVisitOf, visitById, visitColumns } from "@waste/db/commands/site-visits"
 import { projectToday } from "@waste/db/commands/project-clock"
+import { wasteFraction } from "@waste/db/schema/catalogue"
 import { property } from "@waste/db/schema/customers"
 import { dropOffPoint, dropOffPointFraction } from "@waste/db/schema/drop-off-points"
 import { siteVisit } from "@waste/db/schema/site-visits"
@@ -183,7 +184,7 @@ export function siteVisitRoutes(guard: MiddlewareHandler<AuthEnv>, { now = () =>
           operationId: "listVisitSites",
           summary: "The recycling centres a visitor is checked in at",
           description:
-            "One project's active recycling centres, by name, each with the fractions it takes: what the check-in's site picker and its fraction chips are drawn from, under `operate.site-visits` so the Site attendant needs no grant on the Drop-off Points themselves. Nothing of the office's — no notes, hours or exceptions. `projectId` is a project the caller works in (400 on the query otherwise).",
+            "One project's active recycling centres, by name, each with the fractions it takes by name: what the check-in's site picker and its fraction chips are drawn from, under `operate.site-visits` so the Site attendant needs no grant on the Drop-off Points or the master data themselves. Nothing of the office's — no notes, hours or exceptions. `projectId` is a project the caller works in (400 on the query otherwise).",
           security: BEARER_SECURITY,
           responses: {
             200: describeJson("The project's active recycling centres.", VisitSites),
@@ -208,11 +209,12 @@ export function siteVisitRoutes(guard: MiddlewareHandler<AuthEnv>, { now = () =>
             sites.length === 0
               ? []
               : await tx
-                  .select({ siteId: dropOffPointFraction.dropOffPointId, wasteFractionId: dropOffPointFraction.wasteFractionId })
+                  .select({ siteId: dropOffPointFraction.dropOffPointId, id: wasteFraction.id, name: wasteFraction.name })
                   .from(dropOffPointFraction)
+                  .innerJoin(wasteFraction, and(eq(wasteFraction.companyId, dropOffPointFraction.companyId), eq(wasteFraction.id, dropOffPointFraction.wasteFractionId)))
                   .where(and(eq(dropOffPointFraction.companyId, principal.companyId), inArray(dropOffPointFraction.dropOffPointId, sites.map((site) => site.id))))
-                  .orderBy(asc(dropOffPointFraction.id))
-          const answer: VisitSites = { items: sites.map((site) => ({ ...site, wasteFractionIds: fractions.filter((row) => row.siteId === site.id).map((row) => row.wasteFractionId) })) }
+                  .orderBy(asc(wasteFraction.name), asc(wasteFraction.id))
+          const answer: VisitSites = { items: sites.map((site) => ({ ...site, wasteFractions: fractions.filter((row) => row.siteId === site.id).map(({ id, name }) => ({ id, name })) })) }
           return c.json(answer)
         },
       )

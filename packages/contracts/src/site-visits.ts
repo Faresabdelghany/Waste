@@ -255,13 +255,17 @@ export type FrequentVisitors = z.infer<typeof FrequentVisitors>
 export const VisitSitesQuery = z.strictObject({ projectId: Id })
 export type VisitSitesQuery = z.infer<typeof VisitSitesQuery>
 
-/** A recycling centre as the check-in picks it: what it is called and the fractions it takes, nothing of the office's. */
+/** A fraction a recycling centre takes, by the name its chip shows. */
+export const VisitSiteFraction = z.object({ id: Id, name: Label })
+export type VisitSiteFraction = z.infer<typeof VisitSiteFraction>
+
+/** A recycling centre as the check-in picks it: what it is called and the fractions it takes, by name, nothing of the office's. */
 export const VisitSite = z.object({
   id: Id,
   projectId: Id,
   code: Label,
   name: Label,
-  wasteFractionIds: z.array(Id),
+  wasteFractions: z.array(VisitSiteFraction),
 })
 export type VisitSite = z.infer<typeof VisitSite>
 

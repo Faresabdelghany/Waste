@@ -72,6 +72,7 @@ import { SORTING_GUIDE_SETTINGS_PANE_ID } from "@/lib/data/sorting-guide"
 import { TICKET_SLA_SETTINGS_PANE_ID } from "@/lib/data/ticket-sla"
 import { PICKUP_EXCEPTION_CHARGES_SETTINGS_PANE_ID } from "@/lib/data/pickup-exception-rules"
 import { BULKY_SCHEDULES_SETTINGS_PANE_ID } from "@/lib/data/bulky"
+import { VISIT_RULES_SETTINGS_PANE_ID } from "@/lib/data/site-visits"
 import { EMISSION_FACTORS_SETTINGS_PANE_ID } from "@/lib/data/fleet-emissions"
 import { PLANNING_AREAS_SETTINGS_PANE_ID } from "@/lib/data/planning-areas"
 import { COLLECTION_CALENDARS_SETTINGS_PANE_ID } from "@/lib/data/collection-calendars"
@@ -202,6 +203,8 @@ const settingsSections: Array<{
       { id: "commercial-ticket-charges", label: "Ticket charges", icon: Ticket },
       // A project's products for the office's work orders on the API (M14 of #293), as Ticket charges are.
       { id: "commercial-work-order-charges", label: "Work order charges", icon: Wrench },
+      // A project's Visit Rules for its recycling centres on the API (#393): offered with the adapter configured.
+      { id: VISIT_RULES_SETTINGS_PANE_ID, label: "Recycling-centre charges", icon: Recycle },
       // A project's mapping onto the office's chart, which its accounting exports book to (#291 C7).
       { id: "commercial-accounting", label: "Accounting", icon: Calculator },
       // A project's charge rules for Pickup Exceptions on the API (M5 of #293): offered with the adapter configured.
@@ -1458,6 +1461,11 @@ const visiblePaneDefinitions: Record<string, SettingsPaneDefinition> = {
   "commercial-work-order-charges": {
     title: "Work order charges",
     description: "The product each of the office's work orders — a delivery, a removal, a swap, a repair, a wash — is charged at when it is completed (M14 of #293).",
+    groups: [],
+  },
+  [VISIT_RULES_SETTINGS_PANE_ID]: {
+    title: "Recycling-centre charges",
+    description: "How a project's recycling-centre visits are charged: a household's free visits a year and the ladder after them, the free fractions, a business's visit and the likely-trade threshold (#393).",
     groups: [],
   },
   "commercial-accounting": {

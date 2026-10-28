@@ -673,6 +673,37 @@ export const customerResourceBusinessFormSchemas: readonly BusinessFormSchema[] 
     ],
   },
   {
+    // The register of plates and cards (#393): on the Pilot the module's own
+    // dialog registers one under its holder
+    // (components/waste/commands/site-visit-surfaces.tsx); this schema names
+    // the record's fields.
+    key: "customers.site-access",
+    mode: "create",
+    recordKind: "Access credential",
+    title: "Register a plate or card",
+    description: "A vehicle plate or an access card a project's recycling centres admit by: a household's under its property, a business's under its customer and the agreement its visits are charged to.",
+    submitLabel: "Register",
+    contextFieldIds: ["kind", "propertyId"],
+    sections: [
+      {
+        id: "credential",
+        title: "Credential",
+        fields: [
+          { id: "projectId", label: "Project", type: "select", required: true, relation: projectRelation },
+          { id: "kind", label: "Kind", type: "select", required: true, defaultValue: "plate", options: [{ value: "plate", label: "Plate" }, { value: "card", label: "Card" }] },
+          { id: "value", label: "Plate or card number", type: "text", required: true },
+          { id: "label", label: "Label", type: "text" },
+          { id: "propertyId", label: "Property", type: "select", relation: { workspaceId: "customers", moduleId: "properties" }, description: "A household's; or the business and its agreement below." },
+          { id: "customerId", label: "Customer", type: "select", relation: { workspaceId: "customers", moduleId: "contacts" } },
+          { id: "agreementId", label: "Agreement", type: "select", relation: { workspaceId: "customers", moduleId: "agreements" } },
+          { id: "validFrom", label: "First day in force", type: "date", required: true },
+          { id: "lastDay", label: "Last day in force", type: "date" },
+        ],
+      },
+    ],
+    execution: { kind: "create-record", initialStatus: "In force", completionMessage: "Credential registered." },
+  },
+  {
     // The Applications (#293 M7): a customer's written request as it reached
     // the office, on the API; its decision is a command of its own.
     key: "customers.applications",

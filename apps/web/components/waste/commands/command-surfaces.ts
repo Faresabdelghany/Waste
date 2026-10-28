@@ -35,6 +35,7 @@ import { emptyBusinessFilters, singleFilterValue, type BusinessFilters, type Fil
 import { AgreementCommandsSurface } from "./agreement-surfaces"
 import { ApplicationCommandsSurface } from "./application-surfaces"
 import { BookBulkySurface, BulkyBookingCommandsSurface } from "./bulky-surfaces"
+import { CredentialCommandsSurface, RegisterCredentialSurface, SiteVisitCommandsSurface, SiteVisitsPrimarySurface } from "./site-visit-surfaces"
 import { AllocateSurface, AllocationCommandsSurface } from "./allocation-surfaces"
 import { DriverAbsenceSurface, VehicleUnavailabilitySurface } from "./availability-surfaces"
 import { AddManualEventSurface, BillingRunSurface, EventCommandsSurface, InvoiceSurface, RunBillingSurface } from "./billing-surfaces"
@@ -168,6 +169,10 @@ export const COMMAND_SURFACES: Readonly<Record<string, CommandSurface>> = {
   // opening on what still needs attention.
   // O11 of #290: a bulky collection booked by its own dialog, its days read from the place's schedule; a booked one routed onto a route of its day or cancelled.
   "operate.bulky-bookings": { primary: BookBulkySurface, rowActions: BulkyBookingCommandsSurface },
+  // #393: the attendant's check-in is its own page, with the likely trades beside it; a visit is voided with why, never edited.
+  "operate.site-visits": { primary: SiteVisitsPrimarySurface, rowActions: SiteVisitCommandsSurface },
+  // #393: a plate or a card registered by its own dialog under its holder; its label and end edited, and blocked or unblocked, in its details.
+  "customers.site-access": { primary: RegisterCredentialSurface, rowActions: CredentialCommandsSurface },
   "operate.tickets": { primary: NewTicketSurface, list: { readers: ({ accountId }) => ticketListReaders(accountId), initial: TICKET_LIST_INITIAL } },
   "operate.exceptions": { primary: RaiseAlertSurface, rowActions: AlertCommandsSurface, list: { readers: alertListReaders, initial: ALERT_LIST_INITIAL } },
   // Slice 10 (#185): a product is made in Settings, so both pricing modules'

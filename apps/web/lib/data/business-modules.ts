@@ -1961,7 +1961,7 @@ const operate: WorkspaceDefinition = {
       ],
     },
     {
-      // Recycling-centre visits (M4 of #293): on the API only, so no fixture records; the ledger, the likely trades and the phone-first check-in are M4b's.
+      // Recycling-centre visits (M4 of #293): on the API only, so no fixture records; the ledger with its Likely trades and Void, and the attendant's phone-first /check-in (components/waste/commands/site-visit-surfaces.tsx, components/waste/check-in/).
       id: "site-visits",
       label: "Site visits",
       title: "Recycling-centre visits",
@@ -2835,7 +2835,7 @@ const customers: WorkspaceDefinition = {
       ],
     },
     {
-      // The register of plates and cards (M4 of #293): on the API only, so no fixture records; the office's pane is M4b's.
+      // The register of plates and cards (M4 of #293): on the API only, so no fixture records; registered, edited and blocked through components/waste/commands/site-visit-surfaces.tsx.
       id: "site-access",
       label: "Site access",
       title: "Recycling-centre access",
@@ -3680,7 +3680,7 @@ const operateWithoutRouteStudio: WorkspaceDefinition = {
     // Retained as a data contract for route evidence and existing schemas,
     // but omitted from office navigation and public routing.
     requireWorkspaceModule(operate, "driver-app"),
-    // Recycling-centre visits (M4 of #293): the ledger and the attendant's check-in, whose pages are M4b's.
+    // Recycling-centre visits (M4 of #293): the ledger, beside the attendant's own /check-in.
     requireWorkspaceModule(operate, "site-visits"),
   ],
 }
