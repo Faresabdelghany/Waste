@@ -65,6 +65,7 @@
 import type { ProductStatus } from "@waste/contracts/catalogue"
 import type { CustomerStatus, PropertyStatus, SharedCollectionPointStatus } from "@waste/contracts/customers"
 import type { ContaminantCodeStatus } from "@waste/contracts/pickup-exceptions"
+import type { TeamStatus } from "@waste/contracts/ticket-teams"
 import { vehicleAllocation } from "@waste/db/schema/allocations"
 import type { AllocationStatus, DriverStatus, VehicleStatus, WarehouseStatus } from "@waste/domain/resources/vocabulary"
 import { count } from "@waste/domain/text"
@@ -234,6 +235,15 @@ export const retiredCode = (code: string, by: "a tag" | "a rule"): string => `Th
 export function refuseRetiredCode(status: ContaminantCodeStatus, code: string, by: "a tag" | "a rule"): void {
   if (status === "active") return
   throw problem(409, { detail: retiredCode(code, by) })
+}
+
+/** What a ticket or a project's default naming a retired team is told (O30 of #290, row 7.20). */
+export const retiredTeam = (name: string): string => `The team ${JSON.stringify(name)} is retired; a ticket waits with an active team`
+
+/** A Team a new ticket, a patch moving a ticket's team, or a project's default names: active, or the sentence. */
+export function refuseRetiredTeam(status: TeamStatus, name: string): void {
+  if (status === "active") return
+  throw problem(409, { detail: retiredTeam(name) })
 }
 
 /** What a rule's step naming a product that is not offered is told. */

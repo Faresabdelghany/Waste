@@ -33,6 +33,7 @@
 // a question once the row is. The other three have no status to answer.
 import type { ProductStatus } from "@waste/contracts/catalogue"
 import type { CustomerStatus, PropertyStatus, SharedCollectionPointStatus } from "@waste/contracts/customers"
+import type { TeamStatus } from "@waste/contracts/ticket-teams"
 import type { Tx } from "@waste/db/client"
 import { projectAccess, userAccount } from "@waste/db/schema/access"
 import { agreement, subscription } from "@waste/db/schema/agreements"
@@ -46,7 +47,7 @@ import { vehicleType } from "@waste/db/schema/fleet-types"
 import { serviceProvider } from "@waste/db/schema/organisation"
 import { depot, unloadingStation, warehouse } from "@waste/db/schema/places"
 import { planningArea } from "@waste/db/schema/planning-areas"
-import { ticket } from "@waste/db/schema/resolution"
+import { team, ticket } from "@waste/db/schema/resolution"
 import type { DriverStatus, VehicleKind, VehicleStatus, WarehouseStatus } from "@waste/domain/resources/vocabulary"
 import { and, eq, exists, inArray, isNull, or, sql } from "drizzle-orm"
 import type { PgColumn } from "drizzle-orm/pg-core"
@@ -55,6 +56,7 @@ import { invalidRequest } from "../problem"
 import { findAlert, NOT_AN_ALERT } from "./alert-links"
 import type { AlertRow } from "./resolution-shapes"
 import { requireRow, requireStatus, rowIssue, type NamedRow, type Refusal, type Target, type TenantTable } from "./shared"
+import { refuseRetiredTeam } from "./statuses"
 
 /** What a body is told when it names a customer this company does not have; one sentence, wherever the id sat. */
 export const NOT_A_CUSTOMER = "Not a customer of this company"
@@ -462,6 +464,20 @@ export const NOT_WORKING_IN_PROJECT = "Not a user account working in this projec
 export async function requireTicket(tx: Tx, scope: Scope, id: string | null | undefined, path = "ticketId"): Promise<void> {
   if (id == null) return
   await requireRow(tx, ticket, inProject(ticket, scope, id), { path, message: NOT_A_TICKET })
+}
+
+/** What a body naming no team of this company is told (O30 of #290, row 7.20). */
+export const NOT_A_TEAM = "Not a team of this company"
+
+/** The Team a body names: the company's (400 at its field) and active (409), since a status gates a new reference. */
+export async function requireTeam(tx: Tx, companyId: string, id: string, path = "teamId"): Promise<void> {
+  const [found] = await tx
+    .select({ name: team.name, status: team.status })
+    .from(team)
+    .where(and(eq(team.companyId, companyId), eq(team.id, id)))
+    .limit(1)
+  if (found === undefined) throw invalidRequest("body", [{ path, message: NOT_A_TEAM }])
+  refuseRetiredTeam(found.status as TeamStatus, found.name)
 }
 
 /**

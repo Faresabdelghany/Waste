@@ -12,7 +12,7 @@ import { defineVocabularyTests } from "../../__tests__/vocabulary"
 import { EXECUTION_SOURCES } from "../../execution/vocabulary"
 import * as vocabulary from "../vocabulary"
 
-defineVocabularyTests("Resolution", vocabulary, vocabulary.RESOLUTION_VOCABULARIES, 12, ["OPEN_TICKET_STATUSES", "CLOSED_TICKET_STATUSES", "BILLABLE_RESOLUTIONS"])
+defineVocabularyTests("Resolution", vocabulary, vocabulary.RESOLUTION_VOCABULARIES, 13, ["OPEN_TICKET_STATUSES", "CLOSED_TICKET_STATUSES", "BILLABLE_RESOLUTIONS"])
 
 describe("the Resolution vocabulary's own rules", () => {
   test("the open and the closed statuses are values of the status list and together make the whole of it, in its order", () => {

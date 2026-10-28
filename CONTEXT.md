@@ -298,6 +298,10 @@ _Avoid_: Alert, message
 A condition that requires attention, notification, or acknowledgement and may create or link to a ticket. It is acknowledged and resolved, and links to at most one Ticket. The office raises one by hand; the worker's rules raise one per occurrence of a route not started, a device silent, a licence running out or a ticket overdue — an overdue ticket's alert is about that Ticket, never a new one — and resolve it when the condition clears.
 _Avoid_: Ticket, insight
 
+**Team**:
+The people of the company a Ticket waits with, such as customer service or the container desk, with its members. A Ticket names at most one Team beside its assignee; a project names a default Team per kind, which a ticket opened without one takes. A Team's queue is its open tickets with no assignee, and anyone who works tickets takes one, member or not. A Team is retired rather than deleted, so a ticket it held still names it.
+_Avoid_: Group, queue, department
+
 **SLA Target**:
 The hours a project gives a Ticket of a priority, of every kind or of one kind, from when its issue or request happened to its due date; one kind's target wins over every kind's. Opening a ticket without a due date sets one from it, and an open ticket past its due date is overdue.
 _Avoid_: Deadline, response time, ticket type

@@ -2367,21 +2367,10 @@ column wms.property 12 status text not-null
 column wms.property 13 driver_instructions text
 column wms.property 14 service_window_start time without time zone
 column wms.property 15 service_window_end time without time zone
-column wms.property 16 address_id uuid
-column wms.property 17 street_name text
-column wms.property 18 house_number text
-column wms.property 19 floor text
-column wms.property 20 door text
-column wms.property 21 postcode text
-column wms.property 22 post_town text
-column wms.property 23 municipality_code text
-constraint wms.property property_address_shape CHECK ((((address_id IS NULL) = (street_name IS NULL)) AND ((address_id IS NULL) = (house_number IS NULL)) AND ((address_id IS NULL) = (postcode IS NULL)) AND ((address_id IS NULL) = (post_town IS NULL)) AND ((address_id IS NULL) = (municipality_code IS NULL)) AND ((address_id IS NOT NULL) OR ((floor IS NULL) AND (door IS NULL)))))
 constraint wms.property property_company_id_fk FOREIGN KEY (company_id) REFERENCES wms.company(id)
 constraint wms.property property_kind_one_of CHECK ((kind = ANY (ARRAY['residential'::text, 'commercial'::text, 'public'::text, 'mixed'::text, 'other'::text])))
 constraint wms.property property_location_valid CHECK ((extensions.st_isvalid(location) AND (NOT extensions.st_isempty(location)) AND (extensions.st_xmin((location)::extensions.box3d) >= ('-180'::integer)::double precision) AND (extensions.st_xmax((location)::extensions.box3d) <= (180)::double precision) AND (extensions.st_ymin((location)::extensions.box3d) >= ('-90'::integer)::double precision) AND (extensions.st_ymax((location)::extensions.box3d) <= (90)::double precision)))
-constraint wms.property property_municipality_code_shape CHECK ((municipality_code ~ '^[0-9]{4}$'::text))
 constraint wms.property property_pkey PRIMARY KEY (id)
-constraint wms.property property_postcode_shape CHECK ((postcode ~ '^[0-9]{4}$'::text))
 constraint wms.property property_project_id_fk FOREIGN KEY (company_id, project_id) REFERENCES wms.project(company_id, id)
 constraint wms.property property_project_id_name_key UNIQUE (company_id, project_id, name)
 constraint wms.property property_project_key UNIQUE (company_id, project_id, id)
@@ -3350,6 +3339,42 @@ policy wms.subscription_pause subscription_pause_public_door permissive SELECT t
    FROM wms.project published
   WHERE ((published.company_id = subscription_pause.company_id) AND (published.id = subscription_pause.project_id) AND (published.public_slug IS NOT NULL))))) check=none
 policy wms.subscription_pause subscription_pause_tenant_fence permissive ALL to=wms_api using=(company_id = ( SELECT wms.current_company_id() AS current_company_id)) check=(company_id = ( SELECT wms.current_company_id() AS current_company_id))
+relation wms.team kind=table owner=<owner> persistence=p rls=true force-rls=true replica-identity=d acl=[<owner>=DELETE,INSERT,MAINTAIN,REFERENCES,SELECT,TRIGGER,TRUNCATE,UPDATE/<owner> wms_api=DELETE,INSERT,SELECT,UPDATE/<owner> wms_worker=SELECT/<owner>]
+column wms.team 1 id uuid not-null default=wms.uuidv7()
+column wms.team 2 company_id uuid not-null
+column wms.team 3 created_at timestamp with time zone not-null default=now()
+column wms.team 4 updated_at timestamp with time zone not-null default=now()
+column wms.team 5 name text not-null
+column wms.team 6 status text not-null default='active'::text
+constraint wms.team team_company_id_fk FOREIGN KEY (company_id) REFERENCES wms.company(id)
+constraint wms.team team_name_key UNIQUE (company_id, name)
+constraint wms.team team_pkey PRIMARY KEY (id)
+constraint wms.team team_status_one_of CHECK ((status = ANY (ARRAY['active'::text, 'inactive'::text])))
+constraint wms.team team_tenant_key UNIQUE (company_id, id)
+index wms.team team_name_key CREATE UNIQUE INDEX team_name_key ON wms.team USING btree (company_id, name)
+index wms.team team_pkey CREATE UNIQUE INDEX team_pkey ON wms.team USING btree (id)
+index wms.team team_tenant_key CREATE UNIQUE INDEX team_tenant_key ON wms.team USING btree (company_id, id)
+trigger wms.team team_audit_trail enabled=O CREATE TRIGGER team_audit_trail AFTER INSERT OR DELETE OR UPDATE ON wms.team FOR EACH ROW EXECUTE FUNCTION wms.audit_row('', '')
+trigger wms.team team_touch_updated_at enabled=O CREATE TRIGGER team_touch_updated_at BEFORE UPDATE ON wms.team FOR EACH ROW EXECUTE FUNCTION wms.touch_updated_at()
+policy wms.team team_tenant_fence permissive ALL to=wms_api using=(company_id = ( SELECT wms.current_company_id() AS current_company_id)) check=(company_id = ( SELECT wms.current_company_id() AS current_company_id))
+relation wms.team_member kind=table owner=<owner> persistence=p rls=true force-rls=true replica-identity=d acl=[<owner>=DELETE,INSERT,MAINTAIN,REFERENCES,SELECT,TRIGGER,TRUNCATE,UPDATE/<owner> wms_api=DELETE,INSERT,SELECT,UPDATE/<owner> wms_worker=SELECT/<owner>]
+column wms.team_member 1 id uuid not-null default=wms.uuidv7()
+column wms.team_member 2 company_id uuid not-null
+column wms.team_member 3 created_at timestamp with time zone not-null default=now()
+column wms.team_member 4 updated_at timestamp with time zone not-null default=now()
+column wms.team_member 5 team_id uuid not-null
+column wms.team_member 6 user_account_id uuid not-null
+constraint wms.team_member team_member_company_id_fk FOREIGN KEY (company_id) REFERENCES wms.company(id)
+constraint wms.team_member team_member_membership_key UNIQUE (company_id, team_id, user_account_id)
+constraint wms.team_member team_member_pkey PRIMARY KEY (id)
+constraint wms.team_member team_member_team_id_fk FOREIGN KEY (company_id, team_id) REFERENCES wms.team(company_id, id)
+constraint wms.team_member team_member_user_account_id_fk FOREIGN KEY (company_id, user_account_id) REFERENCES wms.user_account(company_id, id)
+index wms.team_member team_member_membership_key CREATE UNIQUE INDEX team_member_membership_key ON wms.team_member USING btree (company_id, team_id, user_account_id)
+index wms.team_member team_member_pkey CREATE UNIQUE INDEX team_member_pkey ON wms.team_member USING btree (id)
+index wms.team_member team_member_user_account_id_idx CREATE INDEX team_member_user_account_id_idx ON wms.team_member USING btree (company_id, user_account_id)
+trigger wms.team_member team_member_audit_trail enabled=O CREATE TRIGGER team_member_audit_trail AFTER INSERT OR DELETE OR UPDATE ON wms.team_member FOR EACH ROW EXECUTE FUNCTION wms.audit_row('team', 'team_id')
+trigger wms.team_member team_member_touch_updated_at enabled=O CREATE TRIGGER team_member_touch_updated_at BEFORE UPDATE ON wms.team_member FOR EACH ROW EXECUTE FUNCTION wms.touch_updated_at()
+policy wms.team_member team_member_tenant_fence permissive ALL to=wms_api using=(company_id = ( SELECT wms.current_company_id() AS current_company_id)) check=(company_id = ( SELECT wms.current_company_id() AS current_company_id))
 relation wms.ticket kind=table owner=<owner> persistence=p rls=true force-rls=true replica-identity=d acl=[<owner>=DELETE,INSERT,MAINTAIN,REFERENCES,SELECT,TRIGGER,TRUNCATE,UPDATE/<owner> wms_api=DELETE,INSERT,SELECT,UPDATE/<owner> wms_worker=SELECT/<owner>]
 column wms.ticket 1 id uuid not-null default=wms.uuidv7()
 column wms.ticket 2 company_id uuid not-null
@@ -3384,6 +3409,7 @@ column wms.ticket 30 recollection_pickup_id uuid
 column wms.ticket 31 charge_product_id uuid
 column wms.ticket 32 booked_route_id uuid
 column wms.ticket 33 booked_pickup_id uuid
+column wms.ticket 34 team_id uuid
 constraint wms.ticket ticket_agreement_id_fk FOREIGN KEY (company_id, project_id, agreement_id) REFERENCES wms.agreement(company_id, project_id, id)
 constraint wms.ticket ticket_assignee_user_account_id_fk FOREIGN KEY (company_id, assignee_user_account_id) REFERENCES wms.user_account(company_id, id)
 constraint wms.ticket ticket_booked_route_id_booked_pickup_id_fk FOREIGN KEY (company_id, project_id, booked_route_id, booked_pickup_id) REFERENCES wms.pickup(company_id, project_id, route_id, id)
@@ -3418,6 +3444,7 @@ constraint wms.ticket ticket_route_id_pickup_id_fk FOREIGN KEY (company_id, proj
 constraint wms.ticket ticket_shared_collection_point_id_fk FOREIGN KEY (company_id, project_id, shared_collection_point_id) REFERENCES wms.shared_collection_point(company_id, project_id, id)
 constraint wms.ticket ticket_source_one_of CHECK ((source = ANY (ARRAY['office'::text, 'phone'::text, 'email'::text, 'portal'::text, 'driver-app'::text, 'dispatch'::text, 'import'::text, 'integration'::text, 'service-provider'::text])))
 constraint wms.ticket ticket_status_one_of CHECK ((status = ANY (ARRAY['open'::text, 'in-progress'::text, 'pending'::text, 'on-hold'::text, 'completed'::text, 'rejected'::text])))
+constraint wms.ticket ticket_team_id_fk FOREIGN KEY (company_id, team_id) REFERENCES wms.team(company_id, id)
 index wms.ticket ticket_agreement_id_idx CREATE INDEX ticket_agreement_id_idx ON wms.ticket USING btree (company_id, agreement_id)
 index wms.ticket ticket_assignee_user_account_id_status_idx CREATE INDEX ticket_assignee_user_account_id_status_idx ON wms.ticket USING btree (company_id, assignee_user_account_id, status)
 index wms.ticket ticket_booked_pickup_id_key CREATE UNIQUE INDEX ticket_booked_pickup_id_key ON wms.ticket USING btree (company_id, booked_pickup_id) WHERE (booked_pickup_id IS NOT NULL)
@@ -3439,6 +3466,7 @@ index wms.ticket ticket_recollection_route_id_idx CREATE INDEX ticket_recollecti
 index wms.ticket ticket_route_id_idx CREATE INDEX ticket_route_id_idx ON wms.ticket USING btree (company_id, route_id)
 index wms.ticket ticket_shared_collection_point_id_idx CREATE INDEX ticket_shared_collection_point_id_idx ON wms.ticket USING btree (company_id, shared_collection_point_id)
 index wms.ticket ticket_source_event_id_idx CREATE UNIQUE INDEX ticket_source_event_id_idx ON wms.ticket USING btree (company_id, source_event_id) WHERE (source_event_id IS NOT NULL)
+index wms.ticket ticket_team_id_status_idx CREATE INDEX ticket_team_id_status_idx ON wms.ticket USING btree (company_id, team_id, status)
 trigger wms.ticket ticket_touch_updated_at enabled=O CREATE TRIGGER ticket_touch_updated_at BEFORE UPDATE ON wms.ticket FOR EACH ROW EXECUTE FUNCTION wms.touch_updated_at()
 policy wms.ticket ticket_tenant_fence permissive ALL to=wms_api using=(company_id = ( SELECT wms.current_company_id() AS current_company_id)) check=(company_id = ( SELECT wms.current_company_id() AS current_company_id))
 relation wms.ticket_booking kind=table owner=<owner> persistence=p rls=true force-rls=true replica-identity=d acl=[<owner>=DELETE,INSERT,MAINTAIN,REFERENCES,SELECT,TRIGGER,TRUNCATE,UPDATE/<owner> wms_api=INSERT,SELECT/<owner> wms_worker=SELECT/<owner>]
@@ -3540,6 +3568,26 @@ index wms.ticket_sla ticket_sla_project_id_kind_priority_key CREATE UNIQUE INDEX
 trigger wms.ticket_sla ticket_sla_audit_trail enabled=O CREATE TRIGGER ticket_sla_audit_trail AFTER INSERT OR DELETE OR UPDATE ON wms.ticket_sla FOR EACH ROW EXECUTE FUNCTION wms.audit_row('project', 'project_id')
 trigger wms.ticket_sla ticket_sla_touch_updated_at enabled=O CREATE TRIGGER ticket_sla_touch_updated_at BEFORE UPDATE ON wms.ticket_sla FOR EACH ROW EXECUTE FUNCTION wms.touch_updated_at()
 policy wms.ticket_sla ticket_sla_tenant_fence permissive ALL to=wms_api using=(company_id = ( SELECT wms.current_company_id() AS current_company_id)) check=(company_id = ( SELECT wms.current_company_id() AS current_company_id))
+relation wms.ticket_team_default kind=table owner=<owner> persistence=p rls=true force-rls=true replica-identity=d acl=[<owner>=DELETE,INSERT,MAINTAIN,REFERENCES,SELECT,TRIGGER,TRUNCATE,UPDATE/<owner> wms_api=DELETE,INSERT,SELECT,UPDATE/<owner> wms_worker=SELECT/<owner>]
+column wms.ticket_team_default 1 id uuid not-null default=wms.uuidv7()
+column wms.ticket_team_default 2 company_id uuid not-null
+column wms.ticket_team_default 3 project_id uuid not-null
+column wms.ticket_team_default 4 created_at timestamp with time zone not-null default=now()
+column wms.ticket_team_default 5 updated_at timestamp with time zone not-null default=now()
+column wms.ticket_team_default 6 kind text not-null
+column wms.ticket_team_default 7 team_id uuid not-null
+constraint wms.ticket_team_default ticket_team_default_company_id_fk FOREIGN KEY (company_id) REFERENCES wms.company(id)
+constraint wms.ticket_team_default ticket_team_default_kind_one_of CHECK ((kind = ANY (ARRAY['missed-collection'::text, 'overflow'::text, 'access-issue'::text, 'container-request'::text, 'container-defect'::text, 'proof-follow-up'::text, 'complaint'::text, 'reported-problem'::text, 'rejected-command'::text, 'internal-task'::text, 'other'::text])))
+constraint wms.ticket_team_default ticket_team_default_pkey PRIMARY KEY (id)
+constraint wms.ticket_team_default ticket_team_default_project_id_fk FOREIGN KEY (company_id, project_id) REFERENCES wms.project(company_id, id)
+constraint wms.ticket_team_default ticket_team_default_project_id_kind_key UNIQUE (company_id, project_id, kind)
+constraint wms.ticket_team_default ticket_team_default_team_id_fk FOREIGN KEY (company_id, team_id) REFERENCES wms.team(company_id, id)
+index wms.ticket_team_default ticket_team_default_pkey CREATE UNIQUE INDEX ticket_team_default_pkey ON wms.ticket_team_default USING btree (id)
+index wms.ticket_team_default ticket_team_default_project_id_kind_key CREATE UNIQUE INDEX ticket_team_default_project_id_kind_key ON wms.ticket_team_default USING btree (company_id, project_id, kind)
+index wms.ticket_team_default ticket_team_default_team_id_idx CREATE INDEX ticket_team_default_team_id_idx ON wms.ticket_team_default USING btree (company_id, team_id)
+trigger wms.ticket_team_default ticket_team_default_audit_trail enabled=O CREATE TRIGGER ticket_team_default_audit_trail AFTER INSERT OR DELETE OR UPDATE ON wms.ticket_team_default FOR EACH ROW EXECUTE FUNCTION wms.audit_row('project', 'project_id')
+trigger wms.ticket_team_default ticket_team_default_touch_updated_at enabled=O CREATE TRIGGER ticket_team_default_touch_updated_at BEFORE UPDATE ON wms.ticket_team_default FOR EACH ROW EXECUTE FUNCTION wms.touch_updated_at()
+policy wms.ticket_team_default ticket_team_default_tenant_fence permissive ALL to=wms_api using=(company_id = ( SELECT wms.current_company_id() AS current_company_id)) check=(company_id = ( SELECT wms.current_company_id() AS current_company_id))
 relation wms.unload kind=table owner=<owner> persistence=p rls=true force-rls=true replica-identity=d acl=[<owner>=DELETE,INSERT,MAINTAIN,REFERENCES,SELECT,TRIGGER,TRUNCATE,UPDATE/<owner> wms_api=INSERT,SELECT/<owner> wms_sync=SELECT/<owner> wms_worker=SELECT/<owner>]
 column wms.unload 1 id uuid not-null default=wms.uuidv7()
 column wms.unload 2 company_id uuid not-null
@@ -4207,5 +4255,5 @@ journal 1793179564300 85ecc9dc677b5efac299e96018803d2f1b1589a6c0d32f05a8156b9014
 journal 1793182222276 c5e590688f3b59222221801f9adb6ef5b420c207211a83eb9331aa951718ff38
 journal 1793188451416 2908b29fc963fdd7f6371dbb1553734c92718138b9573b1d748bca9694a94037
 journal 1793190991835 4479beffde868c9a521b9ff1b6f44dd1b13dbb0e1293a3dabb1f48108c9407d1
-journal 1793199855626 709fe6bc0aa2d71a4a8a365c80e79db143341dd82867c0e2fdbd062aa7bcc9b3
+journal 1793204615433 7d8dad0b8e97c8a9ec2805bac6030d16814cc91d63335a1501744a836bc96d19
 pgboss-version 42
