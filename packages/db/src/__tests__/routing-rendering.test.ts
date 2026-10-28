@@ -68,43 +68,43 @@ const planTable = (asOf: "0013" | "0056"): string =>
 
 /**
  * plan_stop as 0013 made it, as drizzle-kit writes it since 0056, with why the
- * optimiser ordered a stop outside its window, and since 0057 (O15 of #290),
+ * optimiser ordered a stop outside its window, and since 0058 (O15 of #290),
  * with its kind — a pickup or an unload visit on the way — and the station a
  * visit names, its pickup no longer required.
  */
-const planStopTable = (asOf: "0013" | "0056" | "0057"): string =>
+const planStopTable = (asOf: "0013" | "0056" | "0058"): string =>
   createLedger("plan_stop", [
     '"route_id" uuid NOT NULL',
     '"plan_id" uuid NOT NULL',
-    ...(asOf >= "0057" ? [`"kind" text DEFAULT 'pickup' NOT NULL`, '"pickup_id" uuid', '"unloading_station_id" uuid'] : ['"pickup_id" uuid NOT NULL']),
+    ...(asOf >= "0058" ? [`"kind" text DEFAULT 'pickup' NOT NULL`, '"pickup_id" uuid', '"unloading_station_id" uuid'] : ['"pickup_id" uuid NOT NULL']),
     '"position" integer NOT NULL',
     ...(asOf >= "0056" ? ['"window_warning" text'] : []),
     uniqueKey("plan_stop_plan_id_position_key", "company_id", "plan_id", "position"),
     uniqueKey("plan_stop_plan_id_pickup_id_key", "company_id", "plan_id", "pickup_id"),
     positiveCheck("plan_stop", "position"),
-    ...(asOf >= "0057" ? [oneOfCheck("plan_stop", "kind", ...PLAN_STOP_KINDS)] : []),
+    ...(asOf >= "0058" ? [oneOfCheck("plan_stop", "kind", ...PLAN_STOP_KINDS)] : []),
     ...(asOf >= "0056" ? [oneOfCheck("plan_stop", "window_warning", ...PLAN_STOP_WARNINGS)] : []),
-    ...(asOf >= "0057"
+    ...(asOf >= "0058"
       ? [
           `CONSTRAINT "plan_stop_kind_shape" CHECK (case ${ref("plan_stop", "kind")} when 'pickup' then ${ref("plan_stop", "pickup_id")} is not null and ${ref("plan_stop", "unloading_station_id")} is null else ${ref("plan_stop", "pickup_id")} is null and ${ref("plan_stop", "unloading_station_id")} is not null and ${ref("plan_stop", "window_warning")} is null end)`,
         ]
       : []),
   ])
 
-/** What 0056 and 0057 changed: the plan's and its stops' CREATE TABLEs as drizzle-kit generates them now onto what 0013 says; time-windows-rendering.test.ts and multi-trip-rendering.test.ts pin the statements. */
+/** What 0056 and 0058 changed: the plan's and its stops' CREATE TABLEs as drizzle-kit generates them now onto what 0013 says; time-windows-rendering.test.ts and multi-trip-rendering.test.ts pin the statements. */
 const CHANGED_SINCE_0013 = new Map([
   [planTable("0056"), planTable("0013")],
-  [planStopTable("0057"), planStopTable("0013")],
+  [planStopTable("0058"), planStopTable("0013")],
 ])
 
-/** What 0057 added beside the stops' table: the station's key and its index, which 0013 never wrote. */
+/** What 0058 added beside the stops' table: the station's key and its index, which 0013 never wrote. */
 const STATION_KEY = foreignKey("plan_stop", "plan_stop_unloading_station_id_fk", ["company_id", "unloading_station_id"], "unloading_station", ["company_id", "id"])
 const STATION_INDEX = index("plan_stop", "plan_stop_unloading_station_id_idx", "company_id", "unloading_station_id")
-const ADDED_IN_0057 = new Set([STATION_KEY, STATION_INDEX])
+const ADDED_IN_0058 = new Set([STATION_KEY, STATION_INDEX])
 
 const expected = [
   planTable("0056"),
-  planStopTable("0057"),
+  planStopTable("0058"),
   createLedger("plan_leg", [
     '"route_id" uuid NOT NULL',
     '"plan_id" uuid NOT NULL',
@@ -148,7 +148,7 @@ const generatedAlterations = (): Promise<string[]> => statementsBetween({ route:
 
 /** Everything drizzle-kit wrote at the head of 0013: the three tables and the altered route. */
 const generatedHead = async (): Promise<string[]> => [
-  ...(await statementsFor(tables)).filter((statement) => !ADDED_IN_0057.has(statement)).map((statement) => CHANGED_SINCE_0013.get(statement) ?? statement),
+  ...(await statementsFor(tables)).filter((statement) => !ADDED_IN_0058.has(statement)).map((statement) => CHANGED_SINCE_0013.get(statement) ?? statement),
   ...(await generatedAlterations()),
 ]
 
