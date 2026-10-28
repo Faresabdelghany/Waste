@@ -47,21 +47,26 @@ const scripted = (alertRow?: { status: string; ticketId: string | null }) => {
       },
     }),
     select: () => ({
-      from: (table: Table) => ({
-        where: () => {
-          const name = getTableName(table)
-          const statement: Statement = { kind: "select", table: name }
-          statements.push(statement)
-          const rows = name === "alert" && alertRow !== undefined ? [{ id: ALERT, ...alertRow }] : name === "ticket" ? [{ number: 8831 }] : []
-          const limited = Object.assign(Promise.resolve(rows), {
-            for: (strength: string) => {
-              statement.locked = strength
-              return Promise.resolve(rows)
-            },
-          })
-          return Object.assign(Promise.resolve(rows), { limit: () => limited })
-        },
-      }),
+      from: (table: Table) => {
+        const query = {
+          // The project's default team is read through its team, so a retired one is passed over (O30 of #290).
+          innerJoin: () => query,
+          where: () => {
+            const name = getTableName(table)
+            const statement: Statement = { kind: "select", table: name }
+            statements.push(statement)
+            const rows = name === "alert" && alertRow !== undefined ? [{ id: ALERT, ...alertRow }] : name === "ticket" ? [{ number: 8831 }] : []
+            const limited = Object.assign(Promise.resolve(rows), {
+              for: (strength: string) => {
+                statement.locked = strength
+                return Promise.resolve(rows)
+              },
+            })
+            return Object.assign(Promise.resolve(rows), { limit: () => limited })
+          },
+        }
+        return query
+      },
     }),
   } as unknown as Tx
   return { tx, statements }
@@ -91,9 +96,9 @@ describe("openTicket", () => {
     const { tx, statements } = scripted()
     const newId = minter()
     const { row, answered } = await openTicket(tx, { companyId: COMPANY, draft: draft(), createdBy: OLIVIA, sourceEventId: null, newId, now: () => OPENED })
-    assert.deepEqual(shape(statements), ["update company", "insert ticket", "insert ticket_event", "insert outbox_event"])
+    assert.deepEqual(shape(statements), ["select ticket_team_default", "update company", "insert ticket", "insert ticket_event", "insert outbox_event"])
 
-    const [counter, ticketRow, created, outbox] = statements
+    const [, counter, ticketRow, created, outbox] = statements
     assert.ok(counter.values?.nextTicketNumber !== undefined && typeof counter.values.nextTicketNumber !== "number", "the counter steps in the database, as an expression over its own column, never a number read and written back")
     assert.deepEqual([row.number, answered.number, answered.label], [8831, 8831, "T-8831"], "the number taken is the one the counter had, not the one it has now")
     assert.equal(ticketRow.values?.companyId, COMPANY)
@@ -121,11 +126,11 @@ describe("openTicket", () => {
     const { tx, statements } = scripted({ status: "new", ticketId: null })
     const SOURCE = "01a0d3a5-e5e0-7000-8000-000000000009"
     const { row } = await openTicket(tx, { companyId: COMPANY, draft: draft(ALERT), createdBy: null, sourceEventId: SOURCE, newId: minter(), now: () => OPENED })
-    assert.deepEqual(shape(statements), ["update company", "insert ticket", "insert ticket_event", "select alert for no key update", "select alert", "update alert", "insert outbox_event"])
-    const linked = statements[5]
+    assert.deepEqual(shape(statements), ["select ticket_team_default", "update company", "insert ticket", "insert ticket_event", "select alert for no key update", "select alert", "update alert", "insert outbox_event"])
+    const linked = statements[6]
     assert.deepEqual(linked.values, { ticketId: row.id }, "the alert now names the ticket")
-    assert.deepEqual([statements[1].values?.createdBy, statements[1].values?.sourceEventId], [null, SOURCE], "an event's ticket: no person, the event's id")
-    assert.deepEqual([statements[2].values?.recordedBy, statements[2].values?.sourceEventId], [null, null], "its created row is nobody's, and carries no source event — that key is a folded comment's")
+    assert.deepEqual([statements[2].values?.createdBy, statements[2].values?.sourceEventId], [null, SOURCE], "an event's ticket: no person, the event's id")
+    assert.deepEqual([statements[3].values?.recordedBy, statements[3].values?.sourceEventId], [null, null], "its created row is nobody's, and carries no source event — that key is a folded comment's")
   })
 
   test("is refused by a resolved alert, and by one linked to another ticket, before the outbox is written", async () => {
@@ -135,7 +140,7 @@ describe("openTicket", () => {
       assert.match((error as { message: string }).message, /This alert is resolved and does not change/)
       return true
     })
-    assert.deepEqual(shape(resolved.statements), ["update company", "insert ticket", "insert ticket_event", "select alert for no key update", "select alert"], "nothing after the refusal: the transaction is the caller's to roll back")
+    assert.deepEqual(shape(resolved.statements), ["select ticket_team_default", "update company", "insert ticket", "insert ticket_event", "select alert for no key update", "select alert"], "nothing after the refusal: the transaction is the caller's to roll back")
 
     const taken = scripted({ status: "acknowledged", ticketId: "01a0d3a5-e5e0-7000-8000-00000000000a" })
     await assert.rejects(openTicket(taken.tx, { companyId: COMPANY, draft: draft(ALERT), createdBy: OLIVIA, sourceEventId: null, newId: minter(), now: () => OPENED }), (error: unknown) => {

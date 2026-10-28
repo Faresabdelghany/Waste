@@ -67,7 +67,7 @@ import { importRun, importRunRow } from "../schema/imports"
 import { company, project, serviceProvider } from "../schema/organisation"
 import { depot, unloadingStation, unloadingStationFraction, warehouse } from "../schema/places"
 import { planningArea, planningAreaBoundary } from "../schema/planning-areas"
-import { alert, ticket, ticketBooking, ticketEvent, ticketSla } from "../schema/resolution"
+import { alert, team, teamMember, ticket, ticketBooking, ticketEvent, ticketSla, ticketTeamDefault } from "../schema/resolution"
 import { serviceProviderActivity } from "../schema/service-provider-activities"
 import { application, applicationDecision } from "../schema/applications"
 import { bulkyBooking, bulkyBookingItem, bulkySchedule } from "../schema/bulky"
@@ -251,7 +251,14 @@ export const STOCK_MINIMUMS_AUDITED: readonly Audited[] = [{ table: stockMinimum
 /** The Decommission Reasons (O30 of #290, row 9.6): the company's own list, kept in the master data beside its contaminant codes. */
 export const DECOMMISSION_REASONS_AUDITED: readonly Audited[] = [{ table: decommissionReason, module: "configure.master" }]
 
-export const AUDITED: readonly Audited[] = [...AUDITED_AT_0019, ...SUBSCRIPTION_PAUSE_AUDITED, ...TICKET_SLA_AUDITED, ...DROP_OFF_AUDITED, ...ABSENCES_AUDITED, ...TICKET_CHARGE_AUDITED, ...PICKUP_EXCEPTIONS_AUDITED, ...EMISSIONS_AUDITED, ...APPLICATIONS_AUDITED, ...SUSTAINABILITY_AUDITED, ...CONTAINER_HIRE_AUDITED, ...ACCOUNTING_AUDITED, ...BULKY_AUDITED, ...SITE_VISITS_AUDITED, ...SEASONS_AUDITED, ...SERVICE_PROVIDER_ACTIVITIES_AUDITED, ...STOCK_MINIMUMS_AUDITED, ...DECOMMISSION_REASONS_AUDITED]
+/** The ticket teams (O30 of #290, row 7.20): the company's teams with their members, and a project's default team per ticket kind; their migration writes these triggers. */
+export const TEAMS_AUDITED: readonly Audited[] = [
+  { table: team, module: "configure.templates" },
+  { table: teamMember, module: "configure.templates", parent: setOf(team, teamMember.teamId) },
+  { table: ticketTeamDefault, module: "configure.templates", parent: setOf(project, ticketTeamDefault.projectId) },
+]
+
+export const AUDITED: readonly Audited[] = [...AUDITED_AT_0019, ...SUBSCRIPTION_PAUSE_AUDITED, ...TICKET_SLA_AUDITED, ...DROP_OFF_AUDITED, ...ABSENCES_AUDITED, ...TICKET_CHARGE_AUDITED, ...PICKUP_EXCEPTIONS_AUDITED, ...EMISSIONS_AUDITED, ...APPLICATIONS_AUDITED, ...SUSTAINABILITY_AUDITED, ...CONTAINER_HIRE_AUDITED, ...ACCOUNTING_AUDITED, ...BULKY_AUDITED, ...SITE_VISITS_AUDITED, ...SEASONS_AUDITED, ...SERVICE_PROVIDER_ACTIVITIES_AUDITED, ...STOCK_MINIMUMS_AUDITED, ...DECOMMISSION_REASONS_AUDITED, ...TEAMS_AUDITED]
 
 /** The audited tables by name, for a test that reads a migrated database's triggers. */
 export const AUDITED_TABLE_NAMES: ReadonlySet<string> = new Set(AUDITED.map((entry) => getTableName(entry.table)))

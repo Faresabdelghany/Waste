@@ -103,25 +103,66 @@
 // display number, being named by its title.
 import { TICKET_EVENT_SHAPES } from "@waste/domain/resolution/event-shapes"
 import { TICKET_SLA_HOURS_MAX } from "@waste/domain/resolution/sla"
-import { ALERT_KINDS, ALERT_RULES, ALERT_SEVERITIES, ALERT_SOURCES, ALERT_STATUSES, BILLABLE_RESOLUTIONS, TICKET_EVENT_KINDS, TICKET_KINDS, TICKET_PRIORITIES, TICKET_RESOLUTIONS, TICKET_SOURCES, TICKET_STATUSES, TICKET_VISIBILITIES } from "@waste/domain/resolution/vocabulary"
+import { ALERT_KINDS, ALERT_RULES, ALERT_SEVERITIES, ALERT_SOURCES, ALERT_STATUSES, BILLABLE_RESOLUTIONS, TICKET_EVENT_KINDS, TICKET_KINDS, TICKET_PRIORITIES, TICKET_RESOLUTIONS, TICKET_SOURCES, TICKET_STATUSES, TICKET_VISIBILITIES, TEAM_STATUSES } from "@waste/domain/resolution/vocabulary"
 import { sql, type SQL } from "drizzle-orm"
-import { check, index, integer, text, timestamp, uniqueIndex, uuid, type PgColumn } from "drizzle-orm/pg-core"
+import { check, index, integer, text, timestamp, unique, uniqueIndex, uuid, type PgColumn } from "drizzle-orm/pg-core"
 
 import { tableObjectName } from "../names"
 import { userAccount } from "./access"
 import { agreement } from "./agreements"
 import { product } from "./catalogue"
 import { literal, oneOf } from "./checks"
-import { id, projectScoped, recorded, timestamps } from "./columns"
+import { id, projectScoped, recorded, tenant, timestamps } from "./columns"
 import { container } from "./containers"
 import { customer, property, sharedCollectionPoint } from "./customers"
 import { pickup, route } from "./execution"
 import { driver, vehicle } from "./fleet"
 import { company, project } from "./organisation"
-import { companyReference, projectKey, projectReference, tenantIndex, tenantReference, tenantUnique, type ProjectTable } from "./references"
+import { companyReference, projectKey, projectReference, tenantIndex, tenantKey, tenantReference, tenantUnique, type ProjectTable } from "./references"
 import { wms } from "./wms"
 
 const instant = () => timestamp({ withTimezone: true })
+
+// The Team (O30 of #290, row 7.20): the people a kind of ticket goes to — the
+// office's "Customer service", "Container desk" — the company's and no
+// project's, with its members, a set of the company's accounts. A ticket
+// names its team beside its assignee; the team's queue is a reading (its open
+// tickets with no assignee), never a table, and anyone with the tickets grant
+// takes one, member or not: a team is where a ticket waits, not who may work
+// it. Configuration the office edits under `configure.templates`, audited. A
+// team is retired by its status, never deleted, since the tickets it held
+// still name it.
+export const team = wms.table(
+  "team",
+  {
+    ...id,
+    ...tenant,
+    ...timestamps,
+    name: text().notNull(),
+    status: text().notNull().default("active"),
+  },
+  (t) => [companyReference(t, company), tenantUnique(t, t.name), tenantKey(t), oneOf(t.status, TEAM_STATUSES)],
+)
+
+/** A team's members: one row per account, the set `PUT /teams/:id/members` replaces whole. */
+export const teamMember = wms.table(
+  "team_member",
+  {
+    ...id,
+    ...tenant,
+    ...timestamps,
+    teamId: uuid().notNull(),
+    userAccountId: uuid().notNull(),
+  },
+  (t) => [
+    companyReference(t, company),
+    tenantReference(t, [t.teamId], team),
+    tenantReference(t, [t.userAccountId], userAccount),
+    // One row per pair, led by the team whose set it is.
+    unique(tableObjectName(t.companyId.table, "membership_key", "teamMember")).on(t.companyId, t.teamId, t.userAccountId),
+    tenantIndex(t, t.userAccountId),
+  ],
+)
 
 export const ticket = wms.table(
   "ticket",
@@ -145,6 +186,8 @@ export const ticket = wms.table(
     dueAt: instant(),
     /** Who works it; null is unassigned. Moved by `assign` and by nothing else. */
     assigneeUserAccountId: uuid(),
+    /** The team it waits with (O30 of #290, row 7.20): the opener's, or the project's default for the kind (`ticket_team_default`); null for none. */
+    teamId: uuid(),
     /** The caller's account, or null for the consumer's ticket. */
     createdBy: uuid(),
     /** The outbox event the consumer made it from: a soft uuid, and the idempotency key. */
@@ -180,6 +223,7 @@ export const ticket = wms.table(
     companyReference(t, company),
     tenantReference(t, [t.projectId], project),
     tenantReference(t, [t.assigneeUserAccountId], userAccount),
+    tenantReference(t, [t.teamId], team),
     tenantReference(t, [t.createdBy], userAccount),
     projectReference(t, [t.routeId], route),
     // The pickup of the route the ticket names: the key carries the route on both sides.
@@ -230,6 +274,8 @@ export const ticket = wms.table(
     // The queue and my tickets: each leads with its reference column, so it is that reference's index too.
     tenantIndex(t, t.projectId, t.status),
     tenantIndex(t, t.assigneeUserAccountId, t.status),
+    // A team's queue: its tickets by status, the reference's index too.
+    tenantIndex(t, t.teamId, t.status),
     tenantIndex(t, t.createdBy),
     tenantIndex(t, t.routeId),
     tenantIndex(t, t.pickupId),
@@ -452,5 +498,28 @@ export const ticketSla = wms.table(
     oneOf(t.kind, TICKET_KINDS),
     oneOf(t.priority, TICKET_PRIORITIES),
     check(tableObjectName(t.id.table, "hours_range", "ticketSla"), sql`${t.hours} between 1 and ${sql.raw(String(TICKET_SLA_HOURS_MAX))}`),
+  ],
+)
+
+// The team a project's ticket of a kind goes to when its opener names none
+// (O30 of #290, row 7.20): one per kind and project, read by `openTicket` as
+// it opens a ticket, the office's and the consumer's alike, as the SLA is.
+// Configuration under `configure.templates`, audited, a set of its project.
+export const ticketTeamDefault = wms.table(
+  "ticket_team_default",
+  {
+    ...id,
+    ...projectScoped,
+    ...timestamps,
+    kind: text().notNull(),
+    teamId: uuid().notNull(),
+  },
+  (t) => [
+    companyReference(t, company),
+    tenantReference(t, [t.projectId], project),
+    tenantReference(t, [t.teamId], team),
+    tenantUnique(t, t.projectId, t.kind),
+    oneOf(t.kind, TICKET_KINDS),
+    tenantIndex(t, t.teamId),
   ],
 )
