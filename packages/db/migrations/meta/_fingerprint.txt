@@ -2277,11 +2277,17 @@ column wms.project 14 payment_terms_days integer not-null default=30
 column wms.project 15 payment_reference_scheme text not-null default='none'::text
 column wms.project 16 weight_tolerance_percent integer not-null default=5
 column wms.project 17 hold_for_review boolean not-null default=false
+column wms.project 18 position_retention_days integer
+column wms.project 19 proof_retention_days integer
+column wms.project 20 gps_purpose text
 constraint wms.project project_company_id_fk FOREIGN KEY (company_id) REFERENCES wms.company(id)
+constraint wms.project project_gps_purpose_one_of CHECK ((gps_purpose = ANY (ARRAY['dispatch'::text, 'dispatch-and-proof'::text])))
 constraint wms.project project_name_key UNIQUE (company_id, name)
 constraint wms.project project_payment_reference_scheme_one_of CHECK ((payment_reference_scheme = ANY (ARRAY['none'::text, 'fik-71'::text, 'fik-75'::text])))
 constraint wms.project project_payment_terms_range CHECK (((payment_terms_days >= 0) AND (payment_terms_days <= 365)))
 constraint wms.project project_pkey PRIMARY KEY (id)
+constraint wms.project project_position_retention_range CHECK (((position_retention_days >= 1) AND (position_retention_days <= 30)))
+constraint wms.project project_proof_retention_range CHECK (((proof_retention_days >= 1) AND (proof_retention_days <= 3650)))
 constraint wms.project project_public_slug_key UNIQUE (public_slug)
 constraint wms.project project_public_slug_shape CHECK (((public_slug ~ '^[a-z0-9]+(-[a-z0-9]+)*$'::text) AND ((char_length(public_slug) >= 3) AND (char_length(public_slug) <= 63))))
 constraint wms.project project_status_one_of CHECK ((status = ANY (ARRAY['active'::text, 'onboarding'::text])))
@@ -4400,4 +4406,5 @@ journal 1793213906391 d09c47b341e15b5c9c919bbced5e64b308524015740618eae1263d94d8
 journal 1793215474440 39fa2bbbea432325333ab472e2bbeb5082b9e57e679e1c0041ddf7fe7df76872
 journal 1793216335264 64275b21651c0614f779f558aa0d732f781137bd7a3d84380b2c419861502e64
 journal 1793225274885 7d8dad0b8e97c8a9ec2805bac6030d16814cc91d63335a1501744a836bc96d19
+journal 1793227944164 233234b7acf3c642f212331efc9afedc7d139dcd35159a8709e2d830322834c8
 pgboss-version 42
