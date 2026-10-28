@@ -11,7 +11,7 @@ import { NET_IS_GROSS_LESS_TARE, Unload } from "@waste/contracts/unloads"
 import { createDb, type Database } from "@waste/db/client"
 import { wasteFraction } from "@waste/db/schema/catalogue"
 import { property as propertyTable, sharedCollectionPoint } from "@waste/db/schema/customers"
-import { driverCommand, outboxEvent, pickup as pickupTable, proofOfService, route as routeTable, session as sessionTable } from "@waste/db/schema/execution"
+import { driverCommand, outboxEvent, pickup as pickupTable, proofOfService, route as routeTable, session as sessionTable, sessionPosition } from "@waste/db/schema/execution"
 import { vehicle as vehicleTable } from "@waste/db/schema/fleet"
 import { unloadingStation, unloadingStationFraction } from "@waste/db/schema/places"
 import { ticket as ticketTable } from "@waste/db/schema/resolution"
@@ -240,12 +240,13 @@ describe("the driver door", { skip: database.skip || owner.skip }, () => {
   /** How many rows the company has in each of the tables a replay must not touch. */
   const written = () =>
     withCompany(pool.db, a.companyId, async (tx) => {
-      const [[proofs], [commands], [outbox]] = await Promise.all([
+      const [[proofs], [commands], [outbox], [positions]] = await Promise.all([
         tx.select({ n: count() }).from(proofOfService).where(eq(proofOfService.companyId, a.companyId)),
         tx.select({ n: count() }).from(driverCommand).where(eq(driverCommand.companyId, a.companyId)),
         tx.select({ n: count() }).from(outboxEvent).where(eq(outboxEvent.companyId, a.companyId)),
+        tx.select({ n: count() }).from(sessionPosition).where(eq(sessionPosition.companyId, a.companyId)),
       ])
-      return { proofs: proofs.n, commands: commands.n, outbox: outbox.n }
+      return { proofs: proofs.n, commands: commands.n, outbox: outbox.n, positions: positions.n }
     })
   const sessionRow = async (id: string) => {
     const [row] = await withCompany(pool.db, a.companyId, (tx) => tx.select().from(sessionTable).where(and(eq(sessionTable.companyId, a.companyId), eq(sessionTable.id, id))))
@@ -253,6 +254,23 @@ describe("the driver door", { skip: database.skip || owner.skip }, () => {
     return row
   }
   const photoKey = (route: FixtureRoute, commandId: string) => objectKeyOf({ companyId: a.companyId, routeId: route.id, commandId }, "jpg")
+  /** One fix as the Driver App keeps it, at the town hall unless said. */
+  const fix = (instant: string, over: object = {}) => ({ at: instant, location: TOWN_HALL, accuracyM: 12, ...over })
+  /** A session's positions as `wms_api` reads them, in the order the fixes were taken. */
+  const positionsOf = (sessionId: string) =>
+    withCompany(pool.db, a.companyId, (tx) =>
+      tx
+        .select({ sessionId: sessionPosition.sessionId, routeId: sessionPosition.routeId, driverId: sessionPosition.driverId, fixedAt: sessionPosition.fixedAt, location: sessionPosition.location, accuracyM: sessionPosition.accuracyM, speedKmh: sessionPosition.speedKmh, headingDeg: sessionPosition.headingDeg })
+        .from(sessionPosition)
+        .where(and(eq(sessionPosition.companyId, a.companyId), eq(sessionPosition.sessionId, sessionId)))
+        .orderBy(asc(sessionPosition.fixedAt)),
+    )
+  /** The receipt of one command as `wms_api` reads it. */
+  const receiptRow = async (id: string) => {
+    const [row] = await withCompany(pool.db, a.companyId, (tx) => tx.select().from(driverCommand).where(and(eq(driverCommand.companyId, a.companyId), eq(driverCommand.id, id))))
+    assert.ok(row, `receipt ${id}`)
+    return row
+  }
 
   describe("who may knock", () => {
     test("an account no active driver profile is bound to is refused for the whole request, whatever its grants", async () => {
@@ -1014,6 +1032,86 @@ describe("the driver door", { skip: database.skip || owner.skip }, () => {
     })
   })
 
+  describe("record-positions (O8 of #290)", () => {
+    test("appends one position per fix to the session the command ran in, moves lastSeenAt, writes no event, and keeps in the receipt the count of the fixes and none of their points", async () => {
+      const route = await minted({ pickups: 1 })
+      const sessionId = await started(route)
+      const before = await written()
+      const command = envelope("record-positions", route.id, { points: [fix(at("06:40")), fix(at("06:41"), { location: { type: "Point", coordinates: [12.5951, 55.7089] }, accuracyM: 30, speedKmh: 42, headingDeg: 270 })] }, { occurredAt: at("06:41") })
+      now = new Date(MORNING.getTime() + 60_000)
+      try {
+        const outcome = await applied(command)
+        assert.equal(outcome.result, undefined, "a position is no resource the device reads back")
+        assert.equal((await sessionRow(sessionId)).lastSeenAt.toISOString(), now.toISOString(), "the device was heard from")
+      } finally {
+        now = MORNING
+      }
+      assert.deepEqual(
+        (await positionsOf(sessionId)).map((row) => ({ ...row, fixedAt: row.fixedAt.toISOString() })),
+        [
+          { sessionId, routeId: route.id, driverId: fleet.drivers.mads.id, fixedAt: at("06:40"), location: TOWN_HALL, accuracyM: 12, speedKmh: null, headingDeg: null },
+          { sessionId, routeId: route.id, driverId: fleet.drivers.mads.id, fixedAt: at("06:41"), location: { type: "Point", coordinates: [12.5951, 55.7089] }, accuracyM: 30, speedKmh: 42, headingDeg: 270 },
+        ],
+      )
+      const after = await written()
+      assert.deepEqual({ ...after, commands: after.commands - before.commands, positions: after.positions - before.positions }, { ...before, commands: 1, positions: 2 }, "a receipt and two positions, no proof and no event")
+      const receipt = await receiptRow(command.id)
+      assert.deepEqual([receipt.kind, receipt.outcome, receipt.sessionId, receipt.body], ["record-positions", "applied", sessionId, { points: 2 }])
+      assert.equal(JSON.stringify(receipt.body).includes(String(TOWN_HALL.coordinates[0])), false, "no coordinate in the receipt")
+    })
+
+    test("judges every fix on the envelope's clock rules — five minutes ahead at most, forty-eight hours behind at most, not before the session started — at the fix's own field, and writes none of a refused command's fixes", async () => {
+      const route = await minted()
+      const sessionId = await started(route)
+      const before = await written()
+      const ahead = await rejected(envelope("record-positions", route.id, { points: [fix(at("06:40")), fix(fromNow(OCCURRED_AT_SKEW_MS + 1_000))] }, { occurredAt: at("06:41") }), 400, RECORDED_AFTER_IT_HAPPENED)
+      assert.deepEqual(ahead.errors, [{ path: "body.points.1.at", message: RECORDED_AFTER_IT_HAPPENED }])
+      assert.equal((await applied(envelope("record-positions", route.id, { points: [fix(fromNow(OCCURRED_AT_SKEW_MS))] }, { occurredAt: at("06:41") }))).outcome, "applied", "at the edge ahead")
+
+      const early = await rejected(envelope("record-positions", route.id, { points: [fix(at("06:29")), fix(at("06:42"))] }, { occurredAt: at("06:42") }), 400, BEFORE_THE_SESSION_STARTED)
+      assert.deepEqual(early.errors, [{ path: "body.points.0.at", message: BEFORE_THE_SESSION_STARTED }])
+      assert.equal((await applied(envelope("record-positions", route.id, { points: [fix(at("06:30"))] }, { occurredAt: at("06:43") }))).outcome, "applied", "at the session's start")
+
+      now = new Date(Date.parse(at("06:30")) + COMMAND_BACKDATE_MS + 60_000)
+      try {
+        const late = await rejected(envelope("record-positions", route.id, { points: [fix(at("06:30")), fix(at("06:44"))] }, { occurredAt: at("06:44") }), 400, recordedTooLate(COMMAND_BACKDATE_MS))
+        assert.deepEqual(late.errors, [{ path: "body.points.0.at", message: recordedTooLate(COMMAND_BACKDATE_MS) }])
+      } finally {
+        now = MORNING
+      }
+      assert.deepEqual(
+        (await positionsOf(sessionId)).map((row) => row.fixedAt.toISOString()),
+        [at("06:30"), fromNow(OCCURRED_AT_SKEW_MS)],
+        "the two at the edges, and nothing of the three refused",
+      )
+      assert.equal((await written()).positions - before.positions, 2)
+    })
+
+    test("a paused session takes the fixes kept before the pause; an ended route refuses them as not active", async () => {
+      const route = await minted()
+      const sessionId = await started(route)
+      await applied(envelope("pause", route.id, {}, { occurredAt: at("07:00") }))
+      await applied(envelope("record-positions", route.id, { points: [fix(at("06:58")), fix(at("06:59"))] }, { occurredAt: at("07:01") }))
+      assert.equal((await positionsOf(sessionId)).length, 2)
+      await applied(envelope("end-route", route.id, {}, { occurredAt: at("07:10") }))
+      await rejected(envelope("record-positions", route.id, { points: [fix(at("07:11"))] }, { occurredAt: at("07:11") }), 409, notActive(route.label))
+      assert.equal((await positionsOf(sessionId)).length, 2)
+    })
+
+    test("a body its schema refuses is recorded with the schema's issues, its points never kept in the receipt", async () => {
+      const route = await minted()
+      await started(route)
+      const outOfOrder = envelope("record-positions", route.id, { points: [fix(at("06:45")), fix(at("06:44"))] }, { occurredAt: at("06:45") })
+      const [outcome] = await send([outOfOrder])
+      assert.equal(outcome.outcome, "rejected")
+      assert.deepEqual(outcome.problem?.errors?.map((error) => error.path), ["body.points"])
+      assert.deepEqual((await receiptRow(outOfOrder.id)).body, { points: 2 })
+      const shapeless = envelope("record-positions", route.id, { points: "here" }, { occurredAt: at("06:46") })
+      assert.equal((await one(shapeless)).outcome, "rejected")
+      assert.deepEqual((await receiptRow(shapeless.id)).body, { points: null })
+    })
+  })
+
   describe("replay and the receipt", () => {
     test("every kind replayed with its own id answers the first outcome and writes nothing, not even lastSeenAt", async () => {
       const route = await minted({ pickups: 3 })
@@ -1034,13 +1132,14 @@ describe("the driver door", { skip: database.skip || owner.skip }, () => {
         envelope("record-unload", route.id, { unloadingStationId: fleet.stations.amager.id, wasteFractionId: fixtures.residual.id, netKg: 900 }, { occurredAt: at("07:30") }),
         envelope("pause", route.id, {}, { occurredAt: at("07:40") }),
         envelope("resume", route.id, {}, { occurredAt: at("07:50") }),
+        envelope("record-positions", route.id, { points: [fix(at("07:51")), fix(at("07:52"))] }, { occurredAt: at("07:52") }),
         envelope("complete-pickup", route.id, { pickupId: p1 }, { occurredAt: at("07:55") }),
         envelope("end-route", route.id, {}, { occurredAt: at("08:00") }),
       ]
       const first = await send(day)
       assert.deepEqual(
         first.map((outcome) => outcome.outcome),
-        [...Array.from({ length: 13 }, () => "applied"), "rejected", "applied"],
+        [...Array.from({ length: 14 }, () => "applied"), "rejected", "applied"],
         "the second completion is the one rejection",
       )
       const before = await written()

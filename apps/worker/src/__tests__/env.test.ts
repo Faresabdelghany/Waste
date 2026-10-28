@@ -30,6 +30,13 @@ describe("parseEnv", () => {
     assert.throws(() => parseEnv({ ...base, SUPABASE_URL: "not a url" }), naming("SUPABASE_URL"))
   })
 
+  test("reads the positions' retention (O8 of #290), absent unless set: whole days, one to the ceiling of thirty", () => {
+    assert.equal(parseEnv(base).POSITION_RETENTION_DAYS, undefined)
+    assert.equal(parseEnv({ ...base, POSITION_RETENTION_DAYS: "14" }).POSITION_RETENTION_DAYS, 14)
+    assert.equal(parseEnv({ ...base, POSITION_RETENTION_DAYS: "30" }).POSITION_RETENTION_DAYS, 30)
+    for (const value of ["0", "31", "90", "thirty", "1.5"]) assert.throws(() => parseEnv({ ...base, POSITION_RETENTION_DAYS: value }), naming("POSITION_RETENTION_DAYS"), value)
+  })
+
   test("reads the alert rules' cadence (O4 of #290), absent unless set, an even one alone: whole minutes that divide an hour or whole hours that divide a day", () => {
     assert.equal(parseEnv(base).WORKER_RULES_INTERVAL_SECONDS, undefined)
     assert.equal(parseEnv({ ...base, WORKER_RULES_INTERVAL_SECONDS: "900" }).WORKER_RULES_INTERVAL_SECONDS, 900)

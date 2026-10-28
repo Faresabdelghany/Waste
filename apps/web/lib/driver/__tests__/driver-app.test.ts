@@ -21,6 +21,7 @@ import { openCommandQueue, type QueueEntry } from "../command-queue"
 import { createDriverApp, DRAIN_RETRY_MS, REQUEST_TIMEOUT_MS, type DriverAppOptions } from "../driver-app"
 import {
   commandsOf,
+  DRIVER_ID,
   driverMe,
   eventually,
   fakeDoor,
@@ -33,6 +34,7 @@ import {
   outcomes,
   pickupId,
   problem,
+  PROJECT_ID,
   ROUTE_ID,
   routeDetail,
   settle,
@@ -40,6 +42,7 @@ import {
   STORAGE_ORIGIN,
   storageError,
   uploadPath,
+  VEHICLE_ID,
 } from "./driver-fixtures"
 import { manualTimers } from "./manual-timers"
 
@@ -727,5 +730,144 @@ describe("a photo or a signature", () => {
     assert.equal(puts(door).length, 1)
     assert.equal(door.calls.filter((call) => call.path === "/driver/uploads").length, 1)
     assert.equal(door.batches().at(-1)?.[0].body.objectKey, objectKey(id, "jpg"))
+  })
+})
+
+describe("positions (O8 of #290)", () => {
+  /** This driver's session on the route, open since 06:00, paused where said. */
+  const openSession = (pausedAt: string | null = null) => ({
+    id: "01950000-0000-7000-8000-0000000005a1",
+    createdAt: "2027-01-15T06:00:00.000Z",
+    updatedAt: "2027-01-15T06:00:00.000Z",
+    projectId: PROJECT_ID,
+    routeId: ROUTE_ID,
+    driverId: DRIVER_ID,
+    vehicleId: VEHICLE_ID,
+    trailerId: null,
+    deviceId: DEVICE,
+    appVersion: null,
+    startedAt: "2027-01-15T06:00:00.000Z",
+    endedAt: null,
+    pausedAt,
+    lastSeenAt: "2027-01-15T07:59:00.000Z",
+  })
+  /** A loaded phone on a running route's screen, its door answering every batch as applied. */
+  async function running(session = openSession()) {
+    const device = phone()
+    device.door.always("GET /driver/me", () => json(driverMe()))
+    device.door.always(`GET /driver/routes/${ROUTE_ID}`, () => json(routeDetail({ status: "active", session })))
+    device.door.always("POST /driver/commands", ({ body }) => outcomes(commandsOf(body)))
+    const app = device.open()
+    const unwatch = app.watchRoute(ROUTE_ID)
+    await app.load()
+    await eventually(() => assert.equal(app.store.getSnapshot().status, "ready"))
+    return { ...device, app, unwatch }
+  }
+  /** The phone is heard of `seconds` from now, `metres` north of where it began. */
+  const heard = (device: Awaited<ReturnType<typeof running>>, seconds: number, metres = 0) => {
+    device.position.move(NOW + seconds * 1000, 55.7 + metres / 111_195)
+  }
+  const positionBatches = (door: ReturnType<typeof fakeDoor>) => door.batches().flatMap((batch) => batch.filter((command) => command.kind === "record-positions"))
+
+  test("on a running route's screen the phone is watched, the open batch is the queue's collecting row, which counts as no action waiting and is never sent as it stands", async () => {
+    const device = await running()
+    await eventually(() => assert.equal(device.position.watches.size, 1))
+    heard(device, 0)
+    await eventually(async () => {
+      const rows = await device.stored()
+      assert.deepEqual(
+        rows.map((row) => [row.state, row.command.kind, (row.command.body as { points: unknown[] }).points.length]),
+        [["collecting", "record-positions", 1]],
+      )
+    })
+    assert.deepEqual(device.app.store.getSnapshot().waiting, [], "no action of the driver's waits")
+    await device.app.drain()
+    assert.deepEqual(device.door.batches(), [], "the open batch is not sent")
+  })
+
+  test("two minutes on, the batch closes into a record-positions command minted then, which goes with the next drain and leaves the queue", async () => {
+    const device = await running()
+    await eventually(() => assert.equal(device.position.watches.size, 1))
+    heard(device, 0)
+    device.tick(30_000)
+    heard(device, 30, 40)
+    await eventually(async () => assert.equal(((await device.stored())[0]?.command.body as { points?: unknown[] }).points?.length, 2))
+    device.tick(90_000)
+    device.timers.advance(120_000)
+    await eventually(() => assert.equal(positionBatches(device.door).length, 1))
+    const [sent] = positionBatches(device.door)
+    assert.match(sent.id, UUID_V7)
+    assert.deepEqual(sent.body, {
+      points: [
+        { at: new Date(NOW).toISOString(), location: { type: "Point", coordinates: [12.58, 55.7] }, accuracyM: 8 },
+        { at: new Date(NOW + 30_000).toISOString(), location: { type: "Point", coordinates: [12.58, 55.7 + 40 / 111_195] }, accuracyM: 8 },
+      ],
+    })
+    await eventually(async () => assert.deepEqual(await device.stored(), []))
+  })
+
+  test("the open batch survives a reload while offline: the next page closes it into a command and sends it", async () => {
+    const first = await running()
+    await eventually(() => assert.equal(first.position.watches.size, 1))
+    heard(first, 0)
+    await eventually(async () => assert.equal((await first.stored()).length, 1))
+    first.app.dispose()
+    assert.equal(first.position.watches.size, 0, "the page going stops the watch")
+
+    const second = first.open()
+    await second.load()
+    await eventually(() => assert.equal(positionBatches(first.door).length, 1))
+    assert.equal((positionBatches(first.door)[0].body.points as unknown[]).length, 1)
+    await eventually(async () => assert.deepEqual((await first.stored()).filter((row) => row.state === "collecting"), []))
+  })
+
+  test("a pause or an end-route tap closes the batch first, so its fixes reach the door before the command, and the recording stops", async () => {
+    const device = await running()
+    await eventually(() => assert.equal(device.position.watches.size, 1))
+    heard(device, 0)
+    await eventually(async () => assert.equal((await device.stored()).length, 1))
+    await device.app.tap({ kind: "end-route", routeId: ROUTE_ID, body: {} })
+    assert.equal(device.position.watches.size, 0, "no fix after the route's end is kept")
+    device.position.answer()
+    await eventually(() =>
+      assert.deepEqual(
+        device.door.batches().flatMap((batch) => batch.map((command) => command.kind)),
+        ["record-positions", "end-route"],
+      ),
+    )
+  })
+
+  test("nothing is recorded on a paused session, without one, off the route's screen, or for another driver's session", async () => {
+    const paused = await running(openSession("2027-01-15T07:30:00.000Z"))
+    await settle()
+    assert.equal(paused.position.watches.size, 0, "paused")
+
+    const unstarted = await running(null as unknown as ReturnType<typeof openSession>)
+    await settle()
+    assert.equal(unstarted.position.watches.size, 0, "no session")
+
+    const theirs = await running({ ...openSession(), driverId: "01950000-0000-7000-8000-0000000000d2" })
+    await settle()
+    assert.equal(theirs.position.watches.size, 0, "another driver's session")
+
+    const left = await running()
+    await eventually(() => assert.equal(left.position.watches.size, 1))
+    heard(left, 0)
+    await eventually(async () => assert.equal((await left.stored()).length, 1))
+    left.unwatch()
+    assert.equal(left.position.watches.size, 0, "the route's screen closed")
+    await eventually(() => assert.equal(positionBatches(left.door).length, 1), 2_000)
+  })
+
+  test("a refused batch of positions is not shown to the driver: the server keeps its receipt", async () => {
+    const device = await running()
+    await eventually(() => assert.equal(device.position.watches.size, 1))
+    device.door.next("POST /driver/commands", ({ body }) => outcomes(commandsOf(body), () => ({ outcome: "rejected", problem: { type: "about:blank", title: "Bad Request", status: 400, detail: "Before the session started" } })))
+    heard(device, 0)
+    await eventually(async () => assert.equal((await device.stored()).length, 1))
+    device.unwatch()
+    await eventually(() => assert.equal(positionBatches(device.door).length, 1))
+    await settle()
+    assert.deepEqual(device.app.store.getSnapshot().rejections, [])
   })
 })

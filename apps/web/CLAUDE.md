@@ -31,6 +31,7 @@ The Next.js App Router prototype (TypeScript, Tailwind CSS v4, shadcn/ui). Recor
 
 - `/driver` and `/driver/routes/[id]` are a surface of their own on the driver door, never a `SERVER_MODULES` entry: the screens in `components/waste/driver/`, the rules in `lib/driver/` — `driver-app.ts` is the controller (reads, taps, the drain), `command-queue.ts` the IndexedDB Command Queue, `route-view.ts` what a screen offers. Nothing is shown that the server has not answered: no local `decide`, no display cache.
 - A photo's or a signature's bytes ride in the queue's row, and the drain puts them to Storage before the command naming them is sent (`driver-app.ts`); a refusal on the way is the action's rejection.
+- Positions (O8 of #290) are recorded only while a route's screen shows this driver's open, unpaused session (`position-recorder.ts`, `sessionRecords`). The open batch is the queue's one `collecting` row, which the drain passes over and a reload closes into a command; a batch is minted as a `record-positions` command when it closes, and is neither counted among the actions waiting nor shown when refused.
 - A stop shows its place's `driverInstructions`, never a property's `notes`, which are the office's own.
 - It imports the contracts as types only; a value it needs from them is spelled again and held equal by a test (`BATCH_LIMIT`).
 

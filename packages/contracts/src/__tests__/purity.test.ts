@@ -61,7 +61,9 @@
 // @waste/domain/route-schemes/seasons: route-schemes.ts reads the month-day
 // pattern the database's checks read, and the overlap rule of a scheme's
 // seasons. O21 of #290 added @waste/domain/planning/lifecycle: route-schemes.ts
-// reads the Plan Ahead window's bounds the database's check reads.
+// reads the Plan Ahead window's bounds the database's check reads. O8 of
+// #290 added @waste/domain/execution/positions: driver-commands.ts bounds a
+// `record-positions` by the batch the Driver App closes, one spelling.
 import path from "node:path"
 import { fileURLToPath } from "node:url"
 
@@ -74,6 +76,7 @@ definePurityTests({
     "@waste/domain/access/public-slug",
     "@waste/domain/audit/vocabulary",
     "@waste/domain/execution/bulky",
+    "@waste/domain/execution/positions",
     "@waste/domain/execution/proof-shapes",
     "@waste/domain/execution/shift",
     "@waste/domain/execution/unloads",

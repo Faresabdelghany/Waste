@@ -92,6 +92,7 @@ async function boot() {
     pollingIntervalSeconds: env.WORKER_POLLING_INTERVAL_SECONDS,
     ...(proofStorage === undefined ? {} : { proofStorage }),
     ...(env.PROOF_RETENTION_DAYS === undefined ? {} : { proofRetentionDays: env.PROOF_RETENTION_DAYS }),
+    ...(env.POSITION_RETENTION_DAYS === undefined ? {} : { positionRetentionDays: env.POSITION_RETENTION_DAYS }),
   })
   made.running = running
   started = true

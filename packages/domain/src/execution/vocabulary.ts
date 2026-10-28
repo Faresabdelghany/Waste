@@ -42,7 +42,8 @@
 // `DRIVER_COMMAND_KINDS` is the prototype's ten driver actions less
 // `retry-sync` (the device's, not a command) and `reschedule-stop` (a
 // Ticket's), plus `arrive`, the four evidence commands, `record-unload`, and
-// `pause`/`resume` in place of breaks. `COMMAND_OUTCOMES` is what the receipt
+// `pause`/`resume` in place of breaks, and `record-positions`, where the
+// vehicle was while the session ran (O8 of #290). `COMMAND_OUTCOMES` is what the receipt
 // stores; `replayed` is the wire's word for the first outcome answered again
 // and is never stored. `OUTBOX_KINDS` and `OUTBOX_AGGREGATES` are the events
 // the outbox carries and what each is about: the table is Execution's and its
@@ -84,7 +85,7 @@ export const PROOF_KINDS = ["arrival", "completion", "skip", "failure", "problem
 /** Who recorded a proof or an unload. */
 export const EXECUTION_SOURCES = ["driver-app", "dispatch", "integration"] as const
 /** What a driver's device may say, one contract each. */
-export const DRIVER_COMMAND_KINDS = ["start-route", "arrive", "complete-pickup", "skip-pickup", "fail-pickup", "report-problem", "add-photo", "add-weight", "add-signature", "add-note", "record-unload", "pause", "resume", "end-route"] as const
+export const DRIVER_COMMAND_KINDS = ["start-route", "arrive", "complete-pickup", "skip-pickup", "fail-pickup", "report-problem", "add-photo", "add-weight", "add-signature", "add-note", "record-unload", "pause", "resume", "end-route", "record-positions"] as const
 /** What the receipt stores of a command; a replay answers the stored one again and stores nothing. */
 export const COMMAND_OUTCOMES = ["applied", "rejected"] as const
 /** Why a station refused a load (O9 of #290): the facility's side of an unload, apart from weight review's `rejected`, which is the office rejecting a weighbridge reading. */

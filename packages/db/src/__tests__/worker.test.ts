@@ -1,6 +1,7 @@
 // Migration 0011 against Postgres (Issue #97 part B), on a fresh database of
 // this file's own: the worker role as the catalog shows it, what it may and
-// may not do in wms — read every table across companies, write none — and
+// may not do in wms — read every table across companies, write none but the
+// retention purge's DELETE on `session_position` (O8 of #290) — and
 // pg-boss's schema installed at the pinned version with both application
 // roles able to run it and neither able to create in it. The worker's own
 // boot against that schema is `apps/worker`'s test; this file proves the
@@ -51,17 +52,23 @@ describe("migration 0011, the worker role and pg-boss's schema", { skip: databas
     assert.deepEqual(schema, { wms: true, extensions: true, create: false })
   })
 
-  test("may SELECT every wms table and write none, and a table created after the migration is readable too", async () => {
-    const privileges = await owner.sql<{ table: string; select: boolean; write: boolean }[]>`
+  test("may SELECT every wms table and write none, but delete from the one ledger whose retention the purge holds, and a table created after the migration is readable too", async () => {
+    const privileges = await owner.sql<{ table: string; select: boolean; write: boolean; delete: boolean }[]>`
       select c.relname as table,
         has_table_privilege(${WORKER_ROLE}, c.oid, 'SELECT') as select,
-        has_table_privilege(${WORKER_ROLE}, c.oid, 'INSERT, UPDATE, DELETE, TRUNCATE') as write
+        has_table_privilege(${WORKER_ROLE}, c.oid, 'INSERT, UPDATE, TRUNCATE') as write,
+        has_table_privilege(${WORKER_ROLE}, c.oid, 'DELETE') as delete
       from pg_class c join pg_namespace n on n.oid = c.relnamespace
       where n.nspname = 'wms' and c.relkind = 'r'
       order by c.relname`
     assert.ok(privileges.length > 50, `${privileges.length} tables`)
     assert.deepEqual(privileges.filter((row) => !row.select), [], "every table readable")
-    assert.deepEqual(privileges.filter((row) => row.write), [], "no write right on any table")
+    assert.deepEqual(privileges.filter((row) => row.write), [], "no insert, update or truncate on any table")
+    assert.deepEqual(
+      privileges.filter((row) => row.delete).map((row) => row.table),
+      ["session_position"],
+      "DELETE on the positions alone, the retention purge's (O8 of #290, migration 0060)",
+    )
     await owner.sql.begin(async (tx) => {
       await tx`create table wms.worker_specimen_later (id int)`
       const [later] = await tx<{ select: boolean; write: boolean }[]>`

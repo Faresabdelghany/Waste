@@ -113,6 +113,20 @@
 // checked; the driver's log, `(company_id, driver_id, id)`, is what the sync
 // rules' driver bucket reads, a receipt without a route included.
 //
+// `session_position` (O8 of #290, migration 0060) is where the vehicle was
+// while a session ran: one row per fix a `record-positions` command carried,
+// a ledger like the proofs, appended by the driver door and never rewritten.
+// It names the session of the route it names, through the same key the
+// proofs use, and its driver. A position is personal location data (#381), so
+// it is the one ledger with a delete path: the worker's purge removes the
+// rows past `POSITION_RETENTION_DAYS` through a DELETE granted to
+// `wms_worker` on this table alone, in the migration that creates it; the API
+// role keeps neither UPDATE nor DELETE. Its point is never copied into the
+// receipt, which keeps the count of a command's fixes and not their
+// coordinates, so the purge leaves no copy behind. `fixed_at` is the phone's
+// own instant for the fix; the track reads a session by it, and the purge
+// sweeps by it across companies.
+//
 // `outbox_event` is written in the request's transaction after the rows it
 // describes and stamped `published_at` by the relay (part C), so it spreads
 // `timestamps` and is not a ledger (§7.22). `aggregate_id` is a soft uuid on
@@ -625,6 +639,46 @@ export const driverCommand = wms.table(
     index(tableObjectName(t.companyId.table, "driver_id_idx", "driverCommand")).on(t.companyId, t.driverId, t.id),
     // A session's log in order, likewise.
     index(tableObjectName(t.companyId.table, "session_id_idx", "driverCommand")).on(t.companyId, t.sessionId, t.id),
+  ],
+)
+
+export const sessionPosition = wms.table(
+  "session_position",
+  {
+    ...id,
+    ...projectScoped,
+    ...recorded,
+    routeId: uuid().notNull(),
+    sessionId: uuid().notNull(),
+    driverId: uuid().notNull(),
+    /** The phone's instant for the fix, not the upload's. */
+    fixedAt: instant().notNull(),
+    location: geometry.point().notNull(),
+    /** Whole metres. */
+    accuracyM: integer().notNull(),
+    /** Whole kilometres an hour, where the phone gave a speed. */
+    speedKmh: integer(),
+    /** Whole degrees from true north, where the phone gave a heading. */
+    headingDeg: integer(),
+  },
+  (t) => [
+    companyReference(t, company),
+    tenantReference(t, [t.projectId], project),
+    projectReference(t, [t.routeId], route),
+    // A session of the route the position names: the key carries the route on both sides, as the proofs' does.
+    projectReference(t, [t.routeId, t.sessionId], session, [session.routeId, session.id]),
+    projectReference(t, [t.driverId], driver),
+    validGeometry(t.location),
+    positive(t.accuracyM),
+    check(tableObjectName(t.id.table, "speed_range", "sessionPosition"), sql`${t.speedKmh} is null or ${t.speedKmh} between 0 and 300`),
+    check(tableObjectName(t.id.table, "heading_range", "sessionPosition"), sql`${t.headingDeg} is null or ${t.headingDeg} between 0 and 359`),
+    // A session's track in the order the fixes were taken, and its newest fix: leads with the session, so it is the index the reference needs too.
+    index(tableObjectName(t.companyId.table, "session_id_idx", "sessionPosition")).on(t.companyId, t.sessionId, t.fixedAt),
+    tenantIndex(t, t.projectId),
+    tenantIndex(t, t.routeId),
+    tenantIndex(t, t.driverId),
+    // The purge's sweep across companies, by the fix's age.
+    indexOn(t.fixedAt),
   ],
 )
 

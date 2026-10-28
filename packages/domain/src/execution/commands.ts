@@ -54,6 +54,7 @@
 // the schema's issues.
 import { licenceRefusal, licenceSentence, type Licence } from "../resources/licence"
 import type { LicenceClass, VehicleKind, VehicleStatus } from "../resources/vocabulary"
+import type { PositionFix } from "./positions"
 import { alreadyDecided, notActive, PICKUP_OUTCOME_OF, routeTransition, type PickupCommand, type PickupOutcome } from "./transitions"
 import type { DriverCommandKind, DriverPickupReason, OutboxAggregate, OutboxKind, PickupReason, PickupStatus, ProofKind, RouteStatus, UnloadRefusalReason } from "./vocabulary"
 
@@ -63,7 +64,7 @@ export type FlatPoint = { type: "Point"; coordinates: [number, number] }
 /** Where the device stood, and how well it knew. */
 export type Located = { location?: FlatPoint; accuracyM?: number }
 
-/** The bodies of the fourteen commands, as their contracts parse them. */
+/** The bodies of the fifteen commands, as their contracts parse them. */
 export type CommandBodies = {
   "start-route": Located & { vehicleId: string; trailerId?: string; appVersion?: string }
   arrive: Located & { pickupId: string }
@@ -79,6 +80,8 @@ export type CommandBodies = {
   pause: Record<string, never>
   resume: Record<string, never>
   "end-route": Located & { note?: string }
+  /** Where the vehicle was while the session ran (O8 of #290): the fixes the device kept, oldest first. */
+  "record-positions": { points: PositionFix[] }
 }
 
 /** One command as the device sent it: the envelope and the body its kind parsed. */
@@ -208,6 +211,8 @@ export type Effect =
   | { kind: "resume" }
   /** Every planned pickup `→ skipped · route-ended` at the instant, the route `active → completed`, the session ended; the applier emits one `pickup-skipped` per pickup it closed. */
   | { kind: "end-route"; at: string }
+  /** The session's positions appended, one row per fix (O8 of #290); no event, since nothing consumes a position and a running day would flood the outbox. */
+  | { kind: "append-positions"; points: PositionFix[] }
   /** An outbox event to write after the rows it describes, its payload the resource the route would answer. */
   | { kind: "event"; event: OutboxKind; aggregate: OutboxAggregate; aggregateId: string }
 
@@ -387,6 +392,8 @@ export function decide(command: Command, driver: CommandDriver, state: Lookups, 
       return { apply: session.pausedAt === null ? [{ kind: "pause", at: command.occurredAt }] : [] }
     case "resume":
       return { apply: session.pausedAt === null ? [] : [{ kind: "resume" }] }
+    case "record-positions":
+      return decidePositions(command, session, clock)
     case "end-route":
       return {
         apply: [
@@ -398,6 +405,27 @@ export function decide(command: Command, driver: CommandDriver, state: Lookups, 
     default:
       return reject(409, notActive(route.label))
   }
+}
+
+/**
+ * `record-positions` (O8 of #290): every fix is judged by the rules the
+ * envelope's instant is — at most the skew ahead of the request, at most the
+ * backdate behind it, and not before the session started — since each is a
+ * fact of its own instant, and the first that fails is the command's 400 at
+ * its field. A paused session still takes them: fixes kept before the pause
+ * reach the server after it.
+ */
+function decidePositions(command: Command<"record-positions">, session: SessionState, clock: Clock): Decision {
+  const now = Date.parse(clock.now)
+  const started = Date.parse(session.startedAt)
+  for (const [index, point] of command.body.points.entries()) {
+    const at = Date.parse(point.at)
+    const path = `body.points.${index}.at`
+    if (at > now + clock.skewAheadMs) return invalid(path, RECORDED_AFTER_IT_HAPPENED)
+    if (at < now - clock.backdateMs) return invalid(path, recordedTooLate(clock.backdateMs))
+    if (at < started) return invalid(path, BEFORE_THE_SESSION_STARTED)
+  }
+  return { apply: [{ kind: "append-positions", points: command.body.points }] }
 }
 
 /** `start-route`: the route is ready, the driver is on no other route, the vehicle and the trailer are the project's and active, the driver holds the class the vehicle requires on the operating date. */

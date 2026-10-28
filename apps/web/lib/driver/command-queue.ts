@@ -35,8 +35,14 @@ const DEVICE = "device"
  */
 export type QueueEntry = {
   owner: string
-  /** `location-pending` from the tap until the lookup answers or gives up; `ready` once it may be sent as it stands. */
-  state: "location-pending" | "ready"
+  /**
+   * `location-pending` from the tap until the lookup answers or gives up;
+   * `ready` once it may be sent as it stands; `collecting` for the one open
+   * batch of positions (O8 of #290), which grows until it closes, is never
+   * sent as it stands, and is closed into a `ready` command of its own on
+   * the next page when this one goes before it closes.
+   */
+  state: "location-pending" | "ready" | "collecting"
   command: PilotCommand
   /** The bytes of the object the command names, held from the tap until Storage has them; meanwhile the body's `objectKey` is empty, the key being the API's to name, and the command is never sent. */
   object?: ProofBytes

@@ -1390,7 +1390,7 @@ column wms.driver_command 13 outcome text not-null
 column wms.driver_command 14 problem jsonb
 constraint wms.driver_command driver_command_company_id_fk FOREIGN KEY (company_id) REFERENCES wms.company(id)
 constraint wms.driver_command driver_command_driver_id_fk FOREIGN KEY (company_id, project_id, driver_id) REFERENCES wms.driver(company_id, project_id, id)
-constraint wms.driver_command driver_command_kind_one_of CHECK ((kind = ANY (ARRAY['start-route'::text, 'arrive'::text, 'complete-pickup'::text, 'skip-pickup'::text, 'fail-pickup'::text, 'report-problem'::text, 'add-photo'::text, 'add-weight'::text, 'add-signature'::text, 'add-note'::text, 'record-unload'::text, 'pause'::text, 'resume'::text, 'end-route'::text])))
+constraint wms.driver_command driver_command_kind_one_of CHECK ((kind = ANY (ARRAY['start-route'::text, 'arrive'::text, 'complete-pickup'::text, 'skip-pickup'::text, 'fail-pickup'::text, 'report-problem'::text, 'add-photo'::text, 'add-weight'::text, 'add-signature'::text, 'add-note'::text, 'record-unload'::text, 'pause'::text, 'resume'::text, 'end-route'::text, 'record-positions'::text])))
 constraint wms.driver_command driver_command_outcome_one_of CHECK ((outcome = ANY (ARRAY['applied'::text, 'rejected'::text])))
 constraint wms.driver_command driver_command_pkey PRIMARY KEY (id)
 constraint wms.driver_command driver_command_problem_shape CHECK (((outcome = 'rejected'::text) = (problem IS NOT NULL)))
@@ -2920,6 +2920,36 @@ index wms.session session_trailer_id_idx CREATE INDEX session_trailer_id_idx ON 
 index wms.session session_vehicle_id_idx CREATE INDEX session_vehicle_id_idx ON wms.session USING btree (company_id, vehicle_id)
 trigger wms.session session_touch_updated_at enabled=O CREATE TRIGGER session_touch_updated_at BEFORE UPDATE ON wms.session FOR EACH ROW EXECUTE FUNCTION wms.touch_updated_at()
 policy wms.session session_tenant_fence permissive ALL to=wms_api using=(company_id = ( SELECT wms.current_company_id() AS current_company_id)) check=(company_id = ( SELECT wms.current_company_id() AS current_company_id))
+relation wms.session_position kind=table owner=<owner> persistence=p rls=true force-rls=true replica-identity=d acl=[<owner>=DELETE,INSERT,MAINTAIN,REFERENCES,SELECT,TRIGGER,TRUNCATE,UPDATE/<owner> wms_api=INSERT,SELECT/<owner> wms_worker=DELETE,SELECT/<owner>]
+column wms.session_position 1 id uuid not-null default=wms.uuidv7()
+column wms.session_position 2 company_id uuid not-null
+column wms.session_position 3 project_id uuid not-null
+column wms.session_position 4 recorded_at timestamp with time zone not-null default=now()
+column wms.session_position 5 route_id uuid not-null
+column wms.session_position 6 session_id uuid not-null
+column wms.session_position 7 driver_id uuid not-null
+column wms.session_position 8 fixed_at timestamp with time zone not-null
+column wms.session_position 9 location extensions.geometry(Point,4326) not-null
+column wms.session_position 10 accuracy_m integer not-null
+column wms.session_position 11 speed_kmh integer
+column wms.session_position 12 heading_deg integer
+constraint wms.session_position session_position_accuracy_m_positive CHECK ((accuracy_m > 0))
+constraint wms.session_position session_position_company_id_fk FOREIGN KEY (company_id) REFERENCES wms.company(id)
+constraint wms.session_position session_position_driver_id_fk FOREIGN KEY (company_id, project_id, driver_id) REFERENCES wms.driver(company_id, project_id, id)
+constraint wms.session_position session_position_heading_range CHECK (((heading_deg IS NULL) OR ((heading_deg >= 0) AND (heading_deg <= 359))))
+constraint wms.session_position session_position_location_valid CHECK ((extensions.st_isvalid(location) AND (NOT extensions.st_isempty(location)) AND (extensions.st_xmin((location)::extensions.box3d) >= ('-180'::integer)::double precision) AND (extensions.st_xmax((location)::extensions.box3d) <= (180)::double precision) AND (extensions.st_ymin((location)::extensions.box3d) >= ('-90'::integer)::double precision) AND (extensions.st_ymax((location)::extensions.box3d) <= (90)::double precision)))
+constraint wms.session_position session_position_pkey PRIMARY KEY (id)
+constraint wms.session_position session_position_project_id_fk FOREIGN KEY (company_id, project_id) REFERENCES wms.project(company_id, id)
+constraint wms.session_position session_position_route_id_fk FOREIGN KEY (company_id, project_id, route_id) REFERENCES wms.route(company_id, project_id, id)
+constraint wms.session_position session_position_route_id_session_id_fk FOREIGN KEY (company_id, project_id, route_id, session_id) REFERENCES wms.session(company_id, project_id, route_id, id)
+constraint wms.session_position session_position_speed_range CHECK (((speed_kmh IS NULL) OR ((speed_kmh >= 0) AND (speed_kmh <= 300))))
+index wms.session_position session_position_driver_id_idx CREATE INDEX session_position_driver_id_idx ON wms.session_position USING btree (company_id, driver_id)
+index wms.session_position session_position_fixed_at_idx CREATE INDEX session_position_fixed_at_idx ON wms.session_position USING btree (fixed_at)
+index wms.session_position session_position_pkey CREATE UNIQUE INDEX session_position_pkey ON wms.session_position USING btree (id)
+index wms.session_position session_position_project_id_idx CREATE INDEX session_position_project_id_idx ON wms.session_position USING btree (company_id, project_id)
+index wms.session_position session_position_route_id_idx CREATE INDEX session_position_route_id_idx ON wms.session_position USING btree (company_id, route_id)
+index wms.session_position session_position_session_id_idx CREATE INDEX session_position_session_id_idx ON wms.session_position USING btree (company_id, session_id, fixed_at)
+policy wms.session_position session_position_tenant_fence permissive ALL to=wms_api using=(company_id = ( SELECT wms.current_company_id() AS current_company_id)) check=(company_id = ( SELECT wms.current_company_id() AS current_company_id))
 relation wms.settlement kind=table owner=<owner> persistence=p rls=true force-rls=true replica-identity=d acl=[<owner>=DELETE,INSERT,MAINTAIN,REFERENCES,SELECT,TRIGGER,TRUNCATE,UPDATE/<owner> wms_api=DELETE,INSERT,SELECT,UPDATE/<owner> wms_worker=SELECT/<owner>]
 column wms.settlement 1 id uuid not-null default=wms.uuidv7()
 column wms.settlement 2 company_id uuid not-null
@@ -4164,4 +4194,5 @@ journal 1793174294074 9f8a53244ab3c25c383f6b2e788c2de5bdff4c797a91765ca7839ff20a
 journal 1793177580649 01fe8bafb789dc34ac91a51fe178c57f3554bde9065bde1d1d8e3cb9274b5335
 journal 1793179564300 85ecc9dc677b5efac299e96018803d2f1b1589a6c0d32f05a8156b9014e70495
 journal 1793182222276 c5e590688f3b59222221801f9adb6ef5b420c207211a83eb9331aa951718ff38
+journal 1793188451416 2908b29fc963fdd7f6371dbb1553734c92718138b9573b1d748bca9694a94037
 pgboss-version 42

@@ -219,14 +219,25 @@ export async function settle(turns = 50): Promise<void> {
   for (let turn = 0; turn < turns; turn += 1) await new Promise((resolve) => setImmediate(resolve))
 }
 
-/** A geolocation that answers only when the test says. */
+/** A geolocation that answers only when the test says: a lookup per located tap, and the watches the position recorder holds (O8 of #290). */
 export function fakeGeolocation() {
   const asked: Array<{ success: PositionCallback; error?: PositionErrorCallback | null }> = []
+  const watches = new Map<number, PositionCallback>()
+  let nextWatch = 1
   return {
     asked,
+    watches,
     geolocation: {
       getCurrentPosition: (success: PositionCallback, error?: PositionErrorCallback | null) => {
         asked.push({ success, error })
+      },
+      watchPosition: (success: PositionCallback) => {
+        const id = nextWatch++
+        watches.set(id, success)
+        return id
+      },
+      clearWatch: (id: number) => {
+        watches.delete(id)
       },
     },
     /** Answers the oldest lookup still waiting with a good fix. */
@@ -234,6 +245,10 @@ export function fakeGeolocation() {
       const lookup = asked.shift()
       if (lookup === undefined) throw new Error("no lookup is waiting")
       lookup.success({ coords: { latitude: 55.7, longitude: 12.58, accuracy }, timestamp: NOW } as GeolocationPosition)
+    },
+    /** Every watch hears of the phone at this point, at this instant. */
+    move: (at: number, latitude = 55.7, longitude = 12.58, accuracy = 8) => {
+      for (const success of watches.values()) success({ coords: { latitude, longitude, accuracy, speed: null, heading: null }, timestamp: at } as GeolocationPosition)
     },
   }
 }

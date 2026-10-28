@@ -34,6 +34,7 @@ import {
   type VehicleState,
 } from "../commands"
 import { alreadyDecided, notActive, notDispatched, routeCancellation } from "../transitions"
+import type { PositionFix } from "../positions"
 import { DRIVER_COMMAND_KINDS, type RouteStatus } from "../vocabulary"
 
 const COMPANY = "018f7c31-a000-7000-8000-000000000001"
@@ -378,5 +379,47 @@ describe("decide: the body", () => {
     })
     const bare = { ...refused, refusal: { reason: "overweight" as const } }
     assert.deepEqual((applied(decide(command("record-unload", bare), mads, running(), clock))[0] as { unload: { refusalNote: null } }).unload.refusalNote, null)
+  })
+})
+
+describe("decide: record-positions (O8 of #290)", () => {
+  /** A fix that many seconds after the request's instant, at the harbour. */
+  const fixAt = (ms: number): PositionFix => ({ at: shifted(ms), location: point, accuracyM: 12 })
+  const positions = (...points: PositionFix[]) => command("record-positions", { points }, points.at(-1)?.at ?? EARLIER)
+
+  test("appends the session's fixes as sent and is worth no event, on a running session or a paused one", () => {
+    const sent = positions(fixAt(-30 * 60_000), { ...fixAt(-29 * 60_000), speedKmh: 34, headingDeg: 270 })
+    assert.deepEqual(applied(decide(sent, mads, running(), clock)), [{ kind: "append-positions", points: sent.body.points }])
+    assert.deepEqual(applied(decide(sent, mads, running({ session: session({ pausedAt: EARLIER }) }), clock)), [{ kind: "append-positions", points: sent.body.points }], "fixes kept before a pause arrive after it")
+  })
+
+  test("wants the active route and the driver's open session, like every later command: 409", () => {
+    const sent = positions(fixAt(-60_000))
+    assert.deepEqual(rejected(decide(sent, mads, running({ route: route("completed"), session: session({ endedAt: NOW }) }), clock)), { status: 409, detail: notActive("RC-1042") })
+    assert.deepEqual(rejected(decide(sent, mads, running({ session: undefined }), clock)), { status: 409, detail: notActive("RC-1042") })
+  })
+
+  test("every fix is judged on the envelope's clock rules — five minutes ahead at most, forty-eight hours behind at most — 400 at the fix's own field", () => {
+    const ahead = positions(fixAt(-60_000), fixAt(clock.skewAheadMs + 1_000))
+    // The envelope's instant passes on its own: the second fix is what is out of bounds.
+    const aheadSent = { ...ahead, occurredAt: EARLIER }
+    assert.deepEqual(rejected(decide(aheadSent, mads, running(), clock)), { status: 400, detail: RECORDED_AFTER_IT_HAPPENED, errors: [{ path: "body.points.1.at", message: RECORDED_AFTER_IT_HAPPENED }] })
+    assert.equal(applied(decide({ ...positions(fixAt(clock.skewAheadMs)), occurredAt: EARLIER }, mads, running(), clock)).length, 1, "at the edge ahead")
+
+    const longAgo = running({ session: session({ startedAt: shifted(-clock.backdateMs - 60_000) }) })
+    const behind = { ...positions(fixAt(-clock.backdateMs - 1_000), fixAt(-60_000)), occurredAt: EARLIER }
+    assert.deepEqual(rejected(decide(behind, mads, longAgo, clock)), { status: 400, detail: recordedTooLate(clock.backdateMs), errors: [{ path: "body.points.0.at", message: recordedTooLate(clock.backdateMs) }] })
+    assert.equal(applied(decide({ ...positions(fixAt(-clock.backdateMs)), occurredAt: EARLIER }, mads, longAgo, clock)).length, 1, "at the edge behind")
+  })
+
+  test("and no fix lies before the session started: 400 at that fix", () => {
+    const state = running({ session: session({ startedAt: EARLIER }) })
+    const started = Date.parse(EARLIER) - Date.parse(NOW)
+    assert.equal(applied(decide(positions(fixAt(started)), mads, state, clock)).length, 1, "at the start")
+    assert.deepEqual(rejected(decide(positions(fixAt(started - 1_000), fixAt(started + 60_000)), mads, state, clock)), {
+      status: 400,
+      detail: BEFORE_THE_SESSION_STARTED,
+      errors: [{ path: "body.points.0.at", message: BEFORE_THE_SESSION_STARTED }],
+    })
   })
 })

@@ -73,11 +73,14 @@
 //                   `pause`, `resume` and `end-route` move the session and
 //                   the route,
 //                   `end-route` closing the open pickups as `skipped ·
-//                   route-ended` from its own `returning`. Every applied
-//                   command then moves `session.last_seen_at` to the
-//                   request's clock;
+//                   route-ended` from its own `returning`, and
+//                   `record-positions` appends one `session_position` row
+//                   per fix (O8 of #290). Every applied command then moves
+//                   `session.last_seen_at` to the request's clock;
 //   the receipt   — written after the effects (`driver_command`: the outcome,
-//                   the problem on a rejection, the body verbatim), and the
+//                   the problem on a rejection, the body verbatim but a
+//                   `record-positions`'s, whose points it never keeps —
+//                   `bodyKept`), and the
 //                   outbox events last (outbox.ts), each with the resource the
 //                   route would answer at that instant as its payload — a
 //                   pickup's event the pickup with the proofs this command
@@ -143,7 +146,7 @@ import { tableObjectName } from "@waste/db/names"
 import { wasteFraction } from "@waste/db/schema/catalogue"
 import { container } from "@waste/db/schema/containers"
 import { property, sharedCollectionPoint } from "@waste/db/schema/customers"
-import { driverCommand, pickup, proofOfService, route, session, unload } from "@waste/db/schema/execution"
+import { driverCommand, pickup, proofOfService, route, session, sessionPosition, unload } from "@waste/db/schema/execution"
 import { driver, vehicle } from "@waste/db/schema/fleet"
 import { project } from "@waste/db/schema/organisation"
 import { unloadingStation } from "@waste/db/schema/places"
@@ -640,8 +643,23 @@ function receiptScope(applier: Applier, routeRow: RouteRow | undefined): Receipt
  * held it is null and a rejection is kept for a reader who wants that id.
  */
 const bodyKept = (envelope: DriverCommandEnvelope, routeId: string | null): unknown => {
-  const body = envelope.body === undefined ? null : envelope.body
+  const body = envelope.body === undefined ? null : withoutPoints(envelope.kind, envelope.body)
   return routeId === null ? { routeId: envelope.routeId, body } : body
+}
+
+/**
+ * A `record-positions`'s body as the receipt keeps it (O8 of #290): the count
+ * of its fixes and none of their points. A position is personal location data
+ * kept `POSITION_RETENTION_DAYS` (#381) and a receipt is kept for good — and
+ * synced back down to the device, and the payload of a rejection's event — so
+ * the receipt keeps no copy for the purge to miss. A body its schema refused
+ * keeps nothing of its points either: a count where they were a list, null
+ * where they were not.
+ */
+const withoutPoints = (kind: DriverCommandKind, body: unknown): unknown => {
+  if (kind !== "record-positions") return body
+  const points = typeof body === "object" && body !== null ? (body as { points?: unknown }).points : undefined
+  return { points: Array.isArray(points) ? points.length : null }
 }
 
 /** `bodyKept` as the insert takes it: a JSON `null` spelled for the `jsonb not null` column, which would read a bare null as SQL's. */
@@ -841,6 +859,23 @@ async function runEffects(tx: Tx, applier: Applier, envelope: DriverCommandEnvel
         await tx.update(session).set({ endedAt: at }).where(onSession())
         break
       }
+      case "append-positions":
+        // At most `POSITIONS_MAX` rows, one statement: the fixes as the device kept them, in the session the command ran in.
+        await tx.insert(sessionPosition).values(
+          effect.points.map((point) => ({
+            companyId,
+            projectId,
+            routeId: routeRow.id,
+            sessionId: made.sessionId!,
+            driverId: applier.profile.id,
+            fixedAt: new Date(point.at),
+            location: point.location,
+            accuracyM: point.accuracyM,
+            speedKmh: point.speedKmh ?? null,
+            headingDeg: point.headingDeg ?? null,
+          })),
+        )
+        break
       case "event":
         made.events.push(effect)
         break
@@ -1053,7 +1088,7 @@ export function driverDoorRoutes(guard: MiddlewareHandler<AuthEnv>, { now = () =
         operationId: "applyDriverCommands",
         summary: "Apply a device's queued commands",
         description:
-          "The driver door of ADR-0004. The body is one to two hundred commands, each `{ id, kind, routeId, occurredAt, deviceId, body }` with an id the device minted (a UUIDv7, the command's idempotency key and the id of the row it makes), applied in body order, each in its own savepoint, and answered 200 with one outcome per command in order — `applied` with the row it made, `replayed` with the first outcome for an id this driver's devices already sent (nothing written, a command that differs in kind, route, instant, device or body logged and ignored), or `rejected` with the problem, which is recorded in the command's receipt as well. An id that another device's command already holds — another driver's, whatever its company — is refused (409, `That command id belongs to another device's command`) and never replayed, since a replay would hand that command's rows to a device that did not send it; it is the one rejection no receipt can hold, the receipt's key being that id, so it is logged instead. A 400 is for a batch that does not parse (an id twice, more than two hundred, an envelope out of shape): then nothing is applied and nothing recorded. A body that fails its kind's schema is one command's rejection, never the batch's. The fourteen kinds and their bodies: `start-route` (`vehicleId`, `trailerId?`, `appVersion?`, `location?`) opens the session and moves the route `ready → active`; `arrive` (`pickupId`, `location?`, `accuracyM?`) appends an arrival and sets the pickup's first `arrivedAt`; `complete-pickup`, `skip-pickup` and `fail-pickup` (`pickupId`, a `reason` for the last two, `note?`, `location?`) append the proof and move the pickup out of `planned`; `report-problem` (`pickupId?`, `reason`, `note`, `location?`) appends a problem and moves nothing; `add-photo` and `add-signature` (`pickupId` — optional for a photo — and `objectKey`) and `add-weight` (`pickupId`, `weightKg`) and `add-note` (`pickupId?`, `note`) append evidence; `record-unload` (`unloadingStationId`, `wasteFractionId`, `netKg`, `grossKg?`, `tareKg?`, `weighbridgeTicket?`, `objectKey?`, `location?`, `note?`) appends an unload; `pause` and `resume` (`{}`) set and clear the session's `pausedAt`, idempotently; `end-route` (`location?`, `note?`) closes every planned pickup as `skipped · route-ended`, moves the route `active → completed` and ends the session. The rules, judged in this order and each answering its sentence: the route is one of this driver's (404, `No route <id> assigned to this driver`); `occurredAt` is at most five minutes ahead of the request's clock (400, `Recorded after it happened`) and at most forty-eight hours behind it (400, `Recorded more than 48 hours after it happened`); `start-route` wants a `ready` route (409, `Route RC-1042 is not dispatched; a driver starts a ready route` / `… is already active` / `… is completed and does not change`), a driver on no other route (409, `Mads Jensen is already on route RC-1039; end it first` — held again at the write: two of the driver's routes started at once, each batch under its own route's lock, meet on the one-live-session-per-driver index once the first commits, and the second is that command's rejection with this sentence naming the route that won, the rest of its batch standing), a powered vehicle of the route's project (400 at `body.vehicleId`, `Not a powered vehicle of this project`) and a trailer where one is named (400 at `body.trailerId`), the licence the vehicle requires on the operating date (400 at `body.vehicleId`, `Freja Holm needs a C licence for WH-24`), and a vehicle and trailer in service (409, `WH-99 is retired; a route needs a vehicle in service`); every later command wants an `active` route with this driver's open session on it (409, `Route RC-1042 is not active`) and an instant at or after the session started (400, `Before the session started`); a command naming a pickup wants one of the route's (404, `No pickup <id> on route RC-1042`), and an outcome wants a `planned` one (409, `Pickup 12 is already completed`: the first outcome stands and a second is a rejection, not a change); `record-unload` wants a station and a fraction of the company (400 at `body.unloadingStationId` / `body.wasteFractionId`); an `objectKey` is `<companyId>/<routeId>/<commandId>.<jpg|jpeg|png|webp>` for this command (400 at `body.objectKey`, `The object key names another route or another command`). A vehicle or trailer not in service is refused naming its status (409, `WH-99 is retired; a route needs a vehicle in service`). Every applied command moves the session's `lastSeenAt` to the request's clock and writes its outbox events — a pickup's event carries the pickup with the proofs this command made, a route-level `report-problem`'s `pickup-problem-reported` the route with its problem proof as `proofs` the same way, so the reason and the note travel with it, and the route's other events the route alone; every command's receipt is written with the body verbatim — a rejection for a route of another project, another company or none is recorded without a route, in the driver's project, the claimed route id kept beside the body as `{ routeId, body }`, and one for a route of their project assigned to another driver names that route — which `GET /driver/routes/:id` still answers 404 for — and no session and no pickup, since nothing of a route the driver was not given is read for it. An `end-route` on a route the office cancelled meanwhile is applied as nothing, so the device is not locked out.",
+          "The driver door of ADR-0004. The body is one to two hundred commands, each `{ id, kind, routeId, occurredAt, deviceId, body }` with an id the device minted (a UUIDv7, the command's idempotency key and the id of the row it makes), applied in body order, each in its own savepoint, and answered 200 with one outcome per command in order — `applied` with the row it made, `replayed` with the first outcome for an id this driver's devices already sent (nothing written, a command that differs in kind, route, instant, device or body logged and ignored), or `rejected` with the problem, which is recorded in the command's receipt as well. An id that another device's command already holds — another driver's, whatever its company — is refused (409, `That command id belongs to another device's command`) and never replayed, since a replay would hand that command's rows to a device that did not send it; it is the one rejection no receipt can hold, the receipt's key being that id, so it is logged instead. A 400 is for a batch that does not parse (an id twice, more than two hundred, an envelope out of shape): then nothing is applied and nothing recorded. A body that fails its kind's schema is one command's rejection, never the batch's. The fifteen kinds and their bodies: `start-route` (`vehicleId`, `trailerId?`, `appVersion?`, `location?`) opens the session and moves the route `ready → active`; `arrive` (`pickupId`, `location?`, `accuracyM?`) appends an arrival and sets the pickup's first `arrivedAt`; `complete-pickup`, `skip-pickup` and `fail-pickup` (`pickupId`, a `reason` for the last two, `note?`, `location?`) append the proof and move the pickup out of `planned`; `report-problem` (`pickupId?`, `reason`, `note`, `location?`) appends a problem and moves nothing; `add-photo` and `add-signature` (`pickupId` — optional for a photo — and `objectKey`) and `add-weight` (`pickupId`, `weightKg`) and `add-note` (`pickupId?`, `note`) append evidence; `record-unload` (`unloadingStationId`, `wasteFractionId`, `netKg`, `grossKg?`, `tareKg?`, `weighbridgeTicket?`, `objectKey?`, `location?`, `note?`) appends an unload; `pause` and `resume` (`{}`) set and clear the session's `pausedAt`, idempotently; `end-route` (`location?`, `note?`) closes every planned pickup as `skipped · route-ended`, moves the route `active → completed` and ends the session; `record-positions` (`points`: one to sixty fixes, each `{ at, location, accuracyM, speedKmh?, headingDeg? }`, in the order they were taken) appends where the session's vehicle was, one position per fix, and writes no event. The rules, judged in this order and each answering its sentence: the route is one of this driver's (404, `No route <id> assigned to this driver`); `occurredAt` is at most five minutes ahead of the request's clock (400, `Recorded after it happened`) and at most forty-eight hours behind it (400, `Recorded more than 48 hours after it happened`); `start-route` wants a `ready` route (409, `Route RC-1042 is not dispatched; a driver starts a ready route` / `… is already active` / `… is completed and does not change`), a driver on no other route (409, `Mads Jensen is already on route RC-1039; end it first` — held again at the write: two of the driver's routes started at once, each batch under its own route's lock, meet on the one-live-session-per-driver index once the first commits, and the second is that command's rejection with this sentence naming the route that won, the rest of its batch standing), a powered vehicle of the route's project (400 at `body.vehicleId`, `Not a powered vehicle of this project`) and a trailer where one is named (400 at `body.trailerId`), the licence the vehicle requires on the operating date (400 at `body.vehicleId`, `Freja Holm needs a C licence for WH-24`), and a vehicle and trailer in service (409, `WH-99 is retired; a route needs a vehicle in service`); every later command wants an `active` route with this driver's open session on it (409, `Route RC-1042 is not active`) and an instant at or after the session started (400, `Before the session started`), and every fix of a `record-positions` the same two clock bounds and the session's start at its own field (400 at `body.points.<n>.at`), a paused session taking them all the same; a command naming a pickup wants one of the route's (404, `No pickup <id> on route RC-1042`), and an outcome wants a `planned` one (409, `Pickup 12 is already completed`: the first outcome stands and a second is a rejection, not a change); `record-unload` wants a station and a fraction of the company (400 at `body.unloadingStationId` / `body.wasteFractionId`); an `objectKey` is `<companyId>/<routeId>/<commandId>.<jpg|jpeg|png|webp>` for this command (400 at `body.objectKey`, `The object key names another route or another command`). A vehicle or trailer not in service is refused naming its status (409, `WH-99 is retired; a route needs a vehicle in service`). Every applied command moves the session's `lastSeenAt` to the request's clock and writes its outbox events — a pickup's event carries the pickup with the proofs this command made, a route-level `report-problem`'s `pickup-problem-reported` the route with its problem proof as `proofs` the same way, so the reason and the note travel with it, and the route's other events the route alone; every command's receipt is written with the body verbatim, but a `record-positions`'s, which keeps the count of its fixes and none of their points (`{ points: <count> }`), a position being personal data the receipt would otherwise outlive — a rejection for a route of another project, another company or none is recorded without a route, in the driver's project, the claimed route id kept beside the body as `{ routeId, body }`, and one for a route of their project assigned to another driver names that route — which `GET /driver/routes/:id` still answers 404 for — and no session and no pickup, since nothing of a route the driver was not given is read for it. An `end-route` on a route the office cancelled meanwhile is applied as nothing, so the device is not locked out.",
         security: BEARER_SECURITY,
         responses: {
           200: describeJson("One outcome per command, in body order.", DriverCommandBatchOutcome),

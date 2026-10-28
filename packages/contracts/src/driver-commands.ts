@@ -1,10 +1,10 @@
-// The driver's commands on the wire (Issue #104, ADR-0004): fourteen kinds,
+// The driver's commands on the wire (Issue #104, ADR-0004): fifteen kinds,
 // one contract each, every one a `z.strictObject` under a common envelope —
 // `{ id, kind, routeId, occurredAt, deviceId, body }` — where `id` is minted
 // by the device (a UUIDv7 from the device's clock, through
 // @waste/domain/ids) and is the command's idempotency key and, where the
 // command makes a row, that row's id. `DriverCommand` is the discriminated
-// union over the fourteen, so a client that imports this package as the
+// union over the fifteen, so a client that imports this package as the
 // Expo app does builds a typed command per kind.
 //
 // The door, `POST /driver/commands`, takes `DriverCommandBatch`: one to two
@@ -41,8 +41,11 @@
 // (`DriverPickupReason`; the system's four are the server's), a
 // `record-unload`'s weights carry the unload's own rule (unloads.ts), an
 // object key has the agreed shape (execution.ts; which ids it names is the
-// applier's), and `pause`, `resume` carry nothing at all. What each command
+// applier's), `pause`, `resume` carry nothing at all, and `record-positions`
+// (O8 of #290) carries one to `POSITIONS_MAX` fixes in the order they were
+// taken, each judged by the door on the envelope's own clock rules. What each command
 // does when applied is #104 §3's table and the domain's `decide`.
+import { POSITION_RULES } from "@waste/domain/execution/positions"
 import { COMMAND_OUTCOMES } from "@waste/domain/execution/vocabulary"
 import * as z from "zod"
 
@@ -97,7 +100,31 @@ export const BATCH_MAX = 200
  */
 const Kilograms = PositiveInt
 
-/** The fourteen bodies, by kind, for the route to parse a loosely read envelope's body against. */
+/** The most fixes one `record-positions` carries: the batch the Driver App closes (@waste/domain/execution/positions), sixty fixes or two minutes, whichever comes first. */
+export const POSITIONS_MAX = POSITION_RULES.batchMax
+
+/** What a position's fixes are told when two are out of order or share an instant. */
+export const FIXES_IN_ORDER = "The fixes are in the order they were taken, one per instant"
+
+/**
+ * One fix as the device kept it (O8 of #290): its own instant, the point, how
+ * well the phone knew it in whole metres, and — where the phone gave them —
+ * the speed in whole kilometres an hour and the heading in whole degrees from
+ * true north. Bounded by what a road vehicle and a compass can say, so a
+ * phone's nonsense is the command's 400 at its field and never a failed write.
+ */
+export const PositionFix = z.strictObject({
+  at: IsoDateTime,
+  location: FlatPoint,
+  accuracyM: PositiveInt,
+  speedKmh: z.int().min(0).max(300).optional(),
+  headingDeg: z.int().min(0).max(359).optional(),
+})
+export type PositionFix = z.infer<typeof PositionFix>
+
+const inOrder = (points: readonly { at: string }[]): boolean => points.every((point, index) => index === 0 || Date.parse(point.at) > Date.parse(points[index - 1].at))
+
+/** The fifteen bodies, by kind, for the route to parse a loosely read envelope's body against. */
 export const COMMAND_BODIES = {
   "start-route": z.strictObject({ vehicleId: Id, trailerId: Id.optional(), appVersion: Label.optional(), ...located }),
   arrive: z.strictObject({ pickupId: Id, ...located }),
@@ -128,6 +155,9 @@ export const COMMAND_BODIES = {
   pause: z.strictObject({}),
   resume: z.strictObject({}),
   "end-route": z.strictObject({ note: Paragraph.optional(), ...located }),
+  "record-positions": z.strictObject({
+    points: z.array(PositionFix).min(1).max(POSITIONS_MAX).refine(inOrder, { message: FIXES_IN_ORDER }),
+  }),
 } as const satisfies Record<DriverCommandKind, z.ZodType>
 
 export const StartRoute = commandOf("start-route", COMMAND_BODIES["start-route"])
@@ -144,9 +174,10 @@ export const RecordUnload = commandOf("record-unload", COMMAND_BODIES["record-un
 export const Pause = commandOf("pause", COMMAND_BODIES.pause)
 export const Resume = commandOf("resume", COMMAND_BODIES.resume)
 export const EndRoute = commandOf("end-route", COMMAND_BODIES["end-route"])
+export const RecordPositions = commandOf("record-positions", COMMAND_BODIES["record-positions"])
 
 /** One command of any kind: the envelope and the body its kind takes. */
-export const DriverCommand = z.discriminatedUnion("kind", [StartRoute, Arrive, CompletePickup, SkipPickup, FailPickup, ReportProblem, AddPhoto, AddWeight, AddSignature, AddNote, RecordUnload, Pause, Resume, EndRoute])
+export const DriverCommand = z.discriminatedUnion("kind", [StartRoute, Arrive, CompletePickup, SkipPickup, FailPickup, ReportProblem, AddPhoto, AddWeight, AddSignature, AddNote, RecordUnload, Pause, Resume, EndRoute, RecordPositions])
 export type DriverCommand = z.infer<typeof DriverCommand>
 
 /** The envelope read loosely, its body unparsed, so a body that fails its kind is one command's rejection and not the batch's 400. */
@@ -218,7 +249,7 @@ export const DriverCommandReceipt = z
     kind: DriverCommandKind,
     /** The device's clock, as sent, even when refused. */
     occurredAt: IsoDateTime,
-    /** The command's body as received, verbatim. */
+    /** The command's body as received, verbatim — except a `record-positions`'s, which keeps the count of its fixes and none of their points (`{ points: <count> }`), since a receipt outlives a position's retention. */
     body: z.json(),
     outcome: CommandOutcome,
     /** The problem the applier answered, exactly when rejected. */
