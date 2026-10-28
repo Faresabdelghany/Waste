@@ -545,11 +545,13 @@ export const RouteSchemeArchived = z.object({
 })
 export type RouteSchemeArchived = z.infer<typeof RouteSchemeArchived>
 
-/** The successor's answer: the scheme it took over from, ended on the day, the new version, and what became of the predecessor's routes from that day. */
+/** The successor's answer: the scheme it took over from, ended on the day, the new version, what became of the predecessor's routes from that day, and the run queued to plan the new version. */
 export const RouteSchemeSuccession = z.object({
   predecessor: RouteScheme,
   successor: RouteScheme,
   routes: SchemeEndingCounts,
+  /** The generation run queued for a validated successor over its Plan Ahead window from its first day, read at `/generation-runs/{id}`; null for a draft, or where no worker has made the queue yet, when the office generates it itself. */
+  generationRunId: Id.nullable(),
 })
 export type RouteSchemeSuccession = z.infer<typeof RouteSchemeSuccession>
 

@@ -778,7 +778,7 @@ describe("a scheme's lifecycle (O21 of #290)", () => {
     const record = recordOf(central)
     assert.deepEqual(action.toBody?.({}, record, context()), { path: "validFrom", message: "Pick the day the next version takes over" })
     assert.deepEqual(action.toBody?.({ validFrom: "2027-01-04" }, record, context()), { validFrom: "2027-01-04" })
-    const answer = { predecessor: { ...central, validTo: "2027-01-04" }, successor: { ...central, id: "01a0d2a4-a280-701a-8000-0000000000ff", validFrom: "2027-01-04" }, routes: { cancelled: 3, trimmed: 0, kept: 0 } }
+    const answer = { predecessor: { ...central, validTo: "2027-01-04" }, successor: { ...central, id: "01a0d2a4-a280-701a-8000-0000000000ff", validFrom: "2027-01-04" }, routes: { cancelled: 3, trimmed: 0, kept: 0 }, generationRunId: "01a0d2a4-a280-7019-8000-0000000000ff" }
     const { fetch, calls } = scripted([() => json(answer, 201, { location: "/route-schemes/01a0d2a4-a280-701a-8000-0000000000ff" })])
     assert.deepEqual(await action.run(clientOver(fetch), CENTRAL_ID, { validFrom: "2027-01-04" }), answer)
     assert.deepEqual(calls.map(request), [`POST /route-schemes/${CENTRAL_ID}/successor`])

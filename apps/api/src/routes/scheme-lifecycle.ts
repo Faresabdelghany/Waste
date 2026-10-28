@@ -29,8 +29,18 @@
 // create is: a crew away or retired on the new start is refused there as it
 // would be on a create. The day lies after the predecessor's start, before
 // its end, and tomorrow at the earliest; an archived predecessor has no next
-// version. The new version starts with no runs and no routes: its first
-// Generate, or the nightly sweep, plans it.
+// version. A predecessor route already dispatched or running on or after the
+// day refuses the successor (409, naming the routes): the new version plans
+// its own route for that collection, and the two would both go out — the
+// office cancels them, or picks a later day. An archive keeps such a route,
+// since nothing replaces it; a successor does. A validated successor is
+// planned in the same transaction: a generation run over its Plan Ahead
+// window from its first day is queued as the office's Generate queues one
+// (`askGeneration`), so a version from tomorrow has its routes the evening
+// before rather than at the 03:00 sweep of its first day; the queue's one
+// job per scheme is no obstacle here, the successor being a new scheme. A
+// draft generates nothing, and where no worker has made the queue yet no run
+// is queued; the answer's `generationRunId` is null and the office generates.
 //
 // The routes from the day go in the same transaction, never through a queued
 // generation run: the generate queue holds one job per scheme, so a send
@@ -60,13 +70,18 @@ import { pickup, route } from "@waste/db/schema/execution"
 import { routeScheme } from "@waste/db/schema/route-schemes"
 import type { RouteStatus } from "@waste/domain/execution/vocabulary"
 import { firstEndingDay, routesEndedFrom, SCHEME_ARCHIVED_NOTE, supersededNote } from "@waste/domain/planning/lifecycle"
+import { routeLabel } from "@waste/contracts/execution"
+import { QueueMissing, type JobSender } from "@waste/db/jobs"
+import { addDays } from "@waste/domain/route-schemes/recurrence"
+import { count } from "@waste/domain/text"
 import { and, asc, eq, gte, inArray } from "drizzle-orm"
 import { Hono, type MiddlewareHandler } from "hono"
 import { describeRoute } from "hono-openapi"
 
 import { BEARER_SECURITY, type AuthEnv, type Principal } from "../auth/principal"
 import { requireGrant } from "../auth/require"
-import { describeProblem, invalidRequest, validate } from "../problem"
+import { describeProblem, invalidRequest, problem, validate } from "../problem"
+import { askGeneration } from "./generation"
 import { projectToday } from "./fleet-lookups"
 import { writeScheme } from "./route-schemes"
 import { findScheme, MODULE, noSuchScheme, requireNotArchived, schemeColumns, schemeScope, schemeWithGroups, type ClockOptions, type SchemeRow } from "./scheme-groups"
@@ -173,7 +188,29 @@ function successorBody(predecessor: RouteScheme, validFrom: string): RouteScheme
   }
 }
 
-export function schemeLifecycleRoutes(guard: MiddlewareHandler<AuthEnv>, { now = () => new Date() }: ClockOptions = {}) {
+/** What a successor is refused with while routes of the predecessor are dispatched or running on or after its day. */
+export const dispatchedFrom = (labels: readonly string[], validFrom: string): string =>
+  `${count(labels.length, "route")} of this scheme ${labels.length === 1 ? "is" : "are"} dispatched or running on or after ${validFrom} (${labels.join(", ")}), and the next version would plan ${labels.length === 1 ? "that collection" : "those collections"} again: cancel ${labels.length === 1 ? "it" : "them"} or start the next version later`
+
+/**
+ * Queues the run that plans a validated successor over its Plan Ahead window
+ * from its first day, as the office's Generate asks one; null where no
+ * worker has made the queue yet. A new scheme has no job held, so the send
+ * is taken.
+ */
+async function planSuccessor(tx: Tx, principal: Principal, jobs: JobSender, successor: RouteScheme, validFrom: string): Promise<string | null> {
+  try {
+    const asked = await askGeneration(tx, principal, jobs.send, successor, { from: validFrom, to: addDays(validFrom, successor.planAheadDays - 1) })
+    return asked.kind === "refused" ? null : asked.run.id
+  } catch (error) {
+    if (error instanceof QueueMissing) return null
+    throw error
+  }
+}
+
+export type SchemeLifecycleOptions = ClockOptions & { jobs: JobSender }
+
+export function schemeLifecycleRoutes(guard: MiddlewareHandler<AuthEnv>, { now = () => new Date(), jobs }: SchemeLifecycleOptions) {
   return new Hono<AuthEnv>()
     .post(
       "/route-schemes/:id/archive",
@@ -225,7 +262,7 @@ export function schemeLifecycleRoutes(guard: MiddlewareHandler<AuthEnv>, { now =
         operationId: "createRouteSchemeSuccessor",
         summary: "Write the next version of a route scheme, from a day",
         description:
-          "Writes the next version of one route scheme of a project the caller works in: a new scheme of the same name, in force from `validFrom` to the end the predecessor had, and the predecessor's period cut at `validFrom`, in one transaction under the predecessor's row lock. The new version is the predecessor as it reads — its recurrence, holiday and edit policies, Plan Ahead and its window, status, planning area, depot and station, every collection group with its rule or its picked containers, provider, vehicle and driver, and its seasons — written as `POST /route-schemes` writes a scheme and held to every rule a create is held to, so a crew retired, suspended or away on the new start, or a validated scheme that no longer holds together, is refused as a create would refuse it; edit it afterwards like any scheme. `validFrom` comes after the predecessor's start, before its end, and on tomorrow on the project's clock at the earliest. The predecessor's routes with a service date on or after `validFrom` are ended as an archive ends them — a planned route cancelled by generation with the sentence `Superseded by the scheme's next version from <day>`, or trimmed where it carries an open stop the office added, a `ready` or `active` one kept and counted — and the new version has no runs and no routes until its first Generate or the nightly sweep plans it. `Location` names the new version.",
+          "Writes the next version of one route scheme of a project the caller works in: a new scheme of the same name, in force from `validFrom` to the end the predecessor had, and the predecessor's period cut at `validFrom`, in one transaction under the predecessor's row lock. The new version is the predecessor as it reads — its recurrence, holiday and edit policies, Plan Ahead and its window, status, planning area, depot and station, every collection group with its rule or its picked containers, provider, vehicle and driver, and its seasons — written as `POST /route-schemes` writes a scheme and held to every rule a create is held to, so a crew retired, suspended or away on the new start, or a validated scheme that no longer holds together, is refused as a create would refuse it; edit it afterwards like any scheme. `validFrom` comes after the predecessor's start, before its end, and on tomorrow on the project's clock at the earliest; a predecessor route already `ready` or `active` on or after it refuses the successor (409, naming the routes), since the new version would collect those days again — cancel them, or start the next version later. The predecessor's routes with a service date on or after `validFrom` are ended as an archive ends them — a planned route cancelled by generation with the sentence `Superseded by the scheme's next version from <day>`, or trimmed where it carries an open stop the office added, a `ready` or `active` one kept and counted — and a validated new version is planned in the same transaction: a generation run over its Plan Ahead window from `validFrom` is queued as Generate queues one, its id answered as `generationRunId` (null for a draft, which plans nothing, or where no worker has made the queue yet — then press Generate). `Location` names the new version.",
         security: BEARER_SECURITY,
         responses: {
           201: describeCreated("The predecessor as it now stands, the new version, and what became of the predecessor's routes from the day; `Location` names the new version.", RouteSchemeSuccession),
@@ -233,7 +270,7 @@ export function schemeLifecycleRoutes(guard: MiddlewareHandler<AuthEnv>, { now =
           401: describeProblem("No usable token (see WWW-Authenticate)."),
           403: describeProblem("No active account here, or the caller's role does not allow `create` on `route-studio.schemes`."),
           404: describeProblem("No route scheme with that id in the projects this account works in."),
-          409: describeProblem("The scheme is archived, a group's vehicle or driver is retired, suspended, inactive or away on the new start, or the scheme is validated and the new version would not hold together: the detail says which."),
+          409: describeProblem("The scheme is archived, a route of it is dispatched or running on or after `validFrom`, a group's vehicle or driver is retired, suspended, inactive or away on the new start, or the scheme is validated and the new version would not hold together: the detail says which."),
         },
       }),
       guard,
@@ -249,6 +286,13 @@ export function schemeLifecycleRoutes(guard: MiddlewareHandler<AuthEnv>, { now =
         const tomorrow = firstEndingDay(await projectToday(tx, { companyId: principal.companyId, projectId: current.projectId }, now)())
         if (validFrom < tomorrow) throw invalidRequest("body", [{ path: "validFrom", message: endsTomorrowAtTheEarliest(tomorrow) }])
         if (validFrom <= current.validFrom || (current.validTo !== null && validFrom >= current.validTo)) throw invalidRequest("body", [{ path: "validFrom", message: successorStartsInside(current) }])
+        // The predecessor's routes that go out on or after the day whatever happens: the new version would collect them again.
+        const going = await tx
+          .select({ number: route.number })
+          .from(route)
+          .where(and(eq(route.companyId, principal.companyId), eq(route.routeSchemeId, id), gte(route.serviceDate, validFrom), inArray(route.status, ["ready", "active"])))
+          .orderBy(asc(route.number))
+        if (going.length > 0) throw problem(409, { detail: dispatchedFrom(going.map((row) => routeLabel(row.number)), validFrom) })
 
         // The predecessor as it reads, before the cut: what the next version is written from.
         const before = await schemeWithGroups(tx, principal.companyId, current, now)
@@ -259,7 +303,8 @@ export function schemeLifecycleRoutes(guard: MiddlewareHandler<AuthEnv>, { now =
           .returning(schemeColumns)
         const successor = await writeScheme(tx, principal, successorBody(before, validFrom), now)
         const routes = await endSchemeRoutes(tx, principal.companyId, id, validFrom, supersededNote(validFrom), now())
-        const answer: RouteSchemeSuccession = { predecessor: await schemeWithGroups(tx, principal.companyId, row, now), successor, routes }
+        const generationRunId = successor.status === "validated" ? await planSuccessor(tx, principal, jobs, successor, validFrom) : null
+        const answer: RouteSchemeSuccession = { predecessor: await schemeWithGroups(tx, principal.companyId, row, now), successor, routes, generationRunId }
         return c.json(answer, 201, { location: `/route-schemes/${successor.id}` })
       },
     )

@@ -120,8 +120,16 @@ export function SchemeSuccessorDialog({ record, today, open, onOpenChange }: Dia
       onOpenChange(false)
       await refreshModule(ROUTE_SCHEMES_MODULE.workspaceId, ROUTE_SCHEMES_MODULE.moduleId)
       for (const [workspaceId, moduleId] of ROUTE_MODULES) await refreshModule(workspaceId, moduleId)
+      const { successor, generationRunId, routes } = outcome.answer
+      // A validated version is planned by the run the API queued with it; a draft, or one no run was queued for, waits for the office.
+      const planning =
+        generationRunId !== null
+          ? "Its first days are being generated now."
+          : successor.status === "validated"
+            ? "No generation run could be queued: open it and press Generate before its first day."
+            : "It is a draft: validate it, then press Generate before its first day."
       toast.success(`New version of ${record.name} from ${formatServiceDate(validFrom)}`, {
-        description: `This version now ends the day before; the new one is in the schemes list and plans nothing until it is generated. ${endingSentence(outcome.answer.routes)}`,
+        description: `This version now ends the day before. ${planning} ${endingSentence(routes)}`,
       })
     })
   }
@@ -132,7 +140,7 @@ export function SchemeSuccessorDialog({ record, today, open, onOpenChange }: Dia
         <DialogHeader>
           <DialogTitle>New version</DialogTitle>
           <DialogDescription>
-            Writes the next version of {record.name} from the day you pick: the same recurrence, collection groups, crew and seasons, to edit from there. This version ends the day before, and its planned routes from that day are cancelled.
+            Writes the next version of {record.name} from the day you pick: the same recurrence, collection groups, crew and seasons, to edit from there. This version ends the day before, and its planned routes from that day are cancelled; a dispatched route on or after it must be cancelled first. A validated new version is generated at once over its Plan Ahead window.
           </DialogDescription>
         </DialogHeader>
         <div className="space-y-1.5">

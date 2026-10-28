@@ -14,12 +14,15 @@ import { after, before, describe, test } from "node:test"
 import { RouteDetail } from "@waste/contracts/routes"
 import { PLAN_AHEAD_DAYS_BOUND, RouteScheme, SchemeEndingCounts, type RouteSchemeArchived, type RouteSchemeSuccession } from "@waste/contracts/route-schemes"
 import { createDb, type Database } from "@waste/db/client"
+import { GENERATE_ROUTES_QUEUE } from "@waste/db/commands/generation"
+import type { Send } from "@waste/db/jobs"
+import { generationRun } from "@waste/db/schema/generation"
 import { pickup, route } from "@waste/db/schema/execution"
 import { SCHEME_ARCHIVED_NOTE, supersededNote } from "@waste/domain/planning/lifecycle"
 import { eq, inArray } from "drizzle-orm"
 
 import { createApp } from "../app"
-import { endsTomorrowAtTheEarliest } from "../routes/scheme-lifecycle"
+import { dispatchedFrom, endsTomorrowAtTheEarliest } from "../routes/scheme-lifecycle"
 import { schemeArchived } from "../routes/scheme-groups"
 import { callingAs, type Call } from "./calls"
 import { databaseUnderTest, ownerUnderTest } from "./database"
@@ -27,7 +30,7 @@ import { seedExecution, seedRoute, type ExecutionFixtures } from "./execution-fi
 import { readProblem } from "./read-problem"
 import { seedFleet, seedPlanning, type FleetFixtures } from "./scheme-fixtures"
 import { dropTenant, seedTenant, type Tenant } from "./tenant"
-import { signingKeys } from "./tokens"
+import { signingKeys, type SigningKeys } from "./tokens"
 
 const database = databaseUnderTest()
 /** The fixtures write proofs, a ledger the API role cannot delete, so the tenant is dropped as the owner. */
@@ -48,11 +51,12 @@ describe("a route scheme's lifecycle (O21 of #290)", { skip: database.skip || ow
   let fleet: FleetFixtures
   let ex: ExecutionFixtures
   let olivia: Call
+  let keys: SigningKeys
 
   before(async () => {
     pool = createDb(database.url, { max: 4 })
     ownerPool = createDb(owner.url, { max: 1 })
-    const keys = await signingKeys()
+    keys = await signingKeys()
     a = await seedTenant(pool)
     fleet = await seedFleet(pool, a, await seedPlanning(pool, a))
     ex = await seedExecution(pool, a, fleet)
@@ -223,6 +227,7 @@ describe("a route scheme's lifecycle (O21 of #290)", { skip: database.skip || ow
     assert.equal(response.headers.get("location"), `/route-schemes/${answer.successor.id}`)
     assert.equal(answer.predecessor.validTo, MONDAYS[1])
     assert.deepEqual(answer.routes, { cancelled: 1, trimmed: 0, kept: 0 })
+    assert.equal(answer.generationRunId, null, "a draft plans nothing")
     const next = answer.successor
     assert.notEqual(next.id, scheme.id)
     assert.deepEqual([next.name, next.validFrom, next.validTo, next.planAheadDays, next.plannedStartTime, next.status], ["Versioned", MONDAYS[1], null, 10, "06:30", "draft"])
@@ -234,6 +239,38 @@ describe("a route scheme's lifecycle (O21 of #290)", { skip: database.skip || ow
     assert.equal((await readRoute(before.id)).status, "planned", "the predecessor still runs before the day")
     const gone = await readRoute(from.id)
     assert.deepEqual([gone.status, gone.note], ["cancelled", supersededNote(MONDAYS[1])])
+  })
+
+  test("a successor is refused while a route of the predecessor is dispatched or running on or after its day, since the new version would collect it again, and nothing is written", async () => {
+    const scheme = await schemeNamed("Versioned under a dispatched route")
+    await routeOf(scheme, MONDAYS[0], { status: "ready", plannedDriverId: fleet.drivers.mads.id })
+    const after = await routeOf(scheme, MONDAYS[1], { status: "ready", plannedDriverId: fleet.drivers.mads.id })
+    const planned = await routeOf(scheme, MONDAYS[2])
+    const problem = await refused(await successor(scheme.id, { validFrom: MONDAYS[1] }), 409)
+    assert.equal(problem.detail, dispatchedFrom([after.label], MONDAYS[1]), "the route on the day, not the one before it")
+    assert.equal(((await ok(await olivia(`/route-schemes/${scheme.id}`))) as RouteScheme).validTo, null, "the predecessor is not cut")
+    assert.equal((await readRoute(planned.id)).status, "planned", "and its planned routes stand")
+    // From the day after the dispatched routes, the next version is taken.
+    assert.equal(succession(await ok(await successor(scheme.id, { validFrom: MONDAYS[2] }), 201)).routes.cancelled, 1)
+  })
+
+  test("a validated successor is planned in the same transaction over its Plan Ahead window from its first day; a draft is not", async () => {
+    const sent: { name: string; singletonKey: unknown }[] = []
+    const jobs: { send: Send } = { send: async (name, _data, options) => (sent.push({ name, singletonKey: options?.singletonKey }), `job-${sent.length}`) }
+    const office = callingAs(createApp({ probe: pool, pool, verifier: keys.verifier, now: () => NOW, jobs }), keys, a.users.olivia, a.companyId)
+    const area = await seedPlanningArea()
+    const scheme = await schemeNamed("Versioned and planned", { status: "validated", planningAreaId: area.id, planAheadDays: 10 })
+    const answer = succession(await ok(await office(`/route-schemes/${scheme.id}/successor`, { method: "POST", body: { validFrom: MONDAYS[0] } }), 201))
+    assert.equal(answer.successor.status, "validated")
+    assert.notEqual(answer.generationRunId, null)
+    assert.deepEqual(sent, [{ name: GENERATE_ROUTES_QUEUE, singletonKey: answer.successor.id }])
+    const [run] = await ownerPool.db.select().from(generationRun).where(eq(generationRun.id, answer.generationRunId!))
+    assert.deepEqual([run.routeSchemeId, run.windowFrom, run.windowTo, run.trigger, run.status], [answer.successor.id, MONDAYS[0], "2026-10-21", "on-demand", "queued"], "ten days from its first")
+
+    sent.length = 0
+    const draft = await schemeNamed("Versioned as a draft")
+    const drafted = succession(await ok(await office(`/route-schemes/${draft.id}/successor`, { method: "POST", body: { validFrom: MONDAYS[0] } }), 201))
+    assert.deepEqual([drafted.generationRunId, sent], [null, []], "a draft plans nothing")
   })
 
   test("a successor's day lies after the predecessor's start, before its end, and tomorrow at the earliest", async () => {

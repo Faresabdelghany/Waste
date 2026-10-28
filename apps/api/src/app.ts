@@ -264,7 +264,7 @@ export function createApp({
   app.route("/", collectionCalendarRoutes(guard))
   // Planning's group rules judge a driver on "today" on the project's clock, so the two take the app's `now` as the ledger routes do.
   app.route("/", routeSchemeRoutes(guard, { now }))
-  app.route("/", schemeLifecycleRoutes(guard, { now }))
+  app.route("/", schemeLifecycleRoutes(guard, { now, jobs }))
   app.route("/", collectionGroupRoutes(guard, { now }))
   app.route("/", generationRoutes(guard, { jobs }))
   app.route("/", vehicleTypeRoutes(guard))
