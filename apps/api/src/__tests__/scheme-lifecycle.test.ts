@@ -191,9 +191,13 @@ describe("a route scheme's lifecycle (O21 of #290)", { skip: database.skip || ow
     assert.deepEqual([answer.scheme.status, answer.scheme.validFrom, answer.scheme.validTo, answer.scheme.planAhead], ["draft", "2027-01-04", null, false])
   })
 
-  test("an archived scheme refuses every write, a second archive and a successor among them, and the list tells it apart", async () => {
-    const scheme = await schemeNamed("Archived for good")
+  test("an archived scheme reads whole — its groups, its seasons and the API's warnings — and refuses every write, a second archive and a successor among them, and the list tells it apart", async () => {
+    const scheme = await schemeNamed("Archived for good", { seasons: [SUMMER] })
     await ok(await archive(scheme.id))
+    const archivedRead = RouteScheme.parse(await ok(await olivia(`/route-schemes/${scheme.id}`)))
+    assert.deepEqual([archivedRead.collectionGroups.map((group) => group.name), archivedRead.seasons], [["Round 1"], [SUMMER]], "its history stays readable")
+    assert.ok(Array.isArray(archivedRead.warnings), "the reconciliation still reads")
+    assert.notEqual(archivedRead.archivedAt, null)
     const sentence = schemeArchived("Archived for good")
     assert.equal((await refused(await archive(scheme.id), 409)).detail, sentence)
     assert.equal((await refused(await olivia(`/route-schemes/${scheme.id}`, { method: "PATCH", body: { name: "Back again" } }), 409)).detail, sentence)

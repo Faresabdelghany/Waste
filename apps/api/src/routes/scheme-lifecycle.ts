@@ -36,7 +36,8 @@
 // generation run: the generate queue holds one job per scheme, so a send
 // beside a Plan Ahead run would answer null and the cancel would never come.
 // The rule is generation's own (planning/generation.ts, the worker's
-// generate-routes.ts): the scheme's routes from the day are read under their
+// generate-routes.ts), and so are the statements (@waste/db/commands/
+// scheme-routes, which the worker's cleanup runs too): the scheme's routes from the day are read under their
 // row locks in id order, the order a run and a bulk dispatch lock them in; a
 // `planned` route is cancelled by generation — status, `cancelled_by_generation`,
 // the `regeneration` reason code, the sentence as its note, its hold cleared —
@@ -54,9 +55,10 @@
 // edit or a generation run in flight is waited for.
 import { RouteSchemeArchive, RouteSchemeArchived, RouteSchemeSuccession, RouteSchemeSuccessorCreate, type RouteScheme, type RouteSchemeCreate, type SchemeEndingCounts } from "@waste/contracts/route-schemes"
 import type { Tx } from "@waste/db/client"
+import { cancelRoutesByGeneration, skipStopsByGeneration } from "@waste/db/commands/scheme-routes"
 import { pickup, route } from "@waste/db/schema/execution"
 import { routeScheme } from "@waste/db/schema/route-schemes"
-import { REGENERATION_CANCEL, type RouteStatus } from "@waste/domain/execution/vocabulary"
+import type { RouteStatus } from "@waste/domain/execution/vocabulary"
 import { firstEndingDay, routesEndedFrom, SCHEME_ARCHIVED_NOTE, supersededNote } from "@waste/domain/planning/lifecycle"
 import { and, asc, eq, gte, inArray } from "drizzle-orm"
 import { Hono, type MiddlewareHandler } from "hono"
@@ -117,20 +119,13 @@ export async function endSchemeRoutes(tx: Tx, companyId: string, schemeId: strin
 
   const cancelled = ending.decisions.filter((decision) => decision.kind === "cancel").map((decision) => decision.routeId)
   const trimmed = ending.decisions.filter((decision) => decision.kind === "trim").map((decision) => decision.routeId)
-  if (cancelled.length > 0) {
-    await tx
-      .update(route)
-      .set({ status: "cancelled", cancelledAt: at, cancelledByGeneration: true, cancelReasonCode: REGENERATION_CANCEL, note, heldAt: null })
-      .where(and(eq(route.companyId, companyId), inArray(route.id, cancelled)))
-  }
+  await cancelRoutesByGeneration(tx, companyId, cancelled, note, at)
   if (trimmed.length > 0) await tx.update(route).set({ note }).where(and(eq(route.companyId, companyId), inArray(route.id, trimmed)))
   // A cancelled route's every open stop, a trimmed one's own: the office's stops on a trimmed route stand.
   const cancelledSet = new Set(cancelled)
   const trimmedSet = new Set(trimmed)
   const skipped = open.filter((row) => cancelledSet.has(row.routeId) || (trimmedSet.has(row.routeId) && row.origin === "generation")).map((row) => row.id)
-  if (skipped.length > 0) {
-    await tx.update(pickup).set({ status: "skipped", reason: "regeneration", note, outcomeAt: at }).where(and(eq(pickup.companyId, companyId), inArray(pickup.id, skipped)))
-  }
+  await skipStopsByGeneration(tx, companyId, skipped, note, at)
   return { cancelled: cancelled.length, trimmed: trimmed.length, kept: ending.kept }
 }
 
