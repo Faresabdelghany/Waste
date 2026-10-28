@@ -29,6 +29,7 @@ import { serviceArea } from "./finance"
 import { company, project, serviceProvider } from "./organisation"
 import { companyReference, projectKey, projectReference, tenantIndex, tenantReference, tenantUnique } from "./references"
 import { container } from "./containers"
+import { wasteFraction } from "./catalogue"
 import { driver, vehicle } from "./fleet"
 import { collectionGroup, routeScheme } from "./route-schemes"
 import { wms } from "./wms"
@@ -84,10 +85,10 @@ export const serviceProviderActivity = wms.table(
     oneOf(t.status, SERVICE_PROVIDER_ACTIVITY_STATUSES),
     subsetOf(t.serviceDays, SERVICE_DAYS),
     check(tableObjectName(t.id.table, "subject_given", "serviceProviderActivity"), sql`length(btrim(${t.subject})) > 0`),
-    // Each kind carries its own columns and none of another's: a proposal its scheme, group and first day, a route-day change its days, a vehicle change its vehicle and maybe a driver, a follow-up its due day. A stop-set change's containers are its set's rows (`service_provider_activity_container`), which the API holds to one at least.
+    // Each kind carries its own columns and none of another's: a proposal its scheme, group and first day, a route-day change its days, a vehicle change its vehicle and maybe a driver, a follow-up its due day. A stop-set change's containers and a waste-fraction change's fractions are their sets' rows (`service_provider_activity_container`, `service_provider_activity_fraction`), which the API holds to one at least.
     check(
       tableObjectName(t.id.table, "kind_shape", "serviceProviderActivity"),
-      sql`case ${t.kind} when 'route-day-change' then ${t.routeSchemeId} is not null and ${t.collectionGroupId} is not null and cardinality(${t.serviceDays}) > 0 and ${t.effectiveFrom} is not null and ${t.dueOn} is null and ${t.vehicleId} is null and ${t.driverId} is null when 'vehicle-change' then ${t.routeSchemeId} is not null and ${t.collectionGroupId} is not null and ${t.vehicleId} is not null and ${t.effectiveFrom} is not null and ${t.serviceDays} is null and ${t.dueOn} is null when 'stop-set-change' then ${t.routeSchemeId} is not null and ${t.collectionGroupId} is not null and ${t.effectiveFrom} is not null and ${t.serviceDays} is null and ${t.dueOn} is null and ${t.vehicleId} is null and ${t.driverId} is null when 'compliance-follow-up' then ${t.dueOn} is not null and ${t.routeSchemeId} is null and ${t.collectionGroupId} is null and ${t.serviceDays} is null and ${t.effectiveFrom} is null and ${t.vehicleId} is null and ${t.driverId} is null else ${t.dueOn} is null and ${t.routeSchemeId} is null and ${t.collectionGroupId} is null and ${t.serviceDays} is null and ${t.effectiveFrom} is null and ${t.vehicleId} is null and ${t.driverId} is null end`,
+      sql`case ${t.kind} when 'route-day-change' then ${t.routeSchemeId} is not null and ${t.collectionGroupId} is not null and cardinality(${t.serviceDays}) > 0 and ${t.effectiveFrom} is not null and ${t.dueOn} is null and ${t.vehicleId} is null and ${t.driverId} is null when 'vehicle-change' then ${t.routeSchemeId} is not null and ${t.collectionGroupId} is not null and ${t.vehicleId} is not null and ${t.effectiveFrom} is not null and ${t.serviceDays} is null and ${t.dueOn} is null when 'waste-fraction-change' then ${t.routeSchemeId} is not null and ${t.collectionGroupId} is not null and ${t.effectiveFrom} is not null and ${t.serviceDays} is null and ${t.dueOn} is null and ${t.vehicleId} is null and ${t.driverId} is null when 'stop-set-change' then ${t.routeSchemeId} is not null and ${t.collectionGroupId} is not null and ${t.effectiveFrom} is not null and ${t.serviceDays} is null and ${t.dueOn} is null and ${t.vehicleId} is null and ${t.driverId} is null when 'compliance-follow-up' then ${t.dueOn} is not null and ${t.routeSchemeId} is null and ${t.collectionGroupId} is null and ${t.serviceDays} is null and ${t.effectiveFrom} is null and ${t.vehicleId} is null and ${t.driverId} is null else ${t.dueOn} is null and ${t.routeSchemeId} is null and ${t.collectionGroupId} is null and ${t.serviceDays} is null and ${t.effectiveFrom} is null and ${t.vehicleId} is null and ${t.driverId} is null end`,
     ),
     // A proposal moves through its Approval's statuses, every other kind through open and closed.
     check(
@@ -141,5 +142,32 @@ export const serviceProviderActivityContainer = wms.table(
     positive(t.position),
     tenantIndex(t, t.projectId),
     tenantIndex(t, t.containerId),
+  ],
+)
+
+/**
+ * A waste-fraction change's fractions (#474, part 4): the set a rule group's
+ * Stop Matching Rule should collect, replaced whole by a correction, as a
+ * rule's own fractions are (`collection_group_fraction`). A fraction is the
+ * company's, so the key carries the tenant alone; each once.
+ */
+export const serviceProviderActivityFraction = wms.table(
+  "service_provider_activity_fraction",
+  {
+    ...id,
+    ...projectScoped,
+    ...timestamps,
+    activityId: uuid().notNull(),
+    wasteFractionId: uuid().notNull(),
+  },
+  (t) => [
+    companyReference(t, company),
+    tenantReference(t, [t.projectId], project),
+    projectReference(t, [t.activityId], serviceProviderActivity),
+    tenantReference(t, [t.wasteFractionId], wasteFraction),
+    // Named for what it holds, as the containers' set is.
+    unique(tableObjectName(t.companyId.table, "membership_key", "serviceProviderActivityFraction")).on(t.companyId, t.activityId, t.wasteFractionId),
+    tenantIndex(t, t.projectId),
+    tenantIndex(t, t.wasteFractionId),
   ],
 )
