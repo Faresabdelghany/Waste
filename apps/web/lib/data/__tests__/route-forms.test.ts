@@ -26,7 +26,7 @@ import { ORGANISATION_MODULE } from "../containers"
 import { PROPERTIES_MODULE, SHARED_POINTS_MODULE } from "../properties"
 import { A_WORK_ORDER_IS_OF_A_CONTAINER } from "../pickup-services"
 import { SERVICE_PROVIDERS_MODULE } from "../provider-money"
-import { createRouteRecord, DISPATCH_DAY_FORM, dispatchDayRows, PICKUP_COMMAND_FORMS, ROUTE_COMMAND_FORMS, ROUTE_CREATE_FORM, routeCommandValues } from "../routes"
+import { createRouteRecord, DISPATCH_DAY_FORM, dispatchDayRows, PICKUP_COMMAND_FORMS, ROUTE_COMMAND_FORMS, ROUTE_CREATE_FORM, routeCommandValues, routesToJoin } from "../routes"
 
 const NOW = new Date("2026-09-30T12:00:00Z")
 const STAMPS = { createdAt: "2026-09-29T02:00:00.000Z", updatedAt: "2026-09-29T02:00:00.000Z" }
@@ -232,8 +232,30 @@ describe("the route's dialogs", () => {
   })
 })
 
+describe("the routes a route's stops may join (O23 of #290)", () => {
+  test("are the project's other routes that have not started, by day and then by number", () => {
+    const projectId = record.projectIds?.[0] ?? ""
+    const at = (name: string, values: Record<string, string>, projectIds = [projectId]): BusinessRecord => ({ ...record, id: `route-${name}`, name, projectIds, submittedValues: { ...record.submittedValues, ...values } })
+    const rows = [
+      record,
+      at("RC-1010", { operatingDate: "2026-10-01", status: "planned" }),
+      at("RC-1002", { operatingDate: "2026-10-02", status: "ready" }),
+      at("RC-1003", { operatingDate: "2026-10-01", status: "ready" }),
+      at("RC-1004", { operatingDate: "2026-10-01", status: "active" }),
+      at("RC-1006", { operatingDate: "2026-10-01", status: "cancelled" }),
+      at("RC-1005", { operatingDate: "2026-10-01", status: "planned" }, ["project-elsewhere"]),
+    ]
+    assert.deepEqual(
+      routesToJoin(rows, record).map((row) => row.name),
+      ["RC-1003", "RC-1010", "RC-1002"],
+      "never itself, one that runs or ended, or another project's",
+    )
+    assert.deepEqual(routesToJoin(rows, { ...record, projectIds: undefined }), [])
+  })
+})
+
 describe("the stop's dialogs", () => {
-  const pickup: Pickup = { id: "01a0d2a4-a280-7033-8000-000000000001", ...STAMPS, projectId: route.projectId, routeId: route.id, containerId: "01a0d2a4-a280-7014-8000-000000000009", position: 1, status: "completed", origin: "generation", service: "empty", reason: null, contaminantCodeId: null, note: null, propertyId: null, sharedCollectionPointId: "01a0d2a4-a280-7019-8000-000000000001", wasteFractionId: "01a0d2a4-a280-7005-8000-000000000001", subscriptionId: null, warehouseId: null, replacementContainerId: null, bulkyBookingId: null, arrivedAt: null, outcomeAt: "2026-10-01T05:00:00.000Z" }
+  const pickup: Pickup = { id: "01a0d2a4-a280-7033-8000-000000000001", ...STAMPS, projectId: route.projectId, routeId: route.id, containerId: "01a0d2a4-a280-7014-8000-000000000009", position: 1, status: "completed", origin: "generation", service: "empty", reason: null, contaminantCodeId: null, note: null, propertyId: null, sharedCollectionPointId: "01a0d2a4-a280-7019-8000-000000000001", wasteFractionId: "01a0d2a4-a280-7005-8000-000000000001", subscriptionId: null, warehouseId: null, replacementContainerId: null, bulkyBookingId: null, movedFromPickupId: null, arrivedAt: null, outcomeAt: "2026-10-01T05:00:00.000Z" }
   const stop = pickupAdapter.toRecord(pickup, context)
 
   test("remove asks why", () => {

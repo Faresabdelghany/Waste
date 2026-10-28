@@ -32,6 +32,13 @@ describe("an extra emptying", () => {
     assert.deepEqual([...extraEmptyings(stops)], [])
   })
 
+  test("is never an emptying a move brought onto the route (O23 of #290), which is the collection it was moved as: an office emptying beside it is the extra", () => {
+    const moved = stop("m1", "c1", { origin: "office", movedFromPickupId: "g9" })
+    assert.deepEqual([...extraEmptyings([moved])], [])
+    assert.deepEqual([...extraEmptyings([moved, stop("o1", "c1", { origin: "office" })])], ["o1"])
+    assert.deepEqual([...extraEmptyings([moved, stop("o2", "c2", { origin: "office" })])], [], "another container's office emptying is its own collection")
+  })
+
   test("reads a stop from before the service as an emptying", () => {
     const older = { ...stop("g1", "c1"), service: undefined }
     assert.equal(empties(older), true)

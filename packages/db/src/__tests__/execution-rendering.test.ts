@@ -78,6 +78,13 @@
 // two kinds on a `site-visit`, so `CHANGED_IN_0054`, first of the outbox's chain, maps the
 // outbox as drizzle-kit writes it now onto its 0040 spelling;
 // site-visits-rendering.test.ts pins the statements themselves.
+//
+// Migration 0055 (O23 of #290) gave `pickup` the stop it was moved from, with
+// its route, and `pickup_moved_from_shape`, so `CHANGED_IN_0055`, now first
+// of the pickup's chain, maps its CREATE TABLE as drizzle-kit writes it now
+// onto 0053's, and `ADDED_IN_0055` is the key, the one-move-per-stop index
+// and the index; moved-stops-rendering.test.ts pins the statements
+// themselves.
 import assert from "node:assert/strict"
 import { readFile } from "node:fs/promises"
 import { join } from "node:path"
@@ -314,7 +321,7 @@ const routeTable = (asOf: "0008" | "0012" | "0013" | "0015" | "0016" | "0024"): 
   ])
 
 /** pickup as drizzle-kit wrote it as of 0008; as of 0016 (#111), the container nullable, the stop's origin, and the two checks over them; as of 0023 (O3 of #290), the service with its three checks and the one-stop-per-container key a partial index of its own; as of 0032 (O3b of #290), the ledger bookings; and as it writes it since 0038 (M5 of #293), the contaminant code with its shape. */
-const pickupTable = (asOf: "0008" | "0016" | "0023" | "0032" | "0038" | "0053"): string =>
+const pickupTable = (asOf: "0008" | "0016" | "0023" | "0032" | "0038" | "0053" | "0055"): string =>
   createTable("pickup", "project", [
     '"route_id" uuid NOT NULL',
     asOf >= "0016" ? '"container_id" uuid' : '"container_id" uuid NOT NULL',
@@ -332,6 +339,7 @@ const pickupTable = (asOf: "0008" | "0016" | "0023" | "0032" | "0038" | "0053"):
     ...(asOf >= "0032" ? ['"subscription_id" uuid', '"warehouse_id" uuid', '"replacement_container_id" uuid', `"reserved_container_id" uuid GENERATED ALWAYS AS (${RESERVED_CONTAINER}) STORED`, `"taken_container_id" uuid GENERATED ALWAYS AS (${TAKEN_CONTAINER}) STORED`] : []),
     ...(asOf >= "0038" ? ['"contaminant_code_id" uuid'] : []),
     ...(asOf >= "0053" ? ['"bulky_booking_id" uuid'] : []),
+    ...(asOf >= "0055" ? ['"moved_from_route_id" uuid', '"moved_from_pickup_id" uuid'] : []),
     ...(asOf < "0023" ? [uniqueKey("pickup_route_id_container_id_key", "company_id", "route_id", "container_id")] : []),
     uniqueKey("pickup_route_id_project_key", "company_id", "project_id", "route_id", "id"),
     oneOfCheck("pickup", "status", ...STATUSES),
@@ -355,6 +363,9 @@ const pickupTable = (asOf: "0008" | "0016" | "0023" | "0032" | "0038" | "0053"):
     `CONSTRAINT "pickup_reason_shape" CHECK ((${ref("pickup", "status")} in ('skipped', 'failed')) = (${ref("pickup", "reason")} is not null))`,
     ...(asOf >= "0038"
       ? [`CONSTRAINT "pickup_contaminant_code_shape" CHECK (${ref("pickup", "contaminant_code_id")} is null or ${ref("pickup", "reason")} = 'contamination' or ${ref("pickup", "status")} = 'completed')`]
+      : []),
+    ...(asOf >= "0055"
+      ? [`CONSTRAINT "pickup_moved_from_shape" CHECK ((${ref("pickup", "moved_from_route_id")} is null) = (${ref("pickup", "moved_from_pickup_id")} is null) and (${ref("pickup", "moved_from_pickup_id")} is null or ${ref("pickup", "origin")} = 'office'))`]
       : []),
   ])
 
@@ -432,6 +443,16 @@ const ADDED_IN_0053 = [
   index("pickup", "pickup_bulky_booking_id_idx", "company_id", "bulky_booking_id"),
 ]
 
+/** What 0055 changed on one of the seven (O23 of #290): the pickup's CREATE TABLE as drizzle-kit generates it now onto what it generated as of 0053. Applied first, one file at a time. */
+const CHANGED_IN_0055 = new Map([[pickupTable("0055"), pickupTable("0053")]])
+
+/** What 0055 added to the pickup beside the columns and the check: its key through the route into the stop it was moved from, one stop moved from each, and the index. */
+const ADDED_IN_0055 = [
+  foreignKey("pickup", "pickup_moved_from_route_id_moved_from_pickup_id_fk", ["company_id", "project_id", "moved_from_route_id", "moved_from_pickup_id"], "pickup", ["company_id", "project_id", "route_id", "id"]),
+  partialUniqueIndex("pickup", "pickup_moved_from_pickup_id_key", ["company_id", "moved_from_pickup_id"], `${ref("pickup", "moved_from_pickup_id")} is not null`),
+  index("pickup", "pickup_moved_from_route_id_moved_from_pickup_id_idx", "company_id", "moved_from_route_id", "moved_from_pickup_id"),
+]
+
 /** What 0024 changed on one of the seven (O5 of #290): the route's CREATE TABLE as drizzle-kit generates it now onto what it generated as of 0016. Applied first, one file at a time. */
 const CHANGED_IN_0024 = new Map([[routeTable("0024"), routeTable("0016")]])
 
@@ -464,7 +485,7 @@ const ADDED_IN_0012 = [projectFkTo("route", "generation_run_id", "generation_run
 
 const expected = [
   routeTable("0024"),
-  pickupTable("0053"),
+  pickupTable("0055"),
   createTable("session", "project", [
     '"route_id" uuid NOT NULL',
     '"driver_id" uuid NOT NULL',
@@ -522,6 +543,7 @@ const expected = [
   tenantFk("pickup", "waste_fraction_id", "waste_fraction"),
   ADDED_IN_0053[0],
   tenantFk("pickup", "contaminant_code_id", "contaminant_code"),
+  ADDED_IN_0055[0],
   companyFk("session"),
   projectFk("session"),
   projectFkTo("session", "route_id", "route"),
@@ -577,6 +599,8 @@ const expected = [
   index("pickup", "pickup_route_id_position_idx", "company_id", "route_id", "position"),
   index("pickup", "pickup_contaminant_code_id_idx", "company_id", "contaminant_code_id"),
   ADDED_IN_0053[2],
+  ADDED_IN_0055[1],
+  ADDED_IN_0055[2],
   // One live session per route and one per driver: the open rows alone are in the index.
   partialUniqueIndex("session", "session_route_open_idx", ["company_id", "route_id"], `${ref("session", "ended_at")} is null`),
   partialUniqueIndex("session", "session_driver_open_idx", ["company_id", "driver_id"], `${ref("session", "ended_at")} is null`),
@@ -652,7 +676,8 @@ const handWritten = [...Object.values(tables).flatMap((table) => handWrittenStat
 /** Everything drizzle-kit wrote at the head of 0008: the seven tables as they were generated as of 0008 — the outbox and the unload in their earlier spelling, the route without the run that last wrote it, what 0012 added left out — and the company altered from 0002's spelling to 0008's. */
 const generatedHead = async (): Promise<string[]> => [
   ...(await statementsFor(tables))
-    .filter((statement) => !ADDED_IN_0053.includes(statement) && !ADDED_IN_0038.includes(statement) && !ADDED_IN_0032.includes(statement) && !ADDED_IN_0023.includes(statement) && !ADDED_IN_0013.includes(statement) && !ADDED_IN_0012.includes(statement))
+    .filter((statement) => !ADDED_IN_0055.includes(statement) && !ADDED_IN_0053.includes(statement) && !ADDED_IN_0038.includes(statement) && !ADDED_IN_0032.includes(statement) && !ADDED_IN_0023.includes(statement) && !ADDED_IN_0013.includes(statement) && !ADDED_IN_0012.includes(statement))
+    .map((statement) => CHANGED_IN_0055.get(statement) ?? statement)
     .map((statement) => CHANGED_IN_0053.get(statement) ?? statement)
     .map((statement) => CHANGED_IN_0054.get(statement) ?? statement)
     .map((statement) => CHANGED_IN_0045.get(statement) ?? statement)
@@ -689,7 +714,9 @@ describe("the Execution tables as drizzle-kit writes them", () => {
     assert.deepEqual([...statements.slice(0, generated.length)].sort(), generated)
     // The statements 0038 and 0024 changed are ones the schema generates today, the one 0032 changed is what 0038 maps the pickup back to, the one 0023 changed is what 0032 maps it back to, the ones 0016 changed are what 0024 maps the route back to and 0023 the pickup, the one 0015 changed is what 0016 maps the route back to, the one 0013 changed is what 0015 maps back to, and the one 0012 changed is what 0013 maps back to — each mapping maps something, one file at a time; the same chain for 0010 and 0009.
     const today = await statementsFor(tables)
-    for (const statement of CHANGED_IN_0053.keys()) assert.ok(today.includes(statement), statement.split("\n")[0])
+    for (const statement of CHANGED_IN_0055.keys()) assert.ok(today.includes(statement), statement.split("\n")[0])
+    for (const statement of ADDED_IN_0055) assert.ok(today.includes(statement), statement)
+    for (const statement of CHANGED_IN_0053.keys()) assert.ok([...CHANGED_IN_0055.values()].includes(statement), statement.split("\n")[0])
     for (const statement of ADDED_IN_0053) assert.ok(today.includes(statement), statement)
     for (const statement of CHANGED_IN_0038.keys()) assert.ok(today.includes(statement) || [...CHANGED_IN_0053.values()].includes(statement), statement.split("\n")[0])
     for (const statement of ADDED_IN_0038) assert.ok(today.includes(statement), statement)
@@ -721,6 +748,7 @@ describe("the Execution tables as drizzle-kit writes them", () => {
     assert.equal(CHANGED_IN_0040.size, 1, "the outbox's decided application")
     assert.equal(CHANGED_IN_0054.size, 1, "the outbox's recycling-centre visits")
     assert.equal(CHANGED_IN_0053.size, 1, "the stop's bulky booking")
+    assert.equal(CHANGED_IN_0055.size, 1, "the stop a moved stop was moved from")
   })
 
   test("and carries below them the fence and trigger, or revoke, of each table, then the sync role, its grants and the publication: 7 x 3 + 3 + 17 + 1 = 42 statements", async () => {
@@ -813,6 +841,7 @@ describe("the checks of this context", () => {
       "pickup_outcome_shape",
       "pickup_reason_shape",
       "pickup_contaminant_code_shape",
+      "pickup_moved_from_shape",
     ])
     assert.deepEqual([...checksOf(unload).keys()].slice(-4), ["unload_session_shape", "unload_weights_shape", "unload_refusal_reason_one_of", "unload_refusal_shape"])
     assert.deepEqual([...checksOf(driverCommand).keys()], ["driver_command_kind_one_of", "driver_command_outcome_one_of", "driver_command_problem_shape", "driver_command_route_shape"])

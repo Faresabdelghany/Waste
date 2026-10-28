@@ -202,7 +202,22 @@ export async function placeBin(pool: Database, tenant: FinanceTenant, label: str
 
 /** A stop to seed: a container's, or — with `containerId` null — an address-only one, which only the office adds (#111). */
 /** A stop as a test seeds it; an emptying unless it says a work order, a delivery naming the subscription it books (O3b of #290). */
-export type StopSeed = { containerId: string | null; propertyId: string; status?: PickupStatus; wasteFractionId?: string; origin?: PickupOrigin; service?: PickupService; subscriptionId?: string; warehouseId?: string; replacementContainerId?: string; bulkyBookingId?: string }
+export type StopSeed = {
+  containerId: string | null
+  propertyId: string
+  status?: PickupStatus
+  /** A missed stop's reason; `not-presented` unless said. */
+  reason?: PickupReason
+  wasteFractionId?: string
+  origin?: PickupOrigin
+  service?: PickupService
+  subscriptionId?: string
+  warehouseId?: string
+  replacementContainerId?: string
+  bulkyBookingId?: string
+  /** The stop a move took this one from (O23 of #290), on its route: an office stop. */
+  movedFrom?: { routeId: string; pickupId: string }
+}
 
 export type SeededRoute = { id: string; number: number; serviceDate: string; pickupIds: string[] }
 
@@ -275,7 +290,9 @@ export async function seedCompletedRoute(pool: Database, tenant: FinanceTenant, 
           wasteFractionId: stop.wasteFractionId ?? tenant.fractions.residual.id,
           arrivedAt: status === "planned" ? null : at(serviceDate, "06:40"),
           outcomeAt: status === "planned" ? null : at(serviceDate, "06:45"),
-          reason: status === "skipped" ? "not-presented" : status === "failed" ? "not-presented" : null,
+          reason: status === "skipped" || status === "failed" ? (stop.reason ?? "not-presented") : null,
+          movedFromRouteId: stop.movedFrom?.routeId ?? null,
+          movedFromPickupId: stop.movedFrom?.pickupId ?? null,
         }
       }),
     )

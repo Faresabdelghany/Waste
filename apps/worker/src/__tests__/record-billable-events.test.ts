@@ -235,6 +235,36 @@ describe("finance.record-billable-events against Postgres", { skip }, () => {
     assert.deepEqual(await eventsOfPickup(addressOnly), [])
   })
 
+  test("a scheduled collection moved to another route (O23 of #290) is billed as the collection it is, once, moved once or twice; the stop taken off records nothing, and an office stop moved stays the office's", async () => {
+    const bin = await placeBin(pool, tenant, "BIN-MOV-1", { agreementId: tenant.agreements.anna.id, productId: tenant.products.residual.id })
+    // The scheme's Monday stop taken off, then the office's stop of it on another route, taken off in turn and moved once more, and done there.
+    const from = await seedCompletedRoute(pool, tenant, [{ containerId: bin.containerId, propertyId: bin.propertyId, status: "skipped", reason: "removed-by-dispatcher" }])
+    const [scheduled] = from.pickupIds
+    const between = await seedCompletedRoute(pool, tenant, [{ containerId: bin.containerId, propertyId: bin.propertyId, origin: "office", status: "skipped", reason: "removed-by-dispatcher", movedFrom: { routeId: from.id, pickupId: scheduled } }], FIXTURE_DAY, { adHoc: true })
+    const [moved] = between.pickupIds
+    const to = await seedCompletedRoute(pool, tenant, [{ containerId: bin.containerId, propertyId: bin.propertyId, origin: "office", movedFrom: { routeId: between.id, pickupId: moved } }], FIXTURE_DAY, { adHoc: true })
+    const [done] = to.pickupIds
+
+    const taken = await handle(published("pickup-skipped", scheduled, { ...pickupPayload(from.id, scheduled, bin.containerId, "skipped"), reason: "removed-by-dispatcher" }))
+    assert.deepEqual([taken.did, await eventsOfPickup(scheduled)], ["nothing", []], "the stop taken off is no collection and no exception")
+    const collected = await handle(published("pickup-completed", done, { ...pickupPayload(to.id, done, bin.containerId), origin: "office", movedFromPickupId: moved }))
+    assert.equal(collected.did, "recorded")
+    const [recorded, ...rest] = await eventsOfPickup(done)
+    assert.deepEqual(rest, [])
+    assert.deepEqual(
+      [recorded.kind, recorded.agreementId, recorded.subscriptionId, recorded.productId, recorded.blockReason, recorded.links.routeId, recorded.links.pickupId],
+      ["pickup", tenant.agreements.anna.id, bin.subscriptionId, tenant.products.residual.id, null, to.id, done],
+      "priced through its placement, as the scheduled collection it stands for, on the route it was done on",
+    )
+
+    // An extra emptying the office added, moved, is the office's still: nothing, as #111's stop.
+    const extra = await seedCompletedRoute(pool, tenant, [{ containerId: bin.containerId, propertyId: bin.propertyId, origin: "office", status: "skipped", reason: "removed-by-dispatcher" }], FIXTURE_DAY, { adHoc: true })
+    const moves = await seedCompletedRoute(pool, tenant, [{ containerId: bin.containerId, propertyId: bin.propertyId, origin: "office", movedFrom: { routeId: extra.id, pickupId: extra.pickupIds[0] } }], FIXTURE_DAY, { adHoc: true })
+    const [extraDone] = moves.pickupIds
+    assert.equal((await handle(published("pickup-completed", extraDone, { ...pickupPayload(moves.id, extraDone, bin.containerId), origin: "office", movedFromPickupId: extra.pickupIds[0] }))).did, "nothing")
+    assert.deepEqual(await eventsOfPickup(extraDone), [])
+  })
+
   test("the negotiated row wins for its customer, whatever the conditions score", async () => {
     const bin = await placeBin(pool, tenant, "BIN-HOUSING-1", { agreementId: tenant.agreements.housing.id, productId: tenant.products.residual.id })
     const seeded = await seedCompletedRoute(pool, tenant, [{ containerId: bin.containerId, propertyId: bin.propertyId }])
