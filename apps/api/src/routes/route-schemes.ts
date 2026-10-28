@@ -5,12 +5,16 @@
 // `GET /route-schemes/:id/occurrences` previews the dates
 // it would plan. The groups' own routes are routes/collection-groups.ts; what
 // the two modules share is routes/scheme-groups.ts. No delete: a scheme ends
-// by `validTo`, and a group by `days: []`.
+// by `validTo`, a group by `days: []`, and a scheme for good by its archive
+// (O21 of #290, routes/scheme-lifecycle.ts, with the next version of a name),
+// after which every write here refuses it.
 //
 // A scheme is effective-dated (ADR-0005) and the database holds one scheme of
 // a name in force at a time in a project (`route_scheme_no_overlap`, 23P01),
 // so "Create new version" is a new scheme of the same name starting when the
-// old ends, and `refuseOverlap` turns the constraint into the one sentence.
+// old ends — `POST /route-schemes/:id/successor` writes both halves at once —
+// and `refuseOverlap` turns the constraint into the one sentence. `planAheadDays`
+// is how far from tomorrow the nightly job keeps the scheme planned (O21).
 // `?validOn=` is how "effective" and "expired" are asked for; `status` is the
 // half of the lifecycle a person decides, `draft` or `validated`, and a
 // validated scheme is held to the structural rules of
@@ -76,6 +80,7 @@
 //
 // The grant is `route-studio.schemes` throughout.
 import { Page } from "@waste/contracts/pagination"
+import type { Tx } from "@waste/db/client"
 import type { ProblemFieldError } from "@waste/contracts/problem"
 import {
   DAILY_HAS_NO_SEASONS,
@@ -103,12 +108,12 @@ import { holidayLabel, holidayNamesFor, withCarriedNames } from "@waste/domain/r
 import { generateOccurrences, NO_HOLIDAYS, SHIFT_SEARCH_DAYS, type HolidayList } from "@waste/domain/route-schemes/occurrences"
 import { addDays, type SchemeRecurrence } from "@waste/domain/route-schemes/recurrence"
 import { count } from "@waste/domain/text"
-import { and, asc, eq, gt, gte, lte } from "drizzle-orm"
+import { and, asc, eq, gt, gte, isNotNull, isNull, lte } from "drizzle-orm"
 import { Hono, type MiddlewareHandler } from "hono"
 import { describeRoute } from "hono-openapi"
 import * as z from "zod"
 
-import { BEARER_SECURITY, type AuthEnv } from "../auth/principal"
+import { BEARER_SECURITY, type AuthEnv, type Principal } from "../auth/principal"
 import { requireProject } from "../auth/projects"
 import { requireAllowed, requireGrant } from "../auth/require"
 import { newId } from "../ids"
@@ -134,6 +139,7 @@ import {
   CREW_THERE,
   requireGroupDriver,
   requireGroupReferences,
+  requireNotArchived,
   requireNotPickedTwice,
   requireStructure,
   SCHEME_NAME_IN_FORCE,
@@ -169,6 +175,78 @@ function requireRecurrence(merged: { frequency: string; weekRotation: string | n
   if (errors.length > 0) throw invalidRequest("body", errors)
 }
 
+/**
+ * A scheme written with the groups and seasons it starts with, held to every
+ * rule the create holds: what `POST /route-schemes` writes, and the next
+ * version `POST /route-schemes/:id/successor` writes from its predecessor
+ * (routes/scheme-lifecycle.ts), so a successor is held to exactly what a
+ * create is.
+ */
+export async function writeScheme(tx: Tx, principal: Principal, body: RouteSchemeCreate, now: () => Date): Promise<RouteScheme> {
+  const { collectionGroups: asked, seasons, ...values } = body
+  requireProject(principal, values.projectId)
+  const scope: Scope = { companyId: principal.companyId, projectId: values.projectId }
+
+  // The 400s first, each at its entry: what the body points at, and
+  // the picks across its groups. Then the 409s: the fleet's statuses,
+  // the structure, and the period the database refuses.
+  await requirePlanningArea(tx, scope, values.planningAreaId)
+  await requireDepot(tx, scope, values.depotId)
+  await requireUnloadingStation(tx, principal.companyId, values.unloadingStationId)
+  const refs = mergeReferences(asked.map((group, n) => referencesOf(group, { prefix: `collectionGroups.${n}.` })))
+  const rows = await requireGroupReferences(tx, scope, refs)
+  const today = projectToday(tx, scope, now)
+  for (const [n, group] of asked.entries()) {
+    await requireGroupDriver(tx, scope, values, group, { path: `collectionGroups.${n}.driverId`, rows, today })
+    requireNotPickedTwice(asked.slice(0, n).map(pickOf), pickOf(group), (m) => `collectionGroups.${n}.containerIds.${m}`)
+  }
+  requireFleetInService(refs, rows)
+  await requireFleetThere(tx, scope, values, asked, today)
+  await requireStructure(tx, scope, { status: values.status, serviceDays: values.serviceDays, planningAreaId: values.planningAreaId ?? null }, asked)
+
+  const schemeId = newId()
+  const [row] = await refuseOverlap({ [SCHEME_NAME_IN_FORCE]: SCHEME_NAME_IN_FORCE_SENTENCE }, () =>
+    tx
+      .insert(routeScheme)
+      .values({
+        ...values,
+        id: schemeId,
+        companyId: principal.companyId,
+        planningAreaId: values.planningAreaId ?? null,
+        weekRotation: values.weekRotation ?? null,
+        plannedStartTime: values.plannedStartTime ?? null,
+        depotId: values.depotId ?? null,
+        unloadingStationId: values.unloadingStationId ?? null,
+        validTo: values.validTo ?? null,
+      })
+      .returning(schemeColumns),
+  )
+
+  const groups = asked.map((group, n) => ({
+    id: newId(),
+    companyId: principal.companyId,
+    projectId: values.projectId,
+    routeSchemeId: schemeId,
+    name: group.name,
+    position: group.position ?? n + 1,
+    days: group.days,
+    stopSource: group.stopSource,
+    ruleVehicleTypeId: group.rule?.vehicleTypeId ?? null,
+    serviceProviderId: group.serviceProviderId ?? null,
+    vehicleId: group.vehicleId ?? null,
+    driverId: group.driverId ?? null,
+  }))
+  // The contracts hold a body to one group per name, so the key cannot meet two here.
+  await tx.insert(collectionGroup).values(groups)
+  await writeGroupSets(
+    tx,
+    scope,
+    groups.map((group, n) => ({ id: group.id, rule: asked[n].rule, containerIds: asked[n].containerIds })),
+  )
+  await writeSeasons(tx, scope, schemeId, seasons, { replacing: false })
+  return schemeWithGroups(tx, principal.companyId, row, now)
+}
+
 export function routeSchemeRoutes(guard: MiddlewareHandler<AuthEnv>, { now = () => new Date() }: ClockOptions = {}) {
   return new Hono<AuthEnv>()
     .get(
@@ -177,7 +255,7 @@ export function routeSchemeRoutes(guard: MiddlewareHandler<AuthEnv>, { now = () 
         operationId: "listRouteSchemes",
         summary: "The route schemes the caller's projects hold",
         description:
-          "One page of route schemes, oldest first (ids are time-ordered), from the projects the caller works in — an account that works in none, such as a service provider's, reads an empty page — each with its collection groups by position, their stop matching rule or their picked containers in stop order. `projectId` narrows it to one of those projects; naming another is refused. `planningAreaId` answers the schemes matching inside one area, `status` the drafts or the validated ones, `planAhead` the ones the nightly job keeps planned or the ones it leaves alone. `validOn` asks for the schemes in force on that day, `validFrom` inclusive and `validTo` exclusive, which is how \"effective\" and \"expired\" are asked for; scheduled and Attention are the client's readings of each scheme's `generation`: when its latest succeeded run finished, and each rule group's two latest match stamps. Hand `nextCursor` back as `cursor` for the next page.",
+          "One page of route schemes, oldest first (ids are time-ordered), from the projects the caller works in — an account that works in none, such as a service provider's, reads an empty page — each with its collection groups by position, their stop matching rule or their picked containers in stop order. `projectId` narrows it to one of those projects; naming another is refused. `planningAreaId` answers the schemes matching inside one area, `status` the drafts or the validated ones, `planAhead` the ones the nightly job keeps planned or the ones it leaves alone, `archived` the archived ones or the ones still planning (O21 of #290; absent, both, `archivedAt` saying which). `validOn` asks for the schemes in force on that day, `validFrom` inclusive and `validTo` exclusive, which is how \"effective\" and \"expired\" are asked for; scheduled and Attention are the client's readings of each scheme's `generation`: when its latest succeeded run finished, and each rule group's two latest match stamps. Hand `nextCursor` back as `cursor` for the next page.",
         security: BEARER_SECURITY,
         responses: {
           200: describeJson("One page of route schemes, each with its collection groups.", RouteSchemePage),
@@ -190,7 +268,7 @@ export function routeSchemeRoutes(guard: MiddlewareHandler<AuthEnv>, { now = () 
       requireGrant(MODULE, "view"),
       validate("query", RouteSchemeListQuery),
       async (c) => {
-        const { limit, cursor, projectId, planningAreaId, status, planAhead, validOn: day } = c.req.valid("query")
+        const { limit, cursor, projectId, planningAreaId, status, planAhead, validOn: day, archived } = c.req.valid("query")
         const after = afterCursor(cursor)
         const tx = c.get("tx")
         const principal = c.get("principal")
@@ -205,6 +283,7 @@ export function routeSchemeRoutes(guard: MiddlewareHandler<AuthEnv>, { now = () 
               planningAreaId === undefined ? undefined : eq(routeScheme.planningAreaId, planningAreaId),
               status === undefined ? undefined : eq(routeScheme.status, status),
               planAhead === undefined ? undefined : eq(routeScheme.planAhead, planAhead),
+              archived === undefined ? undefined : archived ? isNotNull(routeScheme.archivedAt) : isNull(routeScheme.archivedAt),
               day === undefined ? undefined : validOn(routeScheme, day),
               after === undefined ? undefined : gt(routeScheme.id, after),
             ),
@@ -241,72 +320,7 @@ export function routeSchemeRoutes(guard: MiddlewareHandler<AuthEnv>, { now = () 
       guard,
       requireGrant(MODULE, "create"),
       validate("json", RouteSchemeCreate),
-      async (c) => {
-        const { collectionGroups: asked, seasons, ...values } = c.req.valid("json")
-        const tx = c.get("tx")
-        const principal = c.get("principal")
-        requireProject(principal, values.projectId)
-        const scope: Scope = { companyId: principal.companyId, projectId: values.projectId }
-
-        // The 400s first, each at its entry: what the body points at, and
-        // the picks across its groups. Then the 409s: the fleet's statuses,
-        // the structure, and the period the database refuses.
-        await requirePlanningArea(tx, scope, values.planningAreaId)
-        await requireDepot(tx, scope, values.depotId)
-        await requireUnloadingStation(tx, principal.companyId, values.unloadingStationId)
-        const refs = mergeReferences(asked.map((group, n) => referencesOf(group, { prefix: `collectionGroups.${n}.` })))
-        const rows = await requireGroupReferences(tx, scope, refs)
-        const today = projectToday(tx, scope, now)
-        for (const [n, group] of asked.entries()) {
-          await requireGroupDriver(tx, scope, values, group, { path: `collectionGroups.${n}.driverId`, rows, today })
-          requireNotPickedTwice(asked.slice(0, n).map(pickOf), pickOf(group), (m) => `collectionGroups.${n}.containerIds.${m}`)
-        }
-        requireFleetInService(refs, rows)
-        await requireFleetThere(tx, scope, values, asked, today)
-        await requireStructure(tx, scope, { status: values.status, serviceDays: values.serviceDays, planningAreaId: values.planningAreaId ?? null }, asked)
-
-        const schemeId = newId()
-        const [row] = await refuseOverlap({ [SCHEME_NAME_IN_FORCE]: SCHEME_NAME_IN_FORCE_SENTENCE }, () =>
-          tx
-            .insert(routeScheme)
-            .values({
-              ...values,
-              id: schemeId,
-              companyId: principal.companyId,
-              planningAreaId: values.planningAreaId ?? null,
-              weekRotation: values.weekRotation ?? null,
-              plannedStartTime: values.plannedStartTime ?? null,
-              depotId: values.depotId ?? null,
-              unloadingStationId: values.unloadingStationId ?? null,
-              validTo: values.validTo ?? null,
-            })
-            .returning(schemeColumns),
-        )
-
-        const groups = asked.map((group, n) => ({
-          id: newId(),
-          companyId: principal.companyId,
-          projectId: values.projectId,
-          routeSchemeId: schemeId,
-          name: group.name,
-          position: group.position ?? n + 1,
-          days: group.days,
-          stopSource: group.stopSource,
-          ruleVehicleTypeId: group.rule?.vehicleTypeId ?? null,
-          serviceProviderId: group.serviceProviderId ?? null,
-          vehicleId: group.vehicleId ?? null,
-          driverId: group.driverId ?? null,
-        }))
-        // The contracts hold a body to one group per name, so the key cannot meet two here.
-        await tx.insert(collectionGroup).values(groups)
-        await writeGroupSets(
-          tx,
-          scope,
-          groups.map((group, n) => ({ id: group.id, rule: asked[n].rule, containerIds: asked[n].containerIds })),
-        )
-        await writeSeasons(tx, scope, schemeId, seasons, { replacing: false })
-        return created(c, "/route-schemes", await schemeWithGroups(tx, principal.companyId, row, now))
-      },
+      async (c) => created(c, "/route-schemes", await writeScheme(c.get("tx"), c.get("principal"), c.req.valid("json"), now)),
     )
     .get(
       "/route-schemes/:id",
@@ -376,6 +390,7 @@ export function routeSchemeRoutes(guard: MiddlewareHandler<AuthEnv>, { now = () 
         await lockRow(tx, routeScheme, { companyId: principal.companyId, id })
         const current = await findScheme(tx, principal, id)
         if (current === undefined) throw noSuchScheme(id)
+        requireNotArchived(current)
         const scope: Scope = { companyId: principal.companyId, projectId: current.projectId }
         const merged = { ...current, ...patch }
 

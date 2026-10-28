@@ -1,11 +1,13 @@
 // The nightly sweep (Issue #97 part B, §5 "Cron"): `planning.plan-ahead` at
 // 03:00 UTC — past midnight in every timezone the demo serves, so "today" is
 // the same day everywhere it is read — finds every validated route scheme
-// with `plan_ahead` on whose period overlaps the coming week in its
-// project's timezone, and gives each a generation run over
-// `planAheadWindow(today)`: tomorrow through the next seven days, today's
-// routes being already operating (the domain's rule, route-schemes/
-// plan-ahead.ts). Every row is written as `wms_api` under `withCompany`, the
+// with `plan_ahead` on, not archived, whose period overlaps its Plan Ahead
+// window in its project's timezone, and gives each a generation run over
+// `planAheadRunWindow(today, plan_ahead_days)`: tomorrow through the
+// scheme's number of days ahead, 7 unless the office set another (O21 of
+// #290), today's routes being already operating (the domain's rule,
+// planning/lifecycle.ts). An archived scheme has Plan Ahead off by the
+// database's shape; the sweep asks for both all the same. Every row is written as `wms_api` under `withCompany`, the
 // run and its job in one transaction through `sendGenerateRoutes`
 // (`@waste/db/jobs`, the spelling the API's trigger shares, Issue #168), so
 // neither is left without the other.
@@ -32,7 +34,7 @@
 import { sendGenerateRoutes } from "@waste/db/jobs"
 import { generationRun } from "@waste/db/schema/generation"
 import { withCompany } from "@waste/db/tenant"
-import { planAheadWindow } from "@waste/domain/route-schemes/plan-ahead"
+import { planAheadRunWindow } from "@waste/domain/planning/lifecycle"
 import { sql } from "drizzle-orm"
 
 import { defineJob, type JobContext } from "./definition"
@@ -47,33 +49,34 @@ export type PlanAheadData = {
   source: "schedule" | "manual"
 }
 
-/** One scheme the sweep found, with the day it is judged on. */
-export type EligibleScheme = { companyId: string; projectId: string; routeSchemeId: string; today: string }
+/** One scheme the sweep found, with the day it is judged on and how many days ahead it keeps planned. */
+export type EligibleScheme = { companyId: string; projectId: string; routeSchemeId: string; today: string; planAheadDays: number }
 
 /**
- * The sweep: every validated scheme with plan-ahead on whose period overlaps
- * tomorrow through today + 7, today being `at` in the project's timezone.
+ * The sweep: every validated scheme with plan-ahead on, not archived, whose
+ * period overlaps tomorrow through today + its `plan_ahead_days`, today
+ * being `at` in the project's timezone.
  * Across companies, as the worker role. `validTo` is the first day out of
  * force, so a scheme ending on the window's first day is not in it.
  */
 export async function eligibleSchemes(worker: JobContext["worker"], at: Date): Promise<EligibleScheme[]> {
-  const rows = await worker.db.execute<{ company_id: string; project_id: string; route_scheme_id: string; today: string }>(sql`
-    select s.company_id, s.project_id, s.id as route_scheme_id, (${at.toISOString()}::timestamptz at time zone p.timezone)::date::text as today
+  const rows = await worker.db.execute<{ company_id: string; project_id: string; route_scheme_id: string; today: string; plan_ahead_days: number }>(sql`
+    select s.company_id, s.project_id, s.id as route_scheme_id, (${at.toISOString()}::timestamptz at time zone p.timezone)::date::text as today, s.plan_ahead_days
     from wms.route_scheme s
     join wms.project p on p.company_id = s.company_id and p.id = s.project_id
-    where s.plan_ahead and s.status = 'validated'
-      and s.valid_from <= (${at.toISOString()}::timestamptz at time zone p.timezone)::date + 7
+    where s.plan_ahead and s.status = 'validated' and s.archived_at is null
+      and s.valid_from <= (${at.toISOString()}::timestamptz at time zone p.timezone)::date + s.plan_ahead_days
       and (s.valid_to is null or s.valid_to > (${at.toISOString()}::timestamptz at time zone p.timezone)::date + 1)
     order by s.company_id, s.project_id, s.id
   `)
-  return rows.map((row) => ({ companyId: row.company_id, projectId: row.project_id, routeSchemeId: row.route_scheme_id, today: row.today }))
+  return rows.map((row) => ({ companyId: row.company_id, projectId: row.project_id, routeSchemeId: row.route_scheme_id, today: row.today, planAheadDays: row.plan_ahead_days }))
 }
 
 /** What one sweep did: the runs it wrote and sent, the schemes it found already mid-generation, and the companies whose writes failed. */
 export type PlanAheadOutcome = { eligible: number; queued: string[]; alreadyQueued: string[]; failed: string[] }
 
 /**
- * Writes a `cron` run over `planAheadWindow(today)` for each eligible scheme
+ * Writes a `cron` run over its Plan Ahead window for each eligible scheme
  * and sends its job in the same fenced transaction; a scheme whose job is
  * already queued or active gets no run. Companies are taken one at a time,
  * each in its own transactions, so a fenced write for one never sees another.
@@ -85,7 +88,7 @@ export async function planAhead({ api, worker, now, log, send }: JobContext, job
   for (const scheme of schemes) {
     try {
       const sent = await withCompany(api.db, scheme.companyId, async (tx) => {
-        const window = planAheadWindow(scheme.today)
+        const window = planAheadRunWindow(scheme.today, scheme.planAheadDays)
         const [run] = await tx
           .insert(generationRun)
           .values({ companyId: scheme.companyId, projectId: scheme.projectId, routeSchemeId: scheme.routeSchemeId, trigger: "cron", windowFrom: window.from, windowTo: window.to, status: "queued" })
@@ -121,7 +124,7 @@ class AlreadyQueued extends Error {
 
 export const planAheadJob = defineJob<PlanAheadData>({
   queue: PLAN_AHEAD_QUEUE,
-  description: "Sweeps every validated route scheme with plan-ahead on, across companies, and queues a generation run over the coming week for each, as wms_api under its company.",
+  description: "Sweeps every validated route scheme with plan-ahead on and not archived, across companies, and queues a generation run over its Plan Ahead window (the coming week unless the scheme says otherwise) for each, as wms_api under its company.",
   schedule: PLAN_AHEAD_SCHEDULE,
   scheduleData: { source: "schedule" },
   // A worker back after a night off sweeps once, not once per missed night: the week is the same week.

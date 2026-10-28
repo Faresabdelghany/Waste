@@ -140,6 +140,14 @@ export const GROUP_NAME_TAKEN = "collection_group_route_scheme_id_name_key"
 export const groupNameTaken = (name: string): string => `This scheme already has a collection group called ${JSON.stringify(name)}`
 
 export const noSuchScheme = (id: string) => problem(404, { detail: `No route scheme ${id} in the projects this account works in` })
+/** What a write to an archived scheme, or to one of its groups, is told (O21 of #290): archived is for good, and the next version of its name is a new scheme. */
+export const schemeArchived = (name: string): string => `Route scheme ${JSON.stringify(name)} is archived: it plans nothing more and is not changed; write a new scheme of its name instead`
+
+/** Refuses a write to an archived scheme (409), after its 404. */
+export function requireNotArchived(scheme: { name: string; archivedAt: Date | null }): void {
+  if (scheme.archivedAt !== null) throw problem(409, { detail: schemeArchived(scheme.name) })
+}
+
 export const noSuchGroup = (id: string) => problem(404, { detail: `No collection group ${id} in the projects this account works in` })
 
 export const schemeColumns = {
@@ -155,7 +163,9 @@ export const schemeColumns = {
   holidayPolicy: routeScheme.holidayPolicy,
   editPolicy: routeScheme.editPolicy,
   planAhead: routeScheme.planAhead,
+  planAheadDays: routeScheme.planAheadDays,
   status: routeScheme.status,
+  archivedAt: routeScheme.archivedAt,
   depotId: routeScheme.depotId,
   unloadingStationId: routeScheme.unloadingStationId,
   validFrom: routeScheme.validFrom,
@@ -203,7 +213,9 @@ export function schemeOf(row: SchemeRow, groups: CollectionGroup[], generation: 
     holidayPolicy: row.holidayPolicy as HolidayPolicy,
     editPolicy: row.editPolicy as SchemeEditPolicy,
     planAhead: row.planAhead,
+    planAheadDays: row.planAheadDays,
     status: row.status as RouteSchemeStatus,
+    archivedAt: row.archivedAt === null ? null : row.archivedAt.toISOString(),
     depotId: row.depotId,
     unloadingStationId: row.unloadingStationId,
     seasons,

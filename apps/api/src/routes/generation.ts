@@ -73,7 +73,7 @@ import { requireGrant } from "../auth/require"
 import { newId } from "../ids"
 import { afterCursor, fetchLimit, pageOf } from "../pagination"
 import { describeProblem, problem, validate } from "../problem"
-import { findScheme, MODULE, noSuchScheme } from "./scheme-groups"
+import { findScheme, MODULE, noSuchScheme, requireNotArchived } from "./scheme-groups"
 import { describeJson, IdParam, instantOf, stampsOf } from "./shared"
 
 const GenerationRunPage = Page(GenerationRun)
@@ -207,6 +207,7 @@ export function generationRoutes(guard: MiddlewareHandler<AuthEnv>, { jobs }: Ge
         const principal = c.get("principal")
         const scheme = await findScheme(tx, principal, id)
         if (scheme === undefined) throw noSuchScheme(id)
+        requireNotArchived(scheme)
         if (scheme.status !== "validated") throw problem(409, { detail: DRAFT_GENERATES_NOTHING })
 
         let asked: AskedRun
