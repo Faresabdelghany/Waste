@@ -2604,6 +2604,9 @@ column wms.route_scheme 17 plan_ahead boolean not-null default=true
 column wms.route_scheme 18 status text not-null default='draft'::text acl=[wms_public=SELECT/<owner>]
 column wms.route_scheme 19 depot_id uuid
 column wms.route_scheme 20 unloading_station_id uuid
+column wms.route_scheme 21 plan_ahead_days integer not-null default=7
+column wms.route_scheme 22 archived_at timestamp with time zone
+constraint wms.route_scheme route_scheme_archived_shape CHECK (((archived_at IS NULL) OR (NOT plan_ahead)))
 constraint wms.route_scheme route_scheme_company_id_fk FOREIGN KEY (company_id) REFERENCES wms.company(id)
 constraint wms.route_scheme route_scheme_depot_id_fk FOREIGN KEY (company_id, project_id, depot_id) REFERENCES wms.depot(company_id, project_id, id)
 constraint wms.route_scheme route_scheme_edit_policy_one_of CHECK ((edit_policy = ANY (ARRAY['ask'::text, 'future'::text, 'single'::text])))
@@ -2611,6 +2614,7 @@ constraint wms.route_scheme route_scheme_frequency_one_of CHECK ((frequency = AN
 constraint wms.route_scheme route_scheme_holiday_policy_one_of CHECK ((holiday_policy = ANY (ARRAY['shift-next'::text, 'shift-prev'::text, 'skip'::text, 'collect'::text])))
 constraint wms.route_scheme route_scheme_no_overlap EXCLUDE USING gist (company_id WITH =, project_id WITH =, name WITH =, daterange(valid_from, valid_to, '[)'::text) WITH &&)
 constraint wms.route_scheme route_scheme_pkey PRIMARY KEY (id)
+constraint wms.route_scheme route_scheme_plan_ahead_days_range CHECK (((plan_ahead_days >= 1) AND (plan_ahead_days <= 28)))
 constraint wms.route_scheme route_scheme_planning_area_id_fk FOREIGN KEY (company_id, project_id, planning_area_id) REFERENCES wms.planning_area(company_id, project_id, id)
 constraint wms.route_scheme route_scheme_project_id_fk FOREIGN KEY (company_id, project_id) REFERENCES wms.project(company_id, id)
 constraint wms.route_scheme route_scheme_project_key UNIQUE (company_id, project_id, id)
@@ -4159,4 +4163,5 @@ journal 1793171628420 0fde43652c55b3a47f1abdd683139b9c1f7f368895a38765d4315da4e9
 journal 1793174294074 9f8a53244ab3c25c383f6b2e788c2de5bdff4c797a91765ca7839ff20a9e38ca
 journal 1793177580649 01fe8bafb789dc34ac91a51fe178c57f3554bde9065bde1d1d8e3cb9274b5335
 journal 1793179564300 85ecc9dc677b5efac299e96018803d2f1b1589a6c0d32f05a8156b9014e70495
+journal 1793182222276 c5e590688f3b59222221801f9adb6ef5b420c207211a83eb9331aa951718ff38
 pgboss-version 42

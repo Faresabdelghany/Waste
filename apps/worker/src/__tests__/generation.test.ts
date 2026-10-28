@@ -833,6 +833,28 @@ describe("generation against a migrated database", { skip }, () => {
     await ownerPool.db.delete(generationRun).where(eq(generationRun.trigger, "cron"))
   })
 
+  test("a scheme's own Plan Ahead window (O21 of #290): the sweep finds a scheme starting inside it and runs it over tomorrow through that many days", async () => {
+    sent.length = 0
+    const [stored] = await ownerPool.db.select({ validFrom: routeScheme.validFrom }).from(routeScheme).where(eq(routeScheme.id, b.scheme))
+    // b starts on the 14th, past the week but inside a fortnight.
+    await ownerPool.db.update(routeScheme).set({ validFrom: "2026-10-14" }).where(eq(routeScheme.id, b.scheme))
+    assert.deepEqual((await eligibleSchemes(worker, NOW)).map((scheme) => scheme.routeSchemeId), [a.scheme], "the week does not reach the 14th")
+    await ownerPool.db.update(routeScheme).set({ planAheadDays: 14 }).where(eq(routeScheme.id, b.scheme))
+    assert.deepEqual((await eligibleSchemes(worker, NOW)).map((scheme) => [scheme.routeSchemeId, scheme.planAheadDays]), [[a.scheme, 7], [b.scheme, 14]])
+    const outcome = await planAhead(context(), "sweep-window")
+    assert.equal(outcome.queued.length, 2)
+    const runs = await ownerPool.db.select().from(generationRun).where(eq(generationRun.trigger, "cron")).orderBy(asc(generationRun.companyId))
+    assert.deepEqual(
+      runs.map((run) => [run.routeSchemeId, run.windowFrom, run.windowTo]),
+      [
+        [a.scheme, "2026-10-04", "2026-10-10"],
+        [b.scheme, "2026-10-04", "2026-10-17"],
+      ],
+    )
+    await ownerPool.db.delete(generationRun).where(eq(generationRun.trigger, "cron"))
+    await ownerPool.db.update(routeScheme).set({ planAheadDays: 7, validFrom: stored.validFrom }).where(eq(routeScheme.id, b.scheme))
+  })
+
   test("with pg-boss running: the sweep's job reaches the generate queue and runs there as one transaction with its run; a scheme mid-generation is not queued twice", async () => {
     const boss = createBoss({ url: withDatabaseName(owner.url, name), log: (line) => void lines.push(`pg-boss: ${line}`), cronWorkerIntervalSeconds: 1, monitorIntervalSeconds: 1 })
     // Only the generate queue is registered here, without its worker, so the jobs sit queued and the second sweep meets them.

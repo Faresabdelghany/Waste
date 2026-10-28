@@ -90,7 +90,12 @@ const projectAltered = [
   `ALTER TABLE "wms"."project" ADD CONSTRAINT "project_weekend_not_every_day" CHECK (cardinality(${ref("project", "weekend")}) < 7);`,
 ]
 
-/** route_scheme as drizzle-kit writes it today, and as it wrote it as of 0006, before 0007 gave it a depot and a station. */
+/**
+ * route_scheme as drizzle-kit writes it today, and as it wrote it as of 0006,
+ * before 0007 gave it a depot and a station and the scheme lifecycle's
+ * migration (O21 of #290) its Plan Ahead window and archive mark with their
+ * two checks: `true` is today's spelling, `false` 0006's.
+ */
 const routeSchemeTable = (resources: boolean): string =>
   createTable("route_scheme", "dated", [
     '"name" text NOT NULL',
@@ -104,7 +109,7 @@ const routeSchemeTable = (resources: boolean): string =>
     `"edit_policy" text DEFAULT 'ask' NOT NULL`,
     '"plan_ahead" boolean DEFAULT true NOT NULL',
     `"status" text DEFAULT 'draft' NOT NULL`,
-    ...(resources ? ['"depot_id" uuid', '"unloading_station_id" uuid'] : []),
+    ...(resources ? ['"depot_id" uuid', '"unloading_station_id" uuid', '"plan_ahead_days" integer DEFAULT 7 NOT NULL', '"archived_at" timestamp with time zone'] : []),
     uniqueKey("route_scheme_project_key", "company_id", "project_id", "id"),
     validityCheck("route_scheme"),
     oneOfCheck("route_scheme", "service_type", "container-collection", "underground-collection", "kerbside-collection", "crane-collection", "tank-emptying"),
@@ -116,6 +121,12 @@ const routeSchemeTable = (resources: boolean): string =>
     oneOfCheck("route_scheme", "edit_policy", "ask", "future", "single"),
     oneOfCheck("route_scheme", "status", "draft", "validated"),
     `CONSTRAINT "route_scheme_week_rotation_shape" CHECK ((${ref("route_scheme", "frequency")} = 'every-2-weeks') = (${ref("route_scheme", "week_rotation")} is not null))`,
+    ...(resources
+      ? [
+          `CONSTRAINT "route_scheme_plan_ahead_days_range" CHECK (${ref("route_scheme", "plan_ahead_days")} between 1 and 28)`,
+          `CONSTRAINT "route_scheme_archived_shape" CHECK (${ref("route_scheme", "archived_at")} is null or not ${ref("route_scheme", "plan_ahead")})`,
+        ]
+      : []),
   ])
 
 /** collection_group as drizzle-kit writes it today — the vehicle type a key, a vehicle and a driver — and as of 0006, with the token and its check. */

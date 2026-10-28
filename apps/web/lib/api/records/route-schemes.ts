@@ -56,13 +56,30 @@
 // it (./generation.ts) and then reads the scheme back through `read`, since
 // its `generation` reading is the runs'.
 import type { GenerationRequest, GenerationRun } from "@waste/contracts/generation"
-import type { CollectionGroup as WireGroup, CollectionGroupCreate, CollectionGroupEntry, CollectionGroupPatch, Occurrence, OccurrenceQuery, RouteScheme, RouteSchemeCreate, RouteSchemePatch, StopMatchingRule } from "@waste/contracts/route-schemes"
+import type {
+  CollectionGroup as WireGroup,
+  CollectionGroupCreate,
+  CollectionGroupEntry,
+  CollectionGroupPatch,
+  Occurrence,
+  OccurrenceQuery,
+  RouteScheme,
+  RouteSchemeArchive,
+  RouteSchemeArchived,
+  RouteSchemeCreate,
+  RouteSchemePatch,
+  RouteSchemeSuccession,
+  RouteSchemeSuccessorCreate,
+  StopMatchingRule,
+} from "@waste/contracts/route-schemes"
 import { LAST_GENERATION_MATCHES_KEY, PREVIOUS_GENERATION_MATCHES_KEY, serializeGenerationMatches, type GenerationMatches } from "@waste/domain/route-schemes/container-drift"
 import { collectionGroupsOfRecord, collectionGroupsToValues, hasExplicitCollectionGroups, IMPLICIT_GROUP_ID, sharedServiceProvider, type CollectionGroup as SchemeGroup, type ResolvedCollectionGroup } from "@waste/domain/route-schemes/groups"
 import { SCHEME_API_WARNINGS_KEY } from "@waste/domain/route-schemes/lifecycle"
 import { addDays, parseServiceDays, sortServiceDays } from "@waste/domain/route-schemes/recurrence"
 import { SCHEME_SEASONS_KEY, seasonsValue, storedSeasonsFromValues } from "@waste/domain/route-schemes/scheme-seasons"
+import { PLAN_AHEAD_DAYS_DEFAULT, planAheadDaysAllowed } from "@waste/domain/planning/lifecycle"
 import { SERVICE_TYPES, type ServiceType } from "@waste/domain/planning/vocabulary"
+import { REGISTRY_VISIBILITY_FACT, SOFT_DELETED } from "@waste/domain/record-visibility"
 
 import { FIXTURE_COMPANY_ID, type BusinessRecord } from "@/lib/data/business-modules"
 import { MASTER_DATA_KIND_DETAILS, masterDataKindOf, type MasterDataKind } from "@/lib/data/master-data-kinds"
@@ -231,6 +248,20 @@ function placeOf(context: MappingContext, record: BusinessRecord, key: string, p
   return serverIdFor(context, prefix, webId) ?? refusal(key, `The API holds no ${what} ${webId}`)
 }
 
+/** Where a scheme keeps how many days from tomorrow the nightly job plans it (O21 of #290): a whole number of days, as text. */
+export const PLAN_AHEAD_DAYS_KEY = "planAheadDays"
+
+/** What a window outside 1..28 is refused with before the API. */
+export const PLAN_AHEAD_DAYS_REFUSAL = "The nightly job plans 1 to 28 days ahead"
+
+/** The record's Plan Ahead window in days, undefined where it says none, or a refusal. */
+function planAheadDaysOf(record: BusinessRecord): number | undefined | LocalRefusal {
+  const value = record.submittedValues?.[PLAN_AHEAD_DAYS_KEY]
+  if (value === undefined || value === null || value === "") return undefined
+  const days = typeof value === "number" ? value : Number(value)
+  return planAheadDaysAllowed(days) ? days : refusal(PLAN_AHEAD_DAYS_KEY, PLAN_AHEAD_DAYS_REFUSAL)
+}
+
 /** The scheme's own wire fields as the record spells them, or the first refusal. */
 function schemeFieldsOf(record: BusinessRecord, context: MappingContext): SchemeFields | LocalRefusal {
   const areaWebId = typed(record, "planningAreaId")
@@ -246,6 +277,8 @@ function schemeFieldsOf(record: BusinessRecord, context: MappingContext): Scheme
   const frequency = typed(record, "frequency") as RouteSchemePatch["frequency"]
   const lastDay = typed(record, "effectiveTo")
   const planAhead = record.submittedValues?.planAhead
+  const planAheadDays = planAheadDaysOf(record)
+  if (isRefusal(planAheadDays)) return planAheadDays
   return {
     name: typed(record, "schemeName") ?? record.name,
     planningAreaId,
@@ -257,6 +290,7 @@ function schemeFieldsOf(record: BusinessRecord, context: MappingContext): Scheme
     holidayPolicy: typed(record, "holidayPolicy") as RouteSchemePatch["holidayPolicy"],
     editPolicy: typed(record, "editPolicy") as RouteSchemePatch["editPolicy"],
     planAhead: typeof planAhead === "boolean" ? planAhead : undefined,
+    planAheadDays,
     depotId,
     unloadingStationId,
     validFrom: typed(record, "effectiveFrom"),
@@ -456,6 +490,31 @@ const generateRoutes: RecordAction<GenerationAnswer> = {
   refused: (record) => `Generation of ${record.name} was not started`,
 }
 
+/** The scheme's archive (O21 of #290): its delete, which erases nothing. */
+export const ARCHIVE_SCHEME = "archive"
+/** The next version of the scheme's name, from a day (O21 of #290). */
+export const SUCCEED_SCHEME = "successor"
+
+const archiveScheme_: RecordAction<RouteSchemeArchived> = {
+  // The first day the scheme no longer runs; absent, the API's tomorrow on the project's clock.
+  toBody: (input) => {
+    const effectiveFrom = dayOf(input.effectiveFrom)
+    return (effectiveFrom === undefined ? {} : { effectiveFrom }) satisfies RouteSchemeArchive
+  },
+  run: (client, serverId, body) => post<RouteSchemeArchived>(client, `/route-schemes/${serverId}/archive`, body).then((answer) => answer.body),
+  refused: (record) => `${record.name} was not archived`,
+}
+
+const succeedScheme_: RecordAction<RouteSchemeSuccession> = {
+  toBody: (input) => {
+    const validFrom = dayOf(input.validFrom)
+    if (validFrom === undefined) return refusal("validFrom", "Pick the day the next version takes over")
+    return { validFrom } satisfies RouteSchemeSuccessorCreate
+  },
+  run: (client, serverId, body) => create<RouteSchemeSuccession>(client, `/route-schemes/${serverId}/successor`, body).then((answer) => answer.body),
+  refused: (record) => `No new version of ${record.name} was written`,
+}
+
 export const routeSchemeAdapter: ResourceAdapter<RouteScheme> = {
   prefix: SCHEME_PREFIX,
   auditTable: "route_scheme",
@@ -513,6 +572,9 @@ export const routeSchemeAdapter: ResourceAdapter<RouteScheme> = {
         ...(explicit || groups[0]?.vehicleName === undefined ? {} : { Vehicle: groups[0].vehicleName }),
         ...(explicit || groups[0]?.driverName === undefined ? {} : { Driver: groups[0].driverName }),
         "Plan ahead": scheme.planAhead ? "On" : "Off",
+        "Plan ahead window": `${scheme.planAheadDays} days`,
+        // An archived scheme (O21 of #290) is history: every list and planner skips it as the prototype's deleted scheme, and its routes still name it.
+        ...(scheme.archivedAt === null ? {} : { Archived: scheme.archivedAt.slice(0, 10), [REGISTRY_VISIBILITY_FACT]: SOFT_DELETED }),
         ...(scheme.seasons.length === 0 ? {} : { Seasons: scheme.seasons.map((season) => season.name).join(", ") }),
       },
       companyId: context.companyRecordId ?? FIXTURE_COMPANY_ID,
@@ -534,6 +596,8 @@ export const routeSchemeAdapter: ResourceAdapter<RouteScheme> = {
         holidayPolicy: scheme.holidayPolicy,
         editPolicy: scheme.editPolicy,
         planAhead: scheme.planAhead,
+        [PLAN_AHEAD_DAYS_KEY]: String(scheme.planAheadDays),
+        ...(scheme.archivedAt === null ? {} : { archivedAt: scheme.archivedAt }),
         depotId: scheme.depotId === null ? "" : webIdFor(context, CHIP.depot, scheme.depotId),
         unloadingStationId: scheme.unloadingStationId === null ? "" : webIdFor(context, CHIP.station, scheme.unloadingStationId),
         ...groupValues,
@@ -556,7 +620,7 @@ export const routeSchemeAdapter: ResourceAdapter<RouteScheme> = {
     if (projectId === undefined) return refusal("projectId", "Pick a project")
     const fields = schemeFieldsOf(record, context)
     if (isRefusal(fields)) return fields
-    const { serviceType, frequency, validFrom, validTo, holidayPolicy, editPolicy, planAhead, ...rest } = fields
+    const { serviceType, frequency, validFrom, validTo, holidayPolicy, editPolicy, planAhead, planAheadDays, ...rest } = fields
     if (serviceType === undefined) return refusal("serviceType", "Pick a service type")
     if (frequency === undefined) return refusal("frequency", "Pick how often the scheme recurs")
     if (rest.serviceDays === undefined || rest.serviceDays.length === 0) return refusal("serviceDays", "Pick the days the scheme serves")
@@ -568,8 +632,8 @@ export const routeSchemeAdapter: ResourceAdapter<RouteScheme> = {
       groups.push(created)
     }
     const status = statusOf(record)
-    // The contract's output type says `planAhead` always; on the way in, absent is the server's default.
-    const body: Omit<RouteSchemeCreate, "planAhead"> & { planAhead?: boolean } = {
+    // The contract's output type says `planAhead` and its window always; on the way in, absent is the server's default.
+    const body: Omit<RouteSchemeCreate, "planAhead" | "planAheadDays"> & { planAhead?: boolean; planAheadDays?: number } = {
       projectId,
       name: rest.name ?? record.name,
       planningAreaId: rest.planningAreaId,
@@ -581,6 +645,7 @@ export const routeSchemeAdapter: ResourceAdapter<RouteScheme> = {
       holidayPolicy: holidayPolicy ?? "skip",
       editPolicy: editPolicy ?? "ask",
       ...(planAhead === undefined ? {} : { planAhead }),
+      ...(planAheadDays === undefined || planAheadDays === PLAN_AHEAD_DAYS_DEFAULT ? {} : { planAheadDays }),
       status: status === "validated" ? "validated" : "draft",
       depotId: rest.depotId,
       unloadingStationId: rest.unloadingStationId,
@@ -617,7 +682,17 @@ export const routeSchemeAdapter: ResourceAdapter<RouteScheme> = {
   // One request, the API's verdict on the whole edit: it writes all of it or none (#205).
   update: (client, serverId, body) => patch<RouteScheme>(client, `/route-schemes/${serverId}`, body),
   read: (client, serverId) => get<RouteScheme>(client, `/route-schemes/${serverId}`),
-  actions: { [GENERATE_ROUTES]: generateRoutes },
+  actions: { [GENERATE_ROUTES]: generateRoutes, [ARCHIVE_SCHEME]: archiveScheme_, [SUCCEED_SCHEME]: succeedScheme_ },
+}
+
+/** A scheme's archive through the store's `sendAction`, from `effectiveFrom` or the API's tomorrow; the page reads the scheme and its routes back once it lands. */
+export function archiveScheme(sendAction: SendAction, recordId: string, effectiveFrom: string | undefined): Promise<ActionOutcome<RouteSchemeArchived>> {
+  return sendAction(ROUTE_SCHEMES_MODULE.workspaceId, ROUTE_SCHEMES_MODULE.moduleId, recordId, ARCHIVE_SCHEME, effectiveFrom === undefined ? {} : { effectiveFrom }, { report: false }) as Promise<ActionOutcome<RouteSchemeArchived>>
+}
+
+/** A scheme's next version from `validFrom` through the store's `sendAction`; the page reads the schemes and the routes back once it lands. */
+export function succeedScheme(sendAction: SendAction, recordId: string, validFrom: string): Promise<ActionOutcome<RouteSchemeSuccession>> {
+  return sendAction(ROUTE_SCHEMES_MODULE.workspaceId, ROUTE_SCHEMES_MODULE.moduleId, recordId, SUCCEED_SCHEME, { validFrom }, { report: false }) as Promise<ActionOutcome<RouteSchemeSuccession>>
 }
 
 /** A scheme's generate through the store's `sendAction`, its answer typed: the one way a page asks for a run. */

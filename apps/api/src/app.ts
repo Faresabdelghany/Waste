@@ -88,6 +88,7 @@ import { propertyGroupRoutes } from "./routes/property-groups"
 import { publicRoutes } from "./routes/public"
 import { roleRoutes } from "./routes/roles"
 import { routeSchemeRoutes } from "./routes/route-schemes"
+import { schemeLifecycleRoutes } from "./routes/scheme-lifecycle"
 import { planRoutes } from "./routes/plans"
 import { routeRoutes } from "./routes/routes"
 import { proofObjectRoutes } from "./routes/proof-objects"
@@ -263,6 +264,7 @@ export function createApp({
   app.route("/", collectionCalendarRoutes(guard))
   // Planning's group rules judge a driver on "today" on the project's clock, so the two take the app's `now` as the ledger routes do.
   app.route("/", routeSchemeRoutes(guard, { now }))
+  app.route("/", schemeLifecycleRoutes(guard, { now, jobs }))
   app.route("/", collectionGroupRoutes(guard, { now }))
   app.route("/", generationRoutes(guard, { jobs }))
   app.route("/", vehicleTypeRoutes(guard))

@@ -90,6 +90,7 @@ import { groupReleases, releaseHolds } from "./route-holds"
 import {
   assembleGroups,
   findScheme,
+  requireNotArchived,
   GROUP_NAME_TAKEN,
   groupColumns,
   groupNameTaken,
@@ -126,7 +127,7 @@ const RULE_PICKS_NOTHING = "This collection group matches by rule; its container
 const pickedOnNewDay = (containerId: string, found: Parameters<typeof alreadyPicked>[0]): string => `Container ${containerId} is already picked by ${found.group} on ${found.day}`
 
 /** What a write of a group is held against: the state of the scheme it belongs to, and the day its period starts, which the driver's licence is judged from. */
-type SchemeState = { status: string; serviceDays: string[]; planningAreaId: string | null; validFrom: string }
+type SchemeState = { name: string; status: string; serviceDays: string[]; planningAreaId: string | null; validFrom: string; archivedAt: Date | null }
 
 /**
  * One group with what a write of it is held against — its scheme's status,
@@ -137,7 +138,9 @@ async function findGroup(tx: Tx, principal: Principal, id: string): Promise<(Gro
   const [row] = await tx
     .select({
       ...groupColumns,
+      schemeName: routeScheme.name,
       schemeStatus: routeScheme.status,
+      schemeArchivedAt: routeScheme.archivedAt,
       schemeServiceDays: routeScheme.serviceDays,
       schemePlanningAreaId: routeScheme.planningAreaId,
       schemeValidFrom: routeScheme.validFrom,
@@ -147,8 +150,8 @@ async function findGroup(tx: Tx, principal: Principal, id: string): Promise<(Gro
     .where(and(groupScope(principal), eq(collectionGroup.id, id)))
     .limit(1)
   if (row === undefined) return undefined
-  const { schemeStatus, schemeServiceDays, schemePlanningAreaId, schemeValidFrom, ...group } = row
-  return { ...group, scheme: { status: schemeStatus, serviceDays: schemeServiceDays, planningAreaId: schemePlanningAreaId, validFrom: schemeValidFrom } }
+  const { schemeName, schemeStatus, schemeArchivedAt, schemeServiceDays, schemePlanningAreaId, schemeValidFrom, ...group } = row
+  return { ...group, scheme: { name: schemeName, status: schemeStatus, serviceDays: schemeServiceDays, planningAreaId: schemePlanningAreaId, validFrom: schemeValidFrom, archivedAt: schemeArchivedAt } }
 }
 
 /**
@@ -168,6 +171,8 @@ async function lockedGroup(tx: Tx, principal: Principal, id: string): Promise<Gr
   await lockRow(tx, routeScheme, { companyId: principal.companyId, id: found.routeSchemeId })
   const current = await findGroup(tx, principal, id)
   if (current === undefined) throw noSuchGroup(id)
+  // An archived scheme's groups are its history (O21 of #290).
+  requireNotArchived(current.scheme)
   return current
 }
 
@@ -255,6 +260,7 @@ export function collectionGroupRoutes(guard: MiddlewareHandler<AuthEnv>, { now =
         await lockRow(tx, routeScheme, { companyId: principal.companyId, id })
         const scheme = await findScheme(tx, principal, id)
         if (scheme === undefined) throw noSuchScheme(id)
+        requireNotArchived(scheme)
         const within: Scope = { companyId: principal.companyId, projectId: scheme.projectId }
 
         if (!withinServiceDays(scheme.serviceDays, values.days)) throw invalidRequest("body", [{ path: "days", message: OUTSIDE_SERVICE_DAYS }])

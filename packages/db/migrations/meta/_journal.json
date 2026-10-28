@@ -414,6 +414,13 @@
       "when": 1793179564300,
       "tag": "0058_multi_trip_unloading",
       "breakpoints": true
+    },
+    {
+      "idx": 59,
+      "version": "7",
+      "when": 1793182222276,
+      "tag": "0059_scheme_lifecycle",
+      "breakpoints": true
     }
   ]
 }

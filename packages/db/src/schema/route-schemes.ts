@@ -69,10 +69,22 @@
 // stretch no exclusion constraint spells; the API, the one writer, replaces
 // the set whole and refuses an overlap, and generation reads at most one
 // season on a date (`seasonOn`, @waste/domain/route-schemes/seasons).
+//
+// O21 of #290 gave the scheme its lifecycle's two columns: `plan_ahead_days`,
+// how far from tomorrow the nightly sweep keeps it planned (7 unless said, at
+// most 28, the domain's bounds in @waste/domain/planning/lifecycle), and
+// `archived_at`, the instant the office archived it. Archive is the scheme's
+// delete and erases nothing: the API cuts the period at the effective day,
+// turns Plan Ahead off — `route_scheme_archived_shape` holds an archived
+// scheme to that — and cancels or trims the planned routes from that day, and
+// every row the scheme ever generated stays. Archived is a marker beside the
+// status, not a status, since `status` is the half of the lifecycle a person
+// decides while the scheme plans.
 import { HOLIDAY_POLICIES, RECURRENCE_FREQUENCIES, ROUTE_SCHEME_STATUSES, SCHEME_EDIT_POLICIES, SEASON_FREQUENCIES, SERVICE_DAYS, SERVICE_TYPES, STOP_SOURCES, WEEK_ROTATIONS } from "@waste/domain/planning/vocabulary"
+import { PLAN_AHEAD_DAYS_DEFAULT, PLAN_AHEAD_DAYS_MAX } from "@waste/domain/planning/lifecycle"
 import { MONTH_DAY_SOURCE } from "@waste/domain/route-schemes/seasons"
 import { sql } from "drizzle-orm"
-import { boolean, check, integer, text, time, unique, uuid } from "drizzle-orm/pg-core"
+import { boolean, check, integer, text, time, timestamp, unique, uuid } from "drizzle-orm/pg-core"
 
 import { tableObjectName } from "../names"
 import { containerType, wasteFraction } from "./catalogue"
@@ -116,6 +128,10 @@ export const routeScheme = wms.table(
     depotId: uuid(),
     /** Where the routes empty; one of the company's stations, null while unsaid (Issue #101). */
     unloadingStationId: uuid(),
+    /** How many days from tomorrow the nightly job keeps planned (O21 of #290): 7 unless said, at most 28. */
+    planAheadDays: integer().notNull().default(PLAN_AHEAD_DAYS_DEFAULT),
+    /** When the office archived the scheme (O21 of #290); null while it plans. An archived scheme is history: never planned again, never erased. */
+    archivedAt: timestamp({ withTimezone: true }),
   },
   (t) => [
     companyReference(t, company),
@@ -137,6 +153,10 @@ export const routeScheme = wms.table(
     // exactly when the frequency is every-2-weeks. No helper spells it because
     // no other table has it; the label names the check itself.
     check(tableObjectName(t.id.table, "week_rotation_shape", "routeScheme"), sql`(${t.frequency} = 'every-2-weeks') = (${t.weekRotation} is not null)`),
+    // The window the nightly sweep plans, the domain's bounds (@waste/domain/planning/lifecycle).
+    check(tableObjectName(t.id.table, "plan_ahead_days_range", "routeScheme"), sql`${t.planAheadDays} between 1 and ${sql.raw(String(PLAN_AHEAD_DAYS_MAX))}`),
+    // An archived scheme is planned by nobody: its Plan Ahead is off.
+    check(tableObjectName(t.id.table, "archived_shape", "routeScheme"), sql`${t.archivedAt} is null or not ${t.planAhead}`),
     tenantIndex(t, t.planningAreaId),
     tenantIndex(t, t.depotId),
     tenantIndex(t, t.unloadingStationId),

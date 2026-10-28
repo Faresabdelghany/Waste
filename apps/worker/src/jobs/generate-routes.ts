@@ -39,7 +39,8 @@
 // so a second run of the same inputs writes no route and moves no
 // `updated_at`; a `resurrect` brings a route an earlier run cancelled back to
 // `planned`, its reason code cleared; `cancel` marks a `planned` route cancelled by generation with
-// the sentence and the `regeneration` code (O5 of #290) and skips its open pickups with `regeneration` as the reason,
+// the sentence and the `regeneration` code (O5 of #290) and skips its open pickups with `regeneration` as the reason
+// (the two statements are @waste/db/commands/scheme-routes, which the API's scheme archive runs too),
 // deleting nothing; `trim` (#111) skips the run's own open pickups of a
 // `planned` route the same way and leaves the route planned with the
 // sentence as its note, since it carries an open stop the office added and a
@@ -98,6 +99,7 @@
 // the office's button in apps/api sends the same job as the nightly sweep.
 import type { Tx } from "@waste/db/client"
 import { GENERATE_ROUTES_QUEUE, type GenerateRoutesData } from "@waste/db/commands/generation"
+import { cancelRoutesByGeneration, skipStopsByGeneration } from "@waste/db/commands/scheme-routes"
 import { validOver } from "@waste/db/query/valid-on"
 import { routeLabel } from "@waste/contracts/execution"
 import { driverAbsence, vehicleUnavailability } from "@waste/db/schema/availability"
@@ -109,7 +111,7 @@ import { generationMatch, generationRun } from "@waste/db/schema/generation"
 import { company, project } from "@waste/db/schema/organisation"
 import { collectionGroup, collectionGroupContainer, collectionGroupContainerType, collectionGroupFraction, routeScheme, routeSchemeSeason } from "@waste/db/schema/route-schemes"
 import { withCompany } from "@waste/db/tenant"
-import { REGENERATION_CANCEL, type PickupOrigin, type PickupReason, type PickupService, type PickupStatus, type RouteStatus } from "@waste/domain/execution/vocabulary"
+import { type PickupOrigin, type PickupReason, type PickupService, type PickupStatus, type RouteStatus } from "@waste/domain/execution/vocabulary"
 import {
   compatibilityKey,
   holidayListOf,
@@ -388,20 +390,14 @@ async function generate(tx: Tx, runId: string, companyId: string, at: Date): Pro
 
   const numbers = { next: await takeNumbers(tx, companyId, plan.decisions.filter((decision) => decision.kind === "create").length) }
 
-  /** Skips open stops the scheme no longer plans, by regeneration with the sentence: a cancel's every open stop, a trim's own. Deletes nothing. */
-  const skipOpen = async (ids: readonly string[], note: string): Promise<void> => {
-    if (ids.length === 0) return
-    await tx.update(pickup).set({ status: "skipped", reason: "regeneration", note, outcomeAt: at }).where(and(eq(pickup.companyId, companyId), inArray(pickup.id, [...ids])))
-  }
+  /** Skips open stops the scheme no longer plans, by regeneration with the sentence: a cancel's every open stop, a trim's own. Deletes nothing (@waste/db/commands/scheme-routes, the statement the API's scheme ending shares). */
+  const skipOpen = (ids: readonly string[], note: string): Promise<void> => skipStopsByGeneration(tx, companyId, ids, note, at)
 
   for (const decision of plan.decisions) {
     if (decision.kind === "leave" || decision.kind === "omit") continue
 
     if (decision.kind === "cancel") {
-      await tx
-        .update(route)
-        .set({ status: "cancelled", cancelledAt: at, cancelledByGeneration: true, cancelReasonCode: REGENERATION_CANCEL, note: decision.note, generationRunId: run.id, heldAt: null })
-        .where(and(eq(route.companyId, companyId), eq(route.id, decision.routeId)))
+      await cancelRoutesByGeneration(tx, companyId, [decision.routeId], decision.note, at, run.id)
       await skipOpen(
         pickupsOf(decision.routeId)
           .filter((row) => row.status === "planned")
