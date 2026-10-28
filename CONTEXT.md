@@ -170,6 +170,10 @@ _Avoid_: Quota (one part of the rule), tariff, price list (the rule names produc
 An append-only record of receipt, issue, return, transfer, adjustment, or decommission.
 _Avoid_: Inventory quantity, balance edit
 
+**Stock Minimum**:
+The fewest containers of one type the office wants a Warehouse to hold in stock; a container in maintenance does not count towards it. The stock is read off the Stock Movements against it, "below minimum" where fewer stand there; nothing is alerted or ordered from it.
+_Avoid_: Reorder level, safety stock, par level
+
 **Decommission Reason**:
 Why a container was scrapped: one of the company's own list, kept in the master data, which a decommission names beside an optional note. A reason is retired rather than deleted, so a decommission given it still reads it.
 _Avoid_: Scrap code, disposal reason, retirement reason
@@ -345,6 +349,10 @@ _Avoid_: Price update, repricing, tariff edit
 **Service Area**:
 An effective-dated geographic and service responsibility awarded to a service provider. Its geographic scope references operator-owned Planning Areas — the service provider domain has no zone concept of its own — while the contract's own boundary text stays the authoritative legal boundary.
 _Avoid_: Contract area, operational area, route, service provider zone
+
+**Service Provider Activity**:
+One item of coordination between the office and one Service Provider about the work it holds under an award, numbered `ACT-<n>`: a proposal of a protected change, which asks for the office's Approval — a route-day change, a Collection Group of a scheme the provider serves run on other days from a day — a compliance follow-up the office raises with a due day, or a note either side keeps. An approved proposal is applied as the scheme's next version from its day; a refused one changes nothing. Every end is final, and overdue is a reading of a follow-up's due day, never a status. It restates no operational record: a route's assignment is the route's own.
+_Avoid_: Task, case (that is a Ticket), request (that is an Application), assignment notice
 
 **Service Area Assignment**:
 The effective-dated relationship that links an existing Service Area to one service provider. Assigning or transferring it changes the relationship and preserves the Service Area itself.

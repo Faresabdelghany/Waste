@@ -185,7 +185,7 @@ describe("the route schemes module", () => {
       assert.ok(SERVER_MODULE_KEYS.indexOf(before) < at, before)
     }
     // The routes' modules follow it at once (#179), the Live board's short read ahead of the two windowed ones, and after them only the modules that name a route — Resolution's (#182) and the money a route's work makes (#185), the payments with the invoices they pay (#291 C6); a module switched later that names no route goes in ahead of the schemes (the order on #191).
-    assert.deepEqual(SERVER_MODULE_KEYS.slice(at + 1), ["route-studio.live", "route-studio.routes", "route-studio.pickups", "operate.bulky-bookings", "operate.site-visits", "operate.tickets", "operate.exceptions", "commercial.events", "commercial.billing", "commercial.invoices", "commercial.payments", "commercial.accounting", "commercial.settlements", "route-studio.weights"])
+    assert.deepEqual(SERVER_MODULE_KEYS.slice(at + 1), ["route-studio.live", "route-studio.routes", "service-providers.activities", "route-studio.pickups", "operate.bulky-bookings", "operate.site-visits", "operate.tickets", "operate.exceptions", "commercial.events", "commercial.billing", "commercial.invoices", "commercial.payments", "commercial.accounting", "commercial.settlements", "route-studio.weights"])
   })
 
   test("loads one list, and lends no fixture its id: a scheme is `scheme-<uuid>` from the start", async () => {
@@ -601,6 +601,22 @@ describe("an edit of a scheme", () => {
     const south = groupOf({ id: "01a0d2a4-a280-701b-8000-0000000000a2", routeSchemeId: CENTRAL_ID, name: "South", position: 2, days: ["thursday", "friday"] })
     const merged = await edited({ ...central, collectionGroups: [north, south] }, withGroups((current) => [{ ...current[0], days: [...WEEKDAYS] }]), [schemeAnswer()])
     assert.deepEqual(one(merged.calls), { collectionGroups: [entryOf(north, { days: [...WEEKDAYS] })] }, "no delete: South, left out, is parked; the one group of the legacy shape keeps its own name, North")
+  })
+
+  test("a rule group's own planning area (O30 of #290): read as the area's web id, kept by an edit that leaves it, and said by an edit that gives one", async () => {
+    const north = groupOf({ id: "01a0d2a4-a280-701b-8000-0000000000a1", routeSchemeId: CENTRAL_ID, name: "North", days: ["monday", "tuesday", "wednesday"], rule: { wasteFractionIds: [residual.id], containerTypeIds: [], vehicleTypeId: rearLoader.id, planningAreaId: indreBy.id } })
+    const south = groupOf({ id: "01a0d2a4-a280-701b-8000-0000000000a2", routeSchemeId: CENTRAL_ID, name: "South", position: 2, days: ["thursday", "friday"] })
+    const scheme = { ...central, collectionGroups: [north, south] }
+    assert.deepEqual(collectionGroupsOfRecord(recordOf(scheme)).map((group) => group.planningAreaId), [areaRecord.id, undefined])
+
+    const renamed = await edited(scheme, withGroups((current) => [{ ...current[0], name: "North side" }, current[1]]), [schemeAnswer()])
+    assert.deepEqual(one(renamed.calls), { collectionGroups: [entryOf(north, { name: "North side" }), entryOf(south)] }, "the area rides on the rule as it was read")
+
+    const given = await edited(scheme, withGroups((current) => [current[0], { ...current[1], planningAreaId: areaRecord.id }]), [schemeAnswer()])
+    assert.deepEqual(one(given.calls), { collectionGroups: [entryOf(north), entryOf(south, { rule: { ...south.rule, planningAreaId: indreBy.id } })] })
+
+    const cleared = await edited(scheme, withGroups((current) => [{ ...current[0], planningAreaId: undefined }, current[1]]), [schemeAnswer()])
+    assert.deepEqual(one(cleared.calls), { collectionGroups: [entryOf(north, { rule: { wasteFractionIds: [residual.id], containerTypeIds: [], vehicleTypeId: rearLoader.id } }), entryOf(south)] }, "no area of its own: the scheme's")
   })
 
   test("a group removed from the front is left out of the list, and the others are restated as they stand: nothing is renumbered", async () => {

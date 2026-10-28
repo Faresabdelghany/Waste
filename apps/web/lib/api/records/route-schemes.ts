@@ -224,6 +224,8 @@ function schemeGroupOf(group: WireGroup, context: MappingContext): SchemeGroup {
     stopSource: group.stopSource,
     ruleVehicleType: rule?.vehicleTypeId ? masterName(context, "vehicle-type", rule.vehicleTypeId) : undefined,
     containerTypes: rule && rule.containerTypeIds.length > 0 ? rule.containerTypeIds.map((id) => masterName(context, "container-type", id)) : undefined,
+    // A rule's own planning area (O30 of #290): the area's record where the store holds it, its chip otherwise.
+    planningAreaId: rule?.planningAreaId ? (context.resolve.byServerId(rule.planningAreaId)?.id ?? webIdOf(CHIP.area, rule.planningAreaId)) : undefined,
     containerIds: group.containerIds.map((id) => webIdFor(context, CHIP.container, id)),
     serviceProviderId: group.serviceProviderId === null ? undefined : (provider?.id ?? webIdOf(CHIP.provider, group.serviceProviderId)),
     serviceProviderName: provider?.name,
@@ -314,7 +316,11 @@ function ruleOf(group: SchemeGroup, context: MappingContext, known: RuleMasterId
   if (isRefusal(containerTypeIds)) return containerTypeIds
   const vehicleTypeId = group.ruleVehicleType === undefined ? null : masterId(context, "vehicle-type", group.ruleVehicleType, "matchVehicleType", known)
   if (isRefusal(vehicleTypeId)) return vehicleTypeId
-  return { wasteFractionIds, containerTypeIds, vehicleTypeId }
+  // A rule's own planning area (O30 of #290) is said only where it has one: absent is the scheme's, as null is.
+  if (group.planningAreaId === undefined) return { wasteFractionIds, containerTypeIds, vehicleTypeId }
+  const planningAreaId = serverIdFor(context, CHIP.area, group.planningAreaId) ?? refusal("collectionGroups", `Pick a planning area the API holds for group ${group.name}`)
+  if (isRefusal(planningAreaId)) return planningAreaId
+  return { wasteFractionIds, containerTypeIds, vehicleTypeId, planningAreaId }
 }
 
 /** A manual group's picks by the API's ids, in stop order. */
@@ -368,7 +374,7 @@ function ruleAsRead(group: SchemeGroup, known: RuleMasterIds): StopMatchingRule 
   return { wasteFractionIds: wasteFractionIds as string[], containerTypeIds: containerTypeIds as string[], vehicleTypeId: vehicleTypeId ?? null }
 }
 
-/** Whether two groups' rules name the same fractions, container types and vehicle type, in the names the record spells them by. */
+/** Whether two groups' rules name the same fractions, container types and vehicle type, in the names the record spells them by; the area is restated by its id whatever this says. */
 const sameRule = (a: SchemeGroup, b: SchemeGroup) =>
   JSON.stringify([a.fractions, a.containerTypes ?? [], a.ruleVehicleType ?? null]) === JSON.stringify([b.fractions, b.containerTypes ?? [], b.ruleVehicleType ?? null])
 
@@ -391,7 +397,7 @@ const movable = (group: SchemeGroup) =>
   JSON.stringify([
     group.days,
     group.stopSource,
-    group.stopSource === "rule" ? [group.fractions, group.containerTypes ?? [], group.ruleVehicleType ?? null] : group.containerIds,
+    group.stopSource === "rule" ? [group.fractions, group.containerTypes ?? [], group.ruleVehicleType ?? null, group.planningAreaId ?? null] : group.containerIds,
     group.serviceProviderId ?? null,
     group.vehicleId ?? null,
     group.driverId ?? null,
@@ -446,7 +452,9 @@ function groupEntriesOf(before: BusinessRecord, after: BusinessRecord, context: 
     const whole = groupCreateOf(group, context, known)
     if (isRefusal(whole)) return whole
     const name = renamed(group, prior) ? group.name : (names[serverId] ?? prior.name)
-    entries.push({ id: serverId, ...whole, ...(kept === undefined ? {} : { rule: kept }), name })
+    // The rule as read keeps its master ids; its area is the one the edit leaves it with.
+    const area = whole.rule?.planningAreaId == null ? {} : { planningAreaId: whole.rule.planningAreaId }
+    entries.push({ id: serverId, ...whole, ...(kept === undefined ? {} : { rule: { ...kept, ...area } }), name })
   }
   return entries
 }

@@ -54,9 +54,11 @@ import {
   type Client,
   type LocalRefusal,
   type MappingContext,
+  type RecordAction,
   type ResourceAdapter,
   type ServerModule,
 } from "./adapter"
+import { SET_STOCK_MINIMUMS, SET_STOCK_MINIMUMS_ACTION } from "./stock"
 
 /** What a body giving one opening time is told (`@waste/contracts/places`, `BOTH_HOURS_OR_NEITHER`); the test holds the two equal. */
 export const BOTH_HOURS_OR_NEITHER = "Give both opening and closing time or neither"
@@ -605,6 +607,8 @@ export const warehouseAdapter: ResourceAdapter<Warehouse> = {
   },
   create: (client, body) => create<Warehouse>(client, "/warehouses", body).then((created) => created.body),
   update: (client, serverId, body) => patch<Warehouse>(client, `/warehouses/${serverId}`, body),
+  // Its Stock Minimums (O30 of #290), replaced whole: the answer is the set, so an action (records/stock.ts).
+  actions: { [SET_STOCK_MINIMUMS]: SET_STOCK_MINIMUMS_ACTION as RecordAction<unknown> },
 }
 
 // ---------------------------------------------------------------------------

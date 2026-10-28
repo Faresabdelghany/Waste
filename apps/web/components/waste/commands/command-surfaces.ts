@@ -33,6 +33,7 @@ import { TICKET_LIST_INITIAL, ticketListReaders } from "@/lib/data/tickets"
 import { emptyBusinessFilters, singleFilterValue, type BusinessFilters, type FilterValueReaders } from "@waste/domain/business-filters"
 
 import { AgreementCommandsSurface } from "./agreement-surfaces"
+import { ActivityCommandsSurface, LogActivitySurface } from "./activity-surfaces"
 import { ApplicationCommandsSurface } from "./application-surfaces"
 import { BookBulkySurface, BulkyBookingCommandsSurface } from "./bulky-surfaces"
 import { CredentialCommandsSurface, RegisterCredentialSurface, SiteVisitCommandsSurface, SiteVisitsPrimarySurface } from "./site-visit-surfaces"
@@ -51,6 +52,7 @@ import { PROVIDER_PRICES_LIST, SERVICE_AREAS_LIST, SETTLEMENTS_LIST, WEIGHTS_LIS
 import { CreateServiceAreaSurface, OpenSettlementSurface, ProviderPriceCommandsSurface, ProviderPricesPrimarySurface, RecordUnloadSurface, ServiceAreaCommandsSurface, ServiceAreasRead, SettlementSurface, WeightReviewSurface } from "./provider-money-surfaces"
 import { InviteTeamMemberSurface, TeamMemberCommandsSurface } from "./team-surfaces"
 import { LiveBoardRefresh, LiveRouteSurface, PickupCommandsSurface, RouteCommandsSurface, RoutesPrimarySurface } from "./route-surfaces"
+import { WarehouseStockSurface } from "./stock-surfaces"
 
 /** What a primary surface is handed: the label the module's primary action carries. */
 export type PrimarySurfaceProps = { label: string }
@@ -143,6 +145,8 @@ export const COMMAND_SURFACES: Readonly<Record<string, CommandSurface>> = {
   "resources.containers": { primary: AddContainerSurface, rowActions: ContainerCommandsSurface },
   // The ledger is read-only on the wire: a movement is a container's command.
   "resources.inventory": { primary: null },
+  // O30 of #290: a warehouse by its own form as before, and its stock against its minimums in its details.
+  "resources.warehouses": { primary: "form", rowActions: WarehouseStockSurface, genericEdit: true },
   "fleet.vehicle-planning": { primary: AllocateSurface, rowActions: AllocationCommandsSurface },
   // O6 of #290: a driver's absences and a vehicle's periods out of use, in the row's details; the row itself by its own form as before.
   "fleet.drivers": { primary: "form", rowActions: DriverAbsenceSurface, genericEdit: true },
@@ -155,6 +159,8 @@ export const COMMAND_SURFACES: Readonly<Record<string, CommandSurface>> = {
   "customers.agreements": { primary: "form", rowActions: AgreementCommandsSurface },
   // M7 of #293: an Application recorded and corrected by its own form while undecided, moved by its commands, its Decisions and letter in its details.
   "customers.applications": { primary: "form", rowActions: ApplicationCommandsSurface, genericEdit: applicationCorrectable },
+  // #474: an Activity opened by its side's own form, closed by its commands and corrected by its own form while open; the registry's form stays disabled.
+  "service-providers.activities": { primary: LogActivitySurface, rowActions: ActivityCommandsSurface },
   // Slice 6 (#179): generation writes routes and their stops; a route and a
   // stop move by their commands, and the Live board only reads. A route's
   // details are these, not the fixture route page. #111: New route makes the

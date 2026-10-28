@@ -200,7 +200,8 @@ test("the scheme is created at step 5 in one POST the API takes, a validated sch
   ])
   expect(stored.status).toBe("validated")
   expect(stored.collectionGroups.map((group) => ({ name: group.name, rule: group.rule, vehicleId: group.vehicleId, driverId: group.driverId }))).toEqual([
-    { name, rule: { wasteFractionIds: [residual?.id], containerTypeIds: [bin240?.id], vehicleTypeId: null }, vehicleId: fleet.vehicle.id, driverId: fleet.driver.id },
+    // No planning area of its own (O30 of #290): the group matches within the scheme's.
+    { name, rule: { wasteFractionIds: [residual?.id], containerTypeIds: [bin240?.id], vehicleTypeId: null, planningAreaId: null }, vehicleId: fleet.vehicle.id, driverId: fleet.driver.id },
   ])
 })
 

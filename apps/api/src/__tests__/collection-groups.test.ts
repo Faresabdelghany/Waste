@@ -168,7 +168,7 @@ describe("the collection group endpoints", { skip: database.skip }, () => {
       assert.deepEqual(await one(olivia, bank.id), bank)
 
       const glassRun = await add(created.id, ruleGroup("Glass", ["monday"], { position: 1, rule: rule({ wasteFractionIds: [glass.id], containerTypeIds: [igloo.id], vehicleTypeId: planning.vehicleTypes.glassCrane.id }) }))
-      assert.deepEqual(glassRun.rule, { wasteFractionIds: [glass.id], containerTypeIds: [igloo.id], vehicleTypeId: planning.vehicleTypes.glassCrane.id })
+      assert.deepEqual(glassRun.rule, { wasteFractionIds: [glass.id], containerTypeIds: [igloo.id], vehicleTypeId: planning.vehicleTypes.glassCrane.id, planningAreaId: null }, "no area of its own: the scheme's")
       assert.deepEqual([glassRun.vehicleId, glassRun.driverId], [null, null], "Resources' columns, read as null until #101's slice 6 writes them")
       assert.deepEqual((await oneScheme(created.id)).collectionGroups.map((group) => [group.name, group.position]), [["Residual", 1], ["Glass", 1], ["Bank", 2]], "by position, ties by id — the order they were made in")
     })
@@ -221,6 +221,18 @@ describe("the collection group endpoints", { skip: database.skip }, () => {
       assert.equal((await oneScheme(created.id)).collectionGroups.length, 1, "nothing written")
       const manual = await add(created.id, manualGroup("More bins", ["monday"], [bin2.id]))
       assert.equal(manual.stopSource, "manual", "a manual group needs no area")
+    })
+
+    test("a rule may match within a planning area of its own, which stands in for the scheme's; another project's is refused at the entry (O30 of #290, row 2.17)", async () => {
+      const created = await scheme("Own area", { status: "validated", planningAreaId: null, collectionGroups: [manualGroup("Bank", ["monday", "thursday"], [bin1.id])] })
+      const own = await add(created.id, ruleGroup("Residual", ["monday"], { rule: rule({ planningAreaId: planning.areas.centrum.id }) }))
+      assert.deepEqual(own.rule, { wasteFractionIds: [residual.id], containerTypeIds: [], vehicleTypeId: null, planningAreaId: planning.areas.centrum.id })
+      assert.deepEqual(await one(olivia, own.id), own)
+      const elsewhere = await refused(await post(created.id, ruleGroup("Harbour", ["thursday"], { rule: rule({ planningAreaId: planning.areas.harbor.id }) })), 400)
+      assert.deepEqual(elsewhere.errors, [{ path: "rule.planningAreaId", message: "Not a planning area of this project" }])
+      // A rule group without one still needs the scheme's.
+      const onScheme = await refused(await post(created.id, ruleGroup("Paper", ["thursday"])), 409)
+      assert.equal(onScheme.detail, "The scheme has no planning area and a collection group matches by rule")
     })
 
     test("answers 404 for a scheme outside the caller's scope, and 403 for a role that may view but not create", async () => {
@@ -327,12 +339,14 @@ describe("the collection group endpoints", { skip: database.skip }, () => {
       const created = await scheme("Re-ruled", { status: "validated", collectionGroups: [ruleGroup("Residual", ["monday", "thursday"]), manualGroup("Bank", ["thursday"], [bin3.id])] })
       const [residualRun, bank] = created.collectionGroups
       const replaced = await put(residualRun.id, "stop-matching-rule", { wasteFractionIds: [glass.id, residual.id], containerTypeIds: [igloo.id, bin.id], vehicleTypeId: planning.vehicleTypes.glassCrane.id })
-      assert.deepEqual(replaced.rule, { wasteFractionIds: [glass.id, residual.id], containerTypeIds: [igloo.id, bin.id], vehicleTypeId: planning.vehicleTypes.glassCrane.id }, "in the body's order")
+      assert.deepEqual(replaced.rule, { wasteFractionIds: [glass.id, residual.id], containerTypeIds: [igloo.id, bin.id], vehicleTypeId: planning.vehicleTypes.glassCrane.id, planningAreaId: null }, "in the body's order")
       assert.deepEqual(replaced.containerIds, [])
       assert.ok(replaced.updatedAt > residualRun.updatedAt, "the rule is part of the group on the wire")
       assert.deepEqual(await one(olivia, residualRun.id), replaced)
-      const narrowed = await put(residualRun.id, "stop-matching-rule", { wasteFractionIds: [glass.id], containerTypeIds: [], vehicleTypeId: null })
-      assert.deepEqual(narrowed.rule, { wasteFractionIds: [glass.id], containerTypeIds: [], vehicleTypeId: null }, "what the body left out is gone")
+      const narrowed = await put(residualRun.id, "stop-matching-rule", { wasteFractionIds: [glass.id], containerTypeIds: [], vehicleTypeId: null, planningAreaId: planning.areas.centrum.id })
+      assert.deepEqual(narrowed.rule, { wasteFractionIds: [glass.id], containerTypeIds: [], vehicleTypeId: null, planningAreaId: planning.areas.centrum.id }, "what the body left out is gone; a rule's own area is part of it (O30 of #290)")
+      const schemeArea = await put(residualRun.id, "stop-matching-rule", { wasteFractionIds: [glass.id], containerTypeIds: [], vehicleTypeId: null })
+      assert.equal(schemeArea.rule?.planningAreaId, null, "a rule replaced without an area matches within the scheme's again")
 
       const manual = await refused(await olivia(`/collection-groups/${bank.id}/stop-matching-rule`, { method: "PUT", body: rule() }), 409)
       assert.equal(manual.detail, "This collection group picks containers; it has no stop matching rule")

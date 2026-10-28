@@ -130,6 +130,8 @@ export const SYSTEM_ROLES: readonly SystemRole[] = [
       only("configure.calendars", ALL),
       only("configure.master", VIEW_EDIT),
       only("configure.templates", VIEW_EDIT),
+      // A provider's coordination (#474): it raises the follow-ups and notes, and decides the proposals with its schemes' create.
+      only("service-providers.activities", VIEW_EDIT_CREATE),
     ),
   },
   {
@@ -242,6 +244,8 @@ export const SYSTEM_ROLES: readonly SystemRole[] = [
       only("fleet.drivers", ALL),
       only("operate.tickets", ["view", "create"]),
       only("service-providers.service-provider-workspace", ALL),
+      // Its proposals and notes to the office (#474): opened and withdrawn here, decided only by the office.
+      only("service-providers.activities", VIEW_EDIT_CREATE),
       only("commercial.service-provider-prices", VIEW),
       only("commercial.settlements", VIEW),
     ),

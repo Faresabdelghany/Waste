@@ -94,6 +94,7 @@ import { publicRoutes } from "./routes/public"
 import { roleRoutes } from "./routes/roles"
 import { routeSchemeRoutes } from "./routes/route-schemes"
 import { schemeLifecycleRoutes } from "./routes/scheme-lifecycle"
+import { serviceProviderActivityRoutes } from "./routes/service-provider-activities"
 import { planRoutes } from "./routes/plans"
 import { routeRoutes } from "./routes/routes"
 import { proofObjectRoutes } from "./routes/proof-objects"
@@ -121,6 +122,7 @@ import { vehicleAllocationRoutes } from "./routes/vehicle-allocations"
 import { vehicleTypeRoutes } from "./routes/vehicle-types"
 import { visitRuleRoutes } from "./routes/visit-rules"
 import { vehicleRoutes } from "./routes/vehicles"
+import { stockBalanceRoutes } from "./routes/stock-balances"
 import { warehouseRoutes } from "./routes/warehouses"
 import { wasteFractionEmissionFactorRoutes } from "./routes/waste-fraction-emission-factors"
 import { weightControlRoutes } from "./routes/weight-control"
@@ -276,12 +278,14 @@ export function createApp({
   // Planning's group rules judge a driver on "today" on the project's clock, so the two take the app's `now` as the ledger routes do.
   app.route("/", routeSchemeRoutes(guard, { now }))
   app.route("/", schemeLifecycleRoutes(guard, { now, jobs }))
+  app.route("/", serviceProviderActivityRoutes(guard, { now, jobs }))
   app.route("/", collectionGroupRoutes(guard, { now }))
   app.route("/", generationRoutes(guard, { jobs }))
   app.route("/", vehicleTypeRoutes(guard))
   // The fleet's emission factors (M10 of #293), master data beside the vehicle types whose consumption they measure.
   app.route("/", fuelEmissionFactorRoutes(guard))
   app.route("/", warehouseRoutes(guard))
+  app.route("/", stockBalanceRoutes(guard))
   app.route("/", depotRoutes(guard))
   app.route("/", dropOffPointRoutes(guard))
   app.route("/", unloadingStationRoutes(guard))

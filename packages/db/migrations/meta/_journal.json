@@ -442,6 +442,34 @@
       "when": 1793199855626,
       "tag": "0062_address_register",
       "breakpoints": true
+    },
+    {
+      "idx": 63,
+      "version": "7",
+      "when": 1793204881720,
+      "tag": "0063_service_provider_activities",
+      "breakpoints": true
+    },
+    {
+      "idx": 64,
+      "version": "7",
+      "when": 1793207368395,
+      "tag": "0064_stock_minimums",
+      "breakpoints": true
+    },
+    {
+      "idx": 65,
+      "version": "7",
+      "when": 1793209754047,
+      "tag": "0065_group_planning_area",
+      "breakpoints": true
+    },
+    {
+      "idx": 66,
+      "version": "7",
+      "when": 1793211869364,
+      "tag": "0066_decommission_reasons",
+      "breakpoints": true
     }
   ]
 }
