@@ -74,7 +74,6 @@ import type { RoutingIdentity } from "@waste/routing/provider"
 import { QuotaEngine, STANDARD_PLAN } from "@waste/routing/quota"
 import { providerNameFromEnv } from "@waste/routing/select"
 
-import { FakeAddressRegister } from "./address-register/fake"
 import type { AddressRegister } from "./address-register/register"
 import { liveRoutes } from "./routes/live"
 import { positionRoutes } from "./routes/positions"
@@ -169,8 +168,8 @@ export type AppOptions = {
   peer?: (c: Context) => string | undefined
   /** How many proxies in front of the API append to X-Forwarded-For (PUBLIC_TRUSTED_PROXIES): 0, the default, ignores the header. */
   trustedProxies?: number
-  /** The address register the lookup and a property's `addressId` ask (#291 C13): the fake unless ADDRESS_PROVIDER says otherwise; server.ts builds it from the environment, with the token; a test injects one, scripted down where it needs the 502. */
-  addressRegister?: AddressRegister
+  /** The address register the lookup and a property's `addressId` ask (#291 C13); null where ADDRESS_PROVIDER names none, and the lookup answers 503. server.ts builds it from the environment, with the token; a test injects the fake, scripted down where it needs the 502. */
+  addressRegister?: AddressRegister | null
   /** The proofs' Storage (O1 of #290), which signs uploads and reads of photos and signatures; null where the deployment holds no service-role key, and its routes answer 503. server.ts builds it from the environment; a test injects a fake. */
   storage?: ProofStorage | null
 }
@@ -191,7 +190,7 @@ export function createApp({
   peer = () => undefined,
   trustedProxies = 0,
   storage = null,
-  addressRegister = new FakeAddressRegister(),
+  addressRegister = null,
 }: AppOptions) {
   const app = new Hono()
   app.onError(errorHandler(log))

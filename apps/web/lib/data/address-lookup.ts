@@ -31,3 +31,12 @@ export function addressPicked(lookupFieldId: string, fields: AddressLookupFields
 export function picksLetGoBy(fields: readonly BusinessFormField[], fieldId: string): string[] {
   return fields.filter((field) => field.type === "address-lookup" && field.addressLookup?.address === fieldId).map((field) => field.id)
 }
+
+/** The status the API answers where the deployment names no address register (ADDRESS_PROVIDER unset). */
+export const NO_REGISTER_STATUS = 503
+
+/** What a failed lookup leaves the picker: off for good where the deployment has no register — the typed address and point are the form — or a sentence beside the search for anything else, which a next search may get past. */
+export function lookupFailure(status: number | undefined, detail: string | undefined): { off: boolean; sentence: string } {
+  const sentence = detail ?? "The address register could not be asked. Type the address and place the point by hand."
+  return { off: status === NO_REGISTER_STATUS, sentence }
+}

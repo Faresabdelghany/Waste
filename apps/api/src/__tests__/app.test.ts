@@ -1031,8 +1031,8 @@ describe("GET /openapi.json", () => {
     // What a caller can earn on each of them, and in what shape.
     const families = ["/waste-fractions", "/container-types", "/service-frequencies", "/products", "/customers", "/properties", "/property-groups", "/shared-collection-points"]
     for (const path of families) {
-      // A property's write may ask the address register, whose silence is a 502 (#291 C13).
-      const register = path === "/properties" ? ["502"] : []
+      // A property's write may ask the address register: its silence is a 502, its absence a 503 (#291 C13).
+      const register = path === "/properties" ? ["502", "503"] : []
       assert.deepEqual(Object.keys(document.paths[path].get.responses), ["200", "400", "401", "403"], path)
       assert.deepEqual(Object.keys(document.paths[path].post.responses), ["201", "400", "401", "403", "409", ...register], path)
       assert.deepEqual(Object.keys(document.paths[`${path}/{id}`].get.responses), ["200", "400", "401", "403", "404"], path)

@@ -54,7 +54,7 @@ const publicAllowance = new Allowance(env.PUBLIC_REQUESTS_PER_MINUTE ?? PUBLIC_R
 const storage = env.SUPABASE_SERVICE_ROLE_KEY === undefined ? null : supabaseStorage({ url: env.SUPABASE_URL, serviceKey: env.SUPABASE_SERVICE_ROLE_KEY })
 if (storage !== null) void ensureProofBucket(storage, { info: (line) => console.log(`@waste/api: ${line}`), error: (line) => console.error(`@waste/api: ${line}`) })
 
-// The address register the lookup asks (#291 C13), with the owner's token where it is Dataforsyningen's; the fake unless ADDRESS_PROVIDER names it.
+// The address register the lookup asks (#291 C13), with the owner's token where it is Dataforsyningen's; none unless ADDRESS_PROVIDER names one.
 const addressRegister = addressRegisterFrom({ ADDRESS_PROVIDER: env.ADDRESS_PROVIDER, DATAFORSYNINGEN_TOKEN: env.DATAFORSYNINGEN_TOKEN, ADDRESS_REGISTER_URL: env.ADDRESS_REGISTER_URL })
 
 const listening = await listen(
@@ -74,7 +74,7 @@ const listening = await listen(
   }),
   { host: env.HOST, port: env.PORT },
 )
-console.log(`@waste/api listening on ${listening.url}, verifying tokens from ${auth.issuer}, build ${build?.commit ?? "none"}, request pool max ${env.DATABASE_POOL_MAX ?? DEFAULT_POOL_MAX}, address register ${addressRegister.name}`)
+console.log(`@waste/api listening on ${listening.url}, verifying tokens from ${auth.issuer}, build ${build?.commit ?? "none"}, request pool max ${env.DATABASE_POOL_MAX ?? DEFAULT_POOL_MAX}, address register ${addressRegister?.name ?? "none"}`)
 
 // Shutdown: the listener drains and the probe pool closes together, since a
 // probe is not a request and 503 is the right answer to one that arrives

@@ -45,10 +45,10 @@ describe("the fake address register", () => {
 })
 
 describe("the register switch", () => {
-  test("is the fake unless ADDRESS_PROVIDER names the live register, which needs its token", () => {
-    assert.equal(addressRegisterFrom({}).name, "fake")
-    assert.equal(addressRegisterFrom({ ADDRESS_PROVIDER: "fake" }).name, "fake")
-    assert.equal(addressRegisterFrom({ ADDRESS_PROVIDER: "dataforsyningen", DATAFORSYNINGEN_TOKEN: "test-only" }).name, "dataforsyningen")
+  test("is no register unless ADDRESS_PROVIDER names one: the fake only when named, the live register with its token", () => {
+    assert.equal(addressRegisterFrom({}), null, "never the fake by default: its made-up addresses would land on real properties")
+    assert.equal(addressRegisterFrom({ ADDRESS_PROVIDER: "fake" })?.name, "fake")
+    assert.equal(addressRegisterFrom({ ADDRESS_PROVIDER: "dataforsyningen", DATAFORSYNINGEN_TOKEN: "test-only" })?.name, "dataforsyningen")
     assert.throws(() => addressRegisterFrom({ ADDRESS_PROVIDER: "dataforsyningen" }), /DATAFORSYNINGEN_TOKEN/)
     assert.throws(() => addressRegisterFrom({ ADDRESS_PROVIDER: "dataforsyningen", DATAFORSYNINGEN_TOKEN: "  " }), /DATAFORSYNINGEN_TOKEN/)
     assert.throws(() => addressRegisterFrom({ ADDRESS_PROVIDER: "dawa" }), /"fake" and "dataforsyningen"/)

@@ -6,7 +6,8 @@
 // (lib/data/address-lookup.ts); the field's own value is the register's id,
 // which the property's write names instead of the typed text. Where the
 // register does not answer, or finds nothing, the form is whole without it:
-// the address typed and the point placed by hand. The register's data is
+// the address typed and the point placed by hand; on a deployment with no
+// register (the API's 503) the picker turns itself off and says so. The register's data is
 // credited under the field, as its licence asks.
 import { useEffect, useState } from "react"
 import { MagnifyingGlass, MapPin, X } from "@phosphor-icons/react/dist/ssr"
@@ -15,7 +16,7 @@ import type { Address, AddressSearch } from "@waste/contracts/addresses"
 import { Button } from "@/components/ui/button"
 import { Input } from "@/components/ui/input"
 import { useApiClient } from "@/components/waste/api-session-store"
-import { addressPicked } from "@/lib/data/address-lookup"
+import { addressPicked, lookupFailure } from "@/lib/data/address-lookup"
 import type { BusinessFormField, BusinessFormValues } from "@/lib/data/business-form-types"
 import { get, withQuery } from "@/lib/api/client"
 import { ApiProblem } from "@/lib/api/problem"
@@ -24,10 +25,13 @@ import { ApiProblem } from "@/lib/api/problem"
 const SEARCH_DELAY_MS = 250
 const QUERY_MIN = 2
 
-type Found = { kind: "idle" } | { kind: "searching" } | { kind: "found"; search: AddressSearch } | { kind: "failed"; sentence: string }
+type Found = { kind: "idle" } | { kind: "searching" } | { kind: "found"; search: AddressSearch } | { kind: "failed"; sentence: string } | { kind: "off"; sentence: string }
 
-const failedSentence = (error: unknown) =>
-  error instanceof ApiProblem && error.problem.detail ? error.problem.detail : "The address register could not be asked. Type the address and place the point by hand."
+/** A failed request as the picker shows it: off for good on a deployment with no register, else a sentence beside the search. */
+const failed = (error: unknown): Found => {
+  const { off, sentence } = lookupFailure(error instanceof ApiProblem ? error.status : undefined, error instanceof ApiProblem ? error.problem.detail : undefined)
+  return off ? { kind: "off", sentence } : { kind: "failed", sentence }
+}
 
 export function AddressLookupField({
   field,
@@ -49,22 +53,30 @@ export function AddressLookupField({
   const picked = typeof values[field.id] === "string" && values[field.id] !== ""
   const query = text.trim()
 
+  const off = found.kind === "off"
   useEffect(() => {
-    if (client === null || query.length < QUERY_MIN) return
+    if (client === null || off || query.length < QUERY_MIN) return
     let current = true
     const timer = setTimeout(() => {
       setFound({ kind: "searching" })
       get<AddressSearch>(client, withQuery("/addresses", { q: query }))
         .then((search) => current && setFound({ kind: "found", search }))
-        .catch((error: unknown) => current && setFound({ kind: "failed", sentence: failedSentence(error) }))
+        .catch((error: unknown) => current && setFound(failed(error)))
     }, SEARCH_DELAY_MS)
     return () => {
       current = false
       clearTimeout(timer)
     }
-  }, [client, query])
+  }, [client, off, query])
 
   if (client === null || field.addressLookup === undefined) return null
+  if (found.kind === "off") {
+    return (
+      <p className="text-sm text-muted-foreground" data-testid="address-lookup-off">
+        {found.sentence}
+      </p>
+    )
+  }
   const fields = field.addressLookup
 
   const pick = (id: string) => {
@@ -75,11 +87,11 @@ export function AddressLookupField({
         setText("")
         setFound({ kind: "idle" })
       })
-      .catch((error: unknown) => setFound({ kind: "failed", sentence: failedSentence(error) }))
+      .catch((error: unknown) => setFound(failed(error)))
       .finally(() => setPicking(false))
   }
 
-  const shown = query.length < QUERY_MIN ? null : found
+  const shown = query.length < QUERY_MIN && found.kind !== "failed" ? null : found
   return (
     <div className="grid gap-2" data-testid="address-lookup">
       {picked ? (

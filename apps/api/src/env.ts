@@ -105,7 +105,7 @@ export const Env = z.object({
     .transform(Number)
     .pipe(z.int().min(1))
     .optional(),
-  /** The address register's name (#291 C13): unset means the fake; the one validator of the value is addressRegisterFrom (address-register/select.ts), so the refusal has one spelling. */
+  /** The address register's name (#291 C13): unset means none, and the lookup answers 503; `fake` only where named (CI, e2e, a developer's .env); the one validator of the value is addressRegisterFrom (address-register/select.ts), so the refusal has one spelling. */
   ADDRESS_PROVIDER: z.string().optional(),
   /** The owner's Dataforsyningen token (#77), when ADDRESS_PROVIDER names `dataforsyningen`: the address lookup calls the register from the API alone; server-side only, never logged; `addressRegisterFrom` refuses the register without it. */
   DATAFORSYNINGEN_TOKEN: z.string().optional(),

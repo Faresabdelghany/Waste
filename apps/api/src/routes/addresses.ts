@@ -18,14 +18,18 @@
 // A body that names none passes straight on: a typed address and a point
 // placed by hand ask nothing of the register. A register that does not
 // answer is a 502, as the routing provider's silence is, saying what the
-// office can do without it; its reason is logged, never answered.
+// office can do without it; its reason is logged, never answered. A
+// deployment that names no register (ADDRESS_PROVIDER unset) answers 503,
+// address lookup not set up here, to the reads and to a write naming an
+// `addressId` alike, as the proofs' routes answer a deployment without
+// Storage.
 import { Address, AddressId, AddressSearch, AddressSearchQuery, ADDRESS_ATTRIBUTION } from "@waste/contracts/addresses"
 import type { ModuleKey } from "@waste/domain/access/modules"
 import { Hono, type Context, type MiddlewareHandler } from "hono"
 import { describeRoute } from "hono-openapi"
 import * as z from "zod"
 
-import { RegisterUnavailable, REGISTER_UNAVAILABLE, type AddressRegister } from "../address-register/register"
+import { NO_REGISTER, RegisterUnavailable, REGISTER_UNAVAILABLE, type AddressRegister } from "../address-register/register"
 import { BEARER_SECURITY, type IdentifiedEnv } from "../auth/principal"
 import { allows } from "../auth/require"
 import { describeProblem, loggable, problem, validate } from "../problem"
@@ -47,14 +51,16 @@ const lookupGrant: MiddlewareHandler<IdentifiedEnv> = async (c, next) => {
 }
 
 export type AddressLookupOptions = {
-  register: AddressRegister
+  /** Null where the deployment names no register. */
+  register: AddressRegister | null
   log: (line: unknown) => void
 }
 
-/** One call to the register, its silence a 502 with what the office can do, its reason logged. */
-async function asking<Answer>(log: AddressLookupOptions["log"], call: () => Promise<Answer>): Promise<Answer> {
+/** One call to the register, its absence a 503 and its silence a 502, each with what the office can do, the silence's reason logged. */
+async function asking<Answer>({ register, log }: AddressLookupOptions, call: (register: AddressRegister) => Promise<Answer>): Promise<Answer> {
+  if (register === null) throw problem(503, { detail: NO_REGISTER })
   try {
-    return await call()
+    return await call(register)
   } catch (error) {
     if (!(error instanceof RegisterUnavailable)) throw error
     log(loggable(error))
@@ -64,9 +70,10 @@ async function asking<Answer>(log: AddressLookupOptions["log"], call: () => Prom
 
 const AddressIdParam = z.object({ id: AddressId })
 
-export function addressRoutes(guard: MiddlewareHandler<IdentifiedEnv>, { register, log }: AddressLookupOptions) {
+export function addressRoutes(guard: MiddlewareHandler<IdentifiedEnv>, options: AddressLookupOptions) {
   const forbidden = describeProblem(`No active account here, or the caller's role allows neither \`create\` nor \`edit\` on \`${MODULE}\`.`)
   const silent = describeProblem("The address register did not answer. Try again, or type the address and place the point by hand.")
+  const absent = describeProblem("This deployment names no address register (ADDRESS_PROVIDER unset): address lookup is not set up, and the address is typed.")
   return new Hono<IdentifiedEnv>()
     .get(
       "/addresses",
@@ -82,6 +89,7 @@ export function addressRoutes(guard: MiddlewareHandler<IdentifiedEnv>, { registe
           401: describeProblem("No usable token (see WWW-Authenticate)."),
           403: forbidden,
           502: silent,
+          503: absent,
         },
       }),
       guard,
@@ -89,7 +97,7 @@ export function addressRoutes(guard: MiddlewareHandler<IdentifiedEnv>, { registe
       validate("query", AddressSearchQuery),
       async (c) => {
         const { q } = c.req.valid("query")
-        const items = await asking(log, () => register.search(q))
+        const items = await asking(options, (register) => register.search(q))
         return c.json({ items, attribution: ADDRESS_ATTRIBUTION } satisfies AddressSearch)
       },
     )
@@ -108,6 +116,7 @@ export function addressRoutes(guard: MiddlewareHandler<IdentifiedEnv>, { registe
           403: forbidden,
           404: describeProblem("The register holds no address by that id."),
           502: silent,
+          503: absent,
         },
       }),
       guard,
@@ -115,7 +124,7 @@ export function addressRoutes(guard: MiddlewareHandler<IdentifiedEnv>, { registe
       validate("param", AddressIdParam),
       async (c) => {
         const { id } = c.req.valid("param")
-        const found = await asking(log, () => register.find(id))
+        const found = await asking(options, (register) => register.find(id))
         if (found === null) throw problem(404, { detail: `No address ${id} in the address register` })
         return c.json(found satisfies Address)
       },
@@ -148,13 +157,13 @@ async function namedAddressId(c: Context): Promise<string | undefined> {
  * before the call), the address read from the register for the handler, and
  * then the route's own guard; any other body passes straight on.
  */
-export function addressLookup(identified: MiddlewareHandler<IdentifiedEnv>, { register, log }: AddressLookupOptions): MiddlewareHandler {
+export function addressLookup(identified: MiddlewareHandler<IdentifiedEnv>, options: AddressLookupOptions): MiddlewareHandler {
   return async (c, next) => {
     const id = await namedAddressId(c)
     if (id === undefined) return await next()
     await identified(c as unknown as Context<IdentifiedEnv>, async () => {
       requireLookupGrant(c as unknown as Context<IdentifiedEnv>)
-      found.set(c.req.raw, await asking(log, () => register.find(id)))
+      found.set(c.req.raw, await asking(options, (register) => register.find(id)))
       await next()
     })
   }

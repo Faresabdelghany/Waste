@@ -28,5 +28,8 @@ export class RegisterUnavailable extends Error {
   }
 }
 
+/** What a person is told where the deployment names no register (ADDRESS_PROVIDER unset). */
+export const NO_REGISTER = "Address lookup is not set up on this deployment. Type the address and place the point by hand."
+
 /** What a person is told when the register does not answer: what they can do without it. */
 export const REGISTER_UNAVAILABLE = "The address register is not answering right now. Try again in a moment, or type the address and place the point by hand."

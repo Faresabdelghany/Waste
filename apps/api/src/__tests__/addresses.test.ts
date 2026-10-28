@@ -127,6 +127,24 @@ describe("the address lookup and a property found in the register", { skip: data
     })
   })
 
+  describe("a deployment that names no register (ADDRESS_PROVIDER unset)", () => {
+    test("answers the lookup and a write naming an addressId 503, address lookup not set up; a typed address still goes through", async () => {
+      const app = createApp({ probe: pool, pool, verifier: keys.verifier, log: () => {} })
+      const office = callingAs(app, keys, a.users.olivia, a.companyId)
+      for (const [path, init] of [
+        ["/addresses?q=park", {}],
+        [`/addresses/${PARKVEJ_18.id}`, {}],
+        ["/properties", { method: "POST", body: found("Parkvej 18 · no register", PARKVEJ_18.id) }],
+      ] as const) {
+        const response = await office(path, init)
+        assert.equal(response.status, 503, path)
+        assert.match((await readProblem(response)).detail ?? "", /Address lookup is not set up on this deployment/)
+      }
+      const typed = await created(office, "/properties", await office("/properties", { method: "POST", body: { projectId: a.projects.copenhagen.id, name: "Parkvej 18 · no register, typed", address: "Parkvej 18, 2100 København Ø", kind: "residential", location: gate } }), Property)
+      assert.deepEqual([typed.addressId, typed.location], [null, gate])
+    })
+  })
+
   describe("a property created with an addressId", () => {
     test("is the register's address, its parts, its BFE number and its point: geocoded as it is created", async () => {
       const property = await createFound(found("Parkvej 18 · found", PARKVEJ_18.id.toUpperCase()))
