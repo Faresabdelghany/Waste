@@ -165,6 +165,88 @@ async function requireLogin(tx: Tx, principal: Principal, id: string | null | un
   await requireProviderAccount(tx, { companyId: principal.companyId, serviceProviderId: providerId, provider: providerNameOf(principal) }, id)
 }
 
+// The writes the routes and the fleet's CSV import (routes/import-rows.ts,
+// O30 of #290) share, so an imported row is held to every rule a form's is and
+// refused in the same sentence.
+
+/** Registers a driver: the project reached, the fleet the caller's own, every reference held, then the row. */
+export async function createDriver(tx: Tx, principal: Principal, body: DriverCreate, now: () => Date): Promise<Driver> {
+  const { shift, ...values } = body
+  await requireReachedProject(tx, principal, values.projectId, now)
+  requireOwnFleet(principal, { kind: values.employment, serviceProviderId: values.serviceProviderId }, "driver", "create")
+  const within: Scope = { companyId: principal.companyId, projectId: values.projectId }
+
+  // The 400s first, each at its field, in the order a body reads.
+  await requireServiceProvider(tx, principal.companyId, values.serviceProviderId)
+  await requireDepot(tx, within, values.homeDepotId, "homeDepotId")
+  await requireLogin(tx, principal, values.userAccountId)
+
+  const [row] = await refuseDuplicate(collisions(values), () =>
+    tx
+      .insert(driver)
+      .values({
+        ...values,
+        id: newId(),
+        companyId: principal.companyId,
+        workforceReference: values.workforceReference ?? null,
+        serviceProviderId: values.serviceProviderId ?? null,
+        homeDepotId: values.homeDepotId ?? null,
+        licenceClass: values.licenceClass ?? null,
+        licenceNumber: values.licenceNumber ?? null,
+        licenceExpiry: values.licenceExpiry ?? null,
+        userAccountId: values.userAccountId ?? null,
+        notes: values.notes ?? null,
+        ...shiftValues(shift),
+      })
+      .returning(columns),
+  )
+  return driverOf(row)
+}
+
+/** Changes one driver the caller reaches, under its row lock: the provider rule against the row the patch leaves, every new reference held, and taking it out of service refused under what that would strand. */
+export async function patchDriver(tx: Tx, principal: Principal, id: string, body: DriverPatch): Promise<Driver> {
+  const { shift, ...patch } = body
+  // The row the provider rule is held against, locked before it is read
+  // (routes/shared.ts), so two patches that each hold alone cannot
+  // together leave the row the database's check would refuse.
+  await lockRow(tx, driver, { companyId: principal.companyId, id })
+  const current = await findDriver(tx, principal, id)
+  if (current === undefined) throw noSuchDriver(id)
+  const within: Scope = { companyId: principal.companyId, projectId: current.projectId }
+  const merged = { ...current, ...patch }
+
+  // A provider's own driver stays its own; then the provider rule as the merged row must hold it (routes/shared.ts), in the driver's words: a patch carries one half and the stored row the other.
+  requireOwnFleet(principal, { kind: patch.employment, serviceProviderId: patch.serviceProviderId }, "driver", "patch")
+  requireProviderShape(merged.employment, merged, PROVIDER_WITH_PROVIDER_EMPLOYMENT)
+  await requireServiceProvider(tx, principal.companyId, patch.serviceProviderId)
+  await requireDepot(tx, within, patch.homeDepotId, "homeDepotId")
+  await requireLogin(tx, principal, patch.userAccountId)
+  if (patch.status !== undefined && OUT_OF_SERVICE.includes(patch.status) && !OUT_OF_SERVICE.includes(current.status)) {
+    await refuseStranded(tx, vehicleAllocation, liveAllocations(principal.companyId, id), liveAllocationsNameThis)
+    await refuseStranded(tx, collectionGroup, groupsInForceNaming(tx, collectionGroup.driverId, principal.companyId, id), groupsNameThis)
+  }
+
+  const [row] = await refuseDuplicate(collisions(patch), () =>
+    tx
+      .update(driver)
+      .set({ ...patch, ...shiftValues(shift) })
+      .where(and(scope(principal), eq(driver.id, id)))
+      .returning(columns),
+  )
+  if (row === undefined) throw noSuchDriver(id)
+  return driverOf(row)
+}
+
+/** The company's driver with this workforce reference, wherever they are based; undefined where there is none. */
+export async function driverByWorkforceReference(tx: Tx, companyId: string, reference: string): Promise<Driver | undefined> {
+  const [row] = await tx
+    .select(columns)
+    .from(driver)
+    .where(and(eq(driver.companyId, companyId), eq(driver.workforceReference, reference)))
+    .limit(1)
+  return row === undefined ? undefined : driverOf(row)
+}
+
 export function driverRoutes(guard: MiddlewareHandler<AuthEnv>, { now = () => new Date() }: ClockOptions = {}) {
   return new Hono<AuthEnv>()
     .get(
@@ -231,40 +313,7 @@ export function driverRoutes(guard: MiddlewareHandler<AuthEnv>, { now = () => ne
       guard,
       requireGrant(MODULE, "create"),
       validate("json", DriverCreate),
-      async (c) => {
-        const { shift, ...values } = c.req.valid("json")
-        const tx = c.get("tx")
-        const principal = c.get("principal")
-        await requireReachedProject(tx, principal, values.projectId, now)
-        requireOwnFleet(principal, { kind: values.employment, serviceProviderId: values.serviceProviderId }, "driver", "create")
-        const within: Scope = { companyId: principal.companyId, projectId: values.projectId }
-
-        // The 400s first, each at its field, in the order a body reads.
-        await requireServiceProvider(tx, principal.companyId, values.serviceProviderId)
-        await requireDepot(tx, within, values.homeDepotId, "homeDepotId")
-        await requireLogin(tx, principal, values.userAccountId)
-
-        const [row] = await refuseDuplicate(collisions(values), () =>
-          tx
-            .insert(driver)
-            .values({
-              ...values,
-              id: newId(),
-              companyId: principal.companyId,
-              workforceReference: values.workforceReference ?? null,
-              serviceProviderId: values.serviceProviderId ?? null,
-              homeDepotId: values.homeDepotId ?? null,
-              licenceClass: values.licenceClass ?? null,
-              licenceNumber: values.licenceNumber ?? null,
-              licenceExpiry: values.licenceExpiry ?? null,
-              userAccountId: values.userAccountId ?? null,
-              notes: values.notes ?? null,
-              ...shiftValues(shift),
-            })
-            .returning(columns),
-        )
-        return created(c, "/drivers", driverOf(row))
-      },
+      async (c) => created(c, "/drivers", await createDriver(c.get("tx"), c.get("principal"), c.req.valid("json"), now)),
     )
     .get(
       "/drivers/:id",
@@ -318,42 +367,7 @@ export function driverRoutes(guard: MiddlewareHandler<AuthEnv>, { now = () => ne
       requireGrant(MODULE, "edit"),
       validate("param", IdParam),
       validate("json", DriverPatch),
-      async (c) => {
-        const { id } = c.req.valid("param")
-        const { shift, ...patch } = c.req.valid("json")
-        const tx = c.get("tx")
-        const principal = c.get("principal")
-
-        // The row the provider rule is held against, locked before it is read
-        // (routes/shared.ts), so two patches that each hold alone cannot
-        // together leave the row the database's check would refuse.
-        await lockRow(tx, driver, { companyId: principal.companyId, id })
-        const current = await findDriver(tx, principal, id)
-        if (current === undefined) throw noSuchDriver(id)
-        const within: Scope = { companyId: principal.companyId, projectId: current.projectId }
-        const merged = { ...current, ...patch }
-
-        // A provider's own driver stays its own; then the provider rule as the merged row must hold it (routes/shared.ts), in the driver's words: a patch carries one half and the stored row the other.
-        requireOwnFleet(principal, { kind: patch.employment, serviceProviderId: patch.serviceProviderId }, "driver", "patch")
-        requireProviderShape(merged.employment, merged, PROVIDER_WITH_PROVIDER_EMPLOYMENT)
-        await requireServiceProvider(tx, principal.companyId, patch.serviceProviderId)
-        await requireDepot(tx, within, patch.homeDepotId, "homeDepotId")
-        await requireLogin(tx, principal, patch.userAccountId)
-        if (patch.status !== undefined && OUT_OF_SERVICE.includes(patch.status) && !OUT_OF_SERVICE.includes(current.status)) {
-          await refuseStranded(tx, vehicleAllocation, liveAllocations(principal.companyId, id), liveAllocationsNameThis)
-          await refuseStranded(tx, collectionGroup, groupsInForceNaming(tx, collectionGroup.driverId, principal.companyId, id), groupsNameThis)
-        }
-
-        const [row] = await refuseDuplicate(collisions(patch), () =>
-          tx
-            .update(driver)
-            .set({ ...patch, ...shiftValues(shift) })
-            .where(and(scope(principal), eq(driver.id, id)))
-            .returning(columns),
-        )
-        if (row === undefined) throw noSuchDriver(id)
-        return c.json(driverOf(row))
-      },
+      async (c) => c.json(await patchDriver(c.get("tx"), c.get("principal"), c.req.valid("param").id, c.req.valid("json"))),
     )
 }
 

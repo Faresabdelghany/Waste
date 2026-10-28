@@ -22,6 +22,13 @@ export const IMPORT_KIND_OPTIONS = [
   { kind: "properties", label: "Properties", moduleKey: "customers.properties", projectScoped: true },
   { kind: "containers", label: "Containers", moduleKey: "resources.containers", projectScoped: true },
   { kind: "agreements", label: "Agreements and subscriptions", moduleKey: "customers.agreements", projectScoped: true },
+  // The company's catalogue (O30 of #290, row 1.18), kept in Settings › Master data.
+  { kind: "waste-fractions", label: "Waste fractions", moduleKey: "configure.master", projectScoped: false },
+  { kind: "container-types", label: "Container types", moduleKey: "configure.master", projectScoped: false },
+  { kind: "vehicle-types", label: "Vehicle types", moduleKey: "configure.master", projectScoped: false },
+  // A project's fleet (O30 of #290, row 1.18).
+  { kind: "vehicles", label: "Vehicles", moduleKey: "fleet.vehicles", projectScoped: true },
+  { kind: "drivers", label: "Drivers", moduleKey: "fleet.drivers", projectScoped: true },
 ] as const satisfies readonly { kind: ImportKind; label: string; moduleKey: ModuleKey; projectScoped: boolean }[]
 
 export type ImportKindOption = (typeof IMPORT_KIND_OPTIONS)[number]
