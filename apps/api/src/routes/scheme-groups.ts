@@ -112,6 +112,7 @@ import {
   requireContainer,
   requireContainerType,
   requireDriver,
+  requirePlanningArea,
   requireServiceProvider,
   requireVehicle,
   requireVehicleType,
@@ -185,6 +186,7 @@ export const groupColumns = {
   days: collectionGroup.days,
   stopSource: collectionGroup.stopSource,
   ruleVehicleTypeId: collectionGroup.ruleVehicleTypeId,
+  rulePlanningAreaId: collectionGroup.rulePlanningAreaId,
   serviceProviderId: collectionGroup.serviceProviderId,
   vehicleId: collectionGroup.vehicleId,
   driverId: collectionGroup.driverId,
@@ -241,7 +243,7 @@ function groupOf(row: GroupRow, sets: GroupSets): CollectionGroup {
     position: row.position,
     days: row.days as ServiceDay[],
     stopSource,
-    rule: stopSource === "rule" ? { wasteFractionIds: sets.wasteFractionIds, containerTypeIds: sets.containerTypeIds, vehicleTypeId: row.ruleVehicleTypeId } : null,
+    rule: stopSource === "rule" ? { wasteFractionIds: sets.wasteFractionIds, containerTypeIds: sets.containerTypeIds, vehicleTypeId: row.ruleVehicleTypeId, planningAreaId: row.rulePlanningAreaId } : null,
     containerIds: sets.containerIds,
     serviceProviderId: row.serviceProviderId,
     vehicleId: row.vehicleId,
@@ -379,11 +381,12 @@ export async function findScheme(tx: Tx, principal: Principal, id: string): Prom
   return row
 }
 
-/** Every id a body names across its groups, by what it names: the rule's fractions, container types and vehicle type, the picked containers, the providers, the vehicles and the drivers. */
+/** Every id a body names across its groups, by what it names: the rule's fractions, container types, vehicle type and planning area, the picked containers, the providers, the vehicles and the drivers. */
 export type GroupReferences = {
   fractions: Named[]
   containerTypes: Named[]
   vehicleTypes: Named[]
+  planningAreas: Named[]
   containers: Named[]
   providers: Named[]
   vehicles: Named[]
@@ -413,6 +416,7 @@ export function referencesOf(
     fractions: (group.rule?.wasteFractionIds ?? []).map((id, m) => ({ path: `${rulePrefix}wasteFractionIds.${m}`, id })),
     containerTypes: (group.rule?.containerTypeIds ?? []).map((id, m) => ({ path: `${rulePrefix}containerTypeIds.${m}`, id })),
     vehicleTypes: group.rule?.vehicleTypeId == null ? [] : [{ path: `${rulePrefix}vehicleTypeId`, id: group.rule.vehicleTypeId }],
+    planningAreas: group.rule?.planningAreaId == null ? [] : [{ path: `${rulePrefix}planningAreaId`, id: group.rule.planningAreaId }],
     containers: (group.containerIds ?? []).map((id, m) => ({ path: `${prefix}containerIds.${m}`, id })),
     providers: group.serviceProviderId == null ? [] : [{ path: `${prefix}serviceProviderId`, id: group.serviceProviderId }],
     vehicles: group.vehicleId == null ? [] : [{ path: `${prefix}vehicleId`, id: group.vehicleId }],
@@ -426,6 +430,7 @@ export function mergeReferences(all: readonly GroupReferences[]): GroupReference
     fractions: all.flatMap((refs) => refs.fractions),
     containerTypes: all.flatMap((refs) => refs.containerTypes),
     vehicleTypes: all.flatMap((refs) => refs.vehicleTypes),
+    planningAreas: all.flatMap((refs) => refs.planningAreas),
     containers: all.flatMap((refs) => refs.containers),
     providers: all.flatMap((refs) => refs.providers),
     vehicles: all.flatMap((refs) => refs.vehicles),
@@ -546,6 +551,8 @@ export async function requireGroupReferences(tx: Tx, scope: Scope, refs: GroupRe
   await eachPresent(tx, wasteFraction, wasteFraction.id, scope.companyId, refs.fractions, (entry) => requireWasteFraction(tx, scope.companyId, entry.id, entry.path))
   await eachPresent(tx, containerType, containerType.id, scope.companyId, refs.containerTypes, (entry) => requireContainerType(tx, scope.companyId, entry.id, entry.path))
   await eachPresent(tx, vehicleType, vehicleType.id, scope.companyId, refs.vehicleTypes, (entry) => requireVehicleType(tx, scope.companyId, entry.id, entry.path))
+  // A rule's own planning area is one of the scheme's project's (O30 of #290); a body names one per rule at most.
+  for (const entry of refs.planningAreas) await requirePlanningArea(tx, scope, entry.id, entry.path)
   await eachPresent(tx, container, container.id, scope.companyId, refs.containers, (entry) => requireContainer(tx, scope, entry.id, entry.path), eq(container.projectId, scope.projectId))
   await eachPresent(tx, serviceProvider, serviceProvider.id, scope.companyId, refs.providers, (entry) => requireServiceProvider(tx, scope.companyId, entry.id, entry.path))
   const vehicles = await vehiclesNamed(tx, scope, refs.vehicles)
@@ -706,7 +713,7 @@ export type GroupSet = { rule: StopMatchingRule } | { containerIds: readonly str
 export async function replaceGroupSet(tx: Tx, principal: Principal, id: string, set: GroupSet): Promise<GroupRow | undefined> {
   const [row] = await tx
     .update(collectionGroup)
-    .set("rule" in set ? { ruleVehicleTypeId: set.rule.vehicleTypeId, ...stamp() } : stamp())
+    .set("rule" in set ? { ruleVehicleTypeId: set.rule.vehicleTypeId, rulePlanningAreaId: set.rule.planningAreaId ?? null, ...stamp() } : stamp())
     .where(and(groupScope(principal), eq(collectionGroup.id, id)))
     .returning(groupColumns)
   if (row === undefined) return undefined
@@ -728,7 +735,7 @@ export type GroupShape = {
   name: string
   days: readonly string[]
   stopSource: string
-  rule?: { wasteFractionIds: readonly string[]; vehicleTypeId?: string | null } | null
+  rule?: { wasteFractionIds: readonly string[]; vehicleTypeId?: string | null; planningAreaId?: string | null } | null
   containerIds?: readonly string[] | null
   vehicleId?: string | null
   driverId?: string | null
@@ -754,6 +761,7 @@ const structureOf = (group: GroupShape, fleet: FleetRows, types: ReadonlyMap<str
   driver: named(group.driverId, fleet.drivers, (row) => row.name),
   vehicleType: typeNamed(group.vehicleId == null ? null : fleet.vehicles.get(group.vehicleId)?.vehicleTypeId, types),
   ruleVehicleType: typeNamed(group.rule?.vehicleTypeId, types),
+  hasOwnPlanningArea: group.rule?.planningAreaId != null,
 })
 
 /** The names of the vehicle types a sentence spells, by id: one statement, read only once an issue exists. */

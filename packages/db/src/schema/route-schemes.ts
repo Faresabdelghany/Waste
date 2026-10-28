@@ -179,6 +179,8 @@ export const collectionGroup = wms.table(
     stopSource: text().notNull(),
     /** The vehicle type a rule asks for, a row of the company's; null for a manual group, and optional for a rule. */
     ruleVehicleTypeId: uuid(),
+    /** The planning area a rule matches within instead of the scheme's (O30 of #290, row 2.17): one of the project's; null is the scheme's, and a manual group has none. */
+    rulePlanningAreaId: uuid(),
     serviceProviderId: uuid(),
     /** The vehicle the group runs with; a powered vehicle of the project, held by the API. Null while unsaid. */
     vehicleId: uuid(),
@@ -191,6 +193,7 @@ export const collectionGroup = wms.table(
     projectReference(t, [t.routeSchemeId], routeScheme),
     tenantReference(t, [t.serviceProviderId], serviceProvider),
     tenantReference(t, [t.ruleVehicleTypeId], vehicleType),
+    projectReference(t, [t.rulePlanningAreaId], planningArea),
     projectReference(t, [t.vehicleId], vehicle),
     projectReference(t, [t.driverId], driver),
     tenantUnique(t, t.routeSchemeId, t.name),
@@ -200,8 +203,11 @@ export const collectionGroup = wms.table(
     positive(t.position),
     // A vehicle type is part of a rule; a manual group has no rule to carry one in.
     check(tableObjectName(t.id.table, "rule_shape", "collectionGroup"), sql`${t.stopSource} = 'rule' or ${t.ruleVehicleTypeId} is null`),
+    // So is a group's own planning area: a manual group's stops are its picks, judged by no geometry.
+    check(tableObjectName(t.id.table, "rule_area_shape", "collectionGroup"), sql`${t.stopSource} = 'rule' or ${t.rulePlanningAreaId} is null`),
     tenantIndex(t, t.serviceProviderId),
     tenantIndex(t, t.ruleVehicleTypeId),
+    tenantIndex(t, t.rulePlanningAreaId),
     tenantIndex(t, t.vehicleId),
     tenantIndex(t, t.driverId),
   ],

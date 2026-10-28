@@ -531,6 +531,21 @@ const collectionGroupBetween = wms.table(
     tenantIndex(t, t.driverId),
   ],
 )
+/** collection_group as 0007 left it, before the group planning area's migration (O30 of #290) gave a rule its own area. */
+const collectionGroupAsOf0007 = wms.table(
+  "collection_group",
+  { ...groupColumns, ruleVehicleTypeId: uuid(), serviceProviderId: uuid(), vehicleId: uuid(), driverId: uuid() },
+  (t) => [
+    ...groupKeys(t as unknown as typeof collectionGroup._.columns),
+    tenantReference(t, [t.ruleVehicleTypeId], vehicleType),
+    projectReference(t, [t.vehicleId], vehicle),
+    projectReference(t, [t.driverId], driver),
+    check(tableObjectName(t.id.table, "rule_shape", "collectionGroup"), sql`${t.stopSource} = 'rule' or ${t.ruleVehicleTypeId} is null`),
+    tenantIndex(t, t.ruleVehicleTypeId),
+    tenantIndex(t, t.vehicleId),
+    tenantIndex(t, t.driverId),
+  ],
+)
 const containerServicePlacementAsOf0004 = wms.table(
   "container_service_placement",
   { ...id, ...projectScoped, ...timestamps, ...validity, containerId: uuid().notNull(), subscriptionId: uuid().notNull(), wasteFractionId: uuid().notNull(), serviceFrequencyId: uuid() },
@@ -606,7 +621,7 @@ const generatedAlterations = async (): Promise<string[]> => [
     { collectionGroup: collectionGroupAsOf0006, routeScheme: routeSchemeAsOf0006, containerServicePlacement: containerServicePlacementAsOf0004 },
     { collectionGroup: collectionGroupBetween, routeScheme: routeSchemeAsOf0007, containerServicePlacement },
   )),
-  ...(await statementsBetween({ collectionGroup: collectionGroupBetween }, { collectionGroup })),
+  ...(await statementsBetween({ collectionGroup: collectionGroupBetween }, { collectionGroup: collectionGroupAsOf0007 })),
 ]
 
 /** Everything drizzle-kit wrote at the head of 0007: the thirteen tables and the three altered ones. */
