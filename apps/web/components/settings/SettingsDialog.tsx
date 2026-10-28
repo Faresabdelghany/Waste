@@ -70,7 +70,7 @@ import { MasterDataSettings } from "@/components/settings/master-data-settings"
 import { useApiConfigured, useApiSession } from "@/components/waste/api-session-store"
 import { profileOf, type AccountProfile } from "@/lib/data/account-profile"
 import { HOLIDAY_LISTS_SETTINGS_PANE_ID, MASTER_DATA_SETTINGS_PANE_ID } from "@/lib/data/business-links"
-import { ASSET_MANAGEMENT_SETTINGS_PANE_ID, FINANCE_ON_API_SETTINGS_PANE_ID, FINANCE_SETTINGS_PANE_ID, PRIVACY_ON_API_SETTINGS_PANE_ID, PRIVACY_SETTINGS_PANE_ID, INTEGRATIONS_ON_API_SETTINGS_PANE_ID, INTEGRATIONS_SETTINGS_PANE_ID, PORTALS_ON_API_SETTINGS_PANE_ID, PORTALS_SETTINGS_PANE_ID, settingsPaneOffered, settingsPaneOpened } from "@/lib/data/settings-panes"
+import { ASSET_MANAGEMENT_SETTINGS_PANE_ID, FINANCE_ON_API_SETTINGS_PANE_ID, FINANCE_SETTINGS_PANE_ID, PRIVACY_ON_API_SETTINGS_PANE_ID, PRIVACY_SETTINGS_PANE_ID, INTEGRATIONS_ON_API_SETTINGS_PANE_ID, INTEGRATIONS_SETTINGS_PANE_ID, PORTALS_ON_API_SETTINGS_PANE_ID, PORTALS_SETTINGS_PANE_ID, ACCOUNT_DEFAULTS_GROUP, settingsPaneOffered, settingsPaneOpened } from "@/lib/data/settings-panes"
 import { SORTING_GUIDE_SETTINGS_PANE_ID } from "@/lib/data/sorting-guide"
 import { TICKET_SLA_SETTINGS_PANE_ID } from "@/lib/data/ticket-sla"
 import { PICKUP_EXCEPTION_CHARGES_SETTINGS_PANE_ID } from "@/lib/data/pickup-exception-rules"
@@ -1553,7 +1553,8 @@ function withSignedInProfile(definition: SettingsPaneDefinition, profile: Accoun
     { id: "account-role", label: "Primary role", description: "What you may see and do; an administrator sets it.", scope: "Personal", type: "status", value: profile.role, tone: "healthy" },
     { id: "account-projects", label: "Projects", description: "The projects you work in.", scope: "Personal", type: "text", value: profile.projects },
   ]
-  return { ...definition, groups: definition.groups.map((group) => (group.title === "Profile" ? { ...group, controls } : group)) }
+  // The personal defaults are saved by this browser and read by nothing, so the Pilot shows none (#487).
+  return { ...definition, groups: definition.groups.filter((group) => group.title !== ACCOUNT_DEFAULTS_GROUP).map((group) => (group.title === "Profile" ? { ...group, controls } : group)) }
 }
 
 function initialSettingValues(): Record<string, SettingValue> {
@@ -1879,6 +1880,8 @@ function SettingsPane({
   onSave: () => void
 }) {
   const isDirty = dirtyControlIds.length > 0
+  // A pane of read lines alone — the Pilot's account profile — has nothing to save on this device.
+  const editable = definition.groups.some((group) => group.controls.some((control) => control.type === "input" || control.type === "select" || control.type === "switch"))
 
   return (
     <div
@@ -2058,18 +2061,20 @@ function SettingsPane({
 
           {paneId === "pricing" && <CommercialDefaultsExtras />}
 
-          <div className="sticky bottom-0 flex items-center justify-between gap-3 border-t border-border bg-background py-4">
-            <p className="text-xs text-muted-foreground">
-              {isDirty
-                ? `${dirtyControlIds.length} unsaved change${dirtyControlIds.length === 1 ? "" : "s"} · save to keep ${dirtyControlIds.length === 1 ? "it" : "them"} on this device.`
-                : configurationHistory[0]
-                  ? `Saved on this device at ${configurationHistory[0].at} · ${configurationHistory[0].controls.length} change${configurationHistory[0].controls.length === 1 ? "" : "s"}.`
-                  : "Changes are saved on this device when you select Save changes."}
-            </p>
-            <Button disabled={!isDirty} onClick={onSave}>
-              Save changes
-            </Button>
-          </div>
+          {editable && (
+            <div className="sticky bottom-0 flex items-center justify-between gap-3 border-t border-border bg-background py-4">
+              <p className="text-xs text-muted-foreground">
+                {isDirty
+                  ? `${dirtyControlIds.length} unsaved change${dirtyControlIds.length === 1 ? "" : "s"} · save to keep ${dirtyControlIds.length === 1 ? "it" : "them"} on this device.`
+                  : configurationHistory[0]
+                    ? `Saved on this device at ${configurationHistory[0].at} · ${configurationHistory[0].controls.length} change${configurationHistory[0].controls.length === 1 ? "" : "s"}.`
+                    : "Changes are saved on this device when you select Save changes."}
+              </p>
+              <Button disabled={!isDirty} onClick={onSave}>
+                Save changes
+              </Button>
+            </div>
+          )}
         </>
       )}
     </div>
