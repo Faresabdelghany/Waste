@@ -2367,10 +2367,21 @@ column wms.property 12 status text not-null
 column wms.property 13 driver_instructions text
 column wms.property 14 service_window_start time without time zone
 column wms.property 15 service_window_end time without time zone
+column wms.property 16 address_id uuid
+column wms.property 17 street_name text
+column wms.property 18 house_number text
+column wms.property 19 floor text
+column wms.property 20 door text
+column wms.property 21 postcode text
+column wms.property 22 post_town text
+column wms.property 23 municipality_code text
+constraint wms.property property_address_shape CHECK ((((address_id IS NULL) = (street_name IS NULL)) AND ((address_id IS NULL) = (house_number IS NULL)) AND ((address_id IS NULL) = (postcode IS NULL)) AND ((address_id IS NULL) = (post_town IS NULL)) AND ((address_id IS NULL) = (municipality_code IS NULL)) AND ((address_id IS NOT NULL) OR ((floor IS NULL) AND (door IS NULL)))))
 constraint wms.property property_company_id_fk FOREIGN KEY (company_id) REFERENCES wms.company(id)
 constraint wms.property property_kind_one_of CHECK ((kind = ANY (ARRAY['residential'::text, 'commercial'::text, 'public'::text, 'mixed'::text, 'other'::text])))
 constraint wms.property property_location_valid CHECK ((extensions.st_isvalid(location) AND (NOT extensions.st_isempty(location)) AND (extensions.st_xmin((location)::extensions.box3d) >= ('-180'::integer)::double precision) AND (extensions.st_xmax((location)::extensions.box3d) <= (180)::double precision) AND (extensions.st_ymin((location)::extensions.box3d) >= ('-90'::integer)::double precision) AND (extensions.st_ymax((location)::extensions.box3d) <= (90)::double precision)))
+constraint wms.property property_municipality_code_shape CHECK ((municipality_code ~ '^[0-9]{4}$'::text))
 constraint wms.property property_pkey PRIMARY KEY (id)
+constraint wms.property property_postcode_shape CHECK ((postcode ~ '^[0-9]{4}$'::text))
 constraint wms.property property_project_id_fk FOREIGN KEY (company_id, project_id) REFERENCES wms.project(company_id, id)
 constraint wms.property property_project_id_name_key UNIQUE (company_id, project_id, name)
 constraint wms.property property_project_key UNIQUE (company_id, project_id, id)
@@ -3224,29 +3235,6 @@ policy wms.sorting_guide_item sorting_guide_item_public_door permissive SELECT t
    FROM wms.project published
   WHERE ((published.company_id = sorting_guide_item.company_id) AND (published.id = sorting_guide_item.project_id) AND (published.public_slug IS NOT NULL))))) check=none
 policy wms.sorting_guide_item sorting_guide_item_tenant_fence permissive ALL to=wms_api using=(company_id = ( SELECT wms.current_company_id() AS current_company_id)) check=(company_id = ( SELECT wms.current_company_id() AS current_company_id))
-relation wms.stock_minimum kind=table owner=<owner> persistence=p rls=true force-rls=true replica-identity=d acl=[<owner>=DELETE,INSERT,MAINTAIN,REFERENCES,SELECT,TRIGGER,TRUNCATE,UPDATE/<owner> wms_api=DELETE,INSERT,SELECT,UPDATE/<owner> wms_worker=SELECT/<owner>]
-column wms.stock_minimum 1 id uuid not-null default=wms.uuidv7()
-column wms.stock_minimum 2 company_id uuid not-null
-column wms.stock_minimum 3 project_id uuid not-null
-column wms.stock_minimum 4 created_at timestamp with time zone not-null default=now()
-column wms.stock_minimum 5 updated_at timestamp with time zone not-null default=now()
-column wms.stock_minimum 6 warehouse_id uuid not-null
-column wms.stock_minimum 7 container_type_id uuid not-null
-column wms.stock_minimum 8 minimum integer not-null
-constraint wms.stock_minimum stock_minimum_company_id_fk FOREIGN KEY (company_id) REFERENCES wms.company(id)
-constraint wms.stock_minimum stock_minimum_container_type_id_fk FOREIGN KEY (company_id, container_type_id) REFERENCES wms.container_type(company_id, id)
-constraint wms.stock_minimum stock_minimum_minimum_positive CHECK ((minimum > 0))
-constraint wms.stock_minimum stock_minimum_pkey PRIMARY KEY (id)
-constraint wms.stock_minimum stock_minimum_project_id_fk FOREIGN KEY (company_id, project_id) REFERENCES wms.project(company_id, id)
-constraint wms.stock_minimum stock_minimum_warehouse_id_container_type_id_key UNIQUE (company_id, warehouse_id, container_type_id)
-constraint wms.stock_minimum stock_minimum_warehouse_id_fk FOREIGN KEY (company_id, project_id, warehouse_id) REFERENCES wms.warehouse(company_id, project_id, id)
-index wms.stock_minimum stock_minimum_container_type_id_idx CREATE INDEX stock_minimum_container_type_id_idx ON wms.stock_minimum USING btree (company_id, container_type_id)
-index wms.stock_minimum stock_minimum_pkey CREATE UNIQUE INDEX stock_minimum_pkey ON wms.stock_minimum USING btree (id)
-index wms.stock_minimum stock_minimum_project_id_idx CREATE INDEX stock_minimum_project_id_idx ON wms.stock_minimum USING btree (company_id, project_id)
-index wms.stock_minimum stock_minimum_warehouse_id_container_type_id_key CREATE UNIQUE INDEX stock_minimum_warehouse_id_container_type_id_key ON wms.stock_minimum USING btree (company_id, warehouse_id, container_type_id)
-trigger wms.stock_minimum stock_minimum_audit_trail enabled=O CREATE TRIGGER stock_minimum_audit_trail AFTER INSERT OR DELETE OR UPDATE ON wms.stock_minimum FOR EACH ROW EXECUTE FUNCTION wms.audit_row('warehouse', 'warehouse_id')
-trigger wms.stock_minimum stock_minimum_touch_updated_at enabled=O CREATE TRIGGER stock_minimum_touch_updated_at BEFORE UPDATE ON wms.stock_minimum FOR EACH ROW EXECUTE FUNCTION wms.touch_updated_at()
-policy wms.stock_minimum stock_minimum_tenant_fence permissive ALL to=wms_api using=(company_id = ( SELECT wms.current_company_id() AS current_company_id)) check=(company_id = ( SELECT wms.current_company_id() AS current_company_id))
 relation wms.stock_movement kind=table owner=<owner> persistence=p rls=true force-rls=true replica-identity=d acl=[<owner>=DELETE,INSERT,MAINTAIN,REFERENCES,SELECT,TRIGGER,TRUNCATE,UPDATE/<owner> wms_api=INSERT,SELECT/<owner> wms_worker=SELECT/<owner>]
 column wms.stock_movement 1 id uuid not-null default=wms.uuidv7()
 column wms.stock_movement 2 company_id uuid not-null
@@ -4219,5 +4207,5 @@ journal 1793179564300 85ecc9dc677b5efac299e96018803d2f1b1589a6c0d32f05a8156b9014
 journal 1793182222276 c5e590688f3b59222221801f9adb6ef5b420c207211a83eb9331aa951718ff38
 journal 1793188451416 2908b29fc963fdd7f6371dbb1553734c92718138b9573b1d748bca9694a94037
 journal 1793190991835 4479beffde868c9a521b9ff1b6f44dd1b13dbb0e1293a3dabb1f48108c9407d1
-journal 1793201416916 fbe151d4ba9945172963cf2e6667189ae6f64e362e64a82f9aa7639b7bea994e
+journal 1793199855626 709fe6bc0aa2d71a4a8a365c80e79db143341dd82867c0e2fdbd062aa7bcc9b3
 pgboss-version 42
