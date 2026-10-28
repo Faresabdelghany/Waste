@@ -76,8 +76,9 @@ type StoredValues = Record<string, string | boolean | undefined>
 
 /**
  * What a rule group's matches depend on besides the container base: the
- * scheme's planning area and the group's fractions, vehicle type and
- * container types. Two runs are compared only when this is unchanged between
+ * planning area it matches within — its own where it has one (O30 of #290),
+ * else the scheme's — and the group's fractions, vehicle type and container
+ * types. Two runs are compared only when this is unchanged between
  * them. Compared whole, never parsed, so the separators need no escaping.
  */
 export function ruleSignature(
@@ -114,7 +115,8 @@ export function generationMatchesOf(
       for (const id of plan.containerIds) ids.add(id)
     }
     matches[group.id] = {
-      rule: ruleSignature(group, areaId),
+      // Within the group's own area where it has one, else the scheme's: as `ruleAreaOf` and the group's resolution read it.
+      rule: ruleSignature(group, group.planningAreaId ?? areaId),
       containerIds: [...ids].sort(),
     }
   }
