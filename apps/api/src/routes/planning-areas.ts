@@ -218,6 +218,79 @@ async function writeBoundary(
   return row
 }
 
+// The writes the routes and the planning areas' GeoJSON import
+// (routes/import-rows.ts, O30 of #290) share, so an imported row is held to
+// every rule a form's is and refused in the same sentence.
+
+/** Registers an area in a project the caller works in, with its first version where the body draws one. */
+export async function createPlanningArea(tx: Tx, principal: Principal, body: PlanningAreaCreate): Promise<PlanningAreaCreated> {
+  const { boundary, ...values } = body
+  requireProject(principal, values.projectId)
+  const [row] = await refuseDuplicate({ [CODE_TAKEN]: codeTaken(values.code), [NAME_TAKEN]: nameTaken(values.name) }, () =>
+    tx
+      .insert(planningArea)
+      .values({ ...values, id: newId(), companyId: principal.companyId })
+      .returning(columns),
+  )
+  const version = boundary === undefined ? null : await writeBoundary(tx, { companyId: principal.companyId, projectId: row.projectId, id: row.id }, boundary, "boundary.boundary")
+  return { ...areaOf(row), boundary: version === null ? null : boundaryOf(version) }
+}
+
+/** Renames an area or changes its purpose; the 404 where the caller reaches no such area. */
+export async function patchPlanningArea(tx: Tx, principal: Principal, id: string, patch: PlanningAreaPatch): Promise<PlanningArea> {
+  const sentences: Record<string, string> = patch.name === undefined ? {} : { [NAME_TAKEN]: nameTaken(patch.name) }
+  const [row] = await refuseDuplicate(sentences, () =>
+    tx
+      .update(planningArea)
+      .set(patch)
+      .where(and(scope(principal), eq(planningArea.id, id)))
+      .returning(columns),
+  )
+  if (row === undefined) throw noSuchArea(id)
+  return areaOf(row)
+}
+
+/** Adds a version to an area the caller reaches; the 404 where there is none. */
+export async function addPlanningAreaBoundary(tx: Tx, principal: Principal, areaId: string, values: PlanningAreaBoundaryCreate): Promise<PlanningAreaBoundary> {
+  const area = await findArea(tx, principal, areaId)
+  if (area === undefined) throw noSuchArea(areaId)
+  return boundaryOf(await writeBoundary(tx, { companyId: principal.companyId, projectId: area.projectId, id: area.id }, values, "boundary"))
+}
+
+/** Ends or redraws one version the caller reaches; the 404 where there is none. */
+export async function patchPlanningAreaBoundary(tx: Tx, principal: Principal, id: string, patch: PlanningAreaBoundaryPatch): Promise<PlanningAreaBoundary> {
+  const current = await findBoundary(tx, principal, id)
+  if (current === undefined) throw noSuchBoundary(id)
+  if (patch.validTo !== undefined) requireOrdered(periodAfter(current, patch))
+  const [row] = await refuseCheck(polygonInvalid("boundary"), () =>
+    refuseOverlap({ [BOUNDARY_RUNNING]: BOUNDARY_RUNNING_SENTENCE }, () =>
+      tx
+        .update(planningAreaBoundary)
+        .set(patch)
+        .where(and(boundaryScope(principal), eq(planningAreaBoundary.id, id)))
+        .returning(boundaryColumns),
+    ),
+  )
+  if (row === undefined) throw noSuchBoundary(id)
+  return boundaryOf(row)
+}
+
+/** A project's area with this code, and its versions by their first day; undefined where there is none. */
+export async function planningAreaByCode(tx: Tx, principal: Principal, projectId: string, code: string): Promise<{ area: PlanningArea; boundaries: PlanningAreaBoundary[] } | undefined> {
+  const [row] = await tx
+    .select(columns)
+    .from(planningArea)
+    .where(and(scope(principal), eq(planningArea.projectId, projectId), eq(planningArea.code, code)))
+    .limit(1)
+  if (row === undefined) return undefined
+  const versions = await tx
+    .select(boundaryColumns)
+    .from(planningAreaBoundary)
+    .where(and(boundaryScope(principal), eq(planningAreaBoundary.planningAreaId, row.id)))
+    .orderBy(asc(planningAreaBoundary.validFrom))
+  return { area: areaOf(row), boundaries: versions.map(boundaryOf) }
+}
+
 export function planningAreaRoutes(guard: MiddlewareHandler<AuthEnv>) {
   return new Hono<AuthEnv>()
     .get(
@@ -281,24 +354,7 @@ export function planningAreaRoutes(guard: MiddlewareHandler<AuthEnv>) {
       guard,
       requireGrant(MODULE, "create"),
       validate("json", PlanningAreaCreate),
-      async (c) => {
-        const { boundary, ...values } = c.req.valid("json")
-        const tx = c.get("tx")
-        const principal = c.get("principal")
-        requireProject(principal, values.projectId)
-        const [row] = await refuseDuplicate({ [CODE_TAKEN]: codeTaken(values.code), [NAME_TAKEN]: nameTaken(values.name) }, () =>
-          tx
-            .insert(planningArea)
-            .values({ ...values, id: newId(), companyId: principal.companyId })
-            .returning(columns),
-        )
-        const version =
-          boundary === undefined
-            ? null
-            : await writeBoundary(tx, { companyId: principal.companyId, projectId: row.projectId, id: row.id }, boundary, "boundary.boundary")
-        const answer: PlanningAreaCreated = { ...areaOf(row), boundary: version === null ? null : boundaryOf(version) }
-        return created(c, "/planning-areas", answer)
-      },
+      async (c) => created(c, "/planning-areas", await createPlanningArea(c.get("tx"), c.get("principal"), c.req.valid("json"))),
     )
     .get(
       "/planning-areas/:id",
@@ -347,22 +403,7 @@ export function planningAreaRoutes(guard: MiddlewareHandler<AuthEnv>) {
       requireGrant(MODULE, "edit"),
       validate("param", IdParam),
       validate("json", PlanningAreaPatch),
-      async (c) => {
-        const { id } = c.req.valid("param")
-        const patch = c.req.valid("json")
-        const principal = c.get("principal")
-        const sentences: Record<string, string> = patch.name === undefined ? {} : { [NAME_TAKEN]: nameTaken(patch.name) }
-        const [row] = await refuseDuplicate(sentences, () =>
-          c
-            .get("tx")
-            .update(planningArea)
-            .set(patch)
-            .where(and(scope(principal), eq(planningArea.id, id)))
-            .returning(columns),
-        )
-        if (row === undefined) throw noSuchArea(id)
-        return c.json(areaOf(row))
-      },
+      async (c) => c.json(await patchPlanningArea(c.get("tx"), c.get("principal"), c.req.valid("param").id, c.req.valid("json"))),
     )
     .get(
       "/planning-areas/:id/boundaries",
@@ -430,16 +471,7 @@ export function planningAreaRoutes(guard: MiddlewareHandler<AuthEnv>) {
       requireGrant(MODULE, "create"),
       validate("param", IdParam),
       validate("json", PlanningAreaBoundaryCreate),
-      async (c) => {
-        const { id } = c.req.valid("param")
-        const values = c.req.valid("json")
-        const tx = c.get("tx")
-        const principal = c.get("principal")
-        const area = await findArea(tx, principal, id)
-        if (area === undefined) throw noSuchArea(id)
-        const row = await writeBoundary(tx, { companyId: principal.companyId, projectId: area.projectId, id: area.id }, values, "boundary")
-        return created(c, "/planning-area-boundaries", boundaryOf(row))
-      },
+      async (c) => created(c, "/planning-area-boundaries", await addPlanningAreaBoundary(c.get("tx"), c.get("principal"), c.req.valid("param").id, c.req.valid("json"))),
     )
     .get(
       "/planning-area-boundaries",
@@ -531,25 +563,6 @@ export function planningAreaRoutes(guard: MiddlewareHandler<AuthEnv>) {
       requireGrant(MODULE, "edit"),
       validate("param", IdParam),
       validate("json", PlanningAreaBoundaryPatch),
-      async (c) => {
-        const { id } = c.req.valid("param")
-        const patch = c.req.valid("json")
-        const tx = c.get("tx")
-        const principal = c.get("principal")
-        const current = await findBoundary(tx, principal, id)
-        if (current === undefined) throw noSuchBoundary(id)
-        if (patch.validTo !== undefined) requireOrdered(periodAfter(current, patch))
-        const [row] = await refuseCheck(polygonInvalid("boundary"), () =>
-          refuseOverlap({ [BOUNDARY_RUNNING]: BOUNDARY_RUNNING_SENTENCE }, () =>
-            tx
-              .update(planningAreaBoundary)
-              .set(patch)
-              .where(and(boundaryScope(principal), eq(planningAreaBoundary.id, id)))
-              .returning(boundaryColumns),
-          ),
-        )
-        if (row === undefined) throw noSuchBoundary(id)
-        return c.json(boundaryOf(row))
-      },
+      async (c) => c.json(await patchPlanningAreaBoundary(c.get("tx"), c.get("principal"), c.req.valid("param").id, c.req.valid("json"))),
     )
 }

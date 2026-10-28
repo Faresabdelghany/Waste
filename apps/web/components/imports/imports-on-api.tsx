@@ -46,7 +46,7 @@ import { problemOfError } from "@/lib/api/records/server-records"
 import { REASON_MAX } from "@/lib/data/action-decision"
 import { getBusinessModuleHref, masterDataSettingsHref } from "@/lib/data/business-links"
 import { CSV_BOM, downloadCsv } from "@/lib/data/csv"
-import { batchesOf, countsOf, importableKinds, importReason, kindOption, mayView, readImportFile, templateSeparatorFor, textOf, type FileReading } from "@/lib/imports/import-file"
+import { acceptedFiles, batchesOf, countsOf, importableKinds, importReason, kindOption, mayView, readImportFile, templateSeparatorFor, textOf, type FileReading } from "@/lib/imports/import-file"
 
 import { ImportResultsTable } from "./import-results-table"
 import { ImportRuns } from "./import-runs"
@@ -268,7 +268,7 @@ export function ImportsOnApi() {
                     id="import-file"
                     ref={fileInput}
                     type="file"
-                    accept=".csv,text/csv"
+                    accept={acceptedFiles(kind)}
                     disabled={busy}
                     onChange={(event) => {
                       const file = event.target.files?.[0]
@@ -423,5 +423,9 @@ function recordsHref(kind: ImportKind): string {
       return getBusinessModuleHref("fleet", "vehicles")
     case "drivers":
       return getBusinessModuleHref("fleet", "drivers")
+    case "collection-calendars":
+      return getBusinessModuleHref("configure", "calendars")
+    case "planning-areas":
+      return getBusinessModuleHref("configure", "areas")
   }
 }

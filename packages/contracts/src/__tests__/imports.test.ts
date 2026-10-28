@@ -5,7 +5,7 @@
 import assert from "node:assert/strict"
 import { describe, test } from "node:test"
 
-import { IMPORT_BATCH_MAX, IMPORT_ROWS_MAX } from "@waste/domain/imports/vocabulary"
+import { IMPORT_BATCH_MAX, IMPORT_BOUNDARY_MAX, IMPORT_ROWS_MAX } from "@waste/domain/imports/vocabulary"
 
 import {
   ImportBatch,
@@ -13,6 +13,9 @@ import {
   ImportPreview,
   ImportPreviewRequest,
   ImportRunCreate,
+  BOUNDARY_COLUMN,
+  cellTooLong,
+  IMPORT_CELL_MAX,
   PROJECT_IMPORT_KINDS,
   PROJECT_REFUSED,
   PROJECT_REQUIRED,
@@ -41,7 +44,14 @@ describe("ImportPreviewRequest and ImportRunCreate", () => {
       assert.equal(ImportRunCreate.safeParse({ kind, fileName: "catalogue.csv", rowCount: 3 }).success, true, kind)
       assert.deepEqual(refusal(ImportRunCreate.safeParse({ kind, projectId: PROJECT, fileName: "catalogue.csv", rowCount: 3 })), [{ path: "projectId", message: PROJECT_REFUSED }], kind)
     }
-    assert.deepEqual([...PROJECT_IMPORT_KINDS], ["properties", "containers", "agreements", "vehicles", "drivers"])
+    assert.deepEqual([...PROJECT_IMPORT_KINDS], ["properties", "containers", "agreements", "vehicles", "drivers", "collection-calendars", "planning-areas"])
+  })
+
+  test("hold a cell to a paragraph's length, and a planning area's boundary to some thousands of vertices (O30 of #290)", () => {
+    const long = "x".repeat(IMPORT_CELL_MAX + 1)
+    assert.deepEqual(refusal(ImportBatch.safeParse({ rows: [row(2, { name: long })] })), [{ path: "rows.0.values.name", message: cellTooLong(IMPORT_CELL_MAX) }])
+    assert.equal(ImportBatch.safeParse({ rows: [row(2, { [BOUNDARY_COLUMN]: long })] }).success, true)
+    assert.equal(ImportBatch.safeParse({ rows: [row(2, { [BOUNDARY_COLUMN]: "x".repeat(IMPORT_BOUNDARY_MAX + 1) })] }).success, false)
   })
 
   test("number rows from 2, the header being row 1, each once, and bound the preview and the batch", () => {

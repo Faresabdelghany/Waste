@@ -11,9 +11,11 @@ import { after, before, describe, test } from "node:test"
 import { Agreement, Subscription } from "@waste/contracts/agreements"
 import { AuditEvent, CHANGE_REASON_HEADER } from "@waste/contracts/audit"
 import { ContainerType, Product, WasteFraction } from "@waste/contracts/catalogue"
+import { CollectionCalendar } from "@waste/contracts/collection-calendars"
 import { Container } from "@waste/contracts/containers"
 import { Driver, Vehicle } from "@waste/contracts/fleet"
 import { Depot } from "@waste/contracts/places"
+import { PlanningAreaBoundary } from "@waste/contracts/planning-areas"
 import { Customer, Property, SharedCollectionPoint } from "@waste/contracts/customers"
 import { ImportBatchResult, ImportPreview, ImportRun, ImportRunRow, type ImportKind, type ImportRowResult } from "@waste/contracts/imports"
 import { Page } from "@waste/contracts/pagination"
@@ -454,6 +456,73 @@ describe("the import endpoints", { skip: database.skip || owner.skip }, () => {
       assert.equal(drivers.rows[3]!.outcome, "refused", "service-provider employment names its provider")
       const mads = await read(`/drivers/${drivers.rows[0]!.resourceId}`, Driver)
       assert.deepEqual([mads.employment, mads.licenceClass, mads.licenceExpiry, mads.homeDepotId], ["employee", "c", "2029-06-30", yard.id])
+    })
+
+    test("writes collection calendars (O30 of #290) by name, a holiday a row: added or renamed, never removed, and held to the period", async () => {
+      const result = await commit(
+        olivia,
+        "collection-calendars",
+        rowsOf(
+          { calendar: "Import 2031", "valid from": "2031-01-01", "valid to": "2032-01-01", day: "2031-06-05", holiday: "Constitution Day" },
+          { calendar: "Import 2031", "valid from": "2031-01-01", day: "2031-12-25", holiday: "Christmas Day" },
+          { calendar: "Import 2031", "valid from": "2031-01-01", day: "2031-06-05", holiday: "Grundlovsdag" },
+          { calendar: "Import 2031", "valid from": "2031-01-01", day: "2031-12-25" },
+          { calendar: "Import 2031", "valid from": "2031-01-01", day: "2033-01-01", holiday: "Too late" },
+          { calendar: "Import 2031", "valid from": "2031-01-01", holiday: "No day" },
+        ),
+        copenhagen,
+      )
+      assert.deepEqual(result.rows.map((row) => [row.row, row.outcome, row.key]), [
+        [2, "created", "calendar Import 2031, 2031-06-05"],
+        [3, "updated", "calendar Import 2031, 2031-12-25"],
+        [4, "updated", "calendar Import 2031, 2031-06-05"],
+        [5, "unchanged", "calendar Import 2031, 2031-12-25"],
+        [6, "refused", "calendar Import 2031, 2033-01-01"],
+        [7, "refused", "calendar Import 2031"],
+      ])
+      assert.match(result.rows[4]!.detail ?? "", /^day: /)
+      assert.equal(result.rows[5]!.detail, "day: give the holiday's day")
+      const calendar = await read(`/collection-calendars/${result.rows[0]!.resourceId}`, CollectionCalendar)
+      assert.deepEqual([calendar.validFrom, calendar.validTo, calendar.holidays], ["2031-01-01", "2032-01-01", [{ day: "2031-06-05", name: "Grundlovsdag" }, { day: "2031-12-25", name: "Christmas Day" }]])
+    })
+
+    test("writes planning areas (O30 of #290) by code, each with its boundary from a day: redrawn where a version starts that day, else a new version meeting the one before", async () => {
+      const square = (offset: number) => JSON.stringify({ type: "Polygon", coordinates: [[[12.5 + offset, 55.7], [12.6 + offset, 55.7], [12.6 + offset, 55.8], [12.5 + offset, 55.8], [12.5 + offset, 55.7]]] })
+      const result = await commit(
+        olivia,
+        "planning-areas",
+        rowsOf(
+          { code: "IMP-N", name: "Import North", purpose: "route-planning", boundary: square(0), "valid from": "2031-01-01" },
+          { code: "IMP-N", name: "Import North", purpose: "route-planning", boundary: square(0.01), "valid from": "2031-01-01" },
+          { code: "IMP-N", name: "Import North", purpose: "route-planning", boundary: square(0.02), "valid from": "2031-07-01" },
+          { code: "IMP-N", name: "Import North", purpose: "Notification" },
+          { code: "IMP-N", name: "Import North", purpose: "notification", boundary: square(0.02), "valid from": "2031-07-01" },
+          { code: "IMP-S", name: "Import South", purpose: "route-planning", boundary: square(0) },
+          { code: "IMP-X", name: "Import X", purpose: "route-planning", boundary: "not json", "valid from": "2031-01-01" },
+          { code: "IMP-Y", name: "Import Y", purpose: "route-planning", boundary: JSON.stringify({ type: "Polygon", coordinates: [[[12.5, 55.7], [12.6, 55.8], [12.6, 55.7], [12.5, 55.8], [12.5, 55.7]]] }), "valid from": "2031-01-01" },
+        ),
+        copenhagen,
+      )
+      assert.deepEqual(result.rows.map((row) => [row.row, row.outcome]), [
+        [2, "created"],
+        [3, "updated"],
+        [4, "updated"],
+        [5, "updated"],
+        [6, "unchanged"],
+        [7, "refused"],
+        [8, "refused"],
+        [9, "refused"],
+      ])
+      assert.deepEqual([result.rows[5]!.detail, result.rows[6]!.detail, result.rows[7]!.detail], ["valid from: give the boundary's first day", "boundary: a GeoJSON Polygon", "boundary: Not a valid polygon"])
+      const versions = await read(`/planning-areas/${result.rows[0]!.resourceId}/boundaries`, Page(PlanningAreaBoundary))
+      assert.deepEqual(
+        versions.items.map((version) => [version.validFrom, version.validTo, version.boundary.coordinates[0]![0]![0]]),
+        [
+          ["2031-01-01", "2031-07-01", 12.51],
+          ["2031-07-01", null, 12.52],
+        ],
+        "the first redrawn, then ended where the second starts",
+      )
     })
 
     test("writes agreements with a subscription per row, both or neither, matched on the number and the first day", async () => {
