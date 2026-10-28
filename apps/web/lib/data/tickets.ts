@@ -19,7 +19,7 @@ import { CONTAINERS_MODULE } from "../api/records/containers"
 import { accessModule } from "../api/records/organisation"
 import { PICKUPS_MODULE } from "../api/records/pickups"
 import { ROUTES_MODULE } from "../api/records/routes"
-import { ASSIGNEE_ACCOUNT_KEY, isOpenTicketStatus, OFFICE_TICKET_SOURCES, TICKET_SLA_FACT } from "../api/records/tickets"
+import { ASSIGNEE_ACCOUNT_KEY, isOpenTicketStatus, OFFICE_TICKET_SOURCES, TICKET_NUMBER_FACT, TICKET_SLA_FACT, TICKETS_MODULE } from "../api/records/tickets"
 import { AGREEMENTS_MODULE } from "./agreements"
 import { DRIVERS_MODULE } from "./allocations"
 import type { BusinessFormField, BusinessFormOption, BusinessFormSchema, BusinessFormValues } from "./business-form-types"
@@ -43,7 +43,7 @@ const priority: BusinessFormField = { id: "priority", label: "Priority", type: "
 const due: BusinessFormField = { id: "dueAt", label: "Due", type: "datetime", description: "On the project's clock. Left blank, the project's SLA for the kind and priority sets it." }
 const assignee = (description?: string): BusinessFormField => ({ id: "assigneeUserAccountId", label: "Assignee", type: "select", relation: ACCESS_MODULE, description })
 
-/** What a ticket may be about, field by field, each from its module: the office's eight links, the stop among its route's, and whether the stop's record may answer the case. */
+/** What a ticket may be about, field by field, each from its module: the office's nine links — the parent case among them — the stop among its route's, and whether the stop's record may answer the case. */
 export const TICKET_LINK_FIELDS: readonly BusinessFormField[] = [
   { id: "routeId", label: "Route", type: "select", relation: ROUTES_MODULE },
   {
@@ -66,6 +66,8 @@ export const TICKET_LINK_FIELDS: readonly BusinessFormField[] = [
   { id: "sharedCollectionPointId", label: "Shared collection point", type: "select", relation: SHARED_POINTS_MODULE },
   { id: "agreementId", label: "Agreement", type: "select", relation: AGREEMENTS_MODULE },
   { id: "driverId", label: "Driver", type: "select", relation: DRIVERS_MODULE },
+  // A sub-case (7.10 of #290): a ticket of the same project, which the API holds.
+  { id: "parentTicketId", label: "Parent ticket", type: "select", relation: TICKETS_MODULE, description: "The case this one is part of; a ticket of the same project." },
 ]
 
 /** New ticket on the Pilot: `TicketCreate`, and nothing the wire has no home for — no team, type, SLA, attachment or create-time message. */
@@ -185,6 +187,31 @@ export function updateTicketRecord(record: BusinessRecord, values: BusinessFormV
   const name = typeof values.subject === "string" && values.subject.trim() !== "" ? values.subject.trim() : record.name
   return { ...record, name, submittedValues: { ...record.submittedValues, ...values } }
 }
+
+/**
+ * New sub-ticket (7.10 of #290): New ticket opened on the parent's project,
+ * naming the parent, its kind and priority taken over for the office to
+ * change. The words are the sub-case's own.
+ */
+export function subTicketValues(parent: BusinessRecord): BusinessFormValues {
+  const value = (key: string) => (typeof parent.submittedValues?.[key] === "string" ? (parent.submittedValues[key] as string) : "")
+  const projectId = value("projectId") || parent.projectIds?.[0] || ""
+  return { projectId, parentTicketId: parent.id, ...(value("kind") === "" ? {} : { kind: value("kind") }), ...(value("priority") === "" ? {} : { priority: value("priority") }) }
+}
+
+/** The number a ticket reads by, for ordering: a row the API has not numbered yet sorts last. */
+const numberOf = (record: BusinessRecord): number => {
+  const digits = /\d+/.exec(record.facts[TICKET_NUMBER_FACT] ?? "")
+  return digits === null ? Number.POSITIVE_INFINITY : Number(digits[0])
+}
+
+/** A ticket's sub-tickets: the loaded tickets naming it as their parent, in number order. */
+export function subTicketsOf(tickets: readonly BusinessRecord[], parentWebId: string): BusinessRecord[] {
+  return tickets.filter((record) => record.submittedValues?.parentTicketId === parentWebId).sort((a, b) => numberOf(a) - numberOf(b))
+}
+
+/** A sub-ticket is opened under an open case; a closed one is reopened first. */
+export const offersSubTicket = (status: string): boolean => isOpenTicketStatus(status)
 
 /**
  * "Open" or "Closed": a ticket's status read as the switch the list opens on —
