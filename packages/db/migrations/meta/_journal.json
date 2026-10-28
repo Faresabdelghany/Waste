@@ -439,8 +439,15 @@
     {
       "idx": 62,
       "version": "7",
-      "when": 1793201416916,
-      "tag": "0062_stock_minimums",
+      "when": 1793199855626,
+      "tag": "0062_address_register",
+      "breakpoints": true
+    },
+    {
+      "idx": 63,
+      "version": "7",
+      "when": 1793205415223,
+      "tag": "0063_stock_minimums",
       "breakpoints": true
     }
   ]

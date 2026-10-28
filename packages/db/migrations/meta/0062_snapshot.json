@@ -1,5 +1,5 @@
 {
-  "id": "4e0b2deb-cb5d-44f8-80ec-1cbc433dc114",
+  "id": "d1b64cf6-49a8-485d-95d3-fbd62604c424",
   "prevId": "92355102-2180-4ff6-b384-e204363cf791",
   "version": "7",
   "dialect": "postgresql",
@@ -1984,6 +1984,54 @@
           "primaryKey": false,
           "notNull": true
         },
+        "address_id": {
+          "name": "address_id",
+          "type": "uuid",
+          "primaryKey": false,
+          "notNull": false
+        },
+        "street_name": {
+          "name": "street_name",
+          "type": "text",
+          "primaryKey": false,
+          "notNull": false
+        },
+        "house_number": {
+          "name": "house_number",
+          "type": "text",
+          "primaryKey": false,
+          "notNull": false
+        },
+        "floor": {
+          "name": "floor",
+          "type": "text",
+          "primaryKey": false,
+          "notNull": false
+        },
+        "door": {
+          "name": "door",
+          "type": "text",
+          "primaryKey": false,
+          "notNull": false
+        },
+        "postcode": {
+          "name": "postcode",
+          "type": "text",
+          "primaryKey": false,
+          "notNull": false
+        },
+        "post_town": {
+          "name": "post_town",
+          "type": "text",
+          "primaryKey": false,
+          "notNull": false
+        },
+        "municipality_code": {
+          "name": "municipality_code",
+          "type": "text",
+          "primaryKey": false,
+          "notNull": false
+        },
         "registry_id": {
           "name": "registry_id",
           "type": "text",
@@ -2127,6 +2175,18 @@
         "property_location_valid": {
           "name": "property_location_valid",
           "value": "extensions.st_isvalid(\"wms\".\"property\".\"location\") and not extensions.st_isempty(\"wms\".\"property\".\"location\") and extensions.st_xmin(\"wms\".\"property\".\"location\") >= -180 and extensions.st_xmax(\"wms\".\"property\".\"location\") <= 180 and extensions.st_ymin(\"wms\".\"property\".\"location\") >= -90 and extensions.st_ymax(\"wms\".\"property\".\"location\") <= 90"
+        },
+        "property_address_shape": {
+          "name": "property_address_shape",
+          "value": "(\"wms\".\"property\".\"address_id\" is null) = (\"wms\".\"property\".\"street_name\" is null) and (\"wms\".\"property\".\"address_id\" is null) = (\"wms\".\"property\".\"house_number\" is null) and (\"wms\".\"property\".\"address_id\" is null) = (\"wms\".\"property\".\"postcode\" is null) and (\"wms\".\"property\".\"address_id\" is null) = (\"wms\".\"property\".\"post_town\" is null) and (\"wms\".\"property\".\"address_id\" is null) = (\"wms\".\"property\".\"municipality_code\" is null) and (\"wms\".\"property\".\"address_id\" is not null or (\"wms\".\"property\".\"floor\" is null and \"wms\".\"property\".\"door\" is null))"
+        },
+        "property_postcode_shape": {
+          "name": "property_postcode_shape",
+          "value": "\"wms\".\"property\".\"postcode\" ~ '^[0-9]{4}$'"
+        },
+        "property_municipality_code_shape": {
+          "name": "property_municipality_code_shape",
+          "value": "\"wms\".\"property\".\"municipality_code\" ~ '^[0-9]{4}$'"
         }
       },
       "isRLSEnabled": false
@@ -8346,193 +8406,6 @@
       },
       "policies": {},
       "checkConstraints": {},
-      "isRLSEnabled": false
-    },
-    "wms.stock_minimum": {
-      "name": "stock_minimum",
-      "schema": "wms",
-      "columns": {
-        "id": {
-          "name": "id",
-          "type": "uuid",
-          "primaryKey": true,
-          "notNull": true,
-          "default": "wms.uuidv7()"
-        },
-        "company_id": {
-          "name": "company_id",
-          "type": "uuid",
-          "primaryKey": false,
-          "notNull": true
-        },
-        "project_id": {
-          "name": "project_id",
-          "type": "uuid",
-          "primaryKey": false,
-          "notNull": true
-        },
-        "created_at": {
-          "name": "created_at",
-          "type": "timestamp with time zone",
-          "primaryKey": false,
-          "notNull": true,
-          "default": "now()"
-        },
-        "updated_at": {
-          "name": "updated_at",
-          "type": "timestamp with time zone",
-          "primaryKey": false,
-          "notNull": true,
-          "default": "now()"
-        },
-        "warehouse_id": {
-          "name": "warehouse_id",
-          "type": "uuid",
-          "primaryKey": false,
-          "notNull": true
-        },
-        "container_type_id": {
-          "name": "container_type_id",
-          "type": "uuid",
-          "primaryKey": false,
-          "notNull": true
-        },
-        "minimum": {
-          "name": "minimum",
-          "type": "integer",
-          "primaryKey": false,
-          "notNull": true
-        }
-      },
-      "indexes": {
-        "stock_minimum_project_id_idx": {
-          "name": "stock_minimum_project_id_idx",
-          "columns": [
-            {
-              "expression": "company_id",
-              "isExpression": false,
-              "asc": true,
-              "nulls": "last"
-            },
-            {
-              "expression": "project_id",
-              "isExpression": false,
-              "asc": true,
-              "nulls": "last"
-            }
-          ],
-          "isUnique": false,
-          "concurrently": false,
-          "method": "btree",
-          "with": {}
-        },
-        "stock_minimum_container_type_id_idx": {
-          "name": "stock_minimum_container_type_id_idx",
-          "columns": [
-            {
-              "expression": "company_id",
-              "isExpression": false,
-              "asc": true,
-              "nulls": "last"
-            },
-            {
-              "expression": "container_type_id",
-              "isExpression": false,
-              "asc": true,
-              "nulls": "last"
-            }
-          ],
-          "isUnique": false,
-          "concurrently": false,
-          "method": "btree",
-          "with": {}
-        }
-      },
-      "foreignKeys": {
-        "stock_minimum_company_id_fk": {
-          "name": "stock_minimum_company_id_fk",
-          "tableFrom": "stock_minimum",
-          "tableTo": "company",
-          "schemaTo": "wms",
-          "columnsFrom": [
-            "company_id"
-          ],
-          "columnsTo": [
-            "id"
-          ],
-          "onDelete": "no action",
-          "onUpdate": "no action"
-        },
-        "stock_minimum_project_id_fk": {
-          "name": "stock_minimum_project_id_fk",
-          "tableFrom": "stock_minimum",
-          "tableTo": "project",
-          "schemaTo": "wms",
-          "columnsFrom": [
-            "company_id",
-            "project_id"
-          ],
-          "columnsTo": [
-            "company_id",
-            "id"
-          ],
-          "onDelete": "no action",
-          "onUpdate": "no action"
-        },
-        "stock_minimum_warehouse_id_fk": {
-          "name": "stock_minimum_warehouse_id_fk",
-          "tableFrom": "stock_minimum",
-          "tableTo": "warehouse",
-          "schemaTo": "wms",
-          "columnsFrom": [
-            "company_id",
-            "project_id",
-            "warehouse_id"
-          ],
-          "columnsTo": [
-            "company_id",
-            "project_id",
-            "id"
-          ],
-          "onDelete": "no action",
-          "onUpdate": "no action"
-        },
-        "stock_minimum_container_type_id_fk": {
-          "name": "stock_minimum_container_type_id_fk",
-          "tableFrom": "stock_minimum",
-          "tableTo": "container_type",
-          "schemaTo": "wms",
-          "columnsFrom": [
-            "company_id",
-            "container_type_id"
-          ],
-          "columnsTo": [
-            "company_id",
-            "id"
-          ],
-          "onDelete": "no action",
-          "onUpdate": "no action"
-        }
-      },
-      "compositePrimaryKeys": {},
-      "uniqueConstraints": {
-        "stock_minimum_warehouse_id_container_type_id_key": {
-          "name": "stock_minimum_warehouse_id_container_type_id_key",
-          "nullsNotDistinct": false,
-          "columns": [
-            "company_id",
-            "warehouse_id",
-            "container_type_id"
-          ]
-        }
-      },
-      "policies": {},
-      "checkConstraints": {
-        "stock_minimum_minimum_positive": {
-          "name": "stock_minimum_minimum_positive",
-          "value": "\"wms\".\"stock_minimum\".\"minimum\" > 0"
-        }
-      },
       "isRLSEnabled": false
     },
     "wms.stock_movement": {

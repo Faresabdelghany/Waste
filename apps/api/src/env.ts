@@ -1,7 +1,9 @@
 // The process environment, read once at startup and never again. Four
 // variables the process needs: where to listen, the database, and the
 // Supabase project whose Auth signs the tokens; the routing provider and its
-// key, which the guided setup's preview calls (#173); and two knobs, the
+// key, which the guided setup's preview calls (#173); the address register,
+// its token and its gateway, which the address lookup calls (#291 C13); and
+// two knobs, the
 // request pool's size and the preview's calls a minute, absent unless set
 // (#149: the Pilot's are its host's environment, never a default here).
 // Every value arrives as a string, so
@@ -103,6 +105,12 @@ export const Env = z.object({
     .transform(Number)
     .pipe(z.int().min(1))
     .optional(),
+  /** The address register's name (#291 C13): unset means none, and the lookup answers 503; `fake` only where named (CI, e2e, a developer's .env); the one validator of the value is addressRegisterFrom (address-register/select.ts), so the refusal has one spelling. */
+  ADDRESS_PROVIDER: z.string().optional(),
+  /** The owner's Dataforsyningen token (#77), when ADDRESS_PROVIDER names `dataforsyningen`: the address lookup calls the register from the API alone; server-side only, never logged; `addressRegisterFrom` refuses the register without it. */
+  DATAFORSYNINGEN_TOKEN: z.string().optional(),
+  /** The register's gateway, `https://api.dataforsyningen.dk` unless set: the one seam its URL sits behind. */
+  ADDRESS_REGISTER_URL: z.url({ protocol: /^https?$/ }).optional(),
   DATABASE_POOL_MAX: PoolMax,
   /** Each public client's requests a minute on the public door (ADR-0010): PUBLIC_REQUESTS_PER_MINUTE, 60, unless set. */
   PUBLIC_REQUESTS_PER_MINUTE: z
