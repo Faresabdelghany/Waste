@@ -41,6 +41,12 @@
 // (`ServiceDays` in @waste/contracts/planning, `WEEKEND_MAX` in
 // @waste/contracts/organisation), since the API is the only writer — a SQL
 // function for the two would be a second spelling of a rule already held.
+//
+// `timeWindow(columns, label, [start, end])` (O14 of #290): two times of day
+// that are a window of one day, given together or not at all, the end after
+// the start — a stop's access hours, an agreement's promise, a driver's
+// shift. A window across midnight is not one, since every time here is read
+// against a single operating date.
 import { getTableName, sql } from "drizzle-orm"
 import { check, type CheckBuilder, type PgColumn } from "drizzle-orm/pg-core"
 
@@ -97,4 +103,9 @@ export function exactlyOne(columns: TenantColumns, label: string, among: [PgColu
   }
   const set = among.map((column) => sql`(${column} is not null)::int`)
   return check(tableObjectName(columns.companyId.table, `${label}_exactly_one`, helper), sql`${sql.join(set, sql` + `)} = 1`)
+}
+
+/** `CHECK ((start is null) = (end is null) and (start is null or end > start))`, named `<table>_<label>_window`: a window of one day, both ends or neither. */
+export function timeWindow(columns: TenantColumns, label: string, [start, end]: [PgColumn, PgColumn]): CheckBuilder {
+  return check(tableObjectName(columns.companyId.table, `${label}_window`, "timeWindow"), sql`(${start} is null) = (${end} is null) and (${start} is null or ${end} > ${start})`)
 }

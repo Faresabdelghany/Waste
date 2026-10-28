@@ -26,7 +26,7 @@ import { MIGRATIONS_FOLDER } from "../migrate"
 import { tableObjectName } from "../names"
 import { oneOf, positive } from "../schema/checks"
 import { id, projectScoped, timestamps } from "../schema/columns"
-import { customer, property, sharedCollectionPoint } from "../schema/customers"
+import { customer, sharedCollectionPoint } from "../schema/customers"
 import { geometry, validGeometry } from "../schema/geometry"
 import { company, project } from "../schema/organisation"
 import { companyReference, projectKey, tenantIndex, tenantReference, tenantUnique } from "../schema/references"
@@ -36,32 +36,41 @@ import { statementsBetween } from "./specimen"
 
 const MIGRATION = "0022_driver_instructions.sql"
 
+const propertyColumns = {
+  ...id,
+  ...projectScoped,
+  ...timestamps,
+  name: text().notNull(),
+  address: text().notNull(),
+  registryId: text(),
+  kind: text().notNull(),
+  location: geometry.point(),
+  notes: text(),
+}
+
 /** property as 0004 made it and 0018 still had it: no instructions for the driver. */
-const propertyAsOf0018 = wms.table(
-  "property",
-  {
-    ...id,
-    ...projectScoped,
-    ...timestamps,
-    name: text().notNull(),
-    address: text().notNull(),
-    registryId: text(),
-    kind: text().notNull(),
-    location: geometry.point(),
-    notes: text(),
-    status: text().notNull(),
-  },
-  (t) => [
-    companyReference(t, company),
-    tenantReference(t, [t.projectId], project),
-    tenantUnique(t, t.projectId, t.name),
-    projectKey(t),
-    oneOf(t.kind, PROPERTY_KINDS),
-    oneOf(t.status, PROPERTY_STATUSES),
-    validGeometry(t.location),
-    uniqueIndex(tableObjectName(t.companyId.table, "registry_id_idx", "property")).on(t.companyId, t.registryId).where(sql`${t.registryId} is not null`),
-  ],
-)
+const propertyAsOf0018 = wms.table("property", { ...propertyColumns, status: text().notNull() }, (t) => [
+  companyReference(t, company),
+  tenantReference(t, [t.projectId], project),
+  tenantUnique(t, t.projectId, t.name),
+  projectKey(t),
+  oneOf(t.kind, PROPERTY_KINDS),
+  oneOf(t.status, PROPERTY_STATUSES),
+  validGeometry(t.location),
+  uniqueIndex(tableObjectName(t.companyId.table, "registry_id_idx", "property")).on(t.companyId, t.registryId).where(sql`${t.registryId} is not null`),
+])
+
+/** property as 0022 left it, with the instructions, before 0055's service window (O14 of #290). */
+const propertyAsOf0022 = wms.table("property", { ...propertyColumns, driverInstructions: text(), status: text().notNull() }, (t) => [
+  companyReference(t, company),
+  tenantReference(t, [t.projectId], project),
+  tenantUnique(t, t.projectId, t.name),
+  projectKey(t),
+  oneOf(t.kind, PROPERTY_KINDS),
+  oneOf(t.status, PROPERTY_STATUSES),
+  validGeometry(t.location),
+  uniqueIndex(tableObjectName(t.companyId.table, "registry_id_idx", "property")).on(t.companyId, t.registryId).where(sql`${t.registryId} is not null`),
+])
 
 /** shared_collection_point as 0004 made it and 0018 still had it. */
 const pointAsOf0018 = wms.table(
@@ -103,7 +112,7 @@ const pointAsOf0018 = wms.table(
 const referenced = { company, project, customer }
 
 describe("the driver instructions as drizzle-kit writes them", () => {
-  const generated = statementsBetween({ ...referenced, property: propertyAsOf0018, sharedCollectionPoint: pointAsOf0018 }, { ...referenced, property, sharedCollectionPoint })
+  const generated = statementsBetween({ ...referenced, property: propertyAsOf0018, sharedCollectionPoint: pointAsOf0018 }, { ...referenced, property: propertyAsOf0022, sharedCollectionPoint })
 
   test("one nullable text column on each place, nothing else moved", async () => {
     assert.deepEqual(await generated, [

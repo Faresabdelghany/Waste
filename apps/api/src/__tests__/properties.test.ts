@@ -117,6 +117,17 @@ describe("the property endpoints", { skip: database.skip }, () => {
       assert.deepEqual(await one(olivia, created.id), created)
     })
 
+    test("keeps its access hours as a window of the day, written whole and cleared with null (O14 of #290)", async () => {
+      const created = await create(olivia, "/properties", { ...body(a.projects.copenhagen.id, "Strandboulevarden 44"), serviceWindow: { from: "07:00", to: "12:00" } }, Property)
+      assert.deepEqual(created.serviceWindow, { from: "07:00", to: "12:00" })
+      assert.deepEqual(await one(olivia, created.id), created)
+      assert.deepEqual((await patch(olivia, created.id, { serviceWindow: { from: "08:30", to: "16:00" } })).serviceWindow, { from: "08:30", to: "16:00" })
+      assert.equal((await patch(olivia, created.id, { serviceWindow: null })).serviceWindow, null)
+      assert.equal((await create(olivia, "/properties", body(a.projects.copenhagen.id, "Strandboulevarden 46"), Property)).serviceWindow, null, "any time unless told")
+      const reversed = await olivia(`/properties/${created.id}`, { method: "PATCH", body: { serviceWindow: { from: "16:00", to: "08:00" } } })
+      assert.equal(reversed.status, 400)
+    })
+
     test("keeps the driver's instructions apart from the office's notes, and a patch changes or clears them", async () => {
       const created = await create(olivia, "/properties", { ...body(a.projects.copenhagen.id, "Strandboulevarden 40"), notes: "Owner disputes the bill", driverInstructions: "Gate code 4711; the bins stand behind the garage" }, Property)
       assert.deepEqual([created.notes, created.driverInstructions], ["Owner disputes the bill", "Gate code 4711; the bins stand behind the garage"])

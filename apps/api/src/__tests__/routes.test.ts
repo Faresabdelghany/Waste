@@ -6,9 +6,10 @@ import { Page } from "@waste/contracts/pagination"
 import { Route, RouteDetail, RouteDispatchResults, RouteListItem } from "@waste/contracts/routes"
 import { containerType, wasteFraction } from "@waste/db/schema/catalogue"
 import { createDb, type Database, type Tx } from "@waste/db/client"
-import { driverCommand, outboxEvent, session } from "@waste/db/schema/execution"
+import { driverCommand, outboxEvent, route as routeTable, session } from "@waste/db/schema/execution"
+import { plan } from "@waste/db/schema/routing"
 import { unloadingStation, unloadingStationFraction } from "@waste/db/schema/places"
-import { vehicle } from "@waste/db/schema/fleet"
+import { driver, vehicle } from "@waste/db/schema/fleet"
 import { withCompany } from "@waste/db/tenant"
 import { ROUTING_MEASURE_QUEUE } from "@waste/db/commands/plans"
 import { PGBOSS_SCHEMA } from "@waste/db/sql/pgboss"
@@ -115,7 +116,7 @@ describe("the route endpoints", { skip: database.skip || owner.skip }, () => {
     return RouteDetail.parse(await response.json())
   }
   /** The `Route` inside a detail: what an outbox payload carries. */
-  const routeOf = ({ pickups: _pickups, session: _session, sessions: _sessions, unloads: _unloads, activePlan: _activePlan, workload: _workload, ...rest }: RouteDetail): Route => rest
+  const routeOf = ({ pickups: _pickups, session: _session, sessions: _sessions, unloads: _unloads, activePlan: _activePlan, workload: _workload, shift: _shift, ...rest }: RouteDetail): Route => rest
   /** The outbox rows about one aggregate, oldest first, read as `wms_api` under the fence. */
   const eventsAbout = async (aggregateId: string, companyId = a.companyId) =>
     await withCompany(pool.db, companyId, async (tx: Tx) =>
@@ -217,6 +218,31 @@ describe("the route endpoints", { skip: database.skip || owner.skip }, () => {
         assert.deepEqual((await read(route.id)).workload, { stopSeconds: 180, expectedKg: null, unexpectedStops: 3, capacityKg: null, overCapacityKg: null })
       } finally {
         await set({ density: null, seconds: null, capacity: before.capacity })
+      }
+    })
+
+    test("answers its day against its planned driver's shift, the over-shift verdict, as the list does (O14 of #290)", async () => {
+      const route = await fresh({ ...mads() })
+      const setShift = (values: Partial<typeof driver.$inferInsert>) => withCompany(pool.db, a.companyId, async (tx: Tx) => tx.update(driver).set(values).where(eq(driver.id, fleet.drivers.mads.id)))
+      const noShift = { shiftStart: null, shiftEnd: null, breakMinutes: null, breakWindowStart: null, breakWindowEnd: null }
+      // No shift on record and no measured Plan: nothing to judge.
+      assert.deepEqual((await read(route.id)).shift, { shift: null, startsAt: null, workSeconds: null, overShiftSeconds: null })
+      await setShift({ shiftStart: "07:00", shiftEnd: "08:00", breakMinutes: 15, breakWindowStart: null, breakWindowEnd: null })
+      try {
+        const shift = { from: "07:00", to: "08:00", breakMinutes: 15, breakWindow: null }
+        assert.deepEqual((await read(route.id)).shift, { shift, startsAt: "07:00", workSeconds: null, overShiftSeconds: null }, "the shift's start without a planned one, and no verdict without a measured Plan")
+        // An optimiser's Plan of 40 minutes' drive that waited 10 for a window, leaving at 07:10: with the three bins' 3 minutes and the 15-minute break the route works 68 minutes and ends at 08:18.
+        const planId = testId()
+        await ownerPool.db.insert(plan).values({ id: planId, companyId: a.companyId, projectId: route.projectId, routeId: route.id, solver: "optimiser", status: "ready", fingerprint: "o14", trip: "stops-only", provider: "fake", distanceMetres: 9_000, durationSeconds: 2_400, waitingSeconds: 600 })
+        await ownerPool.db.update(routeTable).set({ activePlanId: planId, plannedStartTime: "07:10" }).where(eq(routeTable.id, route.id))
+        const verdict = { shift, startsAt: "07:10", workSeconds: 2_400 + 600 + 180 + 900, overShiftSeconds: 1_080 }
+        assert.deepEqual((await read(route.id)).shift, verdict)
+        const listed = (await (await olivia(`/routes?limit=200&plannedDriverId=${fleet.drivers.mads.id}`)).json()) as { items: unknown[] }
+        assert.deepEqual(listed.items.map((item) => RouteListItem.parse(item)).find((item) => item.id === route.id)?.shift, verdict)
+        await setShift({ shiftEnd: "09:00" })
+        assert.equal((await read(route.id)).shift.overShiftSeconds, 0, "within a longer shift")
+      } finally {
+        await setShift(noShift)
       }
     })
 

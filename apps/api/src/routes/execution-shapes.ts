@@ -55,7 +55,7 @@ import { inProjects } from "../auth/projects"
 import { reachesRoute, reachesThroughRoute, type ReachedRouteColumns } from "../auth/provider"
 import { problem } from "../problem"
 import { planContextOf, sequencedPickups } from "./plan-shapes"
-import { NO_WORKLOAD, workloadsByRoute } from "./workload"
+import { NO_SHIFT, NO_WORKLOAD, shiftsByRoute, workloadsByRoute } from "./workload"
 import { NOT_A_ROUTE } from "./references"
 import { instantOf, requireRow, stampsOf, timeOf } from "./shared"
 
@@ -586,7 +586,7 @@ export async function unloadsOfRoute(tx: Tx, companyId: string, routeId: string)
  * the active Plan's reading with the `sequence` it gives them (#170,
  * routes/plan-shapes.ts).
  */
-export async function routeWithSessions(tx: Tx, companyId: string, row: RouteRow): Promise<Omit<RouteDetail, "pickups" | "activePlan" | "workload">> {
+export async function routeWithSessions(tx: Tx, companyId: string, row: RouteRow): Promise<Omit<RouteDetail, "pickups" | "activePlan" | "workload" | "shift">> {
   const [answered, sessions, unloads] = await Promise.all([routeWithProgress(tx, companyId, row), sessionsOfRoute(tx, companyId, row.id), unloadsOfRoute(tx, companyId, row.id)])
   const open = sessions.find((candidate) => candidate.endedAt === null)
   return { ...answered, session: open === undefined ? null : sessionOf(open), sessions: sessions.map(sessionOf), unloads: await unloadsAnswered(tx, companyId, unloads) }
@@ -600,8 +600,8 @@ export async function routeWithSessions(tx: Tx, companyId: string, row: RouteRow
  */
 export async function detailOf(tx: Tx, companyId: string, row: RouteRow): Promise<RouteDetail> {
   const [answered, pickups, workloads] = await Promise.all([routeWithSessions(tx, companyId, row), pickupsOfRoute(tx, companyId, row.id), workloadsByRoute(tx, companyId, [row])])
-  const context = await planContextOf(tx, companyId, row, pickups)
-  return { ...answered, pickups: sequencedPickups(pickups.map(pickupOf), context), activePlan: context.activePlan, workload: workloads.get(row.id) ?? NO_WORKLOAD }
+  const [context, shifts] = await Promise.all([planContextOf(tx, companyId, row, pickups), shiftsByRoute(tx, companyId, [row], workloads)])
+  return { ...answered, pickups: sequencedPickups(pickups.map(pickupOf), context), activePlan: context.activePlan, workload: workloads.get(row.id) ?? NO_WORKLOAD, shift: shifts.get(row.id) ?? NO_SHIFT }
 }
 
 export const receiptColumns = {

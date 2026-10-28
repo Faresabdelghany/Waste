@@ -1856,6 +1856,18 @@ export const operationsBusinessFormSchemas = [
           },
         ],
       },
+      {
+        id: "shift",
+        title: "Shift and break",
+        description: "The driver's working day on the project's clock. Route optimisation plans the break, and a route running past the shift is flagged as over shift.",
+        fields: [
+          { id: "shiftStart", label: "Shift starts", type: "time" },
+          { id: "shiftEnd", label: "Shift ends", type: "time", description: "On the same day as the start." },
+          { id: "breakMinutes", label: "Break (minutes)", type: "number", description: "Blank is a shift without a break." },
+          { id: "breakWindowStart", label: "Break from", type: "time", description: "Blank lets the break fall anywhere in the shift." },
+          { id: "breakWindowEnd", label: "Break until", type: "time" },
+        ],
+      },
     ],
   },
   {

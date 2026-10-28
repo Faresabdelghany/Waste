@@ -13,7 +13,7 @@
 // (#132 §1), at the priority that class gives it.
 import type { ActivePlan, Plan, PlanLeg } from "@waste/contracts/plans"
 import type { Tx } from "@waste/db/client"
-import { ensurePlan as ensureCompanyPlan, planStopIds, type EnsuredPlan } from "@waste/db/commands/plans"
+import { ensurePlan as ensureCompanyPlan, planStopIds, type EnsuredPlan, type PlanRoute } from "@waste/db/commands/plans"
 import { QueueMissing, type JobSender } from "@waste/db/jobs"
 import { pickup, route } from "@waste/db/schema/execution"
 import { plan, planLeg, planStop } from "@waste/db/schema/routing"
@@ -256,7 +256,7 @@ export async function activePlansByRoute(tx: Tx, companyId: string, rows: readon
 export async function ensurePlan(
   tx: Tx,
   principal: Principal,
-  routeRow: { id: string; projectId: string; operatingDate: string; depotId: string | null; unloadingStationId: string | null },
+  routeRow: PlanRoute & { projectId: string },
   request: { solver: PlanSolver; orderedPickupIds: readonly string[] },
   { routing, jobs }: { routing: RoutingIdentity; jobs: JobSender },
 ): Promise<EnsuredPlan> {

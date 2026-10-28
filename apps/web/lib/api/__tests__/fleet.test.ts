@@ -63,7 +63,7 @@ const wh24: Vehicle = { id: "01a0d2a4-a280-7013-8000-000000000001", ...STAMPS, p
 const nr08: Vehicle = { ...wh24, id: "01a0d2a4-a280-7013-8000-000000000003", registration: "AB 51 912", callsign: "NR-08", vehicleTypeId: organicSealed.id, ownership: "service-provider", serviceProviderId: nordren.id, capacityKg: 12_000, homeDepotId: null, fuel: "biogas", compartments: [compartment([residual.id])] }
 const trailer: Vehicle = { ...wh24, id: "01a0d2a4-a280-7013-8000-000000000005", registration: "TR 12 012", callsign: "WH-T12", kind: "trailer", vehicleTypeId: closedTrailer.id, requiredLicenceClass: "ce", fuel: null, compartments: [] }
 
-const mads: Driver = { id: "01a0d2a4-a280-7014-8000-000000000001", ...STAMPS, projectId: copenhagen.id, name: "Mads Jensen", workforceReference: null, employment: "employee", serviceProviderId: null, homeDepotId: null, licenceClass: "ce", licenceNumber: null, licenceExpiry: "2028-12-31", userAccountId: MADS_ACCOUNT_ID, status: "active", notes: null }
+const mads: Driver = { id: "01a0d2a4-a280-7014-8000-000000000001", ...STAMPS, projectId: copenhagen.id, name: "Mads Jensen", workforceReference: null, employment: "employee", serviceProviderId: null, homeDepotId: null, licenceClass: "ce", licenceNumber: null, licenceExpiry: "2028-12-31", userAccountId: MADS_ACCOUNT_ID, status: "active", notes: null, shift: null }
 const lars: Driver = { ...mads, id: "01a0d2a4-a280-7014-8000-000000000003", name: "Lars Møller", employment: "service-provider", serviceProviderId: nordren.id, licenceClass: "c", licenceExpiry: "2026-09-05", userAccountId: null }
 const jonas: Driver = { ...mads, id: "01a0d2a4-a280-7014-8000-000000000004", name: "Jonas Lind", licenceClass: null, licenceExpiry: null, userAccountId: null }
 
@@ -402,6 +402,7 @@ describe("a driver", () => {
       Licence: "C · valid to 2026-09-05",
       Employer: "NordRen ApS",
       Employment: "Service provider",
+      Shift: "None on record",
       "App access": "None",
       Project: "Copenhagen Central",
     })
@@ -417,6 +418,11 @@ describe("a driver", () => {
       licenceExpiry: "2026-09-05",
       driverAppAccess: false,
       linkedUserId: "",
+      shiftStart: "",
+      shiftEnd: "",
+      breakMinutes: "",
+      breakWindowStart: "",
+      breakWindowEnd: "",
     })
     assert.deepEqual(driverAdapter.statuses, DRIVER_STATUSES)
     assert.ok(driverAdapter.owns(record))
@@ -493,6 +499,35 @@ describe("a driver", () => {
     assert.deepEqual(refuse({ status: "invited" }), { path: "status", message: 'The API has no status "invited" for a driver; it knows active, inactive, suspended' })
     assert.deepEqual(refuse({ driverName: "" }), { path: "driverName", message: "A driver needs a name" })
     assert.deepEqual(refuse({ homeDepotId: "depot-nowhere" }), { path: "homeDepotId", message: "Pick a depot the API holds" })
+  })
+
+  test("a shift goes out whole with its break, is read back into its five fields, moves whole on a patch and is cleared as null (O14 of #290)", () => {
+    const shifted = { shiftStart: "07:00", shiftEnd: "15:00", breakMinutes: "30", breakWindowStart: "11:00", breakWindowEnd: "12:30" }
+    const shift = { from: "07:00", to: "15:00", breakMinutes: 30, breakWindow: { from: "11:00", to: "12:30" } }
+    const body = driverAdapter.toCreateBody?.(hired(shifted), context(driverFixtures)) as { shift?: unknown }
+    assert.deepEqual(body.shift, shift)
+    assert.ok(DriverCreate.safeParse(body).success)
+    const read = driverAdapter.toRecord({ ...mads, shift }, context(driverFixtures))
+    assert.equal(read.facts?.Shift, "07:00–15:00 · 30 min break 11:00–12:30")
+    assert.deepEqual(
+      Object.fromEntries(Object.keys(shifted).map((key) => [key, read.submittedValues?.[key]])),
+      shifted,
+    )
+    const later: BusinessRecord = { ...read, submittedValues: { ...read.submittedValues, shiftEnd: "16:00" } }
+    assert.deepEqual(driverAdapter.toPatchBody(read, later, context(driverFixtures)), { shift: { ...shift, to: "16:00" } }, "whole, the break with it")
+    const cleared: BusinessRecord = { ...read, submittedValues: { ...read.submittedValues, shiftStart: "", shiftEnd: "", breakMinutes: "", breakWindowStart: "", breakWindowEnd: "" } }
+    assert.deepEqual(driverAdapter.toPatchBody(read, cleared, context(driverFixtures)), { shift: null })
+    assert.equal(driverAdapter.toRecord(mads, context(driverFixtures)).facts?.Shift, "None on record")
+  })
+
+  test("a shift the API would refuse is refused here, at its field, in the domain's words", () => {
+    const refuse = (over: Record<string, string>) => driverAdapter.toCreateBody?.(hired(over), context(driverFixtures))
+    assert.deepEqual(refuse({ shiftStart: "07:00" }), { path: "shiftEnd", message: "Give both ends of the window, or neither" })
+    assert.deepEqual(refuse({ shiftStart: "15:00", shiftEnd: "07:00" }), { path: "shiftEnd", message: "A window closes after it opens, on the same day" })
+    assert.deepEqual(refuse({ breakMinutes: "30" }), { path: "shiftStart", message: "A break belongs to a shift: give the shift's hours" })
+    assert.deepEqual(refuse({ shiftStart: "07:00", shiftEnd: "15:00", breakWindowStart: "11:00", breakWindowEnd: "12:00" }), { path: "breakMinutes", message: "Give the break's minutes with its window" })
+    assert.deepEqual(refuse({ shiftStart: "07:00", shiftEnd: "15:00", breakMinutes: "30", breakWindowStart: "14:30", breakWindowEnd: "16:00" }), { path: "breakWindowEnd", message: "The break's window lies within the shift" })
+    assert.deepEqual(refuse({ shiftStart: "07:00", shiftEnd: "15:00", breakMinutes: "half" }), { path: "breakMinutes", message: "A break is a whole number of minutes, 1 or more" })
   })
 
   test("a patch says what moved — a licence renewal, an account unlinked as null, a status the lifecycle moved — holds the project and the provider rule, and the contract accepts it", () => {

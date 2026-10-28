@@ -67,6 +67,7 @@ const parkvej: Property = {
   location: { type: "Point", coordinates: [12.5709, 55.7012] },
   notes: "Locked yard access.",
   driverInstructions: "Gate code 4711; the bins stand behind the garage.",
+  serviceWindow: null,
   status: "active",
   parties: [
     { customerId: osterbro.id, role: "owner" },
@@ -234,6 +235,8 @@ describe("a property", () => {
       longitude: "12.5709",
       specialConditions: "Locked yard access.",
       driverInstructions: "Gate code 4711; the bins stand behind the garage.",
+      serviceWindowStart: "",
+      serviceWindowEnd: "",
       ownerIds: "company-osterbro-housing",
       payerIds: "company-osterbro-housing",
       tenantIds: "",
@@ -321,6 +324,12 @@ describe("a property", () => {
     assert.ok(PropertyPatch.safeParse((renamed as { property: unknown }).property).success)
     assert.deepEqual(propertyAdapter.toPatchBody(record, edit({ driverInstructions: "Gate code 9001" }), context()), { property: { driverInstructions: "Gate code 9001" } }, "the driver's instructions move on their own")
     assert.deepEqual(propertyAdapter.toPatchBody(record, edit({ driverInstructions: "" }), context()), { property: { driverInstructions: null } }, "and a cleared one is a null")
+    // Its access hours (O14 of #290): whole, and a blank pair is a null.
+    assert.deepEqual(propertyAdapter.toPatchBody(record, edit({ serviceWindowStart: "07:00", serviceWindowEnd: "12:00" }), context()), { property: { serviceWindow: { from: "07:00", to: "12:00" } } })
+    const hours = propertyAdapter.toRecord({ ...parkvej, serviceWindow: { from: "07:00", to: "12:00" } }, context())
+    assert.equal(hours.facts?.["Access hours"], "07:00–12:00")
+    assert.deepEqual(propertyAdapter.toPatchBody(hours, { ...hours, submittedValues: { ...hours.submittedValues, serviceWindowStart: "", serviceWindowEnd: "" } }, context()), { property: { serviceWindow: null } })
+    assert.deepEqual(propertyAdapter.toPatchBody(record, edit({ serviceWindowStart: "12:00", serviceWindowEnd: "07:00" }), context()), { path: "serviceWindowEnd", message: "A window closes after it opens, on the same day" })
     assert.deepEqual(propertyAdapter.toPatchBody(record, edit({ latitude: "", longitude: "" }), context()), { property: { location: null } })
     assert.deepEqual(propertyAdapter.toPatchBody(record, edit({}, "Inactive"), context()), { property: { status: "inactive" } })
     const tenanted = propertyAdapter.toPatchBody(record, edit({ tenantIds: `company-${kab.id}` }), context())

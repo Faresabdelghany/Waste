@@ -33,6 +33,7 @@ import { providerShape, providerShapeGiven, providerWithProviderOwnership } from
 import { ProjectScopedListQuery } from "./queries"
 import { changesSomething, eachOnce, eachOnceSentence, PositiveInt, somethingToChange, stamped } from "./resource"
 import { DriverStatus, EmploymentType, FuelType, LicenceClass, VehicleKind, VehicleOwnership, VehicleStatus } from "./resources"
+import { DriverShift } from "./shifts"
 import { Label, Paragraph } from "./text"
 
 /** The most compartments a body may give a vehicle: a body, a left and a right is three, and twenty is room for anything with wheels. */
@@ -177,6 +178,8 @@ export const Driver = z.object({
   userAccountId: Id.nullable(),
   status: DriverStatus,
   notes: Paragraph.nullable(),
+  /** The working day on the project's clock with its one break (O14 of #290): what the optimiser is sent for a route the driver is planned on, and what its over-shift verdict reads. Null is no shift on record. */
+  shift: DriverShift.nullable(),
 })
 export type Driver = z.infer<typeof Driver>
 
@@ -194,6 +197,7 @@ export const DriverCreate = z
     userAccountId: Id.nullable().optional(),
     status: DriverStatus.default("active").describe("Defaults to active when absent: a driver is registered in order to drive."),
     notes: Paragraph.nullable().optional(),
+    shift: DriverShift.nullable().optional(),
   })
   .refine((body) => providerShapeGiven(body.employment, body), providerWithProviderEmployment)
 export type DriverCreate = z.infer<typeof DriverCreate>
@@ -212,6 +216,8 @@ export const DriverPatch = z
     userAccountId: Id.nullable().optional(),
     status: DriverStatus.optional(),
     notes: Paragraph.nullable().optional(),
+    /** Written whole, the break with it; null clears it. */
+    shift: DriverShift.nullable().optional(),
   })
   .refine(changesSomething, somethingToChange)
   .refine((patch) => providerShape(patch.employment, patch), providerWithProviderEmployment)

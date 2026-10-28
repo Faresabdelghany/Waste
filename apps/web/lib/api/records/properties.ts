@@ -84,6 +84,10 @@ import { isCompanyRecord } from "./organisation"
 import { coordinatesFact, coordinatesOf, countOf, createStatusOf, patchStatusOf, pointOf, projectMoved, projectServerIdOf, referenced, refusal, requiredText, sameSet, tokenOf, withStatus } from "./places"
 import { referencedServerId } from "./references"
 import { customerAdapter } from "./registry"
+import { windowFact, windowOf, windowValues, type WindowKeys } from "./time-windows"
+
+/** The form's access hours (O14 of #290). */
+const SERVICE_WINDOW_KEYS: WindowKeys = { from: "serviceWindowStart", to: "serviceWindowEnd" }
 
 /** The chip a customer the store has not loaded is named by: the one prefix of either kind. */
 const CUSTOMER_CHIP = "customer"
@@ -212,6 +216,7 @@ export const propertyAdapter: ResourceAdapter<Property> = {
         ...(property.registryId === null ? {} : { "Registry identifier": property.registryId }),
         ...(property.location === null ? {} : { Coordinates: coordinatesFact(property.location) }),
         ...(property.driverInstructions ? { "Driver instructions": property.driverInstructions } : {}),
+        ...(property.serviceWindow === null ? {} : { "Access hours": windowFact(property.serviceWindow) }),
         ...(project.name === undefined ? {} : { Project: project.name }),
         ...roleFacts(parties, PROPERTY_PARTY_ROLES, PARTY_ROLE_LABELS),
       },
@@ -229,6 +234,7 @@ export const propertyAdapter: ResourceAdapter<Property> = {
         ...coordinatesOf(property.location),
         specialConditions: property.notes ?? "",
         driverInstructions: property.driverInstructions ?? "",
+        ...windowValues(property.serviceWindow, SERVICE_WINDOW_KEYS),
         ...Object.fromEntries(PROPERTY_PARTY_ROLES.map((role) => [PARTY_FIELDS[role], parties.filter((party) => party.role === role).map((party) => party.webId).join(",")])),
       },
     }
@@ -248,6 +254,8 @@ export const propertyAdapter: ResourceAdapter<Property> = {
     if (isLocalRefusal(parties)) return parties
     const status = createStatusOf(record, PROPERTY_STATUSES, "a property")
     if (isLocalRefusal(status)) return status
+    const serviceWindow = windowOf(record, SERVICE_WINDOW_KEYS)
+    if (isLocalRefusal(serviceWindow)) return serviceWindow
     const registryId = typed(record, "registryId")
     const notes = typed(record, "specialConditions")
     const driverInstructions = typed(record, "driverInstructions")
@@ -260,6 +268,7 @@ export const propertyAdapter: ResourceAdapter<Property> = {
       ...(location === null ? {} : { location }),
       ...(notes === undefined ? {} : { notes }),
       ...(driverInstructions === undefined ? {} : { driverInstructions }),
+      ...(serviceWindow === null ? {} : { serviceWindow }),
       ...(status === undefined ? {} : { status }),
       parties,
     }
@@ -274,9 +283,12 @@ export const propertyAdapter: ResourceAdapter<Property> = {
     if (isLocalRefusal(parties)) return parties
     const status = patchStatusOf(before, after, PROPERTY_STATUSES, "a property")
     if (isLocalRefusal(status)) return status
+    const serviceWindow = windowOf(after, SERVICE_WINDOW_KEYS)
+    if (isLocalRefusal(serviceWindow)) return serviceWindow
     const property = withStatus(
       patchOf(before, after, (record) => {
         const point = pointOf(record, "")
+        const window = windowOf(record, SERVICE_WINDOW_KEYS)
         return {
           name: typed(record, "displayName") ?? record.name,
           address: typed(record, "serviceAddress"),
@@ -285,6 +297,7 @@ export const propertyAdapter: ResourceAdapter<Property> = {
           location: isLocalRefusal(point) ? undefined : point,
           notes: typed(record, "specialConditions") ?? null,
           driverInstructions: typed(record, "driverInstructions") ?? null,
+          serviceWindow: isLocalRefusal(window) ? undefined : window,
         }
       }),
       before,

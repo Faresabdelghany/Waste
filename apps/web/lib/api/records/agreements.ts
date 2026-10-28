@@ -78,11 +78,15 @@ import {
 import { FIXTURE_COMPANY_ID, type BusinessRecord } from "@/lib/data/business-modules"
 
 import { command, create, listAll, patch, post } from "../client"
-import { inheritedPresentation, patchOf, stampFacts, statusLabel, statusToken, typed, webIdOf, type Client, type CommandInput, type LocalRefusal, type MappingContext, type RecordAction, type ResourceAdapter, type ServerModule } from "./adapter"
+import { inheritedPresentation, isLocalRefusal, patchOf, stampFacts, statusLabel, statusToken, typed, webIdOf, type Client, type CommandInput, type LocalRefusal, type MappingContext, type RecordAction, type ResourceAdapter, type ServerModule } from "./adapter"
 import { dayIn, firstDayOut, lastDayIn } from "./planning"
 import type { ActionOutcome, SendAction } from "./server-records"
+import { windowFact, windowOf, windowValues, type WindowKeys } from "./time-windows"
 
 const refusal = (path: string, message: string): LocalRefusal => ({ path, message })
+
+/** The form's service window (O14 of #290). */
+const SERVICE_WINDOW_KEYS: WindowKeys = { from: "serviceWindowStart", to: "serviceWindowEnd" }
 
 /** The wire's agreement statuses, the vocabulary's own tuple: exactly what a patch may say. */
 export const AGREEMENT_STATUSES: readonly AgreementStatus[] = WIRE_AGREEMENT_STATUSES
@@ -258,6 +262,7 @@ function agreementFields(record: BusinessRecord, context: MappingContext) {
     // The record carries notes only where the wire has some, so a blank and an absent field both read as the wire's null.
     notes: typed(record, "internalNotes") ?? null,
     priceListId: priceListServerId(record, context),
+    serviceWindow: windowOf(record, SERVICE_WINDOW_KEYS),
     validFrom: typed(record, "effectiveFrom"),
     validTo: lastDay === undefined ? null : firstDayOut(lastDay),
   }
@@ -297,6 +302,7 @@ export const agreementAdapter: ResourceAdapter<Agreement> = {
         Currency: agreement.currency,
         ...(priceList === undefined ? {} : { "Price list": priceList.name }),
         ...(agreement.notes === null ? {} : { Notes: agreement.notes }),
+        ...(agreement.serviceWindow === null ? {} : { "Service window": windowFact(agreement.serviceWindow) }),
         "Valid from": agreement.validFrom,
         ...(lastDay === undefined ? {} : { "Valid to": lastDay }),
       },
@@ -316,6 +322,7 @@ export const agreementAdapter: ResourceAdapter<Agreement> = {
         currency: agreement.currency,
         ...(agreement.notes === null ? {} : { internalNotes: agreement.notes }),
         priceListId: priceList?.id ?? PROJECT_DEFAULT_LIST,
+        ...windowValues(agreement.serviceWindow, SERVICE_WINDOW_KEYS),
       },
     }
   },
@@ -332,6 +339,7 @@ export const agreementAdapter: ResourceAdapter<Agreement> = {
     if (fields.billingCadence === undefined || !(BILLING_CADENCES as readonly string[]).includes(fields.billingCadence)) return refusal("billingCadence", "Pick a billing cadence")
     if (fields.currency === undefined) return refusal("currency", "Pick a currency")
     if (fields.priceListId === undefined) return refusal("priceListId", PRICE_LIST_REFUSAL)
+    if (isLocalRefusal(fields.serviceWindow)) return fields.serviceWindow
     return {
       projectId,
       number: fields.number,
@@ -344,6 +352,7 @@ export const agreementAdapter: ResourceAdapter<Agreement> = {
       ...(fields.notes === null ? {} : { notes: fields.notes }),
       // Absent is the project's default list.
       ...(fields.priceListId === null ? {} : { priceListId: fields.priceListId }),
+      ...(fields.serviceWindow === null ? {} : { serviceWindow: fields.serviceWindow }),
       validFrom: fields.validFrom,
       ...(fields.validTo === null ? {} : { validTo: fields.validTo }),
     }
@@ -355,7 +364,11 @@ export const agreementAdapter: ResourceAdapter<Agreement> = {
     if (typed(after, "customerId") !== undefined && fields.customerId === undefined) return refusal("customerId", "Pick a customer the API holds")
     if (typed(after, "payerId") !== undefined && fields.payerCustomerId === undefined) return refusal("payerId", "Pick a payer the API holds")
     if (fields.priceListId === undefined) return refusal("priceListId", PRICE_LIST_REFUSAL)
-    return patchOf(before, after, (record) => agreementFields(record, context))
+    if (isLocalRefusal(fields.serviceWindow)) return fields.serviceWindow
+    return patchOf(before, after, (record) => {
+      const read = agreementFields(record, context)
+      return { ...read, serviceWindow: isLocalRefusal(read.serviceWindow) ? undefined : read.serviceWindow }
+    })
   },
   create: (client, body) => create<Agreement>(client, "/agreements", body).then((created) => created.body),
   update: (client, serverId, body) => patch<Agreement>(client, `/agreements/${serverId}`, body),

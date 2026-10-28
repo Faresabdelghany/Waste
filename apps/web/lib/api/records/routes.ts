@@ -46,7 +46,7 @@
 import type { DriverCommandReceipt } from "@waste/contracts/driver-commands"
 import type { PickupDetail } from "@waste/contracts/pickups"
 import type { OptimiseAnswer, Plan } from "@waste/contracts/plans"
-import type { Route, RouteDetail, RouteDispatchResults, RouteWorkload } from "@waste/contracts/routes"
+import type { Route, RouteDetail, RouteDispatchResults, RouteShift, RouteWorkload } from "@waste/contracts/routes"
 import { OFFICE_CANCEL_REASON_CODES, OFFICE_STOP_SERVICES, type OfficeStopService } from "@waste/domain/execution/vocabulary"
 import { BOOKED_WITH, type BookedField } from "@waste/domain/execution/work-orders"
 
@@ -66,6 +66,7 @@ import { containerAdapter } from "./containers"
 import { serviceProviderAdapter } from "./organisation"
 import { projectServerIdOf, referenced, refusal, unloadingStationAdapter, warehouseAdapter } from "./places"
 import { nameVia, referencedServerId, webIdVia, type ReferenceRule } from "./references"
+import { shiftFact } from "./time-windows"
 
 /** The workspace module the routes are the rows of. */
 export const ROUTES_MODULE: ModuleLocation = { workspaceId: "route-studio", moduleId: "routes" }
@@ -113,7 +114,7 @@ const GROUP_PREFIX = "group"
 const PICKUP_PREFIX = "pickup"
 
 /** A route as a read may carry it: the list's and the detail's with the active Plan and the workload (O10 of #290), the live read's with the Plan alone. */
-type RouteRead = Route & { activePlan?: RouteDetail["activePlan"]; workload?: RouteWorkload }
+type RouteRead = Route & { activePlan?: RouteDetail["activePlan"]; workload?: RouteWorkload; shift?: RouteShift }
 
 /** "WH-24" for "WH-24 · CN 42 018": a vehicle as the fixtures and the map name it, its callsign; an id chip as it stands. */
 export const callsignOf = (name: string) => name.split(" · ")[0] ?? name
@@ -174,6 +175,7 @@ export function toRouteRecord(route: RouteRead, context: MappingContext): Busine
   if (plan?.distanceMetres != null) facts.Distance = formatDistance(plan.distanceMetres)
   if (plan?.durationSeconds != null) facts.Duration = formatDuration(plan.durationSeconds + (workload?.stopSeconds ?? 0))
   if (workload !== undefined) Object.assign(facts, workloadFacts(workload))
+  if ("shift" in route && route.shift !== undefined) Object.assign(facts, shiftFacts(route.shift))
   if (route.cancelReasonCode !== null) facts["Cancel reason"] = statusLabel(route.cancelReasonCode)
   // A generated route's note is how it deviated from its scheme; the office's own route has no scheme to deviate from, and its note is the one New route took (#111).
   facts[route.routeSchemeId === null ? "Note" : "Deviation"] = route.note ?? "None"
@@ -472,6 +474,21 @@ export function workloadFacts(workload: RouteWorkload): Record<string, string> {
     const uncounted = workload.unexpectedStops > 0 ? `, ${workload.unexpectedStops} ${workload.unexpectedStops === 1 ? "stop" : "stops"} not counted` : ""
     facts["Expected load"] = `${against}${over}${uncounted}`
   }
+  return facts
+}
+
+/**
+ * A route's day against its planned driver's shift (O14 of #290), as its
+ * facts say it: the shift, and the server's over-shift verdict — within it,
+ * or how far the planned day runs outside it — once a Plan is measured.
+ * Neither for a driver without a shift on record.
+ */
+export function shiftFacts(day: RouteShift): Record<string, string> {
+  if (day.shift === null) return {}
+  const facts: Record<string, string> = { Shift: shiftFact(day.shift) }
+  if (day.overShiftSeconds === null || day.workSeconds === null) return facts
+  const planned = `${formatDuration(day.workSeconds)} of work from ${day.startsAt ?? day.shift.from}`
+  facts["Shift check"] = day.overShiftSeconds > 0 ? `Over shift by ${formatDuration(day.overShiftSeconds)}: ${planned}` : `Within the shift: ${planned}`
   return facts
 }
 

@@ -18,6 +18,7 @@ import { newId } from "../ids"
 import { problem } from "../problem"
 import { entriesFor, replaceSet, requirePartyCustomers, writeEntries, type Entry, type MemberSet, type Parent } from "./members"
 import { refuseDuplicate, stampsOf } from "./shared"
+import { serviceWindowOf, serviceWindowValues } from "./time-windows"
 
 export const propertyColumns = {
   id: property.id,
@@ -29,6 +30,8 @@ export const propertyColumns = {
   location: property.location,
   notes: property.notes,
   driverInstructions: property.driverInstructions,
+  serviceWindowStart: property.serviceWindowStart,
+  serviceWindowEnd: property.serviceWindowEnd,
   status: property.status,
   createdAt: property.createdAt,
   updatedAt: property.updatedAt,
@@ -68,6 +71,7 @@ export function propertyOf(row: PropertyRow, held: readonly Entry[]): Property {
     location: row.location as FlatPoint | null,
     notes: row.notes,
     driverInstructions: row.driverInstructions,
+    serviceWindow: serviceWindowOf(row),
     status: row.status as PropertyStatus,
     parties: held.map(partyOf),
     ...stampsOf(row),
@@ -110,7 +114,7 @@ export async function findProperty(tx: Tx, principal: Principal, id: string): Pr
 
 /** Registers a property in one of the caller's projects, with the parties it starts with. */
 export async function createProperty(tx: Tx, principal: Principal, body: PropertyCreate): Promise<Property> {
-  const { parties: asked, ...values } = body
+  const { parties: asked, serviceWindow, ...values } = body
   requireProject(principal, values.projectId)
   const parent: Parent = { companyId: principal.companyId, projectId: values.projectId, id: newId() }
   const entries = asked.map(entryOf)
@@ -118,7 +122,7 @@ export async function createProperty(tx: Tx, principal: Principal, body: Propert
   const [row] = await refuseDuplicate(collisions(values), () =>
     tx
       .insert(property)
-      .values({ ...values, id: parent.id, companyId: parent.companyId })
+      .values({ ...values, ...serviceWindowValues(serviceWindow), id: parent.id, companyId: parent.companyId })
       .returning(propertyColumns),
   )
   await writeEntries(tx, parties, parent, entries)
@@ -126,11 +130,12 @@ export async function createProperty(tx: Tx, principal: Principal, body: Propert
 }
 
 /** Changes one property of the caller's projects; a 404 for one they do not reach. */
-export async function patchProperty(tx: Tx, principal: Principal, id: string, patch: PropertyPatch): Promise<Property> {
+export async function patchProperty(tx: Tx, principal: Principal, id: string, body: PropertyPatch): Promise<Property> {
+  const { serviceWindow, ...patch } = body
   const [row] = await refuseDuplicate(collisions(patch), () =>
     tx
       .update(property)
-      .set(patch)
+      .set({ ...patch, ...serviceWindowValues(serviceWindow) })
       .where(and(propertyScope(principal), eq(property.id, id)))
       .returning(propertyColumns),
   )

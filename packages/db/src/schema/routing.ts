@@ -56,6 +56,8 @@ export const plan = wms.table(
     /** The totals, the sum of the legs; written with `ready` and never before. */
     distanceMetres: integer(),
     durationSeconds: integer(),
+    /** The seconds the optimiser's order waits for a stop's or a break's window to open (O14 of #290); written with an optimiser's `ready`, null for every other Plan. */
+    waitingSeconds: integer(),
     /** When a quota-deferred job resumes (#132 §4): written on deferral, cleared when it runs, only ever beside `calculating`. */
     deferredUntil: timestamp({ withTimezone: true }),
     /** Why a `failed` Plan failed: the provider's sentence, or the structured `superseded`. */
@@ -81,6 +83,7 @@ export const plan = wms.table(
     ),
     check(tableObjectName(t.id.table, "failure_shape", "plan"), sql`(${t.status} = 'failed') = (${t.failureReason} is not null)`),
     check(tableObjectName(t.id.table, "deferred_shape", "plan"), sql`${t.deferredUntil} is null or ${t.status} = 'calculating'`),
+    check(tableObjectName(t.id.table, "waiting_shape", "plan"), sql`${t.waitingSeconds} is null or (${t.waitingSeconds} >= 0 and ${t.status} = 'ready' and ${t.solver} = 'optimiser')`),
     // The cache lookup: a request whose fingerprint equals a ready Plan's consumes no call (#124 §4).
     tenantIndex(t, t.fingerprint),
   ],

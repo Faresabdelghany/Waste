@@ -58,6 +58,11 @@
 // visit's: `CHANGED_IN_0054`, first of the product's chain, maps today's
 // product onto 0044's, and site-visits-rendering.test.ts pins the statements.
 //
+// Migration 0055 (O14 of #290) gave `property` and `agreement` their service
+// window and its check: `CHANGED_IN_0055`, first of both chains, maps today's
+// CREATE TABLEs onto 0022's and 0010's, and time-windows-rendering.test.ts
+// pins the statements.
+//
 // This is also what makes a change to the vocabulary a migration: the values
 // are spelled here as the file spells them, so adding one to a list in
 // @waste/domain/registry/vocabulary fails this test until a migration replaces
@@ -165,8 +170,8 @@ const productTable = (asOf: "0004" | "0010" | "0044" | "0054"): string => {
   ])
 }
 
-/** agreement as drizzle-kit writes it today, with the price list 0010 added (Issue #112), and as of 0004, without. */
-const agreementTable = (finance: boolean): string =>
+/** agreement as drizzle-kit writes it today, with the service window 0055 added (O14 of #290); as of 0010, with the price list (Issue #112); and as of 0004, without either. */
+const agreementTable = (asOf: "0004" | "0010" | "0055"): string =>
   createTable("agreement", "dated", [
     '"number" text NOT NULL',
     '"customer_id" uuid NOT NULL',
@@ -175,8 +180,10 @@ const agreementTable = (finance: boolean): string =>
     '"billing_cadence" text NOT NULL',
     '"currency" text NOT NULL',
     '"notes" text',
-    ...(finance ? ['"price_list_id" uuid'] : []),
+    ...(asOf >= "0010" ? ['"price_list_id" uuid'] : []),
+    ...(asOf >= "0055" ? ['"service_window_start" time', '"service_window_end" time'] : []),
     uniqueKey("agreement_project_key", "company_id", "project_id", "id"),
+    ...(asOf >= "0055" ? [`CONSTRAINT "agreement_service_window" CHECK ((${ref("agreement", "service_window_start")} is null) = (${ref("agreement", "service_window_end")} is null) and (${ref("agreement", "service_window_start")} is null or ${ref("agreement", "service_window_end")} > ${ref("agreement", "service_window_start")}))`] : []),
     validityCheck("agreement"),
     oneOfCheck("agreement", "status", "draft", "active", "cancelled"),
     oneOfCheck("agreement", "billing_cadence", "monthly", "quarterly", "annual", "manual"),
@@ -188,7 +195,7 @@ const CHANGED_IN_0054 = new Map([[productTable("0054"), productTable("0044")]])
 /** What 0010 changed on two tables 0004 created (Issue #112), and 0044 on the product again: the statement as drizzle-kit generated it as of 0044 (the agreement's as it generates it now), and as it generated it as of 0004. */
 const CHANGED_IN_0010 = new Map([
   [productTable("0044"), productTable("0004")],
-  [agreementTable(true), agreementTable(false)],
+  [agreementTable("0010"), agreementTable("0004")],
 ])
 
 /** What 0010 added to the two tables beside the columns: the agreement's key into Finance and its index, and the product's partial unique on the invoice code. 0004 begins with the generated statements less these. */
@@ -198,8 +205,8 @@ const ADDED_IN_0010 = [
   index("agreement", "agreement_price_list_id_idx", "company_id", "price_list_id"),
 ]
 
-/** property as drizzle-kit writes it today, with the driver's instructions 0022 added, and as of 0004, without. */
-const propertyTable = (instructions: boolean): string =>
+/** property as drizzle-kit writes it today, with the service window 0055 added (O14 of #290); as of 0022, with the driver's instructions; and as of 0004, without either. */
+const propertyTable = (asOf: "0004" | "0022" | "0055"): string =>
   createTable("property", "project", [
     '"name" text NOT NULL',
     '"address" text NOT NULL',
@@ -207,10 +214,12 @@ const propertyTable = (instructions: boolean): string =>
     '"kind" text NOT NULL',
     '"location" geometry(Point, 4326)',
     '"notes" text',
-    ...(instructions ? ['"driver_instructions" text'] : []),
+    ...(asOf >= "0022" ? ['"driver_instructions" text'] : []),
     '"status" text NOT NULL',
+    ...(asOf >= "0055" ? ['"service_window_start" time', '"service_window_end" time'] : []),
     uniqueKey("property_project_id_name_key", "company_id", "project_id", "name"),
     uniqueKey("property_project_key", "company_id", "project_id", "id"),
+    ...(asOf >= "0055" ? [`CONSTRAINT "property_service_window" CHECK ((${ref("property", "service_window_start")} is null) = (${ref("property", "service_window_end")} is null) and (${ref("property", "service_window_start")} is null or ${ref("property", "service_window_end")} > ${ref("property", "service_window_start")}))`] : []),
     oneOfCheck("property", "kind", "residential", "commercial", "public", "mixed", "other"),
     oneOfCheck("property", "status", "active", "inactive"),
     geometryCheck("property", "location"),
@@ -265,9 +274,15 @@ const customerTable = (terms: boolean): string =>
 /** What 0037 changed on one table 0004 created: the statement as drizzle-kit generates it now, and as it generated it as of 0004. */
 const CHANGED_IN_0037 = new Map([[customerTable(true), customerTable(false)]])
 
+/** What 0055 changed (O14 of #290): the property's and the agreement's CREATE TABLEs as drizzle-kit generates them now onto what they were before it. Applied first, one file at a time. */
+const CHANGED_IN_0055 = new Map([
+  [propertyTable("0055"), propertyTable("0022")],
+  [agreementTable("0055"), agreementTable("0010")],
+])
+
 /** What 0022 changed on two tables 0004 created: the statement as drizzle-kit generates it now, and as it generated it as of 0004. */
 const CHANGED_IN_0022 = new Map([
-  [propertyTable(true), propertyTable(false)],
+  [propertyTable("0022"), propertyTable("0004")],
   [pointTable(true), pointTable(false)],
 ])
 
@@ -330,7 +345,7 @@ const expected = [
   ]),
   productTable("0054"),
   customerTable(true),
-  propertyTable(true),
+  propertyTable("0055"),
   createTable("property_party", "project", [
     '"property_id" uuid NOT NULL',
     '"customer_id" uuid NOT NULL',
@@ -363,7 +378,7 @@ const expected = [
     uniqueKey("shared_collection_point_member_membership_key", "company_id", "shared_collection_point_id", "property_id"),
     oneOfCheck("shared_collection_point_member", "role", "service-member", "administrator", "payer", "notification-contact"),
   ]),
-  agreementTable(true),
+  agreementTable("0055"),
   createTable("subscription", "dated", [
     '"agreement_id" uuid NOT NULL',
     '"product_id" uuid NOT NULL',
@@ -483,6 +498,7 @@ describe("the Registry tables as drizzle-kit writes them", () => {
   const generatedHead = async (): Promise<string[]> => [
     ...(await statementsFor(tables))
       .filter((statement) => !ADDED_IN_0010.includes(statement))
+      .map((statement) => CHANGED_IN_0055.get(statement) ?? statement)
       .map((statement) => CHANGED_IN_0054.get(statement) ?? statement)
       .map((statement) => CHANGED_IN_0050.get(statement) ?? statement)
       .map((statement) => CHANGED_IN_0043.get(statement) ?? statement)
@@ -498,8 +514,9 @@ describe("the Registry tables as drizzle-kit writes them", () => {
     const today = await statementsFor(tables)
     for (const statement of CHANGED_IN_0007.keys()) assert.ok(today.includes(statement), statement.split("\n")[0])
     for (const statement of CHANGED_IN_0054.keys()) assert.ok(today.includes(statement), statement.split("\n")[0])
-    for (const statement of CHANGED_IN_0010.keys()) assert.ok(today.includes(statement) || [...CHANGED_IN_0054.values()].includes(statement), statement.split("\n")[0])
-    for (const statement of CHANGED_IN_0022.keys()) assert.ok(today.includes(statement), statement.split("\n")[0])
+    for (const statement of CHANGED_IN_0055.keys()) assert.ok(today.includes(statement), statement.split("\n")[0])
+    for (const statement of CHANGED_IN_0010.keys()) assert.ok([...CHANGED_IN_0054.values(), ...CHANGED_IN_0055.values()].includes(statement), statement.split("\n")[0])
+    for (const statement of CHANGED_IN_0022.keys()) assert.ok(today.includes(statement) || [...CHANGED_IN_0055.values()].includes(statement), statement.split("\n")[0])
     for (const statement of CHANGED_IN_0050.keys()) assert.ok(today.includes(statement), statement.split("\n")[0])
     for (const statement of CHANGED_IN_0043.keys()) assert.ok([...CHANGED_IN_0050.values()].includes(statement), statement.split("\n")[0])
     for (const statement of CHANGED_IN_0029.keys()) assert.ok([...CHANGED_IN_0043.values()].includes(statement), statement.split("\n")[0])

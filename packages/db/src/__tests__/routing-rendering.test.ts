@@ -40,7 +40,8 @@ const createLedger = (name: string, lines: string[]): string =>
 const planFk = (table: string): string =>
   foreignKey(table, `${table}_route_id_plan_id_fk`, ["company_id", "project_id", "route_id", "plan_id"], "plan", ["company_id", "project_id", "route_id", "id"])
 
-const expected = [
+/** plan as 0013 made it, and as drizzle-kit writes it since 0055 (O14 of #290), with the optimiser's waiting seconds and their shape. */
+const planTable = (asOf: "0013" | "0055"): string =>
   createTable("plan", "project", [
     '"route_id" uuid NOT NULL',
     '"solver" text NOT NULL',
@@ -49,6 +50,7 @@ const expected = [
     '"trip" text NOT NULL',
     '"distance_metres" integer',
     '"duration_seconds" integer',
+    ...(asOf >= "0055" ? ['"waiting_seconds" integer'] : []),
     `"deferred_until" ${INSTANT}`,
     '"failure_reason" text',
     '"provider" text NOT NULL',
@@ -61,7 +63,14 @@ const expected = [
     `CONSTRAINT "plan_totals_shape" CHECK (case ${ref("plan", "status")} when 'ready' then ${ref("plan", "distance_metres")} is not null and ${ref("plan", "distance_metres")} >= 0 and ${ref("plan", "duration_seconds")} is not null and ${ref("plan", "duration_seconds")} >= 0 else ${ref("plan", "distance_metres")} is null and ${ref("plan", "duration_seconds")} is null end)`,
     `CONSTRAINT "plan_failure_shape" CHECK ((${ref("plan", "status")} = 'failed') = (${ref("plan", "failure_reason")} is not null))`,
     `CONSTRAINT "plan_deferred_shape" CHECK (${ref("plan", "deferred_until")} is null or ${ref("plan", "status")} = 'calculating')`,
-  ]),
+    ...(asOf >= "0055" ? [`CONSTRAINT "plan_waiting_shape" CHECK (${ref("plan", "waiting_seconds")} is null or (${ref("plan", "waiting_seconds")} >= 0 and ${ref("plan", "status")} = 'ready' and ${ref("plan", "solver")} = 'optimiser'))`] : []),
+  ])
+
+/** What 0055 changed: the plan's CREATE TABLE as drizzle-kit generates it now onto what 0013 says; time-windows-rendering.test.ts pins the statements. */
+const CHANGED_IN_0055 = new Map([[planTable("0055"), planTable("0013")]])
+
+const expected = [
+  planTable("0055"),
   createLedger("plan_stop", [
     '"route_id" uuid NOT NULL',
     '"plan_id" uuid NOT NULL',
@@ -111,7 +120,7 @@ const handWritten = Object.values(tables).flatMap((table) => handWrittenStatemen
 const generatedAlterations = (): Promise<string[]> => statementsBetween({ route: routeAsOf("0012") }, { route: routeAsOf("0013") })
 
 /** Everything drizzle-kit wrote at the head of 0013: the three tables and the altered route. */
-const generatedHead = async (): Promise<string[]> => [...(await statementsFor(tables)), ...(await generatedAlterations())]
+const generatedHead = async (): Promise<string[]> => [...(await statementsFor(tables)).map((statement) => CHANGED_IN_0055.get(statement) ?? statement), ...(await generatedAlterations())]
 
 const fileStatements = async (): Promise<string[]> => statementsOf(await readFile(join(MIGRATIONS_FOLDER, MIGRATION), "utf8"))
 
@@ -155,7 +164,7 @@ describe("the Routing tables as drizzle-kit writes them", () => {
 
 describe("the checks of this context", () => {
   test("every check renders without parameters, and the three one_of checks read the routing vocabulary", () => {
-    assert.deepEqual([...checksOf(plan).keys()], ["plan_solver_one_of", "plan_status_one_of", "plan_trip_one_of", "plan_totals_shape", "plan_failure_shape", "plan_deferred_shape"])
+    assert.deepEqual([...checksOf(plan).keys()], ["plan_solver_one_of", "plan_status_one_of", "plan_trip_one_of", "plan_totals_shape", "plan_failure_shape", "plan_deferred_shape", "plan_waiting_shape"])
     assert.deepEqual([...checksOf(planStop).keys()], ["plan_stop_position_positive"])
     assert.deepEqual([...checksOf(planLeg).keys()], ["plan_leg_position_positive", "plan_leg_path_valid", "plan_leg_measure_shape"])
     const checks = checksOf(plan)

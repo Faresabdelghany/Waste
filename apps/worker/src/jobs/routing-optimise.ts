@@ -23,6 +23,14 @@
 // (ADR-0002). The route row is locked before the Plan, the office's order,
 // so a reorder and an answer never cross.
 //
+// The request rides the route's clock (O14 of #290, `routeTiming` from
+// @waste/db/commands/stop-timing, which the fingerprint reads too): each
+// stop's window — where its property's hours and its agreement's promise
+// overlap — the route's departure, and its planned driver's break. A stop
+// whose two windows never overlap is no request at all, and the Plan fails
+// naming it; the waiting the windows make is written on the ready Plan, for
+// the over-shift verdict.
+//
 // Everything else is routing.measure's rule (routing-plans.ts): the read and
 // the write in two fenced transactions around a call made outside both, what
 // cannot be optimised final, the quota's answers the engine's.
@@ -30,16 +38,14 @@ import type { Position2D } from "@waste/contracts/geojson"
 import type { Tx } from "@waste/db/client"
 import { activateSolved, classOf, ROUTING_OPTIMISE_QUEUE, type RoutingJobData } from "@waste/db/commands/plans"
 import { quotaRows, type QuotaRow } from "@waste/db/commands/routing-quota"
-import { containerType } from "@waste/db/schema/catalogue"
-import { container } from "@waste/db/schema/containers"
+import { routeTiming } from "@waste/db/commands/stop-timing"
 import { property, sharedCollectionPoint } from "@waste/db/schema/customers"
 import { pickup, route } from "@waste/db/schema/execution"
 import { depot, unloadingStation } from "@waste/db/schema/places"
 import { plan, planLeg, planStop } from "@waste/db/schema/routing"
 import { withCompany } from "@waste/db/tenant"
 import { orderIsOpen } from "@waste/domain/execution/transitions"
-import type { PickupService, RouteStatus } from "@waste/domain/execution/vocabulary"
-import { serviceSecondsOf } from "@waste/domain/execution/workload"
+import type { RouteStatus } from "@waste/domain/execution/vocabulary"
 import { isSuperseded, OPTIMISER_MAX_STOPS } from "@waste/domain/routing/plans"
 import { SUPERSEDED } from "@waste/domain/routing/vocabulary"
 import { DEFAULT_PROFILE, type OptimiseRequest, type RoutedLeg } from "@waste/routing/provider"
@@ -65,7 +71,15 @@ async function gather(tx: Tx, keys: { planId: string; companyId: string; provide
   if (found.status !== "calculating") return { kind: "done", status: found.status }
   if (found.solver !== "optimiser") return { kind: "refused", sentence: `a ${found.solver} Plan is routing.measure's to measure, not optimised here` }
   const [ends] = await tx
-    .select({ status: route.status, activePlanId: route.activePlanId, operatingDate: route.operatingDate, depot: depot.location, station: unloadingStation.location })
+    .select({
+      status: route.status,
+      activePlanId: route.activePlanId,
+      operatingDate: route.operatingDate,
+      plannedStartTime: route.plannedStartTime,
+      plannedDriverId: route.plannedDriverId,
+      depot: depot.location,
+      station: unloadingStation.location,
+    })
     .from(route)
     .leftJoin(depot, eq(route.depotId, depot.id))
     .leftJoin(unloadingStation, eq(route.unloadingStationId, unloadingStation.id))
@@ -79,14 +93,11 @@ async function gather(tx: Tx, keys: { planId: string; companyId: string; provide
   const station = positionOf(ends.station)
   if (found.trip === "full" && !station) return { kind: "refused", sentence: "a full trip needs the route's unloading station, and it has none" }
   // The route's open stops as they are now: the optimiser's request is a set, and the solver reads it when it runs (#170).
-  // Each with its seconds at the kerb (O10 of #290): its arrival times', never the order's, since the solver's cost is the drive.
   const stops = await tx
-    .select({ id: pickup.id, position: pickup.position, service: pickup.service, containerServiceSeconds: containerType.serviceSeconds, property: property.location, point: sharedCollectionPoint.location })
+    .select({ id: pickup.id, position: pickup.position, property: property.location, point: sharedCollectionPoint.location })
     .from(pickup)
     .leftJoin(property, eq(pickup.propertyId, property.id))
     .leftJoin(sharedCollectionPoint, eq(pickup.sharedCollectionPointId, sharedCollectionPoint.id))
-    .leftJoin(container, eq(pickup.containerId, container.id))
-    .leftJoin(containerType, eq(container.containerTypeId, containerType.id))
     .where(and(eq(pickup.routeId, found.routeId), eq(pickup.status, "planned")))
     .orderBy(asc(pickup.position), asc(pickup.id))
   if (stops.length === 0) return { kind: "refused", sentence: "the route has no open pickups to order" }
@@ -97,8 +108,24 @@ async function gather(tx: Tx, keys: { planId: string; companyId: string; provide
     if (!at) return { kind: "refused", sentence: `stop ${stop.position} has no location to route` }
     points.push(at)
   }
-  const serviceSeconds = stops.map((stop) => serviceSecondsOf({ service: stop.service as PickupService, containerServiceSeconds: stop.containerServiceSeconds }))
-  const request: OptimiseRequest = { profile: DEFAULT_PROFILE, depot: home, stops: points, serviceSeconds, station: found.trip === "full" ? station : null }
+  // Each with its seconds at the kerb (O10 of #290) and its window (O14), on the clock the fingerprint read.
+  const timing = await routeTiming(tx, keys.companyId, ends, stops.map((stop) => stop.id))
+  const timeWindows: (readonly [number, number] | null)[] = []
+  for (const stop of stops) {
+    const window = timing.stops.get(stop.id)?.window ?? null
+    if (window === "disjoint") return { kind: "refused", sentence: `stop ${stop.position}'s property hours and its agreement's window never overlap, so no time of the day serves it` }
+    timeWindows.push(window)
+  }
+  const request: OptimiseRequest = {
+    profile: DEFAULT_PROFILE,
+    depot: home,
+    stops: points,
+    serviceSeconds: stops.map((stop) => timing.stops.get(stop.id)?.serviceSeconds ?? 0),
+    ...(timing.timed ? { timeWindows } : {}),
+    departure: timing.departure,
+    ...(timing.breaks.length > 0 ? { breaks: timing.breaks } : {}),
+    station: found.trip === "full" ? station : null,
+  }
   const quota = await quotaRows(tx, { companyId: keys.companyId, provider: keys.provider })
   return { kind: "request", request, routeId: found.routeId, pickupIds: stops.map((stop) => stop.id), trip: found.trip, operatingDate: ends.operatingDate, quota }
 }
@@ -176,6 +203,7 @@ async function optimiseOne(job: Job<RoutingJobData>, context: JobContext): Promi
             status: "ready",
             distanceMetres: legs.reduce((sum, leg) => sum + leg.metres, 0),
             durationSeconds: legs.reduce((sum, leg) => sum + leg.seconds, 0),
+            waitingSeconds: outcome.result.waitingSeconds,
             deferredUntil: null,
             engineVersion: provenance.engineVersion,
             graphDate: provenance.graphDate,

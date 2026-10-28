@@ -443,6 +443,8 @@ column wms.agreement 12 billing_cadence text not-null
 column wms.agreement 13 currency text not-null
 column wms.agreement 14 notes text
 column wms.agreement 15 price_list_id uuid
+column wms.agreement 16 service_window_start time without time zone
+column wms.agreement 17 service_window_end time without time zone
 constraint wms.agreement agreement_billing_cadence_one_of CHECK ((billing_cadence = ANY (ARRAY['monthly'::text, 'quarterly'::text, 'annual'::text, 'manual'::text])))
 constraint wms.agreement agreement_company_id_fk FOREIGN KEY (company_id) REFERENCES wms.company(id)
 constraint wms.agreement agreement_customer_id_fk FOREIGN KEY (company_id, customer_id) REFERENCES wms.customer(company_id, id)
@@ -452,6 +454,7 @@ constraint wms.agreement agreement_pkey PRIMARY KEY (id)
 constraint wms.agreement agreement_price_list_id_fk FOREIGN KEY (company_id, project_id, price_list_id) REFERENCES wms.price_list(company_id, project_id, id)
 constraint wms.agreement agreement_project_id_fk FOREIGN KEY (company_id, project_id) REFERENCES wms.project(company_id, id)
 constraint wms.agreement agreement_project_key UNIQUE (company_id, project_id, id)
+constraint wms.agreement agreement_service_window CHECK ((((service_window_start IS NULL) = (service_window_end IS NULL)) AND ((service_window_start IS NULL) OR (service_window_end > service_window_start))))
 constraint wms.agreement agreement_status_one_of CHECK ((status = ANY (ARRAY['draft'::text, 'active'::text, 'cancelled'::text])))
 constraint wms.agreement agreement_validity CHECK (((valid_to IS NULL) OR (valid_to > valid_from)))
 index wms.agreement agreement_customer_id_idx CREATE INDEX agreement_customer_id_idx ON wms.agreement USING btree (company_id, customer_id)
@@ -1317,6 +1320,14 @@ column wms.driver 13 licence_expiry date
 column wms.driver 14 user_account_id uuid
 column wms.driver 15 status text not-null
 column wms.driver 16 notes text
+column wms.driver 17 shift_start time without time zone
+column wms.driver 18 shift_end time without time zone
+column wms.driver 19 break_minutes integer
+column wms.driver 20 break_window_start time without time zone
+column wms.driver 21 break_window_end time without time zone
+constraint wms.driver driver_break_minutes_range CHECK (((break_minutes >= 1) AND (break_minutes <= 240)))
+constraint wms.driver driver_break_shape CHECK ((((break_minutes IS NULL) OR (shift_start IS NOT NULL)) AND ((break_window_start IS NULL) OR ((break_minutes IS NOT NULL) AND (break_window_start >= shift_start) AND (break_window_end <= shift_end)))))
+constraint wms.driver driver_break_window CHECK ((((break_window_start IS NULL) = (break_window_end IS NULL)) AND ((break_window_start IS NULL) OR (break_window_end > break_window_start))))
 constraint wms.driver driver_company_id_fk FOREIGN KEY (company_id) REFERENCES wms.company(id)
 constraint wms.driver driver_employment_one_of CHECK ((employment = ANY (ARRAY['employee'::text, 'service-provider'::text, 'temporary'::text])))
 constraint wms.driver driver_home_depot_id_fk FOREIGN KEY (company_id, project_id, home_depot_id) REFERENCES wms.depot(company_id, project_id, id)
@@ -1326,6 +1337,7 @@ constraint wms.driver driver_project_id_fk FOREIGN KEY (company_id, project_id) 
 constraint wms.driver driver_project_key UNIQUE (company_id, project_id, id)
 constraint wms.driver driver_provider_shape CHECK (((employment = 'service-provider'::text) = (service_provider_id IS NOT NULL)))
 constraint wms.driver driver_service_provider_id_fk FOREIGN KEY (company_id, service_provider_id) REFERENCES wms.service_provider(company_id, id)
+constraint wms.driver driver_shift_window CHECK ((((shift_start IS NULL) = (shift_end IS NULL)) AND ((shift_start IS NULL) OR (shift_end > shift_start))))
 constraint wms.driver driver_status_one_of CHECK ((status = ANY (ARRAY['active'::text, 'inactive'::text, 'suspended'::text])))
 constraint wms.driver driver_user_account_id_fk FOREIGN KEY (company_id, user_account_id) REFERENCES wms.user_account(company_id, id)
 index wms.driver driver_home_depot_id_idx CREATE INDEX driver_home_depot_id_idx ON wms.driver USING btree (company_id, home_depot_id)
@@ -1968,6 +1980,7 @@ column wms.plan 14 failure_reason text
 column wms.plan 15 provider text not-null
 column wms.plan 16 engine_version text
 column wms.plan 17 graph_date date
+column wms.plan 18 waiting_seconds integer
 constraint wms.plan plan_company_id_fk FOREIGN KEY (company_id) REFERENCES wms.company(id)
 constraint wms.plan plan_deferred_shape CHECK (((deferred_until IS NULL) OR (status = 'calculating'::text)))
 constraint wms.plan plan_failure_shape CHECK (((status = 'failed'::text) = (failure_reason IS NOT NULL)))
@@ -1983,6 +1996,7 @@ CASE status
     ELSE ((distance_metres IS NULL) AND (duration_seconds IS NULL))
 END)
 constraint wms.plan plan_trip_one_of CHECK ((trip = ANY (ARRAY['full'::text, 'stops-only'::text])))
+constraint wms.plan plan_waiting_shape CHECK (((waiting_seconds IS NULL) OR ((waiting_seconds >= 0) AND (status = 'ready'::text) AND (solver = 'optimiser'::text))))
 index wms.plan plan_fingerprint_idx CREATE INDEX plan_fingerprint_idx ON wms.plan USING btree (company_id, fingerprint)
 index wms.plan plan_pkey CREATE UNIQUE INDEX plan_pkey ON wms.plan USING btree (id)
 index wms.plan plan_route_id_project_key CREATE UNIQUE INDEX plan_route_id_project_key ON wms.plan USING btree (company_id, project_id, route_id, id)
@@ -2333,6 +2347,8 @@ column wms.property 10 location extensions.geometry(Point,4326)
 column wms.property 11 notes text
 column wms.property 12 status text not-null
 column wms.property 13 driver_instructions text
+column wms.property 14 service_window_start time without time zone
+column wms.property 15 service_window_end time without time zone
 constraint wms.property property_company_id_fk FOREIGN KEY (company_id) REFERENCES wms.company(id)
 constraint wms.property property_kind_one_of CHECK ((kind = ANY (ARRAY['residential'::text, 'commercial'::text, 'public'::text, 'mixed'::text, 'other'::text])))
 constraint wms.property property_location_valid CHECK ((extensions.st_isvalid(location) AND (NOT extensions.st_isempty(location)) AND (extensions.st_xmin((location)::extensions.box3d) >= ('-180'::integer)::double precision) AND (extensions.st_xmax((location)::extensions.box3d) <= (180)::double precision) AND (extensions.st_ymin((location)::extensions.box3d) >= ('-90'::integer)::double precision) AND (extensions.st_ymax((location)::extensions.box3d) <= (90)::double precision)))
@@ -2340,6 +2356,7 @@ constraint wms.property property_pkey PRIMARY KEY (id)
 constraint wms.property property_project_id_fk FOREIGN KEY (company_id, project_id) REFERENCES wms.project(company_id, id)
 constraint wms.property property_project_id_name_key UNIQUE (company_id, project_id, name)
 constraint wms.property property_project_key UNIQUE (company_id, project_id, id)
+constraint wms.property property_service_window CHECK ((((service_window_start IS NULL) = (service_window_end IS NULL)) AND ((service_window_start IS NULL) OR (service_window_end > service_window_start))))
 constraint wms.property property_status_one_of CHECK ((status = ANY (ARRAY['active'::text, 'inactive'::text])))
 index wms.property property_pkey CREATE UNIQUE INDEX property_pkey ON wms.property USING btree (id)
 index wms.property property_project_id_name_key CREATE UNIQUE INDEX property_project_id_name_key ON wms.property USING btree (company_id, project_id, name)
@@ -4088,4 +4105,5 @@ journal 1792964774291 575d9404cde4feb3468d43c2645301f94e48b4960341cda4dc4d6d7b43
 journal 1793086298088 3aa024a0b1c207b537d4b52cc6c9c09f295500483b1bc53e66c27a5fa0ed1bf8
 journal 1793117570372 0cf12010a83bd55fbf734aea83b3699d1636d710d1cc52cd63b5b586441a72af
 journal 1793122833651 fddd34bf8e7c1eadc319cddcf6b5a274974e7993317a4fc32d01ed89ce216655
+journal 1793170257287 fe4887b13c628786077e50c76c7fce87c9bd6e03a7358bba59312768af19ffa1
 pgboss-version 42

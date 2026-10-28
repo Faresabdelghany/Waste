@@ -14,6 +14,7 @@ const progress = { planned: 28, completed: 10, skipped: 1, failed: 1, total: 40,
 
 /** A route whose stops take and weigh nothing known (O10 of #290). */
 const workload = { stopSeconds: 0, expectedKg: null, unexpectedStops: 0, capacityKg: null, overCapacityKg: null }
+const shift = { shift: null, startsAt: null, workSeconds: null, overShiftSeconds: null }
 const route = {
   id: ID,
   projectId: OTHER,
@@ -101,14 +102,14 @@ describe("Route", () => {
     assert.equal(labelMatches({ number: 1042, label: "RC-1042" }), true)
     assert.equal(labelMatches({ number: 1042, label: "RC-1043" }), false)
     assert.deepEqual(refusal(Route.safeParse({ ...route, label: "RC-1043" })), [{ path: "label", message: LABEL_IS_THE_NUMBER }])
-    assert.deepEqual(refusal(RouteDetail.safeParse({ ...route, label: "1042", pickups: [], activePlan: null, workload, session: null, sessions: [], unloads: [] })), [{ path: "label", message: LABEL_IS_THE_NUMBER }])
+    assert.deepEqual(refusal(RouteDetail.safeParse({ ...route, label: "1042", pickups: [], activePlan: null, workload, shift, session: null, sessions: [], unloads: [] })), [{ path: "label", message: LABEL_IS_THE_NUMBER }])
     assert.equal(Route.safeParse({ ...route, number: 0 }).success, false)
     assert.equal(Route.safeParse({ ...route, plannedStartTime: "06:30:00" }).success, false, "HH:MM, no seconds")
     assert.equal(Route.safeParse({ ...route, serviceDate: "2026-10-05T00:00:00Z" }).success, false, "a day, not an instant")
   })
 
   test("a detail carries the pickups by position, the open session, every session and the unloads; a live route its open session and three readings", () => {
-    const detail = { ...route, pickups: [pickup], activePlan: null, workload, session, sessions: [session], unloads: [] }
+    const detail = { ...route, pickups: [pickup], activePlan: null, workload, shift, session, sessions: [session], unloads: [] }
     assert.deepEqual(RouteDetail.parse(detail), detail)
     const extra = { ...pickup, id: THIRD, containerId: null, origin: "office", position: 2, note: "Re-collection of T-8831" }
     assert.deepEqual(RouteDetail.parse({ ...detail, pickups: [pickup, extra] }), { ...detail, pickups: [pickup, extra] }, "an address-only stop the office added sits beside the generated ones (#111)")
@@ -122,10 +123,10 @@ describe("Route", () => {
 
   test("a listed route carries its active Plan's reading, or null, and holds the label to the number like the rest (#173)", () => {
     const activePlan = { id: OTHER, solver: "manual", status: "calculating", trip: "full", distanceMetres: null, durationSeconds: null, stale: false, deferredUntil: "2026-10-05T09:00:30.000Z" }
-    assert.deepEqual(RouteListItem.parse({ ...route, activePlan, workload }), { ...route, activePlan, workload })
-    assert.deepEqual(RouteListItem.parse({ ...route, activePlan: null, workload }), { ...route, activePlan: null, workload })
+    assert.deepEqual(RouteListItem.parse({ ...route, activePlan, workload, shift }), { ...route, activePlan, workload, shift })
+    assert.deepEqual(RouteListItem.parse({ ...route, activePlan: null, workload, shift }), { ...route, activePlan: null, workload, shift })
     assert.equal(RouteListItem.safeParse({ ...route, workload }).success, false, "the reading is there, null or not")
-    assert.deepEqual(refusal(RouteListItem.safeParse({ ...route, label: "RC-1043", activePlan: null, workload })), [{ path: "label", message: LABEL_IS_THE_NUMBER }])
+    assert.deepEqual(refusal(RouteListItem.safeParse({ ...route, label: "RC-1043", activePlan: null, workload, shift })), [{ path: "label", message: LABEL_IS_THE_NUMBER }])
   })
 
   test("a listed or detailed route carries its workload (O10 of #290): the stop time and the expected load against a payload, unknowns null", () => {

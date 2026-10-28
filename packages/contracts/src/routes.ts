@@ -23,6 +23,7 @@
 // (`LiveRoute`) is a route with its open session and three readings — the
 // latest point a proof carried, when the device was last seen, whether it is
 // paused — for the dashboard, paged like every list.
+import type { RouteShift as DomainRouteShift } from "@waste/domain/execution/shift"
 import type { RouteWorkload as DomainRouteWorkload } from "@waste/domain/execution/workload"
 import * as z from "zod"
 
@@ -35,6 +36,7 @@ import { ActivePlan } from "./plans"
 import { dayWindowIsOrdered, dayWindowOrdered, ProjectScopedListQuery } from "./queries"
 import { changesSomething, eachOnce, eachOnceSentence, NonNegativeInt, PositiveInt, somethingToChange, stamped } from "./resource"
 import { Session } from "./sessions"
+import { DriverShift } from "./shifts"
 import { Paragraph } from "./text"
 import { Unload } from "./unloads"
 
@@ -133,6 +135,27 @@ export const RouteWorkload = z.object({
 export type RouteWorkload = z.infer<typeof RouteWorkload>
 
 /**
+ * A route's day against its planned driver's shift (O14 of #290), the
+ * over-shift verdict read on the server: the route leaves at its planned
+ * start, or the shift's start without one, and works the active Plan's
+ * drive, the waiting its windows made, the stop time and the break. A route
+ * too long for its shift is still ordered — the shift's end is never the
+ * optimiser's bound — and told here how far it runs over. The domain's
+ * `RouteShift` is the shape, and this is held to it.
+ */
+export const RouteShift = z.object({
+  /** The planned driver's shift, or null for a route with no driver or a driver with no shift on record. */
+  shift: DriverShift.nullable(),
+  /** When the route leaves: its planned start, the shift's start without one; null where neither says. */
+  startsAt: IsoTime.nullable(),
+  /** The working time it plans: drive, waiting, stop time and break; null without a measured Plan. */
+  workSeconds: NonNegativeInt.nullable(),
+  /** How far it runs outside the shift, before its start or past its end, 0 within it; null without a shift or a measured Plan. */
+  overShiftSeconds: NonNegativeInt.nullable(),
+}) satisfies z.ZodType<DomainRouteShift>
+export type RouteShift = z.infer<typeof RouteShift>
+
+/**
  * A route as `GET /routes` lists it: with its active Plan's reading, the way
  * the live list carries it (#173), so a map or a list drawn over the page
  * reads every per-route sentence of #132 §5 — Not measured, Measuring…,
@@ -146,6 +169,8 @@ export const RouteListItem = z
     activePlan: ActivePlan.nullable(),
     /** What its stops take and weigh (O10 of #290). */
     workload: RouteWorkload,
+    /** Its day against its planned driver's shift (O14 of #290). */
+    shift: RouteShift,
   })
   .refine(labelMatches, labelIsTheNumber)
 export type RouteListItem = z.infer<typeof RouteListItem>
@@ -160,6 +185,8 @@ export const RouteDetail = z
     activePlan: ActivePlan.nullable(),
     /** What its stops take and weigh (O10 of #290). */
     workload: RouteWorkload,
+    /** Its day against its planned driver's shift (O14 of #290). */
+    shift: RouteShift,
     /** The open session, or null. */
     session: Session.nullable(),
     /** Every session, oldest first. */

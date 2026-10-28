@@ -14,9 +14,11 @@ import type { Position2D } from "@waste/contracts/geojson"
 import { createDb, type Database, type Tx } from "@waste/db/client"
 import { ROUTING_MEASURE_QUEUE, ROUTING_OPTIMISE_QUEUE, routingSendOptions, type RoutingJobData } from "@waste/db/commands/plans"
 import { migrateDatabase } from "@waste/db/migrate"
+import { agreement } from "@waste/db/schema/agreements"
 import { containerType } from "@waste/db/schema/catalogue"
 import { property } from "@waste/db/schema/customers"
 import { route } from "@waste/db/schema/execution"
+import { driver } from "@waste/db/schema/fleet"
 import { depot, unloadingStation } from "@waste/db/schema/places"
 import { plan, planLeg, planStop, routingQuota } from "@waste/db/schema/routing"
 import { PGBOSS_SCHEMA } from "@waste/db/sql/pgboss"
@@ -374,6 +376,62 @@ describe("routing's jobs under the quota engine", { skip: roles.skip }, () => {
         )
       } finally {
         await typed(null)
+      }
+    })
+
+    test("sends each stop's window — its property's hours where they meet its agreement's — the departure and the driver's break, and writes the waiting on the ready Plan (O14 of #290)", async () => {
+      const sent: OptimiseRequest[] = []
+      const fake = new FakeProvider()
+      const recording: RoutingProvider = {
+        name: fake.name,
+        maxWaypoints: fake.maxWaypoints,
+        measure: (request) => fake.measure(request),
+        optimise: (request: OptimiseRequest) => {
+          sent.push(request)
+          return fake.optimise(request)
+        },
+      }
+      const timed = (values: { property: [string, string] | null; agreement: [string, string] | null; shift: boolean }) =>
+        withCompany(api.db, tenant.companyId, async (tx: Tx) => {
+          await tx
+            .update(property)
+            .set({ serviceWindowStart: values.property?.[0] ?? null, serviceWindowEnd: values.property?.[1] ?? null })
+            .where(eq(property.id, tenant.properties.parkvej.id))
+          await tx
+            .update(agreement)
+            .set({ serviceWindowStart: values.agreement?.[0] ?? null, serviceWindowEnd: values.agreement?.[1] ?? null })
+            .where(eq(agreement.id, tenant.agreementId))
+          await tx
+            .update(driver)
+            .set(values.shift ? { shiftStart: "07:00", shiftEnd: "15:00", breakMinutes: 30, breakWindowStart: "11:00", breakWindowEnd: "12:30" } : { shiftStart: null, shiftEnd: null, breakMinutes: null, breakWindowStart: null, breakWindowEnd: null })
+            .where(eq(driver.id, tenant.driverId))
+        })
+      try {
+        // Parkvej opens 08:00–12:00 and AGR-1, which BIN-1 serves under there, promises 09:00–14:00: BIN-1 is served 09:00–12:00; BIN-2 at Havnegade any time.
+        await timed({ property: ["08:00", "12:00"], agreement: ["09:00", "14:00"], shift: true })
+        const { engine } = engineOf({}, recording)
+        const seeded = await routeWith("depot")
+        await withCompany(api.db, tenant.companyId, (tx: Tx) => tx.update(route).set({ plannedStartTime: "07:00" }).where(eq(route.id, seeded.id)))
+        const planId = await planOf(seeded, "optimiser", "stops-only")
+        await routingOptimise.handler([await inHand(ROUTING_OPTIMISE_QUEUE, planId)], contextOf(engine))
+        assert.deepEqual(sent.at(-1)?.timeWindows, [null, [32_400, 43_200]])
+        assert.equal(sent.at(-1)?.departure, 25_200)
+        assert.deepEqual(sent.at(-1)?.breaks, [{ seconds: 1_800, window: [39_600, 45_000] }])
+        const solved = await planRow(planId)
+        assert.deepEqual([solved.status, solved.waitingSeconds], ["ready", 0], "the fake waits for nothing")
+
+        // The two never overlap: no time of the day serves BIN-1, and the Plan fails saying so without a call.
+        await timed({ property: ["08:00", "12:00"], agreement: ["13:00", "14:00"], shift: false })
+        const calls = sent.length
+        const disjoint = await routeWith("depot")
+        const failing = await planOf(disjoint, "optimiser", "stops-only")
+        await routingOptimise.handler([await inHand(ROUTING_OPTIMISE_QUEUE, failing)], contextOf(engine))
+        const failed = await planRow(failing)
+        assert.equal(failed.status, "failed")
+        assert.match(failed.failureReason ?? "", /stop 2's property hours and its agreement's window never overlap/)
+        assert.equal(sent.length, calls, "no call spent")
+      } finally {
+        await timed({ property: null, agreement: null, shift: false })
       }
     })
 

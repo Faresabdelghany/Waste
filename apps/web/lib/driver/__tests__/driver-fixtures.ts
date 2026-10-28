@@ -106,6 +106,7 @@ export function driverMe(overrides: Partial<DriverMe> = {}): DriverMe {
       userAccountId: "01950000-0000-7000-8000-000000000401",
       status: "active",
       notes: null,
+      shift: null,
     },
     openSession: null,
     routes: [route()],

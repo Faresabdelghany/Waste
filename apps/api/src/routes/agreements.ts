@@ -104,6 +104,7 @@ import { created, describeCreated, describeJson, IdParam, lockRow, lockRows, ref
 import type { ClockOptions } from "./scheme-groups"
 import { askRuns, stopsLeft } from "./service-ends"
 import { placeOf, refuseInactiveCustomer, refuseUnofferedProduct, refuseUnservedPlace, type Party } from "./statuses"
+import { serviceWindowOf, serviceWindowValues } from "./time-windows"
 
 const MODULE = "customers.agreements"
 const AgreementPage = Page(Agreement)
@@ -121,6 +122,8 @@ const columns = {
   notes: agreement.notes,
   // The list the agreement is priced under (Issue #112): read here; the create and the patch hold it to a list of the project in the agreement's currency.
   priceListId: agreement.priceListId,
+  serviceWindowStart: agreement.serviceWindowStart,
+  serviceWindowEnd: agreement.serviceWindowEnd,
   validFrom: agreement.validFrom,
   validTo: agreement.validTo,
   createdAt: agreement.createdAt,
@@ -142,6 +145,7 @@ function agreementOf(row: Row): Agreement {
     currency: row.currency,
     notes: row.notes,
     priceListId: row.priceListId,
+    serviceWindow: serviceWindowOf(row),
     validFrom: row.validFrom,
     validTo: row.validTo,
     ...stampsOf(row),
@@ -309,7 +313,8 @@ async function requireAgreementList(tx: Tx, within: Scope, priceListId: string |
 // is the caller's to have checked.
 
 /** Writes an agreement in one of the caller's projects. */
-export async function createAgreement(tx: Tx, principal: Principal, values: AgreementCreate): Promise<Agreement> {
+export async function createAgreement(tx: Tx, principal: Principal, body: AgreementCreate): Promise<Agreement> {
+  const { serviceWindow, ...values } = body
   requireProject(principal, values.projectId)
   const parties = await partyStatuses(tx, principal.companyId, values.customerId, values.payerCustomerId)
   await requireAgreementList(tx, { companyId: principal.companyId, projectId: values.projectId }, values.priceListId, values.currency)
@@ -317,14 +322,15 @@ export async function createAgreement(tx: Tx, principal: Principal, values: Agre
   const [row] = await refuseOverlap({ [NUMBER_RUNNING]: numberRunning(values.number) }, () =>
     tx
       .insert(agreement)
-      .values({ ...values, id: newId(), companyId: principal.companyId })
+      .values({ ...values, ...serviceWindowValues(serviceWindow), id: newId(), companyId: principal.companyId })
       .returning(columns),
   )
   return agreementOf(row)
 }
 
 /** Amends one agreement of the caller's projects; a 404 for one they do not reach. */
-export async function patchAgreement(tx: Tx, principal: Principal, id: string, patch: AgreementPatch): Promise<Agreement> {
+export async function patchAgreement(tx: Tx, principal: Principal, id: string, body: AgreementPatch): Promise<Agreement> {
+  const { serviceWindow, ...patch } = body
   // The row this patch counts children against, locked before it is
   // read: a shortening and a subscription being added to it are the
   // two halves of one rule, and they serialise here (routes/shared.ts).
@@ -353,7 +359,7 @@ export async function patchAgreement(tx: Tx, principal: Principal, id: string, p
   const [row] = await refuseOverlap({ [NUMBER_RUNNING]: numberRunning(patch.number ?? current.number) }, () =>
     tx
       .update(agreement)
-      .set(patch)
+      .set({ ...patch, ...serviceWindowValues(serviceWindow) })
       .where(and(scope(principal), eq(agreement.id, id)))
       .returning(columns),
   )

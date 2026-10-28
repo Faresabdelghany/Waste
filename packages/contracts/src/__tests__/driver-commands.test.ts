@@ -208,7 +208,7 @@ describe("what the door answers and stores", () => {
   })
 
   test("the driver's start screen is the profile, the open session, today's routes and what a start and an unload pick from", () => {
-    const driver = { id: OTHER, projectId: OTHER, name: "Mads Jensen", workforceReference: null, employment: "employee", serviceProviderId: null, homeDepotId: null, licenceClass: "ce", licenceNumber: null, licenceExpiry: null, userAccountId: ID, status: "active", notes: null, ...STAMPS }
+    const driver = { id: OTHER, projectId: OTHER, name: "Mads Jensen", workforceReference: null, employment: "employee", serviceProviderId: null, homeDepotId: null, licenceClass: "ce", licenceNumber: null, licenceExpiry: null, userAccountId: ID, status: "active", notes: null, shift: null, ...STAMPS }
     const vehicles = [
       { id: ID, label: "WH-24", kind: "powered-vehicle", requiredLicenceClass: "c" },
       { id: THIRD, label: "CN 90 112", kind: "trailer", requiredLicenceClass: "b" },

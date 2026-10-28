@@ -59,6 +59,17 @@ export type OptimiseRequest = {
    * change the order; they are its arrival times', and a leg is still the drive.
    */
   serviceSeconds?: readonly number[]
+  /**
+   * Each stop's window (O14 of #290), by its index into `stops`: the seconds
+   * from the operating date's midnight its service may start between, or null
+   * for a stop any time serves. Hard: a stop no order can reach inside its
+   * window is left unassigned, and the call refused.
+   */
+  timeWindows?: readonly (readonly [number, number] | null)[]
+  /** When the vehicle leaves the depot, seconds from the operating date's midnight; the solver's own clock from zero where absent. */
+  departure?: number | null
+  /** The driver's breaks (O14 of #290): so many seconds taken inside a window of the day. The shift's end is never a bound, so a route too long for it is still ordered. */
+  breaks?: readonly { seconds: number; window: readonly [number, number] }[]
   /** The unloading station, visited after every stop and before the return (#124 §3), when the Route names one. */
   station?: Position2D | null
 }
@@ -68,6 +79,8 @@ export type OptimiseResult = {
   order: number[]
   /** The closed trip's legs — depot, the stops in `order`, the station where given, back to the depot — one per consecutive pair of distinct points, so two stops at one address span no leg. */
   legs: RoutedLeg[]
+  /** Seconds the order waits for a stop's or a break's window to open (O14 of #290), the station's device never counted; 0 where nothing waits. */
+  waitingSeconds: number
   provenance: Provenance
 }
 
