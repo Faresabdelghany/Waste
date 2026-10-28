@@ -123,11 +123,9 @@ import { sameSeasons, storedSeasonsOf, writeSeasons } from "./scheme-seasons"
 import {
   findScheme,
   fleetOf,
-  generationsOf,
   groupsOf,
   MODULE,
   mergeReferences,
-  NEVER_GENERATED,
   noSuchScheme,
   pickOf,
   referencesOf,
@@ -141,7 +139,6 @@ import {
   SCHEME_NAME_IN_FORCE,
   SCHEME_NAME_IN_FORCE_SENTENCE,
   schemeColumns,
-  schemeOf,
   schemeScope,
   schemesOf,
   schemeWithGroups,
@@ -216,7 +213,7 @@ export function routeSchemeRoutes(guard: MiddlewareHandler<AuthEnv>, { now = () 
           .limit(fetchLimit(limit))
         // Paged first, so the row that only proves there is a next page is not one whose groups are loaded.
         const { items, nextCursor } = pageOf(rows, limit)
-        return c.json({ items: await schemesOf(tx, principal.companyId, items), nextCursor })
+        return c.json({ items: await schemesOf(tx, principal.companyId, items, now), nextCursor })
       },
     )
     .post(
@@ -308,7 +305,7 @@ export function routeSchemeRoutes(guard: MiddlewareHandler<AuthEnv>, { now = () 
           groups.map((group, n) => ({ id: group.id, rule: asked[n].rule, containerIds: asked[n].containerIds })),
         )
         await writeSeasons(tx, scope, schemeId, seasons, { replacing: false })
-        return created(c, "/route-schemes", await schemeWithGroups(tx, principal.companyId, row))
+        return created(c, "/route-schemes", await schemeWithGroups(tx, principal.companyId, row, now))
       },
     )
     .get(
@@ -336,7 +333,7 @@ export function routeSchemeRoutes(guard: MiddlewareHandler<AuthEnv>, { now = () 
         const principal = c.get("principal")
         const row = await findScheme(tx, principal, id)
         if (row === undefined) throw noSuchScheme(id)
-        return c.json(await schemeWithGroups(tx, principal.companyId, row))
+        return c.json(await schemeWithGroups(tx, principal.companyId, row, now))
       },
     )
     .patch(
@@ -428,9 +425,8 @@ export function routeSchemeRoutes(guard: MiddlewareHandler<AuthEnv>, { now = () 
         }
         // A set restated as it stands writes nothing, so the audit trail records only a change.
         if (seasons !== undefined && !sameSeasons(seasons, storedSeasons)) await writeSeasons(tx, scope, id, seasons, { replacing: true })
-        if (edit === undefined) return c.json(schemeOf(row, groups, (await generationsOf(tx, principal.companyId, new Map([[id, groups]]))).get(id) ?? NEVER_GENERATED, seasonsLeft))
-        await writeGroupEdit(tx, scope, id, edit)
-        return c.json(await schemeWithGroups(tx, principal.companyId, row))
+        if (edit !== undefined) await writeGroupEdit(tx, scope, id, edit)
+        return c.json(await schemeWithGroups(tx, principal.companyId, row, now))
       },
     )
     .get(

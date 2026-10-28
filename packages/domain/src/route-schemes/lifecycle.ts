@@ -27,7 +27,6 @@ import {
   type GenerationMatches,
 } from "./container-drift"
 import {
-  collectionGroupContainerIds,
   schemeAssignmentSources,
   schemeGroupPlans,
   schemeStopRuleSources,
@@ -37,9 +36,9 @@ import { vehicleTypeOfRecord } from "./matching"
 import { isIsoDate, recurrenceFromValues, serviceDaysFromValues } from "./recurrence"
 import {
   allocationConflictSources,
+  servedFrequencyPromises,
   stringValue,
   validateScheme,
-  type SchemeFrequencyPromise,
   type SchemeValidationResult,
 } from "./validation"
 
@@ -245,6 +244,27 @@ export type SchemeLiveAssessment = {
 }
 
 /**
+ * Where a scheme read from the API carries the warnings the API judged it by
+ * (O22 of #290), a JSON array of sentences: the cadence against the
+ * containers' promised service frequencies, read from the API's
+ * `service_frequency` intervals. A record carrying it is not reconciled in
+ * the browser; its warnings are the API's.
+ */
+export const SCHEME_API_WARNINGS_KEY = "apiWarnings"
+
+/** The API's warnings a record carries, or null for a record the API did not answer (fixture mode). */
+export function schemeApiWarnings(values: Record<string, string | boolean | undefined> | undefined): string[] | null {
+  const stored = values?.[SCHEME_API_WARNINGS_KEY]
+  if (typeof stored !== "string") return null
+  try {
+    const parsed: unknown = JSON.parse(stored)
+    return Array.isArray(parsed) ? parsed.filter((warning): warning is string => typeof warning === "string") : null
+  } catch {
+    return null
+  }
+}
+
+/**
  * Re-runs validateScheme against a stored record's canonical configuration
  * plus the current related records — the record-side counterpart of the
  * wizard's validateGuidedScheme, sharing every check (FR-5 blocking issues,
@@ -267,11 +287,8 @@ export function schemeLiveAssessment(
   // The record's collection groups (implicit or explicit) resolved per day —
   // the same seam generation reads, so validation and generation agree.
   const { groups, resolution } = schemeGroupPlans(record, serviceDays, containers)
-  const linkedContainerIds = new Set(collectionGroupContainerIds(resolution))
-  const promises = containers
-    .filter((container) => linkedContainerIds.has(container.id))
-    .map((container) => schemeFrequencyPromiseOfRecord(container))
-    .filter((promise): promise is SchemeFrequencyPromise => promise !== null)
+  // A scheme the API answered is reconciled by the API, against its own intervals.
+  const apiWarnings = schemeApiWarnings(values)
 
   const otherSchemes = schemesInPlanning(related.schemes).filter(
     (candidate) => candidate.id !== record.id,
@@ -283,7 +300,14 @@ export function schemeLiveAssessment(
       effectiveTo: recurrence.effectiveTo,
       areaId: stringValue(values, "planningAreaId"),
       schemeId: record.id,
-      frequencyReconciliation: { frequency: recurrence.frequency, promises },
+      ...(apiWarnings === null
+        ? {
+            frequencyReconciliation: {
+              frequency: recurrence.frequency,
+              promises: servedFrequencyPromises(resolution.plans, containers, schemeFrequencyPromiseOfRecord),
+            },
+          }
+        : {}),
       ...schemeValidationGroups(
         groups,
         resolution,
@@ -300,7 +324,7 @@ export function schemeLiveAssessment(
   )
   const history = generationMatchHistoryOf(values)
   return {
-    validation,
+    validation: apiWarnings === null ? validation : { ...validation, warnings: [...validation.warnings, ...apiWarnings] },
     containerDrift: containerDriftBetween(history.previous, history.last, groups),
   }
 }

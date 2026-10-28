@@ -1,7 +1,7 @@
 // A Route Scheme's Seasons (O17 of #290) as drizzle-kit writes them: one new
 // table, the scheme's set, with its cadence held to the season vocabulary,
 // its rotation to every-2-weeks, its two month-days to days every year has
-// and apart from each other. Then migration 0055, which is exactly those
+// and apart from each other. Then migration 0056, which is exactly those
 // statements, then what the table owes the file by migrations/README.md: its
 // fence and trigger, its audit trail as its scheme's set
 // (`SEASONS_AUDITED`), and the public door's grant and policy, since the
@@ -23,11 +23,11 @@ import { SEASONS_DOOR, seasonsDoorStatements } from "../sql/public-door"
 import { checksOf, list, ref } from "./rendering"
 import { statementsBetween } from "./specimen"
 
-const MIGRATION = "0055_seasonal_frequencies.sql"
+const MIGRATION = "0056_seasonal_frequencies.sql"
 
 const referenced = { company, project, routeScheme }
 
-/** What drizzle-kit writes for 0055: the one table. */
+/** What drizzle-kit writes for 0056: the one table. */
 const generated = (): Promise<string[]> => statementsBetween(referenced, { ...referenced, routeSchemeSeason })
 
 /** What the table owes the file below drizzle-kit's statements: its fence and trigger, its audit trail, then the public door's grant and policy. */
@@ -60,7 +60,7 @@ describe("the seasons as drizzle-kit writes them", () => {
   })
 })
 
-describe("migration 0055", () => {
+describe("migration 0056", () => {
   test("begins with exactly what drizzle-kit generates for it", async () => {
     const statements = await fileStatements()
     const head = (await generated()).map(normalised)

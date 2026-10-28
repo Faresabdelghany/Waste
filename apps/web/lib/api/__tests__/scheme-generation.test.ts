@@ -54,6 +54,7 @@ const central: RouteScheme = {
   collectionGroups: [],
   seasons: [],
   generation: { lastGeneratedAt: null, groups: [] },
+  warnings: [],
   validFrom: "2026-06-01",
   validTo: null,
 }

@@ -663,6 +663,32 @@ describe("generation against a migrated database", { skip }, () => {
     assert.deepEqual(await officeOf(adHoc.id), [adHocStop])
   })
 
+  test("a stop the office moved to another route (O23 of #290) stays moved: the route it left keeps it taken off, the route it joined keeps it as the office's, and neither is held", async () => {
+    const scoped = { companyId: a.company, projectId: a.project }
+    // The week as a run leaves it; a second run writes nothing where the earlier tests ran one.
+    assert.equal((await generateA()).run.status, "succeeded")
+    const routes = await routesOfA()
+    const monday = routes.find((row) => row.serviceDate === "2026-10-05")
+    const thursday = routes.find((row) => row.serviceDate === "2026-10-08")
+    assert.ok(monday && thursday, "the Monday's and the Thursday's routes, planned and the scheme's")
+    // What POST /routes/:id/move-stops writes: bin 1 taken off the Monday's route, saying where it went, and the office's stop of it put on the Thursday's — whose own plan holds bin 1 too.
+    const [taken] = await ownerPool.db
+      .update(pickup)
+      .set({ status: "skipped", reason: "removed-by-dispatcher", note: "Moved to route RC-9001", outcomeAt: NOW })
+      .where(and(eq(pickup.routeId, monday.id), eq(pickup.containerId, a.bin1), eq(pickup.origin, "generation")))
+      .returning()
+    assert.ok(taken, "the Monday's stop of bin 1")
+    await ownerPool.db.insert(pickup).values({ ...scoped, routeId: thursday.id, containerId: a.bin1, position: 9, origin: "office", propertyId: a.parkvej, wasteFractionId: a.wasteFraction })
+    const before = { monday: await pickupsOf(monday.id), thursday: await pickupsOf(thursday.id) }
+
+    const refresh = await generateA()
+    assert.equal(refresh.run.status, "succeeded")
+    assert.deepEqual(await pickupsOf(monday.id), before.monday, "the stop taken off is not brought back")
+    assert.deepEqual(await pickupsOf(thursday.id), before.thursday, "the office's stop is neither skipped nor planned a second time")
+    const [mondayRow, thursdayRow] = await Promise.all([monday, thursday].map(async (row) => (await ownerPool.db.select().from(route).where(eq(route.id, row.id)))[0]))
+    assert.deepEqual([mondayRow.heldAt, thursdayRow.heldAt], [null, null], "a move holds nothing")
+  })
+
   test("a draft scheme generates nothing and says so on the run; a run already succeeded is not run again; a validated scheme with a rule group and no planning area warns", async () => {
     const draftRun = await runFor(a.draftScheme, a.company, a.project, WEEK)
     const draft = await runGeneration({ generationRunId: draftRun, companyId: a.company }, "job-1", context())

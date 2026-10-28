@@ -7,7 +7,6 @@
 import type { BusinessRecord } from "../prototype-record"
 import { schemeFrequencyPromiseOfRecord } from "../service-frequencies"
 import {
-  collectionGroupContainerIds,
   flattenGroupPlans,
   resolveCollectionGroupPlans,
   schemeAssignmentSources,
@@ -24,10 +23,10 @@ import { isIsoDate, occurrencesPerWeek, type SchemeRecurrence } from "./recurren
 import {
   allocationConflictSources,
   recurrenceIssues,
+  servedFrequencyPromises,
   validateScheme,
   type RecurrenceIssue,
   type SchemeDayPlan,
-  type SchemeFrequencyPromise,
   type SchemeValidationResult,
 } from "./validation"
 
@@ -112,11 +111,7 @@ export function validateGuidedScheme(
   // filter the edit path's schemeLiveValidation applies.
   const siblings = schemesInPlanning(existingSchemes)
   const resolution = resolvedDraftGroups(data, containers)
-  const linkedContainerIds = new Set(collectionGroupContainerIds(resolution))
-  const promises = containers
-    .filter((container) => linkedContainerIds.has(container.id))
-    .map((container) => schemeFrequencyPromiseOfRecord(container))
-    .filter((promise): promise is SchemeFrequencyPromise => promise !== null)
+  const promises = servedFrequencyPromises(resolution.plans, containers, schemeFrequencyPromiseOfRecord)
   const result = validateScheme(
     {
       serviceDays: data.serviceDays,

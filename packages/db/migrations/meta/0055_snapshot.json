@@ -1,5 +1,5 @@
 {
-  "id": "4426ccf6-e944-436c-abde-7849d064c8ac",
+  "id": "c9689cc8-ce06-4090-bf75-e982cde3fb04",
   "prevId": "9083503d-bb00-4bf1-8c7f-022e8c79b638",
   "version": "7",
   "dialect": "postgresql",
@@ -6060,194 +6060,6 @@
       },
       "isRLSEnabled": false
     },
-    "wms.route_scheme_season": {
-      "name": "route_scheme_season",
-      "schema": "wms",
-      "columns": {
-        "id": {
-          "name": "id",
-          "type": "uuid",
-          "primaryKey": true,
-          "notNull": true,
-          "default": "wms.uuidv7()"
-        },
-        "company_id": {
-          "name": "company_id",
-          "type": "uuid",
-          "primaryKey": false,
-          "notNull": true
-        },
-        "project_id": {
-          "name": "project_id",
-          "type": "uuid",
-          "primaryKey": false,
-          "notNull": true
-        },
-        "created_at": {
-          "name": "created_at",
-          "type": "timestamp with time zone",
-          "primaryKey": false,
-          "notNull": true,
-          "default": "now()"
-        },
-        "updated_at": {
-          "name": "updated_at",
-          "type": "timestamp with time zone",
-          "primaryKey": false,
-          "notNull": true,
-          "default": "now()"
-        },
-        "route_scheme_id": {
-          "name": "route_scheme_id",
-          "type": "uuid",
-          "primaryKey": false,
-          "notNull": true
-        },
-        "name": {
-          "name": "name",
-          "type": "text",
-          "primaryKey": false,
-          "notNull": true
-        },
-        "starts_on": {
-          "name": "starts_on",
-          "type": "text",
-          "primaryKey": false,
-          "notNull": true
-        },
-        "ends_on": {
-          "name": "ends_on",
-          "type": "text",
-          "primaryKey": false,
-          "notNull": true
-        },
-        "frequency": {
-          "name": "frequency",
-          "type": "text",
-          "primaryKey": false,
-          "notNull": true
-        },
-        "week_rotation": {
-          "name": "week_rotation",
-          "type": "text",
-          "primaryKey": false,
-          "notNull": false
-        }
-      },
-      "indexes": {
-        "route_scheme_season_project_id_idx": {
-          "name": "route_scheme_season_project_id_idx",
-          "columns": [
-            {
-              "expression": "company_id",
-              "isExpression": false,
-              "asc": true,
-              "nulls": "last"
-            },
-            {
-              "expression": "project_id",
-              "isExpression": false,
-              "asc": true,
-              "nulls": "last"
-            }
-          ],
-          "isUnique": false,
-          "concurrently": false,
-          "method": "btree",
-          "with": {}
-        }
-      },
-      "foreignKeys": {
-        "route_scheme_season_company_id_fk": {
-          "name": "route_scheme_season_company_id_fk",
-          "tableFrom": "route_scheme_season",
-          "tableTo": "company",
-          "schemaTo": "wms",
-          "columnsFrom": [
-            "company_id"
-          ],
-          "columnsTo": [
-            "id"
-          ],
-          "onDelete": "no action",
-          "onUpdate": "no action"
-        },
-        "route_scheme_season_project_id_fk": {
-          "name": "route_scheme_season_project_id_fk",
-          "tableFrom": "route_scheme_season",
-          "tableTo": "project",
-          "schemaTo": "wms",
-          "columnsFrom": [
-            "company_id",
-            "project_id"
-          ],
-          "columnsTo": [
-            "company_id",
-            "id"
-          ],
-          "onDelete": "no action",
-          "onUpdate": "no action"
-        },
-        "route_scheme_season_route_scheme_id_fk": {
-          "name": "route_scheme_season_route_scheme_id_fk",
-          "tableFrom": "route_scheme_season",
-          "tableTo": "route_scheme",
-          "schemaTo": "wms",
-          "columnsFrom": [
-            "company_id",
-            "project_id",
-            "route_scheme_id"
-          ],
-          "columnsTo": [
-            "company_id",
-            "project_id",
-            "id"
-          ],
-          "onDelete": "no action",
-          "onUpdate": "no action"
-        }
-      },
-      "compositePrimaryKeys": {},
-      "uniqueConstraints": {
-        "route_scheme_season_route_scheme_id_name_key": {
-          "name": "route_scheme_season_route_scheme_id_name_key",
-          "nullsNotDistinct": false,
-          "columns": [
-            "company_id",
-            "route_scheme_id",
-            "name"
-          ]
-        }
-      },
-      "policies": {},
-      "checkConstraints": {
-        "route_scheme_season_frequency_one_of": {
-          "name": "route_scheme_season_frequency_one_of",
-          "value": "\"wms\".\"route_scheme_season\".\"frequency\" in ('weekly', 'every-2-weeks', 'every-3-weeks', 'every-4-weeks', 'monthly')"
-        },
-        "route_scheme_season_week_rotation_one_of": {
-          "name": "route_scheme_season_week_rotation_one_of",
-          "value": "\"wms\".\"route_scheme_season\".\"week_rotation\" in ('odd', 'even')"
-        },
-        "route_scheme_season_starts_on_shape": {
-          "name": "route_scheme_season_starts_on_shape",
-          "value": "\"wms\".\"route_scheme_season\".\"starts_on\" ~ '^((01|03|05|07|08|10|12)-(0[1-9]|[12][0-9]|3[01])|(04|06|09|11)-(0[1-9]|[12][0-9]|30)|02-(0[1-9]|1[0-9]|2[0-8]))$'"
-        },
-        "route_scheme_season_ends_on_shape": {
-          "name": "route_scheme_season_ends_on_shape",
-          "value": "\"wms\".\"route_scheme_season\".\"ends_on\" ~ '^((01|03|05|07|08|10|12)-(0[1-9]|[12][0-9]|3[01])|(04|06|09|11)-(0[1-9]|[12][0-9]|30)|02-(0[1-9]|1[0-9]|2[0-8]))$'"
-        },
-        "route_scheme_season_span": {
-          "name": "route_scheme_season_span",
-          "value": "\"wms\".\"route_scheme_season\".\"starts_on\" <> \"wms\".\"route_scheme_season\".\"ends_on\""
-        },
-        "route_scheme_season_week_rotation_shape": {
-          "name": "route_scheme_season_week_rotation_shape",
-          "value": "(\"wms\".\"route_scheme_season\".\"frequency\" = 'every-2-weeks') = (\"wms\".\"route_scheme_season\".\"week_rotation\" is not null)"
-        }
-      },
-      "isRLSEnabled": false
-    },
     "wms.container_type_vehicle_type": {
       "name": "container_type_vehicle_type",
       "schema": "wms",
@@ -10483,6 +10295,18 @@
           "type": "uuid",
           "primaryKey": false,
           "notNull": false
+        },
+        "moved_from_route_id": {
+          "name": "moved_from_route_id",
+          "type": "uuid",
+          "primaryKey": false,
+          "notNull": false
+        },
+        "moved_from_pickup_id": {
+          "name": "moved_from_pickup_id",
+          "type": "uuid",
+          "primaryKey": false,
+          "notNull": false
         }
       },
       "indexes": {
@@ -10816,6 +10640,55 @@
           "concurrently": false,
           "method": "btree",
           "with": {}
+        },
+        "pickup_moved_from_pickup_id_key": {
+          "name": "pickup_moved_from_pickup_id_key",
+          "columns": [
+            {
+              "expression": "company_id",
+              "isExpression": false,
+              "asc": true,
+              "nulls": "last"
+            },
+            {
+              "expression": "moved_from_pickup_id",
+              "isExpression": false,
+              "asc": true,
+              "nulls": "last"
+            }
+          ],
+          "isUnique": true,
+          "where": "\"wms\".\"pickup\".\"moved_from_pickup_id\" is not null",
+          "concurrently": false,
+          "method": "btree",
+          "with": {}
+        },
+        "pickup_moved_from_route_id_moved_from_pickup_id_idx": {
+          "name": "pickup_moved_from_route_id_moved_from_pickup_id_idx",
+          "columns": [
+            {
+              "expression": "company_id",
+              "isExpression": false,
+              "asc": true,
+              "nulls": "last"
+            },
+            {
+              "expression": "moved_from_route_id",
+              "isExpression": false,
+              "asc": true,
+              "nulls": "last"
+            },
+            {
+              "expression": "moved_from_pickup_id",
+              "isExpression": false,
+              "asc": true,
+              "nulls": "last"
+            }
+          ],
+          "isUnique": false,
+          "concurrently": false,
+          "method": "btree",
+          "with": {}
         }
       },
       "foreignKeys": {
@@ -11024,6 +10897,26 @@
           ],
           "onDelete": "no action",
           "onUpdate": "no action"
+        },
+        "pickup_moved_from_route_id_moved_from_pickup_id_fk": {
+          "name": "pickup_moved_from_route_id_moved_from_pickup_id_fk",
+          "tableFrom": "pickup",
+          "tableTo": "pickup",
+          "schemaTo": "wms",
+          "columnsFrom": [
+            "company_id",
+            "project_id",
+            "moved_from_route_id",
+            "moved_from_pickup_id"
+          ],
+          "columnsTo": [
+            "company_id",
+            "project_id",
+            "route_id",
+            "id"
+          ],
+          "onDelete": "no action",
+          "onUpdate": "no action"
         }
       },
       "compositePrimaryKeys": {},
@@ -11104,6 +10997,10 @@
         "pickup_contaminant_code_shape": {
           "name": "pickup_contaminant_code_shape",
           "value": "\"wms\".\"pickup\".\"contaminant_code_id\" is null or \"wms\".\"pickup\".\"reason\" = 'contamination' or \"wms\".\"pickup\".\"status\" = 'completed'"
+        },
+        "pickup_moved_from_shape": {
+          "name": "pickup_moved_from_shape",
+          "value": "(\"wms\".\"pickup\".\"moved_from_route_id\" is null) = (\"wms\".\"pickup\".\"moved_from_pickup_id\" is null) and (\"wms\".\"pickup\".\"moved_from_pickup_id\" is null or \"wms\".\"pickup\".\"origin\" = 'office')"
         }
       },
       "isRLSEnabled": false

@@ -1,0 +1,6 @@
+ALTER TABLE "wms"."pickup" ADD COLUMN "moved_from_route_id" uuid;--> statement-breakpoint
+ALTER TABLE "wms"."pickup" ADD COLUMN "moved_from_pickup_id" uuid;--> statement-breakpoint
+ALTER TABLE "wms"."pickup" ADD CONSTRAINT "pickup_moved_from_route_id_moved_from_pickup_id_fk" FOREIGN KEY ("company_id","project_id","moved_from_route_id","moved_from_pickup_id") REFERENCES "wms"."pickup"("company_id","project_id","route_id","id") ON DELETE no action ON UPDATE no action;--> statement-breakpoint
+CREATE UNIQUE INDEX "pickup_moved_from_pickup_id_key" ON "wms"."pickup" USING btree ("company_id","moved_from_pickup_id") WHERE "wms"."pickup"."moved_from_pickup_id" is not null;--> statement-breakpoint
+CREATE INDEX "pickup_moved_from_route_id_moved_from_pickup_id_idx" ON "wms"."pickup" USING btree ("company_id","moved_from_route_id","moved_from_pickup_id");--> statement-breakpoint
+ALTER TABLE "wms"."pickup" ADD CONSTRAINT "pickup_moved_from_shape" CHECK (("wms"."pickup"."moved_from_route_id" is null) = ("wms"."pickup"."moved_from_pickup_id" is null) and ("wms"."pickup"."moved_from_pickup_id" is null or "wms"."pickup"."origin" = 'office'));

@@ -92,7 +92,7 @@ import { routeScheme } from "@waste/db/schema/route-schemes"
 import { notInService, THE_OPERATING_DATE } from "@waste/domain/execution/commands"
 import { confirmNonWorkingDay, operatingDayReading, type OperatingDayReading } from "@waste/domain/execution/operating-day"
 import { activeAnd, doesNotChange, hasNotRun, openPickupsClose, orderIsOpen, routeCancellation, routeTransition } from "@waste/domain/execution/transitions"
-import type { PickupStatus, RouteStatus } from "@waste/domain/execution/vocabulary"
+import type { OfficeCancelReasonCode, PickupStatus, RouteStatus } from "@waste/domain/execution/vocabulary"
 import type { HolidayPolicy } from "@waste/domain/planning/vocabulary"
 import { holidayListOf } from "@waste/domain/planning/generation"
 import { licenceRefusal, licenceSentence } from "@waste/domain/resources/licence"
@@ -478,6 +478,112 @@ const commandProblems = (action: "view" | "edit" | "crew") => ({
 const PROVIDER_ASSIGN =
   "A Service Provider's account assigns on a route its provider runs (as `GET /routes` reaches it), and changes it to its own fleet alone: a vehicle and a trailer its provider owns and a driver it employs, of the route's project — another is refused (400) at its field, `Not a vehicle of NordRen ApS` — and never the depot or the unloading station, which are the office's to set, nor another provider as the route's planned provider (400 at the field); a field it restates as the route stands changes nothing and is not refused."
 
+/** What an ad-hoc route is made with: its day, the depot, the station and the Planned Assignment's vehicle and driver the body names, its note, and, for a split (O23 of #290), the start and the provider of the route it came from. */
+type AdHocRoute = { operatingDate: string; plannedVehicleId: string | null; plannedDriverId: string | null; depotId: string | null; unloadingStationId: string | null; note: string | null; plannedStartTime?: string | null; plannedServiceProviderId?: string | null }
+
+/**
+ * The office's ad-hoc route (#111), made on a project's day and numbered from
+ * the company's counter: the depot, the station, the vehicle and the driver
+ * judged as `POST /routes` judges them — each a 400 at its field, the pair's
+ * licence on the day, then the statuses and the periods away as 409s — and
+ * `route-reassigned` written where it names a driver or a vehicle. What
+ * `POST /routes` makes, and what a split moves its stops onto
+ * (routes/stop-moves.ts, O23 of #290), whose depot and station are the ones
+ * the route split already stands on and so are not asked again.
+ */
+export async function createAdHocRoute(tx: Tx, principal: Principal, scope: Scope, values: AdHocRoute, at: Date, { endsKnown = false }: { endsKnown?: boolean } = {}): Promise<RouteRow> {
+  const named = { plannedVehicleId: values.plannedVehicleId, plannedDriverId: values.plannedDriverId, depotId: values.depotId, unloadingStationId: values.unloadingStationId }
+
+  // The 400s in body order: the depot, the station, the vehicle and the driver the project's or the company's, then the pair's licence on the day, as `assign` judges it.
+  if (!endsKnown) {
+    await requireDepot(tx, scope, named.depotId)
+    await requireUnloadingStation(tx, principal.companyId, named.unloadingStationId)
+  }
+  const vehicle = named.plannedVehicleId === null ? null : await findVehicle(tx, scope, named.plannedVehicleId, "powered-vehicle", "vehicleId")
+  const driver = named.plannedDriverId === null ? null : await findDriver(tx, scope, named.plannedDriverId, "driverId")
+  await requireLicenceOn(tx, scope, named, values.operatingDate, "driverId", { vehicle: vehicle ?? undefined, driver: driver ?? undefined })
+
+  // The statuses last, 409s after every 400; then whether the crew named is there on the day (O6 of #290).
+  if (vehicle !== null) refuseVehicleNotActive(vehicle.status, vehicleLabel(vehicle))
+  if (driver !== null) refuseUnavailableDriver(driver.status, driver.name, "a route")
+  await refuseCrewAway(tx, scope, { vehicleId: named.plannedVehicleId, driverId: named.plannedDriverId }, oneDay(values.operatingDate), "a route")
+
+  const number = await nextNumber(tx, principal.companyId, "nextRouteNumber")
+  const [row] = await tx
+    .insert(route)
+    .values({
+      id: newId(),
+      ...scope,
+      routeSchemeId: null,
+      collectionGroupId: null,
+      serviceDate: values.operatingDate,
+      operatingDate: values.operatingDate,
+      status: "planned",
+      note: values.note,
+      number,
+      plannedStartTime: values.plannedStartTime ?? null,
+      plannedServiceProviderId: values.plannedServiceProviderId ?? null,
+      ...named,
+    })
+    .returning(routeColumns)
+  if (row.plannedDriverId !== null || row.plannedVehicleId !== null) {
+    const detail = await detailOf(tx, principal.companyId, row)
+    await emit(tx, principal, { aggregate: "route", aggregateId: row.id, kind: "route-reassigned", payload: routeOfDetail(detail), projectId: row.projectId, occurredAt: at })
+  }
+  return row
+}
+
+/**
+ * The office's cancel of a route its machine lets go (`routeTransition`'s
+ * `move`; the caller has judged the transition): the reason code and the
+ * free reason, `cancelledAt` and the hold cleared, every planned stop closed
+ * as the domain's `openPickupsClose` says, an open session ended, and
+ * `route-cancelled` then one `pickup-skipped` per stop closed written. What
+ * `POST /routes/:id/cancel` does, and what a merge does to the route it
+ * empties (routes/stop-moves.ts, O23 of #290).
+ */
+export async function cancelLockedRoute(tx: Tx, principal: Principal, current: RouteRow, to: RouteStatus, cancel: { reasonCode: OfficeCancelReasonCode; reason: string }, at: Date): Promise<RouteDetail> {
+  const [row] = await tx
+    .update(route)
+    .set({ status: to, note: cancel.reason, cancelReasonCode: cancel.reasonCode, cancelledAt: at, heldAt: null })
+    .where(and(routeScope(principal), eq(route.id, current.id)))
+    .returning(routeColumns)
+  if (row === undefined) throw noSuchRoute(current.id)
+  // The domain says what cancelling does beyond the status — which pickups close and what they become, and whether a session is running to end — and the statements write it. The status is text with a CHECK in the database and the vocabulary's here.
+  const cancellation = routeCancellation(current.status as RouteStatus)
+  const stops = (await pickupsOfRoute(tx, principal.companyId, row.id)).map((stop) => ({ id: stop.id, status: stop.status as PickupStatus }))
+  const closing = openPickupsClose(stops, cancellation.closing.reason)
+  const closed =
+    closing.pickups.length === 0
+      ? []
+      : await tx
+          .update(pickup)
+          .set({ status: closing.outcome.status, reason: closing.outcome.reason, outcomeAt: at })
+          .where(
+            and(
+              eq(pickup.companyId, principal.companyId),
+              eq(pickup.routeId, row.id),
+              inArray(
+                pickup.id,
+                closing.pickups.map((open) => open.id),
+              ),
+            ),
+          )
+          .returning(pickupColumns)
+  if (cancellation.endsSession) {
+    await tx
+      .update(session)
+      .set({ endedAt: at })
+      .where(and(eq(session.companyId, principal.companyId), eq(session.routeId, row.id), isNull(session.endedAt)))
+  }
+  const detail = await detailOf(tx, principal.companyId, row)
+  await emit(tx, principal, { aggregate: "route", aggregateId: row.id, kind: "route-cancelled", payload: routeOfDetail(detail), projectId: row.projectId, occurredAt: at })
+  for (const stop of closed) {
+    await emit(tx, principal, { aggregate: "pickup", aggregateId: stop.id, kind: "pickup-skipped", payload: pickupOf(stop), projectId: stop.projectId, occurredAt: at })
+  }
+  return detail
+}
+
 export function routeRoutes(guard: MiddlewareHandler<AuthEnv>, { now = () => new Date(), routing, jobs }: ClockOptions & { routing: RoutingIdentity; jobs: JobSender }) {
   return new Hono<AuthEnv>()
     .get(
@@ -556,31 +662,8 @@ export function routeRoutes(guard: MiddlewareHandler<AuthEnv>, { now = () => new
         const principal = c.get("principal")
         requireProject(principal, body.projectId, "projectId")
         const scope: Scope = { companyId: principal.companyId, projectId: body.projectId }
-        const named = { plannedVehicleId: body.vehicleId ?? null, plannedDriverId: body.driverId ?? null, depotId: body.depotId ?? null, unloadingStationId: body.unloadingStationId ?? null }
-
-        // The 400s in body order: the depot, the station, the vehicle and the driver the project's or the company's, then the pair's licence on the day, as `assign` judges it.
-        await requireDepot(tx, scope, named.depotId)
-        await requireUnloadingStation(tx, principal.companyId, named.unloadingStationId)
-        const vehicle = named.plannedVehicleId === null ? null : await findVehicle(tx, scope, named.plannedVehicleId, "powered-vehicle", "vehicleId")
-        const driver = named.plannedDriverId === null ? null : await findDriver(tx, scope, named.plannedDriverId, "driverId")
-        await requireLicenceOn(tx, scope, named, body.operatingDate, "driverId", { vehicle: vehicle ?? undefined, driver: driver ?? undefined })
-
-        // The statuses last, 409s after every 400; then whether the crew named is there on the day (O6 of #290).
-        if (vehicle !== null) refuseVehicleNotActive(vehicle.status, vehicleLabel(vehicle))
-        if (driver !== null) refuseUnavailableDriver(driver.status, driver.name, "a route")
-        await refuseCrewAway(tx, scope, { vehicleId: named.plannedVehicleId, driverId: named.plannedDriverId }, oneDay(body.operatingDate), "a route")
-
-        const at = now()
-        const number = await nextNumber(tx, principal.companyId, "nextRouteNumber")
-        const [row] = await tx
-          .insert(route)
-          .values({ id: newId(), ...scope, routeSchemeId: null, collectionGroupId: null, serviceDate: body.operatingDate, operatingDate: body.operatingDate, status: "planned", note: body.note ?? null, number, ...named })
-          .returning(routeColumns)
-        const detail = await detailOf(tx, principal.companyId, row)
-        if (row.plannedDriverId !== null || row.plannedVehicleId !== null) {
-          await emit(tx, principal, { aggregate: "route", aggregateId: row.id, kind: "route-reassigned", payload: routeOfDetail(detail), projectId: row.projectId, occurredAt: at })
-        }
-        return created(c, "/routes", detail)
+        const row = await createAdHocRoute(tx, principal, scope, { operatingDate: body.operatingDate, plannedVehicleId: body.vehicleId ?? null, plannedDriverId: body.driverId ?? null, depotId: body.depotId ?? null, unloadingStationId: body.unloadingStationId ?? null, note: body.note ?? null }, now())
+        return created(c, "/routes", await detailOf(tx, principal.companyId, row))
       },
     )
     .get(
@@ -898,46 +981,7 @@ export function routeRoutes(guard: MiddlewareHandler<AuthEnv>, { now = () => new
         const transition = routeTransition(current.status as RouteStatus, "cancel", labelOf(current))
         if (transition.kind === "refuse") throw problem(409, { detail: transition.sentence })
         if (transition.kind === "stay") return c.json(await detailOf(tx, principal.companyId, current))
-        const at = now()
-        const [row] = await tx
-          .update(route)
-          .set({ status: transition.to, note: reason, cancelReasonCode: reasonCode, cancelledAt: at, heldAt: null })
-          .where(and(routeScope(principal), eq(route.id, id)))
-          .returning(routeColumns)
-        if (row === undefined) throw noSuchRoute(id)
-        // The domain says what cancelling does beyond the status — which pickups close and what they become, and whether a session is running to end — and the statements write it. The status is text with a CHECK in the database and the vocabulary's here.
-        const cancellation = routeCancellation(current.status as RouteStatus)
-        const stops = (await pickupsOfRoute(tx, principal.companyId, row.id)).map((stop) => ({ id: stop.id, status: stop.status as PickupStatus }))
-        const closing = openPickupsClose(stops, cancellation.closing.reason)
-        const closed =
-          closing.pickups.length === 0
-            ? []
-            : await tx
-                .update(pickup)
-                .set({ status: closing.outcome.status, reason: closing.outcome.reason, outcomeAt: at })
-                .where(
-                  and(
-                    eq(pickup.companyId, principal.companyId),
-                    eq(pickup.routeId, row.id),
-                    inArray(
-                      pickup.id,
-                      closing.pickups.map((open) => open.id),
-                    ),
-                  ),
-                )
-                .returning(pickupColumns)
-        if (cancellation.endsSession) {
-          await tx
-            .update(session)
-            .set({ endedAt: at })
-            .where(and(eq(session.companyId, principal.companyId), eq(session.routeId, row.id), isNull(session.endedAt)))
-        }
-        const detail = await detailOf(tx, principal.companyId, row)
-        await emit(tx, principal, { aggregate: "route", aggregateId: row.id, kind: "route-cancelled", payload: routeOfDetail(detail), projectId: row.projectId, occurredAt: at })
-        for (const stop of closed) {
-          await emit(tx, principal, { aggregate: "pickup", aggregateId: stop.id, kind: "pickup-skipped", payload: pickupOf(stop), projectId: stop.projectId, occurredAt: at })
-        }
-        return c.json(detail)
+        return c.json(await cancelLockedRoute(tx, principal, current, transition.to, { reasonCode, reason }, now()))
       },
     )
     .put(

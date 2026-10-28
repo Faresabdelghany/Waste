@@ -26,7 +26,7 @@ import { containerDriftBetween, generationMatchHistoryOf } from "@waste/domain/r
 import { draftGroups } from "@waste/domain/route-schemes/draft"
 import type { GuidedSchemeData } from "@waste/domain/route-schemes/quick-create"
 import { collectionGroupsOfRecord, collectionGroupsToValues, type CollectionGroup as SchemeGroup } from "@waste/domain/route-schemes/groups"
-import { effectiveSchemeStatus } from "@waste/domain/route-schemes/lifecycle"
+import { effectiveSchemeStatus, schemeLiveValidation } from "@waste/domain/route-schemes/lifecycle"
 import { SCHEME_SEASONS_KEY, seasonsValue, storedSeasonsFromValues } from "@waste/domain/route-schemes/scheme-seasons"
 
 import { FIXTURE_COMPANY_ID, getModuleDefinition, type BusinessRecord } from "../../data/business-modules"
@@ -101,6 +101,7 @@ const central: RouteScheme = {
   collectionGroups: [groupOf({ id: CENTRAL_GROUP_ID, routeSchemeId: CENTRAL_ID, name: "RS-Central · Week A", vehicleId: WH24, driverId: MADS })],
   seasons: [],
   generation: { lastGeneratedAt: null, groups: [] },
+  warnings: [],
   validFrom: "2026-06-01",
   validTo: null,
 }
@@ -281,6 +282,13 @@ describe("a scheme read", () => {
     assert.equal(generated.submittedValues?.lastGeneratedAt, "2026-09-29T03:00:07.000Z")
     assert.equal(effectiveSchemeStatus(generated, TODAY), "Effective")
     assert.equal(effectiveSchemeStatus(recordOf({ ...central, status: "draft", generation: generated.submittedValues ? { lastGeneratedAt: "2026-09-29T03:00:07.000Z", groups: [] } : central.generation }), TODAY), "Draft")
+  })
+
+  test("carries the API's warnings, which the scheme's live validation shows in place of judging the promises in the browser (O22 of #290)", () => {
+    const warning = "Recurrence Every week under-serves 1 container promised Twice a week (BIN-1) — raise the frequency or adjust the promised service frequency"
+    const record = recordOf({ ...central, warnings: [warning] })
+    assert.deepEqual(schemeLiveValidation(record, { schemes: [] })?.warnings.filter((text) => text.includes("serves")), [warning])
+    assert.deepEqual(schemeLiveValidation(recordOf(central), { schemes: [] })?.warnings.filter((text) => text.includes("serves")), [])
   })
 
   test("carries the two latest match stamps under the web's group ids, so the drift reading runs as it does on the browser's path", () => {

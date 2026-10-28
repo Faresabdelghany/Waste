@@ -6,6 +6,7 @@
 // submittedValues.
 
 import {
+  occurrencesPerWeek,
   RECURRENCE_FREQUENCY_LABELS,
   RECURRENCE_WEEKLY_RATES,
   SERVICE_DAYS,
@@ -137,6 +138,12 @@ export type SchemeFrequencyPromise = {
   promisedName: string
   /** Promised collections per week — the interval-model comparison value. */
   promisedRate: number
+  /**
+   * The days the scheme collects the container on, when the caller resolved
+   * them: a weekly scheme serving it Mon and Thu collects it twice a week. A
+   * promise without them is served at the cadence's one-day rate.
+   */
+  servedDays?: readonly ServiceDay[]
 }
 
 export type SchemeFrequencyReconciliationInput = {
@@ -219,47 +226,108 @@ const namedContainers = (names: readonly string[]): string => {
 }
 
 /**
+ * The days each container is collected on, from a scheme's resolved per-day
+ * plans: what a promise's `servedDays` is read from, by the browser's
+ * resolution and the API's alike.
+ */
+export function servedDaysByContainer(
+  plans: ReadonlyArray<{ day: ServiceDay; containerIds: readonly string[] }>,
+): Map<string, ServiceDay[]> {
+  const days = new Map<string, ServiceDay[]>()
+  for (const plan of plans) {
+    for (const containerId of plan.containerIds) {
+      const served = days.get(containerId)
+      if (served === undefined) days.set(containerId, [plan.day])
+      else if (!served.includes(plan.day)) served.push(plan.day)
+    }
+  }
+  for (const [containerId, served] of days) days.set(containerId, sortServiceDays(served))
+  return days
+}
+
+/**
+ * The promises of the containers a scheme's plans collect, each with the
+ * days it is collected on; `promiseOf` resolves a container's promise (the
+ * caller's: @waste/domain/service-frequencies schemeFrequencyPromiseOfRecord
+ * in the browser), so validation stays free of where promises come from.
+ */
+export function servedFrequencyPromises<C extends { id: string }>(
+  plans: ReadonlyArray<{ day: ServiceDay; containerIds: readonly string[] }>,
+  containers: readonly C[],
+  promiseOf: (container: C) => Omit<SchemeFrequencyPromise, "servedDays"> | null,
+): SchemeFrequencyPromise[] {
+  const served = servedDaysByContainer(plans)
+  return containers.flatMap((container) => {
+    const days = served.get(container.id)
+    const promise = days === undefined ? null : promiseOf(container)
+    return promise === null ? [] : [{ ...promise, servedDays: days }]
+  })
+}
+
+/**
  * The reconciliation caveats of issue #21, compared on the collections-per-week scale so every-N-weeks
  * promises order without a scheme-cadence counterpart. Under-service — the
  * scheme's cadence falls short of a linked container's promise — is the
  * promise-breaking direction and leads; over-service also warns (decided
  * here: it is visible scheme-vs-agreement drift and usually a configuration
- * or cost error, not a promise kept extra well), phrased as such. One warning
- * per promised cadence, containers named up to three. All non-blocking.
+ * or cost error, not a promise kept extra well), phrased as such. A container
+ * whose served days are known is collected at the cadence's rate on each of
+ * them (`occurrencesPerWeek`), and its days are named where it is collected
+ * on more than one. One warning per promised cadence and served days,
+ * containers named up to three. All non-blocking.
  */
 export function schemeFrequencyReconciliationWarnings(
   reconciliation: SchemeFrequencyReconciliationInput,
 ): string[] {
-  const schemeRate = RECURRENCE_WEEKLY_RATES[reconciliation.frequency]
-  const schemeLabel = RECURRENCE_FREQUENCY_LABELS[reconciliation.frequency]
-  const groups = new Map<string, { promisedRate: number; names: string[] }>()
+  const { frequency } = reconciliation
+  const schemeLabel = RECURRENCE_FREQUENCY_LABELS[frequency]
+  const groups = new Map<
+    string,
+    { promisedName: string; promisedRate: number; servedRate: number; served: string; names: string[] }
+  >()
   for (const promise of reconciliation.promises) {
-    const group = groups.get(promise.promisedName)
+    const days = promise.servedDays
+    const known = days !== undefined && days.length > 0
+    const servedRate = known ? occurrencesPerWeek(frequency, days) : RECURRENCE_WEEKLY_RATES[frequency]
+    // The days are named where the cadence's label alone would mislead: several days, or a daily scheme's part of the week.
+    const daily = frequency === "daily"
+    const served =
+      known && (daily ? days.length < SERVICE_DAYS.length : days.length > 1)
+        ? `${schemeLabel} on ${shortDays(days)}`
+        : schemeLabel
+    const key = `${promise.promisedName}|${served}`
+    const group = groups.get(key)
     if (group) group.names.push(promise.containerName)
     else {
-      groups.set(promise.promisedName, {
+      groups.set(key, {
+        promisedName: promise.promisedName,
         promisedRate: promise.promisedRate,
+        servedRate,
+        served,
         names: [promise.containerName],
       })
     }
   }
   // Under-served promises first (most frequent promise first), then
   // over-served — deterministic regardless of caller record order.
-  const ordered = Array.from(groups.entries()).sort(
-    (a, b) => b[1].promisedRate - a[1].promisedRate || a[0].localeCompare(b[0]),
+  const ordered = Array.from(groups.values()).sort(
+    (a, b) =>
+      b.promisedRate - a.promisedRate ||
+      a.promisedName.localeCompare(b.promisedName) ||
+      a.served.localeCompare(b.served),
   )
   const underServed: string[] = []
   const overServed: string[] = []
-  for (const [promisedName, group] of ordered) {
+  for (const group of ordered) {
     const count = group.names.length
-    const containers = `${count} container${count === 1 ? "" : "s"} promised ${promisedName} (${namedContainers(group.names)})`
-    if (schemeRate < group.promisedRate - RATE_EPSILON) {
+    const containers = `${count} container${count === 1 ? "" : "s"} promised ${group.promisedName} (${namedContainers(group.names)})`
+    if (group.servedRate < group.promisedRate - RATE_EPSILON) {
       underServed.push(
-        `Recurrence ${schemeLabel} under-serves ${containers} — raise the frequency or adjust the promised service frequency`,
+        `Recurrence ${group.served} under-serves ${containers} — raise the frequency or adjust the promised service frequency`,
       )
-    } else if (schemeRate > group.promisedRate + RATE_EPSILON) {
+    } else if (group.servedRate > group.promisedRate + RATE_EPSILON) {
       overServed.push(
-        `Recurrence ${schemeLabel} over-serves ${containers} — collections run more often than the promised service frequency`,
+        `Recurrence ${group.served} over-serves ${containers} — collections run more often than the promised service frequency`,
       )
     }
   }

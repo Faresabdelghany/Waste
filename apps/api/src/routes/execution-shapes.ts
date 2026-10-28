@@ -236,6 +236,7 @@ export const pickupColumns = {
   warehouseId: pickup.warehouseId,
   replacementContainerId: pickup.replacementContainerId,
   bulkyBookingId: pickup.bulkyBookingId,
+  movedFromPickupId: pickup.movedFromPickupId,
   createdAt: pickup.createdAt,
   updatedAt: pickup.updatedAt,
 }
@@ -265,6 +266,7 @@ export function pickupOf(row: PickupRow): Pickup {
     warehouseId: row.warehouseId,
     replacementContainerId: row.replacementContainerId,
     bulkyBookingId: row.bulkyBookingId,
+    movedFromPickupId: row.movedFromPickupId,
     ...stampsOf(row),
   }
 }

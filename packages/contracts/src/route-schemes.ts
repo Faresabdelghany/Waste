@@ -400,6 +400,12 @@ const RouteSchemeFields = {
   collectionGroups: z.array(CollectionGroup),
   /** A reading of the runs, never written: see the header. */
   generation: SchemeGeneration,
+  /**
+   * Non-blocking caveats, read on every read and never written (O22 of #290):
+   * the containers the scheme collects whose promised service frequency its
+   * cadence under- or over-serves. A write that leaves one still succeeds.
+   */
+  warnings: z.array(z.string()),
   ...Validity.shape,
 }
 

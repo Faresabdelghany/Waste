@@ -252,6 +252,7 @@ export function pickupPayload(tenant: ConsumerTenant, routeId: string, pickupId:
     warehouseId: null,
     replacementContainerId: null,
     bulkyBookingId: null,
+    movedFromPickupId: null,
     arrivedAt: null,
     outcomeAt: at("07:12").toISOString(),
     ...STAMPS,
