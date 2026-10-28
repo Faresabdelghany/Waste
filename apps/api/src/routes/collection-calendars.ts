@@ -79,6 +79,7 @@ import { newId } from "../ids"
 import { afterCursor, fetchLimit, pageOf } from "../pagination"
 import { describeProblem, invalidRequest, problem, validate } from "../problem"
 import { periodAfter, refuseStranded, requireOrdered, strandedSentence, type Period } from "./periods"
+import { projectCalendarOf, releaseHolidayHolds } from "./route-holds"
 import { created, describeCreated, describeJson, IdParam, lockRow, refuseDuplicate, refuseOverlap, stamp, stampsOf, strengthFor } from "./shared"
 
 const MODULE = "configure.calendars"
@@ -272,7 +273,7 @@ export function collectionCalendarRoutes(guard: MiddlewareHandler<AuthEnv>) {
         operationId: "createCollectionCalendar",
         summary: "Write a collection calendar",
         description:
-          "Writes a collection calendar in one project, which must be a project the caller works in. The name is unique inside the project. The period is half-open — `validFrom` is the first day in force and `validTo` the first day out of it, absent meaning the calendar is still running — and a project has one calendar in force at a time, so a period overlapping the project's other calendar is refused (409): the per-year calendars tile the project's timeline, and the next begins where the earlier one ends. `holidays` is the list the calendar starts with, each a day inside the period (400 on `holidays.N.day` otherwise) and each day named once (400 on `holidays`); the name of a holiday may be null. The server mints the ids.",
+          "Writes a collection calendar in one project, which must be a project the caller works in. The name is unique inside the project. The period is half-open — `validFrom` is the first day in force and `validTo` the first day out of it, absent meaning the calendar is still running — and a project has one calendar in force at a time, so a period overlapping the project's other calendar is refused (409): the per-year calendars tile the project's timeline, and the next begins where the earlier one ends. `holidays` is the list the calendar starts with, each a day inside the period (400 on `holidays.N.day` otherwise) and each day named once (400 on `holidays`); the name of a holiday may be null. Where the project has a holiday list, the holidays release the holds of the routes they re-decide, as the replacement of the list does. The server mints the ids.",
         security: BEARER_SECURITY,
         responses: {
           201: describeCreated("The calendar as it was written, with its holidays by day.", CollectionCalendar),
@@ -292,6 +293,7 @@ export function collectionCalendarRoutes(guard: MiddlewareHandler<AuthEnv>) {
         const tx = c.get("tx")
         const principal = c.get("principal")
         requireProject(principal, values.projectId)
+        const before = holidays.length === 0 ? undefined : await projectCalendarOf(tx, principal.companyId, values.projectId)
         const [row] = await refuseOverlap({ [CALENDAR_RUNNING]: CALENDAR_RUNNING_SENTENCE }, () =>
           refuseDuplicate({ [NAME_TAKEN]: nameTaken(values.name) }, () =>
             tx
@@ -301,6 +303,7 @@ export function collectionCalendarRoutes(guard: MiddlewareHandler<AuthEnv>) {
           ),
         )
         await writeHolidays(tx, { companyId: principal.companyId, projectId: row.projectId, id: row.id }, holidays)
+        if (before !== undefined) await releaseHolidayHolds(tx, principal.companyId, row.projectId, { before, after: await projectCalendarOf(tx, principal.companyId, row.projectId) })
         return created(c, "/collection-calendars", calendarOf(row, byDay(holidays)))
       },
     )
@@ -392,7 +395,7 @@ export function collectionCalendarRoutes(guard: MiddlewareHandler<AuthEnv>) {
         operationId: "putCollectionCalendarHolidays",
         summary: "Replace a calendar's holidays",
         description:
-          "Replaces the whole list with the one in the body: a holiday the body leaves out is not a holiday afterwards, and an empty list is a year without holidays. Each entry is a day inside the calendar's period (400 on `holidays.N.day` otherwise) and a name or null, and each day is named once (400 on `holidays`). The calendar's `updatedAt` moves, since the holidays are part of the calendar on the wire.",
+          "Replaces the whole list with the one in the body: a holiday the body leaves out is not a holiday afterwards, and an empty list is a year without holidays. Each entry is a day inside the calendar's period (400 on `holidays.N.day` otherwise) and a name or null, and each day is named once (400 on `holidays`). The calendar's `updatedAt` moves, since the holidays are part of the calendar on the wire. Where the project has a holiday list, the change releases in the same transaction the hold on each route the office moved by hand (`heldAt`) that it re-decides under its scheme's holiday policy — one standing where the scheme put the collection, when a holiday added or taken away moves or skips it, and one the office moved to a day that becomes a holiday the scheme moves collections off — so the next generation run plans them with their neighbours (#226).",
         security: BEARER_SECURITY,
         responses: {
           200: describeJson("The calendar with the holidays it now has.", CollectionCalendar),
@@ -427,10 +430,13 @@ export function collectionCalendarRoutes(guard: MiddlewareHandler<AuthEnv>) {
           .returning(columns)
         if (row === undefined) throw noSuchCalendar(id)
         requireHolidaysWithin(row, holidays)
+        const before = await projectCalendarOf(tx, principal.companyId, row.projectId)
         await tx
           .delete(collectionCalendarHoliday)
           .where(and(eq(collectionCalendarHoliday.companyId, principal.companyId), eq(collectionCalendarHoliday.collectionCalendarId, id)))
         await writeHolidays(tx, { companyId: principal.companyId, projectId: row.projectId, id: row.id }, holidays)
+        // The held routes the new set re-decides go back to their schemes (#226, routes/route-holds.ts).
+        await releaseHolidayHolds(tx, principal.companyId, row.projectId, { before, after: await projectCalendarOf(tx, principal.companyId, row.projectId) })
         return c.json(calendarOf(row, byDay(holidays)))
       },
     )

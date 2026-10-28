@@ -31,10 +31,29 @@
 // run takes before it reads a route, so a release and a run take turns. A
 // held route is a planned one, so a release never writes a route that was
 // dispatched.
+//
+// A change of holiday inputs — the scheme's `holidayPolicy`, the project's
+// `weekend` or whether it has a `holidayList`, a calendar's holidays — releases
+// the held routes it re-decides (#226, `holidayReleases` in the domain): one
+// standing where the scheme put its collection, held for its start or crew,
+// when the change moves that collection or skips it, and one the office moved
+// when the change makes its day one the scheme moves collections off. The
+// project's and the calendar's edits reach every held route of the project,
+// fenced by the tenant and the project the edit changed rather than by the
+// caller's projects, since the inputs are the project's whoever changes them;
+// the scheme's reaches its own routes. Those two edits hold no scheme's lock,
+// so a run already reading the route keeps the office's day once more, and
+// the run after it moves it. No run is asked: the next run re-plans.
 import type { Tx } from "@waste/db/client"
+import { collectionCalendarHoliday } from "@waste/db/schema/collection-calendars"
 import { route } from "@waste/db/schema/execution"
+import { project } from "@waste/db/schema/organisation"
+import { routeScheme } from "@waste/db/schema/route-schemes"
+import type { ServiceDay } from "@waste/domain/planning/vocabulary"
+import { holidayReleases } from "@waste/domain/planning/generation"
 import { addDays } from "@waste/domain/route-schemes/recurrence"
 import { WALK_CAP_DAYS } from "@waste/domain/route-schemes/generation"
+import type { HolidayPolicy, SchemeCalendar } from "@waste/domain/route-schemes/occurrences"
 import { and, eq, inArray, isNotNull, sql } from "drizzle-orm"
 
 import type { Principal } from "../auth/principal"
@@ -113,4 +132,59 @@ export async function releaseHolds(tx: Tx, principal: Principal, projectId: stri
     .update(route)
     .set({ heldAt: null })
     .where(and(routeScope(principal), eq(route.projectId, projectId), routes, isNotNull(route.heldAt), away))
+}
+
+/**
+ * The project's holiday inputs as a generation run reads them: its weekend,
+ * and its calendars' holidays where it has a holiday list, none where it has
+ * not. Every holiday of the project, since the held routes it is asked about
+ * may lie anywhere ahead; the names do not bear on a release.
+ */
+export async function projectCalendarOf(tx: Tx, companyId: string, projectId: string): Promise<SchemeCalendar> {
+  const [row] = await tx.select({ weekend: project.weekend, holidayList: project.holidayList }).from(project).where(and(eq(project.companyId, companyId), eq(project.id, projectId)))
+  if (row === undefined || row.holidayList === null) return { weekend: (row?.weekend ?? []) as ServiceDay[], holidays: new Map() }
+  const days = await tx
+    .select({ day: collectionCalendarHoliday.day })
+    .from(collectionCalendarHoliday)
+    .where(and(eq(collectionCalendarHoliday.companyId, companyId), eq(collectionCalendarHoliday.projectId, projectId)))
+  return { weekend: row.weekend as ServiceDay[], holidays: new Map(days.map(({ day }) => [day, ""])) }
+}
+
+/** A change of holiday inputs: the project's calendar before and after it, and the scheme's policy where the change is the scheme's. */
+export type HolidayChange = { before: SchemeCalendar; after: SchemeCalendar; policy?: { routeSchemeId: string; before: HolidayPolicy; after: HolidayPolicy } }
+
+/**
+ * Releases, in the edit's transaction, the held routes of the project a
+ * change of holiday inputs re-decides (#226): a policy change the scheme's
+ * own, a calendar change every scheme's, each judged under its scheme's
+ * policy. Fenced by the tenant and the project.
+ */
+export async function releaseHolidayHolds(tx: Tx, companyId: string, projectId: string, change: HolidayChange): Promise<void> {
+  const held = await tx
+    .select({ id: route.id, serviceDate: route.serviceDate, operatingDate: route.operatingDate, holidayPolicy: routeScheme.holidayPolicy })
+    .from(route)
+    .innerJoin(routeScheme, and(eq(routeScheme.companyId, route.companyId), eq(routeScheme.id, route.routeSchemeId)))
+    .where(
+      and(
+        eq(route.companyId, companyId),
+        eq(route.projectId, projectId),
+        isNotNull(route.heldAt),
+        change.policy === undefined ? undefined : eq(route.routeSchemeId, change.policy.routeSchemeId),
+      ),
+    )
+  const released = held
+    .filter((row) => {
+      const policy = row.holidayPolicy as HolidayPolicy
+      return holidayReleases(
+        row,
+        { holidayPolicy: change.policy?.before ?? policy, calendar: change.before },
+        { holidayPolicy: change.policy?.after ?? policy, calendar: change.after },
+      )
+    })
+    .map((row) => row.id)
+  if (released.length === 0) return
+  await tx
+    .update(route)
+    .set({ heldAt: null })
+    .where(and(eq(route.companyId, companyId), eq(route.projectId, projectId), inArray(route.id, released)))
 }
