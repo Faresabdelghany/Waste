@@ -29,6 +29,7 @@ import { PAYMENT_REFERENCE_SCHEMES } from "@waste/domain/finance/vocabulary"
 import type { Grant } from "@waste/contracts/permissions"
 
 import { FIXTURE_COMPANY_ID, type BusinessRecord } from "@/lib/data/business-modules"
+import { BRANDING_KEY } from "@/lib/data/project-branding"
 import { COMPANY_IDENTITY_FIELDS, holdForReviewLabel, paymentReferenceSchemeLabel, paymentTermsLabel, paymentTermsRefusalOf } from "@/lib/data/finance-settings"
 import { isRoleAccessMap, type RoleAccessMap } from "@/lib/data/role-permissions"
 
@@ -219,7 +220,8 @@ export const projectAdapter: ResourceAdapter<Project> = {
       projectIds: [id],
       recordKind: "Project",
       // Whether its hires and jobs wait for a person before a run (M14 of #293), a flag as the form's switch says it.
-      submittedValues: { ...submittedValues, holdForReview: project.holdForReview },
+      // Its branding on its public pages (M22 of #293) as the wire's JSON, which Settings › Portals & branding reads and writes whole through its own route (lib/data/project-branding.ts).
+      submittedValues: { ...submittedValues, holdForReview: project.holdForReview, [BRANDING_KEY]: JSON.stringify(project.branding) },
     }
   },
   toCreateBody: (record) => {

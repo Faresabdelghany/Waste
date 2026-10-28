@@ -69,7 +69,9 @@
 // added @waste/domain/service-providers/vocabulary: service-provider-activities.ts
 // reads an Activity's kinds and statuses. O30 of #290 added
 // @waste/domain/resources/stock-balance: stock.ts bounds a warehouse's set of
-// Stock Minimums by the domain's cap.
+// Stock Minimums by the domain's cap. M22 of #293 added
+// @waste/domain/access/branding: organisation.ts holds a project's branding to
+// its shapes and its colour to WCAG 2.1 AA's contrast.
 import path from "node:path"
 import { fileURLToPath } from "node:url"
 
@@ -79,6 +81,7 @@ definePurityTests({
   packageDir: path.resolve(path.dirname(fileURLToPath(import.meta.url)), "../.."),
   allowedImports: [
     "@waste/domain/access/modules",
+    "@waste/domain/access/branding",
     "@waste/domain/access/public-slug",
     "@waste/domain/audit/vocabulary",
     "@waste/domain/execution/bulky",

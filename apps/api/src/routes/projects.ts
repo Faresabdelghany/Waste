@@ -18,9 +18,12 @@
 // out there somewhere.
 //
 // The grant is `configure.organization`, the same as the company's: Settings
-// → Company & Projects is one surface.
+// → Company & Projects is one surface. A project's branding on its public
+// pages (M22 of #293) is read with the project and written whole through its
+// own route, `PUT /projects/:id/branding`, under `configure.portals`: Settings
+// › Portals & branding is that module's surface.
 import type { PaymentReferenceScheme } from "@waste/contracts/finance"
-import { Project, ProjectCreate, ProjectPatch, type ProjectStatus } from "@waste/contracts/organisation"
+import { Project, ProjectBranding, ProjectBrandingReplace, ProjectCreate, ProjectPatch, type ProjectStatus } from "@waste/contracts/organisation"
 import { Page, PageRequest } from "@waste/contracts/pagination"
 import type { ServiceDay } from "@waste/contracts/planning"
 import type { Tx } from "@waste/db/client"
@@ -55,6 +58,9 @@ const columns = {
   paymentReferenceScheme: project.paymentReferenceScheme,
   weightTolerancePercent: project.weightTolerancePercent,
   holdForReview: project.holdForReview,
+  brandColor: project.brandColor,
+  logoUrl: project.logoUrl,
+  accessibilityStatementUrl: project.accessibilityStatementUrl,
   createdAt: project.createdAt,
   updatedAt: project.updatedAt,
 }
@@ -78,9 +84,20 @@ function projectOf(row: Row): Project {
     paymentReferenceScheme: row.paymentReferenceScheme as PaymentReferenceScheme,
     weightTolerancePercent: row.weightTolerancePercent,
     holdForReview: row.holdForReview,
+    branding: brandingOf(row),
     ...stampsOf(row),
   }
 }
+
+/** The branding's three columns on the wire; null each is none. */
+const brandingOf = (row: Pick<Row, "brandColor" | "logoUrl" | "accessibilityStatementUrl">): ProjectBranding => ({
+  brandColor: row.brandColor,
+  logoUrl: row.logoUrl,
+  accessibilityStatementUrl: row.accessibilityStatementUrl,
+})
+
+/** The module whose `edit` writes a project's branding (M22 of #293). */
+const PORTALS_MODULE = "configure.portals"
 
 /** What a project moved to a FI card's scheme is told while its company has no creditor number (#291 C4). */
 export const NO_FIK_CREDITOR = "Set the company's FIK creditor number first: a FI card names it"
@@ -251,6 +268,40 @@ export function projectRoutes(guard: MiddlewareHandler<AuthEnv>) {
         // The held routes the new weekend or list re-decides go back to their schemes (routes/route-holds.ts).
         if (holidayInputs !== undefined) await releaseHolidayHolds(tx, companyId, id, { before: holidayInputs, after: await projectCalendarOf(tx, companyId, id) })
         return c.json(projectOf(row))
+      },
+    )
+    .put(
+      "/projects/:id/branding",
+      describeRoute({
+        operationId: "replaceProjectBranding",
+        summary: "Set a project's branding",
+        description:
+          "Replaces one project's branding on its public pages whole (M22 of #293): `brandColor`, a colour as `#RRGGBB` drawn behind white text, refused unless white text on it meets WCAG 2.1 AA's contrast for normal text (4.5 to 1); `logoUrl`, an image the project serves itself; and `accessibilityStatementUrl`, the statement it publishes (in Denmark, through Digitaliseringsstyrelsen's WAS tool) — each address https. A null is none: the public pages look as they do unbranded, and name no statement. Read back as the project's `branding`; every change is in the project's audit history.",
+        security: BEARER_SECURITY,
+        responses: {
+          200: describeJson("The branding as it now stands.", ProjectBranding),
+          400: describeProblem("The path does not hold an id, or the body is missing a field, names one the server does not take, holds a colour that is not `#RRGGBB` or that white text cannot be read on at WCAG 2.1 AA, or an address that is not https."),
+          401: describeProblem("No usable token (see WWW-Authenticate)."),
+          403: describeProblem(`No active account here, or the caller's role does not allow \`edit\` on \`${PORTALS_MODULE}\`.`),
+          404: describeProblem("No project with that id in this company."),
+        },
+      }),
+      guard,
+      requireGrant(PORTALS_MODULE, "edit"),
+      validate("param", IdParam),
+      validate("json", ProjectBrandingReplace),
+      async (c) => {
+        const { id } = c.req.valid("param")
+        const branding = c.req.valid("json")
+        const companyId = c.get("principal").companyId
+        const [row] = await c
+          .get("tx")
+          .update(project)
+          .set(branding)
+          .where(and(eq(project.companyId, companyId), eq(project.id, id)))
+          .returning(columns)
+        if (row === undefined) throw noSuchProject(id)
+        return c.json(brandingOf(row))
       },
     )
 }

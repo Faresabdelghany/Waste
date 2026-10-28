@@ -49,6 +49,7 @@
 // them unbroken and a run that fails rolls its numbers back with its rows.
 // The series is the company's because the legal entity's is; it arrived with
 // migration 0010.
+import { BRAND_COLOR_PATTERN, HTTPS_ADDRESS_MAX, HTTPS_ADDRESS_PATTERN } from "@waste/domain/access/branding"
 import { PUBLIC_SLUG_LENGTH, PUBLIC_SLUG_PATTERN } from "@waste/domain/access/public-slug"
 import { BIC_PATTERN, DEFAULT_PAYMENT_TERMS_DAYS, FIK_CREDITOR_PATTERN, IBAN_PATTERN, PAYMENT_TERMS_MAX, VAT_NUMBER_PATTERN } from "@waste/domain/finance/payment"
 import { PAYMENT_REFERENCE_SCHEMES } from "@waste/domain/finance/vocabulary"
@@ -153,6 +154,15 @@ export const project = wms.table(
     weightTolerancePercent: integer().notNull().default(DEFAULT_WEIGHT_TOLERANCE_PERCENT),
     /** Whether its hires and work-order jobs (M14 of #293) are held for the office's review as they are charged, so a run passes over them until released. */
     holdForReview: boolean().notNull().default(false),
+    /**
+     * Its branding on its public pages (M22 of #293): one colour behind white
+     * text, which the API holds to WCAG 2.1 AA's contrast, a logo and an
+     * accessibility statement it serves itself over https. Null each is none:
+     * the pages look as they do unbranded, and name no statement.
+     */
+    brandColor: text(),
+    logoUrl: text(),
+    accessibilityStatementUrl: text(),
   },
   (t) => [
     companyReference(t, company),
@@ -179,6 +189,12 @@ export const project = wms.table(
       tableObjectName(t.id.table, "weight_tolerance_percent_range", "project"),
       sql`${t.weightTolerancePercent} between ${sql.raw(String(WEIGHT_TOLERANCE_PERCENT.min))} and ${sql.raw(String(WEIGHT_TOLERANCE_PERCENT.max))}`,
     ),
+    // The branding's shapes, `@waste/domain/access/branding`'s spellings; the colour's contrast is the API's to judge.
+    check(tableObjectName(t.id.table, "brand_color_shape", "project"), sql`${t.brandColor} ~ ${sql.raw(`'${BRAND_COLOR_PATTERN}'`)}`),
+    ...([
+      ["logo_url_shape", t.logoUrl],
+      ["accessibility_statement_url_shape", t.accessibilityStatementUrl],
+    ] as const).map(([label, column]) => check(tableObjectName(t.id.table, label, "project"), sql`${column} ~ ${sql.raw(`'${HTTPS_ADDRESS_PATTERN}'`)} and char_length(${column}) <= ${sql.raw(String(HTTPS_ADDRESS_MAX))}`)),
   ],
 )
 

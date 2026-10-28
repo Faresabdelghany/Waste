@@ -505,6 +505,13 @@
       "when": 1793227264394,
       "tag": "0071_stop_set_proposals",
       "breakpoints": true
+    },
+    {
+      "idx": 72,
+      "version": "7",
+      "when": 1793230691847,
+      "tag": "0072_project_branding",
+      "breakpoints": true
     }
   ]
 }
