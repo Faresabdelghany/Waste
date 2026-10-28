@@ -65,6 +65,7 @@ import { availabilityRoutes } from "./routes/availability"
 import { driverRoutes } from "./routes/drivers"
 import { generationRoutes } from "./routes/generation"
 import { importRoutes } from "./routes/imports"
+import { integrationRoutes } from "./routes/integrations"
 import { invoiceRoutes } from "./routes/invoices"
 import { lifecycleRoutes } from "./routes/lifecycle"
 import { accessCredentialRoutes } from "./routes/access-credentials"
@@ -114,6 +115,7 @@ import { sustainabilityRoutes } from "./routes/sustainability"
 import { ticketChargeRoutes } from "./routes/ticket-charges"
 import { workOrderProductRoutes } from "./routes/work-order-charges"
 import { ticketSlaRoutes } from "./routes/ticket-sla"
+import { ticketTeamRoutes } from "./routes/ticket-teams"
 import { ticketRoutes } from "./routes/tickets"
 import { unloadRoutes } from "./routes/unloads"
 import { unloadingStationRoutes } from "./routes/unloading-stations"
@@ -305,6 +307,8 @@ export function createApp({
   // The Plan endpoints (#170) share the routes module and its grant; the provider's name keys the fingerprints.
   app.route("/", planRoutes(guard, { routing, jobs }))
   app.route("/", routingQuotaRoutes(guard, { routing }))
+  // The deployment's connections for Settings › Integrations (#487): read off what was injected, never a call to the services.
+  app.route("/", integrationRoutes(guard, { routing, addressRegister, proofStorage: storage !== null }))
   // The preview calls the provider, so its guard ends the principal's transaction before the handler, which opens its own short ones around the call (#124 §4, #173).
   app.route("/", routingPreviewRoutes(identify({ pool, verifier }), { pool, engine: routingEngine, now, log: log ?? console.error }))
   app.route("/", pickupRoutes(guard, { now }))
@@ -320,6 +324,7 @@ export function createApp({
   app.route("/", ticketRoutes(guard, { now }))
   app.route("/", sortingGuideRoutes(guard))
   app.route("/", ticketSlaRoutes(guard))
+  app.route("/", ticketTeamRoutes(guard))
   // The Pickup Exceptions (M5 of #293): the company's contaminant codes, the projects' charge rules, and a place's exception history.
   app.route("/", contaminantCodeRoutes(guard))
   app.route("/", decommissionReasonRoutes(guard))
@@ -368,7 +373,7 @@ export function createApp({
   // A customer's sustainability report (M13 of #293), likewise.
   app.route("/", sustainabilityRoutes(guard))
   // The CSV import (#291 slice 12): a preview, then a run written a batch at a time through the families' own writes.
-  app.route("/", importRoutes(guard))
+  app.route("/", importRoutes(guard, { now }))
 
   app.get(
     "/openapi.json",

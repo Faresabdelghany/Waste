@@ -99,6 +99,7 @@ const missed: Ticket = {
   occurredAt: "2026-10-01T05:31:00.000Z",
   dueAt: "2026-10-01T12:00:00.000Z",
   assigneeUserAccountId: null,
+  teamId: null,
   createdBy: null,
   sourceEventId: "01a0d2a4-a280-7050-8000-000000000001",
   links: { ...NO_LINKS, routeId, pickupId, containerId },

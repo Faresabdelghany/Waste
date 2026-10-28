@@ -81,7 +81,7 @@ import { pickup, route } from "@waste/db/schema/execution"
 import { ticket, ticketEvent } from "@waste/db/schema/resolution"
 import { closedTicket, ticketTransition, type TicketCommand } from "@waste/domain/resolution/transitions"
 import { CLOSED_TICKET_STATUSES, isClosedTicketStatus, OPEN_TICKET_STATUSES, type TicketStatus } from "@waste/domain/resolution/vocabulary"
-import { and, asc, eq, exists, gt, gte, inArray, isNull, lt, notInArray, or, type SQL } from "drizzle-orm"
+import { and, asc, eq, exists, gt, gte, inArray, isNotNull, isNull, lt, notInArray, or, type SQL } from "drizzle-orm"
 import { Hono, type MiddlewareHandler } from "hono"
 import { describeRoute } from "hono-openapi"
 
@@ -106,6 +106,7 @@ import {
   requireProperty,
   requireRoute,
   requireSharedCollectionPoint,
+  requireTeam,
   requireTicket,
   type Scope,
 } from "./references"
@@ -133,6 +134,8 @@ export const notTheRoutesProject = (route: string): string => `Not the project o
 /** What a provider's ticket naming a source of the office's is told, at `source`. */
 export const fromItsWorkspace = (provider: string): string => `A ticket ${provider} raises comes from its workspace: its source is service-provider`
 export const OFFICE_ASSIGNS = "The office assigns a ticket"
+/** What a provider's ticket naming a team is told, at `teamId`: the office hands a ticket to a team (O30 of #290, row 7.20). */
+export const OFFICE_HANDS_TO_TEAMS = "The office hands a ticket to a team"
 export const OFFICE_LINKS_ALERTS = "The office links an alert to a ticket"
 /** What a provider's comment meant for the customer is told, at `visibility`. */
 export const OFFICE_SPEAKS_TO_CUSTOMERS = "The office speaks to the customer: a service provider's comment is for the office and the provider"
@@ -141,8 +144,8 @@ export const OFFICE_SPEAKS_TO_CUSTOMERS = "The office speaks to the customer: a 
  * A ticket a Service Provider's account raises (#291 slice 23b): about a
  * route its provider runs (`links.routeId`, as `GET /routes` reaches it), in
  * that route's project, from its workspace — the default source, which the
- * API writes as `service-provider`, and no other — with no assignee and no
- * alert, which are the office's. Every refusal a 400 at its field, listed
+ * API writes as `service-provider`, and no other — with no assignee, no team
+ * and no alert, which are the office's. Every refusal a 400 at its field, listed
  * together in the body's order.
  */
 async function requireProviderTicket(tx: Tx, principal: Principal, body: TicketCreate): Promise<void> {
@@ -153,6 +156,7 @@ async function requireProviderTicket(tx: Tx, principal: Principal, body: TicketC
   if (named !== undefined && named.projectId !== body.projectId) issues.push({ path: "projectId", message: notTheRoutesProject(routeLabelOf(named)) })
   if (body.source !== "office") issues.push({ path: "source", message: fromItsWorkspace(provider) })
   if (body.assigneeUserAccountId != null) issues.push({ path: "assigneeUserAccountId", message: OFFICE_ASSIGNS })
+  if (body.teamId != null) issues.push({ path: "teamId", message: OFFICE_HANDS_TO_TEAMS })
   if (named === undefined) issues.push({ path: "links.routeId", message: routeId === null ? namesARouteItRuns(provider) : notARouteItRuns(provider) })
   if (body.alertId !== undefined) issues.push({ path: "alertId", message: OFFICE_LINKS_ALERTS })
   if (issues.length > 0) throw invalidRequest("body", issues)
@@ -364,7 +368,7 @@ export function ticketRoutes(guard: MiddlewareHandler<AuthEnv>, { now = () => ne
         operationId: "listTickets",
         summary: "The tickets of the caller's projects",
         description:
-          "One page of tickets, oldest first (ids are time-ordered, so a cursor over them is a cursor over time), from the projects the caller works in — or, for a Service Provider's account, which works in none, the tickets about a route its provider runs (as `GET /routes` reaches it). `projectId` narrows it to one of those projects; naming another is refused. `status` is one of the six, `open=true` the four open statuses and `open=false` the two closed (the two combine with `status`), `overdue=true` the open tickets whose `dueAt` has passed on the request's clock and `overdue=false` every other — closed, without a due date, or not due yet — `kind`, `priority` and `source` one each, `assigneeUserAccountId` one account's tickets, `propertyId`, `routeId`, `pickupId`, `containerId` and `driverId` the tickets naming that row, and `from` and `to` the tickets whose `occurredAt` falls in a window of days — both ends inclusive, on the UTC calendar day, so `to=2026-10-05` takes the whole of the 5th (`to` on or after `from`). `customerId` is the citizen portal's read model: the tickets naming the customer, or naming a property a party row names them on in any role — one row per ticket however many roles they hold — held to a customer of this company (400 on the query); its fence on the portal's own login is the portal issue's. Hand `nextCursor` back as `cursor` for the next page.",
+          "One page of tickets, oldest first (ids are time-ordered, so a cursor over them is a cursor over time), from the projects the caller works in — or, for a Service Provider's account, which works in none, the tickets about a route its provider runs (as `GET /routes` reaches it). `projectId` narrows it to one of those projects; naming another is refused. `status` is one of the six, `open=true` the four open statuses and `open=false` the two closed (the two combine with `status`), `overdue=true` the open tickets whose `dueAt` has passed on the request's clock and `overdue=false` every other — closed, without a due date, or not due yet — `kind`, `priority` and `source` one each, `assigneeUserAccountId` one account's tickets, `teamId` one team's and `unassigned=true` the tickets nobody works (`false` those somebody does) — so `teamId` with `open=true` and `unassigned=true` is the team's queue, which anyone with the grant takes from (O30 of #290) — `propertyId`, `routeId`, `pickupId`, `containerId` and `driverId` the tickets naming that row, and `from` and `to` the tickets whose `occurredAt` falls in a window of days — both ends inclusive, on the UTC calendar day, so `to=2026-10-05` takes the whole of the 5th (`to` on or after `from`). `customerId` is the citizen portal's read model: the tickets naming the customer, or naming a property a party row names them on in any role — one row per ticket however many roles they hold — held to a customer of this company (400 on the query); its fence on the portal's own login is the portal issue's. Hand `nextCursor` back as `cursor` for the next page.",
         security: BEARER_SECURITY,
         responses: {
           200: describeJson("One page of tickets.", TicketPage),
@@ -377,7 +381,7 @@ export function ticketRoutes(guard: MiddlewareHandler<AuthEnv>, { now = () => ne
       requireGrant(MODULE, "view"),
       validate("query", TicketListQuery),
       async (c) => {
-        const { limit, cursor, projectId, status, open, overdue, kind, priority, source, assigneeUserAccountId, customerId, propertyId, routeId, pickupId, containerId, driverId, from, to } = c.req.valid("query")
+        const { limit, cursor, projectId, status, open, overdue, kind, priority, source, assigneeUserAccountId, teamId, unassigned, customerId, propertyId, routeId, pickupId, containerId, driverId, from, to } = c.req.valid("query")
         const after = afterCursor(cursor)
         const tx = c.get("tx")
         const principal = c.get("principal")
@@ -397,6 +401,8 @@ export function ticketRoutes(guard: MiddlewareHandler<AuthEnv>, { now = () => ne
               priority === undefined ? undefined : eq(ticket.priority, priority),
               source === undefined ? undefined : eq(ticket.source, source),
               assigneeUserAccountId === undefined ? undefined : eq(ticket.assigneeUserAccountId, assigneeUserAccountId),
+              teamId === undefined ? undefined : eq(ticket.teamId, teamId),
+              unassigned === undefined ? undefined : unassigned ? isNull(ticket.assigneeUserAccountId) : isNotNull(ticket.assigneeUserAccountId),
               customerId === undefined ? undefined : visibleTo(tx, principal.companyId, customerId),
               propertyId === undefined ? undefined : eq(ticket.propertyId, propertyId),
               routeId === undefined ? undefined : eq(ticket.routeId, routeId),
@@ -418,14 +424,14 @@ export function ticketRoutes(guard: MiddlewareHandler<AuthEnv>, { now = () => ne
         operationId: "createTicket",
         summary: "Open a ticket",
         description:
-          "Opens a case in a project the caller works in (400 at `projectId` otherwise): the number is taken from the company's counter (`T-<n>`, never renumbered), the row is written `open`, and a `created` event is appended with the assignee if one and the caller as its recorder. `source` is one of the office's doors and defaults to `office`; `driver-app` and `dispatch` are the outbox consumer's and are refused. `occurredAt` is when the issue or request happened, the request's clock when absent, and may run at most five minutes ahead of it (400) — with no lower bound, since the office records a complaint made yesterday. `dueAt` is the due date, null for none; absent, it is the project's SLA target of the ticket's kind and priority counted from `occurredAt` (`GET /projects/:id/ticket-sla`: the kind's own target, else every kind's), and none where the project sets neither. Every link named is held to the ticket's project (400 at `links.<field>`): a route of the project, a pickup of that route (a pickup is named with its route, 400 at `links.pickupId`), a container, a property, a shared collection point, an agreement, a driver and a parent ticket of the project, a customer of the company; no status gates a link — a ticket is about whatever it is about. `assigneeUserAccountId` is an account of this company that is not deactivated and works in the project (400). `alertId` is an alert of the project (400) that is not resolved (409, `This alert is resolved and does not change`) and not linked to another ticket (409, `This alert is linked to ticket T-8831; an alert links to one ticket`); its `ticketId` is set in the same transaction. The `ticket-opened` event is written in the same transaction, carrying the ticket as answered. A Service Provider's account opens a ticket about a route its provider runs alone: `links.routeId` names one (as `GET /routes` reaches it), `projectId` is that route's project, the source is left to its default — the API writes `service-provider` — and neither an assignee nor an alert is named, those being the office's; each refused (400) at its field. A `missed-collection` naming an emptying whose driver recorded the bin was not presented — skipped or failed, reason `not-presented`, and not since corrected by the office — is answered by that record as it opens, unless `answerFromRecord` is false: a customer-visible `comment` quoting the record (as `GET /tickets/{id}/evidence` writes it) is appended, the case is completed `answered`, and `ticket-completed` follows `ticket-opened`; the 201 answers it completed. The reply is recorded, not sent: sending is the communications slice's, and a reply recorded before it is never sent after it.",
+          "Opens a case in a project the caller works in (400 at `projectId` otherwise): the number is taken from the company's counter (`T-<n>`, never renumbered), the row is written `open`, and a `created` event is appended with the assignee if one and the caller as its recorder. `source` is one of the office's doors and defaults to `office`; `driver-app` and `dispatch` are the outbox consumer's and are refused. `occurredAt` is when the issue or request happened, the request's clock when absent, and may run at most five minutes ahead of it (400) — with no lower bound, since the office records a complaint made yesterday. `dueAt` is the due date, null for none; absent, it is the project's SLA target of the ticket's kind and priority counted from `occurredAt` (`GET /projects/:id/ticket-sla`: the kind's own target, else every kind's), and none where the project sets neither. Every link named is held to the ticket's project (400 at `links.<field>`): a route of the project, a pickup of that route (a pickup is named with its route, 400 at `links.pickupId`), a container, a property, a shared collection point, an agreement, a driver and a parent ticket of the project, a customer of the company; no status gates a link — a ticket is about whatever it is about. `assigneeUserAccountId` is an account of this company that is not deactivated and works in the project (400). `teamId` is the team the ticket waits with (O30 of #290): one of this company's (400) that is active (409, `The team \"…\" is retired; a ticket waits with an active team`), null for none, and, absent, the project's default team for the kind (`GET /projects/:id/ticket-team-defaults`) while that team is active, else none. `alertId` is an alert of the project (400) that is not resolved (409, `This alert is resolved and does not change`) and not linked to another ticket (409, `This alert is linked to ticket T-8831; an alert links to one ticket`); its `ticketId` is set in the same transaction. The `ticket-opened` event is written in the same transaction, carrying the ticket as answered. A Service Provider's account opens a ticket about a route its provider runs alone: `links.routeId` names one (as `GET /routes` reaches it), `projectId` is that route's project, the source is left to its default — the API writes `service-provider` — and neither an assignee, a team nor an alert is named, those being the office's; each refused (400) at its field. A `missed-collection` naming an emptying whose driver recorded the bin was not presented — skipped or failed, reason `not-presented`, and not since corrected by the office — is answered by that record as it opens, unless `answerFromRecord` is false: a customer-visible `comment` quoting the record (as `GET /tickets/{id}/evidence` writes it) is appended, the case is completed `answered`, and `ticket-completed` follows `ticket-opened`; the 201 answers it completed. The reply is recorded, not sent: sending is the communications slice's, and a reply recorded before it is never sent after it.",
         security: BEARER_SECURITY,
         responses: {
           201: describeCreated("The ticket as opened, or completed `answered` where the stop's record answered it.", Ticket),
           400: describeProblem("The body is missing a field, names a member the server owns, names a source the office may not write, dates the ticket more than five minutes after the request, names a pickup without its route, or names a project, link, assignee or alert the rules above refuse — each at the field that is wrong."),
           401: describeProblem("No usable token (see WWW-Authenticate)."),
           403: describeProblem(`No active account here, or the caller's role does not allow \`create\` on \`${MODULE}\`.`),
-          409: describeProblem("The alert named is resolved, or is linked to another ticket; the detail says which."),
+          409: describeProblem("The team named is retired, or the alert named is resolved or linked to another ticket; the detail says which."),
         },
       }),
       guard,
@@ -441,11 +447,12 @@ export function ticketRoutes(guard: MiddlewareHandler<AuthEnv>, { now = () => ne
         const scope: Scope = { companyId: principal.companyId, projectId: body.projectId }
         const at = now()
         const occurredAt = body.occurredAt === undefined ? at : new Date(body.occurredAt)
-        // The 400s in body order: the clock, the assignee, the links; the alert's own 400 and its two 409s follow under its lock inside `openTicket` (routes/alert-links.ts), which spells them once for both doors, so nothing is checked here that it checks again.
+        // The 400s in body order: the clock, the assignee, the links, then the team's 400 and its 409; the alert's own 400 and its two 409s follow under its lock inside `openTicket` (routes/alert-links.ts), which spells them once for both doors, so nothing is checked here that it checks again.
         requireNotAhead(occurredAt, at)
         await requireAccountInProject(tx, scope, body.assigneeUserAccountId)
         const links = linksAfter(NO_LINKS, body.links)
         await requireLinks(tx, scope, links, namedIn(body.links))
+        if (body.teamId != null) await requireTeam(tx, principal.companyId, body.teamId)
         const { answered } = await openTicket(tx, {
           companyId: principal.companyId,
           draft: {
@@ -458,6 +465,8 @@ export function ticketRoutes(guard: MiddlewareHandler<AuthEnv>, { now = () => ne
             occurredAt,
             dueAt: body.dueAt === undefined ? BY_SLA : body.dueAt === null ? null : new Date(body.dueAt),
             assigneeUserAccountId: body.assigneeUserAccountId ?? null,
+            // Absent, the project's default team for the kind (`openTicket`).
+            ...(body.teamId === undefined ? {} : { teamId: body.teamId }),
             links,
             alertId: body.alertId ?? null,
           },
@@ -510,15 +519,15 @@ export function ticketRoutes(guard: MiddlewareHandler<AuthEnv>, { now = () => ne
         operationId: "patchTicket",
         summary: "Change a ticket's own fields",
         description:
-          "Moves the case's own fields — `subject`, `description`, `kind`, `priority`, `dueAt` and the `links` — and nothing the machine or the assignment owns: the status moves through the commands, the assignee through `assign`, and the source, the project, the number, the resolution and the stamps never. At least one field must be given. Under the ticket's row lock. " +
+          "Moves the case's own fields — `subject`, `description`, `kind`, `priority`, `dueAt`, `teamId` and the `links` — and nothing the machine or the assignment owns: the status moves through the commands, the assignee through `assign`, and the source, the project, the number, the resolution and the stamps never. At least one field must be given. Under the ticket's row lock. " +
           CLOSED +
-          " Every link named is held as on the create (400 at `links.<field>`), the pickup rule against the row the patch leaves behind: a body moving `pickupId` alone names the stored route, one moving `routeId` under a stored pickup must name the pickup's route, and a body clearing the route under a pickup is refused at `links.pickupId`; a ticket may not be its own parent (400). `updatedAt` moves; no history row is appended, since a field edit is the audit log's (ADR-0005).",
+          " Every link named is held as on the create (400 at `links.<field>`), the pickup rule against the row the patch leaves behind: a body moving `pickupId` alone names the stored route, one moving `routeId` under a stored pickup must name the pickup's route, and a body clearing the route under a pickup is refused at `links.pickupId`; a ticket may not be its own parent (400). `teamId` hands the case to another team, one of this company's (400) that is active (409) — the team it already waits with is kept whatever its status — or to none with null; the assignee stays as it is, and the kind moving does not move the team. `updatedAt` moves; no history row is appended, since a field edit is the audit log's (ADR-0005).",
         security: BEARER_SECURITY,
         responses: {
           200: describeJson("The ticket as it now stands.", Ticket),
           400: describeProblem("The path does not hold an id, or the body changes nothing, names a member the patch does not take, or names a link the rules above refuse — at the field that is wrong."),
           ...commandProblems("edit"),
-          409: describeProblem("The ticket is completed or rejected; reopen it first."),
+          409: describeProblem("The ticket is completed or rejected; reopen it first. Or the team named is retired."),
         },
       }),
       guard,
@@ -535,6 +544,8 @@ export function ticketRoutes(guard: MiddlewareHandler<AuthEnv>, { now = () => ne
         const scope: Scope = { companyId: principal.companyId, projectId: current.projectId }
         const links = linksAfter(linksOf(current), body.links)
         await requireLinks(tx, scope, links, namedIn(body.links), current.id)
+        // A team the ticket already waits with is no new reference; any other is held, its status included.
+        if (body.teamId != null && body.teamId !== current.teamId) await requireTeam(tx, principal.companyId, body.teamId)
         const [row] = await tx
           .update(ticket)
           .set({
@@ -543,6 +554,7 @@ export function ticketRoutes(guard: MiddlewareHandler<AuthEnv>, { now = () => ne
             kind: body.kind ?? current.kind,
             priority: body.priority ?? current.priority,
             dueAt: body.dueAt === undefined ? current.dueAt : body.dueAt === null ? null : new Date(body.dueAt),
+            teamId: body.teamId === undefined ? current.teamId : body.teamId,
             ...links,
           })
           .where(and(ticketScope(principal), eq(ticket.id, id)))

@@ -32,7 +32,7 @@ import { serviceProviderActivityAsOf0067 } from "./activity-as-of"
 import { checksOf, list, ref } from "./rendering"
 import { statementsBetween } from "./specimen"
 
-const MIGRATION = "0068_stop_set_proposals.sql"
+const MIGRATION = "0071_stop_set_proposals.sql"
 
 const referenced = { company, project, serviceProvider, serviceArea, routeScheme, collectionGroup, userAccount, vehicle, driver, container }
 

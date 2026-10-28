@@ -26,3 +26,10 @@ export function historySubjectOf(module: ServerModule, record: BusinessRecord, s
 /** The newest page of a row's history: as many changes as one page holds, `nextCursor` saying older ones were left. */
 export const historyPage = (client: ApiClient, subject: HistorySubject): Promise<Page<AuditEvent>> =>
   listPage<AuditEvent>(client, "/audit-events", { table: subject.table, rowId: subject.rowId })
+
+/** The module whose `view` reads the company's whole history (`GET /audit-events` with no row). */
+export const COMPANY_HISTORY_MODULE = "configure.privacy"
+
+/** One page of the company's whole history, newest first: from the newest change, or from `cursor` — the page before's `nextCursor` — back. */
+export const companyHistoryPage = (client: ApiClient, cursor?: string): Promise<Page<AuditEvent>> =>
+  listPage<AuditEvent>(client, "/audit-events", { cursor })

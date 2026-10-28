@@ -80,7 +80,7 @@ import {
 import { company, project, serviceProvider } from "@waste/db/schema/organisation"
 import { contaminantCode, contaminantCodeFraction, pickupExceptionRule, pickupExceptionRuleStep } from "@waste/db/schema/pickup-exceptions"
 import { planningArea, planningAreaBoundary } from "@waste/db/schema/planning-areas"
-import { alert, ticket, ticketBooking, ticketEvent, ticketSla } from "@waste/db/schema/resolution"
+import { alert, team, teamMember, ticket, ticketBooking, ticketEvent, ticketSla, ticketTeamDefault } from "@waste/db/schema/resolution"
 import { application, applicationDecision } from "@waste/db/schema/applications"
 import { bulkyBooking, bulkyBookingItem, bulkySchedule } from "@waste/db/schema/bulky"
 import { serviceProviderActivity, serviceProviderActivityContainer } from "@waste/db/schema/service-provider-activities"
@@ -393,6 +393,10 @@ export async function dropTenant(pool: Database, companyId: string, owner?: Data
     await tx.delete(routingQuota).where(eq(routingQuota.companyId, companyId))
     await tx.delete(sortingGuideItem).where(eq(sortingGuideItem.companyId, companyId))
     await tx.delete(ticketSla).where(eq(ticketSla.companyId, companyId))
+    // The ticket teams (O30 of #290): the defaults and the members name a team, and a ticket did, so the team goes after the tickets.
+    await tx.delete(ticketTeamDefault).where(eq(ticketTeamDefault.companyId, companyId))
+    await tx.delete(teamMember).where(eq(teamMember.companyId, companyId))
+    await tx.delete(team).where(eq(team.companyId, companyId))
     // The Drop-off Points (#293 M3): the three sets, then the point, before the fractions and the project they name.
     await tx.delete(dropOffPointFraction).where(eq(dropOffPointFraction.companyId, companyId))
     await tx.delete(dropOffPointHours).where(eq(dropOffPointHours.companyId, companyId))
