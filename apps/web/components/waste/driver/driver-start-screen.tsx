@@ -7,19 +7,22 @@
 // door carries (#144). Whether the driver may take that vehicle, whether it
 // is in service and whether another route is still open are the server's to
 // say: the start is sent, and a refusal comes back as its sentence on the
-// route, which stays ready.
+// route, which stays ready. Before it, the driver checks the picked vehicle
+// and trailer against their type's checklist (O13 of #290): a critical
+// defect takes the vehicle off the road, and the start on it is refused.
 import Link from "next/link"
 import { useState } from "react"
-import { ArrowClockwise, MapPin, Play } from "@phosphor-icons/react/dist/ssr"
+import { ArrowClockwise, ClipboardText, MapPin, Play } from "@phosphor-icons/react/dist/ssr"
 
 import { Badge } from "@/components/ui/badge"
 import { Button } from "@/components/ui/button"
 import { useDriverApp, useDriverAppState } from "@/components/waste/driver/driver-app-provider"
-import { NativeSelect } from "@/components/waste/driver/driver-dialogs"
+import { NativeSelect, PreTripDialog } from "@/components/waste/driver/driver-dialogs"
 import { DriverFrame } from "@/components/waste/driver/driver-frame"
 import { RejectionList, operatingDay, progressLine } from "@/components/waste/driver/driver-parts"
 import type { DriverMe } from "@waste/contracts/driver-commands"
 import type { Route } from "@waste/contracts/routes"
+import { checkWaiting } from "@/lib/driver/pre-trip"
 import { ROUTE_STATUS_LABELS, routeActions, routesInDayOrder, waitingOn } from "@/lib/driver/route-view"
 
 export function DriverStartScreen() {
@@ -110,6 +113,8 @@ function RouteCard({ route, me }: { route: Route; me: DriverMe }) {
 
 function StartForm({ route, me }: { route: Route; me: DriverMe }) {
   const app = useDriverApp()
+  const state = useDriverAppState()
+  const [checking, setChecking] = useState<string | null>(null)
   const vehicles = me.vehicles.filter((vehicle) => vehicle.kind !== "trailer")
   const trailers = me.vehicles.filter((vehicle) => vehicle.kind === "trailer")
   const planned = (id: string | null, from: typeof vehicles) => (id !== null && from.some((vehicle) => vehicle.id === id) ? id : "")
@@ -144,6 +149,27 @@ function StartForm({ route, me }: { route: Route; me: DriverMe }) {
           ))}
         </NativeSelect>
       )}
+      <div className="grid grid-cols-2 gap-2">
+        {[vehicleId, trailerId]
+          .filter((id) => id !== "")
+          .map((id) => {
+            const picked = me.vehicles.find((candidate) => candidate.id === id)
+            const sending = checkWaiting(state.waiting, route.id, id)
+            return (
+              <Button key={id} type="button" variant="outline" className="h-11" disabled={picked === undefined || sending} onClick={() => setChecking(id)}>
+                <ClipboardText aria-hidden />
+                {sending ? "Check sending" : `Check ${picked?.label ?? "vehicle"}`}
+              </Button>
+            )
+          })}
+      </div>
+      {checking !== null &&
+        (() => {
+          const picked = me.vehicles.find((candidate) => candidate.id === checking)
+          return picked === undefined ? null : (
+            <PreTripDialog open onOpenChange={(open) => !open && setChecking(null)} vehicle={picked} onConfirm={(body) => void app.tap({ kind: "pre-trip-check", routeId: route.id, body })} />
+          )
+        })()}
       <Button type="submit" className="h-11" disabled={vehicleId === ""}>
         <Play aria-hidden weight="fill" />
         Start route

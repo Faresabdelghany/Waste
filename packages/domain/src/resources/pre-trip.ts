@@ -89,6 +89,6 @@ export function defectTicket(facts: { vehicleLabel: string; driverName: string; 
     kind: "vehicle-defect",
     priority: facts.grounds ? "high" : "medium",
     subject: `Pre-trip check found ${count} on ${facts.vehicleLabel}`,
-    description: `${facts.driverName} checked ${facts.vehicleLabel} before route ${facts.routeLabel} at ${facts.checkedAt} and found:\n${facts.defects.map((defect) => `- ${defectLine(defect)}`).join("\n")}\n\n${outcome}`,
+    description: `${facts.driverName} checked ${facts.vehicleLabel} for route ${facts.routeLabel} at ${facts.checkedAt} and found:\n${facts.defects.map((defect) => `- ${defectLine(defect)}`).join("\n")}\n\n${outcome}`,
   }
 }

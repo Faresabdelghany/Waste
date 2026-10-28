@@ -126,6 +126,14 @@ _Avoid_: Working hours, roster, schedule
 When in the day a stop may be served: a Property's access hours and an Agreement's promised window, each optional, the stop's window being where the two overlap. Route optimisation holds a stop inside it.
 _Avoid_: Time slot, booking slot, opening hours (a station's)
 
+**Pre-trip Check**:
+A driver's walk-round of a Vehicle before or during the day, answering every item of the checklist its vehicle type holds — passed, or a defect with what was seen — and the odometer and engine hours where read. A check is kept as it was answered, whatever the checklist says later.
+_Avoid_: Inspection report, vehicle audit, service
+
+**Vehicle Defect**:
+A checklist item a Pre-trip Check failed, open until the office marks it resolved. A defect of a critical item takes the Vehicle out of service — its status maintenance — until the office mends it and sets it active again; every check that finds defects opens the office one ticket for them.
+_Avoid_: Fault, damage report, container defect (a container's)
+
 **Vehicle Allocation**:
 A time-bounded plan that reserves a compatible vehicle and, where applicable, a driver for expected work.
 _Avoid_: Actual assignment, route, vehicle

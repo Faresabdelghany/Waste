@@ -27,6 +27,7 @@ import { vehicleAllocation, vehicleAllocationEvent } from "@waste/db/schema/allo
 import { driverAbsence, vehicleUnavailability } from "@waste/db/schema/availability"
 import { container, containerServicePlacement } from "@waste/db/schema/containers"
 import { driverCommand, outboxEvent, pickup, proofOfService, route, session, sessionPosition, unload } from "@waste/db/schema/execution"
+import { preTripCheck, preTripChecklistItem, vehicleDefect } from "@waste/db/schema/pre-trip"
 import {
   accountingAccount,
   accountingExport,
@@ -354,6 +355,9 @@ export async function dropTenant(pool: Database, companyId: string, owner?: Data
     await owner.db.delete(applicationDecision).where(eq(applicationDecision.companyId, companyId))
     await owner.db.delete(proofOfService).where(eq(proofOfService.companyId, companyId))
     await owner.db.delete(sessionPosition).where(eq(sessionPosition.companyId, companyId))
+    // A defect names its check (O13 of #290): both go with the ledgers, the defect first.
+    await owner.db.delete(vehicleDefect).where(eq(vehicleDefect.companyId, companyId))
+    await owner.db.delete(preTripCheck).where(eq(preTripCheck.companyId, companyId))
     await owner.db.delete(unload).where(eq(unload.companyId, companyId))
     await owner.db.delete(driverCommand).where(eq(driverCommand.companyId, companyId))
     await owner.db.delete(vehicleAllocationEvent).where(eq(vehicleAllocationEvent.companyId, companyId))
@@ -433,6 +437,7 @@ export async function dropTenant(pool: Database, companyId: string, owner?: Data
     await tx.delete(depot).where(eq(depot.companyId, companyId))
     await tx.delete(containerTypeVehicleType).where(eq(containerTypeVehicleType.companyId, companyId))
     await tx.delete(vehicleTypeConsumption).where(eq(vehicleTypeConsumption.companyId, companyId))
+    await tx.delete(preTripChecklistItem).where(eq(preTripChecklistItem.companyId, companyId))
     await tx.delete(fuelEmissionFactor).where(eq(fuelEmissionFactor.companyId, companyId))
     await tx.delete(vehicleType).where(eq(vehicleType.companyId, companyId))
     await tx.delete(collectionCalendarHoliday).where(eq(collectionCalendarHoliday.companyId, companyId))
