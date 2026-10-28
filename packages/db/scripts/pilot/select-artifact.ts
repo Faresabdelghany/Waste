@@ -1,5 +1,5 @@
 // Chooses the artifact a restore or a recovery reads (src/pilot/github.ts):
-// SOURCE_RUN_ID must be a dispatched run of this workflow on main, and of its
+// SOURCE_RUN_ID must be a run of this workflow on main (by hand or after CI), and of its
 // artifacts named ARTIFACT_PREFIX-<run>-<attempt> the newest attempt's is
 // taken. Outputs `id`, `attempt` and `commit` (the run's head) for the
 // download step and the checks after it. Reads GITHUB_TOKEN (the job's, with
