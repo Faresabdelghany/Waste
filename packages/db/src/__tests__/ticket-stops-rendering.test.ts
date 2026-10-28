@@ -2,7 +2,7 @@
 // the booked route and pickup on the ticket, a pickup of that route through
 // the project key the re-collection's stop reaches, both or neither, and one
 // ticket per stop — six statements diffed from the ticket as 0033 left it to
-// the ticket as 0035 left it, before 0062 gave it its team (ticket-as-of.ts),
+// the ticket as 0035 left it, before 0064 gave it its team (ticket-as-of.ts),
 // since an applied file is never edited;
 // resolution-rendering.test.ts maps today's table back (`CHANGED_LATER`).
 // Then migration 0035, which is exactly those statements under its header:

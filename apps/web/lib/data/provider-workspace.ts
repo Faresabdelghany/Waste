@@ -16,6 +16,7 @@ import { TICKET_KINDS, TICKET_PRIORITIES } from "@waste/domain/resolution/vocabu
 import { allows, type Grants } from "../api/grants"
 import { accessMapOf, DEACTIVATE_USER, REACTIVATE_USER } from "../api/records/organisation"
 import { PICKUPS_MODULE } from "../api/records/pickups"
+import { COMPLETE_ACTIVITY, WITHDRAW_ACTIVITY } from "../api/records/provider-activities"
 import { ASSIGN_ROUTE, DISPATCH_ROUTE, ROUTES_MODULE } from "../api/records/routes"
 import type { BusinessFormOption, BusinessFormSchema, BusinessFormValues } from "./business-form-types"
 import type { BusinessRecord, ModuleLocation } from "./business-modules"
@@ -64,13 +65,15 @@ export function providerWorkspaceOf(me: MeOfProvider): ProviderWorkspace | null 
  * a stop's, a ticket's, a ticket's patch — is the office's: the API finds no
  * row for a provider's, so no surface offers it one.
  */
+/** A row's own fields changed by its patch, which a surface asks after as it asks after a command: a provider's account patches no ticket. */
+export const PATCH_RECORD = "patch"
+
 export const PROVIDER_COMMANDS: Readonly<Record<string, readonly string[]>> = {
   "route-studio.routes": [ASSIGN_ROUTE, DISPATCH_ROUTE],
   [`${TEAM_MODULE.workspaceId}.${TEAM_MODULE.moduleId}`]: [DEACTIVATE_USER, REACTIVATE_USER],
+  // Its own proposals and notes (#474): withdrawn, completed and corrected; the office alone decides a proposal.
+  "service-providers.activities": [WITHDRAW_ACTIVITY, COMPLETE_ACTIVITY, PATCH_RECORD],
 }
-
-/** A row's own fields changed by its patch, which a surface asks after as it asks after a command: a provider's account patches no ticket. */
-export const PATCH_RECORD = "patch"
 
 /**
  * Whether a surface offers a command of a module to the account signed in:

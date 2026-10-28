@@ -36,6 +36,7 @@ import { priceRowsModule, productsModule } from "./pricing"
 import { propertiesModule, propertyGroupsModule, sharedPointsModule } from "./properties"
 import { customersModule } from "./registry"
 import { dropOffPointsModule } from "./drop-off-points"
+import { providerActivitiesModule } from "./provider-activities"
 import { providerPricesModule, settlementsModule } from "./provider-money"
 import { routeSchemesModule } from "./route-schemes"
 import { serviceAreasModule } from "./service-areas"
@@ -117,6 +118,8 @@ export const SERVER_MODULES: readonly ServerModule[] = [
   routeSchemesModule,
   liveModule,
   routesModule,
+  // The providers' Activities (#474), after the providers, the awards, the schemes and the routes a proposal is opened on.
+  providerActivitiesModule,
   pickupsModule,
   // The Bulky Bookings (O11 of #290), after the routes their stops are on and the places, agreements and fractions they name.
   bulkyBookingsModule,
