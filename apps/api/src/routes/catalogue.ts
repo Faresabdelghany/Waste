@@ -119,6 +119,81 @@ const typeNameTaken = (name: string) => `This company already has a container ty
 
 const noSuchType = (id: string) => problem(404, { detail: `No container type ${id} in this company` })
 
+// The writes the routes and the catalogue's CSV import (routes/import-rows.ts,
+// O30 of #290) share, so an imported row is held to every rule a form's is and
+// refused in the same sentence: the duplicate's 409, the missing row's 404.
+
+/** Adds a waste fraction to the caller's company. */
+export async function createWasteFraction(tx: Tx, principal: Principal, values: WasteFractionCreate): Promise<WasteFraction> {
+  const sentences = { [FRACTION_KEY_TAKEN]: fractionKeyTaken(values.key), [FRACTION_NAME_TAKEN]: fractionNameTaken(values.name) }
+  const [row] = await refuseDuplicate(sentences, () =>
+    tx
+      .insert(wasteFraction)
+      .values({ ...values, id: newId(), companyId: principal.companyId })
+      .returning(fractionColumns),
+  )
+  return fractionOf(row)
+}
+
+/** Changes one waste fraction of the caller's company; the 404 where there is none. */
+export async function patchWasteFraction(tx: Tx, principal: Principal, id: string, patch: WasteFractionPatch): Promise<WasteFraction> {
+  const sentences: Record<string, string> = patch.name === undefined ? {} : { [FRACTION_NAME_TAKEN]: fractionNameTaken(patch.name) }
+  const [row] = await refuseDuplicate(sentences, () =>
+    tx
+      .update(wasteFraction)
+      .set(patch)
+      .where(and(eq(wasteFraction.companyId, principal.companyId), eq(wasteFraction.id, id)))
+      .returning(fractionColumns),
+  )
+  if (row === undefined) throw noSuchFraction(id)
+  return fractionOf(row)
+}
+
+/** The company's waste fraction with this key, or undefined. */
+export async function wasteFractionByKey(tx: Tx, companyId: string, key: string): Promise<WasteFraction | undefined> {
+  const [row] = await tx
+    .select(fractionColumns)
+    .from(wasteFraction)
+    .where(and(eq(wasteFraction.companyId, companyId), eq(wasteFraction.key, key)))
+    .limit(1)
+  return row === undefined ? undefined : fractionOf(row)
+}
+
+/** Adds a container type to the caller's company. */
+export async function createContainerType(tx: Tx, principal: Principal, values: ContainerTypeCreate): Promise<ContainerType> {
+  const [row] = await refuseDuplicate({ [TYPE_NAME_TAKEN]: typeNameTaken(values.name) }, () =>
+    tx
+      .insert(containerType)
+      .values({ ...values, id: newId(), companyId: principal.companyId })
+      .returning(typeColumns),
+  )
+  return typeOf(row)
+}
+
+/** Changes one container type of the caller's company; the 404 where there is none. */
+export async function patchContainerType(tx: Tx, principal: Principal, id: string, patch: ContainerTypePatch): Promise<ContainerType> {
+  const sentences: Record<string, string> = patch.name === undefined ? {} : { [TYPE_NAME_TAKEN]: typeNameTaken(patch.name) }
+  const [row] = await refuseDuplicate(sentences, () =>
+    tx
+      .update(containerType)
+      .set(patch)
+      .where(and(eq(containerType.companyId, principal.companyId), eq(containerType.id, id)))
+      .returning(typeColumns),
+  )
+  if (row === undefined) throw noSuchType(id)
+  return typeOf(row)
+}
+
+/** The company's container type with this name, or undefined. */
+export async function containerTypeByName(tx: Tx, companyId: string, name: string): Promise<ContainerType | undefined> {
+  const [row] = await tx
+    .select(typeColumns)
+    .from(containerType)
+    .where(and(eq(containerType.companyId, companyId), eq(containerType.name, name)))
+    .limit(1)
+  return row === undefined ? undefined : typeOf(row)
+}
+
 const frequencyColumns = {
   id: serviceFrequency.id,
   projectId: serviceFrequency.projectId,
@@ -220,18 +295,7 @@ export function catalogueRoutes(guard: MiddlewareHandler<AuthEnv>) {
       guard,
       requireGrant(MODULE, "create"),
       validate("json", WasteFractionCreate),
-      async (c) => {
-        const values = c.req.valid("json")
-        const sentences = { [FRACTION_KEY_TAKEN]: fractionKeyTaken(values.key), [FRACTION_NAME_TAKEN]: fractionNameTaken(values.name) }
-        const [row] = await refuseDuplicate(sentences, () =>
-          c
-            .get("tx")
-            .insert(wasteFraction)
-            .values({ ...values, id: newId(), companyId: c.get("principal").companyId })
-            .returning(fractionColumns),
-        )
-        return created(c, "/waste-fractions", fractionOf(row))
-      },
+      async (c) => created(c, "/waste-fractions", await createWasteFraction(c.get("tx"), c.get("principal"), c.req.valid("json"))),
     )
     .get(
       "/waste-fractions/:id",
@@ -284,21 +348,7 @@ export function catalogueRoutes(guard: MiddlewareHandler<AuthEnv>) {
       requireGrant(MODULE, "edit"),
       validate("param", IdParam),
       validate("json", WasteFractionPatch),
-      async (c) => {
-        const { id } = c.req.valid("param")
-        const patch = c.req.valid("json")
-        const sentences: Record<string, string> = patch.name === undefined ? {} : { [FRACTION_NAME_TAKEN]: fractionNameTaken(patch.name) }
-        const [row] = await refuseDuplicate(sentences, () =>
-          c
-            .get("tx")
-            .update(wasteFraction)
-            .set(patch)
-            .where(and(eq(wasteFraction.companyId, c.get("principal").companyId), eq(wasteFraction.id, id)))
-            .returning(fractionColumns),
-        )
-        if (row === undefined) throw noSuchFraction(id)
-        return c.json(fractionOf(row))
-      },
+      async (c) => c.json(await patchWasteFraction(c.get("tx"), c.get("principal"), c.req.valid("param").id, c.req.valid("json"))),
     )
     .get(
       "/container-types",
@@ -350,17 +400,7 @@ export function catalogueRoutes(guard: MiddlewareHandler<AuthEnv>) {
       guard,
       requireGrant(MODULE, "create"),
       validate("json", ContainerTypeCreate),
-      async (c) => {
-        const values = c.req.valid("json")
-        const [row] = await refuseDuplicate({ [TYPE_NAME_TAKEN]: typeNameTaken(values.name) }, () =>
-          c
-            .get("tx")
-            .insert(containerType)
-            .values({ ...values, id: newId(), companyId: c.get("principal").companyId })
-            .returning(typeColumns),
-        )
-        return created(c, "/container-types", typeOf(row))
-      },
+      async (c) => created(c, "/container-types", await createContainerType(c.get("tx"), c.get("principal"), c.req.valid("json"))),
     )
     .get(
       "/container-types/:id",
@@ -413,21 +453,7 @@ export function catalogueRoutes(guard: MiddlewareHandler<AuthEnv>) {
       requireGrant(MODULE, "edit"),
       validate("param", IdParam),
       validate("json", ContainerTypePatch),
-      async (c) => {
-        const { id } = c.req.valid("param")
-        const patch = c.req.valid("json")
-        const sentences: Record<string, string> = patch.name === undefined ? {} : { [TYPE_NAME_TAKEN]: typeNameTaken(patch.name) }
-        const [row] = await refuseDuplicate(sentences, () =>
-          c
-            .get("tx")
-            .update(containerType)
-            .set(patch)
-            .where(and(eq(containerType.companyId, c.get("principal").companyId), eq(containerType.id, id)))
-            .returning(typeColumns),
-        )
-        if (row === undefined) throw noSuchType(id)
-        return c.json(typeOf(row))
-      },
+      async (c) => c.json(await patchContainerType(c.get("tx"), c.get("principal"), c.req.valid("param").id, c.req.valid("json"))),
     )
     .get(
       "/service-frequencies",

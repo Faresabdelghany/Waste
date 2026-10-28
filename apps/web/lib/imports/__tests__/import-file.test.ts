@@ -1,6 +1,7 @@
 import assert from "node:assert/strict"
 import { describe, test } from "node:test"
 
+import { PROJECT_IMPORT_KINDS } from "@waste/contracts/imports"
 import { IMPORT_BATCH_MAX, IMPORT_KINDS, IMPORT_ROWS_MAX } from "@waste/domain/imports/vocabulary"
 
 import {
@@ -28,14 +29,22 @@ describe("the kinds a role imports", () => {
         ["properties", "customers.properties", true],
         ["containers", "resources.containers", true],
         ["agreements", "customers.agreements", true],
+        ["waste-fractions", "configure.master", false],
+        ["container-types", "configure.master", false],
+        ["vehicle-types", "configure.master", false],
+        ["vehicles", "fleet.vehicles", true],
+        ["drivers", "fleet.drivers", true],
       ],
     )
+    // The web's project rule is the contracts': a project's kinds and no other.
+    assert.deepEqual(IMPORT_KIND_OPTIONS.filter((option) => option.projectScoped).map((option) => option.kind), [...PROJECT_IMPORT_KINDS])
   })
 
   test("needs the import's create and, per kind, its module's create or edit", () => {
     assert.deepEqual(importableKinds(grants(["customers.contacts", "view", "create"])), [], "no import grant, no kind")
     const role = grants(["improve.imports", "view", "create"], ["customers.contacts", "view", "edit"], ["resources.containers", "view"], ["customers.agreements", "view", "create"])
     assert.deepEqual(importableKinds(role).map((option) => option.kind), ["customers", "agreements"])
+    assert.deepEqual(importableKinds([...role, ...grants(["configure.master", "view", "edit"])]).map((option) => option.kind), ["customers", "agreements", "waste-fractions", "container-types", "vehicle-types"], "the master data's edit opens the catalogue")
     assert.equal(mayImport(role), true)
     assert.equal(mayView(grants(["improve.imports", "view"])), true)
     assert.equal(mayImport(grants(["improve.imports", "view"])), false)
