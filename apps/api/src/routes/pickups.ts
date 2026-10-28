@@ -431,6 +431,80 @@ async function lockedPickup(tx: Tx, principal: Principal, id: string): Promise<{
   return { current, parent }
 }
 
+/**
+ * The office's stop put on a route that has not started, judged as Add stop
+ * judges it — the ticket it answers, the bulky booking it collects, a ledger
+ * work order's bookings, a container's placement or an address on the
+ * route's service date, the same work booked twice, a held container — and
+ * written after the route's last position: what `POST /routes/:id/pickups`
+ * answers, and what a stop moved onto the route becomes (routes/stop-moves.ts,
+ * O23 of #290). The caller holds the route's lock and has judged its state.
+ */
+export async function addOfficeStop(tx: Tx, principal: Principal, parent: RouteRow, body: PickupAdd): Promise<PickupRow> {
+  const scope: Scope = { companyId: principal.companyId, projectId: parent.projectId }
+  // The ticket the stop is booked to answer (O3c of #290): the body's own field, judged before the stop's place is read.
+  const asked = body.ticketId == null ? undefined : await requireTicketForStop(tx, principal, scope, body.ticketId, { service: body.service, containerId: body.containerId ?? null })
+  // A bulky collection (O11 of #290) is its booking's: the place and the fraction are the booking's.
+  const bulky = body.service === "bulky" && body.bulkyBookingId != null ? await bulkyStopOf(tx, scope, body.bulkyBookingId, parent) : undefined
+  const stop =
+    bulky !== undefined
+      ? { label: null, at: { containerId: null, propertyId: bulky.propertyId, sharedCollectionPointId: bulky.sharedCollectionPointId, wasteFractionId: bulky.wasteFractionId }, replacementLabel: null, booking: NO_BOOKING }
+      : isLedgerService(body.service)
+        ? await ledgerStopOf(tx, principal, scope, body, parent.serviceDate)
+        : { ...(await stopOf(tx, scope, body, parent.serviceDate)), replacementLabel: null, booking: NO_BOOKING }
+  const [last] = await tx
+    .select({ position: max(pickup.position) })
+    .from(pickup)
+    .where(and(eq(pickup.companyId, principal.companyId), eq(pickup.routeId, parent.id)))
+  // The office may repeat a container on a route — an extra emptying, a work order beside its collection — but not book the same work twice while it is planned: a double-sent request meets this. Under the route's lock nobody adds one meanwhile.
+  if (stop.label !== null && stop.at.containerId !== null) {
+    const [booked] = await tx
+      .select({ id: pickup.id })
+      .from(pickup)
+      .where(and(eq(pickup.companyId, principal.companyId), eq(pickup.routeId, parent.id), eq(pickup.containerId, stop.at.containerId), eq(pickup.origin, "office"), eq(pickup.service, body.service), eq(pickup.status, "planned")))
+      .limit(1)
+    if (booked !== undefined) throw problem(409, { detail: bookedAlready(stop.label, body.service, labelOf(parent)) })
+  }
+  // What the stop holds back from another booking: the delivery's container or the swap's replacement, and the container a removal or a swap takes away.
+  const planned = { service: body.service, status: "planned" as const, containerId: stop.at.containerId, replacementContainerId: stop.booking.replacementContainerId }
+  const reserved = reservedContainerOf(planned)
+  const taken = takenContainerOf(planned)
+  const held: Held[] = [
+    ...(reserved === null ? [] : [{ index: "pickup_reserved_container_id_key" as const, id: reserved, label: (reserved === stop.at.containerId ? stop.label : stop.replacementLabel) ?? reserved }]),
+    ...(taken === null ? [] : [{ index: "pickup_taken_container_id_key" as const, id: taken, label: stop.label ?? taken }]),
+  ]
+  // And held to the stop's place, open, and answered by no other planned stop.
+  const answering = asked === undefined ? undefined : await requireBookableTicket(tx, scope, asked, { service: body.service, ...stop.at })
+  const row = await insertHolding(
+    tx,
+    principal,
+    { id: newId(), ...scope, routeId: parent.id, position: (last?.position ?? 0) + 1, origin: "office", service: body.service, note: body.note ?? bulky?.note ?? null, ...stop.at, ...stop.booking, bulkyBookingId: bulky?.bulkyBookingId ?? null },
+    held,
+  )
+  if (answering !== undefined) await bookTicket(tx, principal, answering, { pickupId: row.id, routeId: parent.id, position: row.position, routeLabel: labelOf(parent), service: body.service })
+  return row
+}
+
+/**
+ * A planned stop taken off its route — `skipped · removed-by-dispatcher`,
+ * the note saying why, `outcomeAt` stamped — and `pickup-skipped` written
+ * with the stop as answered: what `remove` does, and what a stop moved off
+ * its route becomes (routes/stop-moves.ts, O23 of #290), its note naming
+ * where it went. The caller holds the route's lock and has judged the stop
+ * planned.
+ */
+export async function takeOffStop(tx: Tx, principal: Principal, id: string, note: string, at: Date): Promise<PickupDetail> {
+  const [row] = await tx
+    .update(pickup)
+    .set({ status: "skipped", reason: "removed-by-dispatcher", note, outcomeAt: at })
+    .where(and(pickupScope(principal), eq(pickup.id, id)))
+    .returning(pickupColumns)
+  if (row === undefined) throw noSuchPickup(id)
+  const detail = await detailOf(tx, principal, row)
+  await emit(tx, principal, { aggregate: "pickup", aggregateId: row.id, kind: "pickup-skipped", payload: detail, projectId: row.projectId, occurredAt: at })
+  return detail
+}
+
 const commandProblems = (action: "view" | "edit") => ({
   401: describeProblem("No usable token (see WWW-Authenticate)."),
   403: describeProblem(`No active account here, or the caller's role does not allow \`${action}\` on \`${MODULE}\`.`),
@@ -554,47 +628,7 @@ export function pickupRoutes(guard: MiddlewareHandler<AuthEnv>, { now = () => ne
         const principal = c.get("principal")
         const parent = await lockedRoute(tx, principal, id)
         requireNotStarted(parent, ORDER_IS_FROZEN)
-        const scope: Scope = { companyId: principal.companyId, projectId: parent.projectId }
-        // The ticket the stop is booked to answer (O3c of #290): the body's own field, judged before the stop's place is read.
-        const asked = body.ticketId == null ? undefined : await requireTicketForStop(tx, principal, scope, body.ticketId, { service: body.service, containerId: body.containerId ?? null })
-        // A bulky collection (O11 of #290) is its booking's: the place and the fraction are the booking's.
-        const bulky = body.service === "bulky" && body.bulkyBookingId != null ? await bulkyStopOf(tx, scope, body.bulkyBookingId, parent) : undefined
-        const stop =
-          bulky !== undefined
-            ? { label: null, at: { containerId: null, propertyId: bulky.propertyId, sharedCollectionPointId: bulky.sharedCollectionPointId, wasteFractionId: bulky.wasteFractionId }, replacementLabel: null, booking: NO_BOOKING }
-            : isLedgerService(body.service)
-              ? await ledgerStopOf(tx, principal, scope, body, parent.serviceDate)
-              : { ...(await stopOf(tx, scope, body, parent.serviceDate)), replacementLabel: null, booking: NO_BOOKING }
-        const [last] = await tx
-          .select({ position: max(pickup.position) })
-          .from(pickup)
-          .where(and(eq(pickup.companyId, principal.companyId), eq(pickup.routeId, parent.id)))
-        // The office may repeat a container on a route — an extra emptying, a work order beside its collection — but not book the same work twice while it is planned: a double-sent request meets this. Under the route's lock nobody adds one meanwhile.
-        if (stop.label !== null && stop.at.containerId !== null) {
-          const [booked] = await tx
-            .select({ id: pickup.id })
-            .from(pickup)
-            .where(and(eq(pickup.companyId, principal.companyId), eq(pickup.routeId, parent.id), eq(pickup.containerId, stop.at.containerId), eq(pickup.origin, "office"), eq(pickup.service, body.service), eq(pickup.status, "planned")))
-            .limit(1)
-          if (booked !== undefined) throw problem(409, { detail: bookedAlready(stop.label, body.service, labelOf(parent)) })
-        }
-        // What the stop holds back from another booking: the delivery's container or the swap's replacement, and the container a removal or a swap takes away.
-        const planned = { service: body.service, status: "planned" as const, containerId: stop.at.containerId, replacementContainerId: stop.booking.replacementContainerId }
-        const reserved = reservedContainerOf(planned)
-        const taken = takenContainerOf(planned)
-        const held: Held[] = [
-          ...(reserved === null ? [] : [{ index: "pickup_reserved_container_id_key" as const, id: reserved, label: (reserved === stop.at.containerId ? stop.label : stop.replacementLabel) ?? reserved }]),
-          ...(taken === null ? [] : [{ index: "pickup_taken_container_id_key" as const, id: taken, label: stop.label ?? taken }]),
-        ]
-        // And held to the stop's place, open, and answered by no other planned stop.
-        const answering = asked === undefined ? undefined : await requireBookableTicket(tx, scope, asked, { service: body.service, ...stop.at })
-        const row = await insertHolding(
-          tx,
-          principal,
-          { id: newId(), ...scope, routeId: parent.id, position: (last?.position ?? 0) + 1, origin: "office", service: body.service, note: body.note ?? bulky?.note ?? null, ...stop.at, ...stop.booking, bulkyBookingId: bulky?.bulkyBookingId ?? null },
-          held,
-        )
-        if (answering !== undefined) await bookTicket(tx, principal, answering, { pickupId: row.id, routeId: parent.id, position: row.position, routeLabel: labelOf(parent), service: body.service })
+        const row = await addOfficeStop(tx, principal, parent, body)
         await tx
           .update(route)
           .set(stamp())
@@ -632,16 +666,7 @@ export function pickupRoutes(guard: MiddlewareHandler<AuthEnv>, { now = () => ne
         if (transition.kind === "refuse") throw problem(409, { detail: transition.sentence })
         // A skip moves a planned pickup or refuses a decided one; the machine never answers "stay" for it, so that branch is a bug in the machine and not a client's.
         if (transition.kind !== "move") throw new Error(`a skip of pickup ${id} neither moved nor refused`)
-        const at = now()
-        const [row] = await tx
-          .update(pickup)
-          .set({ status: transition.to, reason: "removed-by-dispatcher", note: reason, outcomeAt: at })
-          .where(and(pickupScope(principal), eq(pickup.id, id)))
-          .returning(pickupColumns)
-        if (row === undefined) throw noSuchPickup(id)
-        const detail = await detailOf(tx, principal, row)
-        await emit(tx, principal, { aggregate: "pickup", aggregateId: row.id, kind: "pickup-skipped", payload: detail, projectId: row.projectId, occurredAt: at })
-        return c.json(detail)
+        return c.json(await takeOffStop(tx, principal, id, reason, now()))
       },
     )
     .post(

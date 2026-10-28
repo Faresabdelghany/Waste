@@ -25,6 +25,10 @@ export const ROUTE_ACTIVE_PLAN_KEY = "activePlan"
 // one unasked, in the domain's sentence); Cancel takes one of the office's
 // reason codes beside the free reason; and a day's routes, or a selection of
 // them, are dispatched together (`dispatchDayRows`).
+//
+// Since O23 of #290 a route's open stops move onto another route of its
+// project, split off onto a new one of its day, or come over from a route
+// merged into it: the other route is one `routesToJoin` offers.
 import { OFFICE_CANCEL_REASON_CODES, PICKUP_OUTCOMES, PICKUP_REASONS } from "@waste/domain/execution/vocabulary"
 
 import { statusLabel } from "../api/records/adapter"
@@ -252,4 +256,18 @@ export function dispatchDayRows(records: readonly BusinessRecord[], projectId: s
   return records
     .filter((record) => record.recordKind === "Route" && (record.projectIds ?? []).includes(projectId) && record.submittedValues?.operatingDate === day && record.submittedValues?.status === "planned")
     .sort((a, b) => a.name.localeCompare(b.name, "en", { numeric: true }))
+}
+
+/**
+ * The routes a route's stops may move onto, or a route merged into it may
+ * come from (O23 of #290): the project's other routes that have not started,
+ * planned or ready — the API refuses any other — by day, then by number.
+ */
+export function routesToJoin(records: readonly BusinessRecord[], route: BusinessRecord): BusinessRecord[] {
+  const projectId = route.projectIds?.[0]
+  if (projectId === undefined) return []
+  const day = (record: BusinessRecord) => (typeof record.submittedValues?.operatingDate === "string" ? record.submittedValues.operatingDate : "")
+  return records
+    .filter((record) => record.recordKind === "Route" && record.id !== route.id && (record.projectIds ?? []).includes(projectId) && (record.submittedValues?.status === "planned" || record.submittedValues?.status === "ready"))
+    .sort((a, b) => day(a).localeCompare(day(b)) || a.name.localeCompare(b.name, "en", { numeric: true }))
 }

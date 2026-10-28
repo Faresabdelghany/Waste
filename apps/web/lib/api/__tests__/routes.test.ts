@@ -15,7 +15,7 @@ import type { Driver, Vehicle } from "@waste/contracts/fleet"
 import type { Project } from "@waste/contracts/organisation"
 import type { Depot, UnloadingStation } from "@waste/contracts/places"
 import { PickupAdd } from "@waste/contracts/pickups"
-import { DISPATCH_MANY_MAX, PickupOrderSet, Route, RouteAssign, RouteCancel, RouteCreate, RouteDetail, RouteDispatchMany, RouteReleaseHold, RouteReschedule, type RouteWorkload } from "@waste/contracts/routes"
+import { DISPATCH_MANY_MAX, PickupOrderSet, Route, RouteAssign, RouteMerge, RouteMoveStops, RouteSplit, RouteCancel, RouteCreate, RouteDetail, RouteDispatchMany, RouteReleaseHold, RouteReschedule, type RouteWorkload } from "@waste/contracts/routes"
 import type { ActivePlan, Plan } from "@waste/contracts/plans"
 
 import { FIXTURE_COMPANY_ID, getModuleDefinition, type BusinessRecord } from "../../data/business-modules"
@@ -40,6 +40,9 @@ import {
   planLine,
   RELEASE_HOLD,
   REORDER_ROUTE,
+  MOVE_STOPS,
+  SPLIT_ROUTE,
+  MERGE_ROUTE,
   RESCHEDULE_ROUTE,
   ROUTES_MODULE,
   ROUTES_WINDOW_DAYS,
@@ -302,7 +305,7 @@ describe("a route", () => {
     assert.equal(routeAdapter.statuses, undefined, "a route's status moves by command alone")
     const record = routeAdapter.toRecord(planned, context())
     const edited: BusinessRecord = { ...record, submittedValues: { ...record.submittedValues, plannedStartTime: "07:00" } }
-    assert.deepEqual(routeAdapter.toPatchBody(record, edited, context()), { path: "", message: "A route is changed by its commands: assign, dispatch, reschedule, release its hold, cancel, add a stop, optimise or reorder its stops" })
+    assert.deepEqual(routeAdapter.toPatchBody(record, edited, context()), { path: "", message: "A route is changed by its commands: assign, dispatch, reschedule, release its hold, cancel, add a stop, move its stops, split or merge it, optimise or reorder its stops" })
     const { fetch, calls } = scripted([])
     const current = loaded({ records: [record], serverIds: new Map([[record.id, planned.id]]) }, 1)
     const moved = await writeRecord(clientOver(fetch), routesModule, current, { ...record, status: "Ready" }, options)
@@ -376,6 +379,23 @@ describe("the route's commands", () => {
     assert.deepEqual(cancel?.touches, ["route-studio.pickups", "route-studio.live", "operate.bulky-bookings"], "a cancel's skipped stops book their bulky bookings again")
     assert.deepEqual(routeAdapter.commands?.[REORDER_ROUTE]?.touches, ["route-studio.pickups", "route-studio.live"])
     assert.deepEqual(routeAdapter.commands?.[ADD_STOP]?.touches, ["route-studio.pickups", "route-studio.live", "operate.bulky-bookings"], "an added stop is a new row of the stops, moves the route's progress, and routes a bulky booking")
+  })
+
+  test("a move, a split and a merge send the stops and the other route by server id, and read the routes, the stops, the board and the bookings again (O23 of #290)", () => {
+    const stop = "01a0d2a4-a280-7033-8000-000000000001"
+    const other = "01a0d2a4-a280-7030-8000-000000000002"
+    for (const name of [MOVE_STOPS, SPLIT_ROUTE, MERGE_ROUTE]) assert.deepEqual(routeAdapter.commands?.[name]?.touches, ["route-studio.routes", "route-studio.pickups", "route-studio.live", "operate.bulky-bookings"], name)
+    const move = routeAdapter.commands?.[MOVE_STOPS]?.toBody?.({ pickupIds: [`pickup-${stop}`], toRouteId: `route-${other}` }, record, context())
+    assert.deepEqual(move, { pickupIds: [stop], toRouteId: other })
+    assert.ok(RouteMoveStops.safeParse(move).success)
+    assert.deepEqual(routeAdapter.commands?.[MOVE_STOPS]?.toBody?.({ pickupIds: [], toRouteId: `route-${other}` }, record, context()), { path: "pickupIds", message: "Pick the stops to move" })
+    assert.deepEqual(routeAdapter.commands?.[MOVE_STOPS]?.toBody?.({ pickupIds: [`pickup-${stop}`] }, record, context()), { path: "toRouteId", message: "Pick the other route" })
+    const split = routeAdapter.commands?.[SPLIT_ROUTE]?.toBody?.({ pickupIds: [`pickup-${stop}`], note: "Second truck" }, record, context())
+    assert.deepEqual(split, { pickupIds: [stop], note: "Second truck" })
+    assert.ok(RouteSplit.safeParse(split).success)
+    const merge = routeAdapter.commands?.[MERGE_ROUTE]?.toBody?.({ routeId: `route-${other}` }, record, context())
+    assert.deepEqual(merge, { routeId: other })
+    assert.ok(RouteMerge.safeParse(merge).success)
   })
 
   test("add a stop sends a container alone, or one address with its fraction, by server id, and the note: the stop body the contract accepts (#111)", () => {

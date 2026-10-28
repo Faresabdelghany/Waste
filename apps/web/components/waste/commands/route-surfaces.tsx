@@ -19,12 +19,20 @@
 // dispatches a project's planned routes of a day, or the ones left ticked, in
 // one request and says what became of each; a route's details offer Optimise
 // on a route that has not started and list its Plans, the active one marked.
+//
+// Moving stops (O23 of #290): on a route that has not started, Move stops
+// sends ticked open stops to another route of the project, Split route sends
+// them to a new route of its day, and Merge route takes in every open stop of
+// another route and cancels it as merged; the other route is one
+// `routesToJoin` offers, and the API judges each stop where it goes.
 import { useEffect, useRef, useState, type ReactNode } from "react"
 import { ArrowDown, ArrowSquareOut, ArrowUp } from "@phosphor-icons/react/dist/ssr"
 import { toast } from "sonner"
 
 import { Button } from "@/components/ui/button"
 import { Checkbox } from "@/components/ui/checkbox"
+import { Input } from "@/components/ui/input"
+import { Select, SelectContent, SelectItem, SelectTrigger, SelectValue } from "@/components/ui/select"
 import { useApiClient } from "@/components/waste/api-session-store"
 import { Dialog, DialogContent, DialogDescription, DialogFooter, DialogHeader, DialogTitle } from "@/components/ui/dialog"
 import { BusinessRecordFormDialog } from "@/components/waste/business-record-form-dialog"
@@ -44,14 +52,14 @@ import { shownOn } from "@/lib/api/records/clock"
 import { CONTAINERS_MODULE } from "@/lib/api/records/containers"
 import { LIVE_MODULE, routeSessions, whileWatched } from "@/lib/api/records/live"
 import { CORRECT_PICKUP, PICKUPS_MODULE, pickupProofs, proofLine, proofObjectNoun, REMOVE_PICKUP } from "@/lib/api/records/pickups"
-import { ADD_STOP, ASSIGN_ROUTE, callsignOf, CANCEL_ROUTE, DISPATCH_ROUTE, dispatchRoutes, isHeldRoute, OPTIMISE_ROUTE, planLine, RELEASE_HOLD, REORDER_ROUTE, RESCHEDULE_ROUTE, routeCommandLog, routeDetail, routePlans, ROUTES_MODULE } from "@/lib/api/records/routes"
+import { ADD_STOP, ASSIGN_ROUTE, callsignOf, CANCEL_ROUTE, DISPATCH_ROUTE, dispatchRoutes, isHeldRoute, MERGE_ROUTE, MOVE_STOPS, OPTIMISE_ROUTE, planLine, RELEASE_HOLD, REORDER_ROUTE, RESCHEDULE_ROUTE, routeCommandLog, routeDetail, routePlans, ROUTES_MODULE, SPLIT_ROUTE } from "@/lib/api/records/routes"
 import { DRIVERS_MODULE, VEHICLES_MODULE } from "@/lib/data/allocations"
 import type { BusinessFormValues } from "@/lib/data/business-form-types"
 import { PROPERTIES_MODULE, SHARED_POINTS_MODULE } from "@/lib/data/properties"
 import { getModuleDefinition, type BusinessRecord } from "@/lib/data/business-modules"
 import { BULKY_BOOKINGS_MODULE, bookingsForRoute } from "@/lib/data/bulky"
 import { MASTER_DATA_MODULE, masterDataKindOf } from "@/lib/data/master-data"
-import { contaminantCodeOptions, createRouteRecord, DISPATCH_DAY_FORM, dispatchDayRows, PICKUP_COMMAND_FORMS, pickupReasonLabel, ROUTE_COMMAND_FORMS, ROUTE_CREATE_FORM, routeCommandValues, type PickupCommandWithForm, type RouteCommandWithForm } from "@/lib/data/routes"
+import { contaminantCodeOptions, createRouteRecord, DISPATCH_DAY_FORM, dispatchDayRows, PICKUP_COMMAND_FORMS, pickupReasonLabel, ROUTE_COMMAND_FORMS, ROUTE_CREATE_FORM, routeCommandValues, routesToJoin, type PickupCommandWithForm, type RouteCommandWithForm } from "@/lib/data/routes"
 import type { Pickup } from "@waste/contracts/pickups"
 import type { ProofObjectLink } from "@waste/contracts/proof-objects"
 import type { ProofOfService } from "@waste/contracts/proofs"
@@ -258,6 +266,9 @@ const DONE: Readonly<Record<string, (name: string) => string>> = {
   [RELEASE_HOLD]: (name) => `${name} handed back to its scheme`,
   [ADD_STOP]: (name) => `A stop was added to ${name}`,
   [OPTIMISE_ROUTE]: (name) => `A Plan was asked for ${name}`,
+  [MOVE_STOPS]: (name) => `Stops of ${name} moved`,
+  [SPLIT_ROUTE]: (name) => `${name} split`,
+  [MERGE_ROUTE]: (name) => `A route was merged into ${name}`,
 }
 
 /** What each command's toast says beneath its title: where it now stands, or, for a hand-back, what is still to come (#226). */
@@ -265,9 +276,12 @@ const DONE_SAYS: Readonly<Record<string, string>> = {
   [RELEASE_HOLD]: "The next generation run brings back the scheme's day, start and assignment.",
   [ADD_STOP]: "It goes after the route's last stop, and generation never moves or skips it.",
   [OPTIMISE_ROUTE]: "Its open stops are ordered and measured; the Plan's distance and duration follow once it is ready.",
+  [MOVE_STOPS]: "Each is taken off here and added to the other route as the office's, after its last stop.",
+  [SPLIT_ROUTE]: "The stops are on a new route of the same day: assign its crew, then dispatch it.",
+  [MERGE_ROUTE]: "Its open stops are on this route now, after the last stop, and it is cancelled as merged.",
 }
 
-type RouteOpen = { kind: "form"; name: RouteCommandWithForm; values: BusinessFormValues } | { kind: "reorder"; order: string[] }
+type RouteOpen = { kind: "form"; name: RouteCommandWithForm; values: BusinessFormValues } | { kind: "reorder"; order: string[] } | { kind: "stops"; mode: StopsMode }
 
 /** A route's commands, its stops in sequence, its sessions and the device's command log, in its details. */
 /** No fixture bookings: the module is the API's alone. */
@@ -278,6 +292,8 @@ export function RouteCommandsSurface({ record }: RowSurfaceProps) {
   // The bookings Add stop may collect (O11 of #290): booked ones of the route's project for its day.
   const bulkyBookings = useModuleRecords(BULKY_BOOKINGS_MODULE.workspaceId, BULKY_BOOKINGS_MODULE.moduleId, NO_BOOKINGS)
   const moduleReady = useModuleReady(ROUTES_MODULE)
+  // The routes a move goes to or a merge takes in (O23 of #290): the project's others that have not started.
+  const routes = useModuleRecords(ROUTES_MODULE.workspaceId, ROUTES_MODULE.moduleId, getModuleDefinition(ROUTES_MODULE)?.records ?? [])
   // The version is bumped after each command the API took: the stops and the log are the route's own reads.
   const { busy, version, run: send } = useCommandRunner(ROUTES_MODULE, record.id)
   const { refreshRecord } = useBusinessRecordStore()
@@ -361,6 +377,22 @@ export function RouteCommandsSurface({ record }: RowSurfaceProps) {
             Add stop
           </Button>
         )}
+        {/* Open stops onto another route, a new one of the day, or another route's taken in (O23 of #290), on a route that has not started. */}
+        {offered(MOVE_STOPS) && TAKES_A_STOP.has(status) && (
+          <Button variant="outline" size="sm" disabled={!sendable || openStops.length === 0} onClick={() => setOpen({ kind: "stops", mode: "move" })}>
+            Move stops
+          </Button>
+        )}
+        {offered(SPLIT_ROUTE) && TAKES_A_STOP.has(status) && (
+          <Button variant="outline" size="sm" disabled={!sendable || openStops.length < 2} onClick={() => setOpen({ kind: "stops", mode: "split" })}>
+            Split route
+          </Button>
+        )}
+        {offered(MERGE_ROUTE) && TAKES_A_STOP.has(status) && (
+          <Button variant="outline" size="sm" disabled={!sendable} onClick={() => setOpen({ kind: "stops", mode: "merge" })}>
+            Merge route
+          </Button>
+        )}
         {offered(REORDER_ROUTE) && (
           <Button variant="outline" size="sm" disabled={!sendable || detail === undefined || openStops.length < 2} onClick={() => setOpen({ kind: "reorder", order: openStops.map((pickup) => pickup.id) })}>
             Reorder stops
@@ -430,6 +462,16 @@ export function RouteCommandsSurface({ record }: RowSurfaceProps) {
           initialValueOverrides={open.values}
         />
       )}
+      {open?.kind === "stops" && (
+        <MoveStopsDialog
+          mode={open.mode}
+          stops={openStops.map((pickup) => ({ id: webIdOf("pickup", pickup.id), label: stopName(pickup) }))}
+          routes={routesToJoin(routes.records, record).map((other) => ({ id: other.id, label: `${other.name} · ${String(other.submittedValues?.operatingDate ?? "")} · ${statusLabel(String(other.submittedValues?.status ?? ""))}` }))}
+          busy={busy}
+          onClose={() => setOpen(null)}
+          onSend={(input) => run(STOPS_COMMAND_OF[open.mode], input)}
+        />
+      )}
       {open?.kind === "reorder" && (
         <ReorderStopsDialog
           order={open.order}
@@ -444,6 +486,81 @@ export function RouteCommandsSurface({ record }: RowSurfaceProps) {
         />
       )}
     </section>
+  )
+}
+
+/** The three ways stops change route (O23 of #290). */
+type StopsMode = "move" | "split" | "merge"
+
+/** The command each mode sends. */
+const STOPS_COMMAND_OF: Readonly<Record<StopsMode, string>> = { move: MOVE_STOPS, split: SPLIT_ROUTE, merge: MERGE_ROUTE }
+
+/** What each mode's dialog says. */
+const STOPS_DIALOG: Readonly<Record<StopsMode, { title: string; description: string; send: string }>> = {
+  move: { title: "Move stops", description: "Tick the open stops to move and pick the route they go to: a route of this project that has not started. Each is taken off here and added there after its last stop.", send: "Move stops" },
+  split: { title: "Split route", description: "Tick the open stops to split off: they go onto a new route of the same day, with this route's depot, unloading station and start. Leave this route some of its stops.", send: "Split route" },
+  merge: { title: "Merge route", description: "Pick the route to merge into this one: its open stops come here after the last stop, and it is cancelled as merged.", send: "Merge route" },
+}
+
+/** The stops ticked and the other route picked, for a move, a split or a merge; the API judges each stop where it goes. */
+function MoveStopsDialog({ mode, stops, routes, busy, onClose, onSend }: { mode: StopsMode; stops: readonly { id: string; label: string }[]; routes: readonly { id: string; label: string }[]; busy: boolean; onClose: () => void; onSend: (input: CommandInput) => void }) {
+  const [ticked, setTicked] = useState<ReadonlySet<string>>(new Set())
+  const [other, setOther] = useState("")
+  const [note, setNote] = useState("")
+  const words = STOPS_DIALOG[mode]
+  const picksStops = mode !== "merge"
+  const picksRoute = mode !== "split"
+  const ready = (!picksStops || ticked.size > 0) && (!picksRoute || other !== "")
+  const send = () => {
+    const pickupIds = stops.filter((stop) => ticked.has(stop.id)).map((stop) => stop.id)
+    if (mode === "move") onSend({ pickupIds, toRouteId: other })
+    else if (mode === "split") onSend(note.trim() === "" ? { pickupIds } : { pickupIds, note: note.trim() })
+    else onSend({ routeId: other })
+  }
+  return (
+    <Dialog open onOpenChange={(isOpen) => !isOpen && onClose()}>
+      <DialogContent>
+        <DialogHeader>
+          <DialogTitle>{words.title}</DialogTitle>
+          <DialogDescription>{words.description}</DialogDescription>
+        </DialogHeader>
+        {picksStops && (
+          <ul className="max-h-64 divide-y divide-border/60 overflow-y-auto border-y border-border/60 text-sm" data-testid="move-stops">
+            {stops.map((stop) => (
+              <DispatchDayRow key={stop.id} checked={ticked.has(stop.id)} onToggle={(checked) => setTicked((set) => toggled(set, stop.id, checked))}>
+                {stop.label}
+              </DispatchDayRow>
+            ))}
+          </ul>
+        )}
+        {picksRoute &&
+          (routes.length === 0 ? (
+            <p className="text-sm text-muted-foreground">No other route of this project has yet to start.</p>
+          ) : (
+            <Select value={other} onValueChange={setOther}>
+              <SelectTrigger aria-label={mode === "move" ? "Route to move the stops to" : "Route to merge into this one"}>
+                <SelectValue placeholder={mode === "move" ? "Route to move them to" : "Route to merge in"} />
+              </SelectTrigger>
+              <SelectContent>
+                {routes.map((route) => (
+                  <SelectItem key={route.id} value={route.id}>
+                    {route.label}
+                  </SelectItem>
+                ))}
+              </SelectContent>
+            </Select>
+          ))}
+        {mode === "split" && <Input aria-label="Note for the new route" placeholder="Note for the new route (optional)" value={note} onChange={(event) => setNote(event.target.value)} />}
+        <DialogFooter>
+          <Button variant="outline" onClick={onClose}>
+            Back
+          </Button>
+          <Button disabled={busy || !ready} onClick={send}>
+            {words.send}
+          </Button>
+        </DialogFooter>
+      </DialogContent>
+    </Dialog>
   )
 }
 
