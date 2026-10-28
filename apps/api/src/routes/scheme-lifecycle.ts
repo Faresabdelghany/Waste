@@ -210,6 +210,51 @@ async function planSuccessor(tx: Tx, principal: Principal, jobs: JobSender, succ
 
 export type SchemeLifecycleOptions = ClockOptions & { jobs: JobSender }
 
+/**
+ * The next version of a scheme from `validFrom`, as `POST
+ * /route-schemes/:id/successor` writes it, under the predecessor's row lock:
+ * the day held to the predecessor's period and to tomorrow at the earliest,
+ * refused while a route of it goes out on or after the day, the period cut,
+ * the new version written through `writeScheme` from the predecessor as it
+ * reads, its routes from the day ended, and a validated version planned. An
+ * approved proposal (#474, routes/service-provider-activities.ts) writes its
+ * change through here: `amend` turns the predecessor's body into the one the
+ * new version is written from, which `writeScheme` holds to every rule a
+ * create is. The scheme's own route calls it with nothing to amend.
+ */
+export async function writeSuccessor(
+  tx: Tx,
+  principal: Principal,
+  { jobs, now }: { jobs: JobSender; now: () => Date },
+  id: string,
+  validFrom: string,
+  amend: (body: RouteSchemeCreate, predecessor: RouteScheme) => RouteSchemeCreate = (body) => body,
+): Promise<RouteSchemeSuccession> {
+  const current = await lockedScheme(tx, principal, id)
+  const tomorrow = firstEndingDay(await projectToday(tx, { companyId: principal.companyId, projectId: current.projectId }, now)())
+  if (validFrom < tomorrow) throw invalidRequest("body", [{ path: "validFrom", message: endsTomorrowAtTheEarliest(tomorrow) }])
+  if (validFrom <= current.validFrom || (current.validTo !== null && validFrom >= current.validTo)) throw invalidRequest("body", [{ path: "validFrom", message: successorStartsInside(current) }])
+  // The predecessor's routes that go out on or after the day whatever happens: the new version would collect them again.
+  const going = await tx
+    .select({ number: route.number })
+    .from(route)
+    .where(and(eq(route.companyId, principal.companyId), eq(route.routeSchemeId, id), gte(route.serviceDate, validFrom), inArray(route.status, ["ready", "active"])))
+    .orderBy(asc(route.number))
+  if (going.length > 0) throw problem(409, { detail: dispatchedFrom(going.map((row) => routeLabel(row.number)), validFrom) })
+
+  // The predecessor as it reads, before the cut: what the next version is written from.
+  const before = await schemeWithGroups(tx, principal.companyId, current, now)
+  const [row] = await tx
+    .update(routeScheme)
+    .set({ validTo: validFrom, ...stamp() })
+    .where(and(schemeScope(principal), eq(routeScheme.id, id)))
+    .returning(schemeColumns)
+  const successor = await writeScheme(tx, principal, amend(successorBody(before, validFrom), before), now)
+  const routes = await endSchemeRoutes(tx, principal.companyId, id, validFrom, supersededNote(validFrom), now())
+  const generationRunId = successor.status === "validated" ? await planSuccessor(tx, principal, jobs, successor, validFrom) : null
+  return { predecessor: await schemeWithGroups(tx, principal.companyId, row, now), successor, routes, generationRunId }
+}
+
 export function schemeLifecycleRoutes(guard: MiddlewareHandler<AuthEnv>, { now = () => new Date(), jobs }: SchemeLifecycleOptions) {
   return new Hono<AuthEnv>()
     .post(
@@ -280,32 +325,8 @@ export function schemeLifecycleRoutes(guard: MiddlewareHandler<AuthEnv>, { now =
       async (c) => {
         const { id } = c.req.valid("param")
         const { validFrom } = c.req.valid("json")
-        const tx = c.get("tx")
-        const principal = c.get("principal")
-        const current = await lockedScheme(tx, principal, id)
-        const tomorrow = firstEndingDay(await projectToday(tx, { companyId: principal.companyId, projectId: current.projectId }, now)())
-        if (validFrom < tomorrow) throw invalidRequest("body", [{ path: "validFrom", message: endsTomorrowAtTheEarliest(tomorrow) }])
-        if (validFrom <= current.validFrom || (current.validTo !== null && validFrom >= current.validTo)) throw invalidRequest("body", [{ path: "validFrom", message: successorStartsInside(current) }])
-        // The predecessor's routes that go out on or after the day whatever happens: the new version would collect them again.
-        const going = await tx
-          .select({ number: route.number })
-          .from(route)
-          .where(and(eq(route.companyId, principal.companyId), eq(route.routeSchemeId, id), gte(route.serviceDate, validFrom), inArray(route.status, ["ready", "active"])))
-          .orderBy(asc(route.number))
-        if (going.length > 0) throw problem(409, { detail: dispatchedFrom(going.map((row) => routeLabel(row.number)), validFrom) })
-
-        // The predecessor as it reads, before the cut: what the next version is written from.
-        const before = await schemeWithGroups(tx, principal.companyId, current, now)
-        const [row] = await tx
-          .update(routeScheme)
-          .set({ validTo: validFrom, ...stamp() })
-          .where(and(schemeScope(principal), eq(routeScheme.id, id)))
-          .returning(schemeColumns)
-        const successor = await writeScheme(tx, principal, successorBody(before, validFrom), now)
-        const routes = await endSchemeRoutes(tx, principal.companyId, id, validFrom, supersededNote(validFrom), now())
-        const generationRunId = successor.status === "validated" ? await planSuccessor(tx, principal, jobs, successor, validFrom) : null
-        const answer: RouteSchemeSuccession = { predecessor: await schemeWithGroups(tx, principal.companyId, row, now), successor, routes, generationRunId }
-        return c.json(answer, 201, { location: `/route-schemes/${successor.id}` })
+        const answer = await writeSuccessor(c.get("tx"), c.get("principal"), { jobs, now }, id, validFrom)
+        return c.json(answer, 201, { location: `/route-schemes/${answer.successor.id}` })
       },
     )
 }
