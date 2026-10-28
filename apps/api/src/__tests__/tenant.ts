@@ -70,6 +70,7 @@ import { stockMinimum, stockMovement } from "@waste/db/schema/stock"
 import { wasteFractionEmissionFactor } from "@waste/db/schema/sustainability"
 import {
   customer,
+  customerContact,
   property,
   propertyGroup,
   propertyGroupMember,
@@ -456,6 +457,8 @@ export async function dropTenant(pool: Database, companyId: string, owner?: Data
     await tx.delete(propertyGroup).where(eq(propertyGroup.companyId, companyId))
     await tx.delete(propertyParty).where(eq(propertyParty.companyId, companyId))
     await tx.delete(property).where(eq(property.companyId, companyId))
+    // A customer's contact persons (#291 C14) go before it.
+    await tx.delete(customerContact).where(eq(customerContact.companyId, companyId))
     await tx.delete(customer).where(eq(customer.companyId, companyId))
     await tx.delete(containerType).where(eq(containerType.companyId, companyId))
     // The fractions' emission factors (M13 of #293) name the fractions.

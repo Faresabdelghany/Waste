@@ -5,4 +5,4 @@
 import { defineVocabularyTests } from "../../__tests__/vocabulary"
 import * as vocabulary from "../vocabulary"
 
-defineVocabularyTests("Registry", vocabulary, vocabulary.REGISTRY_VOCABULARIES, 25)
+defineVocabularyTests("Registry", vocabulary, vocabulary.REGISTRY_VOCABULARIES, 27)
