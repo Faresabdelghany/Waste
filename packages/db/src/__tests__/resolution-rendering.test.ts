@@ -41,7 +41,9 @@
 // to answer it, `booked_route_id` and `booked_pickup_id`, with its check, the
 // same way: today's ticket carries them, `CHANGED_LATER` maps it onto 0009's,
 // `ADDED_IN_0035` is left out, and ticket-stops-rendering.test.ts pins its
-// statements.
+// statements. Migration 0066 (O13 of #290) grew the ticket's kinds by
+// `vehicle-defect`: today's ticket carries it, `CHANGED_LATER` maps it onto
+// 0009's, and pre-trip-rendering.test.ts pins the replacement.
 import assert from "node:assert/strict"
 import { readFile } from "node:fs/promises"
 import { join } from "node:path"
@@ -101,7 +103,7 @@ const stampsShape = (() => {
 })()
 
 /** ticket as drizzle-kit wrote it as of 0009, as it wrote it since 0016 (#111) — the re-collection's stop and the check that it names its route — and as it wrote it since 0031 (#291 slice 23b), its sources grown by `service-provider`. */
-const ticketTable = (asOf: "0009" | "0016" | "0031" | "0033" | "0035"): string =>
+const ticketTable = (asOf: "0009" | "0016" | "0031" | "0033" | "0035" | "0066"): string =>
   createTable("ticket", "project", [
     '"number" integer NOT NULL',
     '"kind" text NOT NULL',
@@ -132,7 +134,7 @@ const ticketTable = (asOf: "0009" | "0016" | "0031" | "0033" | "0035"): string =
     ...(asOf >= "0035" ? ['"booked_route_id" uuid', '"booked_pickup_id" uuid'] : []),
     uniqueKey("ticket_number_key", "company_id", "number"),
     uniqueKey("ticket_project_key", "company_id", "project_id", "id"),
-    oneOfCheck("ticket", "kind", "missed-collection", "overflow", "access-issue", "container-request", "container-defect", "proof-follow-up", "complaint", "reported-problem", "rejected-command", "internal-task", "other"),
+    oneOfCheck("ticket", "kind", "missed-collection", "overflow", "access-issue", "container-request", "container-defect", "proof-follow-up", "complaint", "reported-problem", "rejected-command", "internal-task", ...(asOf >= "0066" ? ["vehicle-defect"] : []), "other"),
     oneOfCheck("ticket", "status", ...STATUSES),
     oneOfCheck("ticket", "priority", "critical", "high", "medium", "low", "none"),
     oneOfCheck("ticket", "source", "office", "phone", "email", "portal", "driver-app", "dispatch", "import", "integration", ...(asOf >= "0031" ? ["service-provider"] : [])),
@@ -219,9 +221,9 @@ const alertTable = (asOf: "0009" | "0034"): string =>
 /** What 0034 added to the alert beside the columns and the checks: one alert per occurrence. */
 const ADDED_IN_0034 = [RULE_KEY_INDEX]
 
-/** What 0016 (#111), 0031 (#291 slice 23b), 0033 (#291 C3), 0034 and 0035 (O4 and O3c of #290) changed on the three: the ticket's, the history's and the alert's CREATE TABLE as drizzle-kit generates them now onto what 0009 says. */
+/** What 0016 (#111), 0031 (#291 slice 23b), 0033 (#291 C3), 0034, 0035 and 0066 (O4, O3c and O13 of #290) changed on the three: the ticket's, the history's and the alert's CREATE TABLE as drizzle-kit generates them now onto what 0009 says. */
 const CHANGED_LATER = new Map([
-  [ticketTable("0035"), ticketTable("0009")],
+  [ticketTable("0066"), ticketTable("0009")],
   [ticketEventTable("0031"), ticketEventTable("0009")],
   [alertTable("0034"), alertTable("0009")],
 ])
@@ -236,7 +238,7 @@ const ADDED_IN_0033 = [CHARGE_PRODUCT_FK, CHARGE_PRODUCT_INDEX]
 const ADDED_IN_0035 = [BOOKED_PICKUP_FK, BOOKED_PICKUP_KEY, BOOKED_ROUTE_INDEX]
 
 const expected = [
-  ticketTable("0035"),
+  ticketTable("0066"),
   ticketEventTable("0031"),
   alertTable("0034"),
   companyFk("ticket"),

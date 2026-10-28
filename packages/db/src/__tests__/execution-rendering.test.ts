@@ -90,6 +90,10 @@
 // `record-positions`, so `CHANGED_IN_0060`, the receipt's only change, maps its
 // CREATE TABLE as drizzle-kit writes it now onto 0008's;
 // live-positions-rendering.test.ts pins the statements themselves.
+//
+// Migration 0066 (O13 of #290) grew it again by `pre-trip-check`, so
+// `CHANGED_IN_0066` maps today's spelling onto 0060's, applied before it;
+// pre-trip-rendering.test.ts pins the statements themselves.
 import assert from "node:assert/strict"
 import { readFile } from "node:fs/promises"
 import { join } from "node:path"
@@ -265,8 +269,8 @@ const unloadTable = (asOf: "0008" | "0010" | "0045"): string => {
 /** What 0045 changed on one of the seven (O9 of #290): the unload's CREATE TABLE as drizzle-kit generates it now onto what it generated as of 0010. Applied first; weighbridge-rendering.test.ts pins the statements themselves. */
 const CHANGED_IN_0045 = new Map([[unloadTable("0045"), unloadTable("0010")]])
 
-/** driver_command as drizzle-kit writes it today — its kind grown by `record-positions` (O8 of #290, migration 0060) — and as it wrote it as of 0008. */
-const driverCommandTable = (asOf: "0008" | "0060"): string =>
+/** driver_command as drizzle-kit writes it today — its kind grown by `record-positions` (O8 of #290, migration 0060) and by `pre-trip-check` (O13 of #290, migration 0066) — and as it wrote it as of 0060 and 0008. */
+const driverCommandTable = (asOf: "0008" | "0060" | "0066"): string =>
   createLedger("driver_command", [
     // Nullable: a command rejected because no such route is assigned to the driver has no route the key could check, and is still a receipt.
     '"route_id" uuid',
@@ -297,6 +301,7 @@ const driverCommandTable = (asOf: "0008" | "0060"): string =>
       "resume",
       "end-route",
       ...(asOf >= "0060" ? ["record-positions"] : []),
+      ...(asOf >= "0066" ? ["pre-trip-check"] : []),
     ),
     oneOfCheck("driver_command", "outcome", "applied", "rejected"),
     `CONSTRAINT "driver_command_problem_shape" CHECK ((${ref("driver_command", "outcome")} = 'rejected') = (${ref("driver_command", "problem")} is not null))`,
@@ -305,6 +310,9 @@ const driverCommandTable = (asOf: "0008" | "0060"): string =>
 
 /** What 0060 changed on one of the seven (O8 of #290): the receipt's CREATE TABLE as drizzle-kit generates it now onto what 0008 says. Applied first of all; live-positions-rendering.test.ts pins the statements themselves. */
 const CHANGED_IN_0060 = new Map([[driverCommandTable("0060"), driverCommandTable("0008")]])
+
+/** What 0066 changed on one of the seven (O13 of #290): the receipt's CREATE TABLE as drizzle-kit generates it now onto what 0060 says. Applied first of all; pre-trip-rendering.test.ts pins the statements themselves. */
+const CHANGED_IN_0066 = new Map([[driverCommandTable("0066"), driverCommandTable("0060")]])
 
 /** What 0054 changed on one of the seven (#393): the outbox's CREATE TABLE as drizzle-kit generates it now onto what it generated as of 0040. Applied first of all. */
 const CHANGED_IN_0054 = new Map([[outboxEventTable("0054"), outboxEventTable("0040")]])
@@ -547,7 +555,7 @@ const expected = [
   ]),
   proofTable("0038"),
   unloadTable("0045"),
-  driverCommandTable("0060"),
+  driverCommandTable("0066"),
   outboxEventTable("0054"),
   companyFk("route"),
   projectFk("route"),
@@ -707,6 +715,7 @@ const handWritten = [...Object.values(tables).flatMap((table) => handWrittenStat
 const generatedHead = async (): Promise<string[]> => [
   ...(await statementsFor(tables))
     .filter((statement) => !ADDED_IN_0055.includes(statement) && !ADDED_IN_0053.includes(statement) && !ADDED_IN_0038.includes(statement) && !ADDED_IN_0032.includes(statement) && !ADDED_IN_0023.includes(statement) && !ADDED_IN_0013.includes(statement) && !ADDED_IN_0012.includes(statement))
+    .map((statement) => CHANGED_IN_0066.get(statement) ?? statement)
     .map((statement) => CHANGED_IN_0060.get(statement) ?? statement)
     .map((statement) => CHANGED_IN_0055.get(statement) ?? statement)
     .map((statement) => CHANGED_IN_0053.get(statement) ?? statement)
@@ -745,7 +754,8 @@ describe("the Execution tables as drizzle-kit writes them", () => {
     assert.deepEqual([...statements.slice(0, generated.length)].sort(), generated)
     // The statements 0038 and 0024 changed are ones the schema generates today, the one 0032 changed is what 0038 maps the pickup back to, the one 0023 changed is what 0032 maps it back to, the ones 0016 changed are what 0024 maps the route back to and 0023 the pickup, the one 0015 changed is what 0016 maps the route back to, the one 0013 changed is what 0015 maps back to, and the one 0012 changed is what 0013 maps back to — each mapping maps something, one file at a time; the same chain for 0010 and 0009.
     const today = await statementsFor(tables)
-    for (const statement of CHANGED_IN_0060.keys()) assert.ok(today.includes(statement), statement.split("\n")[0])
+    for (const statement of CHANGED_IN_0066.keys()) assert.ok(today.includes(statement), statement.split("\n")[0])
+    for (const statement of CHANGED_IN_0060.keys()) assert.ok([...CHANGED_IN_0066.values()].includes(statement), statement.split("\n")[0])
     for (const statement of CHANGED_IN_0055.keys()) assert.ok(today.includes(statement), statement.split("\n")[0])
     for (const statement of ADDED_IN_0055) assert.ok(today.includes(statement), statement)
     for (const statement of CHANGED_IN_0053.keys()) assert.ok([...CHANGED_IN_0055.values()].includes(statement), statement.split("\n")[0])
@@ -782,6 +792,7 @@ describe("the Execution tables as drizzle-kit writes them", () => {
     assert.equal(CHANGED_IN_0053.size, 1, "the stop's bulky booking")
     assert.equal(CHANGED_IN_0055.size, 1, "the stop a moved stop was moved from")
     assert.equal(CHANGED_IN_0060.size, 1, "the receipt's record-positions")
+    assert.equal(CHANGED_IN_0066.size, 1, "the receipt's pre-trip-check")
   })
 
   test("and carries below them the fence and trigger, or revoke, of each table, then the sync role, its grants and the publication: 7 x 3 + 3 + 17 + 1 = 42 statements", async () => {

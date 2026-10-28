@@ -22,6 +22,8 @@
 // `DRIVER_ABSENCE_REASONS` and
 // `VEHICLE_UNAVAILABILITY_REASONS` (O6 of #290) say why a driver is away or a
 // vehicle out of use over a dated period (resources/availability.ts).
+// `VEHICLE_DEFECT_STATUSES` (O13 of #290) is where a defect a pre-trip check
+// found stands (resources/pre-trip.ts).
 //
 // A value is a kebab-case token: it goes into a migration as a SQL literal
 // and onto the wire as an enum member, and those are the same string. A list
@@ -74,6 +76,8 @@ export const VEHICLE_UNAVAILABILITY_REASONS = ["maintenance", "repair", "inspect
 export const ENERGY_UNITS = ["litre", "kg", "kwh"] as const
 /** Why a route's emissions are not measured, in the order they are judged: no active Plan, a Plan not yet measured, no vehicle planned, a vehicle with no fuel, no consumption for its type and fuel, no factor in force for its fuel. */
 export const EMISSION_GAPS = ["no-plan", "plan-unmeasured", "no-vehicle", "no-fuel", "no-consumption", "no-factor"] as const
+/** Where a Vehicle Defect a pre-trip check found stands (O13 of #290): open until the office marks it mended. */
+export const VEHICLE_DEFECT_STATUSES = ["open", "resolved"] as const
 
 /**
  * The places a container stands in while in stock — a warehouse, or
@@ -110,6 +114,7 @@ export type DriverAbsenceReason = (typeof DRIVER_ABSENCE_REASONS)[number]
 export type VehicleUnavailabilityReason = (typeof VEHICLE_UNAVAILABILITY_REASONS)[number]
 export type EnergyUnit = (typeof ENERGY_UNITS)[number]
 export type EmissionGap = (typeof EMISSION_GAPS)[number]
+export type VehicleDefectStatus = (typeof VEHICLE_DEFECT_STATUSES)[number]
 
 /** Every list of this module by its name, for a test that walks them and for a reader looking for the whole vocabulary at once. */
 export const RESOURCES_VOCABULARIES = {
@@ -136,4 +141,5 @@ export const RESOURCES_VOCABULARIES = {
   VEHICLE_UNAVAILABILITY_REASONS,
   ENERGY_UNITS,
   EMISSION_GAPS,
+  VEHICLE_DEFECT_STATUSES,
 } as const satisfies Record<string, readonly [string, ...string[]]>

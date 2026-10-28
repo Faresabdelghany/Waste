@@ -53,6 +53,7 @@
 // never reaches `decide`, since the route records that rejection itself with
 // the schema's issues.
 import { licenceRefusal, licenceSentence, type Licence } from "../resources/licence"
+import { isCheckIssue, judgeCheck, type CheckAnswer, type ChecklistItem, type CheckedItem } from "../resources/pre-trip"
 import type { LicenceClass, VehicleKind, VehicleStatus } from "../resources/vocabulary"
 import type { PositionFix } from "./positions"
 import { alreadyDecided, notActive, PICKUP_OUTCOME_OF, routeTransition, type PickupCommand, type PickupOutcome } from "./transitions"
@@ -64,7 +65,7 @@ export type FlatPoint = { type: "Point"; coordinates: [number, number] }
 /** Where the device stood, and how well it knew. */
 export type Located = { location?: FlatPoint; accuracyM?: number }
 
-/** The bodies of the fifteen commands, as their contracts parse them. */
+/** The bodies of the sixteen commands, as their contracts parse them. */
 export type CommandBodies = {
   "start-route": Located & { vehicleId: string; trailerId?: string; appVersion?: string }
   arrive: Located & { pickupId: string }
@@ -82,6 +83,8 @@ export type CommandBodies = {
   "end-route": Located & { note?: string }
   /** Where the vehicle was while the session ran (O8 of #290): the fixes the device kept, oldest first. */
   "record-positions": { points: PositionFix[] }
+  /** A vehicle's walk-round (O13 of #290): every item of its type's checklist answered, and what the dashboard reads where the driver gave it. */
+  "pre-trip-check": Located & { vehicleId: string; items: CheckAnswer[]; odometerKm?: number; engineHours?: number }
 }
 
 /** One command as the device sent it: the envelope and the body its kind parsed. */
@@ -139,7 +142,7 @@ export type Lookups = {
   driverOpenOn: string | undefined
   /** The pickup the body names, on this route. */
   pickup: PickupState | undefined
-  /** The vehicle a `start-route` names, of the route's project. */
+  /** The vehicle a `start-route` or a `pre-trip-check` names, of the route's project. */
   vehicle: VehicleState | undefined
   /** The trailer a `start-route` names, of the route's project. */
   trailer: VehicleState | undefined
@@ -147,6 +150,8 @@ export type Lookups = {
   stationKnown: boolean
   /** Whether the fraction a `record-unload` names is the company's. */
   fractionKnown: boolean
+  /** The checklist of the type of the vehicle a `pre-trip-check` names (O13 of #290), in order; read with `vehicle`, and empty for a type that holds none. */
+  checklist?: ChecklistItem[]
 }
 
 /** The request's clock and the two bounds a device's clock is held within. */
@@ -197,6 +202,18 @@ export type UnloadDraft = {
   refusalNote: string | null
 }
 
+/** A pre-trip check to append, with the command's id (O13 of #290): the vehicle, what each item came to, the readings. */
+export type PreTripCheckDraft = {
+  id: string
+  vehicleId: string
+  occurredAt: string
+  items: CheckedItem[]
+  odometerKm: number | null
+  engineHours: number | null
+  location: FlatPoint | null
+  locationAccuracyM: number | null
+}
+
 /** One thing the applier writes. */
 export type Effect =
   /** The route `ready → active` at the instant, its actual assignment copied from the session opened with the command's id. */
@@ -213,6 +230,8 @@ export type Effect =
   | { kind: "end-route"; at: string }
   /** The session's positions appended, one row per fix (O8 of #290); no event, since nothing consumes a position and a running day would flood the outbox. */
   | { kind: "append-positions"; points: PositionFix[] }
+  /** The check appended (O13 of #290); where it found defects, one Vehicle Defect each, the office's ticket for them, and — where one is critical — the vehicle set to `maintenance`. */
+  | { kind: "append-pre-trip-check"; check: PreTripCheckDraft; defects: CheckedItem[]; grounds: boolean }
   /** An outbox event to write after the rows it describes, its payload the resource the route would answer. */
   | { kind: "event"; event: OutboxKind; aggregate: OutboxAggregate; aggregateId: string }
 
@@ -247,6 +266,11 @@ export const NOT_A_STATION = "Not an unloading station of this company"
 export const NOT_A_FRACTION = "Not a waste fraction of this company"
 /** An `objectKey` outside the command's own prefix. */
 export const OBJECT_KEY_NAMES_ANOTHER = "The object key names another route or another command"
+/** A `pre-trip-check` naming a vehicle or a trailer that is not the project's. */
+export const NOT_A_VEHICLE = "Not a vehicle or trailer of this project"
+/** A `pre-trip-check` on a route that is neither ready nor running: the check is the day's, before or while it is driven. */
+export const checkNotNow = (label: string): string => `Route ${label} is not ready or active; a pre-trip check is made before or during the route`
+
 /** What the licence sentence's last clause says the judged day was. */
 export const THE_OPERATING_DATE = "the operating date"
 
@@ -313,6 +337,7 @@ export function decide(command: Command, driver: CommandDriver, state: Lookups, 
   if (occurred < now - clock.backdateMs) return invalid("occurredAt", recordedTooLate(clock.backdateMs))
 
   if (command.kind === "start-route") return decideStart(command, driver, route, state)
+  if (command.kind === "pre-trip-check") return decidePreTrip(command, route, state)
 
   // The office cancelled the route while the device was out: its session is already ended (routeCancellation), and the day's end has nothing to end. Applied, not refused, so the driver is not locked out of the next route.
   if (command.kind === "end-route" && route.status === "cancelled") return { apply: [], note: ROUTE_CANCELLED_NOTHING_TO_END }
@@ -426,6 +451,35 @@ function decidePositions(command: Command<"record-positions">, session: SessionS
     if (at < started) return invalid(path, BEFORE_THE_SESSION_STARTED)
   }
   return { apply: [{ kind: "append-positions", points: command.body.points }] }
+}
+
+/**
+ * `pre-trip-check` (O13 of #290): the route is ready or active — the check is
+ * made before the day or during it, on the vehicle or the trailer it names,
+ * which is the route's project's and in service — and every item of the
+ * checklist its type holds is answered once (resources/pre-trip.ts). The
+ * check is appended whatever it found; its defects are the applier's to
+ * record and tell the office of.
+ */
+function decidePreTrip(command: Command<"pre-trip-check">, route: RouteState, state: Lookups): Decision {
+  if (route.status !== "ready" && route.status !== "active") return reject(409, checkNotNow(route.label))
+  const { vehicle } = state
+  const { body } = command
+  if (vehicle === undefined || vehicle.id !== body.vehicleId) return invalid("body.vehicleId", NOT_A_VEHICLE)
+  if (vehicle.status !== "active") return reject(409, notInService(vehicle.label, vehicle.status, vehicle.kind === "trailer" ? "trailer" : "vehicle"))
+  const judged = judgeCheck(state.checklist ?? [], body.items)
+  if (isCheckIssue(judged)) return invalid(judged.path, judged.message)
+  const check: PreTripCheckDraft = {
+    id: command.id,
+    vehicleId: vehicle.id,
+    occurredAt: command.occurredAt,
+    items: judged.items,
+    odometerKm: body.odometerKm ?? null,
+    engineHours: body.engineHours ?? null,
+    location: body.location ?? null,
+    locationAccuracyM: body.accuracyM ?? null,
+  }
+  return { apply: [{ kind: "append-pre-trip-check", check, defects: judged.defects, grounds: judged.grounds }] }
 }
 
 /** `start-route`: the route is ready, the driver is on no other route, the vehicle and the trailer are the project's and active, the driver holds the class the vehicle requires on the operating date. */

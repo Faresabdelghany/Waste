@@ -25,7 +25,7 @@ describe("the Resolution vocabulary's own rules", () => {
   })
 
   test("the kinds are the prototype's five types, the repair ticket, the glossary's complaint and task, the consumer's two, and other", () => {
-    assert.deepEqual([...vocabulary.TICKET_KINDS], ["missed-collection", "overflow", "access-issue", "container-request", "container-defect", "proof-follow-up", "complaint", "reported-problem", "rejected-command", "internal-task", "other"])
+    assert.deepEqual([...vocabulary.TICKET_KINDS], ["missed-collection", "overflow", "access-issue", "container-request", "container-defect", "proof-follow-up", "complaint", "reported-problem", "rejected-command", "internal-task", "vehicle-defect", "other"])
     assert.deepEqual([...vocabulary.TICKET_PRIORITIES], ["critical", "high", "medium", "low", "none"])
     assert.deepEqual([...vocabulary.TICKET_RESOLUTIONS], ["recollected", "serviced", "answered", "no-action", "duplicate"])
     assert.deepEqual([...vocabulary.BILLABLE_RESOLUTIONS], ["recollected", "serviced"], "the work Finance charges for, a value of the resolutions")

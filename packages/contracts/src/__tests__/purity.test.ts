@@ -69,7 +69,9 @@
 // added @waste/domain/service-providers/vocabulary: service-provider-activities.ts
 // reads an Activity's kinds and statuses. O30 of #290 added
 // @waste/domain/resources/stock-balance: stock.ts bounds a warehouse's set of
-// Stock Minimums by the domain's cap.
+// Stock Minimums by the domain's cap. O13 of #290 added
+// @waste/domain/resources/pre-trip: pre-trip.ts bounds a checklist and a
+// check by the domain's cap.
 import path from "node:path"
 import { fileURLToPath } from "node:url"
 
@@ -108,6 +110,7 @@ definePurityTests({
     "@waste/domain/resolution/vocabulary",
     "@waste/domain/resources/drop-off-points",
     "@waste/domain/resources/emissions",
+    "@waste/domain/resources/pre-trip",
     "@waste/domain/resources/stock-balance",
     "@waste/domain/resources/vocabulary",
     "@waste/domain/route-schemes/seasons",

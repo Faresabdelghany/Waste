@@ -3,7 +3,9 @@
 // project with nulls as equal, the hours held to a year. Then migration 0026,
 // which has to begin with exactly those statements and carry below them the
 // table's fence and trigger and its audit trail (`TICKET_SLA_AUDITED`), since
-// the office's edits of it are history. No database.
+// the office's edits of it are history. Migration 0066 (O13 of #290) grew
+// the kinds by `vehicle-defect`, so 0026 is held to the list as it was then
+// and pre-trip-rendering.test.ts pins the replacement. No database.
 import assert from "node:assert/strict"
 import { readFile } from "node:fs/promises"
 import { join } from "node:path"
@@ -24,19 +26,25 @@ const MIGRATION = "0026_ticket_sla.sql"
 
 const HOURS = `${ref("ticket_sla", "hours")} between 1 and ${TICKET_SLA_HOURS_MAX}`
 
-const expected = [
+/** The kinds as of 0026: today's less the one 0066 added. */
+const KINDS_AS_OF_0026 = TICKET_KINDS.filter((kind) => kind !== "vehicle-defect")
+
+/** What drizzle-kit writes for the table, with its kind's check over the list given. */
+const expectedWith = (kinds: readonly string[]) => [
   createTable("ticket_sla", "project", [
     '"kind" text',
     '"priority" text NOT NULL',
     '"hours" integer NOT NULL',
     `CONSTRAINT "ticket_sla_project_id_kind_priority_key" UNIQUE NULLS NOT DISTINCT(${columns("company_id", "project_id", "kind", "priority")})`,
-    oneOfCheck("ticket_sla", "kind", ...TICKET_KINDS),
+    oneOfCheck("ticket_sla", "kind", ...kinds),
     oneOfCheck("ticket_sla", "priority", ...TICKET_PRIORITIES),
     `CONSTRAINT "ticket_sla_hours_range" CHECK (${HOURS})`,
   ]),
   companyFk("ticket_sla"),
   projectFk("ticket_sla"),
 ]
+
+const expected = expectedWith(TICKET_KINDS)
 
 const fileStatements = async (): Promise<string[]> => statementsOf(await readFile(join(MIGRATIONS_FOLDER, MIGRATION), "utf8"))
 
@@ -48,7 +56,7 @@ describe("the SLA as drizzle-kit writes it", () => {
   })
 
   test("migration 0026 is exactly that, then the table's fence and trigger, then its audit trail", async () => {
-    assert.deepEqual(await fileStatements(), [...expected, ...handWrittenStatements(ticketSla), ...TICKET_SLA_AUDITED.flatMap(auditTrail)].map(normalised))
+    assert.deepEqual(await fileStatements(), [...expectedWith(KINDS_AS_OF_0026), ...handWrittenStatements(ticketSla), ...TICKET_SLA_AUDITED.flatMap(auditTrail)].map(normalised))
   })
 })
 

@@ -64,3 +64,5 @@ export * from "./sustainability"
 export * from "./site-visits"
 // The coordination between the office and a Service Provider: proposals, follow-ups and notes (#474).
 export * from "./service-provider-activities"
+// Pre-trip inspection (O13 of #290): a vehicle type's checklist, the checks made against it, and the defects they find.
+export * from "./pre-trip"
