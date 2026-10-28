@@ -20,16 +20,19 @@
 // the resolver.
 //
 // Compartments travel with the vehicle, replaced whole through
-// `PUT /vehicles/:id/compartments`. The form has one multiselect of waste
-// fractions and no per-compartment editor, so a create makes one compartment
-// carrying them (with the form's volume as its litres), and an edit that
-// moves the fractions or the volume re-puts that one compartment, keeping
-// its name and capacities; a vehicle the API holds with several
-// compartments is read faithfully (each named in the `compartments` text,
-// the union of their fractions in the picker) and its fractions are not
-// re-cut from a one-slot form: that edit is refused by name. The list the
-// vehicle had is kept on the record under `COMPARTMENTS_KEY`, as a role
-// keeps its grants, so a patch can rebuild the whole list from it.
+// `PUT /vehicles/:id/compartments`. The generic form has one multiselect of
+// waste fractions, so a create makes one compartment carrying them (with the
+// form's volume as its litres), and an edit that moves the fractions or the
+// volume re-puts that one compartment, keeping its name and capacities. The
+// compartments one by one — each its name, its payload, its litres and its
+// fractions — are the vehicle's details' editor (O7 of #290,
+// commands/compartment-surfaces.tsx), sent as the `SET_COMPARTMENTS`
+// command, which puts the whole list; a vehicle of several compartments is
+// not re-cut from the generic form's one slot, and that edit is refused by
+// name, pointing there. The list the vehicle had is kept on the record under
+// `COMPARTMENTS_KEY`, as a role keeps its grants, so a patch can rebuild the
+// whole list from it, and as the editor's drafts under
+// `COMPARTMENT_DRAFTS_KEY`, its fractions by web id.
 //
 // A driver's licence is read literally — the class and the last day it holds
 // — and never judged here: the licence rule is the domain's and the API's,
@@ -50,7 +53,7 @@ import { MASTER_DATA_KIND_DETAILS, masterDataKindOf } from "@/lib/data/master-da
 import { fuelLabel } from "@/lib/data/resources-vocabulary"
 
 import { create, get, listAll, patch, put } from "../client"
-import { hasPrefix, inheritedPresentation, isLocalRefusal, ofKind, patchOf, stampFacts, statusLabel, typed, typedFlag, webIdOf, type Client, type LocalRefusal, type MappingContext, type ResourceAdapter, type ServerModule } from "./adapter"
+import { hasPrefix, inheritedPresentation, isLocalRefusal, ofKind, patchOf, stampFacts, statusLabel, typed, typedFlag, webIdOf, type Client, type CommandInput, type LocalRefusal, type MappingContext, type ResourceAdapter, type ServerModule } from "./adapter"
 import { DRIVER_AVAILABILITY_ACTIONS, VEHICLE_AVAILABILITY_ACTIONS } from "./availability"
 import { userAdapter } from "./organisation"
 import { shiftFact, shiftOf, shiftValues } from "./time-windows"
@@ -81,6 +84,58 @@ export const PROVIDER_WITH_PROVIDER_EMPLOYMENT = "Name the employing service pro
 export const COMPARTMENTS_KEY = "compartmentSet"
 
 const A_LICENCE_CLASS = `A licence class is ${LICENCE_CLASSES.map(displayLicenceClass).join(", ").replace(/, ([^,]*)$/, " or $1")}`
+
+/** The typed key the vehicle record keeps its compartments under as the editor's drafts, each one's fractions by web id. */
+export const COMPARTMENT_DRAFTS_KEY = "compartmentDrafts"
+
+/** The command that puts a vehicle's compartments whole (O7 of #290). */
+export const SET_COMPARTMENTS = "set-compartments"
+
+/** One compartment as the editor holds it: its name and figures as typed, blank for none, and its fractions by web id. */
+export type CompartmentDraft = { name: string; capacityKg: string; volumeLitres: string; wasteFractionIds: string[] }
+
+/** The vehicle's compartments as the editor starts from them; none for a record that carries none. */
+export function compartmentDraftsOf(record: Pick<BusinessRecord, "submittedValues">): CompartmentDraft[] {
+  const raw = typed(record, COMPARTMENT_DRAFTS_KEY)
+  if (raw === undefined) return []
+  try {
+    const parsed: unknown = JSON.parse(raw)
+    return Array.isArray(parsed) ? (parsed as CompartmentDraft[]) : []
+  } catch {
+    return []
+  }
+}
+
+/** A blank or a whole number of at least one, as a compartment's figure; a refusal at `path` otherwise. */
+function figureOf(text: string, path: string, message: string): number | undefined | LocalRefusal {
+  const trimmed = text.trim()
+  if (trimmed === "") return undefined
+  return /^\d+$/.test(trimmed) && Number(trimmed) >= 1 ? Number(trimmed) : refusal(path, message)
+}
+
+/** The editor's drafts as the PUT's body, or a refusal at the compartment and field the API would refuse. */
+function compartmentsSetBody(input: CommandInput, record: BusinessRecord, context: MappingContext): { compartments: CompartmentBody[] } | LocalRefusal {
+  const drafts = Array.isArray(input.compartments) ? (input.compartments as CompartmentDraft[]) : []
+  if (drafts.length === 0 && typed(record, "resourceKind") !== "trailer") return refusal("compartments", A_POWERED_VEHICLE_HAS_A_COMPARTMENT)
+  const compartments: CompartmentBody[] = []
+  for (const [index, draft] of drafts.entries()) {
+    const at = (field: string) => `compartments.${index}.${field}`
+    if (draft.wasteFractionIds.length === 0) return refusal(at("wasteFractionIds"), `Pick the fractions compartment ${index + 1} carries`)
+    const capacityKg = figureOf(draft.capacityKg, at("capacityKg"), "A compartment's capacity is a whole number of kilograms, 1 or more")
+    if (isLocalRefusal(capacityKg)) return capacityKg
+    const volumeLitres = figureOf(draft.volumeLitres, at("volumeLitres"), "A compartment's volume is a whole number of litres, 1 or more")
+    if (isLocalRefusal(volumeLitres)) return volumeLitres
+    const fractionIds = draft.wasteFractionIds.map((webId) => {
+      const serverId = context.resolve.serverIdOf(webId)
+      const named = serverId === undefined ? undefined : context.resolve.byServerId(serverId)
+      return named !== undefined && masterDataKindOf(named) === "waste-fraction" ? serverId : undefined
+    })
+    if (fractionIds.some((id) => id === undefined)) return refusal(at("wasteFractionIds"), "Pick fractions the API holds")
+    const name = draft.name.trim()
+    compartments.push(compartmentBody({ name: name === "" ? null : name, capacityKg: capacityKg ?? null, volumeLitres: volumeLitres ?? null }, fractionIds as string[]))
+  }
+  return { compartments }
+}
 
 /** One compartment as the record keeps it and a body gives it: without the position, which is the list's order. */
 type CompartmentBody = { name?: string | null; capacityKg?: number | null; volumeLitres?: number | null; wasteFractionIds: string[] }
@@ -166,7 +221,7 @@ function compartmentsPut(before: BusinessRecord, after: BusinessRecord, fraction
   if (!fractionsMoved && !volumeMoved) return undefined
   if (stored.length > 1) {
     const label = typed(before, "assetReference") ?? before.name
-    return refusal(FRACTIONS_KEY, `${label} has ${stored.length} compartments: their fractions are set compartment by compartment on the API`)
+    return refusal(FRACTIONS_KEY, `${label} has ${stored.length} compartments: set their fractions under Compartments in its details`)
   }
   const kind = typed(after, "resourceKind") ?? typed(before, "resourceKind")
   if (fractionIds.length === 0) return kind === "trailer" ? [] : refusal(FRACTIONS_KEY, A_POWERED_VEHICLE_HAS_A_COMPARTMENT)
@@ -247,6 +302,16 @@ export const vehicleAdapter: ResourceAdapter<Vehicle> = {
         gpsDeviceId: vehicle.telematicsDeviceId ?? "",
         fuelOrEnergyType: vehicle.fuel ?? "",
         [COMPARTMENTS_KEY]: JSON.stringify(vehicle.compartments.map(kept)),
+        [COMPARTMENT_DRAFTS_KEY]: JSON.stringify(
+          vehicle.compartments.map(
+            (compartment): CompartmentDraft => ({
+              name: compartment.name ?? "",
+              capacityKg: compartment.capacityKg === null ? "" : String(compartment.capacityKg),
+              volumeLitres: compartment.volumeLitres === null ? "" : String(compartment.volumeLitres),
+              wasteFractionIds: compartment.wasteFractionIds.map((id) => referenced(context, MASTER_DATA_KIND_DETAILS["waste-fraction"].prefix, id).webId),
+            }),
+          ),
+        ),
       },
     }
   },
@@ -360,6 +425,14 @@ export const vehicleAdapter: ResourceAdapter<Vehicle> = {
     if (write.vehicle !== undefined) vehicle = await patch<Vehicle>(client, `/vehicles/${serverId}`, write.vehicle)
     if (write.compartments !== undefined) vehicle = await put<Vehicle>(client, `/vehicles/${serverId}/compartments`, { compartments: write.compartments })
     return vehicle ?? (await get<Vehicle>(client, `/vehicles/${serverId}`))
+  },
+  // Its compartments one by one, from its details (O7 of #290): the whole list put, the vehicle answered.
+  commands: {
+    [SET_COMPARTMENTS]: {
+      toBody: compartmentsSetBody,
+      run: (client, serverId, body) => put<Vehicle>(client, `/vehicles/${serverId}/compartments`, body),
+      refused: (record) => `The compartments of ${record.name} were not saved`,
+    },
   },
   // When it is out of use (O6 of #290): periods of its own, recorded and removed from its details.
   actions: VEHICLE_AVAILABILITY_ACTIONS,
