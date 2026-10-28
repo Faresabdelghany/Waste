@@ -135,7 +135,7 @@ const driverTable = (asOf: "0007" | "0056"): string =>
   ])
 
 /** stock_movement as 0007 made it, and as drizzle-kit writes it since the decommission reasons' migration (O30 of #290), with a decommission's reason and its shape. */
-const stockMovementTable = (asOf: "0007" | "0062"): string =>
+const stockMovementTable = (asOf: "0007" | "0063"): string =>
   createLedger("stock_movement", [
     '"container_id" uuid NOT NULL',
     '"kind" text NOT NULL',
@@ -147,7 +147,7 @@ const stockMovementTable = (asOf: "0007" | "0062"): string =>
     '"occurred_at" timestamp with time zone NOT NULL',
     '"recorded_by" uuid NOT NULL',
     '"reason" text',
-    ...(asOf >= "0062" ? ['"decommission_reason_id" uuid'] : []),
+    ...(asOf >= "0063" ? ['"decommission_reason_id" uuid'] : []),
     '"reference" text',
     '"corrects_movement_id" uuid',
     uniqueKey("stock_movement_tenant_key", "company_id", "id"),
@@ -157,18 +157,18 @@ const stockMovementTable = (asOf: "0007" | "0062"): string =>
     `CONSTRAINT "stock_movement_from_shape" CHECK ((${ref("stock_movement", "from_kind")} in ('warehouse', 'maintenance')) = (${ref("stock_movement", "from_warehouse_id")} is not null))`,
     `CONSTRAINT "stock_movement_to_shape" CHECK ((${ref("stock_movement", "to_kind")} in ('warehouse', 'maintenance')) = (${ref("stock_movement", "to_warehouse_id")} is not null))`,
     `CONSTRAINT "stock_movement_placement_shape" CHECK ((${ref("stock_movement", "from_kind")} = 'service' or ${ref("stock_movement", "to_kind")} = 'service') = (${ref("stock_movement", "placement_id")} is not null))`,
-    ...(asOf >= "0062" ? [`CONSTRAINT "stock_movement_decommission_reason_shape" CHECK ((${ref("stock_movement", "kind")} = 'decommission') = (${ref("stock_movement", "decommission_reason_id")} is not null))`] : []),
+    ...(asOf >= "0063" ? [`CONSTRAINT "stock_movement_decommission_reason_shape" CHECK ((${ref("stock_movement", "kind")} = 'decommission') = (${ref("stock_movement", "decommission_reason_id")} is not null))`] : []),
     kindShape,
   ])
 
 /** What 0056 changed (O14 of #290): the driver's CREATE TABLE as drizzle-kit generates it now onto what 0007 says; time-windows-rendering.test.ts pins the statements. The decommission reasons' migration (O30 of #290) the ledger's, likewise; decommission-reasons-rendering.test.ts pins its statements. */
 const CHANGED_IN_0056 = new Map([
   [driverTable("0056"), driverTable("0007")],
-  [stockMovementTable("0062"), stockMovementTable("0007")],
+  [stockMovementTable("0063"), stockMovementTable("0007")],
 ])
 
 /** What the decommission reasons' migration added to the ledger beside the column: its key into the reasons and the index that needs. 0007 begins with the generated statements less these. */
-const ADDED_IN_0062 = [
+const ADDED_IN_0063 = [
   tenantFk("stock_movement", "decommission_reason_id", "decommission_reason"),
   index("stock_movement", "stock_movement_decommission_reason_id_idx", "company_id", "decommission_reason_id"),
 ]
@@ -292,7 +292,7 @@ const expected = [
     uniqueKey("vehicle_compartment_fraction_membership_key", "company_id", "vehicle_compartment_id", "waste_fraction_id"),
   ]),
   driverTable("0056"),
-  stockMovementTable("0062"),
+  stockMovementTable("0063"),
   createTable("vehicle_allocation", "project", [
     ...WINDOW,
     '"vehicle_id" uuid NOT NULL',
@@ -628,7 +628,7 @@ const generatedAlterations = async (): Promise<string[]> => [
 
 /** Everything drizzle-kit wrote at the head of 0007: the thirteen tables and the three altered ones. */
 const generatedHead = async (): Promise<string[]> => [
-  ...(await statementsFor(tables)).filter((statement) => !ADDED_IN_0062.includes(statement)).map((statement) => CHANGED_IN_0056.get(statement) ?? statement),
+  ...(await statementsFor(tables)).filter((statement) => !ADDED_IN_0063.includes(statement)).map((statement) => CHANGED_IN_0056.get(statement) ?? statement),
   ...(await generatedAlterations()),
 ]
 

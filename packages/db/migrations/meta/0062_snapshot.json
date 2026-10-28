@@ -1,5 +1,5 @@
 {
-  "id": "e8f7e7f9-2b0d-4be9-8d5d-1aca8957047d",
+  "id": "d1b64cf6-49a8-485d-95d3-fbd62604c424",
   "prevId": "92355102-2180-4ff6-b384-e204363cf791",
   "version": "7",
   "dialect": "postgresql",
@@ -1984,6 +1984,54 @@
           "primaryKey": false,
           "notNull": true
         },
+        "address_id": {
+          "name": "address_id",
+          "type": "uuid",
+          "primaryKey": false,
+          "notNull": false
+        },
+        "street_name": {
+          "name": "street_name",
+          "type": "text",
+          "primaryKey": false,
+          "notNull": false
+        },
+        "house_number": {
+          "name": "house_number",
+          "type": "text",
+          "primaryKey": false,
+          "notNull": false
+        },
+        "floor": {
+          "name": "floor",
+          "type": "text",
+          "primaryKey": false,
+          "notNull": false
+        },
+        "door": {
+          "name": "door",
+          "type": "text",
+          "primaryKey": false,
+          "notNull": false
+        },
+        "postcode": {
+          "name": "postcode",
+          "type": "text",
+          "primaryKey": false,
+          "notNull": false
+        },
+        "post_town": {
+          "name": "post_town",
+          "type": "text",
+          "primaryKey": false,
+          "notNull": false
+        },
+        "municipality_code": {
+          "name": "municipality_code",
+          "type": "text",
+          "primaryKey": false,
+          "notNull": false
+        },
         "registry_id": {
           "name": "registry_id",
           "type": "text",
@@ -2127,6 +2175,18 @@
         "property_location_valid": {
           "name": "property_location_valid",
           "value": "extensions.st_isvalid(\"wms\".\"property\".\"location\") and not extensions.st_isempty(\"wms\".\"property\".\"location\") and extensions.st_xmin(\"wms\".\"property\".\"location\") >= -180 and extensions.st_xmax(\"wms\".\"property\".\"location\") <= 180 and extensions.st_ymin(\"wms\".\"property\".\"location\") >= -90 and extensions.st_ymax(\"wms\".\"property\".\"location\") <= 90"
+        },
+        "property_address_shape": {
+          "name": "property_address_shape",
+          "value": "(\"wms\".\"property\".\"address_id\" is null) = (\"wms\".\"property\".\"street_name\" is null) and (\"wms\".\"property\".\"address_id\" is null) = (\"wms\".\"property\".\"house_number\" is null) and (\"wms\".\"property\".\"address_id\" is null) = (\"wms\".\"property\".\"postcode\" is null) and (\"wms\".\"property\".\"address_id\" is null) = (\"wms\".\"property\".\"post_town\" is null) and (\"wms\".\"property\".\"address_id\" is null) = (\"wms\".\"property\".\"municipality_code\" is null) and (\"wms\".\"property\".\"address_id\" is not null or (\"wms\".\"property\".\"floor\" is null and \"wms\".\"property\".\"door\" is null))"
+        },
+        "property_postcode_shape": {
+          "name": "property_postcode_shape",
+          "value": "\"wms\".\"property\".\"postcode\" ~ '^[0-9]{4}$'"
+        },
+        "property_municipality_code_shape": {
+          "name": "property_municipality_code_shape",
+          "value": "\"wms\".\"property\".\"municipality_code\" ~ '^[0-9]{4}$'"
         }
       },
       "isRLSEnabled": false
@@ -8348,114 +8408,6 @@
       "checkConstraints": {},
       "isRLSEnabled": false
     },
-    "wms.decommission_reason": {
-      "name": "decommission_reason",
-      "schema": "wms",
-      "columns": {
-        "id": {
-          "name": "id",
-          "type": "uuid",
-          "primaryKey": true,
-          "notNull": true,
-          "default": "wms.uuidv7()"
-        },
-        "company_id": {
-          "name": "company_id",
-          "type": "uuid",
-          "primaryKey": false,
-          "notNull": true
-        },
-        "created_at": {
-          "name": "created_at",
-          "type": "timestamp with time zone",
-          "primaryKey": false,
-          "notNull": true,
-          "default": "now()"
-        },
-        "updated_at": {
-          "name": "updated_at",
-          "type": "timestamp with time zone",
-          "primaryKey": false,
-          "notNull": true,
-          "default": "now()"
-        },
-        "code": {
-          "name": "code",
-          "type": "text",
-          "primaryKey": false,
-          "notNull": true
-        },
-        "name": {
-          "name": "name",
-          "type": "text",
-          "primaryKey": false,
-          "notNull": true
-        },
-        "status": {
-          "name": "status",
-          "type": "text",
-          "primaryKey": false,
-          "notNull": true,
-          "default": "'active'"
-        }
-      },
-      "indexes": {},
-      "foreignKeys": {
-        "decommission_reason_company_id_fk": {
-          "name": "decommission_reason_company_id_fk",
-          "tableFrom": "decommission_reason",
-          "tableTo": "company",
-          "schemaTo": "wms",
-          "columnsFrom": [
-            "company_id"
-          ],
-          "columnsTo": [
-            "id"
-          ],
-          "onDelete": "no action",
-          "onUpdate": "no action"
-        }
-      },
-      "compositePrimaryKeys": {},
-      "uniqueConstraints": {
-        "decommission_reason_code_key": {
-          "name": "decommission_reason_code_key",
-          "nullsNotDistinct": false,
-          "columns": [
-            "company_id",
-            "code"
-          ]
-        },
-        "decommission_reason_name_key": {
-          "name": "decommission_reason_name_key",
-          "nullsNotDistinct": false,
-          "columns": [
-            "company_id",
-            "name"
-          ]
-        },
-        "decommission_reason_tenant_key": {
-          "name": "decommission_reason_tenant_key",
-          "nullsNotDistinct": false,
-          "columns": [
-            "company_id",
-            "id"
-          ]
-        }
-      },
-      "policies": {},
-      "checkConstraints": {
-        "decommission_reason_code_lowercase": {
-          "name": "decommission_reason_code_lowercase",
-          "value": "\"wms\".\"decommission_reason\".\"code\" = lower(\"wms\".\"decommission_reason\".\"code\")"
-        },
-        "decommission_reason_status_one_of": {
-          "name": "decommission_reason_status_one_of",
-          "value": "\"wms\".\"decommission_reason\".\"status\" in ('active', 'inactive')"
-        }
-      },
-      "isRLSEnabled": false
-    },
     "wms.stock_movement": {
       "name": "stock_movement",
       "schema": "wms",
@@ -8543,12 +8495,6 @@
         "reason": {
           "name": "reason",
           "type": "text",
-          "primaryKey": false,
-          "notNull": false
-        },
-        "decommission_reason_id": {
-          "name": "decommission_reason_id",
-          "type": "uuid",
           "primaryKey": false,
           "notNull": false
         },
@@ -8718,27 +8664,6 @@
           "concurrently": false,
           "method": "btree",
           "with": {}
-        },
-        "stock_movement_decommission_reason_id_idx": {
-          "name": "stock_movement_decommission_reason_id_idx",
-          "columns": [
-            {
-              "expression": "company_id",
-              "isExpression": false,
-              "asc": true,
-              "nulls": "last"
-            },
-            {
-              "expression": "decommission_reason_id",
-              "isExpression": false,
-              "asc": true,
-              "nulls": "last"
-            }
-          ],
-          "isUnique": false,
-          "concurrently": false,
-          "method": "btree",
-          "with": {}
         }
       },
       "foreignKeys": {
@@ -8862,22 +8787,6 @@
           "onDelete": "no action",
           "onUpdate": "no action"
         },
-        "stock_movement_decommission_reason_id_fk": {
-          "name": "stock_movement_decommission_reason_id_fk",
-          "tableFrom": "stock_movement",
-          "tableTo": "decommission_reason",
-          "schemaTo": "wms",
-          "columnsFrom": [
-            "company_id",
-            "decommission_reason_id"
-          ],
-          "columnsTo": [
-            "company_id",
-            "id"
-          ],
-          "onDelete": "no action",
-          "onUpdate": "no action"
-        },
         "stock_movement_corrects_movement_id_fk": {
           "name": "stock_movement_corrects_movement_id_fk",
           "tableFrom": "stock_movement",
@@ -8931,10 +8840,6 @@
         "stock_movement_placement_shape": {
           "name": "stock_movement_placement_shape",
           "value": "(\"wms\".\"stock_movement\".\"from_kind\" = 'service' or \"wms\".\"stock_movement\".\"to_kind\" = 'service') = (\"wms\".\"stock_movement\".\"placement_id\" is not null)"
-        },
-        "stock_movement_decommission_reason_shape": {
-          "name": "stock_movement_decommission_reason_shape",
-          "value": "(\"wms\".\"stock_movement\".\"kind\" = 'decommission') = (\"wms\".\"stock_movement\".\"decommission_reason_id\" is not null)"
         },
         "stock_movement_kind_shape": {
           "name": "stock_movement_kind_shape",

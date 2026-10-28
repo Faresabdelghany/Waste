@@ -89,6 +89,14 @@ import { windowFact, windowOf, windowValues, type WindowKeys } from "./time-wind
 /** The form's access hours (O14 of #290). */
 const SERVICE_WINDOW_KEYS: WindowKeys = { from: "serviceWindowStart", to: "serviceWindowEnd" }
 
+/** A patch that picks an address from the register names it by its id alone: its designation is the API's to write, and the two together are refused (#291 C13). */
+function registersAddress<Patch extends { address?: unknown; addressId?: unknown }>(patch: Patch): Patch {
+  if (typeof patch.addressId !== "string") return patch
+  const rest = { ...patch }
+  delete rest.address
+  return rest
+}
+
 /** The chip a customer the store has not loaded is named by: the one prefix of either kind. */
 const CUSTOMER_CHIP = "customer"
 
@@ -213,6 +221,7 @@ export const propertyAdapter: ResourceAdapter<Property> = {
       facts: {
         "Property type": PROPERTY_KIND_LABELS[property.kind],
         Address: property.address,
+        ...(property.addressId === null ? {} : { "Address register": "Found in the register" }),
         ...(property.registryId === null ? {} : { "Registry identifier": property.registryId }),
         ...(property.location === null ? {} : { Coordinates: coordinatesFact(property.location) }),
         ...(property.driverInstructions ? { "Driver instructions": property.driverInstructions } : {}),
@@ -229,6 +238,7 @@ export const propertyAdapter: ResourceAdapter<Property> = {
         projectId: project.webId,
         displayName: property.name,
         serviceAddress: property.address,
+        addressId: property.addressId ?? "",
         registryId: property.registryId ?? "",
         propertyType: property.kind,
         ...coordinatesOf(property.location),
@@ -244,6 +254,8 @@ export const propertyAdapter: ResourceAdapter<Property> = {
     if (isLocalRefusal(projectId)) return projectId
     const name = requiredText(record, "displayName", "A property", "a name")
     if (isLocalRefusal(name)) return name
+    // An address found in the register goes as its id, whose designation the API stores (#291 C13); a typed one as its text.
+    const addressId = typed(record, "addressId")
     const address = requiredText(record, "serviceAddress", "A property", "an address")
     if (isLocalRefusal(address)) return address
     const kind = propertyKind(record) ?? refusal("propertyType", "A property needs a property type")
@@ -262,7 +274,7 @@ export const propertyAdapter: ResourceAdapter<Property> = {
     return {
       projectId,
       name,
-      address,
+      ...(addressId === undefined ? { address } : { addressId }),
       ...(registryId === undefined ? {} : { registryId }),
       kind,
       ...(location === null ? {} : { location }),
@@ -292,6 +304,7 @@ export const propertyAdapter: ResourceAdapter<Property> = {
         return {
           name: typed(record, "displayName") ?? record.name,
           address: typed(record, "serviceAddress"),
+          addressId: typed(record, "addressId") ?? null,
           registryId: typed(record, "registryId") ?? null,
           kind: typed(record, "propertyType"),
           location: isLocalRefusal(point) ? undefined : point,
@@ -308,7 +321,7 @@ export const propertyAdapter: ResourceAdapter<Property> = {
     const was = partiesOf(before, context)
     const partiesMoved = isLocalRefusal(was) || !sameSet(was.map((party) => pairKey(party.customerId, party.role)), parties.map((party) => pairKey(party.customerId, party.role)))
     if (property === null && !partiesMoved) return null
-    const write: PropertyWrite = { ...(property === null ? {} : { property }), ...(partiesMoved ? { parties } : {}) }
+    const write: PropertyWrite = { ...(property === null ? {} : { property: registersAddress(property) }), ...(partiesMoved ? { parties } : {}) }
     return write
   },
   create: (client, body) => create<Property>(client, "/properties", body).then((created) => created.body),

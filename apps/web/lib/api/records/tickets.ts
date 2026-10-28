@@ -114,8 +114,8 @@ export const TICKET_LINKS: ReadonlyArray<readonly [keyof TicketLinks, string, st
   ["parentTicketId", TICKET_PREFIX, "Parent ticket", isTicketRecord],
 ]
 
-/** The links an office's form names, each by a picker: the stop among its route's (M6 of #293), and the parent set by nobody here. */
-export const OFFICE_TICKET_LINKS = TICKET_LINKS.filter(([key]) => key !== "parentTicketId")
+/** The links an office's form names, each by a picker: the stop among its route's (M6 of #293), and the parent among the project's tickets (7.10 of #290). */
+export const OFFICE_TICKET_LINKS = TICKET_LINKS
 
 /** Whether a status is one of the four open ones: what the list opens on and the sidebar counts. */
 export const isOpenTicketStatus = (status: string): boolean => (OPEN_TICKET_STATUSES as readonly string[]).includes(status)

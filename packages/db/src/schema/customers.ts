@@ -21,6 +21,15 @@
 // number in Denmark) is unique per company where given, the same partial index
 // as the customer's registration.
 //
+// A property found in the address register (#291 C13) carries the register's
+// id for its address, `address_id` (DAR's, a UUID the register mints), and the
+// parts the register holds beside it: the street and the house number, a floor
+// and a door for a unit, the postcode, its town and the municipality's code.
+// The parts are all there with the id or none is (`property_address_shape`),
+// a floor or a door only with them, and a postcode and a municipality code
+// are four digits. A typed address has none of them; `address` stays the text
+// a person reads either way.
+//
 // `property_party` is what a Customer is to a Property: the prototype's owner,
 // payer and primary contact of a property, and its contact's relationship
 // role, are all rows here. It is also the citizen portal's customer-side
@@ -44,6 +53,7 @@
 // `project_id` instead, as migrations/README.md requires of every referencing
 // column set.
 import { PAYMENT_TERMS_MAX } from "@waste/domain/finance/payment"
+import { FOUR_DIGITS_PATTERN } from "@waste/domain/registry/address"
 import {
   CUSTOMER_KINDS,
   CUSTOMER_STATUSES,
@@ -115,8 +125,18 @@ export const property = wms.table(
     ...timestamps,
     /** The display name: `Parkvej 18`. */
     name: text().notNull(),
-    /** The service address as one text; a structured address arrives with the address lookup (#77). */
+    /** The service address as one text: the register's designation where the property was found there. */
     address: text().notNull(),
+    /** The address register's id for the address (DAR, #291 C13); null where the address was typed. */
+    addressId: uuid(),
+    /** The address's parts as the register holds them, with `address_id` and only with it. */
+    streetName: text(),
+    houseNumber: text(),
+    floor: text(),
+    door: text(),
+    postcode: text(),
+    postTown: text(),
+    municipalityCode: text(),
     /** The property registry's identifier: a BFE number in Denmark. */
     registryId: text(),
     kind: text().notNull(),
@@ -140,6 +160,12 @@ export const property = wms.table(
     oneOf(t.kind, PROPERTY_KINDS),
     oneOf(t.status, PROPERTY_STATUSES),
     validGeometry(t.location),
+    check(
+      tableObjectName(t.id.table, "address_shape", "property"),
+      sql`(${t.addressId} is null) = (${t.streetName} is null) and (${t.addressId} is null) = (${t.houseNumber} is null) and (${t.addressId} is null) = (${t.postcode} is null) and (${t.addressId} is null) = (${t.postTown} is null) and (${t.addressId} is null) = (${t.municipalityCode} is null) and (${t.addressId} is not null or (${t.floor} is null and ${t.door} is null))`,
+    ),
+    check(tableObjectName(t.id.table, "postcode_shape", "property"), sql`${t.postcode} ~ ${sql.raw(`'${FOUR_DIGITS_PATTERN}'`)}`),
+    check(tableObjectName(t.id.table, "municipality_code_shape", "property"), sql`${t.municipalityCode} ~ ${sql.raw(`'${FOUR_DIGITS_PATTERN}'`)}`),
     uniqueIndex(tableObjectName(t.companyId.table, "registry_id_idx", "property")).on(t.companyId, t.registryId).where(sql`${t.registryId} is not null`),
   ],
 )
