@@ -29,7 +29,7 @@ type Snapshot = Parameters<typeof generateMigration>[0]
 const snapshot = async (n: string): Promise<Snapshot> => JSON.parse(await readFile(join(MIGRATIONS_FOLDER, "meta", `${n}_snapshot.json`), "utf8")) as Snapshot
 
 const KIND_ONE_OF = `ALTER TABLE "wms"."import_run" ADD CONSTRAINT "import_run_kind_one_of" CHECK (${ref("import_run", "kind")} in (${list(...IMPORT_KINDS)}));`
-const PROJECT_SHAPE = `ALTER TABLE "wms"."import_run" ADD CONSTRAINT "import_run_project_shape" CHECK (${projectShape("0064")});`
+const PROJECT_SHAPE = `ALTER TABLE "wms"."import_run" ADD CONSTRAINT "import_run_project_shape" CHECK (${projectShape("0068")});`
 
 describe("the catalogue import's migration", () => {
   test("is drizzle-kit's statements alone: the two checks dropped and added in their grown spelling", async () => {
@@ -44,7 +44,7 @@ describe("the catalogue import's migration", () => {
   })
 
   test("the schema's checks are the ones the file adds", () => {
-    assert.equal(checksOf(importRun).get("import_run_project_shape"), projectShape("0064"))
+    assert.equal(checksOf(importRun).get("import_run_project_shape"), projectShape("0068"))
     assert.equal(checksOf(importRun).get("import_run_kind_one_of"), `${ref("import_run", "kind")} in (${list(...IMPORT_KINDS)})`)
   })
 })

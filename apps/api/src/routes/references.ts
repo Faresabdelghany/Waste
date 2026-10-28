@@ -33,6 +33,7 @@
 // a question once the row is. The other three have no status to answer.
 import type { ProductStatus } from "@waste/contracts/catalogue"
 import type { CustomerStatus, PropertyStatus, SharedCollectionPointStatus } from "@waste/contracts/customers"
+import type { DecommissionReasonStatus } from "@waste/contracts/stock"
 import type { Tx } from "@waste/db/client"
 import { projectAccess, userAccount } from "@waste/db/schema/access"
 import { agreement, subscription } from "@waste/db/schema/agreements"
@@ -47,6 +48,7 @@ import { serviceProvider } from "@waste/db/schema/organisation"
 import { depot, unloadingStation, warehouse } from "@waste/db/schema/places"
 import { planningArea } from "@waste/db/schema/planning-areas"
 import { ticket } from "@waste/db/schema/resolution"
+import { decommissionReason } from "@waste/db/schema/stock"
 import type { DriverStatus, VehicleKind, VehicleStatus, WarehouseStatus } from "@waste/domain/resources/vocabulary"
 import { and, eq, exists, inArray, isNull, or, sql } from "drizzle-orm"
 import type { PgColumn } from "drizzle-orm/pg-core"
@@ -55,6 +57,7 @@ import { invalidRequest } from "../problem"
 import { findAlert, NOT_AN_ALERT } from "./alert-links"
 import type { AlertRow } from "./resolution-shapes"
 import { requireRow, requireStatus, rowIssue, type NamedRow, type Refusal, type Target, type TenantTable } from "./shared"
+import { refuseRetiredReason } from "./statuses"
 
 /** What a body is told when it names a customer this company does not have; one sentence, wherever the id sat. */
 export const NOT_A_CUSTOMER = "Not a customer of this company"
@@ -187,6 +190,20 @@ export async function requirePlanningArea(
 // company's, since Organisation & Access has the table. A scheme and a group
 // are named by no body yet — the path names them — so their checks arrive
 // with part B, the day a body does.
+
+/** What a decommission naming no reason of this company is told (O30 of #290). */
+export const NOT_A_DECOMMISSION_REASON = "Not a decommission reason of this company"
+
+/** The Decommission Reason a new decommission names: the company's (400 at `decommissionReasonId`) and active (409), since a status gates a new reference. */
+export async function requireDecommissionReason(tx: Tx, companyId: string, id: string): Promise<void> {
+  const [found] = await tx
+    .select({ name: decommissionReason.name, status: decommissionReason.status })
+    .from(decommissionReason)
+    .where(and(eq(decommissionReason.companyId, companyId), eq(decommissionReason.id, id)))
+    .limit(1)
+  if (found === undefined) throw invalidRequest("body", [{ path: "decommissionReasonId", message: NOT_A_DECOMMISSION_REASON }])
+  refuseRetiredReason(found.status as DecommissionReasonStatus, found.name)
+}
 
 /** A Container a body names: the project's, since a group cannot pick another project's bin. */
 export async function requireContainer(tx: Tx, scope: Scope, id: string | null | undefined, path = "containerId"): Promise<void> {

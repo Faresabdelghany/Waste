@@ -75,6 +75,8 @@ export type CollectionGroup = {
   ruleVehicleType?: string
   /** Rule groups only: restrict matches to these container types (display vocabulary). */
   containerTypes?: string[]
+  /** Rule groups only: the planning area the rule matches within instead of the scheme's (O30 of #290), by its record id; the scheme's where absent. */
+  planningAreaId?: string
   /** Manual groups only: the picked container ids in stop order. */
   containerIds: string[]
 }
@@ -147,6 +149,7 @@ export function parseCollectionGroups(raw: string | undefined): CollectionGroup[
         stopSource: entry.stopSource === "rule" ? "rule" : "manual",
         ruleVehicleType: optionalString(entry.ruleVehicleType),
         containerTypes: stringList(entry.containerTypes).length > 0 ? stringList(entry.containerTypes) : undefined,
+        planningAreaId: entry.stopSource === "rule" ? optionalString(entry.planningAreaId) : undefined,
         containerIds: stringList(entry.containerIds),
       }),
     )
@@ -319,7 +322,8 @@ export function collectionGroupsToValues(
     containersByDay: "",
   }
   const [only] = groups
-  if (groups.length === 1 && only && sameDaySet(only.days, serviceDays)) {
+  // The legacy keys have no home for a group's own planning area (O30 of #290): such a group stays explicit.
+  if (groups.length === 1 && only && sameDaySet(only.days, serviceDays) && only.planningAreaId === undefined) {
     const stopValues =
       only.stopSource === "rule"
         ? matchPlansToValues({
@@ -450,7 +454,8 @@ export function resolveCollectionGroupPlans(input: {
             ? { containerTypes: [...group.containerTypes] }
             : {}),
         },
-        areaId: input.areaId,
+        // A group matching within an area of its own (O30 of #290) judges containers by it, not the scheme's.
+        areaId: group.planningAreaId ?? input.areaId,
         projectIds: input.projectIds,
         from: input.from,
         days: group.days,
@@ -750,8 +755,10 @@ export function schemeAssignmentSources(
 /**
  * What the rule-overlap warning needs from the existing schemes: per rule
  * group, its area, days, fractions, and effective period — a legacy rule
- * scheme is one source carrying its fraction union. Manual groups and
- * schemes without an area or service days cannot overlap by rule.
+ * scheme is one source carrying its fraction union, and a group matching
+ * within an area of its own is a source in that area. Manual groups, rule
+ * groups with no area at all, and schemes without service days cannot
+ * overlap by rule.
  */
 export function schemeStopRuleSources(
   records: readonly Pick<BusinessRecord, "name" | "submittedValues">[],
@@ -760,20 +767,20 @@ export function schemeStopRuleSources(
   for (const record of records) {
     const values = record.submittedValues
     if (!values) continue
-    const areaId = stringValue(values, "planningAreaId")
-    if (!areaId) continue
+    const schemeAreaId = stringValue(values, "planningAreaId")
     const serviceDays = serviceDaysFromValues(values)
     if (serviceDays.length === 0) continue
+    // A group matching within an area of its own (O30 of #290) is a source in that area; one without, in the scheme's.
     const groups = collectionGroupsOf(values, { serviceDays }).filter(
-      (group) => group.stopSource === "rule",
+      (group) => group.stopSource === "rule" && (group.planningAreaId ?? schemeAreaId) !== undefined,
     )
     if (groups.length === 0) continue
     const effectiveFrom = stringValue(values, "effectiveFrom")
     const effectiveTo = stringValue(values, "effectiveTo")
     if (groups.every((group) => group.implicit)) {
       const fractions = Array.from(new Set(groups.flatMap((group) => group.fractions)))
-      if (fractions.length === 0) continue
-      sources.push({ schemeName: record.name, areaId, serviceDays, fractions, effectiveFrom, effectiveTo })
+      if (fractions.length === 0 || schemeAreaId === undefined) continue
+      sources.push({ schemeName: record.name, areaId: schemeAreaId, serviceDays, fractions, effectiveFrom, effectiveTo })
       continue
     }
     for (const group of groups) {
@@ -781,7 +788,7 @@ export function schemeStopRuleSources(
       sources.push({
         schemeName: record.name,
         groupName: group.name,
-        areaId,
+        areaId: (group.planningAreaId ?? schemeAreaId) as string,
         serviceDays: sortServiceDays(group.days.filter((day) => serviceDays.includes(day))),
         fractions: [...new Set(group.fractions)],
         effectiveFrom,

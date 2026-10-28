@@ -46,6 +46,7 @@ import {
 } from "@waste/contracts/service-provider-activities"
 import type { Tx } from "@waste/db/client"
 import { serviceArea, serviceAreaAssignment } from "@waste/db/schema/finance"
+import { driver, vehicle } from "@waste/db/schema/fleet"
 import { company, serviceProvider } from "@waste/db/schema/organisation"
 import { collectionGroup, routeScheme } from "@waste/db/schema/route-schemes"
 import { serviceProviderActivity } from "@waste/db/schema/service-provider-activities"
@@ -61,6 +62,7 @@ import {
   OPEN_STATUSES,
   routeDayChangeRefusal,
   serviceDaysAfter,
+  vehicleChangeRefusal,
   type ActivityCommand,
   type ActivitySide,
 } from "@waste/domain/service-providers/activities"
@@ -70,13 +72,13 @@ import { describeRoute } from "hono-openapi"
 
 import { BEARER_SECURITY, type AuthEnv, type Principal } from "../auth/principal"
 import { inProjects, requireProject } from "../auth/projects"
-import { providerIdOf, providerNameOf, requireReachedProject, servesScheme } from "../auth/provider"
+import { notOwnFleet, providerIdOf, providerNameOf, requireReachedProject, servesScheme } from "../auth/provider"
 import { requireAllowed, requireGrant } from "../auth/require"
 import { newId } from "../ids"
 import { afterCursor, fetchLimit, pageOf } from "../pagination"
 import { describeProblem, invalidRequest, problem, ProblemError, validate } from "../problem"
 import { projectToday } from "./fleet-lookups"
-import { requireServiceProvider } from "./references"
+import { NOT_A_DRIVER, NOT_A_POWERED_VEHICLE, requireServiceProvider } from "./references"
 import { successorStartsInside, writeSuccessor } from "./scheme-lifecycle"
 import { requireNotArchived, MODULE as SCHEMES } from "./scheme-groups"
 import { created, describeCreated, describeJson, IdParam, lockRow, stampsOf } from "./shared"
@@ -99,6 +101,8 @@ const columns = {
   collectionGroupId: serviceProviderActivity.collectionGroupId,
   serviceDays: serviceProviderActivity.serviceDays,
   effectiveFrom: serviceProviderActivity.effectiveFrom,
+  vehicleId: serviceProviderActivity.vehicleId,
+  driverId: serviceProviderActivity.driverId,
   successorSchemeId: serviceProviderActivity.successorSchemeId,
   openedBy: serviceProviderActivity.openedBy,
   closedBy: serviceProviderActivity.closedBy,
@@ -124,6 +128,8 @@ const activityOf = (row: Row): ServiceProviderActivity => ({
   collectionGroupId: row.collectionGroupId,
   serviceDays: row.serviceDays as ServiceDay[] | null,
   effectiveFrom: row.effectiveFrom,
+  vehicleId: row.vehicleId,
+  driverId: row.driverId,
   successorSchemeId: row.successorSchemeId,
   openedBy: row.openedBy,
   closedBy: row.closedBy,
@@ -167,20 +173,58 @@ export const KIND_CARRIES_NOT = "Not a member of this kind of activity"
 type ProposalRefusal = { status: 400 | 409; path: string; message: string }
 
 /** The scheme and the group a proposal names, as its rules read them. */
-type Subject = { scheme: { id: string; name: string; validFrom: string; validTo: string | null; archivedAt: Date | null }; group: { name: string; days: string[] } }
+type Subject = { scheme: { id: string; name: string; validFrom: string; validTo: string | null; archivedAt: Date | null }; group: { name: string; days: string[]; vehicleId: string | null; driverId: string | null } }
+
+/** What a proposal asks, by kind: a route-day change the group's days, a vehicle change its vehicle and, where named, its driver; both from a day. */
+type Proposal = { routeSchemeId: string; collectionGroupId: string; effectiveFrom: string } & (
+  | { kind: "route-day-change"; serviceDays: readonly ServiceDay[] }
+  | { kind: "vehicle-change"; vehicleId: string; driverId: string | null }
+)
+
+/** A stored proposal as its rules read it again. */
+function proposalOf(row: Row): Proposal {
+  const base = { routeSchemeId: row.routeSchemeId as string, collectionGroupId: row.collectionGroupId as string, effectiveFrom: row.effectiveFrom as string }
+  return row.kind === "vehicle-change" ? { ...base, kind: "vehicle-change", vehicleId: row.vehicleId as string, driverId: row.driverId } : { ...base, kind: "route-day-change", serviceDays: row.serviceDays as ServiceDay[] }
+}
 
 /**
- * A route-day change judged against the scheme as it stands, in the API's
- * order: the 400s at the fields — the scheme the project's, the group the
- * scheme's, the days moved, the first day tomorrow at the earliest and inside
+ * A vehicle change's crew, each the project's: the vehicle a powered one,
+ * the driver where it names one; and where `ownFleet` names the provider
+ * that opens it — a provider's account — both of that provider's own fleet
+ * (`reachesFleet`'s rule). The first refusal at its field, or null.
+ */
+async function crewRefusal(tx: Tx, scope: { companyId: string; projectId: string; provider: string; ownFleet: string | null }, proposal: { vehicleId: string; driverId: string | null }): Promise<ProposalRefusal | null> {
+  const [truck] = await tx
+    .select({ serviceProviderId: vehicle.serviceProviderId })
+    .from(vehicle)
+    .where(and(eq(vehicle.companyId, scope.companyId), eq(vehicle.projectId, scope.projectId), eq(vehicle.id, proposal.vehicleId), eq(vehicle.kind, "powered-vehicle")))
+    .limit(1)
+  if (truck === undefined) return { status: 400, path: "vehicleId", message: NOT_A_POWERED_VEHICLE }
+  if (scope.ownFleet !== null && truck.serviceProviderId !== scope.ownFleet) return { status: 400, path: "vehicleId", message: notOwnFleet("vehicle", scope.provider) }
+  if (proposal.driverId === null) return null
+  const [person] = await tx
+    .select({ serviceProviderId: driver.serviceProviderId })
+    .from(driver)
+    .where(and(eq(driver.companyId, scope.companyId), eq(driver.projectId, scope.projectId), eq(driver.id, proposal.driverId)))
+    .limit(1)
+  if (person === undefined) return { status: 400, path: "driverId", message: NOT_A_DRIVER }
+  if (scope.ownFleet !== null && person.serviceProviderId !== scope.ownFleet) return { status: 400, path: "driverId", message: notOwnFleet("driver", scope.provider) }
+  return null
+}
+
+/**
+ * A proposal judged against the scheme as it stands, in the API's order: the
+ * 400s at the fields — the scheme the project's, the group the scheme's, what
+ * the kind asks (a route-day change's days moved; a vehicle change's crew the
+ * project's, a provider's own, and moved), the first day tomorrow at the earliest and inside
  * the scheme's period, which the successor holds it to — then the 409s the
  * rows decide: the scheme not archived, the group running, and the provider
  * serving the scheme on the day. The first refusal, or the subject.
  */
 async function judgeProposal(
   tx: Tx,
-  scope: { companyId: string; projectId: string; serviceProviderId: string; provider: string },
-  proposal: { routeSchemeId: string; collectionGroupId: string; serviceDays: readonly ServiceDay[]; effectiveFrom: string },
+  scope: { companyId: string; projectId: string; serviceProviderId: string; provider: string; ownFleet: string | null },
+  proposal: Proposal,
   now: () => Date,
 ): Promise<ProposalRefusal | Subject> {
   const [scheme] = await tx
@@ -190,13 +234,20 @@ async function judgeProposal(
     .limit(1)
   if (scheme === undefined) return { status: 400, path: "routeSchemeId", message: NOT_A_SCHEME }
   const [group] = await tx
-    .select({ name: collectionGroup.name, days: collectionGroup.days })
+    .select({ name: collectionGroup.name, days: collectionGroup.days, vehicleId: collectionGroup.vehicleId, driverId: collectionGroup.driverId })
     .from(collectionGroup)
     .where(and(eq(collectionGroup.companyId, scope.companyId), eq(collectionGroup.routeSchemeId, scheme.id), eq(collectionGroup.id, proposal.collectionGroupId)))
     .limit(1)
   if (group === undefined) return { status: 400, path: "collectionGroupId", message: NOT_A_GROUP_OF_THE_SCHEME }
-  const same = routeDayChangeRefusal(group.days as ServiceDay[], proposal.serviceDays)
-  if (same !== null) return { status: 400, path: "serviceDays", message: same }
+  if (proposal.kind === "route-day-change") {
+    const same = routeDayChangeRefusal(group.days as ServiceDay[], proposal.serviceDays)
+    if (same !== null) return { status: 400, path: "serviceDays", message: same }
+  } else {
+    const crew = await crewRefusal(tx, scope, proposal)
+    if (crew !== null) return crew
+    const same = vehicleChangeRefusal(group, proposal)
+    if (same !== null) return { status: 400, path: "vehicleId", message: same }
+  }
   const tomorrow = firstEndingDay(await projectToday(tx, { companyId: scope.companyId, projectId: scope.projectId }, now)())
   if (proposal.effectiveFrom < tomorrow) return { status: 400, path: "effectiveFrom", message: appliesFromTomorrow(tomorrow) }
   if (proposal.effectiveFrom <= scheme.validFrom || (scheme.validTo !== null && proposal.effectiveFrom >= scheme.validTo)) return { status: 400, path: "effectiveFrom", message: successorStartsInside(scheme) }
@@ -276,6 +327,23 @@ const routeDayAmendment =
     return { ...body, collectionGroups: groups, serviceDays: [...serviceDaysAfter(body.frequency as RecurrenceFrequency, body.serviceDays as ServiceDay[], groups as { days: ServiceDay[] }[])] }
   }
 
+/**
+ * The amendment an approved vehicle change makes to the scheme's next
+ * version: the group, found as the route-day change finds it, runs with the
+ * proposed vehicle, and with the proposed driver where one is named, else
+ * its own.
+ */
+const vehicleAmendment =
+  (collectionGroupId: string, vehicleId: string, driverId: string | null) =>
+  (body: RouteSchemeCreate, predecessor: RouteScheme): RouteSchemeCreate => {
+    const at = predecessor.collectionGroups.findIndex((group) => group.id === collectionGroupId)
+    return { ...body, collectionGroups: (body.collectionGroups ?? []).map((group, index) => (index === at ? { ...group, vehicleId, ...(driverId === null ? {} : { driverId }) } : group)) }
+  }
+
+/** What approving a proposal amends the scheme's next version by. */
+const amendmentOf = (proposal: Proposal) =>
+  proposal.kind === "route-day-change" ? routeDayAmendment(proposal.collectionGroupId, proposal.serviceDays) : vehicleAmendment(proposal.collectionGroupId, proposal.vehicleId, proposal.driverId)
+
 const commonProblems = (action: "view" | "edit" | "create") => ({
   401: describeProblem("No usable token (see WWW-Authenticate)."),
   403: describeProblem(`No active account here, or the caller's role does not allow \`${action}\` on \`${MODULE}\`.`),
@@ -314,12 +382,13 @@ export function serviceProviderActivityRoutes(guard: MiddlewareHandler<AuthEnv>,
    */
   const applyProposal = async (tx: Tx, principal: Principal, row: Row): Promise<string> => {
     requireAllowed(principal.grants, SCHEMES, "create")
-    const proposal = { routeSchemeId: row.routeSchemeId as string, collectionGroupId: row.collectionGroupId as string, serviceDays: row.serviceDays as ServiceDay[], effectiveFrom: row.effectiveFrom as string }
-    const scope = { companyId: principal.companyId, projectId: row.projectId, serviceProviderId: row.serviceProviderId, provider: await providerName(tx, principal.companyId, row.serviceProviderId) }
+    const proposal = proposalOf(row)
+    // The approver is the office's, so the crew is held to the project and the group alone: whose fleet it is was judged when the proposal was opened.
+    const scope = { companyId: principal.companyId, projectId: row.projectId, serviceProviderId: row.serviceProviderId, provider: await providerName(tx, principal.companyId, row.serviceProviderId), ownFleet: null }
     const judged = await judgeProposal(tx, scope, proposal, now)
     if ("status" in judged) throw problem(409, { detail: `${activityLabel(row.number)} cannot be approved: ${judged.message}` })
     try {
-      const succession = await writeSuccessor(tx, principal, { jobs, now }, proposal.routeSchemeId, proposal.effectiveFrom, routeDayAmendment(proposal.collectionGroupId, proposal.serviceDays))
+      const succession = await writeSuccessor(tx, principal, { jobs, now }, proposal.routeSchemeId, proposal.effectiveFrom, amendmentOf(proposal))
       return succession.successor.id
     } catch (error) {
       // The successor's 400s hold a body the approver never sent, and its 409s a scheme the approver did not name: each is the approval's 409, in the successor's sentence.
@@ -403,7 +472,7 @@ export function serviceProviderActivityRoutes(guard: MiddlewareHandler<AuthEnv>,
         operationId: "createServiceProviderActivity",
         summary: "Open a service provider activity",
         description:
-          "Opens an Activity of its kind, shaped by it: a `route-day-change` — a proposal, `pending-approval` — names a scheme of the project, one of its collection groups, the days the group should run on and the first day they apply from (`effectiveFrom`, tomorrow on the project's clock at the earliest and inside the scheme's period); a `compliance-follow-up`, `open`, its due day; a `coordination-note`, `open`, nothing more. Every kind names its project, its provider, a subject and optionally a body and the Service Area it is about, one the provider is or was assigned in the project. A provider's account opens a proposal or a note for its own provider alone, in a project where its provider holds an award in force today; a compliance follow-up is the office's to raise (403). The office opens any kind for a provider that is or was assigned a Service Area in the project. A proposal's provider serves the scheme on `effectiveFrom` — a Service Area assigned to it then holds the scheme's planning area — whichever side opens it (409 otherwise), the scheme is not archived and the group runs on some day (409). The server numbers it, the company's next, and mints the id.",
+          "Opens an Activity of its kind, shaped by it: a `route-day-change` — a proposal, `pending-approval` — names a scheme of the project, one of its collection groups, the days the group should run on and the first day they apply from (`effectiveFrom`, tomorrow on the project's clock at the earliest and inside the scheme's period); a `vehicle-change` — a proposal too — the same group, the powered vehicle of the project it should run with, optionally a driver of the project, and the first day, the vehicle or the driver moved, and from a provider's account both of its own fleet; a `compliance-follow-up`, `open`, its due day; a `coordination-note`, `open`, nothing more. Every kind names its project, its provider, a subject and optionally a body and the Service Area it is about, one the provider is or was assigned in the project. A provider's account opens a proposal or a note for its own provider alone, in a project where its provider holds an award in force today; a compliance follow-up is the office's to raise (403). The office opens any kind for a provider that is or was assigned a Service Area in the project. A proposal's provider serves the scheme on `effectiveFrom` — a Service Area assigned to it then holds the scheme's planning area — whichever side opens it (409 otherwise), the scheme is not archived and the group runs on some day (409). The server numbers it, the company's next, and mints the id.",
         security: BEARER_SECURITY,
         responses: {
           201: describeCreated("The activity as it was opened.", ServiceProviderActivity),
@@ -426,12 +495,14 @@ export function serviceProviderActivityRoutes(guard: MiddlewareHandler<AuthEnv>,
         if (refusedSide !== null) throw problem(403, { detail: refusedSide })
         await requireReachedProject(tx, principal, body.projectId, now)
         const provider = await requireProviderOf(tx, principal, body.projectId, body.serviceProviderId)
-        const scope = { companyId: principal.companyId, projectId: body.projectId, serviceProviderId: body.serviceProviderId, provider }
+        const scope = { companyId: principal.companyId, projectId: body.projectId, serviceProviderId: body.serviceProviderId, provider, ownFleet: providerIdOf(principal) }
         await requireAward(tx, scope, body.serviceAreaId)
-        if (body.kind === "route-day-change") {
-          const judged = await judgeProposal(tx, scope, body, now)
+        if (body.kind === "route-day-change" || body.kind === "vehicle-change") {
+          const proposal: Proposal = body.kind === "route-day-change" ? body : { ...body, driverId: body.driverId ?? null }
+          const judged = await judgeProposal(tx, scope, proposal, now)
           if ("status" in judged) refuseProposal(judged)
         }
+        const proposed = body.kind === "route-day-change" || body.kind === "vehicle-change" ? body : undefined
         // The company's row first, so two opens take the next number one after the other; a key share, so the company's children still insert beside it.
         await tx.select({ id: company.id }).from(company).where(eq(company.id, principal.companyId)).limit(1).for("no key update")
         const [{ highest }] = await tx.select({ highest: max(serviceProviderActivity.number) }).from(serviceProviderActivity).where(eq(serviceProviderActivity.companyId, principal.companyId))
@@ -449,10 +520,12 @@ export function serviceProviderActivityRoutes(guard: MiddlewareHandler<AuthEnv>,
             subject: body.subject,
             body: body.body ?? null,
             dueOn: body.kind === "compliance-follow-up" ? body.dueOn : null,
-            routeSchemeId: body.kind === "route-day-change" ? body.routeSchemeId : null,
-            collectionGroupId: body.kind === "route-day-change" ? body.collectionGroupId : null,
+            routeSchemeId: proposed?.routeSchemeId ?? null,
+            collectionGroupId: proposed?.collectionGroupId ?? null,
             serviceDays: body.kind === "route-day-change" ? [...body.serviceDays] : null,
-            effectiveFrom: body.kind === "route-day-change" ? body.effectiveFrom : null,
+            effectiveFrom: proposed?.effectiveFrom ?? null,
+            vehicleId: body.kind === "vehicle-change" ? body.vehicleId : null,
+            driverId: body.kind === "vehicle-change" ? (body.driverId ?? null) : null,
             openedBy: principal.user.id,
           })
           .returning(columns)
@@ -515,19 +588,20 @@ export function serviceProviderActivityRoutes(guard: MiddlewareHandler<AuthEnv>,
         const kind = current.kind as ActivityKind
         if (!OPEN_STATUSES.includes(current.status as ActivityStatus)) throw problem(409, { detail: `${activityLabel(current.number)} is ${current.status.replace("-", " ")}: only an open activity is corrected` })
         if (!correctedBy(kind, sideOf(principal))) throw problem(403, { detail: createRefusal(kind, sideOf(principal)) ?? undefined })
-        const carried = kind === "route-day-change" ? ["serviceDays", "effectiveFrom"] : kind === "compliance-follow-up" ? ["dueOn"] : []
-        const foreign = (["dueOn", "serviceDays", "effectiveFrom"] as const).filter((member) => patch[member] !== undefined && !carried.includes(member))
+        const carried = kind === "route-day-change" ? ["serviceDays", "effectiveFrom"] : kind === "vehicle-change" ? ["vehicleId", "driverId", "effectiveFrom"] : kind === "compliance-follow-up" ? ["dueOn"] : []
+        const foreign = (["dueOn", "serviceDays", "effectiveFrom", "vehicleId", "driverId"] as const).filter((member) => patch[member] !== undefined && !carried.includes(member))
         if (foreign.length > 0) throw invalidRequest("body", foreign.map((path) => ({ path, message: KIND_CARRIES_NOT })))
         const provider = await providerName(tx, principal.companyId, current.serviceProviderId)
-        const scope = { companyId: principal.companyId, projectId: current.projectId, serviceProviderId: current.serviceProviderId, provider }
+        const scope = { companyId: principal.companyId, projectId: current.projectId, serviceProviderId: current.serviceProviderId, provider, ownFleet: providerIdOf(principal) }
         await requireAward(tx, scope, patch.serviceAreaId)
-        if (kind === "route-day-change" && (patch.serviceDays !== undefined || patch.effectiveFrom !== undefined)) {
-          const proposal = {
-            routeSchemeId: current.routeSchemeId as string,
-            collectionGroupId: current.collectionGroupId as string,
-            serviceDays: patch.serviceDays ?? (current.serviceDays as ServiceDay[]),
-            effectiveFrom: patch.effectiveFrom ?? (current.effectiveFrom as string),
-          }
+        if (isProposal(kind) && (patch.serviceDays !== undefined || patch.effectiveFrom !== undefined || patch.vehicleId !== undefined || patch.driverId !== undefined)) {
+          // The proposal as the correction would leave it, judged as an open judges it.
+          const stored = proposalOf(current)
+          const effectiveFrom = patch.effectiveFrom ?? stored.effectiveFrom
+          const proposal: Proposal =
+            stored.kind === "route-day-change"
+              ? { ...stored, effectiveFrom, serviceDays: patch.serviceDays ?? stored.serviceDays }
+              : { ...stored, effectiveFrom, vehicleId: patch.vehicleId ?? stored.vehicleId, driverId: patch.driverId === undefined ? stored.driverId : patch.driverId }
           const judged = await judgeProposal(tx, scope, proposal, now)
           if ("status" in judged) refuseProposal(judged)
         }
@@ -544,7 +618,7 @@ export function serviceProviderActivityRoutes(guard: MiddlewareHandler<AuthEnv>,
       command(
         "approve",
         "Approve a proposal, and apply it",
-        "Approves a proposal pending approval — the office's alone (403 from a provider's account) — and applies it in the same transaction, which takes `create` on `route-studio.schemes` beside the decision's `edit` (403 otherwise). A `route-day-change` writes the scheme's next version from the proposal's `effectiveFrom`, as `POST /route-schemes/{id}/successor` writes one, with the proposal's group running on its proposed days and the scheme serving the days its groups then run on: the version is held to every rule a create is held to, the predecessor's period is cut at the day and its routes from it ended as a successor ends them, and a validated version is planned. The proposal is judged again first against the scheme as it stands. Whatever refuses — a day now past, the scheme archived, its provider no longer serving it, a route of it dispatched on or after the day, or a rule of the new version — refuses the approval (409, the sentence saying why) and leaves the proposal pending. The approved activity names the version it wrote, `successorSchemeId`, and who approved it; `reason` is kept as the approval's note.",
+        "Approves a proposal pending approval — the office's alone (403 from a provider's account) — and applies it in the same transaction, which takes `create` on `route-studio.schemes` beside the decision's `edit` (403 otherwise). A `route-day-change` writes the scheme's next version from the proposal's `effectiveFrom`, as `POST /route-schemes/{id}/successor` writes one, with the proposal's group running on its proposed days and the scheme serving the days its groups then run on — or, for a `vehicle-change`, the group running with the proposed vehicle, and the proposed driver where one is named: the version is held to every rule a create is held to, the predecessor's period is cut at the day and its routes from it ended as a successor ends them, and a validated version is planned. The proposal is judged again first against the scheme as it stands. Whatever refuses — a day now past, the scheme archived, its provider no longer serving it, a route of it dispatched on or after the day, or a rule of the new version — refuses the approval (409, the sentence saying why) and leaves the proposal pending. The approved activity names the version it wrote, `successorSchemeId`, and who approved it; `reason` is kept as the approval's note.",
         "The activity is not a proposal or not pending approval, or its change cannot be applied: the sentence says why, and the proposal stays pending.",
       ),
       guard,

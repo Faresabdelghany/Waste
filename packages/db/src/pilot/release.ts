@@ -342,3 +342,92 @@ export async function requireChecks({ repository, sha, names = REQUIRED_CHECKS, 
   if (!verdict.ok) throw new Error(`Commit ${sha} is not released: ${verdict.reason}`)
   return { names }
 }
+
+/**
+ * Where a release stands against what the deploy branch already released
+ * (2026-10-28, ADR-0011): every merge to main releases itself once CI has
+ * passed on it, and two merges close together can see their CI finish in
+ * either order. The workflow's concurrency runs one release at a time; this
+ * keeps them in main's order. A release goes on when the deploy branch's
+ * release file names no commit, names this one (a release run again), or
+ * names an ancestor of it; it is skipped when the file names a descendant,
+ * which already carries this commit and whose migrations the Pilot already
+ * has. A commit off main is refused, and so is a released commit GitHub
+ * cannot compare. Pure: the comparisons are GitHub's statuses, `compare/
+ * base...head` read as where head stands against base.
+ */
+export type CompareStatus = "ahead" | "behind" | "identical" | "diverged"
+
+export type OrderFacts = {
+  /** The commit this run would release. */
+  candidate: string
+  /** Where main stands against the candidate: ahead or identical when the candidate is on main. */
+  mainVsCandidate: CompareStatus
+  /** The commit the deploy branch's release file names, or null where there is no branch or no file. */
+  released: string | null
+  /** Where the released commit stands against the candidate; null where there is nothing to compare. */
+  releasedVsCandidate: CompareStatus | null
+}
+
+export type OrderVerdict = { proceed: true; reason: string } | { proceed: false; reason: string }
+
+export function judgeOrder({ candidate, mainVsCandidate, released, releasedVsCandidate }: OrderFacts): OrderVerdict {
+  if (mainVsCandidate !== "ahead" && mainVsCandidate !== "identical") throw new Error(`Commit ${candidate} is not on main (main is ${mainVsCandidate} of it): the Pilot is released from main only`)
+  if (released === null) return { proceed: true, reason: `the deploy branch names no released commit yet: ${candidate} is the first release` }
+  if (released === candidate) return { proceed: true, reason: `the deploy branch already names ${candidate}: released again` }
+  switch (releasedVsCandidate) {
+    case "ahead":
+      return { proceed: false, reason: `the deploy branch already releases ${released}, a newer commit of main that carries ${candidate}: skipped, so the Pilot never moves backwards` }
+    case "behind":
+      return { proceed: true, reason: `${candidate} is newer than the released ${released}` }
+    case "diverged":
+      return { proceed: true, reason: `the released ${released} is not in ${candidate}'s history (main was rewritten): releasing main's ${candidate} over it` }
+    default:
+      throw new Error(`GitHub answered no comparison of the released ${released} with ${candidate}`)
+  }
+}
+
+export type ReleaseOrderOptions = {
+  /** `<owner>/<name>`: GITHUB_REPOSITORY. */
+  repository: string
+  /** The deploy branch: PILOT_DEPLOY_BRANCH. */
+  branch: string
+  /** The commit this run would release: RELEASE_COMMIT. */
+  sha: string
+  /** The job's token, with `contents: read`: GITHUB_TOKEN. */
+  token: string
+  apiUrl?: string
+  fetch?: Fetch
+}
+
+/** Reads the facts `judgeOrder` needs from GitHub — main against the commit, the deploy branch's release file, the released commit against the commit — and judges them. */
+export async function resolveReleaseOrder({ repository, branch, sha, token, apiUrl = "https://api.github.com", fetch = globalThis.fetch }: ReleaseOrderOptions): Promise<OrderVerdict & { released: string | null }> {
+  if (!REPOSITORY.test(repository)) throw new Error(`GITHUB_REPOSITORY is not <owner>/<name>: ${repository}`)
+  if (!BRANCH.test(branch)) throw new Error(`PILOT_DEPLOY_BRANCH is not a plain branch name: ${branch}`)
+  if (!COMMIT_ID.test(sha)) throw new Error(`RELEASE_COMMIT is not a full commit id: ${sha}`)
+  if (token === "") throw new Error("GITHUB_TOKEN is not set")
+  const call = githubRepository(repository, token, apiUrl, fetch)
+  const compare = async (base: string, head: string): Promise<CompareStatus> => {
+    const response = await call(`/compare/${base}...${head}`, { method: "GET" })
+    if (!response.ok) await refuse(response, `comparing ${head} with ${base}`)
+    const status = ((await response.json()) as { status?: unknown }).status
+    if (status !== "ahead" && status !== "behind" && status !== "identical" && status !== "diverged") throw new Error(`GitHub answered no comparison of ${head} with ${base}`)
+    return status
+  }
+
+  const mainVsCandidate = await compare(sha, "main")
+
+  const file = await call(`/contents/${RELEASE_FILE}?ref=${branch}`, { method: "GET" })
+  let released: string | null = null
+  if (file.status !== 404) {
+    if (!file.ok) await refuse(file, `reading ${RELEASE_FILE} on ${branch}`)
+    const { content, encoding } = (await file.json()) as { content?: unknown; encoding?: unknown }
+    if (typeof content !== "string" || encoding !== "base64") throw new Error(`GitHub answered no content for ${RELEASE_FILE} on ${branch}`)
+    const commit = (JSON.parse(Buffer.from(content, "base64").toString("utf8")) as { commit?: unknown }).commit
+    if (typeof commit !== "string" || !COMMIT_ID.test(commit)) throw new Error(`${RELEASE_FILE} on ${branch} names no commit`)
+    released = commit
+  }
+
+  const releasedVsCandidate = released === null || released === sha ? null : await compare(sha, released)
+  return { ...judgeOrder({ candidate: sha, mainVsCandidate, released, releasedVsCandidate }), released }
+}

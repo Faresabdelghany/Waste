@@ -232,6 +232,7 @@ export async function writeScheme(tx: Tx, principal: Principal, body: RouteSchem
     days: group.days,
     stopSource: group.stopSource,
     ruleVehicleTypeId: group.rule?.vehicleTypeId ?? null,
+    rulePlanningAreaId: group.rule?.planningAreaId ?? null,
     serviceProviderId: group.serviceProviderId ?? null,
     vehicleId: group.vehicleId ?? null,
     driverId: group.driverId ?? null,
