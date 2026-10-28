@@ -45,24 +45,41 @@ export const daysText = (days: readonly string[]): string => SERVICE_DAYS.filter
 const kindOf = (record: Pick<BusinessRecord, "submittedValues">): ServiceProviderActivityKind | undefined => SERVICE_PROVIDER_ACTIVITY_KINDS.find((kind) => kind === record.submittedValues?.[ACTIVITY_KIND_KEY])
 const statusOf = (record: Pick<BusinessRecord, "submittedValues">): ServiceProviderActivityStatus | undefined => SERVICE_PROVIDER_ACTIVITY_STATUSES.find((status) => status === record.submittedValues?.[ACTIVITY_STATUS_KEY])
 
-/** The kinds a side opens, in the order the form offers them: a provider never raises a follow-up. */
-export const kindsOpenedBy = (side: ActivitySide): readonly ServiceProviderActivityKind[] => (side === "provider" ? ["route-day-change", "coordination-note"] : SERVICE_PROVIDER_ACTIVITY_KINDS)
+/**
+ * The kinds a side opens, in the order the form offers them: a provider never
+ * raises a follow-up, and the form offers it no waste-fraction change, since
+ * a provider's role reads no master data to pick fractions from (the API
+ * takes the kind from a provider; the pick is the office's on the web until a
+ * provider reads the fractions, the follow-up #453 named for its fleet forms).
+ */
+export const kindsOpenedBy = (side: ActivitySide): readonly ServiceProviderActivityKind[] => (side === "provider" ? ["route-day-change", "vehicle-change", "stop-set-change", "coordination-note"] : SERVICE_PROVIDER_ACTIVITY_KINDS)
 
-/** What the open form picks from, each by web id: the routes a proposal is opened on, the awards, and for the office the providers and the projects. */
+/** What the open form picks from, each by web id: the routes a proposal is opened on, the powered vehicles and the drivers a vehicle change names, the awards, and for the office the providers and the projects. */
 export type ActivityFormOptions = {
   routes: readonly BusinessFormOption[]
+  vehicles: readonly BusinessFormOption[]
+  drivers: readonly BusinessFormOption[]
+  containers: readonly BusinessFormOption[]
+  fractions: readonly BusinessFormOption[]
   serviceAreas: readonly BusinessFormOption[]
   providers: readonly BusinessFormOption[]
   projects: readonly BusinessFormOption[]
 }
 
-const PROPOSAL = { fieldId: "kind", oneOf: ["route-day-change"] }
+const PROPOSAL = { fieldId: "kind", oneOf: ["route-day-change", "vehicle-change", "stop-set-change", "waste-fraction-change"] }
+const STOPS = { fieldId: "kind", oneOf: ["stop-set-change"] }
+const FRACTIONS = { fieldId: "kind", oneOf: ["waste-fraction-change"] }
+const ROUTE_DAYS = { fieldId: "kind", oneOf: ["route-day-change"] }
+const VEHICLE = { fieldId: "kind", oneOf: ["vehicle-change"] }
 const FOLLOW_UP = { fieldId: "kind", oneOf: ["compliance-follow-up"] }
 const NOT_PROPOSAL = { fieldId: "kind", oneOf: ["compliance-follow-up", "coordination-note"] }
 
 /**
  * Log activity: the kind, then what it is about. A proposal names a route of
- * the group, the days it should run on and the first day; a follow-up its
+ * the group and the first day, and a route-day change the days it should run
+ * on, a vehicle change its truck and optionally its driver, a stop-set change
+ * its containers in stop order, a waste-fraction change its rule's fractions;
+ * a follow-up its
  * due day; a follow-up or a note the award, or for the office the project.
  * The office names the provider; a provider's account opens for its own.
  */
@@ -93,8 +110,12 @@ export function activityOpenForm(side: ActivitySide, options: ActivityFormOption
         title: "The change",
         fields: [
           { id: "routeId", label: "Route of the group", type: "select", options: options.routes, visibleWhen: PROPOSAL, requiredWhen: PROPOSAL, description: "A route of the collection group the change is about: its scheme and group are what the proposal changes." },
-          { id: "serviceDays", label: "New days", type: "multiselect", options: DAY_OPTIONS, visibleWhen: PROPOSAL, requiredWhen: PROPOSAL },
-          { id: "effectiveFrom", label: "From", type: "date", visibleWhen: PROPOSAL, requiredWhen: PROPOSAL, description: "The first day the group runs on its new days." },
+          { id: "serviceDays", label: "New days", type: "multiselect", options: DAY_OPTIONS, visibleWhen: ROUTE_DAYS, requiredWhen: ROUTE_DAYS },
+          { id: "vehicleId", label: "Vehicle", type: "select", options: options.vehicles, visibleWhen: VEHICLE, requiredWhen: VEHICLE, description: office ? "A powered vehicle of the project." : "One of your own trucks." },
+          { id: "driverId", label: "Driver", type: "select", options: options.drivers, visibleWhen: VEHICLE, description: "Blank keeps the group's driver." },
+          { id: "wasteFractionIds", label: "Waste fractions", type: "multiselect", options: options.fractions, visibleWhen: FRACTIONS, requiredWhen: FRACTIONS, description: "What the group's rule should collect; its container types and vehicle type are kept." },
+          { id: "containerIds", label: "Stops", type: "multiselect", options: options.containers, visibleWhen: STOPS, requiredWhen: STOPS, description: "The containers the group should run on, in the order picked. A group that finds its stops by a rule takes a waste-fraction change instead." },
+          { id: "effectiveFrom", label: "From", type: "date", visibleWhen: PROPOSAL, requiredWhen: PROPOSAL, description: "The first day the change applies." },
         ],
       },
       {
@@ -110,8 +131,8 @@ export function activityOpenForm(side: ActivitySide, options: ActivityFormOption
   }
 }
 
-/** The correction a row's kind takes while it is open: its words, and a proposal's days and day or a follow-up's due day. */
-export function activityCorrectionForm(kind: ServiceProviderActivityKind): BusinessFormSchema {
+/** The correction a row's kind takes while it is open: its words, a route-day change's days, a vehicle change's truck and driver, a proposal's day, or a follow-up's due day. */
+export function activityCorrectionForm(kind: ServiceProviderActivityKind, options: Pick<ActivityFormOptions, "vehicles" | "drivers" | "containers" | "fractions"> = { vehicles: [], drivers: [], containers: [], fractions: [] }): BusinessFormSchema {
   return {
     key: `${PROVIDER_ACTIVITIES_MODULE.workspaceId}.${PROVIDER_ACTIVITIES_MODULE.moduleId}.correct`,
     mode: "create",
@@ -134,6 +155,25 @@ export function activityCorrectionForm(kind: ServiceProviderActivityKind): Busin
                 { id: "effectiveFrom", label: "From", type: "date" as const, required: true },
               ]
             : []),
+          ...(kind === "vehicle-change"
+            ? [
+                { id: "vehicleId", label: "Vehicle", type: "select" as const, required: true, options: options.vehicles },
+                { id: "driverId", label: "Driver", type: "select" as const, options: options.drivers, description: "Blank keeps the group's driver." },
+                { id: "effectiveFrom", label: "From", type: "date" as const, required: true },
+              ]
+            : []),
+          ...(kind === "stop-set-change"
+            ? [
+                { id: "containerIds", label: "Stops", type: "multiselect" as const, required: true, options: options.containers, description: "Replaced whole, in the order picked." },
+                { id: "effectiveFrom", label: "From", type: "date" as const, required: true },
+              ]
+            : []),
+          ...(kind === "waste-fraction-change"
+            ? [
+                { id: "wasteFractionIds", label: "Waste fractions", type: "multiselect" as const, required: true, options: options.fractions, description: "Replaced whole." },
+                { id: "effectiveFrom", label: "From", type: "date" as const, required: true },
+              ]
+            : []),
           ...(kind === "compliance-follow-up" ? [{ id: "dueOn", label: "Due", type: "date" as const, required: true }] : []),
         ],
       },
@@ -144,13 +184,13 @@ export function activityCorrectionForm(kind: ServiceProviderActivityKind): Busin
 /** The values the correction opens on: the row's own. */
 export const correctionValuesOf = (record: Pick<BusinessRecord, "submittedValues">): BusinessFormValues => {
   const values = record.submittedValues ?? {}
-  return { subject: values.subject ?? "", body: values.body ?? "", serviceDays: values.serviceDays ?? "", effectiveFrom: values.effectiveFrom ?? "", dueOn: values.dueOn ?? "" }
+  return { subject: values.subject ?? "", body: values.body ?? "", serviceDays: values.serviceDays ?? "", effectiveFrom: values.effectiveFrom ?? "", dueOn: values.dueOn ?? "", vehicleId: values.vehicleId ?? "", driverId: values.driverId ?? "", containerIds: values.containerIds ?? "", wasteFractionIds: values.wasteFractionIds ?? "" }
 }
 
 /** The row a Log activity makes before the API answers it: its values as typed, the provider stamped for a provider's account. */
 export function createActivityRecord(values: BusinessFormValues, now: number, stamp: { serviceProviderId?: string } = {}): BusinessRecord {
   const name = typeof values.subject === "string" ? values.subject.trim() : ""
-  return mintedRecord({ id: `activities-${ACTIVITY_PREFIX}-${now}`, name, status: values.kind === "route-day-change" ? "Pending approval" : "Open", recordKind: ACTIVITY_RECORD_KIND, values: { ...values, ...stamp } })
+  return mintedRecord({ id: `activities-${ACTIVITY_PREFIX}-${now}`, name, status: values.kind === "route-day-change" || values.kind === "vehicle-change" || values.kind === "stop-set-change" || values.kind === "waste-fraction-change" ? "Pending approval" : "Open", recordKind: ACTIVITY_RECORD_KIND, values: { ...values, ...stamp } })
 }
 
 /** One command a row offers: its button's words, what the toast says once the API took it, and whether its dialog asks a reason. */
@@ -203,7 +243,7 @@ export function reasonForm(offer: ActivityOffer): BusinessFormSchema {
     mode: "create",
     recordKind: "Reason",
     title: offer.label,
-    description: offer.command === "approve" ? "The scheme's next version is written from the proposal's day, with the group on its new days. If the scheme's rules refuse it, nothing changes and the proposal stays pending." : "",
+    description: offer.command === "approve" ? "The scheme's next version is written from the proposal's day, with the change applied to its group. If the scheme's rules refuse it, nothing changes and the proposal stays pending." : "",
     submitLabel: offer.label,
     contextFieldIds: [],
     sections: [{ id: "reason", title: "Reason", fields: [{ id: "reason", label: offer.reason === "required" ? "Why" : "Note", type: "textarea", required: offer.reason === "required" }] }],

@@ -178,6 +178,10 @@ _Avoid_: Inventory quantity, balance edit
 The fewest containers of one type the office wants a Warehouse to hold in stock; a container in maintenance does not count towards it. The stock is read off the Stock Movements against it, "below minimum" where fewer stand there; nothing is alerted or ordered from it.
 _Avoid_: Reorder level, safety stock, par level
 
+**Decommission Reason**:
+Why a container was scrapped: one of the company's own list, kept in the master data, which a decommission names beside an optional note. A reason is retired rather than deleted, so a decommission given it still reads it.
+_Avoid_: Scrap code, disposal reason, retirement reason
+
 **Hauler / Service Provider**:
 An external organization, typically a hauler, that delivers collection work for a company within awarded Service Areas and is settled for it through Settlements.
 _Avoid_: Contractor, customer, project
@@ -306,6 +310,10 @@ _Avoid_: Alert, message
 A condition that requires attention, notification, or acknowledgement and may create or link to a ticket. It is acknowledged and resolved, and links to at most one Ticket. The office raises one by hand; the worker's rules raise one per occurrence of a route not started, a device silent, a licence running out or a ticket overdue — an overdue ticket's alert is about that Ticket, never a new one — and resolve it when the condition clears.
 _Avoid_: Ticket, insight
 
+**Team**:
+The people of the company a Ticket waits with, such as customer service or the container desk, with its members. A Ticket names at most one Team beside its assignee; a project names a default Team per kind, which a ticket opened without one takes. A Team's queue is its open tickets with no assignee, and anyone who works tickets takes one, member or not. A Team is retired rather than deleted, so a ticket it held still names it.
+_Avoid_: Group, queue, department
+
 **SLA Target**:
 The hours a project gives a Ticket of a priority, of every kind or of one kind, from when its issue or request happened to its due date; one kind's target wins over every kind's. Opening a ticket without a due date sets one from it, and an open ticket past its due date is overdue.
 _Avoid_: Deadline, response time, ticket type
@@ -351,7 +359,7 @@ An effective-dated geographic and service responsibility awarded to a service pr
 _Avoid_: Contract area, operational area, route, service provider zone
 
 **Service Provider Activity**:
-One item of coordination between the office and one Service Provider about the work it holds under an award, numbered `ACT-<n>`: a proposal of a protected change, which asks for the office's Approval — a route-day change, a Collection Group of a scheme the provider serves run on other days from a day — a compliance follow-up the office raises with a due day, or a note either side keeps. An approved proposal is applied as the scheme's next version from its day; a refused one changes nothing. Every end is final, and overdue is a reading of a follow-up's due day, never a status. It restates no operational record: a route's assignment is the route's own.
+One item of coordination between the office and one Service Provider about the work it holds under an award, numbered `ACT-<n>`: a proposal of a protected change, which asks for the office's Approval — a route-day change, a Collection Group of a scheme the provider serves run on other days from a day, a vehicle change, the group run with another vehicle and optionally another driver, a stop-set change, a group that picks its stops run on another list of containers, or a waste-fraction change, a rule group's rule collect other fractions — a compliance follow-up the office raises with a due day, or a note either side keeps. An approved proposal is applied as the scheme's next version from its day; a refused one changes nothing. Every end is final, and overdue is a reading of a follow-up's due day, never a status. It restates no operational record: a route's assignment is the route's own.
 _Avoid_: Task, case (that is a Ticket), request (that is an Application), assignment notice
 
 **Service Area Assignment**:

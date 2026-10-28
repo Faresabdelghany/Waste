@@ -11,7 +11,7 @@ import assert from "node:assert/strict"
 import { readFileSync } from "node:fs"
 import { describe, test } from "node:test"
 
-import { judgeChecks, judgeObservation, observeRelease, releaseToDeployBranch, REQUIRED_CHECKS, requireChecks, type CheckRun, type Observation } from "../pilot/release"
+import { judgeChecks, judgeObservation, judgeOrder, observeRelease, releaseToDeployBranch, REQUIRED_CHECKS, requireChecks, resolveReleaseOrder, type CheckRun, type Observation } from "../pilot/release"
 
 const COMMIT = "5f1501d6a2b3c4d5e6f708192a3b4c5d6e7f8091"
 const OLD = "21e7e2c0c8f1b4d9a3e5f6a7b8c9d0e1f2a3b4c5"
@@ -320,5 +320,91 @@ describe("requireChecks", () => {
     await assert.rejects(requireChecks({ ...base, fetch: github(403, { message: "Resource not accessible by integration" }).fetch }), /GitHub answered 403 reading the check runs of 5f1501d6/)
     await assert.rejects(requireChecks({ ...base, fetch: github(200, { nothing: true }).fetch }), /GitHub answered no check runs for/)
     await assert.rejects(requireChecks({ ...base, token: "", fetch: github(200, {}).fetch }), /GITHUB_TOKEN is not set/)
+  })
+})
+
+describe("judgeOrder", () => {
+  const NEWER = "9b8a7c6d5e4f30211a2b3c4d5e6f708192a3b4c5"
+
+  test("goes on with a first release, a release run again and a commit newer than the released one", () => {
+    assert.equal(judgeOrder({ candidate: COMMIT, mainVsCandidate: "identical", released: null, releasedVsCandidate: null }).proceed, true)
+    assert.equal(judgeOrder({ candidate: COMMIT, mainVsCandidate: "ahead", released: COMMIT, releasedVsCandidate: null }).proceed, true)
+    assert.deepEqual(judgeOrder({ candidate: COMMIT, mainVsCandidate: "ahead", released: OLD, releasedVsCandidate: "behind" }), { proceed: true, reason: `${COMMIT} is newer than the released ${OLD}` })
+  })
+
+  test("skips a commit the deploy branch's newer release already carries — CI on two merges finishing out of order — saying so", () => {
+    const verdict = judgeOrder({ candidate: COMMIT, mainVsCandidate: "ahead", released: NEWER, releasedVsCandidate: "ahead" })
+    assert.equal(verdict.proceed, false)
+    assert.match(verdict.reason, /already releases 9b8a7c6d.*a newer commit of main that carries 5f1501d6.*never moves backwards/)
+  })
+
+  test("releases over a released commit that left main's history, saying so", () => {
+    const verdict = judgeOrder({ candidate: COMMIT, mainVsCandidate: "identical", released: OLD, releasedVsCandidate: "diverged" })
+    assert.equal(verdict.proceed, true)
+    assert.match(verdict.reason, /not in 5f1501d6.*history/)
+  })
+
+  test("refuses a commit off main, and a released commit with no comparison", () => {
+    assert.throws(() => judgeOrder({ candidate: COMMIT, mainVsCandidate: "behind", released: null, releasedVsCandidate: null }), /Commit 5f1501d6a2b3c4d5e6f708192a3b4c5d6e7f8091 is not on main \(main is behind of it\)/)
+    assert.throws(() => judgeOrder({ candidate: COMMIT, mainVsCandidate: "diverged", released: null, releasedVsCandidate: null }), /is not on main/)
+    assert.throws(() => judgeOrder({ candidate: COMMIT, mainVsCandidate: "ahead", released: OLD, releasedVsCandidate: null }), /no comparison of the released 21e7e2c0/)
+  })
+})
+
+describe("resolveReleaseOrder", () => {
+  const TOKEN = "ghs_s3cr3tT0ken"
+  const NEWER = "9b8a7c6d5e4f30211a2b3c4d5e6f708192a3b4c5"
+  const base = { repository: "faresabdelghany/waste", branch: "pilot", sha: COMMIT, token: TOKEN }
+  const api = "https://api.github.com/repos/faresabdelghany/waste"
+  const github = (script: { status: number; body?: unknown }[]) => {
+    const calls: { url: string; headers: Record<string, string> }[] = []
+    const fetch = async (input: URL | string, init?: RequestInit) => {
+      calls.push({ url: String(input), headers: Object.fromEntries(new Headers(init?.headers).entries()) })
+      const next = script.shift()
+      if (next === undefined) throw new Error(`unexpected request ${String(input)}`)
+      return new Response(next.body === undefined ? null : JSON.stringify(next.body), { status: next.status, headers: { "content-type": "application/json" } })
+    }
+    return { calls, fetch, left: () => script.length }
+  }
+  const releaseFile = (commit: string) => ({ status: 200, body: { encoding: "base64", content: Buffer.from(`${JSON.stringify({ commit })}\n`).toString("base64") } })
+
+  test("reads main against the commit, the deploy branch's release file and the released commit against the commit, and skips a commit older than the released one", async () => {
+    const gh = github([{ status: 200, body: { status: "ahead" } }, releaseFile(NEWER), { status: 200, body: { status: "ahead" } }])
+    const verdict = await resolveReleaseOrder({ ...base, fetch: gh.fetch })
+    assert.equal(verdict.proceed, false)
+    assert.equal(verdict.released, NEWER)
+    assert.deepEqual(
+      gh.calls.map((call) => call.url),
+      [`${api}/compare/${COMMIT}...main`, `${api}/contents/apps/pilot/release.json?ref=pilot`, `${api}/compare/${COMMIT}...${NEWER}`],
+    )
+    for (const call of gh.calls) assert.equal(call.headers.authorization, `Bearer ${TOKEN}`)
+    assert.equal(gh.left(), 0)
+  })
+
+  test("goes on with a newer commit, with no deploy branch yet, and with the released commit itself, comparing only what needs it", async () => {
+    const newer = github([{ status: 200, body: { status: "identical" } }, releaseFile(OLD), { status: 200, body: { status: "behind" } }])
+    assert.deepEqual(await resolveReleaseOrder({ ...base, fetch: newer.fetch }), { proceed: true, reason: `${COMMIT} is newer than the released ${OLD}`, released: OLD })
+    const first = github([{ status: 200, body: { status: "identical" } }, { status: 404, body: { message: "Not Found" } }])
+    assert.equal((await resolveReleaseOrder({ ...base, fetch: first.fetch })).proceed, true)
+    assert.equal(first.left(), 0)
+    const again = github([{ status: 200, body: { status: "ahead" } }, releaseFile(COMMIT)])
+    assert.deepEqual(await resolveReleaseOrder({ ...base, fetch: again.fetch }), { proceed: true, reason: `the deploy branch already names ${COMMIT}: released again`, released: COMMIT })
+    assert.equal(again.left(), 0)
+  })
+
+  test("refuses a commit off main, a release file naming no commit and an unexpected answer, never printing the token", async () => {
+    const fails = async (script: { status: number; body?: unknown }[], expected: RegExp) => {
+      await assert.rejects(resolveReleaseOrder({ ...base, fetch: github(script).fetch }), (error: unknown) => {
+        assert.ok(error instanceof Error)
+        assert.match(error.message, expected)
+        assert.doesNotMatch(error.message, /s3cr3t/)
+        return true
+      })
+    }
+    await fails([{ status: 200, body: { status: "diverged" } }, releaseFile(OLD), { status: 200, body: { status: "behind" } }], /is not on main/)
+    await fails([{ status: 200, body: { status: "ahead" } }, { status: 200, body: { encoding: "base64", content: Buffer.from("{}").toString("base64") } }], /apps\/pilot\/release.json on pilot names no commit/)
+    await fails([{ status: 403, body: { message: "Resource not accessible by integration" } }], /GitHub answered 403 comparing main with 5f1501d6.*: Resource not accessible/)
+    await fails([{ status: 200, body: { status: "ahead" } }, releaseFile(OLD), { status: 404, body: { message: "Not Found" } }], /GitHub answered 404 comparing 21e7e2c0/)
+    await assert.rejects(resolveReleaseOrder({ ...base, sha: "abc", fetch: github([]).fetch }), /RELEASE_COMMIT is not a full commit id/)
   })
 })
