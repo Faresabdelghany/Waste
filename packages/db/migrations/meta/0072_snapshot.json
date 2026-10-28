@@ -1,5 +1,5 @@
 {
-  "id": "fb4dffb0-8daf-4c8b-8517-22821422a6d2",
+  "id": "44019622-06fe-4e34-9849-85926d6b19de",
   "prevId": "a730bdee-c152-4e61-82ba-8f76b6f3e1ab",
   "version": "7",
   "dialect": "postgresql",
@@ -1493,7 +1493,7 @@
         },
         "product_unit_one_of": {
           "name": "product_unit_one_of",
-          "value": "\"wms\".\"product\".\"unit\" in ('pickup', 'month', 'job', 'day', 'visit', 'item')"
+          "value": "\"wms\".\"product\".\"unit\" in ('pickup', 'month', 'job', 'day', 'visit')"
         },
         "product_vat_percent_range": {
           "name": "product_vat_percent_range",
@@ -30936,7 +30936,7 @@
       "checkConstraints": {
         "service_provider_activity_kind_one_of": {
           "name": "service_provider_activity_kind_one_of",
-          "value": "\"wms\".\"service_provider_activity\".\"kind\" in ('route-day-change', 'compliance-follow-up', 'coordination-note', 'vehicle-change', 'stop-set-change')"
+          "value": "\"wms\".\"service_provider_activity\".\"kind\" in ('route-day-change', 'compliance-follow-up', 'coordination-note', 'vehicle-change', 'stop-set-change', 'waste-fraction-change')"
         },
         "service_provider_activity_status_one_of": {
           "name": "service_provider_activity_status_one_of",
@@ -30952,11 +30952,11 @@
         },
         "service_provider_activity_kind_shape": {
           "name": "service_provider_activity_kind_shape",
-          "value": "case \"wms\".\"service_provider_activity\".\"kind\" when 'route-day-change' then \"wms\".\"service_provider_activity\".\"route_scheme_id\" is not null and \"wms\".\"service_provider_activity\".\"collection_group_id\" is not null and cardinality(\"wms\".\"service_provider_activity\".\"service_days\") > 0 and \"wms\".\"service_provider_activity\".\"effective_from\" is not null and \"wms\".\"service_provider_activity\".\"due_on\" is null and \"wms\".\"service_provider_activity\".\"vehicle_id\" is null and \"wms\".\"service_provider_activity\".\"driver_id\" is null when 'vehicle-change' then \"wms\".\"service_provider_activity\".\"route_scheme_id\" is not null and \"wms\".\"service_provider_activity\".\"collection_group_id\" is not null and \"wms\".\"service_provider_activity\".\"vehicle_id\" is not null and \"wms\".\"service_provider_activity\".\"effective_from\" is not null and \"wms\".\"service_provider_activity\".\"service_days\" is null and \"wms\".\"service_provider_activity\".\"due_on\" is null when 'stop-set-change' then \"wms\".\"service_provider_activity\".\"route_scheme_id\" is not null and \"wms\".\"service_provider_activity\".\"collection_group_id\" is not null and \"wms\".\"service_provider_activity\".\"effective_from\" is not null and \"wms\".\"service_provider_activity\".\"service_days\" is null and \"wms\".\"service_provider_activity\".\"due_on\" is null and \"wms\".\"service_provider_activity\".\"vehicle_id\" is null and \"wms\".\"service_provider_activity\".\"driver_id\" is null when 'compliance-follow-up' then \"wms\".\"service_provider_activity\".\"due_on\" is not null and \"wms\".\"service_provider_activity\".\"route_scheme_id\" is null and \"wms\".\"service_provider_activity\".\"collection_group_id\" is null and \"wms\".\"service_provider_activity\".\"service_days\" is null and \"wms\".\"service_provider_activity\".\"effective_from\" is null and \"wms\".\"service_provider_activity\".\"vehicle_id\" is null and \"wms\".\"service_provider_activity\".\"driver_id\" is null else \"wms\".\"service_provider_activity\".\"due_on\" is null and \"wms\".\"service_provider_activity\".\"route_scheme_id\" is null and \"wms\".\"service_provider_activity\".\"collection_group_id\" is null and \"wms\".\"service_provider_activity\".\"service_days\" is null and \"wms\".\"service_provider_activity\".\"effective_from\" is null and \"wms\".\"service_provider_activity\".\"vehicle_id\" is null and \"wms\".\"service_provider_activity\".\"driver_id\" is null end"
+          "value": "case \"wms\".\"service_provider_activity\".\"kind\" when 'route-day-change' then \"wms\".\"service_provider_activity\".\"route_scheme_id\" is not null and \"wms\".\"service_provider_activity\".\"collection_group_id\" is not null and cardinality(\"wms\".\"service_provider_activity\".\"service_days\") > 0 and \"wms\".\"service_provider_activity\".\"effective_from\" is not null and \"wms\".\"service_provider_activity\".\"due_on\" is null and \"wms\".\"service_provider_activity\".\"vehicle_id\" is null and \"wms\".\"service_provider_activity\".\"driver_id\" is null when 'vehicle-change' then \"wms\".\"service_provider_activity\".\"route_scheme_id\" is not null and \"wms\".\"service_provider_activity\".\"collection_group_id\" is not null and \"wms\".\"service_provider_activity\".\"vehicle_id\" is not null and \"wms\".\"service_provider_activity\".\"effective_from\" is not null and \"wms\".\"service_provider_activity\".\"service_days\" is null and \"wms\".\"service_provider_activity\".\"due_on\" is null when 'waste-fraction-change' then \"wms\".\"service_provider_activity\".\"route_scheme_id\" is not null and \"wms\".\"service_provider_activity\".\"collection_group_id\" is not null and \"wms\".\"service_provider_activity\".\"effective_from\" is not null and \"wms\".\"service_provider_activity\".\"service_days\" is null and \"wms\".\"service_provider_activity\".\"due_on\" is null and \"wms\".\"service_provider_activity\".\"vehicle_id\" is null and \"wms\".\"service_provider_activity\".\"driver_id\" is null when 'stop-set-change' then \"wms\".\"service_provider_activity\".\"route_scheme_id\" is not null and \"wms\".\"service_provider_activity\".\"collection_group_id\" is not null and \"wms\".\"service_provider_activity\".\"effective_from\" is not null and \"wms\".\"service_provider_activity\".\"service_days\" is null and \"wms\".\"service_provider_activity\".\"due_on\" is null and \"wms\".\"service_provider_activity\".\"vehicle_id\" is null and \"wms\".\"service_provider_activity\".\"driver_id\" is null when 'compliance-follow-up' then \"wms\".\"service_provider_activity\".\"due_on\" is not null and \"wms\".\"service_provider_activity\".\"route_scheme_id\" is null and \"wms\".\"service_provider_activity\".\"collection_group_id\" is null and \"wms\".\"service_provider_activity\".\"service_days\" is null and \"wms\".\"service_provider_activity\".\"effective_from\" is null and \"wms\".\"service_provider_activity\".\"vehicle_id\" is null and \"wms\".\"service_provider_activity\".\"driver_id\" is null else \"wms\".\"service_provider_activity\".\"due_on\" is null and \"wms\".\"service_provider_activity\".\"route_scheme_id\" is null and \"wms\".\"service_provider_activity\".\"collection_group_id\" is null and \"wms\".\"service_provider_activity\".\"service_days\" is null and \"wms\".\"service_provider_activity\".\"effective_from\" is null and \"wms\".\"service_provider_activity\".\"vehicle_id\" is null and \"wms\".\"service_provider_activity\".\"driver_id\" is null end"
         },
         "service_provider_activity_status_shape": {
           "name": "service_provider_activity_status_shape",
-          "value": "case when \"wms\".\"service_provider_activity\".\"kind\" in ('route-day-change', 'vehicle-change', 'stop-set-change') then \"wms\".\"service_provider_activity\".\"status\" in ('pending-approval', 'approved', 'rejected', 'withdrawn') else \"wms\".\"service_provider_activity\".\"status\" in ('open', 'completed', 'cancelled') end"
+          "value": "case when \"wms\".\"service_provider_activity\".\"kind\" in ('route-day-change', 'vehicle-change', 'stop-set-change', 'waste-fraction-change') then \"wms\".\"service_provider_activity\".\"status\" in ('pending-approval', 'approved', 'rejected', 'withdrawn') else \"wms\".\"service_provider_activity\".\"status\" in ('open', 'completed', 'cancelled') end"
         },
         "service_provider_activity_closed_shape": {
           "name": "service_provider_activity_closed_shape",
@@ -31161,6 +31161,182 @@
           "value": "\"wms\".\"service_provider_activity_container\".\"position\" > 0"
         }
       },
+      "isRLSEnabled": false
+    },
+    "wms.service_provider_activity_fraction": {
+      "name": "service_provider_activity_fraction",
+      "schema": "wms",
+      "columns": {
+        "id": {
+          "name": "id",
+          "type": "uuid",
+          "primaryKey": true,
+          "notNull": true,
+          "default": "wms.uuidv7()"
+        },
+        "company_id": {
+          "name": "company_id",
+          "type": "uuid",
+          "primaryKey": false,
+          "notNull": true
+        },
+        "project_id": {
+          "name": "project_id",
+          "type": "uuid",
+          "primaryKey": false,
+          "notNull": true
+        },
+        "created_at": {
+          "name": "created_at",
+          "type": "timestamp with time zone",
+          "primaryKey": false,
+          "notNull": true,
+          "default": "now()"
+        },
+        "updated_at": {
+          "name": "updated_at",
+          "type": "timestamp with time zone",
+          "primaryKey": false,
+          "notNull": true,
+          "default": "now()"
+        },
+        "activity_id": {
+          "name": "activity_id",
+          "type": "uuid",
+          "primaryKey": false,
+          "notNull": true
+        },
+        "waste_fraction_id": {
+          "name": "waste_fraction_id",
+          "type": "uuid",
+          "primaryKey": false,
+          "notNull": true
+        }
+      },
+      "indexes": {
+        "service_provider_activity_fraction_project_id_idx": {
+          "name": "service_provider_activity_fraction_project_id_idx",
+          "columns": [
+            {
+              "expression": "company_id",
+              "isExpression": false,
+              "asc": true,
+              "nulls": "last"
+            },
+            {
+              "expression": "project_id",
+              "isExpression": false,
+              "asc": true,
+              "nulls": "last"
+            }
+          ],
+          "isUnique": false,
+          "concurrently": false,
+          "method": "btree",
+          "with": {}
+        },
+        "service_provider_activity_fraction_waste_fraction_id_idx": {
+          "name": "service_provider_activity_fraction_waste_fraction_id_idx",
+          "columns": [
+            {
+              "expression": "company_id",
+              "isExpression": false,
+              "asc": true,
+              "nulls": "last"
+            },
+            {
+              "expression": "waste_fraction_id",
+              "isExpression": false,
+              "asc": true,
+              "nulls": "last"
+            }
+          ],
+          "isUnique": false,
+          "concurrently": false,
+          "method": "btree",
+          "with": {}
+        }
+      },
+      "foreignKeys": {
+        "service_provider_activity_fraction_company_id_fk": {
+          "name": "service_provider_activity_fraction_company_id_fk",
+          "tableFrom": "service_provider_activity_fraction",
+          "tableTo": "company",
+          "schemaTo": "wms",
+          "columnsFrom": [
+            "company_id"
+          ],
+          "columnsTo": [
+            "id"
+          ],
+          "onDelete": "no action",
+          "onUpdate": "no action"
+        },
+        "service_provider_activity_fraction_project_id_fk": {
+          "name": "service_provider_activity_fraction_project_id_fk",
+          "tableFrom": "service_provider_activity_fraction",
+          "tableTo": "project",
+          "schemaTo": "wms",
+          "columnsFrom": [
+            "company_id",
+            "project_id"
+          ],
+          "columnsTo": [
+            "company_id",
+            "id"
+          ],
+          "onDelete": "no action",
+          "onUpdate": "no action"
+        },
+        "service_provider_activity_fraction_activity_id_fk": {
+          "name": "service_provider_activity_fraction_activity_id_fk",
+          "tableFrom": "service_provider_activity_fraction",
+          "tableTo": "service_provider_activity",
+          "schemaTo": "wms",
+          "columnsFrom": [
+            "company_id",
+            "project_id",
+            "activity_id"
+          ],
+          "columnsTo": [
+            "company_id",
+            "project_id",
+            "id"
+          ],
+          "onDelete": "no action",
+          "onUpdate": "no action"
+        },
+        "service_provider_activity_fraction_waste_fraction_id_fk": {
+          "name": "service_provider_activity_fraction_waste_fraction_id_fk",
+          "tableFrom": "service_provider_activity_fraction",
+          "tableTo": "waste_fraction",
+          "schemaTo": "wms",
+          "columnsFrom": [
+            "company_id",
+            "waste_fraction_id"
+          ],
+          "columnsTo": [
+            "company_id",
+            "id"
+          ],
+          "onDelete": "no action",
+          "onUpdate": "no action"
+        }
+      },
+      "compositePrimaryKeys": {},
+      "uniqueConstraints": {
+        "service_provider_activity_fraction_membership_key": {
+          "name": "service_provider_activity_fraction_membership_key",
+          "nullsNotDistinct": false,
+          "columns": [
+            "company_id",
+            "activity_id",
+            "waste_fraction_id"
+          ]
+        }
+      },
+      "policies": {},
+      "checkConstraints": {},
       "isRLSEnabled": false
     }
   },

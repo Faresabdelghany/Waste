@@ -27,7 +27,7 @@ export type ActivitySide = "office" | "provider"
 export type ActivityCommand = "approve" | "reject" | "withdraw" | "complete" | "cancel"
 
 /** The kinds that ask for an Approval. */
-export const PROPOSAL_KINDS = ["route-day-change", "vehicle-change", "stop-set-change"] as const satisfies readonly ServiceProviderActivityKind[]
+export const PROPOSAL_KINDS = ["route-day-change", "vehicle-change", "stop-set-change", "waste-fraction-change"] as const satisfies readonly ServiceProviderActivityKind[]
 
 export const isProposal = (kind: ServiceProviderActivityKind): boolean => (PROPOSAL_KINDS as readonly string[]).includes(kind)
 
@@ -44,6 +44,7 @@ const CREATE_SIDES: Readonly<Record<ServiceProviderActivityKind, readonly Activi
   "coordination-note": ["office", "provider"],
   "vehicle-change": ["office", "provider"],
   "stop-set-change": ["office", "provider"],
+  "waste-fraction-change": ["office", "provider"],
 }
 
 export const OFFICE_RAISES_FOLLOW_UPS = "A compliance follow-up is the office's to raise"
@@ -72,6 +73,7 @@ const COMMAND_SIDES: Readonly<Record<ServiceProviderActivityKind, Partial<Record
   "coordination-note": { complete: ["office", "provider"] },
   "vehicle-change": { approve: ["office"], reject: ["office"], withdraw: ["office", "provider"] },
   "stop-set-change": { approve: ["office"], reject: ["office"], withdraw: ["office", "provider"] },
+  "waste-fraction-change": { approve: ["office"], reject: ["office"], withdraw: ["office", "provider"] },
 }
 
 /** The sides that may give the command on an Activity of the kind; empty where the kind does not take it. */
@@ -95,6 +97,7 @@ export const KIND_WORDS: Readonly<Record<ServiceProviderActivityKind, string>> =
   "coordination-note": "coordination note",
   "vehicle-change": "vehicle change",
   "stop-set-change": "stop-set change",
+  "waste-fraction-change": "waste-fraction change",
 }
 
 const article = (words: string): string => (/^[aeiou]/.test(words) ? `an ${words}` : `a ${words}`)
@@ -167,6 +170,15 @@ export const RULE_GROUP_STOPS = "This group finds its stops by its rule, not a l
 export function stopSetChangeRefusal(current: readonly string[], proposed: readonly string[]): string | null {
   const same = current.length === proposed.length && current.every((id, index) => proposed[index] === id)
   return same ? SAME_STOPS : null
+}
+
+export const SAME_FRACTIONS = "The proposed waste fractions are the ones the group's rule collects already"
+export const MANUAL_GROUP_FRACTIONS = "This group picks its stops, so it has no rule to collect by: propose a stop-set change to its list instead"
+
+/** Why a waste-fraction change of a rule collecting `current` to `proposed` is no change, or null where it moves a fraction: a rule's fractions are a set. */
+export function wasteFractionChangeRefusal(current: readonly string[], proposed: readonly string[]): string | null {
+  const same = current.length === proposed.length && proposed.every((id) => current.includes(id))
+  return same ? SAME_FRACTIONS : null
 }
 
 /**

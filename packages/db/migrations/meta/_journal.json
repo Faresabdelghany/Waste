@@ -509,8 +509,15 @@
     {
       "idx": 72,
       "version": "7",
-      "when": 1793230297651,
-      "tag": "0072_item_product_unit",
+      "when": 1793229147346,
+      "tag": "0072_waste_fraction_proposals",
+      "breakpoints": true
+    },
+    {
+      "idx": 73,
+      "version": "7",
+      "when": 1793231683269,
+      "tag": "0073_item_product_unit",
       "breakpoints": true
     }
   ]

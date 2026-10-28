@@ -48,9 +48,10 @@ import type { Tx } from "@waste/db/client"
 import { serviceArea, serviceAreaAssignment } from "@waste/db/schema/finance"
 import { driver, vehicle } from "@waste/db/schema/fleet"
 import { company, serviceProvider } from "@waste/db/schema/organisation"
-import { collectionGroup, collectionGroupContainer, routeScheme } from "@waste/db/schema/route-schemes"
+import { collectionGroup, collectionGroupContainer, collectionGroupFraction, routeScheme } from "@waste/db/schema/route-schemes"
+import { wasteFraction } from "@waste/db/schema/catalogue"
 import { container } from "@waste/db/schema/containers"
-import { serviceProviderActivity, serviceProviderActivityContainer } from "@waste/db/schema/service-provider-activities"
+import { serviceProviderActivity, serviceProviderActivityContainer, serviceProviderActivityFraction } from "@waste/db/schema/service-provider-activities"
 import type { JobSender } from "@waste/db/jobs"
 import { firstEndingDay } from "@waste/domain/planning/lifecycle"
 import type { RecurrenceFrequency, ServiceDay } from "@waste/domain/planning/vocabulary"
@@ -62,9 +63,11 @@ import {
   isProposal,
   OPEN_STATUSES,
   routeDayChangeRefusal,
+  MANUAL_GROUP_FRACTIONS,
   RULE_GROUP_STOPS,
   serviceDaysAfter,
   stopSetChangeRefusal,
+  wasteFractionChangeRefusal,
   vehicleChangeRefusal,
   type ActivityCommand,
   type ActivitySide,
@@ -116,7 +119,7 @@ const columns = {
 }
 type Row = Pick<typeof serviceProviderActivity.$inferSelect, keyof typeof columns>
 
-const activityOf = (row: Row, containerIds: string[] | null = null): ServiceProviderActivity => ({
+const activityOf = (row: Row, containerIds: string[] | null = null, wasteFractionIds: string[] | null = null): ServiceProviderActivity => ({
   id: row.id,
   projectId: row.projectId,
   number: row.number,
@@ -134,6 +137,7 @@ const activityOf = (row: Row, containerIds: string[] | null = null): ServiceProv
   vehicleId: row.vehicleId,
   driverId: row.driverId,
   containerIds,
+  wasteFractionIds,
   successorSchemeId: row.successorSchemeId,
   openedBy: row.openedBy,
   closedBy: row.closedBy,
@@ -156,10 +160,25 @@ async function containersOf(tx: Tx, companyId: string, rows: readonly Row[]): Pr
   return sets
 }
 
-/** Activities on the wire, each stop-set change with its containers. */
+/** Each waste-fraction change's fractions by activity id, in one statement; an activity of another kind has none. */
+async function fractionsOf(tx: Tx, companyId: string, rows: readonly Row[]): Promise<Map<string, string[]>> {
+  const ids = rows.filter((row) => row.kind === "waste-fraction-change").map((row) => row.id)
+  const sets = new Map<string, string[]>(ids.map((id) => [id, []]))
+  if (ids.length === 0) return sets
+  const members = await tx
+    .select({ activityId: serviceProviderActivityFraction.activityId, wasteFractionId: serviceProviderActivityFraction.wasteFractionId })
+    .from(serviceProviderActivityFraction)
+    .where(and(eq(serviceProviderActivityFraction.companyId, companyId), inArray(serviceProviderActivityFraction.activityId, ids)))
+    .orderBy(asc(serviceProviderActivityFraction.activityId), asc(serviceProviderActivityFraction.id))
+  for (const member of members) sets.get(member.activityId)?.push(member.wasteFractionId)
+  return sets
+}
+
+/** Activities on the wire, each stop-set change with its containers and each waste-fraction change with its fractions. */
 async function answers(tx: Tx, companyId: string, rows: readonly Row[]): Promise<ServiceProviderActivity[]> {
-  const sets = await containersOf(tx, companyId, rows)
-  return rows.map((row) => activityOf(row, sets.get(row.id) ?? null))
+  const containers = await containersOf(tx, companyId, rows)
+  const fractions = await fractionsOf(tx, companyId, rows)
+  return rows.map((row) => activityOf(row, containers.get(row.id) ?? null, fractions.get(row.id) ?? null))
 }
 
 /** One Activity on the wire. */
@@ -169,6 +188,12 @@ const answer = async (tx: Tx, companyId: string, row: Row): Promise<ServiceProvi
 async function writeContainers(tx: Tx, row: Pick<Row, "id" | "projectId">, companyId: string, containerIds: readonly string[]): Promise<void> {
   await tx.delete(serviceProviderActivityContainer).where(and(eq(serviceProviderActivityContainer.companyId, companyId), eq(serviceProviderActivityContainer.activityId, row.id)))
   await tx.insert(serviceProviderActivityContainer).values(containerIds.map((containerId, index) => ({ id: newId(), companyId, projectId: row.projectId, activityId: row.id, containerId, position: index + 1 })))
+}
+
+/** A waste-fraction change's fractions written as its set, replacing whatever it held. */
+async function writeFractions(tx: Tx, row: Pick<Row, "id" | "projectId">, companyId: string, wasteFractionIds: readonly string[]): Promise<void> {
+  await tx.delete(serviceProviderActivityFraction).where(and(eq(serviceProviderActivityFraction.companyId, companyId), eq(serviceProviderActivityFraction.activityId, row.id)))
+  await tx.insert(serviceProviderActivityFraction).values(wasteFractionIds.map((wasteFractionId) => ({ id: newId(), companyId, projectId: row.projectId, activityId: row.id, wasteFractionId })))
 }
 
 /** The side of an Activity the caller is on: a provider's account, or the office's. */
@@ -213,6 +238,7 @@ type Proposal = { routeSchemeId: string; collectionGroupId: string; effectiveFro
   | { kind: "route-day-change"; serviceDays: readonly ServiceDay[] }
   | { kind: "vehicle-change"; vehicleId: string; driverId: string | null }
   | { kind: "stop-set-change"; containerIds: readonly string[] }
+  | { kind: "waste-fraction-change"; wasteFractionIds: readonly string[] }
 )
 
 /** A stored proposal as its rules read it again, a stop-set change with the containers its set holds. */
@@ -220,10 +246,35 @@ async function proposalOf(tx: Tx, companyId: string, row: Row): Promise<Proposal
   const base = { routeSchemeId: row.routeSchemeId as string, collectionGroupId: row.collectionGroupId as string, effectiveFrom: row.effectiveFrom as string }
   if (row.kind === "vehicle-change") return { ...base, kind: "vehicle-change", vehicleId: row.vehicleId as string, driverId: row.driverId }
   if (row.kind === "stop-set-change") return { ...base, kind: "stop-set-change", containerIds: (await containersOf(tx, companyId, [row])).get(row.id) ?? [] }
+  if (row.kind === "waste-fraction-change") return { ...base, kind: "waste-fraction-change", wasteFractionIds: (await fractionsOf(tx, companyId, [row])).get(row.id) ?? [] }
   return { ...base, kind: "route-day-change", serviceDays: row.serviceDays as ServiceDay[] }
 }
 
 export const NOT_A_CONTAINER = "Not a container of this project"
+export const NOT_A_WASTE_FRACTION = "Not a waste fraction of this company"
+
+/**
+ * A waste-fraction change's fractions held to its group: the group finds its
+ * stops by a rule (a picked list has no rule to collect by, which a stop-set
+ * change moves), every fraction is the company's, and the set moves a
+ * fraction. The first refusal at its field, or null.
+ */
+async function fractionsRefusal(tx: Tx, companyId: string, group: { id: string; stopSource: string }, wasteFractionIds: readonly string[]): Promise<ProposalRefusal | null> {
+  if (group.stopSource !== "rule") return { status: 400, path: "collectionGroupId", message: MANUAL_GROUP_FRACTIONS }
+  const found = await tx
+    .select({ id: wasteFraction.id })
+    .from(wasteFraction)
+    .where(and(eq(wasteFraction.companyId, companyId), inArray(wasteFraction.id, [...wasteFractionIds])))
+  const known = new Set(found.map((row) => row.id))
+  const missing = wasteFractionIds.findIndex((id) => !known.has(id))
+  if (missing !== -1) return { status: 400, path: `wasteFractionIds.${missing}`, message: NOT_A_WASTE_FRACTION }
+  const current = await tx
+    .select({ wasteFractionId: collectionGroupFraction.wasteFractionId })
+    .from(collectionGroupFraction)
+    .where(and(eq(collectionGroupFraction.companyId, companyId), eq(collectionGroupFraction.collectionGroupId, group.id)))
+  const same = wasteFractionChangeRefusal(current.map((row) => row.wasteFractionId), wasteFractionIds)
+  return same === null ? null : { status: 400, path: "wasteFractionIds", message: same }
+}
 
 /**
  * A stop-set change's list held to its group: the group picks its stops (a
@@ -279,7 +330,9 @@ async function crewRefusal(tx: Tx, scope: { companyId: string; projectId: string
  * 400s at the fields — the scheme the project's, the group the scheme's, what
  * the kind asks (a route-day change's days moved; a vehicle change's crew the
  * project's, a provider's own, and moved; a stop-set change's group picking
- * its stops and its list the project's and moved), the first day tomorrow at the earliest and inside
+ * its stops and its list the project's and moved; a waste-fraction change's
+ * group finding them by a rule and its fractions the company's and moved),
+ * the first day tomorrow at the earliest and inside
  * the scheme's period, which the successor holds it to — then the 409s the
  * rows decide: the scheme not archived, the group running, and the provider
  * serving the scheme on the day. The first refusal, or the subject.
@@ -310,9 +363,12 @@ async function judgeProposal(
     if (crew !== null) return crew
     const same = vehicleChangeRefusal(group, proposal)
     if (same !== null) return { status: 400, path: "vehicleId", message: same }
-  } else {
+  } else if (proposal.kind === "stop-set-change") {
     const stops = await stopsRefusal(tx, scope, group, proposal.containerIds)
     if (stops !== null) return stops
+  } else {
+    const fractions = await fractionsRefusal(tx, scope.companyId, group, proposal.wasteFractionIds)
+    if (fractions !== null) return fractions
   }
   const tomorrow = firstEndingDay(await projectToday(tx, { companyId: scope.companyId, projectId: scope.projectId }, now)())
   if (proposal.effectiveFrom < tomorrow) return { status: 400, path: "effectiveFrom", message: appliesFromTomorrow(tomorrow) }
@@ -418,6 +474,21 @@ const stopsAmendment =
     return { ...body, collectionGroups: (body.collectionGroups ?? []).map((group, index) => (index === at ? { ...group, containerIds: [...containerIds] } : group)) }
   }
 
+/**
+ * The amendment an approved waste-fraction change makes to the scheme's next
+ * version: the group's rule, found as the others find the group, collects the
+ * proposed fractions, its container types and vehicle type kept.
+ */
+const fractionsAmendment =
+  (collectionGroupId: string, wasteFractionIds: readonly string[]) =>
+  (body: RouteSchemeCreate, predecessor: RouteScheme): RouteSchemeCreate => {
+    const at = predecessor.collectionGroups.findIndex((group) => group.id === collectionGroupId)
+    return {
+      ...body,
+      collectionGroups: (body.collectionGroups ?? []).map((group, index) => (index === at && group.rule != null ? { ...group, rule: { ...group.rule, wasteFractionIds: [...wasteFractionIds] } } : group)),
+    }
+  }
+
 /** What approving a proposal amends the scheme's next version by. */
 function amendmentOf(proposal: Proposal) {
   switch (proposal.kind) {
@@ -427,6 +498,8 @@ function amendmentOf(proposal: Proposal) {
       return vehicleAmendment(proposal.collectionGroupId, proposal.vehicleId, proposal.driverId)
     case "stop-set-change":
       return stopsAmendment(proposal.collectionGroupId, proposal.containerIds)
+    case "waste-fraction-change":
+      return fractionsAmendment(proposal.collectionGroupId, proposal.wasteFractionIds)
   }
 }
 
@@ -558,7 +631,7 @@ export function serviceProviderActivityRoutes(guard: MiddlewareHandler<AuthEnv>,
         operationId: "createServiceProviderActivity",
         summary: "Open a service provider activity",
         description:
-          "Opens an Activity of its kind, shaped by it: a `route-day-change` — a proposal, `pending-approval` — names a scheme of the project, one of its collection groups, the days the group should run on and the first day they apply from (`effectiveFrom`, tomorrow on the project's clock at the earliest and inside the scheme's period); a `vehicle-change` — a proposal too — the same group, the powered vehicle of the project it should run with, optionally a driver of the project, and the first day, the vehicle or the driver moved, and from a provider's account both of its own fleet; a `stop-set-change` — a proposal too — the same of a group that picks its stops (a rule group's are its rule's), the containers of the project it should run on in stop order, each once, and the first day, the list or its order moved; a `compliance-follow-up`, `open`, its due day; a `coordination-note`, `open`, nothing more. Every kind names its project, its provider, a subject and optionally a body and the Service Area it is about, one the provider is or was assigned in the project. A provider's account opens a proposal or a note for its own provider alone, in a project where its provider holds an award in force today; a compliance follow-up is the office's to raise (403). The office opens any kind for a provider that is or was assigned a Service Area in the project. A proposal's provider serves the scheme on `effectiveFrom` — a Service Area assigned to it then holds the scheme's planning area — whichever side opens it (409 otherwise), the scheme is not archived and the group runs on some day (409). The server numbers it, the company's next, and mints the id.",
+          "Opens an Activity of its kind, shaped by it: a `route-day-change` — a proposal, `pending-approval` — names a scheme of the project, one of its collection groups, the days the group should run on and the first day they apply from (`effectiveFrom`, tomorrow on the project's clock at the earliest and inside the scheme's period); a `vehicle-change` — a proposal too — the same group, the powered vehicle of the project it should run with, optionally a driver of the project, and the first day, the vehicle or the driver moved, and from a provider's account both of its own fleet; a `stop-set-change` — a proposal too — the same of a group that picks its stops (a rule group's are its rule's), the containers of the project it should run on in stop order, each once, and the first day, the list or its order moved; a `waste-fraction-change` — a proposal too — the same of a group that finds its stops by a rule, the company's fractions its rule should collect, each once, and the first day, a fraction moved; a `compliance-follow-up`, `open`, its due day; a `coordination-note`, `open`, nothing more. Every kind names its project, its provider, a subject and optionally a body and the Service Area it is about, one the provider is or was assigned in the project. A provider's account opens a proposal or a note for its own provider alone, in a project where its provider holds an award in force today; a compliance follow-up is the office's to raise (403). The office opens any kind for a provider that is or was assigned a Service Area in the project. A proposal's provider serves the scheme on `effectiveFrom` — a Service Area assigned to it then holds the scheme's planning area — whichever side opens it (409 otherwise), the scheme is not archived and the group runs on some day (409). The server numbers it, the company's next, and mints the id.",
         security: BEARER_SECURITY,
         responses: {
           201: describeCreated("The activity as it was opened.", ServiceProviderActivity),
@@ -583,12 +656,12 @@ export function serviceProviderActivityRoutes(guard: MiddlewareHandler<AuthEnv>,
         const provider = await requireProviderOf(tx, principal, body.projectId, body.serviceProviderId)
         const scope = { companyId: principal.companyId, projectId: body.projectId, serviceProviderId: body.serviceProviderId, provider, ownFleet: providerIdOf(principal) }
         await requireAward(tx, scope, body.serviceAreaId)
-        if (body.kind === "route-day-change" || body.kind === "vehicle-change" || body.kind === "stop-set-change") {
+        if (body.kind === "route-day-change" || body.kind === "vehicle-change" || body.kind === "stop-set-change" || body.kind === "waste-fraction-change") {
           const proposal: Proposal = body.kind === "vehicle-change" ? { ...body, driverId: body.driverId ?? null } : body
           const judged = await judgeProposal(tx, scope, proposal, now)
           if ("status" in judged) refuseProposal(judged)
         }
-        const proposed = body.kind === "route-day-change" || body.kind === "vehicle-change" || body.kind === "stop-set-change" ? body : undefined
+        const proposed = body.kind === "route-day-change" || body.kind === "vehicle-change" || body.kind === "stop-set-change" || body.kind === "waste-fraction-change" ? body : undefined
         // The company's row first, so two opens take the next number one after the other; a key share, so the company's children still insert beside it.
         await tx.select({ id: company.id }).from(company).where(eq(company.id, principal.companyId)).limit(1).for("no key update")
         const [{ highest }] = await tx.select({ highest: max(serviceProviderActivity.number) }).from(serviceProviderActivity).where(eq(serviceProviderActivity.companyId, principal.companyId))
@@ -616,6 +689,7 @@ export function serviceProviderActivityRoutes(guard: MiddlewareHandler<AuthEnv>,
           })
           .returning(columns)
         if (body.kind === "stop-set-change") await writeContainers(tx, row, principal.companyId, body.containerIds)
+        if (body.kind === "waste-fraction-change") await writeFractions(tx, row, principal.companyId, body.wasteFractionIds)
         return created(c, "/service-provider-activities", await answer(tx, principal.companyId, row))
       },
     )
@@ -649,7 +723,7 @@ export function serviceProviderActivityRoutes(guard: MiddlewareHandler<AuthEnv>,
         operationId: "patchServiceProviderActivity",
         summary: "Correct a service provider activity",
         description:
-          "Corrects an Activity while it is open — a proposal pending approval, any other kind open — in its subject, body or Service Area, a follow-up's due day, or a proposal's days, crew, containers — replaced whole — and first day; at least one must be given, and a member its kind does not carry is refused at its field. The kind, the provider, the project and a proposal's scheme and group are its own: another group's change is another proposal. The side that may open the kind corrects it: a follow-up is the office's. A proposal is judged again as it would stand, as an open judges it. A closed Activity is not corrected (409).",
+          "Corrects an Activity while it is open — a proposal pending approval, any other kind open — in its subject, body or Service Area, a follow-up's due day, or a proposal's days, crew, containers or fractions — each set replaced whole — and first day; at least one must be given, and a member its kind does not carry is refused at its field. The kind, the provider, the project and a proposal's scheme and group are its own: another group's change is another proposal. The side that may open the kind corrects it: a follow-up is the office's. A proposal is judged again as it would stand, as an open judges it. A closed Activity is not corrected (409).",
         security: BEARER_SECURITY,
         responses: {
           200: describeJson("The activity as it now stands.", ServiceProviderActivity),
@@ -679,15 +753,16 @@ export function serviceProviderActivityRoutes(guard: MiddlewareHandler<AuthEnv>,
           "route-day-change": ["serviceDays", "effectiveFrom"],
           "vehicle-change": ["vehicleId", "driverId", "effectiveFrom"],
           "stop-set-change": ["containerIds", "effectiveFrom"],
+          "waste-fraction-change": ["wasteFractionIds", "effectiveFrom"],
           "compliance-follow-up": ["dueOn"],
           "coordination-note": [],
         }
-        const foreign = (["dueOn", "serviceDays", "effectiveFrom", "vehicleId", "driverId", "containerIds"] as const).filter((member) => patch[member] !== undefined && !carried[kind].includes(member))
+        const foreign = (["dueOn", "serviceDays", "effectiveFrom", "vehicleId", "driverId", "containerIds", "wasteFractionIds"] as const).filter((member) => patch[member] !== undefined && !carried[kind].includes(member))
         if (foreign.length > 0) throw invalidRequest("body", foreign.map((path) => ({ path, message: KIND_CARRIES_NOT })))
         const provider = await providerName(tx, principal.companyId, current.serviceProviderId)
         const scope = { companyId: principal.companyId, projectId: current.projectId, serviceProviderId: current.serviceProviderId, provider, ownFleet: providerIdOf(principal) }
         await requireAward(tx, scope, patch.serviceAreaId)
-        if (isProposal(kind) && (patch.serviceDays !== undefined || patch.effectiveFrom !== undefined || patch.vehicleId !== undefined || patch.driverId !== undefined || patch.containerIds !== undefined)) {
+        if (isProposal(kind) && (patch.serviceDays !== undefined || patch.effectiveFrom !== undefined || patch.vehicleId !== undefined || patch.driverId !== undefined || patch.containerIds !== undefined || patch.wasteFractionIds !== undefined)) {
           // The proposal as the correction would leave it, judged as an open judges it.
           const stored = await proposalOf(tx, principal.companyId, current)
           const effectiveFrom = patch.effectiveFrom ?? stored.effectiveFrom
@@ -696,17 +771,20 @@ export function serviceProviderActivityRoutes(guard: MiddlewareHandler<AuthEnv>,
               ? { ...stored, effectiveFrom, serviceDays: patch.serviceDays ?? stored.serviceDays }
               : stored.kind === "vehicle-change"
                 ? { ...stored, effectiveFrom, vehicleId: patch.vehicleId ?? stored.vehicleId, driverId: patch.driverId === undefined ? stored.driverId : patch.driverId }
-                : { ...stored, effectiveFrom, containerIds: patch.containerIds ?? stored.containerIds }
+                : stored.kind === "stop-set-change"
+                  ? { ...stored, effectiveFrom, containerIds: patch.containerIds ?? stored.containerIds }
+                  : { ...stored, effectiveFrom, wasteFractionIds: patch.wasteFractionIds ?? stored.wasteFractionIds }
           const judged = await judgeProposal(tx, scope, proposal, now)
           if ("status" in judged) refuseProposal(judged)
         }
-        const { containerIds, ...own } = patch
+        const { containerIds, wasteFractionIds, ...own } = patch
         const [row] = await tx
           .update(serviceProviderActivity)
           .set({ ...own, ...(patch.serviceDays === undefined ? {} : { serviceDays: [...patch.serviceDays] }), ...stamp() })
           .where(and(eq(serviceProviderActivity.companyId, principal.companyId), eq(serviceProviderActivity.id, id)))
           .returning(columns)
         if (containerIds !== undefined) await writeContainers(tx, row, principal.companyId, containerIds)
+        if (wasteFractionIds !== undefined) await writeFractions(tx, row, principal.companyId, wasteFractionIds)
         return c.json(await answer(tx, principal.companyId, row))
       },
     )
@@ -715,7 +793,7 @@ export function serviceProviderActivityRoutes(guard: MiddlewareHandler<AuthEnv>,
       command(
         "approve",
         "Approve a proposal, and apply it",
-        "Approves a proposal pending approval — the office's alone (403 from a provider's account) — and applies it in the same transaction, which takes `create` on `route-studio.schemes` beside the decision's `edit` (403 otherwise). A `route-day-change` writes the scheme's next version from the proposal's `effectiveFrom`, as `POST /route-schemes/{id}/successor` writes one, with the proposal's group running on its proposed days and the scheme serving the days its groups then run on — or, for a `vehicle-change`, the group running with the proposed vehicle, and the proposed driver where one is named, or, for a `stop-set-change`, the group picking the proposed containers in their order: the version is held to every rule a create is held to, the predecessor's period is cut at the day and its routes from it ended as a successor ends them, and a validated version is planned. The proposal is judged again first against the scheme as it stands. Whatever refuses — a day now past, the scheme archived, its provider no longer serving it, a route of it dispatched on or after the day, or a rule of the new version — refuses the approval (409, the sentence saying why) and leaves the proposal pending. The approved activity names the version it wrote, `successorSchemeId`, and who approved it; `reason` is kept as the approval's note.",
+        "Approves a proposal pending approval — the office's alone (403 from a provider's account) — and applies it in the same transaction, which takes `create` on `route-studio.schemes` beside the decision's `edit` (403 otherwise). A `route-day-change` writes the scheme's next version from the proposal's `effectiveFrom`, as `POST /route-schemes/{id}/successor` writes one, with the proposal's group running on its proposed days and the scheme serving the days its groups then run on — or, for a `vehicle-change`, the group running with the proposed vehicle, and the proposed driver where one is named, or, for a `stop-set-change`, the group picking the proposed containers in their order, or, for a `waste-fraction-change`, the group's rule collecting the proposed fractions, its container types and vehicle type kept: the version is held to every rule a create is held to, the predecessor's period is cut at the day and its routes from it ended as a successor ends them, and a validated version is planned. The proposal is judged again first against the scheme as it stands. Whatever refuses — a day now past, the scheme archived, its provider no longer serving it, a route of it dispatched on or after the day, or a rule of the new version — refuses the approval (409, the sentence saying why) and leaves the proposal pending. The approved activity names the version it wrote, `successorSchemeId`, and who approved it; `reason` is kept as the approval's note.",
         "The activity is not a proposal or not pending approval, or its change cannot be applied: the sentence says why, and the proposal stays pending.",
       ),
       guard,
