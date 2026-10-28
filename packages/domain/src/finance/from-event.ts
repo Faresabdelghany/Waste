@@ -100,6 +100,18 @@
 // visit's step is never re-tiered by a void or a backdated check-in: each
 // visit keeps the product it was quoted at.
 //
+// An Unload's weight review (O28 of #290, C32 of #291) is Finance's since
+// `weight-reviewed`: a stop under a product sold by the tonne records nothing
+// at its completion, and is charged when the Unload that carried it reads
+// `approved` — a `weight` event per such stop, its share of the reviewed net
+// (finance/tonnage.ts) priced per tonne on the route's service date under its
+// placement's agreement, blocked as a pickup's would be. One approval charges
+// once: an Unload with live weight events is charged already. A review that
+// leaves the Unload anything but approved — a rejection, a correction, which
+// moves the weight to a new Unload to review in its turn — cancels each live
+// weight event with `weight-revised`, or reverses it once a line names it. A
+// refused load is never charged; the next accepted Unload carries its stops.
+//
 // What the draft does not carry is the writer's: `createdBy` null,
 // `sourceEventId` the event's id (`billable_event_origin_shape` ties the two),
 // the stamps, and the row's own id.
@@ -110,6 +122,7 @@ import { isBillableResolution, type TicketResolution } from "../resolution/vocab
 import { HIRE_UNIT } from "./hire"
 import { priceOccurrence, type PriceLabels, type PricedAmounts, type PricedList, type PriceRow, type PricingOutcome } from "./pricing"
 import { RECURRING_UNIT } from "./recurring"
+import { chargedByWeight, weighedLoad } from "./tonnage"
 import type { BillableEventKind, BlockReason, CancelReason } from "./vocabulary"
 
 /** The events about a pickup that Finance reads: a missed stop's two (#293 M5) beside the completion and the correction. */
@@ -119,6 +132,10 @@ export type PickupEventKind = (typeof PICKUP_EVENT_KINDS)[number]
 /** The events about a Site Visit that Finance reads (#393, M4 of #293). */
 export const VISIT_EVENT_KINDS = ["site-visit-recorded", "site-visit-voided"] as const satisfies readonly OutboxKind[]
 export type VisitEventKind = (typeof VISIT_EVENT_KINDS)[number]
+
+/** The event about an Unload's weight review that Finance reads (O28 of #290). */
+export const WEIGHT_EVENT_KINDS = ["weight-reviewed"] as const satisfies readonly OutboxKind[]
+export type WeightEventKind = (typeof WEIGHT_EVENT_KINDS)[number]
 
 /** The placement valid on the service date, with what it reaches: the subscription, the agreement it runs under, and the product it delivers. */
 export type PlacementFacts<Row extends PriceRow = PriceRow> = {
@@ -246,11 +263,38 @@ export type VisitEventFacts = {
   liveEvent: LiveEventFacts | null
 }
 
+/** A stop an Unload carried, as the worker read it (O28 of #290): its share of the reviewed net, the conditions it is priced on, and the placement of its container on the service date. */
+export type WeighedStopFacts<Row extends PriceRow = PriceRow> = {
+  pickupId: string
+  /** The stop's share of the Unload's reviewed net, whole kilograms (`tonnageShares`). */
+  weightKg: number
+  planningAreaId: string | null
+  containerTypeId: string | null
+  wasteFractionId: string
+  /** The placement valid on the service date, or null; only one under a product sold by the tonne is charged here. */
+  placement: PlacementFacts<Row> | null
+}
+
+/** An Unload's weight review as the worker reads it: whether its weight stands approved now, the stops it carried with their shares, and its live weight events. */
+export type WeightReviewedFacts<Row extends PriceRow = PriceRow> = {
+  kind: WeightEventKind
+  unloadId: string
+  routeId: string
+  /** The route's service date, the day each share is priced and billed on. */
+  serviceDate: string
+  /** Whether the Unload reads `approved` now and the station took the load — the table's word, since a later review may have moved it. */
+  approved: boolean
+  /** The stops the Unload carried, each with its share; empty where it carried none or reads anything but approved. */
+  stops: readonly WeighedStopFacts<Row>[]
+  /** The Unload's live `weight` events. */
+  liveEvents: readonly LiveEventFacts[]
+}
+
 /** Every other event, which this module reads the kind of and nothing else. */
-export type OtherEventFacts = { kind: Exclude<OutboxKind, PickupEventKind | VisitEventKind | "ticket-completed"> }
+export type OtherEventFacts = { kind: Exclude<OutboxKind, PickupEventKind | VisitEventKind | WeightEventKind | "ticket-completed"> }
 
 /** An outbox event as the worker hands it here: the kind, and the plain facts that kind's payload and the reads beside it give. */
-export type EventFacts<Row extends PriceRow = PriceRow> = PickupEventFacts<Row> | TicketCompletedFacts<Row> | VisitEventFacts | OtherEventFacts
+export type EventFacts<Row extends PriceRow = PriceRow> = PickupEventFacts<Row> | TicketCompletedFacts<Row> | VisitEventFacts | WeightReviewedFacts<Row> | OtherEventFacts
 
 /** What a billable event links to: the ids the event named, each null where it named none. */
 export type BillableEventLinks = {
@@ -262,6 +306,8 @@ export type BillableEventLinks = {
   proofId: string | null
   /** The Site Visit a `visit` event charges for (#393); null on every other kind. */
   visitId: string | null
+  /** The Unload whose reviewed weight a `weight` event charges a share of (O28 of #290); null on every other kind. */
+  unloadId: string | null
 }
 
 /** The event the consumer records: what the writer takes from the draft, the rest being the outbox event's. */
@@ -276,6 +322,8 @@ export type BillableEventDraft = {
   price: PricedAmounts | null
   blockReason: BlockReason | null
   links: BillableEventLinks
+  /** On a `weight` event (O28 of #290): the stop's share of the Unload's reviewed net, whole kilograms; absent on every other kind. */
+  weightKg?: number
 }
 
 /** What the consumer does with an event: records a draft, cancels the live event, or records a reversal of it. */
@@ -289,10 +337,13 @@ export { BILLABLE_RESOLUTIONS, isBillableResolution } from "../resolution/vocabu
 /** Whether a product is charged by its period, never per occurrence: a recurring charge's month (#291 C2), a hire's day (M14 of #293). */
 const chargedByPeriod = (unit: ProductUnit): boolean => unit === RECURRING_UNIT || unit === HIRE_UNIT
 
-/** Whether a ticket's work may be charged at the product (#291 C3): never one sold by the month or the day, which a billing run charges by its period; the completion's as the person named it; the kind's only while it is offered, a retired one being the office's to replace. */
-export const chargesTicketWork = (charge: TicketChargeFacts): boolean => !chargedByPeriod(charge.product.unit) && (charge.source === "completion" || charge.product.status === "active")
+/** Whether a product is charged otherwise than per occurrence: by its period, or by its stops' reviewed weight (O28 of #290). */
+const chargedOtherwise = (unit: ProductUnit): boolean => chargedByPeriod(unit) || chargedByWeight(unit)
 
-const NO_LINKS: BillableEventLinks = { routeId: null, pickupId: null, ticketId: null, reversesEventId: null, proofId: null, visitId: null }
+/** Whether a ticket's work may be charged at the product (#291 C3): never one sold by the month or the day, which a billing run charges by its period; the completion's as the person named it; the kind's only while it is offered, a retired one being the office's to replace. */
+export const chargesTicketWork = (charge: TicketChargeFacts): boolean => !chargedOtherwise(charge.product.unit) && (charge.source === "completion" || charge.product.status === "active")
+
+const NO_LINKS: BillableEventLinks = { routeId: null, pickupId: null, ticketId: null, reversesEventId: null, proofId: null, visitId: null, unloadId: null }
 
 /** Whether a work order may be charged at the project's product: one sold by the job, while it is offered — a retired one is the office's to replace, never a silent charge. */
 export const chargesJob = (job: JobChargeFacts): boolean => job.product.unit === "job" && job.product.status === "active"
@@ -336,8 +387,8 @@ function pickupDraft<Row extends PriceRow>(facts: PickupEventFacts<Row>, labels:
   const base = { kind: "pickup" as const, serviceDate: facts.serviceDate, quantity: 1, links }
   const placement = facts.placement
   if (placement === null) return { ...base, agreementId: null, subscriptionId: null, productId: null, price: null, blockReason: "no-subscription" }
-  // The collection is inside a recurring charge or a hire (M14 of #293), which a billing run bills by its period; a `job` is one event like a `pickup`.
-  if (chargedByPeriod(placement.product.unit)) return undefined
+  // The collection is inside a recurring charge or a hire (M14 of #293), which a billing run bills by its period, or charged by its weight once reviewed (O28 of #290); a `job` is one event like a `pickup`.
+  if (chargedOtherwise(placement.product.unit)) return undefined
   const outcome = priceOccurrence(
     {
       agreement: { status: placement.agreement.status },
@@ -376,6 +427,52 @@ export function reversalOf(original: LiveEventFacts): BillableEventDraft {
     blockReason: null,
     links: { ...NO_LINKS, reversesEventId: original.id },
   }
+}
+
+/** A stop's share of an approved Unload under a product sold by the tonne (O28 of #290): priced per tonne on the service date under its placement's agreement, then turned into the weighed load's amount; blocked as a pickup's would be. Nothing for a stop under any other product, or with no placement to say. */
+function weightDraft<Row extends PriceRow>(event: WeightReviewedFacts<Row>, stop: WeighedStopFacts<Row>, labels: PriceLabels): BillableEventDraft | undefined {
+  const placement = stop.placement
+  if (placement === null || !chargedByWeight(placement.product.unit)) return undefined
+  const base = {
+    kind: "weight" as const,
+    serviceDate: event.serviceDate,
+    quantity: 1,
+    weightKg: stop.weightKg,
+    agreementId: placement.agreement.id,
+    subscriptionId: placement.subscriptionId,
+    productId: placement.product.id,
+    links: { ...NO_LINKS, routeId: event.routeId, pickupId: stop.pickupId, unloadId: event.unloadId },
+  }
+  const outcome = priceOccurrence(
+    {
+      agreement: { status: placement.agreement.status },
+      priceList: placement.priceList,
+      product: placement.product,
+      quantity: 1,
+      input: {
+        on: event.serviceDate,
+        planningAreaId: stop.planningAreaId,
+        customerKind: placement.agreement.customerKind,
+        containerTypeId: stop.containerTypeId,
+        wasteFractionId: stop.wasteFractionId,
+        customerId: placement.agreement.customerId,
+      },
+    },
+    labels,
+  )
+  if (outcome.price === null) return { ...base, price: null, blockReason: outcome.blockReason }
+  const load = weighedLoad(outcome.price, stop.weightKg)
+  return load === null ? { ...base, price: null, blockReason: "amount-too-large" } : { ...base, price: load, blockReason: null }
+}
+
+/** What an Unload's weight review does (O28 of #290): approved and uncharged, a `weight` event per stop sold by the tonne; approved and charged, nothing; anything else, each live weight event cancelled or reversed. */
+export function weightActionsFor<Row extends PriceRow>(event: WeightReviewedFacts<Row>, labels: PriceLabels = {}): BillableAction[] {
+  if (!event.approved) return event.liveEvents.flatMap((live) => correctionOf(live, "weight-revised") ?? [])
+  if (event.liveEvents.length > 0) return []
+  return event.stops.flatMap((stop) => {
+    const draft = weightDraft(event, stop, labels)
+    return draft === undefined ? [] : [{ action: "record" as const, draft }]
+  })
 }
 
 /** What a corrected pickup or a voided visit does to its live event: nothing without one; a cancellation with the consumer's reason when no line names it; a reversal when one does. */
@@ -437,6 +534,7 @@ function exceptionActionsFor<Row extends PriceRow>(event: PickupEventFacts<Row>,
 
 /** Every action an event is worth, in order: a pickup's collection charge, then its exception charge (#293 M5); for any other event its one action, or none. */
 export function billableActionsFor<Row extends PriceRow>(event: EventFacts<Row>, labels: PriceLabels = {}): BillableAction[] {
+  if (event.kind === "weight-reviewed") return weightActionsFor(event, labels)
   const first = billableFor(event, labels)
   return [...(first === undefined ? [] : [first]), ...(isPickupEvent(event) ? exceptionActionsFor(event, labels) : [])]
 }
@@ -489,6 +587,9 @@ export function billableFor<Row extends PriceRow>(event: EventFacts<Row>, labels
     }
     case "site-visit-voided":
       return correctionOf(event.liveEvent, "visit-voided")
+    case "weight-reviewed":
+      // An Unload's review may charge several stops: `billableActionsFor` answers them all, and this its first.
+      return weightActionsFor(event, labels)[0]
     default:
       return undefined
   }
