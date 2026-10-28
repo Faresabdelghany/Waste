@@ -5,14 +5,16 @@
 // ticket past its due date — and raises nothing twice; a condition that clears
 // resolves its alert with no account and the rule's note; a person's resolve
 // holds while the condition does; and a new occurrence is a new alert. A
-// quiet tick reads nothing and writes nothing.
+// quiet tick reads nothing and writes nothing. Since O8 of #290 a running
+// device heard from but sending no position for ten minutes raises a fifth,
+// and a fix clears it.
 import assert from "node:assert/strict"
 import { after, before, describe, test } from "node:test"
 
 import { createDb, type Database } from "@waste/db/client"
 import { openTicket } from "@waste/db/commands/open-ticket"
 import { migrateDatabase } from "@waste/db/migrate"
-import { route, session } from "@waste/db/schema/execution"
+import { driverCommand, route, session, sessionPosition } from "@waste/db/schema/execution"
 import { driver } from "@waste/db/schema/fleet"
 import { alert, ticket } from "@waste/db/schema/resolution"
 import { withCompany } from "@waste/db/tenant"
@@ -70,6 +72,11 @@ describe("resolution.alert-rules", { skip: roles.skip }, () => {
 
   const alerts = () => withCompany(api.db, tenant.companyId, (tx) => tx.select().from(alert).where(eq(alert.companyId, tenant.companyId)).orderBy(asc(alert.id)))
   const alertOf = async (rule: string, subjectId: string) => (await alerts()).filter((row) => row.rule === rule && [row.routeId, row.driverId, row.ticketId].includes(subjectId))
+  /** A fix of the running session, as the driver door writes it. */
+  const fixAt = (fixedAt: Date) =>
+    withCompany(api.db, tenant.companyId, (tx) =>
+      tx.insert(sessionPosition).values({ companyId: tenant.companyId, projectId: tenant.projectId, routeId: running.id, sessionId, driverId: tenant.driverId, fixedAt, location: { type: "Point", coordinates: [12.5683, 55.6761] }, accuracyM: 10 }),
+    )
   const setRoute = (id: string, values: Partial<typeof route.$inferInsert>) => withCompany(api.db, tenant.companyId, (tx) => tx.update(route).set(values).where(and(eq(route.companyId, tenant.companyId), eq(route.id, id))))
   const openTicketDue = async (dueAt: Date | null, subject: string): Promise<string> => {
     const { row } = await withCompany(api.db, tenant.companyId, (tx) =>
@@ -177,7 +184,7 @@ describe("resolution.alert-rules", { skip: roles.skip }, () => {
     assert.equal(lines.at(-1), "alert rules: raised 5, cleared 0")
   })
 
-  test("the next tick raises nothing twice and reads nothing: a quiet tick is five empty results and no write", async () => {
+  test("the next tick raises nothing twice and reads nothing: a quiet tick is six empty results and no write", async () => {
     assert.deepEqual(await occurrencesToRaise(worker, NOW), [])
     assert.deepEqual(await alertsToClear(worker, NOW), [])
     const before = lines.length
@@ -189,6 +196,8 @@ describe("resolution.alert-rules", { skip: roles.skip }, () => {
   test("a condition that clears resolves its alert with no account and the rule's note: the route started, the device heard from, the ticket re-dated", async () => {
     await setRoute(late.id, { status: "cancelled", cancelledAt: at("07:12") })
     await withCompany(api.db, tenant.companyId, (tx) => tx.update(session).set({ lastSeenAt: at("07:11") }).where(and(eq(session.companyId, tenant.companyId), eq(session.id, sessionId))))
+    // Heard from with a fix: neither silent nor stale.
+    await fixAt(at("07:11"))
     await withCompany(api.db, tenant.companyId, (tx) => tx.update(ticket).set({ dueAt: at("18:00") }).where(and(eq(ticket.companyId, tenant.companyId), eq(ticket.id, overdueTicketId))))
     NOW = at("07:12")
     assert.deepEqual(await runAlertRules(context()), { raised: 0, cleared: 3 })
@@ -243,6 +252,38 @@ describe("resolution.alert-rules", { skip: roles.skip }, () => {
     await withCompany(api.db, tenant.companyId, (tx) => tx.update(driver).set({ licenceExpiry: "2031-10-20" }).where(and(eq(driver.companyId, tenant.companyId), eq(driver.id, tenant.otherDriverId))))
     assert.deepEqual(await runAlertRules(context()), { raised: 0, cleared: 1 })
     assert.deepEqual((await alertOf("licence-expiring", tenant.otherDriverId)).map((row) => row.status), ["resolved", "resolved"])
+  })
+
+  test("a device heard from but sending no position for ten minutes raises a stale position, from the telemetry; the silent device it was clears, and a fix clears the stale one (O8 of #290)", async () => {
+    await withCompany(api.db, tenant.companyId, (tx) => tx.update(session).set({ lastSeenAt: at("07:58") }).where(and(eq(session.companyId, tenant.companyId), eq(session.id, sessionId))))
+    NOW = at("08:00")
+    assert.deepEqual(await runAlertRules(context()), { raised: 1, cleared: 1 }, "the stale position raised, the silence cleared")
+    const [stale] = (await alertOf("position-stale", running.id)).filter((row) => row.status === "new")
+    assert.deepEqual([stale.kind, stale.severity, stale.source, stale.driverId, stale.vehicleId], ["route-exception", "medium", "telemetry", tenant.driverId, tenant.vehicleId])
+    assert.equal(stale.title, `No position from Mads Jensen on ${running.label}`)
+    assert.equal(stale.details, "Last position at 07:11, and none for 10 minutes since, though the device is heard from: its location may be off, or the route's screen closed.")
+    assert.match(stale.ruleKey ?? "", new RegExp(`^position-stale:${sessionId}:2026-10-05T05:11:00\\.000000Z$`))
+    assert.deepEqual(await runAlertRules(context()), { raised: 0, cleared: 0 }, "raised once")
+
+    await fixAt(at("07:59"))
+    NOW = at("08:01")
+    assert.deepEqual(await runAlertRules(context()), { raised: 0, cleared: 1 })
+    const [cleared] = await alertOf("position-stale", running.id)
+    assert.deepEqual([cleared.status, cleared.resolvedBy, cleared.resolutionNote], ["resolved", null, CLEARED_NOTES["position-stale"]])
+  })
+
+  test("a paused session's position is never stale, and the clock starts again at its resume", async () => {
+    await withCompany(api.db, tenant.companyId, (tx) => tx.update(session).set({ pausedAt: at("08:02"), lastSeenAt: at("08:20") }).where(and(eq(session.companyId, tenant.companyId), eq(session.id, sessionId))))
+    NOW = at("08:20")
+    assert.deepEqual((await occurrencesToRaise(worker, NOW)).filter((found) => found.occurrence.rule === "position-stale"), [], "paused")
+    await withCompany(api.db, tenant.companyId, (tx) => tx.update(session).set({ pausedAt: null }).where(and(eq(session.companyId, tenant.companyId), eq(session.id, sessionId))))
+    await withCompany(api.db, tenant.companyId, (tx) =>
+      tx.insert(driverCommand).values({ id: testId(), companyId: tenant.companyId, projectId: tenant.projectId, routeId: running.id, sessionId, driverId: tenant.driverId, deviceId: "device-1", kind: "resume", occurredAt: at("08:19"), body: {}, outcome: "applied" }),
+    )
+    assert.deepEqual((await occurrencesToRaise(worker, NOW)).filter((found) => found.occurrence.rule === "position-stale"), [], "resumed a minute ago")
+    NOW = at("08:30")
+    await withCompany(api.db, tenant.companyId, (tx) => tx.update(session).set({ lastSeenAt: at("08:29") }).where(and(eq(session.companyId, tenant.companyId), eq(session.id, sessionId))))
+    assert.deepEqual((await occurrencesToRaise(worker, NOW)).map((found) => found.occurrence.rule).filter((rule) => rule === "position-stale"), ["position-stale"], "ten minutes after the resume")
   })
 
   async function ticketNumber(id: string): Promise<number> {

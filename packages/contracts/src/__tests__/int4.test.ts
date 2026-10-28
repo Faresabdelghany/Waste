@@ -48,6 +48,7 @@ import * as placesModule from "../places"
 import * as planningModule from "../planning"
 import * as planningAreasModule from "../planning-areas"
 import * as plansModule from "../plans"
+import * as positionsModule from "../positions"
 import * as priceListsModule from "../price-lists"
 import * as problemModule from "../problem"
 import * as proofObjectsModule from "../proof-objects"
@@ -126,6 +127,7 @@ const MODULES: Readonly<Record<string, Record<string, unknown>>> = {
   "planning": planningModule,
   "planning-areas": planningAreasModule,
   "plans": plansModule,
+  "positions": positionsModule,
   "price-lists": priceListsModule,
   "problem": problemModule,
   "proof-objects": proofObjectsModule,

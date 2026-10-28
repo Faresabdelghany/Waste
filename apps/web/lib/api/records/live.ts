@@ -14,16 +14,20 @@
 // record (routes.ts) with the board's readings on top: the actual assignment
 // the session went out with, or the planned one before a session, the
 // progress as a percentage the table's circle reads, and the position as a
-// person reads it. There is no track: the board shows the last point, never
-// a line.
+// person reads it. Since O8 of #290 the position is the open session's newest
+// one the Driver App recorded, a proof's point only where there is none yet;
+// the row tells the next stop's estimate and the trip's expected end; and a
+// route's details read its track and its estimates per stop
+// (`routeTrack`, `routeEtas`, `GET /routes/:id/positions` and `/eta`).
+import type { RouteEta, RouteTrack } from "@waste/contracts/positions"
 import type { LiveRoute } from "@waste/contracts/routes"
 import type { Session } from "@waste/contracts/sessions"
 
 import type { BusinessRecord, ModuleLocation } from "@/lib/data/business-modules"
 
-import { listAll } from "../client"
+import { get, listAll } from "../client"
 import { ofKind, typed, type Client, type MappingContext, type ResourceAdapter, type ServerModule } from "./adapter"
-import { shownOn } from "./clock"
+import { shownOn, timeOn } from "./clock"
 import { refusal } from "./places"
 import { assignmentOf, toRouteRecord } from "./routes"
 
@@ -62,13 +66,21 @@ export function toLiveRecord(live: LiveRoute, context: MappingContext): Business
   const planned = assignmentOf(context, live.planned)
   const actual = live.session === null ? undefined : assignmentOf(context, live.session)
   const { total, planned: open } = live.progress
+  // The session's newest recorded position, else the latest point a proof carried.
+  const point = live.lastPosition?.location ?? live.lastLocation
+  const now = context.now ?? new Date()
   const facts: Record<string, string> = {
     ...route.facts,
     "Planned assignment": planned ?? "Unassigned",
     "Actual assignment": actual ?? "Not started",
     // A point is [longitude, latitude] on the wire; a person reads latitude first.
-    "Last position": live.lastLocation === null ? "No position yet" : `${live.lastLocation.coordinates[1].toFixed(5)}, ${live.lastLocation.coordinates[0].toFixed(5)}`,
-    "Position freshness": live.lastSeenAt === null ? "No session" : freshnessOf(live.lastSeenAt, context.now ?? new Date()),
+    "Last position": point === null ? "No position yet" : `${point.coordinates[1].toFixed(5)}, ${point.coordinates[0].toFixed(5)}`,
+    "Position freshness": live.lastPosition !== null ? freshnessOf(live.lastPosition.at, now) : live.lastSeenAt === null ? "No session" : freshnessOf(live.lastSeenAt, now),
+  }
+  if (live.lastPosition !== null) facts["Position recorded"] = shownOn(live.lastPosition.at, timezone)
+  if (live.eta !== null) {
+    facts["Next stop expected"] = live.eta.nextAt === null ? "No stop to come" : timeOn(live.eta.nextAt, timezone)
+    if (live.eta.finishAt !== null) facts["Expected finish"] = timeOn(live.eta.finishAt, timezone)
   }
   if (live.lastSeenAt !== null) facts["Last seen"] = shownOn(live.lastSeenAt, timezone)
   if (live.session !== null) {
@@ -85,8 +97,8 @@ export function toLiveRecord(live: LiveRoute, context: MappingContext): Business
     submittedValues: {
       ...route.submittedValues,
       sessionId: live.session?.id ?? "",
-      latitude: live.lastLocation === null ? "" : String(live.lastLocation.coordinates[1]),
-      longitude: live.lastLocation === null ? "" : String(live.lastLocation.coordinates[0]),
+      latitude: point === null ? "" : String(point.coordinates[1]),
+      longitude: point === null ? "" : String(point.coordinates[0]),
       lastSeenAt: live.lastSeenAt ?? "",
       paused: live.paused ? "true" : "false",
     },
@@ -96,6 +108,38 @@ export function toLiveRecord(live: LiveRoute, context: MappingContext): Business
 /** A route's sessions, oldest first: every time a driver started it, and how it went. */
 export function routeSessions(client: Client, routeServerId: string): Promise<Session[]> {
   return listAll<Session>(client, "/sessions", { routeId: routeServerId })
+}
+
+/** A route's track: its open session's positions in order, else its latest session's, as one row for the details' read. */
+export function routeTrack(client: Client, routeServerId: string): Promise<RouteTrack[]> {
+  return get<RouteTrack>(client, `/routes/${routeServerId}/positions`).then((track) => [track])
+}
+
+/** A route's estimates: each stop of its active Plan with when the vehicle is expected there, as one row for the details' read. */
+export function routeEtas(client: Client, routeServerId: string): Promise<RouteEta[]> {
+  return get<RouteEta>(client, `/routes/${routeServerId}/eta`).then((eta) => [eta])
+}
+
+/** A track drawn in a box of `width` by `height`: the points as an SVG path, north up, scaled to their extent at the track's latitude; null for fewer than two. */
+export function trackPath(points: readonly { location: { coordinates: readonly [number, number] } }[], width: number, height: number): string | null {
+  if (points.length < 2) return null
+  const lons = points.map((point) => point.location.coordinates[0])
+  const lats = points.map((point) => point.location.coordinates[1])
+  const [west, east, south, north] = [Math.min(...lons), Math.max(...lons), Math.min(...lats), Math.max(...lats)]
+  // A degree of longitude is shorter than one of latitude away from the equator.
+  const scaleX = Math.cos((((south + north) / 2) * Math.PI) / 180)
+  const spanX = Math.max((east - west) * scaleX, 1e-9)
+  const spanY = Math.max(north - south, 1e-9)
+  const scale = Math.min(width / spanX, height / spanY)
+  const offsetX = (width - spanX * scale) / 2
+  const offsetY = (height - spanY * scale) / 2
+  return points
+    .map((point, index) => {
+      const x = offsetX + (point.location.coordinates[0] - west) * scaleX * scale
+      const y = offsetY + (north - point.location.coordinates[1]) * scale
+      return `${index === 0 ? "M" : "L"}${x.toFixed(1)} ${y.toFixed(1)}`
+    })
+    .join(" ")
 }
 
 const READ_ONLY = "The Live board reads what the driver's device reports; a route is moved by its commands in Routes"

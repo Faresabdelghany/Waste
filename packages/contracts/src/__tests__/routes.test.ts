@@ -109,14 +109,17 @@ describe("Route", () => {
     assert.equal(Route.safeParse({ ...route, serviceDate: "2026-10-05T00:00:00Z" }).success, false, "a day, not an instant")
   })
 
-  test("a detail carries the pickups by position, the open session, every session and the unloads; a live route its open session and three readings", () => {
+  test("a detail carries the pickups by position, the open session, every session and the unloads; a live route its open session and its readings", () => {
     const detail = { ...route, pickups: [pickup], activePlan: null, workload, shift, session, sessions: [session], unloads: [] }
     assert.deepEqual(RouteDetail.parse(detail), detail)
     const extra = { ...pickup, id: THIRD, containerId: null, origin: "office", position: 2, note: "Re-collection of T-8831" }
     assert.deepEqual(RouteDetail.parse({ ...detail, pickups: [pickup, extra] }), { ...detail, pickups: [pickup, extra] }, "an address-only stop the office added sits beside the generated ones (#111)")
-    const live = { ...route, activePlan: null, session, lastLocation: { type: "Point", coordinates: [12.5951, 55.7089] }, lastSeenAt: "2026-10-05T06:05:00.000Z", paused: false }
+    const lastPosition = { at: "2026-10-05T06:04:00.000Z", location: { type: "Point", coordinates: [12.5951, 55.7089] }, accuracyM: 9, speedKmh: null, headingDeg: null }
+    const eta = { nextPickupId: THIRD, nextAt: "2026-10-05T06:20:00.000Z", finishAt: "2026-10-05T10:00:00.000Z" }
+    const live = { ...route, activePlan: null, session, lastLocation: { type: "Point", coordinates: [12.5951, 55.7089] }, lastPosition, eta, lastSeenAt: "2026-10-05T06:05:00.000Z", paused: false }
     assert.deepEqual(LiveRoute.parse(live), live)
-    const due = { ...live, status: "ready", session: null, lastLocation: null, lastSeenAt: null, startedAt: null, actual: { vehicleId: null, driverId: null, trailerId: null } }
+    assert.equal(LiveRoute.safeParse({ ...live, eta: undefined }).success, false, "the estimates are there, null or not (O8 of #290)")
+    const due = { ...live, status: "ready", session: null, lastLocation: null, lastPosition: null, eta: null, lastSeenAt: null, startedAt: null, actual: { vehicleId: null, driverId: null, trailerId: null } }
     assert.deepEqual(LiveRoute.parse(due), due)
     assert.equal(LiveRoute.safeParse({ ...live, lastLocation: { type: "Point", coordinates: [12.5951, 55.7089, 10] } }).success, false, "a flat point")
     assert.deepEqual(LiveRouteQuery.parse({ projectId: OTHER }), { projectId: OTHER, limit: 50 })

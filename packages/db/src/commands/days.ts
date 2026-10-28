@@ -39,3 +39,24 @@ export function dayInTimezone(instant: Date, timeZone: string): string {
 export function lastDayInside(end: Date, timeZone: string): string {
   return dayInTimezone(new Date(end.getTime() - 1), timeZone)
 }
+
+/** How far `timeZone`'s clock runs ahead of UTC at `instant`, in milliseconds. */
+function offsetAt(instant: number, timeZone: string): number {
+  const parts = new Intl.DateTimeFormat("en-US", { timeZone, hourCycle: "h23", year: "numeric", month: "2-digit", day: "2-digit", hour: "2-digit", minute: "2-digit", second: "2-digit" }).formatToParts(new Date(instant))
+  const part = (type: Intl.DateTimeFormatPartTypes): number => Number(parts.find((candidate) => candidate.type === type)?.value)
+  const asUtc = Date.UTC(part("year"), part("month") - 1, part("day"), part("hour"), part("minute"), part("second"))
+  return asUtc - Math.floor(instant / 1000) * 1000
+}
+
+/**
+ * The instant a time of a project's day falls at (O8 of #290): `seconds`
+ * after midnight of `day` on `timeZone`'s clock, where a Plan's departure and
+ * a stop's window are spelled. The offset is the one in force at that time of
+ * that day, so a summer morning is summer time on the day the clocks change;
+ * a time the change skips is read in the offset before it.
+ */
+export function instantOnDay(day: string, seconds: number, timeZone: string): Date {
+  const local = Date.parse(`${day}T00:00:00Z`) + seconds * 1000
+  const first = local - offsetAt(local, timeZone)
+  return new Date(local - offsetAt(first, timeZone))
+}

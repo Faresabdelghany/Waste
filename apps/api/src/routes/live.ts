@@ -15,8 +15,10 @@
 // its open session or null, whether that session is paused, when the device
 // was last seen, and the latest point a proof of the route carried — one
 // `distinct on (route_id)` over the page's routes in recording order, so a
-// page of fifty costs one statement and not fifty; no position stream exists
-// yet (#104 §1), and a proof's point is what is cheap.
+// page of fifty costs one statement and not fifty. Since O8 of #290 a row
+// carries its open session's newest position too, one `distinct on` over the
+// page's sessions, and its estimates (`liveEtaOf`, routes/positions.ts): the
+// next stop still to come and when, and when the trip ends.
 //
 // Every statement carries the tenant and `inProjects`; the grant is
 // `route-studio.live`, `view` throughout.
@@ -38,6 +40,7 @@ import { afterCursor, fetchLimit, pageOf } from "../pagination"
 import { describeProblem, validate } from "../problem"
 import { noSuchSession, openSessionsByRoute, progressByRoute, progressFor, routeColumns, routeOf, routeScope, sessionColumns, sessionOf, sessionScope } from "./execution-shapes"
 import { activePlansByRoute } from "./plan-shapes"
+import { liveEtaOf, newestPositionsBySession } from "./positions"
 import { requireRoute } from "./references"
 import type { ClockOptions } from "./scheme-groups"
 import { describeJson, IdParam } from "./shared"
@@ -66,7 +69,7 @@ export function liveRoutes(guard: MiddlewareHandler<AuthEnv>, { now = () => new 
         operationId: "listLiveRoutes",
         summary: "The routes running or due today",
         description:
-          "One page of the routes the live dashboard watches, oldest first (ids are time-ordered): every `active` route of the projects the caller works in, and every `ready` one whose operating date is today on its project's clock — the request's instant rendered in `project.timezone`, so a route due tomorrow in Copenhagen may already be due today in Cairo. `projectId` narrows it to one of those projects; naming another is refused. Each row is the route with its progress, its open `session` or null for a route due today that has not started, `paused` (whether that session is paused), `lastSeenAt` (when the device last uploaded) and `lastLocation` (the latest point a proof of the route carried, or null). Hand `nextCursor` back as `cursor` for the next page.",
+          "One page of the routes the live dashboard watches, oldest first (ids are time-ordered): every `active` route of the projects the caller works in, and every `ready` one whose operating date is today on its project's clock — the request's instant rendered in `project.timezone`, so a route due tomorrow in Copenhagen may already be due today in Cairo. `projectId` narrows it to one of those projects; naming another is refused. Each row is the route with its progress, its open `session` or null for a route due today that has not started, `paused` (whether that session is paused), `lastSeenAt` (when the device last uploaded), `lastLocation` (the latest point a proof of the route carried, or null), `lastPosition` (the open session's newest position the Driver App recorded, or null) and `eta` (the first stop still to come with its estimate and when the trip is expected to end, as `GET /routes/:id/eta` reads them; null for a route without an active Plan). Hand `nextCursor` back as `cursor` for the next page.",
         security: BEARER_SECURITY,
         responses: {
           200: describeJson("One page of live routes.", LivePage),
@@ -108,6 +111,15 @@ export function liveRoutes(guard: MiddlewareHandler<AuthEnv>, { now = () => new 
           lastLocationsByRoute(tx, principal.companyId, ids),
           activePlansByRoute(tx, principal.companyId, items),
         ])
+        const positions = await newestPositionsBySession(
+          tx,
+          principal.companyId,
+          [...sessions.values()].map((open) => open.id),
+        )
+        // The estimates route by route, at the request's instant: a page of the day's live routes, each a handful of statements.
+        const at = now()
+        const etas = new Map<string, LiveRoute["eta"]>()
+        for (const row of items) etas.set(row.id, await liveEtaOf(tx, principal.companyId, row, at))
         const live: LiveRoute[] = items.map((row) => {
           const open = sessions.get(row.id)
           return {
@@ -115,6 +127,8 @@ export function liveRoutes(guard: MiddlewareHandler<AuthEnv>, { now = () => new 
             activePlan: plans.get(row.id) ?? null,
             session: open === undefined ? null : sessionOf(open),
             lastLocation: locations.get(row.id) ?? null,
+            lastPosition: open === undefined ? null : (positions.get(open.id) ?? null),
+            eta: etas.get(row.id) ?? null,
             lastSeenAt: open === undefined ? null : open.lastSeenAt.toISOString(),
             paused: open !== undefined && open.pausedAt !== null,
           }

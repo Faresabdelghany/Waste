@@ -8,7 +8,8 @@
 // in their sequence, each opening its pickup, its sessions, and the device's
 // command log. A stop's details offer remove and correct outcome, with its
 // proofs — a photo or a signature shown from the URL the API signs for it
-// (O1 of #290) — a live row its sessions and the way to its route. Every command is
+// (O1 of #290) — a live row its track, the estimates at its stops (O8 of
+// #290), its sessions and the way to its route. Every command is
 // offered whatever the status, and the API's 409 says why one does not apply
 // (the rules on #81): a dispatch without a planned driver, a reorder of an
 // active route. A route without a Plan is complete — nothing here waits on
@@ -52,9 +53,9 @@ import { problemSentence } from "@/lib/api/problem"
 import { problemOfError } from "@/lib/api/records/server-records"
 import { PLAN_POLL_MS } from "@/lib/map-planning/plan-readings"
 import { statusLabel, webIdOf, type CommandInput } from "@/lib/api/records/adapter"
-import { shownOn } from "@/lib/api/records/clock"
+import { shownOn, timeOn } from "@/lib/api/records/clock"
 import { CONTAINERS_MODULE } from "@/lib/api/records/containers"
-import { LIVE_MODULE, routeSessions, whileWatched } from "@/lib/api/records/live"
+import { LIVE_MODULE, routeEtas, routeSessions, routeTrack, trackPath, whileWatched } from "@/lib/api/records/live"
 import { CORRECT_PICKUP, PICKUPS_MODULE, pickupProofs, proofLine, proofObjectNoun, REMOVE_PICKUP } from "@/lib/api/records/pickups"
 import { ORGANISATION_MODULE } from "@/lib/data/containers"
 import { ADD_STOP, applyBalance, ASSIGN_ROUTE, balanceMoveLine, callsignOf, CANCEL_ROUTE, dayLoadLine, DISPATCH_ROUTE, dispatchRoutes, previewBalance, isHeldRoute, MERGE_ROUTE, MOVE_STOPS, OPTIMISE_ROUTE, planLine, RELEASE_HOLD, REORDER_ROUTE, RESCHEDULE_ROUTE, routeCommandLog, routeDetail, routePlans, ROUTES_MODULE, SPLIT_ROUTE } from "@/lib/api/records/routes"
@@ -68,6 +69,7 @@ import { BALANCE_DAY_FORM, contaminantCodeOptions, createRouteRecord, DISPATCH_D
 import type { Pickup } from "@waste/contracts/pickups"
 import type { ProofObjectLink } from "@waste/contracts/proof-objects"
 import type { ProofOfService } from "@waste/contracts/proofs"
+import type { RouteEta, RouteTrack } from "@waste/contracts/positions"
 import type { RouteBalancePreview, RouteDetail, RouteDispatchResult } from "@waste/contracts/routes"
 import type { Session } from "@waste/contracts/sessions"
 
@@ -873,6 +875,11 @@ export function LiveBoardRefresh() {
 export function LiveRouteSurface({ record }: RowSurfaceProps) {
   const pickers = useRelationPickers()
   const sessions = useRowHistory(LIVE_MODULE.workspaceId, LIVE_MODULE.moduleId, record, 0, routeSessions)
+  // Read again with the board: the row's last-seen moves on every read of it.
+  const version = record.submittedValues?.lastSeenAt ?? ""
+  const track = useRowHistory(LIVE_MODULE.workspaceId, LIVE_MODULE.moduleId, record, String(version), routeTrack)
+  const etas = useRowHistory(LIVE_MODULE.workspaceId, LIVE_MODULE.moduleId, record, String(version), routeEtas)
+  const stopName = useServerNames(PICKUPS_MODULE, "pickup")
   const sessionLine = useSessionLine()
   const openRoute = useOpenRecord(ROUTES_MODULE.moduleId)
   const timezone = pickers.timezoneOf(record.projectIds?.[0])
@@ -886,9 +893,56 @@ export function LiveRouteSurface({ record }: RowSurfaceProps) {
         </Button>
       </div>
       <div className="space-y-2">
+        <h4 className="text-xs font-medium text-muted-foreground">Track</h4>
+        <ReadRows read={track} label="Reading the route's track…" empty="No track." testId="live-track" line={(read) => <TrackDrawing track={read} timezone={timezone} />} />
+      </div>
+      <div className="space-y-2">
+        <h4 className="text-xs font-medium text-muted-foreground">Expected at each stop</h4>
+        <ReadRows
+          read={{ rows: etas.rows === null ? null : etas.rows.flatMap((read) => read.stops), problem: etas.problem }}
+          label="Reading the route's estimates…"
+          empty="No active Plan: nothing to estimate."
+          testId="live-etas"
+          line={(stop) => <StopEtaLine stop={stop} name={stop.pickupId === null ? "Unload visit" : stopName(stop.pickupId)} timezone={timezone} />}
+        />
+      </div>
+      <div className="space-y-2">
         <h4 className="text-xs font-medium text-muted-foreground">Sessions</h4>
         <ReadRows read={sessions} label="Reading the route's sessions…" empty="Not started: no driver has started this route." testId="live-sessions" line={(session) => sessionLine(session, timezone)} />
       </div>
     </section>
+  )
+}
+
+/** A session's track as a line in a box, north up (O8 of #290), with when it starts and ends; the positions are kept 30 days at most. */
+function TrackDrawing({ track, timezone }: { track: RouteTrack; timezone: string | undefined }) {
+  const first = track.points[0]
+  const last = track.points.at(-1)
+  if (first === undefined || last === undefined) return <span className="text-muted-foreground">{track.sessionId === null ? "Not started: no track." : "No position recorded for this session."}</span>
+  const path = trackPath(track.points, 240, 120)
+  return (
+    <div className="space-y-1">
+      {path !== null && (
+        <svg viewBox="0 0 240 120" className="h-32 w-full max-w-sm rounded-md border bg-muted/30" role="img" aria-label={`Track of ${track.points.length} positions`}>
+          <path d={path} fill="none" stroke="currentColor" strokeWidth={2} strokeLinejoin="round" strokeLinecap="round" className="text-primary" />
+        </svg>
+      )}
+      <p className="text-muted-foreground">
+        {track.points.length} {track.points.length === 1 ? "position" : "positions"}, {timeOn(first.at, timezone)} to {timeOn(last.at, timezone)}
+        {track.thinned ? " (thinned to fit)" : ""}
+      </p>
+    </div>
+  )
+}
+
+/** One stop of the active Plan and when the vehicle is expected there, or that it has been passed. */
+function StopEtaLine({ stop, name, timezone }: { stop: RouteEta["stops"][number]; name: string; timezone: string | undefined }) {
+  return (
+    <span className="flex justify-between gap-3">
+      <span>
+        {stop.position}. {name}
+      </span>
+      <span className="text-muted-foreground">{stop.eta === null ? "Passed or not estimated" : timeOn(stop.eta, timezone)}</span>
+    </span>
   )
 }

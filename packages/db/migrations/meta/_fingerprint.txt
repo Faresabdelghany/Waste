@@ -505,7 +505,7 @@ constraint wms.alert alert_raised_by_fk FOREIGN KEY (company_id, raised_by) REFE
 constraint wms.alert alert_resolved_by_fk FOREIGN KEY (company_id, resolved_by) REFERENCES wms.user_account(company_id, id)
 constraint wms.alert alert_resolved_shape CHECK ((((resolved_by IS NULL) OR (resolved_at IS NOT NULL)) AND ((resolved_at IS NULL) OR (resolved_by IS NOT NULL) OR (rule IS NOT NULL)) AND ((resolution_note IS NULL) OR (resolved_at IS NOT NULL))))
 constraint wms.alert alert_route_id_fk FOREIGN KEY (company_id, project_id, route_id) REFERENCES wms.route(company_id, project_id, id)
-constraint wms.alert alert_rule_one_of CHECK ((rule = ANY (ARRAY['route-not-started'::text, 'session-silent'::text, 'licence-expiring'::text, 'ticket-overdue'::text])))
+constraint wms.alert alert_rule_one_of CHECK ((rule = ANY (ARRAY['route-not-started'::text, 'session-silent'::text, 'licence-expiring'::text, 'ticket-overdue'::text, 'position-stale'::text])))
 constraint wms.alert alert_rule_shape CHECK (((rule IS NULL) = (rule_key IS NULL)))
 constraint wms.alert alert_severity_one_of CHECK ((severity = ANY (ARRAY['critical'::text, 'high'::text, 'medium'::text, 'low'::text])))
 constraint wms.alert alert_source_one_of CHECK ((source = ANY (ARRAY['manual'::text, 'execution'::text, 'telemetry'::text, 'rule'::text])))
@@ -4195,4 +4195,5 @@ journal 1793177580649 01fe8bafb789dc34ac91a51fe178c57f3554bde9065bde1d1d8e3cb927
 journal 1793179564300 85ecc9dc677b5efac299e96018803d2f1b1589a6c0d32f05a8156b9014e70495
 journal 1793182222276 c5e590688f3b59222221801f9adb6ef5b420c207211a83eb9331aa951718ff38
 journal 1793188451416 2908b29fc963fdd7f6371dbb1553734c92718138b9573b1d748bca9694a94037
+journal 1793190991835 4479beffde868c9a521b9ff1b6f44dd1b13dbb0e1293a3dabb1f48108c9407d1
 pgboss-version 42

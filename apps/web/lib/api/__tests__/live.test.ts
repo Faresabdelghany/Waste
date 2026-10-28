@@ -16,7 +16,7 @@ import type { Session } from "@waste/contracts/sessions"
 import { FIXTURE_COMPANY_ID, getModuleDefinition, type BusinessRecord } from "../../data/business-modules"
 import { NOTHING_RESOLVED, type MappingContext, type Resolver } from "../records/adapter"
 import { driverAdapter, vehicleAdapter } from "../records/fleet"
-import { LIVE_BOARD_REFRESH_MS, LIVE_MODULE, liveModule, liveRouteAdapter, routeSessions, whileWatched } from "../records/live"
+import { LIVE_BOARD_REFRESH_MS, LIVE_MODULE, liveModule, liveRouteAdapter, routeEtas, routeSessions, routeTrack, trackPath, whileWatched } from "../records/live"
 import { isServerBacked, SERVER_MODULE_KEYS } from "../records/modules"
 import { projectAdapter } from "../records/organisation"
 import { loaded, loadModule, resolverOver, writeRecord, type ServerRecordsState } from "../records/server-records"
@@ -60,8 +60,8 @@ const route: Route = {
   progress: { planned: 2, completed: 1, skipped: 0, failed: 0, total: 3, fraction: 1 / 3 },
 }
 const session: Session = { id: "01a0d2a4-a280-7035-8000-000000000001", ...STAMPS, projectId: copenhagen.id, routeId: route.id, driverId: mads.id, vehicleId: wh31.id, trailerId: null, deviceId: "phone-mads", appVersion: "a1b2c3", startedAt: "2026-10-01T04:31:00.000Z", endedAt: null, pausedAt: null, lastSeenAt: "2026-10-01T07:16:00.000Z" }
-const live: LiveRoute = { ...route, activePlan: null, session, lastLocation: { type: "Point", coordinates: [12.568337, 55.676098] }, lastSeenAt: session.lastSeenAt, paused: false }
-const dueToday: LiveRoute = { ...route, id: "01a0d2a4-a280-7030-8000-000000000002", number: 1043, label: "RC-1043", status: "ready", startedAt: null, actual: { vehicleId: null, driverId: null, trailerId: null }, progress: { planned: 3, completed: 0, skipped: 0, failed: 0, total: 3, fraction: 0 }, activePlan: null, session: null, lastLocation: null, lastSeenAt: null, paused: false }
+const live: LiveRoute = { ...route, activePlan: null, session, lastLocation: { type: "Point", coordinates: [12.568337, 55.676098] }, lastPosition: null, eta: null, lastSeenAt: session.lastSeenAt, paused: false }
+const dueToday: LiveRoute = { ...route, id: "01a0d2a4-a280-7030-8000-000000000002", number: 1043, label: "RC-1043", status: "ready", startedAt: null, actual: { vehicleId: null, driverId: null, trailerId: null }, progress: { planned: 3, completed: 0, skipped: 0, failed: 0, total: 3, fraction: 0 }, activePlan: null, session: null, lastLocation: null, lastPosition: null, eta: null, lastSeenAt: null, paused: false }
 
 const noResolve = (moduleFixtures: readonly BusinessRecord[], resolver: Resolver = NOTHING_RESOLVED): MappingContext => ({ fixtures: moduleFixtures, resolve: resolver, companyRecordId: FIXTURE_COMPANY_ID, now: NOW })
 const serverIdsOf = (records: readonly BusinessRecord[], ids: readonly string[]) => new Map(records.map((record, index) => [record.id, ids[index]]))
@@ -171,6 +171,48 @@ describe("a live route", () => {
     assert.equal((await writeRecord(clientOver(fetch), liveModule, current, { ...record, status: "Completed" }, { fixtures, state, now: NOW })).kind, "refused")
     assert.equal((await writeRecord(clientOver(fetch), liveModule, current, { ...record, name: "RC-9" }, { fixtures, state, now: NOW })).kind, "refused")
     assert.equal(calls.length, 0)
+  })
+
+  test("with a recorded position (O8 of #290), reads where the session's vehicle last was and how fresh that is, and the next stop's estimate and the trip's end on the project's clock", () => {
+    const tracked: LiveRoute = {
+      ...live,
+      lastPosition: { at: "2026-10-01T07:18:00.000Z", location: { type: "Point", coordinates: [12.6, 55.7] }, accuracyM: 8, speedKmh: 30, headingDeg: 90 },
+      eta: { nextPickupId: "01a0d2a4-a280-7031-8000-000000000002", nextAt: "2026-10-01T07:31:00.000Z", finishAt: "2026-10-01T09:05:00.000Z" },
+    }
+    assert.ok(LiveRoute.safeParse(tracked).success)
+    const record = liveRouteAdapter.toRecord(tracked, context())
+    assert.equal(record.facts["Last position"], "55.70000, 12.60000", "the recorded position, not the proof's point")
+    assert.equal(record.facts["Position freshness"], "2 minutes ago", "the position's age, not the device's")
+    assert.equal(record.facts["Position recorded"], "2026-10-01 09:18")
+    assert.equal(record.facts["Next stop expected"], "09:31")
+    assert.equal(record.facts["Expected finish"], "11:05")
+    assert.equal(record.submittedValues?.latitude, "55.7")
+    const done = liveRouteAdapter.toRecord({ ...tracked, eta: { nextPickupId: null, nextAt: null, finishAt: null } }, context())
+    assert.equal(done.facts["Next stop expected"], "No stop to come")
+    assert.equal(done.facts["Expected finish"], undefined)
+    assert.equal(liveRouteAdapter.toRecord(live, context()).facts["Next stop expected"], undefined, "a route without an active Plan says nothing of it")
+  })
+
+  test("a route's track and its estimates are read from the route, one row each", async () => {
+    const track = { routeId: live.id, sessionId: session.id, points: [], thinned: false }
+    const eta = { routeId: live.id, planId: null, computedAt: NOW.toISOString(), stops: [], finishAt: null }
+    const { fetch, calls } = scripted([() => json(track), () => json(eta)])
+    assert.deepEqual(await routeTrack(clientOver(fetch), live.id), [track])
+    assert.deepEqual(await routeEtas(clientOver(fetch), live.id), [eta])
+    assert.deepEqual(
+      calls.map((call) => call.url),
+      [`http://api.test/routes/${live.id}/positions`, `http://api.test/routes/${live.id}/eta`],
+    )
+  })
+
+  test("a track is drawn north up in its box, scaled to its extent, and needs two points", () => {
+    const point = (lon: number, lat: number) => ({ location: { coordinates: [lon, lat] as [number, number] } })
+    assert.equal(trackPath([], 100, 100), null)
+    assert.equal(trackPath([point(12.5, 55.7)], 100, 100), null)
+    // A due-north line: centred across, top to bottom.
+    assert.equal(trackPath([point(12.5, 55.7), point(12.5, 55.71)], 100, 100), "M50.0 100.0 L50.0 0.0")
+    const path = trackPath([point(12.5, 55.7), point(12.52, 55.7), point(12.52, 55.71)], 200, 100) ?? ""
+    assert.match(path, /^M\S+ \S+ L\S+ \S+ L\S+ \S+$/)
   })
 
   test("a route's sessions are read from /sessions, by route", async () => {
