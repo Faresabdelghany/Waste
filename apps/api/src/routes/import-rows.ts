@@ -4,7 +4,8 @@
 // and the write made through the family's own create or patch
 // (customer-writes.ts, property-writes.ts, container-writes.ts,
 // agreements.ts, and for the catalogue and the fleet catalogue.ts,
-// vehicle-types.ts, vehicles.ts and drivers.ts) —
+// vehicle-types.ts, vehicles.ts and drivers.ts, collection-calendars.ts and
+// planning-areas.ts) —
 // never a second writer, so an imported record is held to
 // every rule a form's is and a refusal says what a form's would.
 //
@@ -25,8 +26,9 @@
 // agreement by its number and its first day in the project; a subscription
 // by its product, its place and its first day under the agreement; a waste
 // fraction and a vehicle type by their key, a container type by its name, a
-// vehicle by its registration and a driver by the workforce reference
-// (O30 of #290). Other
+// vehicle by its registration, a driver by the workforce reference, a
+// collection calendar by its name and a planning area by its code (O30 of
+// #290). Other
 // records are named by the keys the template's column guide gives
 // (@waste/domain/imports/columns): a container type, a product and a shared
 // collection point by name, a price list by its code in force on the
@@ -46,10 +48,12 @@ import {
   SubscriptionPatch,
 } from "@waste/contracts/agreements"
 import { ContainerTypeCreate, ContainerTypePatch, WasteFractionCreate, WasteFractionPatch } from "@waste/contracts/catalogue"
+import { CollectionCalendarCreate, CollectionCalendarHolidaysSet, CollectionCalendarPatch } from "@waste/contracts/collection-calendars"
 import { ContainerCreate, ContainerPatch } from "@waste/contracts/containers"
 import { CustomerCreate, CustomerPatch, PropertyCreate, PropertyPartyRole, PropertyPatch, type PropertyParty } from "@waste/contracts/customers"
 import { IsoDate } from "@waste/contracts/dates"
 import { DriverCreate, DriverPatch, VehicleCreate, VehiclePatch } from "@waste/contracts/fleet"
+import { PlanningAreaBoundaryCreate, PlanningAreaCreate, PlanningAreaPatch } from "@waste/contracts/planning-areas"
 import { VehicleTypeCreate, VehicleTypePatch } from "@waste/contracts/vehicle-types"
 import type { ImportKind, ImportRowResult, ImportRowValues } from "@waste/contracts/imports"
 import type { Tx } from "@waste/db/client"
@@ -69,9 +73,11 @@ import { requireAllowed } from "../auth/require"
 import { ProblemError, refusedProblem } from "../problem"
 import { agreementStarting, createAgreement, createSubscription, patchAgreement, patchSubscription, subscriptionStarting } from "./agreements"
 import { containerTypeByName, createContainerType, createWasteFraction, patchContainerType, patchWasteFraction, wasteFractionByKey } from "./catalogue"
+import { calendarByName, createCalendar, patchCalendar, replaceCalendarHolidays } from "./collection-calendars"
 import { containerByLabel, containerOf, createContainer, findContainer, patchContainer } from "./container-writes"
 import { createCustomer, customersByKey, patchCustomer } from "./customer-writes"
 import { createDriver, driverByWorkforceReference, patchDriver } from "./drivers"
+import { addPlanningAreaBoundary, createPlanningArea, patchPlanningArea, patchPlanningAreaBoundary, planningAreaByCode } from "./planning-areas"
 import { createProperty, patchProperty, propertiesAt, propertyWithParties, setPropertyParties } from "./property-writes"
 import { createVehicleType, patchVehicleType, replaceVehicleTypeContainerTypes, vehicleTypeByKey } from "./vehicle-types"
 import { createVehicle, patchVehicle, replaceVehicleCompartments, vehicleByRegistration } from "./vehicles"
@@ -87,6 +93,8 @@ export const IMPORT_MODULES: Readonly<Record<ImportKind, ModuleKey>> = {
   "vehicle-types": "configure.master",
   vehicles: "fleet.vehicles",
   drivers: "fleet.drivers",
+  "collection-calendars": "configure.calendars",
+  "planning-areas": "configure.areas",
 }
 
 /** What a row is written in: the request's transaction, the caller, and the project the file is imported into (none for Customers). */
@@ -173,6 +181,9 @@ const DRIVER_COLUMNS: Columns = {
   status: "status",
   notes: "notes",
 }
+const CALENDAR_COLUMNS: Columns = { name: "calendar", validFrom: "valid from", validTo: "valid to", holidays: "day" }
+const AREA_COLUMNS: Columns = { code: "code", name: "name", purpose: "purpose", boundary: "boundary" }
+const BOUNDARY_COLUMNS: Columns = { boundary: "boundary", validFrom: "valid from", validTo: "valid to" }
 const SUBSCRIPTION_COLUMNS: Columns = {
   productId: "product",
   propertyId: "property",
@@ -853,6 +864,102 @@ async function importDriver(context: ImportContext, cells: Cells): Promise<Writt
   return { outcome: "updated", resourceId: current.id }
 }
 
+// Collection calendars and planning areas (O30 of #290, row 1.18) -----------
+//
+// A project's. A calendar is matched on its name in the project, and a row is
+// the calendar with at most one of its holidays: the period the row gives
+// moves the calendar's, and the holiday is added, or renamed where the
+// calendar has its day already — never removed, since a file of holidays
+// names the ones it has and not the ones it lacks. A planning area is matched
+// on its code, the reference the rest of the system quotes and set once, and
+// a row is the area with at most one version of its boundary, the polygon
+// from a day: the version starting that day is redrawn where there is one,
+// and otherwise a new version starts, ending the one open before it so the
+// two meet, as a person drawing a new outline would.
+
+/** One holiday as a calendar holds it. */
+type HolidayCells = { day: string; name: string | null }
+
+async function importCalendar(context: ImportContext, cells: Cells): Promise<Written> {
+  const { tx, principal } = context
+  const projectId = projectOf(context)
+  const name = required(cells, "calendar")
+  const validFrom = day(cells, "valid from") ?? required(cells, "valid from")
+  const validTo = day(cells, "valid to")
+  const holidayDay = day(cells, "day")
+  if (holidayDay === undefined && cells.holiday !== undefined) throw refuse("day", "give the holiday's day")
+  const holiday: HolidayCells | undefined = holidayDay === undefined ? undefined : { day: holidayDay, name: cells.holiday ?? null }
+  const current = await calendarByName(tx, principal, projectId, name)
+  if (current === undefined) {
+    const body = parsed(CollectionCalendarCreate, { projectId, name, validFrom, validTo, holidays: holiday === undefined ? [] : [holiday] }, CALENDAR_COLUMNS)
+    requireAllowed(principal.grants, IMPORT_MODULES["collection-calendars"], "create")
+    return { outcome: "created", resourceId: (await step(CALENDAR_COLUMNS, () => createCalendar(tx, principal, body))).id }
+  }
+  const given = givenFields(cells, CALENDAR_COLUMNS)
+  given.delete("name")
+  given.delete("holidays")
+  const patch = changes(current, { validFrom, validTo }, given)
+  const stored = current.holidays.find((candidate) => candidate.day === holiday?.day)
+  const holidayMoved = holiday !== undefined && (stored === undefined || (cells.holiday !== undefined && stored.name !== holiday.name))
+  if (isEmpty(patch) && !holidayMoved) return { outcome: "unchanged", resourceId: current.id }
+  requireAllowed(principal.grants, IMPORT_MODULES["collection-calendars"], "edit")
+  if (!isEmpty(patch)) await step(CALENDAR_COLUMNS, () => patchCalendar(tx, principal, current.id, parsed(CollectionCalendarPatch, patch, CALENDAR_COLUMNS)))
+  if (holidayMoved) {
+    const holidays = [...current.holidays.filter((candidate) => candidate.day !== holiday.day), holiday]
+    await step(CALENDAR_COLUMNS, () => replaceCalendarHolidays(tx, principal, current.id, parsed(CollectionCalendarHolidaysSet, { holidays }, CALENDAR_COLUMNS).holidays))
+  }
+  return { outcome: "updated", resourceId: current.id }
+}
+
+/** The boundary cell read as the GeoJSON it holds; the row's refusal at the column where it is not JSON. Its shape is the schema's to judge. */
+function boundaryCell(cells: Cells): unknown {
+  const text = cells.boundary
+  if (text === undefined) return undefined
+  try {
+    return JSON.parse(text)
+  } catch {
+    throw refuse("boundary", "a GeoJSON Polygon")
+  }
+}
+
+/** Whether two polygons are one outline: their rings, position by position. */
+const sameOutline = (a: unknown, b: unknown): boolean => JSON.stringify((a as { coordinates?: unknown }).coordinates) === JSON.stringify((b as { coordinates?: unknown }).coordinates)
+
+async function importPlanningArea(context: ImportContext, cells: Cells): Promise<Written> {
+  const { tx, principal } = context
+  const projectId = projectOf(context)
+  const code = required(cells, "code")
+  required(cells, "name")
+  required(cells, "purpose")
+  const outline = boundaryCell(cells)
+  const validFrom = day(cells, "valid from")
+  const validTo = day(cells, "valid to")
+  if (outline !== undefined && validFrom === undefined) throw refuse("valid from", "give the boundary's first day")
+  const version = outline === undefined ? undefined : parsed(PlanningAreaBoundaryCreate, { boundary: outline, validFrom, validTo }, BOUNDARY_COLUMNS)
+  const current = await planningAreaByCode(tx, principal, projectId, code)
+  if (current === undefined) {
+    const body = parsed(PlanningAreaCreate, { projectId, code, name: cells.name, purpose: coded(cells.purpose), boundary: version }, AREA_COLUMNS)
+    requireAllowed(principal.grants, IMPORT_MODULES["planning-areas"], "create")
+    return { outcome: "created", resourceId: (await step(AREA_COLUMNS, () => createPlanningArea(tx, principal, body))).id }
+  }
+  const patch = changes(current.area, parsed(PlanningAreaPatch, { name: cells.name, purpose: coded(cells.purpose) }, AREA_COLUMNS), givenFields(cells, { name: "name", purpose: "purpose" }))
+  const starting = version === undefined ? undefined : current.boundaries.find((candidate) => candidate.validFrom === version.validFrom)
+  const redraw = version !== undefined && starting !== undefined && (!sameOutline(starting.boundary, version.boundary) || (validTo !== undefined && starting.validTo !== validTo))
+  const added = version !== undefined && starting === undefined
+  if (isEmpty(patch) && !redraw && !added) return { outcome: "unchanged", resourceId: current.area.id }
+  requireAllowed(principal.grants, IMPORT_MODULES["planning-areas"], "edit")
+  if (!isEmpty(patch)) await step(AREA_COLUMNS, () => patchPlanningArea(tx, principal, current.area.id, parsed(PlanningAreaPatch, patch, AREA_COLUMNS)))
+  if (redraw) await step(BOUNDARY_COLUMNS, () => patchPlanningAreaBoundary(tx, principal, starting.id, { boundary: version.boundary, ...(validTo === undefined ? {} : { validTo }) }))
+  if (added) {
+    // The version open across the new one's first day ends there, so the two meet; a later one is the file's to end, and the overlap's sentence says so.
+    const open = current.boundaries.find((candidate) => candidate.validFrom < version.validFrom && (candidate.validTo === null || candidate.validTo > version.validFrom))
+    if (open !== undefined) await step(BOUNDARY_COLUMNS, () => patchPlanningAreaBoundary(tx, principal, open.id, { validTo: version.validFrom }))
+    requireAllowed(principal.grants, IMPORT_MODULES["planning-areas"], "create")
+    await step(BOUNDARY_COLUMNS, () => addPlanningAreaBoundary(tx, principal, current.area.id, version))
+  }
+  return { outcome: "updated", resourceId: current.area.id }
+}
+
 // One row -----------------------------------------------------------------
 
 const IMPORTERS: Readonly<Record<ImportKind, (context: ImportContext, cells: Cells) => Promise<Written>>> = {
@@ -865,6 +972,8 @@ const IMPORTERS: Readonly<Record<ImportKind, (context: ImportContext, cells: Cel
   "vehicle-types": importVehicleType,
   vehicles: importVehicle,
   drivers: importDriver,
+  "collection-calendars": importCalendar,
+  "planning-areas": importPlanningArea,
 }
 
 /** A row's cells as they are read: each trimmed, an empty one no cell at all, as the browser's reader sends them (@waste/domain/imports/csv) and whoever else sends a row. */
@@ -901,6 +1010,10 @@ export function keyOf(kind: ImportKind, cells: Cells): string | null {
       return cells.registration === undefined ? null : `registration ${cells.registration}`
     case "drivers":
       return cells["workforce reference"] === undefined ? null : `workforce reference ${cells["workforce reference"]}`
+    case "collection-calendars":
+      return cells.calendar === undefined ? null : `calendar ${cells.calendar}${cells.day === undefined ? "" : `, ${cells.day}`}`
+    case "planning-areas":
+      return cells.code === undefined ? null : `code ${cells.code}${cells["valid from"] === undefined || cells.boundary === undefined ? "" : `, boundary from ${cells["valid from"]}`}`
   }
 }
 

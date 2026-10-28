@@ -10,7 +10,6 @@ import { readdir, readFile } from "node:fs/promises"
 import { join } from "node:path"
 import { describe, test } from "node:test"
 
-import { IMPORT_KINDS } from "@waste/domain/imports/vocabulary"
 import { generateMigration } from "drizzle-kit/api"
 
 import { MIGRATIONS_FOLDER } from "../migrate"
@@ -28,7 +27,10 @@ async function migrationName(): Promise<string> {
 type Snapshot = Parameters<typeof generateMigration>[0]
 const snapshot = async (n: string): Promise<Snapshot> => JSON.parse(await readFile(join(MIGRATIONS_FOLDER, "meta", `${n}_snapshot.json`), "utf8")) as Snapshot
 
-const KIND_ONE_OF = `ALTER TABLE "wms"."import_run" ADD CONSTRAINT "import_run_kind_one_of" CHECK (${ref("import_run", "kind")} in (${list(...IMPORT_KINDS)}));`
+/** The kinds the migration wrote: the four before it, the catalogue's three and the fleet's two; the calendars' and the areas' migration grew the list again. */
+const KINDS_AS_OF_0068 = ["customers", "properties", "containers", "agreements", "waste-fractions", "container-types", "vehicle-types", "vehicles", "drivers"]
+
+const KIND_ONE_OF = `ALTER TABLE "wms"."import_run" ADD CONSTRAINT "import_run_kind_one_of" CHECK (${ref("import_run", "kind")} in (${list(...KINDS_AS_OF_0068)}));`
 const PROJECT_SHAPE = `ALTER TABLE "wms"."import_run" ADD CONSTRAINT "import_run_project_shape" CHECK (${projectShape("0068")});`
 
 describe("the catalogue import's migration", () => {
@@ -43,8 +45,7 @@ describe("the catalogue import's migration", () => {
     assert.match(text, /^-- The CSV import of the catalogue and the fleet \(O30 of #290, row 1\.18\)/)
   })
 
-  test("the schema's checks are the ones the file adds", () => {
+  test("the schema's project check is the one the file adds", () => {
     assert.equal(checksOf(importRun).get("import_run_project_shape"), projectShape("0068"))
-    assert.equal(checksOf(importRun).get("import_run_kind_one_of"), `${ref("import_run", "kind")} in (${list(...IMPORT_KINDS)})`)
   })
 })

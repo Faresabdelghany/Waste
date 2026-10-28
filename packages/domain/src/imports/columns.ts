@@ -16,7 +16,11 @@
 // and the fleet: a vehicle by its registration, the company's, and a driver
 // by the workforce reference, the company's where given, which the import
 // therefore asks of every row. A depot is named by its name in the import's
-// project, a service provider by its registration number in the company.
+// project, a service provider by its registration number in the company. A
+// collection calendar is matched on its name in the project, a row a holiday
+// of it, which the import adds or renames and never removes; a planning area
+// on its code, a row an area with the version of its boundary from a day,
+// read from a GeoJSON file's features (`planningAreaRows`, ./geojson).
 // An empty cell leaves a field as it stands
 // when a row matches a record, and is no value when it makes one.
 
@@ -128,6 +132,21 @@ export const IMPORT_COLUMNS: Readonly<Record<ImportKind, readonly ImportColumn[]
     column("home depot", false, "The name of the project's depot they start from", "Nordhavn depot"),
     column("status", false, "active, inactive or suspended; active when empty", "active"),
     column("notes", false, "Notes for the office", ""),
+  ],
+  "collection-calendars": [
+    column("calendar", true, "The calendar's name, unique in the project; a calendar is matched on it", "Copenhagen 2027"),
+    column("valid from", true, "The calendar's first day, YYYY-MM-DD", "2027-01-01"),
+    column("valid to", false, "The first day it is no longer in force, YYYY-MM-DD; open when empty", "2028-01-01"),
+    column("day", false, "A holiday's day, YYYY-MM-DD, inside the calendar's period; a row without one writes the calendar alone", "2027-06-05"),
+    column("holiday", false, "The holiday's name", "Grundlovsdag"),
+  ],
+  "planning-areas": [
+    column("code", true, "The area's code, unique in the project and set once; an area is matched on it", "CPH-N"),
+    column("name", true, "The area's name, unique in the project", "Copenhagen North"),
+    column("purpose", true, "route-planning, service-operations or notification", "route-planning"),
+    column("boundary", false, "The area's outline as a GeoJSON Polygon, read from a GeoJSON file's feature", '{"type":"Polygon","coordinates":[[[12.5,55.7],[12.6,55.7],[12.6,55.8],[12.5,55.7]]]}'),
+    column("valid from", false, "The boundary's first day, YYYY-MM-DD; given with the boundary", "2027-01-01"),
+    column("valid to", false, "The first day the boundary is no longer in force, YYYY-MM-DD; open when empty", ""),
   ],
 }
 

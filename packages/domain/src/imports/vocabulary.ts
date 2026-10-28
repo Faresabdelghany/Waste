@@ -26,7 +26,7 @@
 // two.
 
 /** What a file imports. */
-export const IMPORT_KINDS = ["customers", "properties", "containers", "agreements", "waste-fractions", "container-types", "vehicle-types", "vehicles", "drivers"] as const
+export const IMPORT_KINDS = ["customers", "properties", "containers", "agreements", "waste-fractions", "container-types", "vehicle-types", "vehicles", "drivers", "collection-calendars", "planning-areas"] as const
 
 /** What became of one row. */
 export const IMPORT_ROW_OUTCOMES = ["created", "updated", "unchanged", "refused"] as const
@@ -36,6 +36,9 @@ export const IMPORT_BATCH_MAX = 50
 
 /** The most rows one file holds: what a run may be said to hold. */
 export const IMPORT_ROWS_MAX = 10_000
+
+/** The longest boundary a planning-area row may carry, as the GeoJSON of its polygon: some thousands of vertices, where every other cell is a paragraph's length. */
+export const IMPORT_BOUNDARY_MAX = 100_000
 
 /** The largest spreadsheet row number a row may carry: the database's integer. */
 export const IMPORT_ROW_NUMBER_MAX = 2_147_483_647

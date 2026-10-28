@@ -1,9 +1,11 @@
 // The CSV import on the wire (#291 slice 12, row 20.1): the company's
 // Customers, a project's Properties with their parties, a project's
-// containers, a project's Agreements with their Subscriptions, and the
-// company's catalogue — waste fractions, container types and vehicle types
-// (O30 of #290, row 1.18) — from a file the browser has read into rows
-// (@waste/domain/imports/csv).
+// containers, a project's Agreements with their Subscriptions, the company's
+// catalogue — waste fractions, container types and vehicle types — and a
+// project's vehicles, drivers, collection calendars and planning areas (O30 of
+// #290, row 1.18), from a file the browser has read into rows
+// (@waste/domain/imports/csv, and for the planning areas a GeoJSON file,
+// @waste/domain/imports/geojson).
 //
 // An import is a preview first and a commit after:
 //
@@ -31,7 +33,7 @@
 // person knows them by, never by id. The limits are the domain's
 // (@waste/domain/imports/vocabulary), which the browser reads a file
 // against before it sends a row.
-import { IMPORT_BATCH_MAX, IMPORT_KINDS, IMPORT_ROW_NUMBER_MAX, IMPORT_ROW_OUTCOMES, IMPORT_ROWS_MAX, isCompanyImportKind } from "@waste/domain/imports/vocabulary"
+import { IMPORT_BATCH_MAX, IMPORT_BOUNDARY_MAX, IMPORT_KINDS, IMPORT_ROW_NUMBER_MAX, IMPORT_ROW_OUTCOMES, IMPORT_ROWS_MAX, isCompanyImportKind } from "@waste/domain/imports/vocabulary"
 import * as z from "zod"
 
 import { IsoDateTime } from "./dates"
@@ -65,10 +67,20 @@ const projectFits = (body: { kind: ImportKind; projectId?: string }, context: z.
   if (message !== undefined) context.addIssue({ code: "custom", message, path: ["projectId"] })
 }
 
-/** One row of a file: its spreadsheet row number (the header is row 1) and its non-empty cells by column header. */
+/** The one column whose cell is longer than a paragraph: a planning area's boundary, its polygon's GeoJSON (O30 of #290). */
+export const BOUNDARY_COLUMN = "boundary"
+
+/** What a cell longer than its column takes is told. */
+export const cellTooLong = (max: number): string => `Too long: a cell holds at most ${max} characters`
+
+/** One row of a file: its spreadsheet row number (the header is row 1) and its non-empty cells by column header, each a paragraph's length at most, a boundary some thousands of vertices'. */
 export const ImportRowValues = z.strictObject({
   row: z.int().min(2).max(IMPORT_ROW_NUMBER_MAX),
-  values: z.record(z.string().min(1).max(200), z.string().max(IMPORT_CELL_MAX)),
+  values: z.record(z.string().min(1).max(200), z.string().max(IMPORT_BOUNDARY_MAX)).superRefine((values, context) => {
+    for (const [header, value] of Object.entries(values)) {
+      if (header !== BOUNDARY_COLUMN && value.length > IMPORT_CELL_MAX) context.addIssue({ code: "custom", message: cellTooLong(IMPORT_CELL_MAX), path: [header] })
+    }
+  }),
 })
 export type ImportRowValues = z.infer<typeof ImportRowValues>
 
