@@ -171,6 +171,8 @@ describe("planRoutes", () => {
     assert.equal(holidayReleases(held("2026-10-08"), shiftNext(restingWeekend), shiftNext(withHoliday)), true)
     // The holiday taken away again: a route held where the shift put it goes back with its neighbours.
     assert.equal(holidayReleases(held("2026-10-08", "2026-10-09"), shiftNext(withHoliday), shiftNext(restingWeekend)), true)
+    // A list renamed names its days anew and moves none of them.
+    assert.equal(holidayReleases(held("2026-10-08", "2026-10-09"), shiftNext(withHoliday), shiftNext({ ...withHoliday, holidays: new Map([["2026-10-08", "Renamed Day"]]) })), false)
     // A holiday on another day, or one collected on, moves nothing under it.
     assert.equal(holidayReleases(held("2026-10-12"), shiftNext(restingWeekend), shiftNext(withHoliday)), false)
     assert.equal(holidayReleases(held("2026-10-08"), { holidayPolicy: "collect", calendar: restingWeekend }, { holidayPolicy: "collect", calendar: withHoliday }), false)
