@@ -34,6 +34,7 @@ import { requireGrant } from "../auth/require"
 import { newId } from "../ids"
 import { afterCursor, fetchLimit, pageOf } from "../pagination"
 import { describeProblem, problem, validate } from "../problem"
+import { projectCalendarOf, releaseHolidayHolds } from "./route-holds"
 import { created, describeCreated, describeJson, IdParam, lockRow, refuseDuplicate, stampsOf } from "./shared"
 
 const MODULE = "configure.organization"
@@ -206,7 +207,7 @@ export function projectRoutes(guard: MiddlewareHandler<AuthEnv>) {
         operationId: "patchProject",
         summary: "Change a project",
         description:
-          "Changes one project of the caller's company; every field is optional and at least one must be given. `weekend` replaces the days the project rests on with the list given, each of the seven named at most once; `holidayList` renames the list its holidays are looked up under, or as null takes it away, and a project without one rests on its weekend only, whatever collection calendars it has. `publicSlug` publishes the project on the public door under that name (`GET /public/<slug>`, ADR-0010), unique across every company; null unpublishes it: its public pages answer 404 from the next request, and an answer someone cached before (they may keep one for a minute) runs out within that minute. `paymentTermsDays` and `paymentReferenceScheme` (#291 C4) date and reference the invoices its next run issues — an issued invoice keeps its own — and a FI card's scheme needs the company's creditor number (409, `Set the company's FIK creditor number first: a FI card names it`), under the company's row lock; `weightTolerancePercent` is how far a weighbridge's net may differ from what the stops weighed on board before an unload reads as above tolerance, in whole percent from 1 to 100 (5 when a project is made without one).",
+          "Changes one project of the caller's company; every field is optional and at least one must be given. `weekend` replaces the days the project rests on with the list given, each of the seven named at most once; `holidayList` renames the list its holidays are looked up under, or as null takes it away, and a project without one rests on its weekend only, whatever collection calendars it has. A change of `weekend`, or a `holidayList` set or taken away (a rename changes no day), releases in the same transaction the hold on each route the office moved by hand (`heldAt`) that the change re-decides — one standing where its scheme put the collection, when the change moves or skips that collection, and one the office moved to a day the change makes a holiday its scheme moves collections off — so the next generation run plans them with their neighbours (#226). `publicSlug` publishes the project on the public door under that name (`GET /public/<slug>`, ADR-0010), unique across every company; null unpublishes it: its public pages answer 404 from the next request, and an answer someone cached before (they may keep one for a minute) runs out within that minute. `paymentTermsDays` and `paymentReferenceScheme` (#291 C4) date and reference the invoices its next run issues — an issued invoice keeps its own — and a FI card's scheme needs the company's creditor number (409, `Set the company's FIK creditor number first: a FI card names it`), under the company's row lock; `weightTolerancePercent` is how far a weighbridge's net may differ from what the stops weighed on board before an unload reads as above tolerance, in whole percent from 1 to 100 (5 when a project is made without one).",
         security: BEARER_SECURITY,
         responses: {
           200: describeJson("The project as it now stands.", Project),
@@ -236,6 +237,8 @@ export function projectRoutes(guard: MiddlewareHandler<AuthEnv>) {
           ...(patch.name === undefined ? {} : { [NAME_TAKEN]: nameTaken(patch.name) }),
           ...(patch.publicSlug == null ? {} : { [SLUG_TAKEN]: slugTaken(patch.publicSlug) }),
         }
+        // The holiday inputs as they stand before the patch, where it changes them (#226): `holidayList` matters by whether it is set.
+        const holidayInputs = patch.weekend !== undefined || patch.holidayList !== undefined ? await projectCalendarOf(tx, companyId, id) : undefined
         const [row] = await refuseDuplicate(sentences, () =>
           c
             .get("tx")
@@ -245,6 +248,8 @@ export function projectRoutes(guard: MiddlewareHandler<AuthEnv>) {
             .returning(columns),
         )
         if (row === undefined) throw noSuchProject(id)
+        // The held routes the new weekend or list re-decides go back to their schemes (routes/route-holds.ts).
+        if (holidayInputs !== undefined) await releaseHolidayHolds(tx, companyId, id, { before: holidayInputs, after: await projectCalendarOf(tx, companyId, id) })
         return c.json(projectOf(row))
       },
     )
