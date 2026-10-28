@@ -41,7 +41,7 @@ import { pickupExceptionRule, pickupExceptionRuleStep } from "@waste/db/schema/p
 import { warehouse } from "@waste/db/schema/places"
 import { planningArea } from "@waste/db/schema/planning-areas"
 import { ticket, ticketBooking, ticketEvent } from "@waste/db/schema/resolution"
-import { collectionGroup, routeScheme } from "@waste/db/schema/route-schemes"
+import { collectionGroup, routeScheme, routeSchemeSeason } from "@waste/db/schema/route-schemes"
 import { withCompany } from "@waste/db/tenant"
 import type { PickupOrigin, PickupOutcome, PickupReason, PickupService, PickupStatus } from "@waste/domain/execution/vocabulary"
 import type { TicketKind, TicketResolution } from "@waste/domain/resolution/vocabulary"
@@ -436,6 +436,7 @@ export async function dropFinanceTenant(pool: Database, owner: Database, company
     await tx.delete(bulkySchedule).where(eq(bulkySchedule.companyId, companyId))
     await tx.delete(route).where(eq(route.companyId, companyId))
     await tx.delete(collectionGroup).where(eq(collectionGroup.companyId, companyId))
+    await tx.delete(routeSchemeSeason).where(eq(routeSchemeSeason.companyId, companyId))
     await tx.delete(routeScheme).where(eq(routeScheme.companyId, companyId))
     await tx.delete(warehouse).where(eq(warehouse.companyId, companyId))
     await tx.delete(vehicle).where(eq(vehicle.companyId, companyId))

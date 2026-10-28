@@ -78,7 +78,7 @@
 // answered as a 409 listing every sentence, and "no container on two groups
 // the same day", a 400 at the entry. Both are applied here to the shapes the
 // routes hand in, under the scheme's row lock the routes take first.
-import type { CollectionGroup, GenerationMatchStamp, RouteScheme, SchemeGeneration, StopMatchingRule } from "@waste/contracts/route-schemes"
+import type { CollectionGroup, GenerationMatchStamp, RouteScheme, SchemeGeneration, SchemeSeason, StopMatchingRule } from "@waste/contracts/route-schemes"
 import type { Tx } from "@waste/db/client"
 import { validOn } from "@waste/db/query/valid-on"
 import { containerType, wasteFraction } from "@waste/db/schema/catalogue"
@@ -120,6 +120,7 @@ import {
 } from "./references"
 import { schemeWarningsOf } from "./scheme-reconciliation"
 import { eachPresent, groupedBy, rowsPresent, whereNamed, type Named } from "./sets"
+import { seasonsOf } from "./scheme-seasons"
 import { instantOf, stamp, stampsOf, timeOf } from "./shared"
 import { refuseRetiredVehicle, refuseUnavailableDriver } from "./statuses"
 import { oneDay, refuseCrewsAway } from "./availability-rules"
@@ -187,7 +188,7 @@ export type GroupRow = Pick<typeof collectionGroup.$inferSelect, keyof typeof gr
 export const NEVER_GENERATED: SchemeGeneration = { lastGeneratedAt: null, groups: [] }
 
 /** The row on the wire, with the groups and the generation reading read for it. The coded fields are text with a CHECK in the database and an enum here; the vocabulary holds the two in lockstep. */
-export function schemeOf(row: SchemeRow, groups: CollectionGroup[], generation: SchemeGeneration, warnings: string[]): RouteScheme {
+export function schemeOf(row: SchemeRow, groups: CollectionGroup[], generation: SchemeGeneration, warnings: string[], seasons: SchemeSeason[]): RouteScheme {
   return {
     id: row.id,
     projectId: row.projectId,
@@ -205,6 +206,7 @@ export function schemeOf(row: SchemeRow, groups: CollectionGroup[], generation: 
     status: row.status as RouteSchemeStatus,
     depotId: row.depotId,
     unloadingStationId: row.unloadingStationId,
+    seasons,
     collectionGroups: groups,
     generation,
     warnings,
@@ -334,9 +336,11 @@ export async function schemesOf(tx: Tx, companyId: string, rows: readonly Scheme
   const found = await groupsOf(tx, companyId, rows.map((row) => row.id))
   const groups = new Map(rows.map((row) => [row.id, found.get(row.id) ?? []]))
   const generations = await generationsOf(tx, companyId, groups)
-  const read = rows.map((row) => ({ row, groups: groups.get(row.id) ?? [], generation: generations.get(row.id) ?? NEVER_GENERATED }))
+  // The seasons before the warnings: each is a cadence the scheme is judged at (O17 of #290).
+  const seasons = await seasonsOf(tx, companyId, rows.map((row) => row.id))
+  const read = rows.map((row) => ({ row, groups: groups.get(row.id) ?? [], generation: generations.get(row.id) ?? NEVER_GENERATED, seasons: seasons.get(row.id) ?? [] }))
   const warnings = await schemeWarningsOf(tx, companyId, read.map(({ row, ...rest }) => ({ ...row, ...rest })), now)
-  return read.map(({ row, groups, generation }) => schemeOf(row, groups, generation, warnings.get(row.id) ?? []))
+  return read.map(({ row, groups, generation, seasons }) => schemeOf(row, groups, generation, warnings.get(row.id) ?? [], seasons))
 }
 
 /** One scheme on the wire, read the way a page reads it. */

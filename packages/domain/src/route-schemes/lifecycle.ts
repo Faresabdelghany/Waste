@@ -305,6 +305,8 @@ export function schemeLiveAssessment(
             frequencyReconciliation: {
               frequency: recurrence.frequency,
               promises: servedFrequencyPromises(resolution.plans, containers, schemeFrequencyPromiseOfRecord),
+              // Every cadence of the year, the seasons' among them (O17 of #290), as the API judges them.
+              ...(recurrence.seasons === undefined ? {} : { seasons: recurrence.seasons }),
             },
           }
         : {}),

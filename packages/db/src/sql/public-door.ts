@@ -34,7 +34,7 @@ import { property } from "../schema/customers"
 import { route } from "../schema/execution"
 import { generationMatch } from "../schema/generation"
 import { project } from "../schema/organisation"
-import { collectionGroup, collectionGroupContainer, routeScheme } from "../schema/route-schemes"
+import { collectionGroup, collectionGroupContainer, routeScheme, routeSchemeSeason } from "../schema/route-schemes"
 import { sortingGuideItem } from "../schema/sorting-guide"
 
 const HELPER = "publicDoor"
@@ -223,9 +223,23 @@ export const SUBSCRIPTION_PAUSE_DOOR: readonly PublicDoorTable[] = [
   },
 ]
 
+/**
+ * What a scheme's Seasons (O17 of #290) open to the collection days: a
+ * season's days and cadence under its scheme, so a resident is told the dates
+ * generation will plan in winter as in summer. The keys the read is fenced by
+ * and the season's own columns, nothing else.
+ */
+export const SEASONS_DOOR: readonly PublicDoorTable[] = [
+  {
+    table: routeSchemeSeason,
+    columns: [routeSchemeSeason.companyId, routeSchemeSeason.projectId, routeSchemeSeason.routeSchemeId, routeSchemeSeason.name, routeSchemeSeason.startsOn, routeSchemeSeason.endsOn, routeSchemeSeason.frequency, routeSchemeSeason.weekRotation],
+    rows: inPublishedProject("route_scheme_season"),
+  },
+]
+
 export const PUBLIC_DOOR_TABLES: readonly { table: PgTable; columns: readonly PgColumn[] }[] = (() => {
   const merged = new Map<PgTable, PgColumn[]>()
-  for (const { table, columns } of [...SORTING_GUIDE_DOOR, ...COLLECTION_DAYS_DOOR, ...SUBSCRIPTION_PAUSE_DOOR, ...DROP_OFF_DOOR]) merged.set(table, [...(merged.get(table) ?? []), ...columns])
+  for (const { table, columns } of [...SORTING_GUIDE_DOOR, ...COLLECTION_DAYS_DOOR, ...SUBSCRIPTION_PAUSE_DOOR, ...DROP_OFF_DOOR, ...SEASONS_DOOR]) merged.set(table, [...(merged.get(table) ?? []), ...columns])
   return [...merged].map(([table, columns]) => ({ table, columns }))
 })()
 
@@ -284,3 +298,6 @@ export const subscriptionPauseDoorStatements = (): string[] => [...publicGrantSt
 
 /** What the Drop-off Points' migration writes: the grants, then the policies. */
 export const dropOffDoorStatements = (): string[] => [...publicGrantStatements(DROP_OFF_DOOR), ...publicPolicyStatements(DROP_OFF_DOOR)]
+
+/** What the seasons' migration carries for the door (O17 of #290), below the table's own statements: its grant, then its policy. */
+export const seasonsDoorStatements = (): string[] => [...publicGrantStatements(SEASONS_DOOR), ...publicPolicyStatements(SEASONS_DOOR)]

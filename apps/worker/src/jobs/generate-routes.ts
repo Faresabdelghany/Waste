@@ -107,7 +107,7 @@ import { containerTypeVehicleType } from "@waste/db/schema/fleet-types"
 import { pickup, route } from "@waste/db/schema/execution"
 import { generationMatch, generationRun } from "@waste/db/schema/generation"
 import { company, project } from "@waste/db/schema/organisation"
-import { collectionGroup, collectionGroupContainer, collectionGroupContainerType, collectionGroupFraction, routeScheme } from "@waste/db/schema/route-schemes"
+import { collectionGroup, collectionGroupContainer, collectionGroupContainerType, collectionGroupFraction, routeScheme, routeSchemeSeason } from "@waste/db/schema/route-schemes"
 import { withCompany } from "@waste/db/tenant"
 import { REGENERATION_CANCEL, type PickupOrigin, type PickupReason, type PickupService, type PickupStatus, type RouteStatus } from "@waste/domain/execution/vocabulary"
 import {
@@ -129,7 +129,7 @@ import {
   type RouteDecision,
   type StopGroup,
 } from "@waste/domain/planning/generation"
-import type { HolidayPolicy, RecurrenceFrequency, ServiceDay, StopSource, WeekRotation } from "@waste/domain/planning/vocabulary"
+import type { HolidayPolicy, RecurrenceFrequency, SeasonFrequency, ServiceDay, StopSource, WeekRotation } from "@waste/domain/planning/vocabulary"
 import { crewLeftOff, crewOnDay, heldCrewAway, type AwayPeriod } from "@waste/domain/resources/availability"
 import { SHIFT_SEARCH_DAYS } from "@waste/domain/route-schemes/occurrences"
 import { addDays } from "@waste/domain/route-schemes/recurrence"
@@ -244,12 +244,19 @@ async function generate(tx: Tx, runId: string, companyId: string, at: Date): Pro
   const [calendar] = await tx.select({ weekend: project.weekend, holidayList: project.holidayList }).from(project).where(and(eq(project.companyId, companyId), eq(project.id, scheme.projectId)))
   if (calendar === undefined) throw new Error(`no project ${scheme.projectId} for route scheme ${scheme.id}`)
   const window = { from: run.windowFrom, to: run.windowTo }
+  // The scheme's seasons (O17 of #290): the cadence for part of every year, which the occurrences apply as the API's read does.
+  const seasons = await tx
+    .select({ name: routeSchemeSeason.name, startsOn: routeSchemeSeason.startsOn, endsOn: routeSchemeSeason.endsOn, frequency: routeSchemeSeason.frequency, weekRotation: routeSchemeSeason.weekRotation })
+    .from(routeSchemeSeason)
+    .where(and(eq(routeSchemeSeason.companyId, companyId), eq(routeSchemeSeason.routeSchemeId, scheme.id)))
+    .orderBy(asc(routeSchemeSeason.startsOn))
   const recurrence = schemeRecurrenceOf({
     frequency: scheme.frequency as RecurrenceFrequency,
     serviceDays: scheme.serviceDays as ServiceDay[],
     weekRotation: scheme.weekRotation as WeekRotation | null,
     validFrom: scheme.validFrom,
     validTo: scheme.validTo,
+    seasons: seasons.map((season) => ({ ...season, frequency: season.frequency as SeasonFrequency, weekRotation: season.weekRotation as WeekRotation | null })),
   })
   const holidayRows =
     calendar.holidayList === null

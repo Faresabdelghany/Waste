@@ -63,6 +63,7 @@ const scheme = {
   status: "validated",
   depotId: FOURTH,
   unloadingStationId: null,
+  seasons: [],
   collectionGroups: [ruleGroup, manualGroup],
   generation: { lastGeneratedAt: null, groups: [] },
   warnings: [],
@@ -232,11 +233,11 @@ describe("RouteSchemeCreate", () => {
     collectionGroups: [group],
     validFrom: "2026-01-01",
   }
-  const defaults = { holidayPolicy: "skip", editPolicy: "ask", planAhead: true, status: "draft" }
+  const defaults = { holidayPolicy: "skip", editPolicy: "ask", planAhead: true, status: "draft", seasons: [] }
 
   test("defaults the policies, plan ahead and the status, says so in the schema, and mints nothing", () => {
     assert.deepEqual(RouteSchemeCreate.parse(body), { ...body, ...defaults })
-    for (const key of ["holidayPolicy", "editPolicy", "planAhead", "status"] as const) assert.ok(RouteSchemeCreate.shape[key].description, key)
+    for (const key of ["holidayPolicy", "editPolicy", "planAhead", "status", "seasons"] as const) assert.ok(RouteSchemeCreate.shape[key].description, key)
     assert.match(RouteSchemeCreate.shape.status.description ?? "", /draft/)
     refusesWhatTheServerOwns(RouteSchemeCreate, body)
   })

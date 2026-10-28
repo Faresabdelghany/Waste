@@ -3,6 +3,9 @@
 // holiday". The guided setup's next-dates preview (step 2) and route
 // generation (generation.ts) both call generateOccurrences, so a preview row
 // and a generated route for the same scheme and window agree by construction.
+// A scheme's seasons (seasons.ts, O17 of #290) change its cadence for part of
+// each year inside matchesRecurrence, and each row names the season its
+// recurrence date fell in.
 // Pure date math — no UI, store, or fixture dependencies.
 //
 // Holiday policies:
@@ -29,6 +32,7 @@ import {
   type SchemeRecurrence,
   type ServiceDay,
 } from "./recurrence"
+import { seasonOn } from "./seasons"
 
 // The list lives in ../planning/vocabulary since Issue #97, where the database
 // and the contracts read it too; re-exported so its importers did not move.
@@ -77,6 +81,8 @@ export type Occurrence = {
   status: OccurrenceStatus
   /** Holiday name for shifted, skipped, and holiday rows. */
   note?: string
+  /** The season the recurrence date fell in (O17 of #290), by name; absent outside every season. */
+  season?: string
 }
 
 export type OccurrenceWindow = { from: string; to: string }
@@ -178,18 +184,21 @@ export function generateOccurrences(input: GenerateOccurrencesInput): Occurrence
 
   for (let cursor = occurrenceWindow.from; cursor <= occurrenceWindow.to; cursor = addDays(cursor, 1)) {
     if (!matchesRecurrence(recurrence, cursor)) continue
+    // The season is the recurrence date's, which a shift does not move.
+    const season = seasonOn(recurrence.seasons, cursor)
+    const inSeason = season === undefined ? {} : { season: season.name }
     const note = calendar.holidays.get(cursor)
     if (note === undefined) {
-      rows.push({ n: null, date: cursor, plannedDate: cursor, week: isoWeek(cursor), status: "planned" })
+      rows.push({ n: null, date: cursor, plannedDate: cursor, week: isoWeek(cursor), status: "planned", ...inSeason })
       continue
     }
     if (holidayPolicy === "collect") {
-      rows.push({ n: null, date: cursor, plannedDate: cursor, week: isoWeek(cursor), status: "holiday", note })
+      rows.push({ n: null, date: cursor, plannedDate: cursor, week: isoWeek(cursor), status: "holiday", note, ...inSeason })
     } else if (holidayPolicy === "skip") {
-      rows.push({ n: null, date: cursor, plannedDate: cursor, week: isoWeek(cursor), status: "skipped", note })
+      rows.push({ n: null, date: cursor, plannedDate: cursor, week: isoWeek(cursor), status: "skipped", note, ...inSeason })
     } else {
       const shifted = shiftToWorkingDay(calendar, cursor, holidayPolicy === "shift-next" ? 1 : -1)
-      rows.push({ n: null, date: shifted, plannedDate: cursor, week: isoWeek(shifted), status: "shifted", note })
+      rows.push({ n: null, date: shifted, plannedDate: cursor, week: isoWeek(shifted), status: "shifted", note, ...inSeason })
     }
   }
 

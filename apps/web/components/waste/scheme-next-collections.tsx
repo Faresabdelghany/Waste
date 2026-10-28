@@ -11,6 +11,7 @@ import { useEffect, useState } from "react"
 
 import type { Occurrence } from "@waste/contracts/route-schemes"
 import { addDays, formatServiceDate, todayIso } from "@waste/domain/route-schemes/recurrence"
+import { SCHEME_SEASONS_KEY } from "@waste/domain/route-schemes/scheme-seasons"
 
 import { Badge } from "@/components/ui/badge"
 import { Table, TableBody, TableCell, TableHead, TableHeader, TableRow } from "@/components/ui/table"
@@ -39,7 +40,7 @@ type Loaded = { key: string; rows: Occurrence[] } | { key: string; problem: stri
 const NO_ROWS: Occurrence[] = []
 
 /** What an occurrence depends on in a scheme's values: a change of any reads the dates again. */
-const OCCURRENCE_KEYS = ["frequency", "weekRotation", "serviceDays", "effectiveFrom", "effectiveTo", "holidayPolicy", "projectId"] as const
+const OCCURRENCE_KEYS = ["frequency", "weekRotation", "serviceDays", "effectiveFrom", "effectiveTo", "holidayPolicy", "projectId", SCHEME_SEASONS_KEY] as const
 
 export function SchemeNextCollections({ record }: { record: BusinessRecord }) {
   const recordId = record.id
@@ -65,6 +66,8 @@ export function SchemeNextCollections({ record }: { record: BusinessRecord }) {
 
   const current = loaded?.key === key ? loaded : null
   const { page, setPage, pageCount, pageRows, totalCount } = useTablePagination(current !== null && "rows" in current ? current.rows : NO_ROWS)
+  // The Season column stands only for a scheme some of whose dates fall in a season (O17 of #290).
+  const seasonal = current !== null && "rows" in current && current.rows.some((row) => row.season !== undefined)
 
   return (
     <section className="space-y-3 rounded-xl border border-border/60 p-4" aria-labelledby="scheme-next-collections">
@@ -94,6 +97,7 @@ export function SchemeNextCollections({ record }: { record: BusinessRecord }) {
                 <TableHead className="w-12">#</TableHead>
                 <TableHead>Date</TableHead>
                 <TableHead>Week</TableHead>
+                {seasonal && <TableHead>Season</TableHead>}
                 <TableHead>Status</TableHead>
                 <TableHead>Note</TableHead>
               </TableRow>
@@ -104,6 +108,7 @@ export function SchemeNextCollections({ record }: { record: BusinessRecord }) {
                   <TableCell className="tabular-nums text-muted-foreground">{row.n ?? "—"}</TableCell>
                   <TableCell>{formatServiceDate(row.date)}</TableCell>
                   <TableCell className="tabular-nums">{row.week}</TableCell>
+                  {seasonal && <TableCell className="text-muted-foreground">{row.season ?? "—"}</TableCell>}
                   <TableCell>
                     <Badge variant={row.status === "planned" ? "secondary" : "outline"}>{STATUS_LABELS[row.status]}</Badge>
                   </TableCell>

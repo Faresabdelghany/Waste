@@ -17,7 +17,10 @@
 // subscription's product's, the coalesce routes/containers.ts answers as
 // `effectiveServiceFrequencyId`, read on the day the scheme is judged from —
 // the day its period starts or today on the project's clock, whichever is
-// later, and its last day in force for a scheme that has ended. The interval
+// later, and its last day in force for a scheme that has ended. Every cadence
+// the scheme runs at in a year is judged against that promise — its own, and
+// each of its seasons' (O17 of #290), named — so a winter that breaks it warns
+// in May, when it is written. The interval
 // is turned into collections per week by
 // @waste/domain/service-frequencies `intervalCollectionsPerWeek` and the
 // sentences are @waste/domain/route-schemes/validation's, the ones the
@@ -25,7 +28,7 @@
 //
 // A page costs one statement for the projects' timezones and one per day the
 // page's schemes are judged on (today, for a page of schemes in force).
-import type { CollectionGroup, SchemeGeneration } from "@waste/contracts/route-schemes"
+import type { CollectionGroup, SchemeGeneration, SchemeSeason } from "@waste/contracts/route-schemes"
 import type { Tx } from "@waste/db/client"
 import { dayInTimezone } from "@waste/db/commands/days"
 import { validOn } from "@waste/db/query/valid-on"
@@ -35,6 +38,7 @@ import { container, containerServicePlacement } from "@waste/db/schema/container
 import { project } from "@waste/db/schema/organisation"
 import type { RecurrenceFrequency, ServiceDay } from "@waste/domain/planning/vocabulary"
 import { addDays } from "@waste/domain/route-schemes/recurrence"
+import { schemeSeasonsOf } from "@waste/domain/route-schemes/scheme-seasons"
 import { schemeFrequencyReconciliationWarnings, servedFrequencyPromises } from "@waste/domain/route-schemes/validation"
 import { intervalCollectionsPerWeek } from "@waste/domain/service-frequencies"
 import { and, eq, inArray, sql } from "drizzle-orm"
@@ -48,6 +52,8 @@ export type SchemeToReconcile = {
   validTo: string | null
   groups: readonly CollectionGroup[]
   generation: SchemeGeneration
+  /** The scheme's seasons (O17 of #290), each a cadence judged beside the scheme's own. */
+  seasons?: readonly SchemeSeason[]
 }
 
 /** One container's promise on a day: its label, and its effective frequency's name and interval, null where it has none. */
@@ -138,7 +144,7 @@ export async function schemeWarningsOf(tx: Tx, companyId: string, schemes: reado
         const promisedRate = intervalCollectionsPerWeek(row)
         return row.name === null || promisedRate === null ? null : { containerName: row.label, promisedName: row.name, promisedRate }
       })
-      warnings.set(scheme.id, schemeFrequencyReconciliationWarnings({ frequency: scheme.frequency as RecurrenceFrequency, promises }))
+      warnings.set(scheme.id, schemeFrequencyReconciliationWarnings({ frequency: scheme.frequency as RecurrenceFrequency, promises, seasons: schemeSeasonsOf(scheme.seasons ?? []) }))
     }
   }
   return warnings
