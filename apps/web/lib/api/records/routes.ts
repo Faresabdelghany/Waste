@@ -43,6 +43,12 @@
 // distance and duration as the route's facts, the route's Plans as its
 // history (`routePlans`), the service provider on Assign, a reschedule onto a
 // non-working day only when the dialog says so, and the cancel's reason code.
+//
+// Since O23 of #290 a route's open stops move onto another route of its
+// project (`MOVE_STOPS`), split off onto a new route of its day
+// (`SPLIT_ROUTE`, which answers the new route and so has this one read back),
+// or come over from a route merged into it (`MERGE_ROUTE`); each reads the
+// routes again, since another route than the one it is sent on changed.
 import type { DriverCommandReceipt } from "@waste/contracts/driver-commands"
 import type { PickupDetail } from "@waste/contracts/pickups"
 import type { OptimiseAnswer, Plan } from "@waste/contracts/plans"
@@ -89,6 +95,8 @@ export function routesWindowFrom(now = new Date()): string {
 
 // The modules a route's command changes the rows of too, spelled here: their own constants sit in files built on this one (live.ts, pickups.ts).
 const LIVE_KEY = moduleKeyOf(ROUTES_MODULE.workspaceId, "live")
+/** The routes themselves: a move, a split or a merge changes another route than the one it is sent on, or makes one. */
+const ROUTES_KEY = moduleKeyOf(ROUTES_MODULE.workspaceId, ROUTES_MODULE.moduleId)
 const PICKUPS_KEY = moduleKeyOf(ROUTES_MODULE.workspaceId, "pickups")
 /** The bulky bookings (O11 of #290): a stop added for one routes it, and a stop of one skipped books it again. */
 const BULKY_KEY = moduleKeyOf("operate", "bulky-bookings")
@@ -105,6 +113,12 @@ export const RELEASE_HOLD = "release-hold"
 export const ADD_STOP = "add-stop"
 /** The office's ask for a Plan over the route's open stops (O5 of #290): the optimiser's order, or a measured baseline where it cannot take the route. */
 export const OPTIMISE_ROUTE = "optimise"
+/** Open stops moved onto another route of the project (O23 of #290). */
+export const MOVE_STOPS = "move-stops"
+/** Open stops split off onto a new ad-hoc route of the day (O23 of #290). */
+export const SPLIT_ROUTE = "split"
+/** Another route's open stops merged onto this one, that route cancelled as merged (O23 of #290). */
+export const MERGE_ROUTE = "merge"
 
 /** What an ad-hoc route says it is, under its Origin fact (#111): the office's own, with no scheme. */
 export const MADE_BY_THE_OFFICE = "Made by the office"
@@ -272,6 +286,9 @@ const onRoute = (path: string, verb: string, toBody?: RecordCommand<Route>["toBo
   touches,
 })
 
+/** What a move, a split or a merge changes beside the route it is sent on: the other route, or the new one, the stops on both, the Live board, and a bulky booking whose stop moved. */
+const STOPS_MOVED = [ROUTES_KEY, PICKUPS_KEY, LIVE_KEY, BULKY_KEY]
+
 export const ROUTE_COMMANDS = {
   [ASSIGN_ROUTE]: onRoute("assign", "assigned", (input, record, context) => {
     const body: Record<string, string | null> = {}
@@ -354,7 +371,60 @@ export const ROUTE_COMMANDS = {
     // The stops list each one's sequence (#219), which the new order moves.
     touches: [PICKUPS_KEY, LIVE_KEY],
   },
+  // Open stops onto another route (O23 of #290): the API answers this route, the stops gone; the other route, the stops and the Live board are read again.
+  [MOVE_STOPS]: {
+    toBody: (input, _record, context) => {
+      const stops = movedStops(input, context)
+      if (!("pickupIds" in stops)) return stops
+      const toRouteId = otherRouteOf(input, "toRouteId", context)
+      return typeof toRouteId === "string" ? { ...stops, toRouteId } : toRouteId
+    },
+    run: (client, serverId, body) => command<RouteDetail>(client, `/routes/${serverId}/move-stops`, body),
+    refused: (record) => `No stop of ${record.name} was moved`,
+    touches: STOPS_MOVED,
+  },
+  // Open stops onto a new route of the day (O23 of #290): the API answers the new route, so this one is read back, and the routes with it.
+  [SPLIT_ROUTE]: {
+    toBody: (input, _record, context) => {
+      const stops = movedStops(input, context)
+      if (!("pickupIds" in stops)) return stops
+      const note = said(input, "note")
+      return note === undefined ? stops : { ...stops, note }
+    },
+    run: async (client, serverId, body) => {
+      await create<RouteDetail>(client, `/routes/${serverId}/split`, body)
+      return routeDetail(client, serverId)
+    },
+    refused: (record) => `${record.name} was not split`,
+    touches: STOPS_MOVED,
+  },
+  // Another route's open stops onto this one, that route cancelled as merged (O23 of #290): the API answers this route.
+  [MERGE_ROUTE]: {
+    toBody: (input, _record, context) => {
+      const routeId = otherRouteOf(input, "routeId", context)
+      return typeof routeId === "string" ? { routeId } : routeId
+    },
+    run: (client, serverId, body) => command<RouteDetail>(client, `/routes/${serverId}/merge`, body),
+    refused: (record) => `Nothing was merged into ${record.name}`,
+    touches: STOPS_MOVED,
+  },
 } satisfies Record<string, RecordCommand<Route>>
+
+/** The open stops a move or a split names, each by server id; a refusal where none is picked or one is not a stop the API holds. */
+function movedStops(input: Record<string, unknown>, context: MappingContext): { pickupIds: string[] } | ReturnType<typeof refusal> {
+  const ids = Array.isArray(input.pickupIds) ? input.pickupIds.filter((id): id is string => typeof id === "string") : []
+  if (ids.length === 0) return refusal("pickupIds", "Pick the stops to move")
+  const serverIds = ids.map((id) => referencedServerId(id, PICKUP_PREFIX, context, { owns: hasPrefix(PICKUP_PREFIX) }))
+  if (serverIds.some((id) => id === undefined)) return refusal("pickupIds", "Pick stops the API holds for this route")
+  return { pickupIds: serverIds as string[] }
+}
+
+/** The other route a move goes to or a merge takes in, by server id; a refusal where none is picked or it is not a route the API holds. */
+function otherRouteOf(input: Record<string, unknown>, field: "toRouteId" | "routeId", context: MappingContext): string | ReturnType<typeof refusal> {
+  const picked = said(input, field)
+  if (picked === undefined) return refusal(field, "Pick the other route")
+  return referencedServerId(picked, ROUTE_PREFIX, context, { owns: hasPrefix(ROUTE_PREFIX) }) ?? refusal(field, "Pick a route the API holds")
+}
 
 const isOfficeStopService = (value: string): value is OfficeStopService => (OFFICE_STOP_SERVICES as readonly string[]).includes(value)
 
@@ -537,7 +607,7 @@ export function routeCommandLog(client: Client, serverId: string): Promise<Drive
   return listAll<DriverCommandReceipt>(client, `/routes/${serverId}/commands`)
 }
 
-const CHANGED_BY_COMMANDS = "A route is changed by its commands: assign, dispatch, reschedule, release its hold, cancel, add a stop, optimise or reorder its stops"
+const CHANGED_BY_COMMANDS = "A route is changed by its commands: assign, dispatch, reschedule, release its hold, cancel, add a stop, move its stops, split or merge it, optimise or reorder its stops"
 
 export const routeAdapter: ResourceAdapter<Route> = {
   prefix: ROUTE_PREFIX,

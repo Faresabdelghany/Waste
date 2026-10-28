@@ -104,8 +104,8 @@ const hoursShape = (table: string) => `CONSTRAINT "${table}_hours_shape" CHECK (
 
 const shiftWindow = (start: string, end: string) => `(${ref("driver", start)} is null) = (${ref("driver", end)} is null) and (${ref("driver", start)} is null or ${ref("driver", end)} > ${ref("driver", start)})`
 
-/** driver as 0007 made it, and as drizzle-kit writes it since 0055 (O14 of #290), with the shift, its break and their checks. */
-const driverTable = (asOf: "0007" | "0055"): string =>
+/** driver as 0007 made it, and as drizzle-kit writes it since 0056 (O14 of #290), with the shift, its break and their checks. */
+const driverTable = (asOf: "0007" | "0056"): string =>
   createTable("driver", "project", [
     '"name" text NOT NULL',
     '"workforce_reference" text',
@@ -118,9 +118,9 @@ const driverTable = (asOf: "0007" | "0055"): string =>
     '"user_account_id" uuid',
     '"status" text NOT NULL',
     '"notes" text',
-    ...(asOf >= "0055" ? ['"shift_start" time', '"shift_end" time', '"break_minutes" integer', '"break_window_start" time', '"break_window_end" time'] : []),
+    ...(asOf >= "0056" ? ['"shift_start" time', '"shift_end" time', '"break_minutes" integer', '"break_window_start" time', '"break_window_end" time'] : []),
     uniqueKey("driver_project_key", "company_id", "project_id", "id"),
-    ...(asOf >= "0055"
+    ...(asOf >= "0056"
       ? [
           `CONSTRAINT "driver_shift_window" CHECK (${shiftWindow("shift_start", "shift_end")})`,
           `CONSTRAINT "driver_break_window" CHECK (${shiftWindow("break_window_start", "break_window_end")})`,
@@ -134,8 +134,8 @@ const driverTable = (asOf: "0007" | "0055"): string =>
     providerShape("driver", "employment"),
   ])
 
-/** What 0055 changed (O14 of #290): the driver's CREATE TABLE as drizzle-kit generates it now onto what 0007 says; time-windows-rendering.test.ts pins the statements. */
-const CHANGED_IN_0055 = new Map([[driverTable("0055"), driverTable("0007")]])
+/** What 0056 changed (O14 of #290): the driver's CREATE TABLE as drizzle-kit generates it now onto what 0007 says; time-windows-rendering.test.ts pins the statements. */
+const CHANGED_IN_0056 = new Map([[driverTable("0056"), driverTable("0007")]])
 
 const expected = [
   createTable("vehicle_type", "tenant", [
@@ -255,7 +255,7 @@ const expected = [
     '"waste_fraction_id" uuid NOT NULL',
     uniqueKey("vehicle_compartment_fraction_membership_key", "company_id", "vehicle_compartment_id", "waste_fraction_id"),
   ]),
-  driverTable("0055"),
+  driverTable("0056"),
   createLedger("stock_movement", [
     '"container_id" uuid NOT NULL',
     '"kind" text NOT NULL',
@@ -565,7 +565,7 @@ const generatedAlterations = async (): Promise<string[]> => [
 ]
 
 /** Everything drizzle-kit wrote at the head of 0007: the thirteen tables and the three altered ones. */
-const generatedHead = async (): Promise<string[]> => [...(await statementsFor(tables)).map((statement) => CHANGED_IN_0055.get(statement) ?? statement), ...(await generatedAlterations())]
+const generatedHead = async (): Promise<string[]> => [...(await statementsFor(tables)).map((statement) => CHANGED_IN_0056.get(statement) ?? statement), ...(await generatedAlterations())]
 
 describe("the Resources tables as drizzle-kit writes them", () => {
   test("thirteen tables, every column, key, unique, check and partial index as the Domain model spells them, every name within 63 bytes", async () => {
@@ -579,7 +579,7 @@ describe("the Resources tables as drizzle-kit writes them", () => {
   test("migration 0007 begins with exactly what drizzle-kit generates for the schema, the guard aside: 125 statements", async () => {
     const { withoutGuard } = await fileStatements()
     // The same statements, whatever order drizzle-kit's loader gave the tables, and wherever the placement's key was moved to.
-    for (const statement of CHANGED_IN_0055.keys()) assert.ok((await statementsFor(tables)).includes(statement), statement.split("\n")[0])
+    for (const statement of CHANGED_IN_0056.keys()) assert.ok((await statementsFor(tables)).includes(statement), statement.split("\n")[0])
     const generated = (await generatedHead()).map(normalised).sort()
     assert.equal(generated.length, 125, "thirteen CREATE TABLE, five ADD COLUMN, one DROP INDEX, sixty foreign keys, forty-one indexes, one unique, two DROP CONSTRAINT, one DROP COLUMN, one check")
     assert.deepEqual([...withoutGuard.slice(0, generated.length)].sort(), generated)

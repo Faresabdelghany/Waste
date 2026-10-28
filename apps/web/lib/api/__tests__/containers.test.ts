@@ -8,17 +8,18 @@
 import assert from "node:assert/strict"
 import { describe, test } from "node:test"
 
-import type { ContainerType, WasteFraction } from "@waste/contracts/catalogue"
+import type { ContainerType, ServiceFrequency, WasteFraction } from "@waste/contracts/catalogue"
 import { ContainerCreate, ContainerPatch, ContainerServicePlacementCreate, ContainerServicePlacementPatch, type Container, type ContainerServicePlacement } from "@waste/contracts/containers"
 import type { Project } from "@waste/contracts/organisation"
 import { Adjust, Decommission, Receive, Return, Transfer, WAREHOUSE_WITH_A_STOCK_PLACE, type StockMovement } from "@waste/contracts/stock"
+import { PROMISED_RATE_KEY, schemeFrequencyPromiseOfRecord } from "@waste/domain/service-frequencies"
 
 import { FIXTURE_COMPANY_ID, getModuleDefinition, type BusinessRecord } from "../../data/business-modules"
 import { createExternalStore } from "../../external-store"
 import { problemSentence } from "../problem"
 import { moduleKeyOf, NOTHING_RESOLVED, type MappingContext, type Resolver } from "../records/adapter"
 import { CONTAINERS_MODULE, containerAdapter, containerMovements, containersModule, INVENTORY_MODULE, inventoryModule, ledgerRow, stockMovementAdapter, WAREHOUSE_WITH_A_STOCK_PLACE as LOCAL_WAREHOUSE_WITH_A_STOCK_PLACE } from "../records/containers"
-import { containerTypeAdapter, wasteFractionAdapter } from "../records/master-data"
+import { containerTypeAdapter, serviceFrequencyAdapter, wasteFractionAdapter } from "../records/master-data"
 import { isServerBacked, SERVER_MODULE_KEYS, SERVER_MODULES } from "../records/modules"
 import { projectAdapter } from "../records/organisation"
 import { commandRecord, loaded, loadModule, readModuleInto, rereadsOf, resolverOver, writeRecord, type ServerRecordsState } from "../records/server-records"
@@ -198,6 +199,7 @@ describe("a container", () => {
       subscriptionId: `subscription-${subscriptionId}`,
       wasteFraction: masterRecords[0].id,
       serviceFrequencyId: "",
+      [PROMISED_RATE_KEY]: "",
       placementFrom: "2026-01-01",
       placementTo: "",
       // Its subscription is not loaded here, so it serves on no day the record can say (container-places.test.ts reads the place).
@@ -523,5 +525,30 @@ describe("the inventory module", () => {
     const outcome = await writeRecord(clientOver(fetch), inventoryModule, current, { ...movement, id: "resources-stock-movement-1", recordKind: "Stock movement" }, { fixtures: inventoryFixtures, state, now: NOW })
     assert.equal(outcome.kind, "refused")
     assert.equal(calls.length, 0)
+  })
+})
+
+describe("a placed container's promised service frequency (O22 of #290)", () => {
+  const twiceWeekly: ServiceFrequency = { id: "01a0d2a4-a280-7009-8000-000000000099", ...STAMPS, projectId: copenhagen.id, name: "Twice a week", description: null, collectionsPerWeek: 2, weeksBetween: null, daysBetween: 3 }
+  const onDemand: ServiceFrequency = { ...twiceWeekly, id: "01a0d2a4-a280-7009-8000-000000000098", name: "On demand", collectionsPerWeek: null, daysBetween: null }
+  const frequencies = [twiceWeekly, onDemand].map((frequency) => serviceFrequencyAdapter.toRecord(frequency, masterContext))
+  const withFrequencies: ServerRecordsState = new Map([
+    ...state,
+    ["configure.master", loaded({ records: [...masterRecords, ...frequencies], serverIds: serverIdsOf([...masterRecords, ...frequencies], [residual.id, organic.id, bin240.id, bin660.id, twiceWeekly.id, onDemand.id]) }, 1)],
+  ])
+  const read = (placement: ContainerServicePlacement | undefined) =>
+    containerAdapter.toRecord({ ...bin91007, placements: placement === undefined ? [] : [placement] }, context(resolverOver(withFrequencies)))
+
+  test("is the API's interval as collections per week, which the scheme preview reconciles against rather than the fixture catalog", () => {
+    const record = read({ ...placed, effectiveServiceFrequencyId: twiceWeekly.id })
+    assert.equal(record.submittedValues?.[PROMISED_RATE_KEY], "2")
+    assert.deepEqual(schemeFrequencyPromiseOfRecord(record), { containerName: "BIN-91007", promisedName: "Twice a week", promisedRate: 2 })
+  })
+
+  test("is none for an on-demand frequency, a placement without one, and a container serving nowhere", () => {
+    for (const record of [read({ ...placed, effectiveServiceFrequencyId: onDemand.id }), read(placed), read(undefined)]) {
+      assert.equal(record.submittedValues?.[PROMISED_RATE_KEY], "")
+      assert.equal(schemeFrequencyPromiseOfRecord(record), null)
+    }
   })
 })

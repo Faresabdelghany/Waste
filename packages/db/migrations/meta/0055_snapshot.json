@@ -1,5 +1,5 @@
 {
-  "id": "560fda95-0a84-4bd2-a13c-943198059f68",
+  "id": "c9689cc8-ce06-4090-bf75-e982cde3fb04",
   "prevId": "9083503d-bb00-4bf1-8c7f-022e8c79b638",
   "version": "7",
   "dialect": "postgresql",
@@ -2019,18 +2019,6 @@
           "type": "text",
           "primaryKey": false,
           "notNull": true
-        },
-        "service_window_start": {
-          "name": "service_window_start",
-          "type": "time",
-          "primaryKey": false,
-          "notNull": false
-        },
-        "service_window_end": {
-          "name": "service_window_end",
-          "type": "time",
-          "primaryKey": false,
-          "notNull": false
         }
       },
       "indexes": {
@@ -2112,10 +2100,6 @@
       },
       "policies": {},
       "checkConstraints": {
-        "property_service_window": {
-          "name": "property_service_window",
-          "value": "(\"wms\".\"property\".\"service_window_start\" is null) = (\"wms\".\"property\".\"service_window_end\" is null) and (\"wms\".\"property\".\"service_window_start\" is null or \"wms\".\"property\".\"service_window_end\" > \"wms\".\"property\".\"service_window_start\")"
-        },
         "property_kind_one_of": {
           "name": "property_kind_one_of",
           "value": "\"wms\".\"property\".\"kind\" in ('residential', 'commercial', 'public', 'mixed', 'other')"
@@ -3201,18 +3185,6 @@
           "type": "uuid",
           "primaryKey": false,
           "notNull": false
-        },
-        "service_window_start": {
-          "name": "service_window_start",
-          "type": "time",
-          "primaryKey": false,
-          "notNull": false
-        },
-        "service_window_end": {
-          "name": "service_window_end",
-          "type": "time",
-          "primaryKey": false,
-          "notNull": false
         }
       },
       "indexes": {
@@ -3397,10 +3369,6 @@
       },
       "policies": {},
       "checkConstraints": {
-        "agreement_service_window": {
-          "name": "agreement_service_window",
-          "value": "(\"wms\".\"agreement\".\"service_window_start\" is null) = (\"wms\".\"agreement\".\"service_window_end\" is null) and (\"wms\".\"agreement\".\"service_window_start\" is null or \"wms\".\"agreement\".\"service_window_end\" > \"wms\".\"agreement\".\"service_window_start\")"
-        },
         "agreement_validity": {
           "name": "agreement_validity",
           "value": "\"wms\".\"agreement\".\"valid_to\" is null or \"wms\".\"agreement\".\"valid_to\" > \"wms\".\"agreement\".\"valid_from\""
@@ -7195,36 +7163,6 @@
           "type": "text",
           "primaryKey": false,
           "notNull": false
-        },
-        "shift_start": {
-          "name": "shift_start",
-          "type": "time",
-          "primaryKey": false,
-          "notNull": false
-        },
-        "shift_end": {
-          "name": "shift_end",
-          "type": "time",
-          "primaryKey": false,
-          "notNull": false
-        },
-        "break_minutes": {
-          "name": "break_minutes",
-          "type": "integer",
-          "primaryKey": false,
-          "notNull": false
-        },
-        "break_window_start": {
-          "name": "break_window_start",
-          "type": "time",
-          "primaryKey": false,
-          "notNull": false
-        },
-        "break_window_end": {
-          "name": "break_window_end",
-          "type": "time",
-          "primaryKey": false,
-          "notNull": false
         }
       },
       "indexes": {
@@ -7411,22 +7349,6 @@
       },
       "policies": {},
       "checkConstraints": {
-        "driver_shift_window": {
-          "name": "driver_shift_window",
-          "value": "(\"wms\".\"driver\".\"shift_start\" is null) = (\"wms\".\"driver\".\"shift_end\" is null) and (\"wms\".\"driver\".\"shift_start\" is null or \"wms\".\"driver\".\"shift_end\" > \"wms\".\"driver\".\"shift_start\")"
-        },
-        "driver_break_window": {
-          "name": "driver_break_window",
-          "value": "(\"wms\".\"driver\".\"break_window_start\" is null) = (\"wms\".\"driver\".\"break_window_end\" is null) and (\"wms\".\"driver\".\"break_window_start\" is null or \"wms\".\"driver\".\"break_window_end\" > \"wms\".\"driver\".\"break_window_start\")"
-        },
-        "driver_break_minutes_range": {
-          "name": "driver_break_minutes_range",
-          "value": "\"wms\".\"driver\".\"break_minutes\" between 1 and 240"
-        },
-        "driver_break_shape": {
-          "name": "driver_break_shape",
-          "value": "(\"wms\".\"driver\".\"break_minutes\" is null or \"wms\".\"driver\".\"shift_start\" is not null) and (\"wms\".\"driver\".\"break_window_start\" is null or (\"wms\".\"driver\".\"break_minutes\" is not null and \"wms\".\"driver\".\"break_window_start\" >= \"wms\".\"driver\".\"shift_start\" and \"wms\".\"driver\".\"break_window_end\" <= \"wms\".\"driver\".\"shift_end\"))"
-        },
         "driver_employment_one_of": {
           "name": "driver_employment_one_of",
           "value": "\"wms\".\"driver\".\"employment\" in ('employee', 'service-provider', 'temporary')"
@@ -10373,6 +10295,18 @@
           "type": "uuid",
           "primaryKey": false,
           "notNull": false
+        },
+        "moved_from_route_id": {
+          "name": "moved_from_route_id",
+          "type": "uuid",
+          "primaryKey": false,
+          "notNull": false
+        },
+        "moved_from_pickup_id": {
+          "name": "moved_from_pickup_id",
+          "type": "uuid",
+          "primaryKey": false,
+          "notNull": false
         }
       },
       "indexes": {
@@ -10706,6 +10640,55 @@
           "concurrently": false,
           "method": "btree",
           "with": {}
+        },
+        "pickup_moved_from_pickup_id_key": {
+          "name": "pickup_moved_from_pickup_id_key",
+          "columns": [
+            {
+              "expression": "company_id",
+              "isExpression": false,
+              "asc": true,
+              "nulls": "last"
+            },
+            {
+              "expression": "moved_from_pickup_id",
+              "isExpression": false,
+              "asc": true,
+              "nulls": "last"
+            }
+          ],
+          "isUnique": true,
+          "where": "\"wms\".\"pickup\".\"moved_from_pickup_id\" is not null",
+          "concurrently": false,
+          "method": "btree",
+          "with": {}
+        },
+        "pickup_moved_from_route_id_moved_from_pickup_id_idx": {
+          "name": "pickup_moved_from_route_id_moved_from_pickup_id_idx",
+          "columns": [
+            {
+              "expression": "company_id",
+              "isExpression": false,
+              "asc": true,
+              "nulls": "last"
+            },
+            {
+              "expression": "moved_from_route_id",
+              "isExpression": false,
+              "asc": true,
+              "nulls": "last"
+            },
+            {
+              "expression": "moved_from_pickup_id",
+              "isExpression": false,
+              "asc": true,
+              "nulls": "last"
+            }
+          ],
+          "isUnique": false,
+          "concurrently": false,
+          "method": "btree",
+          "with": {}
         }
       },
       "foreignKeys": {
@@ -10914,6 +10897,26 @@
           ],
           "onDelete": "no action",
           "onUpdate": "no action"
+        },
+        "pickup_moved_from_route_id_moved_from_pickup_id_fk": {
+          "name": "pickup_moved_from_route_id_moved_from_pickup_id_fk",
+          "tableFrom": "pickup",
+          "tableTo": "pickup",
+          "schemaTo": "wms",
+          "columnsFrom": [
+            "company_id",
+            "project_id",
+            "moved_from_route_id",
+            "moved_from_pickup_id"
+          ],
+          "columnsTo": [
+            "company_id",
+            "project_id",
+            "route_id",
+            "id"
+          ],
+          "onDelete": "no action",
+          "onUpdate": "no action"
         }
       },
       "compositePrimaryKeys": {},
@@ -10994,6 +10997,10 @@
         "pickup_contaminant_code_shape": {
           "name": "pickup_contaminant_code_shape",
           "value": "\"wms\".\"pickup\".\"contaminant_code_id\" is null or \"wms\".\"pickup\".\"reason\" = 'contamination' or \"wms\".\"pickup\".\"status\" = 'completed'"
+        },
+        "pickup_moved_from_shape": {
+          "name": "pickup_moved_from_shape",
+          "value": "(\"wms\".\"pickup\".\"moved_from_route_id\" is null) = (\"wms\".\"pickup\".\"moved_from_pickup_id\" is null) and (\"wms\".\"pickup\".\"moved_from_pickup_id\" is null or \"wms\".\"pickup\".\"origin\" = 'office')"
         }
       },
       "isRLSEnabled": false
@@ -22681,12 +22688,6 @@
           "primaryKey": false,
           "notNull": false
         },
-        "waiting_seconds": {
-          "name": "waiting_seconds",
-          "type": "integer",
-          "primaryKey": false,
-          "notNull": false
-        },
         "deferred_until": {
           "name": "deferred_until",
           "type": "timestamp with time zone",
@@ -22829,10 +22830,6 @@
         "plan_deferred_shape": {
           "name": "plan_deferred_shape",
           "value": "\"wms\".\"plan\".\"deferred_until\" is null or \"wms\".\"plan\".\"status\" = 'calculating'"
-        },
-        "plan_waiting_shape": {
-          "name": "plan_waiting_shape",
-          "value": "\"wms\".\"plan\".\"waiting_seconds\" is null or (\"wms\".\"plan\".\"waiting_seconds\" >= 0 and \"wms\".\"plan\".\"status\" = 'ready' and \"wms\".\"plan\".\"solver\" = 'optimiser')"
         }
       },
       "isRLSEnabled": false
@@ -23079,12 +23076,6 @@
           "type": "integer",
           "primaryKey": false,
           "notNull": true
-        },
-        "window_warning": {
-          "name": "window_warning",
-          "type": "text",
-          "primaryKey": false,
-          "notNull": false
         }
       },
       "indexes": {
@@ -23247,10 +23238,6 @@
         "plan_stop_position_positive": {
           "name": "plan_stop_position_positive",
           "value": "\"wms\".\"plan_stop\".\"position\" > 0"
-        },
-        "plan_stop_window_warning_one_of": {
-          "name": "plan_stop_window_warning_one_of",
-          "value": "\"wms\".\"plan_stop\".\"window_warning\" in ('windows-disjoint', 'window-unreachable')"
         }
       },
       "isRLSEnabled": false

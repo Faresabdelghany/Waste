@@ -46,6 +46,10 @@
 // product is sold by, since a month's subscription still pays its fees — and
 // the pickup's live exception charge, read apart from its collection's.
 //
+// A stop a move added (O23 of #290) is read with the origin of the stop it
+// was moved from, followed back to the first (`originStoodFor`): a scheduled
+// collection moved to another route is the scheduled collection still.
+//
 // A stop the office added (#111) is read like any other, with its `origin`:
 // the scheme and the container are left joins, since an ad-hoc route names
 // no scheme (no planning area, then) and an address-only stop no container
@@ -153,6 +157,7 @@ export async function pickupRow(tx: Tx, companyId: string, routeId: string, pick
       contaminantCodeId: pickup.contaminantCodeId,
       propertyId: pickup.propertyId,
       sharedCollectionPointId: pickup.sharedCollectionPointId,
+      movedFromPickupId: pickup.movedFromPickupId,
     })
     .from(pickup)
     .innerJoin(route, and(eq(route.companyId, pickup.companyId), eq(route.id, pickup.routeId)))
@@ -163,8 +168,35 @@ export async function pickupRow(tx: Tx, companyId: string, routeId: string, pick
     .where(and(eq(pickup.companyId, companyId), eq(pickup.routeId, routeId), eq(pickup.id, pickupId)))
     .limit(1)
   if (row === undefined) return undefined
-  const { bookingTicketId, ...stop } = row
-  return { ...stop, origin: row.origin as PickupOrigin, service: row.service as PickupService, bookedForTicket: bookingTicketId !== null }
+  const { bookingTicketId, movedFromPickupId, ...stop } = row
+  // A moved stop is read as the stop it stands for (O23 of #290): a scheduled collection moved to another route is billed, and judged for its exceptions, as the collection it is.
+  const origin = movedFromPickupId === null ? (row.origin as PickupOrigin) : await originStoodFor(tx, companyId, movedFromPickupId)
+  return { ...stop, origin, service: row.service as PickupService, bookedForTicket: bookingTicketId !== null }
+}
+
+/**
+ * The origin of the stop a moved stop stands for (O23 of #290): a move adds
+ * the office's stop on the route it joins, naming the stop it was moved from
+ * (`moved_from_pickup_id`), so the chain is followed back to the first stop
+ * of it — a stop moved twice was moved from one moved before — whose origin
+ * says whether the work is the scheme's collection or the office's.
+ */
+async function originStoodFor(tx: Tx, companyId: string, movedFromPickupId: string): Promise<PickupOrigin> {
+  const seen = new Set<string>()
+  let id: string | null = movedFromPickupId
+  while (id !== null && !seen.has(id)) {
+    seen.add(id)
+    const [from] = await tx
+      .select({ origin: pickup.origin, movedFromPickupId: pickup.movedFromPickupId })
+      .from(pickup)
+      .where(and(eq(pickup.companyId, companyId), eq(pickup.id, id)))
+      .limit(1)
+    if (from === undefined) break
+    if (from.movedFromPickupId === null) return from.origin as PickupOrigin
+    id = from.movedFromPickupId
+  }
+  // The key holds every stop named to a stop of the company, and each stop is moved from once, so the chain ends at a stop no move made.
+  throw new Error(`pickup ${movedFromPickupId} names no first stop to stand for`)
 }
 
 /** The placement as read, before the list: what the domain's `PlacementFacts` carries less the list, plus the list the agreement names (null for the project's default), which the next read needs. */

@@ -42,6 +42,7 @@ import type { StockMovement } from "@waste/contracts/stock"
 import { CONTAINER_OWNERSHIPS } from "@waste/domain/registry/vocabulary"
 import { ADJUSTMENT_TARGETS, STOCK_PLACES } from "@waste/domain/resources/vocabulary"
 import { addDays } from "@waste/domain/route-schemes/recurrence"
+import { intervalCollectionsPerWeek, PROMISED_RATE_KEY } from "@waste/domain/service-frequencies"
 
 import { FIXTURE_COMPANY_ID, type BusinessRecord, type ModuleLocation } from "@/lib/data/business-modules"
 import { OWNERSHIP_LABELS } from "@/lib/data/containers"
@@ -126,6 +127,24 @@ function identityOf(record: BusinessRecord, context: MappingContext) {
 type ContainerWrite = {
   container?: Record<string, unknown>
   placement?: { id: string; patch: Record<string, unknown> }
+}
+
+/**
+ * The promise a placement's effective frequency makes, from the API's
+ * interval as the master data read it (O22 of #290): collections per week,
+ * or "" where there is none to reconcile — on demand, or a frequency this
+ * account has not read. The browser's preview reconciles a scheme's cadence
+ * against it (`schemeFrequencyPromiseOfRecord`), never the fixture catalog.
+ */
+function promisedRateOf(context: MappingContext, frequencyId: string | null): string {
+  const values = frequencyId === null ? undefined : context.resolve.byServerId(frequencyId)?.submittedValues
+  if (values === undefined) return ""
+  const whole = (key: string): number | null => {
+    const value = values[key]
+    return typeof value === "string" && value.trim() !== "" && Number.isInteger(Number(value)) ? Number(value) : null
+  }
+  const rate = intervalCollectionsPerWeek({ collectionsPerWeek: whole("collectionsPerWeek"), weeksBetween: whole("weeksBetween"), daysBetween: whole("daysBetween") })
+  return rate === null ? "" : String(rate)
 }
 
 /** The placement half of an edit: the fraction, the cadence override and a corrected end; null when none moved. */
@@ -377,6 +396,7 @@ export const containerAdapter: ResourceAdapter<ContainerResource> = {
         subscriptionId: placement ? webIdVia(context, "subscription", placement.subscriptionId) : "",
         wasteFraction: placement ? webIdVia(context, "fraction", placement.wasteFractionId) : "",
         serviceFrequencyId: placement?.serviceFrequencyId ? webIdVia(context, "frequency", placement.serviceFrequencyId) : "",
+        [PROMISED_RATE_KEY]: placement === undefined ? "" : promisedRateOf(context, placement.effectiveServiceFrequencyId),
         placementFrom: placement?.validFrom ?? "",
         placementTo: placement?.validTo ? lastDayIn(placement.validTo) : "",
         ...place.values,

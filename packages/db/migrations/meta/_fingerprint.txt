@@ -1854,6 +1854,8 @@ CASE
 END)
 column wms.pickup 24 contaminant_code_id uuid
 column wms.pickup 25 bulky_booking_id uuid
+column wms.pickup 26 moved_from_route_id uuid
+column wms.pickup 27 moved_from_pickup_id uuid
 constraint wms.pickup pickup_bulky_booking_id_fk FOREIGN KEY (company_id, project_id, bulky_booking_id) REFERENCES wms.bulky_booking(company_id, project_id, id)
 constraint wms.pickup pickup_bulky_shape CHECK ((((service = 'bulky'::text) = (bulky_booking_id IS NOT NULL)) AND ((service <> 'bulky'::text) OR (container_id IS NULL))))
 constraint wms.pickup pickup_company_id_fk FOREIGN KEY (company_id) REFERENCES wms.company(id)
@@ -1861,6 +1863,8 @@ constraint wms.pickup pickup_container_id_fk FOREIGN KEY (company_id, project_id
 constraint wms.pickup pickup_container_shape CHECK (((container_id IS NOT NULL) OR (origin = 'office'::text)))
 constraint wms.pickup pickup_contaminant_code_id_fk FOREIGN KEY (company_id, contaminant_code_id) REFERENCES wms.contaminant_code(company_id, id)
 constraint wms.pickup pickup_contaminant_code_shape CHECK (((contaminant_code_id IS NULL) OR (reason = 'contamination'::text) OR (status = 'completed'::text)))
+constraint wms.pickup pickup_moved_from_route_id_moved_from_pickup_id_fk FOREIGN KEY (company_id, project_id, moved_from_route_id, moved_from_pickup_id) REFERENCES wms.pickup(company_id, project_id, route_id, id)
+constraint wms.pickup pickup_moved_from_shape CHECK ((((moved_from_route_id IS NULL) = (moved_from_pickup_id IS NULL)) AND ((moved_from_pickup_id IS NULL) OR (origin = 'office'::text))))
 constraint wms.pickup pickup_origin_one_of CHECK ((origin = ANY (ARRAY['generation'::text, 'office'::text])))
 constraint wms.pickup pickup_outcome_shape CHECK (((status <> 'planned'::text) = (outcome_at IS NOT NULL)))
 constraint wms.pickup pickup_pkey PRIMARY KEY (id)
@@ -1888,6 +1892,8 @@ index wms.pickup pickup_bulky_booking_id_idx CREATE INDEX pickup_bulky_booking_i
 index wms.pickup pickup_bulky_booking_id_key CREATE UNIQUE INDEX pickup_bulky_booking_id_key ON wms.pickup USING btree (company_id, bulky_booking_id) WHERE ((bulky_booking_id IS NOT NULL) AND (status = ANY (ARRAY['planned'::text, 'completed'::text])))
 index wms.pickup pickup_container_id_idx CREATE INDEX pickup_container_id_idx ON wms.pickup USING btree (company_id, container_id)
 index wms.pickup pickup_contaminant_code_id_idx CREATE INDEX pickup_contaminant_code_id_idx ON wms.pickup USING btree (company_id, contaminant_code_id)
+index wms.pickup pickup_moved_from_pickup_id_key CREATE UNIQUE INDEX pickup_moved_from_pickup_id_key ON wms.pickup USING btree (company_id, moved_from_pickup_id) WHERE (moved_from_pickup_id IS NOT NULL)
+index wms.pickup pickup_moved_from_route_id_moved_from_pickup_id_idx CREATE INDEX pickup_moved_from_route_id_moved_from_pickup_id_idx ON wms.pickup USING btree (company_id, moved_from_route_id, moved_from_pickup_id)
 index wms.pickup pickup_pkey CREATE UNIQUE INDEX pickup_pkey ON wms.pickup USING btree (id)
 index wms.pickup pickup_project_id_idx CREATE INDEX pickup_project_id_idx ON wms.pickup USING btree (company_id, project_id)
 index wms.pickup pickup_property_id_idx CREATE INDEX pickup_property_id_idx ON wms.pickup USING btree (company_id, property_id)
@@ -4107,5 +4113,6 @@ journal 1792964774291 575d9404cde4feb3468d43c2645301f94e48b4960341cda4dc4d6d7b43
 journal 1793086298088 3aa024a0b1c207b537d4b52cc6c9c09f295500483b1bc53e66c27a5fa0ed1bf8
 journal 1793117570372 0cf12010a83bd55fbf734aea83b3699d1636d710d1cc52cd63b5b586441a72af
 journal 1793122833651 fddd34bf8e7c1eadc319cddcf6b5a274974e7993317a4fc32d01ed89ce216655
-journal 1793172240849 9f8a53244ab3c25c383f6b2e788c2de5bdff4c797a91765ca7839ff20a9e38ca
+journal 1793171628420 0fde43652c55b3a47f1abdd683139b9c1f7f368895a38765d4315da4e99f00ec
+journal 1793174294074 9f8a53244ab3c25c383f6b2e788c2de5bdff4c797a91765ca7839ff20a9e38ca
 pgboss-version 42

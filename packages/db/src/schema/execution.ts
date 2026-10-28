@@ -140,7 +140,7 @@ import { company, project, serviceProvider } from "./organisation"
 import { bulkyBooking } from "./bulky"
 import { contaminantCode } from "./pickup-exceptions"
 import { depot, unloadingStation, warehouse } from "./places"
-import { companyReference, indexOn, projectKey, projectReference, tenantIndex, tenantReference, tenantUnique } from "./references"
+import { companyReference, indexOn, projectKey, projectReference, tenantIndex, tenantReference, tenantUnique, type ProjectTable } from "./references"
 import { collectionGroup, routeScheme } from "./route-schemes"
 import { wms } from "./wms"
 
@@ -313,6 +313,16 @@ export const pickup = wms.table(
     contaminantCodeId: uuid(),
     /** The Bulky Booking a `bulky` stop collects (O11 of #290), and none for any other service. */
     bulkyBookingId: uuid(),
+    /**
+     * The stop this one was moved from, with its route (O23 of #290): a stop
+     * never changes its route, so a move takes the stop off and adds the
+     * office's stop of the same work on the other route, naming the stop it
+     * stands for. Billing reads a moved stop as the one it was moved from — a
+     * scheduled collection stays one — and the stop taken off is known as
+     * moved by the stop naming it. Null on every stop no move made.
+     */
+    movedFromRouteId: uuid(),
+    movedFromPickupId: uuid(),
   },
   (t) => [
     companyReference(t, company),
@@ -373,6 +383,11 @@ export const pickup = wms.table(
     tenantIndex(t, t.routeId, t.position),
     tenantIndex(t, t.contaminantCodeId),
     tenantIndex(t, t.bulkyBookingId),
+    // A moved stop names the stop it was moved from, on that stop's route, and only the office's stop a move adds names one; each stop is moved from once.
+    projectReference(t, [t.movedFromRouteId, t.movedFromPickupId], t as ProjectTable, [t.routeId, t.id]),
+    check(tableObjectName(t.id.table, "moved_from_shape", "pickup"), sql`(${t.movedFromRouteId} is null) = (${t.movedFromPickupId} is null) and (${t.movedFromPickupId} is null or ${t.origin} = 'office')`),
+    uniqueIndex(tableObjectName(t.id.table, "moved_from_pickup_id_key", "pickup")).on(t.companyId, t.movedFromPickupId).where(sql`${t.movedFromPickupId} is not null`),
+    tenantIndex(t, t.movedFromRouteId, t.movedFromPickupId),
   ],
 )
 

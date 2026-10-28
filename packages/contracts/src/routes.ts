@@ -294,6 +294,32 @@ export const PickupOrderSet = z.strictObject({
 })
 export type PickupOrderSet = z.infer<typeof PickupOrderSet>
 
+export const EACH_STOP_MOVED_ONCE = eachOnceSentence("pickup", "a stop moves once")
+
+/** The open stops a move or a split takes off the route, each once; as many as an order may name. */
+const MovedStops = z
+  .array(Id)
+  .min(1)
+  .max(PICKUP_ORDER_MAX)
+  .refine((ids) => eachOnce(ids), { message: EACH_STOP_MOVED_ONCE })
+
+/** `POST /routes/:id/move-stops` (O23 of #290): open stops of the route moved onto another of its project that has not started, each taken off here and added there as the office's. */
+export const RouteMoveStops = z.strictObject({ pickupIds: MovedStops, toRouteId: Id })
+export type RouteMoveStops = z.infer<typeof RouteMoveStops>
+
+/** `POST /routes/:id/split` (O23 of #290): open stops of the route moved onto a new ad-hoc route of its day, crewed by the vehicle and the driver the body names, where it names them. */
+export const RouteSplit = z.strictObject({
+  pickupIds: MovedStops,
+  vehicleId: Id.nullable().optional(),
+  driverId: Id.nullable().optional(),
+  note: Paragraph.nullable().optional(),
+})
+export type RouteSplit = z.infer<typeof RouteSplit>
+
+/** `POST /routes/:id/merge` (O23 of #290): every open stop of the route the body names moved onto this one, and that route cancelled as `merged`. */
+export const RouteMerge = z.strictObject({ routeId: Id })
+export type RouteMerge = z.infer<typeof RouteMerge>
+
 /** A page of routes: one project's, one scheme's, one group's, over a window of operating days, on one service date, of one status, planned for one driver or one vehicle. */
 export const RouteListQuery = ProjectScopedListQuery.extend({
   routeSchemeId: Id.optional(),

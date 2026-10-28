@@ -852,7 +852,7 @@ const agreementAsOf0004 = wms.table("agreement", agreementColumns, (t) => [
   tenantIndex(t, t.payerCustomerId),
 ])
 
-/** agreement as 0010 left it, with its price list, before 0055's service window (O14 of #290). */
+/** agreement as 0010 left it, with its price list, before 0056's service window (O14 of #290). */
 const agreementAsOf0010 = wms.table("agreement", { ...agreementColumns, priceListId: uuid() }, (t) => [
   companyReference(t, company),
   tenantReference(t, [t.projectId], project),

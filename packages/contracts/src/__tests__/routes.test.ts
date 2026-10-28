@@ -2,7 +2,7 @@ import assert from "node:assert/strict"
 import { describe, test } from "node:test"
 
 import { DAY_WINDOW_ORDERED, dayWindowOrdered } from "../queries"
-import { DISPATCH_MANY_MAX, EACH_PICKUP_ONCE, EACH_ROUTE_ONCE, LABEL_IS_THE_NUMBER, labelMatches, LiveRoute, LiveRouteQuery, PICKUP_ORDER_MAX, PickupOrderSet, Route, RouteAssign, RouteCancel, RouteCreate, RouteDetail, RouteDispatchMany, RouteDispatchResults, RouteListItem, RouteListQuery, RouteWorkload, RouteProgress, RouteReschedule } from "../routes"
+import { DISPATCH_MANY_MAX, EACH_PICKUP_ONCE, EACH_STOP_MOVED_ONCE, RouteMerge, RouteMoveStops, RouteSplit, EACH_ROUTE_ONCE, LABEL_IS_THE_NUMBER, labelMatches, LiveRoute, LiveRouteQuery, PICKUP_ORDER_MAX, PickupOrderSet, Route, RouteAssign, RouteCancel, RouteCreate, RouteDetail, RouteDispatchMany, RouteDispatchResults, RouteListItem, RouteListQuery, RouteWorkload, RouteProgress, RouteReschedule } from "../routes"
 import { refusal, refusesAnEmptyPatch } from "./expect"
 
 const ID = "01a0d3a5-e5e0-7000-8000-000000000001"
@@ -78,6 +78,7 @@ const pickup = {
   warehouseId: null,
   replacementContainerId: null,
   bulkyBookingId: null,
+  movedFromPickupId: null,
   ...STAMPS,
 }
 
@@ -204,6 +205,31 @@ describe("the dispatcher's commands", () => {
     const tooMany = Array.from({ length: PICKUP_ORDER_MAX + 1 }, (_unused, index) => `01a0d3a5-e5e0-7000-8000-${String(index).padStart(12, "0")}`)
     assert.deepEqual(refusal(PickupOrderSet.safeParse({ pickupIds: tooMany })).map((issue) => issue.path), ["pickupIds"])
     assert.equal(PickupOrderSet.safeParse({ pickupIds: tooMany.slice(1) }).success, true)
+  })
+})
+
+describe("moving stops, splitting and merging (O23 of #290)", () => {
+  test("a move names open stops once each, one to five hundred of them, and the route they go to", () => {
+    assert.deepEqual(RouteMoveStops.parse({ pickupIds: [ID, OTHER], toRouteId: THIRD }), { pickupIds: [ID, OTHER], toRouteId: THIRD })
+    assert.deepEqual(refusal(RouteMoveStops.safeParse({ pickupIds: [ID, ID], toRouteId: THIRD })), [{ path: "pickupIds", message: EACH_STOP_MOVED_ONCE }])
+    assert.deepEqual(refusal(RouteMoveStops.safeParse({ pickupIds: [], toRouteId: THIRD })).map((issue) => issue.path), ["pickupIds"])
+    assert.deepEqual(refusal(RouteMoveStops.safeParse({ pickupIds: [ID] })).map((issue) => issue.path), ["toRouteId"])
+    const tooMany = Array.from({ length: PICKUP_ORDER_MAX + 1 }, (_unused, index) => `01a0d3a5-e5e0-7000-8000-${String(index).padStart(12, "0")}`)
+    assert.equal(RouteMoveStops.safeParse({ pickupIds: tooMany, toRouteId: THIRD }).success, false)
+    assert.equal(RouteMoveStops.safeParse({ pickupIds: [ID], toRouteId: THIRD, position: 3 }).success, false, "a member the server owns is refused")
+  })
+
+  test("a split names its stops and, where it names them, the new route's vehicle, driver and note", () => {
+    assert.deepEqual(RouteSplit.parse({ pickupIds: [ID] }), { pickupIds: [ID] })
+    assert.deepEqual(RouteSplit.parse({ pickupIds: [ID], vehicleId: OTHER, driverId: null, note: "Second truck" }), { pickupIds: [ID], vehicleId: OTHER, driverId: null, note: "Second truck" })
+    assert.equal(RouteSplit.safeParse({ pickupIds: [ID], operatingDate: "2026-10-05" }).success, false, "the new route runs on the route's day")
+    assert.deepEqual(refusal(RouteSplit.safeParse({ pickupIds: [OTHER, OTHER] })), [{ path: "pickupIds", message: EACH_STOP_MOVED_ONCE }])
+  })
+
+  test("a merge names the route it takes the stops of, and nothing else", () => {
+    assert.deepEqual(RouteMerge.parse({ routeId: OTHER }), { routeId: OTHER })
+    assert.equal(RouteMerge.safeParse({}).success, false)
+    assert.equal(RouteMerge.safeParse({ routeId: OTHER, reasonCode: "merged" }).success, false)
   })
 })
 

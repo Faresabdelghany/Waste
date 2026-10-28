@@ -18,7 +18,7 @@ import { bulkyBooking, bulkyBookingItem, bulkySchedule } from "../schema/bulky"
 import { product, wasteFraction } from "../schema/catalogue"
 import { container } from "../schema/containers"
 import { customer, property, sharedCollectionPoint } from "../schema/customers"
-import { pickup, route } from "../schema/execution"
+import { route } from "../schema/execution"
 import { company, project } from "../schema/organisation"
 import { contaminantCode } from "../schema/pickup-exceptions"
 import { warehouse } from "../schema/places"
@@ -27,7 +27,7 @@ import { auditTrail, BULKY_AUDITED } from "../sql/audit-trail"
 import { excludeOverlapping } from "../sql/exclude-overlapping"
 import { handWrittenStatements, normalised, statementsOf } from "../sql/hand-written"
 import { checksOf, ref } from "./rendering"
-import { pickupAsOf0038 } from "./pickup-as-of"
+import { pickupAsOf0038, pickupAsOf0053 } from "./pickup-as-of"
 import { statementsBetween } from "./specimen"
 
 const MIGRATION = "0053_bulky_booking.sql"
@@ -35,8 +35,8 @@ const MIGRATION = "0053_bulky_booking.sql"
 const referenced = { company, project, route, container, property, sharedCollectionPoint, wasteFraction, product, userAccount, customer, agreement, subscription, warehouse, planningArea, contaminantCode }
 const created = { bulkyBooking, bulkyBookingItem, bulkySchedule }
 
-/** What drizzle-kit writes for 0053: the three tables, and the pickup from its 0038 spelling to today's. */
-const generated = (): Promise<string[]> => statementsBetween({ ...referenced, pickup: pickupAsOf0038 }, { ...referenced, pickup, ...created })
+/** What drizzle-kit writes for 0053: the three tables, and the pickup from its 0038 spelling to its 0053 one, since 0055 moved it on (O23 of #290). */
+const generated = (): Promise<string[]> => statementsBetween({ ...referenced, pickup: pickupAsOf0038 }, { ...referenced, pickup: pickupAsOf0053, ...created })
 
 /** What the three owe the file below drizzle-kit's statements: fence and trigger each, the schedule's exclusion constraint, then their audit trail. */
 const handWritten = [...Object.values(created).flatMap((table) => handWrittenStatements(table)), ...excludeOverlapping(bulkySchedule, [bulkySchedule.planningAreaId]), ...BULKY_AUDITED.flatMap(auditTrail)]

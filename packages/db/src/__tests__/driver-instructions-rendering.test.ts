@@ -60,7 +60,7 @@ const propertyAsOf0018 = wms.table("property", { ...propertyColumns, status: tex
   uniqueIndex(tableObjectName(t.companyId.table, "registry_id_idx", "property")).on(t.companyId, t.registryId).where(sql`${t.registryId} is not null`),
 ])
 
-/** property as 0022 left it, with the instructions, before 0055's service window (O14 of #290). */
+/** property as 0022 left it, with the instructions, before 0056's service window (O14 of #290). */
 const propertyAsOf0022 = wms.table("property", { ...propertyColumns, driverInstructions: text(), status: text().notNull() }, (t) => [
   companyReference(t, company),
   tenantReference(t, [t.projectId], project),
