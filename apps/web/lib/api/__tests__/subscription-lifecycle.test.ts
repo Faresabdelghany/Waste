@@ -37,7 +37,7 @@ const context: MappingContext = { fixtures, resolve: NOTHING_RESOLVED, companyRe
 const PRODUCT = "01a0d2a4-a280-700a-8000-000000000001"
 const OTHER_PRODUCT = "01a0d2a4-a280-700a-8000-000000000002"
 const PAUSE_ID = "01a0d2a4-a280-7030-8000-000000000001"
-const agreement: Agreement = { id: "01a0d2a4-a280-7012-8000-000000000001", ...STAMPS, projectId: "01a0d2a4-a280-7002-8000-000000000001", number: "AGR-2408", customerId: "01a0d2a4-a280-700b-8000-000000000002", payerCustomerId: "01a0d2a4-a280-700b-8000-000000000002", status: "active", billingCadence: "monthly", currency: "DKK", notes: null, priceListId: null, validFrom: "2026-01-01", validTo: null }
+const agreement: Agreement = { id: "01a0d2a4-a280-7012-8000-000000000001", ...STAMPS, projectId: "01a0d2a4-a280-7002-8000-000000000001", number: "AGR-2408", customerId: "01a0d2a4-a280-700b-8000-000000000002", payerCustomerId: "01a0d2a4-a280-700b-8000-000000000002", status: "active", billingCadence: "monthly", currency: "DKK", notes: null, priceListId: null, serviceWindow: null, validFrom: "2026-01-01", validTo: null }
 const subscription: Subscription = { id: "01a0d2a4-a280-7013-8000-000000000001", ...STAMPS, projectId: agreement.projectId, agreementId: agreement.id, productId: PRODUCT, propertyId: "01a0d2a4-a280-700c-8000-000000000001", sharedCollectionPointId: null, quantity: 1, validFrom: "2026-01-01", validTo: null }
 const pause: SubscriptionPause = { id: PAUSE_ID, ...STAMPS, projectId: agreement.projectId, subscriptionId: subscription.id, validFrom: "2026-11-02", validTo: "2026-11-16" }
 

@@ -34,9 +34,9 @@
 // the agreement's validity too.
 import { AGREEMENT_STATUSES, BILLING_CADENCES } from "@waste/domain/registry/vocabulary"
 import { sql } from "drizzle-orm"
-import { integer, text, uuid } from "drizzle-orm/pg-core"
+import { integer, text, time, uuid } from "drizzle-orm/pg-core"
 
-import { exactlyOne, oneOf, positive } from "./checks"
+import { exactlyOne, oneOf, positive, timeWindow } from "./checks"
 import { id, projectScoped, timestamps, validity, validPeriod } from "./columns"
 import { product } from "./catalogue"
 import { customer, property, sharedCollectionPoint } from "./customers"
@@ -70,11 +70,15 @@ export const agreement = wms.table(
     notes: text(),
     /** The Price List the agreement is priced under (Issue #112), in the agreement's currency; null is the project's default list. */
     priceListId: uuid(),
+    /** The window the agreement promises its stops are served in (O14 of #290), both ends on the project's clock or neither; a stop's window is where it and its property's access hours overlap. */
+    serviceWindowStart: time(),
+    serviceWindowEnd: time(),
   },
   (t) => [
     companyReference(t, company),
     tenantReference(t, [t.projectId], project),
     tenantReference(t, [t.customerId], customer),
+    timeWindow(t, "service", [t.serviceWindowStart, t.serviceWindowEnd]),
     tenantReference(t, [t.payerCustomerId], customer),
     projectReference(t, [t.priceListId], priceList),
     projectKey(t),

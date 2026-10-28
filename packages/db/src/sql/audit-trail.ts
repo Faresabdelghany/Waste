@@ -238,7 +238,7 @@ export const BULKY_AUDITED: readonly Audited[] = [
   { table: bulkyBookingItem, module: "operate.bulky-bookings", parent: setOf(bulkyBooking, bulkyBookingItem.bookingId) },
 ]
 
-/** A scheme's seasons (O17 of #290, migration 0056): the scheme's set, replaced whole with it. */
+/** A scheme's seasons (O17 of #290, migration 0057): the scheme's set, replaced whole with it. */
 export const SEASONS_AUDITED: readonly Audited[] = [{ table: routeSchemeSeason, module: "route-studio.schemes", parent: setOf(routeScheme, routeSchemeSeason.routeSchemeId) }]
 
 export const AUDITED: readonly Audited[] = [...AUDITED_AT_0019, ...SUBSCRIPTION_PAUSE_AUDITED, ...TICKET_SLA_AUDITED, ...DROP_OFF_AUDITED, ...ABSENCES_AUDITED, ...TICKET_CHARGE_AUDITED, ...PICKUP_EXCEPTIONS_AUDITED, ...EMISSIONS_AUDITED, ...APPLICATIONS_AUDITED, ...SUSTAINABILITY_AUDITED, ...CONTAINER_HIRE_AUDITED, ...ACCOUNTING_AUDITED, ...BULKY_AUDITED, ...SITE_VISITS_AUDITED, ...SEASONS_AUDITED]

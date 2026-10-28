@@ -118,6 +118,14 @@ _Avoid_: Route, vehicle allocation, actual assignment
 A qualified and authorized workforce profile that can execute assigned collection work.
 _Avoid_: User, planned assignment, actual assignment
 
+**Shift**:
+A Driver's working day on the project's clock, from a start to a later end on the same day, with at most one break of so many minutes, inside a window of its own or anywhere in the shift. The Route's planned Driver's shift is what route optimisation plans the break by, and a Route whose planned day runs outside it is over shift: still planned, and flagged.
+_Avoid_: Working hours, roster, schedule
+
+**Service Window**:
+When in the day a stop may be served: a Property's access hours and an Agreement's promised window, each optional, the stop's window being where the two overlap. Route optimisation holds a stop inside it.
+_Avoid_: Time slot, booking slot, opening hours (a station's)
+
 **Vehicle Allocation**:
 A time-bounded plan that reserves a compatible vehicle and, where applicable, a driver for expected work.
 _Avoid_: Actual assignment, route, vehicle

@@ -213,6 +213,16 @@ describe("the agreement and subscription endpoints", { skip: database.skip || ow
       assert.equal(running.validTo, null, "an agreement with no end is one that is still running")
     })
 
+    test("keeps the window it promises its stops are served in, written whole and cleared with null (O14 of #290)", async () => {
+      const created = await agreement("AGR-2914", { serviceWindow: { from: "06:00", to: "10:00" } })
+      assert.deepEqual(created.serviceWindow, { from: "06:00", to: "10:00" })
+      assert.deepEqual(await one(olivia, created.id), created)
+      assert.deepEqual((await patch(olivia, created.id, { serviceWindow: { from: "06:00", to: "09:00" } })).serviceWindow, { from: "06:00", to: "09:00" })
+      const cleared = await patch(olivia, created.id, { serviceWindow: null })
+      assert.deepEqual([cleared.serviceWindow, cleared.number], [null, "AGR-2914"])
+      assert.equal((await agreement("AGR-2915")).serviceWindow, null, "any time unless told")
+    })
+
     test("holds the customer and the payer to this company, naming the field", async () => {
       const foreign = await refused(await olivia("/agreements", { method: "POST", body: body("AGR-2403", { customerId: theirCustomer.id }) }), 400)
       assert.deepEqual(foreign.errors, [{ path: "customerId", message: "Not a customer of this company" }])
@@ -262,9 +272,9 @@ describe("the agreement and subscription endpoints", { skip: database.skip || ow
       assert.equal(asPayer.detail, "The customer named as payer is inactive; an agreement needs an active one")
       assert.deepEqual((await page(olivia, "?limit=200&number=AGR-2412")).items, [], "and nothing was written")
 
-      const both = await refused(await olivia("/agreements", { method: "POST", body: body("AGR-2414", { customerId: dormant.id, payerCustomerId: dormant.id }) }), 409)
+      const both = await refused(await olivia("/agreements", { method: "POST", body: body("AGR-2914", { customerId: dormant.id, payerCustomerId: dormant.id }) }), 409)
       assert.equal(both.detail, "The customer is inactive; an agreement needs an active customer", "the same customer in both fields is one lookup, told as the holder first")
-      const missing = await refused(await olivia("/agreements", { method: "POST", body: body("AGR-2414", { customerId: dormant.id, payerCustomerId: testId() }) }), 400)
+      const missing = await refused(await olivia("/agreements", { method: "POST", body: body("AGR-2914", { customerId: dormant.id, payerCustomerId: testId() }) }), 400)
       assert.deepEqual(missing.errors, [{ path: "payerCustomerId", message: "Not a customer of this company" }], "an id that is not there is a 400 before any state is a 409")
     })
 

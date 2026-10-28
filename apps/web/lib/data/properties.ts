@@ -225,6 +225,8 @@ const propertyFields = (projectField: BusinessFormField): BusinessFormSchema["se
     fields: [
       { id: "specialConditions", label: "Special service conditions", type: "textarea", description: "The office's own; never shown to a driver." },
       DRIVER_INSTRUCTIONS,
+      { id: "serviceWindowStart", label: "Access from", type: "time", description: "When in the day a stop here may be served. Blank both for any time." },
+      { id: "serviceWindowEnd", label: "Access until", type: "time", description: "Route optimisation keeps the stop inside these hours and its agreement's window." },
     ],
   },
 ]

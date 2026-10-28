@@ -52,6 +52,7 @@
 import { Driver, DriverCreate, DriverListQuery, DriverPatch, PROVIDER_WITH_PROVIDER_EMPLOYMENT } from "@waste/contracts/fleet"
 import { Page } from "@waste/contracts/pagination"
 import type { Tx } from "@waste/db/client"
+import { shiftColumns } from "@waste/db/commands/stop-timing"
 import { vehicleAllocation } from "@waste/db/schema/allocations"
 import { driver } from "@waste/db/schema/fleet"
 import { collectionGroup } from "@waste/db/schema/route-schemes"
@@ -71,6 +72,7 @@ import { requireDepot, requireProviderAccount, requireServiceProvider, requireUs
 import { groupsInForceNaming, type ClockOptions } from "./scheme-groups"
 import { created, describeCreated, describeJson, IdParam, lockRow, refuseDuplicate, requireProviderShape, stampsOf } from "./shared"
 import { groupsName, liveAllocationsName, liveAllocationsNaming } from "./statuses"
+import { shiftOf, shiftValues } from "./time-windows"
 
 const MODULE = "fleet.drivers"
 const DriverPage = Page(Driver)
@@ -89,6 +91,7 @@ const columns = {
   userAccountId: driver.userAccountId,
   status: driver.status,
   notes: driver.notes,
+  ...shiftColumns,
   createdAt: driver.createdAt,
   updatedAt: driver.updatedAt,
 }
@@ -111,6 +114,7 @@ function driverOf(row: Row): Driver {
     userAccountId: row.userAccountId,
     status: row.status as DriverStatus,
     notes: row.notes,
+    shift: shiftOf(row),
     ...stampsOf(row),
   }
 }
@@ -228,7 +232,7 @@ export function driverRoutes(guard: MiddlewareHandler<AuthEnv>, { now = () => ne
       requireGrant(MODULE, "create"),
       validate("json", DriverCreate),
       async (c) => {
-        const values = c.req.valid("json")
+        const { shift, ...values } = c.req.valid("json")
         const tx = c.get("tx")
         const principal = c.get("principal")
         await requireReachedProject(tx, principal, values.projectId, now)
@@ -255,6 +259,7 @@ export function driverRoutes(guard: MiddlewareHandler<AuthEnv>, { now = () => ne
               licenceExpiry: values.licenceExpiry ?? null,
               userAccountId: values.userAccountId ?? null,
               notes: values.notes ?? null,
+              ...shiftValues(shift),
             })
             .returning(columns),
         )
@@ -315,7 +320,7 @@ export function driverRoutes(guard: MiddlewareHandler<AuthEnv>, { now = () => ne
       validate("json", DriverPatch),
       async (c) => {
         const { id } = c.req.valid("param")
-        const patch = c.req.valid("json")
+        const { shift, ...patch } = c.req.valid("json")
         const tx = c.get("tx")
         const principal = c.get("principal")
 
@@ -342,7 +347,7 @@ export function driverRoutes(guard: MiddlewareHandler<AuthEnv>, { now = () => ne
         const [row] = await refuseDuplicate(collisions(patch), () =>
           tx
             .update(driver)
-            .set(patch)
+            .set({ ...patch, ...shiftValues(shift) })
             .where(and(scope(principal), eq(driver.id, id)))
             .returning(columns),
         )

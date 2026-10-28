@@ -54,7 +54,10 @@
 // availability window by the domain's caps. M4 of #293 added
 // @waste/domain/visits/vocabulary and @waste/domain/visits/charges:
 // site-visits.ts reads the visits' lists and normalises a plate or a card
-// as the API stores and matches it. O17 of #290 added
+// as the API stores and matches it. O14 of #290 added
+// @waste/domain/execution/shift: shifts.ts holds a window and a shift to the
+// domain's rules in the domain's sentences, with the break's bounds.
+// O17 of #290 added
 // @waste/domain/route-schemes/seasons: route-schemes.ts reads the month-day
 // pattern the database's checks read, and the overlap rule of a scheme's
 // seasons.
@@ -71,6 +74,7 @@ definePurityTests({
     "@waste/domain/audit/vocabulary",
     "@waste/domain/execution/bulky",
     "@waste/domain/execution/proof-shapes",
+    "@waste/domain/execution/shift",
     "@waste/domain/execution/unloads",
     "@waste/domain/execution/vocabulary",
     "@waste/domain/execution/work-orders",

@@ -51,6 +51,13 @@ export type FingerprintInputs = {
    * reorder is never swallowed by the first's cache entry.
    */
   stops: readonly (FingerprintPosition | string)[]
+  /**
+   * Each stop's window and seconds at the kerb (O14 of #290), by its index
+   * into `stops`, where a window or a break can move the order; absent, a
+   * stop keys by its place alone, as before. A window is seconds of the
+   * operating date, or `disjoint` where no time serves the stop.
+   */
+  stopTimes?: readonly { window: readonly [number, number] | null | "disjoint"; serviceSeconds: number }[]
   /** Every constraint that can affect the result, flat scalars only. */
   constraints?: Readonly<Record<string, string | number | boolean>>
 }
@@ -63,16 +70,23 @@ const spellRecord = (record: Readonly<Record<string, string | number | boolean>>
     .map((key) => `${key}=${JSON.stringify(record[key])}`)
     .join("&")
 
+const spellTime = (time: NonNullable<FingerprintInputs["stopTimes"]>[number] | undefined): string => {
+  if (time === undefined) return ""
+  const window = time.window === null ? "any" : time.window === "disjoint" ? "disjoint" : `${time.window[0]}-${time.window[1]}`
+  return `@${window}+${time.serviceSeconds}`
+}
+
 /**
  * The request a Plan answers, spelt so equal requests share one answer. A
- * stop's seconds at the kerb (O10 of #290) are sent to the optimiser and not
- * spelt here: its cost is the drive, so they never change the order or a
- * leg, and spelling them would send every active Plan back to the provider
- * once for an answer it already holds. They join the day a time window makes
- * them matter.
+ * stop's seconds at the kerb (O10 of #290) are sent to the optimiser and
+ * spelt here only beside a time window or a break (O14 of #290), which is
+ * when they can move the order: without one the solver's cost is the drive,
+ * so they never change the order or a leg, and spelling them would send
+ * every active Plan back to the provider once for an answer it already holds.
+ * A timed request's departure and break are its `constraints`.
  */
 export function planFingerprint(inputs: FingerprintInputs): string {
-  const stops = inputs.stops.map((stop) => (typeof stop === "string" ? `none(${stop})` : spell(stop)))
+  const stops = inputs.stops.map((stop, index) => (typeof stop === "string" ? `none(${stop})` : spell(stop)) + spellTime(inputs.stopTimes?.[index]))
   if (inputs.solver === "optimiser") stops.sort()
   return [
     `provider=${inputs.provider}`,

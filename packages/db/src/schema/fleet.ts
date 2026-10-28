@@ -36,14 +36,22 @@
 // expiry, which is what "holds on that day" reads
 // (@waste/domain/resources/licence). A driver's employment has the provider's
 // shape check over `employment` instead of `ownership`.
+//
+// A driver's shift (O14 of #290) is their working day on the project's
+// clock, one window of the day (`driver_shift_window`), with at most one
+// break: its minutes, and where it falls — inside a window of its own that
+// lies within the shift, or anywhere in it without one (`driver_break_shape`).
+// The route's planned driver's shift is what the optimiser is sent and the
+// over-shift verdict reads (@waste/domain/execution/shift).
+import { BREAK_MINUTES } from "@waste/domain/execution/shift"
 import { DRIVER_STATUSES, EMPLOYMENT_TYPES, FUEL_TYPES, LICENCE_CLASSES, VEHICLE_KINDS, VEHICLE_OWNERSHIPS, VEHICLE_STATUSES } from "@waste/domain/resources/vocabulary"
 import { sql } from "drizzle-orm"
-import { check, date, integer, text, unique, uniqueIndex, uuid } from "drizzle-orm/pg-core"
+import { check, date, integer, text, time, unique, uniqueIndex, uuid } from "drizzle-orm/pg-core"
 
 import { tableObjectName } from "../names"
 import { userAccount } from "./access"
 import { wasteFraction } from "./catalogue"
-import { oneOf, positive } from "./checks"
+import { oneOf, positive, timeWindow } from "./checks"
 import { id, projectScoped, timestamps } from "./columns"
 import { vehicleType } from "./fleet-types"
 import { company, project, serviceProvider } from "./organisation"
@@ -170,11 +178,27 @@ export const driver = wms.table(
     userAccountId: uuid(),
     status: text().notNull(),
     notes: text(),
+    /** The working day on the project's clock (O14 of #290), both ends or neither. */
+    shiftStart: time(),
+    shiftEnd: time(),
+    /** The shift's one break, in minutes; null is a shift without one. */
+    breakMinutes: integer(),
+    /** Where the break falls, within the shift; null is anywhere in it. */
+    breakWindowStart: time(),
+    breakWindowEnd: time(),
   },
   (t) => [
     companyReference(t, company),
     tenantReference(t, [t.projectId], project),
     tenantReference(t, [t.serviceProviderId], serviceProvider),
+    timeWindow(t, "shift", [t.shiftStart, t.shiftEnd]),
+    timeWindow(t, "break", [t.breakWindowStart, t.breakWindowEnd]),
+    check(tableObjectName(t.id.table, "break_minutes_range", "driver"), sql`${t.breakMinutes} between ${sql.raw(String(BREAK_MINUTES.min))} and ${sql.raw(String(BREAK_MINUTES.max))}`),
+    // A break belongs to a shift, its window to its minutes, and the window lies within the shift.
+    check(
+      tableObjectName(t.id.table, "break_shape", "driver"),
+      sql`(${t.breakMinutes} is null or ${t.shiftStart} is not null) and (${t.breakWindowStart} is null or (${t.breakMinutes} is not null and ${t.breakWindowStart} >= ${t.shiftStart} and ${t.breakWindowEnd} <= ${t.shiftEnd}))`,
+    ),
     tenantReference(t, [t.userAccountId], userAccount),
     projectReference(t, [t.homeDepotId], depot),
     projectKey(t),

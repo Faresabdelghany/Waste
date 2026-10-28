@@ -56,7 +56,7 @@
 // `unloading_station_id`, a `tenantReference` to the company's station, both
 // nullable while a draft says nothing about them.
 //
-// `route_scheme_season` (O17 of #290, migration 0056) is one Season of a
+// `route_scheme_season` (O17 of #290, migration 0057) is one Season of a
 // scheme: a stretch of every year, from `starts_on` to the day before
 // `ends_on` — month-days, `mm-dd`, half-open like every period here and over
 // the new year where the end comes first — in which the scheme serves its

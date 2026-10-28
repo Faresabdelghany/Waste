@@ -299,6 +299,24 @@ describe("the driver endpoints", { skip: database.skip }, () => {
       assert.deepEqual([cleared.licenceClass, cleared.licenceExpiry, cleared.licenceNumber, cleared.homeDepotId, cleared.notes], [null, null, null, null, null], "a null takes each back; no class on record is eligible for nothing")
     })
 
+    test("writes a shift with its break whole, replaces it whole, and clears it with null (O14 of #290)", async () => {
+      const shift = { from: "07:00", to: "15:00", breakMinutes: 30, breakWindow: { from: "11:00", to: "12:30" } }
+      const created = await driver("Shifted", { shift })
+      assert.deepEqual(created.shift, shift)
+      assert.deepEqual(await one(olivia, created.id), created)
+      const anywhere = { from: "06:00", to: "14:00", breakMinutes: 20, breakWindow: null }
+      assert.deepEqual((await patch(olivia, created.id, { shift: anywhere })).shift, anywhere, "the break anywhere in the shift: the old window goes with the old shift")
+      assert.equal((await patch(olivia, created.id, { notes: "Early" })).shift?.from, "06:00", "a patch that does not name it leaves it")
+      assert.equal((await patch(olivia, created.id, { shift: null })).shift, null)
+      assert.equal((await driver("Unshifted")).shift, null, "none on record unless told")
+    })
+
+    test("refuses a shift whose break falls outside it, at the member that is wrong", async () => {
+      const created = await driver("Misshifted")
+      const problem = await refused(await olivia(`/drivers/${created.id}`, { method: "PATCH", body: { shift: { from: "07:00", to: "15:00", breakMinutes: 30, breakWindow: { from: "14:30", to: "16:00" } } } }), 400)
+      assert.deepEqual(problem.errors, [{ path: "shift.breakWindow", message: "The break's window lies within the shift" }])
+    })
+
     test("holds the provider rule against the merged row, in the driver's words", async () => {
       const created = await driver("Moving")
       const unemployed = await refused(await olivia(`/drivers/${created.id}`, { method: "PATCH", body: { employment: "service-provider" } }), 400)

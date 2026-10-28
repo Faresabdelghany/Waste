@@ -43,7 +43,7 @@ const kab: Customer = { ...osterbro, id: "01a0d2a4-a280-700b-8000-000000000004",
 const PRODUCT = "01a0d2a4-a280-700a-8000-000000000001"
 const PROPERTY = "01a0d2a4-a280-700c-8000-000000000001"
 const POINT = "01a0d2a4-a280-7010-8000-000000000001"
-const agr2408: Agreement = { id: "01a0d2a4-a280-7012-8000-000000000001", ...STAMPS, projectId: copenhagen.id, number: "AGR-2408", customerId: osterbro.id, payerCustomerId: osterbro.id, status: "active", billingCadence: "monthly", currency: "DKK", notes: null, priceListId: null, validFrom: "2026-01-01", validTo: "2027-01-01" }
+const agr2408: Agreement = { id: "01a0d2a4-a280-7012-8000-000000000001", ...STAMPS, projectId: copenhagen.id, number: "AGR-2408", customerId: osterbro.id, payerCustomerId: osterbro.id, status: "active", billingCadence: "monthly", currency: "DKK", notes: null, priceListId: null, serviceWindow: null, validFrom: "2026-01-01", validTo: "2027-01-01" }
 const agr2512: Agreement = { ...agr2408, id: "01a0d2a4-a280-7012-8000-000000000002", projectId: HARBOR, number: "AGR-2512", status: "draft", validFrom: "2026-09-01", validTo: null }
 const agr2188: Agreement = { ...agr2408, id: "01a0d2a4-a280-7012-8000-000000000003", number: "AGR-2188", customerId: mikkel.id, payerCustomerId: kab.id, validTo: null }
 const agrDraft: Agreement = { ...agr2408, id: "01a0d2a4-a280-7012-8000-000000000004", number: "AGR-2700", status: "draft", notes: "Payer to be confirmed", priceListId: "01a0d2a4-a280-7028-8000-000000000001", validFrom: "2026-10-01", validTo: null }
@@ -196,6 +196,8 @@ describe("an agreement", () => {
       billingCadence: "monthly",
       currency: "DKK",
       priceListId: PROJECT_DEFAULT_LIST,
+      serviceWindowStart: "",
+      serviceWindowEnd: "",
     })
     assert.equal(record.updated, "5 days ago")
     assert.ok(agreementAdapter.owns(record))
@@ -276,6 +278,19 @@ describe("an agreement", () => {
     assert.deepEqual(made({ effectiveFrom: "" }), { path: "effectiveFrom", message: "An agreement needs the first day it is in force" })
     assert.deepEqual(made({ billingCadence: "" }), { path: "billingCadence", message: "Pick a billing cadence" })
     assert.deepEqual(made({ currency: "" }), { path: "currency", message: "Pick a currency" })
+  })
+
+  test("the service window goes out whole, is read back into its two fields and as a fact, and a half or a reversed one is refused at the field (O14 of #290)", () => {
+    const windowed = agreementAdapter.toCreateBody?.(madeAgreement({ ...AGREEMENT_FORM, serviceWindowStart: "06:00", serviceWindowEnd: "10:00" }), context()) as Record<string, unknown>
+    assert.deepEqual(windowed.serviceWindow, { from: "06:00", to: "10:00" })
+    assert.ok(AgreementCreate.safeParse(windowed).success)
+    assert.equal("serviceWindow" in (agreementAdapter.toCreateBody?.(madeAgreement(AGREEMENT_FORM), context()) as Record<string, unknown>), false, "absent is any time of the day")
+    assert.deepEqual(agreementAdapter.toCreateBody?.(madeAgreement({ ...AGREEMENT_FORM, serviceWindowStart: "06:00" }), context()), { path: "serviceWindowEnd", message: "Give both ends of the window, or neither" })
+    assert.deepEqual(agreementAdapter.toCreateBody?.(madeAgreement({ ...AGREEMENT_FORM, serviceWindowStart: "10:00", serviceWindowEnd: "06:00" }), context()), { path: "serviceWindowEnd", message: "A window closes after it opens, on the same day" })
+    const read = agreementAdapter.toRecord({ ...agr2408, serviceWindow: { from: "06:00", to: "10:00" } }, context())
+    assert.equal(read.facts?.["Service window"], "06:00–10:00")
+    assert.deepEqual(agreementAdapter.toPatchBody(read, { ...read, submittedValues: { ...read.submittedValues, serviceWindowEnd: "09:00" } }, context()), { serviceWindow: { from: "06:00", to: "09:00" } })
+    assert.deepEqual(agreementAdapter.toPatchBody(read, { ...read, submittedValues: { ...read.submittedValues, serviceWindowStart: "", serviceWindowEnd: "" } }, context()), { serviceWindow: null })
   })
 
   test("the price list picked goes out by its server id, the project's default list as no list at all; one the store does not hold is refused at the field", () => {

@@ -7,12 +7,21 @@
 // — and counted, so a page of routes is one statement over its stops however
 // many there are, and one over its planned vehicles. The routes are those a
 // fenced read already found, as `activePlansByRoute` reads their Plans.
-import type { RouteWorkload } from "@waste/contracts/routes"
+//
+// Beside it, the route's day against its planned driver's shift (O14 of
+// #290), the over-shift verdict (`routeShift`, @waste/domain/execution/shift):
+// the planned start, the active Plan's drive and the waiting its windows
+// made, the stop time above and the break, against the shift. A page's is
+// two statements more, over its drivers and its active Plans.
+import type { RouteShift, RouteWorkload } from "@waste/contracts/routes"
 import type { Tx } from "@waste/db/client"
+import { shiftColumns, shiftOf } from "@waste/db/commands/stop-timing"
 import { containerType, wasteFraction } from "@waste/db/schema/catalogue"
 import { container } from "@waste/db/schema/containers"
 import { pickup } from "@waste/db/schema/execution"
-import { vehicle } from "@waste/db/schema/fleet"
+import { driver, vehicle } from "@waste/db/schema/fleet"
+import { plan } from "@waste/db/schema/routing"
+import { routeShift } from "@waste/domain/execution/shift"
 import { routeWorkload, type WorkloadStop } from "@waste/domain/execution/workload"
 import type { PickupService, PickupStatus } from "@waste/domain/execution/vocabulary"
 import { and, count, eq, inArray } from "drizzle-orm"
@@ -73,3 +82,49 @@ export async function workloadsByRoute(tx: Tx, companyId: string, routes: readon
 
 /** The workload of a route a read found without stops to weigh: what a map lookup answers for a route it was never asked about. */
 export const NO_WORKLOAD: RouteWorkload = routeWorkload([], null)
+
+/** Each route's day against its planned driver's shift, by its id: every route named answers one, read beside its workload (`workloadsByRoute`). */
+export async function shiftsByRoute(
+  tx: Tx,
+  companyId: string,
+  routes: readonly { id: string; plannedDriverId: string | null; plannedStartTime: string | null; activePlanId: string | null }[],
+  workloads: ReadonlyMap<string, RouteWorkload>,
+): Promise<Map<string, RouteShift>> {
+  if (routes.length === 0) return new Map()
+  const driverIds = [...new Set(routes.flatMap((row) => (row.plannedDriverId === null ? [] : [row.plannedDriverId])))]
+  const planIds = routes.flatMap((row) => (row.activePlanId === null ? [] : [row.activePlanId]))
+  const [drivers, plans] = await Promise.all([
+    driverIds.length === 0
+      ? []
+      : tx
+          .select({ id: driver.id, ...shiftColumns })
+          .from(driver)
+          .where(and(eq(driver.companyId, companyId), inArray(driver.id, driverIds))),
+    planIds.length === 0
+      ? []
+      : tx
+          .select({ id: plan.id, durationSeconds: plan.durationSeconds, waitingSeconds: plan.waitingSeconds })
+          .from(plan)
+          .where(and(eq(plan.companyId, companyId), inArray(plan.id, planIds))),
+  ])
+  const shifts = new Map(drivers.map((row) => [row.id, shiftOf(row)]))
+  const measured = new Map(plans.map((row) => [row.id, row]))
+  return new Map(
+    routes.map((row) => {
+      const active = row.activePlanId === null ? undefined : measured.get(row.activePlanId)
+      return [
+        row.id,
+        routeShift({
+          shift: row.plannedDriverId === null ? null : (shifts.get(row.plannedDriverId) ?? null),
+          plannedStartTime: row.plannedStartTime,
+          driveSeconds: active?.durationSeconds ?? null,
+          waitingSeconds: active?.waitingSeconds ?? null,
+          stopSeconds: (workloads.get(row.id) ?? NO_WORKLOAD).stopSeconds,
+        }),
+      ]
+    }),
+  )
+}
+
+/** The day of a route a read found without a shift to judge: what a map lookup answers for a route it was never asked about. */
+export const NO_SHIFT: RouteShift = { shift: null, startsAt: null, workSeconds: null, overShiftSeconds: null }

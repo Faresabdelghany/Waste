@@ -61,10 +61,10 @@ import {
   SHARED_COLLECTION_POINT_STATUSES,
 } from "@waste/domain/registry/vocabulary"
 import { sql } from "drizzle-orm"
-import { boolean, check, integer, text, unique, uniqueIndex, uuid } from "drizzle-orm/pg-core"
+import { boolean, check, integer, text, time, unique, uniqueIndex, uuid } from "drizzle-orm/pg-core"
 
 import { tableObjectName } from "../names"
-import { lowercase, oneOf, positive } from "./checks"
+import { lowercase, oneOf, positive, timeWindow } from "./checks"
 import { id, projectScoped, tenant, timestamps } from "./columns"
 import { geometry, validGeometry } from "./geometry"
 import { company, project } from "./organisation"
@@ -127,11 +127,15 @@ export const property = wms.table(
     /** What the driver is told at the place — the gate code, where the bins stand (migration 0019): the Driver App's stop shows it. */
     driverInstructions: text(),
     status: text().notNull(),
+    /** The property's access hours (O14 of #290): when in the day a stop here may be served, both ends on the project's clock or neither. */
+    serviceWindowStart: time(),
+    serviceWindowEnd: time(),
   },
   (t) => [
     companyReference(t, company),
     tenantReference(t, [t.projectId], project),
     tenantUnique(t, t.projectId, t.name),
+    timeWindow(t, "service", [t.serviceWindowStart, t.serviceWindowEnd]),
     projectKey(t),
     oneOf(t.kind, PROPERTY_KINDS),
     oneOf(t.status, PROPERTY_STATUSES),

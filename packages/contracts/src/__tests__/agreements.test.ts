@@ -43,6 +43,7 @@ const agreement = {
   currency: "DKK",
   notes: "Signed at the housing association's annual meeting.",
   priceListId: null,
+  serviceWindow: null,
   validFrom: "2026-01-01",
   validTo: null,
   ...STAMPS,

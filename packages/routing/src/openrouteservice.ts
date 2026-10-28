@@ -26,7 +26,13 @@
 // when every stop's has closed, so one optimisation call orders the whole
 // trip and spends no directions call (#132's cost). An answer that leaves a
 // stop unassigned or visits the station early is a refusal in so many
-// words, never a Plan.
+// words, never a Plan. A stop's window and the driver's breaks (O14 of #290)
+// ride the same clock, seconds from the operating date's midnight: the
+// windows are hard, so a stop no order reaches inside its own is
+// unassigned, and the answer says which for the caller to ask again without
+// those windows (a Plan never loses a stop), while the shift's end is never a bound —
+// a route too long for its shift is ordered, and the verdict told it. The
+// waiting the windows make is read off the steps, the station's week apart.
 //
 // Every response's `x-ratelimit-*` headers are its family's reading (the
 // reset in Unix seconds, per HeiGIT's own answer); a 403 carrying them is
@@ -52,7 +58,7 @@ const MAX_WAYPOINTS = 50
 /** A provider call gets a minute; the job's ten minutes hold a chunked trip's five calls and a 429's wait. */
 const REQUEST_TIMEOUT_MS = 60_000
 
-/** A week in seconds: every stop's time window closes before it and the station's opens at it. */
+/** A week in seconds: every stop's time window closes before it and the station's opens at it; a stop's own window (O14 of #290) is a day's. */
 const STATION_OPENS = 604_800
 const DAY_SECONDS = 86_400
 
@@ -135,33 +141,60 @@ function directionsResult(body: unknown, points: readonly Position2D[]): Measure
   return { legs: legsBetween(line, wayPoints as number[], points, measures), provenance: provenanceOf(body) }
 }
 
-/** The optimisation request: a job per stop with its seconds at the kerb where given, the station held last by its window, one vehicle from and back to the depot. */
-function vroomRequest({ profile, depot, stops, serviceSeconds, station }: OptimiseRequest) {
-  const held = station ? { time_windows: [[0, STATION_OPENS - 1]] } : {}
-  const serviceOf = (index: number) => (serviceSeconds?.[index] === undefined ? {} : { service: serviceSeconds[index] })
-  const jobs: Record<string, unknown>[] = stops.map((location, index) => ({ id: index + 1, location, ...serviceOf(index), ...held }))
+/** The horizon of the optimiser's clock: past every window of the day and the station's, so nothing a day holds is bounded by it. */
+const HORIZON = STATION_OPENS + 2 * DAY_SECONDS
+
+/**
+ * The optimisation request: a job per stop with its seconds at the kerb and
+ * its window where given, the station held last by its own, and one vehicle
+ * from and back to the depot, leaving at its departure and taking its
+ * driver's breaks (O14 of #290). Every time is seconds from the operating
+ * date's midnight, so a stop's window and a break's are a day's and the
+ * station's, a week in, opens after every one of them; a stop without a
+ * window on a trip with a station is held to the week before it. The vehicle
+ * is bounded by the horizon alone, never by its shift's end.
+ */
+function vroomRequest({ profile, depot, stops, serviceSeconds, timeWindows, departure, breaks, station }: OptimiseRequest) {
+  const jobs: Record<string, unknown>[] = stops.map((location, index) => {
+    const service = serviceSeconds?.[index]
+    const window = timeWindows?.[index] ?? (station ? ([0, STATION_OPENS - 1] as const) : null)
+    return { id: index + 1, location, ...(service === undefined ? {} : { service }), ...(window === null ? {} : { time_windows: [[window[0], window[1]]] }) }
+  })
   if (station) jobs.push({ id: stops.length + 1, location: station, time_windows: [[STATION_OPENS, STATION_OPENS + DAY_SECONDS]] })
-  const vehicle = { id: 1, profile, start: depot, end: depot, ...(station ? { time_window: [0, STATION_OPENS + 2 * DAY_SECONDS] } : {}) }
+  const timed = station || (departure ?? null) !== null || (breaks?.length ?? 0) > 0 || (timeWindows?.some((window) => window !== null) ?? false)
+  const vehicle = {
+    id: 1,
+    profile,
+    start: depot,
+    end: depot,
+    ...(timed ? { time_window: [departure ?? 0, HORIZON] } : {}),
+    ...(breaks && breaks.length > 0 ? { breaks: breaks.map((pause, index) => ({ id: index + 1, time_windows: [[pause.window[0], pause.window[1]]], service: pause.seconds })) } : {}),
+  }
   return { jobs, vehicles: [vehicle], options: { g: true } }
 }
 
 type Step = Waypoint & { seconds: number }
 
 /** VROOM's answer as the order over the stops and the closed trip's legs; a refusal where it did not order every stop with the station last. */
-function vroomResult(body: unknown, { stops, station }: OptimiseRequest): OptimiseResult | { refused: string } {
+function vroomResult(body: unknown, request: OptimiseRequest): OptimiseResult | { refused: string } {
+  const { stops, station } = request
   if (!isRecord(body)) throw unreadable("the optimisation answer is not an object")
   if (typeof body.code === "number" && body.code !== 0) return { refused: typeof body.error === "string" ? body.error : `the optimiser answered code ${body.code}` }
   const unassigned = Array.isArray(body.unassigned) ? body.unassigned.length : 0
-  if (unassigned > 0) return { refused: `the optimiser left ${unassigned} ${unassigned === 1 ? "stop" : "stops"} unassigned` }
+  const stationId = stops.length + 1
+  const left = (Array.isArray(body.unassigned) ? body.unassigned : []).map((job) => (isRecord(job) && typeof job.id === "number" ? job.id : -1))
+  // Only a stop with a window may be left: anything else — the station, a stop without one — is a refusal as it always was.
+  const windowedLeft = left.every((id) => id >= 1 && id <= stops.length && (request.timeWindows?.[id - 1] ?? null) !== null)
+  if (unassigned > 0 && !windowedLeft) return { refused: `the optimiser left ${unassigned} ${unassigned === 1 ? "stop" : "stops"} unassigned` }
+  const missing = new Set(left.map((id) => id - 1))
   if (!Array.isArray(body.routes) || body.routes.length !== 1 || !isRecord(body.routes[0])) throw unreadable("the optimisation answer does not hold one route")
   const route = body.routes[0]
   if (typeof route.geometry !== "string" || !Array.isArray(route.steps)) throw unreadable("the optimised route has no geometry or no steps; the request asks for g")
   const steps = route.steps.filter((step): step is Record<string, unknown> => isRecord(step) && (step.type === "start" || step.type === "job" || step.type === "end"))
-  const stationId = stops.length + 1
   const jobIds = steps.filter((step) => step.type === "job").map((step) => step.id ?? step.job)
   const order = jobIds.filter((id) => id !== stationId).map((id) => (typeof id === "number" ? id - 1 : -1))
-  if (order.length !== stops.length || new Set(order).size !== stops.length || order.some((index) => index < 0 || index >= stops.length)) {
-    throw unreadable(`the optimised route does not visit each of the ${stops.length} stops once`)
+  if (order.length + missing.size !== stops.length || new Set(order).size !== order.length || order.some((index) => index < 0 || index >= stops.length || missing.has(index))) {
+    throw unreadable(`the optimised route does not visit each of the ${stops.length - missing.size} stops it assigned once`)
   }
   if (station && jobIds.at(-1) !== stationId) return { refused: "the optimiser visited the unloading station before the last stop" }
   const visited: Step[] = steps.map((step, index) => {
@@ -179,7 +212,11 @@ function vroomResult(body: unknown, { stops, station }: OptimiseRequest): Optimi
     points.map((step) => step.at),
     measures,
   )
-  return { order, legs, provenance: { engineVersion: null, graphDate: null } }
+  // Waiting for a stop's window or a break's, never the week the station's device waits.
+  const waitingSeconds = route.steps
+    .filter((step): step is Record<string, unknown> => isRecord(step) && ((step.type === "job" && (step.id ?? step.job) !== stationId) || step.type === "break"))
+    .reduce((sum, step) => sum + (typeof step.waiting_time === "number" ? step.waiting_time : 0), 0)
+  return { order, legs, waitingSeconds, ...(missing.size > 0 ? { unassigned: [...missing].sort((a, b) => a - b) } : {}), provenance: { engineVersion: null, graphDate: null } }
 }
 
 export class OpenRouteServiceProvider implements RoutingProvider {

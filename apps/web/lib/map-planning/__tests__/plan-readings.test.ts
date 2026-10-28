@@ -26,6 +26,7 @@ const active = (overrides: Partial<ActivePlan> = {}): ActivePlan => ({
   durationSeconds: 1_849,
   stale: false,
   deferredUntil: null,
+  stopWarnings: [],
   ...overrides,
 })
 

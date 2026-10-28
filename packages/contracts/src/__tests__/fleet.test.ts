@@ -68,6 +68,7 @@ const driver = {
   userAccountId: THIRD,
   status: "active",
   notes: null,
+  shift: { from: "07:00", to: "15:00", breakMinutes: 30, breakWindow: { from: "11:00", to: "12:30" } },
   ...STAMPS,
 }
 

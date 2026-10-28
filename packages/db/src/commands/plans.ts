@@ -34,6 +34,7 @@ import { property, sharedCollectionPoint } from "../schema/customers"
 import { pickup, route } from "../schema/execution"
 import { depot, unloadingStation } from "../schema/places"
 import { plan, planStop } from "../schema/routing"
+import { routeTiming } from "./stop-timing"
 
 /** The queue a `baseline` or `manual` Plan's measurement is sent to and worked on. */
 export const ROUTING_MEASURE_QUEUE = "routing.measure"
@@ -233,20 +234,37 @@ async function fingerprintParts(tx: Tx, companyId: string, routeRow: { id: strin
   return { trip, ...ends, stops: orderedPickupIds.map((id) => at.get(id) ?? id) }
 }
 
+/** What a Plan is keyed on of its route: the ends, and the clock the optimiser is sent (O14 of #290). */
+export type PlanRoute = {
+  id: string
+  depotId: string | null
+  unloadingStationId: string | null
+  operatingDate: string
+  plannedStartTime: string | null
+  plannedDriverId: string | null
+}
+
 /**
  * What a request over the route keys on: its trip, and its fingerprint over
  * the ends the result depends on and each stop's place (#124 §4, corrected by
- * #132 §6). The one spelling the cache lookup below and the horizon's
- * question — does the active Plan still answer the route? — share.
+ * #132 §6) — and, for the optimiser on a timed route (O14 of #290), each
+ * stop's window and service with the departure and the driver's break, the
+ * request `routing.optimise` sends (`routeTiming`). The one spelling the
+ * cache lookup below and the horizon's question — does the active Plan still
+ * answer the route? — share.
  */
 export async function planKey(
   tx: Tx,
   companyId: string,
-  routeRow: { id: string; depotId: string | null; unloadingStationId: string | null },
+  routeRow: PlanRoute,
   request: { solver: PlanSolver; orderedPickupIds: readonly string[] },
   routing: { name: string; profile: string },
 ): Promise<{ trip: PlanTrip; fingerprint: string }> {
-  const parts = await fingerprintParts(tx, companyId, routeRow, request.solver, request.orderedPickupIds)
+  const [parts, timing] = await Promise.all([
+    fingerprintParts(tx, companyId, routeRow, request.solver, request.orderedPickupIds),
+    request.solver === "optimiser" ? routeTiming(tx, companyId, routeRow, request.orderedPickupIds) : undefined,
+  ])
+  const timed = timing?.timed === true ? timing : undefined
   const fingerprint = planFingerprint({
     provider: routing.name,
     profile: routing.profile,
@@ -254,6 +272,15 @@ export async function planKey(
     depot: parts.depot,
     station: parts.station,
     stops: parts.stops,
+    ...(timed === undefined
+      ? {}
+      : {
+          stopTimes: request.orderedPickupIds.map((id) => timed.stops.get(id) ?? { window: null, serviceSeconds: 0 }),
+          constraints: {
+            departure: timed.departure ?? "none",
+            breaks: timed.breaks.map((pause) => `${pause.window[0]}-${pause.window[1]}+${pause.seconds}`).join(";"),
+          },
+        }),
   })
   return { trip: parts.trip, fingerprint }
 }
@@ -273,7 +300,7 @@ export type EnsuredPlan = { planId: string; created: boolean }
 export async function ensurePlan(
   tx: Tx,
   companyId: string,
-  routeRow: { id: string; projectId: string; operatingDate: string; depotId: string | null; unloadingStationId: string | null },
+  routeRow: PlanRoute & { projectId: string },
   request: { solver: PlanSolver; orderedPickupIds: readonly string[]; class: RoutingJobClass },
   { routing, send: sendJob }: { routing: { name: string; profile: string }; send: Send },
 ): Promise<EnsuredPlan> {

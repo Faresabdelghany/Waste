@@ -18,6 +18,16 @@ export type PlanStatus = (typeof PLAN_STATUSES)[number]
 export const PLAN_TRIPS = ["full", "stops-only"] as const
 export type PlanTrip = (typeof PLAN_TRIPS)[number]
 
+/**
+ * Why an optimiser's Plan holds a stop outside its Service Window (O14 of
+ * #290): its property's hours and its agreement's window never overlap, so it
+ * was ordered with no window; or no order reached it inside its window, so it
+ * was ordered again without one. A Plan never loses a stop: it keeps the stop
+ * and says which, for the office to mend the record or the route.
+ */
+export const PLAN_STOP_WARNINGS = ["windows-disjoint", "window-unreachable"] as const
+export type PlanStopWarning = (typeof PLAN_STOP_WARNINGS)[number]
+
 /** Who is waiting on a routing job: a person (a reorder, an Optimise click, a preview) or the horizon. Priority reads it first (#132 §1). */
 export const ROUTING_JOB_CLASSES = ["interactive", "batch"] as const
 export type RoutingJobClass = (typeof ROUTING_JOB_CLASSES)[number]
