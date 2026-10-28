@@ -8,7 +8,7 @@ import assert from "node:assert/strict"
 import { describe, test } from "node:test"
 
 import { MASTER_DATA_SETTINGS_PANE_ID } from "../business-links"
-import { ASSET_MANAGEMENT_SETTINGS_PANE_ID, FINANCE_ON_API_SETTINGS_PANE_ID, FINANCE_SETTINGS_PANE_ID, PRIVACY_ON_API_SETTINGS_PANE_ID, PRIVACY_SETTINGS_PANE_ID, INTEGRATIONS_ON_API_SETTINGS_PANE_ID, INTEGRATIONS_SETTINGS_PANE_ID, settingsPaneOffered, settingsPaneOpened, TICKETS_COMMUNICATION_SETTINGS_PANE_ID } from "../settings-panes"
+import { ASSET_MANAGEMENT_SETTINGS_PANE_ID, FINANCE_ON_API_SETTINGS_PANE_ID, FINANCE_SETTINGS_PANE_ID, PRIVACY_ON_API_SETTINGS_PANE_ID, PRIVACY_SETTINGS_PANE_ID, INTEGRATIONS_ON_API_SETTINGS_PANE_ID, INTEGRATIONS_SETTINGS_PANE_ID, PORTALS_ON_API_SETTINGS_PANE_ID, PORTALS_SETTINGS_PANE_ID, settingsPaneOffered, settingsPaneOpened, TICKETS_COMMUNICATION_SETTINGS_PANE_ID } from "../settings-panes"
 import { SORTING_GUIDE_SETTINGS_PANE_ID } from "../sorting-guide"
 import { PICKUP_EXCEPTION_CHARGES_SETTINGS_PANE_ID } from "../pickup-exception-rules"
 import { EMISSION_FACTORS_SETTINGS_PANE_ID } from "../fleet-emissions"
@@ -81,6 +81,17 @@ describe("the Settings panes offered", () => {
     assert.equal(settingsPaneOpened(INTEGRATIONS_SETTINGS_PANE_ID, true), INTEGRATIONS_ON_API_SETTINGS_PANE_ID)
     assert.equal(settingsPaneOpened(INTEGRATIONS_SETTINGS_PANE_ID, false), INTEGRATIONS_SETTINGS_PANE_ID)
     assert.equal(settingsPaneOpened(INTEGRATIONS_ON_API_SETTINGS_PANE_ID, false), INTEGRATIONS_SETTINGS_PANE_ID)
+  })
+
+  test("Portals & branding is the API's on the Pilot (#487) and the browser's in fixture mode, one pane in each", () => {
+    assert.equal(settingsPaneOffered(PORTALS_SETTINGS_PANE_ID, true), false, "the fixtures' customer portal and branding are never shown to a signed-in API user")
+    assert.equal(settingsPaneOffered(PORTALS_SETTINGS_PANE_ID, false), true)
+    assert.equal(settingsPaneOffered(PORTALS_ON_API_SETTINGS_PANE_ID, true), true)
+    assert.equal(settingsPaneOffered(PORTALS_ON_API_SETTINGS_PANE_ID, false), false)
+    // A link to it — Configure's module, `/settings?pane=portals` — opens the API's pane on the Pilot.
+    assert.equal(settingsPaneOpened(PORTALS_SETTINGS_PANE_ID, true), PORTALS_ON_API_SETTINGS_PANE_ID)
+    assert.equal(settingsPaneOpened(PORTALS_SETTINGS_PANE_ID, false), PORTALS_SETTINGS_PANE_ID)
+    assert.equal(settingsPaneOpened(PORTALS_ON_API_SETTINGS_PANE_ID, false), PORTALS_SETTINGS_PANE_ID)
   })
 
   test("a link to Asset management opens Master data on the Pilot, and itself in fixture mode", () => {
