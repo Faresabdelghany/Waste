@@ -118,7 +118,7 @@ describe("the weight control endpoints", { skip: database.skip || owner.skip }, 
   const eventsAbout = async (aggregateId: string) =>
     await withCompany(pool.db, a.companyId, async (tx: Tx) =>
       tx
-        .select({ kind: outboxEvent.kind })
+        .select({ kind: outboxEvent.kind, payload: outboxEvent.payload })
         .from(outboxEvent)
         .where(and(eq(outboxEvent.companyId, a.companyId), eq(outboxEvent.aggregateId, aggregateId)))
         .orderBy(asc(outboxEvent.id)),
@@ -158,10 +158,16 @@ describe("the weight control endpoints", { skip: database.skip || owner.skip }, 
       assert.deepEqual(history, [approval, rejection, second], "every row as it was appended: the ledger is never updated")
       assert.deepEqual(await one(u.id), { ...u, weightReview: { status: "approved", latestReviewId: second.id, correctionUnloadId: null } })
       assert.equal(await reviewRowsOf(u.id), 3)
+      const published = await eventsAbout(u.id)
       assert.deepEqual(
-        (await eventsAbout(u.id)).map((event) => event.kind),
-        ["unload-recorded"],
-        "a review publishes nothing",
+        published.map((event) => event.kind),
+        ["unload-recorded", "weight-reviewed", "weight-reviewed", "weight-reviewed"],
+        "each review written publishes weight-reviewed for Finance (O28 of #290); a decision that stays publishes nothing",
+      )
+      assert.deepEqual(
+        published.slice(1).map((event) => event.payload),
+        [approval, rejection, second],
+        "the review as answered",
       )
       // The viewer holds edit on Copenhagen: a Copenhagen unload takes their decision, and they read it back.
       const theirDecision = await stood(await decide(u.id, "approve", {}, viewer))
@@ -209,11 +215,15 @@ describe("the weight control endpoints", { skip: database.skip || owner.skip }, 
       assert.notEqual(twice.correctionUnloadId, fresh.id)
       assert.deepEqual((await one(fresh.id)).weightReview, { status: "corrected", latestReviewId: twice.id, correctionUnloadId: twice.correctionUnloadId }, "corrected in its turn")
 
-      assert.deepEqual(await eventsAbout(fresh.id), [], "the correction emits no unload-recorded")
+      assert.deepEqual(
+        (await eventsAbout(fresh.id)).map((event) => event.kind),
+        ["weight-reviewed", "weight-reviewed"],
+        "the correction emits no unload-recorded: its approval and its own correction are its reviews' news",
+      )
       assert.deepEqual(
         (await eventsAbout(u.id)).map((event) => event.kind),
-        ["unload-recorded"],
-        "the capture did",
+        ["unload-recorded", "weight-reviewed"],
+        "the capture did, and the correction's review of it",
       )
       const route = RouteDetail.parse(await (await olivia(`/routes/${u.routeId}`)).json())
       const listed = route.unloads.filter((row) => [u.id, fresh.id].includes(row.id))

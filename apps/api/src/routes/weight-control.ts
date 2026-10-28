@@ -24,6 +24,12 @@
 // the new row is `captured` and may be reviewed and corrected in its turn.
 // The correction emits no `unload-recorded` (#112 §7.26): the outbox carries
 // what another context acts on, and the reader of a weight is Finance itself.
+// Every decision that writes its row emits `weight-reviewed` (O28 of #290,
+// C32 of #291) in the same transaction, carrying the review as answered —
+// for a correction the review of the corrected unload — which is how Finance
+// charges a stop sold by the tonne its share of an approved weight, and
+// cancels or reverses that charge when a later review takes the approval
+// back; a decision that stays emits nothing, since nothing moved.
 // `GET /unloads/:id/reviews` is the unload's reviews, oldest first.
 //
 // The machine is the domain's (`weightReviewTransition`,
@@ -59,6 +65,7 @@ import { Hono, type MiddlewareHandler } from "hono"
 import { describeRoute } from "hono-openapi"
 
 import { BEARER_SECURITY, type AuthEnv, type Principal } from "../auth/principal"
+import { emit } from "../outbox"
 import { requireGrant } from "../auth/require"
 import { newId } from "../ids"
 import { afterCursor, fetchLimit, pageOf } from "../pagination"
@@ -155,6 +162,8 @@ async function decided(tx: Tx, principal: Principal, id: string, decision: Weigh
       reviewedBy: principal.user.id,
     })
     .returning(reviewColumns)
+  // Finance's news (O28 of #290): the review as answered, after the row it describes.
+  await emit(tx, principal, { aggregate: "unload", aggregateId: current.id, kind: "weight-reviewed", payload: reviewOf(review), projectId: current.projectId, occurredAt: review.recordedAt })
   return { review, wrote: true }
 }
 
@@ -167,6 +176,7 @@ const commandProblems = {
 
 const APPENDED = "Answers 201 with the review and no `Location`, like the ledger's commands: a review is read on `GET /unloads/{id}/reviews`, a list, and has no address of its own."
 const CORRECTED = "An unload that was corrected is refused (409, `This unload was corrected by unload <id>; review that one`): the correction is the row to review."
+const EMITS = "A decision that writes its review emits `weight-reviewed` with the review in the same transaction, which Finance reads to charge or uncharge a weight sold by the tonne; one that stays emits nothing."
 const LOCKED = "Runs under the unload's route's row lock — a ledger row cannot be locked by the API role, which may not update it — with the reading read again under it, so two reviews take turns and the fold never forks."
 
 export function weightControlRoutes(guard: MiddlewareHandler<AuthEnv>) {
@@ -181,6 +191,8 @@ export function weightControlRoutes(guard: MiddlewareHandler<AuthEnv>) {
           CORRECTED +
           " " +
           LOCKED +
+          " " +
+          EMITS +
           " " +
           APPENDED +
           " An unload of another company, or of a project this account does not work in, is an unload that does not exist here.",
@@ -214,6 +226,8 @@ export function weightControlRoutes(guard: MiddlewareHandler<AuthEnv>) {
           " " +
           LOCKED +
           " " +
+          EMITS +
+          " " +
           APPENDED +
           " An unload of another company, or of a project this account does not work in, is an unload that does not exist here.",
         security: BEARER_SECURITY,
@@ -245,6 +259,8 @@ export function weightControlRoutes(guard: MiddlewareHandler<AuthEnv>) {
           CORRECTED +
           " " +
           LOCKED +
+          " " +
+          EMITS +
           " " +
           APPENDED +
           " An unload of another company, or of a project this account does not work in, is an unload that does not exist here.",

@@ -150,7 +150,7 @@ export type BillableEventRelease = z.infer<typeof BillableEventRelease>
 
 /** `POST /billable-events/:id/cancel`: the office's reason, never the consumer's, and a note. */
 export const BillableEventCancel = z.strictObject({
-  reason: CancelReason.exclude(["pickup-corrected", "visit-voided"]),
+  reason: CancelReason.exclude(["pickup-corrected", "visit-voided", "weight-revised"]),
   note: Paragraph.optional(),
 })
 export type BillableEventCancel = z.infer<typeof BillableEventCancel>

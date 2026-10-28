@@ -168,6 +168,7 @@ describe("the two commands", () => {
     assert.deepEqual(BillableEventCancel.parse({ reason: "duplicate" }), { reason: "duplicate" })
     assert.deepEqual(BillableEventCancel.parse({ reason: "not-delivered", note: "The container was not out" }), { reason: "not-delivered", note: "The container was not out" })
     assert.deepEqual(refusal(BillableEventCancel.safeParse({ reason: "pickup-corrected" })).map((issue) => issue.path), ["reason"], "the consumer's reason is not a person's")
+    assert.equal(BillableEventCancel.safeParse({ reason: "weight-revised" }).success, false, "nor the weight review's (O28 of #290)")
     assert.deepEqual(refusal(BillableEventCancel.safeParse({})).map((issue) => issue.path), ["reason"])
     for (const reason of ["duplicate", "not-delivered", "other"]) assert.equal(BillableEventCancel.safeParse({ reason }).success, true, reason)
   })

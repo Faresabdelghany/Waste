@@ -92,6 +92,7 @@ import { route } from "@waste/db/schema/execution"
 import { billableEvent, serviceArea, serviceAreaAssignment, serviceAreaPlanningArea, serviceProviderPrice, settlement, settlementEvent, settlementLine } from "@waste/db/schema/finance"
 import { serviceProvider } from "@waste/db/schema/organisation"
 import { routeScheme } from "@waste/db/schema/route-schemes"
+import { tonnesAt } from "@waste/domain/finance/tonnage"
 import { settlementTransition, type SettlementCommand } from "@waste/domain/finance/transitions"
 import type { SettlementEventKind, SettlementStatus } from "@waste/domain/finance/vocabulary"
 import { addDays } from "@waste/domain/route-schemes/recurrence"
@@ -339,7 +340,7 @@ async function transitionOf(tx: Tx, principal: Principal, current: Row, command:
 }
 
 /** One event served under the settlement's assignment, with the provider price valid on its service date or none. */
-type Served = { eventId: string; kind: string; quantity: number; priceId: string | null; unitPriceMinor: number | null }
+type Served = { eventId: string; kind: string; quantity: number; priceId: string | null; unitPriceMinor: number | null; weightKg: number | null }
 
 /**
  * §3's predicate as a join, the settlement's own assignment in place of the
@@ -351,7 +352,10 @@ type Served = { eventId: string; kind: string; quantity: number; priceId: string
  * route whose scheme has no planning area serves nobody's award. Each event
  * comes with the one provider price of the assignment for its product valid
  * on the day (`service_provider_price_no_overlap` holds it to one), or none.
- * In id order, so the lines are minted in the order the events were.
+ * A weight charge (O28 of #290) comes with its share's kilograms, a reversal
+ * with those of the charge it undoes, so the provider is paid its price per
+ * tonne for the same weight the customer is charged for. In id order, so the
+ * lines are minted in the order the events were.
  */
 async function servedEvents(tx: Tx, companyId: string, current: Row): Promise<Served[]> {
   const original = alias(billableEvent, "original")
@@ -363,6 +367,7 @@ async function servedEvents(tx: Tx, companyId: string, current: Row): Promise<Se
       quantity: billableEvent.quantity,
       priceId: serviceProviderPrice.id,
       unitPriceMinor: serviceProviderPrice.unitPriceMinor,
+      weightKg: sql<number | null>`coalesce(${billableEvent.weightKg}, ${original.weightKg})`,
     })
     .from(billableEvent)
     .leftJoin(original, and(eq(original.companyId, billableEvent.companyId), eq(original.id, billableEvent.reversesEventId)))
@@ -398,8 +403,18 @@ async function servedEvents(tx: Tx, companyId: string, current: Row): Promise<Se
     .orderBy(asc(billableEvent.id))
 }
 
-/** A line's amount: the fee times the quantity, negated on a reversal, the way the event's own is; null where no price covers the product on the day. */
-const lineNet = (event: Served): number | null => (event.unitPriceMinor === null ? null : (event.kind === "reversal" ? -1 : 1) * event.unitPriceMinor * event.quantity)
+/**
+ * A line's unit price: the provider's fee, or for a weight charge (O28 of
+ * #290) the weighed load's amount at the fee per tonne, as the customer's
+ * event is priced; null where no price covers the product on the day.
+ */
+const lineUnitPrice = (event: Served): number | null => (event.unitPriceMinor === null ? null : event.weightKg === null ? event.unitPriceMinor : tonnesAt(event.unitPriceMinor, event.weightKg))
+
+/** A line's amount: the unit price times the quantity, negated on a reversal, the way the event's own is; null where no price covers the product on the day. */
+const lineNet = (event: Served): number | null => {
+  const unit = lineUnitPrice(event)
+  return unit === null ? null : (event.kind === "reversal" ? -1 : 1) * unit * event.quantity
+}
 
 /** What a calculation whose line comes to more than its column holds is told: the fee times the quantity is an `integer` in the database. */
 export const LINE_TOO_LARGE = (eventId: string) => `The line for billable event ${eventId} comes to more than ${INT4_MAX} minor units, the most a line holds; correct the event's quantity or the provider's fee`
@@ -422,7 +437,7 @@ async function calculate(tx: Tx, principal: Principal, current: Row, at: Date): 
     billableEventId: event.eventId,
     serviceProviderPriceId: event.priceId,
     quantity: event.quantity,
-    unitPriceMinor: event.unitPriceMinor,
+    unitPriceMinor: lineUnitPrice(event),
     netMinor: lineNet(event),
   }))
   // A line past its column is the settlement's 409, judged before the lines are replaced, never the database's 22003.
@@ -576,7 +591,7 @@ export function settlementRoutes(guard: MiddlewareHandler<AuthEnv>, { now = () =
         operationId: "calculateSettlement",
         summary: "Calculate a settlement's lines",
         description:
-          "The `calculate` command, on an open or a calculated settlement: replaces the lines whole. Selects every billable event of the project whose service date lies in the period, priced and not cancelled — reversals included, at their negative amounts — whose route's scheme's planning area is one of the assignment's service area's, and whose service date the assignment and the area were both valid on; prices each with the assignment's provider price for the event's product valid on that service date, or leaves it unpriced when none covers it; writes one line per event, the settlement's `lineCount`, `netMinor` (the priced lines summed) and `calculatedAt`, and appends a `calculated` event with the snapshot. A recalculation is a move like the first: the lines change and the history gets its row; one asked before the period has ended is a partial one. The body is empty; a member in it is refused. A closed settlement is refused (409, `Settlement NordRen ApS · 2026-07-01–2026-07-31 is closed; reopen it first`), and so is one whose period has not begun on the project's day (409, `Settlement NordRen ApS · 2026-07-01–2026-07-31 has not begun; calculate it from its first day`). Runs under the settlement's row lock. " +
+          "The `calculate` command, on an open or a calculated settlement: replaces the lines whole. Selects every billable event of the project whose service date lies in the period, priced and not cancelled — reversals included, at their negative amounts — whose route's scheme's planning area is one of the assignment's service area's, and whose service date the assignment and the area were both valid on; prices each with the assignment's provider price for the event's product valid on that service date, or leaves it unpriced when none covers it — a weight charge (O28 of #290) at that price per tonne over its kilograms, a reversal over those of the charge it undoes; writes one line per event, the settlement's `lineCount`, `netMinor` (the priced lines summed) and `calculatedAt`, and appends a `calculated` event with the snapshot. A recalculation is a move like the first: the lines change and the history gets its row; one asked before the period has ended is a partial one. The body is empty; a member in it is refused. A closed settlement is refused (409, `Settlement NordRen ApS · 2026-07-01–2026-07-31 is closed; reopen it first`), and so is one whose period has not begun on the project's day (409, `Settlement NordRen ApS · 2026-07-01–2026-07-31 has not begun; calculate it from its first day`). Runs under the settlement's row lock. " +
           LABEL,
         security: BEARER_SECURITY,
         responses: {

@@ -323,7 +323,7 @@ export type BillableEventDraft = {
   blockReason: BlockReason | null
   links: BillableEventLinks
   /** On a `weight` event (O28 of #290): the stop's share of the Unload's reviewed net, whole kilograms; absent on every other kind. */
-  weightKg?: number
+  weightKg?: number | null
 }
 
 /** What the consumer does with an event: records a draft, cancels the live event, or records a reversal of it. */
