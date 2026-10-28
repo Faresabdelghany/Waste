@@ -215,10 +215,18 @@ export const RouteCreate = z.strictObject({
   vehicleId: Id.nullable().optional(),
   driverId: Id.nullable().optional(),
   note: Paragraph.nullable().optional(),
+  /** The crew on another route of the day whose times are not both known is planned knowingly (O7 of #290); a known overlap is never taken. */
+  acceptSameDay: z.literal(true).optional(),
 })
 export type RouteCreate = z.infer<typeof RouteCreate>
 
-/** `POST /routes/:id/assign`: the Planned Assignment moved, any field cleared with null, on a route that has not started — the service provider too since O5 of #290. */
+/**
+ * `POST /routes/:id/assign`: the Planned Assignment moved, any field cleared
+ * with null, on a route that has not started — the service provider too since
+ * O5 of #290. A crew member on another route of the day whose times are not
+ * both known is taken only with `acceptSameDay` (O7 of #290), which never
+ * takes a known overlap; the flag alone moves nothing.
+ */
 export const RouteAssign = z
   .strictObject({
     vehicleId: Id.nullable().optional(),
@@ -227,23 +235,27 @@ export const RouteAssign = z
     serviceProviderId: Id.nullable().optional(),
     depotId: Id.nullable().optional(),
     unloadingStationId: Id.nullable().optional(),
+    acceptSameDay: z.literal(true).optional(),
   })
-  .refine(changesSomething, somethingToChange)
+  .refine(({ acceptSameDay: _accepted, ...moved }) => changesSomething(moved), somethingToChange)
 export type RouteAssign = z.infer<typeof RouteAssign>
 
 /**
  * `POST /routes/:id/reschedule`: the day the route runs, or its planned
  * start, moved; never the service date. A day its project's calendar rests
  * on is taken only with `acceptNonWorkingDay` (O5 of #290): the move is made
- * knowingly, and the flag alone moves nothing.
+ * knowingly, and the flag alone moves nothing. So is a day or a start that
+ * puts the crew beside another route of the day whose times are not both
+ * known, with `acceptSameDay` (O7 of #290).
  */
 export const RouteReschedule = z
   .strictObject({
     operatingDate: IsoDate.optional(),
     plannedStartTime: IsoTime.nullable().optional(),
     acceptNonWorkingDay: z.literal(true).optional(),
+    acceptSameDay: z.literal(true).optional(),
   })
-  .refine(({ acceptNonWorkingDay: _accepted, ...moved }) => changesSomething(moved), somethingToChange)
+  .refine(({ acceptNonWorkingDay: _accepted, acceptSameDay: _same, ...moved }) => changesSomething(moved), somethingToChange)
 export type RouteReschedule = z.infer<typeof RouteReschedule>
 
 /** `POST /routes/:id/cancel`: why, as one of the office's codes (O5 of #290), and the free reason, which becomes the route's note. */
@@ -314,6 +326,8 @@ export const RouteSplit = z.strictObject({
   vehicleId: Id.nullable().optional(),
   driverId: Id.nullable().optional(),
   note: Paragraph.nullable().optional(),
+  /** As `POST /routes` takes it (O7 of #290). */
+  acceptSameDay: z.literal(true).optional(),
 })
 export type RouteSplit = z.infer<typeof RouteSplit>
 

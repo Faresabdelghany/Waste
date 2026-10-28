@@ -176,6 +176,16 @@ describe("the dispatcher's commands", () => {
     assert.deepEqual(refusal(RouteReschedule.safeParse({ acceptNonWorkingDay: true })).map((issue) => issue.message), ["Give at least one field to change"])
   })
 
+  test("assign, reschedule, a split and an ad-hoc route take the crew's same day only when they say so, and that alone moves nothing (O7 of #290)", () => {
+    assert.deepEqual(RouteAssign.parse({ driverId: THIRD, acceptSameDay: true }), { driverId: THIRD, acceptSameDay: true })
+    assert.deepEqual(refusal(RouteAssign.safeParse({ acceptSameDay: true })).map((issue) => issue.message), ["Give at least one field to change"])
+    assert.equal(RouteAssign.safeParse({ driverId: THIRD, acceptSameDay: false }).success, false, "the flag is said or left out, never false")
+    assert.deepEqual(RouteReschedule.parse({ plannedStartTime: "07:00", acceptSameDay: true }), { plannedStartTime: "07:00", acceptSameDay: true })
+    assert.deepEqual(refusal(RouteReschedule.safeParse({ acceptSameDay: true, acceptNonWorkingDay: true })).map((issue) => issue.message), ["Give at least one field to change"])
+    assert.equal(RouteSplit.safeParse({ pickupIds: [THIRD], acceptSameDay: true }).success, true)
+    assert.equal(RouteCreate.safeParse({ projectId: THIRD, operatingDate: "2026-10-05", acceptSameDay: true }).success, true)
+  })
+
   test("cancel carries one of the office's reason codes and the reason, and nothing else (O5 of #290)", () => {
     assert.deepEqual(RouteCancel.parse({ reasonCode: "weather", reason: "Snowed in" }), { reasonCode: "weather", reason: "Snowed in" })
     assert.deepEqual(refusal(RouteCancel.safeParse({})).map((issue) => issue.path), ["reasonCode", "reason"])

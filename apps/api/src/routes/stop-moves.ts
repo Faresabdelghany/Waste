@@ -247,7 +247,7 @@ export function stopMoveRoutes(guard: MiddlewareHandler<AuthEnv>, { now = () => 
       describeRoute({
         operationId: "splitRoute",
         summary: "Split stops off onto a new route",
-        description: `Splits the route (O23 of #290): a new ad-hoc route (#111) is made on the route's operating date — its service date too, as \`POST /routes\` makes one — with the route's depot, unloading station, planned start and service provider, and the vehicle, the driver and the note the body names, where it names them, judged as \`POST /routes\` judges them (400 at the field, the licence on the day, then 409s for a vehicle or driver out of service or away that day); then the open stops \`pickupIds\` names move onto it. The stops are open stops of this route, each once (400 at \`pickupIds\` counting the ids that are not), and leave the route some of its open stops (400; a move to another route takes them all). ${STATES} ${MOVE} The \`route-reassigned\` event is written for the new route where it names a driver or a vehicle.`,
+        description: `Splits the route (O23 of #290): a new ad-hoc route (#111) is made on the route's operating date — its service date too, as \`POST /routes\` makes one — with the route's depot, unloading station, planned start and service provider, and the vehicle, the driver and the note the body names, where it names them, judged as \`POST /routes\` judges them (400 at the field, the licence on the day, then 409s for a vehicle or driver out of service or away that day, allocated that day with another crew, or on another route of the day — taken with \`acceptSameDay\` where the times are not both known, never at once; O7 of #290); then the open stops \`pickupIds\` names move onto it. The stops are open stops of this route, each once (400 at \`pickupIds\` counting the ids that are not), and leave the route some of its open stops (400; a move to another route takes them all). ${STATES} ${MOVE} The \`route-reassigned\` event is written for the new route where it names a driver or a vehicle.`,
         security: BEARER_SECURITY,
         responses: {
           201: describeCreated("The new route, planned, with the stops moved onto it.", RouteDetail),
@@ -286,6 +286,7 @@ export function stopMoveRoutes(guard: MiddlewareHandler<AuthEnv>, { now = () => 
             note: body.note ?? null,
             plannedStartTime: current.plannedStartTime,
             plannedServiceProviderId: current.plannedServiceProviderId,
+            acceptSameDay: body.acceptSameDay === true,
           },
           at,
           { endsKnown: true },

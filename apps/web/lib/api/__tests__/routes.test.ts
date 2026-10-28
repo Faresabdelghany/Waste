@@ -606,6 +606,21 @@ describe("the route's commands", () => {
     assert.deepEqual(reschedule?.toBody?.({ operatingDate: "2026-10-01", plannedStartTime: "07:00", acceptNonWorkingDay: true }, record, context()), { plannedStartTime: "07:00" }, "a start moved on the same day asks no calendar")
   })
 
+  test("assign, reschedule and New route say the crew's same day is meant only when the dialog does (O7 of #290)", () => {
+    const assigned = assign?.toBody?.({ driverId: frejaRecord.id, acceptSameDay: true }, record, context())
+    assert.deepEqual(assigned, { driverId: freja.id, acceptSameDay: true })
+    assert.ok(RouteAssign.safeParse(assigned).success)
+    assert.deepEqual(assign?.toBody?.({ driverId: frejaRecord.id, acceptSameDay: false }, record, context()), { driverId: freja.id }, "unticked, the flag is left out")
+    assert.deepEqual(assign?.toBody?.({ depotId: "", acceptSameDay: true }, record, context()), { depotId: null }, "a move of no crew asks no other route")
+    const moved = reschedule?.toBody?.({ operatingDate: "2026-10-01", plannedStartTime: "07:00", acceptSameDay: true }, record, context())
+    assert.deepEqual(moved, { plannedStartTime: "07:00", acceptSameDay: true })
+    assert.ok(RouteReschedule.safeParse(moved).success)
+    const created = routeAdapter.toCreateBody?.(createRouteRecord({ projectId: projectRecord.id, operatingDate: "2026-10-06", driverId: madsRecord.id, acceptSameDay: true }, { now: 4 }), context())
+    assert.deepEqual(created, { projectId: copenhagen.id, operatingDate: "2026-10-06", driverId: mads.id, acceptSameDay: true })
+    assert.ok(RouteCreate.safeParse(created).success)
+    assert.deepEqual(routeAdapter.toCreateBody?.(createRouteRecord({ projectId: projectRecord.id, operatingDate: "2026-10-06", acceptSameDay: true }, { now: 5 }), context()), { projectId: copenhagen.id, operatingDate: "2026-10-06" }, "a route of no crew says nothing of it")
+  })
+
   test("the route's own read gives its stops in sequence, its sessions and its unloads; its command log is the device's", async () => {
     const detail = detailOf({ ...planned, status: "ready" })
     const receipts = { items: [], nextCursor: null }

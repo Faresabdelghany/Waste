@@ -77,9 +77,10 @@ describe("the vehicle pickers", () => {
 })
 
 describe("the route's dialogs", () => {
-  test("assign names the Planned Assignment's six fields, each a picker of the module that holds it, none required — the service provider since O5 of #290", () => {
+  test("assign names the Planned Assignment's six fields, each a picker of the module that holds it, none required — the service provider since O5 of #290 — and whether the crew's same day is meant (O7 of #290)", () => {
     const form = ROUTE_COMMAND_FORMS[ASSIGN_ROUTE]
-    assert.deepEqual(fieldIdsOf(form), ["vehicleId", "driverId", "trailerId", "serviceProviderId", "depotId", "unloadingStationId"])
+    assert.deepEqual(fieldIdsOf(form), ["vehicleId", "driverId", "trailerId", "serviceProviderId", "depotId", "unloadingStationId", "acceptSameDay"])
+    assert.deepEqual([fieldOf(form, "acceptSameDay")?.type, fieldOf(form, "acceptSameDay")?.defaultValue], ["checkbox", false])
     assert.deepEqual(fieldOf(form, "serviceProviderId")?.relation, SERVICE_PROVIDERS_MODULE)
     assert.deepEqual(requiredOf(form), [])
     assert.deepEqual(fieldOf(form, "vehicleId")?.relation, VEHICLES_MODULE)
@@ -108,7 +109,7 @@ describe("the route's dialogs", () => {
 
   test("reschedule names the day it runs, required, its planned start, and whether a non-working day is meant (O5 of #290)", () => {
     const form = ROUTE_COMMAND_FORMS[RESCHEDULE_ROUTE]
-    assert.deepEqual(fieldIdsOf(form), ["operatingDate", "plannedStartTime", "acceptNonWorkingDay"])
+    assert.deepEqual(fieldIdsOf(form), ["operatingDate", "plannedStartTime", "acceptNonWorkingDay", "acceptSameDay"])
     assert.deepEqual([fieldOf(form, "acceptNonWorkingDay")?.type, fieldOf(form, "acceptNonWorkingDay")?.defaultValue], ["checkbox", false])
     const knowingly = routeAdapter.commands?.[RESCHEDULE_ROUTE]?.toBody?.({ ...routeCommandValues(record), operatingDate: "2026-10-03", acceptNonWorkingDay: true }, record, context)
     assert.ok(RouteReschedule.safeParse(knowingly).success, JSON.stringify(knowingly))
@@ -121,7 +122,7 @@ describe("the route's dialogs", () => {
   })
 
   test("New route names the project and the day, required, and the optional ends, crew and note; the routes adapter owns the record it makes (#111)", () => {
-    assert.deepEqual(fieldIdsOf(ROUTE_CREATE_FORM), ["projectId", "operatingDate", "depotId", "unloadingStationId", "vehicleId", "driverId", "note"])
+    assert.deepEqual(fieldIdsOf(ROUTE_CREATE_FORM), ["projectId", "operatingDate", "depotId", "unloadingStationId", "vehicleId", "driverId", "note", "acceptSameDay"])
     assert.deepEqual(requiredOf(ROUTE_CREATE_FORM), ["projectId", "operatingDate"])
     assert.equal(ROUTE_CREATE_FORM.mode, "create")
     assert.ok(routeAdapter.owns(createRouteRecord({ operatingDate: "2026-10-06" }, { now: 1 })), "the routes adapter owns what New route makes; routes.test.ts holds its body to the contract")

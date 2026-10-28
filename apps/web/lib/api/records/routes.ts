@@ -66,7 +66,7 @@ import { formatDistance, formatDuration } from "@/lib/map-planning/format"
 import { ROUTE_ACTIVE_PLAN_KEY, STOP_AT_BULKY_BOOKING, STOP_AT_CONTAINER, STOP_AT_POINT, STOP_AT_PROPERTY } from "@/lib/data/routes"
 
 import { command, create, get, listAll, put } from "../client"
-import { hasPrefix, inheritedPresentation, isLocalRefusal, moduleKeyOf, ofKind, said, stampFacts, statusLabel, typed, webIdOf, type Client, type MappingContext, type RecordCommand, type ResourceAdapter, type ServerModule } from "./adapter"
+import { hasPrefix, inheritedPresentation, isLocalRefusal, moduleKeyOf, ofKind, said, stampFacts, statusLabel, typed, typedFlag, webIdOf, type Client, type MappingContext, type RecordCommand, type ResourceAdapter, type ServerModule } from "./adapter"
 import { FLEET_AND_DEPOT_PICKS } from "./allocations"
 import { shownOn } from "./clock"
 import { containerAdapter } from "./containers"
@@ -309,7 +309,10 @@ export const ROUTE_COMMANDS = {
       if (was !== undefined && referencedServerId(was, prefix, context, rule) === serverId) continue
       body[field] = serverId
     }
-    return Object.keys(body).length === 0 ? refusal("vehicleId", NOTHING_TO_ASSIGN) : body
+    if (Object.keys(body).length === 0) return refusal("vehicleId", NOTHING_TO_ASSIGN)
+    // The crew beside another route of the day is meant only when the dialog says so (O7 of #290); said where the crew moves, since nothing else asks another route.
+    const crewMoved = "vehicleId" in body || "driverId" in body || "trailerId" in body
+    return input.acceptSameDay === true && crewMoved ? { ...body, acceptSameDay: true } : body
   }),
   [DISPATCH_ROUTE]: onRoute("dispatch", "dispatched"),
   // The route back on its scheme: the API asks a generation run over its service date, which brings back the scheme's day, start and assignment.
@@ -320,12 +323,15 @@ export const ROUTE_COMMANDS = {
     if (day === undefined) return refusal("operatingDate", "A route runs on a day: give its operating date")
     if (!ISO_DAY.test(day)) return refusal("operatingDate", "Give the day it runs as a date")
     if (start !== undefined && !CLOCK_TIME.test(start)) return refusal("plannedStartTime", "Give the planned start as HH:MM")
-    const body: { operatingDate?: string; plannedStartTime?: string | null; acceptNonWorkingDay?: true } = {}
+    const body: { operatingDate?: string; plannedStartTime?: string | null; acceptNonWorkingDay?: true; acceptSameDay?: true } = {}
     if (day !== typed(record, "operatingDate")) body.operatingDate = day
     if (start !== typed(record, "plannedStartTime")) body.plannedStartTime = start ?? null
     if (Object.keys(body).length === 0) return refusal("operatingDate", NOTHING_TO_RESCHEDULE)
     // A day the project rests on is taken only when the dialog says so (O5 of #290); said on a move of the day alone, since a start moved on the same day asks no calendar.
-    return input.acceptNonWorkingDay === true && body.operatingDate !== undefined ? { ...body, acceptNonWorkingDay: true } : body
+    if (input.acceptNonWorkingDay === true && body.operatingDate !== undefined) body.acceptNonWorkingDay = true
+    // A new day or start puts the crew beside the day's other routes (O7 of #290): meant only when the dialog says so.
+    if (input.acceptSameDay === true) body.acceptSameDay = true
+    return body
   }),
   [CANCEL_ROUTE]: onRoute(
     "cancel",
@@ -659,7 +665,9 @@ export const routeAdapter: ResourceAdapter<Route> = {
       body[field] = serverId
     }
     const note = typed(record, "note")
-    return note === undefined ? body : { ...body, note }
+    // The crew beside another route of the day, said where the route names a crew (O7 of #290).
+    const sameDay = typedFlag(record, "acceptSameDay") === true && (body.vehicleId !== undefined || body.driverId !== undefined)
+    return { ...body, ...(note === undefined ? {} : { note }), ...(sameDay ? { acceptSameDay: true } : {}) }
   },
   create: async (client, body) => (await create<RouteDetail>(client, "/routes", body)).body,
   toPatchBody: () => refusal("", CHANGED_BY_COMMANDS),
