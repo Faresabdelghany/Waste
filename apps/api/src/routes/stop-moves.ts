@@ -24,7 +24,9 @@
 // saying so. That is what makes a move survive the next generation run with
 // no hold of its own: a refresh never brings back a stop the dispatcher took
 // off, and never skips, moves or doubles the office's (#111;
-// @waste/domain/execution/stop-moves).
+// @waste/domain/execution/stop-moves). The stop added names the one it was
+// moved from (`moved_from_pickup_id`, migration 0055), which Finance reads it
+// as: a scheduled collection moved is still billed as one.
 //
 // Both routes are locked in id order, the order a generation run and a bulk
 // dispatch lock routes in, before either is read; both must not have started
@@ -161,7 +163,7 @@ async function moveStops(tx: Tx, principal: Principal, from: RouteRow, to: Route
   const note = movedTo(labelOf(to))
   for (const row of moving) {
     await takeOffStop(tx, principal, row.id, note, at)
-    await addOfficeStop(tx, principal, to, addedAs(row, tickets.get(row.id)))
+    await addOfficeStop(tx, principal, to, addedAs(row, tickets.get(row.id)), { routeId: row.routeId, pickupId: row.id })
   }
   await tx
     .update(route)

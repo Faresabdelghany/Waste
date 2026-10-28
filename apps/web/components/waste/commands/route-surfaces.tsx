@@ -343,7 +343,7 @@ export function RouteCommandsSurface({ record }: RowSurfaceProps) {
     return pickup.sharedCollectionPointId === null ? "A stop with no place" : pointName(pickup.sharedCollectionPointId)
   }
   const stopLine = (pickup: Pickup & { sequence?: number }) =>
-    `${pickup.sequence ?? pickup.position}. ${stopName(pickup)} · ${statusLabel(pickup.status)}${pickup.reason === null ? "" : ` · ${pickupReasonLabel(pickup.reason)}`}${pickup.origin === "office" ? " · added by the office" : ""}`
+    `${pickup.sequence ?? pickup.position}. ${stopName(pickup)} · ${statusLabel(pickup.status)}${pickup.reason === null ? "" : ` · ${pickupReasonLabel(pickup.reason)}`}${pickup.movedFromPickupId != null ? " · moved here" : pickup.origin === "office" ? " · added by the office" : ""}`
 
   return (
     <section className="space-y-4" data-testid="route-commands">

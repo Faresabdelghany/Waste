@@ -255,7 +255,7 @@ describe("the routes a route's stops may join (O23 of #290)", () => {
 })
 
 describe("the stop's dialogs", () => {
-  const pickup: Pickup = { id: "01a0d2a4-a280-7033-8000-000000000001", ...STAMPS, projectId: route.projectId, routeId: route.id, containerId: "01a0d2a4-a280-7014-8000-000000000009", position: 1, status: "completed", origin: "generation", service: "empty", reason: null, contaminantCodeId: null, note: null, propertyId: null, sharedCollectionPointId: "01a0d2a4-a280-7019-8000-000000000001", wasteFractionId: "01a0d2a4-a280-7005-8000-000000000001", subscriptionId: null, warehouseId: null, replacementContainerId: null, bulkyBookingId: null, arrivedAt: null, outcomeAt: "2026-10-01T05:00:00.000Z" }
+  const pickup: Pickup = { id: "01a0d2a4-a280-7033-8000-000000000001", ...STAMPS, projectId: route.projectId, routeId: route.id, containerId: "01a0d2a4-a280-7014-8000-000000000009", position: 1, status: "completed", origin: "generation", service: "empty", reason: null, contaminantCodeId: null, note: null, propertyId: null, sharedCollectionPointId: "01a0d2a4-a280-7019-8000-000000000001", wasteFractionId: "01a0d2a4-a280-7005-8000-000000000001", subscriptionId: null, warehouseId: null, replacementContainerId: null, bulkyBookingId: null, movedFromPickupId: null, arrivedAt: null, outcomeAt: "2026-10-01T05:00:00.000Z" }
   const stop = pickupAdapter.toRecord(pickup, context)
 
   test("remove asks why", () => {

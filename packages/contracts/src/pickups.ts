@@ -93,6 +93,8 @@ export const Pickup = z.object({
   replacementContainerId: Id.nullable().default(null),
   /** The Bulky Booking a `bulky` stop collects (O11 of #290); null for any other service, and absent on an event the outbox took before it, which named none. */
   bulkyBookingId: Id.nullable().default(null),
+  /** The stop this one was moved from onto its route (O23 of #290), which it stands for; null on every stop no move made, and absent on an event the outbox took before moves, which named none. */
+  movedFromPickupId: Id.nullable().default(null),
 })
 export type Pickup = z.infer<typeof Pickup>
 

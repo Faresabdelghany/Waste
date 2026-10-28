@@ -10,7 +10,9 @@
 // judges one. That is what makes a move survive the next generation run with
 // nothing new to hold: a refresh never brings back a stop the dispatcher took
 // off (only its own `regeneration` skips), and never skips, moves or doubles
-// the office's (`pickupChanges`, ../planning/generation.ts).
+// the office's (`pickupChanges`, ../planning/generation.ts). The stop put on
+// names the one it was moved from, which Finance reads it as: a scheduled
+// collection moved is billed as the scheduled collection still.
 //
 // Only open stops move, of a route that has not started, onto one that has
 // not either — the rule Add stop and remove hold (`orderIsOpen`). An emptying

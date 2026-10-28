@@ -159,6 +159,11 @@ describe("moving stops, splitting and merging routes", { skip: database.skip || 
         ],
         "judged on the route's service date, as Add stop judges a container's stop",
       )
+      assert.deepEqual(
+        joined.pickups.map((stop) => stop.movedFromPickupId),
+        [null, bin1, bin2],
+        "each names the stop it was moved from, which billing reads it as",
+      )
       assert.ok(left.updatedAt > before.from.updatedAt && joined.updatedAt > before.to.updatedAt, "both routes' stops are part of them on the wire")
       assert.deepEqual(
         (await eventsAbout([bin1, bin2])).map((event) => [event.kind, event.aggregateId]),

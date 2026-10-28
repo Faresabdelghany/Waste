@@ -438,9 +438,10 @@ async function lockedPickup(tx: Tx, principal: Principal, id: string): Promise<{
  * route's service date, the same work booked twice, a held container — and
  * written after the route's last position: what `POST /routes/:id/pickups`
  * answers, and what a stop moved onto the route becomes (routes/stop-moves.ts,
- * O23 of #290). The caller holds the route's lock and has judged its state.
+ * O23 of #290), naming the stop it was moved from. The caller holds the
+ * route's lock and has judged its state.
  */
-export async function addOfficeStop(tx: Tx, principal: Principal, parent: RouteRow, body: PickupAdd): Promise<PickupRow> {
+export async function addOfficeStop(tx: Tx, principal: Principal, parent: RouteRow, body: PickupAdd, movedFrom?: { routeId: string; pickupId: string }): Promise<PickupRow> {
   const scope: Scope = { companyId: principal.companyId, projectId: parent.projectId }
   // The ticket the stop is booked to answer (O3c of #290): the body's own field, judged before the stop's place is read.
   const asked = body.ticketId == null ? undefined : await requireTicketForStop(tx, principal, scope, body.ticketId, { service: body.service, containerId: body.containerId ?? null })
@@ -478,7 +479,20 @@ export async function addOfficeStop(tx: Tx, principal: Principal, parent: RouteR
   const row = await insertHolding(
     tx,
     principal,
-    { id: newId(), ...scope, routeId: parent.id, position: (last?.position ?? 0) + 1, origin: "office", service: body.service, note: body.note ?? bulky?.note ?? null, ...stop.at, ...stop.booking, bulkyBookingId: bulky?.bulkyBookingId ?? null },
+    {
+      id: newId(),
+      ...scope,
+      routeId: parent.id,
+      position: (last?.position ?? 0) + 1,
+      origin: "office",
+      service: body.service,
+      note: body.note ?? bulky?.note ?? null,
+      ...stop.at,
+      ...stop.booking,
+      bulkyBookingId: bulky?.bulkyBookingId ?? null,
+      movedFromRouteId: movedFrom?.routeId ?? null,
+      movedFromPickupId: movedFrom?.pickupId ?? null,
+    },
     held,
   )
   if (answering !== undefined) await bookTicket(tx, principal, answering, { pickupId: row.id, routeId: parent.id, position: row.position, routeLabel: labelOf(parent), service: body.service })
