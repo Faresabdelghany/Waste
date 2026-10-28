@@ -159,6 +159,7 @@ const rowOf = (entry: CollectionGroupEntry) => ({
   name: entry.name,
   days: entry.days,
   ruleVehicleTypeId: entry.rule?.vehicleTypeId ?? null,
+  rulePlanningAreaId: entry.rule?.planningAreaId ?? null,
   serviceProviderId: entry.serviceProviderId ?? null,
   vehicleId: entry.vehicleId ?? null,
   driverId: entry.driverId ?? null,
@@ -188,6 +189,7 @@ function changesOf(entry: CollectionGroupEntry, group: CollectionGroup, position
       !sameIds(row.days, group.days) ||
       position !== group.position ||
       row.ruleVehicleTypeId !== (group.rule?.vehicleTypeId ?? null) ||
+      row.rulePlanningAreaId !== (group.rule?.planningAreaId ?? null) ||
       row.serviceProviderId !== group.serviceProviderId ||
       row.vehicleId !== group.vehicleId ||
       row.driverId !== group.driverId,

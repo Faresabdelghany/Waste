@@ -85,6 +85,11 @@ describe("StopMatchingRule", () => {
     assert.equal(StopMatchingRuleSet, StopMatchingRule, "the PUT body is the rule itself")
   })
 
+  test("may name a planning area of its own, which stands in for the scheme's; null or absent is the scheme's (O30 of #290, row 2.17)", () => {
+    assert.deepEqual(StopMatchingRule.parse({ ...rule, planningAreaId: FOURTH }), { ...rule, planningAreaId: FOURTH })
+    assert.deepEqual(StopMatchingRule.parse({ ...rule, planningAreaId: null }), { ...rule, planningAreaId: null })
+  })
+
   test("refuses no fraction, a fraction twice, a type twice, more than 200 of either, and a member it does not carry", () => {
     assert.deepEqual(refusal(StopMatchingRule.safeParse({ ...rule, wasteFractionIds: [] })).map((issue) => issue.path), ["wasteFractionIds"])
     assert.deepEqual(refusal(StopMatchingRule.safeParse({ ...rule, wasteFractionIds: [THIRD, THIRD] })), [{ path: "wasteFractionIds", message: EACH_FRACTION_ONCE }])
@@ -92,7 +97,7 @@ describe("StopMatchingRule", () => {
     assert.equal(StopMatchingRule.safeParse({ ...rule, wasteFractionIds: manyIds(CONTAINERS_MAX) }).success, true)
     assert.deepEqual(refusal(StopMatchingRule.safeParse({ ...rule, wasteFractionIds: manyIds(CONTAINERS_MAX + 1) })).map((issue) => issue.path), ["wasteFractionIds"])
     assert.deepEqual(refusal(StopMatchingRule.safeParse({ ...rule, containerTypeIds: manyIds(CONTAINERS_MAX + 1) })).map((issue) => issue.path), ["containerTypeIds"])
-    assert.match(refusal(StopMatchingRule.safeParse({ ...rule, planningAreaId: FOURTH }))[0].message, /planningAreaId/)
+    assert.deepEqual(refusal(StopMatchingRule.safeParse({ ...rule, planningAreaId: "centrum" })).map((issue) => issue.path), ["planningAreaId"], "a rule's own area is a row's id")
     assert.equal(StopMatchingRule.safeParse({ ...rule, vehicleTypeId: "rear-loader" }).success, false, "a row's id since Resources, never the token")
     assert.match(refusal(StopMatchingRule.safeParse({ ...rule, vehicleType: "rear-loader" }))[0].message, /vehicleType/, "the 0006 spelling is refused by name")
   })

@@ -1,11 +1,11 @@
 // The `service_provider_activity` table as an earlier migration left it:
 // 0063 (#474, part 1) with three kinds, the route-day change the one
-// proposal, and no vehicle or driver; 0064 (part 2) with the vehicle change
-// and its vehicle and driver; 0065 (part 3) with the stop-set change.
+// proposal, and no vehicle or driver; 0067 (part 2) with the vehicle change
+// and its vehicle and driver; 0068 (part 3) with the stop-set change.
 // Today's, with the waste-fraction change (part 4), is
 // src/schema/service-provider-activities.ts itself. One spelling here, so the
-// rendering tests of 0063, 0064, 0065 and the waste-fraction change cannot
-// drift on what an era said. The numbers of 0065 and later are provisional
+// rendering tests of 0063, 0067, 0068 and the waste-fraction change cannot
+// drift on what an era said. The numbers of 0068 and later are provisional
 // until their turn in the migration queue. Another
 // table object of the same name is fine, since nothing connects to a
 // database. Not a suite of its own: only ever imported.
@@ -27,10 +27,10 @@ import { wms } from "../schema/wms"
 
 /** The kinds 0063 held an Activity to. */
 export const KINDS_AS_OF_0063 = ["route-day-change", "compliance-follow-up", "coordination-note"] as const
-/** The kinds 0064 held an Activity to. */
-export const KINDS_AS_OF_0064 = [...KINDS_AS_OF_0063, "vehicle-change"] as const
-/** The kinds 0065 held an Activity to. */
-export const KINDS_AS_OF_0065 = [...KINDS_AS_OF_0064, "stop-set-change"] as const
+/** The kinds 0067 held an Activity to. */
+export const KINDS_AS_OF_0067 = [...KINDS_AS_OF_0063, "vehicle-change"] as const
+/** The kinds 0068 held an Activity to. */
+export const KINDS_AS_OF_0068 = [...KINDS_AS_OF_0067, "stop-set-change"] as const
 
 export const serviceProviderActivityAsOf0063 = wms.table(
   "service_provider_activity",
@@ -105,7 +105,7 @@ export const serviceProviderActivityAsOf0063 = wms.table(
   ],
 )
 
-export const serviceProviderActivityAsOf0064 = wms.table(
+export const serviceProviderActivityAsOf0067 = wms.table(
   "service_provider_activity",
   {
     ...id,
@@ -152,7 +152,7 @@ export const serviceProviderActivityAsOf0064 = wms.table(
     tenantReference(t, [t.openedBy], userAccount),
     tenantReference(t, [t.closedBy], userAccount),
     tenantUnique(t, t.number),
-    oneOf(t.kind, KINDS_AS_OF_0064),
+    oneOf(t.kind, KINDS_AS_OF_0067),
     oneOf(t.status, SERVICE_PROVIDER_ACTIVITY_STATUSES),
     subsetOf(t.serviceDays, SERVICE_DAYS),
     check(tableObjectName(t.id.table, "subject_given", "serviceProviderActivity"), sql`length(btrim(${t.subject})) > 0`),
@@ -185,7 +185,7 @@ export const serviceProviderActivityAsOf0064 = wms.table(
   ],
 )
 
-export const serviceProviderActivityAsOf0065 = wms.table(
+export const serviceProviderActivityAsOf0068 = wms.table(
   "service_provider_activity",
   {
     ...id,
@@ -232,7 +232,7 @@ export const serviceProviderActivityAsOf0065 = wms.table(
     tenantReference(t, [t.openedBy], userAccount),
     tenantReference(t, [t.closedBy], userAccount),
     tenantUnique(t, t.number),
-    oneOf(t.kind, KINDS_AS_OF_0065),
+    oneOf(t.kind, KINDS_AS_OF_0068),
     oneOf(t.status, SERVICE_PROVIDER_ACTIVITY_STATUSES),
     subsetOf(t.serviceDays, SERVICE_DAYS),
     check(tableObjectName(t.id.table, "subject_given", "serviceProviderActivity"), sql`length(btrim(${t.subject})) > 0`),

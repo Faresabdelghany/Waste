@@ -114,6 +114,8 @@ export const AUDITED_TABLES = [
   "visit_rule_free_fraction",
   "route_scheme_season",
   "service_provider_activity",
+  "stock_minimum",
+  "decommission_reason",
   "service_provider_activity_container",
   "service_provider_activity_fraction",
 ] as const

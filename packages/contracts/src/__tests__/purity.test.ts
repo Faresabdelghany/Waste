@@ -67,7 +67,9 @@
 // of #291 added @waste/domain/registry/address: addresses.ts checks a
 // postcode and a municipality code by the shape the domain spells. #474
 // added @waste/domain/service-providers/vocabulary: service-provider-activities.ts
-// reads an Activity's kinds and statuses.
+// reads an Activity's kinds and statuses. O30 of #290 added
+// @waste/domain/resources/stock-balance: stock.ts bounds a warehouse's set of
+// Stock Minimums by the domain's cap.
 import path from "node:path"
 import { fileURLToPath } from "node:url"
 
@@ -106,6 +108,7 @@ definePurityTests({
     "@waste/domain/resolution/vocabulary",
     "@waste/domain/resources/drop-off-points",
     "@waste/domain/resources/emissions",
+    "@waste/domain/resources/stock-balance",
     "@waste/domain/resources/vocabulary",
     "@waste/domain/route-schemes/seasons",
     "@waste/domain/routing/balance",

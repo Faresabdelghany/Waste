@@ -1,6 +1,6 @@
 {
-  "id": "ff28c998-8082-423a-9319-eb752261be15",
-  "prevId": "8e8d2d69-b8e0-469f-a93a-4587ebb248cb",
+  "id": "cc115fcf-cd34-4583-bf20-fbc65cb62db2",
+  "prevId": "b09b6e28-b3c4-4ca7-909d-dcf2d1415c93",
   "version": "7",
   "dialect": "postgresql",
   "tables": {
@@ -4999,6 +4999,12 @@
           "primaryKey": false,
           "notNull": false
         },
+        "rule_planning_area_id": {
+          "name": "rule_planning_area_id",
+          "type": "uuid",
+          "primaryKey": false,
+          "notNull": false
+        },
         "service_provider_id": {
           "name": "service_provider_id",
           "type": "uuid",
@@ -5051,6 +5057,27 @@
             },
             {
               "expression": "rule_vehicle_type_id",
+              "isExpression": false,
+              "asc": true,
+              "nulls": "last"
+            }
+          ],
+          "isUnique": false,
+          "concurrently": false,
+          "method": "btree",
+          "with": {}
+        },
+        "collection_group_rule_planning_area_id_idx": {
+          "name": "collection_group_rule_planning_area_id_idx",
+          "columns": [
+            {
+              "expression": "company_id",
+              "isExpression": false,
+              "asc": true,
+              "nulls": "last"
+            },
+            {
+              "expression": "rule_planning_area_id",
               "isExpression": false,
               "asc": true,
               "nulls": "last"
@@ -5185,6 +5212,24 @@
           "onDelete": "no action",
           "onUpdate": "no action"
         },
+        "collection_group_rule_planning_area_id_fk": {
+          "name": "collection_group_rule_planning_area_id_fk",
+          "tableFrom": "collection_group",
+          "tableTo": "planning_area",
+          "schemaTo": "wms",
+          "columnsFrom": [
+            "company_id",
+            "project_id",
+            "rule_planning_area_id"
+          ],
+          "columnsTo": [
+            "company_id",
+            "project_id",
+            "id"
+          ],
+          "onDelete": "no action",
+          "onUpdate": "no action"
+        },
         "collection_group_vehicle_id_fk": {
           "name": "collection_group_vehicle_id_fk",
           "tableFrom": "collection_group",
@@ -5260,6 +5305,10 @@
         "collection_group_rule_shape": {
           "name": "collection_group_rule_shape",
           "value": "\"wms\".\"collection_group\".\"stop_source\" = 'rule' or \"wms\".\"collection_group\".\"rule_vehicle_type_id\" is null"
+        },
+        "collection_group_rule_area_shape": {
+          "name": "collection_group_rule_area_shape",
+          "value": "\"wms\".\"collection_group\".\"stop_source\" = 'rule' or \"wms\".\"collection_group\".\"rule_planning_area_id\" is null"
         }
       },
       "isRLSEnabled": false
@@ -8408,6 +8457,301 @@
       "checkConstraints": {},
       "isRLSEnabled": false
     },
+    "wms.decommission_reason": {
+      "name": "decommission_reason",
+      "schema": "wms",
+      "columns": {
+        "id": {
+          "name": "id",
+          "type": "uuid",
+          "primaryKey": true,
+          "notNull": true,
+          "default": "wms.uuidv7()"
+        },
+        "company_id": {
+          "name": "company_id",
+          "type": "uuid",
+          "primaryKey": false,
+          "notNull": true
+        },
+        "created_at": {
+          "name": "created_at",
+          "type": "timestamp with time zone",
+          "primaryKey": false,
+          "notNull": true,
+          "default": "now()"
+        },
+        "updated_at": {
+          "name": "updated_at",
+          "type": "timestamp with time zone",
+          "primaryKey": false,
+          "notNull": true,
+          "default": "now()"
+        },
+        "code": {
+          "name": "code",
+          "type": "text",
+          "primaryKey": false,
+          "notNull": true
+        },
+        "name": {
+          "name": "name",
+          "type": "text",
+          "primaryKey": false,
+          "notNull": true
+        },
+        "status": {
+          "name": "status",
+          "type": "text",
+          "primaryKey": false,
+          "notNull": true,
+          "default": "'active'"
+        }
+      },
+      "indexes": {},
+      "foreignKeys": {
+        "decommission_reason_company_id_fk": {
+          "name": "decommission_reason_company_id_fk",
+          "tableFrom": "decommission_reason",
+          "tableTo": "company",
+          "schemaTo": "wms",
+          "columnsFrom": [
+            "company_id"
+          ],
+          "columnsTo": [
+            "id"
+          ],
+          "onDelete": "no action",
+          "onUpdate": "no action"
+        }
+      },
+      "compositePrimaryKeys": {},
+      "uniqueConstraints": {
+        "decommission_reason_code_key": {
+          "name": "decommission_reason_code_key",
+          "nullsNotDistinct": false,
+          "columns": [
+            "company_id",
+            "code"
+          ]
+        },
+        "decommission_reason_name_key": {
+          "name": "decommission_reason_name_key",
+          "nullsNotDistinct": false,
+          "columns": [
+            "company_id",
+            "name"
+          ]
+        },
+        "decommission_reason_tenant_key": {
+          "name": "decommission_reason_tenant_key",
+          "nullsNotDistinct": false,
+          "columns": [
+            "company_id",
+            "id"
+          ]
+        }
+      },
+      "policies": {},
+      "checkConstraints": {
+        "decommission_reason_code_lowercase": {
+          "name": "decommission_reason_code_lowercase",
+          "value": "\"wms\".\"decommission_reason\".\"code\" = lower(\"wms\".\"decommission_reason\".\"code\")"
+        },
+        "decommission_reason_status_one_of": {
+          "name": "decommission_reason_status_one_of",
+          "value": "\"wms\".\"decommission_reason\".\"status\" in ('active', 'inactive')"
+        }
+      },
+      "isRLSEnabled": false
+    },
+    "wms.stock_minimum": {
+      "name": "stock_minimum",
+      "schema": "wms",
+      "columns": {
+        "id": {
+          "name": "id",
+          "type": "uuid",
+          "primaryKey": true,
+          "notNull": true,
+          "default": "wms.uuidv7()"
+        },
+        "company_id": {
+          "name": "company_id",
+          "type": "uuid",
+          "primaryKey": false,
+          "notNull": true
+        },
+        "project_id": {
+          "name": "project_id",
+          "type": "uuid",
+          "primaryKey": false,
+          "notNull": true
+        },
+        "created_at": {
+          "name": "created_at",
+          "type": "timestamp with time zone",
+          "primaryKey": false,
+          "notNull": true,
+          "default": "now()"
+        },
+        "updated_at": {
+          "name": "updated_at",
+          "type": "timestamp with time zone",
+          "primaryKey": false,
+          "notNull": true,
+          "default": "now()"
+        },
+        "warehouse_id": {
+          "name": "warehouse_id",
+          "type": "uuid",
+          "primaryKey": false,
+          "notNull": true
+        },
+        "container_type_id": {
+          "name": "container_type_id",
+          "type": "uuid",
+          "primaryKey": false,
+          "notNull": true
+        },
+        "minimum": {
+          "name": "minimum",
+          "type": "integer",
+          "primaryKey": false,
+          "notNull": true
+        }
+      },
+      "indexes": {
+        "stock_minimum_project_id_idx": {
+          "name": "stock_minimum_project_id_idx",
+          "columns": [
+            {
+              "expression": "company_id",
+              "isExpression": false,
+              "asc": true,
+              "nulls": "last"
+            },
+            {
+              "expression": "project_id",
+              "isExpression": false,
+              "asc": true,
+              "nulls": "last"
+            }
+          ],
+          "isUnique": false,
+          "concurrently": false,
+          "method": "btree",
+          "with": {}
+        },
+        "stock_minimum_container_type_id_idx": {
+          "name": "stock_minimum_container_type_id_idx",
+          "columns": [
+            {
+              "expression": "company_id",
+              "isExpression": false,
+              "asc": true,
+              "nulls": "last"
+            },
+            {
+              "expression": "container_type_id",
+              "isExpression": false,
+              "asc": true,
+              "nulls": "last"
+            }
+          ],
+          "isUnique": false,
+          "concurrently": false,
+          "method": "btree",
+          "with": {}
+        }
+      },
+      "foreignKeys": {
+        "stock_minimum_company_id_fk": {
+          "name": "stock_minimum_company_id_fk",
+          "tableFrom": "stock_minimum",
+          "tableTo": "company",
+          "schemaTo": "wms",
+          "columnsFrom": [
+            "company_id"
+          ],
+          "columnsTo": [
+            "id"
+          ],
+          "onDelete": "no action",
+          "onUpdate": "no action"
+        },
+        "stock_minimum_project_id_fk": {
+          "name": "stock_minimum_project_id_fk",
+          "tableFrom": "stock_minimum",
+          "tableTo": "project",
+          "schemaTo": "wms",
+          "columnsFrom": [
+            "company_id",
+            "project_id"
+          ],
+          "columnsTo": [
+            "company_id",
+            "id"
+          ],
+          "onDelete": "no action",
+          "onUpdate": "no action"
+        },
+        "stock_minimum_warehouse_id_fk": {
+          "name": "stock_minimum_warehouse_id_fk",
+          "tableFrom": "stock_minimum",
+          "tableTo": "warehouse",
+          "schemaTo": "wms",
+          "columnsFrom": [
+            "company_id",
+            "project_id",
+            "warehouse_id"
+          ],
+          "columnsTo": [
+            "company_id",
+            "project_id",
+            "id"
+          ],
+          "onDelete": "no action",
+          "onUpdate": "no action"
+        },
+        "stock_minimum_container_type_id_fk": {
+          "name": "stock_minimum_container_type_id_fk",
+          "tableFrom": "stock_minimum",
+          "tableTo": "container_type",
+          "schemaTo": "wms",
+          "columnsFrom": [
+            "company_id",
+            "container_type_id"
+          ],
+          "columnsTo": [
+            "company_id",
+            "id"
+          ],
+          "onDelete": "no action",
+          "onUpdate": "no action"
+        }
+      },
+      "compositePrimaryKeys": {},
+      "uniqueConstraints": {
+        "stock_minimum_warehouse_id_container_type_id_key": {
+          "name": "stock_minimum_warehouse_id_container_type_id_key",
+          "nullsNotDistinct": false,
+          "columns": [
+            "company_id",
+            "warehouse_id",
+            "container_type_id"
+          ]
+        }
+      },
+      "policies": {},
+      "checkConstraints": {
+        "stock_minimum_minimum_positive": {
+          "name": "stock_minimum_minimum_positive",
+          "value": "\"wms\".\"stock_minimum\".\"minimum\" > 0"
+        }
+      },
+      "isRLSEnabled": false
+    },
     "wms.stock_movement": {
       "name": "stock_movement",
       "schema": "wms",
@@ -8495,6 +8839,12 @@
         "reason": {
           "name": "reason",
           "type": "text",
+          "primaryKey": false,
+          "notNull": false
+        },
+        "decommission_reason_id": {
+          "name": "decommission_reason_id",
+          "type": "uuid",
           "primaryKey": false,
           "notNull": false
         },
@@ -8664,6 +9014,27 @@
           "concurrently": false,
           "method": "btree",
           "with": {}
+        },
+        "stock_movement_decommission_reason_id_idx": {
+          "name": "stock_movement_decommission_reason_id_idx",
+          "columns": [
+            {
+              "expression": "company_id",
+              "isExpression": false,
+              "asc": true,
+              "nulls": "last"
+            },
+            {
+              "expression": "decommission_reason_id",
+              "isExpression": false,
+              "asc": true,
+              "nulls": "last"
+            }
+          ],
+          "isUnique": false,
+          "concurrently": false,
+          "method": "btree",
+          "with": {}
         }
       },
       "foreignKeys": {
@@ -8787,6 +9158,22 @@
           "onDelete": "no action",
           "onUpdate": "no action"
         },
+        "stock_movement_decommission_reason_id_fk": {
+          "name": "stock_movement_decommission_reason_id_fk",
+          "tableFrom": "stock_movement",
+          "tableTo": "decommission_reason",
+          "schemaTo": "wms",
+          "columnsFrom": [
+            "company_id",
+            "decommission_reason_id"
+          ],
+          "columnsTo": [
+            "company_id",
+            "id"
+          ],
+          "onDelete": "no action",
+          "onUpdate": "no action"
+        },
         "stock_movement_corrects_movement_id_fk": {
           "name": "stock_movement_corrects_movement_id_fk",
           "tableFrom": "stock_movement",
@@ -8840,6 +9227,10 @@
         "stock_movement_placement_shape": {
           "name": "stock_movement_placement_shape",
           "value": "(\"wms\".\"stock_movement\".\"from_kind\" = 'service' or \"wms\".\"stock_movement\".\"to_kind\" = 'service') = (\"wms\".\"stock_movement\".\"placement_id\" is not null)"
+        },
+        "stock_movement_decommission_reason_shape": {
+          "name": "stock_movement_decommission_reason_shape",
+          "value": "(\"wms\".\"stock_movement\".\"kind\" = 'decommission') = (\"wms\".\"stock_movement\".\"decommission_reason_id\" is not null)"
         },
         "stock_movement_kind_shape": {
           "name": "stock_movement_kind_shape",
@@ -29666,18 +30057,6 @@
           "primaryKey": false,
           "notNull": false
         },
-        "vehicle_id": {
-          "name": "vehicle_id",
-          "type": "uuid",
-          "primaryKey": false,
-          "notNull": false
-        },
-        "driver_id": {
-          "name": "driver_id",
-          "type": "uuid",
-          "primaryKey": false,
-          "notNull": false
-        },
         "successor_scheme_id": {
           "name": "successor_scheme_id",
           "type": "uuid",
@@ -29826,48 +30205,6 @@
             },
             {
               "expression": "successor_scheme_id",
-              "isExpression": false,
-              "asc": true,
-              "nulls": "last"
-            }
-          ],
-          "isUnique": false,
-          "concurrently": false,
-          "method": "btree",
-          "with": {}
-        },
-        "service_provider_activity_vehicle_id_idx": {
-          "name": "service_provider_activity_vehicle_id_idx",
-          "columns": [
-            {
-              "expression": "company_id",
-              "isExpression": false,
-              "asc": true,
-              "nulls": "last"
-            },
-            {
-              "expression": "vehicle_id",
-              "isExpression": false,
-              "asc": true,
-              "nulls": "last"
-            }
-          ],
-          "isUnique": false,
-          "concurrently": false,
-          "method": "btree",
-          "with": {}
-        },
-        "service_provider_activity_driver_id_idx": {
-          "name": "service_provider_activity_driver_id_idx",
-          "columns": [
-            {
-              "expression": "company_id",
-              "isExpression": false,
-              "asc": true,
-              "nulls": "last"
-            },
-            {
-              "expression": "driver_id",
               "isExpression": false,
               "asc": true,
               "nulls": "last"
@@ -30040,42 +30377,6 @@
           "onDelete": "no action",
           "onUpdate": "no action"
         },
-        "service_provider_activity_vehicle_id_fk": {
-          "name": "service_provider_activity_vehicle_id_fk",
-          "tableFrom": "service_provider_activity",
-          "tableTo": "vehicle",
-          "schemaTo": "wms",
-          "columnsFrom": [
-            "company_id",
-            "project_id",
-            "vehicle_id"
-          ],
-          "columnsTo": [
-            "company_id",
-            "project_id",
-            "id"
-          ],
-          "onDelete": "no action",
-          "onUpdate": "no action"
-        },
-        "service_provider_activity_driver_id_fk": {
-          "name": "service_provider_activity_driver_id_fk",
-          "tableFrom": "service_provider_activity",
-          "tableTo": "driver",
-          "schemaTo": "wms",
-          "columnsFrom": [
-            "company_id",
-            "project_id",
-            "driver_id"
-          ],
-          "columnsTo": [
-            "company_id",
-            "project_id",
-            "id"
-          ],
-          "onDelete": "no action",
-          "onUpdate": "no action"
-        },
         "service_provider_activity_opened_by_fk": {
           "name": "service_provider_activity_opened_by_fk",
           "tableFrom": "service_provider_activity",
@@ -30133,7 +30434,7 @@
       "checkConstraints": {
         "service_provider_activity_kind_one_of": {
           "name": "service_provider_activity_kind_one_of",
-          "value": "\"wms\".\"service_provider_activity\".\"kind\" in ('route-day-change', 'compliance-follow-up', 'coordination-note', 'vehicle-change', 'stop-set-change', 'waste-fraction-change')"
+          "value": "\"wms\".\"service_provider_activity\".\"kind\" in ('route-day-change', 'compliance-follow-up', 'coordination-note')"
         },
         "service_provider_activity_status_one_of": {
           "name": "service_provider_activity_status_one_of",
@@ -30149,391 +30450,17 @@
         },
         "service_provider_activity_kind_shape": {
           "name": "service_provider_activity_kind_shape",
-          "value": "case \"wms\".\"service_provider_activity\".\"kind\" when 'route-day-change' then \"wms\".\"service_provider_activity\".\"route_scheme_id\" is not null and \"wms\".\"service_provider_activity\".\"collection_group_id\" is not null and cardinality(\"wms\".\"service_provider_activity\".\"service_days\") > 0 and \"wms\".\"service_provider_activity\".\"effective_from\" is not null and \"wms\".\"service_provider_activity\".\"due_on\" is null and \"wms\".\"service_provider_activity\".\"vehicle_id\" is null and \"wms\".\"service_provider_activity\".\"driver_id\" is null when 'vehicle-change' then \"wms\".\"service_provider_activity\".\"route_scheme_id\" is not null and \"wms\".\"service_provider_activity\".\"collection_group_id\" is not null and \"wms\".\"service_provider_activity\".\"vehicle_id\" is not null and \"wms\".\"service_provider_activity\".\"effective_from\" is not null and \"wms\".\"service_provider_activity\".\"service_days\" is null and \"wms\".\"service_provider_activity\".\"due_on\" is null when 'waste-fraction-change' then \"wms\".\"service_provider_activity\".\"route_scheme_id\" is not null and \"wms\".\"service_provider_activity\".\"collection_group_id\" is not null and \"wms\".\"service_provider_activity\".\"effective_from\" is not null and \"wms\".\"service_provider_activity\".\"service_days\" is null and \"wms\".\"service_provider_activity\".\"due_on\" is null and \"wms\".\"service_provider_activity\".\"vehicle_id\" is null and \"wms\".\"service_provider_activity\".\"driver_id\" is null when 'stop-set-change' then \"wms\".\"service_provider_activity\".\"route_scheme_id\" is not null and \"wms\".\"service_provider_activity\".\"collection_group_id\" is not null and \"wms\".\"service_provider_activity\".\"effective_from\" is not null and \"wms\".\"service_provider_activity\".\"service_days\" is null and \"wms\".\"service_provider_activity\".\"due_on\" is null and \"wms\".\"service_provider_activity\".\"vehicle_id\" is null and \"wms\".\"service_provider_activity\".\"driver_id\" is null when 'compliance-follow-up' then \"wms\".\"service_provider_activity\".\"due_on\" is not null and \"wms\".\"service_provider_activity\".\"route_scheme_id\" is null and \"wms\".\"service_provider_activity\".\"collection_group_id\" is null and \"wms\".\"service_provider_activity\".\"service_days\" is null and \"wms\".\"service_provider_activity\".\"effective_from\" is null and \"wms\".\"service_provider_activity\".\"vehicle_id\" is null and \"wms\".\"service_provider_activity\".\"driver_id\" is null else \"wms\".\"service_provider_activity\".\"due_on\" is null and \"wms\".\"service_provider_activity\".\"route_scheme_id\" is null and \"wms\".\"service_provider_activity\".\"collection_group_id\" is null and \"wms\".\"service_provider_activity\".\"service_days\" is null and \"wms\".\"service_provider_activity\".\"effective_from\" is null and \"wms\".\"service_provider_activity\".\"vehicle_id\" is null and \"wms\".\"service_provider_activity\".\"driver_id\" is null end"
+          "value": "case \"wms\".\"service_provider_activity\".\"kind\" when 'route-day-change' then \"wms\".\"service_provider_activity\".\"route_scheme_id\" is not null and \"wms\".\"service_provider_activity\".\"collection_group_id\" is not null and cardinality(\"wms\".\"service_provider_activity\".\"service_days\") > 0 and \"wms\".\"service_provider_activity\".\"effective_from\" is not null and \"wms\".\"service_provider_activity\".\"due_on\" is null when 'compliance-follow-up' then \"wms\".\"service_provider_activity\".\"due_on\" is not null and \"wms\".\"service_provider_activity\".\"route_scheme_id\" is null and \"wms\".\"service_provider_activity\".\"collection_group_id\" is null and \"wms\".\"service_provider_activity\".\"service_days\" is null and \"wms\".\"service_provider_activity\".\"effective_from\" is null else \"wms\".\"service_provider_activity\".\"due_on\" is null and \"wms\".\"service_provider_activity\".\"route_scheme_id\" is null and \"wms\".\"service_provider_activity\".\"collection_group_id\" is null and \"wms\".\"service_provider_activity\".\"service_days\" is null and \"wms\".\"service_provider_activity\".\"effective_from\" is null end"
         },
         "service_provider_activity_status_shape": {
           "name": "service_provider_activity_status_shape",
-          "value": "case when \"wms\".\"service_provider_activity\".\"kind\" in ('route-day-change', 'vehicle-change', 'stop-set-change', 'waste-fraction-change') then \"wms\".\"service_provider_activity\".\"status\" in ('pending-approval', 'approved', 'rejected', 'withdrawn') else \"wms\".\"service_provider_activity\".\"status\" in ('open', 'completed', 'cancelled') end"
+          "value": "case when \"wms\".\"service_provider_activity\".\"kind\" in ('route-day-change') then \"wms\".\"service_provider_activity\".\"status\" in ('pending-approval', 'approved', 'rejected', 'withdrawn') else \"wms\".\"service_provider_activity\".\"status\" in ('open', 'completed', 'cancelled') end"
         },
         "service_provider_activity_closed_shape": {
           "name": "service_provider_activity_closed_shape",
           "value": "(\"wms\".\"service_provider_activity\".\"status\" in ('pending-approval', 'open')) = (\"wms\".\"service_provider_activity\".\"closed_by\" is null and \"wms\".\"service_provider_activity\".\"closed_at\" is null) and (\"wms\".\"service_provider_activity\".\"status\" <> 'rejected' or \"wms\".\"service_provider_activity\".\"close_reason\" is not null) and (\"wms\".\"service_provider_activity\".\"status\" = 'approved') = (\"wms\".\"service_provider_activity\".\"successor_scheme_id\" is not null)"
         }
       },
-      "isRLSEnabled": false
-    },
-    "wms.service_provider_activity_container": {
-      "name": "service_provider_activity_container",
-      "schema": "wms",
-      "columns": {
-        "id": {
-          "name": "id",
-          "type": "uuid",
-          "primaryKey": true,
-          "notNull": true,
-          "default": "wms.uuidv7()"
-        },
-        "company_id": {
-          "name": "company_id",
-          "type": "uuid",
-          "primaryKey": false,
-          "notNull": true
-        },
-        "project_id": {
-          "name": "project_id",
-          "type": "uuid",
-          "primaryKey": false,
-          "notNull": true
-        },
-        "created_at": {
-          "name": "created_at",
-          "type": "timestamp with time zone",
-          "primaryKey": false,
-          "notNull": true,
-          "default": "now()"
-        },
-        "updated_at": {
-          "name": "updated_at",
-          "type": "timestamp with time zone",
-          "primaryKey": false,
-          "notNull": true,
-          "default": "now()"
-        },
-        "activity_id": {
-          "name": "activity_id",
-          "type": "uuid",
-          "primaryKey": false,
-          "notNull": true
-        },
-        "container_id": {
-          "name": "container_id",
-          "type": "uuid",
-          "primaryKey": false,
-          "notNull": true
-        },
-        "position": {
-          "name": "position",
-          "type": "integer",
-          "primaryKey": false,
-          "notNull": true
-        }
-      },
-      "indexes": {
-        "service_provider_activity_container_project_id_idx": {
-          "name": "service_provider_activity_container_project_id_idx",
-          "columns": [
-            {
-              "expression": "company_id",
-              "isExpression": false,
-              "asc": true,
-              "nulls": "last"
-            },
-            {
-              "expression": "project_id",
-              "isExpression": false,
-              "asc": true,
-              "nulls": "last"
-            }
-          ],
-          "isUnique": false,
-          "concurrently": false,
-          "method": "btree",
-          "with": {}
-        },
-        "service_provider_activity_container_container_id_idx": {
-          "name": "service_provider_activity_container_container_id_idx",
-          "columns": [
-            {
-              "expression": "company_id",
-              "isExpression": false,
-              "asc": true,
-              "nulls": "last"
-            },
-            {
-              "expression": "container_id",
-              "isExpression": false,
-              "asc": true,
-              "nulls": "last"
-            }
-          ],
-          "isUnique": false,
-          "concurrently": false,
-          "method": "btree",
-          "with": {}
-        }
-      },
-      "foreignKeys": {
-        "service_provider_activity_container_company_id_fk": {
-          "name": "service_provider_activity_container_company_id_fk",
-          "tableFrom": "service_provider_activity_container",
-          "tableTo": "company",
-          "schemaTo": "wms",
-          "columnsFrom": [
-            "company_id"
-          ],
-          "columnsTo": [
-            "id"
-          ],
-          "onDelete": "no action",
-          "onUpdate": "no action"
-        },
-        "service_provider_activity_container_project_id_fk": {
-          "name": "service_provider_activity_container_project_id_fk",
-          "tableFrom": "service_provider_activity_container",
-          "tableTo": "project",
-          "schemaTo": "wms",
-          "columnsFrom": [
-            "company_id",
-            "project_id"
-          ],
-          "columnsTo": [
-            "company_id",
-            "id"
-          ],
-          "onDelete": "no action",
-          "onUpdate": "no action"
-        },
-        "service_provider_activity_container_activity_id_fk": {
-          "name": "service_provider_activity_container_activity_id_fk",
-          "tableFrom": "service_provider_activity_container",
-          "tableTo": "service_provider_activity",
-          "schemaTo": "wms",
-          "columnsFrom": [
-            "company_id",
-            "project_id",
-            "activity_id"
-          ],
-          "columnsTo": [
-            "company_id",
-            "project_id",
-            "id"
-          ],
-          "onDelete": "no action",
-          "onUpdate": "no action"
-        },
-        "service_provider_activity_container_container_id_fk": {
-          "name": "service_provider_activity_container_container_id_fk",
-          "tableFrom": "service_provider_activity_container",
-          "tableTo": "container",
-          "schemaTo": "wms",
-          "columnsFrom": [
-            "company_id",
-            "project_id",
-            "container_id"
-          ],
-          "columnsTo": [
-            "company_id",
-            "project_id",
-            "id"
-          ],
-          "onDelete": "no action",
-          "onUpdate": "no action"
-        }
-      },
-      "compositePrimaryKeys": {},
-      "uniqueConstraints": {
-        "service_provider_activity_container_membership_key": {
-          "name": "service_provider_activity_container_membership_key",
-          "nullsNotDistinct": false,
-          "columns": [
-            "company_id",
-            "activity_id",
-            "container_id"
-          ]
-        },
-        "service_provider_activity_container_activity_id_position_key": {
-          "name": "service_provider_activity_container_activity_id_position_key",
-          "nullsNotDistinct": false,
-          "columns": [
-            "company_id",
-            "activity_id",
-            "position"
-          ]
-        }
-      },
-      "policies": {},
-      "checkConstraints": {
-        "service_provider_activity_container_position_positive": {
-          "name": "service_provider_activity_container_position_positive",
-          "value": "\"wms\".\"service_provider_activity_container\".\"position\" > 0"
-        }
-      },
-      "isRLSEnabled": false
-    },
-    "wms.service_provider_activity_fraction": {
-      "name": "service_provider_activity_fraction",
-      "schema": "wms",
-      "columns": {
-        "id": {
-          "name": "id",
-          "type": "uuid",
-          "primaryKey": true,
-          "notNull": true,
-          "default": "wms.uuidv7()"
-        },
-        "company_id": {
-          "name": "company_id",
-          "type": "uuid",
-          "primaryKey": false,
-          "notNull": true
-        },
-        "project_id": {
-          "name": "project_id",
-          "type": "uuid",
-          "primaryKey": false,
-          "notNull": true
-        },
-        "created_at": {
-          "name": "created_at",
-          "type": "timestamp with time zone",
-          "primaryKey": false,
-          "notNull": true,
-          "default": "now()"
-        },
-        "updated_at": {
-          "name": "updated_at",
-          "type": "timestamp with time zone",
-          "primaryKey": false,
-          "notNull": true,
-          "default": "now()"
-        },
-        "activity_id": {
-          "name": "activity_id",
-          "type": "uuid",
-          "primaryKey": false,
-          "notNull": true
-        },
-        "waste_fraction_id": {
-          "name": "waste_fraction_id",
-          "type": "uuid",
-          "primaryKey": false,
-          "notNull": true
-        }
-      },
-      "indexes": {
-        "service_provider_activity_fraction_project_id_idx": {
-          "name": "service_provider_activity_fraction_project_id_idx",
-          "columns": [
-            {
-              "expression": "company_id",
-              "isExpression": false,
-              "asc": true,
-              "nulls": "last"
-            },
-            {
-              "expression": "project_id",
-              "isExpression": false,
-              "asc": true,
-              "nulls": "last"
-            }
-          ],
-          "isUnique": false,
-          "concurrently": false,
-          "method": "btree",
-          "with": {}
-        },
-        "service_provider_activity_fraction_waste_fraction_id_idx": {
-          "name": "service_provider_activity_fraction_waste_fraction_id_idx",
-          "columns": [
-            {
-              "expression": "company_id",
-              "isExpression": false,
-              "asc": true,
-              "nulls": "last"
-            },
-            {
-              "expression": "waste_fraction_id",
-              "isExpression": false,
-              "asc": true,
-              "nulls": "last"
-            }
-          ],
-          "isUnique": false,
-          "concurrently": false,
-          "method": "btree",
-          "with": {}
-        }
-      },
-      "foreignKeys": {
-        "service_provider_activity_fraction_company_id_fk": {
-          "name": "service_provider_activity_fraction_company_id_fk",
-          "tableFrom": "service_provider_activity_fraction",
-          "tableTo": "company",
-          "schemaTo": "wms",
-          "columnsFrom": [
-            "company_id"
-          ],
-          "columnsTo": [
-            "id"
-          ],
-          "onDelete": "no action",
-          "onUpdate": "no action"
-        },
-        "service_provider_activity_fraction_project_id_fk": {
-          "name": "service_provider_activity_fraction_project_id_fk",
-          "tableFrom": "service_provider_activity_fraction",
-          "tableTo": "project",
-          "schemaTo": "wms",
-          "columnsFrom": [
-            "company_id",
-            "project_id"
-          ],
-          "columnsTo": [
-            "company_id",
-            "id"
-          ],
-          "onDelete": "no action",
-          "onUpdate": "no action"
-        },
-        "service_provider_activity_fraction_activity_id_fk": {
-          "name": "service_provider_activity_fraction_activity_id_fk",
-          "tableFrom": "service_provider_activity_fraction",
-          "tableTo": "service_provider_activity",
-          "schemaTo": "wms",
-          "columnsFrom": [
-            "company_id",
-            "project_id",
-            "activity_id"
-          ],
-          "columnsTo": [
-            "company_id",
-            "project_id",
-            "id"
-          ],
-          "onDelete": "no action",
-          "onUpdate": "no action"
-        },
-        "service_provider_activity_fraction_waste_fraction_id_fk": {
-          "name": "service_provider_activity_fraction_waste_fraction_id_fk",
-          "tableFrom": "service_provider_activity_fraction",
-          "tableTo": "waste_fraction",
-          "schemaTo": "wms",
-          "columnsFrom": [
-            "company_id",
-            "waste_fraction_id"
-          ],
-          "columnsTo": [
-            "company_id",
-            "id"
-          ],
-          "onDelete": "no action",
-          "onUpdate": "no action"
-        }
-      },
-      "compositePrimaryKeys": {},
-      "uniqueConstraints": {
-        "service_provider_activity_fraction_membership_key": {
-          "name": "service_provider_activity_fraction_membership_key",
-          "nullsNotDistinct": false,
-          "columns": [
-            "company_id",
-            "activity_id",
-            "waste_fraction_id"
-          ]
-        }
-      },
-      "policies": {},
-      "checkConstraints": {},
       "isRLSEnabled": false
     }
   },

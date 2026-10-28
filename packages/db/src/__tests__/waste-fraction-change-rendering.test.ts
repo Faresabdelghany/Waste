@@ -4,7 +4,7 @@
 // an Approval's statuses as the domain's proposal kinds say; its fractions are
 // a set of their own, `service_provider_activity_fraction`, each a fraction of
 // the company's, once. Then the migration, which is exactly those statements,
-// diffed from the activity as 0065 left it (activity-as-of.ts), then the
+// diffed from the activity as 0068 left it (activity-as-of.ts), then the
 // set's fence and trigger and its audit trail as its activity's set
 // (`WASTE_FRACTION_PROPOSALS_AUDITED`). No database.
 import assert from "node:assert/strict"
@@ -28,23 +28,23 @@ import { collectionGroup, routeScheme } from "../schema/route-schemes"
 import { serviceProviderActivity, serviceProviderActivityContainer, serviceProviderActivityFraction } from "../schema/service-provider-activities"
 import { auditTrail, WASTE_FRACTION_PROPOSALS_AUDITED } from "../sql/audit-trail"
 import { handWrittenStatements, normalised, statementsOf } from "../sql/hand-written"
-import { serviceProviderActivityAsOf0065 } from "./activity-as-of"
+import { serviceProviderActivityAsOf0068 } from "./activity-as-of"
 import { checksOf, list, ref } from "./rendering"
 import { statementsBetween } from "./specimen"
 
-const MIGRATION = "0066_waste_fraction_proposals.sql"
+const MIGRATION = "0069_waste_fraction_proposals.sql"
 
 const referenced = { company, project, serviceProvider, serviceArea, routeScheme, collectionGroup, userAccount, vehicle, driver, container, wasteFraction, serviceProviderActivityContainer }
 
-/** What drizzle-kit writes: the activity from its 0065 spelling to today's, and the set. */
-const generated = (): Promise<string[]> => statementsBetween({ ...referenced, serviceProviderActivity: serviceProviderActivityAsOf0065 }, { ...referenced, serviceProviderActivity, serviceProviderActivityFraction })
+/** What drizzle-kit writes: the activity from its 0068 spelling to today's, and the set. */
+const generated = (): Promise<string[]> => statementsBetween({ ...referenced, serviceProviderActivity: serviceProviderActivityAsOf0068 }, { ...referenced, serviceProviderActivity, serviceProviderActivityFraction })
 
 const fileStatements = async (): Promise<string[]> => statementsOf(await readFile(join(MIGRATIONS_FOLDER, MIGRATION), "utf8"))
 
 const column = (name: string) => ref("service_provider_activity", name)
 
 describe("the waste-fraction change as drizzle-kit writes it", () => {
-  test("the migration is exactly what the schema generates from 0065's activity, then the set's fence, trigger and audit trail", async () => {
+  test("the migration is exactly what the schema generates from 0068's activity, then the set's fence, trigger and audit trail", async () => {
     assert.deepEqual(await fileStatements(), [...(await generated()), ...handWrittenStatements(serviceProviderActivityFraction), ...WASTE_FRACTION_PROPOSALS_AUDITED.flatMap(auditTrail)].map(normalised))
   })
 
