@@ -68,6 +68,12 @@
 // property's chain, maps today's CREATE TABLE onto 0056's, and
 // address-register-rendering.test.ts pins the statements.
 //
+// The dated parties (#374) gave `property_party` its period, with the
+// exclusion constraint in place of the unique key over the property, the
+// customer and the role, and an index on the property, which the key no
+// longer leads with: `CHANGED_BY_DATED_PARTIES` maps today's CREATE TABLE onto
+// 0004's, and dated-parties-rendering.test.ts pins the statements.
+//
 // This is also what makes a change to the vocabulary a migration: the values
 // are spelled here as the file spells them, so adding one to a list in
 // @waste/domain/registry/vocabulary fails this test until a migration replaces
@@ -301,6 +307,23 @@ const CHANGED_IN_0056 = new Map([
   [agreementTable("0056"), agreementTable("0010")],
 ])
 
+/** property_party as drizzle-kit wrote it as of 0004, its role unique per customer and property, and as it writes it since the dated parties (#374), effective-dated with the exclusion constraint in the migration holding what the unique key held. */
+const partyTable = (dated: boolean): string =>
+  createTable("property_party", dated ? "dated" : "project", [
+    '"property_id" uuid NOT NULL',
+    '"customer_id" uuid NOT NULL',
+    '"role" text NOT NULL',
+    ...(dated ? [] : [uniqueKey("property_party_property_id_customer_id_role_key", "company_id", "property_id", "customer_id", "role")]),
+    ...(dated ? [validityCheck("property_party")] : []),
+    oneOfCheck("property_party", "role", "owner", "payer", "tenant", "administrator", "service-contact"),
+  ])
+
+/** What the dated parties changed (#374): the party's CREATE TABLE as drizzle-kit generates it now onto what 0004 says. dated-parties-rendering.test.ts pins the statements. */
+const CHANGED_BY_DATED_PARTIES = new Map([[partyTable(true), partyTable(false)]])
+
+/** The index the dated parties added (#374), now that no unique key leads with the property. */
+const ADDED_BY_DATED_PARTIES = [index("property_party", "property_party_property_id_idx", "company_id", "property_id")]
+
 /** What 0022 changed on two tables 0004 created: the statement as drizzle-kit generates it now, and as it generated it as of 0004. */
 const CHANGED_IN_0022 = new Map([
   [propertyTable("0022"), propertyTable("0004")],
@@ -367,13 +390,7 @@ const expected = [
   productTable("0054"),
   customerTable(true),
   propertyTable("0062"),
-  createTable("property_party", "project", [
-    '"property_id" uuid NOT NULL',
-    '"customer_id" uuid NOT NULL',
-    '"role" text NOT NULL',
-    uniqueKey("property_party_property_id_customer_id_role_key", "company_id", "property_id", "customer_id", "role"),
-    oneOfCheck("property_party", "role", "owner", "payer", "tenant", "administrator", "service-contact"),
-  ]),
+  partyTable(true),
   createTable("property_group", "project", [
     '"name" text NOT NULL',
     '"purpose" text NOT NULL',
@@ -481,6 +498,7 @@ const expected = [
   partialUniqueIndex("product", "product_invoice_code_idx", ["company_id", "project_id", "invoice_code"], `${ref("product", "invoice_code")} is not null`),
   partialUniqueIndex("customer", "customer_registration_number_idx", ["company_id", "registration_number"], `${ref("customer", "registration_number")} is not null`),
   partialUniqueIndex("property", "property_registry_id_idx", ["company_id", "registry_id"], `${ref("property", "registry_id")} is not null`),
+  index("property_party", "property_party_property_id_idx", "company_id", "property_id"),
   index("property_party", "property_party_project_id_idx", "company_id", "project_id"),
   index("property_party", "property_party_customer_id_idx", "company_id", "customer_id"),
   index("property_group", "property_group_responsible_customer_id_idx", "company_id", "responsible_customer_id"),
@@ -518,7 +536,8 @@ describe("the Registry tables as drizzle-kit writes them", () => {
   /** Everything drizzle-kit wrote at the head of 0004, as it was generated as of 0004: the placement, the product, the agreement and the two places in their earlier spelling, what 0010 added left out, and the index 0007 dropped back in. */
   const generatedHead = async (): Promise<string[]> => [
     ...(await statementsFor(tables))
-      .filter((statement) => !ADDED_IN_0010.includes(statement))
+      .filter((statement) => !ADDED_IN_0010.includes(statement) && !ADDED_BY_DATED_PARTIES.includes(statement))
+      .map((statement) => CHANGED_BY_DATED_PARTIES.get(statement) ?? statement)
       .map((statement) => CHANGED_IN_0062.get(statement) ?? statement)
       .map((statement) => CHANGED_IN_0056.get(statement) ?? statement)
       .map((statement) => CHANGED_IN_0054.get(statement) ?? statement)
@@ -545,6 +564,7 @@ describe("the Registry tables as drizzle-kit writes them", () => {
     for (const statement of CHANGED_IN_0029.keys()) assert.ok([...CHANGED_IN_0043.values()].includes(statement), statement.split("\n")[0])
     for (const statement of CHANGED_IN_0037.keys()) assert.ok(today.includes(statement), statement.split("\n")[0])
     for (const statement of ADDED_IN_0010) assert.ok(today.includes(statement), statement)
+    for (const statement of [...CHANGED_BY_DATED_PARTIES.keys(), ...ADDED_BY_DATED_PARTIES]) assert.ok(today.includes(statement), statement.split("\n")[0])
     for (const statement of DROPPED_IN_0007) assert.equal(today.includes(statement), false, statement)
   })
 

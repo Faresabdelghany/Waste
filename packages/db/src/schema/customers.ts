@@ -1,8 +1,9 @@
 // Who is served and where (Issue #78): the Customer, the Property, the
 // parties between them, the Property Group and the Shared Collection Point
-// with its members. Nothing here is effective-dated (ADR-0005): a membership
-// or a party role is present or absent and its history is the audit log, and a
-// Customer, Property, Group or Point carries a status.
+// with its members. A party role is effective-dated (ADR-0005, #374): an
+// occupant moves in and out on a day, so the row says from when until when.
+// Nothing else here is: a membership is present or absent and its history is
+// the audit log, and a Customer, Property, Group or Point carries a status.
 //
 // `customer` is one record for a person or an organisation; the prototype's
 // "Contacts & Companies" is this one table. A person has no natural key, so
@@ -34,7 +35,12 @@
 // payer and primary contact of a property, and its contact's relationship
 // role, are all rows here. It is also the citizen portal's customer-side
 // identity — which properties a person may see and as what — a read model over
-// these rows, not a `user_account`.
+// these rows, not a `user_account`. A party holds its role over a period
+// (#374): a move ends the outgoing customer's rows on its day and begins the
+// incoming's there, and one customer holds one role at one property once at a
+// time, which the exclusion constraint over the property, the customer and the
+// role says in the migration, where a unique key said it while the rows were
+// undated.
 //
 // A Property Group and a Shared Collection Point both gather properties, and
 // they are different things: a Group is administrative (one invoice, one
@@ -75,7 +81,7 @@ import { boolean, check, integer, text, time, unique, uniqueIndex, uuid } from "
 
 import { tableObjectName } from "../names"
 import { lowercase, oneOf, positive, timeWindow } from "./checks"
-import { id, projectScoped, tenant, timestamps } from "./columns"
+import { id, projectScoped, tenant, timestamps, validity, validPeriod } from "./columns"
 import { geometry, validGeometry } from "./geometry"
 import { company, project } from "./organisation"
 import { companyReference, projectKey, projectReference, tenantIndex, tenantKey, tenantReference, tenantUnique } from "./references"
@@ -176,6 +182,7 @@ export const propertyParty = wms.table(
     ...id,
     ...projectScoped,
     ...timestamps,
+    ...validity,
     propertyId: uuid().notNull(),
     customerId: uuid().notNull(),
     role: text().notNull(),
@@ -185,8 +192,9 @@ export const propertyParty = wms.table(
     tenantReference(t, [t.projectId], project),
     projectReference(t, [t.propertyId], property),
     tenantReference(t, [t.customerId], customer),
-    // One Customer may be several things to one Property (an owner who also pays), so the role is part of the key.
-    tenantUnique(t, t.propertyId, t.customerId, t.role),
+    // One Customer may be several things to one Property (an owner who also pays), so the role is part of the key the migration's exclusion constraint holds over the period.
+    validPeriod(t),
+    tenantIndex(t, t.propertyId),
     tenantIndex(t, t.projectId),
     tenantIndex(t, t.customerId),
     oneOf(t.role, PROPERTY_PARTY_ROLES),

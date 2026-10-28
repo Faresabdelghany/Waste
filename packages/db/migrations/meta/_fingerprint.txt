@@ -2480,17 +2480,21 @@ column wms.property_party 5 updated_at timestamp with time zone not-null default
 column wms.property_party 6 property_id uuid not-null
 column wms.property_party 7 customer_id uuid not-null
 column wms.property_party 8 role text not-null
+column wms.property_party 9 valid_from date not-null
+column wms.property_party 10 valid_to date
 constraint wms.property_party property_party_company_id_fk FOREIGN KEY (company_id) REFERENCES wms.company(id)
 constraint wms.property_party property_party_customer_id_fk FOREIGN KEY (company_id, customer_id) REFERENCES wms.customer(company_id, id)
+constraint wms.property_party property_party_no_overlap EXCLUDE USING gist (company_id WITH =, property_id WITH =, customer_id WITH =, role WITH =, daterange(valid_from, valid_to, '[)'::text) WITH &&)
 constraint wms.property_party property_party_pkey PRIMARY KEY (id)
 constraint wms.property_party property_party_project_id_fk FOREIGN KEY (company_id, project_id) REFERENCES wms.project(company_id, id)
-constraint wms.property_party property_party_property_id_customer_id_role_key UNIQUE (company_id, property_id, customer_id, role)
 constraint wms.property_party property_party_property_id_fk FOREIGN KEY (company_id, project_id, property_id) REFERENCES wms.property(company_id, project_id, id)
 constraint wms.property_party property_party_role_one_of CHECK ((role = ANY (ARRAY['owner'::text, 'payer'::text, 'tenant'::text, 'administrator'::text, 'service-contact'::text])))
+constraint wms.property_party property_party_validity CHECK (((valid_to IS NULL) OR (valid_to > valid_from)))
 index wms.property_party property_party_customer_id_idx CREATE INDEX property_party_customer_id_idx ON wms.property_party USING btree (company_id, customer_id)
+index wms.property_party property_party_no_overlap CREATE INDEX property_party_no_overlap ON wms.property_party USING gist (company_id, property_id, customer_id, role, daterange(valid_from, valid_to, '[)'::text))
 index wms.property_party property_party_pkey CREATE UNIQUE INDEX property_party_pkey ON wms.property_party USING btree (id)
 index wms.property_party property_party_project_id_idx CREATE INDEX property_party_project_id_idx ON wms.property_party USING btree (company_id, project_id)
-index wms.property_party property_party_property_id_customer_id_role_key CREATE UNIQUE INDEX property_party_property_id_customer_id_role_key ON wms.property_party USING btree (company_id, property_id, customer_id, role)
+index wms.property_party property_party_property_id_idx CREATE INDEX property_party_property_id_idx ON wms.property_party USING btree (company_id, property_id)
 trigger wms.property_party property_party_audit_trail enabled=O CREATE TRIGGER property_party_audit_trail AFTER INSERT OR DELETE OR UPDATE ON wms.property_party FOR EACH ROW EXECUTE FUNCTION wms.audit_row('property', 'property_id')
 trigger wms.property_party property_party_touch_updated_at enabled=O CREATE TRIGGER property_party_touch_updated_at BEFORE UPDATE ON wms.property_party FOR EACH ROW EXECUTE FUNCTION wms.touch_updated_at()
 policy wms.property_party property_party_tenant_fence permissive ALL to=wms_api using=(company_id = ( SELECT wms.current_company_id() AS current_company_id)) check=(company_id = ( SELECT wms.current_company_id() AS current_company_id))
@@ -4450,4 +4454,5 @@ journal 1793216335264 64275b21651c0614f779f558aa0d732f781137bd7a3d84380b2c419861
 journal 1793225274885 7d8dad0b8e97c8a9ec2805bac6030d16814cc91d63335a1501744a836bc96d19
 journal 1793227264394 ab9df765d72e64095403123cc17acf2f34f85c3caecb8ebea81a0321043ac64b
 journal 1793229147346 ea9804b6736352c3417743973dfdd0e9ac08c7ec714e43bfc7bb79a33034e30b
+journal 1793231244210 28c1ebcb79fe09c31112ea7c107fd4fa02346fd0ea3241c4875ef71724c3300a
 pgboss-version 42
