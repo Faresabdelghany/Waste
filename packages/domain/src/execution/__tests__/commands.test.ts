@@ -34,6 +34,7 @@ import {
   type VehicleState,
 } from "../commands"
 import { alreadyDecided, notActive, notDispatched, routeCancellation } from "../transitions"
+import type { PositionFix } from "../positions"
 import { DRIVER_COMMAND_KINDS, type RouteStatus } from "../vocabulary"
 
 const COMPANY = "018f7c31-a000-7000-8000-000000000001"
@@ -383,8 +384,8 @@ describe("decide: the body", () => {
 
 describe("decide: record-positions (O8 of #290)", () => {
   /** A fix that many seconds after the request's instant, at the harbour. */
-  const fixAt = (ms: number) => ({ at: shifted(ms), location: point, accuracyM: 12 })
-  const positions = (...points: ReturnType<typeof fixAt>[]) => command("record-positions", { points }, points.at(-1)?.at ?? EARLIER)
+  const fixAt = (ms: number): PositionFix => ({ at: shifted(ms), location: point, accuracyM: 12 })
+  const positions = (...points: PositionFix[]) => command("record-positions", { points }, points.at(-1)?.at ?? EARLIER)
 
   test("appends the session's fixes as sent and is worth no event, on a running session or a paused one", () => {
     const sent = positions(fixAt(-30 * 60_000), { ...fixAt(-29 * 60_000), speedKmh: 34, headingDeg: 270 })
