@@ -23,8 +23,13 @@ test("a customer's details export everything held about it as one file, read by 
   await page.getByRole("main").getByRole("textbox", { name: /^Search .+/ }).fill(housing.name)
   await page.getByRole("button", { name: `Open ${housing.name}` }).first().click()
 
-  const [download, invoices] = await Promise.all([page.waitForEvent("download"), answerOf(page, "GET", "/invoices"), page.getByRole("button", { name: "Export customer data" }).click()])
-  expect(new URL(invoices.url()).searchParams.get("customerId"), "each family is read by the customer").toBe(housing.id)
+  // Each family is read by the customer; the page's own unfiltered reads of the same lists may answer alongside it.
+  const byCustomer = page.waitForResponse((response) => {
+    const url = new URL(response.url())
+    return response.request().method() === "GET" && url.pathname === "/waste-api/invoices" && url.searchParams.get("customerId") === housing.id
+  })
+  const [download, invoices] = await Promise.all([page.waitForEvent("download"), byCustomer, page.getByRole("button", { name: "Export customer data" }).click()])
+  expect(invoices.status(), "each family is read by the customer").toBe(200)
   expect(download.suggestedFilename()).toMatch(/^customer-export-osterbro-housing.*\.json$/)
   await expect(toasts(page)).toContainText("Customer data exported")
 
