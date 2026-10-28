@@ -13,6 +13,8 @@ import {
   OFFICE_DECIDES,
   routeDayChangeRefusal,
   SAME_CREW,
+  SAME_STOPS,
+  stopSetChangeRefusal,
   serviceDaysAfter,
   SAME_DAYS,
   vehicleChangeRefusal,
@@ -31,7 +33,7 @@ describe("a Service Provider Activity", () => {
     assert.equal(initialStatus("coordination-note"), "open")
     assert.deepEqual(
       SERVICE_PROVIDER_ACTIVITY_KINDS.filter((kind) => isProposal(kind)),
-      ["route-day-change", "vehicle-change"],
+      ["route-day-change", "vehicle-change", "stop-set-change"],
     )
   })
 
@@ -140,5 +142,20 @@ describe("a vehicle change", () => {
     assert.equal(vehicleChangeRefusal(crew, { vehicleId: "nr-08", driverId: "mads" }), null)
     assert.equal(vehicleChangeRefusal(crew, { vehicleId: "nr-12", driverId: null }), null)
     assert.equal(vehicleChangeRefusal({ vehicleId: null, driverId: null }, { vehicleId: "nr-12", driverId: null }), null)
+  })
+})
+
+describe("a stop-set change", () => {
+  test("is a proposal, decided by the office", () => {
+    assert.equal(initialStatus("stop-set-change"), "pending-approval")
+    assert.deepEqual(closesWith({ number: 8, kind: "stop-set-change", status: "pending-approval" }, "approve", "office"), { ok: true, to: "approved" })
+    assert.deepEqual(closesWith({ number: 8, kind: "stop-set-change", status: "pending-approval" }, "approve", "provider"), { ok: false, status: 403, detail: OFFICE_DECIDES })
+  })
+
+  test("must move a stop or their order, the list being stop order", () => {
+    assert.equal(stopSetChangeRefusal(["a", "b"], ["a", "b"]), SAME_STOPS)
+    assert.equal(stopSetChangeRefusal(["a", "b"], ["b", "a"]), null)
+    assert.equal(stopSetChangeRefusal(["a", "b"], ["a", "b", "c"]), null)
+    assert.equal(stopSetChangeRefusal(["a", "b"], ["a"]), null)
   })
 })

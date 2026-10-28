@@ -119,6 +119,7 @@ export const AUDITED_TABLES = [
   "team",
   "team_member",
   "ticket_team_default",
+  "service_provider_activity_container",
 ] as const
 export type AuditedTable = (typeof AUDITED_TABLES)[number]
 

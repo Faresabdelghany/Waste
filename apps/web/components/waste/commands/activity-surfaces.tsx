@@ -46,14 +46,21 @@ const { workspaceId, moduleId } = PROVIDER_ACTIVITIES_MODULE
 const SERVICE_AREAS_MODULE = { workspaceId: "service-providers", moduleId: "service-areas" } as const
 const VEHICLES_MODULE = { workspaceId: "fleet", moduleId: "vehicles" } as const
 const DRIVERS_MODULE = { workspaceId: "fleet", moduleId: "drivers" } as const
+const CONTAINERS_MODULE = { workspaceId: "resources", moduleId: "containers" } as const
 
-/** The crew a vehicle change picks from: the powered vehicles and the drivers the account reads — a provider's own fleet alone, which the API fences. */
-function useCrewOptions(): { vehicles: BusinessFormOption[]; drivers: BusinessFormOption[] } {
+/**
+ * What a vehicle change and a stop-set change pick from: the powered vehicles
+ * and the drivers the account reads — a provider's own fleet alone, which
+ * the API fences — and the containers it reads.
+ */
+function useCrewOptions(): { vehicles: BusinessFormOption[]; drivers: BusinessFormOption[]; containers: BusinessFormOption[] } {
   const vehicles = useServerModuleState(VEHICLES_MODULE.workspaceId, VEHICLES_MODULE.moduleId)
   const drivers = useServerModuleState(DRIVERS_MODULE.workspaceId, DRIVERS_MODULE.moduleId)
+  const containers = useServerModuleState(CONTAINERS_MODULE.workspaceId, CONTAINERS_MODULE.moduleId)
   return {
     vehicles: optionsOf(vehicles?.records, (record) => record.submittedValues?.resourceKind === "powered-vehicle"),
     drivers: optionsOf(drivers?.records, () => true),
+    containers: optionsOf(containers?.records, () => true),
   }
 }
 

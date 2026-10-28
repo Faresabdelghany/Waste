@@ -498,6 +498,13 @@
       "when": 1793225274885,
       "tag": "0070_ticket_teams",
       "breakpoints": true
+    },
+    {
+      "idx": 71,
+      "version": "7",
+      "when": 1793227264394,
+      "tag": "0071_stop_set_proposals",
+      "breakpoints": true
     }
   ]
 }

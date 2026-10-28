@@ -27,7 +27,7 @@ export type ActivitySide = "office" | "provider"
 export type ActivityCommand = "approve" | "reject" | "withdraw" | "complete" | "cancel"
 
 /** The kinds that ask for an Approval. */
-export const PROPOSAL_KINDS = ["route-day-change", "vehicle-change"] as const satisfies readonly ServiceProviderActivityKind[]
+export const PROPOSAL_KINDS = ["route-day-change", "vehicle-change", "stop-set-change"] as const satisfies readonly ServiceProviderActivityKind[]
 
 export const isProposal = (kind: ServiceProviderActivityKind): boolean => (PROPOSAL_KINDS as readonly string[]).includes(kind)
 
@@ -43,6 +43,7 @@ const CREATE_SIDES: Readonly<Record<ServiceProviderActivityKind, readonly Activi
   "compliance-follow-up": ["office"],
   "coordination-note": ["office", "provider"],
   "vehicle-change": ["office", "provider"],
+  "stop-set-change": ["office", "provider"],
 }
 
 export const OFFICE_RAISES_FOLLOW_UPS = "A compliance follow-up is the office's to raise"
@@ -70,6 +71,7 @@ const COMMAND_SIDES: Readonly<Record<ServiceProviderActivityKind, Partial<Record
   "compliance-follow-up": { complete: ["office"], cancel: ["office"] },
   "coordination-note": { complete: ["office", "provider"] },
   "vehicle-change": { approve: ["office"], reject: ["office"], withdraw: ["office", "provider"] },
+  "stop-set-change": { approve: ["office"], reject: ["office"], withdraw: ["office", "provider"] },
 }
 
 /** The sides that may give the command on an Activity of the kind; empty where the kind does not take it. */
@@ -92,6 +94,7 @@ export const KIND_WORDS: Readonly<Record<ServiceProviderActivityKind, string>> =
   "compliance-follow-up": "compliance follow-up",
   "coordination-note": "coordination note",
   "vehicle-change": "vehicle change",
+  "stop-set-change": "stop-set change",
 }
 
 const article = (words: string): string => (/^[aeiou]/.test(words) ? `an ${words}` : `a ${words}`)
@@ -155,6 +158,15 @@ export const SAME_CREW = "The proposed vehicle and driver are the group's alread
 export function vehicleChangeRefusal(current: { vehicleId: string | null; driverId: string | null }, proposed: { vehicleId: string; driverId: string | null }): string | null {
   const driver = proposed.driverId ?? current.driverId
   return current.vehicleId === proposed.vehicleId && current.driverId === driver ? SAME_CREW : null
+}
+
+export const SAME_STOPS = "The proposed stops are the group's already, in the same order"
+export const RULE_GROUP_STOPS = "This group finds its stops by its rule, not a list: propose a waste-fraction change to its rule instead"
+
+/** Why a stop-set change of a group picking `current` to `proposed` is no change, or null where it moves a stop or their order: the list is stop order. */
+export function stopSetChangeRefusal(current: readonly string[], proposed: readonly string[]): string | null {
+  const same = current.length === proposed.length && current.every((id, index) => proposed[index] === id)
+  return same ? SAME_STOPS : null
 }
 
 /**
