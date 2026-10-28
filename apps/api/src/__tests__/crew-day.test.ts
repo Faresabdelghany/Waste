@@ -118,6 +118,15 @@ describe("a route's crew against the rest of its day", { skip: database.skip || 
       assert.equal(await refused(await post(`/routes/${later.id}/assign`, { driverId: fleet.drivers.mads.id, acceptSameDay: true })), detail)
     })
 
+    test("two assigns of one driver onto overlapping routes at once: the second waits on the first and is refused, so exactly one is taken", async () => {
+      const day = "2026-10-09"
+      const [first, second] = [await route(day, { start: "07:00", minutes: 240 }), await route(day, { start: "09:00", minutes: 240 })]
+      const answers = await Promise.all([first, second].map((one) => post(`/routes/${one.id}/assign`, { driverId: fleet.drivers.mads.id, acceptSameDay: true })))
+      assert.deepEqual(answers.map((answer) => answer.status).sort(), [200, 409])
+      const refusal = answers.find((answer) => answer.status === 409) as Response
+      assert.match((await readProblem(refusal)).detail ?? "", /^Mads Jensen is planned on route RC-\d+ \d\d:\d\d–\d\d:\d\d, which overlaps/)
+    })
+
     test("known spans apart are taken, one ending as the other starts", async () => {
       const day = "2026-10-07"
       await route(day, { plannedVehicleId: fleet.vehicles.wh24.id, start: "07:00", minutes: 180 })

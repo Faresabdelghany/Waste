@@ -20,6 +20,14 @@
 // unknown span unless the body says `acceptSameDay`. The read is one
 // statement for the routes and the route read's few for their spans, made
 // only when another route of the day names the crew.
+//
+// Both reads are under a transaction-scoped advisory lock on each crew member
+// the route names (`lockCrew`), taken in sorted order before either reads:
+// each command locks only its own route's row, so without it two commands
+// naming one driver onto two routes of a day at once would each miss the
+// other's uncommitted row and both pass. Both checks lock the same set — the
+// route's whole crew as the command leaves it — so a second take is a no-op
+// and two commands never wait on each other in opposite orders.
 import type { Tx } from "@waste/db/client"
 import { route } from "@waste/db/schema/execution"
 import { vehicleAllocation } from "@waste/db/schema/allocations"
@@ -39,6 +47,17 @@ import { shiftsByRoute, workloadsByRoute } from "./workload"
 
 /** The crew a route plans, by id, each null where it names none. */
 export type RouteCrew = { vehicleId: string | null; driverId: string | null; trailerId: string | null }
+
+/**
+ * Takes the day's lock on each crew member, in id order, until the request's
+ * transaction ends (`pg_advisory_xact_lock`, as ticket-sla.ts takes its
+ * project's): a second command naming any of them waits here until the first
+ * commits or rolls back, then reads its routes and allocations as they stand.
+ */
+export async function lockCrew(tx: Tx, companyId: string, crew: RouteCrew): Promise<void> {
+  const ids = [...new Set([crew.vehicleId, crew.trailerId, crew.driverId].filter((id): id is string => id !== null))].sort()
+  for (const id of ids) await tx.execute(sql`select pg_advisory_xact_lock(hashtextextended(${`crew-day:${companyId}:${id}`}, 0))`)
+}
 
 /** An instant's time on the project's clock: `06:00`. */
 const timeIn = (instant: Date, timeZone: string): string => new Intl.DateTimeFormat("en-GB", { timeZone, hour: "2-digit", minute: "2-digit", hourCycle: "h23" }).format(instant)
@@ -63,6 +82,7 @@ export async function refuseAllocatedElsewhere(tx: Tx, scope: Scope, crew: Route
     ...(driverId === null ? [] : [eq(vehicleAllocation.driverId, driverId)]),
   ]
   if (named.length === 0) return
+  await lockCrew(tx, scope.companyId, crew)
   // The day's bounds on the project's clock, rendered by the database from the project's timezone.
   const dayStart = sql`(${day}::date)::timestamp at time zone ${project.timezone}`
   const dayEnd = sql`((${day}::date) + 1)::timestamp at time zone ${project.timezone}`
@@ -122,6 +142,8 @@ export async function refuseDoubleBooked(tx: Tx, scope: Scope, after: RouteRow, 
     ...(asked.driver && after.plannedDriverId !== null ? [{ column: route.plannedDriverId, id: after.plannedDriverId, name: () => driverName(tx, scope, after.plannedDriverId as string) }] : []),
   ]
   if (members.length === 0) return
+  // The whole crew, not only the members asked: the set the allocation check locks too, so the two take the same locks in the same order.
+  await lockCrew(tx, scope.companyId, { vehicleId: after.plannedVehicleId, driverId: after.plannedDriverId, trailerId: after.plannedTrailerId })
   const others = await tx
     .select(routeColumns)
     .from(route)
