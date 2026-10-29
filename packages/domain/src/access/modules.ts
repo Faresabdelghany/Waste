@@ -48,6 +48,8 @@ export const MODULE_KEYS = [
   "customers.citizen-portal",
   // The register of plates and cards a recycling centre admits by (M4 of #293).
   "customers.site-access",
+  // Right-sizing proposals (M23 of #293): a subscription's container a size down or up from its fill estimates, approved by the office into a subscription change.
+  "customers.right-sizing",
   // Assets & Inventory
   "resources.containers",
   "resources.inventory",

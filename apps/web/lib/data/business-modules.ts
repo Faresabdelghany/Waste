@@ -2871,6 +2871,24 @@ const customers: WorkspaceDefinition = {
       ],
       records: [],
     },
+    {
+      // Right-sizing (M23b of #293): on the API only, so no fixture records; proposals from the drivers' fill estimates, approved or dismissed in their details (components/waste/commands/right-sizing-surfaces.tsx).
+      id: "right-sizing",
+      label: "Right-sizing",
+      title: "Right-sizing proposals",
+      description: "Containers the drivers routinely empty half-empty, or overflowing: a size down or up, or fewer or more collections, which the office approves into the subscription's change or dismisses.",
+      entityLabel: "Right-sizing proposal",
+      contextLabel: "Proposed",
+      valueLabel: "Estimates",
+      primaryAction: "Propose now",
+      metrics: [],
+      lifecycle: ["Open", "Approved", "Dismissed"],
+      rules: [
+        "A proposal changes nothing: the office approves it into the subscription's change, the price following the product.",
+        "A subscription changed since the proposal was made refuses its approve.",
+      ],
+      records: [],
+    },
   ],
 }
 

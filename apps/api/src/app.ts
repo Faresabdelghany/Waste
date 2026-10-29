@@ -106,6 +106,7 @@ import { serviceProviderActivityRoutes } from "./routes/service-provider-activit
 import { planRoutes } from "./routes/plans"
 import { routeRoutes } from "./routes/routes"
 import { proofObjectRoutes } from "./routes/proof-objects"
+import { rightSizingRoutes } from "./routes/right-sizing"
 import { PREVIEW_CALLS_PER_MINUTE, routingPreviewRoutes } from "./routes/routing-preview"
 import { routingQuotaRoutes } from "./routes/routing-quota"
 import { serviceAreaRoutes } from "./routes/service-areas"
@@ -357,6 +358,8 @@ export function createApp({
   const inspections = fieldInspectionRoutes(guard, identify({ pool, verifier }), { now, pool, storage, log: log ?? console.error })
   app.route("/", inspections.routes)
   app.route("/", inspections.objects)
+  // Right-sizing (M23b of #293): the proposals, a run now, and approve into a subscription change in one transaction.
+  app.route("/", rightSizingRoutes(guard, { now }))
   app.route(
     "/",
     publicRoutes(
