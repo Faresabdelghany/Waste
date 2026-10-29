@@ -89,6 +89,13 @@ describe("a filling container (O26 of #290)", () => {
     assert.deepEqual([alert.containerId, alert.routeId, alert.driverId, alert.vehicleId, alert.ticketId], ["bin", null, null, null, null])
   })
 
+  test("ends with what the fill-driven emptying came to, where the pairing books one", () => {
+    const route = { id: "r", label: "RC-1042", operatingDate: "2026-10-30", routeSchemeId: "s", collectionGroupId: "g" }
+    assert.match(alertOfRule({ ...reading, emptying: { kind: "booked", route } }).details, /overflows\. An emptying is booked on RC-1042 on 2026-10-30\.$/)
+    assert.match(alertOfRule({ ...reading, emptying: { kind: "refused", route, reason: "WH-24 has no compartment for Glass, which the stop collects" } }).details, /No emptying is booked on RC-1042: WH-24 has no compartment for Glass, which the stop collects\.$/)
+    assert.match(alertOfRule({ ...reading, emptying: { kind: "no-schedule" } }).details, /no emptying of it is planned to bring forward\.$/)
+  })
+
   test("is high once the bin reads full", () => {
     const alert = alertOfRule({ ...reading, fillPercent: 100 })
     assert.deepEqual([alert.severity, alert.title], ["high", "BIN-82014 is full"])

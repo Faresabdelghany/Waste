@@ -14,7 +14,9 @@
 // A Sensor Pairing is effective-dated and half-open (ADR-0005): the sensor is
 // the path's (`POST /sensors/:id/pairings`) and the project is the sensor's,
 // so the body names the container and the period and the full threshold, a
-// whole percent from 1 to 100, 85 when absent. One sensor measures one
+// whole percent from 1 to 100, 85 when absent, and whether a filling books
+// the office's emptying of the container (`booksEmptying`, off when
+// absent; O26's second part). One sensor measures one
 // container at a time and one container is measured by one sensor at a time,
 // which the database's two exclusion constraints hold. A patch moves the
 // threshold or the end; a pairing that starts on another day or measures
@@ -59,6 +61,8 @@ export const SensorPairing = z
     containerId: Id,
     /** The fill, in whole percent, at which the container is full enough to raise an alert. */
     fullThresholdPercent: ThresholdPercent,
+    /** Whether a filling books the office's emptying of the container ahead of its next scheduled one. Absent on an answer from before it, read as false. */
+    booksEmptying: z.boolean().default(false),
     ...Validity.shape,
   })
   .refine(validityOrdered, endsAfterItStarts)
@@ -119,15 +123,17 @@ export const SensorPairingCreate = z
   .strictObject({
     containerId: Id,
     fullThresholdPercent: ThresholdPercent.default(DEFAULT_FULL_THRESHOLD_PERCENT).describe(`Defaults to ${DEFAULT_FULL_THRESHOLD_PERCENT} when absent.`),
+    booksEmptying: z.boolean().default(false).describe("Off when absent: a pairing books no stop until the office asks."),
     ...ValidityCreate,
   })
   .refine(validityOrdered, endsAfterItStarts)
 export type SensorPairingCreate = z.infer<typeof SensorPairingCreate>
 
-/** Moves a pairing's threshold or its end; null takes the end off. */
+/** Moves a pairing's threshold, whether it books an emptying, or its end; null takes the end off. */
 export const SensorPairingPatch = z
   .strictObject({
     fullThresholdPercent: ThresholdPercent.optional(),
+    booksEmptying: z.boolean().optional(),
     validTo: IsoDate.nullable().optional(),
   })
   .refine(changesSomething, somethingToChange)
