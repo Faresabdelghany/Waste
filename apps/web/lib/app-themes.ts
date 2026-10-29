@@ -89,6 +89,16 @@ export function getThemePreset(
   )
 }
 
+/**
+ * The theme a public page (`/p/<slug>/…`, ADR-0010) always takes (#506): a
+ * resident's page looks the same in every browser, whatever staff theme or
+ * dark preference the browser holds, and Ash is the one preset its pages are
+ * held to WCAG 2.1 AA under (e2e-api/public-branding.spec.ts). A public page
+ * applies it without writing it, so a staff member's saved theme is still
+ * theirs when they come back to the app.
+ */
+export const PUBLIC_PAGE_THEME = "ash" satisfies AppThemeSelection
+
 export function migrateThemeSelection(
   value: string | null,
   prefersDark = false,

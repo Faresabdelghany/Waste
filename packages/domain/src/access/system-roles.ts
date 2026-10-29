@@ -291,6 +291,8 @@ export const SYSTEM_ROLES: readonly SystemRole[] = [
       only("improve.imports", VIEW_EDIT_CREATE),
       only("configure.integrations", VIEW_EDIT),
       only("configure.privacy", VIEW),
+      // A sensor vendor's integration (O26 of #290): it reads the sensors, registers and pairs them as a vendor's provisioning does, and appends their readings; retiring a sensor and ending or moving a pairing are the office's edits.
+      only("resources.sensors", ["view", "create"]),
     ),
   },
   {

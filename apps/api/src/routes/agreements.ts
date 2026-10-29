@@ -223,6 +223,12 @@ async function findAgreement(tx: Tx, principal: Principal, id: string): Promise<
   return row
 }
 
+/** One agreement of the caller's projects as the wire carries it; undefined for one they do not reach. */
+export async function readAgreement(tx: Tx, principal: Principal, id: string): Promise<Agreement | undefined> {
+  const row = await findAgreement(tx, principal, id)
+  return row === undefined ? undefined : agreementOf(row)
+}
+
 /**
  * One subscription, with the period of the agreement it hangs on: a patch has
  * to hold the new period inside that one and the join is already there, so it
@@ -494,7 +500,7 @@ function requireStrictlyInside(period: Period, on: string, message: string): voi
 }
 
 /** A pause of these subscriptions in force past `on`: begun before it, ending after it or open. */
-const pausesPast = (companyId: string, subscriptionIds: readonly string[], on: string) =>
+export const pausesPast = (companyId: string, subscriptionIds: readonly string[], on: string) =>
   and(
     eq(subscriptionPause.companyId, companyId),
     inArray(subscriptionPause.subscriptionId, [...subscriptionIds]),
@@ -503,7 +509,7 @@ const pausesPast = (companyId: string, subscriptionIds: readonly string[], on: s
   )
 
 /** A placement of these subscriptions in force past `on`: begun before it, ending after it or open. */
-const placementsPast = (companyId: string, subscriptionIds: readonly string[], on: string) =>
+export const placementsPast = (companyId: string, subscriptionIds: readonly string[], on: string) =>
   and(
     eq(containerServicePlacement.companyId, companyId),
     inArray(containerServicePlacement.subscriptionId, [...subscriptionIds]),

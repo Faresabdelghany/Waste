@@ -275,7 +275,7 @@ export const publicWorkspaceDomains: readonly PublicWorkspaceDomain[] = [
       "Control physical service assets, individually tracked units, stock, and warehouses.",
     blueprintModules: ["M06", "M07", "M08"],
     personas: ["Asset manager", "Warehouse staff", "Technician", "Operations planner"],
-    moduleIds: ["containers", "inventory", "warehouses", "depots", "drop-off-points"],
+    moduleIds: ["containers", "inventory", "warehouses", "depots", "drop-off-points", "sensors"],
     boundaryNote:
       "Resources should become Assets & Inventory. Depot records belong to Fleet; warehouses remain separate even when colocated.",
   },
@@ -745,6 +745,19 @@ export const publicModuleDomains: readonly PublicModuleDomain[] = [
     downstream: ["M02"],
     boundaryNote:
       "A Drop-off Point is where residents bring waste themselves: not a Depot or an Unloading Station, which are the operation's own.",
+  },
+  {
+    key: "resources.sensors",
+    workspaceId: "resources",
+    moduleId: "sensors",
+    primaryBlueprintModule: "M06",
+    supportingBlueprintModules: ["M20"],
+    canonicalOwner: "Resources · Fill-level Sensors, paired with Containers",
+    personas: ["Asset manager", "Operations planner"],
+    upstream: ["M06", "M20"],
+    downstream: ["M11", "M17"],
+    boundaryNote:
+      "A Sensor is the company's device, paired with a Container over a period; its readings are a ledger the vendor's integration appends, and a filling container is an Alert, never a Ticket.",
   },
   {
     key: "commercial.products",

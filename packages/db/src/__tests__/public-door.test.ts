@@ -171,7 +171,7 @@ describe("migration 0017, the public door's role", { skip: database.skip }, () =
       return { published, items: items.map((row) => row.id), fractions: fractions.map((row) => row.id), projects: projects.map((row) => row.id), role: role?.role }
     })
     assert.deepEqual(seen, {
-      published: { id: projectId("a", 1), companyId: companyId("a"), name: "Project a1", language: "da", timezone: "Europe/Copenhagen", slug: "door-a" },
+      published: { id: projectId("a", 1), companyId: companyId("a"), name: "Project a1", language: "da", timezone: "Europe/Copenhagen", slug: "door-a", branding: { brandColor: null, logoUrl: null, accessibilityStatementUrl: null } },
       items: [itemId("a", 1)],
       fractions: [fractionId("a")],
       projects: [projectId("a", 1), projectId("b", 1)],

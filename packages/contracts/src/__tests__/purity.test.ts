@@ -84,6 +84,9 @@
 // project's privacy policy by the domain's days and reads its purposes. M22 of #293 added
 // @waste/domain/access/branding: organisation.ts holds a project's branding to
 // its shapes and its colour to WCAG 2.1 AA's contrast.
+// O26 of #290 added @waste/domain/resources/sensors: sensors.ts bounds the
+// ingest's batch by the domain's cap and defaults a pairing's threshold to the
+// domain's.
 import path from "node:path"
 import { fileURLToPath } from "node:url"
 
@@ -130,6 +133,7 @@ definePurityTests({
     "@waste/domain/resources/drop-off-points",
     "@waste/domain/resources/emissions",
     "@waste/domain/resources/pre-trip",
+    "@waste/domain/resources/sensors",
     "@waste/domain/resources/stock-balance",
     "@waste/domain/resources/vocabulary",
     "@waste/domain/route-schemes/seasons",

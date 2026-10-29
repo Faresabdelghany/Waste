@@ -22,10 +22,10 @@
 // licence run out — is a new key, its predecessor cleared.
 //
 // Small by design, since the Pilot's database is metered by its egress (#134):
-// the five raise statements read only the occurrences no alert names yet,
+// the raise statements read only the occurrences no alert names yet,
 // and the clear statement only the open rule alerts whose condition no longer
 // holds, each with the few columns an alert or a resolution needs, so a quiet
-// tick reads six empty results. They read across companies as `wms_worker`,
+// tick reads seven empty results. They read across companies as `wms_worker`,
 // one after another, since the Pilot's worker pool is two connections the
 // other sweeps share; the writes go per company as `wms_api` under
 // `withCompany`, only where there is something to raise or resolve. A route
@@ -47,8 +47,23 @@
 // or the route's end. The newest fix is one probe into
 // `session_position_session_id_idx`, the last resume one into the session's
 // receipts, read only for the sessions running.
+//
+// O26 of #290 added the sixth, `fill-threshold`: a Sensor Pairing in force
+// today on the project's clock whose newest Fill Reading, within the
+// lookback, is at or past the pairing's full threshold. Its key is
+// `fill-threshold:<pairing>:<newest reading below the threshold>` (`:none`
+// before the first), so one filling is one alert however many full readings
+// follow, and the bin read low again and filling once more is a new
+// occurrence. It clears when the newest reading is below the threshold — the
+// container emptied, or the threshold raised — or the pairing is no longer in
+// force. Both readings are probes into `fill_reading_pairing_id_idx`.
+// Where the pairing books an emptying (`books_emptying`), the raise also
+// books the office's emptying of the container in the same
+// transaction (@waste/db/commands/fill-emptying), and the alert ends with
+// what that came to; a tick that overlaps finds the stop booked already.
 import { routeLabel } from "@waste/contracts/execution"
 import { ticketLabel } from "@waste/contracts/resolution"
+import { bookFillEmptying, fillEmptyingNote } from "@waste/db/commands/fill-emptying"
 import { alert } from "@waste/db/schema/resolution"
 import { withCompany } from "@waste/db/tenant"
 import { alertOfRule, CLEARED_NOTES, LICENCE_WARNING_DAYS, POSITION_STALE_MINUTES, ROUTE_START_GRACE_MINUTES, RULE_LOOKBACK_HOURS, SESSION_SILENCE_MINUTES, type RuleOccurrence } from "@waste/domain/resolution/alert-rules"
@@ -70,8 +85,8 @@ export type AlertRulesData = {
   source: "schedule" | "manual"
 }
 
-/** One occurrence to raise, with the company and project its alert is of. */
-export type RaisedOccurrence = { companyId: string; projectId: string; ruleKey: string; occurrence: RuleOccurrence }
+/** One occurrence to raise, with the company and project its alert is of, and, for a filling whose pairing books one, the emptying to book on the project's today. */
+export type RaisedOccurrence = { companyId: string; projectId: string; ruleKey: string; occurrence: RuleOccurrence; books?: { containerId: string; today: string; note: string } }
 /** One rule alert to resolve. */
 export type ClearedAlert = { companyId: string; alertId: string; rule: AlertRule }
 
@@ -88,6 +103,15 @@ const NEWEST_FIX = sql`(select max(sp.fixed_at) from wms.session_position sp whe
 /** When the session last resumed, from its receipts; null where it never paused. */
 const LAST_RESUME = sql`(select max(dc.occurred_at) from wms.driver_command dc where dc.company_id = s.company_id and dc.session_id = s.id and dc.kind = 'resume' and dc.outcome = 'applied')`
 
+/** A pairing's newest reading's fill, one backward probe into its index. */
+const NEWEST_FILL = sql`(select fr.fill_percent from wms.fill_reading fr where fr.company_id = sp.company_id and fr.pairing_id = sp.id order by fr.measured_at desc limit 1)`
+/** When that newest reading was measured. */
+const NEWEST_MEASURED = sql`(select max(fr.measured_at) from wms.fill_reading fr where fr.company_id = sp.company_id and fr.pairing_id = sp.id)`
+/** The pairing's newest reading below its threshold: the last time the bin read low, which keys a filling. */
+const LAST_LOW = sql`(select fr.id::text from wms.fill_reading fr where fr.company_id = sp.company_id and fr.pairing_id = sp.id and fr.fill_percent < sp.full_threshold_percent order by fr.measured_at desc limit 1)`
+/** A pairing in force on the project's today. */
+const pairingInForce = (now: SQL) => sql`sp.valid_from <= (${now} at time zone p.timezone)::date and (sp.valid_to is null or sp.valid_to > (${now} at time zone p.timezone)::date)`
+
 /** Each rule's key at the tick's instant, spelled once for the raise and the clear. */
 const keysAt = (now: SQL) => ({
   /** The route and its planned day and start: a route moved is a new occurrence. */
@@ -98,6 +122,8 @@ const keysAt = (now: SQL) => ({
   ticket: sql`'ticket-overdue:' || t.id || ':' || ${keyInstant(sql`t.due_at`)}`,
   /** The session and its newest fix: a fix that comes in is a new occurrence, its predecessor cleared. */
   position: sql`'position-stale:' || s.id || ':' || coalesce(${keyInstant(NEWEST_FIX)}, 'none')`,
+  /** The pairing and the last reading below its threshold: the bin read low and filling again is a new occurrence. */
+  fill: sql`'fill-threshold:' || sp.id || ':' || coalesce(${LAST_LOW}, 'none')`,
 })
 
 /** An alert that holds its key: any but one the worker itself cleared — `alert_rule_key_idx`'s predicate. */
@@ -174,6 +200,21 @@ export async function occurrencesToRaise(worker: JobContext["worker"], at: Date)
        and ${noAlertWith(KEYS.ticket, sql`t.company_id`)}
   `)
 
+  const fills = await worker.db.execute<{ company_id: string; project_id: string; rule_key: string; container_id: string; label: string; identifier: string; fill_percent: number; threshold: number; measured_at: string; books_emptying: boolean; today: string }>(sql`
+    select sp.company_id, sp.project_id, ${KEYS.fill} as rule_key, sp.container_id, c.label, se.identifier,
+           ${NEWEST_FILL} as fill_percent, sp.full_threshold_percent as threshold,
+           to_char(${NEWEST_MEASURED} at time zone p.timezone, 'YYYY-MM-DD HH24:MI') as measured_at,
+           sp.books_emptying, to_char((${now} at time zone p.timezone)::date, 'YYYY-MM-DD') as today
+      from wms.sensor_pairing sp
+      join wms.sensor se on se.company_id = sp.company_id and se.id = sp.sensor_id
+      join wms.container c on c.company_id = sp.company_id and c.id = sp.container_id
+      join wms.project p on p.company_id = sp.company_id and p.id = sp.project_id
+     where ${pairingInForce(now)}
+       and ${NEWEST_FILL} >= sp.full_threshold_percent
+       and ${NEWEST_MEASURED} > ${lookback}
+       and ${noAlertWith(KEYS.fill, sql`sp.company_id`)}
+  `)
+
   const of = (row: { company_id: string; project_id: string; rule_key: string }) => ({ companyId: row.company_id, projectId: row.project_id, ruleKey: row.rule_key })
   return [
     ...routes.map((row) => ({ ...of(row), occurrence: { rule: "route-not-started" as const, routeId: row.route_id, routeLabel: routeLabel(Number(row.number)), operatingDate: row.operating_date, plannedStart: row.planned_start, driverId: row.driver_id, vehicleId: row.vehicle_id } })),
@@ -181,6 +222,11 @@ export async function occurrencesToRaise(worker: JobContext["worker"], at: Date)
     ...positions.map((row) => ({ ...of(row), occurrence: { rule: "position-stale" as const, routeId: row.route_id, routeLabel: routeLabel(Number(row.number)), driverId: row.driver_id, driverName: row.driver_name, vehicleId: row.vehicle_id, lastFix: row.last_fix } })),
     ...licences.map((row) => ({ ...of(row), occurrence: { rule: "licence-expiring" as const, driverId: row.driver_id, driverName: row.driver_name, licenceExpiry: row.licence_expiry, today: row.today } })),
     ...tickets.map((row) => ({ ...of(row), occurrence: { rule: "ticket-overdue" as const, ticketId: row.ticket_id, ticketLabel: ticketLabel(Number(row.number)), subject: row.subject, due: row.due } })),
+    ...fills.map((row) => ({
+      ...of(row),
+      occurrence: { rule: "fill-threshold" as const, containerId: row.container_id, containerLabel: row.label, sensorIdentifier: row.identifier, fillPercent: Number(row.fill_percent), thresholdPercent: Number(row.threshold), measuredAt: row.measured_at },
+      ...(row.books_emptying ? { books: { containerId: row.container_id, today: row.today, note: fillEmptyingNote(row.identifier, Number(row.fill_percent), row.measured_at) } } : {}),
+    })),
   ]
 }
 
@@ -189,7 +235,8 @@ export async function occurrencesToRaise(worker: JobContext["worker"], at: Date)
  * as the worker role: the subject, found by its id, no longer spells the
  * alert's key — a route started, moved or cancelled; a device heard from or
  * its session or route ended; a licence renewed or run out, or its driver no
- * longer active; a ticket closed or re-dated — or its condition has passed.
+ * longer active; a ticket closed or re-dated; a container read below its
+ * threshold, or its pairing ended — or its condition has passed.
  */
 export async function alertsToClear(worker: JobContext["worker"], at: Date): Promise<ClearedAlert[]> {
   const now = sql`${at.toISOString()}::timestamptz`
@@ -215,6 +262,10 @@ export async function alertsToClear(worker: JobContext["worker"], at: Date): Pro
            select 1 from wms.session s join wms.route r on r.company_id = s.company_id and r.id = s.route_id
             where s.company_id = a.company_id and s.route_id = a.route_id and s.driver_id = a.driver_id and a.rule_key = ${KEYS.position}
               and s.ended_at is null and s.paused_at is null and r.status = 'active')
+         when 'fill-threshold' then not exists (
+           select 1 from wms.sensor_pairing sp join wms.project p on p.company_id = sp.company_id and p.id = sp.project_id
+            where sp.company_id = a.company_id and sp.container_id = a.container_id and a.rule_key = ${KEYS.fill}
+              and ${pairingInForce(now)} and ${NEWEST_FILL} >= sp.full_threshold_percent)
          when 'ticket-overdue' then not exists (
            select 1 from wms.ticket t
             where t.company_id = a.company_id and t.id = a.ticket_id and a.rule_key = ${KEYS.ticket} and t.status in (${OPEN_TICKETS}) and t.due_at < ${now})
@@ -249,19 +300,25 @@ export async function runAlertRules({ api, worker, now, log }: JobContext): Prom
   const toClear = await alertsToClear(worker, at)
   let raised = 0
   for (const [companyId, occurrences] of byCompany(toRaise)) {
-    const rows = await withCompany(api.db, companyId, (tx) =>
-      tx
+    const rows = await withCompany(api.db, companyId, async (tx) => {
+      // A filling whose pairing books one has its emptying booked first, so its alert can say what that came to.
+      const told: RuleOccurrence[] = []
+      for (const { projectId, occurrence, books } of occurrences) {
+        told.push(books === undefined || occurrence.rule !== "fill-threshold" ? occurrence : { ...occurrence, emptying: await bookFillEmptying(tx, { companyId, projectId }, books.containerId, books.today, books.note) })
+      }
+      return await tx
         .insert(alert)
         .values(
-          occurrences.map(({ projectId, ruleKey, occurrence }) => {
+          occurrences.map(({ projectId, ruleKey }, index) => {
+            const occurrence = told[index]!
             const { rule, kind, severity, source, title, details, routeId, vehicleId, driverId, containerId, ticketId } = alertOfRule(occurrence)
             return { companyId, projectId, rule, ruleKey, kind, severity, source, title, details, detectedAt: at, routeId, vehicleId, driverId, containerId, ticketId, raisedBy: null }
           }),
         )
         // A tick that overlapped this one raised the occurrence already: the key is its word.
         .onConflictDoNothing({ target: [alert.companyId, alert.ruleKey], where: sql`${alert.ruleKey} is not null and (${alert.status} <> 'resolved' or ${alert.resolvedBy} is not null)` })
-        .returning({ id: alert.id }),
-    )
+        .returning({ id: alert.id })
+    })
     raised += rows.length
   }
   let cleared = 0
@@ -290,7 +347,7 @@ export async function runAlertRules({ api, worker, now, log }: JobContext): Prom
 
 export const alertRulesJob = defineJob<AlertRulesData>({
   queue: ALERT_RULES_QUEUE,
-  description: "Raises the alerts the worker's rules find — a route not started, a device silent, a licence running out, a ticket overdue, a position stale — and resolves those whose condition has cleared (O4 and O8 of #290).",
+  description: "Raises the alerts the worker's rules find — a route not started, a device silent, a licence running out, a ticket overdue, a position stale, a container filled past its threshold — and resolves those whose condition has cleared (O4, O8 and O26 of #290).",
   handler: async (_jobs, context) => await runAlertRules(context),
   schedule: rulesSchedule(),
   scheduleData: { source: "schedule" },

@@ -1,6 +1,6 @@
 {
-  "id": "ca4551d2-3f2e-4007-bbf7-7273ddc37b86",
-  "prevId": "edc2f6a1-2c2e-4546-b2a2-9df0cb460e76",
+  "id": "eb90e8da-897c-49f3-bde9-9d91ec405473",
+  "prevId": "f846cb46-fa49-4817-bdaf-f60872b96345",
   "version": "7",
   "dialect": "postgresql",
   "tables": {
@@ -2810,6 +2810,18 @@
           "notNull": true,
           "default": "now()"
         },
+        "valid_from": {
+          "name": "valid_from",
+          "type": "date",
+          "primaryKey": false,
+          "notNull": true
+        },
+        "valid_to": {
+          "name": "valid_to",
+          "type": "date",
+          "primaryKey": false,
+          "notNull": false
+        },
         "property_id": {
           "name": "property_id",
           "type": "uuid",
@@ -2830,6 +2842,27 @@
         }
       },
       "indexes": {
+        "property_party_property_id_idx": {
+          "name": "property_party_property_id_idx",
+          "columns": [
+            {
+              "expression": "company_id",
+              "isExpression": false,
+              "asc": true,
+              "nulls": "last"
+            },
+            {
+              "expression": "property_id",
+              "isExpression": false,
+              "asc": true,
+              "nulls": "last"
+            }
+          ],
+          "isUnique": false,
+          "concurrently": false,
+          "method": "btree",
+          "with": {}
+        },
         "property_party_project_id_idx": {
           "name": "property_party_project_id_idx",
           "columns": [
@@ -2940,20 +2973,13 @@
         }
       },
       "compositePrimaryKeys": {},
-      "uniqueConstraints": {
-        "property_party_property_id_customer_id_role_key": {
-          "name": "property_party_property_id_customer_id_role_key",
-          "nullsNotDistinct": false,
-          "columns": [
-            "company_id",
-            "property_id",
-            "customer_id",
-            "role"
-          ]
-        }
-      },
+      "uniqueConstraints": {},
       "policies": {},
       "checkConstraints": {
+        "property_party_validity": {
+          "name": "property_party_validity",
+          "value": "\"wms\".\"property_party\".\"valid_to\" is null or \"wms\".\"property_party\".\"valid_to\" > \"wms\".\"property_party\".\"valid_from\""
+        },
         "property_party_role_one_of": {
           "name": "property_party_role_one_of",
           "value": "\"wms\".\"property_party\".\"role\" in ('owner', 'payer', 'tenant', 'administrator', 'service-contact')"
@@ -10894,7 +10920,7 @@
       "checkConstraints": {
         "driver_command_kind_one_of": {
           "name": "driver_command_kind_one_of",
-          "value": "\"wms\".\"driver_command\".\"kind\" in ('start-route', 'arrive', 'complete-pickup', 'skip-pickup', 'fail-pickup', 'report-problem', 'add-photo', 'add-weight', 'add-signature', 'add-note', 'record-unload', 'pause', 'resume', 'end-route', 'record-positions', 'pre-trip-check', 'record-fill')"
+          "value": "\"wms\".\"driver_command\".\"kind\" in ('start-route', 'arrive', 'complete-pickup', 'skip-pickup', 'fail-pickup', 'report-problem', 'add-photo', 'add-weight', 'add-signature', 'add-note', 'record-unload', 'pause', 'resume', 'end-route', 'record-positions', 'pre-trip-check')"
         },
         "driver_command_outcome_one_of": {
           "name": "driver_command_outcome_one_of",
@@ -11269,12 +11295,6 @@
         "moved_from_pickup_id": {
           "name": "moved_from_pickup_id",
           "type": "uuid",
-          "primaryKey": false,
-          "notNull": false
-        },
-        "fill_level": {
-          "name": "fill_level",
-          "type": "text",
           "primaryKey": false,
           "notNull": false
         }
@@ -11915,10 +11935,6 @@
         "pickup_service_one_of": {
           "name": "pickup_service_one_of",
           "value": "\"wms\".\"pickup\".\"service\" in ('empty', 'deliver', 'remove', 'swap', 'repair', 'wash', 'bulky')"
-        },
-        "pickup_fill_level_one_of": {
-          "name": "pickup_fill_level_one_of",
-          "value": "\"wms\".\"pickup\".\"fill_level\" in ('empty', 'quarter', 'half', 'three-quarters', 'full', 'overflowing')"
         },
         "pickup_service_origin_shape": {
           "name": "pickup_service_origin_shape",
@@ -14878,7 +14894,7 @@
         },
         "alert_rule_one_of": {
           "name": "alert_rule_one_of",
-          "value": "\"wms\".\"alert\".\"rule\" in ('route-not-started', 'session-silent', 'licence-expiring', 'ticket-overdue', 'position-stale')"
+          "value": "\"wms\".\"alert\".\"rule\" in ('route-not-started', 'session-silent', 'licence-expiring', 'ticket-overdue', 'position-stale', 'fill-threshold')"
         },
         "alert_subject_shape": {
           "name": "alert_subject_shape",
@@ -32827,325 +32843,8 @@
       },
       "isRLSEnabled": false
     },
-    "wms.field_inspection": {
-      "name": "field_inspection",
-      "schema": "wms",
-      "columns": {
-        "id": {
-          "name": "id",
-          "type": "uuid",
-          "primaryKey": true,
-          "notNull": true,
-          "default": "wms.uuidv7()"
-        },
-        "company_id": {
-          "name": "company_id",
-          "type": "uuid",
-          "primaryKey": false,
-          "notNull": true
-        },
-        "project_id": {
-          "name": "project_id",
-          "type": "uuid",
-          "primaryKey": false,
-          "notNull": true
-        },
-        "created_at": {
-          "name": "created_at",
-          "type": "timestamp with time zone",
-          "primaryKey": false,
-          "notNull": true,
-          "default": "now()"
-        },
-        "updated_at": {
-          "name": "updated_at",
-          "type": "timestamp with time zone",
-          "primaryKey": false,
-          "notNull": true,
-          "default": "now()"
-        },
-        "container_id": {
-          "name": "container_id",
-          "type": "uuid",
-          "primaryKey": false,
-          "notNull": false
-        },
-        "property_id": {
-          "name": "property_id",
-          "type": "uuid",
-          "primaryKey": false,
-          "notNull": false
-        },
-        "inspector_id": {
-          "name": "inspector_id",
-          "type": "uuid",
-          "primaryKey": false,
-          "notNull": true
-        },
-        "inspected_at": {
-          "name": "inspected_at",
-          "type": "timestamp with time zone",
-          "primaryKey": false,
-          "notNull": true
-        },
-        "outcome": {
-          "name": "outcome",
-          "type": "text",
-          "primaryKey": false,
-          "notNull": true
-        },
-        "findings": {
-          "name": "findings",
-          "type": "text[]",
-          "primaryKey": false,
-          "notNull": true,
-          "default": "'{}'::text[]"
-        },
-        "note": {
-          "name": "note",
-          "type": "text",
-          "primaryKey": false,
-          "notNull": false
-        },
-        "status": {
-          "name": "status",
-          "type": "text",
-          "primaryKey": false,
-          "notNull": true,
-          "default": "'open'"
-        },
-        "closed_at": {
-          "name": "closed_at",
-          "type": "timestamp with time zone",
-          "primaryKey": false,
-          "notNull": false
-        }
-      },
-      "indexes": {
-        "field_inspection_container_id_idx": {
-          "name": "field_inspection_container_id_idx",
-          "columns": [
-            {
-              "expression": "company_id",
-              "isExpression": false,
-              "asc": true,
-              "nulls": "last"
-            },
-            {
-              "expression": "container_id",
-              "isExpression": false,
-              "asc": true,
-              "nulls": "last"
-            },
-            {
-              "expression": "inspected_at",
-              "isExpression": false,
-              "asc": true,
-              "nulls": "last"
-            }
-          ],
-          "isUnique": false,
-          "concurrently": false,
-          "method": "btree",
-          "with": {}
-        },
-        "field_inspection_property_id_idx": {
-          "name": "field_inspection_property_id_idx",
-          "columns": [
-            {
-              "expression": "company_id",
-              "isExpression": false,
-              "asc": true,
-              "nulls": "last"
-            },
-            {
-              "expression": "property_id",
-              "isExpression": false,
-              "asc": true,
-              "nulls": "last"
-            },
-            {
-              "expression": "inspected_at",
-              "isExpression": false,
-              "asc": true,
-              "nulls": "last"
-            }
-          ],
-          "isUnique": false,
-          "concurrently": false,
-          "method": "btree",
-          "with": {}
-        },
-        "field_inspection_project_id_idx": {
-          "name": "field_inspection_project_id_idx",
-          "columns": [
-            {
-              "expression": "company_id",
-              "isExpression": false,
-              "asc": true,
-              "nulls": "last"
-            },
-            {
-              "expression": "project_id",
-              "isExpression": false,
-              "asc": true,
-              "nulls": "last"
-            }
-          ],
-          "isUnique": false,
-          "concurrently": false,
-          "method": "btree",
-          "with": {}
-        },
-        "field_inspection_inspector_id_idx": {
-          "name": "field_inspection_inspector_id_idx",
-          "columns": [
-            {
-              "expression": "company_id",
-              "isExpression": false,
-              "asc": true,
-              "nulls": "last"
-            },
-            {
-              "expression": "inspector_id",
-              "isExpression": false,
-              "asc": true,
-              "nulls": "last"
-            }
-          ],
-          "isUnique": false,
-          "concurrently": false,
-          "method": "btree",
-          "with": {}
-        }
-      },
-      "foreignKeys": {
-        "field_inspection_company_id_fk": {
-          "name": "field_inspection_company_id_fk",
-          "tableFrom": "field_inspection",
-          "tableTo": "company",
-          "schemaTo": "wms",
-          "columnsFrom": [
-            "company_id"
-          ],
-          "columnsTo": [
-            "id"
-          ],
-          "onDelete": "no action",
-          "onUpdate": "no action"
-        },
-        "field_inspection_project_id_fk": {
-          "name": "field_inspection_project_id_fk",
-          "tableFrom": "field_inspection",
-          "tableTo": "project",
-          "schemaTo": "wms",
-          "columnsFrom": [
-            "company_id",
-            "project_id"
-          ],
-          "columnsTo": [
-            "company_id",
-            "id"
-          ],
-          "onDelete": "no action",
-          "onUpdate": "no action"
-        },
-        "field_inspection_container_id_fk": {
-          "name": "field_inspection_container_id_fk",
-          "tableFrom": "field_inspection",
-          "tableTo": "container",
-          "schemaTo": "wms",
-          "columnsFrom": [
-            "company_id",
-            "project_id",
-            "container_id"
-          ],
-          "columnsTo": [
-            "company_id",
-            "project_id",
-            "id"
-          ],
-          "onDelete": "no action",
-          "onUpdate": "no action"
-        },
-        "field_inspection_property_id_fk": {
-          "name": "field_inspection_property_id_fk",
-          "tableFrom": "field_inspection",
-          "tableTo": "property",
-          "schemaTo": "wms",
-          "columnsFrom": [
-            "company_id",
-            "project_id",
-            "property_id"
-          ],
-          "columnsTo": [
-            "company_id",
-            "project_id",
-            "id"
-          ],
-          "onDelete": "no action",
-          "onUpdate": "no action"
-        },
-        "field_inspection_inspector_id_fk": {
-          "name": "field_inspection_inspector_id_fk",
-          "tableFrom": "field_inspection",
-          "tableTo": "user_account",
-          "schemaTo": "wms",
-          "columnsFrom": [
-            "company_id",
-            "inspector_id"
-          ],
-          "columnsTo": [
-            "company_id",
-            "id"
-          ],
-          "onDelete": "no action",
-          "onUpdate": "no action"
-        }
-      },
-      "compositePrimaryKeys": {},
-      "uniqueConstraints": {
-        "field_inspection_project_key": {
-          "name": "field_inspection_project_key",
-          "nullsNotDistinct": false,
-          "columns": [
-            "company_id",
-            "project_id",
-            "id"
-          ]
-        }
-      },
-      "policies": {},
-      "checkConstraints": {
-        "field_inspection_subject_exactly_one": {
-          "name": "field_inspection_subject_exactly_one",
-          "value": "(\"wms\".\"field_inspection\".\"container_id\" is not null)::int + (\"wms\".\"field_inspection\".\"property_id\" is not null)::int = 1"
-        },
-        "field_inspection_outcome_one_of": {
-          "name": "field_inspection_outcome_one_of",
-          "value": "\"wms\".\"field_inspection\".\"outcome\" in ('compliant', 'minor', 'major')"
-        },
-        "field_inspection_status_one_of": {
-          "name": "field_inspection_status_one_of",
-          "value": "\"wms\".\"field_inspection\".\"status\" in ('open', 'closed')"
-        },
-        "field_inspection_findings_subset_of": {
-          "name": "field_inspection_findings_subset_of",
-          "value": "\"wms\".\"field_inspection\".\"findings\" <@ ARRAY['contamination', 'wrong-fraction', 'overfilled', 'damaged', 'blocked-access', 'missing-container', 'other']::text[]"
-        },
-        "field_inspection_findings_shape": {
-          "name": "field_inspection_findings_shape",
-          "value": "(\"wms\".\"field_inspection\".\"outcome\" = 'compliant') = (cardinality(\"wms\".\"field_inspection\".\"findings\") = 0)"
-        },
-        "field_inspection_closed_shape": {
-          "name": "field_inspection_closed_shape",
-          "value": "(\"wms\".\"field_inspection\".\"status\" = 'closed') = (\"wms\".\"field_inspection\".\"closed_at\" is not null)"
-        }
-      },
-      "isRLSEnabled": false
-    },
-    "wms.field_inspection_photo": {
-      "name": "field_inspection_photo",
+    "wms.fill_reading": {
+      "name": "fill_reading",
       "schema": "wms",
       "columns": {
         "id": {
@@ -33174,28 +32873,46 @@
           "notNull": true,
           "default": "now()"
         },
-        "inspection_id": {
-          "name": "inspection_id",
+        "sensor_id": {
+          "name": "sensor_id",
           "type": "uuid",
           "primaryKey": false,
           "notNull": true
         },
-        "object_key": {
-          "name": "object_key",
-          "type": "text",
+        "pairing_id": {
+          "name": "pairing_id",
+          "type": "uuid",
+          "primaryKey": false,
+          "notNull": false
+        },
+        "measured_at": {
+          "name": "measured_at",
+          "type": "timestamp with time zone",
           "primaryKey": false,
           "notNull": true
         },
-        "recorded_by": {
-          "name": "recorded_by",
-          "type": "uuid",
+        "fill_percent": {
+          "name": "fill_percent",
+          "type": "integer",
           "primaryKey": false,
           "notNull": true
+        },
+        "battery_percent": {
+          "name": "battery_percent",
+          "type": "integer",
+          "primaryKey": false,
+          "notNull": false
+        },
+        "rssi_dbm": {
+          "name": "rssi_dbm",
+          "type": "integer",
+          "primaryKey": false,
+          "notNull": false
         }
       },
       "indexes": {
-        "field_inspection_photo_inspection_id_idx": {
-          "name": "field_inspection_photo_inspection_id_idx",
+        "fill_reading_pairing_id_idx": {
+          "name": "fill_reading_pairing_id_idx",
           "columns": [
             {
               "expression": "company_id",
@@ -33204,7 +32921,13 @@
               "nulls": "last"
             },
             {
-              "expression": "inspection_id",
+              "expression": "pairing_id",
+              "isExpression": false,
+              "asc": true,
+              "nulls": "last"
+            },
+            {
+              "expression": "measured_at",
               "isExpression": false,
               "asc": true,
               "nulls": "last"
@@ -33215,8 +32938,8 @@
           "method": "btree",
           "with": {}
         },
-        "field_inspection_photo_project_id_idx": {
-          "name": "field_inspection_photo_project_id_idx",
+        "fill_reading_project_id_idx": {
+          "name": "fill_reading_project_id_idx",
           "columns": [
             {
               "expression": "company_id",
@@ -33235,33 +32958,12 @@
           "concurrently": false,
           "method": "btree",
           "with": {}
-        },
-        "field_inspection_photo_recorded_by_idx": {
-          "name": "field_inspection_photo_recorded_by_idx",
-          "columns": [
-            {
-              "expression": "company_id",
-              "isExpression": false,
-              "asc": true,
-              "nulls": "last"
-            },
-            {
-              "expression": "recorded_by",
-              "isExpression": false,
-              "asc": true,
-              "nulls": "last"
-            }
-          ],
-          "isUnique": false,
-          "concurrently": false,
-          "method": "btree",
-          "with": {}
         }
       },
       "foreignKeys": {
-        "field_inspection_photo_company_id_fk": {
-          "name": "field_inspection_photo_company_id_fk",
-          "tableFrom": "field_inspection_photo",
+        "fill_reading_company_id_fk": {
+          "name": "fill_reading_company_id_fk",
+          "tableFrom": "fill_reading",
           "tableTo": "company",
           "schemaTo": "wms",
           "columnsFrom": [
@@ -33273,9 +32975,9 @@
           "onDelete": "no action",
           "onUpdate": "no action"
         },
-        "field_inspection_photo_project_id_fk": {
-          "name": "field_inspection_photo_project_id_fk",
-          "tableFrom": "field_inspection_photo",
+        "fill_reading_project_id_fk": {
+          "name": "fill_reading_project_id_fk",
+          "tableFrom": "fill_reading",
           "tableTo": "project",
           "schemaTo": "wms",
           "columnsFrom": [
@@ -33289,15 +32991,15 @@
           "onDelete": "no action",
           "onUpdate": "no action"
         },
-        "field_inspection_photo_inspection_id_fk": {
-          "name": "field_inspection_photo_inspection_id_fk",
-          "tableFrom": "field_inspection_photo",
-          "tableTo": "field_inspection",
+        "fill_reading_sensor_id_fk": {
+          "name": "fill_reading_sensor_id_fk",
+          "tableFrom": "fill_reading",
+          "tableTo": "sensor",
           "schemaTo": "wms",
           "columnsFrom": [
             "company_id",
             "project_id",
-            "inspection_id"
+            "sensor_id"
           ],
           "columnsTo": [
             "company_id",
@@ -33307,17 +33009,19 @@
           "onDelete": "no action",
           "onUpdate": "no action"
         },
-        "field_inspection_photo_recorded_by_fk": {
-          "name": "field_inspection_photo_recorded_by_fk",
-          "tableFrom": "field_inspection_photo",
-          "tableTo": "user_account",
+        "fill_reading_pairing_id_fk": {
+          "name": "fill_reading_pairing_id_fk",
+          "tableFrom": "fill_reading",
+          "tableTo": "sensor_pairing",
           "schemaTo": "wms",
           "columnsFrom": [
             "company_id",
-            "recorded_by"
+            "project_id",
+            "pairing_id"
           ],
           "columnsTo": [
             "company_id",
+            "project_id",
             "id"
           ],
           "onDelete": "no action",
@@ -33326,21 +33030,35 @@
       },
       "compositePrimaryKeys": {},
       "uniqueConstraints": {
-        "field_inspection_photo_object_key_key": {
-          "name": "field_inspection_photo_object_key_key",
+        "fill_reading_sensor_id_measured_at_key": {
+          "name": "fill_reading_sensor_id_measured_at_key",
           "nullsNotDistinct": false,
           "columns": [
             "company_id",
-            "object_key"
+            "sensor_id",
+            "measured_at"
           ]
         }
       },
       "policies": {},
-      "checkConstraints": {},
+      "checkConstraints": {
+        "fill_reading_fill_range": {
+          "name": "fill_reading_fill_range",
+          "value": "\"wms\".\"fill_reading\".\"fill_percent\" between 0 and 100"
+        },
+        "fill_reading_battery_range": {
+          "name": "fill_reading_battery_range",
+          "value": "\"wms\".\"fill_reading\".\"battery_percent\" is null or \"wms\".\"fill_reading\".\"battery_percent\" between 0 and 100"
+        },
+        "fill_reading_rssi_range": {
+          "name": "fill_reading_rssi_range",
+          "value": "\"wms\".\"fill_reading\".\"rssi_dbm\" is null or \"wms\".\"fill_reading\".\"rssi_dbm\" between -200 and 0"
+        }
+      },
       "isRLSEnabled": false
     },
-    "wms.right_sizing_proposal": {
-      "name": "right_sizing_proposal",
+    "wms.sensor": {
+      "name": "sensor",
       "schema": "wms",
       "columns": {
         "id": {
@@ -33376,45 +33094,15 @@
           "notNull": true,
           "default": "now()"
         },
-        "subscription_id": {
-          "name": "subscription_id",
-          "type": "uuid",
-          "primaryKey": false,
-          "notNull": true
-        },
-        "product_id": {
-          "name": "product_id",
-          "type": "uuid",
-          "primaryKey": false,
-          "notNull": true
-        },
-        "direction": {
-          "name": "direction",
+        "identifier": {
+          "name": "identifier",
           "type": "text",
           "primaryKey": false,
           "notNull": true
         },
-        "suggested_product_id": {
-          "name": "suggested_product_id",
-          "type": "uuid",
-          "primaryKey": false,
-          "notNull": false
-        },
-        "evidence": {
-          "name": "evidence",
-          "type": "text[]",
-          "primaryKey": false,
-          "notNull": true
-        },
-        "evidence_through": {
-          "name": "evidence_through",
-          "type": "timestamp with time zone",
-          "primaryKey": false,
-          "notNull": true
-        },
-        "subscription_updated_at": {
-          "name": "subscription_updated_at",
-          "type": "timestamp with time zone",
+        "network": {
+          "name": "network",
+          "type": "text",
           "primaryKey": false,
           "notNull": true
         },
@@ -33422,194 +33110,20 @@
           "name": "status",
           "type": "text",
           "primaryKey": false,
-          "notNull": true,
-          "default": "'open'"
+          "notNull": true
         },
-        "decided_at": {
-          "name": "decided_at",
-          "type": "timestamp with time zone",
-          "primaryKey": false,
-          "notNull": false
-        },
-        "decided_by": {
-          "name": "decided_by",
-          "type": "uuid",
-          "primaryKey": false,
-          "notNull": false
-        },
-        "dismiss_note": {
-          "name": "dismiss_note",
+        "notes": {
+          "name": "notes",
           "type": "text",
           "primaryKey": false,
           "notNull": false
-        },
-        "changed_on": {
-          "name": "changed_on",
-          "type": "date",
-          "primaryKey": false,
-          "notNull": false
-        },
-        "replacement_subscription_id": {
-          "name": "replacement_subscription_id",
-          "type": "uuid",
-          "primaryKey": false,
-          "notNull": false
         }
       },
-      "indexes": {
-        "right_sizing_proposal_subscription_id_open_key": {
-          "name": "right_sizing_proposal_subscription_id_open_key",
-          "columns": [
-            {
-              "expression": "company_id",
-              "isExpression": false,
-              "asc": true,
-              "nulls": "last"
-            },
-            {
-              "expression": "subscription_id",
-              "isExpression": false,
-              "asc": true,
-              "nulls": "last"
-            }
-          ],
-          "isUnique": true,
-          "where": "\"wms\".\"right_sizing_proposal\".\"status\" = 'open'",
-          "concurrently": false,
-          "method": "btree",
-          "with": {}
-        },
-        "right_sizing_proposal_subscription_id_idx": {
-          "name": "right_sizing_proposal_subscription_id_idx",
-          "columns": [
-            {
-              "expression": "company_id",
-              "isExpression": false,
-              "asc": true,
-              "nulls": "last"
-            },
-            {
-              "expression": "subscription_id",
-              "isExpression": false,
-              "asc": true,
-              "nulls": "last"
-            }
-          ],
-          "isUnique": false,
-          "concurrently": false,
-          "method": "btree",
-          "with": {}
-        },
-        "right_sizing_proposal_project_id_idx": {
-          "name": "right_sizing_proposal_project_id_idx",
-          "columns": [
-            {
-              "expression": "company_id",
-              "isExpression": false,
-              "asc": true,
-              "nulls": "last"
-            },
-            {
-              "expression": "project_id",
-              "isExpression": false,
-              "asc": true,
-              "nulls": "last"
-            }
-          ],
-          "isUnique": false,
-          "concurrently": false,
-          "method": "btree",
-          "with": {}
-        },
-        "right_sizing_proposal_product_id_idx": {
-          "name": "right_sizing_proposal_product_id_idx",
-          "columns": [
-            {
-              "expression": "company_id",
-              "isExpression": false,
-              "asc": true,
-              "nulls": "last"
-            },
-            {
-              "expression": "product_id",
-              "isExpression": false,
-              "asc": true,
-              "nulls": "last"
-            }
-          ],
-          "isUnique": false,
-          "concurrently": false,
-          "method": "btree",
-          "with": {}
-        },
-        "right_sizing_proposal_suggested_product_id_idx": {
-          "name": "right_sizing_proposal_suggested_product_id_idx",
-          "columns": [
-            {
-              "expression": "company_id",
-              "isExpression": false,
-              "asc": true,
-              "nulls": "last"
-            },
-            {
-              "expression": "suggested_product_id",
-              "isExpression": false,
-              "asc": true,
-              "nulls": "last"
-            }
-          ],
-          "isUnique": false,
-          "concurrently": false,
-          "method": "btree",
-          "with": {}
-        },
-        "right_sizing_proposal_replacement_subscription_id_idx": {
-          "name": "right_sizing_proposal_replacement_subscription_id_idx",
-          "columns": [
-            {
-              "expression": "company_id",
-              "isExpression": false,
-              "asc": true,
-              "nulls": "last"
-            },
-            {
-              "expression": "replacement_subscription_id",
-              "isExpression": false,
-              "asc": true,
-              "nulls": "last"
-            }
-          ],
-          "isUnique": false,
-          "concurrently": false,
-          "method": "btree",
-          "with": {}
-        },
-        "right_sizing_proposal_decided_by_idx": {
-          "name": "right_sizing_proposal_decided_by_idx",
-          "columns": [
-            {
-              "expression": "company_id",
-              "isExpression": false,
-              "asc": true,
-              "nulls": "last"
-            },
-            {
-              "expression": "decided_by",
-              "isExpression": false,
-              "asc": true,
-              "nulls": "last"
-            }
-          ],
-          "isUnique": false,
-          "concurrently": false,
-          "method": "btree",
-          "with": {}
-        }
-      },
+      "indexes": {},
       "foreignKeys": {
-        "right_sizing_proposal_company_id_fk": {
-          "name": "right_sizing_proposal_company_id_fk",
-          "tableFrom": "right_sizing_proposal",
+        "sensor_company_id_fk": {
+          "name": "sensor_company_id_fk",
+          "tableFrom": "sensor",
           "tableTo": "company",
           "schemaTo": "wms",
           "columnsFrom": [
@@ -33621,9 +33135,143 @@
           "onDelete": "no action",
           "onUpdate": "no action"
         },
-        "right_sizing_proposal_project_id_fk": {
-          "name": "right_sizing_proposal_project_id_fk",
-          "tableFrom": "right_sizing_proposal",
+        "sensor_project_id_fk": {
+          "name": "sensor_project_id_fk",
+          "tableFrom": "sensor",
+          "tableTo": "project",
+          "schemaTo": "wms",
+          "columnsFrom": [
+            "company_id",
+            "project_id"
+          ],
+          "columnsTo": [
+            "company_id",
+            "id"
+          ],
+          "onDelete": "no action",
+          "onUpdate": "no action"
+        }
+      },
+      "compositePrimaryKeys": {},
+      "uniqueConstraints": {
+        "sensor_identifier_key": {
+          "name": "sensor_identifier_key",
+          "nullsNotDistinct": false,
+          "columns": [
+            "company_id",
+            "identifier"
+          ]
+        },
+        "sensor_project_key": {
+          "name": "sensor_project_key",
+          "nullsNotDistinct": false,
+          "columns": [
+            "company_id",
+            "project_id",
+            "id"
+          ]
+        }
+      },
+      "policies": {},
+      "checkConstraints": {
+        "sensor_network_one_of": {
+          "name": "sensor_network_one_of",
+          "value": "\"wms\".\"sensor\".\"network\" in ('lorawan', 'sigfox', 'nb-iot')"
+        },
+        "sensor_status_one_of": {
+          "name": "sensor_status_one_of",
+          "value": "\"wms\".\"sensor\".\"status\" in ('active', 'retired')"
+        }
+      },
+      "isRLSEnabled": false
+    },
+    "wms.sensor_pairing": {
+      "name": "sensor_pairing",
+      "schema": "wms",
+      "columns": {
+        "id": {
+          "name": "id",
+          "type": "uuid",
+          "primaryKey": true,
+          "notNull": true,
+          "default": "wms.uuidv7()"
+        },
+        "company_id": {
+          "name": "company_id",
+          "type": "uuid",
+          "primaryKey": false,
+          "notNull": true
+        },
+        "project_id": {
+          "name": "project_id",
+          "type": "uuid",
+          "primaryKey": false,
+          "notNull": true
+        },
+        "created_at": {
+          "name": "created_at",
+          "type": "timestamp with time zone",
+          "primaryKey": false,
+          "notNull": true,
+          "default": "now()"
+        },
+        "updated_at": {
+          "name": "updated_at",
+          "type": "timestamp with time zone",
+          "primaryKey": false,
+          "notNull": true,
+          "default": "now()"
+        },
+        "valid_from": {
+          "name": "valid_from",
+          "type": "date",
+          "primaryKey": false,
+          "notNull": true
+        },
+        "valid_to": {
+          "name": "valid_to",
+          "type": "date",
+          "primaryKey": false,
+          "notNull": false
+        },
+        "sensor_id": {
+          "name": "sensor_id",
+          "type": "uuid",
+          "primaryKey": false,
+          "notNull": true
+        },
+        "container_id": {
+          "name": "container_id",
+          "type": "uuid",
+          "primaryKey": false,
+          "notNull": true
+        },
+        "full_threshold_percent": {
+          "name": "full_threshold_percent",
+          "type": "integer",
+          "primaryKey": false,
+          "notNull": true
+        }
+      },
+      "indexes": {},
+      "foreignKeys": {
+        "sensor_pairing_company_id_fk": {
+          "name": "sensor_pairing_company_id_fk",
+          "tableFrom": "sensor_pairing",
+          "tableTo": "company",
+          "schemaTo": "wms",
+          "columnsFrom": [
+            "company_id"
+          ],
+          "columnsTo": [
+            "id"
+          ],
+          "onDelete": "no action",
+          "onUpdate": "no action"
+        },
+        "sensor_pairing_project_id_fk": {
+          "name": "sensor_pairing_project_id_fk",
+          "tableFrom": "sensor_pairing",
           "tableTo": "project",
           "schemaTo": "wms",
           "columnsFrom": [
@@ -33637,15 +33285,15 @@
           "onDelete": "no action",
           "onUpdate": "no action"
         },
-        "right_sizing_proposal_subscription_id_fk": {
-          "name": "right_sizing_proposal_subscription_id_fk",
-          "tableFrom": "right_sizing_proposal",
-          "tableTo": "subscription",
+        "sensor_pairing_sensor_id_fk": {
+          "name": "sensor_pairing_sensor_id_fk",
+          "tableFrom": "sensor_pairing",
+          "tableTo": "sensor",
           "schemaTo": "wms",
           "columnsFrom": [
             "company_id",
             "project_id",
-            "subscription_id"
+            "sensor_id"
           ],
           "columnsTo": [
             "company_id",
@@ -33655,71 +33303,19 @@
           "onDelete": "no action",
           "onUpdate": "no action"
         },
-        "right_sizing_proposal_product_id_fk": {
-          "name": "right_sizing_proposal_product_id_fk",
-          "tableFrom": "right_sizing_proposal",
-          "tableTo": "product",
+        "sensor_pairing_container_id_fk": {
+          "name": "sensor_pairing_container_id_fk",
+          "tableFrom": "sensor_pairing",
+          "tableTo": "container",
           "schemaTo": "wms",
           "columnsFrom": [
             "company_id",
             "project_id",
-            "product_id"
+            "container_id"
           ],
           "columnsTo": [
             "company_id",
             "project_id",
-            "id"
-          ],
-          "onDelete": "no action",
-          "onUpdate": "no action"
-        },
-        "right_sizing_proposal_suggested_product_id_fk": {
-          "name": "right_sizing_proposal_suggested_product_id_fk",
-          "tableFrom": "right_sizing_proposal",
-          "tableTo": "product",
-          "schemaTo": "wms",
-          "columnsFrom": [
-            "company_id",
-            "project_id",
-            "suggested_product_id"
-          ],
-          "columnsTo": [
-            "company_id",
-            "project_id",
-            "id"
-          ],
-          "onDelete": "no action",
-          "onUpdate": "no action"
-        },
-        "right_sizing_proposal_replacement_subscription_id_fk": {
-          "name": "right_sizing_proposal_replacement_subscription_id_fk",
-          "tableFrom": "right_sizing_proposal",
-          "tableTo": "subscription",
-          "schemaTo": "wms",
-          "columnsFrom": [
-            "company_id",
-            "project_id",
-            "replacement_subscription_id"
-          ],
-          "columnsTo": [
-            "company_id",
-            "project_id",
-            "id"
-          ],
-          "onDelete": "no action",
-          "onUpdate": "no action"
-        },
-        "right_sizing_proposal_decided_by_fk": {
-          "name": "right_sizing_proposal_decided_by_fk",
-          "tableFrom": "right_sizing_proposal",
-          "tableTo": "user_account",
-          "schemaTo": "wms",
-          "columnsFrom": [
-            "company_id",
-            "decided_by"
-          ],
-          "columnsTo": [
-            "company_id",
             "id"
           ],
           "onDelete": "no action",
@@ -33727,40 +33323,26 @@
         }
       },
       "compositePrimaryKeys": {},
-      "uniqueConstraints": {},
+      "uniqueConstraints": {
+        "sensor_pairing_project_key": {
+          "name": "sensor_pairing_project_key",
+          "nullsNotDistinct": false,
+          "columns": [
+            "company_id",
+            "project_id",
+            "id"
+          ]
+        }
+      },
       "policies": {},
       "checkConstraints": {
-        "right_sizing_proposal_direction_one_of": {
-          "name": "right_sizing_proposal_direction_one_of",
-          "value": "\"wms\".\"right_sizing_proposal\".\"direction\" in ('smaller', 'bigger', 'less-frequent', 'more-frequent')"
+        "sensor_pairing_validity": {
+          "name": "sensor_pairing_validity",
+          "value": "\"wms\".\"sensor_pairing\".\"valid_to\" is null or \"wms\".\"sensor_pairing\".\"valid_to\" > \"wms\".\"sensor_pairing\".\"valid_from\""
         },
-        "right_sizing_proposal_status_one_of": {
-          "name": "right_sizing_proposal_status_one_of",
-          "value": "\"wms\".\"right_sizing_proposal\".\"status\" in ('open', 'approved', 'dismissed')"
-        },
-        "right_sizing_proposal_evidence_subset_of": {
-          "name": "right_sizing_proposal_evidence_subset_of",
-          "value": "\"wms\".\"right_sizing_proposal\".\"evidence\" <@ ARRAY['empty', 'quarter', 'half', 'three-quarters', 'full', 'overflowing']::text[]"
-        },
-        "right_sizing_proposal_evidence_non_empty": {
-          "name": "right_sizing_proposal_evidence_non_empty",
-          "value": "cardinality(\"wms\".\"right_sizing_proposal\".\"evidence\") > 0"
-        },
-        "right_sizing_proposal_suggestion_shape": {
-          "name": "right_sizing_proposal_suggestion_shape",
-          "value": "(\"wms\".\"right_sizing_proposal\".\"direction\" in ('smaller', 'bigger')) = (\"wms\".\"right_sizing_proposal\".\"suggested_product_id\" is not null)"
-        },
-        "right_sizing_proposal_decided_shape": {
-          "name": "right_sizing_proposal_decided_shape",
-          "value": "(\"wms\".\"right_sizing_proposal\".\"status\" <> 'open') = (\"wms\".\"right_sizing_proposal\".\"decided_at\" is not null and \"wms\".\"right_sizing_proposal\".\"decided_by\" is not null)"
-        },
-        "right_sizing_proposal_dismiss_shape": {
-          "name": "right_sizing_proposal_dismiss_shape",
-          "value": "(\"wms\".\"right_sizing_proposal\".\"status\" = 'dismissed') = (\"wms\".\"right_sizing_proposal\".\"dismiss_note\" is not null)"
-        },
-        "right_sizing_proposal_change_shape": {
-          "name": "right_sizing_proposal_change_shape",
-          "value": "(\"wms\".\"right_sizing_proposal\".\"changed_on\" is null) = (\"wms\".\"right_sizing_proposal\".\"replacement_subscription_id\" is null) and (\"wms\".\"right_sizing_proposal\".\"changed_on\" is null or \"wms\".\"right_sizing_proposal\".\"status\" = 'approved')"
+        "sensor_pairing_threshold_range": {
+          "name": "sensor_pairing_threshold_range",
+          "value": "\"wms\".\"sensor_pairing\".\"full_threshold_percent\" between 1 and 100"
         }
       },
       "isRLSEnabled": false
