@@ -65,6 +65,7 @@ const VEHICLE_CONSTRAINT = `ALTER TABLE ${RESERVATION} ADD CONSTRAINT "specimen_
 describe("excludeOverlapping", () => {
   test("one gist exclusion over company_id, the key, and the half-open date range, named <table>_no_overlap", () => {
     assert.deepEqual(excludeOverlapping(specimen, [specimen.containerId]), [CONSTRAINT])
+    assert.deepEqual(excludeOverlapping(specimen, [specimen.containerId], "container"), [CONSTRAINT.replace('"specimen_hand_written_no_overlap"', '"specimen_hand_written_container_no_overlap"')], "a second key over the same period, under its label")
   })
 
   test("company_id leads whether or not the caller lists it, once", () => {
@@ -349,21 +350,23 @@ describe("the migrations carry every table's hand-written statements", () => {
     assert.ok(Array.isArray(await tables()))
   })
 
-  test("each table of the schema is created by exactly one migration, and that file carries its statements", async () => {
+  test("each table of the schema is created by exactly one migration, and that file or a later one carries its statements", async () => {
     const files = await migrations()
     for (const table of await tables()) {
       const creating = files.filter((file) => createsTable(table, file.text))
       assert.equal(creating.length, 1, `${createTableStatement(table)} appears in ${creating.map((file) => file.name).join(", ") || "no migration"}`)
-      const missing = missingHandWritten(table, creating[0].text)
-      assert.deepEqual(missing, [], `${creating[0].name} lacks, below drizzle-kit's statements and each after a --> statement-breakpoint line:\n${missing.join("\n")}`)
+      // A table that gains a statement's reason later — an undated table dated (#374: `property_party`'s exclusion constraint) — carries it in the file that changed it, which runs after the one that created it.
+      const fromCreation = files.slice(files.indexOf(creating[0])).map((file) => file.text).join("\n--> statement-breakpoint\n")
+      const missing = missingHandWritten(table, fromCreation)
+      assert.deepEqual(missing, [], `${creating[0].name} or a later migration lacks, below drizzle-kit's statements and each after a --> statement-breakpoint line:\n${missing.join("\n")}`)
     }
   })
 
   test("the schema has exactly twenty-five ledgers and one reservation, and no ledger carries a trigger anywhere", async () => {
     const all = await tables()
     const ledgers = all.filter(isLedger).map((table) => createTableStatement(table))
-    // Resources' two, Execution's three, Resolution's one, Finance's five (Issue #112), Routing's two (#169): a Plan's stops and legs are the immutable result, written once (#124 §1); the audit log (#291); and an import run's rows (#291 slice 12); an Application's Decisions (M7 of #293); the payments with their allocations (#291 C6); every stop a ticket booked (#422); and an accounting export with its vouchers and their lines (#291 C7); and where a session's vehicle was (O8 of #290); and a vehicle's pre-trip checks (O13 of #290); and a route's messages (O24 of #290).
-    const LEDGERS = ["accounting_export", "accounting_export_line", "accounting_export_voucher", "application_decision", "audit_event", "billing_run_exclusion", "driver_command", "import_run_row", "invoice", "invoice_line", "payment", "payment_allocation", "plan_leg", "plan_stop", "pre_trip_check", "proof_of_service", "route_message", "session_position", "settlement_event", "stock_movement", "ticket_booking", "ticket_event", "unload", "vehicle_allocation_event", "weight_review"]
+    // Resources' two, Execution's three, Resolution's one, Finance's five (Issue #112), Routing's two (#169): a Plan's stops and legs are the immutable result, written once (#124 §1); the audit log (#291); and an import run's rows (#291 slice 12); an Application's Decisions (M7 of #293); the payments with their allocations (#291 C6); every stop a ticket booked (#422); and an accounting export with its vouchers and their lines (#291 C7); and where a session's vehicle was (O8 of #290); and a vehicle's pre-trip checks (O13 of #290); and what a fill-level sensor read (O26 of #290); and a route's messages (O24 of #290).
+    const LEDGERS = ["accounting_export", "accounting_export_line", "accounting_export_voucher", "application_decision", "audit_event", "billing_run_exclusion", "driver_command", "fill_reading", "import_run_row", "invoice", "invoice_line", "payment", "payment_allocation", "plan_leg", "plan_stop", "pre_trip_check", "proof_of_service", "route_message", "session_position", "settlement_event", "stock_movement", "ticket_booking", "ticket_event", "unload", "vehicle_allocation_event", "weight_review"]
     assert.deepEqual(
       ledgers.sort(),
       LEDGERS.map((name) => `CREATE TABLE "wms"."${name}" (`),

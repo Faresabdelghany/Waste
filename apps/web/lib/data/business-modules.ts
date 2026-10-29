@@ -3602,6 +3602,25 @@ const resources: WorkspaceDefinition = {
       ],
       records: [],
     },
+    {
+      // The fill-level Sensors (O26 of #290, row 9.10): on the API only, so no fixture records; the office's pane is O26's last part. The containers' fixture facts (Sensor, Fill level) stay the prototype's until then.
+      id: "sensors",
+      label: "Sensors",
+      title: "Fill-level Sensors",
+      description: "The fill-level sensors on the company's containers: the container each measures over a period at its full threshold, and the readings a vendor's integration sends.",
+      entityLabel: "Sensor",
+      contextLabel: "Network · project",
+      valueLabel: "Fill level",
+      primaryAction: "New sensor",
+      metrics: [],
+      lifecycle: ["Active", "Retired"],
+      rules: [
+        "A sensor measures one container at a time, and a container is measured by one sensor at a time.",
+        "A container read at or past its pairing's threshold raises an alert.",
+        "A sensor is retired, never deleted.",
+      ],
+      records: [],
+    },
   ],
 }
 
