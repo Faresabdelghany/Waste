@@ -12,10 +12,12 @@
 // recurrences it is spelled like.
 import { Page } from "@waste/contracts/pagination"
 import { BulkySchedule, BulkyScheduleCreate, BulkyScheduleListQuery, BulkySchedulePatch } from "@waste/contracts/bulky"
-import type { ProductStatus } from "@waste/contracts/catalogue"
+import type { ProductStatus, ProductUnit } from "@waste/contracts/catalogue"
 import type { Tx } from "@waste/db/client"
 import { validOn } from "@waste/db/query/valid-on"
 import { bulkyBooking, bulkySchedule } from "@waste/db/schema/bulky"
+import { product } from "@waste/db/schema/catalogue"
+import { A_BULKY_PRODUCT_IS_SOLD_BY_THE_JOB_OR_ITEM, isBulkyProductUnit } from "@waste/domain/execution/bulky"
 import type { HolidayPolicy, RecurrenceFrequency, ServiceDay, WeekRotation } from "@waste/domain/planning/vocabulary"
 import { and, asc, eq, gt, gte, isNull } from "drizzle-orm"
 import { Hono, type MiddlewareHandler } from "hono"
@@ -26,11 +28,10 @@ import { inProjects, requireProject } from "../auth/projects"
 import { requireGrant } from "../auth/require"
 import { newId } from "../ids"
 import { afterCursor, fetchLimit, pageOf } from "../pagination"
-import { describeProblem, problem, validate } from "../problem"
+import { describeProblem, invalidRequest, problem, validate } from "../problem"
 import { periodAfter, refuseStranded, requireOrdered } from "./periods"
-import { requirePlanningArea, type Scope } from "./references"
+import { NOT_A_PRODUCT, requirePlanningArea, type Scope } from "./references"
 import { created, describeCreated, describeJson, IdParam, lockRow, refuseOverlap, stampsOf } from "./shared"
-import { requireJobProduct } from "./work-order-charges"
 
 const MODULE = "route-studio.schemes"
 
@@ -95,9 +96,16 @@ async function findSchedule(tx: Tx, principal: Principal, id: string): Promise<R
   return row
 }
 
-/** A product a schedule names: the project's, sold by the job (400 each), and active (409) unless it is the one the schedule already charges. */
+/** A product a schedule names: the project's, sold by the job or by the item (#449; 400 each), and active (409) unless it is the one the schedule already charges. */
 async function requireBulkyProduct(tx: Tx, scope: Scope, id: string, kept?: string): Promise<void> {
-  const status = await requireJobProduct(tx, scope, id)
+  const [found] = await tx
+    .select({ status: product.status, unit: product.unit })
+    .from(product)
+    .where(and(eq(product.companyId, scope.companyId), eq(product.projectId, scope.projectId), eq(product.id, id)))
+    .limit(1)
+  if (found === undefined) throw invalidRequest("body", [{ path: "productId", message: NOT_A_PRODUCT }])
+  if (!isBulkyProductUnit(found.unit as ProductUnit)) throw invalidRequest("body", [{ path: "productId", message: A_BULKY_PRODUCT_IS_SOLD_BY_THE_JOB_OR_ITEM }])
+  const status = found.status as ProductStatus
   if (status !== "active" && id !== kept) throw problem(409, { detail: unofferedBulkyProduct(status) })
 }
 
@@ -155,11 +163,11 @@ export function bulkyScheduleRoutes(guard: MiddlewareHandler<AuthEnv>) {
         operationId: "createBulkySchedule",
         summary: "Add a bulky schedule",
         description:
-          "Adds a Bulky Schedule to a planning area of a project the caller works in (400 at `projectId`, or at `planningAreaId` for an area of another project): the days bulky waste is collected there — a frequency, the service days, a week rotation with every-2-weeks and with nothing else, and the holiday policy, `skip` unless given, exactly as a Route Scheme's — the slots each day has, one per booking, and the product a booking is charged at once collected: a product of the project (400) sold by the job (400 at `productId`, `A work order's job is charged at a product sold by the job`) and active (409). One schedule of an area is in force at a time (409). The days are `generateOccurrences`' over the recurrence: a skipped holiday is no day, a shifted one is offered on the day it moved to.",
+          "Adds a Bulky Schedule to a planning area of a project the caller works in (400 at `projectId`, or at `planningAreaId` for an area of another project): the days bulky waste is collected there — a frequency, the service days, a week rotation with every-2-weeks and with nothing else, and the holiday policy, `skip` unless given, exactly as a Route Scheme's — the slots each day has, one per booking, and the product a booking is charged at once collected: a product of the project (400) sold by the job, charged once per booking, or by the item, charged the booking's item count (#449) (400 at `productId`, `A bulky collection is charged at a product sold by the job or by the item`), and active (409). One schedule of an area is in force at a time (409). The days are `generateOccurrences`' over the recurrence: a skipped holiday is no day, a shifted one is offered on the day it moved to.",
         security: BEARER_SECURITY,
         responses: {
           201: describeCreated("The schedule as it was written.", BulkySchedule),
-          400: describeProblem("The body is missing a field, names a member the server owns, a week rotation without every-2-weeks or every-2-weeks without one, no service day, a period ending on or before it starts, a project this account does not work in, an area of another project, or a product of another project or one not sold by the job."),
+          400: describeProblem("The body is missing a field, names a member the server owns, a week rotation without every-2-weeks or every-2-weeks without one, no service day, a period ending on or before it starts, a project this account does not work in, an area of another project, or a product of another project or one sold by neither the job nor the item."),
           ...commonProblems("create"),
           409: describeProblem("The product is not active, or the area has a schedule in force over part of the period."),
         },
@@ -218,7 +226,7 @@ export function bulkyScheduleRoutes(guard: MiddlewareHandler<AuthEnv>) {
         security: BEARER_SECURITY,
         responses: {
           200: describeJson("The schedule as it now stands.", BulkySchedule),
-          400: describeProblem("The path does not hold an id, or the patch is empty, names a field the caller does not own (the area, the recurrence and the start included), ends on or before the day the schedule starts, or names a product of another project or one not sold by the job."),
+          400: describeProblem("The path does not hold an id, or the patch is empty, names a field the caller does not own (the area, the recurrence and the start included), ends on or before the day the schedule starts, or names a product of another project or one sold by neither the job nor the item."),
           ...commonProblems("edit"),
           404: describeProblem("No schedule with that id in the projects this account works in."),
           409: describeProblem("The new product is not active, the new end leaves bookings outside it, or the area has another schedule in force over part of the new period."),

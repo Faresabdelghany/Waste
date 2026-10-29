@@ -5,7 +5,8 @@
 import assert from "node:assert/strict"
 import { describe, test } from "node:test"
 
-import { bulkyBookingStatus, bulkyDays, dayFull, notABulkyDay, notAfterToday, onlyABookedBooking, refuseBulkyDay, type BulkySchedule } from "../bulky"
+import { PRODUCT_UNITS } from "../../registry/vocabulary"
+import { bulkyBookingStatus, bulkyDays, bulkyQuantity, dayFull, isBulkyProductUnit, notABulkyDay, notAfterToday, onlyABookedBooking, refuseBulkyDay, type BulkySchedule } from "../bulky"
 import { NO_HOLIDAYS, type SchemeCalendar } from "../../route-schemes/occurrences"
 
 const SCHEDULE: BulkySchedule = { frequency: "weekly", serviceDays: ["tuesday"], weekRotation: null, holidayPolicy: "skip", validFrom: "2027-03-01", validTo: null, slotsPerDay: 3 }
@@ -80,5 +81,17 @@ describe("a booking's status", () => {
   test("refuses a command in a sentence that says what to do", () => {
     assert.equal(onlyABookedBooking("routed", "cancel"), "The booking is routed already; take its stop off the route before it can be cancelled")
     assert.equal(onlyABookedBooking("collected", "change"), "The booking is collected; only a booked one can be changed")
+  })
+})
+
+describe("what a collected booking is charged (#449)", () => {
+  test("a product sold by the item is charged the items' count, the sum of the lines; one sold by the job is the booking once", () => {
+    const items = [{ quantity: 1 }, { quantity: 2 }, { quantity: 4 }]
+    assert.equal(bulkyQuantity("item", items), 7)
+    assert.equal(bulkyQuantity("job", items), 1)
+  })
+
+  test("a bulky collection is charged at a product sold by the job or by the item, and by no other unit", () => {
+    assert.deepEqual(PRODUCT_UNITS.filter(isBulkyProductUnit), ["job", "item"])
   })
 })
