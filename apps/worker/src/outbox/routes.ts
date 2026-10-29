@@ -5,12 +5,13 @@
 import { OutboxKind } from "@waste/contracts/execution"
 
 import type { AnyJob } from "../jobs/definition"
+import { applyPauseGrants } from "../jobs/apply-pause-grants"
 import { openTickets } from "../jobs/open-tickets"
 import { recordBillableEvents } from "../jobs/record-billable-events"
 import { outboxQueue } from "./subscribe"
 
-/** Every outbox consumer's entries, one per kind it takes: Resolution's, then Finance's. */
-export const OUTBOX_CONSUMERS: readonly AnyJob[] = [...openTickets, ...recordBillableEvents]
+/** Every outbox consumer's entries, one per kind it takes: Resolution's, then Finance's, then the Registry's granted pauses (M11 of #293). */
+export const OUTBOX_CONSUMERS: readonly AnyJob[] = [...openTickets, ...recordBillableEvents, ...applyPauseGrants]
 
 /** Each kind's consumers' queues, in the consumers' order, read off the entries: an entry inherits its kind's own queue (`outbox.<kind>`). */
 export function routesOf(consumers: readonly AnyJob[], kinds: readonly OutboxKind[]): Map<OutboxKind, string[]> {

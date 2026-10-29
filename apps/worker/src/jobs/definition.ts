@@ -148,6 +148,16 @@ export type JobDefinition<Data extends object = object> = {
    * there, in one transaction (boss.ts, `drainInherited`).
    */
   inherits?: string
+  /**
+   * Takes none of what waits on `inherits`: the relay sends to this queue
+   * from the start of the process that first runs it, and what waited there
+   * before — an outbox kind's backlog, events emitted before the consumer
+   * existed — stays for the heirs that drain it, or expires under its
+   * retention. For a consumer whose effect must not reach back to news it
+   * was never meant for: a granted pause's (M11 of #293), which would pause
+   * a subscription, and change its charges, on a decision made months ago.
+   */
+  startsFresh?: true
 }
 
 /** What a queue is created with: pg-boss's `QueueOptions` and, optionally, the `policy` and the `deadLetter`. `partition` is not offered: the role may not create a partition. */

@@ -17,6 +17,7 @@ import { OUTBOX_KINDS, type OutboxKind } from "@waste/domain/execution/vocabular
 import { isCronExpression } from "../boss"
 import { defineJob, JOBS } from "../jobs"
 import { alertRulesJob } from "../jobs/alert-rules"
+import { applyPauseGrants } from "../jobs/apply-pause-grants"
 import { updatableOptions } from "../jobs/definition"
 import { generateRoutes } from "../jobs/generate-routes"
 import { heartbeat } from "../jobs/heartbeat"
@@ -34,6 +35,8 @@ import { CONSUMED_OUTBOX_QUEUE_OPTIONS, CONSUMED_RETENTION_SECONDS, consumerQueu
 /** Resolution's and Finance's queues of their kinds, as the fan-out spells them (#339). */
 const resolutionQueues = RESOLUTION_KINDS.map((kind) => consumerQueue(kind, "resolution"))
 const financeQueues = FINANCE_EVENT_KINDS.map((kind) => consumerQueue(kind, "finance"))
+/** The Registry's one (M11 of #293): a granted pause, applied. */
+const registryQueues = [consumerQueue("application-decided", "registry")]
 
 describe("the job registry", () => {
   test("names every queue once", () => {
@@ -77,7 +80,7 @@ describe("the job registry", () => {
       assert.equal(job.queueOptions?.deadLetter, OUTBOX_DEAD_QUEUE, `${job.queue}: a consumer's queue dead-letters to outbox.dead, so a poison job is kept for a redrive and not lost with its retention`)
       assert.equal(job.queueOptions?.retentionSeconds, CONSUMED_RETENTION_SECONDS, `${job.queue}: a consumed queue keeps a job a fortnight`)
     }
-    assert.deepEqual([...consumed].sort(), [...resolutionQueues, ...financeQueues].sort(), "the two consumers take Resolution's four and Finance's five, and nothing else is consumed")
+    assert.deepEqual([...consumed].sort(), [...resolutionQueues, ...financeQueues, ...registryQueues].sort(), "the three consumers take Resolution's kinds, Finance's and the Registry's one, and nothing else is consumed")
     assert.ok(!consumed.includes(OUTBOX_DEAD_QUEUE), "nobody works the dead-letter queue: an operator redrives it")
     // The relay's routes are the consumers' queues by kind, in the consumers' order.
     for (const kind of OUTBOX_KINDS) {
@@ -140,6 +143,7 @@ describe("the job registry", () => {
       "execution.relay-outbox",
       ...resolutionQueues,
       ...financeQueues,
+      ...registryQueues,
       "finance.run-billing",
       "execution.purge-proof-objects",
       "resolution.alert-rules",
@@ -244,11 +248,17 @@ describe("the job registry", () => {
     )
     // What the consumers inherit is the consumed kinds' own queues, each published; the rest wait for a consumer under retention, and the dead-letter queue for an operator.
     const inherited = [...new Set(JOBS.flatMap((job) => (job.inherits === undefined ? [] : [job.inherits])))]
-    assert.deepEqual(inherited.sort(), [...new Set([...RESOLUTION_KINDS, ...FINANCE_EVENT_KINDS])].map(outboxQueue).sort())
+    assert.deepEqual(inherited.sort(), [...new Set([...RESOLUTION_KINDS, ...FINANCE_EVENT_KINDS, "application-decided" as const])].map(outboxQueue).sort())
     for (const queue of inherited) assert.ok(published.includes(queue), queue)
     assert.ok(published.includes(OUTBOX_DEAD_QUEUE), "the dead-letter queue is published and worked by nobody")
     assert.ok(worked.has(ROUTING_OPTIMISE_QUEUE) && !published.includes(ROUTING_OPTIMISE_QUEUE), "the API sends optimiser Plans (#170) to a queue with a worker of its own (#171), which nobody publishes to hold it open")
     assert.equal(published.length - 1, OUTBOX_KINDS.length, "every kind's own queue, and the dead-letter queue")
+  })
+
+  test("holds the Registry's consumer (M11 of #293): one entry on outbox.application-decided.registry that starts fresh, so a decision relayed before it ran is never applied", () => {
+    assert.deepEqual(applyPauseGrants.map((job) => [job.queue, job.inherits, job.startsFresh]), [["outbox.application-decided.registry", "outbox.application-decided", true]])
+    assert.deepEqual(OUTBOX_ROUTES.get("application-decided"), ["outbox.application-decided.registry"], "the relay sends a decision to it from the first start")
+    assert.equal(openTickets.some((job) => job.startsFresh === true) || recordBillableEvents.some((job) => job.startsFresh === true), false, "the others take their kinds' backlog")
   })
 
   test("updatableOptions drops the policy and nothing else, the dead letter among what it keeps", () => {

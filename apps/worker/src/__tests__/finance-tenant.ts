@@ -25,7 +25,7 @@ import { randomBytes, randomInt, randomUUID } from "node:crypto"
 
 import type { Database, Tx } from "@waste/db/client"
 import { role, roleGrant, userAccount } from "@waste/db/schema/access"
-import { agreement, subscription } from "@waste/db/schema/agreements"
+import { agreement, subscription, subscriptionPause } from "@waste/db/schema/agreements"
 import { containerType, product, wasteFraction } from "@waste/db/schema/catalogue"
 import { container, containerServicePlacement } from "@waste/db/schema/containers"
 import { customer, property } from "@waste/db/schema/customers"
@@ -447,6 +447,8 @@ export async function dropFinanceTenant(pool: Database, owner: Database, company
     await tx.delete(vehicleType).where(eq(vehicleType.companyId, companyId))
     await tx.delete(planningArea).where(eq(planningArea.companyId, companyId))
     await tx.delete(containerServicePlacement).where(eq(containerServicePlacement.companyId, companyId))
+    // A granted pause (M11 of #293) hangs on its subscription.
+    await tx.delete(subscriptionPause).where(eq(subscriptionPause.companyId, companyId))
     await tx.delete(subscription).where(eq(subscription.companyId, companyId))
     await tx.delete(agreement).where(eq(agreement.companyId, companyId))
     await tx.delete(priceList).where(eq(priceList.companyId, companyId))

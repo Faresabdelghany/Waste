@@ -280,6 +280,7 @@ export function proofPayload(tenant: ConsumerTenant, routeId: string, pickupId: 
     reason: fields.reason ?? null,
     note: fields.note ?? null,
     weightKg: null,
+    volumeLitres: null,
     objectKey: null,
     outcome: null,
     contaminantCodeId: null,

@@ -152,6 +152,8 @@ export type OutboxConsumer<Kind extends OutboxKind> = {
   queueOptions?: JobQueueOptions
   /** Polling and concurrency of this process's worker on each queue; pg-boss's defaults otherwise. */
   workOptions?: WorkOptions
+  /** Takes none of the kind's backlog: only the events relayed once the consumer runs, never those that waited on the kind's own queue before it existed (`JobDefinition.startsFresh`). */
+  startsFresh?: true
 }
 
 /**
@@ -174,7 +176,7 @@ export type OutboxConsumer<Kind extends OutboxKind> = {
  * retry policy and `CONSUMED_OUTBOX_QUEUE_OPTIONS` under the consumer's own,
  * since the consumer's queue is its own to create.
  */
-export function defineOutboxConsumer<const Kind extends OutboxKind>({ name, kinds, description, handler, queueOptions, workOptions }: OutboxConsumer<Kind>): JobDefinition<RelayedEvent>[] {
+export function defineOutboxConsumer<const Kind extends OutboxKind>({ name, kinds, description, handler, queueOptions, workOptions, startsFresh }: OutboxConsumer<Kind>): JobDefinition<RelayedEvent>[] {
   if (!CONSUMER_NAME.test(name)) throw new Error(`an outbox consumer's name is lowercase words joined by hyphens: ${JSON.stringify(name)}`)
   return kinds.map((kind) => ({
     queue: consumerQueue(kind, name),
@@ -182,6 +184,7 @@ export function defineOutboxConsumer<const Kind extends OutboxKind>({ name, kind
     description: `${description} (${kind})`,
     queueOptions: { ...OUTBOX_QUEUE_OPTIONS, ...CONSUMED_OUTBOX_QUEUE_OPTIONS, ...queueOptions },
     ...(workOptions === undefined ? {} : { workOptions }),
+    ...(startsFresh === undefined ? {} : { startsFresh }),
     handler: async (jobs, context) => {
       const events: string[] = []
       for (const job of jobs) {
