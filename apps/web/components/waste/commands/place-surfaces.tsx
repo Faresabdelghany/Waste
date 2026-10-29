@@ -19,6 +19,7 @@ import { useBusinessRecordStore, whenSaved } from "@/components/waste/business-r
 import type { PrimarySurfaceProps, RowSurfaceProps } from "@/components/waste/commands/command-surfaces"
 import { CreateSurface } from "@/components/waste/commands/create-surface"
 import { PickupExceptionsSection } from "@/components/waste/commands/pickup-exceptions-section"
+import { MovePropertySection } from "@/components/waste/commands/move-surface"
 import { PropertyZonesSection } from "@/components/waste/commands/property-zones-section"
 import { useModuleReady, useRelationPickers } from "@/components/waste/commands/use-command-support"
 import type { BusinessFormField, BusinessFormSchema, BusinessFormValues } from "@/lib/data/business-form-types"
@@ -131,6 +132,7 @@ export function PropertyCommandsSurface({ record }: RowSurfaceProps) {
     <>
       <EditSurface record={record} module={PROPERTIES_MODULE} schema={PROPERTY_EDIT_FORM} noun="Property" />
       <PropertyZonesSection record={record} module={PROPERTIES_MODULE} />
+      <MovePropertySection record={record} />
       <PickupExceptionsSection record={record} module={PROPERTIES_MODULE} place="property" />
     </>
   )
