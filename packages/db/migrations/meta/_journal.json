@@ -561,6 +561,13 @@
       "when": 1793247592226,
       "tag": "0079_project_branding",
       "breakpoints": true
+    },
+    {
+      "idx": 80,
+      "version": "7",
+      "when": 1793261978033,
+      "tag": "0095_field_inspections",
+      "breakpoints": true
     }
   ]
 }

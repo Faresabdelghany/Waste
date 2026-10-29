@@ -205,7 +205,7 @@ export const publicWorkspaceDomains: readonly PublicWorkspaceDomain[] = [
       "Customer-service agent",
       "Driver",
     ],
-    moduleIds: ["tickets", "bulky-bookings", "exceptions", "site-visits", "driver-app"],
+    moduleIds: ["tickets", "bulky-bookings", "exceptions", "site-visits", "inspections", "driver-app"],
     boundaryNote:
       "Tickets owns resolution work and linked communication. Driver App remains available only through its restricted shell.",
   },
@@ -440,6 +440,19 @@ export const publicModuleDomains: readonly PublicModuleDomain[] = [
     downstream: ["M16"],
     boundaryNote:
       "A Site Visit is one arrival at a recycling centre, admitted or refused with the reason; its charge is the Visit Rule's, made a billable event by Finance, and a mistake is voided, never deleted.",
+  },
+  {
+    key: "operate.inspections",
+    workspaceId: "operate",
+    moduleId: "inspections",
+    primaryBlueprintModule: "M11",
+    supportingBlueprintModules: ["M03", "M06"],
+    canonicalOwner: "Operate · Inspections",
+    personas: ["Operations manager", "Customer-service agent"],
+    upstream: ["M03", "M06"],
+    downstream: ["M13"],
+    boundaryNote:
+      "A Field Inspection is an inspector's visit to a container or a property, with its verdict, findings and photos; it changes nothing it names, and a closed one changes no more.",
   },
   {
     key: "route-studio.pickups",

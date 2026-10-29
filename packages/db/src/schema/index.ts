@@ -68,3 +68,5 @@ export * from "./service-provider-activities"
 export * from "./messaging"
 // Pre-trip inspection (O13 of #290): a vehicle type's checklist, the checks made against it, and the defects they find.
 export * from "./pre-trip"
+// Field inspections (M23 of #293): an inspector's visits to containers and properties, and their photos.
+export * from "./inspections"

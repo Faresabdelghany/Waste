@@ -28,6 +28,7 @@ import { moduleKeyOf } from "@/lib/api/records/adapter"
 import { isServerBacked } from "@/lib/api/records/modules"
 import { ALERT_LIST_INITIAL, alertListReaders } from "@/lib/data/alerts"
 import { applicationCorrectable } from "@/lib/data/applications"
+import { inspectionOpen } from "@/lib/data/inspections"
 import { isTeamMember } from "@/lib/data/provider-workspace"
 import { TICKET_LIST_INITIAL, ticketListReaders } from "@/lib/data/tickets"
 import { emptyBusinessFilters, singleFilterValue, type BusinessFilters, type FilterValueReaders } from "@waste/domain/business-filters"
@@ -50,6 +51,7 @@ import { AddPropertyGroupSurface, AddPropertySurface, AddSharedPointSurface, Pro
 import { PriceRowCommandsSurface, PriceRowsPrimarySurface, ProductCommandsSurface, ProductsPrimarySurface } from "./pricing-surfaces"
 import { PROVIDER_PRICES_LIST, SERVICE_AREAS_LIST, SETTLEMENTS_LIST, WEIGHTS_LIST } from "./provider-money-lists"
 import { CreateServiceAreaSurface, OpenSettlementSurface, ProviderPriceCommandsSurface, ProviderPricesPrimarySurface, RecordUnloadSurface, ServiceAreaCommandsSurface, ServiceAreasRead, SettlementSurface, WeightReviewSurface } from "./provider-money-surfaces"
+import { InspectionSurface } from "./inspection-surfaces"
 import { InviteTeamMemberSurface, TeamMemberCommandsSurface } from "./team-surfaces"
 import { LiveBoardRefresh, LiveRouteSurface, PickupCommandsSurface, RouteCommandsSurface, RoutesPrimarySurface } from "./route-surfaces"
 import { WarehouseStockSurface } from "./stock-surfaces"
@@ -180,6 +182,8 @@ export const COMMAND_SURFACES: Readonly<Record<string, CommandSurface>> = {
   "operate.site-visits": { primary: SiteVisitsPrimarySurface, rowActions: SiteVisitCommandsSurface },
   // #393: a plate or a card registered by its own dialog under its holder; its label and end edited, and blocked or unblocked, in its details.
   "customers.site-access": { primary: RegisterCredentialSurface, rowActions: CredentialCommandsSurface },
+  // M23 of #293: an inspection recorded by the module's form, its photos added and Close in its details; corrected by the generic Edit while open.
+  "operate.inspections": { primary: "form", rowActions: InspectionSurface, genericEdit: inspectionOpen },
   "operate.tickets": { primary: NewTicketSurface, list: { readers: ({ accountId }) => ticketListReaders(accountId), initial: TICKET_LIST_INITIAL } },
   "operate.exceptions": { primary: RaiseAlertSurface, rowActions: AlertCommandsSurface, list: { readers: alertListReaders, initial: ALERT_LIST_INITIAL } },
   // Slice 10 (#185): a product is made in Settings, so both pricing modules'

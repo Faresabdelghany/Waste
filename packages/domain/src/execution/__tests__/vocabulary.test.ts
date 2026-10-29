@@ -12,7 +12,7 @@ import { describe, test } from "node:test"
 import { defineVocabularyTests } from "../../__tests__/vocabulary"
 import * as vocabulary from "../vocabulary"
 
-defineVocabularyTests("Execution", vocabulary, vocabulary.EXECUTION_VOCABULARIES, 17, ["DRIVER_PICKUP_REASONS", "CLOSING_REASONS", "OFFICE_STOP_SERVICES", "WORK_ORDER_SERVICES", "OFFICE_CANCEL_REASON_CODES", "PICKUP_EXCEPTION_REASONS", "CODED_PROOF_KINDS"])
+defineVocabularyTests("Execution", vocabulary, vocabulary.EXECUTION_VOCABULARIES, 18, ["DRIVER_PICKUP_REASONS", "CLOSING_REASONS", "OFFICE_STOP_SERVICES", "WORK_ORDER_SERVICES", "OFFICE_CANCEL_REASON_CODES", "PICKUP_EXCEPTION_REASONS", "CODED_PROOF_KINDS"])
 
 describe("the Execution vocabulary's own rules", () => {
   test("the route and pickup statuses are #97 B's, verbatim, and the outcomes are the statuses less planned", () => {
@@ -52,12 +52,16 @@ describe("the Execution vocabulary's own rules", () => {
     )
   })
 
+  test("a fill estimate is the driver's eye, a quarter at a time, and past full (M23 of #293)", () => {
+    assert.deepEqual([...vocabulary.FILL_LEVELS], ["empty", "quarter", "half", "three-quarters", "full", "overflowing"])
+  })
+
   test("the proof kinds are seven driver events — five about a stop, two about the route — four kinds of evidence and the correction", () => {
     assert.deepEqual([...vocabulary.PROOF_KINDS], ["arrival", "completion", "skip", "failure", "problem", "route-started", "route-ended", "photo", "weight", "signature", "note", "correction"])
   })
 
-  test("the sixteen command kinds leave out the device's retry and the Ticket's reschedule, and the receipt stores two outcomes", () => {
-    assert.equal(vocabulary.DRIVER_COMMAND_KINDS.length, 16)
+  test("the seventeen command kinds leave out the device's retry and the Ticket's reschedule, and the receipt stores two outcomes", () => {
+    assert.equal(vocabulary.DRIVER_COMMAND_KINDS.length, 17)
     for (const notACommand of ["retry-sync", "reschedule-stop", "start-break", "end-break"]) {
       assert.equal((vocabulary.DRIVER_COMMAND_KINDS as readonly string[]).includes(notACommand), false, notACommand)
     }

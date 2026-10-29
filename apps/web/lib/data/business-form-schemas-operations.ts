@@ -8,6 +8,7 @@ import { CONTAINER_TYPE_VOCABULARY } from "@waste/domain/route-schemes/matching"
 import { SCHEME_SERVICE_TYPES, allowedContainerTypes } from "@waste/domain/route-schemes/scope"
 
 import type { BusinessFormOption, BusinessFormSchema } from "@/lib/data/business-form-types"
+import { INSPECTION_FORM } from "@/lib/data/inspections"
 import { FUEL_TYPE_OPTIONS, VEHICLE_STATUS_OPTIONS } from "@/lib/data/resources-vocabulary"
 
 /**
@@ -913,6 +914,8 @@ export const operationsBusinessFormSchemas = [
     ],
     execution: { kind: "create-record", initialStatus: "Admitted", completionMessage: "Visitor checked in." },
   },
+  // Field inspections (M23 of #293): the form is the module's own, beside its words.
+  INSPECTION_FORM,
   {
     key: "operate.driver-app",
     mode: "action",

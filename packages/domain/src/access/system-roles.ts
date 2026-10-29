@@ -81,6 +81,9 @@ function workspace(id: WorkspaceKey, actions: readonly Action[], except: readonl
 /** The modules of the recycling centres' visits (M4 of #293): the plates, the cards and a household's visit history are personal data the office keeps, never a Service Provider's to read. */
 const VISIT_MODULES: readonly ModuleKey[] = ["operate.site-visits", "customers.site-access"]
 
+/** The modules of Operate a Service Provider's roles never read: the visits', and the inspections' (M23 of #293), whose photos and findings at a customer's bins are the office's to follow up. */
+const OFFICE_OPERATE: readonly ModuleKey[] = [...VISIT_MODULES, "operate.inspections"]
+
 /** One module's actions, for the charters that name a single surface. */
 function only(moduleKey: ModuleKey, actions: readonly Action[]): Grant {
   return { moduleKey, actions }
@@ -232,7 +235,7 @@ export const SYSTEM_ROLES: readonly SystemRole[] = [
       workspace("service-providers", VIEW_EDIT),
       workspace("fleet", VIEW_EDIT),
       workspace("route-studio", VIEW),
-      workspace("operate", VIEW, VISIT_MODULES),
+      workspace("operate", VIEW, OFFICE_OPERATE),
       // The restricted service provider workspace reads these grants live:
       // fleet is fully self-managed, tickets can be raised, and service
       // provider users are fully administered by the manager. The routes it
@@ -263,7 +266,7 @@ export const SYSTEM_ROLES: readonly SystemRole[] = [
       workspace("service-providers", VIEW),
       workspace("fleet", VIEW_EDIT),
       workspace("route-studio", VIEW),
-      workspace("operate", VIEW, VISIT_MODULES),
+      workspace("operate", VIEW, OFFICE_OPERATE),
     ),
   },
   {
