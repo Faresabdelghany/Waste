@@ -153,9 +153,11 @@ export const unloadAdapter: ResourceAdapter<UnloadResource> = {
         ...(refusal === null ? {} : { Refused: refusal.note === null ? REFUSAL_LABELS[refusal.reason] : `${REFUSAL_LABELS[refusal.reason]}: ${refusal.note}` }),
         ...(unload.weighbridgeTicket === null ? {} : { Ticket: unload.weighbridgeTicket }),
         Occurred: shownOn(unload.occurredAt, timezone),
-        Source: unload.source === "driver-app" ? "Driver App" : unload.source === "dispatch" ? "The office" : "An integration",
+        Source: unload.source === "driver-app" ? "Driver App" : unload.source === "dispatch" ? "The office" : "The weighbridge",
         ...(unload.note === null ? {} : { Note: unload.note }),
         ...(correction === null ? {} : { "Corrected by": webIdOf(UNLOAD_PREFIX, correction) }),
+        // The weighbridge's Unload and the driver's of the same load (O27 of #290): both stand until the desk rejects one.
+        ...(unload.possibleDuplicates.length === 0 ? {} : { "Possible duplicate of": unload.possibleDuplicates.map((id) => context.resolve.byServerId(id)?.name ?? webIdOf(UNLOAD_PREFIX, id)).join(", ") }),
       },
       related: [route, station],
       allowedTransitions: [],

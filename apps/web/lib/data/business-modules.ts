@@ -3654,6 +3654,26 @@ const routeStudioLiveModule: ModuleDefinition = {
     "Monitor active routes, vehicle freshness, current stops, exceptions, and dispatcher actions alongside Route Studio master data.",
 }
 
+/** A weighbridge's tickets (O27 of #290): read from the API alone, so it holds no fixture records. */
+const routeStudioWeighbridgeModule: ModuleDefinition = {
+  id: "weighbridge",
+  label: "Weighbridge",
+  title: "Weighbridge Tickets",
+  description: "Tickets a station's weighbridge sent, matched to the routes their vehicles ran and written as their unloads, or waiting for the office.",
+  entityLabel: "Weighbridge ticket",
+  contextLabel: "Station · route",
+  valueLabel: "Net weight",
+  primaryAction: "Match ticket",
+  metrics: [],
+  records: [],
+  lifecycle: ["Unmatched", "Matched", "Dismissed"],
+  rules: [
+    "A ticket is the weighbridge's: the office matches it to a route or dismisses it, and never edits it.",
+    "A matched ticket is its route's unload, reviewed in Weight Control like any other.",
+    "Where the driver recorded the same load, both unloads read as possible duplicates until one is rejected.",
+  ],
+}
+
 const routeStudio: WorkspaceDefinition = {
   id: "route-studio",
   label: "Route Studio",
@@ -3665,6 +3685,7 @@ const routeStudio: WorkspaceDefinition = {
     requireWorkspaceModule(operate, "routes"),
     requireWorkspaceModule(operate, "pickups"),
     requireWorkspaceModule(operate, "weights"),
+    routeStudioWeighbridgeModule,
   ],
 }
 
