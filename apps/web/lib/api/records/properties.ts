@@ -17,7 +17,9 @@
 // `PUT …/members`), never on a patch: an edit is the record's `PATCH` for
 // the fields that moved, then the set's `PUT` when the set did, two requests
 // as a station's fractions are. A member already in a group or a point keeps
-// the role it holds; a new one joins in the form's role for new members.
+// the role it holds; a new one joins in the form's role for new members. A
+// party holds its role over a period (#374), and a record names those in
+// force on the project's today, the set its `PUT` replaces.
 //
 // Statuses are the wire's, on the patch: a property active or inactive, a
 // group draft, active or inactive, a point draft, open, restricted or closed,
@@ -82,6 +84,7 @@ import { create, get, listAll, patch, put } from "../client"
 import { inheritedPresentation, isLocalRefusal, PartialWrite, patchOf, stampFacts, statusLabel, typed, webIdOf, type Client, type LocalRefusal, type MappingContext, type Resource, type ResourceAdapter, type ServerModule } from "./adapter"
 import { isCompanyRecord } from "./organisation"
 import { coordinatesFact, coordinatesOf, countOf, createStatusOf, patchStatusOf, pointOf, projectMoved, projectServerIdOf, referenced, refusal, requiredText, sameSet, tokenOf, withStatus } from "./places"
+import { dayIn } from "./planning"
 import { referencedServerId } from "./references"
 import { customerAdapter } from "./registry"
 import { windowFact, windowOf, windowValues, type WindowKeys } from "./time-windows"
@@ -206,7 +209,10 @@ export const propertyAdapter: ResourceAdapter<Property> = {
   list: (client) => listAll<Property>(client, "/properties"),
   toRecord: (property, context) => {
     const project = referenced(context, "project", property.projectId)
-    const parties = entriesOf(property.parties.map((party) => ({ id: party.customerId, role: party.role })), CUSTOMER_CHIP, context)
+    // The record's parties are today's on the project's clock (#374): a move booked ahead is not yet the set a form edits, nor what `PUT …/parties` sends back.
+    const projectRow = context.resolve.byServerId(property.projectId)
+    const today = dayIn(context.now ?? new Date(), projectRow === undefined ? undefined : typed(projectRow, "timezone"))
+    const parties = entriesOf(property.parties.filter((party) => party.validFrom <= today).map((party) => ({ id: party.customerId, role: party.role })), CUSTOMER_CHIP, context)
     const holders = (role: PropertyParty["role"]) => parties.filter((party) => party.role === role).map((party) => party.name ?? party.webId)
     const owners = holders("owner").join(", ")
     const payers = holders("payer").join(", ")
