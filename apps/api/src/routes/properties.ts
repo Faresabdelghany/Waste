@@ -54,12 +54,12 @@ import { afterCursor, fetchLimit, pageOf } from "../pagination"
 import { describeProblem, validate } from "../problem"
 import { foundAddress } from "./addresses"
 import { projectToday } from "./fleet-lookups"
-import { entriesOf } from "./members"
 import { areaOf } from "./planning-areas"
 import {
   createProperty,
   findProperty,
-  parties,
+  partiesOf,
+  partyInForce,
   patchProperty,
   propertyColumns as columns,
   propertyOf,
@@ -74,8 +74,8 @@ import { created, describeCreated, describeJson, IdParam } from "./shared"
 const MODULE = "customers.properties"
 const PropertyPage = Page(Property)
 
-/** The properties this customer is a party to, in any role: one row of the page however many roles it holds. */
-const heldBy = (tx: Tx, companyId: string, customerId: string) =>
+/** The properties this customer is a party to today, in any role: one row of the page however many roles it holds. A role ended, or not begun, is not one it holds (#374). */
+const heldBy = (tx: Tx, companyId: string, customerId: string, now: Date) =>
   exists(
     tx
       .select({ party: propertyParty.id })
@@ -85,6 +85,7 @@ const heldBy = (tx: Tx, companyId: string, customerId: string) =>
           eq(propertyParty.companyId, companyId),
           eq(propertyParty.customerId, customerId),
           eq(propertyParty.propertyId, property.id),
+          partyInForce(now),
         ),
       ),
   )
@@ -98,7 +99,7 @@ export function propertyRoutes(guard: MiddlewareHandler<AuthEnv>, lookup: Middle
         operationId: "listProperties",
         summary: "The properties the caller's projects serve",
         description:
-          "One page of properties, oldest first (ids are time-ordered), from the projects the caller works in — an account that works in none, such as a service provider's, reads an empty page — each with its parties. `projectId` narrows it to one of those projects; naming another is refused. `customerId` narrows it to the properties that customer is a party to in any role, which is the citizen portal's read model of what a person may see; a property they hold two roles on is one item, not two. The two filters combine. Hand `nextCursor` back as `cursor` for the next page.",
+          "One page of properties, oldest first (ids are time-ordered), from the projects the caller works in — an account that works in none, such as a service provider's, reads an empty page — each with its parties in force on its project's today or from a later day (#374), each with its first day and its first day out. `projectId` narrows it to one of those projects; naming another is refused. `customerId` narrows it to the properties that customer is a party to today in any role, which is the citizen portal's read model of what a person may see; a property they hold two roles on is one item, not two. The two filters combine. Hand `nextCursor` back as `cursor` for the next page.",
         security: BEARER_SECURITY,
         responses: {
           200: describeJson("One page of properties.", PropertyPage),
@@ -123,7 +124,7 @@ export function propertyRoutes(guard: MiddlewareHandler<AuthEnv>, lookup: Middle
             and(
               scope(principal),
               projectId === undefined ? undefined : eq(property.projectId, projectId),
-              customerId === undefined ? undefined : heldBy(tx, principal.companyId, customerId),
+              customerId === undefined ? undefined : heldBy(tx, principal.companyId, customerId, now()),
               after === undefined ? undefined : gt(property.id, after),
             ),
           )
@@ -132,7 +133,7 @@ export function propertyRoutes(guard: MiddlewareHandler<AuthEnv>, lookup: Middle
         // Paged first, so the row that only proves there is a next page is
         // not one of the properties whose parties are loaded.
         const { items, nextCursor } = pageOf(rows, limit)
-        const held = await entriesOf(tx, parties, principal.companyId, items.map((row) => row.id))
+        const held = await partiesOf(tx, principal.companyId, items.map((row) => row.id), now())
         return c.json({ items: items.map((row) => propertyOf(row, held.get(row.id) ?? [])), nextCursor })
       },
     )
@@ -160,7 +161,7 @@ export function propertyRoutes(guard: MiddlewareHandler<AuthEnv>, lookup: Middle
       guard,
       requireGrant(MODULE, "create"),
       validate("json", PropertyCreate),
-      async (c) => created(c, "/properties", await createProperty(c.get("tx"), c.get("principal"), c.req.valid("json"), foundAddress(c))),
+      async (c) => created(c, "/properties", await createProperty(c.get("tx"), c.get("principal"), c.req.valid("json"), now, foundAddress(c))),
     )
     .get(
       "/properties/:id",
@@ -187,7 +188,7 @@ export function propertyRoutes(guard: MiddlewareHandler<AuthEnv>, lookup: Middle
         const principal = c.get("principal")
         const row = await findProperty(tx, principal, id)
         if (row === undefined) throw noSuchProperty(id)
-        return c.json(await propertyWithParties(tx, principal.companyId, row))
+        return c.json(await propertyWithParties(tx, principal.companyId, row, now()))
       },
     )
     .get(
@@ -250,7 +251,7 @@ export function propertyRoutes(guard: MiddlewareHandler<AuthEnv>, lookup: Middle
       requireGrant(MODULE, "edit"),
       validate("param", IdParam),
       validate("json", PropertyPatch),
-      async (c) => c.json(await patchProperty(c.get("tx"), c.get("principal"), c.req.valid("param").id, c.req.valid("json"), foundAddress(c))),
+      async (c) => c.json(await patchProperty(c.get("tx"), c.get("principal"), c.req.valid("param").id, c.req.valid("json"), now, foundAddress(c))),
     )
     .put(
       "/properties/:id/parties",
@@ -258,7 +259,7 @@ export function propertyRoutes(guard: MiddlewareHandler<AuthEnv>, lookup: Middle
         operationId: "putPropertyParties",
         summary: "Replace a property's parties",
         description:
-          "Replaces the whole list with the one in the body: a party the body leaves out is not a party afterwards, and an empty list is a property nobody is billed for. Each entry names a customer of this company and the role they hold, and the same customer may hold several roles, so a pair is named at most once. The record's `updatedAt` moves, since the parties are part of the property on the wire.",
+          "Replaces the list in force today, on the project's clock, with the one in the body (#374): a party the body leaves out ends today — one that began today is a same-day correction and goes — a party it adds begins today, and a party it keeps is untouched; an empty list is a property nobody is billed for from today. A party from a later day, a move booked ahead, or one that has ended is not today's list and stands as it is, and a party added today that the same customer holds in the same role from a later day is refused (409). Each entry names a customer of this company and the role they hold, and the same customer may hold several roles, so a pair is named at most once. The record's `updatedAt` moves, since the parties are part of the property on the wire.",
         security: BEARER_SECURITY,
         responses: {
           200: describeJson("The property with the parties it now has.", Property),
@@ -268,12 +269,13 @@ export function propertyRoutes(guard: MiddlewareHandler<AuthEnv>, lookup: Middle
           401: describeProblem("No usable token (see WWW-Authenticate)."),
           403: describeProblem("No active account here, or the caller's role does not allow `edit` on `customers.properties`."),
           404: describeProblem("No property with that id in the projects this account works in."),
+          409: describeProblem("A customer the body adds already holds that role at this property from a later day."),
         },
       }),
       guard,
       requireGrant(MODULE, "edit"),
       validate("param", IdParam),
       validate("json", PropertyPartiesSet),
-      async (c) => c.json(await setPropertyParties(c.get("tx"), c.get("principal"), c.req.valid("param").id, c.req.valid("json").parties)),
+      async (c) => c.json(await setPropertyParties(c.get("tx"), c.get("principal"), c.req.valid("param").id, c.req.valid("json").parties, now)),
     )
 }
