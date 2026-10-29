@@ -62,8 +62,8 @@ export const WASTE_TREATMENTS = ["reuse", "recycling", "energy-recovery", "dispo
 export const PRODUCT_KINDS = ["container-collection", "recurring-service", "additional-service"] as const
 /** Where the Product stands in the catalogue. Only an active Product can be subscribed to, which the API holds (Issue #79); a subscription already made stands when its Product is withdrawn. */
 export const PRODUCT_STATUSES = ["draft", "active", "inactive"] as const
-/** What one of the Product is: prices are Finance & Contracting's, the unit they are quoted per is here. A `day` is a container on hire, charged by its days on site (M14 of #293); a `visit` a recycling-centre visit its Visit Rule charges (#393). */
-export const PRODUCT_UNITS = ["pickup", "month", "job", "day", "visit"] as const
+/** What one of the Product is: prices are Finance & Contracting's, the unit they are quoted per is here. A `day` is a container on hire, charged by its days on site (M14 of #293); a `visit` a recycling-centre visit its Visit Rule charges (#393); an `item` one of the things a bulky-waste booking lists, charged by their count (#449). */
+export const PRODUCT_UNITS = ["pickup", "month", "job", "day", "visit", "item"] as const
 
 /** Where the Agreement stands; "expiring", "expired" and "terminated" are readings of `valid_to` (ADR-0005), never stored. */
 export const AGREEMENT_STATUSES = ["draft", "active", "cancelled"] as const
@@ -72,6 +72,8 @@ export const BILLING_CADENCES = ["monthly", "quarterly", "annual", "manual"] as 
 
 /** Whose Container it is; `unrecorded` is what an imported registry usually says. */
 export const CONTAINER_OWNERSHIPS = ["company", "customer", "unrecorded"] as const
+/** What a code read off a bin names a Container by (O19 of #290): the visible label, the printed barcode, the RFID tag, or the maker's serial number. */
+export const CONTAINER_IDENTIFIERS = ["label", "barcode", "rfid", "serial-number"] as const
 /** What a customer applies for (M7 of #293): to be exempt from a collection, to pause it, a longer interval between collections, to compost food waste at home, to share a bin with a neighbour, to be collected from where they can manage, or a fee put right. */
 export const APPLICATION_KINDS = ["exemption", "pause", "longer-interval", "home-composting", "shared-bin", "assisted-collection", "fee-correction"] as const
 /** Where an Application stands: received, under the office's review, decided, or withdrawn by the customer. Whether a decision is still in force is a reading of its period, never a status. */
@@ -103,6 +105,7 @@ export type ProductUnit = (typeof PRODUCT_UNITS)[number]
 export type AgreementStatus = (typeof AGREEMENT_STATUSES)[number]
 export type BillingCadence = (typeof BILLING_CADENCES)[number]
 export type ContainerOwnership = (typeof CONTAINER_OWNERSHIPS)[number]
+export type ContainerIdentifier = (typeof CONTAINER_IDENTIFIERS)[number]
 export type ApplicationKind = (typeof APPLICATION_KINDS)[number]
 export type ApplicationStatus = (typeof APPLICATION_STATUSES)[number]
 export type ApplicationChannel = (typeof APPLICATION_CHANNELS)[number]
@@ -134,6 +137,7 @@ export const REGISTRY_VOCABULARIES = {
   AGREEMENT_STATUSES,
   BILLING_CADENCES,
   CONTAINER_OWNERSHIPS,
+  CONTAINER_IDENTIFIERS,
   APPLICATION_KINDS,
   APPLICATION_STATUSES,
   APPLICATION_CHANNELS,

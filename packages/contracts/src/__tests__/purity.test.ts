@@ -77,7 +77,9 @@
 // @waste/domain/resources/pre-trip: pre-trip.ts bounds a checklist and a
 // check by the domain's cap. C19 of #291 added
 // @waste/domain/privacy/retention and /vocabulary: organisation.ts bounds a
-// project's privacy policy by the domain's days and reads its purposes.
+// project's privacy policy by the domain's days and reads its purposes. M22 of #293 added
+// @waste/domain/access/branding: organisation.ts holds a project's branding to
+// its shapes and its colour to WCAG 2.1 AA's contrast.
 import path from "node:path"
 import { fileURLToPath } from "node:url"
 
@@ -87,6 +89,7 @@ definePurityTests({
   packageDir: path.resolve(path.dirname(fileURLToPath(import.meta.url)), "../.."),
   allowedImports: [
     "@waste/domain/access/modules",
+    "@waste/domain/access/branding",
     "@waste/domain/access/public-slug",
     "@waste/domain/audit/vocabulary",
     "@waste/domain/execution/bulky",

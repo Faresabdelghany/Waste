@@ -44,8 +44,8 @@ const EVENT_SHAPES = ["billable_event_kind_shape", "billable_event_origin_shape"
 /** The event's kinds as 0044 wrote them: today's through `hire`, before M5b's `pickup-exception` (#293). */
 const KINDS_AS_OF_0044 = BILLABLE_EVENT_KINDS.slice(0, BILLABLE_EVENT_KINDS.indexOf("hire") + 1)
 
-/** The product's units as 0044 wrote them: today's before the recycling-centre visit's (#393). */
-const UNITS_AS_OF_0044 = PRODUCT_UNITS.filter((unit) => unit !== "visit")
+/** The product's units as 0044 wrote them: today's before the recycling-centre visit's (#393) and the bulky item's (#449). */
+const UNITS_AS_OF_0044 = PRODUCT_UNITS.filter((unit) => unit !== "visit" && unit !== "item")
 
 /** The clause M5b added to the kind's shape (#293), which 0044's spelling lacks. */
 const EXCEPTION_CLAUSE = ` when 'pickup-exception' then ${ref("billable_event", "pickup_id")} is not null and ${ref("billable_event", "ticket_id")} is null and ${ref("billable_event", "reverses_event_id")} is null`

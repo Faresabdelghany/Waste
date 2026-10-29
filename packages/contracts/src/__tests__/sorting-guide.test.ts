@@ -88,7 +88,7 @@ describe("the public door's shapes", () => {
 
   test("an answer carries what a resident reads: no status, no stamps, no project", () => {
     const answer = {
-      project: { slug: "kystbyen", name: "Kystbyen", language: "da", timezone: "Europe/Copenhagen" },
+      project: { slug: "kystbyen", name: "Kystbyen", language: "da", timezone: "Europe/Copenhagen", branding: { brandColor: null, logoUrl: null, accessibilityStatementUrl: null } },
       query: "pizza",
       matches: [{ id: ID, name: "Pizzabakke", synonyms: ["pizza box"], matched: "Pizzabakke", fraction: { key: "cardboard", name: "Pap" }, instructions: null }],
     }
@@ -96,8 +96,9 @@ describe("the public door's shapes", () => {
     assert.deepEqual(Object.keys(SortingGuideAnswer.shape.matches.element.shape).sort(), ["fraction", "id", "instructions", "matched", "name", "synonyms"])
   })
 
-  test("a published project is named by its slug, never its ids", () => {
-    assert.deepEqual(Object.keys(PublishedProject.shape).sort(), ["language", "name", "slug", "timezone"])
+  test("a published project is named by its slug, never its ids, and carries its branding (M22)", () => {
+    assert.deepEqual(Object.keys(PublishedProject.shape).sort(), ["branding", "language", "name", "slug", "timezone"])
+    assert.deepEqual(Object.keys(PublishedProject.shape.branding.shape).sort(), ["accessibilityStatementUrl", "brandColor", "logoUrl"])
     assert.deepEqual(PublicSlugParam.parse({ slug: "kystbyen" }), { slug: "kystbyen" })
     assert.equal(PublicSlugParam.safeParse({ slug: "Kystbyen" }).success, false)
   })

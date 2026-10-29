@@ -6,7 +6,7 @@ import * as z from "zod"
 import { IsoDate, IsoTime } from "./dates"
 import { FlatPoint } from "./geojson"
 import { Id } from "./ids"
-import { PublicSlug } from "./organisation"
+import { ProjectBranding, PublicSlug } from "./organisation"
 import { DropOffPointKind } from "./resources"
 import { Slug } from "./text"
 
@@ -14,7 +14,7 @@ import { Slug } from "./text"
 export const PublicSlugParam = z.object({ slug: PublicSlug })
 export type PublicSlugParam = z.infer<typeof PublicSlugParam>
 
-/** A published project as its public pages name it: the slug, the name, and the language and clock its pages speak in. */
+/** A published project as its public pages name it: the slug, the name, the language and clock its pages speak in, and its branding (M22). */
 export const PublishedProject = z.object({
   slug: PublicSlug,
   name: z.string(),
@@ -22,6 +22,8 @@ export const PublishedProject = z.object({
   language: z.string(),
   /** IANA (`Europe/Copenhagen`): the clock its dates are read on. */
   timezone: z.string(),
+  /** The project's colour, logo and accessibility statement, each null where it set none (`PUT /projects/:id/branding`). */
+  branding: ProjectBranding,
 })
 export type PublishedProject = z.infer<typeof PublishedProject>
 
