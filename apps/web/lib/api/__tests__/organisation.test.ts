@@ -13,6 +13,7 @@ import { resolveProjectCalendar } from "@waste/domain/route-schemes/project-cale
 
 import { FIXTURE_COMPANY_ID, FIXTURE_PROJECT_IDS, FIXTURE_SERVICE_PROVIDER_IDS, getModuleDefinition, type BusinessRecord } from "../../data/business-modules"
 import { isInProjectScope, isProjectRecordId, projectRecordsOf } from "../../data/project-scope"
+import { privacyPolicyOf } from "../../data/privacy-policy"
 import { NOTHING_RESOLVED, type MappingContext, type Resolver } from "../records/adapter"
 import {
   accessMapOf,
@@ -58,7 +59,7 @@ const copenhagen: Project = {
   status: "active",
   weekend: ["saturday", "sunday"],
   holidayList: "Danish public holidays",
-  publicSlug: null, paymentTermsDays: 30, paymentReferenceScheme: "none", holdForReview: false,
+  publicSlug: null, paymentTermsDays: 30, paymentReferenceScheme: "none", holdForReview: false, privacyPolicy: { positionRetentionDays: null, proofRetentionDays: null, gpsPurpose: null },
   weightTolerancePercent: 5,
 }
 const harbor: Project = { ...copenhagen, id: "01a0d2a4-a280-7002-8000-000000000002", name: "Harbor Commercial", kind: "Business unit", status: "onboarding", holidayList: null }
@@ -316,6 +317,14 @@ describe("the projects", () => {
     assert.deepEqual(body, { holdForReview: true })
     assert.ok(ProjectPatch.safeParse(body).success)
     assert.equal(projectAdapter.toRecord({ ...copenhagen, holdForReview: true }, context(fixtures)).facts["Hires and jobs"], "Held for review")
+  })
+
+  test("a project's privacy policy (#291 C19) rides on its record as the wire's JSON, which Settings › Privacy reads, and never on the project's patch", () => {
+    const policy = { positionRetentionDays: 14, proofRetentionDays: 365, gpsPurpose: "dispatch" as const }
+    const read = projectAdapter.toRecord({ ...copenhagen, privacyPolicy: policy }, context(fixtures))
+    assert.deepEqual(privacyPolicyOf(read), policy)
+    const body = projectAdapter.toPatchBody(read, { ...read, submittedValues: { ...read.submittedValues, holdForReview: true } }, context(fixtures))
+    assert.deepEqual(body, { holdForReview: true }, "the policy is its own route's to write")
   })
 
   test("terms the API would refuse are refused here, naming the field, on a patch and a create", () => {
