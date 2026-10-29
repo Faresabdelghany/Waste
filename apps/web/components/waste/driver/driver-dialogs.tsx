@@ -5,7 +5,8 @@
 // requires, and a photo if the driver takes one (O1 of #290,
 // driver-proof-dialogs.tsx) — a stop's note and its weight (O2), an unload's station,
 // fraction and weights, and the end of a
-// route behind a confirm that counts the stops still to do. Native selects,
+// route behind a confirm that counts the stops still to do, and a vehicle's
+// pre-trip check (O13 of #290). Native selects,
 // since a phone draws its own picker for them. The forms shape the body and
 // no more: whether it holds is the server's to say, and a rejection comes
 // back as its sentence on the stop or the route.
@@ -17,9 +18,10 @@ import { Input } from "@/components/ui/input"
 import { Label } from "@/components/ui/label"
 import { Textarea } from "@/components/ui/textarea"
 import { PhotoField } from "@/components/waste/driver/driver-proof-dialogs"
-import type { DriverMe } from "@waste/contracts/driver-commands"
+import type { DriverMe, DriverVehicle } from "@waste/contracts/driver-commands"
 import { DRIVER_PICKUP_REASONS, UNLOAD_REFUSAL_REASONS, type DriverPickupReason, type UnloadRefusalReason } from "@waste/domain/execution/vocabulary"
 import { NOTE_MAX, wholeKilograms, type PilotBody, type ProofBytes } from "@/lib/driver/commands"
+import { checkOutcome, preTripBody, type CheckForm, type CheckMark } from "@/lib/driver/pre-trip"
 import { DRIVER_REASON_LABELS } from "@/lib/driver/route-view"
 import { REFUSAL_LABELS, SAY_WHY_REFUSED } from "@/lib/data/unload-refusals"
 
@@ -342,5 +344,82 @@ export function EndRouteDialog({ open, onOpenChange, warning, onConfirm }: Dialo
         </DialogFooter>
       </DialogContent>
     </Dialog>
+  )
+}
+
+/**
+ * The pre-trip check (O13 of #290): each item of the vehicle's checklist,
+ * passed unless the driver ticks it a defect and says what was seen, then the
+ * odometer and the engine hours where the driver reads them, and a line
+ * saying what the check will do. A vehicle whose type holds no checklist is
+ * checked with the readings alone.
+ */
+export function PreTripDialog({ open, onOpenChange, vehicle, onConfirm }: DialogProps & { vehicle: DriverVehicle; onConfirm: (body: PilotBody<"pre-trip-check">) => void }) {
+  return (
+    <Dialog open={open} onOpenChange={onOpenChange}>
+      <DialogContent>
+        <DialogHeader>
+          <DialogTitle>Pre-trip check of {vehicle.label}</DialogTitle>
+          <DialogDescription>Walk round the vehicle. Tick an item only where you found a defect; a critical defect takes the vehicle off the road.</DialogDescription>
+        </DialogHeader>
+        {/* Mounted with each opening: a cancelled check leaves nothing for the next. */}
+        <PreTripForm vehicle={vehicle} onConfirm={onConfirm} onClose={() => onOpenChange(false)} />
+      </DialogContent>
+    </Dialog>
+  )
+}
+
+function PreTripForm({ vehicle, onConfirm, onClose }: { vehicle: DriverVehicle; onConfirm: (body: PilotBody<"pre-trip-check">) => void; onClose: () => void }) {
+  const id = useId()
+  const [form, setForm] = useState<CheckForm>({ marks: {}, odometerKm: "", engineHours: "" })
+  const mark = (itemId: string, change: Partial<CheckMark>) => setForm((current) => ({ ...current, marks: { ...current.marks, [itemId]: { ...(current.marks[itemId] ?? { defect: false, note: "" }), ...change } } }))
+  const submit = (event: FormEvent) => {
+    event.preventDefault()
+    onConfirm(preTripBody(vehicle, form))
+    onClose()
+  }
+  return (
+    <form onSubmit={submit} className="flex max-h-[70vh] flex-col gap-4 overflow-y-auto">
+      {vehicle.checklist.length === 0 ? (
+        <p className="text-sm text-muted-foreground">The office has set no checklist for this vehicle&apos;s type. Record the readings and confirm.</p>
+      ) : (
+        <ul className="flex flex-col gap-3" aria-label="Checklist">
+          {vehicle.checklist.map((item) => {
+            const current = form.marks[item.id]
+            return (
+              <li key={item.id} className="flex flex-col gap-2 rounded-lg border p-3">
+                <label className="flex items-center gap-3 text-sm">
+                  <input type="checkbox" className="size-5" checked={current?.defect === true} onChange={(event) => mark(item.id, { defect: event.target.checked })} />
+                  <span className="font-medium">{item.label}</span>
+                  {item.critical && <span className="text-xs text-muted-foreground">critical</span>}
+                </label>
+                {current?.defect === true && <Textarea aria-label={`What is wrong with ${item.label}`} placeholder="What is wrong" maxLength={NOTE_MAX} value={current.note} onChange={(event) => mark(item.id, { note: event.target.value })} />}
+              </li>
+            )
+          })}
+        </ul>
+      )}
+      <div className="grid grid-cols-2 gap-3">
+        <div className="flex flex-col gap-1.5">
+          <Label htmlFor={`${id}-odometer`}>Odometer (km)</Label>
+          <Input id={`${id}-odometer`} inputMode="numeric" type="number" min={0} step={1} className="h-11" value={form.odometerKm} onChange={(event) => setForm((current) => ({ ...current, odometerKm: event.target.value }))} />
+        </div>
+        <div className="flex flex-col gap-1.5">
+          <Label htmlFor={`${id}-hours`}>Engine hours</Label>
+          <Input id={`${id}-hours`} inputMode="numeric" type="number" min={0} step={1} className="h-11" value={form.engineHours} onChange={(event) => setForm((current) => ({ ...current, engineHours: event.target.value }))} />
+        </div>
+      </div>
+      <p className="text-sm text-muted-foreground" role="status">
+        {checkOutcome(vehicle, form)}
+      </p>
+      <DialogFooter>
+        <Button type="button" variant="outline" onClick={onClose}>
+          Cancel
+        </Button>
+        <Button type="submit" className="h-11">
+          Record check
+        </Button>
+      </DialogFooter>
+    </form>
   )
 }

@@ -10,6 +10,7 @@ import {
   Couch,
   CaretLeft,
   CheckCircle,
+  ClipboardText,
   CreditCard,
   Database,
   Gear,
@@ -28,6 +29,7 @@ import {
   Ticket,
   Calculator,
   Timer,
+  EnvelopeSimple,
   UserCircle,
   UsersThree,
   Warning,
@@ -62,7 +64,9 @@ import { FinanceSettingsOnApi } from "@/components/settings/finance-settings-on-
 import { PrivacySettingsOnApi } from "@/components/settings/privacy-settings-on-api"
 import { IntegrationsSettingsOnApi } from "@/components/settings/integrations-settings-on-api"
 import { PortalsSettingsOnApi } from "@/components/settings/portals-settings-on-api"
+import { MessageTemplatesSettings } from "@/components/settings/message-templates-settings"
 import { TicketSlaSettings } from "@/components/settings/ticket-sla-settings"
+import { PreTripChecklistsSettings } from "@/components/settings/pre-trip-checklists-settings"
 import { TicketTeamsSettings } from "@/components/settings/ticket-teams-settings"
 import { PickupExceptionChargesSettings } from "@/components/settings/pickup-exception-charges-settings"
 import { BulkySchedulesSettings } from "@/components/settings/bulky-schedules-settings"
@@ -73,7 +77,9 @@ import { profileOf, type AccountProfile } from "@/lib/data/account-profile"
 import { HOLIDAY_LISTS_SETTINGS_PANE_ID, MASTER_DATA_SETTINGS_PANE_ID } from "@/lib/data/business-links"
 import { ASSET_MANAGEMENT_SETTINGS_PANE_ID, FINANCE_ON_API_SETTINGS_PANE_ID, FINANCE_SETTINGS_PANE_ID, PRIVACY_ON_API_SETTINGS_PANE_ID, PRIVACY_SETTINGS_PANE_ID, INTEGRATIONS_ON_API_SETTINGS_PANE_ID, INTEGRATIONS_SETTINGS_PANE_ID, PORTALS_ON_API_SETTINGS_PANE_ID, PORTALS_SETTINGS_PANE_ID, ACCOUNT_DEFAULTS_GROUP, settingsPaneOffered, settingsPaneOpened } from "@/lib/data/settings-panes"
 import { SORTING_GUIDE_SETTINGS_PANE_ID } from "@/lib/data/sorting-guide"
+import { MESSAGE_TEMPLATES_SETTINGS_PANE_ID } from "@/lib/data/message-templates"
 import { TICKET_SLA_SETTINGS_PANE_ID } from "@/lib/data/ticket-sla"
+import { PRE_TRIP_CHECKLISTS_SETTINGS_PANE_ID } from "@/lib/data/pre-trip-checklists"
 import { TICKET_TEAMS_SETTINGS_PANE_ID } from "@/lib/data/ticket-teams"
 import { PICKUP_EXCEPTION_CHARGES_SETTINGS_PANE_ID } from "@/lib/data/pickup-exception-rules"
 import { BULKY_SCHEDULES_SETTINGS_PANE_ID } from "@/lib/data/bulky"
@@ -182,8 +188,12 @@ const settingsSections: Array<{
       { id: TICKET_SLA_SETTINGS_PANE_ID, label: "Ticket SLA", icon: Timer },
       // The ticket teams on the API (O30 of #290): offered with the adapter configured.
       { id: TICKET_TEAMS_SETTINGS_PANE_ID, label: "Ticket teams", icon: UsersThree },
+      // A project's message templates on the API (#291 C15): offered with the adapter configured, in place of the fixtures' templates.
+      { id: MESSAGE_TEMPLATES_SETTINGS_PANE_ID, label: "Message templates", icon: EnvelopeSimple },
       // The fleet's emission factors on the API (M10 of #293): offered with the adapter configured.
       { id: EMISSION_FACTORS_SETTINGS_PANE_ID, label: "Emission factors", icon: Leaf },
+      // The vehicle types' pre-trip checklists on the API (O13 of #290): offered with the adapter configured.
+      { id: PRE_TRIP_CHECKLISTS_SETTINGS_PANE_ID, label: "Pre-trip checklists", icon: ClipboardText },
     ],
   },
   {
@@ -1372,6 +1382,16 @@ const visiblePaneDefinitions: Record<string, SettingsPaneDefinition> = {
     description: "Grams of CO₂e per unit of each fuel, over the period it is in force, which the fleet's routes are measured by.",
     groups: [],
   },
+  [MESSAGE_TEMPLATES_SETTINGS_PANE_ID]: {
+    title: "Message templates",
+    description: "The e-mails and text messages the office sends a customer or one of its contact persons, each for service or for billing.",
+    groups: [],
+  },
+  [PRE_TRIP_CHECKLISTS_SETTINGS_PANE_ID]: {
+    title: "Pre-trip checklists",
+    description: "What a driver checks on a vehicle of each type before or during the day, and which defects take it off the road.",
+    groups: [],
+  },
   [TICKET_SLA_SETTINGS_PANE_ID]: {
     title: "Ticket SLA",
     description: "How long a ticket has from opening to its due date, by priority, for every kind or for one kind.",
@@ -1531,7 +1551,9 @@ function isFullPanelPane(paneId: string): boolean {
     paneId === MASTER_DATA_SETTINGS_PANE_ID ||
     paneId === SORTING_GUIDE_SETTINGS_PANE_ID ||
     paneId === TICKET_SLA_SETTINGS_PANE_ID ||
+    paneId === PRE_TRIP_CHECKLISTS_SETTINGS_PANE_ID ||
     paneId === TICKET_TEAMS_SETTINGS_PANE_ID ||
+    paneId === MESSAGE_TEMPLATES_SETTINGS_PANE_ID ||
     paneId === FINANCE_ON_API_SETTINGS_PANE_ID ||
     paneId === PRIVACY_ON_API_SETTINGS_PANE_ID ||
     paneId === INTEGRATIONS_ON_API_SETTINGS_PANE_ID ||
@@ -1951,8 +1973,12 @@ function SettingsPane({
         <SortingGuideSettings />
       ) : paneId === TICKET_SLA_SETTINGS_PANE_ID ? (
         <TicketSlaSettings />
+      ) : paneId === PRE_TRIP_CHECKLISTS_SETTINGS_PANE_ID ? (
+        <PreTripChecklistsSettings />
       ) : paneId === TICKET_TEAMS_SETTINGS_PANE_ID ? (
         <TicketTeamsSettings />
+      ) : paneId === MESSAGE_TEMPLATES_SETTINGS_PANE_ID ? (
+        <MessageTemplatesSettings />
       ) : paneId === FINANCE_ON_API_SETTINGS_PANE_ID ? (
         <FinanceSettingsOnApi />
       ) : paneId === PRIVACY_ON_API_SETTINGS_PANE_ID ? (

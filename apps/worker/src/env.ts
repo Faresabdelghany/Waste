@@ -108,6 +108,8 @@ export const Env = z.object({
   DATABASE_URL: DatabaseUrl,
   /** The routing provider's name (#169, #131): unset means the fake; the one validator of the value is `providerFromEnv` (@waste/routing/select), so the refusal has one spelling. */
   ROUTING_PROVIDER: z.string().optional(),
+  /** The messaging provider's name (#291 C15): unset or `log` means the log-only sender, which sends nothing; the one validator is `messagingProviderFromEnv` (messaging/select.ts). */
+  MESSAGING_PROVIDER: z.string().optional(),
   /** The API role's pool, on which every job writes; postgres.js's 10 unless set. Named for its process, since in the Pilot's container both children read one environment. */
   WORKER_API_POOL_MAX: PoolMax,
   /** The worker role's pool, on which the sweeps read; postgres.js's 10 unless set. pg-boss's own pool stays at 3 (boss.ts). */

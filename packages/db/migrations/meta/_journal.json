@@ -509,8 +509,57 @@
     {
       "idx": 72,
       "version": "7",
-      "when": 1793230691847,
-      "tag": "0072_project_branding",
+      "when": 1793229147346,
+      "tag": "0072_waste_fraction_proposals",
+      "breakpoints": true
+    },
+    {
+      "idx": 73,
+      "version": "7",
+      "when": 1793231090634,
+      "tag": "0073_contact_persons",
+      "breakpoints": true
+    },
+    {
+      "idx": 74,
+      "version": "7",
+      "when": 1793231765311,
+      "tag": "0074_messaging",
+      "breakpoints": true
+    },
+    {
+      "idx": 75,
+      "version": "7",
+      "when": 1793235059830,
+      "tag": "0075_pre_trip",
+      "breakpoints": true
+    },
+    {
+      "idx": 76,
+      "version": "7",
+      "when": 1793241234406,
+      "tag": "0076_fraction_hazardous",
+      "breakpoints": true
+    },
+    {
+      "idx": 77,
+      "version": "7",
+      "when": 1793243238519,
+      "tag": "0077_privacy_policy",
+      "breakpoints": true
+    },
+    {
+      "idx": 78,
+      "version": "7",
+      "when": 1793245578465,
+      "tag": "0078_item_product_unit",
+      "breakpoints": true
+    },
+    {
+      "idx": 79,
+      "version": "7",
+      "when": 1793247592226,
+      "tag": "0079_project_branding",
       "breakpoints": true
     }
   ]

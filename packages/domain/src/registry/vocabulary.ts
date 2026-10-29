@@ -23,6 +23,11 @@ export const CUSTOMER_KINDS = ["person", "organisation"] as const
 /** Whether the Customer is served; a record is deactivated, never deleted. */
 export const CUSTOMER_STATUSES = ["active", "inactive"] as const
 
+/** What a Contact Person does for the organisation Customer they speak for (#291 C14): its main contact, who receives its invoices, who runs its service day to day, who is on site at its properties (a caretaker), or anything else. */
+export const CONTACT_ROLES = ["primary", "billing", "operations", "on-site", "other"] as const
+/** Whether the Contact Person still speaks for their Customer; one who has left is deactivated, never deleted, since a message sent to them stays on the ledger. */
+export const CONTACT_STATUSES = ["active", "inactive"] as const
+
 /** What stands on the Property, which decides what may be collected there. */
 export const PROPERTY_KINDS = ["residential", "commercial", "public", "mixed", "other"] as const
 /** Whether the Property is served. */
@@ -57,8 +62,8 @@ export const WASTE_TREATMENTS = ["reuse", "recycling", "energy-recovery", "dispo
 export const PRODUCT_KINDS = ["container-collection", "recurring-service", "additional-service"] as const
 /** Where the Product stands in the catalogue. Only an active Product can be subscribed to, which the API holds (Issue #79); a subscription already made stands when its Product is withdrawn. */
 export const PRODUCT_STATUSES = ["draft", "active", "inactive"] as const
-/** What one of the Product is: prices are Finance & Contracting's, the unit they are quoted per is here. A `day` is a container on hire, charged by its days on site (M14 of #293); a `visit` a recycling-centre visit its Visit Rule charges (#393). */
-export const PRODUCT_UNITS = ["pickup", "month", "job", "day", "visit"] as const
+/** What one of the Product is: prices are Finance & Contracting's, the unit they are quoted per is here. A `day` is a container on hire, charged by its days on site (M14 of #293); a `visit` a recycling-centre visit its Visit Rule charges (#393); an `item` one of the things a bulky-waste booking lists, charged by their count (#449). */
+export const PRODUCT_UNITS = ["pickup", "month", "job", "day", "visit", "item"] as const
 
 /** Where the Agreement stands; "expiring", "expired" and "terminated" are readings of `valid_to` (ADR-0005), never stored. */
 export const AGREEMENT_STATUSES = ["draft", "active", "cancelled"] as const
@@ -78,6 +83,8 @@ export const DECISION_OUTCOMES = ["granted", "partly-granted", "refused"] as con
 
 export type CustomerKind = (typeof CUSTOMER_KINDS)[number]
 export type CustomerStatus = (typeof CUSTOMER_STATUSES)[number]
+export type ContactRole = (typeof CONTACT_ROLES)[number]
+export type ContactStatus = (typeof CONTACT_STATUSES)[number]
 export type PropertyKind = (typeof PROPERTY_KINDS)[number]
 export type PropertyStatus = (typeof PROPERTY_STATUSES)[number]
 export type PropertyPartyRole = (typeof PROPERTY_PARTY_ROLES)[number]
@@ -107,6 +114,8 @@ export const REGISTRY_VOCABULARIES = {
   WASTE_TREATMENTS,
   CUSTOMER_KINDS,
   CUSTOMER_STATUSES,
+  CONTACT_ROLES,
+  CONTACT_STATUSES,
   PROPERTY_KINDS,
   PROPERTY_STATUSES,
   PROPERTY_PARTY_ROLES,

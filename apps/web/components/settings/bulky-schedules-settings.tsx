@@ -33,6 +33,8 @@ import { problemSentence } from "@/lib/api/problem"
 import { dayIn } from "@/lib/api/records/planning"
 import { problemOfError } from "@/lib/api/records/server-records"
 import {
+  bulkyProductLabel,
+  bulkyProductsOffered,
   FREQUENCY_OPTIONS,
   HOLIDAY_POLICY_OPTIONS,
   isScheduleRefusal,
@@ -76,7 +78,10 @@ export function BulkySchedulesSettings() {
   })
   const shown = read.shown
   const areaName = (id: string) => shown?.areas.find((candidate) => candidate.id === id)?.name ?? id
-  const productName = (id: string) => shown?.products.find((candidate) => candidate.id === id)?.name ?? id
+  const productName = (id: string) => {
+    const found = shown?.products.find((candidate) => candidate.id === id)
+    return found === undefined ? id : bulkyProductLabel(found)
+  }
   const schedules = shown === null ? [] : schedulesInOrder(shown.schedules, areaName)
 
   const [editing, setEditing] = useState<Editing | null>(null)
@@ -130,8 +135,7 @@ export function BulkySchedulesSettings() {
           ? "Reading the schedules from the API…"
           : `${project.name} collects no bulky waste by booking: no area has a schedule.`
 
-  // The products a schedule may charge: the project's active ones sold by the job, and the one it charges now whatever it is.
-  const productOptions = (kept: string | undefined) => (shown?.products ?? []).filter((candidate) => (candidate.unit === "job" && candidate.status === "active") || candidate.id === kept)
+  const productOptions = (kept: string | undefined) => bulkyProductsOffered(shown?.products ?? [], kept)
 
   return (
     <AssetPanelShell
@@ -353,7 +357,7 @@ function ScheduleDialogForm({
             <SelectContent>
               {products.map((candidate) => (
                 <SelectItem key={candidate.id} value={candidate.id}>
-                  {candidate.name}
+                  {bulkyProductLabel(candidate)}
                 </SelectItem>
               ))}
             </SelectContent>

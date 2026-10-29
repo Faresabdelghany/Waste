@@ -11,7 +11,9 @@
 // they apply; a `vehicle-change` the same group, the vehicle it should run
 // with, optionally its driver, and the first day; a `stop-set-change` a group
 // that picks its stops, the containers it should run on in stop order, and
-// the first day; a `compliance-follow-up` its due day. It is moved by command —
+// the first day; a `waste-fraction-change` a rule group, the fractions its
+// rule should collect, and the first day; a `compliance-follow-up` its due
+// day. It is moved by command —
 // `approve`, `reject` or `withdraw` a proposal, `complete` or `cancel` the
 // rest — and an approved proposal names the scheme version its approval
 // wrote (`successorSchemeId`). Overdue is a reading of an open follow-up's
@@ -22,7 +24,7 @@ import * as z from "zod"
 import { IsoDate, IsoDateTime } from "./dates"
 import { Id } from "./ids"
 import { ServiceDays } from "./planning"
-import { CollectionGroupContainersSet } from "./route-schemes"
+import { CollectionGroupContainersSet, StopMatchingRule } from "./route-schemes"
 import { ProjectScopedListQuery } from "./queries"
 import { changesSomething, PositiveInt, somethingToChange, stamped } from "./resource"
 import { Label, Paragraph } from "./text"
@@ -64,6 +66,8 @@ export const ServiceProviderActivity = z.object({
   driverId: Id.nullable(),
   /** A stop-set change's containers for the group, in stop order; null for every other kind. */
   containerIds: z.array(Id).nullable(),
+  /** A waste-fraction change's fractions for the group's rule; null for every other kind. */
+  wasteFractionIds: z.array(Id).nullable(),
   /** The scheme version an approval wrote; null until a proposal is approved. */
   successorSchemeId: Id.nullable(),
   openedBy: Id,
@@ -133,15 +137,29 @@ export const StopSetChangeCreate = z.strictObject({
 })
 export type StopSetChangeCreate = z.infer<typeof StopSetChangeCreate>
 
+/** The fractions a waste-fraction change asks the rule to collect: a rule's own set, one at least, each once. */
+const RuleFractions = StopMatchingRule.shape.wasteFractionIds
+
+/** A waste-fraction change: the group's rule collects these fractions from `effectiveFrom`, its container types and vehicle type kept. */
+export const WasteFractionChangeCreate = z.strictObject({
+  ...createBase,
+  kind: z.literal("waste-fraction-change"),
+  routeSchemeId: Id,
+  collectionGroupId: Id,
+  wasteFractionIds: RuleFractions,
+  effectiveFrom: IsoDate,
+})
+export type WasteFractionChangeCreate = z.infer<typeof WasteFractionChangeCreate>
+
 /** `POST /service-provider-activities`: the body its kind shapes. */
-export const ServiceProviderActivityCreate = z.discriminatedUnion("kind", [RouteDayChangeCreate, ComplianceFollowUpCreate, CoordinationNoteCreate, VehicleChangeCreate, StopSetChangeCreate])
+export const ServiceProviderActivityCreate = z.discriminatedUnion("kind", [RouteDayChangeCreate, ComplianceFollowUpCreate, CoordinationNoteCreate, VehicleChangeCreate, StopSetChangeCreate, WasteFractionChangeCreate])
 export type ServiceProviderActivityCreate = z.infer<typeof ServiceProviderActivityCreate>
 
 /**
  * What may be corrected while an Activity is open: its subject, body and
  * award, a follow-up's due day, a route-day change's days, a vehicle change's
- * vehicle and driver, a stop-set change's containers, and a proposal's first
- * day. The
+ * vehicle and driver, a stop-set change's containers, a waste-fraction
+ * change's fractions, and a proposal's first day. The
  * kind, the provider, the project and a proposal's scheme and group are its
  * own — another group's change is another proposal. A member the kind does
  * not carry is refused by the API at its field.
@@ -157,6 +175,7 @@ export const ServiceProviderActivityPatch = z
     vehicleId: Id.optional(),
     driverId: Id.nullable().optional(),
     containerIds: PickedContainers.optional(),
+    wasteFractionIds: RuleFractions.optional(),
   })
   .refine(changesSomething, somethingToChange)
 export type ServiceProviderActivityPatch = z.infer<typeof ServiceProviderActivityPatch>

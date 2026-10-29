@@ -54,7 +54,10 @@ import { collectionCalendarRoutes } from "./routes/collection-calendars"
 import { collectionGroupRoutes } from "./routes/collection-groups"
 import { companyRoutes } from "./routes/company"
 import { containerRoutes } from "./routes/containers"
+import { customerContactRoutes } from "./routes/customer-contacts"
 import { customerRoutes } from "./routes/customers"
+import { messageTemplateRoutes } from "./routes/message-templates"
+import { messageRoutes } from "./routes/messages"
 import { depotRoutes } from "./routes/depots"
 import { applicationRoutes } from "./routes/applications"
 import { dropOffPointRoutes } from "./routes/drop-off-points"
@@ -62,6 +65,7 @@ import { emissionReportRoutes } from "./routes/emissions"
 import { fuelEmissionFactorRoutes } from "./routes/fuel-emission-factors"
 import { driverDoorRoutes } from "./routes/driver"
 import { availabilityRoutes } from "./routes/availability"
+import { preTripRoutes } from "./routes/pre-trip-checks"
 import { driverRoutes } from "./routes/drivers"
 import { generationRoutes } from "./routes/generation"
 import { importRoutes } from "./routes/imports"
@@ -262,6 +266,9 @@ export function createApp({
   app.route("/", wasteFractionEmissionFactorRoutes(guard))
   app.route("/", productRoutes(guard))
   app.route("/", customerRoutes(guard))
+  app.route("/", customerContactRoutes(guard))
+  app.route("/", messageTemplateRoutes(guard))
+  app.route("/", messageRoutes(guard, { jobs }))
   // The address lookup calls the register (#291 C13), so, like the preview, its guard ends the principal's transaction; a property's write reads its `addressId` from the register before its guard opens the request's.
   const addressOptions = { register: addressRegister, log: log ?? console.error }
   app.route("/", addressRoutes(identify({ pool, verifier }), addressOptions))
@@ -295,6 +302,7 @@ export function createApp({
   app.route("/", vehicleRoutes(guard, { now }))
   app.route("/", driverRoutes(guard, { now }))
   app.route("/", availabilityRoutes(guard))
+  app.route("/", preTripRoutes(guard, { now }))
   // Execution's office (Issue #104, slice 3). The live read goes on before the
   // route module: Hono runs handlers in registration order, and `/routes/live`
   // would otherwise be caught by `/routes/:id`, whose path validator refuses

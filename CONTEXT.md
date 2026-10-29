@@ -56,6 +56,10 @@ _Avoid_: Pickup day (a Pickup is one stop on a route), bin day, tømmedag in cop
 A person or organization that receives or finances a service.
 _Avoid_: Property, payer, account
 
+**Contact Person**:
+A named person who speaks for an organisation Customer, with a role (primary, billing, operations, on-site, other) and the channels they are reached on, an e-mail or a phone or both. A person Customer is their own contact and has none; one who leaves is made inactive, never deleted.
+_Avoid_: Contact (the prototype's word for a person Customer), representative, user
+
 **Property**:
 A physical service address or cadastral location where service is delivered.
 _Avoid_: Customer, contact
@@ -125,6 +129,14 @@ _Avoid_: Working hours, roster, schedule
 **Service Window**:
 When in the day a stop may be served: a Property's access hours and an Agreement's promised window, each optional, the stop's window being where the two overlap. Route optimisation holds a stop inside it.
 _Avoid_: Time slot, booking slot, opening hours (a station's)
+
+**Pre-trip Check**:
+A driver's walk-round of a Vehicle before or during the day, answering every item of the checklist its vehicle type holds — passed, or a defect with what was seen — and the odometer and engine hours where read. A check is kept as it was answered, whatever the checklist says later.
+_Avoid_: Inspection report, vehicle audit, service
+
+**Vehicle Defect**:
+A checklist item a Pre-trip Check failed, open until the office marks it resolved. A defect of a critical item takes the Vehicle out of service — its status maintenance — until the office mends it and sets it active again; every check that finds defects opens the office one ticket for them.
+_Avoid_: Fault, damage report, container defect (a container's)
 
 **Vehicle Allocation**:
 A time-bounded plan that reserves a compatible vehicle and, where applicable, a driver for expected work.
@@ -237,11 +249,11 @@ A Pickup the office books whose service is not an emptying: a delivery, a remova
 _Avoid_: Job, task (a Ticket's kind), collection
 
 **Bulky Booking**:
-A Customer's booked collection of bulky items at one of their places, a Property or a Shared Collection Point, on a day of a Bulky Schedule: the Agreement it is charged to, the waste fraction and the items, each a description and a count. It takes one slot of its day, and freezes the Planning Area, the Bulky Schedule and the Product it was booked under. The office routes it as a Pickup at its address with no container, on a Route running on its day; its completion is charged at its Product to its Agreement. Booked, routed, collected or cancelled is read from its cancellation and its stop; a stop missed leaves it booked, the office's to move and route again.
+A Customer's booked collection of bulky items at one of their places, a Property or a Shared Collection Point, on a day of a Bulky Schedule: the Agreement it is charged to, the waste fraction and the items, each a description and a count. It takes one slot of its day, and freezes the Planning Area, the Bulky Schedule and the Product it was booked under. The office routes it as a Pickup at its address with no container, on a Route running on its day; its completion is charged at its Product to its Agreement: once for a Product sold by the job, or at its items' count for one sold by the item. Booked, routed, collected or cancelled is read from its cancellation and its stop; a stop missed leaves it booked, the office's to move and route again.
 _Avoid_: Order, reservation, appointment, Work Order (a Work Order is of a container)
 
 **Bulky Schedule**:
-A Planning Area's effective-dated recurrence of the days bulky waste is collected there — a Route Scheme's frequency, service days, week rotation and holiday policy — with the slots each day has, one per Bulky Booking, and the Product a booking is charged at, sold by the job. One of an area is in force at a time; a place is booked on the days of the schedule of the area it lies in.
+A Planning Area's effective-dated recurrence of the days bulky waste is collected there — a Route Scheme's frequency, service days, week rotation and holiday policy — with the slots each day has, one per Bulky Booking, and the Product a booking is charged at, sold by the job or by the item. One of an area is in force at a time; a place is booked on the days of the schedule of the area it lies in.
 _Avoid_: Bulky route, slot calendar, Route Scheme (a scheme generates Routes; a schedule only offers days)
 
 **Pickup Exception**:
@@ -296,11 +308,23 @@ _Avoid_: Route status, customer note
 A recorded event on a dated Route at an Unloading Station in which the vehicle disposes of some or all of its collected load, with weight or disposal evidence. It is neither a Pickup nor a stop's Proof of Service; a planned unload visit belongs to a Plan.
 _Avoid_: Pickup, proof of service, tip, dump
 
+**Transfer Note**:
+The document that goes with an Unload's load from the company that collected and carried it to the Unloading Station that took it: the parties, the waste fraction with its waste code and whether it is hazardous, the weights, and when. One per Unload the station accepted; a refused load was not transferred and has none, and a corrected Unload's note is its correction's.
+_Avoid_: Consignment note, waybill, disposal receipt
+
 ## Resolution and finance
 
 **Ticket**:
 A case that owns the resolution of a request, deviation, complaint, task, or operational issue. It is opened by the office, the portal or from an execution event; a re-collection is a Route the ticket names, never one it makes.
 _Avoid_: Alert, message
+
+**Message Template**:
+A project's text for one kind of message the office sends — an e-mail with a subject, or a text message — for service (sent only to a Customer who allows service messages) or for billing (sent whatever they chose), its values named as `{{placeholders}}`. Retired by its status, never deleted.
+_Avoid_: Notification template, letter
+
+**Message**:
+One e-mail or text message rendered from a Message Template to a Customer or one of its Contact Persons, kept on the delivery log with the address it went to and how its sending stands: queued, sent, failed, or withheld for want of consent. Sent through a log-only sender until a card-free provider is chosen.
+_Avoid_: Notification, SMS (one channel of it), mail
 
 **Alert**:
 A condition that requires attention, notification, or acknowledgement and may create or link to a ticket. It is acknowledged and resolved, and links to at most one Ticket. The office raises one by hand; the worker's rules raise one per occurrence of a route not started, a device silent, a licence running out or a ticket overdue — an overdue ticket's alert is about that Ticket, never a new one — and resolve it when the condition clears.
@@ -355,7 +379,7 @@ An effective-dated geographic and service responsibility awarded to a service pr
 _Avoid_: Contract area, operational area, route, service provider zone
 
 **Service Provider Activity**:
-One item of coordination between the office and one Service Provider about the work it holds under an award, numbered `ACT-<n>`: a proposal of a protected change, which asks for the office's Approval — a route-day change, a Collection Group of a scheme the provider serves run on other days from a day, a vehicle change, the group run with another vehicle and optionally another driver, or a stop-set change, a group that picks its stops run on another list of containers — a compliance follow-up the office raises with a due day, or a note either side keeps. An approved proposal is applied as the scheme's next version from its day; a refused one changes nothing. Every end is final, and overdue is a reading of a follow-up's due day, never a status. It restates no operational record: a route's assignment is the route's own.
+One item of coordination between the office and one Service Provider about the work it holds under an award, numbered `ACT-<n>`: a proposal of a protected change, which asks for the office's Approval — a route-day change, a Collection Group of a scheme the provider serves run on other days from a day, a vehicle change, the group run with another vehicle and optionally another driver, a stop-set change, a group that picks its stops run on another list of containers, or a waste-fraction change, a rule group's rule collect other fractions — a compliance follow-up the office raises with a due day, or a note either side keeps. An approved proposal is applied as the scheme's next version from its day; a refused one changes nothing. Every end is final, and overdue is a reading of a follow-up's due day, never a status. It restates no operational record: a route's assignment is the route's own.
 _Avoid_: Task, case (that is a Ticket), request (that is an Application), assignment notice
 
 **Service Area Assignment**:
