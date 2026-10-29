@@ -4,7 +4,7 @@
 import assert from "node:assert/strict"
 import { describe, test } from "node:test"
 
-import { alertOfRule, CLEARED_NOTES, LICENCE_WARNING_DAYS, POSITION_STALE_MINUTES, ROUTE_START_GRACE_MINUTES, RULE_LOOKBACK_HOURS, SESSION_SILENCE_MINUTES } from "../alert-rules"
+import { alertOfRule, CLEARED_NOTES, LICENCE_WARNING_DAYS, LOAD_RECEIPT_HOURS, POSITION_STALE_MINUTES, ROUTE_START_GRACE_MINUTES, ROUTE_TIP_GRACE_HOURS, RULE_LOOKBACK_HOURS, SESSION_SILENCE_MINUTES } from "../alert-rules"
 import { ALERT_RULES } from "../vocabulary"
 
 describe("the thresholds", () => {
@@ -33,6 +33,7 @@ describe("what each rule's alert says", () => {
       driverId: "karen",
       containerId: null,
       ticketId: null,
+      outboundLoadId: null,
     })
   })
 
@@ -99,6 +100,46 @@ describe("a filling container (O26 of #290)", () => {
   test("is high once the bin reads full", () => {
     const alert = alertOfRule({ ...reading, fillPercent: 100 })
     assert.deepEqual([alert.severity, alert.title], ["high", "BIN-82014 is full"])
+  })
+})
+
+describe("the disposal-site reconciliation (M17 of #293)", () => {
+  const subjects = (alert: ReturnType<typeof alertOfRule>) => [alert.outboundLoadId, alert.routeId, alert.vehicleId, alert.driverId, alert.containerId, alert.ticketId]
+
+  test("a load is overdue at the receiving site a day after it left, and a route untipped two hours after it ended", () => {
+    assert.deepEqual([LOAD_RECEIPT_HOURS, ROUTE_TIP_GRACE_HOURS], [24, 2])
+  })
+
+  test("a load not received is a high weight alert about the load, naming where it left from and went", () => {
+    const alert = alertOfRule({ rule: "load-not-received", outboundLoadId: "load", vehicleId: null, registration: "AB 12 345", fromStation: "Kystbyen omlastestation", toStation: "ARC Amager Bakke", departedAt: "2026-10-28 14:00" })
+    assert.deepEqual([alert.rule, alert.kind, alert.severity, alert.source], ["load-not-received", "weight", "high", "rule"])
+    assert.equal(alert.title, "AB 12 345's load to ARC Amager Bakke is not received")
+    assert.equal(alert.details, "It left Kystbyen omlastestation at 2026-10-28 14:00, and no ticket from ARC Amager Bakke is recorded 24 hours later: the load never tipped, or its ticket never came back.")
+    assert.deepEqual(subjects(alert), ["load", null, null, null, null, null])
+  })
+
+  test("a receipt beyond the tolerance says which way and by how much, about the load and our vehicle where it is ours", () => {
+    const mismatch = { rule: "load-weight-mismatch" as const, outboundLoadId: "load", vehicleId: "wh24", registration: "CN 42 018", toStation: "ARC Amager Bakke", ticket: "ARC-88123", netKg: 20_000, receivedNetKg: 18_400, tolerancePercent: 5 }
+    const alert = alertOfRule(mismatch)
+    assert.deepEqual([alert.kind, alert.severity], ["weight", "medium"])
+    assert.equal(alert.title, "ARC Amager Bakke weighed CN 42 018's load 1,600 kg lighter")
+    assert.equal(alert.details, "Ticket ARC-88123 says 18,400 kg against our 20,000 kg, beyond the project's 5% tolerance: reconcile the load, or dispute it.")
+    assert.deepEqual(subjects(alert), ["load", null, "wh24", null, null, null])
+    assert.match(alertOfRule({ ...mismatch, receivedNetKg: 21_500 }).title, /1,500 kg heavier$/)
+  })
+
+  test("a load over our vehicle's rated payload is high, and says by how much", () => {
+    const alert = alertOfRule({ rule: "load-overweight", outboundLoadId: "load", vehicleId: "wh24", registration: "CN 42 018", netKg: 27_400, capacityKg: 26_000 })
+    assert.deepEqual([alert.severity, alert.title], ["high", "CN 42 018 left overloaded"])
+    assert.equal(alert.details, "Its load weighed 27,400 kg net, 1,400 kg over the vehicle's rated payload of 26,000 kg.")
+    assert.deepEqual(subjects(alert), ["load", null, "wh24", null, null, null])
+  })
+
+  test("a route that never tipped is about the route, its vehicle and its driver", () => {
+    const alert = alertOfRule({ rule: "route-not-tipped", routeId: "r", routeLabel: "RC-1042", operatingDate: "2026-10-28", station: "ARC Amager Bakke", driverId: "mads", vehicleId: "wh24" })
+    assert.deepEqual([alert.kind, alert.severity, alert.title], ["weight", "medium", "RC-1042 has no unload"])
+    assert.equal(alert.details, "It ended on 2026-10-28 with collected stops and no unload recorded, though it was planned to unload at ARC Amager Bakke: the vehicle never tipped, or the weighbridge's ticket is not captured.")
+    assert.deepEqual(subjects(alert), [null, "r", "wh24", "mads", null, null])
   })
 })
 

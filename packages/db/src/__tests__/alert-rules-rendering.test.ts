@@ -25,7 +25,7 @@ import { driver, vehicle } from "../schema/fleet"
 import { company, project } from "../schema/organisation"
 import { alert, ticket } from "../schema/resolution"
 import { normalised, statementsOf } from "../sql/hand-written"
-import { ALERT_RULES_AS_OF_0034, alertAsOf0009, RESOLVED_SHAPE, RULE_KEY_INDEX, RULE_SHAPE, SUBJECT_SHAPE } from "./alert-as-of"
+import { ADDED_FOR_LOADS, ALERT_RULES_AS_OF_0034, alertAsOf0009, RESOLVED_SHAPE, RULE_KEY_INDEX, RULE_SHAPE, SUBJECT_SHAPE, SUBJECT_SHAPE_WITH_LOADS } from "./alert-as-of"
 import { checksOf, list, ref } from "./rendering"
 import { statementsBetween } from "./specimen"
 
@@ -37,11 +37,20 @@ const column = (name: string) => ref("alert", name)
 
 const ruleCheck = (rules: readonly string[]) => `ALTER TABLE "wms"."alert" ADD CONSTRAINT "alert_rule_one_of" CHECK (${column("rule")} in (${list(...rules)}));`
 
-/** What 0061 changed of what 0034 wrote: the rule's check as drizzle-kit spells it today, onto 0034's four. */
-const CHANGED_IN_0061 = new Map([[ruleCheck(ALERT_RULES), ruleCheck(ALERT_RULES_AS_OF_0034)]])
+const subjectCheck = (shape: string) => `ALTER TABLE "wms"."alert" ADD CONSTRAINT "alert_subject_shape" CHECK (${shape});`
+
+/** What 0061 and the migrations since changed of what 0034 wrote: the rule's check as drizzle-kit spells it today, onto 0034's four, and the subject's, which the transfer stock's reconciliation (M17 of #293) grew by the outbound load, onto 0034's. */
+const CHANGED_IN_0061 = new Map([
+  [ruleCheck(ALERT_RULES), ruleCheck(ALERT_RULES_AS_OF_0034)],
+  [subjectCheck(SUBJECT_SHAPE_WITH_LOADS), subjectCheck(SUBJECT_SHAPE)],
+])
+/** The outbound load's column, which the reconciliation added; 0034 wrote none of it. */
+const ADDED_LATER = ['ALTER TABLE "wms"."alert" ADD COLUMN "outbound_load_id" uuid;', ...ADDED_FOR_LOADS]
 
 describe("the alert rules as drizzle-kit writes them", () => {
-  const generated = statementsBetween({ ...referenced, alert: alertAsOf0009 }, { ...referenced, alert }).then((statements) => statements.map((statement) => CHANGED_IN_0061.get(statement) ?? statement))
+  const generated = statementsBetween({ ...referenced, alert: alertAsOf0009 }, { ...referenced, alert }).then((statements) =>
+    statements.filter((statement) => !ADDED_LATER.includes(statement)).map((statement) => CHANGED_IN_0061.get(statement) ?? statement),
+  )
 
   test("the rule and its occurrence, one alert per occurrence whatever its status, a ticket as a subject, and a rule's alert resolved by nobody", async () => {
     assert.deepEqual(await generated, [

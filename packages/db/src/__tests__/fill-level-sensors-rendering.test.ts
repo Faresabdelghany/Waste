@@ -12,7 +12,6 @@ import { readdir, readFile } from "node:fs/promises"
 import { join } from "node:path"
 import { describe, test } from "node:test"
 
-import { ALERT_RULES } from "@waste/domain/resolution/vocabulary"
 import { SENSOR_NETWORKS, SENSOR_STATUSES } from "@waste/domain/resources/vocabulary"
 import { generateMigration } from "drizzle-kit/api"
 
@@ -22,6 +21,7 @@ import { fillReading, sensor, sensorPairing } from "../schema/sensors"
 import { auditTrail, SENSORS_AUDITED } from "../sql/audit-trail"
 import { excludeOverlapping } from "../sql/exclude-overlapping"
 import { handWrittenStatements, normalised, statementsOf } from "../sql/hand-written"
+import { ALERT_RULES_AS_OF_SENSORS } from "./alert-as-of"
 import { checksOf, list, ref } from "./rendering"
 
 async function migrationName(): Promise<string> {
@@ -62,8 +62,8 @@ describe("the fill-level sensors as drizzle-kit writes them", () => {
   test("the alert's rule grows by the filling container", async () => {
     const statements = await generated()
     assert.ok(statements.includes(normalised('ALTER TABLE "wms"."alert" DROP CONSTRAINT "alert_rule_one_of";')))
-    assert.ok(statements.includes(normalised(`ALTER TABLE "wms"."alert" ADD CONSTRAINT "alert_rule_one_of" CHECK (${ref("alert", "rule")} in (${list(...ALERT_RULES)}));`)))
-    assert.equal(ALERT_RULES.at(-1), "fill-threshold")
+    assert.ok(statements.includes(normalised(`ALTER TABLE "wms"."alert" ADD CONSTRAINT "alert_rule_one_of" CHECK (${ref("alert", "rule")} in (${list(...ALERT_RULES_AS_OF_SENSORS)}));`)))
+    assert.equal(ALERT_RULES_AS_OF_SENSORS.at(-1), "fill-threshold")
     assert.ok(checksOf(alert).has("alert_rule_one_of"))
   })
 })

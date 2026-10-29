@@ -87,8 +87,10 @@ export const alertAsOf0009 = wms.table(
 )
 
 const column = (name: string) => ref("alert", name)
-/** An alert names a route, a vehicle, a driver, a container or a ticket. */
+/** An alert names a route, a vehicle, a driver, a container or a ticket: as 0034 spelled it, before the transfer stock's reconciliation (M17 of #293) added the outbound load. */
 export const SUBJECT_SHAPE = `(${column("route_id")} is not null)::int + (${column("vehicle_id")} is not null)::int + (${column("driver_id")} is not null)::int + (${column("container_id")} is not null)::int + (${column("ticket_id")} is not null)::int >= 1`
+/** An alert names a route, a vehicle, a driver, a container, a ticket or an outbound load: today's spelling. */
+export const SUBJECT_SHAPE_WITH_LOADS = `(${column("route_id")} is not null)::int + (${column("vehicle_id")} is not null)::int + (${column("driver_id")} is not null)::int + (${column("container_id")} is not null)::int + (${column("ticket_id")} is not null)::int + (${column("outbound_load_id")} is not null)::int >= 1`
 /** A resolver only with a resolution, a resolution with a resolver unless a rule raised the alert, a note only with a resolution. */
 export const RESOLVED_SHAPE = `(${column("resolved_by")} is null or ${column("resolved_at")} is not null) and (${column("resolved_at")} is null or ${column("resolved_by")} is not null or ${column("rule")} is not null) and (${column("resolution_note")} is null or ${column("resolved_at")} is not null)`
 /** A rule and its occurrence together or not at all. */
@@ -96,6 +98,14 @@ export const RESOLVED_SHAPE = `(${column("resolved_by")} is null or ${column("re
 export const ALERT_RULES_AS_OF_0034 = ["route-not-started", "session-silent", "licence-expiring", "ticket-overdue"] as const
 /** The rules 0061 spelled, before the fill-level sensors' migration (O26 of #290) added `fill-threshold`. */
 export const ALERT_RULES_AS_OF_0061 = [...ALERT_RULES_AS_OF_0034, "position-stale"] as const
+/** The rules the fill-level sensors' migration spelled, before the transfer stock's reconciliation (M17 of #293) added its four. */
+export const ALERT_RULES_AS_OF_SENSORS = [...ALERT_RULES_AS_OF_0061, "fill-threshold"] as const
+
+/** What the reconciliation's migration added to the alert beside the column and the checks: its key into the outbound load and the index that needs. */
+export const ADDED_FOR_LOADS = [
+  'ALTER TABLE "wms"."alert" ADD CONSTRAINT "alert_outbound_load_id_fk" FOREIGN KEY ("company_id","project_id","outbound_load_id") REFERENCES "wms"."outbound_load"("company_id","project_id","id") ON DELETE no action ON UPDATE no action;',
+  'CREATE INDEX "alert_outbound_load_id_idx" ON "wms"."alert" USING btree ("company_id","outbound_load_id");',
+]
 
 export const RULE_SHAPE = `(${column("rule")} is null) = (${column("rule_key")} is null)`
 /** One alert per occurrence, whatever its status, but for one the worker cleared. */

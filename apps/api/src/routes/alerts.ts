@@ -129,7 +129,7 @@ export function alertRoutes(guard: MiddlewareHandler<AuthEnv>, { now = () => new
         operationId: "listAlerts",
         summary: "The alerts of the caller's projects",
         description:
-          "One page of alerts, oldest first (ids are time-ordered), from the projects the caller works in — an account that works in none, such as a service provider's, reads an empty page. `projectId` narrows it to one of those projects; naming another is refused. `status`, `severity` and `kind` narrow the board, and `rule` to what one of the worker's rules raised (O4 of #290); `routeId`, `vehicleId`, `driverId` and `containerId` answer what was raised about one route, vehicle, driver or container; `ticketId` answers the alerts a ticket answers. Whether an alert is linked to a ticket is `ticketId` not null and no status. Hand `nextCursor` back as `cursor` for the next page.",
+          "One page of alerts, oldest first (ids are time-ordered), from the projects the caller works in — an account that works in none, such as a service provider's, reads an empty page. `projectId` narrows it to one of those projects; naming another is refused. `status`, `severity` and `kind` narrow the board, and `rule` to what one of the worker's rules raised (O4 of #290); `routeId`, `vehicleId`, `driverId` and `containerId` answer what was raised about one route, vehicle, driver or container; `ticketId` answers the alerts a ticket answers, and `outboundLoadId` the alerts the disposal-site reconciliation raised about one outbound load (M17 of #293). Whether an alert is linked to a ticket is `ticketId` not null and no status. Hand `nextCursor` back as `cursor` for the next page.",
         security: BEARER_SECURITY,
         responses: {
           200: describeJson("One page of alerts.", AlertPage),
@@ -142,7 +142,7 @@ export function alertRoutes(guard: MiddlewareHandler<AuthEnv>, { now = () => new
       requireGrant(MODULE, "view"),
       validate("query", AlertListQuery),
       async (c) => {
-        const { limit, cursor, projectId, status, rule, severity, kind, routeId, vehicleId, driverId, containerId, ticketId } = c.req.valid("query")
+        const { limit, cursor, projectId, status, rule, severity, kind, routeId, vehicleId, driverId, containerId, ticketId, outboundLoadId } = c.req.valid("query")
         const after = afterCursor(cursor)
         const tx = c.get("tx")
         const principal = c.get("principal")
@@ -163,6 +163,7 @@ export function alertRoutes(guard: MiddlewareHandler<AuthEnv>, { now = () => new
               driverId === undefined ? undefined : eq(alert.driverId, driverId),
               containerId === undefined ? undefined : eq(alert.containerId, containerId),
               ticketId === undefined ? undefined : eq(alert.ticketId, ticketId),
+              outboundLoadId === undefined ? undefined : eq(alert.outboundLoadId, outboundLoadId),
               after === undefined ? undefined : gt(alert.id, after),
             ),
           )

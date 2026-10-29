@@ -610,6 +610,7 @@ describe("GET /openapi.json", () => {
       "query:driverId",
       "query:kind",
       "query:limit",
+      "query:outboundLoadId",
       "query:projectId",
       "query:routeId",
       "query:rule",

@@ -589,6 +589,13 @@
       "when": 1793269290325,
       "tag": "0099_transfer_stock",
       "breakpoints": true
+    },
+    {
+      "idx": 84,
+      "version": "7",
+      "when": 1793269410568,
+      "tag": "0100_reconciliation_rules",
+      "breakpoints": true
     }
   ]
 }
