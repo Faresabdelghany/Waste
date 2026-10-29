@@ -318,6 +318,10 @@ _Avoid_: Service fee, job price
 What a Subscription to a Product sold by the day charges each of its containers: the days it stands on site, from the day it is delivered to the day it is taken back, by calendar month in arrears, each placement's Free Days not charged. A pause of the Subscription does not stop a Hire, since the container still stands there.
 _Avoid_: Rental (a Product sold by the month is a recurring charge), demurrage
 
+**Weight Charge**:
+What a Subscription to a Product sold by the tonne charges a stop: its share of an Unload's net once the office's weight review approves that weight, at the price per tonne on the Route's service date. The share is the Unload's net split among the stops it carried, by what each weighed on board where every one was weighed, in equal parts otherwise. A review that takes the approval back cancels the charge, or reverses it once invoiced; a Service Provider is paid its own price per tonne for the same weight.
+_Avoid_: Gate fee (a gate fee is a price per tonne by fraction on the list), tonnage invoice
+
 **Free Days**:
 A Hire Product's first days of each placement on site, charged nothing, counted from the delivery across the months.
 _Avoid_: Grace period

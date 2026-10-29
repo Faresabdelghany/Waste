@@ -74,7 +74,8 @@ export function weightReviewsOffered(record: { submittedValues?: Record<string, 
 export type UnloadResource = Unload & { createdAt: string; updatedAt: string }
 const stamped = (unload: Unload): UnloadResource => ({ ...unload, createdAt: unload.recordedAt, updatedAt: unload.recordedAt })
 
-const kilograms = (value: number) => `${new Intl.NumberFormat("en").format(value)} kg`
+/** Whole kilograms as a person reads them: 8,240 kg; the weights list and a weight charge (O28 of #290) both spell them so. */
+export const kilograms = (value: number) => `${new Intl.NumberFormat("en").format(value)} kg`
 
 /** A form's weight: undefined for blank, the whole kilograms of one, NaN for anything else. */
 function weightOf(input: CommandInput, key: string): number | undefined {
