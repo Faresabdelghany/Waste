@@ -1,5 +1,5 @@
 {
-  "id": "8f7a84e7-3288-4f0e-b556-d9b55b5f874b",
+  "id": "f846cb46-fa49-4817-bdaf-f60872b96345",
   "prevId": "9f7facba-3595-4617-be9f-eae8c8a9f2cc",
   "version": "7",
   "dialect": "postgresql",
@@ -2810,6 +2810,18 @@
           "notNull": true,
           "default": "now()"
         },
+        "valid_from": {
+          "name": "valid_from",
+          "type": "date",
+          "primaryKey": false,
+          "notNull": true
+        },
+        "valid_to": {
+          "name": "valid_to",
+          "type": "date",
+          "primaryKey": false,
+          "notNull": false
+        },
         "property_id": {
           "name": "property_id",
           "type": "uuid",
@@ -2830,6 +2842,27 @@
         }
       },
       "indexes": {
+        "property_party_property_id_idx": {
+          "name": "property_party_property_id_idx",
+          "columns": [
+            {
+              "expression": "company_id",
+              "isExpression": false,
+              "asc": true,
+              "nulls": "last"
+            },
+            {
+              "expression": "property_id",
+              "isExpression": false,
+              "asc": true,
+              "nulls": "last"
+            }
+          ],
+          "isUnique": false,
+          "concurrently": false,
+          "method": "btree",
+          "with": {}
+        },
         "property_party_project_id_idx": {
           "name": "property_party_project_id_idx",
           "columns": [
@@ -2940,20 +2973,13 @@
         }
       },
       "compositePrimaryKeys": {},
-      "uniqueConstraints": {
-        "property_party_property_id_customer_id_role_key": {
-          "name": "property_party_property_id_customer_id_role_key",
-          "nullsNotDistinct": false,
-          "columns": [
-            "company_id",
-            "property_id",
-            "customer_id",
-            "role"
-          ]
-        }
-      },
+      "uniqueConstraints": {},
       "policies": {},
       "checkConstraints": {
+        "property_party_validity": {
+          "name": "property_party_validity",
+          "value": "\"wms\".\"property_party\".\"valid_to\" is null or \"wms\".\"property_party\".\"valid_to\" > \"wms\".\"property_party\".\"valid_from\""
+        },
         "property_party_role_one_of": {
           "name": "property_party_role_one_of",
           "value": "\"wms\".\"property_party\".\"role\" in ('owner', 'payer', 'tenant', 'administrator', 'service-contact')"
@@ -19615,7 +19641,7 @@
       "checkConstraints": {
         "billing_run_exclusion_reason_one_of": {
           "name": "billing_run_exclusion_reason_one_of",
-          "value": "\"wms\".\"billing_run_exclusion\".\"reason\" in ('all-events-blocked', 'all-events-held', 'all-events-blocked-or-held', 'too-many-events')"
+          "value": "\"wms\".\"billing_run_exclusion\".\"reason\" in ('all-events-blocked', 'all-events-held', 'all-events-blocked-or-held')"
         },
         "billing_run_exclusion_event_count_positive": {
           "name": "billing_run_exclusion_event_count_positive",

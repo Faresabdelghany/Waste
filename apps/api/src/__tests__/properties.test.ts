@@ -7,7 +7,10 @@ import { Customer, Property } from "@waste/contracts/customers"
 import type { Point } from "@waste/contracts/geojson"
 import { Id } from "@waste/contracts/ids"
 import { Page } from "@waste/contracts/pagination"
-import { createDb, type Database } from "@waste/db/client"
+import { createDb, type Database, type Tx } from "@waste/db/client"
+import { propertyParty } from "@waste/db/schema/customers"
+import { withCompany } from "@waste/db/tenant"
+import { sql } from "drizzle-orm"
 
 import { createApp } from "../app"
 import { callingAs, type Call } from "./calls"
@@ -24,6 +27,15 @@ const MODULE = "customers.properties"
 
 /** Copenhagen town hall, the point every located fixture here sits on. */
 const townHall: Point = { type: "Point", coordinates: [12.5683, 55.6761] }
+
+/** The suite's clock, a morning in Copenhagen; a test that needs another day moves it and puts it back. */
+const MORNING = new Date("2026-10-28T09:00:00Z")
+/** The project's today on that clock. */
+const TODAY = "2026-10-28"
+let clock = MORNING
+
+/** Parties as a read answers them (#374): each holding its role from `from`, still running. */
+const held = <Entry extends { customerId: string; role: string }>(parties: readonly Entry[], from = TODAY) => parties.map((party) => ({ ...party, validFrom: from, validTo: null }))
 
 /** The order a set reads back in, so a test can say what it expects without knowing which random id sorts first: the customer, then the role. */
 const inReadOrder = <Entry extends { customerId: string; role: string }>(parties: readonly Entry[]): Entry[] =>
@@ -60,7 +72,7 @@ describe("the property endpoints", { skip: database.skip }, () => {
     b = await seedTenant(pool)
     await grantRole(pool, a.companyId, a.roles.viewer.id, [{ moduleKey: MODULE, actions: ["view", "create", "edit"] }])
     await grantRole(pool, a.companyId, a.roles.providerManager.id, [{ moduleKey: MODULE, actions: ["view"] }])
-    app = createApp({ probe: pool, pool, verifier: keys.verifier })
+    app = createApp({ probe: pool, pool, verifier: keys.verifier, now: () => clock })
     olivia = callingAs(app, keys, a.users.olivia, a.companyId)
     viewer = callingAs(app, keys, a.users.viewer, a.companyId)
     lars = callingAs(app, keys, a.users.lars, a.companyId)
@@ -183,11 +195,13 @@ describe("the property endpoints", { skip: database.skip }, () => {
       )
       assert.deepEqual(
         created.parties,
-        inReadOrder([
-          { customerId: housing.id, role: "owner" },
-          { customerId: housing.id, role: "payer" },
-          { customerId: tenantCustomer.id, role: "tenant" },
-        ]),
+        held(
+          inReadOrder([
+            { customerId: housing.id, role: "owner" },
+            { customerId: housing.id, role: "payer" },
+            { customerId: tenantCustomer.id, role: "tenant" },
+          ]),
+        ),
         "the customer, then the role: the order a page reads a set in",
       )
       assert.deepEqual(await one(olivia, created.id), created, "the answer is what the next read says")
@@ -294,7 +308,7 @@ describe("the property endpoints", { skip: database.skip }, () => {
         Property,
       )
       const found = (await page(olivia, "?limit=200")).items.find((held) => held.id === created.id)
-      assert.deepEqual(found?.parties, [{ customerId: housing.id, role: "administrator" }])
+      assert.deepEqual(found?.parties, held([{ customerId: housing.id, role: "administrator" }]))
     })
 
     test("walks the pages with the cursor, each item carrying its own parties and none of the next record's", async () => {
@@ -392,7 +406,7 @@ describe("the property endpoints", { skip: database.skip }, () => {
       const changed = await patch(olivia, created.id, { status: "inactive", notes: "Demolished" })
       assert.equal(changed.status, "inactive")
       assert.equal(changed.notes, "Demolished")
-      assert.deepEqual(changed.parties, [{ customerId: housing.id, role: "owner" }], "a patch is not how a set changes")
+      assert.deepEqual(changed.parties, held([{ customerId: housing.id, role: "owner" }]), "a patch is not how a set changes")
       assert.deepEqual(changed.location, townHall, "what the patch did not name it did not touch")
       assert.ok(changed.updatedAt > created.updatedAt)
       assert.deepEqual(await one(olivia, created.id), changed)
@@ -460,7 +474,7 @@ describe("the property endpoints", { skip: database.skip }, () => {
   })
 
   describe("PUT /properties/:id/parties", () => {
-    test("replaces the whole set: what the body leaves out is gone, and the record is stamped", async () => {
+    test("replaces the set in force today: what the body leaves out is gone, and the record is stamped", async () => {
       const created = await create(
         olivia,
         "/properties",
@@ -474,12 +488,71 @@ describe("the property endpoints", { skip: database.skip }, () => {
         Property,
       )
       const replaced = await putParties(olivia, created.id, [{ customerId: tenantCustomer.id, role: "payer" }])
-      assert.deepEqual(replaced.parties, [{ customerId: tenantCustomer.id, role: "payer" }])
+      assert.deepEqual(replaced.parties, held([{ customerId: tenantCustomer.id, role: "payer" }]))
       assert.ok(replaced.updatedAt > created.updatedAt, "the record the set belongs to moved")
       assert.deepEqual(await one(olivia, created.id), replaced)
 
       const emptied = await putParties(olivia, created.id, [])
       assert.deepEqual(emptied.parties, [], "an empty list is a property nobody is billed for")
+    })
+
+    test("dates what it changes (#374): a party left out ends today and keeps its history, one added begins today, one kept is untouched, and one begun today and left out the same day was a correction, gone", async () => {
+      clock = new Date("2026-09-01T09:00:00Z")
+      const created = await create(
+        olivia,
+        "/properties",
+        {
+          ...body(a.projects.copenhagen.id, "Jagtvej 40"),
+          parties: [
+            { customerId: housing.id, role: "owner" },
+            { customerId: tenantCustomer.id, role: "tenant" },
+          ],
+        },
+        Property,
+      )
+      clock = MORNING
+      try {
+        const moved = await putParties(olivia, created.id, [
+          { customerId: housing.id, role: "owner" },
+          { customerId: housing.id, role: "payer" },
+        ])
+        assert.deepEqual(moved.parties, inReadOrder([...held([{ customerId: housing.id, role: "owner" }], "2026-09-01"), ...held([{ customerId: housing.id, role: "payer" }])]))
+        const rows = await withCompany(pool.db, a.companyId, (tx: Tx) =>
+          tx.execute<{ customer_id: string; role: string; valid_from: string; valid_to: string | null }>(
+            sql`select customer_id, role, valid_from::text, valid_to::text from wms.property_party where property_id = ${created.id} order by valid_from, role`,
+          ),
+        )
+        assert.deepEqual(
+          rows.map((row) => ({ customerId: row.customer_id, role: row.role, validFrom: row.valid_from, validTo: row.valid_to })),
+          [
+            { customerId: housing.id, role: "owner", validFrom: "2026-09-01", validTo: null },
+            { customerId: tenantCustomer.id, role: "tenant", validFrom: "2026-09-01", validTo: TODAY },
+            { customerId: housing.id, role: "payer", validFrom: TODAY, validTo: null },
+          ],
+          "the tenant left out ended today and is kept; the payer added began today",
+        )
+        const tenantsNow = (await page(olivia, `?limit=200&customerId=${tenantCustomer.id}`)).items.map((found) => found.id)
+        assert.equal(tenantsNow.includes(created.id), false, "a customer whose role ended is no party of the property today, so its read model no longer finds it")
+        const corrected = await putParties(olivia, created.id, [{ customerId: housing.id, role: "owner" }])
+        assert.deepEqual(corrected.parties, held([{ customerId: housing.id, role: "owner" }], "2026-09-01"))
+        const [{ count }] = await withCompany(pool.db, a.companyId, (tx: Tx) =>
+          tx.execute<{ count: number }>(sql`select count(*)::int as count from wms.property_party where property_id = ${created.id} and role = 'payer'`),
+        )
+        assert.equal(count, 0, "a party begun today and left out today was never anybody's: a same-day correction leaves no row")
+      } finally {
+        clock = MORNING
+      }
+    })
+
+    test("never touches a party from a later day, and refuses adding today the role that party holds from then (409)", async () => {
+      const created = await create(olivia, "/properties", { ...body(a.projects.copenhagen.id, "Jagtvej 42"), parties: [{ customerId: housing.id, role: "owner" }] }, Property)
+      await withCompany(pool.db, a.companyId, (tx: Tx) =>
+        tx.insert(propertyParty).values({ id: testId(), companyId: a.companyId, projectId: a.projects.copenhagen.id, propertyId: created.id, customerId: tenantCustomer.id, role: "tenant", validFrom: "2026-12-01" }),
+      )
+      const kept = await putParties(olivia, created.id, [])
+      assert.deepEqual(kept.parties, held([{ customerId: tenantCustomer.id, role: "tenant" }], "2026-12-01"), "today's owner ended; the tenancy booked from December is not today's set and stands")
+      const problem = await refused(await olivia(`/properties/${created.id}/parties`, { method: "PUT", body: { parties: [{ customerId: tenantCustomer.id, role: "tenant" }] } }), 409)
+      assert.match(problem.detail ?? "", /from a later day/)
     })
 
     test("refuses a party naming another company's customer, at the indexed path, and writes nothing", async () => {
@@ -503,7 +576,7 @@ describe("the property endpoints", { skip: database.skip }, () => {
       )
       assert.deepEqual(problem.errors, [{ path: "parties.1.customerId", message: "Not a customer of this company" }])
       const unchanged = await one(olivia, created.id)
-      assert.deepEqual(unchanged.parties, [{ customerId: housing.id, role: "owner" }], "the set it had is the set it has")
+      assert.deepEqual(unchanged.parties, held([{ customerId: housing.id, role: "owner" }]), "the set it had is the set it has")
       assert.equal(unchanged.updatedAt, created.updatedAt, "and the stamp the replacement took rolled back with the rest of it")
     })
 
