@@ -8,6 +8,7 @@ import type { Point } from "@waste/contracts/geojson"
 import { Id } from "@waste/contracts/ids"
 import { Page } from "@waste/contracts/pagination"
 import { createDb, type Database, type Tx } from "@waste/db/client"
+import { propertyParty } from "@waste/db/schema/customers"
 import { withCompany } from "@waste/db/tenant"
 import { sql } from "drizzle-orm"
 
@@ -541,6 +542,17 @@ describe("the property endpoints", { skip: database.skip }, () => {
       } finally {
         clock = MORNING
       }
+    })
+
+    test("never touches a party from a later day, and refuses adding today the role that party holds from then (409)", async () => {
+      const created = await create(olivia, "/properties", { ...body(a.projects.copenhagen.id, "Jagtvej 42"), parties: [{ customerId: housing.id, role: "owner" }] }, Property)
+      await withCompany(pool.db, a.companyId, (tx: Tx) =>
+        tx.insert(propertyParty).values({ id: testId(), companyId: a.companyId, projectId: a.projects.copenhagen.id, propertyId: created.id, customerId: tenantCustomer.id, role: "tenant", validFrom: "2026-12-01" }),
+      )
+      const kept = await putParties(olivia, created.id, [])
+      assert.deepEqual(kept.parties, held([{ customerId: tenantCustomer.id, role: "tenant" }], "2026-12-01"), "today's owner ended; the tenancy booked from December is not today's set and stands")
+      const problem = await refused(await olivia(`/properties/${created.id}/parties`, { method: "PUT", body: { parties: [{ customerId: tenantCustomer.id, role: "tenant" }] } }), 409)
+      assert.match(problem.detail ?? "", /from a later day/)
     })
 
     test("refuses a party naming another company's customer, at the indexed path, and writes nothing", async () => {

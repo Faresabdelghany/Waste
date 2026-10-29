@@ -60,6 +60,14 @@ _Avoid_: Property, payer, account
 A physical service address or cadastral location where service is delivered.
 _Avoid_: Customer, contact
 
+**Party**:
+What a Customer is to a Property — owner, payer, tenant, administrator or service contact — from a day until a day. One customer may hold several roles at one property, each once at a time.
+_Avoid_: Contact, occupant (that is the tenant role)
+
+**Move**:
+A Property changing occupant on a day: the outgoing customer's parties and subscriptions there end, and the incoming customer takes the same roles and a new agreement with the same products, the containers staying in service. A sale is a move of the owner.
+_Avoid_: Transfer (a container's stock movement), change of service (a subscription's own)
+
 **Property Group**:
 A managed grouping of properties that share administration, reporting, service rules, or agreements.
 _Avoid_: Shared collection point, customer
