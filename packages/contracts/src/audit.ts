@@ -122,6 +122,7 @@ export const AUDITED_TABLES = [
   "service_provider_activity_container",
   "service_provider_activity_fraction",
   "customer_contact",
+  "message_template",
 ] as const
 export type AuditedTable = (typeof AUDITED_TABLES)[number]
 

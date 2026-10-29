@@ -1786,6 +1786,71 @@ index wms.invoice_line invoice_line_pkey CREATE UNIQUE INDEX invoice_line_pkey O
 index wms.invoice_line invoice_line_product_id_idx CREATE INDEX invoice_line_product_id_idx ON wms.invoice_line USING btree (company_id, product_id)
 index wms.invoice_line invoice_line_project_key CREATE UNIQUE INDEX invoice_line_project_key ON wms.invoice_line USING btree (company_id, project_id, id)
 policy wms.invoice_line invoice_line_tenant_fence permissive ALL to=wms_api using=(company_id = ( SELECT wms.current_company_id() AS current_company_id)) check=(company_id = ( SELECT wms.current_company_id() AS current_company_id))
+relation wms.message kind=table owner=<owner> persistence=p rls=true force-rls=true replica-identity=d acl=[<owner>=DELETE,INSERT,MAINTAIN,REFERENCES,SELECT,TRIGGER,TRUNCATE,UPDATE/<owner> wms_api=DELETE,INSERT,SELECT,UPDATE/<owner> wms_worker=SELECT/<owner>]
+column wms.message 1 id uuid not-null default=wms.uuidv7()
+column wms.message 2 company_id uuid not-null
+column wms.message 3 project_id uuid not-null
+column wms.message 4 created_at timestamp with time zone not-null default=now()
+column wms.message 5 updated_at timestamp with time zone not-null default=now()
+column wms.message 6 template_id uuid
+column wms.message 7 customer_id uuid not-null
+column wms.message 8 contact_id uuid
+column wms.message 9 channel text not-null
+column wms.message 10 purpose text not-null
+column wms.message 11 recipient text not-null
+column wms.message 12 subject text
+column wms.message 13 body text not-null
+column wms.message 14 status text not-null
+column wms.message 15 attempts integer not-null default=0
+column wms.message 16 provider text
+column wms.message 17 provider_message_id text
+column wms.message 18 reason text
+column wms.message 19 sent_at timestamp with time zone
+constraint wms.message message_attempts_range CHECK ((attempts >= 0))
+constraint wms.message message_channel_one_of CHECK ((channel = ANY (ARRAY['email'::text, 'sms'::text])))
+constraint wms.message message_company_id_fk FOREIGN KEY (company_id) REFERENCES wms.company(id)
+constraint wms.message message_contact_id_fk FOREIGN KEY (company_id, contact_id) REFERENCES wms.customer_contact(company_id, id)
+constraint wms.message message_customer_id_fk FOREIGN KEY (company_id, customer_id) REFERENCES wms.customer(company_id, id)
+constraint wms.message message_pkey PRIMARY KEY (id)
+constraint wms.message message_project_id_fk FOREIGN KEY (company_id, project_id) REFERENCES wms.project(company_id, id)
+constraint wms.message message_purpose_one_of CHECK ((purpose = ANY (ARRAY['service'::text, 'billing'::text])))
+constraint wms.message message_sent_shape CHECK (((status = 'sent'::text) = ((sent_at IS NOT NULL) AND (provider IS NOT NULL))))
+constraint wms.message message_status_one_of CHECK ((status = ANY (ARRAY['queued'::text, 'sent'::text, 'failed'::text, 'withheld'::text])))
+constraint wms.message message_template_id_fk FOREIGN KEY (company_id, project_id, template_id) REFERENCES wms.message_template(company_id, project_id, id)
+index wms.message message_contact_id_idx CREATE INDEX message_contact_id_idx ON wms.message USING btree (company_id, contact_id)
+index wms.message message_customer_id_idx CREATE INDEX message_customer_id_idx ON wms.message USING btree (company_id, customer_id)
+index wms.message message_pkey CREATE UNIQUE INDEX message_pkey ON wms.message USING btree (id)
+index wms.message message_project_id_idx CREATE INDEX message_project_id_idx ON wms.message USING btree (company_id, project_id)
+index wms.message message_template_id_idx CREATE INDEX message_template_id_idx ON wms.message USING btree (company_id, template_id)
+trigger wms.message message_touch_updated_at enabled=O CREATE TRIGGER message_touch_updated_at BEFORE UPDATE ON wms.message FOR EACH ROW EXECUTE FUNCTION wms.touch_updated_at()
+policy wms.message message_tenant_fence permissive ALL to=wms_api using=(company_id = ( SELECT wms.current_company_id() AS current_company_id)) check=(company_id = ( SELECT wms.current_company_id() AS current_company_id))
+relation wms.message_template kind=table owner=<owner> persistence=p rls=true force-rls=true replica-identity=d acl=[<owner>=DELETE,INSERT,MAINTAIN,REFERENCES,SELECT,TRIGGER,TRUNCATE,UPDATE/<owner> wms_api=DELETE,INSERT,SELECT,UPDATE/<owner> wms_worker=SELECT/<owner>]
+column wms.message_template 1 id uuid not-null default=wms.uuidv7()
+column wms.message_template 2 company_id uuid not-null
+column wms.message_template 3 project_id uuid not-null
+column wms.message_template 4 created_at timestamp with time zone not-null default=now()
+column wms.message_template 5 updated_at timestamp with time zone not-null default=now()
+column wms.message_template 6 name text not-null
+column wms.message_template 7 purpose text not-null
+column wms.message_template 8 channel text not-null
+column wms.message_template 9 subject text
+column wms.message_template 10 body text not-null
+column wms.message_template 11 status text not-null
+constraint wms.message_template message_template_channel_one_of CHECK ((channel = ANY (ARRAY['email'::text, 'sms'::text])))
+constraint wms.message_template message_template_company_id_fk FOREIGN KEY (company_id) REFERENCES wms.company(id)
+constraint wms.message_template message_template_pkey PRIMARY KEY (id)
+constraint wms.message_template message_template_project_id_fk FOREIGN KEY (company_id, project_id) REFERENCES wms.project(company_id, id)
+constraint wms.message_template message_template_project_id_name_key UNIQUE (company_id, project_id, name)
+constraint wms.message_template message_template_project_key UNIQUE (company_id, project_id, id)
+constraint wms.message_template message_template_purpose_one_of CHECK ((purpose = ANY (ARRAY['service'::text, 'billing'::text])))
+constraint wms.message_template message_template_status_one_of CHECK ((status = ANY (ARRAY['active'::text, 'inactive'::text])))
+constraint wms.message_template message_template_subject_shape CHECK (((channel = 'email'::text) = (subject IS NOT NULL)))
+index wms.message_template message_template_pkey CREATE UNIQUE INDEX message_template_pkey ON wms.message_template USING btree (id)
+index wms.message_template message_template_project_id_name_key CREATE UNIQUE INDEX message_template_project_id_name_key ON wms.message_template USING btree (company_id, project_id, name)
+index wms.message_template message_template_project_key CREATE UNIQUE INDEX message_template_project_key ON wms.message_template USING btree (company_id, project_id, id)
+trigger wms.message_template message_template_audit_trail enabled=O CREATE TRIGGER message_template_audit_trail AFTER INSERT OR DELETE OR UPDATE ON wms.message_template FOR EACH ROW EXECUTE FUNCTION wms.audit_row('', '')
+trigger wms.message_template message_template_touch_updated_at enabled=O CREATE TRIGGER message_template_touch_updated_at BEFORE UPDATE ON wms.message_template FOR EACH ROW EXECUTE FUNCTION wms.touch_updated_at()
+policy wms.message_template message_template_tenant_fence permissive ALL to=wms_api using=(company_id = ( SELECT wms.current_company_id() AS current_company_id)) check=(company_id = ( SELECT wms.current_company_id() AS current_company_id))
 relation wms.outbox_event kind=table owner=<owner> persistence=p rls=true force-rls=true replica-identity=d acl=[<owner>=DELETE,INSERT,MAINTAIN,REFERENCES,SELECT,TRIGGER,TRUNCATE,UPDATE/<owner> wms_api=DELETE,INSERT,SELECT,UPDATE/<owner> wms_worker=SELECT/<owner>]
 column wms.outbox_event 1 id uuid not-null default=wms.uuidv7()
 column wms.outbox_event 2 company_id uuid not-null
@@ -4480,5 +4545,6 @@ journal 1793225274885 7d8dad0b8e97c8a9ec2805bac6030d16814cc91d63335a1501744a836b
 journal 1793227264394 ab9df765d72e64095403123cc17acf2f34f85c3caecb8ebea81a0321043ac64b
 journal 1793229147346 ea9804b6736352c3417743973dfdd0e9ac08c7ec714e43bfc7bb79a33034e30b
 journal 1793231090634 3a342c060d9cc6b5b37397d1817bf12b3e56217d68c7fb5aa6f3a3561827bb70
-journal 1793233258158 28c1ebcb79fe09c31112ea7c107fd4fa02346fd0ea3241c4875ef71724c3300a
+journal 1793231765311 8be507c6aeeb679056b17fbe4b539cd8826f644e166c5d0254f04775e81d3e05
+journal 1793236482647 28c1ebcb79fe09c31112ea7c107fd4fa02346fd0ea3241c4875ef71724c3300a
 pgboss-version 42
