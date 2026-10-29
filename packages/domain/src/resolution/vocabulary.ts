@@ -60,8 +60,8 @@
 
 /** Where a Ticket stands: the prototype's seven less `Created`, which is `created_at`. */
 export const TICKET_STATUSES = ["open", "in-progress", "pending", "on-hold", "completed", "rejected"] as const
-/** What kind of case a Ticket is: the prototype's five, the repair ticket, the glossary's complaint and task, the consumer's two, and other. */
-export const TICKET_KINDS = ["missed-collection", "overflow", "access-issue", "container-request", "container-defect", "proof-follow-up", "complaint", "reported-problem", "rejected-command", "internal-task", "other"] as const
+/** What kind of case a Ticket is: the prototype's five, the repair ticket, the glossary's complaint and task, the consumer's two, a vehicle's defects a pre-trip check found (O13 of #290), and other. */
+export const TICKET_KINDS = ["missed-collection", "overflow", "access-issue", "container-request", "container-defect", "proof-follow-up", "complaint", "reported-problem", "rejected-command", "internal-task", "vehicle-defect", "other"] as const
 /** How urgent: the prototype's five, `none` the default. */
 export const TICKET_PRIORITIES = ["critical", "high", "medium", "low", "none"] as const
 /** Where a Ticket came from: the office's doors, the driver's device as Execution spells it, the dispatcher's word, two machines, and a Service Provider's workspace. */

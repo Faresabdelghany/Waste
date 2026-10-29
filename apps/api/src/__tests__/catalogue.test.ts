@@ -208,6 +208,22 @@ describe("the master data endpoints", { skip: database.skip }, () => {
       assert.equal((await one(olivia, `/waste-fractions/${coded.id}`, WasteFraction)).wasteCode, null)
     })
 
+    test("holds a fraction under a starred code hazardous, and takes the flag as the office sets it under any other (O18 of #290)", async () => {
+      const batteries = await create(olivia, "/waste-fractions", { key: "batteries", name: "Batteries", wasteCode: "200133*" }, WasteFraction)
+      assert.equal(batteries.hazardous, true, "the starred code says it")
+      const plain = await create(olivia, "/waste-fractions", { key: "clean-wood", name: "Clean wood", wasteCode: "200138" }, WasteFraction)
+      assert.equal(plain.hazardous, false)
+      const refusedCreate = await refused(await olivia("/waste-fractions", { method: "POST", body: { key: "paint", name: "Paint", wasteCode: "200127*", hazardous: false } }), 400)
+      assert.deepEqual(refusedCreate.errors?.map((error) => error.path), ["hazardous"])
+      const told = await refused(await olivia(`/waste-fractions/${batteries.id}`, { method: "PATCH", body: { hazardous: false } }), 400)
+      assert.deepEqual(told.errors?.map((error) => [error.path, error.message]), [["hazardous", "A waste code with an asterisk is a hazardous entry of the list: the fraction is hazardous"]])
+      assert.equal((await patch(olivia, `/waste-fractions/${plain.id}`, { hazardous: true }, WasteFraction)).hazardous, true, "a mirror entry's waste may be hazardous")
+      assert.equal((await patch(olivia, `/waste-fractions/${plain.id}`, { hazardous: false }, WasteFraction)).hazardous, false)
+      assert.equal((await patch(olivia, `/waste-fractions/${plain.id}`, { wasteCode: "200137*" }, WasteFraction)).hazardous, true, "a starred code set makes it hazardous")
+      assert.equal((await patch(olivia, `/waste-fractions/${plain.id}`, { wasteCode: "200138" }, WasteFraction)).hazardous, true, "losing the asterisk leaves the flag as it was")
+      assert.equal((await one(olivia, `/waste-fractions/${batteries.id}`, WasteFraction)).hazardous, true)
+    })
+
     test("takes a density on a create and a patch, clears it with a null, and refuses one outside 1 to 2000 at the field (O10 of #290)", async () => {
       const dense = await create(olivia, "/waste-fractions", { key: "green-waste", name: "Green waste", densityKgPerCubicMetre: 250 }, WasteFraction)
       assert.equal(dense.densityKgPerCubicMetre, 250)

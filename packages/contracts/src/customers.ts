@@ -41,6 +41,8 @@
 // point placed by hand, and a typed address is no longer the register's, so
 // a patch of `address` alone lets the register's id and parts go.
 import {
+  CONTACT_ROLES,
+  CONTACT_STATUSES,
   CUSTOMER_KINDS,
   CUSTOMER_STATUSES,
   PROPERTY_GROUP_MEMBER_ROLES,
@@ -187,6 +189,64 @@ export const CustomerPatch = z
   })
   .refine(changesSomething, somethingToChange)
 export type CustomerPatch = z.infer<typeof CustomerPatch>
+
+/** What a Contact Person does for the organisation they speak for (#291 C14). */
+export const ContactRole = z.enum(CONTACT_ROLES)
+export type ContactRole = z.infer<typeof ContactRole>
+
+/** Whether the Contact Person still speaks for their Customer; one who has left is made inactive, never deleted. */
+export const ContactStatus = z.enum(CONTACT_STATUSES)
+export type ContactStatus = z.infer<typeof ContactStatus>
+
+/** A contact is reached on an e-mail or a phone, or both; one with neither could never be written to. */
+export const REACHABLE_ON_A_CHANNEL = "Give an e-mail or a phone: a contact is reached on one at least"
+const reachable = (contact: { email?: string | null; phone?: string | null }) => contact.email != null || contact.phone != null
+
+/**
+ * A Contact Person (#291 C14): a named person who speaks for an organisation
+ * Customer, with a role and the channels they are reached on. A person
+ * Customer is their own contact and has none. Read under its customer
+ * (`GET /customers/:id/contacts`) and written one at a time; there is no
+ * delete, since a message sent to one stays on its ledger naming them.
+ */
+export const CustomerContact = z.object({
+  ...stamped,
+  customerId: Id,
+  name: Label,
+  role: ContactRole,
+  /** Stored lowercase, as a customer's is. */
+  email: z.email().nullable(),
+  phone: Label.nullable(),
+  status: ContactStatus,
+})
+export type CustomerContact = z.infer<typeof CustomerContact>
+
+export const CustomerContactCreate = z
+  .strictObject({
+    name: Label,
+    role: ContactRole,
+    email: z.email().nullable().optional(),
+    phone: Label.nullable().optional(),
+    status: ContactStatus.default("active").describe("Defaults to active when absent: a contact is registered in order to be reached."),
+  })
+  .refine(reachable, { message: REACHABLE_ON_A_CHANNEL, path: ["email"] })
+export type CustomerContactCreate = z.infer<typeof CustomerContactCreate>
+
+/** Every field optional; a null clears a channel, and the route refuses a patch that would leave the contact with neither. */
+export const CustomerContactPatch = z
+  .strictObject({
+    name: Label.optional(),
+    role: ContactRole.optional(),
+    email: z.email().nullable().optional(),
+    phone: Label.nullable().optional(),
+    status: ContactStatus.optional(),
+  })
+  .refine(changesSomething, somethingToChange)
+export type CustomerContactPatch = z.infer<typeof CustomerContactPatch>
+
+/** A customer's contacts, every one: an organisation has a handful, never a page's worth. */
+export const CustomerContacts = z.object({ items: z.array(CustomerContact) })
+export type CustomerContacts = z.infer<typeof CustomerContacts>
 
 /** What one Customer is to one Property. One customer may be several things to one property, so the role is part of the pair. */
 export const PropertyParty = z.strictObject({

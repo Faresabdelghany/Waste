@@ -13,7 +13,9 @@ import {
   OFFICE_DECIDES,
   routeDayChangeRefusal,
   SAME_CREW,
+  SAME_FRACTIONS,
   SAME_STOPS,
+  wasteFractionChangeRefusal,
   stopSetChangeRefusal,
   serviceDaysAfter,
   SAME_DAYS,
@@ -33,7 +35,7 @@ describe("a Service Provider Activity", () => {
     assert.equal(initialStatus("coordination-note"), "open")
     assert.deepEqual(
       SERVICE_PROVIDER_ACTIVITY_KINDS.filter((kind) => isProposal(kind)),
-      ["route-day-change", "vehicle-change", "stop-set-change"],
+      ["route-day-change", "vehicle-change", "stop-set-change", "waste-fraction-change"],
     )
   })
 
@@ -157,5 +159,18 @@ describe("a stop-set change", () => {
     assert.equal(stopSetChangeRefusal(["a", "b"], ["b", "a"]), null)
     assert.equal(stopSetChangeRefusal(["a", "b"], ["a", "b", "c"]), null)
     assert.equal(stopSetChangeRefusal(["a", "b"], ["a"]), null)
+  })
+})
+
+describe("a waste-fraction change", () => {
+  test("is a proposal, decided by the office", () => {
+    assert.equal(initialStatus("waste-fraction-change"), "pending-approval")
+    assert.deepEqual(closesWith({ number: 9, kind: "waste-fraction-change", status: "pending-approval" }, "reject", "provider"), { ok: false, status: 403, detail: OFFICE_DECIDES })
+  })
+
+  test("must move a fraction; a rule's fractions are a set, so their order is no change", () => {
+    assert.equal(wasteFractionChangeRefusal(["organic", "paper"], ["paper", "organic"]), SAME_FRACTIONS)
+    assert.equal(wasteFractionChangeRefusal(["organic"], ["organic", "paper"]), null)
+    assert.equal(wasteFractionChangeRefusal(["organic", "paper"], ["paper"]), null)
   })
 })

@@ -30,7 +30,7 @@ const STAMPS = { createdAt: "2026-08-01T09:00:00.000Z", updatedAt: "2026-08-01T0
 const fixtures = getModuleDefinition(PROVIDER_ACTIVITIES_MODULE)?.records ?? []
 const organisationFixtures = getModuleDefinition({ workspaceId: "configure", moduleId: "organization" })?.records ?? []
 
-const copenhagen: Project = { id: "01a0d2a4-a280-7002-8000-000000000001", ...STAMPS, name: "Copenhagen Central", kind: "Municipality", language: "da", currency: "DKK", timezone: "Europe/Copenhagen", status: "active", weekend: ["saturday", "sunday"], holidayList: "Danish public holidays", publicSlug: null, weightTolerancePercent: 5, paymentTermsDays: 30, paymentReferenceScheme: "none", holdForReview: false, branding: { brandColor: null, logoUrl: null, accessibilityStatementUrl: null } }
+const copenhagen: Project = { id: "01a0d2a4-a280-7002-8000-000000000001", ...STAMPS, name: "Copenhagen Central", kind: "Municipality", language: "da", currency: "DKK", timezone: "Europe/Copenhagen", status: "active", weekend: ["saturday", "sunday"], holidayList: "Danish public holidays", publicSlug: null, weightTolerancePercent: 5, paymentTermsDays: 30, paymentReferenceScheme: "none", holdForReview: false, privacyPolicy: { positionRetentionDays: null, proofRetentionDays: null, gpsPurpose: null }, branding: { brandColor: null, logoUrl: null, accessibilityStatementUrl: null } }
 const NORDREN = "01a0d2a4-a280-7003-8000-000000000001"
 const SCHEME = "01a0d2a4-a280-7010-8000-000000000001"
 const GROUP = "01a0d2a4-a280-7011-8000-000000000001"
@@ -57,6 +57,7 @@ const proposal: ServiceProviderActivity = {
   vehicleId: null,
   driverId: null,
   containerIds: null,
+  wasteFractionIds: null,
   successorSchemeId: null,
   openedBy: LARS,
   closedBy: null,
@@ -221,6 +222,33 @@ describe("a stop-set change (#474, part 3)", () => {
   })
 })
 
+describe("a waste-fraction change (#474, part 4)", () => {
+  const GLASS = "01a0d2a4-a280-7080-8000-000000000001"
+
+  test("is opened on a route of its group with its rule's fractions, by the office on the web", () => {
+    assert.ok(kindsOpenedBy("office").includes("waste-fraction-change"))
+    assert.ok(!kindsOpenedBy("provider").includes("waste-fraction-change"), "a provider reads no fractions to pick from")
+    const record = createActivityRecord({ kind: "waste-fraction-change", serviceProviderId: `service-provider-${NORDREN}`, subject: "Glass too", routeId: route.id, wasteFractionIds: `fraction-${GLASS}`, effectiveFrom: "2026-08-26" }, 1)
+    assert.deepEqual(ServiceProviderActivityCreate.parse(toActivityCreateBody(record, context)), {
+      kind: "waste-fraction-change",
+      projectId: copenhagen.id,
+      serviceProviderId: NORDREN,
+      subject: "Glass too",
+      routeSchemeId: SCHEME,
+      collectionGroupId: GROUP,
+      wasteFractionIds: [GLASS],
+      effectiveFrom: "2026-08-26",
+    })
+  })
+
+  test("reads its fractions and is decided by the office", () => {
+    const change = toActivityRecord({ ...proposal, kind: "waste-fraction-change", serviceDays: null, wasteFractionIds: [GLASS] }, context)
+    assert.equal(change.facts["New fractions"], `fraction-${GLASS}`)
+    assert.equal(change.value, "Waste-fraction change")
+    assert.deepEqual(activityCommandsOffered(change, "provider").map((offer) => offer.command), ["withdraw"])
+  })
+})
+
 describe("a correction", () => {
   test("sends what moved, a proposal's days among them", () => {
     const before = toActivityRecord(proposal, context)
@@ -258,7 +286,7 @@ describe("what each side is offered", () => {
 
   test("the open form offers a provider a proposal or a note, and asks it no provider and no project", () => {
     assert.deepEqual(kindsOpenedBy("provider"), ["route-day-change", "vehicle-change", "stop-set-change", "coordination-note"])
-    const ids = (side: "office" | "provider") => activityOpenForm(side, { routes: [], vehicles: [], drivers: [], containers: [], serviceAreas: [], providers: [], projects: [] }).sections.flatMap((section) => section.fields.map((field) => field.id))
+    const ids = (side: "office" | "provider") => activityOpenForm(side, { routes: [], vehicles: [], drivers: [], containers: [], fractions: [], serviceAreas: [], providers: [], projects: [] }).sections.flatMap((section) => section.fields.map((field) => field.id))
     assert.ok(!ids("provider").includes("serviceProviderId"))
     assert.ok(!ids("provider").includes("projectId"))
     assert.ok(ids("office").includes("serviceProviderId"))
