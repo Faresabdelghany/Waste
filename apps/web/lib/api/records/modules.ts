@@ -45,6 +45,7 @@ import { sortingGuideModule } from "./sorting-guide"
 import { routesModule } from "./routes"
 import { ticketTeamsModule } from "./ticket-teams"
 import { ticketsModule } from "./tickets"
+import { weighbridgeModule } from "./weighbridge"
 import { weightsModule } from "./weights"
 
 /**
@@ -137,6 +138,8 @@ export const SERVER_MODULES: readonly ServerModule[] = [
   accountingModule,
   settlementsModule,
   weightsModule,
+  // A weighbridge's tickets (O27 of #290), after the stations, the routes, the vehicles and the fractions they name.
+  weighbridgeModule,
 ]
 
 const byKey = new Map(SERVER_MODULES.map((module) => [moduleKeyOf(module.workspaceId, module.moduleId), module]))

@@ -133,6 +133,7 @@ import { vehicleRoutes } from "./routes/vehicles"
 import { stockBalanceRoutes } from "./routes/stock-balances"
 import { warehouseRoutes } from "./routes/warehouses"
 import { wasteFractionEmissionFactorRoutes } from "./routes/waste-fraction-emission-factors"
+import { weighbridgeRoutes } from "./routes/weighbridge"
 import { weightControlRoutes } from "./routes/weight-control"
 
 export type AppOptions = {
@@ -177,6 +178,10 @@ export type AppOptions = {
   sensorIngestAllowance?: Allowance
   /** An address's calendar feed's own allowance, per client and address and per client across addresses; a test injects small bounds or a pinned clock. */
   feedAllowance?: FeedAllowance
+  /** Each company's weighbridge batches a minute (O27 of #290); a test injects a small allowance or a pinned clock. */
+  weighbridgeAllowance?: Allowance
+  /** A weighbridge batch's bytes before the token is read; a test injects a small bound. */
+  weighbridgeMaxBodyBytes?: number
   /** The socket's peer address, the public door's client where no trusted proxy names one: server.ts reads the Node request's; a test has none. */
   peer?: (c: Context) => string | undefined
   /** How many proxies in front of the API append to X-Forwarded-For (PUBLIC_TRUSTED_PROXIES): 0, the default, ignores the header. */
@@ -200,6 +205,8 @@ export function createApp({
   routingEngine = new QuotaEngine(new FakeProvider(), { ...STANDARD_PLAN, callsPerMinute: PREVIEW_CALLS_PER_MINUTE, waits: false }),
   publicAllowance = new Allowance(PUBLIC_REQUESTS_PER_MINUTE, now),
   feedAllowance = new FeedAllowance(FEED_REQUESTS_PER_ADDRESS, FEED_ADDRESSES_PER_CLIENT, now),
+  weighbridgeAllowance,
+  weighbridgeMaxBodyBytes,
   sensorIngestAllowance = new Allowance(SENSOR_BATCHES_PER_MINUTE, now),
   peer = () => undefined,
   trustedProxies = 0,
@@ -332,6 +339,8 @@ export function createApp({
   // Proof objects (O1 of #290) call Storage, so, like the preview, their guard ends the principal's transaction and each handler reads its fence in a short one of its own.
   app.route("/", proofObjectRoutes(identify({ pool, verifier }), { pool, storage, now, log: log ?? console.error }))
   app.route("/", unloadRoutes(guard, { now }))
+  // A weighbridge's tickets (O27 of #290): the ingest bounded by its own allowance and body size, the office's queue, match and dismissal.
+  app.route("/", weighbridgeRoutes(guard, { now, allowance: weighbridgeAllowance, maxBodyBytes: weighbridgeMaxBodyBytes }))
   // The driver door (Issue #104, slice 4) goes on after the office: its commands are judged against the request's clock, so it takes `now` like the ledger routes.
   app.route("/", driverDoorRoutes(guard, { now }))
   // Resolution (Issue #109): a ticket's `occurredAt` and an alert's `detectedAt` default to the request's clock and may not run ahead of it, and every command stamps and publishes with it, so both modules take `now` too.

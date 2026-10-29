@@ -328,6 +328,10 @@ _Avoid_: Route status, customer note
 A recorded event on a dated Route at an Unloading Station in which the vehicle disposes of some or all of its collected load, with weight or disposal evidence. It is neither a Pickup nor a stop's Proof of Service; a planned unload visit belongs to a Plan.
 _Avoid_: Pickup, proof of service, tip, dump
 
+**Weighbridge Ticket**:
+What a station's weighbridge sent of one weighing: its ticket number, the vehicle's plate, when, the weights and the product. It is matched to the route its vehicle was out on and written as that route's Unload, or waits for the office, which matches it by hand or dismisses it. A ticket is never edited.
+_Avoid_: Weight record, scale reading, weigh slip
+
 **Transfer Note**:
 The document that goes with an Unload's load from the company that collected and carried it to the Unloading Station that took it: the parties, the waste fraction with its waste code and whether it is hazardous, the weights, and when. One per Unload the station accepted; a refused load was not transferred and has none, and a corrected Unload's note is its correction's.
 _Avoid_: Consignment note, waybill, disposal receipt

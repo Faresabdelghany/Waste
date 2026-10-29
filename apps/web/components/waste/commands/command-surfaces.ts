@@ -48,12 +48,13 @@ import { PaymentCommandsSurface, PaymentsPrimarySurface } from "./payment-surfac
 import { AccountingExportSurface, ExportPeriodSurface } from "./accounting-surfaces"
 import { AddPropertyGroupSurface, AddPropertySurface, AddSharedPointSurface, PropertyCommandsSurface, PropertyGroupCommandsSurface, SharedPointCommandsSurface } from "./place-surfaces"
 import { PriceRowCommandsSurface, PriceRowsPrimarySurface, ProductCommandsSurface, ProductsPrimarySurface } from "./pricing-surfaces"
-import { PROVIDER_PRICES_LIST, SERVICE_AREAS_LIST, SETTLEMENTS_LIST, WEIGHTS_LIST } from "./provider-money-lists"
+import { PROVIDER_PRICES_LIST, SERVICE_AREAS_LIST, SETTLEMENTS_LIST, WEIGHBRIDGE_LIST, WEIGHTS_LIST } from "./provider-money-lists"
 import { CreateServiceAreaSurface, OpenSettlementSurface, ProviderPriceCommandsSurface, ProviderPricesPrimarySurface, RecordUnloadSurface, ServiceAreaCommandsSurface, ServiceAreasRead, SettlementSurface, WeightReviewSurface } from "./provider-money-surfaces"
 import { SensorPairingSurface } from "./sensor-surfaces"
 import { InviteTeamMemberSurface, TeamMemberCommandsSurface } from "./team-surfaces"
 import { LiveBoardRefresh, LiveRouteSurface, PickupCommandsSurface, RouteCommandsSurface, RoutesPrimarySurface } from "./route-surfaces"
 import { WarehouseStockSurface } from "./stock-surfaces"
+import { WeighbridgeTicketSurface } from "./weighbridge-surfaces"
 
 /** What a primary surface is handed: the label the module's primary action carries. */
 export type PrimarySurfaceProps = { label: string }
@@ -212,6 +213,8 @@ export const COMMAND_SURFACES: Readonly<Record<string, CommandSurface>> = {
   "commercial.service-provider-prices": { primary: ProviderPricesPrimarySurface, rowActions: ProviderPriceCommandsSurface, list: PROVIDER_PRICES_LIST, whileShown: ServiceAreasRead },
   "commercial.settlements": { primary: OpenSettlementSurface, rowActions: SettlementSurface, list: SETTLEMENTS_LIST, whileShown: ServiceAreasRead },
   "route-studio.weights": { primary: RecordUnloadSurface, rowActions: WeightReviewSurface, list: WEIGHTS_LIST },
+  // A weighbridge's tickets (O27 of #290): sent by the weighbridge, never made by the office; an unmatched one matched or dismissed in its details, the queue first.
+  "route-studio.weighbridge": { primary: null, rowActions: WeighbridgeTicketSurface, list: WEIGHBRIDGE_LIST },
   // #291 C24: a provider's team invited through its own dialog on a provider's role, a member switched off and on in its details; the module lists the accounts, never the roles it reads beside them.
   "service-providers.service-provider-workspace": { primary: InviteTeamMemberSurface, rowActions: TeamMemberCommandsSurface, list: TEAM_LIST },
 }

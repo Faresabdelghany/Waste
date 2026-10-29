@@ -1,59 +1,63 @@
-// The weighbridge in the office (O9 of #290) as drizzle-kit writes it: the
-// project's tolerance, defaulting to the domain's 5 and held to 1..100, and
-// the unload's refusal, its reason from the domain's list and a note that
-// goes with it — six statements diffed from the project as 0037 left it to
-// the project as 0045 did (project-as-of.ts) and the unload as 0010 did
-// (unload-as-of.ts), since an applied file is never edited. Then migration
-// 0045, which is exactly those statements under its header: no table is new,
-// so nothing is hand-written; every project takes the default, and no unload
-// present is refused, so nothing is guarded. No database.
+// A weighbridge's tickets (O27 of #290) as drizzle-kit writes them: one table,
+// keyed into its station and its sender through the company and into its
+// vehicle, its route and its Unload through its project, unique by the
+// station's ticket number, with the Unload's weights sentence and the status
+// shape. Then the migration, whose head is exactly that table and whose tail
+// is what it owes the file: its fence, its trigger and its audit trail. The
+// file is found by its name, not its number, which it takes at its turn. No
+// database.
 import assert from "node:assert/strict"
-import { readFile } from "node:fs/promises"
+import { readdir, readFile } from "node:fs/promises"
 import { join } from "node:path"
 import { describe, test } from "node:test"
 
-import { DEFAULT_WEIGHT_TOLERANCE_PERCENT } from "@waste/domain/execution/unloads"
-import { UNLOAD_REFUSAL_REASONS } from "@waste/domain/execution/vocabulary"
-
 import { MIGRATIONS_FOLDER } from "../migrate"
-import { userAccount } from "../schema/access"
-import { wasteFraction } from "../schema/catalogue"
-import { route, session, unload } from "../schema/execution"
-import { company, project } from "../schema/organisation"
-import { unloadingStation } from "../schema/places"
+import { weighbridgeTicket } from "../schema/weighbridge"
+import { auditTrail, WEIGHBRIDGE_AUDITED } from "../sql/audit-trail"
 import { normalised, statementsOf } from "../sql/hand-written"
-import { projectAsOf } from "./project-as-of"
+import { tenantFence } from "../sql/tenant-fence"
+import { touchUpdatedAt } from "../sql/touch-updated-at"
 import { checksOf, ref } from "./rendering"
-import { statementsBetween } from "./specimen"
-import { unloadAsOf0010 } from "./unload-as-of"
-import { REFUSAL_REASONS, REFUSAL_SHAPE, TOLERANCE_RANGE } from "./weighbridge-shapes"
+import { statementsFor } from "./specimen"
 
-const MIGRATION = "0045_weighbridge.sql"
+/** What the file owes below drizzle-kit's statements: the fence, the trigger, the audit trail. */
+const handWritten = (): string[] => [...tenantFence(weighbridgeTicket), ...touchUpdatedAt(weighbridgeTicket), ...WEIGHBRIDGE_AUDITED.flatMap(auditTrail)]
 
-const referenced = { company, route, session, unloadingStation, wasteFraction, userAccount }
+/** The migration, by its name: it takes its number at its turn. */
+async function migration(): Promise<{ text: string; statements: string[] }> {
+  const file = (await readdir(MIGRATIONS_FOLDER)).find((name) => /^\d{4}_weighbridge_tickets\.sql$/.test(name))
+  assert.ok(file !== undefined, "the weighbridge's migration")
+  const text = await readFile(join(MIGRATIONS_FOLDER, file), "utf8")
+  return { text, statements: statementsOf(text) }
+}
 
-describe("the weighbridge as drizzle-kit writes it", () => {
-  const generated = statementsBetween({ ...referenced, project: projectAsOf("0037"), unload: unloadAsOf0010 }, { ...referenced, project: projectAsOf("0045"), unload })
-
-  test("the project's tolerance and the unload's refusal, each held by its checks", async () => {
-    assert.deepEqual(await generated, [
-      `ALTER TABLE "wms"."project" ADD COLUMN "weight_tolerance_percent" integer DEFAULT ${DEFAULT_WEIGHT_TOLERANCE_PERCENT} NOT NULL;`,
-      'ALTER TABLE "wms"."unload" ADD COLUMN "refusal_reason" text;',
-      'ALTER TABLE "wms"."unload" ADD COLUMN "refusal_note" text;',
-      `ALTER TABLE "wms"."project" ADD CONSTRAINT "project_weight_tolerance_percent_range" CHECK (${TOLERANCE_RANGE});`,
-      `ALTER TABLE "wms"."unload" ADD CONSTRAINT "unload_refusal_reason_one_of" CHECK (${ref("unload", "refusal_reason")} in (${REFUSAL_REASONS.map((reason) => `'${reason}'`).join(", ")}));`,
-      `ALTER TABLE "wms"."unload" ADD CONSTRAINT "unload_refusal_shape" CHECK (${REFUSAL_SHAPE});`,
-    ])
+describe("a weighbridge's tickets as drizzle-kit writes them", () => {
+  test("the migration's head is exactly the table with its keys and indexes", async () => {
+    const { statements } = await migration()
+    const generated = (await statementsFor({ weighbridgeTicket })).map(normalised)
+    assert.deepEqual([...statements.slice(0, generated.length)].sort(), [...generated].sort())
+    assert.ok(generated.includes(normalised('ALTER TABLE "wms"."weighbridge_ticket" ADD CONSTRAINT "weighbridge_ticket_unload_id_fk" FOREIGN KEY ("company_id","project_id","unload_id") REFERENCES "wms"."unload"("company_id","project_id","id") ON DELETE no action ON UPDATE no action;')), "the Unload of the ticket's project")
+    assert.ok(generated.includes(normalised('ALTER TABLE "wms"."weighbridge_ticket" ADD CONSTRAINT "weighbridge_ticket_vehicle_id_fk" FOREIGN KEY ("company_id","project_id","vehicle_id") REFERENCES "wms"."vehicle"("company_id","project_id","id") ON DELETE no action ON UPDATE no action;')), "a vehicle of the ticket's project")
+    assert.ok(generated.includes(normalised('CREATE INDEX "weighbridge_ticket_status_idx" ON "wms"."weighbridge_ticket" USING btree ("company_id","status","id");')), "the office's queue")
   })
 
-  test("the reasons are the domain's, and the shapes the tables'", () => {
-    assert.deepEqual([...REFUSAL_REASONS], [...UNLOAD_REFUSAL_REASONS])
-    assert.equal(checksOf(unload).get("unload_refusal_shape"), REFUSAL_SHAPE)
-    assert.equal(checksOf(project).get("project_weight_tolerance_percent_range"), TOLERANCE_RANGE)
+  test("and its tail is what the table owes it, in that order, and nothing else", async () => {
+    const { text, statements } = await migration()
+    const tail = handWritten().map(normalised)
+    assert.deepEqual(statements.slice(statements.length - tail.length), tail)
+    assert.equal(statements.length, (await statementsFor({ weighbridgeTicket })).length + tail.length, "nothing else in the file")
+    assert.match(text, /^-- A weighbridge's tickets \(O27 of #290, row 8\.8\)/)
   })
+})
 
-  test("migration 0045 is exactly those statements", async () => {
-    const statements = statementsOf(await readFile(join(MIGRATIONS_FOLDER, MIGRATION), "utf8"))
-    assert.deepEqual(statements, (await generated).map(normalised))
+describe("the table's checks", () => {
+  const column = (name: string) => ref("weighbridge_ticket", name)
+
+  test("the weights are an Unload's sentence; matched is a route and its Unload in a project, dismissed says why, unmatched what it waits for", () => {
+    assert.equal(checksOf(weighbridgeTicket).get("weighbridge_ticket_weights_shape"), `(${column("gross_kg")} is null) = (${column("tare_kg")} is null) and (${column("gross_kg")} is null or ${column("net_kg")} = ${column("gross_kg")} - ${column("tare_kg")})`)
+    assert.equal(
+      checksOf(weighbridgeTicket).get("weighbridge_ticket_status_shape"),
+      `(${column("status")} = 'matched') = (${column("route_id")} is not null and ${column("unload_id")} is not null and ${column("project_id")} is not null) and (${column("status")} = 'dismissed') = (${column("dismissed_note")} is not null) and (${column("status")} <> 'unmatched' or ${column("unmatched_reason")} is not null)`,
+    )
   })
 })

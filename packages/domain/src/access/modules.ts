@@ -31,6 +31,8 @@ export const MODULE_KEYS = [
   "route-studio.routes",
   "route-studio.pickups",
   "route-studio.weights",
+  // A weighbridge's tickets read automatically and matched to routes (O27 of #290).
+  "route-studio.weighbridge",
   // Fleet
   "fleet.vehicles",
   "fleet.drivers",

@@ -38,6 +38,7 @@ const unload = {
   weightReview: CAPTURED,
   refusal: null,
   load: null,
+  possibleDuplicates: [],
 }
 
 describe("the weights rule", () => {
@@ -88,6 +89,12 @@ describe("the weighbridge on an unload (O9 of #290)", () => {
     assert.deepEqual(Unload.parse(measured), measured)
     const { refusal: _refusal, load: _load, ...before } = unload
     assert.deepEqual(Unload.parse(before), unload)
+  })
+
+  test("names the open Unloads it may duplicate (O27 of #290), none on a row from before", () => {
+    assert.deepEqual(Unload.parse({ ...unload, possibleDuplicates: [OTHER] }).possibleDuplicates, [OTHER])
+    const { possibleDuplicates: _duplicates, ...before } = unload
+    assert.deepEqual(Unload.parse(before).possibleDuplicates, [])
   })
 
   test("the office's capture may say the station refused it, from the list, and other in words", () => {

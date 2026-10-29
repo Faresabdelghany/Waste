@@ -68,5 +68,7 @@ export * from "./service-provider-activities"
 export * from "./messaging"
 // Pre-trip inspection (O13 of #290): a vehicle type's checklist, the checks made against it, and the defects they find.
 export * from "./pre-trip"
+// A weighbridge's tickets (O27 of #290): read automatically, matched to a route and written as its Unload, or left for the office.
+export * from "./weighbridge"
 // Fill-level Sensors (O26 of #290): the devices, their pairings with containers and the readings they send.
 export * from "./sensors"

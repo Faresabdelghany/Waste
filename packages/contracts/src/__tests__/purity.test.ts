@@ -101,6 +101,7 @@ definePurityTests({
     "@waste/domain/execution/shift",
     "@waste/domain/execution/unloads",
     "@waste/domain/execution/vocabulary",
+    "@waste/domain/execution/weighbridge",
     "@waste/domain/execution/work-orders",
     "@waste/domain/execution/workload",
     "@waste/domain/finance/accounting",

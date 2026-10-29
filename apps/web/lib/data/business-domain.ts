@@ -230,7 +230,7 @@ export const publicWorkspaceDomains: readonly PublicWorkspaceDomain[] = [
       "Dispatcher",
       "Compliance manager",
     ],
-    moduleIds: ["live", "schemes", "routes", "pickups", "weights"],
+    moduleIds: ["live", "schemes", "routes", "pickups", "weights", "weighbridge"],
     boundaryNote:
       "Live Operations owns current execution state. Route Schemes are recurring master data; every dated Route generates its Pickups, whose outcomes and proof stay on those same records.",
   },
@@ -466,6 +466,19 @@ export const publicModuleDomains: readonly PublicModuleDomain[] = [
     downstream: ["M13", "M16", "M18", "M19", "M23"],
     boundaryNote:
       "Weight control validates execution evidence; financial eligibility remains owned by Billable Events.",
+  },
+  {
+    key: "route-studio.weighbridge",
+    workspaceId: "route-studio",
+    moduleId: "weighbridge",
+    primaryBlueprintModule: "M11",
+    supportingBlueprintModules: ["M16", "M23"],
+    canonicalOwner: "Route Studio · Weighbridge",
+    personas: ["Operations manager", "Dispatcher"],
+    upstream: ["M09", "M11", "M22"],
+    downstream: ["M11", "M16"],
+    boundaryNote:
+      "A weighbridge's ticket becomes a route's unload once matched; Weight Control reviews it as any other.",
   },
   {
     key: "operate.driver-app",

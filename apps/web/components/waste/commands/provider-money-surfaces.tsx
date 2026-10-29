@@ -638,6 +638,7 @@ export function WeightReviewSurface({ record }: RowSurfaceProps) {
   const [open, setOpen] = useState<keyof typeof WEIGHT_REVIEW_FORMS | null>(null)
   const offered = weightReviewsOffered(record)
   const correction = record.facts["Corrected by"]
+  const duplicate = record.facts["Possible duplicate of"]
 
   const send = (name: keyof typeof WEIGHT_REVIEW_FORMS, values: BusinessFormValues) =>
     run(name, blankNone(values), (outcome) => {
@@ -651,6 +652,11 @@ export function WeightReviewSurface({ record }: RowSurfaceProps) {
         <h3 className="text-sm font-semibold">Weight review</h3>
         {!moduleReady && <p className="text-sm text-muted-foreground">The weights are being read from the API; their reviews follow.</p>}
         {correction !== undefined && <p className="text-sm text-muted-foreground">Corrected by {correction}: review that one.</p>}
+        {duplicate !== undefined && (
+          <p className="text-sm font-medium text-amber-700 dark:text-amber-400" data-testid="possible-duplicate">
+            Possible duplicate of {duplicate}: the weighbridge and the driver recorded the same route and fraction. Reject one before you approve.
+          </p>
+        )}
         <div className="flex flex-wrap gap-2">
           {offered.map((name) => (
             <Button key={name} variant="outline" size="sm" disabled={!moduleReady || busy} onClick={() => setOpen(name)}>

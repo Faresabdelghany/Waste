@@ -89,6 +89,7 @@ import * as vehicleTypesModule from "../vehicle-types"
 import * as visitRulesModule from "../visit-rules"
 import * as messagingModule from "../messaging"
 import * as weightControlModule from "../weight-control"
+import * as weighbridgeModule from "../weighbridge"
 import * as workOrderChargesModule from "../work-order-charges"
 import { Int4, INT4_MAX, INT4_MIN, NonNegativeInt, NonNegativeMinor, NonNegativeTotal, PositiveInt } from "../resource"
 import { ServiceProviderPriceIndex } from "../service-provider-prices"
@@ -175,6 +176,7 @@ const MODULES: Readonly<Record<string, Record<string, unknown>>> = {
   "vehicle-types": vehicleTypesModule,
   "visit-rules": visitRulesModule,
   "weight-control": weightControlModule,
+  "weighbridge": weighbridgeModule,
   "work-order-charges": workOrderChargesModule,
 }
 

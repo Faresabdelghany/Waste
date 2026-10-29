@@ -288,6 +288,8 @@ export const SYSTEM_ROLES: readonly SystemRole[] = [
       only("improve.imports", VIEW_EDIT_CREATE),
       only("configure.integrations", VIEW_EDIT),
       only("configure.privacy", VIEW),
+      // A weighbridge's tickets (O27 of #290): the ingest and its queue's read, never the office's match or dismissal.
+      only("route-studio.weighbridge", ["view", "create"]),
       // A sensor vendor's integration (O26 of #290): it reads the sensors, registers and pairs them as a vendor's provisioning does, and appends their readings; retiring a sensor and ending or moving a pairing are the office's edits.
       only("resources.sensors", ["view", "create"]),
     ),
