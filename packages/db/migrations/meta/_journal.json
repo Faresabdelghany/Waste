@@ -540,6 +540,13 @@
       "when": 1793241234406,
       "tag": "0076_fraction_hazardous",
       "breakpoints": true
+    },
+    {
+      "idx": 77,
+      "version": "7",
+      "when": 1793243568726,
+      "tag": "0077_weighbridge_tickets",
+      "breakpoints": true
     }
   ]
 }

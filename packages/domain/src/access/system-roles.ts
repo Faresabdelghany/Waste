@@ -288,6 +288,8 @@ export const SYSTEM_ROLES: readonly SystemRole[] = [
       only("improve.imports", VIEW_EDIT_CREATE),
       only("configure.integrations", VIEW_EDIT),
       only("configure.privacy", VIEW),
+      // A weighbridge's tickets (O27 of #290): the ingest and its queue's read, never the office's match or dismissal.
+      only("route-studio.weighbridge", ["view", "create"]),
     ),
   },
   {

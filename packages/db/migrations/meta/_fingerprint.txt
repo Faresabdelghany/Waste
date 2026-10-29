@@ -4480,6 +4480,55 @@ index wms.waste_fraction_emission_factor waste_fraction_emission_factor_waste_fr
 trigger wms.waste_fraction_emission_factor waste_fraction_emission_factor_audit_trail enabled=O CREATE TRIGGER waste_fraction_emission_factor_audit_trail AFTER INSERT OR DELETE OR UPDATE ON wms.waste_fraction_emission_factor FOR EACH ROW EXECUTE FUNCTION wms.audit_row('', '')
 trigger wms.waste_fraction_emission_factor waste_fraction_emission_factor_touch_updated_at enabled=O CREATE TRIGGER waste_fraction_emission_factor_touch_updated_at BEFORE UPDATE ON wms.waste_fraction_emission_factor FOR EACH ROW EXECUTE FUNCTION wms.touch_updated_at()
 policy wms.waste_fraction_emission_factor waste_fraction_emission_factor_tenant_fence permissive ALL to=wms_api using=(company_id = ( SELECT wms.current_company_id() AS current_company_id)) check=(company_id = ( SELECT wms.current_company_id() AS current_company_id))
+relation wms.weighbridge_ticket kind=table owner=<owner> persistence=p rls=true force-rls=true replica-identity=d acl=[<owner>=DELETE,INSERT,MAINTAIN,REFERENCES,SELECT,TRIGGER,TRUNCATE,UPDATE/<owner> wms_api=DELETE,INSERT,SELECT,UPDATE/<owner> wms_worker=SELECT/<owner>]
+column wms.weighbridge_ticket 1 id uuid not-null default=wms.uuidv7()
+column wms.weighbridge_ticket 2 company_id uuid not-null
+column wms.weighbridge_ticket 3 project_id uuid
+column wms.weighbridge_ticket 4 created_at timestamp with time zone not-null default=now()
+column wms.weighbridge_ticket 5 updated_at timestamp with time zone not-null default=now()
+column wms.weighbridge_ticket 6 unloading_station_id uuid not-null
+column wms.weighbridge_ticket 7 ticket_number text not-null
+column wms.weighbridge_ticket 8 vehicle_registration text not-null
+column wms.weighbridge_ticket 9 vehicle_id uuid
+column wms.weighbridge_ticket 10 weighed_at timestamp with time zone not-null
+column wms.weighbridge_ticket 11 gross_kg integer
+column wms.weighbridge_ticket 12 tare_kg integer
+column wms.weighbridge_ticket 13 net_kg integer not-null
+column wms.weighbridge_ticket 14 fraction_key text
+column wms.weighbridge_ticket 15 waste_code text
+column wms.weighbridge_ticket 16 status text not-null
+column wms.weighbridge_ticket 17 unmatched_reason text
+column wms.weighbridge_ticket 18 route_id uuid
+column wms.weighbridge_ticket 19 unload_id uuid
+column wms.weighbridge_ticket 20 dismissed_note text
+column wms.weighbridge_ticket 21 received_by uuid not-null
+constraint wms.weighbridge_ticket weighbridge_ticket_company_id_fk FOREIGN KEY (company_id) REFERENCES wms.company(id)
+constraint wms.weighbridge_ticket weighbridge_ticket_gross_kg_positive CHECK ((gross_kg > 0))
+constraint wms.weighbridge_ticket weighbridge_ticket_net_kg_positive CHECK ((net_kg > 0))
+constraint wms.weighbridge_ticket weighbridge_ticket_pkey PRIMARY KEY (id)
+constraint wms.weighbridge_ticket weighbridge_ticket_project_id_fk FOREIGN KEY (company_id, project_id) REFERENCES wms.project(company_id, id)
+constraint wms.weighbridge_ticket weighbridge_ticket_received_by_fk FOREIGN KEY (company_id, received_by) REFERENCES wms.user_account(company_id, id)
+constraint wms.weighbridge_ticket weighbridge_ticket_route_id_fk FOREIGN KEY (company_id, project_id, route_id) REFERENCES wms.route(company_id, project_id, id)
+constraint wms.weighbridge_ticket weighbridge_ticket_status_one_of CHECK ((status = ANY (ARRAY['matched'::text, 'unmatched'::text, 'dismissed'::text])))
+constraint wms.weighbridge_ticket weighbridge_ticket_status_shape CHECK ((((status = 'matched'::text) = ((route_id IS NOT NULL) AND (unload_id IS NOT NULL) AND (project_id IS NOT NULL))) AND ((status = 'dismissed'::text) = (dismissed_note IS NOT NULL)) AND ((status <> 'unmatched'::text) OR (unmatched_reason IS NOT NULL))))
+constraint wms.weighbridge_ticket weighbridge_ticket_tare_kg_positive CHECK ((tare_kg > 0))
+constraint wms.weighbridge_ticket weighbridge_ticket_unload_id_fk FOREIGN KEY (company_id, project_id, unload_id) REFERENCES wms.unload(company_id, project_id, id)
+constraint wms.weighbridge_ticket weighbridge_ticket_unloading_station_id_fk FOREIGN KEY (company_id, unloading_station_id) REFERENCES wms.unloading_station(company_id, id)
+constraint wms.weighbridge_ticket weighbridge_ticket_unloading_station_id_ticket_number_key UNIQUE (company_id, unloading_station_id, ticket_number)
+constraint wms.weighbridge_ticket weighbridge_ticket_unmatched_reason_one_of CHECK ((unmatched_reason = ANY (ARRAY['unknown-vehicle'::text, 'no-route'::text, 'several-routes'::text, 'unknown-fraction'::text, 'fraction-not-accepted'::text])))
+constraint wms.weighbridge_ticket weighbridge_ticket_vehicle_id_fk FOREIGN KEY (company_id, project_id, vehicle_id) REFERENCES wms.vehicle(company_id, project_id, id)
+constraint wms.weighbridge_ticket weighbridge_ticket_weights_shape CHECK ((((gross_kg IS NULL) = (tare_kg IS NULL)) AND ((gross_kg IS NULL) OR (net_kg = (gross_kg - tare_kg)))))
+index wms.weighbridge_ticket weighbridge_ticket_pkey CREATE UNIQUE INDEX weighbridge_ticket_pkey ON wms.weighbridge_ticket USING btree (id)
+index wms.weighbridge_ticket weighbridge_ticket_project_id_idx CREATE INDEX weighbridge_ticket_project_id_idx ON wms.weighbridge_ticket USING btree (company_id, project_id)
+index wms.weighbridge_ticket weighbridge_ticket_received_by_idx CREATE INDEX weighbridge_ticket_received_by_idx ON wms.weighbridge_ticket USING btree (company_id, received_by)
+index wms.weighbridge_ticket weighbridge_ticket_route_id_idx CREATE INDEX weighbridge_ticket_route_id_idx ON wms.weighbridge_ticket USING btree (company_id, route_id)
+index wms.weighbridge_ticket weighbridge_ticket_status_idx CREATE INDEX weighbridge_ticket_status_idx ON wms.weighbridge_ticket USING btree (company_id, status, id)
+index wms.weighbridge_ticket weighbridge_ticket_unload_id_idx CREATE INDEX weighbridge_ticket_unload_id_idx ON wms.weighbridge_ticket USING btree (company_id, unload_id)
+index wms.weighbridge_ticket weighbridge_ticket_unloading_station_id_ticket_number_key CREATE UNIQUE INDEX weighbridge_ticket_unloading_station_id_ticket_number_key ON wms.weighbridge_ticket USING btree (company_id, unloading_station_id, ticket_number)
+index wms.weighbridge_ticket weighbridge_ticket_vehicle_id_idx CREATE INDEX weighbridge_ticket_vehicle_id_idx ON wms.weighbridge_ticket USING btree (company_id, vehicle_id)
+trigger wms.weighbridge_ticket weighbridge_ticket_audit_trail enabled=O CREATE TRIGGER weighbridge_ticket_audit_trail AFTER INSERT OR DELETE OR UPDATE ON wms.weighbridge_ticket FOR EACH ROW EXECUTE FUNCTION wms.audit_row('', '')
+trigger wms.weighbridge_ticket weighbridge_ticket_touch_updated_at enabled=O CREATE TRIGGER weighbridge_ticket_touch_updated_at BEFORE UPDATE ON wms.weighbridge_ticket FOR EACH ROW EXECUTE FUNCTION wms.touch_updated_at()
+policy wms.weighbridge_ticket weighbridge_ticket_tenant_fence permissive ALL to=wms_api using=(company_id = ( SELECT wms.current_company_id() AS current_company_id)) check=(company_id = ( SELECT wms.current_company_id() AS current_company_id))
 relation wms.weight_review kind=table owner=<owner> persistence=p rls=true force-rls=true replica-identity=d acl=[<owner>=DELETE,INSERT,MAINTAIN,REFERENCES,SELECT,TRIGGER,TRUNCATE,UPDATE/<owner> wms_api=INSERT,SELECT/<owner> wms_worker=SELECT/<owner>]
 column wms.weight_review 1 id uuid not-null default=wms.uuidv7()
 column wms.weight_review 2 company_id uuid not-null
@@ -4636,4 +4685,5 @@ journal 1793231090634 3a342c060d9cc6b5b37397d1817bf12b3e56217d68c7fb5aa6f3a35618
 journal 1793231765311 8be507c6aeeb679056b17fbe4b539cd8826f644e166c5d0254f04775e81d3e05
 journal 1793235059830 38a2a0d60433c5319c88d1428ef79675b519bda7059587aea3fc5368f164bf60
 journal 1793241234406 3e4f0b485e465f3836018f545d415793a377728d22334fe5b59d8e0b44ea8066
+journal 1793243568726 0af2b76238c11d4ba16e36731b790eab4c626367642b10024682025cf7c59496
 pgboss-version 42
