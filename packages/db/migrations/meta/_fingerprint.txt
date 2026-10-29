@@ -2391,7 +2391,7 @@ constraint wms.product product_project_id_name_key UNIQUE (company_id, project_i
 constraint wms.product product_project_key UNIQUE (company_id, project_id, id)
 constraint wms.product product_service_frequency_id_fk FOREIGN KEY (company_id, project_id, service_frequency_id) REFERENCES wms.service_frequency(company_id, project_id, id)
 constraint wms.product product_status_one_of CHECK ((status = ANY (ARRAY['draft'::text, 'active'::text, 'inactive'::text])))
-constraint wms.product product_unit_one_of CHECK ((unit = ANY (ARRAY['pickup'::text, 'month'::text, 'job'::text, 'day'::text, 'visit'::text])))
+constraint wms.product product_unit_one_of CHECK ((unit = ANY (ARRAY['pickup'::text, 'month'::text, 'job'::text, 'day'::text, 'visit'::text, 'item'::text])))
 constraint wms.product product_vat_percent_range CHECK (((vat_percent >= 0) AND (vat_percent <= 100)))
 constraint wms.product product_waste_fraction_id_fk FOREIGN KEY (company_id, waste_fraction_id) REFERENCES wms.waste_fraction(company_id, id)
 index wms.product product_container_type_id_idx CREATE INDEX product_container_type_id_idx ON wms.product USING btree (company_id, container_type_id)
@@ -4643,4 +4643,5 @@ journal 1793231765311 8be507c6aeeb679056b17fbe4b539cd8826f644e166c5d0254f04775e8
 journal 1793235059830 38a2a0d60433c5319c88d1428ef79675b519bda7059587aea3fc5368f164bf60
 journal 1793241234406 3e4f0b485e465f3836018f545d415793a377728d22334fe5b59d8e0b44ea8066
 journal 1793243238519 233234b7acf3c642f212331efc9afedc7d139dcd35159a8709e2d830322834c8
+journal 1793245578465 3b2865a553c39e7190c0b99795b29f5f18959d692c42e6a9d2a1f2e4ea7b5b3c
 pgboss-version 42
