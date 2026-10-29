@@ -31,7 +31,7 @@ const fixturesOf = (workspaceId: "resources" | "configure", moduleId: string) =>
 }
 
 const copenhagen: Project = { id: "01a0d2a4-a280-7002-8000-000000000001", ...STAMPS, name: "Copenhagen Central", kind: "Municipality", language: "da", currency: "DKK", timezone: "Europe/Copenhagen", status: "active", weekend: ["saturday", "sunday"], holidayList: "Danish public holidays", publicSlug: null, weightTolerancePercent: 5, paymentTermsDays: 30, paymentReferenceScheme: "none", holdForReview: false, privacyPolicy: { positionRetentionDays: null, proofRetentionDays: null, gpsPurpose: null } }
-const glass: WasteFraction = { id: "01a0d2a4-a280-7005-8000-000000000005", ...STAMPS, key: "glass", name: "Glass", wasteCode: null, treatment: null, densityKgPerCubicMetre: null }
+const glass: WasteFraction = { id: "01a0d2a4-a280-7005-8000-000000000005", ...STAMPS, key: "glass", name: "Glass", wasteCode: null, treatment: null, densityKgPerCubicMetre: null, hazardous: false }
 const metal: WasteFraction = { ...glass, id: "01a0d2a4-a280-7005-8000-000000000007", key: "metal", name: "Metal" }
 
 const noResolve = (fixtures: readonly BusinessRecord[]): MappingContext => ({ fixtures, resolve: NOTHING_RESOLVED, now: NOW })

@@ -537,8 +537,15 @@
     {
       "idx": 76,
       "version": "7",
-      "when": 1793241218558,
-      "tag": "0076_privacy_policy",
+      "when": 1793241234406,
+      "tag": "0076_fraction_hazardous",
+      "breakpoints": true
+    },
+    {
+      "idx": 77,
+      "version": "7",
+      "when": 1793243238519,
+      "tag": "0077_privacy_policy",
       "breakpoints": true
     }
   ]

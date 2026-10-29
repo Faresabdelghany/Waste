@@ -65,14 +65,14 @@ const IDENTITY_SHAPES: Array<[string, string]> = [
   ["fik_creditor_number", FIK_CREDITOR_PATTERN],
 ]
 
-/** The privacy policy's checks (#291 C19), as 0076 adds them: each kind's days within its bounds, and the purpose one of the vocabulary's. */
+/** The privacy policy's checks (#291 C19), as 0077 adds them: each kind's days within its bounds, and the purpose one of the vocabulary's. */
 const PRIVACY_POLICY_CHECKS = [
   `\tCONSTRAINT "project_position_retention_range" CHECK (${ref("project", "position_retention_days")} between ${RETENTION_DAYS_BOUNDS.positions.min} and ${RETENTION_DAYS_BOUNDS.positions.max}),`,
   `\tCONSTRAINT "project_proof_retention_range" CHECK (${ref("project", "proof_retention_days")} between ${RETENTION_DAYS_BOUNDS.proofs.min} and ${RETENTION_DAYS_BOUNDS.proofs.max}),`,
   `\tCONSTRAINT "project_gps_purpose_one_of" CHECK (${ref("project", "gps_purpose")} in (${GPS_PURPOSES.map((purpose) => `'${purpose}'`).join(", ")}))`,
 ]
 
-/** The project table as drizzle-kit writes it today, and as it wrote it as of 0002, before 0006 gave it the working week, 0017 the public slug, 0037 its payment terms and reference scheme, 0045 the weighbridge's tolerance (O9 of #290), 0048 its hold for review (M14 of #293) and 0076 its privacy policy (#291 C19). */
+/** The project table as drizzle-kit writes it today, and as it wrote it as of 0002, before 0006 gave it the working week, 0017 the public slug, 0037 its payment terms and reference scheme, 0045 the weighbridge's tolerance (O9 of #290), 0048 its hold for review (M14 of #293) and 0077 its privacy policy (#291 C19). */
 const projectTable = (era: "0002" | "today"): string => {
   const planning = era === "today"
   const published = era === "today"
