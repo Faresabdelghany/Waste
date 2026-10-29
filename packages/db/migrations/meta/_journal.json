@@ -589,6 +589,13 @@
       "when": 1793267564046,
       "tag": "0083_staff_notifications",
       "breakpoints": true
+    },
+    {
+      "idx": 84,
+      "version": "7",
+      "when": 1793268227594,
+      "tag": "0084_booking_notices",
+      "breakpoints": true
     }
   ]
 }
