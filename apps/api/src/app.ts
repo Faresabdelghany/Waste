@@ -95,6 +95,7 @@ import { publicRoutes } from "./routes/public"
 import { roleRoutes } from "./routes/roles"
 import { routeSchemeRoutes } from "./routes/route-schemes"
 import { schemeLifecycleRoutes } from "./routes/scheme-lifecycle"
+import { sensorRoutes } from "./routes/sensors"
 import { serviceProviderActivityRoutes } from "./routes/service-provider-activities"
 import { planRoutes } from "./routes/plans"
 import { routeRoutes } from "./routes/routes"
@@ -328,6 +329,8 @@ export function createApp({
   // The Pickup Exceptions (M5 of #293): the company's contaminant codes, the projects' charge rules, and a place's exception history.
   app.route("/", contaminantCodeRoutes(guard))
   app.route("/", decommissionReasonRoutes(guard))
+  // Fill-level Sensors (O26 of #290): a pairing's day and the ingest's clock are the project's on the app's clock.
+  app.route("/", sensorRoutes(guard, { now }))
   app.route("/", pickupExceptionRoutes(guard, { now }))
   // Bulky-waste booking (O11 of #290): the areas' schedules of collection days, and the bookings that take a slot of one on the project's clock.
   app.route("/", bulkyScheduleRoutes(guard))

@@ -64,3 +64,5 @@ export * from "./sustainability"
 export * from "./site-visits"
 // The coordination between the office and a Service Provider: proposals, follow-ups and notes (#474).
 export * from "./service-provider-activities"
+// Fill-level Sensors (O26 of #290): the devices, their pairings with containers and the readings they send.
+export * from "./sensors"

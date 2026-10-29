@@ -512,6 +512,13 @@
       "when": 1793229147346,
       "tag": "0072_waste_fraction_proposals",
       "breakpoints": true
+    },
+    {
+      "idx": 73,
+      "version": "7",
+      "when": 1793232910198,
+      "tag": "0073_fill_level_sensors",
+      "breakpoints": true
     }
   ]
 }

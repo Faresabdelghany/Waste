@@ -7,7 +7,9 @@
 // holds while the condition does; and a new occurrence is a new alert. A
 // quiet tick reads nothing and writes nothing. Since O8 of #290 a running
 // device heard from but sending no position for ten minutes raises a fifth,
-// and a fix clears it.
+// and a fix clears it; since O26 a container whose sensor reads it at or past
+// its threshold raises a sixth, once per filling, and a low reading or the
+// pairing's end clears it.
 import assert from "node:assert/strict"
 import { after, before, describe, test } from "node:test"
 
@@ -17,6 +19,7 @@ import { migrateDatabase } from "@waste/db/migrate"
 import { driverCommand, route, session, sessionPosition } from "@waste/db/schema/execution"
 import { driver } from "@waste/db/schema/fleet"
 import { alert, ticket } from "@waste/db/schema/resolution"
+import { fillReading, sensor, sensorPairing } from "@waste/db/schema/sensors"
 import { withCompany } from "@waste/db/tenant"
 import { CLEARED_NOTES } from "@waste/domain/resolution/alert-rules"
 import { and, asc, eq } from "drizzle-orm"
@@ -184,7 +187,7 @@ describe("resolution.alert-rules", { skip: roles.skip }, () => {
     assert.equal(lines.at(-1), "alert rules: raised 5, cleared 0")
   })
 
-  test("the next tick raises nothing twice and reads nothing: a quiet tick is six empty results and no write", async () => {
+  test("the next tick raises nothing twice and reads nothing: a quiet tick is seven empty results and no write", async () => {
     assert.deepEqual(await occurrencesToRaise(worker, NOW), [])
     assert.deepEqual(await alertsToClear(worker, NOW), [])
     const before = lines.length
@@ -284,6 +287,51 @@ describe("resolution.alert-rules", { skip: roles.skip }, () => {
     NOW = at("08:30")
     await withCompany(api.db, tenant.companyId, (tx) => tx.update(session).set({ lastSeenAt: at("08:29") }).where(and(eq(session.companyId, tenant.companyId), eq(session.id, sessionId))))
     assert.deepEqual((await occurrencesToRaise(worker, NOW)).map((found) => found.occurrence.rule).filter((rule) => rule === "position-stale"), ["position-stale"], "ten minutes after the resume")
+  })
+
+  test("a container its sensor reads at or past the threshold raises one alert per filling, from the telemetry; a low reading clears it and the next filling is a new one, and so does the pairing's end (O26 of #290)", async () => {
+    const bin = tenant.containers.bin2
+    const [sensorId, pairingId] = [testId(), testId()]
+    await withCompany(api.db, tenant.companyId, async (tx) => {
+      await tx.insert(sensor).values({ id: sensorId, companyId: tenant.companyId, projectId: tenant.projectId, identifier: "70B3D57ED0051A2F", network: "lorawan", status: "active" })
+      await tx.insert(sensorPairing).values({ id: pairingId, companyId: tenant.companyId, projectId: tenant.projectId, sensorId, containerId: bin.id, fullThresholdPercent: 85, validFrom: "2026-10-01" })
+    })
+    const reads = async (time: string, fillPercent: number): Promise<string> => {
+      const id = testId()
+      await withCompany(api.db, tenant.companyId, (tx) => tx.insert(fillReading).values({ id, companyId: tenant.companyId, projectId: tenant.projectId, sensorId, pairingId, measuredAt: at(time), fillPercent }))
+      return id
+    }
+    const fills = async () => (await alerts()).filter((row) => row.rule === "fill-threshold")
+    const tick = async (time: string) => {
+      NOW = at(time)
+      const [raise, clear] = [await occurrencesToRaise(worker, NOW), await alertsToClear(worker, NOW)]
+      await runAlertRules(context())
+      return [raise.filter((found) => found.occurrence.rule === "fill-threshold").length, clear.filter((found) => found.rule === "fill-threshold").length]
+    }
+
+    const low = await reads("08:31", 40)
+    assert.deepEqual(await tick("08:32"), [0, 0], "below the threshold")
+    await reads("08:40", 88)
+    assert.deepEqual(await tick("08:41"), [1, 0])
+    const [raised] = await fills()
+    assert.deepEqual([raised.kind, raised.severity, raised.source, raised.containerId, raised.routeId, raised.driverId], ["service-risk", "medium", "telemetry", bin.id, null, null])
+    assert.equal(raised.title, `${bin.label} is 88% full`)
+    assert.equal(raised.details, "Sensor 70B3D57ED0051A2F read 88% at 2026-10-05 08:40, at or past the full threshold of 85%: empty it before it overflows.")
+    assert.equal(raised.ruleKey, `fill-threshold:${pairingId}:${low}`)
+    await reads("08:50", 100)
+    assert.deepEqual(await tick("08:51"), [0, 0], "still the same filling: one alert")
+
+    await reads("09:00", 10)
+    assert.deepEqual(await tick("09:01"), [0, 1], "emptied")
+    assert.deepEqual((await fills()).map((row) => [row.status, row.resolvedBy, row.resolutionNote]), [["resolved", null, CLEARED_NOTES["fill-threshold"]]])
+    await reads("09:10", 100)
+    assert.deepEqual(await tick("09:11"), [1, 0], "a new filling")
+    const [, again] = await fills()
+    assert.deepEqual([again.severity, again.title, again.status], ["high", `${bin.label} is full`, "new"])
+
+    await withCompany(api.db, tenant.companyId, (tx) => tx.update(sensorPairing).set({ validTo: "2026-10-05" }).where(and(eq(sensorPairing.companyId, tenant.companyId), eq(sensorPairing.id, pairingId))))
+    assert.deepEqual(await tick("09:12"), [0, 1], "the pairing ended today: the sensor measures the bin no more")
+    assert.deepEqual((await fills()).map((row) => row.status), ["resolved", "resolved"])
   })
 
   async function ticketNumber(id: string): Promise<number> {

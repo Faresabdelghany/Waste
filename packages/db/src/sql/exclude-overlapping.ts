@@ -22,6 +22,11 @@
 // for it. Postgres refuses an overlap with SQLSTATE 23P01, naming the
 // constraint. The key itself is resolved by sql/key.ts, shared with the
 // window sibling (exclude-overlapping-window.ts).
+//
+// A table with two business keys over one period — a Sensor Pairing (O26 of
+// #290), whose sensor measures one container at a time and whose container
+// is measured by one sensor at a time — carries this constraint once under
+// the table's name and the second under a label, `<table>_<label>_no_overlap`.
 import { getTableConfig, type PgColumn, type PgTable } from "drizzle-orm/pg-core"
 
 import { VALIDITY_CHECK } from "../schema/columns"
@@ -35,7 +40,7 @@ export const NO_OVERLAP = "no_overlap"
 const VALIDITY_RANGE = { columns: ["valid_from", "valid_to"], noun: "period", set: "validity" } as const
 
 /** The statement that adds the exclusion constraint for this business key, for the table's migration file. */
-export function excludeOverlapping(table: PgTable, key: PgColumn[]): string[] {
+export function excludeOverlapping(table: PgTable, key: PgColumn[], label?: string): string[] {
   const { target, own } = resolveKey(table, key, HELPER, VALIDITY_RANGE)
   const checkName = tableObjectName(table, VALIDITY_CHECK, HELPER)
   if (!getTableConfig(table).checks.some((check) => check.name === checkName)) {
@@ -48,5 +53,5 @@ export function excludeOverlapping(table: PgTable, key: PgColumn[]): string[] {
   }
   const equalities = ["company_id", ...own.map((column) => column.name)].map((name) => `${quoted(name)} WITH =`).join(", ")
   const period = `daterange(${quoted("valid_from")}, ${quoted("valid_to")}, '[)') WITH &&`
-  return [`ALTER TABLE ${target} ADD CONSTRAINT ${quoted(tableObjectName(table, NO_OVERLAP, HELPER))} EXCLUDE USING gist (${equalities}, ${period});`]
+  return [`ALTER TABLE ${target} ADD CONSTRAINT ${quoted(tableObjectName(table, label === undefined ? NO_OVERLAP : `${label}_${NO_OVERLAP}`, HELPER))} EXCLUDE USING gist (${equalities}, ${period});`]
 }
