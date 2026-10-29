@@ -10,10 +10,12 @@
 // /pickups/{id}/proof-objects` alone, never a second door to Storage.
 //
 // `recordCustomerReply` is the one way a reply reaches the customer's thread:
-// a `comment` the customer may read, which the portal reads. It sends
-// nothing. The communications slice (65's) adds the outbox kind and its
-// `emit` here, in the same transaction, so every reply is sent from one
-// place; a reply recorded before that slice is never sent after it.
+// a `comment` the customer may read, which the portal reads. It writes
+// `ticket-replied` to the outbox in the same transaction (C18 of #291), the
+// comment as the history answers it, from which the worker sends the
+// ticket's customer the project's notice where a rule names one: every reply
+// is sent from this one place, and a reply recorded before C18 is never sent
+// after it.
 import type { StopEvidence } from "@waste/contracts/tickets"
 import type { Tx } from "@waste/db/client"
 import { pickup } from "@waste/db/schema/execution"
@@ -23,8 +25,9 @@ import { replyFromRecord, stopEvidenceOf, answeredByRecord, type Coordinates } f
 import type { TicketKind, TicketStatus } from "@waste/domain/resolution/vocabulary"
 import { and, eq } from "drizzle-orm"
 
+import { emit } from "../outbox"
 import { pickupColumns, proofOf, proofsOfPickup } from "./execution-shapes"
-import type { TicketRow } from "./resolution-shapes"
+import { eventOf, type TicketRow } from "./resolution-shapes"
 import { appendTicketEvent, type TicketRef } from "./ticket-writes"
 
 /** An instant as the reply quotes it, on the project's clock: `07:42 on Saturday 24 October`. */
@@ -81,7 +84,7 @@ export async function recordCustomerReply(
   recordedBy: string,
   objectKey: string | null = null,
 ) {
-  return await appendTicketEvent(tx, ref, {
+  const row = await appendTicketEvent(tx, ref, {
     kind: "comment",
     status: snapshot.status,
     assigneeUserAccountId: snapshot.assigneeUserAccountId,
@@ -92,4 +95,7 @@ export async function recordCustomerReply(
     recordedBy,
     sourceEventId: null,
   })
+  // The reply's news (C18 of #291): the comment as the history answers it, for the customer notices to send where the project's rule names a template.
+  await emit(tx, { companyId: ref.companyId }, { aggregate: "ticket", aggregateId: ref.id, kind: "ticket-replied", payload: eventOf(row), projectId: ref.projectId, occurredAt: row.recordedAt })
+  return row
 }

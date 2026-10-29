@@ -60,8 +60,8 @@ export type MessageDraft = {
   contactId: string | null
   /** The outbox event a sender queues it for (O16 of #290, part b): with the customer, the message's key, so a redelivered event queues it once. */
   sourceEventId?: string
-  /** The values its sender has beyond the three every message fills: a booking's notice its collection's day. */
-  values?: Partial<Pick<MessageValues, "collectionDate">>
+  /** The values its sender has beyond the three every message fills: a notice's collection day, a ticket's number and reply (`NOTICE_VALUES`). */
+  values?: Partial<Omit<MessageValues, "recipientName" | "customerName" | "companyName">>
 }
 
 export const templateInactive = (name: string) => `The template ${name} is inactive; make it active, or pick another`

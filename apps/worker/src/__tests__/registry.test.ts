@@ -152,6 +152,7 @@ describe("the job registry", () => {
       "resolution.alert-rules",
       "execution.purge-positions",
       "messaging.send",
+      "messaging.collection-reminders",
     ])
   })
 
@@ -271,11 +272,17 @@ describe("the job registry", () => {
     }
   })
 
-  test("holds the customer notices' consumer (O16 of #290, part b): the booking's two kinds and its stop's completion and failure, fanned out beside Resolution and Finance", () => {
-    assert.deepEqual(
-      noticeCustomers.map((job) => job.queue),
-      ["outbox.bulky-booking-booked.customer-notices", "outbox.bulky-booking-cancelled.customer-notices", "outbox.pickup-completed.customer-notices", "outbox.pickup-failed.customer-notices"],
-    )
+  test("holds the customer notices' consumer (O16 of #290, part b; C18 of #291): the booking's two kinds, its stop's completion and failure, the ticket's reply and completion, the route's cancel and a rule's alert, fanned out beside the other consumers", () => {
+    assert.deepEqual(noticeCustomers.map((job) => job.queue), [
+      "outbox.bulky-booking-booked.customer-notices",
+      "outbox.bulky-booking-cancelled.customer-notices",
+      "outbox.pickup-completed.customer-notices",
+      "outbox.pickup-failed.customer-notices",
+      "outbox.ticket-replied.customer-notices",
+      "outbox.ticket-completed.customer-notices",
+      "outbox.route-cancelled.customer-notices",
+      "outbox.alert-raised.customer-notices",
+    ])
     for (const job of noticeCustomers) {
       assert.ok(JOBS.includes(job), job.queue)
       assert.deepEqual(job.queueOptions, { ...OUTBOX_QUEUE_OPTIONS, ...CONSUMED_OUTBOX_QUEUE_OPTIONS })

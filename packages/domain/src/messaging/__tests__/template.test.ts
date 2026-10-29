@@ -16,7 +16,7 @@ describe("a template's placeholders", () => {
   test("that no message fills are named back, so a template is refused before it is ever sent", () => {
     assert.deepEqual(unknownPlaceholders("Hello {{recipientName}} from {{companyName}}"), [])
     assert.deepEqual(unknownPlaceholders("Hello {{firstName}}, invoice {{invoiceNumber}} {{customerName}}"), ["firstName", "invoiceNumber"])
-    assert.deepEqual([...MESSAGE_VARIABLES], ["recipientName", "customerName", "companyName", "collectionDate"])
+    assert.deepEqual([...MESSAGE_VARIABLES], ["recipientName", "customerName", "companyName", "collectionDate", "ticketNumber", "replyText"])
   })
 })
 

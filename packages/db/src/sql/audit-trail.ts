@@ -70,7 +70,7 @@ import { planningArea, planningAreaBoundary } from "../schema/planning-areas"
 import { alert, team, teamMember, ticket, ticketBooking, ticketEvent, ticketSla, ticketTeamDefault } from "../schema/resolution"
 import { serviceProviderActivity, serviceProviderActivityContainer, serviceProviderActivityFraction } from "../schema/service-provider-activities"
 import { message, messageTemplate } from "../schema/messaging"
-import { notificationPreference, notificationRule } from "../schema/notifications"
+import { notificationPreference, notificationRule, notificationRuleArea } from "../schema/notifications"
 import { application, applicationDecision } from "../schema/applications"
 import { bulkyBooking, bulkyBookingItem, bulkySchedule } from "../schema/bulky"
 import { collectionGroup, collectionGroupContainer, collectionGroupContainerType, collectionGroupFraction, routeScheme, routeSchemeSeason } from "../schema/route-schemes"
@@ -282,7 +282,10 @@ export const NOTIFICATIONS_AUDITED: readonly Audited[] = [{ table: notificationP
 /** A project's notification rules (O16 of #290, part b): a set of the project's, replaced whole, read under the templates' module. */
 export const NOTIFICATION_RULES_AUDITED: readonly Audited[] = [{ table: notificationRule, module: "configure.templates", parent: setOf(project, notificationRule.projectId) }]
 
-export const AUDITED: readonly Audited[] = [...AUDITED_AT_0019, ...SUBSCRIPTION_PAUSE_AUDITED, ...TICKET_SLA_AUDITED, ...DROP_OFF_AUDITED, ...ABSENCES_AUDITED, ...TICKET_CHARGE_AUDITED, ...PICKUP_EXCEPTIONS_AUDITED, ...EMISSIONS_AUDITED, ...APPLICATIONS_AUDITED, ...SUSTAINABILITY_AUDITED, ...CONTAINER_HIRE_AUDITED, ...ACCOUNTING_AUDITED, ...BULKY_AUDITED, ...SITE_VISITS_AUDITED, ...SEASONS_AUDITED, ...SERVICE_PROVIDER_ACTIVITIES_AUDITED, ...STOCK_MINIMUMS_AUDITED, ...DECOMMISSION_REASONS_AUDITED, ...TEAMS_AUDITED, ...STOP_SET_PROPOSALS_AUDITED, ...WASTE_FRACTION_PROPOSALS_AUDITED, ...CONTACT_PERSONS_AUDITED, ...MESSAGING_AUDITED, ...NOTIFICATIONS_AUDITED, ...NOTIFICATION_RULES_AUDITED]
+/** A broadcast rule's notification areas (C18 of #291): a set of the project's, replaced with its rule, read under the templates' module. */
+export const SERVICE_NOTIFICATIONS_AUDITED: readonly Audited[] = [{ table: notificationRuleArea, module: "configure.templates", parent: setOf(project, notificationRuleArea.projectId) }]
+
+export const AUDITED: readonly Audited[] = [...AUDITED_AT_0019, ...SUBSCRIPTION_PAUSE_AUDITED, ...TICKET_SLA_AUDITED, ...DROP_OFF_AUDITED, ...ABSENCES_AUDITED, ...TICKET_CHARGE_AUDITED, ...PICKUP_EXCEPTIONS_AUDITED, ...EMISSIONS_AUDITED, ...APPLICATIONS_AUDITED, ...SUSTAINABILITY_AUDITED, ...CONTAINER_HIRE_AUDITED, ...ACCOUNTING_AUDITED, ...BULKY_AUDITED, ...SITE_VISITS_AUDITED, ...SEASONS_AUDITED, ...SERVICE_PROVIDER_ACTIVITIES_AUDITED, ...STOCK_MINIMUMS_AUDITED, ...DECOMMISSION_REASONS_AUDITED, ...TEAMS_AUDITED, ...STOP_SET_PROPOSALS_AUDITED, ...WASTE_FRACTION_PROPOSALS_AUDITED, ...CONTACT_PERSONS_AUDITED, ...MESSAGING_AUDITED, ...NOTIFICATIONS_AUDITED, ...NOTIFICATION_RULES_AUDITED, ...SERVICE_NOTIFICATIONS_AUDITED]
 
 /** The audited tables by name, for a test that reads a migrated database's triggers. */
 export const AUDITED_TABLE_NAMES: ReadonlySet<string> = new Set(AUDITED.map((entry) => getTableName(entry.table)))

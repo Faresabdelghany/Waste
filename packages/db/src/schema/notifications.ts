@@ -15,6 +15,14 @@
 // for service is the API's rule at the write, and the worker's send honours
 // the customer's consent. The set is replaced whole through
 // `PUT /projects/:id/notification-rules`, and audited as the project's.
+//
+// C18 of #291 adds the service notifications as rows of the same rules, and
+// `notification_rule_area`: the `notification` planning areas a broadcast's
+// rule — a route cancelled or late — narrows its customers to, those whose
+// stop lies inside one of them; a broadcast rule naming none reaches every
+// stop of the route. That an area is a `notification` area and that only a
+// broadcast's rule names one are the API's rules at the write; the set is
+// replaced with its rule, and audited as the project's.
 import { ALERT_SEVERITIES } from "@waste/domain/resolution/vocabulary"
 import { CUSTOMER_NOTICE_EVENTS, NOTIFICATION_EVENTS } from "@waste/domain/notifications/vocabulary"
 import { sql } from "drizzle-orm"
@@ -26,7 +34,8 @@ import { oneOf } from "./checks"
 import { id, projectScoped, tenant, timestamps } from "./columns"
 import { messageTemplate } from "./messaging"
 import { company, project } from "./organisation"
-import { companyReference, projectReference, tenantIndex, tenantReference, tenantUnique } from "./references"
+import { planningArea } from "./planning-areas"
+import { companyReference, projectKey, projectReference, tenantIndex, tenantReference, tenantUnique } from "./references"
 import { wms } from "./wms"
 
 export const notificationPreference = wms.table(
@@ -64,8 +73,28 @@ export const notificationRule = wms.table(
     companyReference(t, company),
     tenantReference(t, [t.projectId], project),
     projectReference(t, [t.templateId], messageTemplate),
+    projectKey(t),
     tenantUnique(t, t.projectId, t.event),
     tenantIndex(t, t.templateId),
     oneOf(t.event, CUSTOMER_NOTICE_EVENTS),
+  ],
+)
+
+export const notificationRuleArea = wms.table(
+  "notification_rule_area",
+  {
+    ...id,
+    ...projectScoped,
+    ...timestamps,
+    ruleId: uuid().notNull(),
+    planningAreaId: uuid().notNull(),
+  },
+  (t) => [
+    companyReference(t, company),
+    tenantReference(t, [t.projectId], project),
+    projectReference(t, [t.ruleId], notificationRule),
+    projectReference(t, [t.planningAreaId], planningArea),
+    tenantUnique(t, t.ruleId, t.planningAreaId),
+    tenantIndex(t, t.planningAreaId),
   ],
 )
