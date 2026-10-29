@@ -58,8 +58,8 @@ export const CANCEL_REASONS = ["pickup-corrected", "visit-voided", "duplicate", 
 export const BILLABLE_EVENT_STATUSES = ["blocked", "ready", "held", "invoiced", "cancelled", "reversed"] as const
 /** Where a Billing Run stands; part A writes `completed` alone. */
 export const BILLING_RUN_STATUSES = ["requested", "completed", "failed"] as const
-/** Why a payer with events in the period got no invoice: every one of them is blocked, or held for review (M14 of #293), or each one or the other. */
-export const EXCLUSION_REASONS = ["all-events-blocked", "all-events-held", "all-events-blocked-or-held"] as const
+/** Why a payer with events in the period got no invoice: every one of them is blocked, or held for review (M14 of #293), or each one or the other — or, since a run goes payer by payer in batches (#329), the payer alone has more ready events than one batch takes, and is refused rather than split across invoices. */
+export const EXCLUSION_REASONS = ["all-events-blocked", "all-events-held", "all-events-blocked-or-held", "too-many-events"] as const
 /** An issued customer financial document: an invoice, or the credit note that corrects one. */
 export const INVOICE_KINDS = ["invoice", "credit-note"] as const
 /** Why a credit note was issued: the prototype's five, verbatim as tokens. */

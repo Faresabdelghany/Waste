@@ -413,6 +413,7 @@ describe("the billing runs module", () => {
     assert.equal(exclusionWords({ eventCount: 1, reason: "all-events-blocked" }), "1 event, all blocked")
     assert.equal(exclusionWords({ eventCount: 4, reason: "all-events-held" }), "4 events, all held for review")
     assert.equal(exclusionWords({ eventCount: 3, reason: "all-events-blocked-or-held" }), "3 events, each blocked or held for review")
+    assert.equal(exclusionWords({ eventCount: 5_001, reason: "too-many-events" }), "5001 events, too many for one invoice in a run")
   })
 
   test("previews through the client, writing nothing, and runs through the store's create", async () => {

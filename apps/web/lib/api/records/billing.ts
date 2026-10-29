@@ -410,8 +410,8 @@ export const eventsModule: ServerModule = { workspaceId: EVENTS_MODULE.workspace
 // Billing runs
 // ---------------------------------------------------------------------------
 
-/** Why a run passed over every event of a payer, as a person reads it: blocked, or held for review (M14 of #293), or each one or the other. */
-const EXCLUSION_WORDS: Readonly<Record<ExclusionReason, string>> = { "all-events-blocked": "all blocked", "all-events-held": "all held for review", "all-events-blocked-or-held": "each blocked or held for review" }
+/** Why a run passed over every event of a payer, as a person reads it: blocked, or held for review (M14 of #293), or each one or the other, or more than one batch of a run takes (#329). */
+const EXCLUSION_WORDS: Readonly<Record<ExclusionReason, string>> = { "all-events-blocked": "all blocked", "all-events-held": "all held for review", "all-events-blocked-or-held": "each blocked or held for review", "too-many-events": "too many for one invoice in a run" }
 
 /** A payer a run or its preview passed over, after its name: how many of its events, and why. */
 export const exclusionWords = (exclusion: { eventCount: number; reason: ExclusionReason }): string =>

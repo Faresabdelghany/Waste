@@ -789,7 +789,7 @@ constraint wms.billing_run_exclusion billing_run_exclusion_customer_id_fk FOREIG
 constraint wms.billing_run_exclusion billing_run_exclusion_event_count_positive CHECK ((event_count > 0))
 constraint wms.billing_run_exclusion billing_run_exclusion_pkey PRIMARY KEY (id)
 constraint wms.billing_run_exclusion billing_run_exclusion_project_id_fk FOREIGN KEY (company_id, project_id) REFERENCES wms.project(company_id, id)
-constraint wms.billing_run_exclusion billing_run_exclusion_reason_one_of CHECK ((reason = ANY (ARRAY['all-events-blocked'::text, 'all-events-held'::text, 'all-events-blocked-or-held'::text])))
+constraint wms.billing_run_exclusion billing_run_exclusion_reason_one_of CHECK ((reason = ANY (ARRAY['all-events-blocked'::text, 'all-events-held'::text, 'all-events-blocked-or-held'::text, 'too-many-events'::text])))
 index wms.billing_run_exclusion billing_run_exclusion_billing_run_id_customer_id_key CREATE UNIQUE INDEX billing_run_exclusion_billing_run_id_customer_id_key ON wms.billing_run_exclusion USING btree (company_id, billing_run_id, customer_id)
 index wms.billing_run_exclusion billing_run_exclusion_customer_id_idx CREATE INDEX billing_run_exclusion_customer_id_idx ON wms.billing_run_exclusion USING btree (company_id, customer_id)
 index wms.billing_run_exclusion billing_run_exclusion_pkey CREATE UNIQUE INDEX billing_run_exclusion_pkey ON wms.billing_run_exclusion USING btree (id)
@@ -4644,4 +4644,5 @@ journal 1793235059830 38a2a0d60433c5319c88d1428ef79675b519bda7059587aea3fc5368f1
 journal 1793241234406 3e4f0b485e465f3836018f545d415793a377728d22334fe5b59d8e0b44ea8066
 journal 1793243238519 233234b7acf3c642f212331efc9afedc7d139dcd35159a8709e2d830322834c8
 journal 1793245578465 3b2865a553c39e7190c0b99795b29f5f18959d692c42e6a9d2a1f2e4ea7b5b3c
+journal 1793250979311 744d0a6acbf2ace0de63e9d89b3722b39f09d06909ce6c09341cdb7bf43323c8
 pgboss-version 42

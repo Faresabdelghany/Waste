@@ -21,16 +21,16 @@
 // (`monthBefore`, the domain's), and `runBilling` — the same command
 // `POST /billing-runs` runs in a request — runs it with `null` for the person,
 // which is what `billing_run.requested_by` and `invoice.issued_by` are
-// nullable for. A `BillingRunStatus` other than `completed` is never written:
-// a run is one transaction or nothing, so a company whose run fails leaves no
-// `requested` or `failed` row behind — the vocabulary's two other statuses are
-// for a run that is enqueued before it is done, which this is not.
+// nullable for. A run goes a batch of payers at a time (#329), each batch a
+// transaction under `withCompany` on the API role's pool, exactly as
+// `POST /billing-runs` runs it, so a project of any size completes.
 //
-// One project, one transaction, and one project's failure is not another's:
-// a run that refuses (too many ready events — a `Refused`, the ceiling
-// the API answers 409) or throws is logged with the project and the job goes
-// on to the next; the job fails at the end if any project failed, so pg-boss
-// retries it and the count reaches `/readyz`. The retry, and the schedule's
+// One project's failure is not another's: a run that refuses (another run of
+// the project under way — a `Refused`, the API's 409) or throws is logged
+// with the project and the job goes on to the next; the job fails at the end
+// if any project failed, so pg-boss retries it and the count reaches
+// `/readyz`. A run that failed midway stays `requested` with the batches it
+// finished, and the retry over the same month resumes it. The retry, and the schedule's
 // next occurrence after an office `POST /billing-runs` covered the month,
 // skip a project the schedule has already run over the period: a `completed`
 // `billing_run` of the project with the same `period_from` and `period_to`
@@ -49,7 +49,7 @@
 // month gets a completed run of zero invoices, as the API's does, which is the
 // record that the month was looked at.
 import type { Tx } from "@waste/db/client"
-import { runBilling } from "@waste/db/commands/billing-runs"
+import { runBilling, type Transact } from "@waste/db/commands/billing-runs"
 import { dayInTimezone } from "@waste/db/commands/days"
 import { lockRow } from "@waste/db/commands/shared"
 import { newId } from "@waste/db/ids"
@@ -81,7 +81,7 @@ async function projectsToBill({ worker }: JobContext, projectId: string | null):
     .orderBy(asc(project.id))
 }
 
-/** The schedule's own completed run over exactly this period, if it has one: `requested_by` null, since a person's run over the month is theirs and not the schedule's record. Read under the project's lock, the one `runBilling` takes, so two sweeps of one project see each other's row. */
+/** The schedule's own completed run over exactly this period, if it has one: `requested_by` null, since a person's run over the month is theirs and not the schedule's record. Read under the project's lock, the one each of `runBilling`'s transactions takes, so a sweep sees another's finished row; two sweeps racing past it meet at the run's start, where the second resumes the first's `requested` run over the month rather than starting its own. */
 async function scheduledRunOver(tx: Tx, scope: { companyId: string; projectId: string; periodFrom: string; periodTo: string }): Promise<{ id: string } | undefined> {
   await lockRow(tx, project, { companyId: scope.companyId, id: scope.projectId })
   const [found] = await tx
@@ -93,18 +93,17 @@ async function scheduledRunOver(tx: Tx, scope: { companyId: string; projectId: s
   return found
 }
 
-/** One project's run: the day on its clock, the month before, the schedule's earlier run over it if any, else `runBilling` under the company's fence; what it came to either way. */
+/** One project's run: the day on its clock, the month before, the schedule's earlier run over it if any, else `runBilling` a batch at a time under the company's fence; what it came to either way. */
 async function runOne(context: JobContext, found: { companyId: string; id: string; timezone: string }, on: string | null): Promise<ProjectRun> {
   const where = { companyId: found.companyId, projectId: found.id }
   try {
     const day = on ?? dayInTimezone(context.now(), found.timezone)
     const scope = { ...where, ...monthBefore(day) }
-    return await withCompany(context.api.db, found.companyId, async (tx): Promise<ProjectRun> => {
-      const before = await scheduledRunOver(tx, scope)
-      if (before !== undefined) return { ...scope, outcome: "already-run", runId: before.id }
-      const { run } = await runBilling(tx, { ...scope, note: null, requestedBy: null, newId, now: context.now })
-      return { ...scope, outcome: "completed", runId: run.id, eventCount: run.eventCount, invoiceCount: run.invoiceCount }
-    })
+    const before = await withCompany(context.api.db, found.companyId, (tx) => scheduledRunOver(tx, scope))
+    if (before !== undefined) return { ...scope, outcome: "already-run", runId: before.id }
+    const transact: Transact = (work) => withCompany(context.api.db, found.companyId, work)
+    const { run } = await runBilling(transact, { ...scope, note: null, requestedBy: null, newId, now: context.now })
+    return { ...scope, outcome: "completed", runId: run.id, eventCount: run.eventCount, invoiceCount: run.invoiceCount }
   } catch (error) {
     // A day that is not one has no month before it: the period is the day itself, so the log names what was asked.
     return { ...where, periodFrom: on ?? "", periodTo: on ?? "", outcome: "failed", reason: error instanceof Error ? error.message : String(error) }

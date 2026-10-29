@@ -9,16 +9,15 @@ import { DAY_WINDOW_ORDERED } from "@waste/contracts/queries"
 import { createDb, type Database, type Tx } from "@waste/db/client"
 import { customer } from "@waste/db/schema/customers"
 import { outboxEvent } from "@waste/db/schema/execution"
-import { billableEvent, billingRun, billingRunExclusion, invoice, invoiceLine } from "@waste/db/schema/finance"
-import { company, project } from "@waste/db/schema/organisation"
+import { billableEvent, billingRun, invoice, invoiceLine } from "@waste/db/schema/finance"
+import { company } from "@waste/db/schema/organisation"
 import { withCompany } from "@waste/db/tenant"
 import { and, asc, count, eq, inArray, sql } from "drizzle-orm"
 
 import { createApp } from "../app"
 import { newId, type IdMinter } from "../ids"
 import { notCancelled } from "../routes/billable-events"
-import { BILLING_RUN_MAX_EVENTS, runBilling, selectBilling, tooManyEvents } from "../routes/billing-runs"
-import { lockRow } from "../routes/shared"
+import { BILLING_RUN_MAX_EVENTS, nextBatch, runBilling, runUnderWay, type Transact } from "../routes/billing-runs"
 import { pickupEvent, reversalEvent, seedBilling, type BillingFixtures } from "./billing-fixtures"
 import { callingAs, type Call } from "./calls"
 import { created } from "./created"
@@ -320,7 +319,7 @@ describe("the billing run endpoints", { skip: database.skip || owner.skip }, () 
   })
 
   describe("the ceiling, the lock and the scope", () => {
-    test("refuses a selection above the ceiling as one transaction, writing nothing, on the run and on the preview alike", async () => {
+    test("excludes alone a payer whose own ready events are more than one batch takes, too-many-events, and invoices every other payer; the preview says the same (#329)", async () => {
       assert.equal(BILLING_RUN_MAX_EVENTS, 5_000)
       const day = "2027-01-05"
       const rows = Array.from({ length: BILLING_RUN_MAX_EVENTS + 1 }, () => ({
@@ -343,61 +342,80 @@ describe("the billing run endpoints", { skip: database.skip || owner.skip }, () 
       await withCompany(pool.db, a.companyId, async (tx: Tx) => {
         for (let start = 0; start < rows.length; start += 500) await tx.insert(billableEvent).values(rows.slice(start, start + 500))
       })
-      const before = await written()
-      const tooMany = await refused(await olivia("/billing-runs", { method: "POST", body: period("2027-01-01", "2027-01-31") }), 409)
-      assert.equal(tooMany.detail, tooManyEvents(BILLING_RUN_MAX_EVENTS + 1))
-      assert.equal(tooMany.detail, "5 001 ready events fall in the period; narrow it — a run is one transaction")
-      assert.equal((await refused(await olivia("/billing-runs/preview", { method: "POST", body: period("2027-01-01", "2027-01-31") }), 409)).detail, tooMany.detail)
-      assert.deepEqual(await written(), before, "a refused run leaves nothing behind, the counter included")
-      const narrower = await run(period("2027-01-04"))
-      assert.deepEqual([narrower.eventCount, narrower.invoiceCount], [0, 0], "the day before holds nothing")
+      const housing = await entered(manual({ serviceDate: day }))
+      try {
+        const january = period("2027-01-01", "2027-01-31")
+        const previewed = await preview(january)
+        const done = await run(january)
+        assert.equal(done.status, "completed")
+        assert.deepEqual([done.eventCount, done.invoiceCount], [1, 1], "the housing association's one event, on its one invoice")
+        assert.equal((await readInvoice(done.invoiceIds[0])).customerId, fx.customers.housing.id)
+        assert.deepEqual(
+          done.exclusions.filter((exclusion) => exclusion.reason === "too-many-events").map((exclusion) => [exclusion.customerId, exclusion.eventCount]),
+          [[fx.customers.anna.id, BILLING_RUN_MAX_EVENTS + 1]],
+          "Anna's 5 001 alone, refused rather than split across invoices",
+        )
+        assert.deepEqual([previewed.eventCount, previewed.invoiceCount], [1, 1], "the preview answers the run")
+        assert.deepEqual(
+          previewed.exclusions.filter((exclusion) => exclusion.reason === "too-many-events").map((exclusion) => [exclusion.customerId, exclusion.eventCount]),
+          [[fx.customers.anna.id, BILLING_RUN_MAX_EVENTS + 1]],
+        )
+        assert.equal((await readEvent(housing.id)).status, "invoiced")
+        assert.equal((await readEvent(rows[0].id)).status, "ready", "a refused payer's events wait for the office")
+      } finally {
+        // Out of every later run's reach: no catch-up of a later test finds them.
+        await withCompany(pool.db, a.companyId, (tx: Tx) =>
+          tx
+            .update(billableEvent)
+            .set({ cancelledAt: NOON, cancelReason: "other", cancelledBy: a.users.olivia.id })
+            .where(inArray(billableEvent.id, rows.map((row) => row.id))),
+        )
+      }
     })
 
-    test("serialises two runs of one project on the project's lock: the second finds only what the first left", async () => {
+    test("serialises two runs of one project over one period on the project's lock: the second joins the first while it is under way, or finds only what it left, and each event is invoiced once", async () => {
       const day = "2026-11-02"
-      await entered(manual({ serviceDate: day }))
-      await entered(manual({ serviceDate: day, agreementId: fx.agreements.anna.id }))
+      const housing = await entered(manual({ serviceDate: day }))
+      const anna = await entered(manual({ serviceDate: day, agreementId: fx.agreements.anna.id }))
       const [first, second] = await Promise.all([olivia("/billing-runs", { method: "POST", body: period("2026-11-01", "2026-11-03") }), olivia("/billing-runs", { method: "POST", body: period("2026-11-01", "2026-11-03") })])
       assert.deepEqual([first.status, second.status], [201, 201])
-      const counts = [BillingRunDetail.parse(await first.json()).invoiceCount, BillingRunDetail.parse(await second.json()).invoiceCount].sort()
-      assert.deepEqual(counts, [0, 2], "one run issued both invoices and the other none")
+      const runs = new Map([BillingRunDetail.parse(await first.json()), BillingRunDetail.parse(await second.json())].map((done) => [done.id, done]))
+      assert.equal([...runs.values()].reduce((sum, done) => sum + done.invoiceCount, 0), 2, "both invoices, once: one run, or one and an empty one")
+      assert.deepEqual([(await readEvent(housing.id)).status, (await readEvent(anna.id)).status], ["invoiced", "invoiced"])
     })
 
-    test("locks the events it invoices: a cancellation sent while a run holds them waits for the run and is then refused as invoiced, so no event is both invoiced and cancelled", async () => {
-      // The run is hand-driven to its selection — the project locked and the ready events read `for update` the way `runBilling` reads them, the transaction held open — so a cancellation that found the row unlocked would stamp `cancelled_at` on an event the run is about to invoice (READ COMMITTED: the run's line is invisible until it commits), a line the customer pays for a row the office thinks is gone. With the lock the cancellation waits: the run goes on to its invoices and commits only once Postgres reports the cancellation blocked behind it (`pg_blocking_pids`, the driver suite's precedent), and the cancellation then reads the line the run wrote.
+    test("locks the events it invoices: a cancellation sent while a batch holds them waits for the batch and is then refused as invoiced, so no event is both invoiced and cancelled", async () => {
+      // The batch is held open after its work and before its commit — the project locked, the ready events read `for update`, the invoice written and not yet visible (READ COMMITTED) — through the opener the run is handed, so a cancellation that found the row unlocked would stamp `cancelled_at` on an event the batch has invoiced, a line the customer pays for a row the office thinks is gone. With the lock the cancellation waits: the batch commits only once Postgres reports the cancellation blocked behind it (`pg_blocking_pids`, the driver suite's precedent), and the cancellation then reads the line the batch wrote.
       const day = "2026-12-07"
       const event = await entered(manual({ serviceDate: day }))
       assert.equal(event.status, "ready")
-      const scope = { companyId: a.companyId, projectId: copenhagen }
-      const window = { periodFrom: day, periodTo: day }
       const proceed = Promise.withResolvers<void>()
       const selected = Promise.withResolvers<number>()
-      const running = withCompany(pool.db, a.companyId, async (tx: Tx) => {
-        const [{ pid }] = await tx.execute<{ pid: number }>(sql`select pg_backend_pid() as pid`)
-        await lockRow(tx, project, { companyId: a.companyId, id: copenhagen })
-        const selection = await selectBilling(tx, scope, window, { lock: true })
-        assert.deepEqual(
-          selection.events.map((ready) => ready.id),
-          [event.id],
-          "the one ready event of the day",
-        )
-        selected.resolve(pid)
-        await proceed.promise
-        return await runBilling(tx, { ...scope, ...window, note: null, requestedBy: a.users.olivia.id, newId, now: () => NOON })
-      })
+      let calls = 0
+      const holding: Transact = (work) =>
+        withCompany(pool.db, a.companyId, async (tx: Tx) => {
+          const call = ++calls
+          const answer = await work(tx)
+          // The first batch is the second transaction, after the start.
+          if (call === 2) {
+            const [{ pid }] = await tx.execute<{ pid: number }>(sql`select pg_backend_pid() as pid`)
+            selected.resolve(pid)
+            await proceed.promise
+          }
+          return answer
+        })
+      const running = runBilling(holding, { companyId: a.companyId, projectId: copenhagen, periodFrom: day, periodTo: day, note: null, requestedBy: a.users.olivia.id, newId, now: () => NOON })
       /** Rejects if the run ends before it is let go — a statement refused, say — so a broken run fails the test instead of hanging it on the pid. */
-      const endedEarly = running.then(() => Promise.reject(new Error("the run's transaction ended before it was released")))
+      const endedEarly = running.then(() => Promise.reject(new Error("the run ended before its batch was released")))
       void endedEarly.catch(() => undefined)
-      // The cancellation is sent once the selection is made and held, so what it meets is the lock and not the timing.
       let cancelling: Promise<Response> | undefined
       try {
         const pid = await Promise.race([selected.promise, endedEarly])
         cancelling = olivia(`/billable-events/${event.id}/cancel`, { method: "POST", body: { reason: "not-delivered" } })
-        // Postgres names the backends a process blocks: the cancellation is waiting on the run's transaction once this answers a row, and not before.
         const blocked = async (): Promise<boolean> => (await pool.sql`select pid from pg_stat_activity where ${pid} = any(pg_blocking_pids(pid))`).length > 0
         const deadline = Date.now() + 10_000
         while (!(await blocked())) {
-          assert.ok(Date.now() < deadline, "the cancellation never waited on the run: the selection took no lock on the events")
+          assert.ok(Date.now() < deadline, "the cancellation never waited on the batch: the selection took no lock on the events")
           await new Promise((resolve) => setTimeout(resolve, 20))
         }
       } finally {
@@ -408,39 +426,41 @@ describe("the billing run endpoints", { skip: database.skip || owner.skip }, () 
       const done = await running
       assert.ok(cancelling, "the cancellation was sent")
       assert.deepEqual([done.run.eventCount, done.invoiceIds.length], [1, 1], "the run invoiced the event")
-      assert.equal((await refused(await cancelling, 409)).detail, notCancelled(event.id, "invoiced"), "the cancellation read the line the run wrote")
+      assert.equal((await refused(await cancelling, 409)).detail, notCancelled(event.id, "invoiced"), "the cancellation read the line the batch wrote")
       const charged = await readEvent(event.id)
       assert.deepEqual([charged.status, charged.cancelledAt, charged.cancelReason, charged.invoiceLineId !== null], ["invoiced", null, null, true], "invoiced and never cancelled")
     })
 
-    test("is one transaction: a run that fails after its first invoice is written leaves no run, invoice, line, exclusion, event or number behind, and the events stay ready", async () => {
-      // The failure is provoked at the second invoice's id: a minter that gives out after the run's id, the first invoice's and its one line's, so the first document — row, line and `invoice-issued` — has been written when the run dies, and everything the transaction holds has to go with it.
+    test("rolls a failed batch back whole: a batch that fails after its first invoice is written leaves no invoice, line, invoice-issued or number of its own, and the run stays requested for the next to finish", async () => {
+      // The failure is provoked inside the one batch both payers fit in: a minter that gives out once the batch has minted the first invoice's id and its line's, so the first document has been written when the batch dies, and everything the batch holds has to go with it.
       const day = "2026-12-14"
       const housing = await entered(manual({ serviceDate: day }))
       const anna = await entered(manual({ serviceDate: day, agreementId: fx.agreements.anna.id }))
-      /** The exclusion rows and the lines naming the two events: what `written` does not count. */
-      const rest = () =>
-        withCompany(pool.db, a.companyId, async (tx: Tx) => {
-          const [exclusions] = await tx.select({ rows: count() }).from(billingRunExclusion).where(eq(billingRunExclusion.companyId, a.companyId))
-          const [lines] = await tx.select({ rows: count() }).from(invoiceLine).where(and(eq(invoiceLine.companyId, a.companyId), inArray(invoiceLine.billableEventId, [housing.id, anna.id])))
-          return { exclusions: exclusions?.rows ?? 0, lines: lines?.rows ?? 0 }
-        })
-      const before = { ...(await written()), ...(await rest()) }
-      assert.equal(before.lines, 0)
+      const lines = () =>
+        withCompany(pool.db, a.companyId, async (tx: Tx) => (await tx.select({ rows: count() }).from(invoiceLine).where(and(eq(invoiceLine.companyId, a.companyId), inArray(invoiceLine.billableEventId, [housing.id, anna.id]))))[0]?.rows ?? 0)
+      const before = await written()
+      let calls = 0
       let minted = 0
+      const counting: Transact = (work) =>
+        withCompany(pool.db, a.companyId, (tx: Tx) => {
+          calls += 1
+          return work(tx)
+        })
       const givesOut: IdMinter = () => {
-        if (++minted > 3) throw new Error("the minter gave out")
+        // The start's (its run's id, and any charge it mints) are spent freely; the batch's third id fails.
+        if (calls === 2 && ++minted > 2) throw new Error("the minter gave out")
         return newId()
       }
-      await assert.rejects(
-        withCompany(pool.db, a.companyId, (tx: Tx) => runBilling(tx, { companyId: a.companyId, projectId: copenhagen, periodFrom: day, periodTo: day, note: null, requestedBy: a.users.olivia.id, newId: givesOut, now: () => NOON })),
-        /the minter gave out/,
-      )
-      assert.equal(minted, 4, "the run's id, the first invoice's, its line's, and the second invoice's: the first document was written before the run died")
-      assert.deepEqual({ ...(await written()), ...(await rest()) }, before, "no run, no invoice, no line, no exclusion, no invoice-issued, and the counter where it was")
-      assert.deepEqual([(await readEvent(housing.id)).status, (await readEvent(anna.id)).status], ["ready", "ready"], "neither event is on a line")
+      await assert.rejects(runBilling(counting, { companyId: a.companyId, projectId: copenhagen, periodFrom: day, periodTo: day, note: null, requestedBy: a.users.olivia.id, newId: givesOut, now: () => NOON }), /the minter gave out/)
+      const after = await written()
+      assert.deepEqual([after.runs, after.invoices, after.issued, after.next], [before.runs + 1, before.invoices, before.issued, before.next], "the run's row alone stands: no invoice, no invoice-issued, and the counter where it was")
+      assert.equal(await lines(), 0, "neither event is on a line")
+      const [left] = await withCompany(pool.db, a.companyId, (tx: Tx) => tx.select({ id: billingRun.id, status: billingRun.status }).from(billingRun).where(and(eq(billingRun.companyId, a.companyId), eq(billingRun.periodFrom, day), eq(billingRun.periodTo, day))))
+      assert.equal(left.status, "requested", "resumable rather than rolled back whole")
       const done = await run(period(day))
-      assert.deepEqual([done.eventCount, done.invoiceCount], [2, 2], "the same run, with a minter that lasts, issues both")
+      assert.equal(done.id, left.id, "the next run over the period finishes the one left requested")
+      assert.deepEqual([done.status, done.eventCount, done.invoiceCount], ["completed", 2, 2])
+      assert.equal(await lines(), 2)
     })
 
     test("holds the body to the caller's projects and its period to its order, and refuses a member the server owns", async () => {
@@ -480,6 +500,95 @@ describe("the billing run endpoints", { skip: database.skip || owner.skip }, () 
       const larsPage = await lars("/billing-runs")
       assert.equal(larsPage.status, 200)
       assert.deepEqual(await larsPage.json(), { items: [], nextCursor: null })
+    })
+  })
+
+  describe("a batch of payers at a time (#329)", () => {
+    /** A run driven directly over one day, its batches as small as a test wants, through the opener it is handed. */
+    const direct = (day: string, { transact, batchMax, staleAfterMs, periodTo = day }: { transact?: Transact; batchMax?: number; staleAfterMs?: number; periodTo?: string } = {}) =>
+      runBilling(transact ?? ((work) => withCompany(pool.db, a.companyId, work)), { companyId: a.companyId, projectId: copenhagen, periodFrom: day, periodTo, note: null, requestedBy: a.users.olivia.id, newId, now: () => NOON, batchMax, staleAfterMs })
+    /** An opener that dies at its `n`th transaction, before it opens: the process killed between two batches, which writes nothing more, not even a failed status. */
+    const killedAt = (n: number): Transact => {
+      let calls = 0
+      return (work) => {
+        if (++calls >= n) return Promise.reject(new Error("the process was killed"))
+        return withCompany(pool.db, a.companyId, work)
+      }
+    }
+    /** How many lines name each event, by event: once each is the rule a resumed run keeps. */
+    const linesOf = (ids: readonly string[]) =>
+      withCompany(pool.db, a.companyId, async (tx: Tx) => {
+        const rows = await tx.select({ id: invoiceLine.billableEventId, lines: count() }).from(invoiceLine).where(and(eq(invoiceLine.companyId, a.companyId), inArray(invoiceLine.billableEventId, [...ids]))).groupBy(invoiceLine.billableEventId)
+        return Object.fromEntries(ids.map((id) => [id, rows.find((row) => row.id === id)?.lines ?? 0]))
+      })
+    const runRow = (id: string) => withCompany(pool.db, a.companyId, async (tx: Tx) => (await tx.select().from(billingRun).where(and(eq(billingRun.companyId, a.companyId), eq(billingRun.id, id))))[0])
+    const runOver = (day: string) => withCompany(pool.db, a.companyId, async (tx: Tx) => (await tx.select().from(billingRun).where(and(eq(billingRun.companyId, a.companyId), eq(billingRun.periodFrom, day))).orderBy(asc(billingRun.id))).at(-1))
+
+    test("plans a batch of the payers whose own events fit together, in id order, never an empty one while a payer is left, and refuses alone a payer above any batch", () => {
+      const payers = [
+        { customerId: "a", own: 2 },
+        { customerId: "b", own: 7 },
+        { customerId: "c", own: 1 },
+        { customerId: "d", own: 3 },
+      ]
+      assert.deepEqual(nextBatch(payers, 3), { payers: ["a", "c"], tooMany: [{ customerId: "b", eventCount: 7 }] }, "b is refused alone and passed, c fits beside a, and the batch stops at d, the first that does not")
+      assert.deepEqual(nextBatch(payers.slice(3), 3), { payers: ["d"], tooMany: [] }, "the next batch takes d")
+      assert.deepEqual(nextBatch(payers, 20), { payers: ["a", "b", "c", "d"], tooMany: [] })
+      assert.deepEqual(nextBatch([{ customerId: "z", own: 0 }], 3), { payers: ["z"], tooMany: [] }, "a payer with only events to catch up")
+      assert.deepEqual(nextBatch([], 3), { payers: [], tooMany: [] })
+    })
+
+    test("issues each payer's invoice in its own batch where the payers do not fit one, numbered on, and completes the run with its counts and totals", async () => {
+      const day = "2027-02-01"
+      const events = [await entered(manual({ serviceDate: day })), await entered(manual({ serviceDate: day })), await entered(manual({ serviceDate: day, agreementId: fx.agreements.anna.id }))]
+      let transactions = 0
+      const done = await direct(day, { batchMax: 2, transact: (work) => withCompany(pool.db, a.companyId, (tx: Tx) => ((transactions += 1), work(tx))) })
+      assert.equal(transactions, 5, "the start, two batches, the batch that finds nobody left, and the finish")
+      assert.deepEqual([done.run.status, done.run.eventCount, done.run.invoiceCount], ["completed", 3, 2])
+      const issued = await Promise.all(done.invoiceIds.map((id) => readInvoice(id)))
+      assert.deepEqual(issued.map((document) => document.lines.length).sort(), [1, 2])
+      assert.equal(done.run.netMinor, issued.reduce((sum, document) => sum + document.netMinor, 0), "the totals read off the run's invoices")
+      assert.deepEqual(Object.values(await linesOf(events.map((event) => event.id))), [1, 1, 1])
+    })
+
+    test("resumes a run killed between two batches where it stopped: the next run over the period finishes the same run, and no event is invoiced twice", async () => {
+      const day = "2027-02-02"
+      const events = [await entered(manual({ serviceDate: day })), await entered(manual({ serviceDate: day, agreementId: fx.agreements.anna.id }))]
+      // The start is the first transaction and the first batch the second: killed at the third, one payer is invoiced and the other is not.
+      await assert.rejects(direct(day, { batchMax: 1, transact: killedAt(3) }), /the process was killed/)
+      const left = await runOver(day)
+      assert.ok(left)
+      assert.deepEqual([left.status, left.invoiceCount, left.completedAt], ["requested", 1, null], "the first batch stands, its row touched with it")
+      assert.deepEqual(Object.values(await linesOf(events.map((event) => event.id))).sort(), [0, 1])
+      // Killed again, at the resumed run's start, then once more after its one batch: nothing a dead process left is redone.
+      await assert.rejects(direct(day, { batchMax: 1, transact: killedAt(1) }), /the process was killed/)
+      await assert.rejects(direct(day, { batchMax: 1, transact: killedAt(3) }), /the process was killed/)
+      const resumed = await direct(day, { batchMax: 1 })
+      assert.equal(resumed.run.id, left.id, "the same run, resumed")
+      assert.deepEqual([resumed.run.status, resumed.run.eventCount, resumed.run.invoiceCount], ["completed", 2, 2])
+      assert.deepEqual(Object.values(await linesOf(events.map((event) => event.id))), [1, 1], "each event on exactly one line")
+      const customers = (await Promise.all(resumed.invoiceIds.map((id) => readInvoice(id)))).map((document) => document.customerId).sort()
+      assert.deepEqual(customers, [fx.customers.anna.id, fx.customers.housing.id].sort(), "one invoice per payer, never a second")
+      assert.deepEqual((await direct(day)).run.invoiceCount, 0, "a later run over the period finds nothing left")
+    })
+
+    test("refuses a run while another run of the project, over another period, is under way, and starts once that one is stale, writing it failed with what it issued", async () => {
+      const stopped = "2027-01-25"
+      const events = [await entered(manual({ serviceDate: stopped })), await entered(manual({ serviceDate: stopped, agreementId: fx.agreements.anna.id }))]
+      await assert.rejects(direct(stopped, { batchMax: 1, transact: killedAt(3) }), /the process was killed/)
+      const under = await runOver(stopped)
+      assert.equal(under?.status, "requested")
+      const day = "2027-02-04"
+      await entered(manual({ serviceDate: day }))
+      const refusal = await refused(await olivia("/billing-runs", { method: "POST", body: period(day) }), 409)
+      assert.equal(refusal.detail, runUnderWay({ periodFrom: stopped, periodTo: stopped }))
+      const later = await direct(day, { staleAfterMs: 0 })
+      assert.equal(later.run.status, "completed")
+      const failed = await runRow(under!.id)
+      assert.deepEqual([failed.status, failed.invoiceCount, failed.completedAt], ["failed", 1, null], "what the dead run issued stands, and its row says it never finished")
+      // Its payer left over is a later run's: by its own period's run again, or a later period's catch-up.
+      await direct(stopped)
+      assert.deepEqual(Object.values(await linesOf(events.map((event) => event.id))), [1, 1], "each event on exactly one line")
     })
   })
 })
