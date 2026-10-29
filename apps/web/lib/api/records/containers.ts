@@ -78,6 +78,7 @@ const KIND = {
   containerType: { owns: (record: BusinessRecord) => masterDataKindOf(record) === "container-type" },
   fraction: { owns: (record: BusinessRecord) => masterDataKindOf(record) === "waste-fraction" },
   frequency: { owns: (record: BusinessRecord) => masterDataKindOf(record) === "service-frequency" },
+  decommissionReason: { owns: (record: BusinessRecord) => masterDataKindOf(record) === "decommission-reason" },
   movement: { owns: (record: BusinessRecord) => record.recordKind === "Stock movement", bare: true },
   subscription: { bare: true },
 } satisfies Record<string, ReferenceRule>
@@ -104,6 +105,7 @@ const periodOf = (placement: ContainerServicePlacement) => (placement.validTo ==
 
 const PICK_CONTAINER_TYPE = "Pick a container type the API holds"
 const PICK_FRACTION = "Pick a waste fraction the API holds"
+const PICK_REASON = "Pick a decommission reason the API holds"
 const PICK_FREQUENCY = "Pick a service frequency the API holds"
 const OWNERSHIP_WORDS = `Ownership is ${CONTAINER_OWNERSHIPS.slice(0, -1).join(", ")} or ${CONTAINER_OWNERSHIPS.at(-1)}`
 export const PLACEMENT_ENDS_BY_THE_LEDGER = "A placement ends when its container is returned or decommissioned"
@@ -286,7 +288,10 @@ export const CONTAINER_COMMANDS = {
   decommission: lifecycle("decommission", "decommissioned", (input, record, context) => {
     // In service the API requires the last day, out of service it refuses one: the route knows which.
     const validTo = endOf(input)
-    return bodyOf(reasonOf(input), validTo === undefined ? {} : isLocalRefusal(validTo) ? validTo : { validTo }, occurredOf(input, record, context), wordsOf(input, ["reference"]))
+    // Why: one of the master data's reasons (O30 of #290), a note beside it if the person says more.
+    const decommissionReasonId = inputReference(input, "decommissionReasonId", MASTER_DATA_KIND_DETAILS["decommission-reason"].prefix, context, KIND.decommissionReason)
+    if (decommissionReasonId === undefined) return refusal("decommissionReasonId", PICK_REASON)
+    return bodyOf({ decommissionReasonId }, validTo === undefined ? {} : isLocalRefusal(validTo) ? validTo : { validTo }, occurredOf(input, record, context), wordsOf(input, ["reason", "reference"]))
   }),
   adjust: lifecycle("adjust", "adjusted", (input, record, context) => {
     const toKind = said(input, "toKind")

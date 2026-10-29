@@ -12,8 +12,14 @@ import {
   isProposal,
   OFFICE_DECIDES,
   routeDayChangeRefusal,
+  SAME_CREW,
+  SAME_FRACTIONS,
+  SAME_STOPS,
+  wasteFractionChangeRefusal,
+  stopSetChangeRefusal,
   serviceDaysAfter,
   SAME_DAYS,
+  vehicleChangeRefusal,
   type ActivityCommand,
 } from "../activities"
 import { SERVICE_PROVIDER_ACTIVITY_KINDS } from "../vocabulary"
@@ -29,7 +35,7 @@ describe("a Service Provider Activity", () => {
     assert.equal(initialStatus("coordination-note"), "open")
     assert.deepEqual(
       SERVICE_PROVIDER_ACTIVITY_KINDS.filter((kind) => isProposal(kind)),
-      ["route-day-change"],
+      ["route-day-change", "vehicle-change", "stop-set-change", "waste-fraction-change"],
     )
   })
 
@@ -120,5 +126,51 @@ describe("a route-day change", () => {
   test("leaves a daily scheme every day, which it serves already", () => {
     const all = ["monday", "tuesday", "wednesday", "thursday", "friday", "saturday", "sunday"] as const
     assert.deepEqual(serviceDaysAfter("daily", all, [{ days: ["wednesday"] }]), all)
+  })
+})
+
+describe("a vehicle change", () => {
+  test("is a proposal, opened by either side and decided by the office", () => {
+    assert.equal(initialStatus("vehicle-change"), "pending-approval")
+    assert.equal(createRefusal("vehicle-change", "provider"), null)
+    assert.deepEqual(closesWith({ number: 7, kind: "vehicle-change", status: "pending-approval" }, "approve", "provider"), { ok: false, status: 403, detail: OFFICE_DECIDES })
+    assert.deepEqual(closesWith({ number: 7, kind: "vehicle-change", status: "pending-approval" }, "withdraw", "provider"), { ok: true, to: "withdrawn" })
+  })
+
+  test("must move the vehicle or the driver; a driver left unsaid keeps the group's", () => {
+    const crew = { vehicleId: "nr-08", driverId: "lars" }
+    assert.equal(vehicleChangeRefusal(crew, { vehicleId: "nr-08", driverId: null }), SAME_CREW)
+    assert.equal(vehicleChangeRefusal(crew, { vehicleId: "nr-08", driverId: "lars" }), SAME_CREW)
+    assert.equal(vehicleChangeRefusal(crew, { vehicleId: "nr-08", driverId: "mads" }), null)
+    assert.equal(vehicleChangeRefusal(crew, { vehicleId: "nr-12", driverId: null }), null)
+    assert.equal(vehicleChangeRefusal({ vehicleId: null, driverId: null }, { vehicleId: "nr-12", driverId: null }), null)
+  })
+})
+
+describe("a stop-set change", () => {
+  test("is a proposal, decided by the office", () => {
+    assert.equal(initialStatus("stop-set-change"), "pending-approval")
+    assert.deepEqual(closesWith({ number: 8, kind: "stop-set-change", status: "pending-approval" }, "approve", "office"), { ok: true, to: "approved" })
+    assert.deepEqual(closesWith({ number: 8, kind: "stop-set-change", status: "pending-approval" }, "approve", "provider"), { ok: false, status: 403, detail: OFFICE_DECIDES })
+  })
+
+  test("must move a stop or their order, the list being stop order", () => {
+    assert.equal(stopSetChangeRefusal(["a", "b"], ["a", "b"]), SAME_STOPS)
+    assert.equal(stopSetChangeRefusal(["a", "b"], ["b", "a"]), null)
+    assert.equal(stopSetChangeRefusal(["a", "b"], ["a", "b", "c"]), null)
+    assert.equal(stopSetChangeRefusal(["a", "b"], ["a"]), null)
+  })
+})
+
+describe("a waste-fraction change", () => {
+  test("is a proposal, decided by the office", () => {
+    assert.equal(initialStatus("waste-fraction-change"), "pending-approval")
+    assert.deepEqual(closesWith({ number: 9, kind: "waste-fraction-change", status: "pending-approval" }, "reject", "provider"), { ok: false, status: 403, detail: OFFICE_DECIDES })
+  })
+
+  test("must move a fraction; a rule's fractions are a set, so their order is no change", () => {
+    assert.equal(wasteFractionChangeRefusal(["organic", "paper"], ["paper", "organic"]), SAME_FRACTIONS)
+    assert.equal(wasteFractionChangeRefusal(["organic"], ["organic", "paper"]), null)
+    assert.equal(wasteFractionChangeRefusal(["organic", "paper"], ["paper"]), null)
   })
 })

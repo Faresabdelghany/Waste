@@ -291,6 +291,7 @@ export function collectionGroupRoutes(guard: MiddlewareHandler<AuthEnv>, { now =
               days: values.days,
               stopSource: values.stopSource,
               ruleVehicleTypeId: values.rule?.vehicleTypeId ?? null,
+              rulePlanningAreaId: values.rule?.planningAreaId ?? null,
               serviceProviderId: values.serviceProviderId ?? null,
               vehicleId: values.vehicleId ?? null,
               driverId: values.driverId ?? null,

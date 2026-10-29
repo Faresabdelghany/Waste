@@ -1,8 +1,9 @@
 // Where a restore or a recovery reads from (Issue #152): the one input they
 // take is a run id, and the run must be a run of the protected workflow
-// itself, on main, dispatched by hand — so a backup or a login-state record
-// comes only from this workflow's own approved runs, never from a pull
-// request's or another workflow's artifacts. Of that run's artifacts the
+// itself, on main, dispatched by hand or started by CI's success on main
+// (the automatic release, ADR-0011) — so a backup or a login-state record
+// comes only from this workflow's own runs, never from a pull request's or
+// another workflow's artifacts. Of that run's artifacts the
 // newest attempt's of the kind asked for is taken, and one that has expired,
 // that another run uploaded, or that two artifacts claim, is refused. The
 // GitHub API is read with the job's token (`actions: read`).
@@ -33,12 +34,15 @@ export type RunArtifact = {
 
 type Expected = { repository: string; workflowPath: string }
 
-/** Refuses a run that is not a dispatched run of this workflow on main. */
+/** The triggers of this workflow's own runs: by hand, and the automatic release after CI on main. */
+const SOURCE_EVENTS: readonly string[] = ["workflow_dispatch", "workflow_run"]
+
+/** Refuses a run that is not a run of this workflow on main, by hand or after CI. */
 export function checkSourceRun(run: WorkflowRun, { repository, workflowPath }: Expected): void {
   if (run.repository.full_name !== repository) throw new Error(`Run ${run.id} is a run of ${run.repository.full_name}, not of ${repository}`)
   if (run.path !== workflowPath) throw new Error(`Run ${run.id} is a run of ${run.path}, not of ${workflowPath}`)
   if (run.head_branch !== "main") throw new Error(`Run ${run.id} ran on ${run.head_branch}, not main`)
-  if (run.event !== "workflow_dispatch") throw new Error(`Run ${run.id} was triggered by ${run.event}, not by hand`)
+  if (!SOURCE_EVENTS.includes(run.event)) throw new Error(`Run ${run.id} was triggered by ${run.event}, not by hand or by CI's success on main`)
 }
 
 export type ArtifactPick = { id: number; name: string; attempt: string }

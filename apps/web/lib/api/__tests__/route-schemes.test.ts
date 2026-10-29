@@ -54,10 +54,10 @@ const copenhagen: Project = { id: "01a0d2a4-a280-7002-8000-000000000001", ...STA
 const nordren: ServiceProvider = { id: "01a0d2a4-a280-7003-8000-000000000001", ...STAMPS, legalName: "NordRen ApS", registrationNumber: "40291188", country: "DK", contactName: "Lars Mikkelsen", contactEmail: "contact@nordren.example" }
 const indreBy: PlanningArea = { id: "01a0d2a4-a280-7016-8000-000000000001", ...STAMPS, projectId: copenhagen.id, code: "OP-CEN-01", name: "Indre By Operations", purpose: "route-planning" }
 const indreByBoundary: PlanningAreaBoundary = { id: "01a0d2a4-a280-7017-8000-000000000001", ...STAMPS, projectId: copenhagen.id, planningAreaId: indreBy.id, boundary: { type: "Polygon", coordinates: [[[12.56, 55.67], [12.59, 55.67], [12.59, 55.69], [12.56, 55.67]]] }, validFrom: "2026-01-01", validTo: null }
-const residual: WasteFraction = { id: "01a0d2a4-a280-7007-8000-000000000001", ...STAMPS, key: "residual", name: "Residual", wasteCode: null, treatment: null, densityKgPerCubicMetre: null }
+const residual: WasteFraction = { id: "01a0d2a4-a280-7007-8000-000000000001", ...STAMPS, key: "residual", name: "Residual", wasteCode: null, treatment: null, densityKgPerCubicMetre: null, hazardous: false }
 const organic: WasteFraction = { ...residual, id: "01a0d2a4-a280-7007-8000-000000000002", key: "organic", name: "Organic" }
 const bin240: ContainerType = { id: "01a0d2a4-a280-7008-8000-000000000002", ...STAMPS, name: "Two-wheel bin · 240 L", volumeLitres: 240, serviceSeconds: null }
-const rearLoader: VehicleType = { id: "01a0d2a4-a280-701f-8000-000000000001", ...STAMPS, key: "rear-loader", name: "Rear loader", description: null, containerTypeIds: [bin240.id], consumption: [] }
+const rearLoader: VehicleType = { id: "01a0d2a4-a280-701f-8000-000000000001", ...STAMPS, key: "rear-loader", name: "Rear loader", description: null, containerTypeIds: [bin240.id], consumption: [], checklist: [] }
 
 // Resources is still on fixtures here (slice 5a): the fleet and the places are named by the API's ids alone.
 const WH24 = "01a0d2a4-a280-7021-8000-000000000001"
@@ -603,6 +603,22 @@ describe("an edit of a scheme", () => {
     assert.deepEqual(one(merged.calls), { collectionGroups: [entryOf(north, { days: [...WEEKDAYS] })] }, "no delete: South, left out, is parked; the one group of the legacy shape keeps its own name, North")
   })
 
+  test("a rule group's own planning area (O30 of #290): read as the area's web id, kept by an edit that leaves it, and said by an edit that gives one", async () => {
+    const north = groupOf({ id: "01a0d2a4-a280-701b-8000-0000000000a1", routeSchemeId: CENTRAL_ID, name: "North", days: ["monday", "tuesday", "wednesday"], rule: { wasteFractionIds: [residual.id], containerTypeIds: [], vehicleTypeId: rearLoader.id, planningAreaId: indreBy.id } })
+    const south = groupOf({ id: "01a0d2a4-a280-701b-8000-0000000000a2", routeSchemeId: CENTRAL_ID, name: "South", position: 2, days: ["thursday", "friday"] })
+    const scheme = { ...central, collectionGroups: [north, south] }
+    assert.deepEqual(collectionGroupsOfRecord(recordOf(scheme)).map((group) => group.planningAreaId), [areaRecord.id, undefined])
+
+    const renamed = await edited(scheme, withGroups((current) => [{ ...current[0], name: "North side" }, current[1]]), [schemeAnswer()])
+    assert.deepEqual(one(renamed.calls), { collectionGroups: [entryOf(north, { name: "North side" }), entryOf(south)] }, "the area rides on the rule as it was read")
+
+    const given = await edited(scheme, withGroups((current) => [current[0], { ...current[1], planningAreaId: areaRecord.id }]), [schemeAnswer()])
+    assert.deepEqual(one(given.calls), { collectionGroups: [entryOf(north), entryOf(south, { rule: { ...south.rule, planningAreaId: indreBy.id } })] })
+
+    const cleared = await edited(scheme, withGroups((current) => [{ ...current[0], planningAreaId: undefined }, current[1]]), [schemeAnswer()])
+    assert.deepEqual(one(cleared.calls), { collectionGroups: [entryOf(north, { rule: { wasteFractionIds: [residual.id], containerTypeIds: [], vehicleTypeId: rearLoader.id } }), entryOf(south)] }, "no area of its own: the scheme's")
+  })
+
   test("a group removed from the front is left out of the list, and the others are restated as they stand: nothing is renumbered", async () => {
     const [a, b, c] = ["a1", "a2", "a3"].map((n, index) => groupOf({ id: `01a0d2a4-a280-701b-8000-0000000000${n}`, routeSchemeId: CENTRAL_ID, name: `Group ${index + 1}`, position: index + 1, days: index === 2 ? ["friday"] : index === 1 ? ["wednesday", "thursday"] : ["monday", "tuesday"] }))
     const { calls } = await edited({ ...central, status: "draft", collectionGroups: [a, b, c] }, (row) => ({ ...withGroups((current) => current.slice(1))(row), status: "Draft" }), [schemeAnswer()])
@@ -644,7 +660,7 @@ describe("an edit of a scheme", () => {
 
   test("a rule the edit leaves alone is restated by the ids it was read with, even where another row now has its name", async () => {
     // Residual (as read) renamed Residual waste, and a new row named Residual: the untouched group still names the row it was read with.
-    const fresh = { id: "01a0d2a4-a280-7007-8000-0000000000ff", ...STAMPS, key: "residual-2", name: "Residual", wasteCode: null, treatment: null, densityKgPerCubicMetre: null }
+    const fresh = { id: "01a0d2a4-a280-7007-8000-0000000000ff", ...STAMPS, key: "residual-2", name: "Residual", wasteCode: null, treatment: null, densityKgPerCubicMetre: null, hazardous: false }
     const shifted = new Map(state).set(
       "configure.master",
       loaded({

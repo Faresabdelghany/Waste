@@ -41,7 +41,9 @@
 // source is a code change and not a migration — `ALERT_STATUSES` the
 // prototype's four less "Linked to ticket", which is a reading of
 // `ticket_id`, and `ALERT_RULES` the worker's rules an alert is raised by
-// (resolution/alert-rules.ts).
+// (resolution/alert-rules.ts). `TEAM_STATUSES` is whether a Team takes
+// tickets (O30 of #290, row 7.20): a team is retired, never deleted, since
+// the tickets it held still name it.
 //
 // Three values beside the lists, the way Execution's `CLOSING_REASONS` and
 // Planning's `DEFAULT_WEEKEND` are values and not vocabularies:
@@ -58,8 +60,8 @@
 
 /** Where a Ticket stands: the prototype's seven less `Created`, which is `created_at`. */
 export const TICKET_STATUSES = ["open", "in-progress", "pending", "on-hold", "completed", "rejected"] as const
-/** What kind of case a Ticket is: the prototype's five, the repair ticket, the glossary's complaint and task, the consumer's two, and other. */
-export const TICKET_KINDS = ["missed-collection", "overflow", "access-issue", "container-request", "container-defect", "proof-follow-up", "complaint", "reported-problem", "rejected-command", "internal-task", "other"] as const
+/** What kind of case a Ticket is: the prototype's five, the repair ticket, the glossary's complaint and task, the consumer's two, a vehicle's defects a pre-trip check found (O13 of #290), and other. */
+export const TICKET_KINDS = ["missed-collection", "overflow", "access-issue", "container-request", "container-defect", "proof-follow-up", "complaint", "reported-problem", "rejected-command", "internal-task", "vehicle-defect", "other"] as const
 /** How urgent: the prototype's five, `none` the default. */
 export const TICKET_PRIORITIES = ["critical", "high", "medium", "low", "none"] as const
 /** Where a Ticket came from: the office's doors, the driver's device as Execution spells it, the dispatcher's word, two machines, and a Service Provider's workspace. */
@@ -78,6 +80,8 @@ export const ALERT_SEVERITIES = ["critical", "high", "medium", "low"] as const
 export const ALERT_SOURCES = ["manual", "execution", "telemetry", "rule"] as const
 /** Where an Alert stands; "linked to a ticket" is a reading of `ticket_id`, not a status. */
 export const ALERT_STATUSES = ["new", "acknowledged", "resolved"] as const
+/** Whether a Team takes tickets (O30 of #290, row 7.20): an inactive team is offered to no new ticket and keeps the ones it holds. */
+export const TEAM_STATUSES = ["active", "inactive"] as const
 /** The worker's rules an Alert is raised by (O4 of #290, and O8's stale position); null on an alert a person raised. */
 export const ALERT_RULES = ["route-not-started", "session-silent", "licence-expiring", "ticket-overdue", "position-stale"] as const
 
@@ -93,6 +97,7 @@ export type AlertSeverity = (typeof ALERT_SEVERITIES)[number]
 export type AlertSource = (typeof ALERT_SOURCES)[number]
 export type AlertStatus = (typeof ALERT_STATUSES)[number]
 export type AlertRule = (typeof ALERT_RULES)[number]
+export type TeamStatus = (typeof TEAM_STATUSES)[number]
 
 /** The statuses a Ticket is open in: what "open" means in a list filter and a count. A value of `TICKET_STATUSES`, not a vocabulary. */
 export const OPEN_TICKET_STATUSES = ["open", "in-progress", "pending", "on-hold"] as const satisfies readonly TicketStatus[]
@@ -125,4 +130,5 @@ export const RESOLUTION_VOCABULARIES = {
   ALERT_SOURCES,
   ALERT_STATUSES,
   ALERT_RULES,
+  TEAM_STATUSES,
 } as const satisfies Record<string, readonly [string, ...string[]]>

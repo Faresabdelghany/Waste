@@ -43,12 +43,21 @@
 // so the queue the weights desk works ("Needs review" is `captured`) is a
 // filter and never a column.
 //
+// `GET /unloads/:id/transfer-note` (O18 of #290) answers the unload's waste
+// transfer note as a PDF: made of its rows (routes/transfer-notes.ts) by the
+// domain's model and `@waste/documents`' renderer, imported inside the
+// handler alone as the invoice's document is, its bytes' sha256 the ETag. A
+// load the station refused and an unload a review corrected have none (409).
+//
 // Every statement carries the tenant and `inProjects`; the grant is
 // `route-studio.weights`, `view` to read and `create` to capture.
+import { createHash } from "node:crypto"
+
 import { Page } from "@waste/contracts/pagination"
 import { Unload, UnloadCreate, UnloadListQuery } from "@waste/contracts/unloads"
 import { reviewStatus } from "@waste/db/query/weight-review"
 import { route, unload } from "@waste/db/schema/execution"
+import { transferNoteOf } from "@waste/domain/execution/transfer-note"
 import { and, asc, eq, gt, gte, lte } from "drizzle-orm"
 import { Hono, type MiddlewareHandler } from "hono"
 import { describeRoute } from "hono-openapi"
@@ -64,6 +73,7 @@ import { requireRoute, requireUnloadingStation, requireWasteFraction } from "./r
 import { requireRan } from "./routes"
 import type { ClockOptions } from "./scheme-groups"
 import { created, describeCreated, describeJson, IdParam, lockRow, requireNotAhead } from "./shared"
+import { noteRefusal, transferNoteInputOf } from "./transfer-notes"
 import { appendUnload, notTaken, stationTakes } from "./unload-writes"
 
 const MODULE = "route-studio.weights"
@@ -144,6 +154,48 @@ export function unloadRoutes(guard: MiddlewareHandler<AuthEnv>, { now = () => ne
         const row = await findUnload(tx, principal, id)
         if (row === undefined) throw noSuchUnload(id)
         return c.json(await unloadAnswered(tx, principal.companyId, row))
+      },
+    )
+    .get(
+      "/unloads/:id/transfer-note",
+      describeRoute({
+        operationId: "getUnloadTransferNote",
+        summary: "One unload's waste transfer note as its PDF",
+        description:
+          "The waste transfer note that goes with the load (O18 of #290): one A4 page naming the company as the transferor and carrier with the vehicle and the driver the load came on (the session's, else the route's actual crew, else its planned one), the station as the transferee, the waste — the fraction, its European List of Waste code as the list prints it, whether it is hazardous, the net weight and the weighbridge's gross and tare where weighed, the station's ticket — and the day and time of the transfer on the project's clock, with lines for both parties to sign. In Danish for a Danish project, in English otherwise. Its number is the unload's id. The unload never changes, but the company, the station and the fraction are read as they stand, so the bytes' sha256 is the ETag; `If-None-Match` with it answers 304. A load the station refused was not transferred, and an unload a weight review corrected has its correction's note: both are refused (409). Inline, named by the unload's id.",
+        security: BEARER_SECURITY,
+        responses: {
+          200: { description: "The PDF.", content: { "application/pdf": { schema: { type: "string" as const, format: "binary" } } } },
+          304: { description: "The ETag named is the note's as it stands." },
+          400: describeProblem("The path does not hold an id."),
+          401: describeProblem("No usable token (see WWW-Authenticate)."),
+          403: describeProblem(`No active account here, or the caller's role does not allow \`view\` on \`${MODULE}\`.`),
+          404: describeProblem("No unload with that id in the projects this account works in."),
+          409: describeProblem("The station refused the load, or a weight review corrected the unload; the detail says which."),
+        },
+      }),
+      guard,
+      requireGrant(MODULE, "view"),
+      validate("param", IdParam),
+      async (c) => {
+        const { id } = c.req.valid("param")
+        const tx = c.get("tx")
+        const principal = c.get("principal")
+        const row = await findUnload(tx, principal, id)
+        if (row === undefined) throw noSuchUnload(id)
+        const refusal = noteRefusal(row)
+        if (refusal !== null) throw refusal
+        const model = transferNoteOf(await transferNoteInputOf(tx, principal.companyId, row))
+        const { renderTransferNote } = await import("@waste/documents/transfer-note")
+        const bytes = await renderTransferNote(model)
+        const etag = `"${createHash("sha256").update(bytes).digest("hex")}"`
+        if (c.req.header("If-None-Match") === etag) return c.body(null, 304, { etag })
+        return c.body(bytes, 200, {
+          "content-type": "application/pdf",
+          "content-disposition": `inline; filename="transfer-note-${row.id}.pdf"`,
+          etag,
+          "cache-control": "private, no-cache",
+        })
       },
     )
     .post(

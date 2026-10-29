@@ -6,12 +6,17 @@ import { describe, test } from "node:test"
 import { defineVocabularyTests } from "../../__tests__/vocabulary"
 import * as vocabulary from "../vocabulary"
 
-defineVocabularyTests("Imports", vocabulary, vocabulary.IMPORT_VOCABULARIES, 2)
+defineVocabularyTests("Imports", vocabulary, vocabulary.IMPORT_VOCABULARIES, 2, ["COMPANY_IMPORT_KINDS"])
 
 describe("the import vocabulary's own rules", () => {
-  test("a file imports one of four kinds, and each row is created, updated, unchanged or refused", () => {
-    assert.deepEqual([...vocabulary.IMPORT_KINDS], ["customers", "properties", "containers", "agreements"])
+  test("a file imports one of eleven kinds, and each row is created, updated, unchanged or refused", () => {
+    assert.deepEqual([...vocabulary.IMPORT_KINDS], ["customers", "properties", "containers", "agreements", "waste-fractions", "container-types", "vehicle-types", "vehicles", "drivers", "collection-calendars", "planning-areas"])
     assert.deepEqual([...vocabulary.IMPORT_ROW_OUTCOMES], ["created", "updated", "unchanged", "refused"])
+  })
+
+  test("the company's kinds are the customers and the catalogue, and every other kind is a project's", () => {
+    assert.deepEqual([...vocabulary.COMPANY_IMPORT_KINDS], ["customers", "waste-fractions", "container-types", "vehicle-types"])
+    assert.deepEqual(vocabulary.IMPORT_KINDS.filter((kind) => !vocabulary.isCompanyImportKind(kind)), ["properties", "containers", "agreements", "vehicles", "drivers", "collection-calendars", "planning-areas"])
   })
 
   test("a request carries fewer rows than the 64 subtransactions Postgres caches, and a file many requests' worth", () => {

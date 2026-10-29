@@ -119,7 +119,7 @@ import { newId } from "../ids"
 import { afterCursor, fetchLimit, pageOf } from "../pagination"
 import { describeProblem, invalidRequest, problem, validate } from "../problem"
 import { requireWithin } from "./periods"
-import { requireWarehouse, type Scope } from "./references"
+import { requireDecommissionReason, requireWarehouse, type Scope } from "./references"
 import { describeJson, IdParam, lockRow, requireNotAhead } from "./shared"
 import { requireWarehouseTakesStock } from "./statuses"
 
@@ -216,7 +216,7 @@ export type Intent = Says &
     | { kind: "issue"; open: () => Promise<string> }
     | { kind: "return"; to: StockPlaceRef; validTo: string }
     | { kind: "transfer"; to: StockPlaceRef }
-    | { kind: "decommission"; validTo?: string }
+    | { kind: "decommission"; validTo?: string; decommissionReasonId: string }
     | { kind: "adjustment"; to: { kind: AdjustmentTarget; warehouseId: string | null }; correctsMovementId?: string }
   )
 
@@ -452,6 +452,7 @@ const columns = {
   occurredAt: stockMovement.occurredAt,
   recordedBy: stockMovement.recordedBy,
   reason: stockMovement.reason,
+  decommissionReasonId: stockMovement.decommissionReasonId,
   reference: stockMovement.reference,
   correctsMovementId: stockMovement.correctsMovementId,
 }
@@ -474,6 +475,7 @@ function movementOf(row: Row): StockMovement {
     occurredAt: row.occurredAt.toISOString(),
     recordedBy: row.recordedBy,
     reason: row.reason,
+    decommissionReasonId: row.decommissionReasonId,
     reference: row.reference,
     correctsMovementId: row.correctsMovementId,
   }
@@ -508,7 +510,7 @@ async function append(
   tx: Tx,
   principal: Principal,
   subject: ContainerRef,
-  movement: { kind: StockMovementKind; from: Place; to: Place; placementId: string | null; occurredAt: Date; correctsMovementId?: string },
+  movement: { kind: StockMovementKind; from: Place; to: Place; placementId: string | null; occurredAt: Date; correctsMovementId?: string; decommissionReasonId?: string },
   says: Says,
 ): Promise<StockMovement> {
   const { kind, from, to } = movement
@@ -530,6 +532,7 @@ async function append(
       reason: says.reason ?? null,
       reference: says.reference ?? null,
       correctsMovementId: movement.correctsMovementId ?? null,
+      decommissionReasonId: movement.decommissionReasonId ?? null,
     })
     .returning(columns)
   return movementOf(row)
@@ -546,12 +549,22 @@ export async function move(tx: Tx, principal: Principal, subject: ContainerRef, 
   const reading = await lockedReading(tx, principal, subject)
   const from = await departure(tx, principal, subject, reading, intent.kind)
   const occurredAt = hold(intent.kind, from, destinationKind(intent), intent)
+  // A decommission's reason (O30 of #290) is the body's field: judged after the container's own state, before the placement is touched.
+  if (intent.kind === "decommission") await requireDecommissionReason(tx, principal.companyId, intent.decommissionReasonId)
   const { to, placementId } = await arrival(tx, principal, subject, from, intent)
   return await append(
     tx,
     principal,
     subject,
-    { kind: intent.kind, from, to, placementId, occurredAt, ...(intent.kind === "adjustment" ? { correctsMovementId: intent.correctsMovementId } : {}) },
+    {
+      kind: intent.kind,
+      from,
+      to,
+      placementId,
+      occurredAt,
+      ...(intent.kind === "adjustment" ? { correctsMovementId: intent.correctsMovementId } : {}),
+      ...(intent.kind === "decommission" ? { decommissionReasonId: intent.decommissionReasonId } : {}),
+    },
     intent,
   )
 }
@@ -668,15 +681,15 @@ export function lifecycleRoutes(guard: MiddlewareHandler<AuthEnv>, { now = () =>
         operationId: "decommissionContainer",
         summary: "Scrap a container",
         description:
-          "Appends the decommission: from wherever the container stands to scrap, with the reason. In service, `validTo` is required (400) and ends the container's placement in force in the same transaction, as a return does — one that already ended on or before it ends nothing more, and one placed again from a later day is refused (409 naming the day); out of service, `validTo` is refused (400), since there is no placement to end. A container with no stock record (409) or already retired (409) is refused. A retired container never comes back through `receive`; a wrong decommission is corrected through `adjust`.",
+          "Appends the decommission: from wherever the container stands to scrap, with its reason, one of the company's active Decommission Reasons (`decommissionReasonId`; 400 for one that is not the company's, 409 for a retired one, judged after the container's own state), and a note beside it if `reason` says more. In service, `validTo` is required (400) and ends the container's placement in force in the same transaction, as a return does — one that already ended on or before it ends nothing more, and one placed again from a later day is refused (409 naming the day); out of service, `validTo` is refused (400), since there is no placement to end. A container with no stock record (409) or already retired (409) is refused. A retired container never comes back through `receive`; a wrong decommission is corrected through `adjust`.",
         security: BEARER_SECURITY,
         responses: {
           201: describeJson("The decommission as it was appended; a placement it ended now ends on `validTo`.", StockMovement),
           400: describeProblem(
-            "The path does not hold an id, or the body is missing the reason, names a member the ledger owns, gives `validTo` out of service or withholds it in service, ends the placement on or before the day it started or outside the subscription's period, or dates the decommission more than five minutes after the request.",
+            "The path does not hold an id, or the body is missing the reason, names a reason that is not this company's, names a member the ledger owns, gives `validTo` out of service or withholds it in service, ends the placement on or before the day it started or outside the subscription's period, or dates the decommission more than five minutes after the request.",
           ),
           ...commandProblems("create"),
-          409: describeProblem("The container has no stock record, is already retired, or is placed again from a later day than the placement's new end."),
+          409: describeProblem("The container has no stock record, is already retired, or is placed again from a later day than the placement's new end, or the reason is retired."),
         },
       }),
       guard,
@@ -685,12 +698,12 @@ export function lifecycleRoutes(guard: MiddlewareHandler<AuthEnv>, { now = () =>
       validate("json", Decommission),
       async (c) => {
         const { id } = c.req.valid("param")
-        const { validTo, ...says } = c.req.valid("json")
+        const { validTo, decommissionReasonId, ...says } = c.req.valid("json")
         const tx = c.get("tx")
         const principal = c.get("principal")
         const subject = await findContainerRef(tx, principal, id)
         if (subject === undefined) throw noSuchContainer(id)
-        return c.json(await move(tx, principal, subject, { kind: "decommission", ...(validTo === undefined ? {} : { validTo }), ...says, at: now() }), 201)
+        return c.json(await move(tx, principal, subject, { kind: "decommission", decommissionReasonId, ...(validTo === undefined ? {} : { validTo }), ...says, at: now() }), 201)
       },
     )
     .post(

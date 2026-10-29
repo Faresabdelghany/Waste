@@ -115,12 +115,15 @@ import { type PickupOrigin, type PickupReason, type PickupService, type PickupSt
 import {
   compatibilityKey,
   holidayListOf,
+  matchAreas,
   matchStampOf,
   NO_PLANNING_AREA,
   noBoundaryInForce,
+  noGroupBoundaryInForce,
   pickupChanges,
   planRoutes,
   resolveStops,
+  ruleAreaOf,
   schemeRecurrenceOf,
   stampMoved,
   walkWindow,
@@ -234,7 +237,13 @@ async function generate(tx: Tx, runId: string, companyId: string, at: Date): Pro
     stopSource: group.stopSource as StopSource,
     rule:
       group.stopSource === "rule"
-        ? { fractionIds: of(fractions, group.id).map((row) => row.id), containerTypeIds: of(containerTypes, group.id).map((row) => row.id), vehicleTypeId: group.ruleVehicleTypeId }
+        ? {
+            fractionIds: of(fractions, group.id).map((row) => row.id),
+            containerTypeIds: of(containerTypes, group.id).map((row) => row.id),
+            vehicleTypeId: group.ruleVehicleTypeId,
+            // The group's own area, else the scheme's (O30 of #290).
+            planningAreaId: ruleAreaOf(scheme.planningAreaId, group.rulePlanningAreaId),
+          }
         : null,
     pickedContainerIds: of(picked, group.id).map((row) => row.id),
   }))
@@ -319,14 +328,22 @@ async function generate(tx: Tx, runId: string, companyId: string, at: Date): Pro
   // The stop candidates of every day the run writes stops for, and of the walk's first day for the stamp, in one statement.
   const writing = plan.decisions.filter((decision): decision is Extract<RouteDecision, { kind: "create" | "refresh" }> => decision.kind === "create" || decision.kind === "refresh")
   const days = [...new Set([...writing.map((decision) => decision.serviceDate), plan.walk.from])].sort()
-  const candidatesByDay = await stopCandidatesByDay(tx, scope, scheme.planningAreaId, days)
+  const rules = stopGroups.flatMap((group) => (group.rule === null ? [] : [{ group, rule: group.rule }]))
+  const candidatesByDay = await stopCandidatesByDay(tx, scope, matchAreas(scheme.planningAreaId, rules.map(({ rule }) => rule)), days)
   const compatible = new Set((await tx.select({ containerTypeId: containerTypeVehicleType.containerTypeId, vehicleTypeId: containerTypeVehicleType.vehicleTypeId }).from(containerTypeVehicleType).where(eq(containerTypeVehicleType.companyId, companyId))).map((row) => compatibilityKey(row.containerTypeId, row.vehicleTypeId)))
-  const hasRuleGroup = stopGroups.some((group) => group.stopSource === "rule")
-  if (hasRuleGroup && scheme.planningAreaId === null) {
+  // A rule group with no area of its own matches within the scheme's; one with its own is told by its name (O30 of #290).
+  const onScheme = rules.filter(({ group }) => groupOf.get(group.id)?.rulePlanningAreaId == null)
+  if (onScheme.length > 0 && scheme.planningAreaId === null) {
     counts.warnings.push(NO_PLANNING_AREA)
-  } else if (hasRuleGroup && scheme.planningAreaId !== null) {
+  } else if (onScheme.length > 0 && scheme.planningAreaId !== null) {
     const covered = await daysWithBoundary(tx, companyId, scheme.planningAreaId, days)
     for (const day of days) if (!covered.has(day)) counts.warnings.push(noBoundaryInForce(day))
+  }
+  for (const { group, rule } of rules) {
+    const own = groupOf.get(group.id)?.rulePlanningAreaId
+    if (own == null || rule.planningAreaId === null) continue
+    const covered = await daysWithBoundary(tx, companyId, rule.planningAreaId, days)
+    for (const day of days) if (!covered.has(day)) counts.warnings.push(noGroupBoundaryInForce(groupOf.get(group.id)?.name ?? group.id, day))
   }
 
   // Every group's stops per day, the tie-breaks applied once per day over the groups that write that day.
@@ -511,7 +528,7 @@ async function generate(tx: Tx, runId: string, companyId: string, at: Date): Pro
   const firstDay = candidatesByDay.get(plan.walk.from) ?? []
   for (const group of stopGroups) {
     if (group.rule === null) continue
-    const next: MatchStamp = matchStampOf(group.rule, scheme.planningAreaId, firstDay, compatible)
+    const next: MatchStamp = matchStampOf(group.rule, firstDay, compatible)
     const [latest] = await tx
       .select({ ruleSignature: generationMatch.ruleSignature, containerIds: generationMatch.containerIds })
       .from(generationMatch)

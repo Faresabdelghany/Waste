@@ -37,6 +37,7 @@ import {
   reasonForm,
   type ActivityOffer,
 } from "@/lib/data/provider-activities"
+import { masterDataKindOf } from "@/lib/data/master-data-kinds"
 import { SERVICE_PROVIDERS_MODULE, serviceAreaKindOf } from "@/lib/data/provider-money"
 import { PATCH_RECORD } from "@/lib/data/provider-workspace"
 import type { ServiceProviderActivityKind } from "@waste/domain/service-providers/vocabulary"
@@ -44,6 +45,29 @@ import type { ActivitySide } from "@waste/domain/service-providers/activities"
 
 const { workspaceId, moduleId } = PROVIDER_ACTIVITIES_MODULE
 const SERVICE_AREAS_MODULE = { workspaceId: "service-providers", moduleId: "service-areas" } as const
+const VEHICLES_MODULE = { workspaceId: "fleet", moduleId: "vehicles" } as const
+const DRIVERS_MODULE = { workspaceId: "fleet", moduleId: "drivers" } as const
+const CONTAINERS_MODULE = { workspaceId: "resources", moduleId: "containers" } as const
+const MASTER_MODULE = { workspaceId: "configure", moduleId: "master" } as const
+
+/**
+ * What a vehicle change, a stop-set change and a waste-fraction change pick
+ * from: the powered vehicles and the drivers the account reads — a
+ * provider's own fleet alone, which the API fences — the containers it
+ * reads, and the master data's waste fractions.
+ */
+function useCrewOptions(): { vehicles: BusinessFormOption[]; drivers: BusinessFormOption[]; containers: BusinessFormOption[]; fractions: BusinessFormOption[] } {
+  const vehicles = useServerModuleState(VEHICLES_MODULE.workspaceId, VEHICLES_MODULE.moduleId)
+  const drivers = useServerModuleState(DRIVERS_MODULE.workspaceId, DRIVERS_MODULE.moduleId)
+  const containers = useServerModuleState(CONTAINERS_MODULE.workspaceId, CONTAINERS_MODULE.moduleId)
+  const master = useServerModuleState(MASTER_MODULE.workspaceId, MASTER_MODULE.moduleId)
+  return {
+    vehicles: optionsOf(vehicles?.records, (record) => record.submittedValues?.resourceKind === "powered-vehicle"),
+    drivers: optionsOf(drivers?.records, () => true),
+    containers: optionsOf(containers?.records, () => true),
+    fractions: optionsOf(master?.records, (record) => masterDataKindOf(record) === "waste-fraction"),
+  }
+}
 
 const optionsOf = (records: readonly BusinessRecord[] | undefined, keep: (record: BusinessRecord) => boolean, label: (record: BusinessRecord) => string = (record) => record.name): BusinessFormOption[] =>
   (records ?? []).filter(keep).map((record) => ({ value: record.id, label: label(record) }))
@@ -64,6 +88,7 @@ export function LogActivitySurface({ label }: PrimarySurfaceProps) {
   const areas = useServerModuleState(SERVICE_AREAS_MODULE.workspaceId, SERVICE_AREAS_MODULE.moduleId)
   const providers = useServerModuleState(SERVICE_PROVIDERS_MODULE.workspaceId, SERVICE_PROVIDERS_MODULE.moduleId)
   const organisation = useServerModuleState(ORGANISATION_MODULE.workspaceId, ORGANISATION_MODULE.moduleId)
+  const crew = useCrewOptions()
   const { upsertRecord } = useBusinessRecordStore()
   const openRecord = useOpenRecord(moduleId)
   const [open, setOpen] = useState(false)
@@ -72,6 +97,7 @@ export function LogActivitySurface({ label }: PrimarySurfaceProps) {
   const schema = activityOpenForm(side, {
     // A proposal is about a scheme's group: the routes generation wrote, never the office's ad-hoc ones.
     routes: optionsOf(routes?.records, (record) => typeof record.submittedValues?.schemeId === "string" && record.submittedValues.schemeId !== "", (record) => [record.name, record.context].filter(Boolean).join(" · ")),
+    ...crew,
     serviceAreas: optionsOf(areas?.records, (record) => serviceAreaKindOf(record) === "service-area"),
     providers: optionsOf(providers?.records, () => true),
     projects: optionsOf(organisation?.records, (record) => record.recordKind === "Project"),
@@ -109,6 +135,7 @@ export function ActivityCommandsSurface({ record }: RowSurfaceProps) {
   const { side } = useSide()
   const moduleReady = useModuleReady(PROVIDER_ACTIVITIES_MODULE)
   const offered = useCommandOffered(PROVIDER_ACTIVITIES_MODULE)
+  const crew = useCrewOptions()
   const { upsertRecord } = useBusinessRecordStore()
   const { busy, run, save } = useCommandRunner(PROVIDER_ACTIVITIES_MODULE, record.id)
   const [asking, setAsking] = useState<ActivityOffer | null>(null)
@@ -152,7 +179,7 @@ export function ActivityCommandsSurface({ record }: RowSurfaceProps) {
       )}
       {correcting && kind !== undefined && (
         <BusinessRecordFormDialog
-          schema={activityCorrectionForm(kind)}
+          schema={activityCorrectionForm(kind, crew)}
           open
           onOpenChange={(isOpen) => !isOpen && setCorrecting(false)}
           onSubmit={correct}

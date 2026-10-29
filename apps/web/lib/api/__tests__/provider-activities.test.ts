@@ -54,6 +54,10 @@ const proposal: ServiceProviderActivity = {
   collectionGroupId: GROUP,
   serviceDays: ["wednesday"],
   effectiveFrom: "2026-08-26",
+  vehicleId: null,
+  driverId: null,
+  containerIds: null,
+  wasteFractionIds: null,
   successorSchemeId: null,
   openedBy: LARS,
   closedBy: null,
@@ -152,12 +156,105 @@ describe("a create", () => {
   })
 })
 
+describe("a vehicle change (#474, part 2)", () => {
+  const TRUCK = "01a0d2a4-a280-7060-8000-000000000001"
+  const DRIVER = "01a0d2a4-a280-7061-8000-000000000001"
+
+  test("is opened on a route of its group with a truck, its driver where one is picked", () => {
+    const record = createActivityRecord({ kind: "vehicle-change", subject: "Own truck", routeId: route.id, vehicleId: `vehicle-${TRUCK}`, effectiveFrom: "2026-08-26" }, 1, { serviceProviderId: `service-provider-${NORDREN}` })
+    assert.equal(record.status, "Pending approval")
+    assert.deepEqual(ServiceProviderActivityCreate.parse(toActivityCreateBody(record, context)), {
+      kind: "vehicle-change",
+      projectId: copenhagen.id,
+      serviceProviderId: NORDREN,
+      subject: "Own truck",
+      routeSchemeId: SCHEME,
+      collectionGroupId: GROUP,
+      vehicleId: TRUCK,
+      effectiveFrom: "2026-08-26",
+    })
+    const withDriver = createActivityRecord({ kind: "vehicle-change", subject: "Own truck", routeId: route.id, vehicleId: `vehicle-${TRUCK}`, driverId: `driver-${DRIVER}`, effectiveFrom: "2026-08-26" }, 1, { serviceProviderId: `service-provider-${NORDREN}` })
+    assert.equal((toActivityCreateBody(withDriver, context) as { driverId?: string }).driverId, DRIVER)
+    const unnamed = createActivityRecord({ kind: "vehicle-change", subject: "Own truck", routeId: route.id, effectiveFrom: "2026-08-26" }, 1, { serviceProviderId: `service-provider-${NORDREN}` })
+    assert.equal((toActivityCreateBody(unnamed, context) as { path?: string }).path, "vehicleId")
+  })
+
+  test("reads its crew, and is decided by the office as a route-day change is", () => {
+    const change = toActivityRecord({ ...proposal, kind: "vehicle-change", serviceDays: null, vehicleId: TRUCK, driverId: DRIVER }, context)
+    assert.equal(change.facts["New vehicle"], `vehicle-${TRUCK}`)
+    assert.equal(change.facts["New driver"], `driver-${DRIVER}`)
+    assert.equal(change.value, "Vehicle change")
+    assert.deepEqual(activityCommandsOffered(change, "office").map((offer) => offer.command), ["approve", "reject", "withdraw"])
+    assert.deepEqual(activityCommandsOffered(change, "provider").map((offer) => offer.command), ["withdraw"])
+    const moved = { ...change, submittedValues: { ...change.submittedValues, driverId: "" } }
+    assert.deepEqual(ServiceProviderActivityPatch.parse(toActivityPatchBody(change, moved, context)), { driverId: null })
+  })
+})
+
+describe("a stop-set change (#474, part 3)", () => {
+  const BIN1 = "01a0d2a4-a280-7070-8000-000000000001"
+  const BIN3 = "01a0d2a4-a280-7070-8000-000000000003"
+
+  test("is opened on a route of its group with its containers in the order picked", () => {
+    const record = createActivityRecord({ kind: "stop-set-change", subject: "Bin 3 first", routeId: route.id, containerIds: `asset-${BIN3},asset-${BIN1}`, effectiveFrom: "2026-08-26" }, 1, { serviceProviderId: `service-provider-${NORDREN}` })
+    assert.equal(record.status, "Pending approval")
+    assert.deepEqual(ServiceProviderActivityCreate.parse(toActivityCreateBody(record, context)), {
+      kind: "stop-set-change",
+      projectId: copenhagen.id,
+      serviceProviderId: NORDREN,
+      subject: "Bin 3 first",
+      routeSchemeId: SCHEME,
+      collectionGroupId: GROUP,
+      containerIds: [BIN3, BIN1],
+      effectiveFrom: "2026-08-26",
+    })
+    const empty = createActivityRecord({ kind: "stop-set-change", subject: "None", routeId: route.id, effectiveFrom: "2026-08-26" }, 1, { serviceProviderId: `service-provider-${NORDREN}` })
+    assert.equal((toActivityCreateBody(empty, context) as { path?: string }).path, "containerIds")
+  })
+
+  test("reads its stops in order, and is corrected by its list, replaced whole", () => {
+    const change = toActivityRecord({ ...proposal, kind: "stop-set-change", serviceDays: null, containerIds: [BIN3, BIN1] }, context)
+    assert.equal(change.facts["New stops"], `asset-${BIN3} → asset-${BIN1}`)
+    assert.equal(change.value, "Stop-set change")
+    assert.deepEqual(activityCommandsOffered(change, "office").map((offer) => offer.command), ["approve", "reject", "withdraw"])
+    const moved = { ...change, submittedValues: { ...change.submittedValues, containerIds: `asset-${BIN1}` } }
+    assert.deepEqual(ServiceProviderActivityPatch.parse(toActivityPatchBody(change, moved, context)), { containerIds: [BIN1] })
+  })
+})
+
+describe("a waste-fraction change (#474, part 4)", () => {
+  const GLASS = "01a0d2a4-a280-7080-8000-000000000001"
+
+  test("is opened on a route of its group with its rule's fractions, by the office on the web", () => {
+    assert.ok(kindsOpenedBy("office").includes("waste-fraction-change"))
+    assert.ok(!kindsOpenedBy("provider").includes("waste-fraction-change"), "a provider reads no fractions to pick from")
+    const record = createActivityRecord({ kind: "waste-fraction-change", serviceProviderId: `service-provider-${NORDREN}`, subject: "Glass too", routeId: route.id, wasteFractionIds: `fraction-${GLASS}`, effectiveFrom: "2026-08-26" }, 1)
+    assert.deepEqual(ServiceProviderActivityCreate.parse(toActivityCreateBody(record, context)), {
+      kind: "waste-fraction-change",
+      projectId: copenhagen.id,
+      serviceProviderId: NORDREN,
+      subject: "Glass too",
+      routeSchemeId: SCHEME,
+      collectionGroupId: GROUP,
+      wasteFractionIds: [GLASS],
+      effectiveFrom: "2026-08-26",
+    })
+  })
+
+  test("reads its fractions and is decided by the office", () => {
+    const change = toActivityRecord({ ...proposal, kind: "waste-fraction-change", serviceDays: null, wasteFractionIds: [GLASS] }, context)
+    assert.equal(change.facts["New fractions"], `fraction-${GLASS}`)
+    assert.equal(change.value, "Waste-fraction change")
+    assert.deepEqual(activityCommandsOffered(change, "provider").map((offer) => offer.command), ["withdraw"])
+  })
+})
+
 describe("a correction", () => {
   test("sends what moved, a proposal's days among them", () => {
     const before = toActivityRecord(proposal, context)
     const after = { ...before, submittedValues: { ...before.submittedValues, serviceDays: "thursday", subject: "Organic route to Thursday" } }
-    assert.deepEqual(ServiceProviderActivityPatch.parse(toActivityPatchBody(before, after)), { subject: "Organic route to Thursday", serviceDays: ["thursday"] })
-    assert.equal(toActivityPatchBody(before, before), null)
+    assert.deepEqual(ServiceProviderActivityPatch.parse(toActivityPatchBody(before, after, context)), { subject: "Organic route to Thursday", serviceDays: ["thursday"] })
+    assert.equal(toActivityPatchBody(before, before, context), null)
   })
 })
 
@@ -188,8 +285,8 @@ describe("what each side is offered", () => {
   })
 
   test("the open form offers a provider a proposal or a note, and asks it no provider and no project", () => {
-    assert.deepEqual(kindsOpenedBy("provider"), ["route-day-change", "coordination-note"])
-    const ids = (side: "office" | "provider") => activityOpenForm(side, { routes: [], serviceAreas: [], providers: [], projects: [] }).sections.flatMap((section) => section.fields.map((field) => field.id))
+    assert.deepEqual(kindsOpenedBy("provider"), ["route-day-change", "vehicle-change", "stop-set-change", "coordination-note"])
+    const ids = (side: "office" | "provider") => activityOpenForm(side, { routes: [], vehicles: [], drivers: [], containers: [], fractions: [], serviceAreas: [], providers: [], projects: [] }).sections.flatMap((section) => section.fields.map((field) => field.id))
     assert.ok(!ids("provider").includes("serviceProviderId"))
     assert.ok(!ids("provider").includes("projectId"))
     assert.ok(ids("office").includes("serviceProviderId"))

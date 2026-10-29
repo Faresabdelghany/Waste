@@ -91,7 +91,7 @@ describe("a vehicle type's consumption", () => {
   })
 
   test("rides on the vehicle type, each entry with its fuel's unit", () => {
-    const type = { ...STAMPS, key: "rear-loader", name: "Rear loader", description: null, containerTypeIds: [], consumption: [{ fuel: "diesel", unit: "litre", milliUnitsPerKm: 450 }] }
+    const type = { ...STAMPS, key: "rear-loader", name: "Rear loader", description: null, containerTypeIds: [], consumption: [{ fuel: "diesel", unit: "litre", milliUnitsPerKm: 450 }], checklist: [] }
     assert.equal(VehicleType.safeParse(type).success, true)
   })
 })
