@@ -276,6 +276,8 @@ describe("a property", () => {
     const record = propertyAdapter.toRecord(moving, context())
     assert.equal(record.facts.Tenants, "KAB Bolig", "the tenant moving in on 1 November is not a tenant on 30 September")
     assert.equal(record.submittedValues?.tenantIds, `company-${kab.id}`)
+    assert.equal(record.facts["Booked ahead"], `KAB Bolig leaves as tenant on 2026-11-01 · customer-${HARBOR_PROPERTIES} joins as tenant on 2026-11-01`, "the move booked ahead, said in its details: who leaves first, then who joins, on the day")
+    assert.equal(propertyAdapter.toRecord(dock4, context()).facts["Booked ahead"], undefined, "nothing booked, nothing said")
   })
 
   test("says exactly the wire's two statuses, so the store refuses the lifecycle's Prospect, On hold and Archived before the API", () => {
