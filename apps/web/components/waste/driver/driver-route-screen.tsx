@@ -16,7 +16,6 @@
 // What the read model makes impossible is not offered and a stop with a
 // command waiting shows "Sending" until the server has answered; everything
 // else is sent and the server decides (lib/driver/route-view.ts).
-import Link from "next/link"
 import { useEffect, useState } from "react"
 import { ArrowLeft, Barcode, Camera, CheckCircle, FlagCheckered, Info, MapPin, MapTrifold, NavigationArrow, NotePencil, Pause, Play, Scales, Signature, SkipForward, Truck, Warning, XCircle } from "@phosphor-icons/react/dist/ssr"
 
@@ -26,9 +25,10 @@ import { useDriverApp, useDriverAppState } from "@/components/waste/driver/drive
 import { EndRouteDialog, NoteDialog, ReasonDialog, UnloadDialog, WeightDialog } from "@/components/waste/driver/driver-dialogs"
 import { DriverFrame } from "@/components/waste/driver/driver-frame"
 import { PhotoDialog, SignatureDialog } from "@/components/waste/driver/driver-proof-dialogs"
+import { DriverLink, KeptNotice, RejectionList, operatingDay, progressLine } from "@/components/waste/driver/driver-parts"
 import { ScanDialog } from "@/components/waste/driver/driver-scan-dialog"
-import { RejectionList, operatingDay, progressLine } from "@/components/waste/driver/driver-parts"
 import type { DriverMe, DriverPickup, DriverRouteDetail, DriverUnloadingStation } from "@waste/contracts/driver-commands"
+import { keepShell, SHELL_ENABLED } from "@/lib/driver/app-shell"
 import type { ProofBytes } from "@/lib/driver/commands"
 import { scanOffered } from "@/lib/driver/container-scan"
 import type { DriverAppController, Tap } from "@/lib/driver/driver-app"
@@ -45,13 +45,15 @@ async function withPhoto(app: DriverAppController, photo: ProofBytes | null, rou
 export function DriverRouteScreen({ routeId }: { routeId: string }) {
   const app = useDriverApp()
   useEffect(() => app.watchRoute(routeId), [app, routeId])
+  // A route screen reached inside the app was never asked for as a page: the shell is told to keep it.
+  useEffect(() => void keepShell(window, SHELL_ENABLED), [routeId])
   return (
     <DriverFrame>
       <Button asChild variant="ghost" size="sm" className="self-start">
-        <Link href="/driver">
+        <DriverLink href="/driver">
           <ArrowLeft aria-hidden />
           Your routes
-        </Link>
+        </DriverLink>
       </Button>
       <RouteContent routeId={routeId} />
     </DriverFrame>
@@ -98,6 +100,7 @@ function RouteDetailView({ detail, me }: { detail: DriverRouteDetail; me: Driver
             {waiting > 0 && <Badge variant="outline">Sending {waiting}</Badge>}
           </div>
         </div>
+        <KeptNotice readAt={state.shownFrom.routes[detail.id]} />
         <RejectionList rejections={rejections} onDismiss={app.dismiss} />
         {routeMaps !== null && (
           <Button asChild variant="outline" className="h-11">
@@ -110,9 +113,9 @@ function RouteDetailView({ detail, me }: { detail: DriverRouteDetail; me: Driver
         {detail.status === "ready" && !actions.sending && (
           <p className="text-sm text-muted-foreground">
             Start this route from{" "}
-            <Link href="/driver" className="underline underline-offset-4">
+            <DriverLink href="/driver" className="underline underline-offset-4">
               your routes
-            </Link>
+            </DriverLink>
             .
           </p>
         )}

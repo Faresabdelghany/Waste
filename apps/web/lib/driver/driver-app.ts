@@ -6,8 +6,16 @@
 //
 // The server is the source of truth and the queue never is (CONTEXT.md,
 // Command Queue; ADR-0004). So the screens show the door's last reads, and
-// nothing a tap did until the server says so: there is no local `decide` and
-// no display cache.
+// nothing a tap did until the server says so: there is no local `decide`.
+//
+// The display cache (O25 of #290). Every read the door answers is kept on the
+// phone under the signed-in login (read-snapshot.ts), and on load — or when
+// another person signs in — the kept answers stand in for the reads not yet
+// answered, each marked with when the server gave it (`shownFrom`), until a
+// live read replaces it. So a driver who opens the app with no signal reads
+// their day's stops as the server last answered them, never with a tap folded
+// in. A route the door no longer answers for leaves the cache, and a login the
+// door refuses, or a sign-out, forgets its own.
 //
 // A tap. The command's id (a UUIDv7, commands.ts) and its `occurredAt` are
 // fixed at the tap and the command is persisted at once, `location-pending`
@@ -73,6 +81,7 @@ import { problemSentence, type Problem } from "../api/problem"
 import { problemOfError } from "../api/records/server-records"
 import { createExternalStore, type ExternalStore } from "../external-store"
 import type { CommandQueueStore, QueueEntry } from "./command-queue"
+import { EMPTY_SNAPSHOT, kept, type ReadSnapshot, type ReadSnapshotStore } from "./read-snapshot"
 import { BATCH_LIMIT, createCommandIds, pickupIdOf, takesLocation, type ObjectKind, type PilotBody, type PilotCommand, type PilotCommandKind, type ProofBytes } from "./commands"
 import { lookupFix } from "./location"
 import { createPositionRecorder, sessionRecords, type PositionBatch, type PositionWatcher } from "./position-recorder"
@@ -116,12 +125,19 @@ export type DriverAppState = {
   /** The sentence of a batch refused whole, beside Discard waiting actions. */
   refused: string | null
   rejections: readonly Rejection[]
+  /** Which of the screens' reads are the display cache's (O25 of #290): when the server gave the kept answer shown for the start screen and for each route, absent once a live read replaced it. */
+  shownFrom: { me: string | null; routes: Readonly<Record<string, string>> }
 }
 
-const INITIAL: DriverAppState = { status: "loading", refusal: null, me: null, routes: {}, waiting: [], unreachable: false, refused: null, rejections: [] }
+const NOTHING_KEPT: DriverAppState["shownFrom"] = { me: null, routes: {} }
+
+const INITIAL: DriverAppState = { status: "loading", refusal: null, me: null, routes: {}, waiting: [], unreachable: false, refused: null, rejections: [], shownFrom: NOTHING_KEPT }
 
 /** What the server owns on a start, the key the API names for an object, and a position, which the controller adds: never part of a tap. */
 type Added<Kind extends PilotCommandKind> = "location" | "accuracyM" | (Kind extends "start-route" ? "appVersion" : never) | (Kind extends ObjectKind ? "objectKey" : never)
+
+/** The record without one key. */
+const without = <Value>(record: Readonly<Record<string, Value>>, key: string): Record<string, Value> => Object.fromEntries(Object.entries(record).filter(([candidate]) => candidate !== key))
 
 /** One tap: the kind, the route, the body as the screen fills it, and a photo's or a signature's bytes. */
 export type Tap = {
@@ -134,6 +150,8 @@ export type IdentifyAnswer = { status: "answered"; answer: DriverIdentification 
 export type DriverAppOptions = {
   /** The Command Queue's storage; a failure to open it leaves this page's commands in memory. */
   openQueue: () => Promise<CommandQueueStore>
+  /** The display cache's storage (O25 of #290); absent, or failing to open, nothing is kept and nothing stands in for a read. */
+  openSnapshot?: () => Promise<ReadSnapshotStore>
   /** The phone's position: a lookup per located tap, and a watch while a session's route is on screen (O8 of #290). */
   geolocation?: (Pick<Geolocation, "getCurrentPosition"> & Partial<PositionWatcher>) | null
   now?: () => number
@@ -164,16 +182,21 @@ export type DriverAppController = {
   /** The browser's `online` event. */
   online: () => void
   dismiss: (commandId: string) => void
+  /** Forgets the signed-in login's kept answers: a sign-out. */
+  forgetReads: () => Promise<void>
   /** Discard waiting actions: the signed-in login's queue, emptied. */
   discardWaiting: () => Promise<void>
   dispose: () => void
 }
 
-export function createDriverApp({ openQueue, geolocation = null, now = Date.now, fill, timers = BROWSER_TIMERS, appVersion = null, log = console.warn }: DriverAppOptions): DriverAppController {
+export function createDriverApp({ openQueue, openSnapshot, geolocation = null, now = Date.now, fill, timers = BROWSER_TIMERS, appVersion = null, log = console.warn }: DriverAppOptions): DriverAppController {
   const store = createExternalStore<DriverAppState>(INITIAL)
   let session: DriverSession | null = null
   let queue: CommandQueueStore | null = null
   let opening: Promise<void> | null = null
+  let snapshots: ReadSnapshotStore | null = null
+  /** The signed-in login's kept answers as last written, and whose they are. */
+  let snapshot: { owner: string; kept: ReadSnapshot } | null = null
   let deviceId = ""
   let nextId: () => string = () => {
     throw new Error("the Command Queue is not open")
@@ -286,6 +309,11 @@ export function createDriverApp({ openQueue, geolocation = null, now = Date.now,
       } catch (error) {
         log("the Command Queue could not be opened; this page keeps its commands in memory", error)
       }
+      try {
+        snapshots = (await openSnapshot?.()) ?? null
+      } catch (error) {
+        log("the display cache could not be opened; nothing is kept on this phone", error)
+      }
       deviceId = queue?.deviceId ?? `web-${crypto.randomUUID()}`
       let stored: QueueEntry[] = []
       try {
@@ -307,6 +335,79 @@ export function createDriverApp({ openQueue, geolocation = null, now = Date.now,
       }
       publishWaiting()
     })())
+
+  /** The signed-in login's kept answers, read from the phone once per person. */
+  const keptOf = async (owner: string): Promise<ReadSnapshot> => {
+    if (snapshot?.owner === owner) return snapshot.kept
+    let read = EMPTY_SNAPSHOT
+    try {
+      read = (await snapshots?.read(owner, now())) ?? EMPTY_SNAPSHOT
+    } catch (error) {
+      log("the display cache could not be read", error)
+    }
+    // Another person signed in meanwhile: theirs is read on its own.
+    if (snapshot?.owner !== owner) snapshot = { owner, kept: read }
+    return snapshot.kept
+  }
+
+  /** The writes of the kept answers, one after another, so two reads answered together each keep their own. */
+  let keeping: Promise<void> = Promise.resolve()
+  /** Changes the signed-in login's kept answers and writes them back; best-effort, since a phone that cannot keep them still works online. */
+  const keep = (change: (kept: ReadSnapshot) => ReadSnapshot): Promise<void> => {
+    const owner = session?.who
+    if (owner === undefined || snapshots === null) return keeping
+    const store = snapshots
+    keeping = keeping.then(async () => {
+      const next = kept(change(await keptOf(owner)), now())
+      if (session?.who !== owner) return
+      snapshot = { owner, kept: next }
+      try {
+        await store.write(owner, next)
+      } catch (error) {
+        log("the display cache could not be written", error)
+      }
+    })
+    return keeping
+  }
+
+  /** Forgets the signed-in login's kept answers. */
+  const forgetKept = (): Promise<void> => {
+    const owner = session?.who
+    if (owner === undefined) return keeping
+    // After the writes in flight, so none of them keeps what was forgotten.
+    keeping = keeping.then(async () => {
+      snapshot = { owner, kept: EMPTY_SNAPSHOT }
+      try {
+        await snapshots?.forget(owner)
+      } catch (error) {
+        log("the display cache could not forget a login's answers", error)
+      }
+    })
+    return keeping
+  }
+
+  /** The kept answers stand in for the reads the screens have not been answered yet, each marked with when the server gave it; a live read already on screen is never replaced. */
+  const showKept = async () => {
+    const owner = session?.who
+    if (owner === undefined) return
+    const { me, routes } = await keptOf(owner)
+    if (session?.who !== owner) return
+    store.set((state) => {
+      const shownMe = state.me === null && me !== null
+      const shownRoutes = Object.entries(routes).filter(([id]) => state.routes[id] === undefined)
+      if (!shownMe && shownRoutes.length === 0) return state
+      return {
+        ...state,
+        ...(shownMe ? { me: me.answer, status: state.status === "not-a-driver" ? state.status : "ready" } : {}),
+        routes: { ...state.routes, ...Object.fromEntries(shownRoutes.map(([id, route]) => [id, { status: "ready", detail: route.answer } satisfies RouteRead])) },
+        shownFrom: {
+          me: shownMe ? me.readAt : state.shownFrom.me,
+          routes: { ...state.shownFrom.routes, ...Object.fromEntries(shownRoutes.map(([id, route]) => [id, route.readAt])) },
+        },
+      }
+    })
+    syncRecording()
+  }
 
   const ageRejections = () => {
     store.set((state) => {
@@ -332,8 +433,10 @@ export function createDriverApp({ openQueue, geolocation = null, now = Date.now,
   const readMe = async (client: ApiClient): Promise<boolean> => {
     try {
       const me = await withDeadline(client, readDriverMe)
-      store.set((state) => ({ ...state, me, status: "ready", refusal: null, unreachable: false }))
+      store.set((state) => ({ ...state, me, status: "ready", refusal: null, unreachable: false, shownFrom: { ...state.shownFrom, me: null } }))
       syncRecording()
+      const readAt = new Date(now()).toISOString()
+      void keep((kept) => ({ ...kept, me: { answer: me, readAt } }))
       return true
     } catch (error) {
       failedRead(problemOfError(error))
@@ -344,8 +447,10 @@ export function createDriverApp({ openQueue, geolocation = null, now = Date.now,
   const readRoute = async (client: ApiClient, id: string): Promise<boolean> => {
     try {
       const detail = await withDeadline(client, (under) => readDriverRoute(under, id))
-      store.set((state) => ({ ...state, routes: { ...state.routes, [id]: { status: "ready", detail } }, unreachable: false }))
+      store.set((state) => ({ ...state, routes: { ...state.routes, [id]: { status: "ready", detail } }, unreachable: false, shownFrom: { ...state.shownFrom, routes: without(state.shownFrom.routes, id) } }))
       syncRecording()
+      const readAt = new Date(now()).toISOString()
+      void keep((kept) => ({ ...kept, routes: { ...kept.routes, [id]: { answer: detail, readAt } } }))
       return true
     } catch (error) {
       const problem = problemOfError(error)
@@ -353,8 +458,10 @@ export function createDriverApp({ openQueue, geolocation = null, now = Date.now,
         failedRead(problem)
         return false
       }
-      store.set((state) => ({ ...state, routes: { ...state.routes, [id]: { status: "missing", sentence: problemSentence(problem) } }, unreachable: false }))
+      store.set((state) => ({ ...state, routes: { ...state.routes, [id]: { status: "missing", sentence: problemSentence(problem) } }, unreachable: false, shownFrom: { ...state.shownFrom, routes: without(state.shownFrom.routes, id) } }))
       syncRecording()
+      // The door no longer answers for it: what was kept of it is not the driver's to read.
+      void keep((kept) => ({ ...kept, routes: without(kept.routes, id) }))
       return true
     }
   }
@@ -366,7 +473,8 @@ export function createDriverApp({ openQueue, geolocation = null, now = Date.now,
       return
     }
     if (problem.status === 403) {
-      store.set((state) => ({ ...state, status: "not-a-driver", refusal: problemSentence(problem), me: null, routes: {} }))
+      store.set((state) => ({ ...state, status: "not-a-driver", refusal: problemSentence(problem), me: null, routes: {}, shownFrom: NOTHING_KEPT }))
+      void forgetKept()
       return
     }
     store.set((state) => ({ ...state, unreachable: true, status: state.me === null ? "unreachable" : state.status }))
@@ -561,6 +669,7 @@ export function createDriverApp({ openQueue, geolocation = null, now = Date.now,
         aged.clear()
         fresh.clear()
         store.set({ ...INITIAL, waiting: actions() })
+        if (loaded && next !== null) void showKept()
         if (loaded && next?.client) void refresh().then(drain)
         return
       }
@@ -574,6 +683,7 @@ export function createDriverApp({ openQueue, geolocation = null, now = Date.now,
     load: async () => {
       await open()
       loaded = true
+      await showKept()
       await refresh()
       void drain()
     },
@@ -639,6 +749,10 @@ export function createDriverApp({ openQueue, geolocation = null, now = Date.now,
       aged.delete(commandId)
       store.set((state) => ({ ...state, rejections: state.rejections.filter((rejection) => rejection.commandId !== commandId) }))
     },
+    forgetReads: async () => {
+      store.set((state) => ({ ...state, shownFrom: NOTHING_KEPT }))
+      await forgetKept()
+    },
     discardWaiting: async () => {
       const discarded = owing().map((entry) => entry.command.id)
       const gone = new Set(discarded)
@@ -653,6 +767,7 @@ export function createDriverApp({ openQueue, geolocation = null, now = Date.now,
       if (retryTimer !== null) timers.clear(retryTimer)
       retryTimer = null
       queue?.close()
+      snapshots?.close()
     },
   }
 }
