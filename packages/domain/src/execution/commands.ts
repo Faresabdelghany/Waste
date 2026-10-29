@@ -56,7 +56,7 @@ import { licenceRefusal, licenceSentence, type Licence } from "../resources/lice
 import type { LicenceClass, VehicleKind, VehicleStatus } from "../resources/vocabulary"
 import type { PositionFix } from "./positions"
 import { alreadyDecided, notActive, PICKUP_OUTCOME_OF, routeTransition, type PickupCommand, type PickupOutcome } from "./transitions"
-import type { DriverCommandKind, DriverPickupReason, OutboxAggregate, OutboxKind, PickupReason, PickupStatus, ProofKind, RouteStatus, UnloadRefusalReason } from "./vocabulary"
+import type { DriverCommandKind, DriverPickupReason, IdentificationMethod, OutboxAggregate, OutboxKind, PickupReason, PickupStatus, ProofKind, RouteStatus, UnloadRefusalReason } from "./vocabulary"
 
 /** A point as the device recorded it: `[longitude, latitude]`. */
 export type FlatPoint = { type: "Point"; coordinates: [number, number] }
@@ -64,10 +64,14 @@ export type FlatPoint = { type: "Point"; coordinates: [number, number] }
 /** Where the device stood, and how well it knew. */
 export type Located = { location?: FlatPoint; accuracyM?: number }
 
+/** A code the driver read off the bin to confirm the stop's container (O19 of #290), and how it was read. */
+export type Identification = { code: string; method: IdentificationMethod }
+
 /** The bodies of the fifteen commands, as their contracts parse them. */
 export type CommandBodies = {
   "start-route": Located & { vehicleId: string; trailerId?: string; appVersion?: string }
-  arrive: Located & { pickupId: string }
+  /** An arrival, which may confirm the stop's container by the code read off it (O19 of #290). */
+  arrive: Located & { pickupId: string; identification?: Identification }
   "complete-pickup": Located & { pickupId: string; note?: string }
   "skip-pickup": Located & { pickupId: string; reason: DriverPickupReason; note?: string }
   "fail-pickup": Located & { pickupId: string; reason: DriverPickupReason; note?: string }
@@ -147,6 +151,8 @@ export type Lookups = {
   stationKnown: boolean
   /** Whether the fraction a `record-unload` names is the company's. */
   fractionKnown: boolean
+  /** For an `arrive` that confirms its container (O19 of #290): the container the pickup names (null for an address-only stop), and the company's containers the code names. Absent for every other command. */
+  identification?: { containerId: string | null; identifiedContainerIds: readonly string[] }
 }
 
 /** The request's clock and the two bounds a device's clock is held within. */
@@ -247,6 +253,10 @@ export const NOT_A_STATION = "Not an unloading station of this company"
 export const NOT_A_FRACTION = "Not a waste fraction of this company"
 /** An `objectKey` outside the command's own prefix. */
 export const OBJECT_KEY_NAMES_ANOTHER = "The object key names another route or another command"
+/** An arrival confirming a container at a stop that names none: an address-only stop has nothing to scan. */
+export const noContainerToConfirm = (position: number): string => `Pickup ${position} names no container to confirm`
+/** An arrival whose code names no container of the stop: another bin, or a misread. */
+export const notTheStopsContainer = (code: string, position: number): string => `${code} is not the container of pickup ${position}`
 /** What the licence sentence's last clause says the judged day was. */
 export const THE_OPERATING_DATE = "the operating date"
 
@@ -345,6 +355,13 @@ export function decide(command: Command, driver: CommandDriver, state: Lookups, 
     case "arrive": {
       // The body names a pickup, so the check above found it; the guard keeps the type honest.
       if (pickup === undefined) return reject(404, noPickupOnRoute(command.body.pickupId, route.label))
+      // A confirmation is judged against the stop's own container: an arrival with the wrong bin's code is refused at the code, so the receipt of an applied one is the confirmation.
+      const { identification } = command.body
+      if (identification !== undefined) {
+        const read = state.identification
+        if (read === undefined || read.containerId === null) return invalid("body.identification", noContainerToConfirm(pickup.position))
+        if (!read.identifiedContainerIds.includes(read.containerId)) return invalid("body.identification.code", notTheStopsContainer(identification.code.trim(), pickup.position))
+      }
       const effects: Effect[] = [{ kind: "append-proof", proof: proof(command, "arrival", { pickupId: pickup.id, location: command.body.location, accuracyM: command.body.accuracyM }) }]
       if (pickup.arrivedAt === null) effects.push({ kind: "arrive", pickupId: pickup.id, at: command.occurredAt })
       return { apply: effects }

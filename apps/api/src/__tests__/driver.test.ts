@@ -1,7 +1,7 @@
 import assert from "node:assert/strict"
 import { after, before, beforeEach, describe, test } from "node:test"
 
-import { CommandOutcomeRow, DriverCommandBatchOutcome, DriverCommandReceipt, DriverMe, DriverRouteDetail, EACH_COMMAND_ONCE, type CommandResult } from "@waste/contracts/driver-commands"
+import { CommandOutcomeRow, DriverCommandBatchOutcome, DriverCommandReceipt, DriverIdentification, DriverMe, DriverRouteDetail, EACH_COMMAND_ONCE, type CommandResult } from "@waste/contracts/driver-commands"
 import { OBJECT_KEY_SHAPE } from "@waste/contracts/execution"
 import { Page } from "@waste/contracts/pagination"
 import { ProofOfService } from "@waste/contracts/proofs"
@@ -10,6 +10,7 @@ import { Session } from "@waste/contracts/sessions"
 import { NET_IS_GROSS_LESS_TARE, Unload } from "@waste/contracts/unloads"
 import { createDb, type Database } from "@waste/db/client"
 import { wasteFraction } from "@waste/db/schema/catalogue"
+import { container as containerTable } from "@waste/db/schema/containers"
 import { property as propertyTable, sharedCollectionPoint } from "@waste/db/schema/customers"
 import { driverCommand, outboxEvent, pickup as pickupTable, proofOfService, route as routeTable, session as sessionTable, sessionPosition } from "@waste/db/schema/execution"
 import { vehicle as vehicleTable } from "@waste/db/schema/fleet"
@@ -26,6 +27,7 @@ import {
   NOT_A_STATION,
   NOT_A_TRAILER,
   notInService,
+  notTheStopsContainer,
   OBJECT_KEY_NAMES_ANOTHER,
   objectKeyOf,
   RECORDED_AFTER_IT_HAPPENED,
@@ -1397,6 +1399,74 @@ describe("the driver door", { skip: database.skip || owner.skip }, () => {
       assert.equal(secondPage.nextCursor, null)
       assert.deepEqual((await refused(await mads("/driver/commands?cursor=nope"), 400)).errors?.map((error) => error.path), ["cursor"])
       assert.deepEqual((await refused(await mads("/driver/commands?routeId=nope"), 400)).errors?.map((error) => error.path), ["routeId"])
+    })
+  })
+
+  describe("a container confirmed at a stop by its code (O19 of #290)", () => {
+    /** Gives the fixture containers a barcode and an RFID tag each, the way a registry holds them. */
+    const tagged = () =>
+      withCompany(pool.db, a.companyId, async (tx) => {
+        for (const [index, bin] of fixtures.containers.entries()) {
+          await tx
+            .update(containerTable)
+            .set({ barcode: `WH9000${index}`, rfid: `E2009000${index}`, serialNumber: index === 0 ? null : `SN-${index}` })
+            .where(and(eq(containerTable.companyId, a.companyId), eq(containerTable.id, bin.id)))
+        }
+      })
+    const identify = async (routeId: string, code: string, call = mads): Promise<DriverIdentification> => {
+      const response = await call(`/driver/routes/${routeId}/identify?code=${encodeURIComponent(code)}`)
+      assert.equal(response.status, 200, JSON.stringify(await response.clone().json()))
+      return DriverIdentification.parse(await response.json())
+    }
+
+    test("the identify read names the stops of the route whose container the code names, by which identifier, and nothing of a bin elsewhere", async () => {
+      await tagged()
+      const route = await minted({ pickups: 2 })
+      const [first, second] = fixtures.containers
+      assert.deepEqual(await identify(route.id, " wh90000 "), {
+        code: "wh90000",
+        stops: [{ pickupId: route.pickupIds[0], position: 1, containerId: first.id, containerLabel: first.label, matchedBy: "barcode", replacement: false }],
+      })
+      assert.deepEqual((await identify(route.id, "E20090001")).stops.map((stop) => [stop.pickupId, stop.matchedBy]), [[route.pickupIds[1], "rfid"]])
+      assert.deepEqual((await identify(route.id, second.label)).stops.map((stop) => stop.matchedBy), ["label"])
+      assert.deepEqual((await identify(route.id, "SN-1")).stops.map((stop) => stop.matchedBy), ["serial-number"])
+      // The third bin is the company's but on no stop of this route: the code answers nothing, so a device learns nothing of the company's other bins.
+      assert.deepEqual((await identify(route.id, "WH90002")).stops, [])
+      assert.deepEqual((await identify(route.id, "NO-SUCH-BIN")).stops, [])
+      assert.deepEqual((await refused(await mads(`/driver/routes/${route.id}/identify`), 400)).errors?.map((error) => error.path), ["code"])
+      assert.deepEqual((await refused(await mads(`/driver/routes/${route.id}/identify?code=%20%20`), 400)).errors?.map((error) => error.path), ["code"])
+      const theirs = await minted({ driver: fleet.drivers.freja })
+      assert.equal((await refused(await mads(`/driver/routes/${theirs.id}/identify?code=WH90000`), 404)).detail, noRouteAssigned(theirs.id))
+      assert.equal((await refused(await theirMads(`/driver/routes/${route.id}/identify?code=WH90000`), 404)).detail, noRouteAssigned(route.id))
+      assert.equal((await ungranted(`/driver/routes/${route.id}/identify?code=WH90000`)).status, 403)
+    })
+
+    test("an arrival carrying the stop's own code is applied and read back as the stop's confirmation; another bin's code is refused at the code, and an arrival without one confirms nothing", async () => {
+      await tagged()
+      const route = await minted({ pickups: 2 })
+      await started(route)
+      const before = await detail(route.id)
+      assert.deepEqual(before.pickups.map((stop) => stop.containerConfirmedAt), [null, null])
+
+      await applied(envelope("arrive", route.id, { pickupId: route.pickupIds[1] }, { occurredAt: at("06:40") }))
+      const wrong = await rejected(envelope("arrive", route.id, { pickupId: route.pickupIds[0], identification: { code: "WH90001", method: "camera" } }, { occurredAt: at("06:41") }), 400, notTheStopsContainer("WH90001", 1))
+      assert.deepEqual(wrong.errors?.map((error) => error.path), ["body.identification.code"])
+      await rejected(envelope("arrive", route.id, { pickupId: route.pickupIds[0], identification: { code: "WH90002", method: "typed" } }, { occurredAt: at("06:42") }), 400, notTheStopsContainer("WH90002", 1))
+      const shapeless = await one(envelope("arrive", route.id, { pickupId: route.pickupIds[0], identification: { code: "WH90000", method: "nfc" } }, { occurredAt: at("06:42") }))
+      assert.equal(shapeless.outcome, "rejected", "a method outside the vocabulary is the body's rejection")
+      assert.equal((await detail(route.id)).pickups[0].arrivedAt, null, "a refused confirmation is no arrival")
+
+      await applied(envelope("arrive", route.id, { pickupId: route.pickupIds[0], identification: { code: "wh90000", method: "camera" } }, { occurredAt: at("06:43") }))
+      await applied(envelope("arrive", route.id, { pickupId: route.pickupIds[0], identification: { code: fixtures.containers[0].label, method: "typed" } }, { occurredAt: at("06:45") }))
+      const after = await detail(route.id)
+      assert.deepEqual(
+        after.pickups.map((stop) => [stop.arrivedAt, stop.containerConfirmedAt]),
+        [
+          [at("06:43"), at("06:45")],
+          [at("06:40"), null],
+        ],
+        "the first arrival sets arrivedAt; the latest confirmation is the stop's",
+      )
     })
   })
 

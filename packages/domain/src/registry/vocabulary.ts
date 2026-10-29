@@ -67,6 +67,8 @@ export const BILLING_CADENCES = ["monthly", "quarterly", "annual", "manual"] as 
 
 /** Whose Container it is; `unrecorded` is what an imported registry usually says. */
 export const CONTAINER_OWNERSHIPS = ["company", "customer", "unrecorded"] as const
+/** What a code read off a bin names a Container by (O19 of #290): the visible label, the printed barcode, the RFID tag, or the maker's serial number. */
+export const CONTAINER_IDENTIFIERS = ["label", "barcode", "rfid", "serial-number"] as const
 /** What a customer applies for (M7 of #293): to be exempt from a collection, to pause it, a longer interval between collections, to compost food waste at home, to share a bin with a neighbour, to be collected from where they can manage, or a fee put right. */
 export const APPLICATION_KINDS = ["exemption", "pause", "longer-interval", "home-composting", "shared-bin", "assisted-collection", "fee-correction"] as const
 /** Where an Application stands: received, under the office's review, decided, or withdrawn by the customer. Whether a decision is still in force is a reading of its period, never a status. */
@@ -96,6 +98,7 @@ export type ProductUnit = (typeof PRODUCT_UNITS)[number]
 export type AgreementStatus = (typeof AGREEMENT_STATUSES)[number]
 export type BillingCadence = (typeof BILLING_CADENCES)[number]
 export type ContainerOwnership = (typeof CONTAINER_OWNERSHIPS)[number]
+export type ContainerIdentifier = (typeof CONTAINER_IDENTIFIERS)[number]
 export type ApplicationKind = (typeof APPLICATION_KINDS)[number]
 export type ApplicationStatus = (typeof APPLICATION_STATUSES)[number]
 export type ApplicationChannel = (typeof APPLICATION_CHANNELS)[number]
@@ -125,6 +128,7 @@ export const REGISTRY_VOCABULARIES = {
   AGREEMENT_STATUSES,
   BILLING_CADENCES,
   CONTAINER_OWNERSHIPS,
+  CONTAINER_IDENTIFIERS,
   APPLICATION_KINDS,
   APPLICATION_STATUSES,
   APPLICATION_CHANNELS,
