@@ -81,6 +81,12 @@ describe("a stale position (O8 of #290)", () => {
 describe("when a condition clears", () => {
   test("each rule resolves its alert with a note of its own", () => {
     assert.deepEqual(Object.keys(CLEARED_NOTES), [...ALERT_RULES])
+    const soon = alertOfRule({ rule: "maintenance-due", vehicleId: "truck", vehicleLabel: "WH-24", planName: "Annual service", overdue: false, nextDueOn: "2026-11-12", nextDueKm: 190_000, nextDueHours: null })
+    assert.deepEqual([soon.rule, soon.kind, soon.severity, soon.source, soon.vehicleId], ["maintenance-due", "resource", "medium", "rule", "truck"])
+    assert.equal(soon.title, "Annual service is due soon on WH-24")
+    assert.match(soon.details, /^Coming up to its next service at 2026-11-12 · 190,000 km\./)
+    const overdue = alertOfRule({ rule: "maintenance-due", vehicleId: "truck", vehicleLabel: "WH-24", planName: "Annual service", overdue: true, nextDueOn: null, nextDueKm: null, nextDueHours: 6_500 })
+    assert.deepEqual([overdue.severity, overdue.title], ["high", "Annual service is overdue on WH-24"])
     for (const note of Object.values(CLEARED_NOTES)) assert.match(note, /^Cleared: /)
   })
 })

@@ -78,8 +78,8 @@ export const ALERT_SEVERITIES = ["critical", "high", "medium", "low"] as const
 export const ALERT_SOURCES = ["manual", "execution", "telemetry", "rule"] as const
 /** Where an Alert stands; "linked to a ticket" is a reading of `ticket_id`, not a status. */
 export const ALERT_STATUSES = ["new", "acknowledged", "resolved"] as const
-/** The worker's rules an Alert is raised by (O4 of #290, and O8's stale position); null on an alert a person raised. */
-export const ALERT_RULES = ["route-not-started", "session-silent", "licence-expiring", "ticket-overdue", "position-stale"] as const
+/** The worker's rules an Alert is raised by (O4 of #290, O8's stale position, and O20's maintenance due); null on an alert a person raised. */
+export const ALERT_RULES = ["route-not-started", "session-silent", "licence-expiring", "ticket-overdue", "position-stale", "maintenance-due"] as const
 
 export type TicketStatus = (typeof TICKET_STATUSES)[number]
 export type TicketKind = (typeof TICKET_KINDS)[number]

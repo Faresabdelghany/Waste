@@ -66,3 +66,5 @@ export * from "./site-visits"
 export * from "./service-provider-activities"
 // Pre-trip inspection (O13 of #290): a vehicle type's checklist, the checks made against it, and the defects they find.
 export * from "./pre-trip"
+// Vehicle maintenance (O20 of #290): a vehicle's service plans and the Maintenance Orders that do them.
+export * from "./maintenance"

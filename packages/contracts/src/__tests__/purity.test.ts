@@ -71,7 +71,9 @@
 // @waste/domain/resources/stock-balance: stock.ts bounds a warehouse's set of
 // Stock Minimums by the domain's cap. O13 of #290 added
 // @waste/domain/resources/pre-trip: pre-trip.ts bounds a checklist and a
-// check by the domain's cap.
+// check by the domain's cap. O20 of #290 added
+// @waste/domain/resources/maintenance: maintenance.ts holds a plan to its
+// interval rule and bounds, and reads its due states.
 import path from "node:path"
 import { fileURLToPath } from "node:url"
 
@@ -110,6 +112,7 @@ definePurityTests({
     "@waste/domain/resolution/vocabulary",
     "@waste/domain/resources/drop-off-points",
     "@waste/domain/resources/emissions",
+    "@waste/domain/resources/maintenance",
     "@waste/domain/resources/pre-trip",
     "@waste/domain/resources/stock-balance",
     "@waste/domain/resources/vocabulary",

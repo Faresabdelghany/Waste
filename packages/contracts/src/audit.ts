@@ -117,6 +117,8 @@ export const AUDITED_TABLES = [
   "stock_minimum",
   "pre_trip_checklist_item",
   "vehicle_defect",
+  "vehicle_maintenance_plan",
+  "maintenance_order",
 ] as const
 export type AuditedTable = (typeof AUDITED_TABLES)[number]
 

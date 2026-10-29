@@ -470,6 +470,13 @@
       "when": 1793214353488,
       "tag": "0066_pre_trip",
       "breakpoints": true
+    },
+    {
+      "idx": 67,
+      "version": "7",
+      "when": 1793216279592,
+      "tag": "0067_maintenance",
+      "breakpoints": true
     }
   ]
 }

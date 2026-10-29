@@ -38,6 +38,7 @@ import * as healthModule from "../health"
 import * as idsModule from "../ids"
 import * as importsModule from "../imports"
 import * as invoicesModule from "../invoices"
+import * as maintenanceModule from "../maintenance"
 import * as meModule from "../me"
 import * as organisationModule from "../organisation"
 import * as outboxModule from "../outbox"
@@ -119,6 +120,7 @@ const MODULES: Readonly<Record<string, Record<string, unknown>>> = {
   "ids": idsModule,
   "imports": importsModule,
   "invoices": invoicesModule,
+  "maintenance": maintenanceModule,
   "me": meModule,
   "organisation": organisationModule,
   "outbox": outboxModule,

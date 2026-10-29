@@ -23,7 +23,9 @@
 // `VEHICLE_UNAVAILABILITY_REASONS` (O6 of #290) say why a driver is away or a
 // vehicle out of use over a dated period (resources/availability.ts).
 // `VEHICLE_DEFECT_STATUSES` (O13 of #290) is where a defect a pre-trip check
-// found stands (resources/pre-trip.ts).
+// found stands (resources/pre-trip.ts). `MAINTENANCE_PLAN_STATUSES` and
+// `MAINTENANCE_ORDER_STATUSES` (O20 of #290) are a vehicle's service plan's
+// and its Maintenance Orders' (resources/maintenance.ts).
 //
 // A value is a kebab-case token: it goes into a migration as a SQL literal
 // and onto the wire as an enum member, and those are the same string. A list
@@ -78,6 +80,10 @@ export const ENERGY_UNITS = ["litre", "kg", "kwh"] as const
 export const EMISSION_GAPS = ["no-plan", "plan-unmeasured", "no-vehicle", "no-fuel", "no-consumption", "no-factor"] as const
 /** Where a Vehicle Defect a pre-trip check found stands (O13 of #290): open until the office marks it mended. */
 export const VEHICLE_DEFECT_STATUSES = ["open", "resolved"] as const
+/** Whether a vehicle's maintenance plan is in use (O20 of #290): a retired plan is kept for the orders that name it, and raises nothing. */
+export const MAINTENANCE_PLAN_STATUSES = ["active", "retired"] as const
+/** Where a Maintenance Order stands (O20 of #290): open until it is done or called off. */
+export const MAINTENANCE_ORDER_STATUSES = ["open", "completed", "cancelled"] as const
 
 /**
  * The places a container stands in while in stock — a warehouse, or
@@ -115,6 +121,8 @@ export type VehicleUnavailabilityReason = (typeof VEHICLE_UNAVAILABILITY_REASONS
 export type EnergyUnit = (typeof ENERGY_UNITS)[number]
 export type EmissionGap = (typeof EMISSION_GAPS)[number]
 export type VehicleDefectStatus = (typeof VEHICLE_DEFECT_STATUSES)[number]
+export type MaintenancePlanStatus = (typeof MAINTENANCE_PLAN_STATUSES)[number]
+export type MaintenanceOrderStatus = (typeof MAINTENANCE_ORDER_STATUSES)[number]
 
 /** Every list of this module by its name, for a test that walks them and for a reader looking for the whole vocabulary at once. */
 export const RESOURCES_VOCABULARIES = {
@@ -142,4 +150,6 @@ export const RESOURCES_VOCABULARIES = {
   ENERGY_UNITS,
   EMISSION_GAPS,
   VEHICLE_DEFECT_STATUSES,
+  MAINTENANCE_PLAN_STATUSES,
+  MAINTENANCE_ORDER_STATUSES,
 } as const satisfies Record<string, readonly [string, ...string[]]>

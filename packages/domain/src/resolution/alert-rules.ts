@@ -18,6 +18,12 @@
 // location refused or lost, or the route's screen closed — raised from the
 // telemetry. A device not heard from at all is the silent session's alert,
 // not this one.
+//
+// O20 of #290 added a sixth: a vehicle's maintenance plan due within its
+// margins, or past a limit (resources/maintenance.ts) — medium while due soon,
+// high once overdue, about the vehicle. The facts come in already judged: the
+// state, the next limits and the readings the plan was judged on.
+import { nextDueLine } from "../resources/maintenance"
 import type { AlertKind, AlertRule, AlertSeverity, AlertSource } from "./vocabulary"
 
 /** A route is late this long after its planned start. */
@@ -38,6 +44,7 @@ export type RuleOccurrence =
   | { rule: "licence-expiring"; driverId: string; driverName: string; licenceExpiry: string; today: string }
   | { rule: "ticket-overdue"; ticketId: string; ticketLabel: string; subject: string; due: string }
   | { rule: "position-stale"; routeId: string; routeLabel: string; driverId: string; driverName: string; vehicleId: string | null; lastFix: string | null }
+  | { rule: "maintenance-due"; vehicleId: string; vehicleLabel: string; planName: string; overdue: boolean; nextDueOn: string | null; nextDueKm: number | null; nextDueHours: number | null }
 
 /** An alert as a rule raises it: everything but its project, its key and its instants. */
 export type RuleAlert = {
@@ -129,6 +136,18 @@ export function alertOfRule(occurrence: RuleOccurrence): RuleAlert {
         vehicleId: occurrence.vehicleId,
         driverId: occurrence.driverId,
       }
+    case "maintenance-due":
+      return {
+        rule: occurrence.rule,
+        kind: "resource",
+        severity: occurrence.overdue ? "high" : "medium",
+        source: "rule",
+        title: occurrence.overdue ? `${occurrence.planName} is overdue on ${occurrence.vehicleLabel}` : `${occurrence.planName} is due soon on ${occurrence.vehicleLabel}`,
+        // The limits, not a count of what is left: the alert stands until the service is done, and a count would be stale by then.
+        details: `${occurrence.overdue ? "Past" : "Coming up to"} its next service at ${nextDueLine(occurrence)}. Open a maintenance order and complete it once the service is done.`,
+        ...NO_SUBJECT,
+        vehicleId: occurrence.vehicleId,
+      }
   }
 }
 
@@ -139,4 +158,5 @@ export const CLEARED_NOTES: Readonly<Record<AlertRule, string>> = {
   "licence-expiring": "Cleared: the licence was renewed, or has run out and is raised again as expired, or the driver is no longer active.",
   "ticket-overdue": "Cleared: the ticket was closed, or given a later due date.",
   "position-stale": "Cleared: a position came in, or the session was paused or ended, or the route ended.",
+  "maintenance-due": "Cleared: the service was done, or the plan changed or was retired, or it is overdue now and raised again as such.",
 }
