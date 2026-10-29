@@ -38,8 +38,8 @@ export const WEIGHTS_LIST: ModuleList = {
   initial: { statuses: [REVIEW_LABELS.captured] },
 }
 
-/** A weighbridge's tickets (O27 of #290) open on what waits for the office, and filter by station. */
+/** A weighbridge's tickets (O27 of #290) open on what waits for the office, and filter by the route a ticket was matched to. */
 export const WEIGHBRIDGE_LIST: ModuleList = {
-  readers: () => ({ statuses: status, stations: fact("Station") }),
+  readers: () => ({ statuses: status, routes: fact("Route") }),
   initial: { statuses: [TICKET_STATUS_LABELS.unmatched] },
 }

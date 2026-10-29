@@ -42,6 +42,18 @@ export function WeighbridgeTicketSurface({ record }: RowSurfaceProps) {
     .map((route) => ({ value: route.id, label: `${route.name} · ${route.status}` }))
   const fractionOptions: BusinessFormOption[] = (master?.records ?? []).filter((row) => masterDataKindOf(row) === "waste-fraction").map((row) => ({ value: row.id, label: row.name }))
 
+  // The two pickers' options are this ticket's: the form is the schema with them filled in.
+  const forms = {
+    [MATCH_TICKET]: {
+      ...MATCH_FORM,
+      sections: MATCH_FORM.sections.map((section) => ({
+        ...section,
+        fields: section.fields.map((field) => (field.id === "routeId" ? { ...field, options: routeOptions } : field.id === "wasteFractionId" ? { ...field, options: fractionOptions } : field)),
+      })),
+    },
+    [DISMISS_TICKET]: DISMISS_FORM,
+  }
+
   const send = (name: keyof typeof FORMS, values: BusinessFormValues) =>
     run(name, values, (outcome) => {
       setOpen(null)
@@ -62,11 +74,11 @@ export function WeighbridgeTicketSurface({ record }: RowSurfaceProps) {
       </div>
       {open !== null && (
         <BusinessRecordFormDialog
-          schema={FORMS[open]}
+          schema={forms[open]}
           open
           onOpenChange={(isOpen) => !isOpen && setOpen(null)}
           onSubmit={(values) => send(open, values)}
-          relationOptions={(field) => (field.id === "routeId" ? routeOptions : field.id === "wasteFractionId" ? fractionOptions : (field.options ?? []))}
+          relationOptions={(field) => field.options ?? []}
         />
       )}
     </section>

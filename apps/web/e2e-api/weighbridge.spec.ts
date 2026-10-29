@@ -40,7 +40,7 @@ async function startedByTheDriver(browser: Browser, route: { id: string; planned
     await signIn(driverPage, SEEDED_DRIVER.email, E2E.loginPassword)
     const asDriver = await apiAs((await accessTokenOf(context)) ?? fail("the driver's browser holds no API session"))
     try {
-      const started = await asDriver.post("/driver/commands", { data: { commands: [{ id: mintId(Date.now(), crypto.getRandomValues(new Uint8Array(ID_RANDOM_BYTES))), kind: "start-route", routeId: route.id, occurredAt: new Date(Date.now() - 5 * 60_000).toISOString(), deviceId: "e2e-weighbridge", body: { vehicleId } }] } })
+      const started = await asDriver.post("/driver/commands", { data: { commands: [{ id: mintId(Date.now(), crypto.getRandomValues(new Uint8Array(ID_RANDOM_BYTES))), kind: "start-route", routeId: route.id, occurredAt: new Date().toISOString(), deviceId: "e2e-weighbridge", body: { vehicleId } }] } })
       expect(started.status()).toBe(200)
       expect(((await started.json()) as { outcomes: { outcome: string }[] }).outcomes.map((outcome) => outcome.outcome)).toEqual(["applied"])
     } finally {
@@ -65,12 +65,13 @@ test("a weighbridge's batch: one ticket matches its truck's route, one waits and
   await startedByTheDriver(browser, route)
   try {
     // The office records the load itself too, before the weighbridge's batch arrives.
-    const byHand = await api.post(`/routes/${route.id}/unloads`, { data: { unloadingStationId: ((await opened.json()) as Named).id, wasteFractionId: residual.id, netKg: 4200, occurredAt: new Date(Date.now() - 2 * 60_000).toISOString() } })
+    const byHand = await api.post(`/routes/${route.id}/unloads`, { data: { unloadingStationId: ((await opened.json()) as Named).id, wasteFractionId: residual.id, netKg: 4200, occurredAt: new Date().toISOString() } })
     expect(byHand.status(), await byHand.text()).toBe(201)
 
     const matchedNumber = `WB-${suffix}-1`
     const waitingNumber = `WB-${suffix}-2`
-    const weighed = new Date(Date.now() - 60_000).toISOString()
+    // Weighed after this route's session began, so no earlier spec's session on the same truck spans the instant.
+    const weighed = new Date(Date.now() + 1_000).toISOString()
     const sent = await api.post("/weighbridge-tickets", {
       data: {
         tickets: [
