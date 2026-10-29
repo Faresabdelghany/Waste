@@ -39,7 +39,7 @@
 import { DENSITY_KG_PER_CUBIC_METRE, SERVICE_SECONDS } from "@waste/domain/execution/workload"
 import { FREE_DAYS_MAX, HIRE_UNIT } from "@waste/domain/finance/hire"
 import { PRODUCT_KINDS, PRODUCT_STATUSES, PRODUCT_UNITS, WASTE_TREATMENTS } from "@waste/domain/registry/vocabulary"
-import { WASTE_CODE_PATTERN, WASTE_CODE_SHAPE } from "@waste/domain/registry/waste-code"
+import { HAZARDOUS_CODE, hazardousAgrees, WASTE_CODE_PATTERN, WASTE_CODE_SHAPE } from "@waste/domain/registry/waste-code"
 import * as z from "zod"
 
 import { Id } from "./ids"
@@ -76,6 +76,9 @@ export const Density = z.int().min(DENSITY_KG_PER_CUBIC_METRE.min).max(DENSITY_K
 /** The seconds an emptying of a container type takes at the kerb (O10 of #290): within the domain's bounds, the database's check. */
 export const ServiceSeconds = z.int().min(SERVICE_SECONDS.min).max(SERVICE_SECONDS.max)
 
+/** A body naming a starred code and `hazardous: false` together contradicts the list (O18 of #290); a patch naming one of them is judged against the row by the API. */
+const starredIsHazardous = (body: { wasteCode?: string | null; hazardous?: boolean }): boolean => body.hazardous !== false || hazardousAgrees(body.wasteCode ?? null, false)
+
 export const WasteFraction = z.object({
   ...stamped,
   /** The stable slug the rest of the system quotes; unique per company. */
@@ -88,6 +91,8 @@ export const WasteFraction = z.object({
   treatment: WasteTreatment.nullable(),
   /** What a cubic metre of it weighs in a container, kg (O10 of #290): a stop's expected weight is its container's litres times this; null where nobody has set one. */
   densityKgPerCubicMetre: Density.nullable(),
+  /** Whether it is hazardous waste (O18 of #290), what its transfer note says: always under a starred waste code, and the office's call under any other or none. */
+  hazardous: z.boolean(),
 })
 export type WasteFraction = z.infer<typeof WasteFraction>
 
@@ -97,18 +102,23 @@ export const WasteFractionCreate = z.strictObject({
   wasteCode: WasteCode.nullable().optional(),
   treatment: WasteTreatment.nullable().optional(),
   densityKgPerCubicMetre: Density.nullable().optional(),
-})
+  /** Hazardous waste; left out, hazardous exactly where the waste code is starred. */
+  hazardous: z.boolean().optional(),
+}).refine(starredIsHazardous, { message: HAZARDOUS_CODE, path: ["hazardous"] })
 export type WasteFractionCreate = z.infer<typeof WasteFractionCreate>
 
-/** The name, the waste code, the treatment and the density: the key is the slug the rest of the system quotes, and a fraction that needs another one is another fraction. Null clears the code, the treatment or the density. */
+/** The name, the waste code, the treatment, the density and the hazardous flag: the key is the slug the rest of the system quotes, and a fraction that needs another one is another fraction. Null clears the code, the treatment or the density. */
 export const WasteFractionPatch = z
   .strictObject({
     name: Label.optional(),
     wasteCode: WasteCode.nullable().optional(),
     treatment: WasteTreatment.nullable().optional(),
     densityKgPerCubicMetre: Density.nullable().optional(),
+    /** Hazardous waste; left out, a starred code the patch sets makes the fraction hazardous and anything else leaves the flag as it is. */
+    hazardous: z.boolean().optional(),
   })
   .refine(changesSomething, somethingToChange)
+  .refine(starredIsHazardous, { message: HAZARDOUS_CODE, path: ["hazardous"] })
 export type WasteFractionPatch = z.infer<typeof WasteFractionPatch>
 
 export const ContainerType = z.object({

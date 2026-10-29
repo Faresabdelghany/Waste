@@ -24,3 +24,28 @@ export function isWasteCode(text: string): boolean {
 export function wasteCodeOf(typed: string): string {
   return typed.replace(/\s+/g, "")
 }
+
+// Whether a fraction is hazardous (O18 of #290): the flag a transfer note
+// prints and the office sets. The list's asterisk says it of an entry, so a
+// fraction under a starred code is hazardous and cannot be told otherwise; a
+// fraction may be hazardous under another code or none, since the list's
+// mirror entries leave it to what the waste holds. Where a write names a
+// starred code and says nothing of the flag, the code sets it.
+
+/** Whether a code is one the list marks hazardous: its asterisk. */
+export const isHazardousCode = (code: string): boolean => code.endsWith("*")
+
+/** What a fraction under a starred code told it is not hazardous is told. */
+export const HAZARDOUS_CODE = "A waste code with an asterisk is a hazardous entry of the list: the fraction is hazardous"
+
+/** The flag a write leaves: as given, else hazardous where the code it leaves is starred, else as it was. */
+export function hazardousOf(code: string | null, given: boolean | undefined, held: boolean): boolean {
+  if (given !== undefined) return given
+  return (code !== null && isHazardousCode(code)) || held
+}
+
+/** Whether a code and a flag may stand together: a starred code is never on a fraction held not hazardous. */
+export const hazardousAgrees = (code: string | null, hazardous: boolean): boolean => hazardous || code === null || !isHazardousCode(code)
+
+/** A stored code as the list prints it, its pairs spaced: `200133*` is `20 01 33*`. */
+export const wasteCodePrinted = (code: string): string => `${code.slice(0, 2)} ${code.slice(2, 4)} ${code.slice(4)}`

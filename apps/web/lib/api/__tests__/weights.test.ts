@@ -17,7 +17,7 @@ import { NOTHING_RESOLVED, type MappingContext } from "../records/adapter"
 import { isServerBacked, SERVER_MODULE_KEYS } from "../records/modules"
 import { routesWindowFrom } from "../records/routes"
 import { commandRecord, loaded, resolverOver, spellsStatus, writeRecord, type ServerRecordsState } from "../records/server-records"
-import { BOTH_GROSS_AND_TARE, differenceOf, NET_IS_GROSS_LESS_TARE, REVIEW_LABELS, SAY_WHY_REFUSED, unloadAdapter, weightReviewsOffered, weightsModule } from "../records/weights"
+import { BOTH_GROSS_AND_TARE, differenceOf, NET_IS_GROSS_LESS_TARE, REVIEW_LABELS, SAY_WHY_REFUSED, TRANSFER_NOTE_WITHHELD, transferNoteWithheld, unloadAdapter, unloadTransferNote, weightReviewsOffered, weightsModule } from "../records/weights"
 import { bodyOf, clientOver, json, problem, scripted } from "./scripted-fetch"
 
 const NOW = new Date("2026-09-30T12:00:00Z")
@@ -102,6 +102,24 @@ describe("the weighbridge in the office (O9 of #290)", () => {
     assert.deepEqual([calls[0].init.method, calls[0].url], ["POST", `http://api.test/routes/${ROUTE}/unloads`])
     assert.deepEqual(bodyOf(calls[0]), { unloadingStationId: STATION, wasteFractionId: RESIDUAL, netKg: 7200, occurredAt: "2026-09-29T13:05:00.000Z" }, "the route is the path's, never the body's")
     assert.equal(outcome.kind, "created")
+  })
+})
+
+describe("an unload's transfer note (O18 of #290)", () => {
+  test("is offered on an unload the station took and nobody corrected, and withheld with the reason otherwise, as the API refuses it", () => {
+    assert.equal(transferNoteWithheld(unloadAdapter.toRecord(unload, context)), null)
+    assert.equal(transferNoteWithheld(unloadAdapter.toRecord({ ...unload, weightReview: { status: "approved", latestReviewId: raw.id, correctionUnloadId: null } }, context)), null, "an approved or rejected weight still went")
+    assert.equal(transferNoteWithheld(unloadAdapter.toRecord({ ...unload, refusal: { reason: "contamination", note: null } }, context)), TRANSFER_NOTE_WITHHELD.refused)
+    assert.equal(transferNoteWithheld(unloadAdapter.toRecord({ ...unload, weightReview: { status: "corrected", latestReviewId: raw.id, correctionUnloadId: ROUTE } }, context)), TRANSFER_NOTE_WITHHELD.corrected)
+  })
+
+  test("is read as the API's PDF from the unload's own path", async () => {
+    const { fetch, calls } = scripted([() => new Response(new Uint8Array([0x25, 0x50, 0x44, 0x46]), { status: 200, headers: { "content-type": "application/pdf", "content-disposition": `inline; filename="transfer-note-${raw.id}.pdf"` } })])
+    const file = await unloadTransferNote(clientOver(fetch), raw.id)
+    assert.equal(calls[0].url, `http://api.test/unloads/${raw.id}/transfer-note`)
+    assert.equal(file.contentType, "application/pdf")
+    assert.equal(file.fileName, `transfer-note-${raw.id}.pdf`)
+    assert.equal(new TextDecoder().decode(file.bytes), "%PDF")
   })
 })
 
