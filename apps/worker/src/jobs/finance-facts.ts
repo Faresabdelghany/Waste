@@ -67,15 +67,28 @@
 // read for a pickup's price, since the domain charges it nothing but a job.
 // A bulky collection (O11 of #290) is a job at its booking's product, charged
 // to the agreement the booking names (`bulkyFacts`).
+//
+// An Unload's weight review (O28 of #290, C32 of #291) is read under the row
+// lock of the Unload's route, the lock every review takes (routes/weight-
+// control.ts), so a review and the consumer of an earlier one take turns:
+// the Unload with its latest review — approved, and taken by the station, or
+// not — and, where it is, the route's standing unloads (a corrected one is
+// left out, its correction standing for it at its instant), the route's
+// stops with what each weighed on board, the stops it carried and their
+// shares (@waste/domain/finance/tonnage), and for each the conditions it is
+// priced on and its container's placement on the service date with the list
+// and the rows — read only under a product sold by the tonne, since no other
+// is charged here; and the Unload's live weight events under their locks.
 import { isChargeable, judgeException, type PickupExceptionStop } from "@waste/domain/execution/pickup-exceptions"
-import type { ExceptionFacts, JobChargeFacts, PlacementFacts, PickupEventFacts, TicketChargeFacts, TicketCompletedFacts, VisitEventFacts } from "@waste/domain/finance/from-event"
+import type { ExceptionFacts, JobChargeFacts, PlacementFacts, PickupEventFacts, TicketChargeFacts, TicketCompletedFacts, VisitEventFacts, WeighedStopFacts, WeightReviewedFacts } from "@waste/domain/finance/from-event"
+import { chargedByWeight, stopsCarried, tonnageShares } from "@waste/domain/finance/tonnage"
 import { isWorkOrderService, type PickupOrigin, type PickupOutcome, type PickupReason, type PickupService, type PickupStatus } from "@waste/domain/execution/vocabulary"
 import { addDays } from "@waste/domain/route-schemes/recurrence"
 import type { AgreementStatus, CustomerKind, ProductStatus, ProductUnit } from "@waste/domain/registry/vocabulary"
 import type { TicketResolution } from "@waste/domain/resolution/vocabulary"
 import type { Tx } from "@waste/db/client"
 import type { SiteVisit } from "@waste/contracts/site-visits"
-import { agreementFacts, EXCEPTION_EVENT_KINDS, liveEventOf, liveVisitEventOf, listInForce, rowsOn } from "@waste/db/commands/billable-writes"
+import { agreementFacts, EXCEPTION_EVENT_KINDS, liveEventOf, liveVisitEventOf, liveWeightEventsOf, listInForce, rowsOn } from "@waste/db/commands/billable-writes"
 import type { EventReading } from "@waste/db/commands/billing-shapes"
 import { dayInTimezone } from "@waste/db/commands/days"
 import { exceptionRulesOf, exceptionStopsAt, latestOutcomeProofs, placeOf } from "@waste/db/commands/pickup-exceptions"
@@ -87,12 +100,13 @@ import { agreement, subscription } from "@waste/db/schema/agreements"
 import { product } from "@waste/db/schema/catalogue"
 import { container, containerServicePlacement } from "@waste/db/schema/containers"
 import { customer } from "@waste/db/schema/customers"
-import { pickup, route } from "@waste/db/schema/execution"
+import { pickup, proofOfService, route, unload } from "@waste/db/schema/execution"
+import { weightReview } from "@waste/db/schema/finance"
 import { ticketKindProduct, workOrderProduct } from "@waste/db/schema/finance"
 import { bulkyBooking } from "@waste/db/schema/bulky"
 import { ticket, ticketBooking } from "@waste/db/schema/resolution"
 import { routeScheme } from "@waste/db/schema/route-schemes"
-import { and, desc, eq, lte } from "drizzle-orm"
+import { and, desc, eq, inArray, lte, sql } from "drizzle-orm"
 
 /** A pickup as the consumer read it: the row the event names, with its route's identity day and scheme, its container's type, who put it there, and its status now. */
 export type PickupRow = {
@@ -550,4 +564,86 @@ export async function visitFacts(tx: Tx, companyId: string, kind: VisitEventFact
     },
     live: live === undefined ? [] : [live],
   }
+}
+
+/** The latest review decision of each Unload asked about: its reading, `approved`, `rejected` or `corrected`; an Unload nobody has reviewed is absent. */
+async function latestDecisions(tx: Tx, companyId: string, unloadIds: readonly string[]): Promise<Map<string, string>> {
+  if (unloadIds.length === 0) return new Map()
+  const rows = await tx
+    .selectDistinctOn([weightReview.unloadId], { unloadId: weightReview.unloadId, decision: weightReview.decision })
+    .from(weightReview)
+    .where(and(eq(weightReview.companyId, companyId), inArray(weightReview.unloadId, [...unloadIds])))
+    .orderBy(weightReview.unloadId, desc(weightReview.id))
+  return new Map(rows.map((row) => [row.unloadId, row.decision]))
+}
+
+/**
+ * An Unload's weight review as the domain reads it (O28 of #290): the Unload
+ * the review names, under its route's row lock, approved now or not; where it
+ * is, the stops it carried with their shares and their placements priced
+ * under a product sold by the tonne; and its live weight events. An Unload
+ * that is not there is a broken key and thrown.
+ */
+export async function weightFacts(tx: Tx, companyId: string, unloadId: string): Promise<{ facts: WeightReviewedFacts; live: EventReading[] }> {
+  const [found] = await tx
+    .select({ projectId: unload.projectId, routeId: unload.routeId })
+    .from(unload)
+    .where(and(eq(unload.companyId, companyId), eq(unload.id, unloadId)))
+    .limit(1)
+  if (found === undefined) throw new Error(`weight-reviewed names unload ${unloadId}, which is not in company ${companyId}`)
+  // The lock every review of the route's unloads takes: the review and this read take turns.
+  await lockRow(tx, route, { companyId, id: found.routeId })
+  const [onRoute] = await tx
+    .select({ serviceDate: route.serviceDate, planningAreaId: routeScheme.planningAreaId })
+    .from(route)
+    .leftJoin(routeScheme, and(eq(routeScheme.companyId, route.companyId), eq(routeScheme.id, route.routeSchemeId)))
+    .where(and(eq(route.companyId, companyId), eq(route.id, found.routeId)))
+    .limit(1)
+  if (onRoute === undefined) throw new Error(`unload ${unloadId} names route ${found.routeId}, which is not in company ${companyId}`)
+  const unloads = await tx
+    .select({ id: unload.id, wasteFractionId: unload.wasteFractionId, occurredAt: unload.occurredAt, netKg: unload.netKg, refusalReason: unload.refusalReason })
+    .from(unload)
+    .where(and(eq(unload.companyId, companyId), eq(unload.routeId, found.routeId)))
+  const decisions = await latestDecisions(tx, companyId, unloads.map((row) => row.id))
+  const reviewed = unloads.find((row) => row.id === unloadId)
+  if (reviewed === undefined) throw new Error(`unload ${unloadId} is not on its own route ${found.routeId}`)
+  const approved = decisions.get(unloadId) === "approved" && reviewed.refusalReason === null
+  const live = await liveWeightEventsOf(tx, companyId, unloadId)
+  const base = { kind: "weight-reviewed" as const, unloadId, routeId: found.routeId, serviceDate: onRoute.serviceDate, approved, liveEvents: live.flatMap((row) => liveFacts(row) ?? []) }
+  // A review that leaves the weight anything but approved, or one charged already, is judged on the live events alone.
+  if (!approved || live.length > 0) return { facts: { ...base, stops: [] }, live }
+  // The route's standing unloads: a corrected one is left out, its correction standing at its instant.
+  const standing = unloads
+    .filter((row) => decisions.get(row.id) !== "corrected")
+    .map((row) => ({ id: row.id, wasteFractionId: row.wasteFractionId, occurredAt: row.occurredAt.toISOString(), refused: row.refusalReason !== null }))
+  const stops = await tx
+    .select({
+      pickupId: pickup.id,
+      wasteFractionId: pickup.wasteFractionId,
+      outcomeAt: pickup.outcomeAt,
+      status: pickup.status,
+      containerId: pickup.containerId,
+      containerTypeId: container.containerTypeId,
+      onBoardKg: sql<number | null>`(select sum(${proofOfService.weightKg}) from ${proofOfService} where ${proofOfService.companyId} = ${pickup.companyId} and ${proofOfService.routeId} = ${pickup.routeId} and ${proofOfService.pickupId} = ${pickup.id} and ${proofOfService.kind} = 'weight')`.mapWith(Number),
+    })
+    .from(pickup)
+    .leftJoin(container, and(eq(container.companyId, pickup.companyId), eq(container.id, pickup.containerId)))
+    .where(and(eq(pickup.companyId, companyId), eq(pickup.routeId, found.routeId)))
+  const asRouteStops = stops.map((stop) => ({ pickupId: stop.pickupId, wasteFractionId: stop.wasteFractionId, outcomeAt: stop.outcomeAt?.toISOString() ?? null, completed: stop.status === "completed", onBoardKg: stop.onBoardKg || null }))
+  const carried = stopsCarried(standing.find((row) => row.id === unloadId)!, standing, asRouteStops)
+  const byPickup = new Map(stops.map((stop) => [stop.pickupId, stop]))
+  const weighed: WeighedStopFacts[] = []
+  for (const share of tonnageShares(reviewed.netKg, carried)) {
+    const stop = byPickup.get(share.pickupId)!
+    const placement = stop.containerId === null ? undefined : await placementOn(tx, companyId, found.projectId, stop.containerId, onRoute.serviceDate)
+    let priced: PlacementFacts | null = null
+    if (placement !== undefined) {
+      const { priceListId, ...facts } = placement
+      // Only a product sold by the tonne is charged here, and a draft agreement blocks before any list is read; the list is read where a price could come of it.
+      const list = !chargedByWeight(facts.product.unit) || facts.agreement.status === "draft" ? undefined : await listInForce(tx, { companyId, projectId: found.projectId }, priceListId, onRoute.serviceDate)
+      priced = { ...facts, priceList: list === undefined ? null : { id: list.id, currency: list.currency, rows: await rowsOn(tx, companyId, list.id, facts.product.id, onRoute.serviceDate) } }
+    }
+    weighed.push({ pickupId: share.pickupId, weightKg: share.weightKg, planningAreaId: onRoute.planningAreaId, containerTypeId: stop.containerTypeId, wasteFractionId: stop.wasteFractionId, placement: priced })
+  }
+  return { facts: { ...base, stops: weighed }, live }
 }
