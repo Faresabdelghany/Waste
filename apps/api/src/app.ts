@@ -58,6 +58,7 @@ import { customerContactRoutes } from "./routes/customer-contacts"
 import { customerRoutes } from "./routes/customers"
 import { messageTemplateRoutes } from "./routes/message-templates"
 import { messageRoutes } from "./routes/messages"
+import { notificationRoutes } from "./routes/notifications"
 import { depotRoutes } from "./routes/depots"
 import { applicationRoutes } from "./routes/applications"
 import { dropOffPointRoutes } from "./routes/drop-off-points"
@@ -255,6 +256,7 @@ export function createApp({
   // The authenticated routes, each module given the guard to put on its routes.
   const guard = authenticate({ pool, verifier })
   app.route("/", meRoutes(guard))
+  app.route("/", notificationRoutes(guard))
   app.route("/", companyRoutes(guard))
   app.route("/", projectRoutes(guard))
   app.route("/", serviceProviderRoutes(guard))

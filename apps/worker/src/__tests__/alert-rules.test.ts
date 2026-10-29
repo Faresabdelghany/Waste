@@ -11,10 +11,11 @@
 import assert from "node:assert/strict"
 import { after, before, describe, test } from "node:test"
 
+import { Alert } from "@waste/contracts/alerts"
 import { createDb, type Database } from "@waste/db/client"
 import { openTicket } from "@waste/db/commands/open-ticket"
 import { migrateDatabase } from "@waste/db/migrate"
-import { driverCommand, route, session, sessionPosition } from "@waste/db/schema/execution"
+import { driverCommand, outboxEvent, route, session, sessionPosition } from "@waste/db/schema/execution"
 import { driver } from "@waste/db/schema/fleet"
 import { alert, ticket } from "@waste/db/schema/resolution"
 import { withCompany } from "@waste/db/tenant"
@@ -182,6 +183,13 @@ describe("resolution.alert-rules", { skip: roles.skip }, () => {
     // Not yet late, planned two days ago, not yet due, and suspended: nothing.
     for (const quiet of [onTime.id, stale.id, laterTicketId, suspendedDriverId]) assert.ok(!raised.some((row) => [row.routeId, row.driverId, row.ticketId].includes(quiet)), quiet)
     assert.equal(lines.at(-1), "alert rules: raised 5, cleared 0")
+    // Each alert raised is the staff notices' news (O16 of #290): one `alert-raised` per alert, the alert as the API answers it, at the tick.
+    const news = await withCompany(api.db, tenant.companyId, (tx) => tx.select().from(outboxEvent).where(and(eq(outboxEvent.companyId, tenant.companyId), eq(outboxEvent.kind, "alert-raised"))))
+    assert.deepEqual(news.map((event) => event.aggregateId).sort(), raised.map((row) => row.id).sort())
+    for (const event of news) {
+      assert.deepEqual([event.aggregateKind, event.projectId, event.occurredAt.toISOString()], ["alert", tenant.projectId, NOW.toISOString()])
+      assert.equal(Alert.parse(event.payload).id, event.aggregateId)
+    }
   })
 
   test("the next tick raises nothing twice and reads nothing: a quiet tick is six empty results and no write", async () => {
@@ -191,6 +199,7 @@ describe("resolution.alert-rules", { skip: roles.skip }, () => {
     assert.deepEqual(await runAlertRules(context()), { raised: 0, cleared: 0 })
     assert.equal(lines.length, before, "a quiet tick says nothing")
     assert.equal((await alerts()).length, 5)
+    assert.equal((await withCompany(api.db, tenant.companyId, (tx) => tx.select().from(outboxEvent).where(and(eq(outboxEvent.companyId, tenant.companyId), eq(outboxEvent.kind, "alert-raised"))))).length, 5, "nor any news twice")
   })
 
   test("a condition that clears resolves its alert with no account and the rule's note: the route started, the device heard from, the ticket re-dated", async () => {

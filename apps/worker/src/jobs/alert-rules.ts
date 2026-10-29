@@ -47,8 +47,15 @@
 // or the route's end. The newest fix is one probe into
 // `session_position_session_id_idx`, the last resume one into the session's
 // receipts, read only for the sessions running.
+//
+// Each alert raised writes `alert-raised` to the outbox in the raise's
+// transaction (O16 of #290), the `Alert` as the API would answer it, so the
+// staff notices' consumer tells the people who asked to hear of an alert that
+// severe; an alert the key already held writes neither row nor event.
 import { routeLabel } from "@waste/contracts/execution"
 import { ticketLabel } from "@waste/contracts/resolution"
+import { emit } from "@waste/db/commands/outbox"
+import { alertColumns, alertOf } from "@waste/db/commands/resolution-rows"
 import { alert } from "@waste/db/schema/resolution"
 import { withCompany } from "@waste/db/tenant"
 import { alertOfRule, CLEARED_NOTES, LICENCE_WARNING_DAYS, POSITION_STALE_MINUTES, ROUTE_START_GRACE_MINUTES, RULE_LOOKBACK_HOURS, SESSION_SILENCE_MINUTES, type RuleOccurrence } from "@waste/domain/resolution/alert-rules"
@@ -249,8 +256,8 @@ export async function runAlertRules({ api, worker, now, log }: JobContext): Prom
   const toClear = await alertsToClear(worker, at)
   let raised = 0
   for (const [companyId, occurrences] of byCompany(toRaise)) {
-    const rows = await withCompany(api.db, companyId, (tx) =>
-      tx
+    const rows = await withCompany(api.db, companyId, async (tx) => {
+      const written = await tx
         .insert(alert)
         .values(
           occurrences.map(({ projectId, ruleKey, occurrence }) => {
@@ -260,8 +267,10 @@ export async function runAlertRules({ api, worker, now, log }: JobContext): Prom
         )
         // A tick that overlapped this one raised the occurrence already: the key is its word.
         .onConflictDoNothing({ target: [alert.companyId, alert.ruleKey], where: sql`${alert.ruleKey} is not null and (${alert.status} <> 'resolved' or ${alert.resolvedBy} is not null)` })
-        .returning({ id: alert.id }),
-    )
+        .returning(alertColumns)
+      for (const row of written) await emit(tx, { companyId }, { aggregate: "alert", aggregateId: row.id, kind: "alert-raised", payload: alertOf(row), projectId: row.projectId, occurredAt: at })
+      return written
+    })
     raised += rows.length
   }
   let cleared = 0

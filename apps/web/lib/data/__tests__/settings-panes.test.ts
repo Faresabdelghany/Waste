@@ -8,7 +8,7 @@ import assert from "node:assert/strict"
 import { describe, test } from "node:test"
 
 import { MASTER_DATA_SETTINGS_PANE_ID } from "../business-links"
-import { ASSET_MANAGEMENT_SETTINGS_PANE_ID, FINANCE_ON_API_SETTINGS_PANE_ID, FINANCE_SETTINGS_PANE_ID, PRIVACY_ON_API_SETTINGS_PANE_ID, PRIVACY_SETTINGS_PANE_ID, INTEGRATIONS_ON_API_SETTINGS_PANE_ID, INTEGRATIONS_SETTINGS_PANE_ID, PORTALS_ON_API_SETTINGS_PANE_ID, PORTALS_SETTINGS_PANE_ID, ACCOUNT_SETTINGS_PANE_ID, COMMERCIAL_DEFAULTS_SETTINGS_PANE_ID, COMMERCIAL_PRODUCTS_SETTINGS_PANE_ID, NOTIFICATIONS_SETTINGS_PANE_ID, OPERATIONS_SETUP_SETTINGS_PANE_ID, settingsPaneOffered, settingsPaneOpened, TICKETS_COMMUNICATION_SETTINGS_PANE_ID } from "../settings-panes"
+import { ASSET_MANAGEMENT_SETTINGS_PANE_ID, FINANCE_ON_API_SETTINGS_PANE_ID, FINANCE_SETTINGS_PANE_ID, PRIVACY_ON_API_SETTINGS_PANE_ID, PRIVACY_SETTINGS_PANE_ID, INTEGRATIONS_ON_API_SETTINGS_PANE_ID, INTEGRATIONS_SETTINGS_PANE_ID, PORTALS_ON_API_SETTINGS_PANE_ID, PORTALS_SETTINGS_PANE_ID, ACCOUNT_SETTINGS_PANE_ID, COMMERCIAL_DEFAULTS_SETTINGS_PANE_ID, COMMERCIAL_PRODUCTS_SETTINGS_PANE_ID, NOTIFICATIONS_ON_API_SETTINGS_PANE_ID, NOTIFICATIONS_SETTINGS_PANE_ID, OPERATIONS_SETUP_SETTINGS_PANE_ID, settingsPaneOffered, settingsPaneOpened, TICKETS_COMMUNICATION_SETTINGS_PANE_ID } from "../settings-panes"
 import { SORTING_GUIDE_SETTINGS_PANE_ID } from "../sorting-guide"
 import { PICKUP_EXCEPTION_CHARGES_SETTINGS_PANE_ID } from "../pickup-exception-rules"
 import { EMISSION_FACTORS_SETTINGS_PANE_ID } from "../fleet-emissions"
@@ -98,7 +98,7 @@ describe("the Settings panes offered", () => {
     for (const [pane, landing] of [
       [OPERATIONS_SETUP_SETTINGS_PANE_ID, MASTER_DATA_SETTINGS_PANE_ID],
       [COMMERCIAL_DEFAULTS_SETTINGS_PANE_ID, COMMERCIAL_PRODUCTS_SETTINGS_PANE_ID],
-      [NOTIFICATIONS_SETTINGS_PANE_ID, ACCOUNT_SETTINGS_PANE_ID],
+      [NOTIFICATIONS_SETTINGS_PANE_ID, NOTIFICATIONS_ON_API_SETTINGS_PANE_ID],
     ]) {
       assert.equal(settingsPaneOffered(pane, true), false, pane)
       assert.equal(settingsPaneOffered(pane, false), true, pane)
@@ -106,6 +106,13 @@ describe("the Settings panes offered", () => {
       assert.equal(settingsPaneOpened(pane, false), pane, pane)
     }
     assert.equal(settingsPaneOffered(ACCOUNT_SETTINGS_PANE_ID, true), true, "Account & appearance stays: its profile is /me's and its theme is the device's own")
+  })
+
+  test("Notifications on the API (O16 of #290) is the Pilot's alone, and a link to it opens the browser's in fixture mode", () => {
+    assert.equal(settingsPaneOffered(NOTIFICATIONS_ON_API_SETTINGS_PANE_ID, true), true)
+    assert.equal(settingsPaneOffered(NOTIFICATIONS_ON_API_SETTINGS_PANE_ID, false), false)
+    assert.equal(settingsPaneOpened(NOTIFICATIONS_ON_API_SETTINGS_PANE_ID, true), NOTIFICATIONS_ON_API_SETTINGS_PANE_ID)
+    assert.equal(settingsPaneOpened(NOTIFICATIONS_ON_API_SETTINGS_PANE_ID, false), NOTIFICATIONS_SETTINGS_PANE_ID)
   })
 
   test("a link to Asset management opens Master data on the Pilot, and itself in fixture mode", () => {

@@ -66,3 +66,5 @@ export * from "./site-visits"
 export * from "./service-provider-activities"
 // Messaging (#291 C15): the office's templates and the delivery log.
 export * from "./messaging"
+// A staff member's notification preferences (O16 of #290).
+export * from "./notifications"

@@ -40,8 +40,11 @@
 // yesterday. The link to a ticket is the one column `ticket_id`, set on the
 // create by naming a ticket of the project and afterwards through
 // routes/alert-links.ts's `linkAlert`, the function `POST /tickets` runs too.
-// Nothing here writes the outbox: Resolution publishes its tickets' news and
-// no alert's (#109 §5).
+// A raised alert writes `alert-raised` to the outbox (O16 of #290), the
+// `Alert` as answered, for the staff notices' consumer to tell the people who
+// asked to hear of one that severe; the three commands write nothing, since a
+// staff notice is about an alert raised and Resolution publishes its
+// tickets' news and no other alert's (#109 §5).
 //
 // Every statement carries the tenant and `inProjects` (auth/projects.ts); the
 // grant is `operate.exceptions` throughout, `view` to read, `create` to raise,
@@ -61,6 +64,7 @@ import { BEARER_SECURITY, type AuthEnv, type Principal } from "../auth/principal
 import { requireProject } from "../auth/projects"
 import { requireGrant } from "../auth/require"
 import { newId } from "../ids"
+import { emit } from "../outbox"
 import { afterCursor, fetchLimit, pageOf } from "../pagination"
 import { describeProblem, problem, validate } from "../problem"
 import { linkAlert } from "./alert-links"
@@ -178,7 +182,7 @@ export function alertRoutes(guard: MiddlewareHandler<AuthEnv>, { now = () => new
         operationId: "raiseAlert",
         summary: "Raise an alert by hand",
         description:
-          "Raises an alert about something of one project the caller works in: `source` is `manual`, `status` is `new`, `raisedBy` is the caller's account, and `detectedAt` is the body's or the request's clock when absent. An alert names what it is about — at least one of `routeId`, `vehicleId`, `driverId` and `containerId` (400 at `routeId` otherwise: an alert about nothing is nothing) — and each one named is held to that project (400 at its field): the route one of its routes, the vehicle one of its vehicles of any kind, a trailer included, the driver one of its drivers, the container one of its containers; `ticketId`, where given, is a ticket of that project and links the alert to it from the start. There is no status gate on any of them: a defect on a retired container and a route that has ended are what an alert is about. `detectedAt` may run at most five minutes ahead of the request's clock (400, `Recorded after it happened`) and has no lower bound, since the office records a condition seen yesterday; the clock is judged before the links, since it costs no statement. Nothing here writes the outbox: an alert is news to the board and to no other context. The server mints the id.",
+          "Raises an alert about something of one project the caller works in: `source` is `manual`, `status` is `new`, `raisedBy` is the caller's account, and `detectedAt` is the body's or the request's clock when absent. An alert names what it is about — at least one of `routeId`, `vehicleId`, `driverId` and `containerId` (400 at `routeId` otherwise: an alert about nothing is nothing) — and each one named is held to that project (400 at its field): the route one of its routes, the vehicle one of its vehicles of any kind, a trailer included, the driver one of its drivers, the container one of its containers; `ticketId`, where given, is a ticket of that project and links the alert to it from the start. There is no status gate on any of them: a defect on a retired container and a route that has ended are what an alert is about. `detectedAt` may run at most five minutes ahead of the request's clock (400, `Recorded after it happened`) and has no lower bound, since the office records a condition seen yesterday; the clock is judged before the links, since it costs no statement. The raise writes `alert-raised` to the outbox with the alert as answered, from which the worker e-mails the staff who asked to hear of an alert that severe (O16 of #290). The server mints the id.",
         security: BEARER_SECURITY,
         responses: {
           201: describeCreated("The alert as it was written.", Alert),
@@ -229,7 +233,9 @@ export function alertRoutes(guard: MiddlewareHandler<AuthEnv>, { now = () => new
             raisedBy: principal.user.id,
           })
           .returning(alertColumns)
-        return created(c, "/alerts", alertOf(row))
+        const answered = alertOf(row)
+        await emit(tx, principal, { aggregate: "alert", aggregateId: row.id, kind: "alert-raised", payload: answered, projectId: row.projectId, occurredAt: detectedAt })
+        return created(c, "/alerts", answered)
       },
     )
     .get(

@@ -316,8 +316,10 @@ describe("the ticket endpoints", { skip: database.skip || owner.skip }, () => {
       const detail = await read(second.id)
       assert.deepEqual(detail.events.map((event) => [event.kind, event.status, event.assigneeUserAccountId, event.body, event.visibility, event.resolution, event.objectKey, event.recordedBy, event.sourceEventId]), [["created", "open", a.users.viewer.id, null, "internal", null, null, a.users.olivia.id, null]])
       assert.deepEqual(detail.alerts, [])
-      const [openedEvent, ...more] = await eventsAbout(second.id)
+      const [openedEvent, assignedEvent, ...more] = await eventsAbout(second.id)
       assert.equal(more.length, 0)
+      assert.deepEqual([assignedEvent.kind, assignedEvent.aggregateKind, assignedEvent.occurredAt.toISOString()], ["ticket-assigned", "ticket", NOON.toISOString()], "opened with an assignee, the assignment follows for the staff notices (O16 of #290)")
+      assert.deepEqual(Ticket.parse(assignedEvent.payload), second)
       assert.deepEqual([openedEvent.kind, openedEvent.aggregateKind, openedEvent.projectId, openedEvent.occurredAt.toISOString(), openedEvent.publishedAt], ["ticket-opened", "ticket", second.projectId, NOON.toISOString(), null])
       assert.deepEqual(Ticket.parse(openedEvent.payload), second, "the payload is the ticket as answered")
 
@@ -485,7 +487,9 @@ describe("the ticket endpoints", { skip: database.skip || owner.skip }, () => {
         ["assigned", "open", a.users.viewer.id, "Vera knows the street"],
         ["assigned", "open", null, null],
       ], "one event per move, none for the repeat")
-      assert.equal((await eventsAbout(fresh.id)).length, 1, "an assignment is nobody else's news")
+      const outbox = await eventsAbout(fresh.id)
+      assert.deepEqual(outbox.map((event) => event.kind), ["ticket-opened", "ticket-assigned"], "the assignment to Vera is the staff notices' news (O16 of #290); the repeat and the clearing are nobody's")
+      assert.deepEqual(Ticket.parse(outbox[1].payload), assigned, "the payload is the ticket as answered")
     })
 
     test("holds the account to the company and the project (400), and a closed ticket refuses whatever the body says (409)", async () => {

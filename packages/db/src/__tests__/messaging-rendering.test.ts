@@ -4,8 +4,9 @@
 // customer and the contact it went to. Then the migration, which is exactly
 // those statements under its header, then what the two tables owe the file
 // by migrations/README.md: their fences and triggers, and the templates'
-// audit trail (`MESSAGING_AUDITED`); the delivery log is exempt. The file is
-// found by its name, not its number, which it takes at its turn. No database.
+// audit trail (`MESSAGING_AUDITED`); the delivery log is exempt. The log is
+// spelled as 0074 left it (message-as-of.ts), since 0075 grew it by the staff
+// notifications. The file is found by its name, not its number. No database.
 import assert from "node:assert/strict"
 import { readdir, readFile } from "node:fs/promises"
 import { join } from "node:path"
@@ -13,10 +14,11 @@ import { describe, test } from "node:test"
 
 import { MIGRATIONS_FOLDER } from "../migrate"
 import { customer, customerContact } from "../schema/customers"
-import { message, messageTemplate } from "../schema/messaging"
+import { messageTemplate } from "../schema/messaging"
 import { company, project } from "../schema/organisation"
 import { auditTrail, MESSAGING_AUDITED } from "../sql/audit-trail"
 import { handWrittenStatements, normalised, statementsOf } from "../sql/hand-written"
+import { messageAsOf0074 as message } from "./message-as-of"
 import { checksOf, ref } from "./rendering"
 import { statementsBetween } from "./specimen"
 

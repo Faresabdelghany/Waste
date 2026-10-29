@@ -44,6 +44,7 @@ describe("consent", () => {
   test("a service message needs the customer's consent; a billing message is owed whatever they chose", () => {
     assert.equal(needsConsent("service"), true)
     assert.equal(needsConsent("billing"), false)
+    assert.equal(needsConsent("staff"), false)
   })
 })
 
