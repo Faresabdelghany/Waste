@@ -1,6 +1,6 @@
 {
-  "id": "7e468796-8681-426f-b96a-3678433731cf",
-  "prevId": "de43267c-8ab8-41a2-a86d-83d95b3f318e",
+  "id": "89baae60-b070-4a1e-a0b9-9cb184c571a9",
+  "prevId": "1478e7cf-d2ea-449a-ac7a-bf6b2114702f",
   "version": "7",
   "dialect": "postgresql",
   "tables": {
@@ -290,6 +290,24 @@
           "type": "text",
           "primaryKey": false,
           "notNull": false
+        },
+        "brand_color": {
+          "name": "brand_color",
+          "type": "text",
+          "primaryKey": false,
+          "notNull": false
+        },
+        "logo_url": {
+          "name": "logo_url",
+          "type": "text",
+          "primaryKey": false,
+          "notNull": false
+        },
+        "accessibility_statement_url": {
+          "name": "accessibility_statement_url",
+          "type": "text",
+          "primaryKey": false,
+          "notNull": false
         }
       },
       "indexes": {},
@@ -376,6 +394,18 @@
         "project_gps_purpose_one_of": {
           "name": "project_gps_purpose_one_of",
           "value": "\"wms\".\"project\".\"gps_purpose\" in ('dispatch', 'dispatch-and-proof')"
+        },
+        "project_brand_color_shape": {
+          "name": "project_brand_color_shape",
+          "value": "\"wms\".\"project\".\"brand_color\" ~ '^#[0-9a-fA-F]{6}$'"
+        },
+        "project_logo_url_shape": {
+          "name": "project_logo_url_shape",
+          "value": "\"wms\".\"project\".\"logo_url\" ~ '^https://[^\\s/?#]+[^\\s]*$' and char_length(\"wms\".\"project\".\"logo_url\") <= 2048"
+        },
+        "project_accessibility_statement_url_shape": {
+          "name": "project_accessibility_statement_url_shape",
+          "value": "\"wms\".\"project\".\"accessibility_statement_url\" ~ '^https://[^\\s/?#]+[^\\s]*$' and char_length(\"wms\".\"project\".\"accessibility_statement_url\") <= 2048"
         }
       },
       "isRLSEnabled": false
@@ -11053,7 +11083,7 @@
       "checkConstraints": {
         "outbox_event_kind_one_of": {
           "name": "outbox_event_kind_one_of",
-          "value": "\"wms\".\"outbox_event\".\"kind\" in ('route-dispatched', 'route-started', 'route-completed', 'route-cancelled', 'route-reassigned', 'pickup-completed', 'pickup-failed', 'pickup-skipped', 'pickup-problem-reported', 'pickup-corrected', 'unload-recorded', 'command-rejected', 'ticket-opened', 'ticket-completed', 'ticket-rejected', 'invoice-issued', 'settlement-closed', 'application-decided', 'site-visit-recorded', 'site-visit-voided', 'alert-raised', 'ticket-assigned', 'bulky-booking-booked', 'bulky-booking-cancelled', 'ticket-replied')"
+          "value": "\"wms\".\"outbox_event\".\"kind\" in ('route-dispatched', 'route-started', 'route-completed', 'route-cancelled', 'route-reassigned', 'pickup-completed', 'pickup-failed', 'pickup-skipped', 'pickup-problem-reported', 'pickup-corrected', 'unload-recorded', 'command-rejected', 'ticket-opened', 'ticket-completed', 'ticket-rejected', 'invoice-issued', 'settlement-closed', 'application-decided', 'site-visit-recorded', 'site-visit-voided', 'alert-raised', 'ticket-assigned', 'bulky-booking-booked', 'bulky-booking-cancelled')"
         },
         "outbox_event_aggregate_kind_one_of": {
           "name": "outbox_event_aggregate_kind_one_of",
@@ -32348,15 +32378,6 @@
       },
       "compositePrimaryKeys": {},
       "uniqueConstraints": {
-        "notification_rule_project_key": {
-          "name": "notification_rule_project_key",
-          "nullsNotDistinct": false,
-          "columns": [
-            "company_id",
-            "project_id",
-            "id"
-          ]
-        },
         "notification_rule_project_id_event_key": {
           "name": "notification_rule_project_id_event_key",
           "nullsNotDistinct": false,
@@ -32371,166 +32392,9 @@
       "checkConstraints": {
         "notification_rule_event_one_of": {
           "name": "notification_rule_event_one_of",
-          "value": "\"wms\".\"notification_rule\".\"event\" in ('bulky-booking-booked', 'bulky-booking-cancelled', 'bulky-booking-collected', 'bulky-booking-not-collected', 'collection-reminder', 'ticket-replied', 'ticket-completed', 'route-cancelled', 'route-late')"
+          "value": "\"wms\".\"notification_rule\".\"event\" in ('bulky-booking-booked', 'bulky-booking-cancelled', 'bulky-booking-collected', 'bulky-booking-not-collected')"
         }
       },
-      "isRLSEnabled": false
-    },
-    "wms.notification_rule_area": {
-      "name": "notification_rule_area",
-      "schema": "wms",
-      "columns": {
-        "id": {
-          "name": "id",
-          "type": "uuid",
-          "primaryKey": true,
-          "notNull": true,
-          "default": "wms.uuidv7()"
-        },
-        "company_id": {
-          "name": "company_id",
-          "type": "uuid",
-          "primaryKey": false,
-          "notNull": true
-        },
-        "project_id": {
-          "name": "project_id",
-          "type": "uuid",
-          "primaryKey": false,
-          "notNull": true
-        },
-        "created_at": {
-          "name": "created_at",
-          "type": "timestamp with time zone",
-          "primaryKey": false,
-          "notNull": true,
-          "default": "now()"
-        },
-        "updated_at": {
-          "name": "updated_at",
-          "type": "timestamp with time zone",
-          "primaryKey": false,
-          "notNull": true,
-          "default": "now()"
-        },
-        "rule_id": {
-          "name": "rule_id",
-          "type": "uuid",
-          "primaryKey": false,
-          "notNull": true
-        },
-        "planning_area_id": {
-          "name": "planning_area_id",
-          "type": "uuid",
-          "primaryKey": false,
-          "notNull": true
-        }
-      },
-      "indexes": {
-        "notification_rule_area_planning_area_id_idx": {
-          "name": "notification_rule_area_planning_area_id_idx",
-          "columns": [
-            {
-              "expression": "company_id",
-              "isExpression": false,
-              "asc": true,
-              "nulls": "last"
-            },
-            {
-              "expression": "planning_area_id",
-              "isExpression": false,
-              "asc": true,
-              "nulls": "last"
-            }
-          ],
-          "isUnique": false,
-          "concurrently": false,
-          "method": "btree",
-          "with": {}
-        }
-      },
-      "foreignKeys": {
-        "notification_rule_area_company_id_fk": {
-          "name": "notification_rule_area_company_id_fk",
-          "tableFrom": "notification_rule_area",
-          "tableTo": "company",
-          "schemaTo": "wms",
-          "columnsFrom": [
-            "company_id"
-          ],
-          "columnsTo": [
-            "id"
-          ],
-          "onDelete": "no action",
-          "onUpdate": "no action"
-        },
-        "notification_rule_area_project_id_fk": {
-          "name": "notification_rule_area_project_id_fk",
-          "tableFrom": "notification_rule_area",
-          "tableTo": "project",
-          "schemaTo": "wms",
-          "columnsFrom": [
-            "company_id",
-            "project_id"
-          ],
-          "columnsTo": [
-            "company_id",
-            "id"
-          ],
-          "onDelete": "no action",
-          "onUpdate": "no action"
-        },
-        "notification_rule_area_rule_id_fk": {
-          "name": "notification_rule_area_rule_id_fk",
-          "tableFrom": "notification_rule_area",
-          "tableTo": "notification_rule",
-          "schemaTo": "wms",
-          "columnsFrom": [
-            "company_id",
-            "project_id",
-            "rule_id"
-          ],
-          "columnsTo": [
-            "company_id",
-            "project_id",
-            "id"
-          ],
-          "onDelete": "no action",
-          "onUpdate": "no action"
-        },
-        "notification_rule_area_planning_area_id_fk": {
-          "name": "notification_rule_area_planning_area_id_fk",
-          "tableFrom": "notification_rule_area",
-          "tableTo": "planning_area",
-          "schemaTo": "wms",
-          "columnsFrom": [
-            "company_id",
-            "project_id",
-            "planning_area_id"
-          ],
-          "columnsTo": [
-            "company_id",
-            "project_id",
-            "id"
-          ],
-          "onDelete": "no action",
-          "onUpdate": "no action"
-        }
-      },
-      "compositePrimaryKeys": {},
-      "uniqueConstraints": {
-        "notification_rule_area_rule_id_planning_area_id_key": {
-          "name": "notification_rule_area_rule_id_planning_area_id_key",
-          "nullsNotDistinct": false,
-          "columns": [
-            "company_id",
-            "rule_id",
-            "planning_area_id"
-          ]
-        }
-      },
-      "policies": {},
-      "checkConstraints": {},
       "isRLSEnabled": false
     },
     "wms.pre_trip_check": {

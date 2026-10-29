@@ -11,6 +11,7 @@ import Link from "next/link"
 import { notFound } from "next/navigation"
 
 import { DropOffMapLoader } from "@/components/public/drop-off-map-loader"
+import { ProjectFooter, ProjectMark } from "@/components/public/project-brand"
 import { PublicNav } from "@/components/public/public-nav"
 import { Badge } from "@/components/ui/badge"
 import { doorFor, readDropOffPoints } from "@/lib/public/door"
@@ -35,7 +36,7 @@ export async function DropOffPage({ params, searchParams }: DropOffPageProps) {
 
   if (answer.kind !== "ok") {
     return (
-      <main className="min-h-svh bg-background">
+      <main className="public-page min-h-svh bg-background">
         <div className="mx-auto w-full max-w-3xl px-4 py-10 sm:py-16">
           <p role="status" className="rounded-lg border border-border bg-muted/40 p-4 text-sm text-foreground">
             {answer.kind === "too-many" ? COPY.tooMany(answer.retryAfterSeconds) : COPY.unavailable}
@@ -51,12 +52,10 @@ export async function DropOffPage({ params, searchParams }: DropOffPageProps) {
   const { project, fraction: named, points, truncated } = answer.body
   const language = project.language
   return (
-    <main className="min-h-svh bg-background">
+    <main className="public-page min-h-svh bg-background">
       <div className="mx-auto w-full max-w-3xl px-4 py-10 sm:py-16">
         <header className="space-y-2">
-          <p lang={language} className="text-sm font-medium text-muted-foreground">
-            {project.name}
-          </p>
+          <ProjectMark project={project} />
           <h1 className="text-3xl font-semibold tracking-tight text-foreground">{COPY.title}</h1>
           <p className="text-base text-muted-foreground">{COPY.intro}</p>
           <PublicNav slug={slug} current="drop-off" />
@@ -97,6 +96,7 @@ export async function DropOffPage({ params, searchParams }: DropOffPageProps) {
             </ul>
           </>
         )}
+        <ProjectFooter project={project} />
       </div>
     </main>
   )
