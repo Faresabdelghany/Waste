@@ -82,6 +82,12 @@ export const APPLICATION_STATUSES = ["received", "in-review", "decided", "withdr
 export const APPLICATION_CHANNELS = ["phone", "email", "letter", "counter", "portal"] as const
 /** A Decision's outcome. */
 export const DECISION_OUTCOMES = ["granted", "partly-granted", "refused"] as const
+/** What a Tank Installation is (M11 of #293): a septic tank that settles sludge before an outlet, a holding tank with no outlet that is emptied whole, a small treatment plant, or a grease separator. */
+export const TANK_KINDS = ["septic-tank", "holding-tank", "small-treatment-plant", "grease-separator"] as const
+/** Where a Tank Installation lets its water out: a soakaway, a sand filter, a watercourse, the sewer, or nowhere — a holding tank's. */
+export const TANK_OUTLETS = ["soakaway", "sand-filter", "watercourse", "sewer", "none"] as const
+/** What a Tank Inspection found: nothing to say, remarks, defects to put right, or a tank that fails. */
+export const TANK_INSPECTION_OUTCOMES = ["approved", "remarks", "defects", "failed"] as const
 
 export type CustomerKind = (typeof CUSTOMER_KINDS)[number]
 export type CustomerStatus = (typeof CUSTOMER_STATUSES)[number]
@@ -110,6 +116,9 @@ export type ApplicationKind = (typeof APPLICATION_KINDS)[number]
 export type ApplicationStatus = (typeof APPLICATION_STATUSES)[number]
 export type ApplicationChannel = (typeof APPLICATION_CHANNELS)[number]
 export type DecisionOutcome = (typeof DECISION_OUTCOMES)[number]
+export type TankKind = (typeof TANK_KINDS)[number]
+export type TankOutlet = (typeof TANK_OUTLETS)[number]
+export type TankInspectionOutcome = (typeof TANK_INSPECTION_OUTCOMES)[number]
 export type WasteTreatment = (typeof WASTE_TREATMENTS)[number]
 
 /** Every list of this module by its name, for a test that walks them and for a reader looking for the whole vocabulary at once. */
@@ -142,4 +151,7 @@ export const REGISTRY_VOCABULARIES = {
   APPLICATION_STATUSES,
   APPLICATION_CHANNELS,
   DECISION_OUTCOMES,
+  TANK_KINDS,
+  TANK_OUTLETS,
+  TANK_INSPECTION_OUTCOMES,
 } as const satisfies Record<string, readonly [string, ...string[]]>

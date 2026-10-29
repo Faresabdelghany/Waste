@@ -37,14 +37,16 @@
 // — `arrival`, `completion`, `skip`, `failure`, `problem` about a stop,
 // `route-started` and `route-ended` about the route, so what the device said
 // when it started and ended the day is a row and not a discarded body — four
-// kinds of evidence, and `correction`, the dispatcher's audited change of an
+// kinds of evidence and the litres a tank was emptied of (`volume`, M11 of #293),
+// and `correction`, the dispatcher's audited change of an
 // outcome; execution/proof-shapes.ts says what each carries.
 // `DRIVER_COMMAND_KINDS` is the prototype's ten driver actions less
 // `retry-sync` (the device's, not a command) and `reschedule-stop` (a
 // Ticket's), plus `arrive`, the four evidence commands, `record-unload`, and
 // `pause`/`resume` in place of breaks, and `record-positions`, where the
 // vehicle was while the session ran (O8 of #290), and `pre-trip-check`, a
-// vehicle's walk-round before or during the day (O13 of #290). `COMMAND_OUTCOMES` is what the receipt
+// vehicle's walk-round before or during the day (O13 of #290), and
+// `record-volume`, the litres a tank was emptied of (M11 of #293). `COMMAND_OUTCOMES` is what the receipt
 // stores; `replayed` is the wire's word for the first outcome answered again
 // and is never stored. `OUTBOX_KINDS` and `OUTBOX_AGGREGATES` are the events
 // the outbox carries and what each is about: the table is Execution's and its
@@ -82,11 +84,11 @@ export const BULKY_BOOKING_STATUSES = ["booked", "routed", "collected", "cancell
 /** Why a route was cancelled (O5 of #290): the office's eight, then the one the system writes when a run no longer plans the route. */
 export const ROUTE_CANCEL_REASON_CODES = ["vehicle-breakdown", "crew-unavailable", "weather", "road-closure", "holiday", "duplicate", "merged", "other", "regeneration"] as const
 /** What a Proof of Service is: seven driver events — five about a stop, two about the route — four kinds of evidence, and the dispatcher's correction. */
-export const PROOF_KINDS = ["arrival", "completion", "skip", "failure", "problem", "route-started", "route-ended", "photo", "weight", "signature", "note", "correction"] as const
+export const PROOF_KINDS = ["arrival", "completion", "skip", "failure", "problem", "route-started", "route-ended", "photo", "weight", "volume", "signature", "note", "correction"] as const
 /** Who recorded a proof or an unload. */
 export const EXECUTION_SOURCES = ["driver-app", "dispatch", "integration"] as const
 /** What a driver's device may say, one contract each. */
-export const DRIVER_COMMAND_KINDS = ["start-route", "arrive", "complete-pickup", "skip-pickup", "fail-pickup", "report-problem", "add-photo", "add-weight", "add-signature", "add-note", "record-unload", "pause", "resume", "end-route", "record-positions", "pre-trip-check"] as const
+export const DRIVER_COMMAND_KINDS = ["start-route", "arrive", "complete-pickup", "skip-pickup", "fail-pickup", "report-problem", "add-photo", "add-weight", "add-signature", "add-note", "record-unload", "pause", "resume", "end-route", "record-positions", "pre-trip-check", "record-volume"] as const
 /** How a driver read the code that confirms a stop's container (O19 of #290): the phone's camera reading a barcode, or the code typed in — off the bin's label, or off a hand-held RFID reader's screen. */
 export const IDENTIFICATION_METHODS = ["camera", "typed"] as const
 /** What the receipt stores of a command; a replay answers the stored one again and stores nothing. */

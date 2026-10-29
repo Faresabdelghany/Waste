@@ -52,12 +52,12 @@ describe("the Execution vocabulary's own rules", () => {
     )
   })
 
-  test("the proof kinds are seven driver events — five about a stop, two about the route — four kinds of evidence and the correction", () => {
-    assert.deepEqual([...vocabulary.PROOF_KINDS], ["arrival", "completion", "skip", "failure", "problem", "route-started", "route-ended", "photo", "weight", "signature", "note", "correction"])
+  test("the proof kinds are seven driver events — five about a stop, two about the route — five kinds of evidence and the correction", () => {
+    assert.deepEqual([...vocabulary.PROOF_KINDS], ["arrival", "completion", "skip", "failure", "problem", "route-started", "route-ended", "photo", "weight", "volume", "signature", "note", "correction"])
   })
 
-  test("the sixteen command kinds leave out the device's retry and the Ticket's reschedule, and the receipt stores two outcomes", () => {
-    assert.equal(vocabulary.DRIVER_COMMAND_KINDS.length, 16)
+  test("the seventeen command kinds leave out the device's retry and the Ticket's reschedule, and the receipt stores two outcomes", () => {
+    assert.equal(vocabulary.DRIVER_COMMAND_KINDS.length, 17)
     for (const notACommand of ["retry-sync", "reschedule-stop", "start-break", "end-break"]) {
       assert.equal((vocabulary.DRIVER_COMMAND_KINDS as readonly string[]).includes(notACommand), false, notACommand)
     }

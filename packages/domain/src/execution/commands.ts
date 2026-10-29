@@ -68,7 +68,7 @@ export type Located = { location?: FlatPoint; accuracyM?: number }
 /** A code the driver read off the bin to confirm the stop's container (O19 of #290), and how it was read. */
 export type Identification = { code: string; method: IdentificationMethod }
 
-/** The bodies of the sixteen commands, as their contracts parse them. */
+/** The bodies of the seventeen commands, as their contracts parse them. */
 export type CommandBodies = {
   "start-route": Located & { vehicleId: string; trailerId?: string; appVersion?: string }
   /** An arrival, which may confirm the stop's container by the code read off it (O19 of #290). */
@@ -89,6 +89,8 @@ export type CommandBodies = {
   "record-positions": { points: PositionFix[] }
   /** A vehicle's walk-round (O13 of #290): every item of its type's checklist answered, and what the dashboard reads where the driver gave it. */
   "pre-trip-check": Located & { vehicleId: string; items: CheckAnswer[]; odometerKm?: number; engineHours?: number }
+  /** The litres a tank was emptied of at the stop (M11 of #293). */
+  "record-volume": { pickupId: string; volumeLitres: number }
 }
 
 /** One command as the device sent it: the envelope and the body its kind parsed. */
@@ -185,6 +187,7 @@ export type ProofDraft = {
   reason: PickupReason | null
   note: string | null
   weightKg: number | null
+  volumeLitres: number | null
   objectKey: string | null
   location: FlatPoint | null
   locationAccuracyM: number | null
@@ -325,6 +328,7 @@ function proof(command: Command, kind: ProofKind, fields: Partial<Omit<ProofDraf
     reason: fields.reason ?? null,
     note: fields.note ?? null,
     weightKg: fields.weightKg ?? null,
+    volumeLitres: fields.volumeLitres ?? null,
     objectKey: fields.objectKey ?? null,
     location: fields.location ?? null,
     locationAccuracyM: fields.accuracyM ?? null,
@@ -406,6 +410,8 @@ export function decide(command: Command, driver: CommandDriver, state: Lookups, 
     }
     case "add-weight":
       return { apply: [{ kind: "append-proof", proof: proof(command, "weight", { pickupId: pickup?.id, weightKg: command.body.weightKg }) }] }
+    case "record-volume":
+      return { apply: [{ kind: "append-proof", proof: proof(command, "volume", { pickupId: pickup?.id, volumeLitres: command.body.volumeLitres }) }] }
     case "add-note":
       return { apply: [{ kind: "append-proof", proof: proof(command, "note", { pickupId: pickup?.id, note: command.body.note }) }] }
     case "record-unload": {

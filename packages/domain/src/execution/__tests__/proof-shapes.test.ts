@@ -5,9 +5,9 @@ import { PROOF_SHAPES, proofShape, proofShapeIssue, type ProofRow } from "../pro
 import { CODED_PROOF_KINDS, EXECUTION_SOURCES, PROOF_KINDS, type ProofKind } from "../vocabulary"
 
 /** A row with every column given, from the driver's device. */
-const full: ProofRow = { pickupId: "pickup", reason: "inaccessible", objectKey: "c/r/k.jpg", weightKg: 148, outcome: "failed", note: "Gate locked", source: "driver-app" }
+const full: ProofRow = { pickupId: "pickup", reason: "inaccessible", objectKey: "c/r/k.jpg", weightKg: 148, volumeLitres: 2800, outcome: "failed", note: "Gate locked", source: "driver-app" }
 /** A row with nothing given but the source. */
-const bare: ProofRow = { pickupId: null, reason: null, objectKey: null, weightKg: null, outcome: null, note: null, source: "driver-app" }
+const bare: ProofRow = { pickupId: null, reason: null, objectKey: null, weightKg: null, volumeLitres: null, outcome: null, note: null, source: "driver-app" }
 
 /** The one row of each kind that carries exactly what the kind requires and nothing it forbids, from the source it may come from. */
 const exemplar = (kind: ProofKind): ProofRow => {
@@ -17,6 +17,7 @@ const exemplar = (kind: ProofKind): ProofRow => {
     reason: shape.reason === "none" ? null : "inaccessible",
     objectKey: shape.objectKey === "none" ? null : "c/r/k.jpg",
     weightKg: shape.weightKg === "none" ? null : 148,
+    volumeLitres: shape.volumeLitres === "none" ? null : 2800,
     outcome: shape.outcome === "none" ? null : "failed",
     note: shape.note === "none" ? null : "Gate locked",
     source: shape.source === "dispatch" ? "dispatch" : "driver-app",
@@ -24,7 +25,7 @@ const exemplar = (kind: ProofKind): ProofRow => {
 }
 
 describe("PROOF_SHAPES", () => {
-  test("spells the twelve kinds: what each names, carries, forbids and comes from", () => {
+  test("spells the thirteen kinds: what each names, carries, forbids and comes from", () => {
     assert.deepEqual(Object.keys(PROOF_SHAPES).sort(), [...PROOF_KINDS].sort())
     const requires = (kind: ProofKind) => Object.entries(PROOF_SHAPES[kind]).filter(([, presence]) => presence === "required").map(([column]) => column)
     const forbids = (kind: ProofKind) => Object.entries(PROOF_SHAPES[kind]).filter(([, presence]) => presence === "none").map(([column]) => column)
@@ -38,23 +39,25 @@ describe("PROOF_SHAPES", () => {
     // Two about the route and never a stop, carrying a note and a place if the device gave them and nothing else.
     for (const kind of ["route-started", "route-ended"] as const) {
       assert.deepEqual(requires(kind), [])
-      assert.deepEqual(forbids(kind), ["pickup", "reason", "objectKey", "weightKg", "outcome"], kind)
+      assert.deepEqual(forbids(kind), ["pickup", "reason", "objectKey", "weightKg", "volumeLitres", "outcome"], kind)
     }
-    // Four kinds of evidence, each carrying its own and nothing else's.
+    // Five kinds of evidence, each carrying its own and nothing else's: the fifth, the litres a tank was emptied of (M11 of #293).
     assert.deepEqual(requires("photo"), ["objectKey"])
     assert.deepEqual(requires("signature"), ["pickup", "objectKey"])
     assert.deepEqual(requires("weight"), ["pickup", "weightKg"])
+    assert.deepEqual(requires("volume"), ["pickup", "volumeLitres"])
     assert.deepEqual(requires("note"), ["note"])
     // The dispatcher's correction.
     assert.deepEqual(requires("correction"), ["pickup", "outcome", "note"])
     assert.equal(PROOF_SHAPES.correction.source, "dispatch")
     assert.equal(PROOF_SHAPES.correction.reason, "any", "the outcome's reason, which the contracts hold to a skip or a failure")
     // An arrival and a completion carry neither reason nor key nor weight; nothing but a photo or a signature carries a key, nothing but a weight a weight.
-    assert.deepEqual(forbids("arrival"), ["reason", "objectKey", "weightKg", "outcome"])
-    assert.deepEqual(forbids("completion"), ["reason", "objectKey", "weightKg", "outcome"])
+    assert.deepEqual(forbids("arrival"), ["reason", "objectKey", "weightKg", "volumeLitres", "outcome"])
+    assert.deepEqual(forbids("completion"), ["reason", "objectKey", "weightKg", "volumeLitres", "outcome"])
     for (const kind of PROOF_KINDS) {
       assert.equal(PROOF_SHAPES[kind].objectKey === "required", kind === "photo" || kind === "signature", kind)
       assert.equal(PROOF_SHAPES[kind].weightKg === "required", kind === "weight", kind)
+      assert.equal(PROOF_SHAPES[kind].volumeLitres === "required", kind === "volume", kind)
       assert.equal(PROOF_SHAPES[kind].outcome === "required", kind === "correction", kind)
       assert.equal(PROOF_SHAPES[kind].source === "dispatch", kind === "correction", kind)
     }
@@ -83,10 +86,12 @@ describe("proofShape", () => {
     assert.equal(proofShape("failure", exemplar("skip")), true)
     assert.equal(proofShape("skip", exemplar("photo")), false)
     assert.equal(proofShape("weight", exemplar("signature")), false)
+    assert.equal(proofShape("weight", exemplar("volume")), false)
+    assert.equal(proofShape("volume", exemplar("weight")), false)
   })
 
   test("each column set or unset against its kind's rule, one column at a time, over every kind: the sentence names the column", () => {
-    const columns = ["reason", "objectKey", "weightKg", "outcome", "note"] as const
+    const columns = ["reason", "objectKey", "weightKg", "volumeLitres", "outcome", "note"] as const
     for (const kind of PROOF_KINDS) {
       const shape = PROOF_SHAPES[kind]
       for (const column of columns) {

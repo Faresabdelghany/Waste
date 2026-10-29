@@ -163,7 +163,7 @@ describe("decide: start-route", () => {
   test("a ready route starts: the session opens with the command's id, the actual assignment is the body's, a route-started proof keeps where the device stood, and route-started is worth an event", () => {
     assert.deepEqual(applied(decide(start({ trailerId: TRAILER, appVersion: "1.4.0", location: point, accuracyM: 12 }), mads, readyToStart(), clock)), [
       { kind: "start-route", sessionId: COMMAND, vehicleId: VEHICLE, trailerId: TRAILER, appVersion: "1.4.0", at: EARLIER },
-      { kind: "append-proof", proof: { id: COMMAND, kind: "route-started", pickupId: null, occurredAt: EARLIER, reason: null, note: null, weightKg: null, objectKey: null, location: point, locationAccuracyM: 12 } },
+      { kind: "append-proof", proof: { id: COMMAND, kind: "route-started", pickupId: null, occurredAt: EARLIER, reason: null, note: null, weightKg: null, volumeLitres: null, objectKey: null, location: point, locationAccuracyM: 12 } },
       { kind: "event", event: "route-started", aggregate: "route", aggregateId: ROUTE },
     ])
     const bare = applied(decide(start(), mads, readyToStart({ trailer: undefined }), clock))
@@ -239,7 +239,7 @@ describe("decide: every later command", () => {
 
   test("end-route appends a route-ended proof with the note and the place, closes the route, its session and its open pickups in one effect, and is worth route-completed; the applier emits one pickup-skipped per pickup it closed", () => {
     assert.deepEqual(applied(decide(command("end-route", { note: "Done for today", location: point, accuracyM: 6 }), mads, running(), clock)), [
-      { kind: "append-proof", proof: { id: COMMAND, kind: "route-ended", pickupId: null, occurredAt: EARLIER, reason: null, note: "Done for today", weightKg: null, objectKey: null, location: point, locationAccuracyM: 6 } },
+      { kind: "append-proof", proof: { id: COMMAND, kind: "route-ended", pickupId: null, occurredAt: EARLIER, reason: null, note: "Done for today", weightKg: null, volumeLitres: null, objectKey: null, location: point, locationAccuracyM: 6 } },
       { kind: "end-route", at: EARLIER },
       { kind: "event", event: "route-completed", aggregate: "route", aggregateId: ROUTE },
     ])
@@ -274,7 +274,7 @@ describe("decide: the pickup", () => {
 
   test("complete, skip and fail decide a planned pickup's outcome: the proof, the status with its reason, and the event", () => {
     assert.deepEqual(applied(decide(command("complete-pickup", { pickupId: PICKUP, note: "Two bins", location: point, accuracyM: 8 }), mads, running(), clock)), [
-      { kind: "append-proof", proof: { id: COMMAND, kind: "completion", pickupId: PICKUP, occurredAt: EARLIER, reason: null, note: "Two bins", weightKg: null, objectKey: null, location: point, locationAccuracyM: 8 } },
+      { kind: "append-proof", proof: { id: COMMAND, kind: "completion", pickupId: PICKUP, occurredAt: EARLIER, reason: null, note: "Two bins", weightKg: null, volumeLitres: null, objectKey: null, location: point, locationAccuracyM: 8 } },
       { kind: "pickup-outcome", pickupId: PICKUP, status: "completed", reason: null, at: EARLIER },
       { kind: "event", event: "pickup-completed", aggregate: "pickup", aggregateId: PICKUP },
     ])
@@ -303,7 +303,7 @@ describe("decide: the pickup", () => {
 
   test("arrive appends its proof and sets arrived_at once; a second arrival appends and moves nothing, whatever the pickup's status", () => {
     assert.deepEqual(applied(decide(command("arrive", { pickupId: PICKUP, location: point, accuracyM: 12 }), mads, running(), clock)), [
-      { kind: "append-proof", proof: { id: COMMAND, kind: "arrival", pickupId: PICKUP, occurredAt: EARLIER, reason: null, note: null, weightKg: null, objectKey: null, location: point, locationAccuracyM: 12 } },
+      { kind: "append-proof", proof: { id: COMMAND, kind: "arrival", pickupId: PICKUP, occurredAt: EARLIER, reason: null, note: null, weightKg: null, volumeLitres: null, objectKey: null, location: point, locationAccuracyM: 12 } },
       { kind: "arrive", pickupId: PICKUP, at: EARLIER },
     ])
     assert.equal(applied(decide(command("arrive", { pickupId: PICKUP }), mads, running({ pickup: pickup({ arrivedAt: "2026-10-05T07:00:00.000Z" }) }), clock)).length, 1)
@@ -328,7 +328,7 @@ describe("decide: the pickup", () => {
 
   test("report-problem moves no status: a problem proof, and an event about the pickup, or about the route when none is named", () => {
     assert.deepEqual(applied(decide(command("report-problem", { pickupId: PICKUP, reason: "safety", note: "Dog loose" }), mads, running({ pickup: pickup({ status: "completed" }) }), clock)), [
-      { kind: "append-proof", proof: { id: COMMAND, kind: "problem", pickupId: PICKUP, occurredAt: EARLIER, reason: "safety", note: "Dog loose", weightKg: null, objectKey: null, location: null, locationAccuracyM: null } },
+      { kind: "append-proof", proof: { id: COMMAND, kind: "problem", pickupId: PICKUP, occurredAt: EARLIER, reason: "safety", note: "Dog loose", weightKg: null, volumeLitres: null, objectKey: null, location: null, locationAccuracyM: null } },
       { kind: "event", event: "pickup-problem-reported", aggregate: "pickup", aggregateId: PICKUP },
     ])
     const onRoute = applied(decide(command("report-problem", { reason: "other", note: "Road closed" }), mads, running(), clock))
@@ -338,13 +338,16 @@ describe("decide: the pickup", () => {
 
   test("weight, signature and note are proofs and nothing else; a note or a photo may stand on the route", () => {
     assert.deepEqual(applied(decide(command("add-weight", { pickupId: PICKUP, weightKg: 148 }), mads, running(), clock)), [
-      { kind: "append-proof", proof: { id: COMMAND, kind: "weight", pickupId: PICKUP, occurredAt: EARLIER, reason: null, note: null, weightKg: 148, objectKey: null, location: null, locationAccuracyM: null } },
+      { kind: "append-proof", proof: { id: COMMAND, kind: "weight", pickupId: PICKUP, occurredAt: EARLIER, reason: null, note: null, weightKg: 148, volumeLitres: null, objectKey: null, location: null, locationAccuracyM: null } },
+    ])
+    assert.deepEqual(applied(decide(command("record-volume", { pickupId: PICKUP, volumeLitres: 2800 }), mads, running(), clock)), [
+      { kind: "append-proof", proof: { id: COMMAND, kind: "volume", pickupId: PICKUP, occurredAt: EARLIER, reason: null, note: null, weightKg: null, volumeLitres: 2800, objectKey: null, location: null, locationAccuracyM: null } },
     ])
     assert.deepEqual(applied(decide(command("add-signature", { pickupId: PICKUP, objectKey: KEY }), mads, running(), clock)), [
-      { kind: "append-proof", proof: { id: COMMAND, kind: "signature", pickupId: PICKUP, occurredAt: EARLIER, reason: null, note: null, weightKg: null, objectKey: KEY, location: null, locationAccuracyM: null } },
+      { kind: "append-proof", proof: { id: COMMAND, kind: "signature", pickupId: PICKUP, occurredAt: EARLIER, reason: null, note: null, weightKg: null, volumeLitres: null, objectKey: KEY, location: null, locationAccuracyM: null } },
     ])
     assert.deepEqual(applied(decide(command("add-note", { note: "Key under the mat" }), mads, running(), clock)), [
-      { kind: "append-proof", proof: { id: COMMAND, kind: "note", pickupId: null, occurredAt: EARLIER, reason: null, note: "Key under the mat", weightKg: null, objectKey: null, location: null, locationAccuracyM: null } },
+      { kind: "append-proof", proof: { id: COMMAND, kind: "note", pickupId: null, occurredAt: EARLIER, reason: null, note: "Key under the mat", weightKg: null, volumeLitres: null, objectKey: null, location: null, locationAccuracyM: null } },
     ])
     assert.equal((applied(decide(command("add-photo", { objectKey: KEY }), mads, running(), clock))[0] as { proof: { pickupId: string | null } }).proof.pickupId, null)
   })
