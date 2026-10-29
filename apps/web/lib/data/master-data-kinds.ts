@@ -1,13 +1,13 @@
-// The five kinds of operational master data and the one rule that says
+// The six kinds of operational master data and the one rule that says
 // which kind a record is (Issue #176, slice 2 of #81; the contaminant codes
-// joined with M5 of #293). A leaf on purpose:
+// joined with M5 of #293, the decommission reasons with O30 of #290). A leaf on purpose:
 // business-links reads it to route a record's link, the adapters own by it,
 // the generic workspace filters pickers by it, and none of them may pull the
 // pane's forms or the fixture registry in with it.
 import type { BusinessRecord } from "./business-modules"
 
-/** The five kinds, as the typed `kind` value spells them. */
-export const MASTER_DATA_KINDS = ["waste-fraction", "container-type", "service-frequency", "vehicle-type", "contaminant-code"] as const
+/** The six kinds, as the typed `kind` value spells them. */
+export const MASTER_DATA_KINDS = ["waste-fraction", "container-type", "service-frequency", "vehicle-type", "contaminant-code", "decommission-reason"] as const
 export type MasterDataKind = (typeof MASTER_DATA_KINDS)[number]
 
 /** The typed value a row carries its kind under. */
@@ -30,6 +30,7 @@ export const MASTER_DATA_KIND_DETAILS: Readonly<Record<MasterDataKind, MasterDat
   "service-frequency": { prefix: "frequency", recordKind: "Service frequency", label: "Service frequency", plural: "Service frequencies" },
   "vehicle-type": { prefix: "vehicle-type", recordKind: "Vehicle type", label: "Vehicle type", plural: "Vehicle types" },
   "contaminant-code": { prefix: "contaminant-code", recordKind: "Contaminant code", label: "Contaminant code", plural: "Contaminant codes" },
+  "decommission-reason": { prefix: "decommission-reason", recordKind: "Decommission reason", label: "Decommission reason", plural: "Decommission reasons" },
 }
 
 export const isMasterDataKind = (value: unknown): value is MasterDataKind => typeof value === "string" && (MASTER_DATA_KINDS as readonly string[]).includes(value)
@@ -56,6 +57,7 @@ export function masterDataKindOf(record: Pick<BusinessRecord, "id"> & Partial<Pi
  */
 export function masterDataKindForField(fieldId: string): MasterDataKind | null {
   if (/contaminant/i.test(fieldId)) return "contaminant-code"
+  if (/decommission/i.test(fieldId)) return "decommission-reason"
   if (/fraction/i.test(fieldId)) return "waste-fraction"
   if (/vehicle.?type/i.test(fieldId)) return "vehicle-type"
   if (/container.?type/i.test(fieldId)) return "container-type"

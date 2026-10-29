@@ -29,6 +29,7 @@
 import type { ContainerType, ServiceFrequency, WasteFraction } from "@waste/contracts/catalogue"
 import type { VehicleTypeConsumptionSet } from "@waste/contracts/emissions"
 import type { ContaminantCode } from "@waste/contracts/pickup-exceptions"
+import type { DecommissionReason } from "@waste/contracts/stock"
 import type { VehicleType, VehicleTypeCreate } from "@waste/contracts/vehicle-types"
 
 import { FIXTURE_COMPANY_ID, type BusinessRecord } from "@/lib/data/business-modules"
@@ -422,15 +423,44 @@ export const contaminantCodeAdapter: ResourceAdapter<ContaminantCode> = {
   },
 }
 
+/** Why a container is scrapped (O30 of #290): a code set once, a name, and a status that retires it from new decommissions. */
+export const decommissionReasonAdapter: ResourceAdapter<DecommissionReason> = {
+  prefix: MASTER_DATA_KIND_DETAILS["decommission-reason"].prefix,
+  auditTable: "decommission_reason",
+  owns: (record) => masterDataKindOf(record) === "decommission-reason",
+  // The status is a field of the form, not a lifecycle move: retiring a reason is an edit.
+  statuses: undefined,
+  list: (client) => listAll<DecommissionReason>(client, "/decommission-reasons"),
+  toRecord: (reason, context) => recordOf("decommission-reason", reason, { name: reason.name, key: reason.code, status: reason.status }, context),
+  toCreateBody: (record) => {
+    const refused = firstRefusal("decommission-reason", record)
+    if (refused) return refused
+    const fields = fieldsOf("decommission-reason", record)
+    return { code: fields.key, name: fields.name, status: fields.status ?? "active" }
+  },
+  toPatchBody: (before, after) => {
+    if (rekinded("decommission-reason", after)) return refusal("kind", "A row keeps its kind")
+    if (fieldsOf("decommission-reason", before).key !== fieldsOf("decommission-reason", after).key) return refusal("key", "The code is set once: a decommission reason that needs another code is another reason")
+    const refused = firstRefusal("decommission-reason", after)
+    if (refused) return refused
+    return patchOf(before, after, (record) => {
+      const read = fieldsOf("decommission-reason", record)
+      return { name: read.name || record.name, status: read.status ?? "active" }
+    })
+  },
+  create: (client, body) => create<DecommissionReason>(client, "/decommission-reasons", body).then((created) => created.body),
+  update: (client, serverId, body) => patch<DecommissionReason>(client, `/decommission-reasons/${serverId}`, body),
+}
+
 // ---------------------------------------------------------------------------
 // The module
 // ---------------------------------------------------------------------------
 
-/** Settings → Operations → Master data, and the module the fixture pickers point at: the container types before the vehicle types that name them, the fractions before the contaminant codes that name them. */
+/** Settings → Operations → Master data, and the module the fixture pickers point at: the container types before the vehicle types that name them, the fractions before the contaminant codes that name them, and the decommission reasons (O30 of #290). */
 export const masterDataModule: ServerModule = {
   workspaceId: MASTER_DATA_MODULE.workspaceId,
   moduleId: MASTER_DATA_MODULE.moduleId,
-  resources: [wasteFractionAdapter, containerTypeAdapter, serviceFrequencyAdapter, vehicleTypeAdapter, contaminantCodeAdapter],
+  resources: [wasteFractionAdapter, containerTypeAdapter, serviceFrequencyAdapter, vehicleTypeAdapter, contaminantCodeAdapter, decommissionReasonAdapter],
 }
 
 export type { Client }

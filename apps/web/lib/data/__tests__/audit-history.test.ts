@@ -8,7 +8,7 @@ import { describe, test } from "node:test"
 
 import type { AuditEvent } from "@waste/contracts/audit"
 
-import { historyEntriesOf } from "../audit-history"
+import { companyHistoryEntriesOf, historyEntriesOf } from "../audit-history"
 
 const AGREEMENT = "0199a000-0000-7000-8000-000000000001"
 const CUSTOMER = "0199a000-0000-7000-8000-000000000002"
@@ -131,5 +131,46 @@ describe("a row's history", () => {
       { label: "Weekdays", before: '["mon"]', after: '["mon","thu"]' },
       { label: "Location", before: null, after: '{"type":"Point","coordinates":[12.5,55.7]}' },
     ])
+  })
+})
+
+// The company's whole history (Settings › Privacy, audit & retention on the
+// Pilot): no row is the subject, so each line names the row it is about, and
+// a set's row the row it belongs to where its own name is not held.
+describe("the company's history", () => {
+  const readCompany = (events: AuditEvent[]) => companyHistoryEntriesOf(events, { nameOf: (id) => names.get(id), when: (at) => `at ${at.slice(11, 16)}` })
+
+  test("a create or a delete names its table and its row, with no columns", () => {
+    const entries = readCompany([
+      event({ transactionId: "2", table: "customer", rowId: CUSTOMER, action: "insert", changed: { name: [null, "Østerbro Boligselskab"] } }),
+      event({ transactionId: "1", table: "customer", rowId: OTHER_CUSTOMER, action: "delete", changed: {} }),
+    ])
+    assert.deepEqual(
+      entries.map((entry) => entry.lines),
+      [[{ what: "Created customer Østerbro Boligselskab", changes: [] }], [{ what: "Deleted customer Nordhavn Ejendomme", changes: [] }]],
+    )
+  })
+
+  test("a change lists the columns that moved, a reference by the row it names, and a row the store does not hold by its table alone", () => {
+    const [entry] = readCompany([event({ transactionId: "5", reason: "New payer", changed: { payer_customer_id: [CUSTOMER, OTHER_CUSTOMER] } })])
+    assert.deepEqual(entry, {
+      key: "5",
+      when: "at 08:30",
+      who: "Mette Holm",
+      reason: "New payer",
+      lines: [{ what: "Changed agreement", changes: [{ label: "Payer customer", before: "Østerbro Boligselskab", after: "Nordhavn Ejendomme" }] }],
+    })
+  })
+
+  test("a set's row is named by the row it belongs to, and one request's rows are one entry", () => {
+    const entries = readCompany([
+      event({ transactionId: "9", table: "subscription", rowId: SUBSCRIPTION, parentTable: "agreement", parentId: CUSTOMER, action: "insert", changed: { quantity: [null, 1] } }),
+      event({ transactionId: "9", table: "product", rowId: PRODUCT, changed: { name: ["Bin", "240 L bin emptying"] } }),
+    ])
+    assert.equal(entries.length, 1)
+    assert.deepEqual(
+      entries[0].lines.map((line) => line.what),
+      ["Added subscription of agreement Østerbro Boligselskab", "Changed product 240 L bin emptying"],
+    )
   })
 })

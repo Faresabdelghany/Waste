@@ -37,8 +37,11 @@
 // `customers.contacts`'s and nothing here widens that. The writes are
 // property-writes.ts's, which the CSV import runs too.
 import { Property, PropertyCreate, PropertyListQuery, PropertyPartiesSet, PropertyPatch } from "@waste/contracts/customers"
+import type { FlatPoint } from "@waste/contracts/geojson"
 import { Page } from "@waste/contracts/pagination"
+import { PlanningAreasAt, PlanningAreasAtQuery } from "@waste/contracts/planning-areas"
 import type { Tx } from "@waste/db/client"
+import { planningAreasAt } from "@waste/db/query/zones"
 import { property, propertyParty } from "@waste/db/schema/customers"
 import { and, asc, eq, exists, gt } from "drizzle-orm"
 import { Hono, type MiddlewareHandler } from "hono"
@@ -50,7 +53,9 @@ import { requireGrant } from "../auth/require"
 import { afterCursor, fetchLimit, pageOf } from "../pagination"
 import { describeProblem, validate } from "../problem"
 import { foundAddress } from "./addresses"
+import { projectToday } from "./fleet-lookups"
 import { entriesOf } from "./members"
+import { areaOf } from "./planning-areas"
 import {
   createProperty,
   findProperty,
@@ -63,6 +68,7 @@ import {
   noSuchProperty,
   setPropertyParties,
 } from "./property-writes"
+import type { ClockOptions } from "./scheme-groups"
 import { created, describeCreated, describeJson, IdParam } from "./shared"
 
 const MODULE = "customers.properties"
@@ -84,7 +90,7 @@ const heldBy = (tx: Tx, companyId: string, customerId: string) =>
   )
 
 /** `lookup` reads a body's `addressId` from the address register before the guard opens the request's transaction (routes/addresses.ts, #291 C13). */
-export function propertyRoutes(guard: MiddlewareHandler<AuthEnv>, lookup: MiddlewareHandler) {
+export function propertyRoutes(guard: MiddlewareHandler<AuthEnv>, lookup: MiddlewareHandler, { now = () => new Date() }: ClockOptions = {}) {
   return new Hono<AuthEnv>()
     .get(
       "/properties",
@@ -182,6 +188,40 @@ export function propertyRoutes(guard: MiddlewareHandler<AuthEnv>, lookup: Middle
         const row = await findProperty(tx, principal, id)
         if (row === undefined) throw noSuchProperty(id)
         return c.json(await propertyWithParties(tx, principal.companyId, row))
+      },
+    )
+    .get(
+      "/properties/:id/zones",
+      describeRoute({
+        operationId: "listPropertyZones",
+        summary: "The zones a property lies in",
+        description:
+          "The address → zone read (O29 of #290): the planning areas of the property's project whose boundary in force on `on` contains the property's point, in code order. Two areas may overlap, so a property can lie in several; an area with no boundary in force on the day holds nothing. `on` defaults to today on the project's clock and `purpose` to `notification`, the citizens' zones; another purpose asks the same of route-planning or service-operations areas. A property with no point yet lies in none. The property's collection days are read through its subscriptions, not its zones.",
+        security: BEARER_SECURITY,
+        responses: {
+          200: describeJson("The areas the property lies in on the day, in code order; none when it has no point or no area holds it.", PlanningAreasAt),
+          400: describeProblem("The path does not hold an id, `on` is not a day, or `purpose` is not one of the three."),
+          401: describeProblem("No usable token (see WWW-Authenticate)."),
+          403: describeProblem("No active account here, or the caller's role does not allow `view` on `customers.properties`."),
+          404: describeProblem("No property with that id in the projects this account works in."),
+        },
+      }),
+      guard,
+      requireGrant(MODULE, "view"),
+      validate("param", IdParam),
+      validate("query", PlanningAreasAtQuery),
+      async (c) => {
+        const { id } = c.req.valid("param")
+        const { on, purpose } = c.req.valid("query")
+        const tx = c.get("tx")
+        const principal = c.get("principal")
+        const row = await findProperty(tx, principal, id)
+        if (row === undefined) throw noSuchProperty(id)
+        const scope = { companyId: principal.companyId, projectId: row.projectId }
+        const day = on ?? (await projectToday(tx, scope, now)())
+        const location = row.location as FlatPoint | null
+        const rows = location === null ? [] : await planningAreasAt(tx, scope, location.coordinates, day, purpose)
+        return c.json({ on: day, purpose, items: rows.map(areaOf) } satisfies PlanningAreasAt)
       },
     )
     .patch(

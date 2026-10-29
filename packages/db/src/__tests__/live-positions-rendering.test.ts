@@ -23,7 +23,7 @@ import { tenantFence } from "../sql/tenant-fence"
 import { checksOf, oneOfCheck, ref } from "./rendering"
 import { statementsFor } from "./specimen"
 
-/** The receipt's kinds as of this file: today's less `pre-trip-check`, which migration 0066 added (O13 of #290). */
+/** The receipt's kinds as of this file: today's less `pre-trip-check`, which migration 0075 added (O13 of #290). */
 const KINDS_AS_OF_0060 = DRIVER_COMMAND_KINDS.filter((kind) => kind !== "pre-trip-check")
 
 const alter = (statement: string): string => `ALTER TABLE "wms"."driver_command" ${statement};`

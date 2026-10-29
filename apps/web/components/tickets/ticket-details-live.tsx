@@ -6,7 +6,8 @@
 // dialog agree. Each inline row is one door of the API's: priority, kind and
 // due are the case's patch while the ticket is open; the status moves by the
 // command buttons, each offered where the domain's machine would move the
-// ticket (`offersTicketCommand`); the assignee by `assign`; the source, the
+// ticket (`offersTicketCommand`); the assignee by `assign`; the team (O30 of
+// #290) by the patch, among the active teams and None; the source, the
 // project and the links are read-only. A link is the linked row's name with
 // its way there where its module has loaded the row, its id chip otherwise.
 // The composer writes a comment, an internal note unless said to be the
@@ -33,7 +34,7 @@ import { Input } from "@/components/ui/input"
 import { Popover, PopoverContent, PopoverTrigger } from "@/components/ui/popover"
 import { Textarea } from "@/components/ui/textarea"
 import { BusinessRecordFormDialog } from "@/components/waste/business-record-form-dialog"
-import { useBusinessRecordStore, useServerModuleState, whenSaved } from "@/components/waste/business-record-store"
+import { useBusinessRecordStore, useModuleRecords, useServerModuleState, whenSaved } from "@/components/waste/business-record-store"
 import { ProofObject } from "@/components/waste/commands/route-surfaces"
 import { useCommandRunner, useRelationPickers, useRowHistory, useServerNames } from "@/components/waste/commands/use-command-support"
 import { useProofObjectLinks } from "@/components/waste/commands/use-proof-object-links"
@@ -73,6 +74,7 @@ import { getBusinessModuleHref } from "@/lib/data/business-links"
 import type { BusinessFormValues } from "@/lib/data/business-form-types"
 import type { BusinessRecord, ModuleLocation } from "@/lib/data/business-modules"
 import { CONTACTS_MODULE, NO_ONE, PROPERTIES_MODULE, SHARED_POINTS_MODULE } from "@/lib/data/properties"
+import { TICKET_TEAMS_MODULE } from "@/lib/data/ticket-teams"
 import { bookableRoutes, bookAStopWaits, bookStopForm, bookStopInput, bookStopValues, offersBookAStop } from "@/lib/data/ticket-stops"
 import { ACCESS_MODULE, createTicketRecord, offersSubTicket, replyWithEvidenceForm, subTicketsOf, subTicketValues, TICKET_COMMAND_FORMS, TICKET_EDIT_FORM, TICKET_FORM, updateTicketRecord, type TicketCommandWithForm } from "@/lib/data/tickets"
 import { cn } from "@/lib/utils"
@@ -168,6 +170,7 @@ export function LiveTicketDetailsDialog({ record, onClose }: { record: BusinessR
   const [changes, setChanges] = useState(0)
   const reads = useRowHistory(workspaceId, moduleId, live, version + changes, readTicket)
   const userName = useServerNames(ACCESS_MODULE, "user")
+  const teams = useModuleRecords(TICKET_TEAMS_MODULE.workspaceId, TICKET_TEAMS_MODULE.moduleId, NO_TEAMS)
   const aboutAStop = typeof live.submittedValues?.pickupId === "string" && live.submittedValues.pickupId !== ""
   const evidenceRead = useRowHistory(workspaceId, moduleId, live, `${version + changes}:${aboutAStop}`, aboutAStop ? readEvidence : NO_EVIDENCE)
   const evidence = evidenceRead.rows === null ? undefined : evidenceRead.rows[0]
@@ -432,6 +435,14 @@ export function LiveTicketDetailsDialog({ record, onClose }: { record: BusinessR
                       )}
                     </span>
                   </Row>
+                  <OptionRow
+                    label="Team"
+                    value={value("teamId") || NO_ONE}
+                    shown={live.facts.Team ?? "No team"}
+                    options={teamOptions(teams.records, value("teamId"))}
+                    disabled={!editable || !teams.ready}
+                    onPick={(teamId) => save({ teamId }, teamId === NO_ONE ? "Team cleared" : "Ticket handed to the team")}
+                  />
                   <Row label="Opened via" value={live.facts["Opened via"] ?? ""} />
                   <Row label="Project" value={live.facts.Project ?? ""} />
                 </div>
@@ -691,6 +702,50 @@ function Row({ label, value, children }: { label: string; value: string; childre
 }
 
 /** A field of a closed list, changed in place: the patch of that one field. */
+const NO_TEAMS: readonly BusinessRecord[] = []
+
+/** The teams a ticket may be handed to: None, the active ones, and the one it waits with whatever its status. */
+function teamOptions(records: readonly BusinessRecord[], current: string): { value: string; label: string }[] {
+  const offered = records.filter((record) => record.status === "Active" || record.id === current)
+  return [{ value: NO_ONE, label: "No team" }, ...offered.map((record) => ({ value: record.id, label: record.name }))]
+}
+
+/** A row whose value is one of a list of named options, picked in place: the team. */
+function OptionRow({ label, value, shown, options, disabled, onPick }: { label: string; value: string; shown: string; options: readonly { value: string; label: string }[]; disabled: boolean; onPick: (value: string) => void }) {
+  const [open, setOpen] = useState(false)
+  return (
+    <div className="grid grid-cols-[120px_minmax(0,1fr)] items-center gap-3 py-1.5 text-sm">
+      <span className="text-muted-foreground">{label}</span>
+      <Popover open={open} onOpenChange={setOpen}>
+        <PopoverTrigger asChild>
+          <button type="button" disabled={disabled} aria-label={`Change ${label}`} className="min-h-8 rounded-md px-2 py-1.5 text-right font-medium hover:bg-accent disabled:opacity-60">
+            {shown}
+          </button>
+        </PopoverTrigger>
+        <PopoverContent align="end" className="!z-[100] w-56 p-1">
+          <div role="listbox" aria-label={label}>
+            {options.map((option) => (
+              <button
+                key={option.value}
+                type="button"
+                role="option"
+                aria-selected={option.value === value}
+                className={cn("flex w-full items-center rounded-sm px-2 py-1.5 text-left text-sm hover:bg-accent", option.value === value && "font-semibold")}
+                onClick={() => {
+                  setOpen(false)
+                  if (option.value !== value) onPick(option.value)
+                }}
+              >
+                {option.label}
+              </button>
+            ))}
+          </div>
+        </PopoverContent>
+      </Popover>
+    </div>
+  )
+}
+
 function PickRow({ label, value, tokens, disabled, onPick }: { label: string; value: string; tokens: readonly string[]; disabled: boolean; onPick: (token: string) => void }) {
   const [open, setOpen] = useState(false)
   return (

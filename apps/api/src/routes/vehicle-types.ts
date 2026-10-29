@@ -152,6 +152,64 @@ async function findType(tx: Tx, principal: Principal, id: string): Promise<Row |
   return row
 }
 
+// The writes the routes and the catalogue's CSV import (routes/import-rows.ts,
+// O30 of #290) share, so an imported row is held to every rule a form's is.
+
+/** Adds a vehicle type with the container types it starts out servicing, each held to the company. */
+export async function createVehicleType(tx: Tx, principal: Principal, body: VehicleTypeCreate): Promise<VehicleType> {
+  const { containerTypeIds, ...values } = body
+  await containerTypes.require(tx, principal.companyId, containerTypeIds)
+  const [row] = await refuseDuplicate({ [KEY_TAKEN]: keyTaken(values.key), [NAME_TAKEN]: nameTaken(values.name) }, () =>
+    tx
+      .insert(vehicleType)
+      .values({ ...values, id: newId(), companyId: principal.companyId })
+      .returning(columns),
+  )
+  await writeIds(tx, containerTypes, { companyId: principal.companyId, id: row.id }, containerTypeIds)
+  // The set just written is known — held to the company, each id once — so it is answered in read order and not read back.
+  // A new type burns nothing yet and asks no check: its consumption and its checklist are their own routes'.
+  return typeOf(row, asRead(containerTypeIds), [], [])
+}
+
+/** Changes the name or the description of one vehicle type of the caller's company; the 404 where there is none. */
+export async function patchVehicleType(tx: Tx, principal: Principal, id: string, patch: VehicleTypePatch): Promise<VehicleType> {
+  const sentences: Record<string, string> = patch.name === undefined ? {} : { [NAME_TAKEN]: nameTaken(patch.name) }
+  const [row] = await refuseDuplicate(sentences, () =>
+    tx
+      .update(vehicleType)
+      .set(patch)
+      .where(and(scope(principal), eq(vehicleType.id, id)))
+      .returning(columns),
+  )
+  if (row === undefined) throw noSuchType(id)
+  return await typeWithContainerTypes(tx, principal.companyId, row)
+}
+
+/** Replaces the container types a vehicle of one type services, each held to the company; the 404 where there is no type. */
+export async function replaceVehicleTypeContainerTypes(tx: Tx, principal: Principal, id: string, containerTypeIds: readonly string[]): Promise<VehicleType> {
+  const row = await replaceIdSet(tx, containerTypes, principal.companyId, containerTypeIds, (stamped) =>
+    tx
+      .update(vehicleType)
+      .set(stamped)
+      .where(and(scope(principal), eq(vehicleType.id, id)))
+      .returning(columns),
+  )
+  if (row === undefined) throw noSuchType(id)
+  // The consumption and the checklist are the type's own, untouched by its container types: read with the answer.
+  const [consumption, checklist] = await Promise.all([consumptionsOf(tx, principal.companyId, [row.id]), checklistsOf(tx, principal.companyId, [row.id])])
+  return typeOf(row, asRead(containerTypeIds), consumption.get(row.id) ?? [], checklist.get(row.id) ?? [])
+}
+
+/** The company's vehicle type with this key, with its container types, or undefined. */
+export async function vehicleTypeByKey(tx: Tx, companyId: string, key: string): Promise<VehicleType | undefined> {
+  const [row] = await tx
+    .select(columns)
+    .from(vehicleType)
+    .where(and(eq(vehicleType.companyId, companyId), eq(vehicleType.key, key)))
+    .limit(1)
+  return row === undefined ? undefined : await typeWithContainerTypes(tx, companyId, row)
+}
+
 export function vehicleTypeRoutes(guard: MiddlewareHandler<AuthEnv>) {
   return new Hono<AuthEnv>()
     .get(
@@ -212,22 +270,7 @@ export function vehicleTypeRoutes(guard: MiddlewareHandler<AuthEnv>) {
       guard,
       requireGrant(MODULE, "create"),
       validate("json", VehicleTypeCreate),
-      async (c) => {
-        const { containerTypeIds, ...values } = c.req.valid("json")
-        const tx = c.get("tx")
-        const principal = c.get("principal")
-        await containerTypes.require(tx, principal.companyId, containerTypeIds)
-        const [row] = await refuseDuplicate({ [KEY_TAKEN]: keyTaken(values.key), [NAME_TAKEN]: nameTaken(values.name) }, () =>
-          tx
-            .insert(vehicleType)
-            .values({ ...values, id: newId(), companyId: principal.companyId })
-            .returning(columns),
-        )
-        await writeIds(tx, containerTypes, { companyId: principal.companyId, id: row.id }, containerTypeIds)
-        // The set just written is known — held to the company, each id once — so it is answered in read order and not read back.
-        // A new type burns nothing yet: its consumption is its own route's.
-        return created(c, "/vehicle-types", typeOf(row, asRead(containerTypeIds), [], []))
-      },
+      async (c) => created(c, "/vehicle-types", await createVehicleType(c.get("tx"), c.get("principal"), c.req.valid("json"))),
     )
     .get(
       "/vehicle-types/:id",
@@ -278,22 +321,7 @@ export function vehicleTypeRoutes(guard: MiddlewareHandler<AuthEnv>) {
       requireGrant(MODULE, "edit"),
       validate("param", IdParam),
       validate("json", VehicleTypePatch),
-      async (c) => {
-        const { id } = c.req.valid("param")
-        const patch = c.req.valid("json")
-        const tx = c.get("tx")
-        const principal = c.get("principal")
-        const sentences: Record<string, string> = patch.name === undefined ? {} : { [NAME_TAKEN]: nameTaken(patch.name) }
-        const [row] = await refuseDuplicate(sentences, () =>
-          tx
-            .update(vehicleType)
-            .set(patch)
-            .where(and(scope(principal), eq(vehicleType.id, id)))
-            .returning(columns),
-        )
-        if (row === undefined) throw noSuchType(id)
-        return c.json(await typeWithContainerTypes(tx, principal.companyId, row))
-      },
+      async (c) => c.json(await patchVehicleType(c.get("tx"), c.get("principal"), c.req.valid("param").id, c.req.valid("json"))),
     )
     .put(
       "/vehicle-types/:id/container-types",
@@ -317,23 +345,7 @@ export function vehicleTypeRoutes(guard: MiddlewareHandler<AuthEnv>) {
       requireGrant(MODULE, "edit"),
       validate("param", IdParam),
       validate("json", VehicleTypeContainerTypesSet),
-      async (c) => {
-        const { id } = c.req.valid("param")
-        const { containerTypeIds } = c.req.valid("json")
-        const tx = c.get("tx")
-        const principal = c.get("principal")
-        const row = await replaceIdSet(tx, containerTypes, principal.companyId, containerTypeIds, (stamped) =>
-          tx
-            .update(vehicleType)
-            .set(stamped)
-            .where(and(scope(principal), eq(vehicleType.id, id)))
-            .returning(columns),
-        )
-        if (row === undefined) throw noSuchType(id)
-        // The consumption and the checklist are the type's own, untouched by its container types: read with the answer.
-        const [consumption, checklist] = await Promise.all([consumptionsOf(tx, principal.companyId, [row.id]), checklistsOf(tx, principal.companyId, [row.id])])
-        return c.json(typeOf(row, asRead(containerTypeIds), consumption.get(row.id) ?? [], checklist.get(row.id) ?? []))
-      },
+      async (c) => c.json(await replaceVehicleTypeContainerTypes(c.get("tx"), c.get("principal"), c.req.valid("param").id, c.req.valid("json").containerTypeIds)),
     )
     .put(
       "/vehicle-types/:id/consumption",

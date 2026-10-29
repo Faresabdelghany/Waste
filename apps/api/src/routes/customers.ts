@@ -139,7 +139,7 @@ export function customerRoutes(guard: MiddlewareHandler<AuthEnv>) {
           401: describeProblem("No usable token (see WWW-Authenticate)."),
           403: describeProblem("No active account here, or the caller's role does not allow `edit` on `customers.contacts`."),
           404: describeProblem("No customer with that id in this company."),
-          409: describeProblem("The company already has another customer with that registration number."),
+          409: describeProblem("The company already has another customer with that registration number, or an organisation with active contact persons is made a person."),
         },
       }),
       guard,

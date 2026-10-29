@@ -97,6 +97,7 @@ const MASTER_KIND_BY_FIELD: Readonly<Record<string, MasterDataKind>> = {
   deliveryFractionId: "waste-fraction",
   plannedFraction: "waste-fraction",
   serviceFrequencyId: "service-frequency",
+  decommissionReasonId: "decommission-reason",
 }
 
 /** A row as a picker offers it: its name, and its status beside it where the status says something. */

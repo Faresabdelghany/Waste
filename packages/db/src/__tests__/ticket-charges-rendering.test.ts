@@ -9,7 +9,7 @@
 // below them the new table's fence, its `updated_at` trigger and its audit
 // trigger — a set of its project, read under `commercial.products`. The file
 // is found by its name, not its number, which it takes at its turn.
-// Migration 0066 (O13 of #290) grew the kinds by `vehicle-defect`, so the file
+// Migration 0075 (O13 of #290) grew the kinds by `vehicle-defect`, so the file
 // is held to the list as it was then (`asOfThisFile`) and
 // pre-trip-rendering.test.ts pins the replacement. No database.
 import assert from "node:assert/strict"
@@ -43,7 +43,7 @@ const CHARGE_SHAPE = `${ref("ticket", "charge_product_id")} is null or (${ref("t
 
 const generated = () => statementsBetween({ ...referenced, ticket: ticketAsOf("0031") }, { ...referenced, ticket: ticketAsOf("0033"), ticketKindProduct })
 
-/** A statement as this file spells it: the kind's list as it was before 0066 added `vehicle-defect`. */
+/** A statement as this file spells it: the kind's list as it was before 0075 added `vehicle-defect`. */
 const asOfThisFile = (statement: string): string => statement.replace(list(...TICKET_KINDS), list(...TICKET_KINDS.filter((kind) => kind !== "vehicle-defect")))
 
 /** The migration, by its name: it takes its number at its turn. */

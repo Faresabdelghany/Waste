@@ -2,11 +2,11 @@
 -- (`pre_trip_checklist_item`), the checks a driver's `pre-trip-check` appends
 -- (`pre_trip_check`, a ledger), and the defects a check finds
 -- (`vehicle_defect`); the driver command's kind grown by `pre-trip-check`, and
--- a ticket's kind — with the two checks that read it, an SLA's and a ticket
--- charge's — by `vehicle-defect`. Below drizzle-kit's statements: each
--- table's fence, the ledger's revoke from the API role, the two current-state
--- tables' triggers and their audit trails. No row present changes meaning: no
--- receipt or ticket holds a new kind yet.
+-- a ticket's kind — with the three checks that read it, an SLA's, a team
+-- default's and a ticket charge's — by `vehicle-defect`. Below drizzle-kit's
+-- statements: each table's fence, the ledger's revoke from the API role, the
+-- two current-state tables' triggers and their audit trails. No row present
+-- changes meaning: no receipt or ticket holds a new kind yet.
 CREATE TABLE "wms"."pre_trip_check" (
 	"id" uuid PRIMARY KEY DEFAULT wms.uuidv7() NOT NULL,
 	"company_id" uuid NOT NULL,
@@ -67,6 +67,7 @@ CREATE TABLE "wms"."vehicle_defect" (
 ALTER TABLE "wms"."driver_command" DROP CONSTRAINT "driver_command_kind_one_of";--> statement-breakpoint
 ALTER TABLE "wms"."ticket" DROP CONSTRAINT "ticket_kind_one_of";--> statement-breakpoint
 ALTER TABLE "wms"."ticket_sla" DROP CONSTRAINT "ticket_sla_kind_one_of";--> statement-breakpoint
+ALTER TABLE "wms"."ticket_team_default" DROP CONSTRAINT "ticket_team_default_kind_one_of";--> statement-breakpoint
 ALTER TABLE "wms"."ticket_kind_product" DROP CONSTRAINT "ticket_kind_product_ticket_kind_one_of";--> statement-breakpoint
 ALTER TABLE "wms"."pre_trip_check" ADD CONSTRAINT "pre_trip_check_company_id_fk" FOREIGN KEY ("company_id") REFERENCES "wms"."company"("id") ON DELETE no action ON UPDATE no action;--> statement-breakpoint
 ALTER TABLE "wms"."pre_trip_check" ADD CONSTRAINT "pre_trip_check_project_id_fk" FOREIGN KEY ("company_id","project_id") REFERENCES "wms"."project"("company_id","id") ON DELETE no action ON UPDATE no action;--> statement-breakpoint
@@ -95,6 +96,7 @@ CREATE INDEX "vehicle_defect_resolved_by_idx" ON "wms"."vehicle_defect" USING bt
 ALTER TABLE "wms"."driver_command" ADD CONSTRAINT "driver_command_kind_one_of" CHECK ("wms"."driver_command"."kind" in ('start-route', 'arrive', 'complete-pickup', 'skip-pickup', 'fail-pickup', 'report-problem', 'add-photo', 'add-weight', 'add-signature', 'add-note', 'record-unload', 'pause', 'resume', 'end-route', 'record-positions', 'pre-trip-check'));--> statement-breakpoint
 ALTER TABLE "wms"."ticket" ADD CONSTRAINT "ticket_kind_one_of" CHECK ("wms"."ticket"."kind" in ('missed-collection', 'overflow', 'access-issue', 'container-request', 'container-defect', 'proof-follow-up', 'complaint', 'reported-problem', 'rejected-command', 'internal-task', 'vehicle-defect', 'other'));--> statement-breakpoint
 ALTER TABLE "wms"."ticket_sla" ADD CONSTRAINT "ticket_sla_kind_one_of" CHECK ("wms"."ticket_sla"."kind" in ('missed-collection', 'overflow', 'access-issue', 'container-request', 'container-defect', 'proof-follow-up', 'complaint', 'reported-problem', 'rejected-command', 'internal-task', 'vehicle-defect', 'other'));--> statement-breakpoint
+ALTER TABLE "wms"."ticket_team_default" ADD CONSTRAINT "ticket_team_default_kind_one_of" CHECK ("wms"."ticket_team_default"."kind" in ('missed-collection', 'overflow', 'access-issue', 'container-request', 'container-defect', 'proof-follow-up', 'complaint', 'reported-problem', 'rejected-command', 'internal-task', 'vehicle-defect', 'other'));--> statement-breakpoint
 ALTER TABLE "wms"."ticket_kind_product" ADD CONSTRAINT "ticket_kind_product_ticket_kind_one_of" CHECK ("wms"."ticket_kind_product"."ticket_kind" in ('missed-collection', 'overflow', 'access-issue', 'container-request', 'container-defect', 'proof-follow-up', 'complaint', 'reported-problem', 'rejected-command', 'internal-task', 'vehicle-defect', 'other'));
 --> statement-breakpoint
 ALTER TABLE "wms"."pre_trip_check" ENABLE ROW LEVEL SECURITY, FORCE ROW LEVEL SECURITY;
