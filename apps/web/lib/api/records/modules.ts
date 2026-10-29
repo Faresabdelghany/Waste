@@ -17,6 +17,7 @@ import { moduleKeyOf, type ServerModule } from "./adapter"
 import { agreementsModule } from "./agreements"
 import { applicationsModule } from "./applications"
 import { bulkyBookingsModule } from "./bulky-bookings"
+import { inspectionsModule } from "./inspections"
 import { siteAccessModule } from "./site-access"
 import { siteVisitsModule } from "./site-visits"
 import { alertsModule } from "./alerts"
@@ -111,6 +112,8 @@ export const SERVER_MODULES: readonly ServerModule[] = [
   // The register of plates and cards (#393), after the customers, the properties and the agreements its holders name.
   siteAccessModule,
   containersModule,
+  // The field inspections (M23 of #293), after the containers and the properties they are of; they name no route.
+  inspectionsModule,
   inventoryModule,
   vehiclePlanningModule,
   serviceAreasModule,

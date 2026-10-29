@@ -60,7 +60,10 @@
 // O17 of #290 added
 // @waste/domain/route-schemes/seasons: route-schemes.ts reads the month-day
 // pattern the database's checks read, and the overlap rule of a scheme's
-// seasons. O21 of #290 added @waste/domain/planning/lifecycle: route-schemes.ts
+// seasons. M23 of #293 added @waste/domain/inspections/vocabulary and
+// @waste/domain/inspections/rules: field-inspections.ts reads an
+// inspection's lists, holds its verdict to its findings and a photo to the
+// bucket's formats. O21 of #290 added @waste/domain/planning/lifecycle: route-schemes.ts
 // reads the Plan Ahead window's bounds the database's check reads. O8 of
 // #290 added @waste/domain/execution/positions: driver-commands.ts bounds a
 // `record-positions` by the batch the Driver App closes, one spelling. C13
@@ -109,6 +112,8 @@ definePurityTests({
     "@waste/domain/finance/payments",
     "@waste/domain/finance/vocabulary",
     "@waste/domain/imports/vocabulary",
+    "@waste/domain/inspections/rules",
+    "@waste/domain/inspections/vocabulary",
     "@waste/domain/insight/sustainability",
     "@waste/domain/insight/vocabulary",
     "@waste/domain/messaging/template",

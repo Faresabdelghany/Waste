@@ -1,5 +1,5 @@
 // The Driver App's commands (Issue #145, decided on #125; O1, O2, O8 and O13
-// of #290): the driver door's sixteen kinds, each an
+// of #290, M23 of #293): the driver door's seventeen kinds, each an
 // envelope of `@waste/contracts/driver-commands`, imported as a type only, so
 // no zod reaches the browser (CLAUDE.md, contracts). The door parses each
 // body against its kind and answers a shape mistake as that command's
@@ -35,10 +35,11 @@ export const PILOT_COMMAND_KINDS = [
   "add-signature",
   "record-positions",
   "pre-trip-check",
+  "record-fill",
 ] as const
 export type PilotCommandKind = (typeof PILOT_COMMAND_KINDS)[number]
 
-/** One of the sixteen, as the door takes it: `{ id, kind, routeId, occurredAt, deviceId, body }`. */
+/** One of the seventeen, as the door takes it: `{ id, kind, routeId, occurredAt, deviceId, body }`. */
 export type PilotCommand = Extract<DriverCommand, { kind: PilotCommandKind }>
 
 /** The kinds whose command names an object in Storage (O1 of #290): its bytes are put there before the command is sent, under the key the API names. */
@@ -63,8 +64,8 @@ export const NOTE_MAX = 2000
 /** The body a kind takes. */
 export type PilotBody<Kind extends PilotCommandKind> = Extract<PilotCommand, { kind: Kind }>["body"]
 
-/** The kinds whose strict bodies take no position: `pause` and `resume` carry nothing at all, a weight and a note only themselves, and `record-positions` its fixes, each with its own (O8 of #290). */
-const WITHOUT_LOCATION: ReadonlySet<PilotCommandKind> = new Set(["pause", "resume", "add-weight", "add-note", "record-positions"])
+/** The kinds whose strict bodies take no position: `pause` and `resume` carry nothing at all, a weight, a note and a fill estimate only themselves, and `record-positions` its fixes, each with its own (O8 of #290). */
+const WITHOUT_LOCATION: ReadonlySet<PilotCommandKind> = new Set(["pause", "resume", "add-weight", "add-note", "record-fill", "record-positions"])
 
 /** Whether the kind's body takes the tap's position. */
 export function takesLocation(kind: PilotCommandKind): boolean {

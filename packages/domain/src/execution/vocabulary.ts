@@ -44,7 +44,8 @@
 // Ticket's), plus `arrive`, the four evidence commands, `record-unload`, and
 // `pause`/`resume` in place of breaks, and `record-positions`, where the
 // vehicle was while the session ran (O8 of #290), and `pre-trip-check`, a
-// vehicle's walk-round before or during the day (O13 of #290). `COMMAND_OUTCOMES` is what the receipt
+// vehicle's walk-round before or during the day (O13 of #290), and
+// `record-fill`, how full a stop's container was (M23 of #293). `COMMAND_OUTCOMES` is what the receipt
 // stores; `replayed` is the wire's word for the first outcome answered again
 // and is never stored. `OUTBOX_KINDS` and `OUTBOX_AGGREGATES` are the events
 // the outbox carries and what each is about: the table is Execution's and its
@@ -86,7 +87,9 @@ export const PROOF_KINDS = ["arrival", "completion", "skip", "failure", "problem
 /** Who recorded a proof or an unload. */
 export const EXECUTION_SOURCES = ["driver-app", "dispatch", "integration"] as const
 /** What a driver's device may say, one contract each. */
-export const DRIVER_COMMAND_KINDS = ["start-route", "arrive", "complete-pickup", "skip-pickup", "fail-pickup", "report-problem", "add-photo", "add-weight", "add-signature", "add-note", "record-unload", "pause", "resume", "end-route", "record-positions", "pre-trip-check"] as const
+export const DRIVER_COMMAND_KINDS = ["start-route", "arrive", "complete-pickup", "skip-pickup", "fail-pickup", "report-problem", "add-photo", "add-weight", "add-signature", "add-note", "record-unload", "pause", "resume", "end-route", "record-positions", "pre-trip-check", "record-fill"] as const
+/** How full a container was when the driver emptied it (M23 of #293): the driver's estimate by eye, a quarter at a time, and past full. What right-sizing reads. */
+export const FILL_LEVELS = ["empty", "quarter", "half", "three-quarters", "full", "overflowing"] as const
 /** How a driver read the code that confirms a stop's container (O19 of #290): the phone's camera reading a barcode, or the code typed in — off the bin's label, or off a hand-held RFID reader's screen. */
 export const IDENTIFICATION_METHODS = ["camera", "typed"] as const
 /** What the receipt stores of a command; a replay answers the stored one again and stores nothing. */
@@ -112,6 +115,7 @@ export type ProofKind = (typeof PROOF_KINDS)[number]
 export type ExecutionSource = (typeof EXECUTION_SOURCES)[number]
 export type DriverCommandKind = (typeof DRIVER_COMMAND_KINDS)[number]
 export type IdentificationMethod = (typeof IDENTIFICATION_METHODS)[number]
+export type FillLevel = (typeof FILL_LEVELS)[number]
 export type CommandOutcome = (typeof COMMAND_OUTCOMES)[number]
 export type UnloadRefusalReason = (typeof UNLOAD_REFUSAL_REASONS)[number]
 export type OutboxKind = (typeof OUTBOX_KINDS)[number]
@@ -194,6 +198,7 @@ export const EXECUTION_VOCABULARIES = {
   EXECUTION_SOURCES,
   DRIVER_COMMAND_KINDS,
   IDENTIFICATION_METHODS,
+  FILL_LEVELS,
   COMMAND_OUTCOMES,
   UNLOAD_REFUSAL_REASONS,
   OUTBOX_KINDS,

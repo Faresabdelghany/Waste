@@ -27,7 +27,7 @@ import { BOOKED_WITH, type BookedField } from "@waste/domain/execution/work-orde
 import * as z from "zod"
 
 import { IsoDate, IsoDateTime } from "./dates"
-import { OfficeStopService, PickupOrigin, PickupOutcome, PickupReason, PickupService, PickupStatus } from "./execution"
+import { FillLevel, OfficeStopService, PickupOrigin, PickupOutcome, PickupReason, PickupService, PickupStatus } from "./execution"
 import { Id } from "./ids"
 import { ProofOfService } from "./proofs"
 import { dayWindowIsOrdered, dayWindowOrdered, ProjectScopedListQuery } from "./queries"
@@ -95,6 +95,8 @@ export const Pickup = z.object({
   bulkyBookingId: Id.nullable().default(null),
   /** The stop this one was moved from onto its route (O23 of #290), which it stands for; null on every stop no move made, and absent on an event the outbox took before moves, which named none. */
   movedFromPickupId: Id.nullable().default(null),
+  /** How full its container was, the driver's latest estimate (M23 of #293); null where none was given, and absent on an event the outbox took before it, which carried none. */
+  fill: FillLevel.nullable().default(null),
 })
 export type Pickup = z.infer<typeof Pickup>
 

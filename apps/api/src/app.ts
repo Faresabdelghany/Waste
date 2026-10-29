@@ -62,6 +62,7 @@ import { depotRoutes } from "./routes/depots"
 import { applicationRoutes } from "./routes/applications"
 import { dropOffPointRoutes } from "./routes/drop-off-points"
 import { emissionReportRoutes } from "./routes/emissions"
+import { fieldInspectionRoutes } from "./routes/field-inspections"
 import { fuelEmissionFactorRoutes } from "./routes/fuel-emission-factors"
 import { driverDoorRoutes } from "./routes/driver"
 import { availabilityRoutes } from "./routes/availability"
@@ -352,6 +353,10 @@ export function createApp({
   app.route("/", accessCredentialRoutes(guard))
   app.route("/", siteVisitRoutes(guard, { now }))
   app.route("/", visitRuleRoutes(guard))
+  // Field inspections (M23 of #293): the office's rows under the request's transaction, and the photos' two Storage routes, like the proof objects', under `identify`.
+  const inspections = fieldInspectionRoutes(guard, identify({ pool, verifier }), { now, pool, storage, log: log ?? console.error })
+  app.route("/", inspections.routes)
+  app.route("/", inspections.objects)
   app.route(
     "/",
     publicRoutes(

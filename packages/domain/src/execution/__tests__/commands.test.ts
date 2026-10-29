@@ -18,6 +18,7 @@ import {
   NOT_A_TRAILER,
   NOT_A_VEHICLE,
   noContainerToConfirm,
+  noContainerToEstimate,
   noPickupOnRoute,
   noRouteAssigned,
   notInService,
@@ -52,6 +53,7 @@ const VEHICLE = "018f7c31-a000-7000-8000-000000000040"
 const TRAILER = "018f7c31-a000-7000-8000-000000000041"
 const STATION = "018f7c31-a000-7000-8000-000000000050"
 const FRACTION = "018f7c31-a000-7000-8000-000000000051"
+const CONTAINER = "018f7c31-a000-7000-8000-000000000022"
 const DEVICE = "device-7"
 
 const NOW = "2026-10-05T08:00:00.000Z"
@@ -69,7 +71,7 @@ const route = (status: RouteStatus, driverId: string | null = mads.id): RouteSta
   operatingDate: "2026-10-05",
 })
 const session = (over: Partial<SessionState> = {}): SessionState => ({ id: SESSION, driverId: mads.id, startedAt: "2026-10-05T06:00:00.000Z", endedAt: null, pausedAt: null, ...over })
-const pickup = (over: Partial<PickupState> = {}): PickupState => ({ id: PICKUP, position: 12, status: "planned", arrivedAt: null, ...over })
+const pickup = (over: Partial<PickupState> = {}): PickupState => ({ id: PICKUP, position: 12, status: "planned", arrivedAt: null, containerId: CONTAINER, ...over })
 const truck: VehicleState = { id: VEHICLE, label: "WH-24", kind: "powered-vehicle", status: "active", requiredLicenceClass: "c" }
 const trailer: VehicleState = { id: TRAILER, label: "WH-T3", kind: "trailer", status: "active", requiredLicenceClass: "ce" }
 
@@ -347,6 +349,19 @@ describe("decide: the pickup", () => {
       { kind: "append-proof", proof: { id: COMMAND, kind: "note", pickupId: null, occurredAt: EARLIER, reason: null, note: "Key under the mat", weightKg: null, objectKey: null, location: null, locationAccuracyM: null } },
     ])
     assert.equal((applied(decide(command("add-photo", { objectKey: KEY }), mads, running(), clock))[0] as { proof: { pickupId: string | null } }).proof.pickupId, null)
+  })
+})
+
+describe("decide: a fill estimate (M23 of #293)", () => {
+  test("sets the stop's fill, whatever its outcome, and appends nothing", () => {
+    assert.deepEqual(applied(decide(command("record-fill", { pickupId: PICKUP, fill: "overflowing" }), mads, running(), clock)), [{ kind: "estimate-fill", pickupId: PICKUP, fill: "overflowing" }])
+    assert.deepEqual(applied(decide(command("record-fill", { pickupId: PICKUP, fill: "half" }), mads, running({ pickup: pickup({ status: "completed" }) }), clock)), [{ kind: "estimate-fill", pickupId: PICKUP, fill: "half" }], "a completed stop is estimated after it is emptied")
+  })
+
+  test("is of a stop with a container, on a running route", () => {
+    assert.deepEqual(rejected(decide(command("record-fill", { pickupId: PICKUP, fill: "full" }), mads, running({ pickup: pickup({ containerId: null }) }), clock)), { status: 400, detail: noContainerToEstimate(12), errors: [{ path: "body.pickupId", message: noContainerToEstimate(12) }] })
+    assert.deepEqual(rejected(decide(command("record-fill", { pickupId: OTHER_PICKUP, fill: "full" }), mads, running(), clock)).status, 404)
+    assert.deepEqual(rejected(decide(command("record-fill", { pickupId: PICKUP, fill: "full" }), mads, running({ route: { ...running().route!, status: "ready" } }), clock)).status, 409)
   })
 })
 

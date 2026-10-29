@@ -57,7 +57,7 @@ import { isCheckIssue, judgeCheck, type CheckAnswer, type ChecklistItem, type Ch
 import type { LicenceClass, VehicleKind, VehicleStatus } from "../resources/vocabulary"
 import type { PositionFix } from "./positions"
 import { alreadyDecided, notActive, PICKUP_OUTCOME_OF, routeTransition, type PickupCommand, type PickupOutcome } from "./transitions"
-import type { DriverCommandKind, DriverPickupReason, IdentificationMethod, OutboxAggregate, OutboxKind, PickupReason, PickupStatus, ProofKind, RouteStatus, UnloadRefusalReason } from "./vocabulary"
+import type { DriverCommandKind, DriverPickupReason, FillLevel, IdentificationMethod, OutboxAggregate, OutboxKind, PickupReason, PickupStatus, ProofKind, RouteStatus, UnloadRefusalReason } from "./vocabulary"
 
 /** A point as the device recorded it: `[longitude, latitude]`. */
 export type FlatPoint = { type: "Point"; coordinates: [number, number] }
@@ -68,7 +68,7 @@ export type Located = { location?: FlatPoint; accuracyM?: number }
 /** A code the driver read off the bin to confirm the stop's container (O19 of #290), and how it was read. */
 export type Identification = { code: string; method: IdentificationMethod }
 
-/** The bodies of the sixteen commands, as their contracts parse them. */
+/** The bodies of the seventeen commands, as their contracts parse them. */
 export type CommandBodies = {
   "start-route": Located & { vehicleId: string; trailerId?: string; appVersion?: string }
   /** An arrival, which may confirm the stop's container by the code read off it (O19 of #290). */
@@ -89,6 +89,8 @@ export type CommandBodies = {
   "record-positions": { points: PositionFix[] }
   /** A vehicle's walk-round (O13 of #290): every item of its type's checklist answered, and what the dashboard reads where the driver gave it. */
   "pre-trip-check": Located & { vehicleId: string; items: CheckAnswer[]; odometerKm?: number; engineHours?: number }
+  /** How full the stop's container was (M23 of #293): the driver's estimate, the latest standing. */
+  "record-fill": { pickupId: string; fill: FillLevel }
 }
 
 /** One command as the device sent it: the envelope and the body its kind parsed. */
@@ -124,7 +126,7 @@ export type RouteState = {
 export type SessionState = { id: string; driverId: string; startedAt: string; endedAt: string | null; pausedAt: string | null }
 
 /** The pickup the body names, as read on the route. */
-export type PickupState = { id: string; position: number; status: PickupStatus; arrivedAt: string | null }
+export type PickupState = { id: string; position: number; status: PickupStatus; arrivedAt: string | null; containerId: string | null }
 
 /** A vehicle or a trailer the body names, as read in the route's project. */
 export type VehicleState = { id: string; label: string; kind: VehicleKind; status: VehicleStatus; requiredLicenceClass: LicenceClass }
@@ -237,6 +239,8 @@ export type Effect =
   /** The session's positions appended, one row per fix (O8 of #290); no event, since nothing consumes a position and a running day would flood the outbox. */
   | { kind: "append-positions"; points: PositionFix[] }
   /** The check appended (O13 of #290); where it found defects, one Vehicle Defect each, the office's ticket for them, and — where one is critical — the vehicle set to `maintenance`. */
+  /** The stop's fill estimate set (M23 of #293): a later estimate of the same stop replaces it, and no event, as no consumer reads one yet. */
+  | { kind: "estimate-fill"; pickupId: string; fill: FillLevel }
   | { kind: "append-pre-trip-check"; check: PreTripCheckDraft; defects: CheckedItem[]; grounds: boolean }
   /** An outbox event to write after the rows it describes, its payload the resource the route would answer. */
   | { kind: "event"; event: OutboxKind; aggregate: OutboxAggregate; aggregateId: string }
@@ -274,6 +278,8 @@ export const NOT_A_FRACTION = "Not a waste fraction of this company"
 export const OBJECT_KEY_NAMES_ANOTHER = "The object key names another route or another command"
 /** An arrival confirming a container at a stop that names none: an address-only stop has nothing to scan. */
 export const noContainerToConfirm = (position: number): string => `Pickup ${position} names no container to confirm`
+/** A fill estimate of a stop with no container: an address-only stop, whose sacks have no size to right-size. */
+export const noContainerToEstimate = (position: number): string => `Pickup ${position} names no container whose fill to estimate`
 /** An arrival whose code names no container of the stop: another bin, or a misread. */
 export const notTheStopsContainer = (code: string, position: number): string => `${code} is not the container of pickup ${position}`
 /** A `pre-trip-check` naming a vehicle or a trailer that is not the project's. */
@@ -406,6 +412,10 @@ export function decide(command: Command, driver: CommandDriver, state: Lookups, 
     }
     case "add-weight":
       return { apply: [{ kind: "append-proof", proof: proof(command, "weight", { pickupId: pickup?.id, weightKg: command.body.weightKg }) }] }
+    case "record-fill":
+      if (pickup === undefined) return reject(404, noPickupOnRoute(command.body.pickupId, route.label))
+      if (pickup.containerId === null) return invalid("body.pickupId", noContainerToEstimate(pickup.position))
+      return { apply: [{ kind: "estimate-fill", pickupId: pickup.id, fill: command.body.fill }] }
     case "add-note":
       return { apply: [{ kind: "append-proof", proof: proof(command, "note", { pickupId: pickup?.id, note: command.body.note }) }] }
     case "record-unload": {

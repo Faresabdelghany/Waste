@@ -45,7 +45,7 @@ import { project } from "@waste/db/schema/organisation"
 import { noRouteAssigned } from "@waste/domain/execution/commands"
 import { progressOf, type PickupCounts } from "@waste/domain/execution/progress"
 import { loadReading, onBoardByUnload } from "@waste/domain/execution/unloads"
-import type { CommandOutcome, DriverCommandKind, ExecutionSource, PickupOrigin, PickupOutcome, PickupReason, PickupService, PickupStatus, ProofKind, RouteCancelReasonCode, RouteStatus, UnloadRefusalReason } from "@waste/domain/execution/vocabulary"
+import type { CommandOutcome, DriverCommandKind, ExecutionSource, FillLevel, PickupOrigin, PickupOutcome, PickupReason, PickupService, PickupStatus, ProofKind, RouteCancelReasonCode, RouteStatus, UnloadRefusalReason } from "@waste/domain/execution/vocabulary"
 import type { WeightReviewStatus } from "@waste/domain/finance/vocabulary"
 import { and, asc, count, eq, inArray, isNull, sql, type SQL } from "drizzle-orm"
 
@@ -237,6 +237,7 @@ export const pickupColumns = {
   replacementContainerId: pickup.replacementContainerId,
   bulkyBookingId: pickup.bulkyBookingId,
   movedFromPickupId: pickup.movedFromPickupId,
+  fillLevel: pickup.fillLevel,
   createdAt: pickup.createdAt,
   updatedAt: pickup.updatedAt,
 }
@@ -267,6 +268,7 @@ export function pickupOf(row: PickupRow): Pickup {
     replacementContainerId: row.replacementContainerId,
     bulkyBookingId: row.bulkyBookingId,
     movedFromPickupId: row.movedFromPickupId,
+    fill: row.fillLevel as FillLevel | null,
     ...stampsOf(row),
   }
 }

@@ -148,7 +148,7 @@ describe("a period's line and the fleet's surfaces", () => {
       assert.equal(surface.genericEdit, true, key)
       assert.ok(surface.rowActions !== undefined, key)
     }
-    // M7 of #293: an Application is corrected by its form while undecided, beside its commands; a customer keeps its Edit beside its statement (#291 C6).
-    assert.deepEqual(Object.keys(COMMAND_SURFACES).filter((key) => COMMAND_SURFACES[key].genericEdit).sort(), ["customers.applications", "customers.contacts", "fleet.drivers", "fleet.vehicles", "resources.warehouses"], "no other surface keeps it")
+    // M7 of #293: an Application is corrected by its form while undecided, beside its commands; a customer keeps its Edit beside its statement (#291 C6); an inspection is corrected by its form while open, beside its photos and Close (M23 of #293).
+    assert.deepEqual(Object.keys(COMMAND_SURFACES).filter((key) => COMMAND_SURFACES[key].genericEdit).sort(), ["customers.applications", "customers.contacts", "fleet.drivers", "fleet.vehicles", "operate.inspections", "resources.warehouses"], "no other surface keeps it")
   })
 })

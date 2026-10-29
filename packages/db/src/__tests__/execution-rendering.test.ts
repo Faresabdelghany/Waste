@@ -94,6 +94,11 @@
 // Migration 0075 (O13 of #290) grew it again by `pre-trip-check`, so
 // `CHANGED_IN_0075` maps today's spelling onto 0060's, applied before it;
 // pre-trip-rendering.test.ts pins the statements themselves.
+//
+// Migration 0095 (M23 of #293) grew it by `record-fill` and gave the stop its
+// fill estimate, so `CHANGED_IN_0095` maps today's two spellings onto 0075's
+// and 0055's, applied before both; inspections-rendering.test.ts pins the
+// statements themselves.
 import assert from "node:assert/strict"
 import { readFile } from "node:fs/promises"
 import { join } from "node:path"
@@ -269,8 +274,8 @@ const unloadTable = (asOf: "0008" | "0010" | "0045"): string => {
 /** What 0045 changed on one of the seven (O9 of #290): the unload's CREATE TABLE as drizzle-kit generates it now onto what it generated as of 0010. Applied first; weighbridge-rendering.test.ts pins the statements themselves. */
 const CHANGED_IN_0045 = new Map([[unloadTable("0045"), unloadTable("0010")]])
 
-/** driver_command as drizzle-kit writes it today — its kind grown by `record-positions` (O8 of #290, migration 0060) and by `pre-trip-check` (O13 of #290, migration 0075) — and as it wrote it as of 0060 and 0008. */
-const driverCommandTable = (asOf: "0008" | "0060" | "0075"): string =>
+/** driver_command as drizzle-kit writes it today — its kind grown by `record-positions` (O8 of #290, migration 0060) and by `pre-trip-check` (O13 of #290, migration 0075) and by `record-fill` (M23 of #293, migration 0095) — and as it wrote it as of 0075, 0060 and 0008. */
+const driverCommandTable = (asOf: "0008" | "0060" | "0075" | "0095"): string =>
   createLedger("driver_command", [
     // Nullable: a command rejected because no such route is assigned to the driver has no route the key could check, and is still a receipt.
     '"route_id" uuid',
@@ -302,6 +307,7 @@ const driverCommandTable = (asOf: "0008" | "0060" | "0075"): string =>
       "end-route",
       ...(asOf >= "0060" ? ["record-positions"] : []),
       ...(asOf >= "0075" ? ["pre-trip-check"] : []),
+      ...(asOf >= "0095" ? ["record-fill"] : []),
     ),
     oneOfCheck("driver_command", "outcome", "applied", "rejected"),
     `CONSTRAINT "driver_command_problem_shape" CHECK ((${ref("driver_command", "outcome")} = 'rejected') = (${ref("driver_command", "problem")} is not null))`,
@@ -375,7 +381,7 @@ const routeTable = (asOf: "0008" | "0012" | "0013" | "0015" | "0016" | "0024"): 
   ])
 
 /** pickup as drizzle-kit wrote it as of 0008; as of 0016 (#111), the container nullable, the stop's origin, and the two checks over them; as of 0023 (O3 of #290), the service with its three checks and the one-stop-per-container key a partial index of its own; as of 0032 (O3b of #290), the ledger bookings; and as it writes it since 0038 (M5 of #293), the contaminant code with its shape. */
-const pickupTable = (asOf: "0008" | "0016" | "0023" | "0032" | "0038" | "0053" | "0055"): string =>
+const pickupTable = (asOf: "0008" | "0016" | "0023" | "0032" | "0038" | "0053" | "0055" | "0095"): string =>
   createTable("pickup", "project", [
     '"route_id" uuid NOT NULL',
     asOf >= "0016" ? '"container_id" uuid' : '"container_id" uuid NOT NULL',
@@ -394,11 +400,13 @@ const pickupTable = (asOf: "0008" | "0016" | "0023" | "0032" | "0038" | "0053" |
     ...(asOf >= "0038" ? ['"contaminant_code_id" uuid'] : []),
     ...(asOf >= "0053" ? ['"bulky_booking_id" uuid'] : []),
     ...(asOf >= "0055" ? ['"moved_from_route_id" uuid', '"moved_from_pickup_id" uuid'] : []),
+    ...(asOf >= "0095" ? ['"fill_level" text'] : []),
     ...(asOf < "0023" ? [uniqueKey("pickup_route_id_container_id_key", "company_id", "route_id", "container_id")] : []),
     uniqueKey("pickup_route_id_project_key", "company_id", "project_id", "route_id", "id"),
     oneOfCheck("pickup", "status", ...STATUSES),
     ...(asOf >= "0016" ? [oneOfCheck("pickup", "origin", "generation", "office")] : []),
     ...(asOf >= "0053" ? [oneOfCheck("pickup", "service", "empty", "deliver", "remove", "swap", "repair", "wash", "bulky")] : asOf >= "0023" ? [oneOfCheck("pickup", "service", "empty", "deliver", "remove", "swap", "repair", "wash")] : []),
+    ...(asOf >= "0095" ? [oneOfCheck("pickup", "fill_level", "empty", "quarter", "half", "three-quarters", "full", "overflowing")] : []),
     ...(asOf >= "0023" ? [`CONSTRAINT "pickup_service_origin_shape" CHECK (${ref("pickup", "service")} = 'empty' or ${ref("pickup", "origin")} = 'office')`] : []),
     ...(asOf >= "0053"
       ? [
@@ -497,6 +505,12 @@ const ADDED_IN_0053 = [
   index("pickup", "pickup_bulky_booking_id_idx", "company_id", "bulky_booking_id"),
 ]
 
+/** What 0095 changed on two of the seven (M23 of #293): the receipt's kind grown by `record-fill` and the stop's fill estimate, each CREATE TABLE as drizzle-kit generates it now onto what 0075 and 0055 say. Applied first of all; inspections-rendering.test.ts pins the statements themselves. */
+const CHANGED_IN_0095 = new Map([
+  [driverCommandTable("0095"), driverCommandTable("0075")],
+  [pickupTable("0095"), pickupTable("0055")],
+])
+
 /** What 0055 changed on one of the seven (O23 of #290): the pickup's CREATE TABLE as drizzle-kit generates it now onto what it generated as of 0053. Applied first, one file at a time. */
 const CHANGED_IN_0055 = new Map([[pickupTable("0055"), pickupTable("0053")]])
 
@@ -539,7 +553,7 @@ const ADDED_IN_0012 = [projectFkTo("route", "generation_run_id", "generation_run
 
 const expected = [
   routeTable("0024"),
-  pickupTable("0055"),
+  pickupTable("0095"),
   createTable("session", "project", [
     '"route_id" uuid NOT NULL',
     '"driver_id" uuid NOT NULL',
@@ -555,7 +569,7 @@ const expected = [
   ]),
   proofTable("0038"),
   unloadTable("0045"),
-  driverCommandTable("0075"),
+  driverCommandTable("0095"),
   outboxEventTable("0054"),
   companyFk("route"),
   projectFk("route"),
@@ -715,6 +729,7 @@ const handWritten = [...Object.values(tables).flatMap((table) => handWrittenStat
 const generatedHead = async (): Promise<string[]> => [
   ...(await statementsFor(tables))
     .filter((statement) => !ADDED_IN_0055.includes(statement) && !ADDED_IN_0053.includes(statement) && !ADDED_IN_0038.includes(statement) && !ADDED_IN_0032.includes(statement) && !ADDED_IN_0023.includes(statement) && !ADDED_IN_0013.includes(statement) && !ADDED_IN_0012.includes(statement))
+    .map((statement) => CHANGED_IN_0095.get(statement) ?? statement)
     .map((statement) => CHANGED_IN_0075.get(statement) ?? statement)
     .map((statement) => CHANGED_IN_0060.get(statement) ?? statement)
     .map((statement) => CHANGED_IN_0055.get(statement) ?? statement)
@@ -754,9 +769,10 @@ describe("the Execution tables as drizzle-kit writes them", () => {
     assert.deepEqual([...statements.slice(0, generated.length)].sort(), generated)
     // The statements 0038 and 0024 changed are ones the schema generates today, the one 0032 changed is what 0038 maps the pickup back to, the one 0023 changed is what 0032 maps it back to, the ones 0016 changed are what 0024 maps the route back to and 0023 the pickup, the one 0015 changed is what 0016 maps the route back to, the one 0013 changed is what 0015 maps back to, and the one 0012 changed is what 0013 maps back to — each mapping maps something, one file at a time; the same chain for 0010 and 0009.
     const today = await statementsFor(tables)
-    for (const statement of CHANGED_IN_0075.keys()) assert.ok(today.includes(statement), statement.split("\n")[0])
+    for (const statement of CHANGED_IN_0095.keys()) assert.ok(today.includes(statement), statement.split("\n")[0])
+    for (const statement of CHANGED_IN_0075.keys()) assert.ok([...CHANGED_IN_0095.values()].includes(statement), statement.split("\n")[0])
     for (const statement of CHANGED_IN_0060.keys()) assert.ok([...CHANGED_IN_0075.values()].includes(statement), statement.split("\n")[0])
-    for (const statement of CHANGED_IN_0055.keys()) assert.ok(today.includes(statement), statement.split("\n")[0])
+    for (const statement of CHANGED_IN_0055.keys()) assert.ok([...CHANGED_IN_0095.values()].includes(statement), statement.split("\n")[0])
     for (const statement of ADDED_IN_0055) assert.ok(today.includes(statement), statement)
     for (const statement of CHANGED_IN_0053.keys()) assert.ok([...CHANGED_IN_0055.values()].includes(statement), statement.split("\n")[0])
     for (const statement of ADDED_IN_0053) assert.ok(today.includes(statement), statement)
@@ -793,6 +809,7 @@ describe("the Execution tables as drizzle-kit writes them", () => {
     assert.equal(CHANGED_IN_0055.size, 1, "the stop a moved stop was moved from")
     assert.equal(CHANGED_IN_0060.size, 1, "the receipt's record-positions")
     assert.equal(CHANGED_IN_0075.size, 1, "the receipt's pre-trip-check")
+    assert.equal(CHANGED_IN_0095.size, 2, "the receipt's record-fill and the stop's fill estimate")
   })
 
   test("and carries below them the fence and trigger, or revoke, of each table, then the sync role, its grants and the publication: 7 x 3 + 3 + 17 + 1 = 42 statements", async () => {
@@ -872,6 +889,7 @@ describe("the checks of this context", () => {
       "pickup_status_one_of",
       "pickup_origin_one_of",
       "pickup_service_one_of",
+      "pickup_fill_level_one_of",
       "pickup_service_origin_shape",
       "pickup_service_container_shape",
       "pickup_bulky_shape",

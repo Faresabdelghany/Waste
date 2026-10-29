@@ -73,6 +73,7 @@ export function pickup(n: number, overrides: Partial<DriverPickup> = {}): Driver
     replacementContainerId: null,
     bulkyBookingId: null,
     movedFromPickupId: null,
+    fill: null,
     arrivedAt: null,
     outcomeAt: null,
     address: `Strandvejen ${n}, 2100 København Ø`,

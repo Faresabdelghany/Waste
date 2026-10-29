@@ -28,8 +28,11 @@ const MIGRATION = "0055_moved_stops.sql"
 
 const referenced = { company, project, route, container, property, sharedCollectionPoint, wasteFraction, subscription, warehouse, contaminantCode, bulkyBooking }
 
-/** What drizzle-kit writes for 0055: the pickup from its 0053 spelling to today's. */
-const generated = (): Promise<string[]> => statementsBetween({ ...referenced, pickup: pickupAsOf0053 }, { ...referenced, pickup })
+/** What 0095 (M23 of #293) added to the stop since: its fill estimate's column and check, each naming `fill_level`. */
+const since0055 = (statement: string): boolean => statement.includes('"fill_level"')
+
+/** What drizzle-kit writes for 0055: the pickup from its 0053 spelling to today's, less what a later file added. */
+const generated = async (): Promise<string[]> => (await statementsBetween({ ...referenced, pickup: pickupAsOf0053 }, { ...referenced, pickup })).filter((statement) => !since0055(statement))
 
 const fileStatements = async (): Promise<string[]> => statementsOf(await readFile(join(MIGRATIONS_FOLDER, MIGRATION), "utf8"))
 

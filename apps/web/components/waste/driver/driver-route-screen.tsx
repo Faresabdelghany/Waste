@@ -17,12 +17,12 @@
 // command waiting shows "Sending" until the server has answered; everything
 // else is sent and the server decides (lib/driver/route-view.ts).
 import { useEffect, useState } from "react"
-import { ArrowLeft, Barcode, Camera, CheckCircle, FlagCheckered, Info, MapPin, MapTrifold, NavigationArrow, NotePencil, Pause, Play, Scales, Signature, SkipForward, Truck, Warning, XCircle } from "@phosphor-icons/react/dist/ssr"
+import { ArrowLeft, Barcode, Camera, CheckCircle, FlagCheckered, Gauge, Info, MapPin, MapTrifold, NavigationArrow, NotePencil, Pause, Play, Scales, Signature, SkipForward, Truck, Warning, XCircle } from "@phosphor-icons/react/dist/ssr"
 
 import { Badge } from "@/components/ui/badge"
 import { Button } from "@/components/ui/button"
 import { useDriverApp, useDriverAppState } from "@/components/waste/driver/driver-app-provider"
-import { EndRouteDialog, NoteDialog, ReasonDialog, UnloadDialog, WeightDialog } from "@/components/waste/driver/driver-dialogs"
+import { EndRouteDialog, FillDialog, NoteDialog, ReasonDialog, UnloadDialog, WeightDialog } from "@/components/waste/driver/driver-dialogs"
 import { DriverFrame } from "@/components/waste/driver/driver-frame"
 import { PhotoDialog, SignatureDialog } from "@/components/waste/driver/driver-proof-dialogs"
 import { DriverLink, KeptNotice, RejectionList, operatingDay, progressLine } from "@/components/waste/driver/driver-parts"
@@ -35,6 +35,7 @@ import type { DriverAppController, Tap } from "@/lib/driver/driver-app"
 import { STOP_PHOTOS } from "@/lib/driver/proof-images"
 import { sessionRecords } from "@/lib/driver/position-recorder"
 import { DRIVER_REASON_LABELS, endRouteWarning, entriesInOrder, mapsHref, PICKUP_STATUS_LABELS, ROUTE_STATUS_LABELS, routeActions, routeMapsHref, stopActions, stopCollects, stopServices, stopsInOrder, waitingOn } from "@/lib/driver/route-view"
+import { FILL_LABELS } from "@/lib/data/fill-levels"
 
 /** A photo taken with a stop's exception goes first, then the exception: the queue sends in the order of the taps. */
 async function withPhoto(app: DriverAppController, photo: ProofBytes | null, routeId: string, pickupId: string, then: Tap): Promise<void> {
@@ -214,7 +215,7 @@ function StopCard({ detail, stop, number, service, numberOf }: { detail: DriverR
   const actions = stopActions(detail, stop, state.waiting)
   const rejections = state.rejections.filter((rejection) => rejection.pickupId === stop.id)
   const maps = mapsHref(stop.location)
-  const [dialog, setDialog] = useState<"skip" | "fail" | "report" | "note" | "weight" | "signature" | "photo" | "scan" | null>(null)
+  const [dialog, setDialog] = useState<"skip" | "fail" | "report" | "note" | "weight" | "fill" | "signature" | "photo" | "scan" | null>(null)
   const close = (open: boolean) => {
     if (!open) setDialog(null)
   }
@@ -237,6 +238,8 @@ function StopCard({ detail, stop, number, service, numberOf }: { detail: DriverR
           {stop.status === "planned" && stop.arrivedAt !== null && <Badge variant="outline">Arrived</Badge>}
           {/* Truthy, not non-null: an API from before the scan answers none at all. */}
           {stop.containerConfirmedAt ? <Badge variant="outline">Container confirmed</Badge> : null}
+          {/* Truthy, not non-null: an API from before the estimate answers none at all. */}
+          {stop.fill ? <Badge variant="outline">{FILL_LABELS[stop.fill]}</Badge> : null}
           {service !== null && <Badge variant="outline">{service}</Badge>}
           {actions.sending && <Badge variant="outline">Sending</Badge>}
         </div>
@@ -302,6 +305,13 @@ function StopCard({ detail, stop, number, service, numberOf }: { detail: DriverR
             <Scales aria-hidden />
             Weight
           </Button>
+          {/* A stop with a container is estimated (M23 of #293): what right-sizing reads; an address's sacks have no size to right-size. */}
+          {stop.containerId !== null && (
+            <Button variant="outline" className="h-11" disabled={!actions.report} onClick={() => setDialog("fill")}>
+              <Gauge aria-hidden />
+              Fill
+            </Button>
+          )}
           <Button variant="outline" className="h-11" disabled={!actions.report} onClick={() => setDialog("signature")}>
             <Signature aria-hidden />
             Signature
@@ -363,6 +373,14 @@ function StopCard({ detail, stop, number, service, numberOf }: { detail: DriverR
         onConfirm={(signature) => void app.tap({ kind: "add-signature", routeId: detail.id, body: { pickupId: stop.id }, object: signature })}
       />
       <PhotoDialog open={dialog === "photo"} onOpenChange={close} title={`A photo of stop ${number}`} description={stop.address} onConfirm={(photo) => void app.tap({ kind: "add-photo", routeId: detail.id, body: { pickupId: stop.id }, object: photo })} />
+      <FillDialog
+        open={dialog === "fill"}
+        onOpenChange={close}
+        title={`How full was stop ${number}?`}
+        description={stop.containerLabel === null ? stopCollects(stop) : `${stop.containerLabel} · ${stopCollects(stop)}`}
+        current={stop.fill ?? null}
+        onConfirm={(fill) => void app.tap({ kind: "record-fill", routeId: detail.id, body: { pickupId: stop.id, fill } })}
+      />
       <WeightDialog open={dialog === "weight"} onOpenChange={close} title={`Weight at stop ${number}`} description={stopCollects(stop)} onConfirm={(weightKg) => void app.tap({ kind: "add-weight", routeId: detail.id, body: { pickupId: stop.id, weightKg } })} />
     </article>
   )
