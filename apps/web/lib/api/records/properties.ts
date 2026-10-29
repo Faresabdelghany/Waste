@@ -33,7 +33,7 @@
 // fixtures names a property, a group or a point by id, and a property's
 // address — its natural handle, which the seed spells as the fixtures do — is
 // no key on the wire, so every row is `<prefix>-<uuid>` from the start.
-import type { Property, PropertyGroup, PropertyGroupMember, PropertyParty, SharedCollectionPoint, SharedCollectionPointMember } from "@waste/contracts/customers"
+import type { Property, PropertyGroup, PropertyGroupMember, PropertyParty, PropertyPartyHeld, SharedCollectionPoint, SharedCollectionPointMember } from "@waste/contracts/customers"
 import { splitList } from "@waste/domain/record-values"
 import {
   PROPERTY_GROUP_MEMBER_ROLES,
@@ -160,6 +160,29 @@ function entriesOf<Role extends string>(entries: readonly { id: string; role: Ro
   return entries.map((entry) => ({ ...referenced(context, prefix, entry.id), role: entry.role }))
 }
 
+/** A fact where there is something to say, and none where there is not. */
+const withFact = (label: string, value: string | undefined): Record<string, string> => (value === undefined ? {} : { [label]: value })
+
+/** The role as a sentence names it. */
+const ROLE_WORDS: Readonly<Record<PropertyParty["role"], string>> = { owner: "owner", payer: "payer", tenant: "tenant", administrator: "administrator", "service-contact": "service contact" }
+
+/**
+ * What a move booked ahead changes (#374), as one fact: a party in force today
+ * whose role ends on a later day leaves then, and a party from a later day
+ * joins then, each by name and role, in day order. Nothing when nothing is
+ * booked.
+ */
+function bookedAhead(parties: readonly PropertyPartyHeld[], today: string, context: MappingContext): string | undefined {
+  const changes = parties.flatMap((party) => [
+    ...(party.validFrom > today ? [{ day: party.validFrom, party, verb: "joins" }] : []),
+    ...(party.validFrom <= today && party.validTo !== null ? [{ day: party.validTo, party, verb: "leaves" }] : []),
+  ])
+  if (changes.length === 0) return undefined
+  changes.sort((left, right) => (left.day === right.day ? (left.verb < right.verb ? 1 : -1) : left.day < right.day ? -1 : 1))
+  const named = entriesOf(changes.map((change) => ({ id: change.party.customerId, role: change.party.role })), CUSTOMER_CHIP, context)
+  return changes.map((change, index) => `${named[index].name ?? named[index].webId} ${change.verb} as ${ROLE_WORDS[change.party.role]} on ${change.day}`).join(" · ")
+}
+
 /** The facts a set shows, one per role that anybody holds: the names under the role's plural. */
 function roleFacts<Role extends string>(entries: readonly { webId: string; name?: string; role: Role }[], roles: readonly Role[], labels: Readonly<Record<Role, string>>): Record<string, string> {
   const facts: Record<string, string> = {}
@@ -234,6 +257,7 @@ export const propertyAdapter: ResourceAdapter<Property> = {
         ...(property.serviceWindow === null ? {} : { "Access hours": windowFact(property.serviceWindow) }),
         ...(project.name === undefined ? {} : { Project: project.name }),
         ...roleFacts(parties, PROPERTY_PARTY_ROLES, PARTY_ROLE_LABELS),
+        ...withFact("Booked ahead", bookedAhead(property.parties, today, context)),
       },
       related: distinct(parties.map((party) => party.name ?? party.webId)),
       allowedTransitions: transitionsFrom(PROPERTY_STATUSES, property.status),
