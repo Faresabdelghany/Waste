@@ -21,6 +21,7 @@ import { PhotoField } from "@/components/waste/driver/driver-proof-dialogs"
 import type { DriverMe, DriverVehicle } from "@waste/contracts/driver-commands"
 import { DRIVER_PICKUP_REASONS, UNLOAD_REFUSAL_REASONS, type DriverPickupReason, type UnloadRefusalReason } from "@waste/domain/execution/vocabulary"
 import { NOTE_MAX, wholeKilograms, type PilotBody, type ProofBytes } from "@/lib/driver/commands"
+import { LITRES_MAX, litresOf } from "@/lib/data/tank-words"
 import { checkOutcome, preTripBody, type CheckForm, type CheckMark } from "@/lib/driver/pre-trip"
 import { DRIVER_REASON_LABELS } from "@/lib/driver/route-view"
 import { REFUSAL_LABELS, SAY_WHY_REFUSED } from "@/lib/data/unload-refusals"
@@ -421,5 +422,43 @@ function PreTripForm({ vehicle, onConfirm, onClose }: { vehicle: DriverVehicle; 
         </Button>
       </DialogFooter>
     </form>
+  )
+}
+
+/** The litres a tank was emptied of at the stop (M11 of #293), whole litres as the tanker's gauge shows them. */
+export function VolumeDialog({ open, onOpenChange, title, description, onConfirm }: DialogProps & { title: string; description: string; onConfirm: (volumeLitres: number) => void }) {
+  const id = useId()
+  const [volume, setVolume] = useState("")
+  const volumeLitres = litresOf(volume)
+  const submit = (event: FormEvent) => {
+    event.preventDefault()
+    if (volumeLitres === undefined) return
+    onConfirm(volumeLitres)
+    onOpenChange(false)
+    setVolume("")
+  }
+  return (
+    <Dialog open={open} onOpenChange={onOpenChange}>
+      <DialogContent>
+        <form onSubmit={submit} className="flex flex-col gap-4">
+          <DialogHeader>
+            <DialogTitle>{title}</DialogTitle>
+            <DialogDescription>{description}</DialogDescription>
+          </DialogHeader>
+          <div className="flex flex-col gap-1.5">
+            <Label htmlFor={`${id}-volume`}>Litres pumped</Label>
+            <Input id={`${id}-volume`} inputMode="numeric" type="number" min={1} max={LITRES_MAX} step={1} required className="h-11" value={volume} onChange={(event) => setVolume(event.target.value)} />
+          </div>
+          <DialogFooter>
+            <Button type="button" variant="outline" onClick={() => onOpenChange(false)}>
+              Cancel
+            </Button>
+            <Button type="submit" className="h-11">
+              Record volume
+            </Button>
+          </DialogFooter>
+        </form>
+      </DialogContent>
+    </Dialog>
   )
 }

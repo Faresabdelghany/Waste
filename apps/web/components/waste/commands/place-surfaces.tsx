@@ -21,6 +21,7 @@ import { CreateSurface } from "@/components/waste/commands/create-surface"
 import { PickupExceptionsSection } from "@/components/waste/commands/pickup-exceptions-section"
 import { MovePropertySection } from "@/components/waste/commands/move-surface"
 import { PropertyZonesSection } from "@/components/waste/commands/property-zones-section"
+import { TanksSection } from "@/components/waste/commands/tank-section"
 import { useModuleReady, useRelationPickers } from "@/components/waste/commands/use-command-support"
 import type { BusinessFormField, BusinessFormSchema, BusinessFormValues } from "@/lib/data/business-form-types"
 import type { ModuleLocation } from "@/lib/data/business-modules"
@@ -126,13 +127,14 @@ function EditSurface({ record, module, schema, noun }: RowSurfaceProps & { modul
   )
 }
 
-/** A property's details: its Edit, its parties replaced whole, its zones (O29 of #290) and its Pickup Exceptions (M5 of #293). */
+/** A property's details: its Edit, its parties replaced whole, its zones (O29 of #290), its move (#374), its tanks (M11 of #293) and its Pickup Exceptions (M5 of #293). */
 export function PropertyCommandsSurface({ record }: RowSurfaceProps) {
   return (
     <>
       <EditSurface record={record} module={PROPERTIES_MODULE} schema={PROPERTY_EDIT_FORM} noun="Property" />
       <PropertyZonesSection record={record} module={PROPERTIES_MODULE} />
       <MovePropertySection record={record} />
+      <TanksSection record={record} module={PROPERTIES_MODULE} />
       <PickupExceptionsSection record={record} module={PROPERTIES_MODULE} place="property" />
     </>
   )
