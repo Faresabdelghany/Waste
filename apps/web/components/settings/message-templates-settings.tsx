@@ -7,7 +7,10 @@
 // `configure.templates`. A template is retired by its status, never deleted,
 // since the delivery log names it. The rules and the bodies are
 // lib/data/message-templates.ts's. Offered on the Pilot alone, in place of
-// the fixtures' Tickets & communication's templates.
+// the fixtures' Tickets & communication's templates. Below the table, the
+// project's customer notices (O16 of #290, part b,
+// customer-notices-section.tsx): which template each notice of a bulky
+// collection is sent from.
 
 import { useState } from "react"
 import { PencilSimple, Plus } from "@phosphor-icons/react/dist/ssr"
@@ -16,6 +19,7 @@ import { toast } from "sonner"
 import type { MessageTemplate } from "@waste/contracts/messaging"
 import { useReport } from "@/components/insight/use-report"
 import { AssetPanelShell, EmptyRow, RecordsSection } from "@/components/settings/asset-management-settings"
+import { CustomerNoticesSection } from "@/components/settings/customer-notices-section"
 import { Badge } from "@/components/ui/badge"
 import { Button } from "@/components/ui/button"
 import { Dialog, DialogContent, DialogDescription, DialogFooter, DialogHeader, DialogTitle } from "@/components/ui/dialog"
@@ -139,7 +143,7 @@ export function MessageTemplatesSettings() {
       }
     >
       <p className="border-b border-border px-4 py-3 text-sm text-muted-foreground">
-        A text names its values as {PLACEHOLDERS.join(", ")}. Messages are sent by a log-only sender until a provider is chosen: each is recorded as sent, and nothing reaches the customer yet.
+        A text names its values as {PLACEHOLDERS.join(", ")}; {"{{collectionDate}}"} is filled only for a customer notice of a bulky collection. Messages are sent by a log-only sender until a provider is chosen: each is recorded as sent, and nothing reaches the customer yet.
       </p>
       <RecordsSection shown={templates.length} total={templates.length}>
         <div className="overflow-x-auto">
@@ -179,6 +183,7 @@ export function MessageTemplatesSettings() {
           </Table>
         </div>
       </RecordsSection>
+      {project !== null && read.report !== null && <CustomerNoticesSection key={project.id} project={project} templates={templates} access={access} />}
       {draft !== null && (
         <Dialog open onOpenChange={(isOpen) => !isOpen && setDraft(null)}>
           <DialogContent className="max-h-[85vh] overflow-y-auto sm:max-w-xl">

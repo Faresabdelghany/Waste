@@ -1850,6 +1850,7 @@ index wms.message message_contact_id_idx CREATE INDEX message_contact_id_idx ON 
 index wms.message message_customer_id_idx CREATE INDEX message_customer_id_idx ON wms.message USING btree (company_id, customer_id)
 index wms.message message_pkey CREATE UNIQUE INDEX message_pkey ON wms.message USING btree (id)
 index wms.message message_project_id_idx CREATE INDEX message_project_id_idx ON wms.message USING btree (company_id, project_id)
+index wms.message message_source_event_id_customer_id_idx CREATE UNIQUE INDEX message_source_event_id_customer_id_idx ON wms.message USING btree (company_id, source_event_id, customer_id) WHERE ((source_event_id IS NOT NULL) AND (customer_id IS NOT NULL))
 index wms.message message_source_event_id_user_account_id_idx CREATE UNIQUE INDEX message_source_event_id_user_account_id_idx ON wms.message USING btree (company_id, source_event_id, user_account_id) WHERE ((source_event_id IS NOT NULL) AND (user_account_id IS NOT NULL))
 index wms.message message_template_id_idx CREATE INDEX message_template_id_idx ON wms.message USING btree (company_id, template_id)
 index wms.message message_user_account_id_idx CREATE INDEX message_user_account_id_idx ON wms.message USING btree (company_id, user_account_id)
@@ -1902,6 +1903,48 @@ index wms.notification_preference notification_preference_user_account_id_event_
 trigger wms.notification_preference notification_preference_audit_trail enabled=O CREATE TRIGGER notification_preference_audit_trail AFTER INSERT OR DELETE OR UPDATE ON wms.notification_preference FOR EACH ROW EXECUTE FUNCTION wms.audit_row('user_account', 'user_account_id')
 trigger wms.notification_preference notification_preference_touch_updated_at enabled=O CREATE TRIGGER notification_preference_touch_updated_at BEFORE UPDATE ON wms.notification_preference FOR EACH ROW EXECUTE FUNCTION wms.touch_updated_at()
 policy wms.notification_preference notification_preference_tenant_fence permissive ALL to=wms_api using=(company_id = ( SELECT wms.current_company_id() AS current_company_id)) check=(company_id = ( SELECT wms.current_company_id() AS current_company_id))
+relation wms.notification_rule kind=table owner=<owner> persistence=p rls=true force-rls=true replica-identity=d acl=[<owner>=DELETE,INSERT,MAINTAIN,REFERENCES,SELECT,TRIGGER,TRUNCATE,UPDATE/<owner> wms_api=DELETE,INSERT,SELECT,UPDATE/<owner> wms_worker=SELECT/<owner>]
+column wms.notification_rule 1 id uuid not-null default=wms.uuidv7()
+column wms.notification_rule 2 company_id uuid not-null
+column wms.notification_rule 3 project_id uuid not-null
+column wms.notification_rule 4 created_at timestamp with time zone not-null default=now()
+column wms.notification_rule 5 updated_at timestamp with time zone not-null default=now()
+column wms.notification_rule 6 event text not-null
+column wms.notification_rule 7 template_id uuid not-null
+constraint wms.notification_rule notification_rule_company_id_fk FOREIGN KEY (company_id) REFERENCES wms.company(id)
+constraint wms.notification_rule notification_rule_event_one_of CHECK ((event = ANY (ARRAY['bulky-booking-booked'::text, 'bulky-booking-cancelled'::text, 'bulky-booking-collected'::text, 'bulky-booking-not-collected'::text, 'collection-reminder'::text, 'ticket-replied'::text, 'ticket-completed'::text, 'route-cancelled'::text, 'route-late'::text])))
+constraint wms.notification_rule notification_rule_pkey PRIMARY KEY (id)
+constraint wms.notification_rule notification_rule_project_id_event_key UNIQUE (company_id, project_id, event)
+constraint wms.notification_rule notification_rule_project_id_fk FOREIGN KEY (company_id, project_id) REFERENCES wms.project(company_id, id)
+constraint wms.notification_rule notification_rule_project_key UNIQUE (company_id, project_id, id)
+constraint wms.notification_rule notification_rule_template_id_fk FOREIGN KEY (company_id, project_id, template_id) REFERENCES wms.message_template(company_id, project_id, id)
+index wms.notification_rule notification_rule_pkey CREATE UNIQUE INDEX notification_rule_pkey ON wms.notification_rule USING btree (id)
+index wms.notification_rule notification_rule_project_id_event_key CREATE UNIQUE INDEX notification_rule_project_id_event_key ON wms.notification_rule USING btree (company_id, project_id, event)
+index wms.notification_rule notification_rule_project_key CREATE UNIQUE INDEX notification_rule_project_key ON wms.notification_rule USING btree (company_id, project_id, id)
+index wms.notification_rule notification_rule_template_id_idx CREATE INDEX notification_rule_template_id_idx ON wms.notification_rule USING btree (company_id, template_id)
+trigger wms.notification_rule notification_rule_audit_trail enabled=O CREATE TRIGGER notification_rule_audit_trail AFTER INSERT OR DELETE OR UPDATE ON wms.notification_rule FOR EACH ROW EXECUTE FUNCTION wms.audit_row('project', 'project_id')
+trigger wms.notification_rule notification_rule_touch_updated_at enabled=O CREATE TRIGGER notification_rule_touch_updated_at BEFORE UPDATE ON wms.notification_rule FOR EACH ROW EXECUTE FUNCTION wms.touch_updated_at()
+policy wms.notification_rule notification_rule_tenant_fence permissive ALL to=wms_api using=(company_id = ( SELECT wms.current_company_id() AS current_company_id)) check=(company_id = ( SELECT wms.current_company_id() AS current_company_id))
+relation wms.notification_rule_area kind=table owner=<owner> persistence=p rls=true force-rls=true replica-identity=d acl=[<owner>=DELETE,INSERT,MAINTAIN,REFERENCES,SELECT,TRIGGER,TRUNCATE,UPDATE/<owner> wms_api=DELETE,INSERT,SELECT,UPDATE/<owner> wms_worker=SELECT/<owner>]
+column wms.notification_rule_area 1 id uuid not-null default=wms.uuidv7()
+column wms.notification_rule_area 2 company_id uuid not-null
+column wms.notification_rule_area 3 project_id uuid not-null
+column wms.notification_rule_area 4 created_at timestamp with time zone not-null default=now()
+column wms.notification_rule_area 5 updated_at timestamp with time zone not-null default=now()
+column wms.notification_rule_area 6 rule_id uuid not-null
+column wms.notification_rule_area 7 planning_area_id uuid not-null
+constraint wms.notification_rule_area notification_rule_area_company_id_fk FOREIGN KEY (company_id) REFERENCES wms.company(id)
+constraint wms.notification_rule_area notification_rule_area_pkey PRIMARY KEY (id)
+constraint wms.notification_rule_area notification_rule_area_planning_area_id_fk FOREIGN KEY (company_id, project_id, planning_area_id) REFERENCES wms.planning_area(company_id, project_id, id)
+constraint wms.notification_rule_area notification_rule_area_project_id_fk FOREIGN KEY (company_id, project_id) REFERENCES wms.project(company_id, id)
+constraint wms.notification_rule_area notification_rule_area_rule_id_fk FOREIGN KEY (company_id, project_id, rule_id) REFERENCES wms.notification_rule(company_id, project_id, id)
+constraint wms.notification_rule_area notification_rule_area_rule_id_planning_area_id_key UNIQUE (company_id, rule_id, planning_area_id)
+index wms.notification_rule_area notification_rule_area_pkey CREATE UNIQUE INDEX notification_rule_area_pkey ON wms.notification_rule_area USING btree (id)
+index wms.notification_rule_area notification_rule_area_planning_area_id_idx CREATE INDEX notification_rule_area_planning_area_id_idx ON wms.notification_rule_area USING btree (company_id, planning_area_id)
+index wms.notification_rule_area notification_rule_area_rule_id_planning_area_id_key CREATE UNIQUE INDEX notification_rule_area_rule_id_planning_area_id_key ON wms.notification_rule_area USING btree (company_id, rule_id, planning_area_id)
+trigger wms.notification_rule_area notification_rule_area_audit_trail enabled=O CREATE TRIGGER notification_rule_area_audit_trail AFTER INSERT OR DELETE OR UPDATE ON wms.notification_rule_area FOR EACH ROW EXECUTE FUNCTION wms.audit_row('project', 'project_id')
+trigger wms.notification_rule_area notification_rule_area_touch_updated_at enabled=O CREATE TRIGGER notification_rule_area_touch_updated_at BEFORE UPDATE ON wms.notification_rule_area FOR EACH ROW EXECUTE FUNCTION wms.touch_updated_at()
+policy wms.notification_rule_area notification_rule_area_tenant_fence permissive ALL to=wms_api using=(company_id = ( SELECT wms.current_company_id() AS current_company_id)) check=(company_id = ( SELECT wms.current_company_id() AS current_company_id))
 relation wms.outbox_event kind=table owner=<owner> persistence=p rls=true force-rls=true replica-identity=d acl=[<owner>=DELETE,INSERT,MAINTAIN,REFERENCES,SELECT,TRIGGER,TRUNCATE,UPDATE/<owner> wms_api=DELETE,INSERT,SELECT,UPDATE/<owner> wms_worker=SELECT/<owner>]
 column wms.outbox_event 1 id uuid not-null default=wms.uuidv7()
 column wms.outbox_event 2 company_id uuid not-null
@@ -1914,9 +1957,9 @@ column wms.outbox_event 8 aggregate_id uuid not-null
 column wms.outbox_event 9 occurred_at timestamp with time zone not-null
 column wms.outbox_event 10 payload jsonb not-null
 column wms.outbox_event 11 published_at timestamp with time zone
-constraint wms.outbox_event outbox_event_aggregate_kind_one_of CHECK ((aggregate_kind = ANY (ARRAY['route'::text, 'pickup'::text, 'unload'::text, 'command'::text, 'ticket'::text, 'invoice'::text, 'settlement'::text, 'application'::text, 'site-visit'::text, 'alert'::text])))
+constraint wms.outbox_event outbox_event_aggregate_kind_one_of CHECK ((aggregate_kind = ANY (ARRAY['route'::text, 'pickup'::text, 'unload'::text, 'command'::text, 'ticket'::text, 'invoice'::text, 'settlement'::text, 'application'::text, 'site-visit'::text, 'alert'::text, 'bulky-booking'::text])))
 constraint wms.outbox_event outbox_event_company_id_fk FOREIGN KEY (company_id) REFERENCES wms.company(id)
-constraint wms.outbox_event outbox_event_kind_one_of CHECK ((kind = ANY (ARRAY['route-dispatched'::text, 'route-started'::text, 'route-completed'::text, 'route-cancelled'::text, 'route-reassigned'::text, 'pickup-completed'::text, 'pickup-failed'::text, 'pickup-skipped'::text, 'pickup-problem-reported'::text, 'pickup-corrected'::text, 'unload-recorded'::text, 'command-rejected'::text, 'ticket-opened'::text, 'ticket-completed'::text, 'ticket-rejected'::text, 'invoice-issued'::text, 'settlement-closed'::text, 'application-decided'::text, 'site-visit-recorded'::text, 'site-visit-voided'::text, 'alert-raised'::text, 'ticket-assigned'::text])))
+constraint wms.outbox_event outbox_event_kind_one_of CHECK ((kind = ANY (ARRAY['route-dispatched'::text, 'route-started'::text, 'route-completed'::text, 'route-cancelled'::text, 'route-reassigned'::text, 'pickup-completed'::text, 'pickup-failed'::text, 'pickup-skipped'::text, 'pickup-problem-reported'::text, 'pickup-corrected'::text, 'unload-recorded'::text, 'command-rejected'::text, 'ticket-opened'::text, 'ticket-completed'::text, 'ticket-rejected'::text, 'invoice-issued'::text, 'settlement-closed'::text, 'application-decided'::text, 'site-visit-recorded'::text, 'site-visit-voided'::text, 'alert-raised'::text, 'ticket-assigned'::text, 'bulky-booking-booked'::text, 'bulky-booking-cancelled'::text, 'ticket-replied'::text])))
 constraint wms.outbox_event outbox_event_pkey PRIMARY KEY (id)
 constraint wms.outbox_event outbox_event_project_id_fk FOREIGN KEY (company_id, project_id) REFERENCES wms.project(company_id, id)
 index wms.outbox_event outbox_event_aggregate_id_idx CREATE INDEX outbox_event_aggregate_id_idx ON wms.outbox_event USING btree (company_id, aggregate_id)
@@ -4762,4 +4805,6 @@ journal 1793251427635 28c1ebcb79fe09c31112ea7c107fd4fa02346fd0ea3241c4875ef71724
 journal 1793262692450 55627dafbd3cb890c76eb45db4afd21abdf2a8593bb40b111738da9cc9c67bef
 journal 1793263502443 743ec23d04aeeab55f061db6ccb5e4a41b62823362ca3f8f5fe3cc5358ddcd5e
 journal 1793267564046 d11debc5f21b91706db12b266c1f9d1c9c0fc1d52f1ff23058b0a44641ad8501
+journal 1793268227594 2125da124d5ee7ff9696f7ba6262cee038ca4f70299587bd9787adb4629f251f
+journal 1793268880247 a9b2b87bfefab0d392d1c922804507e4aaac5ed2c6ad871ec91626f1524f1970
 pgboss-version 42

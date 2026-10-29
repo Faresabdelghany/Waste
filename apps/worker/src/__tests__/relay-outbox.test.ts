@@ -189,9 +189,11 @@ describe("execution.relay-outbox", { skip: roles.skip }, () => {
       [
         { queue: "outbox.pickup-failed.resolution", id: a1 },
         { queue: "outbox.pickup-failed.finance", id: a1 },
-        { queue: "outbox.route-cancelled", id: a2 },
+        { queue: "outbox.pickup-failed.customer-notices", id: a1 },
+        { queue: "outbox.route-cancelled.customer-notices", id: a2 },
         { queue: "outbox.command-rejected.resolution", id: a3 },
         { queue: "outbox.pickup-completed.finance", id: b1 },
+        { queue: "outbox.pickup-completed.customer-notices", id: b1 },
         { queue: "outbox.unload-recorded", id: b2 },
       ],
       "each event sent to its consumer's queue of the kind, or the kind's own where none takes it, in id order within its company",
@@ -207,7 +209,7 @@ describe("execution.relay-outbox", { skip: roles.skip }, () => {
     assert.equal(stampsA.size, 1, "one company's batch is one transaction, one instant")
 
     const jobs = await outboxJobs()
-    assert.equal(jobs.length, 6, "a1 on Resolution's queue and Finance's (#293 M5b), the other four on one each")
+    assert.equal(jobs.length, 8, "a1 on Resolution's, Finance's (#293 M5b) and the customer notices' queues (O16 of #290), b1 on Finance's and the customer notices', the other three on one each")
     for (const job of jobs) {
       const event = RelayedEvent.parse(job.data)
       const row = rows.find((candidate) => candidate.id === event.id)!
@@ -226,7 +228,7 @@ describe("execution.relay-outbox", { skip: roles.skip }, () => {
     sent.length = 0
     assert.deepEqual(await relayOnce(context), { swept: 0, published: 0 })
     assert.deepEqual(sent, [])
-    assert.equal((await outboxJobs()).length, 6)
+    assert.equal((await outboxJobs()).length, 8)
   })
 
   test("a send that fails leaves the company's rows unstamped and its other sends unwritten — one transaction — while the other company's rows are published, and the next tick takes them", async () => {
@@ -253,7 +255,7 @@ describe("execution.relay-outbox", { skip: roles.skip }, () => {
     assert.equal(byId.get(b3)!.publishedAt, null, "B's first row is not stamped, though its send came before the failing one")
     assert.equal(byId.get(b4)!.publishedAt, null)
     const jobs = await outboxJobs()
-    assert.equal(jobs.length, 8, "A's skip on Resolution's queue and Finance's; none of B's two, the send of b3 rolled back with the stamp")
+    assert.equal(jobs.length, 10, "A's skip on Resolution's queue and Finance's; none of B's two, the send of b3 rolled back with the stamp")
     assert.ok(!jobs.some((job) => RelayedEvent.parse(job.data).id === b3), "b3's send did not survive its transaction")
 
     // The queue back, the way a consumer's next start would bring it: the next tick takes exactly B's two rows, in order.
@@ -264,7 +266,7 @@ describe("execution.relay-outbox", { skip: roles.skip }, () => {
       sent.map((entry) => entry.id),
       [b3, b4],
     )
-    assert.equal((await outboxJobs()).length, 10)
+    assert.equal((await outboxJobs()).length, 12)
     assert.ok((await outbox()).every((row) => row.publishedAt !== null))
   })
 
@@ -318,7 +320,7 @@ describe("execution.relay-outbox", { skip: roles.skip }, () => {
     await owner.sql.begin(async (holding) => {
       await holding`select id from wms.outbox_event where id = ${a6} for update`
       assert.deepEqual(await relayOnce(context), { swept: 3, published: 2 }, "the held row is left, the other two go")
-      assert.deepEqual(sent.map((entry) => entry.id), [a5, a5, b5], "a5 to Resolution and Finance both")
+      assert.deepEqual(sent.map((entry) => entry.id), [a5, a5, a5, b5, b5], "a5 to Resolution, Finance and the customer notices, b5 to Finance and the customer notices")
     })
     const rows = new Map((await outbox()).map((row) => [row.id, row]))
     assert.equal(rows.get(a6)!.publishedAt, null)
@@ -331,7 +333,8 @@ describe("execution.relay-outbox", { skip: roles.skip }, () => {
   test("two relays at once publish every row exactly once between them", async () => {
     const ids: string[] = []
     for (let n = 0; n < 6; n += 1) {
-      ids.push(await emit(n % 2 === 0 ? a : b, "pickup-completed", { id: id(0x210 + n), status: "completed", n }))
+      // A kind no consumer takes: one job per row, so a row sent twice is a job too many.
+      ids.push(await emit(n % 2 === 0 ? a : b, "unload-recorded", { id: id(0x210 + n), netKg: 100 + n }))
     }
     sent.length = 0
     const before = (await outboxJobs()).length

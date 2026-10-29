@@ -170,7 +170,7 @@ describe("ticketFor", () => {
       ;(ticketFor(event) === undefined ? news : cases).push(kind)
     }
     assert.deepEqual(cases, ["pickup-failed", "pickup-skipped", "pickup-problem-reported", "command-rejected"])
-    assert.deepEqual(news, ["route-dispatched", "route-started", "route-completed", "route-cancelled", "route-reassigned", "pickup-completed", "pickup-corrected", "unload-recorded", "ticket-opened", "ticket-completed", "ticket-rejected", "invoice-issued", "settlement-closed", "application-decided", "site-visit-recorded", "site-visit-voided", "alert-raised", "ticket-assigned"])
+    assert.deepEqual(news, ["route-dispatched", "route-started", "route-completed", "route-cancelled", "route-reassigned", "pickup-completed", "pickup-corrected", "unload-recorded", "ticket-opened", "ticket-completed", "ticket-rejected", "invoice-issued", "settlement-closed", "application-decided", "site-visit-recorded", "site-visit-voided", "alert-raised", "ticket-assigned", "bulky-booking-booked", "bulky-booking-cancelled", "ticket-replied"])
     // A completed or corrected pickup answers nothing whatever its reason.
     for (const kind of ["pickup-completed", "pickup-corrected"] as const) {
       for (const reason of [...PICKUP_REASONS, null] as (PickupReason | null)[]) assert.equal(ticketFor(pickupEvent(kind, { reason })), undefined, `${kind} ${reason}`)

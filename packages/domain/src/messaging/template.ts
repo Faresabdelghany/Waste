@@ -14,9 +14,18 @@ import type { MessageChannel, MessagePurpose } from "./vocabulary"
  * invoice's number, a collection's day) adds its names here and its values
  * where it queues.
  */
-export const MESSAGE_VARIABLES = ["recipientName", "customerName", "companyName"] as const
+export const MESSAGE_VARIABLES = ["recipientName", "customerName", "companyName", "collectionDate", "ticketNumber", "replyText"] as const
 export type MessageVariable = (typeof MESSAGE_VARIABLES)[number]
-export type MessageValues = Readonly<Record<MessageVariable, string>>
+/** The values every message fills. */
+export const EVERY_MESSAGE_FILLS = ["recipientName", "customerName", "companyName"] as const satisfies readonly MessageVariable[]
+/**
+ * A message's values: the three every message fills, and those its sender
+ * has — `collectionDate`, the day of the collection a booking's notice is
+ * about (O16 of #290, part b), which an office's send from a customer's
+ * details does not have; and a ticket's notice its `ticketNumber` and, for a
+ * reply, the `replyText` (C18 of #291).
+ */
+export type MessageValues = Readonly<Record<(typeof EVERY_MESSAGE_FILLS)[number], string>> & Readonly<Partial<Record<MessageVariable, string>>>
 
 /** Text messages longer than this are refused: four concatenated segments of 160 characters. */
 export const SMS_BODY_MAX = 640
@@ -33,9 +42,18 @@ export function unknownPlaceholders(text: string): string[] {
   return placeholdersOf(text).filter((name) => !(MESSAGE_VARIABLES as readonly string[]).includes(name))
 }
 
+/** The placeholders of a text that this message's values do not fill: a known name its sender has no value for. */
+export function unfilledPlaceholders(text: string, values: MessageValues): string[] {
+  return placeholdersOf(text).filter((name) => (MESSAGE_VARIABLES as readonly string[]).includes(name) && values[name as MessageVariable] === undefined)
+}
+
+/** What a send of a template naming a value it does not have is told. */
+export const unfilledSentence = (template: string, names: readonly string[]): string =>
+  `The template ${template} names ${names.map((name) => `{{${name}}}`).join(", ")}, which ${names.length === 1 ? "this message has no value for" : "this message has no values for"}; pick a template without ${names.length === 1 ? "it" : "them"}`
+
 /** The text with each placeholder replaced by its value, in one pass, so a value is never read as a placeholder of its own. */
 export function renderTemplate(text: string, values: MessageValues): string {
-  return text.replace(PLACEHOLDER, (whole, name: string) => (name in values ? values[name as MessageVariable] : whole))
+  return text.replace(PLACEHOLDER, (whole, name: string) => values[name as MessageVariable] ?? whole)
 }
 
 /** What a channel asks of a template: an e-mail a subject, a text message none and a body that fits; undefined where it holds. */
