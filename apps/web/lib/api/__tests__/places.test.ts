@@ -336,6 +336,7 @@ describe("an unloading station", () => {
       operatingHours: "",
       acceptedFractionIds: `${fractionWebId(residual)},${fractionWebId(mixed)}`,
       weighbridgeAvailable: true,
+      transferStation: false,
     })
     assert.deepEqual(unloadingStationAdapter.statuses, DEPOT_STATUSES, "the same four as a depot's")
   })
@@ -365,6 +366,7 @@ describe("an unloading station", () => {
       opensAt: "07:00",
       closesAt: "15:00",
       weighbridge: false,
+      transfer: false,
       status: "draft",
       wasteFractionIds: [glass.id, residual.id],
     })

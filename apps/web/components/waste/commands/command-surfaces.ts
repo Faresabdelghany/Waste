@@ -53,6 +53,7 @@ import { CreateServiceAreaSurface, OpenSettlementSurface, ProviderPriceCommandsS
 import { InviteTeamMemberSurface, TeamMemberCommandsSurface } from "./team-surfaces"
 import { LiveBoardRefresh, LiveRouteSurface, PickupCommandsSurface, RouteCommandsSurface, RoutesPrimarySurface } from "./route-surfaces"
 import { WarehouseStockSurface } from "./stock-surfaces"
+import { TransferStationSurface } from "./haul-out-surfaces"
 
 /** What a primary surface is handed: the label the module's primary action carries. */
 export type PrimarySurfaceProps = { label: string }
@@ -147,6 +148,8 @@ export const COMMAND_SURFACES: Readonly<Record<string, CommandSurface>> = {
   "resources.inventory": { primary: null },
   // O30 of #290: a warehouse by its own form as before, and its stock against its minimums in its details.
   "resources.warehouses": { primary: "form", rowActions: WarehouseStockSurface, genericEdit: true },
+  // A transfer station's stock and loads (M17 of #293); a depot and any other station show none.
+  "resources.depots": { primary: "form", rowActions: TransferStationSurface, genericEdit: true },
   "fleet.vehicle-planning": { primary: AllocateSurface, rowActions: AllocationCommandsSurface },
   // O6 of #290: a driver's absences and a vehicle's periods out of use, in the row's details; the row itself by its own form as before.
   "fleet.drivers": { primary: "form", rowActions: DriverAbsenceSurface, genericEdit: true },

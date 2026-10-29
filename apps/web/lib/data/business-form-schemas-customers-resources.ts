@@ -1846,6 +1846,13 @@ export const customerResourceBusinessFormSchemas: readonly BusinessFormSchema[] 
             defaultValue: false,
           },
           {
+            id: "transferStation",
+            label: "Transfer station",
+            type: "checkbox",
+            defaultValue: false,
+            description: "Applicable to an Unloading Station that holds what is tipped there and sends it on in outbound loads.",
+          },
+          {
             id: "linkedWarehouseId",
             label: "Colocated warehouse",
             type: "select",
