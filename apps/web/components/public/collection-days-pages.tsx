@@ -14,6 +14,7 @@ import { notFound } from "next/navigation"
 import type { ReactNode } from "react"
 
 import { CalendarFeed } from "@/components/public/calendar-feed"
+import { ProjectFooter, ProjectMark } from "@/components/public/project-brand"
 import { PublicNav } from "@/components/public/public-nav"
 import { Badge } from "@/components/ui/badge"
 import { Button } from "@/components/ui/button"
@@ -45,7 +46,7 @@ type SearchParams = Promise<{ q?: string | string[]; weeks?: string | string[] }
 /** The page's frame: the full page's width or the widget's compact one. On paper, black on white whatever the theme. */
 function PublicFrame({ embed, children }: { embed: boolean; children: ReactNode }) {
   return (
-    <main className="min-h-svh bg-background print:min-h-0 print:bg-white print:**:text-black">
+    <main className="public-page min-h-svh bg-background print:min-h-0 print:bg-white print:**:text-black">
       <div className={cn("mx-auto w-full px-4", embed ? "max-w-xl py-4" : "max-w-2xl py-10 sm:py-16 print:max-w-none print:py-0")}>{children}</div>
     </main>
   )
@@ -78,9 +79,7 @@ export async function CollectionSearchPage({ params, searchParams, embed }: { pa
   return (
     <PublicFrame embed={embed}>
       <header className="space-y-2">
-        <p lang={page.project.language} className="text-sm font-medium text-muted-foreground">
-          {page.project.name}
-        </p>
+        <ProjectMark project={page.project} />
         <h1 className={cn("font-semibold tracking-tight text-foreground", embed ? "text-xl" : "text-3xl")}>{COPY.title}</h1>
         <p className="text-base text-muted-foreground">{COPY.intro}</p>
         {!embed && <PublicNav slug={slug} current="calendar" />}
@@ -109,6 +108,7 @@ export async function CollectionSearchPage({ params, searchParams, embed }: { pa
       <section aria-live="polite" className={embed ? "mt-4" : "mt-8"}>
         <SearchResults slug={slug} embed={embed} language={page.project.language} view={page.search} />
       </section>
+      <ProjectFooter project={page.project} embed={embed} />
     </PublicFrame>
   )
 }
@@ -153,9 +153,7 @@ export async function CollectionDaysPage({ params, searchParams, embed }: { para
     return (
       <PublicFrame embed>
         <header className="space-y-1">
-          <p lang={project.language} className="text-sm font-medium text-muted-foreground">
-            {project.name}
-          </p>
+          <ProjectMark project={project} />
           <h1 lang={project.language} className="text-xl font-semibold tracking-tight text-foreground">
             {answer.body.address.address}
           </h1>
@@ -169,6 +167,7 @@ export async function CollectionDaysPage({ params, searchParams, embed }: { para
             {COPY.anotherAddress}
           </Link>
         </div>
+        <ProjectFooter project={project} embed />
       </PublicFrame>
     )
   }
@@ -177,9 +176,9 @@ export async function CollectionDaysPage({ params, searchParams, embed }: { para
   return (
     <PublicFrame embed={false}>
       <header className="space-y-2">
-        <p className="text-sm font-medium text-muted-foreground">
-          <span lang={project.language}>{project.name}</span> · {COPY.title}
-        </p>
+        <ProjectMark project={project}>
+          <span>· {COPY.title}</span>
+        </ProjectMark>
         <h1 lang={project.language} className="text-3xl font-semibold tracking-tight text-foreground">
           {answer.body.address.address}
         </h1>
@@ -223,6 +222,7 @@ export async function CollectionDaysPage({ params, searchParams, embed }: { para
           ))}
         </div>
       )}
+      <ProjectFooter project={project} />
     </PublicFrame>
   )
 }
