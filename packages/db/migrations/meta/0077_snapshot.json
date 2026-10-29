@@ -1,5 +1,5 @@
 {
-  "id": "cceb16e9-ac82-480a-acfb-ed1e337e9ee9",
+  "id": "2c4acbdf-1255-4bc7-a01c-b782d18c24c1",
   "prevId": "e84ac2ee-a9bd-4812-8e31-ea31b4cbb5fa",
   "version": "7",
   "dialect": "postgresql",
@@ -272,6 +272,24 @@
           "primaryKey": false,
           "notNull": true,
           "default": false
+        },
+        "position_retention_days": {
+          "name": "position_retention_days",
+          "type": "integer",
+          "primaryKey": false,
+          "notNull": false
+        },
+        "proof_retention_days": {
+          "name": "proof_retention_days",
+          "type": "integer",
+          "primaryKey": false,
+          "notNull": false
+        },
+        "gps_purpose": {
+          "name": "gps_purpose",
+          "type": "text",
+          "primaryKey": false,
+          "notNull": false
         }
       },
       "indexes": {},
@@ -346,6 +364,18 @@
         "project_weight_tolerance_percent_range": {
           "name": "project_weight_tolerance_percent_range",
           "value": "\"wms\".\"project\".\"weight_tolerance_percent\" between 1 and 100"
+        },
+        "project_position_retention_range": {
+          "name": "project_position_retention_range",
+          "value": "\"wms\".\"project\".\"position_retention_days\" between 1 and 30"
+        },
+        "project_proof_retention_range": {
+          "name": "project_proof_retention_range",
+          "value": "\"wms\".\"project\".\"proof_retention_days\" between 1 and 3650"
+        },
+        "project_gps_purpose_one_of": {
+          "name": "project_gps_purpose_one_of",
+          "value": "\"wms\".\"project\".\"gps_purpose\" in ('dispatch', 'dispatch-and-proof')"
         }
       },
       "isRLSEnabled": false
@@ -2750,18 +2780,6 @@
           "notNull": true,
           "default": "now()"
         },
-        "valid_from": {
-          "name": "valid_from",
-          "type": "date",
-          "primaryKey": false,
-          "notNull": true
-        },
-        "valid_to": {
-          "name": "valid_to",
-          "type": "date",
-          "primaryKey": false,
-          "notNull": false
-        },
         "property_id": {
           "name": "property_id",
           "type": "uuid",
@@ -2782,27 +2800,6 @@
         }
       },
       "indexes": {
-        "property_party_property_id_idx": {
-          "name": "property_party_property_id_idx",
-          "columns": [
-            {
-              "expression": "company_id",
-              "isExpression": false,
-              "asc": true,
-              "nulls": "last"
-            },
-            {
-              "expression": "property_id",
-              "isExpression": false,
-              "asc": true,
-              "nulls": "last"
-            }
-          ],
-          "isUnique": false,
-          "concurrently": false,
-          "method": "btree",
-          "with": {}
-        },
         "property_party_project_id_idx": {
           "name": "property_party_project_id_idx",
           "columns": [
@@ -2913,13 +2910,20 @@
         }
       },
       "compositePrimaryKeys": {},
-      "uniqueConstraints": {},
+      "uniqueConstraints": {
+        "property_party_property_id_customer_id_role_key": {
+          "name": "property_party_property_id_customer_id_role_key",
+          "nullsNotDistinct": false,
+          "columns": [
+            "company_id",
+            "property_id",
+            "customer_id",
+            "role"
+          ]
+        }
+      },
       "policies": {},
       "checkConstraints": {
-        "property_party_validity": {
-          "name": "property_party_validity",
-          "value": "\"wms\".\"property_party\".\"valid_to\" is null or \"wms\".\"property_party\".\"valid_to\" > \"wms\".\"property_party\".\"valid_from\""
-        },
         "property_party_role_one_of": {
           "name": "property_party_role_one_of",
           "value": "\"wms\".\"property_party\".\"role\" in ('owner', 'payer', 'tenant', 'administrator', 'service-contact')"
