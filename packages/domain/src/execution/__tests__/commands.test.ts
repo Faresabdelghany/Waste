@@ -17,9 +17,11 @@ import {
   NOT_A_STATION,
   NOT_A_TRAILER,
   NOT_A_VEHICLE,
+  noContainerToConfirm,
   noPickupOnRoute,
   noRouteAssigned,
   notInService,
+  notTheStopsContainer,
   OBJECT_KEY_NAMES_ANOTHER,
   objectKeyNames,
   objectKeyOf,
@@ -306,6 +308,22 @@ describe("decide: the pickup", () => {
     ])
     assert.equal(applied(decide(command("arrive", { pickupId: PICKUP }), mads, running({ pickup: pickup({ arrivedAt: "2026-10-05T07:00:00.000Z" }) }), clock)).length, 1)
     assert.equal(applied(decide(command("arrive", { pickupId: PICKUP }), mads, running({ pickup: pickup({ status: "completed", arrivedAt: EARLIER }) }), clock)).length, 1)
+  })
+
+  test("an arrival confirming its container (O19 of #290) is applied as any arrival when the code names the stop's container, and refused at the code otherwise", () => {
+    const BIN = "018f7c31-a000-7000-8000-000000000070"
+    const OTHER_BIN = "018f7c31-a000-7000-8000-000000000071"
+    const scanned = command("arrive", { pickupId: PICKUP, identification: { code: " WH82014 ", method: "camera" } })
+    const plain = applied(decide(command("arrive", { pickupId: PICKUP }), mads, running(), clock))
+    assert.deepEqual(applied(decide(scanned, mads, running({ identification: { containerId: BIN, identifiedContainerIds: [OTHER_BIN, BIN] } }), clock)), plain, "the confirmation writes nothing beyond the arrival; its receipt keeps the code")
+    assert.deepEqual(rejected(decide(scanned, mads, running({ identification: { containerId: BIN, identifiedContainerIds: [OTHER_BIN] } }), clock)), {
+      status: 400,
+      detail: notTheStopsContainer("WH82014", 12),
+      errors: [{ path: "body.identification.code", message: notTheStopsContainer("WH82014", 12) }],
+    })
+    assert.deepEqual(rejected(decide(scanned, mads, running({ identification: { containerId: BIN, identifiedContainerIds: [] } }), clock))?.detail, notTheStopsContainer("WH82014", 12), "a code that names no container at all")
+    assert.deepEqual(rejected(decide(scanned, mads, running({ identification: { containerId: null, identifiedContainerIds: [] } }), clock))?.errors, [{ path: "body.identification", message: noContainerToConfirm(12) }], "an address-only stop has nothing to scan")
+    assert.equal(rejected(decide(scanned, mads, running(), clock))?.detail, noContainerToConfirm(12), "nothing read for the confirmation is no confirmation")
   })
 
   test("report-problem moves no status: a problem proof, and an event about the pickup, or about the route when none is named", () => {

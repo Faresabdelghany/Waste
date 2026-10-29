@@ -34,6 +34,7 @@ The Next.js App Router prototype (TypeScript, Tailwind CSS v4, shadcn/ui). Recor
 - A photo's or a signature's bytes ride in the queue's row, and the drain puts them to Storage before the command naming them is sent (`driver-app.ts`); a refusal on the way is the action's rejection.
 - Positions (O8 of #290) are recorded only while a route's screen shows this driver's open, unpaused session (`position-recorder.ts`, `sessionRecords`). The open batch is the queue's one `collecting` row, which the drain passes over and a reload closes into a command; a batch is minted as a `record-positions` command when it closes, and is neither counted among the actions waiting nor shown when refused.
 - A stop shows its place's `driverInstructions`, never a property's `notes`, which are the office's own.
+- Scan container (O19 of #290) asks the door which stop a code names (`GET /driver/routes/:id/identify`, `container-scan.ts`) and says its answer; the confirmation is an `arrive` carrying the code as its `identification`, which the door judges again, and the stop reads `containerConfirmedAt` back. The camera is `BarcodeDetector` where the browser has one, else the code is typed.
 - It imports the contracts as types only; a value it needs from them is spelled again and held equal by a test (`BATCH_LIMIT`).
 
 ## Persisted state and renames

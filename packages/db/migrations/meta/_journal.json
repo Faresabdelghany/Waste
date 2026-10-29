@@ -547,6 +547,13 @@
       "when": 1793243238519,
       "tag": "0077_privacy_policy",
       "breakpoints": true
+    },
+    {
+      "idx": 78,
+      "version": "7",
+      "when": 1793245578465,
+      "tag": "0078_item_product_unit",
+      "breakpoints": true
     }
   ]
 }

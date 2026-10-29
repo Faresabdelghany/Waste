@@ -7,7 +7,7 @@
 // address-only stop the office added, #111), fraction and status, the
 // place's instructions to the driver where it has some (never the office's
 // own notes), and an "Open in Maps" link over its own point, and per stop:
-// arrived, complete, skip, fail, report a problem, add a note, record a weight
+// arrived, scan the container to confirm it (O19 of #290), complete, skip, fail, report a problem, add a note, record a weight
 // (O2 of #290), a signature, and a photo with a skip, a failure or a problem —
 // of any stop where the deployment offers it (O1). On the route: the next places still to do handed to Maps in
 // one link, report a problem,
@@ -17,7 +17,7 @@
 // command waiting shows "Sending" until the server has answered; everything
 // else is sent and the server decides (lib/driver/route-view.ts).
 import { useEffect, useState } from "react"
-import { ArrowLeft, Camera, CheckCircle, FlagCheckered, Info, MapPin, MapTrifold, NavigationArrow, NotePencil, Pause, Play, Scales, Signature, SkipForward, Truck, Warning, XCircle } from "@phosphor-icons/react/dist/ssr"
+import { ArrowLeft, Barcode, Camera, CheckCircle, FlagCheckered, Info, MapPin, MapTrifold, NavigationArrow, NotePencil, Pause, Play, Scales, Signature, SkipForward, Truck, Warning, XCircle } from "@phosphor-icons/react/dist/ssr"
 
 import { Badge } from "@/components/ui/badge"
 import { Button } from "@/components/ui/button"
@@ -26,9 +26,11 @@ import { EndRouteDialog, NoteDialog, ReasonDialog, UnloadDialog, WeightDialog } 
 import { DriverFrame } from "@/components/waste/driver/driver-frame"
 import { PhotoDialog, SignatureDialog } from "@/components/waste/driver/driver-proof-dialogs"
 import { DriverLink, KeptNotice, RejectionList, operatingDay, progressLine } from "@/components/waste/driver/driver-parts"
+import { ScanDialog } from "@/components/waste/driver/driver-scan-dialog"
 import type { DriverMe, DriverPickup, DriverRouteDetail, DriverUnloadingStation } from "@waste/contracts/driver-commands"
 import { keepShell, SHELL_ENABLED } from "@/lib/driver/app-shell"
 import type { ProofBytes } from "@/lib/driver/commands"
+import { scanOffered } from "@/lib/driver/container-scan"
 import type { DriverAppController, Tap } from "@/lib/driver/driver-app"
 import { STOP_PHOTOS } from "@/lib/driver/proof-images"
 import { sessionRecords } from "@/lib/driver/position-recorder"
@@ -150,7 +152,7 @@ function RouteDetailView({ detail, me }: { detail: DriverRouteDetail; me: Driver
         {entriesInOrder(detail.pickups, detail.activePlan).map((entry, index) =>
           entry.kind === "stop" ? (
             <li key={entry.stop.id}>
-              <StopCard detail={detail} stop={entry.stop} number={numbers.get(entry.stop.id) ?? index + 1} service={services.get(entry.stop.id) ?? null} />
+              <StopCard detail={detail} stop={entry.stop} number={numbers.get(entry.stop.id) ?? index + 1} service={services.get(entry.stop.id) ?? null} numberOf={(id) => numbers.get(id)} />
             </li>
           ) : (
             <li key={`unload-${index}`}>
@@ -206,13 +208,13 @@ function UnloadCard({ station, recordable, onRecord }: { station: DriverUnloadin
   )
 }
 
-function StopCard({ detail, stop, number, service }: { detail: DriverRouteDetail; stop: DriverPickup; number: number; service: string | null }) {
+function StopCard({ detail, stop, number, service, numberOf }: { detail: DriverRouteDetail; stop: DriverPickup; number: number; service: string | null; numberOf: (pickupId: string) => number | undefined }) {
   const app = useDriverApp()
   const state = useDriverAppState()
   const actions = stopActions(detail, stop, state.waiting)
   const rejections = state.rejections.filter((rejection) => rejection.pickupId === stop.id)
   const maps = mapsHref(stop.location)
-  const [dialog, setDialog] = useState<"skip" | "fail" | "report" | "note" | "weight" | "signature" | "photo" | null>(null)
+  const [dialog, setDialog] = useState<"skip" | "fail" | "report" | "note" | "weight" | "signature" | "photo" | "scan" | null>(null)
   const close = (open: boolean) => {
     if (!open) setDialog(null)
   }
@@ -233,6 +235,8 @@ function StopCard({ detail, stop, number, service }: { detail: DriverRouteDetail
         <div className="flex shrink-0 flex-col items-end gap-1 whitespace-nowrap">
           <Badge variant={stop.status === "planned" ? "outline" : "secondary"}>{PICKUP_STATUS_LABELS[stop.status]}</Badge>
           {stop.status === "planned" && stop.arrivedAt !== null && <Badge variant="outline">Arrived</Badge>}
+          {/* Truthy, not non-null: an API from before the scan answers none at all. */}
+          {stop.containerConfirmedAt ? <Badge variant="outline">Container confirmed</Badge> : null}
           {service !== null && <Badge variant="outline">{service}</Badge>}
           {actions.sending && <Badge variant="outline">Sending</Badge>}
         </div>
@@ -258,6 +262,12 @@ function StopCard({ detail, stop, number, service }: { detail: DriverRouteDetail
           <Button variant="outline" size="sm" onClick={() => void app.tap({ kind: "arrive", routeId: detail.id, body: { pickupId: stop.id } })}>
             <MapPin aria-hidden />
             Arrived
+          </Button>
+        )}
+        {scanOffered(stop, actions) && (
+          <Button variant="outline" size="sm" onClick={() => setDialog("scan")}>
+            <Barcode aria-hidden />
+            Scan container
           </Button>
         )}
       </div>
@@ -304,6 +314,16 @@ function StopCard({ detail, stop, number, service }: { detail: DriverRouteDetail
           )}
         </div>
       )}
+      <ScanDialog
+        open={dialog === "scan"}
+        onOpenChange={close}
+        title={`Scan the container at stop ${number}`}
+        description={stop.containerLabel === null ? stop.address : `${stop.containerLabel} · ${stop.address}`}
+        stopId={stop.id}
+        numberOf={numberOf}
+        identify={(code) => app.identify(detail.id, code)}
+        onConfirm={(identification) => void app.tap({ kind: "arrive", routeId: detail.id, body: { pickupId: stop.id, identification } })}
+      />
       <ReasonDialog
         open={dialog === "skip"}
         onOpenChange={close}

@@ -74,7 +74,7 @@
 // end-route tap closes the open batch before the tap's own command. Positions
 // are no action of the driver's: they are not counted among the actions
 // waiting, nor is a rejection of one shown — the server keeps its receipt.
-import type { DriverMe, DriverRouteDetail } from "@waste/contracts/driver-commands"
+import type { DriverIdentification, DriverMe, DriverRouteDetail } from "@waste/contracts/driver-commands"
 
 import type { ApiClient } from "../api/client"
 import { problemSentence, type Problem } from "../api/problem"
@@ -85,7 +85,7 @@ import { EMPTY_SNAPSHOT, kept, type ReadSnapshot, type ReadSnapshotStore } from 
 import { BATCH_LIMIT, createCommandIds, pickupIdOf, takesLocation, type ObjectKind, type PilotBody, type PilotCommand, type PilotCommandKind, type ProofBytes } from "./commands"
 import { lookupFix } from "./location"
 import { createPositionRecorder, sessionRecords, type PositionBatch, type PositionWatcher } from "./position-recorder"
-import { NO_PROOF_STORAGE_TYPE, outOfReach, putObject, readDriverMe, readDriverRoute, sendCommands, signProofUpload } from "./reads"
+import { identifyOnRoute, NO_PROOF_STORAGE_TYPE, outOfReach, putObject, readDriverMe, readDriverRoute, sendCommands, signProofUpload } from "./reads"
 import { BROWSER_TIMERS, type Timers } from "./timers"
 
 /** How long the queue waits before trying again while anything waits. */
@@ -144,6 +144,9 @@ export type Tap = {
   [Kind in PilotCommandKind]: { kind: Kind; routeId: string; body: Omit<PilotBody<Kind>, Added<Kind>> } & (Kind extends ObjectKind ? { object: ProofBytes } : unknown)
 }[PilotCommandKind]
 
+/** What the door answered of a code read off a bin (O19 of #290): the stops it names, the server out of reach, or its refusal's sentence. */
+export type IdentifyAnswer = { status: "answered"; answer: DriverIdentification } | { status: "unreachable" } | { status: "refused"; sentence: string }
+
 export type DriverAppOptions = {
   /** The Command Queue's storage; a failure to open it leaves this page's commands in memory. */
   openQueue: () => Promise<CommandQueueStore>
@@ -171,6 +174,8 @@ export type DriverAppController = {
   refresh: () => Promise<void>
   /** Retry: a read, then a drain. */
   retry: () => Promise<void>
+  /** Asks the door which stop of the route a code names (O19 of #290); a read, so nothing is queued. */
+  identify: (routeId: string, code: string) => Promise<IdentifyAnswer>
   /** Queues a command and answers its id once it is persisted. */
   tap: (tap: Tap) => Promise<string>
   drain: () => Promise<void>
@@ -698,6 +703,18 @@ export function createDriverApp({ openQueue, openSnapshot, geolocation = null, n
     retry: async () => {
       await refresh()
       await drain()
+    },
+    identify: async (routeId, code) => {
+      const client = session?.client
+      if (!client) return { status: "unreachable" }
+      try {
+        return { status: "answered", answer: await withDeadline(client, (under) => identifyOnRoute(under, routeId, code)) }
+      } catch (error) {
+        const problem = problemOfError(error)
+        // A lapsed token waits for its refresh as the reads do; the screen offers to queue the arrival meanwhile.
+        if (problem.status === 401 || outOfReach(problem.status)) return { status: "unreachable" }
+        return { status: "refused", sentence: problemSentence(problem) }
+      }
     },
     tap: async (tap) => {
       const owner = session?.who

@@ -24,6 +24,7 @@ import {
   DRIVER_COMMAND_KINDS,
   DRIVER_PICKUP_REASONS,
   EXECUTION_SOURCES,
+  IDENTIFICATION_METHODS,
   OFFICE_CANCEL_REASON_CODES,
   OFFICE_STOP_SERVICES,
   OUTBOX_AGGREGATES,
@@ -90,6 +91,10 @@ export type ExecutionSource = z.infer<typeof ExecutionSource>
 /** What a driver's device may say. */
 export const DriverCommandKind = z.enum(DRIVER_COMMAND_KINDS)
 export type DriverCommandKind = z.infer<typeof DriverCommandKind>
+
+/** How a driver read the code that confirms a stop's container (O19 of #290). */
+export const IdentificationMethod = z.enum(IDENTIFICATION_METHODS)
+export type IdentificationMethod = z.infer<typeof IdentificationMethod>
 
 /** What the receipt stores of a command: applied or rejected. */
 export const CommandOutcome = z.enum(COMMAND_OUTCOMES)
