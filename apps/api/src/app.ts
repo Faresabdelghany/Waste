@@ -93,6 +93,7 @@ import { productRoutes } from "./routes/products"
 import { projectRoutes } from "./routes/projects"
 import { reportRoutes } from "./routes/reports"
 import { addressLookup, addressRoutes } from "./routes/addresses"
+import { moveRoutes } from "./routes/moves"
 import { propertyRoutes } from "./routes/properties"
 import { propertyGroupRoutes } from "./routes/property-groups"
 import { publicRoutes } from "./routes/public"
@@ -281,6 +282,7 @@ export function createApp({
   app.route("/", sharedCollectionPointRoutes(guard))
   // A termination asks generation runs of the schemes whose planned routes stop at its containers (#291), so it takes the clock and the job sender.
   app.route("/", agreementRoutes(guard, { now, jobs }))
+  app.route("/", moveRoutes(guard, { now }))
   // A customer's Applications and the office's Decisions (M7 of #293): a decision is stamped with the app's clock.
   app.route("/", applicationRoutes(guard, { now }))
   app.route("/", subscriptionPauseRoutes(guard, { now, jobs }))

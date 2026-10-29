@@ -8,7 +8,14 @@
 // on the day it moved to, since that is the day the truck comes. The period
 // is half-open (ADR-0005), so its last day in is one before `validTo`. A day
 // is bookable after the project's today, while it has a slot left; every
-// booking takes one slot, whatever its items (#449 prices the items).
+// booking takes one slot, whatever its items.
+//
+// Once collected, a booking is charged at the product its schedule names: as
+// one job for a product sold by the `job`, or at its items' count, the sum of
+// its lines' quantities, for one sold by the `item` (#449), so a sofa and two
+// mattresses are three. One product prices every item of the booking; a
+// price per kind of item would make each line name a product, which is not
+// built.
 //
 // A booking's status is read off its cancel stamp and the stop that names it:
 // a planned stop routes it, a completed one collected it, and a stop skipped
@@ -16,6 +23,7 @@
 import { generateOccurrences, SHIFT_SEARCH_DAYS, type HolidayPolicy, type SchemeCalendar } from "../route-schemes/occurrences"
 import { addDays, type ServiceDay, type WeekRotation } from "../route-schemes/recurrence"
 import type { RecurrenceFrequency } from "../planning/vocabulary"
+import type { ProductUnit } from "../registry/vocabulary"
 import type { BulkyBookingStatus, PickupStatus } from "./vocabulary"
 
 /** The most items one booking lists. */
@@ -24,6 +32,20 @@ export const BULKY_ITEMS_MAX = 20
 export const BULKY_ITEM_QUANTITY_MAX = 100
 /** The most days one availability read spans, both ends included. */
 export const BULKY_WINDOW_DAYS_MAX = 92
+
+/** The units a bulky collection is charged by (#449): the booking as one job, or each of its items. */
+export const BULKY_PRODUCT_UNITS = ["job", "item"] as const satisfies readonly ProductUnit[]
+
+/** Whether a product of this unit may charge a bulky collection. */
+export const isBulkyProductUnit = (unit: ProductUnit): boolean => (BULKY_PRODUCT_UNITS as readonly ProductUnit[]).includes(unit)
+
+/** What a schedule naming a product of another unit is told. */
+export const A_BULKY_PRODUCT_IS_SOLD_BY_THE_JOB_OR_ITEM = "A bulky collection is charged at a product sold by the job or by the item"
+
+/** How many of the product a collected booking is charged: its items' count for a product sold by the item, one job otherwise. */
+export function bulkyQuantity(unit: ProductUnit, items: readonly { quantity: number }[]): number {
+  return unit === "item" ? items.reduce((total, item) => total + item.quantity, 0) : 1
+}
 
 /** A Bulky Schedule as its days are judged: the recurrence, the holiday policy, the half-open period and the slots per day. */
 export type BulkySchedule = {

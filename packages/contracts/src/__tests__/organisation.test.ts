@@ -2,12 +2,18 @@ import assert from "node:assert/strict"
 import { describe, test } from "node:test"
 
 import { DEFAULT_WEEKEND, SERVICE_DAYS } from "@waste/domain/planning/vocabulary"
+import { RETENTION_DAYS_BOUNDS } from "@waste/domain/privacy/retention"
+import { GPS_PURPOSES } from "@waste/domain/privacy/vocabulary"
 
 import {
   A_WORKING_DAY,
   Company,
   CompanyPatch,
   CompanyStatus,
+  GpsPurpose,
+  PrivacyPolicy,
+  ProjectBranding,
+  ProjectBrandingReplace,
   Project,
   ProjectCreate,
   ProjectPatch,
@@ -51,6 +57,8 @@ const project = {
   paymentReferenceScheme: "none",
   weightTolerancePercent: 5,
   holdForReview: false,
+  privacyPolicy: { positionRetentionDays: null, proofRetentionDays: null, gpsPurpose: null },
+  branding: { brandColor: null, logoUrl: null, accessibilityStatementUrl: null },
   ...STAMPS,
 }
 
@@ -208,7 +216,7 @@ describe("Project", () => {
     assert.deepEqual(Project.parse({ ...project, weekend: sixDays }).weekend, sixDays)
     const everyDay = { path: "weekend", message: A_WORKING_DAY }
     assert.deepEqual(refusal(Project.safeParse({ ...project, weekend: [...SERVICE_DAYS] })), [everyDay])
-    const { id: _id, createdAt: _createdAt, updatedAt: _updatedAt, publicSlug: _publicSlug, ...body } = project
+    const { id: _id, createdAt: _createdAt, updatedAt: _updatedAt, publicSlug: _publicSlug, privacyPolicy: _privacyPolicy, branding: _branding, ...body } = project
     assert.deepEqual(refusal(ProjectCreate.safeParse({ ...body, weekend: [...SERVICE_DAYS] })), [everyDay])
     assert.deepEqual(refusal(ProjectPatch.safeParse({ weekend: [...SERVICE_DAYS] })), [everyDay])
   })
@@ -225,21 +233,21 @@ describe("Project", () => {
 
 describe("ProjectCreate", () => {
   test("takes what a project needs and mints nothing: the server owns the id and the timestamps", () => {
-    const { id: _id, createdAt: _createdAt, updatedAt: _updatedAt, publicSlug: _publicSlug, ...body } = project
+    const { id: _id, createdAt: _createdAt, updatedAt: _updatedAt, publicSlug: _publicSlug, privacyPolicy: _privacyPolicy, branding: _branding, ...body } = project
     assert.deepEqual(ProjectCreate.parse(body), body)
     assert.match(refusal(ProjectCreate.safeParse({ ...body, id: ID }))[0].message, /id/)
     assert.match(refusal(ProjectCreate.safeParse({ ...body, createdAt: STAMPS.createdAt }))[0].message, /createdAt/)
   })
 
   test("defaults the status to onboarding, and says so in the schema", () => {
-    const { id: _id, createdAt: _createdAt, updatedAt: _updatedAt, publicSlug: _publicSlug, status: _status, ...body } = project
+    const { id: _id, createdAt: _createdAt, updatedAt: _updatedAt, publicSlug: _publicSlug, privacyPolicy: _privacyPolicy, branding: _branding, status: _status, ...body } = project
     assert.equal(ProjectCreate.parse(body).status, "onboarding")
     assert.equal(ProjectCreate.parse({ ...body, status: "active" }).status, "active")
     assert.match(ProjectCreate.shape.status.description ?? "", /onboarding/)
   })
 
   test("defaults the weekend to Saturday and Sunday and the holiday list to nothing, and says so in the schema (#97)", () => {
-    const { id: _id, createdAt: _createdAt, updatedAt: _updatedAt, publicSlug: _publicSlug, weekend: _weekend, holidayList: _holidayList, ...body } = project
+    const { id: _id, createdAt: _createdAt, updatedAt: _updatedAt, publicSlug: _publicSlug, privacyPolicy: _privacyPolicy, branding: _branding, weekend: _weekend, holidayList: _holidayList, ...body } = project
     const parsed = ProjectCreate.parse(body)
     assert.deepEqual(parsed.weekend, ["saturday", "sunday"])
     assert.deepEqual(parsed.weekend, [...DEFAULT_WEEKEND], "the domain's constant, the same one the column default is built from")
@@ -251,7 +259,7 @@ describe("ProjectCreate", () => {
   })
 
   test("needs a name, a kind, a language, a currency and a timezone", () => {
-    const { id: _id, createdAt: _createdAt, updatedAt: _updatedAt, publicSlug: _publicSlug, ...body } = project
+    const { id: _id, createdAt: _createdAt, updatedAt: _updatedAt, publicSlug: _publicSlug, privacyPolicy: _privacyPolicy, branding: _branding, ...body } = project
     for (const key of ["name", "kind", "language", "currency", "timezone"]) {
       const { [key]: _dropped, ...without } = body as Record<string, unknown>
       assert.deepEqual(refusal(ProjectCreate.safeParse(without)).map((issue) => issue.path), [key])
@@ -284,7 +292,7 @@ describe("a project's public slug (ADR-0010)", () => {
 
 describe("a project's payment terms and reference scheme (#291 C4)", () => {
   test("are whole days from due on issue to a year, and none or a FI card; a new project's are thirty days and none, and the schema says so", () => {
-    const { id: _id, createdAt: _createdAt, updatedAt: _updatedAt, publicSlug: _publicSlug, paymentTermsDays: _terms, paymentReferenceScheme: _scheme, ...body } = project
+    const { id: _id, createdAt: _createdAt, updatedAt: _updatedAt, publicSlug: _publicSlug, privacyPolicy: _privacyPolicy, branding: _branding, paymentTermsDays: _terms, paymentReferenceScheme: _scheme, ...body } = project
     const made = ProjectCreate.parse(body)
     assert.deepEqual([made.paymentTermsDays, made.paymentReferenceScheme], [30, "none"])
     assert.match(ProjectCreate.shape.paymentTermsDays.description ?? "", /30/)
@@ -317,6 +325,53 @@ describe("ProjectPatch", () => {
     assert.deepEqual(ProjectPatch.parse({ holidayList: "Egyptian public holidays" }), { holidayList: "Egyptian public holidays" })
     assert.deepEqual(ProjectPatch.parse({ holidayList: null }), { holidayList: null })
     assert.deepEqual(refusal(ProjectPatch.safeParse({ weekend: ["sunday", "sunday"] })).map((issue) => issue.path), ["weekend"])
+  })
+})
+
+describe("a project's privacy policy (#291 C19)", () => {
+  const POLICY = { positionRetentionDays: 14, proofRetentionDays: 365, gpsPurpose: "dispatch-and-proof" }
+
+  test("is replaced whole: every part named, a null each being no policy of the project's own", () => {
+    assert.deepEqual(PrivacyPolicy.parse(POLICY), POLICY)
+    assert.deepEqual(PrivacyPolicy.parse({ positionRetentionDays: null, proofRetentionDays: null, gpsPurpose: null }), { positionRetentionDays: null, proofRetentionDays: null, gpsPurpose: null })
+    assert.deepEqual(refusal(PrivacyPolicy.safeParse({ positionRetentionDays: 14 })).map((issue) => issue.path), ["proofRetentionDays", "gpsPurpose"])
+  })
+
+  test("holds each kind's days to the domain's bounds and the purpose to the vocabulary", () => {
+    assert.deepEqual(refusal(PrivacyPolicy.safeParse({ ...POLICY, positionRetentionDays: RETENTION_DAYS_BOUNDS.positions.max + 1 })).map((issue) => issue.path), ["positionRetentionDays"])
+    assert.deepEqual(refusal(PrivacyPolicy.safeParse({ ...POLICY, proofRetentionDays: 0 })).map((issue) => issue.path), ["proofRetentionDays"])
+    assert.deepEqual(refusal(PrivacyPolicy.safeParse({ ...POLICY, gpsPurpose: "marketing" })).map((issue) => issue.path), ["gpsPurpose"])
+    assert.deepEqual(GpsPurpose.options, [...GPS_PURPOSES])
+  })
+
+  test("is read as no policy from a project payload before it", () => {
+    const { privacyPolicy: _, ...before } = project
+    assert.deepEqual(Project.parse(before).privacyPolicy, { positionRetentionDays: null, proofRetentionDays: null, gpsPurpose: null })
+  })
+})
+
+describe("a project's branding (M22 of #293)", () => {
+  const BRANDING = { brandColor: "#1F6F3F", logoUrl: "https://kk.dk/logo.svg", accessibilityStatementUrl: "https://was.digst.dk/kk-dk" }
+
+  test("is replaced whole, the colour kept lowercased, a null each being none", () => {
+    assert.deepEqual(ProjectBrandingReplace.parse(BRANDING), { ...BRANDING, brandColor: "#1f6f3f" })
+    assert.deepEqual(ProjectBrandingReplace.parse({ brandColor: null, logoUrl: null, accessibilityStatementUrl: null }), { brandColor: null, logoUrl: null, accessibilityStatementUrl: null })
+    assert.deepEqual(refusal(ProjectBrandingReplace.safeParse({ brandColor: "#1f6f3f" })).map((issue) => issue.path), ["logoUrl", "accessibilityStatementUrl"])
+  })
+
+  test("refuses a colour white text cannot be read on at WCAG 2.1 AA, saying the ratio; a colour of the wrong shape and an address that is not https", () => {
+    const [light] = refusal(ProjectBrandingReplace.safeParse({ ...BRANDING, brandColor: "#ffd700" }))
+    assert.equal(light.path, "brandColor")
+    assert.match(light.message, /contrast of 1\.\d\d to 1; WCAG 2\.1 AA needs 4\.5 to 1/)
+    assert.deepEqual(refusal(ProjectBrandingReplace.safeParse({ ...BRANDING, brandColor: "green" })).map((issue) => issue.path), ["brandColor"])
+    assert.deepEqual(refusal(ProjectBrandingReplace.safeParse({ ...BRANDING, logoUrl: "http://kk.dk/logo.svg" })).map((issue) => issue.path), ["logoUrl"])
+    assert.deepEqual(refusal(ProjectBrandingReplace.safeParse({ ...BRANDING, accessibilityStatementUrl: "javascript:alert(1)" })).map((issue) => issue.path), ["accessibilityStatementUrl"])
+  })
+
+  test("is read as none from a project payload before it", () => {
+    const { branding: _, ...before } = project
+    assert.deepEqual(Project.parse(before).branding, { brandColor: null, logoUrl: null, accessibilityStatementUrl: null })
+    assert.deepEqual(ProjectBranding.parse({ brandColor: "#1f6f3f", logoUrl: null, accessibilityStatementUrl: null }).brandColor, "#1f6f3f")
   })
 })
 

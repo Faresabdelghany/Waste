@@ -101,7 +101,7 @@ const property = {
   driverInstructions: "Gate code 4711; the bins stand behind the garage.",
   serviceWindow: { from: "07:00", to: "12:00" },
   status: "active",
-  parties: [{ customerId: THIRD, role: "owner" }],
+  parties: [{ customerId: THIRD, role: "owner", validFrom: "2026-01-01", validTo: null }],
   ...STAMPS,
 }
 
@@ -228,8 +228,18 @@ describe("Property", () => {
   })
 
   test("names each party by customer and role, and refuses a role outside the vocabulary", () => {
-    assert.equal(Property.safeParse({ ...property, parties: [{ customerId: THIRD, role: "landlord" }] }).success, false)
-    assert.equal(Property.safeParse({ ...property, parties: [{ customerId: "nobody", role: "owner" }] }).success, false)
+    assert.equal(Property.safeParse({ ...property, parties: [{ customerId: THIRD, role: "landlord", validFrom: "2026-01-01", validTo: null }] }).success, false)
+    assert.equal(Property.safeParse({ ...property, parties: [{ customerId: "nobody", role: "owner", validFrom: "2026-01-01", validTo: null }] }).success, false)
+  })
+
+  test("says from when until when each party holds its role (#374): a first day, and a last day out or null while it runs", () => {
+    const moving = [
+      { customerId: THIRD, role: "owner", validFrom: "2026-01-01", validTo: "2026-11-01" },
+      { customerId: OTHER, role: "owner", validFrom: "2026-11-01", validTo: null },
+    ]
+    assert.deepEqual(Property.parse({ ...property, parties: moving }).parties, moving)
+    assert.equal(Property.safeParse({ ...property, parties: [{ customerId: THIRD, role: "owner" }] }).success, false)
+    assert.equal(Property.safeParse({ ...property, parties: [{ customerId: THIRD, role: "owner", validFrom: "1 November", validTo: null }] }).success, false)
   })
 })
 
@@ -278,6 +288,10 @@ describe("PropertyCreate and PropertyPatch", () => {
 })
 
 describe("PropertyPartiesSet", () => {
+  test("names the set in force today and no period: the server dates what it adds and ends (#374)", () => {
+    assert.equal(PropertyPartiesSet.safeParse({ parties: [{ customerId: THIRD, role: "owner", validFrom: "2026-01-01", validTo: null }] }).success, false)
+  })
+
   test("replaces the whole list, the empty list included: a property with nobody on it is a property nobody is billed for", () => {
     const parties = [
       { customerId: THIRD, role: "owner" },
@@ -302,7 +316,8 @@ describe("PropertyPartiesSet", () => {
     assert.match(refusal(PropertyPartiesSet.safeParse({ parties: [], propertyId: ID }))[0].message, /propertyId/)
     const many = tooManyIds.map((customerId) => ({ customerId, role: "tenant" }))
     assert.equal(PropertyPartiesSet.safeParse({ parties: many }).success, false)
-    assert.equal(Property.parse({ ...property, parties: many }).parties.length, many.length, "the bound is a body's; a stored list has to parse however long it grew")
+    const held = many.map((party) => ({ ...party, validFrom: "2026-01-01", validTo: null }))
+    assert.equal(Property.parse({ ...property, parties: held }).parties.length, held.length, "the bound is a body's; a stored list has to parse however long it grew")
   })
 })
 

@@ -1,6 +1,6 @@
 {
-  "id": "bec6b9fd-7e1f-45ce-b4fc-2056195e0299",
-  "prevId": "bce69d06-e673-4be6-8f43-51944eef3cff",
+  "id": "ee951be3-e746-4fe3-8c86-ad0ae2c06b6e",
+  "prevId": "2c4acbdf-1255-4bc7-a01c-b782d18c24c1",
   "version": "7",
   "dialect": "postgresql",
   "tables": {
@@ -272,6 +272,24 @@
           "primaryKey": false,
           "notNull": true,
           "default": false
+        },
+        "position_retention_days": {
+          "name": "position_retention_days",
+          "type": "integer",
+          "primaryKey": false,
+          "notNull": false
+        },
+        "proof_retention_days": {
+          "name": "proof_retention_days",
+          "type": "integer",
+          "primaryKey": false,
+          "notNull": false
+        },
+        "gps_purpose": {
+          "name": "gps_purpose",
+          "type": "text",
+          "primaryKey": false,
+          "notNull": false
         }
       },
       "indexes": {},
@@ -346,6 +364,18 @@
         "project_weight_tolerance_percent_range": {
           "name": "project_weight_tolerance_percent_range",
           "value": "\"wms\".\"project\".\"weight_tolerance_percent\" between 1 and 100"
+        },
+        "project_position_retention_range": {
+          "name": "project_position_retention_range",
+          "value": "\"wms\".\"project\".\"position_retention_days\" between 1 and 30"
+        },
+        "project_proof_retention_range": {
+          "name": "project_proof_retention_range",
+          "value": "\"wms\".\"project\".\"proof_retention_days\" between 1 and 3650"
+        },
+        "project_gps_purpose_one_of": {
+          "name": "project_gps_purpose_one_of",
+          "value": "\"wms\".\"project\".\"gps_purpose\" in ('dispatch', 'dispatch-and-proof')"
         }
       },
       "isRLSEnabled": false
@@ -1493,7 +1523,7 @@
         },
         "product_unit_one_of": {
           "name": "product_unit_one_of",
-          "value": "\"wms\".\"product\".\"unit\" in ('pickup', 'month', 'job', 'day', 'visit')"
+          "value": "\"wms\".\"product\".\"unit\" in ('pickup', 'month', 'job', 'day', 'visit', 'item')"
         },
         "product_vat_percent_range": {
           "name": "product_vat_percent_range",
@@ -14808,7 +14838,7 @@
         },
         "alert_rule_one_of": {
           "name": "alert_rule_one_of",
-          "value": "\"wms\".\"alert\".\"rule\" in ('route-not-started', 'session-silent', 'licence-expiring', 'ticket-overdue', 'position-stale', 'fill-threshold')"
+          "value": "\"wms\".\"alert\".\"rule\" in ('route-not-started', 'session-silent', 'licence-expiring', 'ticket-overdue', 'position-stale')"
         },
         "alert_subject_shape": {
           "name": "alert_subject_shape",
@@ -32753,517 +32783,6 @@
         "vehicle_defect_resolution_shape": {
           "name": "vehicle_defect_resolution_shape",
           "value": "(\"wms\".\"vehicle_defect\".\"status\" = 'resolved') = (\"wms\".\"vehicle_defect\".\"resolved_at\" is not null)"
-        }
-      },
-      "isRLSEnabled": false
-    },
-    "wms.fill_reading": {
-      "name": "fill_reading",
-      "schema": "wms",
-      "columns": {
-        "id": {
-          "name": "id",
-          "type": "uuid",
-          "primaryKey": true,
-          "notNull": true,
-          "default": "wms.uuidv7()"
-        },
-        "company_id": {
-          "name": "company_id",
-          "type": "uuid",
-          "primaryKey": false,
-          "notNull": true
-        },
-        "project_id": {
-          "name": "project_id",
-          "type": "uuid",
-          "primaryKey": false,
-          "notNull": true
-        },
-        "recorded_at": {
-          "name": "recorded_at",
-          "type": "timestamp with time zone",
-          "primaryKey": false,
-          "notNull": true,
-          "default": "now()"
-        },
-        "sensor_id": {
-          "name": "sensor_id",
-          "type": "uuid",
-          "primaryKey": false,
-          "notNull": true
-        },
-        "pairing_id": {
-          "name": "pairing_id",
-          "type": "uuid",
-          "primaryKey": false,
-          "notNull": false
-        },
-        "measured_at": {
-          "name": "measured_at",
-          "type": "timestamp with time zone",
-          "primaryKey": false,
-          "notNull": true
-        },
-        "fill_percent": {
-          "name": "fill_percent",
-          "type": "integer",
-          "primaryKey": false,
-          "notNull": true
-        },
-        "battery_percent": {
-          "name": "battery_percent",
-          "type": "integer",
-          "primaryKey": false,
-          "notNull": false
-        },
-        "rssi_dbm": {
-          "name": "rssi_dbm",
-          "type": "integer",
-          "primaryKey": false,
-          "notNull": false
-        }
-      },
-      "indexes": {
-        "fill_reading_pairing_id_idx": {
-          "name": "fill_reading_pairing_id_idx",
-          "columns": [
-            {
-              "expression": "company_id",
-              "isExpression": false,
-              "asc": true,
-              "nulls": "last"
-            },
-            {
-              "expression": "pairing_id",
-              "isExpression": false,
-              "asc": true,
-              "nulls": "last"
-            },
-            {
-              "expression": "measured_at",
-              "isExpression": false,
-              "asc": true,
-              "nulls": "last"
-            }
-          ],
-          "isUnique": false,
-          "concurrently": false,
-          "method": "btree",
-          "with": {}
-        },
-        "fill_reading_project_id_idx": {
-          "name": "fill_reading_project_id_idx",
-          "columns": [
-            {
-              "expression": "company_id",
-              "isExpression": false,
-              "asc": true,
-              "nulls": "last"
-            },
-            {
-              "expression": "project_id",
-              "isExpression": false,
-              "asc": true,
-              "nulls": "last"
-            }
-          ],
-          "isUnique": false,
-          "concurrently": false,
-          "method": "btree",
-          "with": {}
-        }
-      },
-      "foreignKeys": {
-        "fill_reading_company_id_fk": {
-          "name": "fill_reading_company_id_fk",
-          "tableFrom": "fill_reading",
-          "tableTo": "company",
-          "schemaTo": "wms",
-          "columnsFrom": [
-            "company_id"
-          ],
-          "columnsTo": [
-            "id"
-          ],
-          "onDelete": "no action",
-          "onUpdate": "no action"
-        },
-        "fill_reading_project_id_fk": {
-          "name": "fill_reading_project_id_fk",
-          "tableFrom": "fill_reading",
-          "tableTo": "project",
-          "schemaTo": "wms",
-          "columnsFrom": [
-            "company_id",
-            "project_id"
-          ],
-          "columnsTo": [
-            "company_id",
-            "id"
-          ],
-          "onDelete": "no action",
-          "onUpdate": "no action"
-        },
-        "fill_reading_sensor_id_fk": {
-          "name": "fill_reading_sensor_id_fk",
-          "tableFrom": "fill_reading",
-          "tableTo": "sensor",
-          "schemaTo": "wms",
-          "columnsFrom": [
-            "company_id",
-            "project_id",
-            "sensor_id"
-          ],
-          "columnsTo": [
-            "company_id",
-            "project_id",
-            "id"
-          ],
-          "onDelete": "no action",
-          "onUpdate": "no action"
-        },
-        "fill_reading_pairing_id_fk": {
-          "name": "fill_reading_pairing_id_fk",
-          "tableFrom": "fill_reading",
-          "tableTo": "sensor_pairing",
-          "schemaTo": "wms",
-          "columnsFrom": [
-            "company_id",
-            "project_id",
-            "pairing_id"
-          ],
-          "columnsTo": [
-            "company_id",
-            "project_id",
-            "id"
-          ],
-          "onDelete": "no action",
-          "onUpdate": "no action"
-        }
-      },
-      "compositePrimaryKeys": {},
-      "uniqueConstraints": {
-        "fill_reading_sensor_id_measured_at_key": {
-          "name": "fill_reading_sensor_id_measured_at_key",
-          "nullsNotDistinct": false,
-          "columns": [
-            "company_id",
-            "sensor_id",
-            "measured_at"
-          ]
-        }
-      },
-      "policies": {},
-      "checkConstraints": {
-        "fill_reading_fill_range": {
-          "name": "fill_reading_fill_range",
-          "value": "\"wms\".\"fill_reading\".\"fill_percent\" between 0 and 100"
-        },
-        "fill_reading_battery_range": {
-          "name": "fill_reading_battery_range",
-          "value": "\"wms\".\"fill_reading\".\"battery_percent\" is null or \"wms\".\"fill_reading\".\"battery_percent\" between 0 and 100"
-        },
-        "fill_reading_rssi_range": {
-          "name": "fill_reading_rssi_range",
-          "value": "\"wms\".\"fill_reading\".\"rssi_dbm\" is null or \"wms\".\"fill_reading\".\"rssi_dbm\" between -200 and 0"
-        }
-      },
-      "isRLSEnabled": false
-    },
-    "wms.sensor": {
-      "name": "sensor",
-      "schema": "wms",
-      "columns": {
-        "id": {
-          "name": "id",
-          "type": "uuid",
-          "primaryKey": true,
-          "notNull": true,
-          "default": "wms.uuidv7()"
-        },
-        "company_id": {
-          "name": "company_id",
-          "type": "uuid",
-          "primaryKey": false,
-          "notNull": true
-        },
-        "project_id": {
-          "name": "project_id",
-          "type": "uuid",
-          "primaryKey": false,
-          "notNull": true
-        },
-        "created_at": {
-          "name": "created_at",
-          "type": "timestamp with time zone",
-          "primaryKey": false,
-          "notNull": true,
-          "default": "now()"
-        },
-        "updated_at": {
-          "name": "updated_at",
-          "type": "timestamp with time zone",
-          "primaryKey": false,
-          "notNull": true,
-          "default": "now()"
-        },
-        "identifier": {
-          "name": "identifier",
-          "type": "text",
-          "primaryKey": false,
-          "notNull": true
-        },
-        "network": {
-          "name": "network",
-          "type": "text",
-          "primaryKey": false,
-          "notNull": true
-        },
-        "status": {
-          "name": "status",
-          "type": "text",
-          "primaryKey": false,
-          "notNull": true
-        },
-        "notes": {
-          "name": "notes",
-          "type": "text",
-          "primaryKey": false,
-          "notNull": false
-        }
-      },
-      "indexes": {},
-      "foreignKeys": {
-        "sensor_company_id_fk": {
-          "name": "sensor_company_id_fk",
-          "tableFrom": "sensor",
-          "tableTo": "company",
-          "schemaTo": "wms",
-          "columnsFrom": [
-            "company_id"
-          ],
-          "columnsTo": [
-            "id"
-          ],
-          "onDelete": "no action",
-          "onUpdate": "no action"
-        },
-        "sensor_project_id_fk": {
-          "name": "sensor_project_id_fk",
-          "tableFrom": "sensor",
-          "tableTo": "project",
-          "schemaTo": "wms",
-          "columnsFrom": [
-            "company_id",
-            "project_id"
-          ],
-          "columnsTo": [
-            "company_id",
-            "id"
-          ],
-          "onDelete": "no action",
-          "onUpdate": "no action"
-        }
-      },
-      "compositePrimaryKeys": {},
-      "uniqueConstraints": {
-        "sensor_identifier_key": {
-          "name": "sensor_identifier_key",
-          "nullsNotDistinct": false,
-          "columns": [
-            "company_id",
-            "identifier"
-          ]
-        },
-        "sensor_project_key": {
-          "name": "sensor_project_key",
-          "nullsNotDistinct": false,
-          "columns": [
-            "company_id",
-            "project_id",
-            "id"
-          ]
-        }
-      },
-      "policies": {},
-      "checkConstraints": {
-        "sensor_network_one_of": {
-          "name": "sensor_network_one_of",
-          "value": "\"wms\".\"sensor\".\"network\" in ('lorawan', 'sigfox', 'nb-iot')"
-        },
-        "sensor_status_one_of": {
-          "name": "sensor_status_one_of",
-          "value": "\"wms\".\"sensor\".\"status\" in ('active', 'retired')"
-        }
-      },
-      "isRLSEnabled": false
-    },
-    "wms.sensor_pairing": {
-      "name": "sensor_pairing",
-      "schema": "wms",
-      "columns": {
-        "id": {
-          "name": "id",
-          "type": "uuid",
-          "primaryKey": true,
-          "notNull": true,
-          "default": "wms.uuidv7()"
-        },
-        "company_id": {
-          "name": "company_id",
-          "type": "uuid",
-          "primaryKey": false,
-          "notNull": true
-        },
-        "project_id": {
-          "name": "project_id",
-          "type": "uuid",
-          "primaryKey": false,
-          "notNull": true
-        },
-        "created_at": {
-          "name": "created_at",
-          "type": "timestamp with time zone",
-          "primaryKey": false,
-          "notNull": true,
-          "default": "now()"
-        },
-        "updated_at": {
-          "name": "updated_at",
-          "type": "timestamp with time zone",
-          "primaryKey": false,
-          "notNull": true,
-          "default": "now()"
-        },
-        "valid_from": {
-          "name": "valid_from",
-          "type": "date",
-          "primaryKey": false,
-          "notNull": true
-        },
-        "valid_to": {
-          "name": "valid_to",
-          "type": "date",
-          "primaryKey": false,
-          "notNull": false
-        },
-        "sensor_id": {
-          "name": "sensor_id",
-          "type": "uuid",
-          "primaryKey": false,
-          "notNull": true
-        },
-        "container_id": {
-          "name": "container_id",
-          "type": "uuid",
-          "primaryKey": false,
-          "notNull": true
-        },
-        "full_threshold_percent": {
-          "name": "full_threshold_percent",
-          "type": "integer",
-          "primaryKey": false,
-          "notNull": true
-        },
-        "books_emptying": {
-          "name": "books_emptying",
-          "type": "boolean",
-          "primaryKey": false,
-          "notNull": true,
-          "default": false
-        }
-      },
-      "indexes": {},
-      "foreignKeys": {
-        "sensor_pairing_company_id_fk": {
-          "name": "sensor_pairing_company_id_fk",
-          "tableFrom": "sensor_pairing",
-          "tableTo": "company",
-          "schemaTo": "wms",
-          "columnsFrom": [
-            "company_id"
-          ],
-          "columnsTo": [
-            "id"
-          ],
-          "onDelete": "no action",
-          "onUpdate": "no action"
-        },
-        "sensor_pairing_project_id_fk": {
-          "name": "sensor_pairing_project_id_fk",
-          "tableFrom": "sensor_pairing",
-          "tableTo": "project",
-          "schemaTo": "wms",
-          "columnsFrom": [
-            "company_id",
-            "project_id"
-          ],
-          "columnsTo": [
-            "company_id",
-            "id"
-          ],
-          "onDelete": "no action",
-          "onUpdate": "no action"
-        },
-        "sensor_pairing_sensor_id_fk": {
-          "name": "sensor_pairing_sensor_id_fk",
-          "tableFrom": "sensor_pairing",
-          "tableTo": "sensor",
-          "schemaTo": "wms",
-          "columnsFrom": [
-            "company_id",
-            "project_id",
-            "sensor_id"
-          ],
-          "columnsTo": [
-            "company_id",
-            "project_id",
-            "id"
-          ],
-          "onDelete": "no action",
-          "onUpdate": "no action"
-        },
-        "sensor_pairing_container_id_fk": {
-          "name": "sensor_pairing_container_id_fk",
-          "tableFrom": "sensor_pairing",
-          "tableTo": "container",
-          "schemaTo": "wms",
-          "columnsFrom": [
-            "company_id",
-            "project_id",
-            "container_id"
-          ],
-          "columnsTo": [
-            "company_id",
-            "project_id",
-            "id"
-          ],
-          "onDelete": "no action",
-          "onUpdate": "no action"
-        }
-      },
-      "compositePrimaryKeys": {},
-      "uniqueConstraints": {
-        "sensor_pairing_project_key": {
-          "name": "sensor_pairing_project_key",
-          "nullsNotDistinct": false,
-          "columns": [
-            "company_id",
-            "project_id",
-            "id"
-          ]
-        }
-      },
-      "policies": {},
-      "checkConstraints": {
-        "sensor_pairing_validity": {
-          "name": "sensor_pairing_validity",
-          "value": "\"wms\".\"sensor_pairing\".\"valid_to\" is null or \"wms\".\"sensor_pairing\".\"valid_to\" > \"wms\".\"sensor_pairing\".\"valid_from\""
-        },
-        "sensor_pairing_threshold_range": {
-          "name": "sensor_pairing_threshold_range",
-          "value": "\"wms\".\"sensor_pairing\".\"full_threshold_percent\" between 1 and 100"
         }
       },
       "isRLSEnabled": false

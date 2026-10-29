@@ -94,6 +94,7 @@ import { emit } from "../outbox"
 import { afterCursor, fetchLimit, pageOf } from "../pagination"
 import { describeProblem, invalidRequest, problem, validate } from "../problem"
 import { findReachedRoute, labelOf as routeLabelOf } from "./execution-shapes"
+import { partyInForce } from "./property-writes"
 import {
   NOT_A_PICKUP,
   NOT_A_ROUTE,
@@ -278,15 +279,15 @@ async function detailOf(tx: Tx, principal: Principal, row: TicketRow): Promise<T
   return { ...ticketOf(row), events: events.map(eventOf), alerts: alerts.map(alertOf) }
 }
 
-/** The tickets a customer may see: those naming the customer, or a property a party row names them on, in any role — one `exists`, so two roles at one property is one ticket and not two. */
-const visibleTo = (tx: Tx, companyId: string, customerId: string) =>
+/** The tickets a customer may see: those naming the customer, or a property a party row names them on today, in any role (#374) — one `exists`, so two roles at one property is one ticket and not two. */
+const visibleTo = (tx: Tx, companyId: string, customerId: string, now: Date) =>
   or(
     eq(ticket.customerId, customerId),
     exists(
       tx
         .select({ party: propertyParty.id })
         .from(propertyParty)
-        .where(and(eq(propertyParty.companyId, companyId), eq(propertyParty.customerId, customerId), eq(propertyParty.propertyId, ticket.propertyId))),
+        .where(and(eq(propertyParty.companyId, companyId), eq(propertyParty.customerId, customerId), eq(propertyParty.propertyId, ticket.propertyId), partyInForce(now))),
     ),
   )
 
@@ -403,7 +404,7 @@ export function ticketRoutes(guard: MiddlewareHandler<AuthEnv>, { now = () => ne
               assigneeUserAccountId === undefined ? undefined : eq(ticket.assigneeUserAccountId, assigneeUserAccountId),
               teamId === undefined ? undefined : eq(ticket.teamId, teamId),
               unassigned === undefined ? undefined : unassigned ? isNull(ticket.assigneeUserAccountId) : isNotNull(ticket.assigneeUserAccountId),
-              customerId === undefined ? undefined : visibleTo(tx, principal.companyId, customerId),
+              customerId === undefined ? undefined : visibleTo(tx, principal.companyId, customerId, now()),
               propertyId === undefined ? undefined : eq(ticket.propertyId, propertyId),
               routeId === undefined ? undefined : eq(ticket.routeId, routeId),
               pickupId === undefined ? undefined : eq(ticket.pickupId, pickupId),

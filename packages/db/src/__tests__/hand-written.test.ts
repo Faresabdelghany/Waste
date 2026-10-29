@@ -350,13 +350,15 @@ describe("the migrations carry every table's hand-written statements", () => {
     assert.ok(Array.isArray(await tables()))
   })
 
-  test("each table of the schema is created by exactly one migration, and that file carries its statements", async () => {
+  test("each table of the schema is created by exactly one migration, and that file or a later one carries its statements", async () => {
     const files = await migrations()
     for (const table of await tables()) {
       const creating = files.filter((file) => createsTable(table, file.text))
       assert.equal(creating.length, 1, `${createTableStatement(table)} appears in ${creating.map((file) => file.name).join(", ") || "no migration"}`)
-      const missing = missingHandWritten(table, creating[0].text)
-      assert.deepEqual(missing, [], `${creating[0].name} lacks, below drizzle-kit's statements and each after a --> statement-breakpoint line:\n${missing.join("\n")}`)
+      // A table that gains a statement's reason later — an undated table dated (#374: `property_party`'s exclusion constraint) — carries it in the file that changed it, which runs after the one that created it.
+      const fromCreation = files.slice(files.indexOf(creating[0])).map((file) => file.text).join("\n--> statement-breakpoint\n")
+      const missing = missingHandWritten(table, fromCreation)
+      assert.deepEqual(missing, [], `${creating[0].name} or a later migration lacks, below drizzle-kit's statements and each after a --> statement-breakpoint line:\n${missing.join("\n")}`)
     }
   })
 

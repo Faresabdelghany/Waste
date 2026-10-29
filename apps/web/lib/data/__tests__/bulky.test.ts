@@ -7,7 +7,7 @@ import type { BulkySchedule } from "@waste/contracts/bulky"
 
 import { mintedRecord } from "../containers"
 
-import { agreementsOfCustomer, bookingPlaceOf, bookingRecordOf, bookingsForRoute, dayOption, placesOfAgreement, routesForBooking, withBookingDay, itemsOf, itemsSentence, newScheduleForm, periodSentence, recurrenceSentence, scheduleCreateBodyOf, scheduleFormOf, schedulePatchBodyOf, shortDay, slotsSentence } from "../bulky"
+import { agreementsOfCustomer, bookingPlaceOf, bulkyProductLabel, bulkyProductsOffered, bookingRecordOf, bookingsForRoute, dayOption, placesOfAgreement, routesForBooking, withBookingDay, itemsOf, itemsSentence, newScheduleForm, periodSentence, recurrenceSentence, scheduleCreateBodyOf, scheduleFormOf, schedulePatchBodyOf, shortDay, slotsSentence } from "../bulky"
 
 const SCHEDULE: BulkySchedule = {
   id: "01a0d2a4-a280-7099-8000-000000000001",
@@ -147,5 +147,20 @@ describe("a booking's place and day", () => {
       bookingsForRoute([booked, routed, otherDay], route).map((option) => option.value),
       ["bulky-booking-1"],
     )
+  })
+})
+
+describe("the products a schedule charges (#449)", () => {
+  const product = (id: string, unit: "job" | "item" | "pickup", status: "active" | "draft" = "active") => ({ id, name: `Product ${id}`, unit, status })
+
+  test("are the project's active ones sold by the job or by the item, and the one the schedule charges now whatever it is", () => {
+    const products = [product("job", "job"), product("item", "item"), product("pickup", "pickup"), product("draft", "item", "draft")]
+    assert.deepEqual(bulkyProductsOffered(products, undefined).map((offered) => offered.id), ["job", "item"])
+    assert.deepEqual(bulkyProductsOffered(products, "draft").map((offered) => offered.id), ["job", "item", "draft"], "the one charged now is kept")
+  })
+
+  test("are named with what a booking is charged of them", () => {
+    assert.equal(bulkyProductLabel({ name: "Bulky collection", unit: "item" }), "Bulky collection · per item")
+    assert.equal(bulkyProductLabel({ name: "Bulky collection", unit: "job" }), "Bulky collection · per job")
   })
 })

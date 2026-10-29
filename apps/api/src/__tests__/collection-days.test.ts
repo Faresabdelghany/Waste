@@ -135,7 +135,7 @@ describe("the collection days by address on the public door", { skip: database.s
       const response = await get(`/public/${slug}/addresses?q=parkvej`)
       assert.equal(response.status, 200)
       const found = AddressMatches.parse(await response.json())
-      assert.deepEqual(found.project, { slug, name: "Copenhagen Central", language: "da", timezone: "Europe/Copenhagen" }, "the project searched, so a page asks once")
+      assert.deepEqual(found.project, { slug, name: "Copenhagen Central", language: "da", timezone: "Europe/Copenhagen", branding: { brandColor: null, logoUrl: null, accessibilityStatementUrl: null } }, "the project searched, so a page asks once")
       assert.deepEqual(found.addresses, [{ id: ids.parkvej1, address: "Parkvej 1, 2100 København Ø" }], "not Parkvej 3 (nothing collected), not Harbor's (unpublished), not the other company's")
     })
 

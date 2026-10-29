@@ -82,7 +82,7 @@ export const PRODUCT_KIND_LABELS: Readonly<Record<ProductKind, string>> = {
 }
 
 /** A Product's unit, as a price is quoted per it: `/pickup`. */
-export const UNIT_SUFFIX: Readonly<Record<ProductUnit, string>> = { pickup: "/pickup", month: "/mo", job: "/job", day: "/day", visit: "/visit" }
+export const UNIT_SUFFIX: Readonly<Record<ProductUnit, string>> = { pickup: "/pickup", month: "/mo", job: "/job", day: "/day", visit: "/visit", item: "/item" }
 
 /** A price row's customer-kind condition, as the prototype's Customer type read: a person is a household, an organisation is commercial. */
 export const CUSTOMER_KIND_LABELS: Readonly<Record<CustomerKind, string>> = { person: "Person", organisation: "Organisation" }

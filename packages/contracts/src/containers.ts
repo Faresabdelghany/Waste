@@ -36,7 +36,7 @@
 // what makes that the honest way to say it. Whether a corrected end still lies
 // inside the subscription's period is the route's question, since this schema
 // cannot see the stored row.
-import { CONTAINER_OWNERSHIPS } from "@waste/domain/registry/vocabulary"
+import { CONTAINER_IDENTIFIERS, CONTAINER_OWNERSHIPS } from "@waste/domain/registry/vocabulary"
 import * as z from "zod"
 
 import { IsoDate, IsoDateTime } from "./dates"
@@ -51,6 +51,10 @@ import { endsAfterItStarts, Validity, validityOrdered } from "./validity"
 /** Whose Container it is; `unrecorded` is what an imported registry usually says. */
 export const ContainerOwnership = z.enum(CONTAINER_OWNERSHIPS)
 export type ContainerOwnership = z.infer<typeof ContainerOwnership>
+
+/** Which of a Container's identifiers a code spells (O19 of #290). */
+export const ContainerIdentifier = z.enum(CONTAINER_IDENTIFIERS)
+export type ContainerIdentifier = z.infer<typeof ContainerIdentifier>
 
 export const Container = z.object({
   ...stamped,
@@ -149,6 +153,8 @@ export const ContainerListQuery = ProjectScopedListQuery.extend({
   assetStatus: AssetStatus.optional(),
   /** The containers standing in this warehouse, in stock or in maintenance. */
   warehouseId: Id.optional(),
+  /** The containers a code read off a bin names (O19 of #290): its label, barcode, RFID tag or serial number, spaces either side and case ignored. */
+  identifier: Label.optional(),
 })
 export type ContainerListQuery = z.infer<typeof ContainerListQuery>
 
