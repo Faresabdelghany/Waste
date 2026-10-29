@@ -280,6 +280,10 @@ _Avoid_: Driver workspace, mobile app (as a promise of a native application), Op
 A driver-app work session on an assigned route, tracking the driver's device state, connectivity, queued actions, and proof progress from assignment to completion. It is created by starting an assigned Route and ended by ending it; a driver has one open Session at a time, and so does a Route.
 _Avoid_: Route, actual assignment, pickup
 
+**Route Message**:
+A line of text the office and a Route's driver write to each other about that Route, read as the Route's thread in its details and on the Driver App's route screen. Written once, never edited or taken back. It is not a Message, which goes to a Customer.
+_Avoid_: Chat, notification, Message (a Customer's)
+
 **Command Queue**:
 The durable, ordered queue on a driver's device of the commands their actions produce, each kept until the server has answered it. It carries actions through a loss of connectivity and is never the source of truth: the server's records and its receipts are.
 _Avoid_: Outbox (the server-side outbox that publishes events between contexts), offline mode, cache

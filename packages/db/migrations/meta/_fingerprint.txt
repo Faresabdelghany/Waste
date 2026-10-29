@@ -2771,6 +2771,30 @@ policy wms.route route_public_door permissive SELECT to=wms_public using=((compa
    FROM wms.project published
   WHERE ((published.company_id = route.company_id) AND (published.id = route.project_id) AND (published.public_slug IS NOT NULL))))) check=none
 policy wms.route route_tenant_fence permissive ALL to=wms_api using=(company_id = ( SELECT wms.current_company_id() AS current_company_id)) check=(company_id = ( SELECT wms.current_company_id() AS current_company_id))
+relation wms.route_message kind=table owner=<owner> persistence=p rls=true force-rls=true replica-identity=d acl=[<owner>=DELETE,INSERT,MAINTAIN,REFERENCES,SELECT,TRIGGER,TRUNCATE,UPDATE/<owner> wms_api=INSERT,SELECT/<owner> wms_worker=SELECT/<owner>]
+column wms.route_message 1 id uuid not-null default=wms.uuidv7()
+column wms.route_message 2 company_id uuid not-null
+column wms.route_message 3 project_id uuid not-null
+column wms.route_message 4 recorded_at timestamp with time zone not-null default=now()
+column wms.route_message 5 route_id uuid not-null
+column wms.route_message 6 author text not-null
+column wms.route_message 7 sent_by uuid not-null
+column wms.route_message 8 driver_id uuid
+column wms.route_message 9 body text not-null
+constraint wms.route_message route_message_author_one_of CHECK ((author = ANY (ARRAY['office'::text, 'driver'::text])))
+constraint wms.route_message route_message_author_shape CHECK (((author = 'driver'::text) = (driver_id IS NOT NULL)))
+constraint wms.route_message route_message_company_id_fk FOREIGN KEY (company_id) REFERENCES wms.company(id)
+constraint wms.route_message route_message_driver_id_fk FOREIGN KEY (company_id, project_id, driver_id) REFERENCES wms.driver(company_id, project_id, id)
+constraint wms.route_message route_message_pkey PRIMARY KEY (id)
+constraint wms.route_message route_message_project_id_fk FOREIGN KEY (company_id, project_id) REFERENCES wms.project(company_id, id)
+constraint wms.route_message route_message_route_id_fk FOREIGN KEY (company_id, project_id, route_id) REFERENCES wms.route(company_id, project_id, id)
+constraint wms.route_message route_message_sent_by_fk FOREIGN KEY (company_id, sent_by) REFERENCES wms.user_account(company_id, id)
+index wms.route_message route_message_driver_id_idx CREATE INDEX route_message_driver_id_idx ON wms.route_message USING btree (company_id, driver_id)
+index wms.route_message route_message_pkey CREATE UNIQUE INDEX route_message_pkey ON wms.route_message USING btree (id)
+index wms.route_message route_message_project_id_idx CREATE INDEX route_message_project_id_idx ON wms.route_message USING btree (company_id, project_id)
+index wms.route_message route_message_route_id_idx CREATE INDEX route_message_route_id_idx ON wms.route_message USING btree (company_id, route_id, id)
+index wms.route_message route_message_sent_by_idx CREATE INDEX route_message_sent_by_idx ON wms.route_message USING btree (company_id, sent_by)
+policy wms.route_message route_message_tenant_fence permissive ALL to=wms_api using=(company_id = ( SELECT wms.current_company_id() AS current_company_id)) check=(company_id = ( SELECT wms.current_company_id() AS current_company_id))
 relation wms.route_scheme kind=table owner=<owner> persistence=p rls=true force-rls=true replica-identity=d acl=[<owner>=DELETE,INSERT,MAINTAIN,REFERENCES,SELECT,TRIGGER,TRUNCATE,UPDATE/<owner> wms_api=DELETE,INSERT,SELECT,UPDATE/<owner> wms_worker=SELECT/<owner>]
 column wms.route_scheme 1 id uuid not-null default=wms.uuidv7() acl=[wms_public=SELECT/<owner>]
 column wms.route_scheme 2 company_id uuid not-null acl=[wms_public=SELECT/<owner>]
@@ -4643,4 +4667,5 @@ journal 1793231765311 8be507c6aeeb679056b17fbe4b539cd8826f644e166c5d0254f04775e8
 journal 1793235059830 38a2a0d60433c5319c88d1428ef79675b519bda7059587aea3fc5368f164bf60
 journal 1793241234406 3e4f0b485e465f3836018f545d415793a377728d22334fe5b59d8e0b44ea8066
 journal 1793243238519 233234b7acf3c642f212331efc9afedc7d139dcd35159a8709e2d830322834c8
+journal 1793246337589 8e1da41950f1d986cc6fea41328cbc0c772a104e679678680a07b829df018e96
 pgboss-version 42

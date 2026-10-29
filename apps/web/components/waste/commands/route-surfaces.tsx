@@ -38,7 +38,9 @@ import { Button } from "@/components/ui/button"
 import { Checkbox } from "@/components/ui/checkbox"
 import { Input } from "@/components/ui/input"
 import { Select, SelectContent, SelectItem, SelectTrigger, SelectValue } from "@/components/ui/select"
-import { useApiClient } from "@/components/waste/api-session-store"
+import { useApiClient, useApiSession } from "@/components/waste/api-session-store"
+import { RouteMessagesSection } from "@/components/waste/commands/route-messages-section"
+import { allows } from "@/lib/api/grants"
 import { Dialog, DialogContent, DialogDescription, DialogFooter, DialogHeader, DialogTitle } from "@/components/ui/dialog"
 import { BusinessRecordFormDialog } from "@/components/waste/business-record-form-dialog"
 import { useBusinessRecordStore, useModuleRecords, useServerModuleState } from "@/components/waste/business-record-store"
@@ -438,8 +440,12 @@ type RouteOpen = { kind: "form"; name: RouteCommandWithForm; values: BusinessFor
 /** No fixture bookings: the module is the API's alone. */
 const NO_BOOKINGS: readonly BusinessRecord[] = []
 
+/** The grant a route's messages are written under (O24 of #290): the routes' own. */
+const ROUTE_MESSAGES_MODULE_KEY = "route-studio.routes"
+
 export function RouteCommandsSurface({ record }: RowSurfaceProps) {
   const pickers = useRelationPickers()
+  const { me } = useApiSession()
   // The bookings Add stop may collect (O11 of #290): booked ones of the route's project for its day.
   const bulkyBookings = useModuleRecords(BULKY_BOOKINGS_MODULE.workspaceId, BULKY_BOOKINGS_MODULE.moduleId, NO_BOOKINGS)
   const moduleReady = useModuleReady(ROUTES_MODULE)
@@ -593,6 +599,7 @@ export function RouteCommandsSurface({ record }: RowSurfaceProps) {
         <h4 className="text-xs font-medium text-muted-foreground">Sessions</h4>
         <ReadRows read={{ rows: detail?.sessions ?? null, problem: reads.problem }} label="Reading the route's sessions…" empty="Not started: no driver has started this route." testId="route-sessions" line={(session) => sessionLine(session, timezone)} />
       </div>
+      <RouteMessagesSection record={record} timezone={timezone} canSend={allows(me?.role.grants, ROUTE_MESSAGES_MODULE_KEY, "edit")} />
       <div className="space-y-2">
         <h4 className="text-xs font-medium text-muted-foreground">Driver app commands</h4>
         <ReadRows
