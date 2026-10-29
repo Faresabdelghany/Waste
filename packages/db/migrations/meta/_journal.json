@@ -544,8 +544,36 @@
     {
       "idx": 77,
       "version": "7",
-      "when": 1793244373991,
-      "tag": "0077_fill_level_sensors",
+      "when": 1793243238519,
+      "tag": "0077_privacy_policy",
+      "breakpoints": true
+    },
+    {
+      "idx": 78,
+      "version": "7",
+      "when": 1793245578465,
+      "tag": "0078_item_product_unit",
+      "breakpoints": true
+    },
+    {
+      "idx": 79,
+      "version": "7",
+      "when": 1793247592226,
+      "tag": "0079_project_branding",
+      "breakpoints": true
+    },
+    {
+      "idx": 80,
+      "version": "7",
+      "when": 1793251427635,
+      "tag": "0080_dated_parties",
+      "breakpoints": true
+    },
+    {
+      "idx": 81,
+      "version": "7",
+      "when": 1793262692450,
+      "tag": "0081_fill_level_sensors",
       "breakpoints": true
     }
   ]

@@ -2416,7 +2416,7 @@ constraint wms.product product_project_id_name_key UNIQUE (company_id, project_i
 constraint wms.product product_project_key UNIQUE (company_id, project_id, id)
 constraint wms.product product_service_frequency_id_fk FOREIGN KEY (company_id, project_id, service_frequency_id) REFERENCES wms.service_frequency(company_id, project_id, id)
 constraint wms.product product_status_one_of CHECK ((status = ANY (ARRAY['draft'::text, 'active'::text, 'inactive'::text])))
-constraint wms.product product_unit_one_of CHECK ((unit = ANY (ARRAY['pickup'::text, 'month'::text, 'job'::text, 'day'::text, 'visit'::text])))
+constraint wms.product product_unit_one_of CHECK ((unit = ANY (ARRAY['pickup'::text, 'month'::text, 'job'::text, 'day'::text, 'visit'::text, 'item'::text])))
 constraint wms.product product_vat_percent_range CHECK (((vat_percent >= 0) AND (vat_percent <= 100)))
 constraint wms.product product_waste_fraction_id_fk FOREIGN KEY (company_id, waste_fraction_id) REFERENCES wms.waste_fraction(company_id, id)
 index wms.product product_container_type_id_idx CREATE INDEX product_container_type_id_idx ON wms.product USING btree (company_id, container_type_id)
@@ -2447,11 +2447,23 @@ column wms.project 14 payment_terms_days integer not-null default=30
 column wms.project 15 payment_reference_scheme text not-null default='none'::text
 column wms.project 16 weight_tolerance_percent integer not-null default=5
 column wms.project 17 hold_for_review boolean not-null default=false
+column wms.project 18 position_retention_days integer
+column wms.project 19 proof_retention_days integer
+column wms.project 20 gps_purpose text
+column wms.project 21 brand_color text acl=[wms_public=SELECT/<owner>]
+column wms.project 22 logo_url text acl=[wms_public=SELECT/<owner>]
+column wms.project 23 accessibility_statement_url text acl=[wms_public=SELECT/<owner>]
+constraint wms.project project_accessibility_statement_url_shape CHECK (((accessibility_statement_url ~ '^https://[^\s/?#]+[^\s]*$'::text) AND (char_length(accessibility_statement_url) <= 2048)))
+constraint wms.project project_brand_color_shape CHECK ((brand_color ~ '^#[0-9a-fA-F]{6}$'::text))
 constraint wms.project project_company_id_fk FOREIGN KEY (company_id) REFERENCES wms.company(id)
+constraint wms.project project_gps_purpose_one_of CHECK ((gps_purpose = ANY (ARRAY['dispatch'::text, 'dispatch-and-proof'::text])))
+constraint wms.project project_logo_url_shape CHECK (((logo_url ~ '^https://[^\s/?#]+[^\s]*$'::text) AND (char_length(logo_url) <= 2048)))
 constraint wms.project project_name_key UNIQUE (company_id, name)
 constraint wms.project project_payment_reference_scheme_one_of CHECK ((payment_reference_scheme = ANY (ARRAY['none'::text, 'fik-71'::text, 'fik-75'::text])))
 constraint wms.project project_payment_terms_range CHECK (((payment_terms_days >= 0) AND (payment_terms_days <= 365)))
 constraint wms.project project_pkey PRIMARY KEY (id)
+constraint wms.project project_position_retention_range CHECK (((position_retention_days >= 1) AND (position_retention_days <= 30)))
+constraint wms.project project_proof_retention_range CHECK (((proof_retention_days >= 1) AND (proof_retention_days <= 3650)))
 constraint wms.project project_public_slug_key UNIQUE (public_slug)
 constraint wms.project project_public_slug_shape CHECK (((public_slug ~ '^[a-z0-9]+(-[a-z0-9]+)*$'::text) AND ((char_length(public_slug) >= 3) AND (char_length(public_slug) <= 63))))
 constraint wms.project project_status_one_of CHECK ((status = ANY (ARRAY['active'::text, 'onboarding'::text])))
@@ -2650,17 +2662,21 @@ column wms.property_party 5 updated_at timestamp with time zone not-null default
 column wms.property_party 6 property_id uuid not-null
 column wms.property_party 7 customer_id uuid not-null
 column wms.property_party 8 role text not-null
+column wms.property_party 9 valid_from date not-null
+column wms.property_party 10 valid_to date
 constraint wms.property_party property_party_company_id_fk FOREIGN KEY (company_id) REFERENCES wms.company(id)
 constraint wms.property_party property_party_customer_id_fk FOREIGN KEY (company_id, customer_id) REFERENCES wms.customer(company_id, id)
+constraint wms.property_party property_party_no_overlap EXCLUDE USING gist (company_id WITH =, property_id WITH =, customer_id WITH =, role WITH =, daterange(valid_from, valid_to, '[)'::text) WITH &&)
 constraint wms.property_party property_party_pkey PRIMARY KEY (id)
 constraint wms.property_party property_party_project_id_fk FOREIGN KEY (company_id, project_id) REFERENCES wms.project(company_id, id)
-constraint wms.property_party property_party_property_id_customer_id_role_key UNIQUE (company_id, property_id, customer_id, role)
 constraint wms.property_party property_party_property_id_fk FOREIGN KEY (company_id, project_id, property_id) REFERENCES wms.property(company_id, project_id, id)
 constraint wms.property_party property_party_role_one_of CHECK ((role = ANY (ARRAY['owner'::text, 'payer'::text, 'tenant'::text, 'administrator'::text, 'service-contact'::text])))
+constraint wms.property_party property_party_validity CHECK (((valid_to IS NULL) OR (valid_to > valid_from)))
 index wms.property_party property_party_customer_id_idx CREATE INDEX property_party_customer_id_idx ON wms.property_party USING btree (company_id, customer_id)
+index wms.property_party property_party_no_overlap CREATE INDEX property_party_no_overlap ON wms.property_party USING gist (company_id, property_id, customer_id, role, daterange(valid_from, valid_to, '[)'::text))
 index wms.property_party property_party_pkey CREATE UNIQUE INDEX property_party_pkey ON wms.property_party USING btree (id)
 index wms.property_party property_party_project_id_idx CREATE INDEX property_party_project_id_idx ON wms.property_party USING btree (company_id, project_id)
-index wms.property_party property_party_property_id_customer_id_role_key CREATE UNIQUE INDEX property_party_property_id_customer_id_role_key ON wms.property_party USING btree (company_id, property_id, customer_id, role)
+index wms.property_party property_party_property_id_idx CREATE INDEX property_party_property_id_idx ON wms.property_party USING btree (company_id, property_id)
 trigger wms.property_party property_party_audit_trail enabled=O CREATE TRIGGER property_party_audit_trail AFTER INSERT OR DELETE OR UPDATE ON wms.property_party FOR EACH ROW EXECUTE FUNCTION wms.audit_row('property', 'property_id')
 trigger wms.property_party property_party_touch_updated_at enabled=O CREATE TRIGGER property_party_touch_updated_at BEFORE UPDATE ON wms.property_party FOR EACH ROW EXECUTE FUNCTION wms.touch_updated_at()
 policy wms.property_party property_party_tenant_fence permissive ALL to=wms_api using=(company_id = ( SELECT wms.current_company_id() AS current_company_id)) check=(company_id = ( SELECT wms.current_company_id() AS current_company_id))
@@ -4712,5 +4728,9 @@ journal 1793231090634 3a342c060d9cc6b5b37397d1817bf12b3e56217d68c7fb5aa6f3a35618
 journal 1793231765311 8be507c6aeeb679056b17fbe4b539cd8826f644e166c5d0254f04775e81d3e05
 journal 1793235059830 38a2a0d60433c5319c88d1428ef79675b519bda7059587aea3fc5368f164bf60
 journal 1793241234406 3e4f0b485e465f3836018f545d415793a377728d22334fe5b59d8e0b44ea8066
-journal 1793244373991 55627dafbd3cb890c76eb45db4afd21abdf2a8593bb40b111738da9cc9c67bef
+journal 1793243238519 233234b7acf3c642f212331efc9afedc7d139dcd35159a8709e2d830322834c8
+journal 1793245578465 3b2865a553c39e7190c0b99795b29f5f18959d692c42e6a9d2a1f2e4ea7b5b3c
+journal 1793247592226 4b92f6ad7212b3dafef3bbd4bfba4e6696da935f5c9f7354442f7860b0bb123f
+journal 1793251427635 28c1ebcb79fe09c31112ea7c107fd4fa02346fd0ea3241c4875ef71724c3300a
+journal 1793262692450 55627dafbd3cb890c76eb45db4afd21abdf2a8593bb40b111738da9cc9c67bef
 pgboss-version 42
