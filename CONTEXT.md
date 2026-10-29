@@ -198,6 +198,18 @@ _Avoid_: Reorder level, safety stock, par level
 Why a container was scrapped: one of the company's own list, kept in the master data, which a decommission names beside an optional note. A reason is retired rather than deleted, so a decommission given it still reads it.
 _Avoid_: Scrap code, disposal reason, retirement reason
 
+**Sensor**:
+A fill-level device the company owns, identified by the identifier its network knows it by, which reports how full the Container it is paired with is. A Sensor is retired rather than deleted; a retired one's readings are refused.
+_Avoid_: Device (the Driver App's phone), IoT unit, tag
+
+**Sensor Pairing**:
+The effective-dated record that a Sensor measures a Container, with the full threshold, in whole percent, at which the container is full enough to raise an Alert. A Sensor measures one Container at a time, and a Container is measured by one Sensor at a time; the pairing is the bin's, not its place's, so it outlives a move.
+_Avoid_: Installation, assignment, mounting
+
+**Fill Reading**:
+One measurement a Sensor sent: when it was measured, how full the Container was in whole percent, and the battery and signal strength where the vendor reports them. Readings are a ledger a vendor's integration appends; a reading is tied to the Sensor Pairing in force on its day.
+_Avoid_: Telemetry (as the record), ping, measurement
+
 **Hauler / Service Provider**:
 An external organization, typically a hauler, that delivers collection work for a company within awarded Service Areas and is settled for it through Settlements.
 _Avoid_: Contractor, customer, project
@@ -335,7 +347,7 @@ One e-mail or text message rendered from a Message Template to a Customer or one
 _Avoid_: Notification, SMS (one channel of it), mail
 
 **Alert**:
-A condition that requires attention, notification, or acknowledgement and may create or link to a ticket. It is acknowledged and resolved, and links to at most one Ticket. The office raises one by hand; the worker's rules raise one per occurrence of a route not started, a device silent, a licence running out or a ticket overdue — an overdue ticket's alert is about that Ticket, never a new one — and resolve it when the condition clears.
+A condition that requires attention, notification, or acknowledgement and may create or link to a ticket. It is acknowledged and resolved, and links to at most one Ticket. The office raises one by hand; the worker's rules raise one per occurrence of a route not started, a device silent, a licence running out, a ticket overdue, a position stale, or a Container filled past its Sensor Pairing's threshold — an overdue ticket's alert is about that Ticket, never a new one — and resolve it when the condition clears.
 _Avoid_: Ticket, insight
 
 **Team**:
