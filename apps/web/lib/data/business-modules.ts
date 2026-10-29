@@ -3603,7 +3603,7 @@ const resources: WorkspaceDefinition = {
       records: [],
     },
     {
-      // The fill-level Sensors (O26 of #290, row 9.10): on the API only, so no fixture records; the office's pane is O26's last part. The containers' fixture facts (Sensor, Fill level) stay the prototype's until then.
+      // The fill-level Sensors (O26 of #290, row 9.10): on the API only, so no fixture records (lib/api/records/sensors.ts); a sensor's pairing and readings are its details' (components/waste/commands/sensor-surfaces.tsx). The containers' fixture facts (Sensor, Fill level) are the prototype's.
       id: "sensors",
       label: "Sensors",
       title: "Fill-level Sensors",

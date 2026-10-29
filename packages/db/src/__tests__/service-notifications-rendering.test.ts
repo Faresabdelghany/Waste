@@ -22,16 +22,16 @@ import { company, project, serviceProvider } from "../schema/organisation"
 import { planningArea } from "../schema/planning-areas"
 import { auditTrail, SERVICE_NOTIFICATIONS_AUDITED } from "../sql/audit-trail"
 import { handWrittenStatements, normalised, statementsOf } from "../sql/hand-written"
-import { notificationRuleAsOf0093 } from "./notification-rule-as-of"
-import { outboxEventAsOf0093 } from "./outbox-as-of"
+import { notificationRuleAsOf0084 } from "./notification-rule-as-of"
+import { outboxEventAsOf0084 } from "./outbox-as-of"
 import { checksOf, ref } from "./rendering"
 import { statementsBetween } from "./specimen"
 
 const referenced = { company, project, serviceProvider, role, userAccount, customer, customerContact, messageTemplate, message, notificationPreference, planningArea }
 
-/** What drizzle-kit writes for the migration: the outbox and the rules from their 0093 spelling to today's, and the new table. */
+/** What drizzle-kit writes for the migration: the outbox and the rules from their 0084 spelling to today's, and the new table. */
 const generated = (): Promise<string[]> =>
-  statementsBetween({ ...referenced, outboxEvent: outboxEventAsOf0093, notificationRule: notificationRuleAsOf0093 }, { ...referenced, outboxEvent, notificationRule, notificationRuleArea })
+  statementsBetween({ ...referenced, outboxEvent: outboxEventAsOf0084, notificationRule: notificationRuleAsOf0084 }, { ...referenced, outboxEvent, notificationRule, notificationRuleArea })
 
 const handWritten = [...handWrittenStatements(notificationRuleArea), ...SERVICE_NOTIFICATIONS_AUDITED.flatMap(auditTrail)]
 
