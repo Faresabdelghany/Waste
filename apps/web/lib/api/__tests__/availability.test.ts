@@ -74,9 +74,9 @@ describe("the record form's values", () => {
 })
 
 describe("the actions and the reads", () => {
-  test("the driver's and the vehicle's adapters carry their two actions", () => {
+  test("the driver's and the vehicle's adapters carry their two actions, the vehicle's beside its defects' resolve (O13 of #290)", () => {
     assert.equal(driverAdapter.actions, DRIVER_AVAILABILITY_ACTIONS)
-    assert.equal(vehicleAdapter.actions, VEHICLE_AVAILABILITY_ACTIONS)
+    for (const [name, action] of Object.entries(VEHICLE_AVAILABILITY_ACTIONS)) assert.equal(vehicleAdapter.actions?.[name], action, name)
     assert.deepEqual(Object.keys(DRIVER_AVAILABILITY_ACTIONS), [RECORD_ABSENCE, REMOVE_ABSENCE])
     assert.deepEqual(Object.keys(VEHICLE_AVAILABILITY_ACTIONS), [RECORD_UNAVAILABILITY, REMOVE_UNAVAILABILITY])
   })
