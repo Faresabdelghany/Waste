@@ -94,8 +94,8 @@ describe("Applications and their Decisions", { skip: database.skip || owner.skip
       await tx.insert(product).values({ id: ids.product, ...copenhagen, name: "Food waste collection", kind: "additional-service", status: "active", unit: "job" })
       await tx.insert(agreement).values({ id: ids.agreement, ...copenhagen, validFrom: "2026-01-01", number: "AGR-M7", customerId: ids.anna, payerCustomerId: ids.anna, status: "active", billingCadence: "monthly", currency: "DKK" })
       await tx.insert(propertyParty).values([
-        { id: testId(), ...copenhagen, propertyId: ids.rosenvej, customerId: ids.anna, role: "owner" },
-        { id: testId(), ...copenhagen, propertyId: ids.elmevej, customerId: ids.anna, role: "tenant" },
+        { id: testId(), ...copenhagen, propertyId: ids.rosenvej, customerId: ids.anna, role: "owner", validFrom: "2026-01-01" },
+        { id: testId(), ...copenhagen, propertyId: ids.elmevej, customerId: ids.anna, role: "tenant", validFrom: "2026-01-01" },
       ])
       // Anna's at Elmevej, which Bo pays for.
       await tx.insert(agreement).values({ id: ids.paidByBo, ...copenhagen, validFrom: "2026-01-01", number: "AGR-M7B", customerId: ids.anna, payerCustomerId: ids.bo, status: "active", billingCadence: "monthly", currency: "DKK" })
