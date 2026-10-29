@@ -2,6 +2,7 @@
 
 import {
   createContext,
+  Suspense,
   useContext,
   useEffect,
   useMemo,
@@ -194,7 +195,8 @@ export function AppThemeProvider({ children }: { children: ReactNode }) {
   const { setTheme: setBaseTheme } = useTheme()
   const [store] = useState(createAppThemeStore)
   // A public page (#506) takes PUBLIC_PAGE_THEME whatever the browser holds, and writes and follows nothing stored.
-  const publicPage = isPublicPath(usePathname() ?? "")
+  // Seeded from the address so the first effect is already right; PublicPathWatch follows client navigation.
+  const [publicPage, setPublicPage] = useState(() => typeof window !== "undefined" && isPublicPath(window.location.pathname))
 
   useEffect(() => {
     store.bindSetBaseTheme(setBaseTheme)
@@ -244,9 +246,23 @@ export function AppThemeProvider({ children }: { children: ReactNode }) {
 
   return (
     <AppThemeContext.Provider value={store}>
+      <Suspense fallback={null}>
+        <PublicPathWatch onChange={setPublicPage} />
+      </Suspense>
       {children}
     </AppThemeContext.Provider>
   )
+}
+
+// The pathname is request data: read in the root layout outside a Suspense
+// boundary it stops every dynamic route from prerendering, so it is read here
+// alone, and renders nothing.
+function PublicPathWatch({ onChange }: { onChange: (publicPage: boolean) => void }) {
+  const pathname = usePathname()
+  useEffect(() => {
+    onChange(isPublicPath(pathname ?? ""))
+  }, [onChange, pathname])
+  return null
 }
 
 export function useAppTheme(): AppThemeContextValue {
