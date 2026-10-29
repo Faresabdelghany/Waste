@@ -46,6 +46,7 @@ import { jobsWithRulesEvery } from "./jobs"
 import { ALERT_RULES_INTERVAL_SECONDS } from "./jobs/alert-rules"
 import { staleOutboxCount } from "./jobs/relay-outbox"
 import { listen, type Listening } from "./listen"
+import { messagingProviderFromEnv } from "./messaging/select"
 import { OUTBOX_DEAD_QUEUE } from "./outbox/subscribe"
 import { CHECK_TIMEOUT_MS, probePoolOptions } from "./readiness"
 
@@ -55,6 +56,8 @@ const routing = new QuotaEngine(
   providerFromEnv({ ROUTING_PROVIDER: env.ROUTING_PROVIDER, OPENROUTESERVICE_API_KEY: env.OPENROUTESERVICE_API_KEY }),
   quotaKnobs({ directionsReserve: env.ROUTING_DIRECTIONS_RESERVE, optimisationReserve: env.ROUTING_OPTIMISATION_RESERVE, callsPerMinute: env.ROUTING_CALLS_PER_MINUTE }),
 )
+// The messaging provider (#291 C15): the log-only sender unless MESSAGING_PROVIDER names another, of which there is none yet; a name it does not know stops the boot here.
+const messaging = messagingProviderFromEnv(env.MESSAGING_PROVIDER)
 // The Pilot's knobs (#149), each the code's default where the environment
 // leaves it unset: the two pools' sizes (an unset knob is `max: undefined`,
 // which createDb reads as its default), and the intervals boss.ts applies.
@@ -89,6 +92,7 @@ async function boot() {
     send: (name, data, options) => boss.send(name, data, options),
     complete: (name, id, options) => boss.complete(name, id, undefined, options),
     routing,
+    messaging,
     pollingIntervalSeconds: env.WORKER_POLLING_INTERVAL_SECONDS,
     ...(proofStorage === undefined ? {} : { proofStorage }),
     ...(env.PROOF_RETENTION_DAYS === undefined ? {} : { proofRetentionDays: env.PROOF_RETENTION_DAYS }),

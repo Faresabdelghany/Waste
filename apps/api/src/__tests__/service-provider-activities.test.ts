@@ -21,13 +21,13 @@ import { vehicle } from "@waste/db/schema/fleet"
 import { withCompany } from "@waste/db/tenant"
 import { and, eq } from "drizzle-orm"
 import { normaliseGrants } from "@waste/domain/access/grants"
-import { OFFICE_CLOSES_FOLLOW_UPS, OFFICE_DECIDES, OFFICE_RAISES_FOLLOW_UPS, SAME_CREW, SAME_DAYS } from "@waste/domain/service-providers/activities"
+import { OFFICE_CLOSES_FOLLOW_UPS, OFFICE_DECIDES, OFFICE_RAISES_FOLLOW_UPS, MANUAL_GROUP_FRACTIONS, RULE_GROUP_STOPS, SAME_CREW, SAME_DAYS, SAME_FRACTIONS, SAME_STOPS } from "@waste/domain/service-providers/activities"
 
 import { notOwnFleet } from "../auth/provider"
 import { createApp } from "../app"
 import { NOT_A_POWERED_VEHICLE } from "../routes/references"
 import { dispatchedFrom } from "../routes/scheme-lifecycle"
-import { appliesFromTomorrow, KIND_CARRIES_NOT, NOT_A_GROUP_OF_THE_SCHEME, notOwnProvider, notServed } from "../routes/service-provider-activities"
+import { appliesFromTomorrow, KIND_CARRIES_NOT, NOT_A_CONTAINER, NOT_A_WASTE_FRACTION, NOT_A_GROUP_OF_THE_SCHEME, notOwnProvider, notServed } from "../routes/service-provider-activities"
 import { callingAs, type Call } from "./calls"
 import { databaseUnderTest, ownerUnderTest } from "./database"
 import { seedExecution, seedRoute, type ExecutionFixtures } from "./execution-fixtures"
@@ -314,6 +314,98 @@ describe("service provider activities (#474)", { skip: database.skip || owner.sk
       const moved = ServiceProviderActivity.parse(await ok(await olivia(`/service-provider-activities/${proposal.id}`, { method: "PATCH", body: { vehicleId: fleet.vehicles.wh25.id } })))
       assert.equal(moved.vehicleId, fleet.vehicles.wh25.id)
       assert.deepEqual((await refused(await olivia(`/service-provider-activities/${proposal.id}`, { method: "PATCH", body: { serviceDays: ["monday"] } }), 400)).errors, [{ path: "serviceDays", message: KIND_CARRIES_NOT }])
+    })
+  })
+
+  describe("a stop-set change (#474, part 3)", () => {
+    /** A draft scheme whose one group picks its stops: bin 1, then bin 2. */
+    const picked = (name: string) =>
+      schemeNamed(name, { collectionGroups: [{ name: "Picked", days: ["tuesday"], stopSource: "manual", containerIds: [ex.containers.bin1.id, ex.containers.bin2.id] }] })
+    const stopsBody = (scheme: RouteScheme, containerIds: string[], values: Record<string, unknown> = {}) => ({
+      kind: "stop-set-change",
+      projectId: a.projects.copenhagen.id,
+      serviceProviderId: a.serviceProviders.nordren.id,
+      subject: "Bin 3 joins the round, first",
+      routeSchemeId: scheme.id,
+      collectionGroupId: scheme.collectionGroups[0].id,
+      containerIds,
+      effectiveFrom: FROM,
+      ...values,
+    })
+
+    test("Lars proposes a picked group's new list; the list must move, be the project's, and be a picked group's", async () => {
+      const round = await picked("Picked list")
+      const proposal = await open(lars, stopsBody(round, [ex.containers.bin3.id, ex.containers.bin1.id, ex.containers.bin2.id]))
+      assert.equal(proposal.kind, "stop-set-change")
+      assert.deepEqual(proposal.containerIds, [ex.containers.bin3.id, ex.containers.bin1.id, ex.containers.bin2.id], "in stop order")
+      assert.deepEqual((await read(lars, proposal.id)).containerIds, proposal.containerIds)
+      const atField = async (body: unknown) => (await refused(await lars("/service-provider-activities", { method: "POST", body }), 400)).errors?.[0]
+      assert.deepEqual(await atField(stopsBody(round, [ex.containers.bin1.id, ex.containers.bin2.id])), { path: "containerIds", message: SAME_STOPS })
+      assert.deepEqual(await atField(stopsBody(round, [ex.containers.bin1.id, ex.containers.harborBin.id])), { path: "containerIds.1", message: NOT_A_CONTAINER })
+      const ruled = await schemeNamed("Ruled list")
+      assert.deepEqual(await atField(stopsBody(ruled, [ex.containers.bin1.id])), { path: "collectionGroupId", message: RULE_GROUP_STOPS })
+    })
+
+    test("the office approves it: the next version's group picks the new list in its order", async () => {
+      const round = await picked("Picked approved")
+      const proposal = await open(lars, stopsBody(round, [ex.containers.bin2.id, ex.containers.bin3.id]))
+      const approved = ServiceProviderActivity.parse(await ok(await commanded(olivia, proposal.id, "approve")))
+      assert.equal(approved.status, "approved")
+      assert.ok(approved.successorSchemeId)
+      const successor = await scheme(approved.successorSchemeId)
+      assert.deepEqual(successor.collectionGroups.map((group) => [group.name, group.stopSource, group.containerIds]), [["Picked", "manual", [ex.containers.bin2.id, ex.containers.bin3.id]]])
+      assert.deepEqual((await scheme(round.id)).collectionGroups[0].containerIds, [ex.containers.bin1.id, ex.containers.bin2.id], "the predecessor ran as it was")
+    })
+
+    test("is corrected by its list, replaced whole", async () => {
+      const round = await picked("Picked corrected")
+      const proposal = await open(lars, stopsBody(round, [ex.containers.bin3.id]))
+      const moved = ServiceProviderActivity.parse(await ok(await lars(`/service-provider-activities/${proposal.id}`, { method: "PATCH", body: { containerIds: [ex.containers.bin2.id, ex.containers.bin1.id] } })))
+      assert.deepEqual(moved.containerIds, [ex.containers.bin2.id, ex.containers.bin1.id])
+      assert.deepEqual((await read(olivia, proposal.id)).containerIds, [ex.containers.bin2.id, ex.containers.bin1.id])
+    })
+  })
+
+  describe("a waste-fraction change (#474, part 4)", () => {
+    const fractionsBody = (round: RouteScheme, wasteFractionIds: string[], values: Record<string, unknown> = {}) => ({
+      kind: "waste-fraction-change",
+      projectId: a.projects.copenhagen.id,
+      serviceProviderId: a.serviceProviders.nordren.id,
+      subject: "Glass joins the organic round",
+      routeSchemeId: round.id,
+      collectionGroupId: round.collectionGroups[0].id,
+      wasteFractionIds,
+      effectiveFrom: FROM,
+      ...values,
+    })
+
+    test("Lars proposes a rule group's new fractions; they must move, be the company's, and be a rule's", async () => {
+      const round = await schemeNamed("Rule fractions")
+      const proposal = await open(lars, fractionsBody(round, [ex.fractions.residual.id, ex.fractions.glass.id]))
+      assert.equal(proposal.kind, "waste-fraction-change")
+      assert.deepEqual([...(proposal.wasteFractionIds ?? [])].sort(), [ex.fractions.residual.id, ex.fractions.glass.id].sort())
+      const atField = async (body: unknown) => (await refused(await lars("/service-provider-activities", { method: "POST", body }), 400)).errors?.[0]
+      assert.deepEqual(await atField(fractionsBody(round, [ex.fractions.residual.id])), { path: "wasteFractionIds", message: SAME_FRACTIONS })
+      assert.deepEqual(await atField(fractionsBody(round, [ex.fractions.residual.id, testId()])), { path: "wasteFractionIds.1", message: NOT_A_WASTE_FRACTION })
+      const manual = await schemeNamed("Picked fractions", { collectionGroups: [{ name: "Picked", days: ["tuesday"], stopSource: "manual", containerIds: [ex.containers.bin1.id] }] })
+      assert.deepEqual(await atField(fractionsBody(manual, [ex.fractions.glass.id])), { path: "collectionGroupId", message: MANUAL_GROUP_FRACTIONS })
+    })
+
+    test("the office approves it: the next version's rule collects the new fractions, its other terms kept", async () => {
+      const round = await schemeNamed("Rule approved")
+      const proposal = await open(lars, fractionsBody(round, [ex.fractions.glass.id]))
+      const approved = ServiceProviderActivity.parse(await ok(await commanded(olivia, proposal.id, "approve")))
+      assert.ok(approved.successorSchemeId)
+      const successor = await scheme(approved.successorSchemeId)
+      assert.deepEqual(successor.collectionGroups[0].rule, { ...round.collectionGroups[0].rule, wasteFractionIds: [ex.fractions.glass.id] })
+      assert.deepEqual((await scheme(round.id)).collectionGroups[0].rule?.wasteFractionIds, [ex.fractions.residual.id], "the predecessor ran as it was")
+    })
+
+    test("is corrected by its fractions, replaced whole", async () => {
+      const round = await schemeNamed("Rule corrected")
+      const proposal = await open(olivia, fractionsBody(round, [ex.fractions.glass.id]))
+      const moved = ServiceProviderActivity.parse(await ok(await olivia(`/service-provider-activities/${proposal.id}`, { method: "PATCH", body: { wasteFractionIds: [ex.fractions.residual.id, ex.fractions.glass.id] } })))
+      assert.equal(moved.wasteFractionIds?.length, 2)
     })
   })
 

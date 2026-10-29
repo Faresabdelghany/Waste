@@ -39,6 +39,7 @@ Only the account holder can do these (tracking issue #191 lists them). The value
    | `WORKER_BOSS_IDLE_TIMEOUT_SECONDS` | `600` (or `0` for never) |
    | `PILOT_MEMORY_LOG_SECONDS` | `600` while the first week's readings are taken; unset after |
    | `ROUTING_PROVIDER` | `openrouteservice`, set together with the key once the OpenRouteService account exists (#171); unset until then, which is the fake |
+   | `MESSAGING_PROVIDER` | unset, which is the log-only sender: every message is written to the log masked and marked sent, and nothing reaches anyone (#291 C15, the owner's decision on #291). No other value exists until a card-free provider is verified; any other name stops the worker's start |
    | `OPENROUTESERVICE_API_KEY` | the account's key, from the password manager; the worker's jobs and the API's guided-setup preview (#173) call the provider with it, and with the provider named and no key each refuses to start |
    | `ADDRESS_PROVIDER` | `dataforsyningen`, set together with the token once the owner has it (#77, #291 C13); unset until then, which is address lookup off: the lookup answers 503, the property forms' picker says so, and addresses are typed with the point placed by hand. Never `fake` here: its made-up addresses would be written on real properties |
    | `DATAFORSYNINGEN_TOKEN` | the owner's Dataforsyningen token, from the password manager; the API's address lookup calls the register with it, and with the register named and no token the API refuses to start. Server-side only, never the web's |

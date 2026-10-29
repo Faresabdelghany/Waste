@@ -502,8 +502,43 @@
     {
       "idx": 71,
       "version": "7",
-      "when": 1793227944164,
-      "tag": "0071_privacy_policy",
+      "when": 1793227264394,
+      "tag": "0071_stop_set_proposals",
+      "breakpoints": true
+    },
+    {
+      "idx": 72,
+      "version": "7",
+      "when": 1793229147346,
+      "tag": "0072_waste_fraction_proposals",
+      "breakpoints": true
+    },
+    {
+      "idx": 73,
+      "version": "7",
+      "when": 1793231090634,
+      "tag": "0073_contact_persons",
+      "breakpoints": true
+    },
+    {
+      "idx": 74,
+      "version": "7",
+      "when": 1793231765311,
+      "tag": "0074_messaging",
+      "breakpoints": true
+    },
+    {
+      "idx": 75,
+      "version": "7",
+      "when": 1793235059830,
+      "tag": "0075_pre_trip",
+      "breakpoints": true
+    },
+    {
+      "idx": 76,
+      "version": "7",
+      "when": 1793241218558,
+      "tag": "0076_privacy_policy",
       "breakpoints": true
     }
   ]

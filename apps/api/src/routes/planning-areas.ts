@@ -62,9 +62,12 @@ import {
   PlanningAreaCreated,
   PlanningAreaListQuery,
   PlanningAreaPatch,
+  PlanningAreasAt,
+  PlanningAreasContainingQuery,
 } from "@waste/contracts/planning-areas"
 import type { Tx } from "@waste/db/client"
 import { validOn } from "@waste/db/query/valid-on"
+import { planningAreasAt } from "@waste/db/query/zones"
 import { planningArea, planningAreaBoundary } from "@waste/db/schema/planning-areas"
 import { and, asc, eq, gt } from "drizzle-orm"
 import { Hono, type MiddlewareHandler } from "hono"
@@ -76,7 +79,9 @@ import { requireGrant } from "../auth/require"
 import { newId } from "../ids"
 import { afterCursor, fetchLimit, pageOf } from "../pagination"
 import { describeProblem, problem, validate } from "../problem"
+import { projectToday } from "./fleet-lookups"
 import { periodAfter, requireOrdered } from "./periods"
+import type { ClockOptions } from "./scheme-groups"
 import { created, describeCreated, describeJson, IdParam, refuseCheck, refuseDuplicate, refuseOverlap, stampsOf, type Refusal } from "./shared"
 
 const MODULE = "configure.areas"
@@ -96,7 +101,7 @@ const columns = {
 type Row = Pick<typeof planningArea.$inferSelect, keyof typeof columns>
 
 /** The row on the wire. `purpose` is text with a CHECK in the database and an enum here, both read off the one vocabulary tuple. */
-function areaOf(row: Row): PlanningArea {
+export function areaOf(row: Row): PlanningArea {
   return {
     id: row.id,
     projectId: row.projectId,
@@ -291,7 +296,7 @@ export async function planningAreaByCode(tx: Tx, principal: Principal, projectId
   return { area: areaOf(row), boundaries: versions.map(boundaryOf) }
 }
 
-export function planningAreaRoutes(guard: MiddlewareHandler<AuthEnv>) {
+export function planningAreaRoutes(guard: MiddlewareHandler<AuthEnv>, { now = () => new Date() }: ClockOptions = {}) {
   return new Hono<AuthEnv>()
     .get(
       "/planning-areas",
@@ -355,6 +360,35 @@ export function planningAreaRoutes(guard: MiddlewareHandler<AuthEnv>) {
       requireGrant(MODULE, "create"),
       validate("json", PlanningAreaCreate),
       async (c) => created(c, "/planning-areas", await createPlanningArea(c.get("tx"), c.get("principal"), c.req.valid("json"))),
+    )
+    .get(
+      "/planning-areas/containing",
+      describeRoute({
+        operationId: "listPlanningAreasContaining",
+        summary: "The planning areas holding a point on a day",
+        description:
+          "The address → zone read (O29 of #290) for a point that is no property yet, such as an address picked from the register: the areas of `projectId` whose boundary in force on `on` contains the point `lng`,`lat` (WGS 84), in code order. Two areas may overlap, so a point can sit in several; an area with no boundary in force on the day holds nothing. `on` defaults to today on the project's clock and `purpose` to `notification`, the citizens' zones. A property's own zones are `GET /properties/{id}/zones`.",
+        security: BEARER_SECURITY,
+        responses: {
+          200: describeJson("The areas holding the point on the day, in code order; none when no area holds it.", PlanningAreasAt),
+          400: describeProblem("`projectId` is missing or not a project this account works in, `lng` or `lat` is missing, not a decimal number or off the globe, `on` is not a day, or `purpose` is not one of the three."),
+          401: describeProblem("No usable token (see WWW-Authenticate)."),
+          403: describeProblem("No active account here, or the caller's role does not allow `view` on `configure.areas`."),
+        },
+      }),
+      guard,
+      requireGrant(MODULE, "view"),
+      validate("query", PlanningAreasContainingQuery),
+      async (c) => {
+        const { projectId, lng, lat, on, purpose } = c.req.valid("query")
+        const principal = c.get("principal")
+        requireProject(principal, projectId, "projectId", "query")
+        const tx = c.get("tx")
+        const scope = { companyId: principal.companyId, projectId }
+        const day = on ?? (await projectToday(tx, scope, now)())
+        const rows = await planningAreasAt(tx, scope, [lng, lat], day, purpose)
+        return c.json({ on: day, purpose, items: rows.map(areaOf) } satisfies PlanningAreasAt)
+      },
     )
     .get(
       "/planning-areas/:id",

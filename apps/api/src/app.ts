@@ -54,7 +54,10 @@ import { collectionCalendarRoutes } from "./routes/collection-calendars"
 import { collectionGroupRoutes } from "./routes/collection-groups"
 import { companyRoutes } from "./routes/company"
 import { containerRoutes } from "./routes/containers"
+import { customerContactRoutes } from "./routes/customer-contacts"
 import { customerRoutes } from "./routes/customers"
+import { messageTemplateRoutes } from "./routes/message-templates"
+import { messageRoutes } from "./routes/messages"
 import { depotRoutes } from "./routes/depots"
 import { applicationRoutes } from "./routes/applications"
 import { dropOffPointRoutes } from "./routes/drop-off-points"
@@ -62,6 +65,7 @@ import { emissionReportRoutes } from "./routes/emissions"
 import { fuelEmissionFactorRoutes } from "./routes/fuel-emission-factors"
 import { driverDoorRoutes } from "./routes/driver"
 import { availabilityRoutes } from "./routes/availability"
+import { preTripRoutes } from "./routes/pre-trip-checks"
 import { driverRoutes } from "./routes/drivers"
 import { generationRoutes } from "./routes/generation"
 import { importRoutes } from "./routes/imports"
@@ -262,10 +266,13 @@ export function createApp({
   app.route("/", wasteFractionEmissionFactorRoutes(guard))
   app.route("/", productRoutes(guard))
   app.route("/", customerRoutes(guard))
+  app.route("/", customerContactRoutes(guard))
+  app.route("/", messageTemplateRoutes(guard))
+  app.route("/", messageRoutes(guard, { jobs }))
   // The address lookup calls the register (#291 C13), so, like the preview, its guard ends the principal's transaction; a property's write reads its `addressId` from the register before its guard opens the request's.
   const addressOptions = { register: addressRegister, log: log ?? console.error }
   app.route("/", addressRoutes(identify({ pool, verifier }), addressOptions))
-  app.route("/", propertyRoutes(guard, addressLookup(identify({ pool, verifier }), addressOptions)))
+  app.route("/", propertyRoutes(guard, addressLookup(identify({ pool, verifier }), addressOptions), { now }))
   app.route("/", propertyGroupRoutes(guard))
   app.route("/", sharedCollectionPointRoutes(guard))
   // A termination asks generation runs of the schemes whose planned routes stop at its containers (#291), so it takes the clock and the job sender.
@@ -275,7 +282,7 @@ export function createApp({
   app.route("/", subscriptionPauseRoutes(guard, { now, jobs }))
   app.route("/", containerRoutes(guard, { now }))
   app.route("/", lifecycleRoutes(guard, { now }))
-  app.route("/", planningAreaRoutes(guard))
+  app.route("/", planningAreaRoutes(guard, { now }))
   app.route("/", collectionCalendarRoutes(guard))
   // Planning's group rules judge a driver on "today" on the project's clock, so the two take the app's `now` as the ledger routes do.
   app.route("/", routeSchemeRoutes(guard, { now }))
@@ -295,6 +302,7 @@ export function createApp({
   app.route("/", vehicleRoutes(guard, { now }))
   app.route("/", driverRoutes(guard, { now }))
   app.route("/", availabilityRoutes(guard))
+  app.route("/", preTripRoutes(guard, { now }))
   // Execution's office (Issue #104, slice 3). The live read goes on before the
   // route module: Hono runs handlers in registration order, and `/routes/live`
   // would otherwise be caught by `/routes/:id`, whose path validator refuses
