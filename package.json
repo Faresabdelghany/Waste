@@ -22,7 +22,8 @@
     "db:check": "pnpm --filter @waste/db check",
     "db:fingerprint": "pnpm --filter @waste/db fingerprint",
     "db:bootstrap": "pnpm --filter @waste/db bootstrap",
-    "db:seed": "pnpm --filter @waste/db seed"
+    "db:seed": "pnpm --filter @waste/db seed",
+    "db:provision-company": "pnpm --filter @waste/db provision-company"
   },
   "devDependencies": {
     "@typescript/native": "npm:typescript@^7.0.2",
