@@ -119,6 +119,7 @@ import { requireGrant } from "../auth/require"
 import { newId } from "../ids"
 import { afterCursor, fetchLimit, pageOf } from "../pagination"
 import { describeProblem, invalidRequest, problem, validate } from "../problem"
+import { namedByCode } from "./container-identity"
 import { containerOf, containersFrom, createContainer, findContainer, patchContainer } from "./container-writes"
 import { ALREADY_PLACED, alreadyPlaced, containerScope, move, noSuchContainer, OUTSIDE_SUBSCRIPTION, type ContainerRef, type LifecycleOptions } from "./lifecycle"
 import { periodAfter, requireWithin, type Period } from "./periods"
@@ -352,7 +353,7 @@ export function containerRoutes(guard: MiddlewareHandler<AuthEnv>, { now = () =>
         operationId: "listContainers",
         summary: "The containers the caller's projects hold",
         description:
-          "One page of containers, oldest first (ids are time-ordered), from the projects the caller works in — an account that works in none, such as a service provider's, reads an empty page. `projectId` narrows it to one of those projects; naming another is refused, and `containerTypeId` narrows it to one type. Each container carries `assetState`, the ledger's reading — its latest Stock Movement folded onto in-warehouse, in-service, in-maintenance or retired, null for a container with no movement yet — and `assetStatus` narrows the page to one state, `warehouseId` to the containers standing in that warehouse, in stock or in maintenance; a warehouse outside the project named, or the projects this account works in, is refused. Where a container serves is the placement valid on the day asked, `GET /placements`. Hand `nextCursor` back as `cursor` for the next page.",
+          "One page of containers, oldest first (ids are time-ordered), from the projects the caller works in — an account that works in none, such as a service provider's, reads an empty page. `projectId` narrows it to one of those projects; naming another is refused, and `containerTypeId` narrows it to one type. Each container carries `assetState`, the ledger's reading — its latest Stock Movement folded onto in-warehouse, in-service, in-maintenance or retired, null for a container with no movement yet — and `assetStatus` narrows the page to one state, `warehouseId` to the containers standing in that warehouse, in stock or in maintenance, and `identifier` to the containers a code read off a bin names — one whose label, barcode, RFID tag or serial number spells it, spaces either side and case ignored — which is how a scanned or typed code is looked up; a warehouse outside the project named, or the projects this account works in, is refused. Where a container serves is the placement valid on the day asked, `GET /placements`. Hand `nextCursor` back as `cursor` for the next page.",
         security: BEARER_SECURITY,
         responses: {
           200: describeJson("One page of containers, each with the ledger's reading.", ContainerPage),
@@ -365,7 +366,7 @@ export function containerRoutes(guard: MiddlewareHandler<AuthEnv>, { now = () =>
       requireGrant(MODULE, "view"),
       validate("query", ContainerListQuery),
       async (c) => {
-        const { limit, cursor, projectId, containerTypeId, assetStatus: status, warehouseId } = c.req.valid("query")
+        const { limit, cursor, projectId, containerTypeId, assetStatus: status, warehouseId, identifier } = c.req.valid("query")
         const after = afterCursor(cursor)
         const tx = c.get("tx")
         const principal = c.get("principal")
@@ -382,6 +383,7 @@ export function containerRoutes(guard: MiddlewareHandler<AuthEnv>, { now = () =>
               // The ledger's reading, filtered in SQL: the status the latest movement folds onto, and the warehouse it arrived at.
               status === undefined ? undefined : eq(assetStatus(state.toKind), status),
               warehouseId === undefined ? undefined : eq(state.toWarehouseId, warehouseId),
+              identifier === undefined ? undefined : namedByCode(container, identifier),
               after === undefined ? undefined : gt(container.id, after),
             ),
           )

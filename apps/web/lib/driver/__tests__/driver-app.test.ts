@@ -871,3 +871,19 @@ describe("positions (O8 of #290)", () => {
     assert.deepEqual(device.app.store.getSnapshot().rejections, [])
   })
 })
+
+describe("a code read off a bin (O19 of #290)", () => {
+  test("is a read of the door, queues nothing, and says when the server is out of reach or refuses", async () => {
+    const { app, door } = await onRoute()
+    const identification = { code: "WH91001", stops: [{ pickupId: pickupId(1), position: 1, containerId: "01950000-0000-7000-8000-000000000201", containerLabel: "BIN-91001", matchedBy: "barcode" as const, replacement: false }] }
+    door.next(`GET /driver/routes/${ROUTE_ID}/identify`, () => json(identification), offline, () => problem(404, `No route ${ROUTE_ID} assigned to this driver`))
+    assert.deepEqual(await app.identify(ROUTE_ID, "WH 91001"), { status: "answered", answer: identification })
+    const asked = door.calls.find((call) => call.path.endsWith("/identify"))
+    assert.ok(asked)
+    assert.deepEqual(await app.identify(ROUTE_ID, "WH91001"), { status: "unreachable" })
+    assert.deepEqual(await app.identify(ROUTE_ID, "WH91001"), { status: "refused", sentence: `No route ${ROUTE_ID} assigned to this driver` })
+    assert.deepEqual(app.store.getSnapshot().waiting, [])
+    assert.deepEqual(door.batches(), [])
+    app.dispose()
+  })
+})
