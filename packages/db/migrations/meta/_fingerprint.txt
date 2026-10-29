@@ -493,19 +493,21 @@ column wms.alert 22 resolved_by uuid
 column wms.alert 23 resolution_note text
 column wms.alert 24 rule text
 column wms.alert 25 rule_key text
+column wms.alert 26 outbound_load_id uuid
 constraint wms.alert alert_acknowledged_by_fk FOREIGN KEY (company_id, acknowledged_by) REFERENCES wms.user_account(company_id, id)
 constraint wms.alert alert_acknowledged_shape CHECK (((acknowledged_at IS NULL) = (acknowledged_by IS NULL)))
 constraint wms.alert alert_company_id_fk FOREIGN KEY (company_id) REFERENCES wms.company(id)
 constraint wms.alert alert_container_id_fk FOREIGN KEY (company_id, project_id, container_id) REFERENCES wms.container(company_id, project_id, id)
 constraint wms.alert alert_driver_id_fk FOREIGN KEY (company_id, project_id, driver_id) REFERENCES wms.driver(company_id, project_id, id)
 constraint wms.alert alert_kind_one_of CHECK ((kind = ANY (ARRAY['route-exception'::text, 'resource'::text, 'service-risk'::text, 'asset'::text, 'weight'::text, 'other'::text])))
+constraint wms.alert alert_outbound_load_id_fk FOREIGN KEY (company_id, project_id, outbound_load_id) REFERENCES wms.outbound_load(company_id, project_id, id)
 constraint wms.alert alert_pkey PRIMARY KEY (id)
 constraint wms.alert alert_project_id_fk FOREIGN KEY (company_id, project_id) REFERENCES wms.project(company_id, id)
 constraint wms.alert alert_raised_by_fk FOREIGN KEY (company_id, raised_by) REFERENCES wms.user_account(company_id, id)
 constraint wms.alert alert_resolved_by_fk FOREIGN KEY (company_id, resolved_by) REFERENCES wms.user_account(company_id, id)
 constraint wms.alert alert_resolved_shape CHECK ((((resolved_by IS NULL) OR (resolved_at IS NOT NULL)) AND ((resolved_at IS NULL) OR (resolved_by IS NOT NULL) OR (rule IS NOT NULL)) AND ((resolution_note IS NULL) OR (resolved_at IS NOT NULL))))
 constraint wms.alert alert_route_id_fk FOREIGN KEY (company_id, project_id, route_id) REFERENCES wms.route(company_id, project_id, id)
-constraint wms.alert alert_rule_one_of CHECK ((rule = ANY (ARRAY['route-not-started'::text, 'session-silent'::text, 'licence-expiring'::text, 'ticket-overdue'::text, 'position-stale'::text, 'fill-threshold'::text])))
+constraint wms.alert alert_rule_one_of CHECK ((rule = ANY (ARRAY['route-not-started'::text, 'session-silent'::text, 'licence-expiring'::text, 'ticket-overdue'::text, 'position-stale'::text, 'fill-threshold'::text, 'load-not-received'::text, 'load-weight-mismatch'::text, 'load-overweight'::text, 'route-not-tipped'::text])))
 constraint wms.alert alert_rule_shape CHECK (((rule IS NULL) = (rule_key IS NULL)))
 constraint wms.alert alert_severity_one_of CHECK ((severity = ANY (ARRAY['critical'::text, 'high'::text, 'medium'::text, 'low'::text])))
 constraint wms.alert alert_source_one_of CHECK ((source = ANY (ARRAY['manual'::text, 'execution'::text, 'telemetry'::text, 'rule'::text])))
@@ -517,12 +519,13 @@ CASE status
     ELSE false
 END)
 constraint wms.alert alert_status_one_of CHECK ((status = ANY (ARRAY['new'::text, 'acknowledged'::text, 'resolved'::text])))
-constraint wms.alert alert_subject_shape CHECK ((((((((route_id IS NOT NULL))::integer + ((vehicle_id IS NOT NULL))::integer) + ((driver_id IS NOT NULL))::integer) + ((container_id IS NOT NULL))::integer) + ((ticket_id IS NOT NULL))::integer) >= 1))
+constraint wms.alert alert_subject_shape CHECK (((((((((route_id IS NOT NULL))::integer + ((vehicle_id IS NOT NULL))::integer) + ((driver_id IS NOT NULL))::integer) + ((container_id IS NOT NULL))::integer) + ((ticket_id IS NOT NULL))::integer) + ((outbound_load_id IS NOT NULL))::integer) >= 1))
 constraint wms.alert alert_ticket_id_fk FOREIGN KEY (company_id, project_id, ticket_id) REFERENCES wms.ticket(company_id, project_id, id)
 constraint wms.alert alert_vehicle_id_fk FOREIGN KEY (company_id, project_id, vehicle_id) REFERENCES wms.vehicle(company_id, project_id, id)
 index wms.alert alert_acknowledged_by_idx CREATE INDEX alert_acknowledged_by_idx ON wms.alert USING btree (company_id, acknowledged_by)
 index wms.alert alert_container_id_idx CREATE INDEX alert_container_id_idx ON wms.alert USING btree (company_id, container_id)
 index wms.alert alert_driver_id_idx CREATE INDEX alert_driver_id_idx ON wms.alert USING btree (company_id, driver_id)
+index wms.alert alert_outbound_load_id_idx CREATE INDEX alert_outbound_load_id_idx ON wms.alert USING btree (company_id, outbound_load_id)
 index wms.alert alert_pkey CREATE UNIQUE INDEX alert_pkey ON wms.alert USING btree (id)
 index wms.alert alert_project_id_status_idx CREATE INDEX alert_project_id_status_idx ON wms.alert USING btree (company_id, project_id, status)
 index wms.alert alert_raised_by_idx CREATE INDEX alert_raised_by_idx ON wms.alert USING btree (company_id, raised_by)
@@ -4814,4 +4817,5 @@ journal 1793251427635 28c1ebcb79fe09c31112ea7c107fd4fa02346fd0ea3241c4875ef71724
 journal 1793262692450 55627dafbd3cb890c76eb45db4afd21abdf2a8593bb40b111738da9cc9c67bef
 journal 1793263502443 743ec23d04aeeab55f061db6ccb5e4a41b62823362ca3f8f5fe3cc5358ddcd5e
 journal 1793269290325 4939a4466261f21e70aac488fcaf9d2bd3d8f4082c4923a264c2fd6b86696aee
+journal 1793269410568 e514162c99f35eaa4598135d4326bdced7332549f11743ec65c7219ac8eadee2
 pgboss-version 42

@@ -25,6 +25,23 @@
 // keys it by the last reading below the threshold, so it is raised again only
 // once the bin has read low in between. Where the pairing books an emptying,
 // the alert ends with what booking came to (execution/fill-emptying.ts).
+//
+// M17 of #293 added the disposal-site reconciliation (row 28.4), four rules
+// over what the stations' and the receiving sites' tickets say:
+//   `load-not-received`: an Outbound Load departed `LOAD_RECEIPT_HOURS` ago
+//   and more with no receiving ticket recorded: the load never tipped, or
+//   its ticket never came back;
+//   `load-weight-mismatch`: a received load whose receiving site's net differs
+//   from our out-weighing beyond the project's weight tolerance, until the
+//   office reconciles or disputes it;
+//   `load-overweight`: a load on our vehicle heavier than its rated payload;
+//   `route-not-tipped`: a completed route that planned an Unloading Station
+//   and collected something, with no Unload recorded `ROUTE_TIP_GRACE_HOURS`
+//   after it ended.
+// "Excess tips" — more Unloads than a route's Plan visits a station — is not
+// a rule: a Plan holds only the unload visits on the way (O15 of #290), not
+// the tip at the end, and most routes have no Plan, so the count it would
+// judge against is not there to be relied on.
 import { emptyingSentence, type FillEmptyingOutcome } from "../execution/fill-emptying"
 import type { AlertKind, AlertRule, AlertSeverity, AlertSource } from "./vocabulary"
 
@@ -36,6 +53,11 @@ export const SESSION_SILENCE_MINUTES = 15
 export const POSITION_STALE_MINUTES = 10
 /** A licence is warned of this many days before it runs out. */
 export const LICENCE_WARNING_DAYS = 30
+/** An outbound load is overdue at the receiving site this long after it departed. */
+export const LOAD_RECEIPT_HOURS = 24
+/** A completed route is untipped this long after it ended with no unload: time for the office to capture the weighbridge's ticket. */
+export const ROUTE_TIP_GRACE_HOURS = 2
+
 /** How far back a rule looks for a new occurrence: a route planned, or a device last heard from, more than a day ago is history to read, not news to raise. */
 export const RULE_LOOKBACK_HOURS = 24
 
@@ -47,6 +69,10 @@ export type RuleOccurrence =
   | { rule: "ticket-overdue"; ticketId: string; ticketLabel: string; subject: string; due: string }
   | { rule: "position-stale"; routeId: string; routeLabel: string; driverId: string; driverName: string; vehicleId: string | null; lastFix: string | null }
   | { rule: "fill-threshold"; containerId: string; containerLabel: string; sensorIdentifier: string; fillPercent: number; thresholdPercent: number; measuredAt: string; emptying?: FillEmptyingOutcome }
+  | { rule: "load-not-received"; outboundLoadId: string; vehicleId: string | null; registration: string; fromStation: string; toStation: string; departedAt: string }
+  | { rule: "load-weight-mismatch"; outboundLoadId: string; vehicleId: string | null; registration: string; toStation: string; ticket: string; netKg: number; receivedNetKg: number; tolerancePercent: number }
+  | { rule: "load-overweight"; outboundLoadId: string; vehicleId: string; registration: string; netKg: number; capacityKg: number }
+  | { rule: "route-not-tipped"; routeId: string; routeLabel: string; operatingDate: string; station: string; driverId: string | null; vehicleId: string | null }
 
 /** An alert as a rule raises it: everything but its project, its key and its instants. */
 export type RuleAlert = {
@@ -61,9 +87,13 @@ export type RuleAlert = {
   driverId: string | null
   containerId: string | null
   ticketId: string | null
+  outboundLoadId: string | null
 }
 
-const NO_SUBJECT = { routeId: null, vehicleId: null, driverId: null, containerId: null, ticketId: null }
+const NO_SUBJECT = { routeId: null, vehicleId: null, driverId: null, containerId: null, ticketId: null, outboundLoadId: null }
+
+/** Whole kilograms as a person reads them: 18,400. */
+const kilograms = (kg: number): string => String(kg).replace(/\B(?=(\d{3})+(?!\d))/g, ",")
 
 const DAY_MS = 24 * 60 * 60 * 1000
 const daysUntil = (today: string, day: string): number => Math.round((Date.parse(`${day}T00:00:00Z`) - Date.parse(`${today}T00:00:00Z`)) / DAY_MS)
@@ -151,6 +181,57 @@ export function alertOfRule(occurrence: RuleOccurrence): RuleAlert {
         containerId: occurrence.containerId,
       }
     }
+    case "load-not-received":
+      return {
+        rule: occurrence.rule,
+        kind: "weight",
+        severity: "high",
+        source: "rule",
+        title: `${occurrence.registration}'s load to ${occurrence.toStation} is not received`,
+        details: `It left ${occurrence.fromStation} at ${occurrence.departedAt}, and no ticket from ${occurrence.toStation} is recorded ${LOAD_RECEIPT_HOURS} hours later: the load never tipped, or its ticket never came back.`,
+        ...NO_SUBJECT,
+        outboundLoadId: occurrence.outboundLoadId,
+        vehicleId: occurrence.vehicleId,
+      }
+    case "load-weight-mismatch": {
+      const difference = occurrence.receivedNetKg - occurrence.netKg
+      return {
+        rule: occurrence.rule,
+        kind: "weight",
+        severity: "medium",
+        source: "rule",
+        title: `${occurrence.toStation} weighed ${occurrence.registration}'s load ${kilograms(Math.abs(difference))} kg ${difference < 0 ? "lighter" : "heavier"}`,
+        details: `Ticket ${occurrence.ticket} says ${kilograms(occurrence.receivedNetKg)} kg against our ${kilograms(occurrence.netKg)} kg, beyond the project's ${occurrence.tolerancePercent}% tolerance: reconcile the load, or dispute it.`,
+        ...NO_SUBJECT,
+        outboundLoadId: occurrence.outboundLoadId,
+        vehicleId: occurrence.vehicleId,
+      }
+    }
+    case "load-overweight":
+      return {
+        rule: occurrence.rule,
+        kind: "weight",
+        severity: "high",
+        source: "rule",
+        title: `${occurrence.registration} left overloaded`,
+        details: `Its load weighed ${kilograms(occurrence.netKg)} kg net, ${kilograms(occurrence.netKg - occurrence.capacityKg)} kg over the vehicle's rated payload of ${kilograms(occurrence.capacityKg)} kg.`,
+        ...NO_SUBJECT,
+        outboundLoadId: occurrence.outboundLoadId,
+        vehicleId: occurrence.vehicleId,
+      }
+    case "route-not-tipped":
+      return {
+        rule: occurrence.rule,
+        kind: "weight",
+        severity: "medium",
+        source: "rule",
+        title: `${occurrence.routeLabel} has no unload`,
+        details: `It ended on ${occurrence.operatingDate} with collected stops and no unload recorded, though it was planned to unload at ${occurrence.station}: the vehicle never tipped, or the weighbridge's ticket is not captured.`,
+        ...NO_SUBJECT,
+        routeId: occurrence.routeId,
+        vehicleId: occurrence.vehicleId,
+        driverId: occurrence.driverId,
+      }
   }
 }
 
@@ -162,4 +243,8 @@ export const CLEARED_NOTES: Readonly<Record<AlertRule, string>> = {
   "ticket-overdue": "Cleared: the ticket was closed, or given a later due date.",
   "position-stale": "Cleared: a position came in, or the session was paused or ended, or the route ended.",
   "fill-threshold": "Cleared: the sensor read below the threshold again, or the pairing ended.",
+  "load-not-received": "Cleared: the receiving site's ticket was recorded, or the load was cancelled.",
+  "load-weight-mismatch": "Cleared: the load was reconciled or disputed, or its receipt corrected within the tolerance.",
+  "load-overweight": "Cleared: the load was cancelled, or the vehicle's rated payload corrected.",
+  "route-not-tipped": "Cleared: an unload was recorded on the route.",
 }

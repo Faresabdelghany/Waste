@@ -46,6 +46,8 @@ export const Alert = z.object({
   containerId: Id.nullable(),
   /** The one ticket the alert created or was linked to; null until then. */
   ticketId: Id.nullable(),
+  /** The Outbound Load a disposal-site reconciliation rule's alert is about (M17 of #293); null on every other. Absent on an answer from before it, read as null. */
+  outboundLoadId: Id.nullable().default(null),
   /** The caller; null for a source that is not a person. */
   raisedBy: Id.nullable(),
   acknowledgedAt: IsoDateTime.nullable(),
@@ -111,5 +113,7 @@ export const AlertListQuery = ProjectScopedListQuery.extend({
   driverId: Id.optional(),
   containerId: Id.optional(),
   ticketId: Id.optional(),
+  /** The alerts raised about one outbound load (M17 of #293). */
+  outboundLoadId: Id.optional(),
 })
 export type AlertListQuery = z.infer<typeof AlertListQuery>

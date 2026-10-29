@@ -61,12 +61,34 @@
 // books the office's emptying of the container in the same
 // transaction (@waste/db/commands/fill-emptying), and the alert ends with
 // what that came to; a tick that overlaps finds the stop booked already.
+//
+// M17 of #293 added the disposal-site reconciliation (row 28.4), four rules
+// over the transfer stations' Outbound Loads and the routes' Unloads:
+//   `load-not-received:<load>`: a load still `departed` `LOAD_RECEIPT_HOURS`
+//   after it left. A status, not news, so no lookback: a load left unreceived
+//   for a week is still to be told of. It clears once the receiving site's
+//   ticket is recorded or the load is cancelled.
+//   `load-weight-mismatch:<load>:<ticket>:<net>`: a `received` load whose
+//   receiving site's net differs from our out-weighing beyond the project's
+//   tolerance, judged on the kilograms as the domain's `receiptReading` is.
+//   A corrected receipt is a new occurrence; the alert clears once the office
+//   reconciles or disputes the load, or the receipt comes within tolerance.
+//   `load-overweight:<load>`: a load on our vehicle heavier than the vehicle's
+//   rated payload, where it has one, departed within the lookback. It clears
+//   if the load is cancelled or the payload corrected.
+//   `route-not-tipped:<route>`: a route completed within the lookback and at
+//   least `ROUTE_TIP_GRACE_HOURS` ago that planned an Unloading Station and
+//   collected at least one stop, with no Unload recorded on it, refused or
+//   accepted. It clears once one is. A route with no planned station is not
+//   judged: nothing says it was to tip.
+// Each is about its load, or its route, and our vehicle and driver where there
+// are any (@waste/domain/resolution/alert-rules).
 import { routeLabel } from "@waste/contracts/execution"
 import { ticketLabel } from "@waste/contracts/resolution"
 import { bookFillEmptying, fillEmptyingNote } from "@waste/db/commands/fill-emptying"
 import { alert } from "@waste/db/schema/resolution"
 import { withCompany } from "@waste/db/tenant"
-import { alertOfRule, CLEARED_NOTES, LICENCE_WARNING_DAYS, POSITION_STALE_MINUTES, ROUTE_START_GRACE_MINUTES, RULE_LOOKBACK_HOURS, SESSION_SILENCE_MINUTES, type RuleOccurrence } from "@waste/domain/resolution/alert-rules"
+import { alertOfRule, CLEARED_NOTES, LICENCE_WARNING_DAYS, LOAD_RECEIPT_HOURS, POSITION_STALE_MINUTES, ROUTE_START_GRACE_MINUTES, ROUTE_TIP_GRACE_HOURS, RULE_LOOKBACK_HOURS, SESSION_SILENCE_MINUTES, type RuleOccurrence } from "@waste/domain/resolution/alert-rules"
 import { ALERT_RULES, OPEN_TICKET_STATUSES, type AlertRule } from "@waste/domain/resolution/vocabulary"
 import { and, eq, inArray, ne, sql, type SQL } from "drizzle-orm"
 
@@ -112,6 +134,14 @@ const LAST_LOW = sql`(select fr.id::text from wms.fill_reading fr where fr.compa
 /** A pairing in force on the project's today. */
 const pairingInForce = (now: SQL) => sql`sp.valid_from <= (${now} at time zone p.timezone)::date and (sp.valid_to is null or sp.valid_to > (${now} at time zone p.timezone)::date)`
 
+/** A received load whose receiving site's net differs from ours beyond its project's tolerance, on the kilograms: the domain's `receiptReading` as SQL. */
+const BEYOND_TOLERANCE = sql`abs(ol.received_net_kg - ol.net_kg) * 100 > p.weight_tolerance_percent * ol.net_kg`
+/** A load over its vehicle's rated payload, where the vehicle has one. */
+const OVER_PAYLOAD = sql`v.capacity_kg is not null and ol.net_kg > v.capacity_kg`
+/** A route that collected something and has no unload recorded, refused or accepted. */
+const UNTIPPED = sql`exists (select 1 from wms.pickup pk where pk.company_id = r.company_id and pk.route_id = r.id and pk.status = 'completed')
+       and not exists (select 1 from wms.unload u where u.company_id = r.company_id and u.route_id = r.id)`
+
 /** Each rule's key at the tick's instant, spelled once for the raise and the clear. */
 const keysAt = (now: SQL) => ({
   /** The route and its planned day and start: a route moved is a new occurrence. */
@@ -124,6 +154,12 @@ const keysAt = (now: SQL) => ({
   position: sql`'position-stale:' || s.id || ':' || coalesce(${keyInstant(NEWEST_FIX)}, 'none')`,
   /** The pairing and the last reading below its threshold: the bin read low and filling again is a new occurrence. */
   fill: sql`'fill-threshold:' || sp.id || ':' || coalesce(${LAST_LOW}, 'none')`,
+  /** The load: once per load, whatever the ticks between. */
+  unreceived: sql`'load-not-received:' || ol.id`,
+  /** The load and its receipt: a corrected receipt is a new occurrence. */
+  mismatch: sql`'load-weight-mismatch:' || ol.id || ':' || ol.receiving_ticket || ':' || ol.received_net_kg`,
+  overweight: sql`'load-overweight:' || ol.id`,
+  untipped: sql`'route-not-tipped:' || r.id`,
 })
 
 /** An alert that holds its key: any but one the worker itself cleared — `alert_rule_key_idx`'s predicate. */
@@ -215,6 +251,48 @@ export async function occurrencesToRaise(worker: JobContext["worker"], at: Date)
        and ${noAlertWith(KEYS.fill, sql`sp.company_id`)}
   `)
 
+  const unreceived = await worker.db.execute<{ company_id: string; project_id: string; rule_key: string; load_id: string; vehicle_id: string | null; registration: string; from_station: string; to_station: string; departed_at: string }>(sql`
+    select ol.company_id, ol.project_id, ${KEYS.unreceived} as rule_key, ol.id as load_id, ol.vehicle_id, ol.vehicle_registration as registration,
+           fs.name as from_station, ts.name as to_station, to_char(ol.departed_at at time zone p.timezone, 'YYYY-MM-DD HH24:MI') as departed_at
+      from wms.outbound_load ol
+      join wms.unloading_station fs on fs.company_id = ol.company_id and fs.id = ol.from_station_id
+      join wms.unloading_station ts on ts.company_id = ol.company_id and ts.id = ol.to_station_id
+      join wms.project p on p.company_id = ol.company_id and p.id = ol.project_id
+     where ol.status = 'departed'
+       and ol.departed_at <= ${now} - make_interval(hours => ${LOAD_RECEIPT_HOURS})
+       and ${noAlertWith(KEYS.unreceived, sql`ol.company_id`)}
+  `)
+  const mismatches = await worker.db.execute<{ company_id: string; project_id: string; rule_key: string; load_id: string; vehicle_id: string | null; registration: string; to_station: string; ticket: string; net_kg: number; received_net_kg: number; tolerance: number }>(sql`
+    select ol.company_id, ol.project_id, ${KEYS.mismatch} as rule_key, ol.id as load_id, ol.vehicle_id, ol.vehicle_registration as registration,
+           ts.name as to_station, ol.receiving_ticket as ticket, ol.net_kg, ol.received_net_kg, p.weight_tolerance_percent as tolerance
+      from wms.outbound_load ol
+      join wms.unloading_station ts on ts.company_id = ol.company_id and ts.id = ol.to_station_id
+      join wms.project p on p.company_id = ol.company_id and p.id = ol.project_id
+     where ol.status = 'received'
+       and ${BEYOND_TOLERANCE}
+       and ${noAlertWith(KEYS.mismatch, sql`ol.company_id`)}
+  `)
+  const overweights = await worker.db.execute<{ company_id: string; project_id: string; rule_key: string; load_id: string; vehicle_id: string; registration: string; net_kg: number; capacity_kg: number }>(sql`
+    select ol.company_id, ol.project_id, ${KEYS.overweight} as rule_key, ol.id as load_id, ol.vehicle_id, ol.vehicle_registration as registration, ol.net_kg, v.capacity_kg
+      from wms.outbound_load ol
+      join wms.vehicle v on v.company_id = ol.company_id and v.id = ol.vehicle_id
+     where ol.status <> 'cancelled'
+       and ${OVER_PAYLOAD}
+       and ol.departed_at > ${lookback}
+       and ${noAlertWith(KEYS.overweight, sql`ol.company_id`)}
+  `)
+  const untipped = await worker.db.execute<{ company_id: string; project_id: string; rule_key: string; route_id: string; number: number; operating_date: string; station: string; driver_id: string | null; vehicle_id: string | null }>(sql`
+    select r.company_id, r.project_id, ${KEYS.untipped} as rule_key, r.id as route_id, r.number, to_char(r.operating_date, 'YYYY-MM-DD') as operating_date,
+           us.name as station, coalesce(r.actual_driver_id, r.planned_driver_id) as driver_id, coalesce(r.actual_vehicle_id, r.planned_vehicle_id) as vehicle_id
+      from wms.route r
+      join wms.unloading_station us on us.company_id = r.company_id and us.id = r.unloading_station_id
+     where r.status = 'completed'
+       and r.completed_at <= ${now} - make_interval(hours => ${ROUTE_TIP_GRACE_HOURS})
+       and r.completed_at > ${lookback}
+       and ${UNTIPPED}
+       and ${noAlertWith(KEYS.untipped, sql`r.company_id`)}
+  `)
+
   const of = (row: { company_id: string; project_id: string; rule_key: string }) => ({ companyId: row.company_id, projectId: row.project_id, ruleKey: row.rule_key })
   return [
     ...routes.map((row) => ({ ...of(row), occurrence: { rule: "route-not-started" as const, routeId: row.route_id, routeLabel: routeLabel(Number(row.number)), operatingDate: row.operating_date, plannedStart: row.planned_start, driverId: row.driver_id, vehicleId: row.vehicle_id } })),
@@ -226,6 +304,29 @@ export async function occurrencesToRaise(worker: JobContext["worker"], at: Date)
       ...of(row),
       occurrence: { rule: "fill-threshold" as const, containerId: row.container_id, containerLabel: row.label, sensorIdentifier: row.identifier, fillPercent: Number(row.fill_percent), thresholdPercent: Number(row.threshold), measuredAt: row.measured_at },
       ...(row.books_emptying ? { books: { containerId: row.container_id, today: row.today, note: fillEmptyingNote(row.identifier, Number(row.fill_percent), row.measured_at) } } : {}),
+    })),
+    ...unreceived.map((row) => ({
+      ...of(row),
+      occurrence: { rule: "load-not-received" as const, outboundLoadId: row.load_id, vehicleId: row.vehicle_id, registration: row.registration, fromStation: row.from_station, toStation: row.to_station, departedAt: row.departed_at },
+    })),
+    ...mismatches.map((row) => ({
+      ...of(row),
+      occurrence: {
+        rule: "load-weight-mismatch" as const,
+        outboundLoadId: row.load_id,
+        vehicleId: row.vehicle_id,
+        registration: row.registration,
+        toStation: row.to_station,
+        ticket: row.ticket,
+        netKg: Number(row.net_kg),
+        receivedNetKg: Number(row.received_net_kg),
+        tolerancePercent: Number(row.tolerance),
+      },
+    })),
+    ...overweights.map((row) => ({ ...of(row), occurrence: { rule: "load-overweight" as const, outboundLoadId: row.load_id, vehicleId: row.vehicle_id, registration: row.registration, netKg: Number(row.net_kg), capacityKg: Number(row.capacity_kg) } })),
+    ...untipped.map((row) => ({
+      ...of(row),
+      occurrence: { rule: "route-not-tipped" as const, routeId: row.route_id, routeLabel: routeLabel(Number(row.number)), operatingDate: row.operating_date, station: row.station, driverId: row.driver_id, vehicleId: row.vehicle_id },
     })),
   ]
 }
@@ -266,6 +367,18 @@ export async function alertsToClear(worker: JobContext["worker"], at: Date): Pro
            select 1 from wms.sensor_pairing sp join wms.project p on p.company_id = sp.company_id and p.id = sp.project_id
             where sp.company_id = a.company_id and sp.container_id = a.container_id and a.rule_key = ${KEYS.fill}
               and ${pairingInForce(now)} and ${NEWEST_FILL} >= sp.full_threshold_percent)
+         when 'load-not-received' then not exists (
+           select 1 from wms.outbound_load ol
+            where ol.company_id = a.company_id and ol.id = a.outbound_load_id and a.rule_key = ${KEYS.unreceived} and ol.status = 'departed')
+         when 'load-weight-mismatch' then not exists (
+           select 1 from wms.outbound_load ol join wms.project p on p.company_id = ol.company_id and p.id = ol.project_id
+            where ol.company_id = a.company_id and ol.id = a.outbound_load_id and a.rule_key = ${KEYS.mismatch} and ol.status = 'received' and ${BEYOND_TOLERANCE})
+         when 'load-overweight' then not exists (
+           select 1 from wms.outbound_load ol join wms.vehicle v on v.company_id = ol.company_id and v.id = ol.vehicle_id
+            where ol.company_id = a.company_id and ol.id = a.outbound_load_id and a.rule_key = ${KEYS.overweight} and ol.status <> 'cancelled' and ${OVER_PAYLOAD})
+         when 'route-not-tipped' then not exists (
+           select 1 from wms.route r
+            where r.company_id = a.company_id and r.id = a.route_id and a.rule_key = ${KEYS.untipped} and ${UNTIPPED})
          when 'ticket-overdue' then not exists (
            select 1 from wms.ticket t
             where t.company_id = a.company_id and t.id = a.ticket_id and a.rule_key = ${KEYS.ticket} and t.status in (${OPEN_TICKETS}) and t.due_at < ${now})
@@ -311,8 +424,8 @@ export async function runAlertRules({ api, worker, now, log }: JobContext): Prom
         .values(
           occurrences.map(({ projectId, ruleKey }, index) => {
             const occurrence = told[index]!
-            const { rule, kind, severity, source, title, details, routeId, vehicleId, driverId, containerId, ticketId } = alertOfRule(occurrence)
-            return { companyId, projectId, rule, ruleKey, kind, severity, source, title, details, detectedAt: at, routeId, vehicleId, driverId, containerId, ticketId, raisedBy: null }
+            const { rule, kind, severity, source, title, details, routeId, vehicleId, driverId, containerId, ticketId, outboundLoadId } = alertOfRule(occurrence)
+            return { companyId, projectId, rule, ruleKey, kind, severity, source, title, details, detectedAt: at, routeId, vehicleId, driverId, containerId, ticketId, outboundLoadId, raisedBy: null }
           }),
         )
         // A tick that overlapped this one raised the occurrence already: the key is its word.
@@ -347,7 +460,8 @@ export async function runAlertRules({ api, worker, now, log }: JobContext): Prom
 
 export const alertRulesJob = defineJob<AlertRulesData>({
   queue: ALERT_RULES_QUEUE,
-  description: "Raises the alerts the worker's rules find — a route not started, a device silent, a licence running out, a ticket overdue, a position stale, a container filled past its threshold — and resolves those whose condition has cleared (O4, O8 and O26 of #290).",
+  description:
+    "Raises the alerts the worker's rules find — a route not started, a device silent, a licence running out, a ticket overdue, a position stale, a container filled past its threshold, an outbound load not received, weighed beyond the tolerance or over its vehicle's payload, a route that never tipped — and resolves those whose condition has cleared (O4, O8 and O26 of #290, M17 of #293).",
   handler: async (_jobs, context) => await runAlertRules(context),
   schedule: rulesSchedule(),
   scheduleData: { source: "schedule" },

@@ -66,7 +66,7 @@ import { companyReference, indexOn, tenantIndex, tenantReference, uniqueOn } fro
 import { alert, ticket, ticketEvent } from "../schema/resolution"
 import { wms } from "../schema/wms"
 import { handWrittenStatements, normalised, statementsOf } from "../sql/hand-written"
-import { RESOLVED_SHAPE, RULE_KEY_INDEX, RULE_SHAPE, SUBJECT_SHAPE } from "./alert-as-of"
+import { ADDED_FOR_LOADS, RESOLVED_SHAPE, RULE_KEY_INDEX, RULE_SHAPE, SUBJECT_SHAPE, SUBJECT_SHAPE_WITH_LOADS } from "./alert-as-of"
 import { checksOf, companyFk, createTable, foreignKey, ID, index, list, oneOfCheck, partialUniqueIndex, projectFk, projectFkTo, ref, tenantFk, uniqueKey } from "./rendering"
 import { BOOKED_PICKUP_FK, BOOKED_PICKUP_KEY, BOOKED_ROUTE_INDEX, BOOKED_SHAPE } from "./resolution-shapes"
 import { statementsBetween, statementsFor } from "./specimen"
@@ -185,7 +185,7 @@ const CHARGE_PRODUCT_FK = foreignKey("ticket", "ticket_charge_product_id_fk", ["
 const CHARGE_PRODUCT_INDEX = index("ticket", "ticket_charge_product_id_idx", "company_id", "charge_product_id")
 
 /** The alert as 0009 created it, and as 0034 changed it (O4 of #290): the rule and its occurrence, a ticket as a subject, a rule's alert resolved by nobody. */
-const alertTable = (asOf: "0009" | "0034"): string =>
+const alertTable = (asOf: "0009" | "0034" | "loads"): string =>
   createTable("alert", "project", [
     '"kind" text NOT NULL',
     '"severity" text NOT NULL',
@@ -199,24 +199,27 @@ const alertTable = (asOf: "0009" | "0034"): string =>
     '"driver_id" uuid',
     '"container_id" uuid',
     '"ticket_id" uuid',
+    ...(asOf === "loads" ? ['"outbound_load_id" uuid'] : []),
     '"raised_by" uuid',
     `"acknowledged_at" ${INSTANT}`,
     '"acknowledged_by" uuid',
     `"resolved_at" ${INSTANT}`,
     '"resolved_by" uuid',
     '"resolution_note" text',
-    ...(asOf === "0034" ? ['"rule" text', '"rule_key" text'] : []),
+    ...(asOf !== "0009" ? ['"rule" text', '"rule_key" text'] : []),
     oneOfCheck("alert", "kind", "route-exception", "resource", "service-risk", "asset", "weight", "other"),
     oneOfCheck("alert", "severity", "critical", "high", "medium", "low"),
     oneOfCheck("alert", "source", "manual", "execution", "telemetry", "rule"),
     oneOfCheck("alert", "status", "new", "acknowledged", "resolved"),
-    ...(asOf === "0034" ? [oneOfCheck("alert", "rule", ...ALERT_RULES)] : []),
-    asOf === "0034"
+    ...(asOf !== "0009" ? [oneOfCheck("alert", "rule", ...ALERT_RULES)] : []),
+    asOf === "loads"
+      ? `CONSTRAINT "alert_subject_shape" CHECK (${SUBJECT_SHAPE_WITH_LOADS})`
+      : asOf === "0034"
       ? `CONSTRAINT "alert_subject_shape" CHECK (${SUBJECT_SHAPE})`
       : `CONSTRAINT "alert_subject_shape" CHECK ((${ref("alert", "route_id")} is not null)::int + (${ref("alert", "vehicle_id")} is not null)::int + (${ref("alert", "driver_id")} is not null)::int + (${ref("alert", "container_id")} is not null)::int >= 1)`,
-    ...(asOf === "0034" ? [`CONSTRAINT "alert_rule_shape" CHECK (${RULE_SHAPE})`] : []),
+    ...(asOf !== "0009" ? [`CONSTRAINT "alert_rule_shape" CHECK (${RULE_SHAPE})`] : []),
     `CONSTRAINT "alert_acknowledged_shape" CHECK ((${ref("alert", "acknowledged_at")} is null) = (${ref("alert", "acknowledged_by")} is null))`,
-    asOf === "0034"
+    asOf !== "0009"
       ? `CONSTRAINT "alert_resolved_shape" CHECK (${RESOLVED_SHAPE})`
       : `CONSTRAINT "alert_resolved_shape" CHECK ((${ref("alert", "resolved_at")} is null) = (${ref("alert", "resolved_by")} is null) and (${ref("alert", "resolution_note")} is null or ${ref("alert", "resolved_at")} is not null))`,
     stampsShape,
@@ -229,7 +232,7 @@ const ADDED_IN_0034 = [RULE_KEY_INDEX]
 const CHANGED_LATER = new Map([
   [ticketTable("0075"), ticketTable("0009")],
   [ticketEventTable("0031"), ticketEventTable("0009")],
-  [alertTable("0034"), alertTable("0009")],
+  [alertTable("loads"), alertTable("0009")],
 ])
 
 /** What 0016 added to the ticket beside the column: the key through the route and its index. 0009 begins with the generated statements less these. */
@@ -249,7 +252,7 @@ const ADDED_IN_0070 = [TEAM_FK, TEAM_INDEX]
 const expected = [
   ticketTable("0075"),
   ticketEventTable("0031"),
-  alertTable("0034"),
+  alertTable("loads"),
   companyFk("ticket"),
   projectFk("ticket"),
   tenantFk("ticket", "assignee_user_account_id", "user_account"),
@@ -282,6 +285,7 @@ const expected = [
   projectFkTo("alert", "driver_id", "driver"),
   projectFkTo("alert", "container_id", "container"),
   projectFkTo("alert", "ticket_id", "ticket"),
+  ADDED_FOR_LOADS[0]!,
   tenantFk("alert", "raised_by", "user_account"),
   tenantFk("alert", "acknowledged_by", "user_account"),
   tenantFk("alert", "resolved_by", "user_account"),
@@ -319,6 +323,7 @@ const expected = [
   index("alert", "alert_driver_id_idx", "company_id", "driver_id"),
   index("alert", "alert_container_id_idx", "company_id", "container_id"),
   index("alert", "alert_ticket_id_idx", "company_id", "ticket_id"),
+  ADDED_FOR_LOADS[1]!,
   index("alert", "alert_raised_by_idx", "company_id", "raised_by"),
   index("alert", "alert_acknowledged_by_idx", "company_id", "acknowledged_by"),
   index("alert", "alert_resolved_by_idx", "company_id", "resolved_by"),
@@ -396,7 +401,7 @@ const generatedAlterations = (): Promise<string[]> => statementsBetween({ compan
 
 /** Everything drizzle-kit wrote at the head of 0009: the three tables as they were generated as of 0009 — the ticket without the product its completion charges or the re-collection's stop and with 0009's sources, what 0033 and 0016 added left out — and the two altered ones. */
 const generatedHead = async (): Promise<string[]> => [
-  ...(await statementsFor(tables)).filter((statement) => !ADDED_IN_0016.includes(statement) && !ADDED_IN_0033.includes(statement) && !ADDED_IN_0034.includes(statement) && !ADDED_IN_0035.includes(statement) && !ADDED_IN_0070.includes(statement)).map((statement) => CHANGED_LATER.get(statement) ?? statement),
+  ...(await statementsFor(tables)).filter((statement) => !ADDED_IN_0016.includes(statement) && !ADDED_IN_0033.includes(statement) && !ADDED_IN_0034.includes(statement) && !ADDED_IN_0035.includes(statement) && !ADDED_IN_0070.includes(statement) && !ADDED_FOR_LOADS.includes(statement)).map((statement) => CHANGED_LATER.get(statement) ?? statement),
   ...(await generatedAlterations()),
 ]
 
@@ -419,7 +424,7 @@ describe("the Resolution tables as drizzle-kit writes them", () => {
     assert.deepEqual([...statements.slice(0, generated.length)].sort(), generated)
     // What 0016, 0031 and 0033 changed and 0016 and 0033 added is what the schema generates today: each mapping maps something.
     const today = await statementsFor(tables)
-    for (const statement of [...CHANGED_LATER.keys(), ...ADDED_IN_0016, ...ADDED_IN_0033, ...ADDED_IN_0034, ...ADDED_IN_0035]) assert.ok(today.includes(statement), statement.split("\n")[0])
+    for (const statement of [...CHANGED_LATER.keys(), ...ADDED_IN_0016, ...ADDED_IN_0033, ...ADDED_IN_0034, ...ADDED_IN_0035, ...ADDED_FOR_LOADS]) assert.ok(today.includes(statement), statement.split("\n")[0])
   })
 
   test("and carries below them the fence and trigger, or revoke, of each table: 3 x 3 = 9 statements", async () => {

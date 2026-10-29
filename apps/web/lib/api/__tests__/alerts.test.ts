@@ -63,6 +63,7 @@ const stale: Alert = {
   driverId: null,
   containerId: null,
   ticketId: null,
+  outboundLoadId: null,
   raisedBy: oliviaId,
   acknowledgedAt: null,
   acknowledgedBy: null,
