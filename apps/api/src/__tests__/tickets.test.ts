@@ -98,9 +98,9 @@ describe("the ticket endpoints", { skip: database.skip || owner.skip }, () => {
       ])
       // Anna is two things to her address; Bo one thing to his.
       await tx.insert(propertyParty).values([
-        { id: testId(), companyId: a.companyId, projectId: copenhagen, propertyId: portal.annas, customerId: portal.anna, role: "tenant" },
-        { id: testId(), companyId: a.companyId, projectId: copenhagen, propertyId: portal.annas, customerId: portal.anna, role: "payer" },
-        { id: testId(), companyId: a.companyId, projectId: copenhagen, propertyId: portal.bos, customerId: portal.bo, role: "owner" },
+        { id: testId(), companyId: a.companyId, projectId: copenhagen, propertyId: portal.annas, customerId: portal.anna, role: "tenant", validFrom: "2026-01-01" },
+        { id: testId(), companyId: a.companyId, projectId: copenhagen, propertyId: portal.annas, customerId: portal.anna, role: "payer", validFrom: "2026-01-01" },
+        { id: testId(), companyId: a.companyId, projectId: copenhagen, propertyId: portal.bos, customerId: portal.bo, role: "owner", validFrom: "2026-01-01" },
       ])
       await tx.insert(agreement).values({ id: registry.agreement, companyId: a.companyId, projectId: copenhagen, number: "AGR-1", customerId: portal.anna, payerCustomerId: portal.anna, status: "active", billingCadence: "monthly", currency: "DKK", validFrom: "2026-01-01" })
       await tx.insert(sharedCollectionPoint).values({
