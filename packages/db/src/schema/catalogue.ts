@@ -45,7 +45,7 @@ import { FREE_DAYS_MAX } from "@waste/domain/finance/hire"
 import { PRODUCT_KINDS, PRODUCT_STATUSES, PRODUCT_UNITS, WASTE_TREATMENTS } from "@waste/domain/registry/vocabulary"
 import { WASTE_CODE_PATTERN } from "@waste/domain/registry/waste-code"
 import { sql } from "drizzle-orm"
-import { check, integer, text, uniqueIndex, uuid } from "drizzle-orm/pg-core"
+import { boolean, check, integer, text, uniqueIndex, uuid } from "drizzle-orm/pg-core"
 
 import { tableObjectName } from "../names"
 import { lowercase, oneOf, positive } from "./checks"
@@ -69,6 +69,8 @@ export const wasteFraction = wms.table(
     treatment: text(),
     /** What a cubic metre of it weighs in a container, kg (O10 of #290): a stop's expected weight is its container's litres times this; null where nobody has set one. */
     densityKgPerCubicMetre: integer(),
+    /** Whether it is hazardous waste (O18 of #290), what its transfer note says: true under a starred code always, and set by the office under any other. */
+    hazardous: boolean().notNull().default(false),
   },
   (t) => [
     companyReference(t, company),
@@ -79,6 +81,8 @@ export const wasteFraction = wms.table(
     // The code's shape, the domain's one spelling; a null passes: no code is not a wrong one.
     check(tableObjectName(t.id.table, "waste_code_shape", "wasteFraction"), sql`${t.wasteCode} ~ ${sql.raw(`'${WASTE_CODE_PATTERN}'`)}`),
     oneOf(t.treatment, WASTE_TREATMENTS),
+    // A starred code is a hazardous entry of the list: such a fraction is never held not hazardous (`hazardousAgrees`, @waste/domain/registry/waste-code).
+    check(tableObjectName(t.id.table, "hazardous_shape", "wasteFraction"), sql`${t.hazardous} or ${t.wasteCode} is null or ${t.wasteCode} not like '%*'`),
     // Within the domain's bounds; a null passes: no density is not a wrong one.
     check(
       tableObjectName(t.id.table, "density_kg_per_cubic_metre_range", "wasteFraction"),

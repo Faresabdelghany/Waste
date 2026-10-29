@@ -10,6 +10,7 @@ import {
   Couch,
   CaretLeft,
   CheckCircle,
+  ClipboardText,
   CreditCard,
   Database,
   Gear,
@@ -66,6 +67,7 @@ import { IntegrationsSettingsOnApi } from "@/components/settings/integrations-se
 import { PortalsSettingsOnApi } from "@/components/settings/portals-settings-on-api"
 import { MessageTemplatesSettings } from "@/components/settings/message-templates-settings"
 import { TicketSlaSettings } from "@/components/settings/ticket-sla-settings"
+import { PreTripChecklistsSettings } from "@/components/settings/pre-trip-checklists-settings"
 import { TicketTeamsSettings } from "@/components/settings/ticket-teams-settings"
 import { PickupExceptionChargesSettings } from "@/components/settings/pickup-exception-charges-settings"
 import { BulkySchedulesSettings } from "@/components/settings/bulky-schedules-settings"
@@ -78,6 +80,7 @@ import { ASSET_MANAGEMENT_SETTINGS_PANE_ID, FINANCE_ON_API_SETTINGS_PANE_ID, NOT
 import { SORTING_GUIDE_SETTINGS_PANE_ID } from "@/lib/data/sorting-guide"
 import { MESSAGE_TEMPLATES_SETTINGS_PANE_ID } from "@/lib/data/message-templates"
 import { TICKET_SLA_SETTINGS_PANE_ID } from "@/lib/data/ticket-sla"
+import { PRE_TRIP_CHECKLISTS_SETTINGS_PANE_ID } from "@/lib/data/pre-trip-checklists"
 import { TICKET_TEAMS_SETTINGS_PANE_ID } from "@/lib/data/ticket-teams"
 import { PICKUP_EXCEPTION_CHARGES_SETTINGS_PANE_ID } from "@/lib/data/pickup-exception-rules"
 import { BULKY_SCHEDULES_SETTINGS_PANE_ID } from "@/lib/data/bulky"
@@ -192,6 +195,8 @@ const settingsSections: Array<{
       { id: MESSAGE_TEMPLATES_SETTINGS_PANE_ID, label: "Message templates", icon: EnvelopeSimple },
       // The fleet's emission factors on the API (M10 of #293): offered with the adapter configured.
       { id: EMISSION_FACTORS_SETTINGS_PANE_ID, label: "Emission factors", icon: Leaf },
+      // The vehicle types' pre-trip checklists on the API (O13 of #290): offered with the adapter configured.
+      { id: PRE_TRIP_CHECKLISTS_SETTINGS_PANE_ID, label: "Pre-trip checklists", icon: ClipboardText },
     ],
   },
   {
@@ -1385,6 +1390,11 @@ const visiblePaneDefinitions: Record<string, SettingsPaneDefinition> = {
     description: "The e-mails and text messages the office sends a customer or one of its contact persons, each for service or for billing.",
     groups: [],
   },
+  [PRE_TRIP_CHECKLISTS_SETTINGS_PANE_ID]: {
+    title: "Pre-trip checklists",
+    description: "What a driver checks on a vehicle of each type before or during the day, and which defects take it off the road.",
+    groups: [],
+  },
   [TICKET_SLA_SETTINGS_PANE_ID]: {
     title: "Ticket SLA",
     description: "How long a ticket has from opening to its due date, by priority, for every kind or for one kind.",
@@ -1549,6 +1559,7 @@ function isFullPanelPane(paneId: string): boolean {
     paneId === MASTER_DATA_SETTINGS_PANE_ID ||
     paneId === SORTING_GUIDE_SETTINGS_PANE_ID ||
     paneId === TICKET_SLA_SETTINGS_PANE_ID ||
+    paneId === PRE_TRIP_CHECKLISTS_SETTINGS_PANE_ID ||
     paneId === TICKET_TEAMS_SETTINGS_PANE_ID ||
     paneId === MESSAGE_TEMPLATES_SETTINGS_PANE_ID ||
     paneId === FINANCE_ON_API_SETTINGS_PANE_ID ||
@@ -1971,6 +1982,8 @@ function SettingsPane({
         <SortingGuideSettings />
       ) : paneId === TICKET_SLA_SETTINGS_PANE_ID ? (
         <TicketSlaSettings />
+      ) : paneId === PRE_TRIP_CHECKLISTS_SETTINGS_PANE_ID ? (
+        <PreTripChecklistsSettings />
       ) : paneId === TICKET_TEAMS_SETTINGS_PANE_ID ? (
         <TicketTeamsSettings />
       ) : paneId === MESSAGE_TEMPLATES_SETTINGS_PANE_ID ? (

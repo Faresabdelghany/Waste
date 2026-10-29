@@ -129,6 +129,8 @@ export type MasterDataFields = {
   treatment?: WasteTreatment | null
   /** A fraction's density, kg per cubic metre (O10 of #290); null where nobody set one, NaN where the form's is no whole number. */
   densityKgPerCubicMetre?: number | null
+  /** Whether a fraction is hazardous waste (O18 of #290), what its transfer note prints. */
+  hazardous?: boolean
   /** A container type's volume; null where nobody recorded one. */
   volumeLitres?: number | null
   /** A container type's seconds at the kerb (O10 of #290); null where nobody set them. */
@@ -183,6 +185,9 @@ const text = (values: BusinessFormValues | SubmittedValues | undefined, key: str
   return typeof value === "string" && value.trim() !== "" ? value.trim() : undefined
 }
 
+/** A form's checkbox, or a record's typed flag: true only where it says so. */
+const flag = (values: BusinessFormValues | SubmittedValues | undefined, key: string): boolean => values?.[key] === true || values?.[key] === "true"
+
 /** A form's number: null for blank, the number for a whole positive one (`240`, `240.0`), NaN for anything else. */
 const count = (values: BusinessFormValues | SubmittedValues | undefined, key: string): number | null => {
   const value = text(values, key)
@@ -204,6 +209,7 @@ export function masterDataFieldsOf(kind: MasterDataKind, values: BusinessFormVal
         wasteCode: code === undefined ? null : wasteCodeOf(code),
         treatment: treatmentOf(text(values, "treatment")),
         densityKgPerCubicMetre: count(values, "densityKgPerCubicMetre"),
+        hazardous: flag(values, "hazardous"),
       }
     }
     case "container-type":
@@ -254,6 +260,8 @@ export function masterDataTypedValues(kind: MasterDataKind, values: BusinessForm
     // A fraction's treatment not recorded is no value, as a cleared waste code is.
     if (value !== undefined && !(key === "treatment" && value === NO_TREATMENT)) typed[key] = value
   }
+  // A fraction's hazardous flag is a checkbox, kept as the boolean the form holds, and only where it is ticked.
+  if (kind === "waste-fraction" && flag(values, "hazardous")) typed.hazardous = true
   return typed
 }
 
@@ -324,6 +332,7 @@ export function presentMasterData(fields: MasterDataFields, lookups: MasterDataL
           ...(code === null ? {} : { "Waste code": code }),
           ...(treatment === null ? {} : { Treatment: TREATMENT_LABELS[treatment] }),
           ...(density === null || Number.isNaN(density) ? {} : { Density: `${density.toLocaleString("en")} kg/m³` }),
+          ...(fields.hazardous === true ? { Hazardous: "Yes" } : {}),
         },
       }
     }
@@ -401,6 +410,13 @@ export function masterDataSchema(kind: MasterDataKind): BusinessFormSchema {
     ...(kind === "waste-fraction"
       ? [
           { id: "wasteCode", label: "Waste code", type: "text" as const, placeholder: "20 03 01" },
+          {
+            id: "hazardous",
+            label: "Hazardous waste",
+            type: "checkbox" as const,
+            defaultValue: false,
+            description: "What its waste transfer notes say. A code with an asterisk is a hazardous entry, and makes the fraction hazardous.",
+          },
           {
             id: "treatment",
             label: "Treatment",
@@ -528,6 +544,7 @@ export function masterDataFormValues(record: BusinessRecord): BusinessFormValues
   for (const [key, value] of Object.entries(record.submittedValues ?? {})) {
     if (key === MASTER_DATA_KIND_KEY) continue
     if (typeof value === "string" && value.trim() !== "") values[key] = value
+    if (typeof value === "boolean") values[key] = value
   }
   // The select shows a fraction with no treatment as not recorded.
   if (masterDataKindOf(record) === "waste-fraction" && values.treatment === undefined) values.treatment = NO_TREATMENT

@@ -123,6 +123,8 @@ export const AUDITED_TABLES = [
   "service_provider_activity_fraction",
   "customer_contact",
   "message_template",
+  "pre_trip_checklist_item",
+  "vehicle_defect",
   "notification_preference",
   "notification_rule",
   "notification_rule_area",

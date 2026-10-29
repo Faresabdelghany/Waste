@@ -18,9 +18,13 @@
 // out there somewhere.
 //
 // The grant is `configure.organization`, the same as the company's: Settings
-// → Company & Projects is one surface.
+// → Company & Projects is one surface. A project's privacy policy (#291 C19)
+// is read with the project and written whole through its own route,
+// `PUT /projects/:id/privacy-policy`, under `configure.privacy`: who may say
+// how long personal data is kept is the privacy module's grant, not the
+// project editor's.
 import type { PaymentReferenceScheme } from "@waste/contracts/finance"
-import { Project, ProjectCreate, ProjectPatch, type ProjectStatus } from "@waste/contracts/organisation"
+import { type GpsPurpose, PrivacyPolicy, Project, ProjectCreate, ProjectPatch, type ProjectStatus } from "@waste/contracts/organisation"
 import { Page, PageRequest } from "@waste/contracts/pagination"
 import type { ServiceDay } from "@waste/contracts/planning"
 import type { Tx } from "@waste/db/client"
@@ -55,6 +59,9 @@ const columns = {
   paymentReferenceScheme: project.paymentReferenceScheme,
   weightTolerancePercent: project.weightTolerancePercent,
   holdForReview: project.holdForReview,
+  positionRetentionDays: project.positionRetentionDays,
+  proofRetentionDays: project.proofRetentionDays,
+  gpsPurpose: project.gpsPurpose,
   createdAt: project.createdAt,
   updatedAt: project.updatedAt,
 }
@@ -78,9 +85,22 @@ function projectOf(row: Row): Project {
     paymentReferenceScheme: row.paymentReferenceScheme as PaymentReferenceScheme,
     weightTolerancePercent: row.weightTolerancePercent,
     holdForReview: row.holdForReview,
+    privacyPolicy: privacyPolicyOf(row),
     ...stampsOf(row),
   }
 }
+
+/** The policy's four columns on the wire; null each is no policy of its own. */
+function privacyPolicyOf(row: Pick<Row, "positionRetentionDays" | "proofRetentionDays" | "gpsPurpose">): PrivacyPolicy {
+  return {
+    positionRetentionDays: row.positionRetentionDays,
+    proofRetentionDays: row.proofRetentionDays,
+    gpsPurpose: row.gpsPurpose as GpsPurpose | null,
+  }
+}
+
+/** The module whose `edit` writes a project's privacy policy (#291 C19). */
+const PRIVACY_MODULE = "configure.privacy"
 
 /** What a project moved to a FI card's scheme is told while its company has no creditor number (#291 C4). */
 export const NO_FIK_CREDITOR = "Set the company's FIK creditor number first: a FI card names it"
@@ -251,6 +271,40 @@ export function projectRoutes(guard: MiddlewareHandler<AuthEnv>) {
         // The held routes the new weekend or list re-decides go back to their schemes (routes/route-holds.ts).
         if (holidayInputs !== undefined) await releaseHolidayHolds(tx, companyId, id, { before: holidayInputs, after: await projectCalendarOf(tx, companyId, id) })
         return c.json(projectOf(row))
+      },
+    )
+    .put(
+      "/projects/:id/privacy-policy",
+      describeRoute({
+        operationId: "replaceProjectPrivacyPolicy",
+        summary: "Set a project's privacy policy",
+        description:
+          "Replaces one project's privacy policy whole (#291 C19): the days its drivers' positions (1 to 30) and its stops' photos and signatures (1 to 3650) are kept, and the purpose its vehicles' positions are recorded for (`dispatch`, `dispatch-and-proof`). A null is no policy of the project's own for that kind: the deployment's setting stands, as before policies (`POSITION_RETENTION_DAYS`, `PROOF_RETENTION_DAYS`), and a photo with neither is kept for good. The worker's nightly purges read the days project by project, so a shorter period takes effect the next night. Read back as the project's `privacyPolicy`; every change is in the project's audit history.",
+        security: BEARER_SECURITY,
+        responses: {
+          200: describeJson("The policy as it now stands.", PrivacyPolicy),
+          400: describeProblem("The path does not hold an id, or the body is missing a field, names one the server does not take, or holds days outside a kind's bounds or a purpose outside the vocabulary."),
+          401: describeProblem("No usable token (see WWW-Authenticate)."),
+          403: describeProblem(`No active account here, or the caller's role does not allow \`edit\` on \`${PRIVACY_MODULE}\`.`),
+          404: describeProblem("No project with that id in this company."),
+        },
+      }),
+      guard,
+      requireGrant(PRIVACY_MODULE, "edit"),
+      validate("param", IdParam),
+      validate("json", PrivacyPolicy),
+      async (c) => {
+        const { id } = c.req.valid("param")
+        const policy = c.req.valid("json")
+        const companyId = c.get("principal").companyId
+        const [row] = await c
+          .get("tx")
+          .update(project)
+          .set(policy)
+          .where(and(eq(project.companyId, companyId), eq(project.id, id)))
+          .returning(columns)
+        if (row === undefined) throw noSuchProject(id)
+        return c.json(privacyPolicyOf(row))
       },
     )
 }

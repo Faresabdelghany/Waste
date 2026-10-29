@@ -530,22 +530,50 @@
     {
       "idx": 75,
       "version": "7",
-      "when": 1793235133148,
-      "tag": "0075_staff_notifications",
+      "when": 1793235059830,
+      "tag": "0075_pre_trip",
       "breakpoints": true
     },
     {
       "idx": 76,
       "version": "7",
-      "when": 1793236892603,
-      "tag": "0076_booking_notices",
+      "when": 1793241234406,
+      "tag": "0076_fraction_hazardous",
       "breakpoints": true
     },
     {
       "idx": 77,
       "version": "7",
-      "when": 1793247870187,
-      "tag": "0077_service_notifications",
+      "when": 1793243238519,
+      "tag": "0077_privacy_policy",
+      "breakpoints": true
+    },
+    {
+      "idx": 78,
+      "version": "7",
+      "when": 1793245578465,
+      "tag": "0078_item_product_unit",
+      "breakpoints": true
+    },
+    {
+      "idx": 79,
+      "version": "7",
+      "when": 1793251090085,
+      "tag": "0092_staff_notifications",
+      "breakpoints": true
+    },
+    {
+      "idx": 80,
+      "version": "7",
+      "when": 1793252174782,
+      "tag": "0093_booking_notices",
+      "breakpoints": true
+    },
+    {
+      "idx": 81,
+      "version": "7",
+      "when": 1793261445537,
+      "tag": "0095_service_notifications",
       "breakpoints": true
     }
   ]

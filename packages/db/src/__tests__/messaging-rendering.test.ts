@@ -5,7 +5,7 @@
 // those statements under its header, then what the two tables owe the file
 // by migrations/README.md: their fences and triggers, and the templates'
 // audit trail (`MESSAGING_AUDITED`); the delivery log is exempt. The log is
-// spelled as 0074 left it (message-as-of.ts), since 0075 grew it by the staff
+// spelled as 0074 left it (message-as-of.ts), since 0092 grew it by the staff
 // notifications. The file is found by its name, not its number. No database.
 import assert from "node:assert/strict"
 import { readdir, readFile } from "node:fs/promises"

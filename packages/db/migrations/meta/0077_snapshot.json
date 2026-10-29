@@ -1,6 +1,6 @@
 {
-  "id": "feb4a991-0440-4ded-a19d-d5dab7584ef1",
-  "prevId": "a279b3f1-0b1c-4b46-84b4-b7c9268e701d",
+  "id": "2c4acbdf-1255-4bc7-a01c-b782d18c24c1",
+  "prevId": "e84ac2ee-a9bd-4812-8e31-ea31b4cbb5fa",
   "version": "7",
   "dialect": "postgresql",
   "tables": {
@@ -272,6 +272,24 @@
           "primaryKey": false,
           "notNull": true,
           "default": false
+        },
+        "position_retention_days": {
+          "name": "position_retention_days",
+          "type": "integer",
+          "primaryKey": false,
+          "notNull": false
+        },
+        "proof_retention_days": {
+          "name": "proof_retention_days",
+          "type": "integer",
+          "primaryKey": false,
+          "notNull": false
+        },
+        "gps_purpose": {
+          "name": "gps_purpose",
+          "type": "text",
+          "primaryKey": false,
+          "notNull": false
         }
       },
       "indexes": {},
@@ -346,6 +364,18 @@
         "project_weight_tolerance_percent_range": {
           "name": "project_weight_tolerance_percent_range",
           "value": "\"wms\".\"project\".\"weight_tolerance_percent\" between 1 and 100"
+        },
+        "project_position_retention_range": {
+          "name": "project_position_retention_range",
+          "value": "\"wms\".\"project\".\"position_retention_days\" between 1 and 30"
+        },
+        "project_proof_retention_range": {
+          "name": "project_proof_retention_range",
+          "value": "\"wms\".\"project\".\"proof_retention_days\" between 1 and 3650"
+        },
+        "project_gps_purpose_one_of": {
+          "name": "project_gps_purpose_one_of",
+          "value": "\"wms\".\"project\".\"gps_purpose\" in ('dispatch', 'dispatch-and-proof')"
         }
       },
       "isRLSEnabled": false
@@ -1709,6 +1739,13 @@
           "type": "integer",
           "primaryKey": false,
           "notNull": false
+        },
+        "hazardous": {
+          "name": "hazardous",
+          "type": "boolean",
+          "primaryKey": false,
+          "notNull": true,
+          "default": false
         }
       },
       "indexes": {},
@@ -1768,6 +1805,10 @@
         "waste_fraction_treatment_one_of": {
           "name": "waste_fraction_treatment_one_of",
           "value": "\"wms\".\"waste_fraction\".\"treatment\" in ('reuse', 'recycling', 'energy-recovery', 'disposal')"
+        },
+        "waste_fraction_hazardous_shape": {
+          "name": "waste_fraction_hazardous_shape",
+          "value": "\"wms\".\"waste_fraction\".\"hazardous\" or \"wms\".\"waste_fraction\".\"waste_code\" is null or \"wms\".\"waste_fraction\".\"waste_code\" not like '%*'"
         },
         "waste_fraction_density_kg_per_cubic_metre_range": {
           "name": "waste_fraction_density_kg_per_cubic_metre_range",
@@ -10823,7 +10864,7 @@
       "checkConstraints": {
         "driver_command_kind_one_of": {
           "name": "driver_command_kind_one_of",
-          "value": "\"wms\".\"driver_command\".\"kind\" in ('start-route', 'arrive', 'complete-pickup', 'skip-pickup', 'fail-pickup', 'report-problem', 'add-photo', 'add-weight', 'add-signature', 'add-note', 'record-unload', 'pause', 'resume', 'end-route', 'record-positions')"
+          "value": "\"wms\".\"driver_command\".\"kind\" in ('start-route', 'arrive', 'complete-pickup', 'skip-pickup', 'fail-pickup', 'report-problem', 'add-photo', 'add-weight', 'add-signature', 'add-note', 'record-unload', 'pause', 'resume', 'end-route', 'record-positions', 'pre-trip-check')"
         },
         "driver_command_outcome_one_of": {
           "name": "driver_command_outcome_one_of",
@@ -11012,11 +11053,11 @@
       "checkConstraints": {
         "outbox_event_kind_one_of": {
           "name": "outbox_event_kind_one_of",
-          "value": "\"wms\".\"outbox_event\".\"kind\" in ('route-dispatched', 'route-started', 'route-completed', 'route-cancelled', 'route-reassigned', 'pickup-completed', 'pickup-failed', 'pickup-skipped', 'pickup-problem-reported', 'pickup-corrected', 'unload-recorded', 'command-rejected', 'ticket-opened', 'ticket-completed', 'ticket-rejected', 'invoice-issued', 'settlement-closed', 'application-decided', 'site-visit-recorded', 'site-visit-voided', 'alert-raised', 'ticket-assigned', 'bulky-booking-booked', 'bulky-booking-cancelled', 'ticket-replied')"
+          "value": "\"wms\".\"outbox_event\".\"kind\" in ('route-dispatched', 'route-started', 'route-completed', 'route-cancelled', 'route-reassigned', 'pickup-completed', 'pickup-failed', 'pickup-skipped', 'pickup-problem-reported', 'pickup-corrected', 'unload-recorded', 'command-rejected', 'ticket-opened', 'ticket-completed', 'ticket-rejected', 'invoice-issued', 'settlement-closed', 'application-decided', 'site-visit-recorded', 'site-visit-voided')"
         },
         "outbox_event_aggregate_kind_one_of": {
           "name": "outbox_event_aggregate_kind_one_of",
-          "value": "\"wms\".\"outbox_event\".\"aggregate_kind\" in ('route', 'pickup', 'unload', 'command', 'ticket', 'invoice', 'settlement', 'application', 'site-visit', 'alert', 'bulky-booking')"
+          "value": "\"wms\".\"outbox_event\".\"aggregate_kind\" in ('route', 'pickup', 'unload', 'command', 'ticket', 'invoice', 'settlement', 'application', 'site-visit')"
         }
       },
       "isRLSEnabled": false
@@ -16020,7 +16061,7 @@
       "checkConstraints": {
         "ticket_kind_one_of": {
           "name": "ticket_kind_one_of",
-          "value": "\"wms\".\"ticket\".\"kind\" in ('missed-collection', 'overflow', 'access-issue', 'container-request', 'container-defect', 'proof-follow-up', 'complaint', 'reported-problem', 'rejected-command', 'internal-task', 'other')"
+          "value": "\"wms\".\"ticket\".\"kind\" in ('missed-collection', 'overflow', 'access-issue', 'container-request', 'container-defect', 'proof-follow-up', 'complaint', 'reported-problem', 'rejected-command', 'internal-task', 'vehicle-defect', 'other')"
         },
         "ticket_status_one_of": {
           "name": "ticket_status_one_of",
@@ -16694,7 +16735,7 @@
       "checkConstraints": {
         "ticket_sla_kind_one_of": {
           "name": "ticket_sla_kind_one_of",
-          "value": "\"wms\".\"ticket_sla\".\"kind\" in ('missed-collection', 'overflow', 'access-issue', 'container-request', 'container-defect', 'proof-follow-up', 'complaint', 'reported-problem', 'rejected-command', 'internal-task', 'other')"
+          "value": "\"wms\".\"ticket_sla\".\"kind\" in ('missed-collection', 'overflow', 'access-issue', 'container-request', 'container-defect', 'proof-follow-up', 'complaint', 'reported-problem', 'rejected-command', 'internal-task', 'vehicle-defect', 'other')"
         },
         "ticket_sla_priority_one_of": {
           "name": "ticket_sla_priority_one_of",
@@ -16844,7 +16885,7 @@
       "checkConstraints": {
         "ticket_team_default_kind_one_of": {
           "name": "ticket_team_default_kind_one_of",
-          "value": "\"wms\".\"ticket_team_default\".\"kind\" in ('missed-collection', 'overflow', 'access-issue', 'container-request', 'container-defect', 'proof-follow-up', 'complaint', 'reported-problem', 'rejected-command', 'internal-task', 'other')"
+          "value": "\"wms\".\"ticket_team_default\".\"kind\" in ('missed-collection', 'overflow', 'access-issue', 'container-request', 'container-defect', 'proof-follow-up', 'complaint', 'reported-problem', 'rejected-command', 'internal-task', 'vehicle-defect', 'other')"
         }
       },
       "isRLSEnabled": false
@@ -23371,7 +23412,7 @@
       "checkConstraints": {
         "ticket_kind_product_ticket_kind_one_of": {
           "name": "ticket_kind_product_ticket_kind_one_of",
-          "value": "\"wms\".\"ticket_kind_product\".\"ticket_kind\" in ('missed-collection', 'overflow', 'access-issue', 'container-request', 'container-defect', 'proof-follow-up', 'complaint', 'reported-problem', 'rejected-command', 'internal-task', 'other')"
+          "value": "\"wms\".\"ticket_kind_product\".\"ticket_kind\" in ('missed-collection', 'overflow', 'access-issue', 'container-request', 'container-defect', 'proof-follow-up', 'complaint', 'reported-problem', 'rejected-command', 'internal-task', 'vehicle-defect', 'other')"
         }
       },
       "isRLSEnabled": false
@@ -31541,22 +31582,10 @@
           "name": "customer_id",
           "type": "uuid",
           "primaryKey": false,
-          "notNull": false
+          "notNull": true
         },
         "contact_id": {
           "name": "contact_id",
-          "type": "uuid",
-          "primaryKey": false,
-          "notNull": false
-        },
-        "user_account_id": {
-          "name": "user_account_id",
-          "type": "uuid",
-          "primaryKey": false,
-          "notNull": false
-        },
-        "source_event_id": {
-          "name": "source_event_id",
           "type": "uuid",
           "primaryKey": false,
           "notNull": false
@@ -31713,83 +31742,6 @@
           "concurrently": false,
           "method": "btree",
           "with": {}
-        },
-        "message_user_account_id_idx": {
-          "name": "message_user_account_id_idx",
-          "columns": [
-            {
-              "expression": "company_id",
-              "isExpression": false,
-              "asc": true,
-              "nulls": "last"
-            },
-            {
-              "expression": "user_account_id",
-              "isExpression": false,
-              "asc": true,
-              "nulls": "last"
-            }
-          ],
-          "isUnique": false,
-          "concurrently": false,
-          "method": "btree",
-          "with": {}
-        },
-        "message_source_event_id_user_account_id_idx": {
-          "name": "message_source_event_id_user_account_id_idx",
-          "columns": [
-            {
-              "expression": "company_id",
-              "isExpression": false,
-              "asc": true,
-              "nulls": "last"
-            },
-            {
-              "expression": "source_event_id",
-              "isExpression": false,
-              "asc": true,
-              "nulls": "last"
-            },
-            {
-              "expression": "user_account_id",
-              "isExpression": false,
-              "asc": true,
-              "nulls": "last"
-            }
-          ],
-          "isUnique": true,
-          "where": "\"wms\".\"message\".\"source_event_id\" is not null and \"wms\".\"message\".\"user_account_id\" is not null",
-          "concurrently": false,
-          "method": "btree",
-          "with": {}
-        },
-        "message_source_event_id_customer_id_idx": {
-          "name": "message_source_event_id_customer_id_idx",
-          "columns": [
-            {
-              "expression": "company_id",
-              "isExpression": false,
-              "asc": true,
-              "nulls": "last"
-            },
-            {
-              "expression": "source_event_id",
-              "isExpression": false,
-              "asc": true,
-              "nulls": "last"
-            },
-            {
-              "expression": "customer_id",
-              "isExpression": false,
-              "asc": true,
-              "nulls": "last"
-            }
-          ],
-          "isUnique": true,
-          "where": "\"wms\".\"message\".\"source_event_id\" is not null and \"wms\".\"message\".\"customer_id\" is not null",
-          "concurrently": false,
-          "method": "btree",
-          "with": {}
         }
       },
       "foreignKeys": {
@@ -31872,39 +31824,19 @@
           ],
           "onDelete": "no action",
           "onUpdate": "no action"
-        },
-        "message_user_account_id_fk": {
-          "name": "message_user_account_id_fk",
-          "tableFrom": "message",
-          "tableTo": "user_account",
-          "schemaTo": "wms",
-          "columnsFrom": [
-            "company_id",
-            "user_account_id"
-          ],
-          "columnsTo": [
-            "company_id",
-            "id"
-          ],
-          "onDelete": "no action",
-          "onUpdate": "no action"
         }
       },
       "compositePrimaryKeys": {},
       "uniqueConstraints": {},
       "policies": {},
       "checkConstraints": {
-        "message_recipient_exactly_one": {
-          "name": "message_recipient_exactly_one",
-          "value": "(\"wms\".\"message\".\"customer_id\" is not null)::int + (\"wms\".\"message\".\"user_account_id\" is not null)::int = 1"
-        },
         "message_channel_one_of": {
           "name": "message_channel_one_of",
           "value": "\"wms\".\"message\".\"channel\" in ('email', 'sms')"
         },
         "message_purpose_one_of": {
           "name": "message_purpose_one_of",
-          "value": "\"wms\".\"message\".\"purpose\" in ('service', 'billing', 'staff')"
+          "value": "\"wms\".\"message\".\"purpose\" in ('service', 'billing')"
         },
         "message_status_one_of": {
           "name": "message_status_one_of",
@@ -32070,8 +32002,355 @@
       },
       "isRLSEnabled": false
     },
-    "wms.notification_preference": {
-      "name": "notification_preference",
+    "wms.pre_trip_check": {
+      "name": "pre_trip_check",
+      "schema": "wms",
+      "columns": {
+        "id": {
+          "name": "id",
+          "type": "uuid",
+          "primaryKey": true,
+          "notNull": true,
+          "default": "wms.uuidv7()"
+        },
+        "company_id": {
+          "name": "company_id",
+          "type": "uuid",
+          "primaryKey": false,
+          "notNull": true
+        },
+        "project_id": {
+          "name": "project_id",
+          "type": "uuid",
+          "primaryKey": false,
+          "notNull": true
+        },
+        "recorded_at": {
+          "name": "recorded_at",
+          "type": "timestamp with time zone",
+          "primaryKey": false,
+          "notNull": true,
+          "default": "now()"
+        },
+        "route_id": {
+          "name": "route_id",
+          "type": "uuid",
+          "primaryKey": false,
+          "notNull": true
+        },
+        "vehicle_id": {
+          "name": "vehicle_id",
+          "type": "uuid",
+          "primaryKey": false,
+          "notNull": true
+        },
+        "driver_id": {
+          "name": "driver_id",
+          "type": "uuid",
+          "primaryKey": false,
+          "notNull": true
+        },
+        "occurred_at": {
+          "name": "occurred_at",
+          "type": "timestamp with time zone",
+          "primaryKey": false,
+          "notNull": true
+        },
+        "recorded_by": {
+          "name": "recorded_by",
+          "type": "uuid",
+          "primaryKey": false,
+          "notNull": true
+        },
+        "device_id": {
+          "name": "device_id",
+          "type": "text",
+          "primaryKey": false,
+          "notNull": true
+        },
+        "items": {
+          "name": "items",
+          "type": "jsonb",
+          "primaryKey": false,
+          "notNull": true
+        },
+        "defect_count": {
+          "name": "defect_count",
+          "type": "integer",
+          "primaryKey": false,
+          "notNull": true
+        },
+        "odometer_km": {
+          "name": "odometer_km",
+          "type": "integer",
+          "primaryKey": false,
+          "notNull": false
+        },
+        "engine_hours": {
+          "name": "engine_hours",
+          "type": "integer",
+          "primaryKey": false,
+          "notNull": false
+        },
+        "location": {
+          "name": "location",
+          "type": "geometry(Point, 4326)",
+          "primaryKey": false,
+          "notNull": false
+        },
+        "location_accuracy_m": {
+          "name": "location_accuracy_m",
+          "type": "integer",
+          "primaryKey": false,
+          "notNull": false
+        }
+      },
+      "indexes": {
+        "pre_trip_check_vehicle_id_idx": {
+          "name": "pre_trip_check_vehicle_id_idx",
+          "columns": [
+            {
+              "expression": "company_id",
+              "isExpression": false,
+              "asc": true,
+              "nulls": "last"
+            },
+            {
+              "expression": "vehicle_id",
+              "isExpression": false,
+              "asc": true,
+              "nulls": "last"
+            },
+            {
+              "expression": "occurred_at",
+              "isExpression": false,
+              "asc": true,
+              "nulls": "last"
+            }
+          ],
+          "isUnique": false,
+          "concurrently": false,
+          "method": "btree",
+          "with": {}
+        },
+        "pre_trip_check_project_id_idx": {
+          "name": "pre_trip_check_project_id_idx",
+          "columns": [
+            {
+              "expression": "company_id",
+              "isExpression": false,
+              "asc": true,
+              "nulls": "last"
+            },
+            {
+              "expression": "project_id",
+              "isExpression": false,
+              "asc": true,
+              "nulls": "last"
+            }
+          ],
+          "isUnique": false,
+          "concurrently": false,
+          "method": "btree",
+          "with": {}
+        },
+        "pre_trip_check_route_id_idx": {
+          "name": "pre_trip_check_route_id_idx",
+          "columns": [
+            {
+              "expression": "company_id",
+              "isExpression": false,
+              "asc": true,
+              "nulls": "last"
+            },
+            {
+              "expression": "route_id",
+              "isExpression": false,
+              "asc": true,
+              "nulls": "last"
+            }
+          ],
+          "isUnique": false,
+          "concurrently": false,
+          "method": "btree",
+          "with": {}
+        },
+        "pre_trip_check_driver_id_idx": {
+          "name": "pre_trip_check_driver_id_idx",
+          "columns": [
+            {
+              "expression": "company_id",
+              "isExpression": false,
+              "asc": true,
+              "nulls": "last"
+            },
+            {
+              "expression": "driver_id",
+              "isExpression": false,
+              "asc": true,
+              "nulls": "last"
+            }
+          ],
+          "isUnique": false,
+          "concurrently": false,
+          "method": "btree",
+          "with": {}
+        },
+        "pre_trip_check_recorded_by_idx": {
+          "name": "pre_trip_check_recorded_by_idx",
+          "columns": [
+            {
+              "expression": "company_id",
+              "isExpression": false,
+              "asc": true,
+              "nulls": "last"
+            },
+            {
+              "expression": "recorded_by",
+              "isExpression": false,
+              "asc": true,
+              "nulls": "last"
+            }
+          ],
+          "isUnique": false,
+          "concurrently": false,
+          "method": "btree",
+          "with": {}
+        }
+      },
+      "foreignKeys": {
+        "pre_trip_check_company_id_fk": {
+          "name": "pre_trip_check_company_id_fk",
+          "tableFrom": "pre_trip_check",
+          "tableTo": "company",
+          "schemaTo": "wms",
+          "columnsFrom": [
+            "company_id"
+          ],
+          "columnsTo": [
+            "id"
+          ],
+          "onDelete": "no action",
+          "onUpdate": "no action"
+        },
+        "pre_trip_check_project_id_fk": {
+          "name": "pre_trip_check_project_id_fk",
+          "tableFrom": "pre_trip_check",
+          "tableTo": "project",
+          "schemaTo": "wms",
+          "columnsFrom": [
+            "company_id",
+            "project_id"
+          ],
+          "columnsTo": [
+            "company_id",
+            "id"
+          ],
+          "onDelete": "no action",
+          "onUpdate": "no action"
+        },
+        "pre_trip_check_route_id_fk": {
+          "name": "pre_trip_check_route_id_fk",
+          "tableFrom": "pre_trip_check",
+          "tableTo": "route",
+          "schemaTo": "wms",
+          "columnsFrom": [
+            "company_id",
+            "project_id",
+            "route_id"
+          ],
+          "columnsTo": [
+            "company_id",
+            "project_id",
+            "id"
+          ],
+          "onDelete": "no action",
+          "onUpdate": "no action"
+        },
+        "pre_trip_check_vehicle_id_fk": {
+          "name": "pre_trip_check_vehicle_id_fk",
+          "tableFrom": "pre_trip_check",
+          "tableTo": "vehicle",
+          "schemaTo": "wms",
+          "columnsFrom": [
+            "company_id",
+            "project_id",
+            "vehicle_id"
+          ],
+          "columnsTo": [
+            "company_id",
+            "project_id",
+            "id"
+          ],
+          "onDelete": "no action",
+          "onUpdate": "no action"
+        },
+        "pre_trip_check_driver_id_fk": {
+          "name": "pre_trip_check_driver_id_fk",
+          "tableFrom": "pre_trip_check",
+          "tableTo": "driver",
+          "schemaTo": "wms",
+          "columnsFrom": [
+            "company_id",
+            "project_id",
+            "driver_id"
+          ],
+          "columnsTo": [
+            "company_id",
+            "project_id",
+            "id"
+          ],
+          "onDelete": "no action",
+          "onUpdate": "no action"
+        },
+        "pre_trip_check_recorded_by_fk": {
+          "name": "pre_trip_check_recorded_by_fk",
+          "tableFrom": "pre_trip_check",
+          "tableTo": "user_account",
+          "schemaTo": "wms",
+          "columnsFrom": [
+            "company_id",
+            "recorded_by"
+          ],
+          "columnsTo": [
+            "company_id",
+            "id"
+          ],
+          "onDelete": "no action",
+          "onUpdate": "no action"
+        }
+      },
+      "compositePrimaryKeys": {},
+      "uniqueConstraints": {
+        "pre_trip_check_project_key": {
+          "name": "pre_trip_check_project_key",
+          "nullsNotDistinct": false,
+          "columns": [
+            "company_id",
+            "project_id",
+            "id"
+          ]
+        }
+      },
+      "policies": {},
+      "checkConstraints": {
+        "pre_trip_check_location_valid": {
+          "name": "pre_trip_check_location_valid",
+          "value": "extensions.st_isvalid(\"wms\".\"pre_trip_check\".\"location\") and not extensions.st_isempty(\"wms\".\"pre_trip_check\".\"location\") and extensions.st_xmin(\"wms\".\"pre_trip_check\".\"location\") >= -180 and extensions.st_xmax(\"wms\".\"pre_trip_check\".\"location\") <= 180 and extensions.st_ymin(\"wms\".\"pre_trip_check\".\"location\") >= -90 and extensions.st_ymax(\"wms\".\"pre_trip_check\".\"location\") <= 90"
+        },
+        "pre_trip_check_location_accuracy_m_positive": {
+          "name": "pre_trip_check_location_accuracy_m_positive",
+          "value": "\"wms\".\"pre_trip_check\".\"location_accuracy_m\" > 0"
+        },
+        "pre_trip_check_readings_range": {
+          "name": "pre_trip_check_readings_range",
+          "value": "\"wms\".\"pre_trip_check\".\"defect_count\" >= 0 and (\"wms\".\"pre_trip_check\".\"odometer_km\" is null or \"wms\".\"pre_trip_check\".\"odometer_km\" >= 0) and (\"wms\".\"pre_trip_check\".\"engine_hours\" is null or \"wms\".\"pre_trip_check\".\"engine_hours\" >= 0)"
+        }
+      },
+      "isRLSEnabled": false
+    },
+    "wms.pre_trip_checklist_item": {
+      "name": "pre_trip_checklist_item",
       "schema": "wms",
       "columns": {
         "id": {
@@ -32101,30 +32380,300 @@
           "notNull": true,
           "default": "now()"
         },
-        "user_account_id": {
-          "name": "user_account_id",
+        "vehicle_type_id": {
+          "name": "vehicle_type_id",
           "type": "uuid",
           "primaryKey": false,
           "notNull": true
         },
-        "event": {
-          "name": "event",
+        "position": {
+          "name": "position",
+          "type": "integer",
+          "primaryKey": false,
+          "notNull": true
+        },
+        "label": {
+          "name": "label",
           "type": "text",
           "primaryKey": false,
           "notNull": true
         },
-        "min_severity": {
-          "name": "min_severity",
+        "critical": {
+          "name": "critical",
+          "type": "boolean",
+          "primaryKey": false,
+          "notNull": true
+        }
+      },
+      "indexes": {},
+      "foreignKeys": {
+        "pre_trip_checklist_item_company_id_fk": {
+          "name": "pre_trip_checklist_item_company_id_fk",
+          "tableFrom": "pre_trip_checklist_item",
+          "tableTo": "company",
+          "schemaTo": "wms",
+          "columnsFrom": [
+            "company_id"
+          ],
+          "columnsTo": [
+            "id"
+          ],
+          "onDelete": "no action",
+          "onUpdate": "no action"
+        },
+        "pre_trip_checklist_item_vehicle_type_id_fk": {
+          "name": "pre_trip_checklist_item_vehicle_type_id_fk",
+          "tableFrom": "pre_trip_checklist_item",
+          "tableTo": "vehicle_type",
+          "schemaTo": "wms",
+          "columnsFrom": [
+            "company_id",
+            "vehicle_type_id"
+          ],
+          "columnsTo": [
+            "company_id",
+            "id"
+          ],
+          "onDelete": "no action",
+          "onUpdate": "no action"
+        }
+      },
+      "compositePrimaryKeys": {},
+      "uniqueConstraints": {
+        "pre_trip_checklist_item_vehicle_type_id_position_key": {
+          "name": "pre_trip_checklist_item_vehicle_type_id_position_key",
+          "nullsNotDistinct": false,
+          "columns": [
+            "company_id",
+            "vehicle_type_id",
+            "position"
+          ]
+        }
+      },
+      "policies": {},
+      "checkConstraints": {
+        "pre_trip_checklist_item_position_positive": {
+          "name": "pre_trip_checklist_item_position_positive",
+          "value": "\"wms\".\"pre_trip_checklist_item\".\"position\" > 0"
+        }
+      },
+      "isRLSEnabled": false
+    },
+    "wms.vehicle_defect": {
+      "name": "vehicle_defect",
+      "schema": "wms",
+      "columns": {
+        "id": {
+          "name": "id",
+          "type": "uuid",
+          "primaryKey": true,
+          "notNull": true,
+          "default": "wms.uuidv7()"
+        },
+        "company_id": {
+          "name": "company_id",
+          "type": "uuid",
+          "primaryKey": false,
+          "notNull": true
+        },
+        "project_id": {
+          "name": "project_id",
+          "type": "uuid",
+          "primaryKey": false,
+          "notNull": true
+        },
+        "created_at": {
+          "name": "created_at",
+          "type": "timestamp with time zone",
+          "primaryKey": false,
+          "notNull": true,
+          "default": "now()"
+        },
+        "updated_at": {
+          "name": "updated_at",
+          "type": "timestamp with time zone",
+          "primaryKey": false,
+          "notNull": true,
+          "default": "now()"
+        },
+        "vehicle_id": {
+          "name": "vehicle_id",
+          "type": "uuid",
+          "primaryKey": false,
+          "notNull": true
+        },
+        "pre_trip_check_id": {
+          "name": "pre_trip_check_id",
+          "type": "uuid",
+          "primaryKey": false,
+          "notNull": true
+        },
+        "label": {
+          "name": "label",
+          "type": "text",
+          "primaryKey": false,
+          "notNull": true
+        },
+        "critical": {
+          "name": "critical",
+          "type": "boolean",
+          "primaryKey": false,
+          "notNull": true
+        },
+        "note": {
+          "name": "note",
+          "type": "text",
+          "primaryKey": false,
+          "notNull": false
+        },
+        "found_at": {
+          "name": "found_at",
+          "type": "timestamp with time zone",
+          "primaryKey": false,
+          "notNull": true
+        },
+        "status": {
+          "name": "status",
+          "type": "text",
+          "primaryKey": false,
+          "notNull": true
+        },
+        "ticket_id": {
+          "name": "ticket_id",
+          "type": "uuid",
+          "primaryKey": false,
+          "notNull": false
+        },
+        "resolved_at": {
+          "name": "resolved_at",
+          "type": "timestamp with time zone",
+          "primaryKey": false,
+          "notNull": false
+        },
+        "resolved_by": {
+          "name": "resolved_by",
+          "type": "uuid",
+          "primaryKey": false,
+          "notNull": false
+        },
+        "resolution_note": {
+          "name": "resolution_note",
           "type": "text",
           "primaryKey": false,
           "notNull": false
         }
       },
-      "indexes": {},
+      "indexes": {
+        "vehicle_defect_vehicle_id_idx": {
+          "name": "vehicle_defect_vehicle_id_idx",
+          "columns": [
+            {
+              "expression": "company_id",
+              "isExpression": false,
+              "asc": true,
+              "nulls": "last"
+            },
+            {
+              "expression": "vehicle_id",
+              "isExpression": false,
+              "asc": true,
+              "nulls": "last"
+            }
+          ],
+          "isUnique": false,
+          "concurrently": false,
+          "method": "btree",
+          "with": {}
+        },
+        "vehicle_defect_project_id_idx": {
+          "name": "vehicle_defect_project_id_idx",
+          "columns": [
+            {
+              "expression": "company_id",
+              "isExpression": false,
+              "asc": true,
+              "nulls": "last"
+            },
+            {
+              "expression": "project_id",
+              "isExpression": false,
+              "asc": true,
+              "nulls": "last"
+            }
+          ],
+          "isUnique": false,
+          "concurrently": false,
+          "method": "btree",
+          "with": {}
+        },
+        "vehicle_defect_pre_trip_check_id_idx": {
+          "name": "vehicle_defect_pre_trip_check_id_idx",
+          "columns": [
+            {
+              "expression": "company_id",
+              "isExpression": false,
+              "asc": true,
+              "nulls": "last"
+            },
+            {
+              "expression": "pre_trip_check_id",
+              "isExpression": false,
+              "asc": true,
+              "nulls": "last"
+            }
+          ],
+          "isUnique": false,
+          "concurrently": false,
+          "method": "btree",
+          "with": {}
+        },
+        "vehicle_defect_ticket_id_idx": {
+          "name": "vehicle_defect_ticket_id_idx",
+          "columns": [
+            {
+              "expression": "company_id",
+              "isExpression": false,
+              "asc": true,
+              "nulls": "last"
+            },
+            {
+              "expression": "ticket_id",
+              "isExpression": false,
+              "asc": true,
+              "nulls": "last"
+            }
+          ],
+          "isUnique": false,
+          "concurrently": false,
+          "method": "btree",
+          "with": {}
+        },
+        "vehicle_defect_resolved_by_idx": {
+          "name": "vehicle_defect_resolved_by_idx",
+          "columns": [
+            {
+              "expression": "company_id",
+              "isExpression": false,
+              "asc": true,
+              "nulls": "last"
+            },
+            {
+              "expression": "resolved_by",
+              "isExpression": false,
+              "asc": true,
+              "nulls": "last"
+            }
+          ],
+          "isUnique": false,
+          "concurrently": false,
+          "method": "btree",
+          "with": {}
+        }
+      },
       "foreignKeys": {
-        "notification_preference_company_id_fk": {
-          "name": "notification_preference_company_id_fk",
-          "tableFrom": "notification_preference",
+        "vehicle_defect_company_id_fk": {
+          "name": "vehicle_defect_company_id_fk",
+          "tableFrom": "vehicle_defect",
           "tableTo": "company",
           "schemaTo": "wms",
           "columnsFrom": [
@@ -32136,14 +32685,84 @@
           "onDelete": "no action",
           "onUpdate": "no action"
         },
-        "notification_preference_user_account_id_fk": {
-          "name": "notification_preference_user_account_id_fk",
-          "tableFrom": "notification_preference",
+        "vehicle_defect_project_id_fk": {
+          "name": "vehicle_defect_project_id_fk",
+          "tableFrom": "vehicle_defect",
+          "tableTo": "project",
+          "schemaTo": "wms",
+          "columnsFrom": [
+            "company_id",
+            "project_id"
+          ],
+          "columnsTo": [
+            "company_id",
+            "id"
+          ],
+          "onDelete": "no action",
+          "onUpdate": "no action"
+        },
+        "vehicle_defect_vehicle_id_fk": {
+          "name": "vehicle_defect_vehicle_id_fk",
+          "tableFrom": "vehicle_defect",
+          "tableTo": "vehicle",
+          "schemaTo": "wms",
+          "columnsFrom": [
+            "company_id",
+            "project_id",
+            "vehicle_id"
+          ],
+          "columnsTo": [
+            "company_id",
+            "project_id",
+            "id"
+          ],
+          "onDelete": "no action",
+          "onUpdate": "no action"
+        },
+        "vehicle_defect_pre_trip_check_id_fk": {
+          "name": "vehicle_defect_pre_trip_check_id_fk",
+          "tableFrom": "vehicle_defect",
+          "tableTo": "pre_trip_check",
+          "schemaTo": "wms",
+          "columnsFrom": [
+            "company_id",
+            "project_id",
+            "pre_trip_check_id"
+          ],
+          "columnsTo": [
+            "company_id",
+            "project_id",
+            "id"
+          ],
+          "onDelete": "no action",
+          "onUpdate": "no action"
+        },
+        "vehicle_defect_ticket_id_fk": {
+          "name": "vehicle_defect_ticket_id_fk",
+          "tableFrom": "vehicle_defect",
+          "tableTo": "ticket",
+          "schemaTo": "wms",
+          "columnsFrom": [
+            "company_id",
+            "project_id",
+            "ticket_id"
+          ],
+          "columnsTo": [
+            "company_id",
+            "project_id",
+            "id"
+          ],
+          "onDelete": "no action",
+          "onUpdate": "no action"
+        },
+        "vehicle_defect_resolved_by_fk": {
+          "name": "vehicle_defect_resolved_by_fk",
+          "tableFrom": "vehicle_defect",
           "tableTo": "user_account",
           "schemaTo": "wms",
           "columnsFrom": [
             "company_id",
-            "user_account_id"
+            "resolved_by"
           ],
           "columnsTo": [
             "company_id",
@@ -32154,342 +32773,18 @@
         }
       },
       "compositePrimaryKeys": {},
-      "uniqueConstraints": {
-        "notification_preference_user_account_id_event_key": {
-          "name": "notification_preference_user_account_id_event_key",
-          "nullsNotDistinct": false,
-          "columns": [
-            "company_id",
-            "user_account_id",
-            "event"
-          ]
-        }
-      },
+      "uniqueConstraints": {},
       "policies": {},
       "checkConstraints": {
-        "notification_preference_event_one_of": {
-          "name": "notification_preference_event_one_of",
-          "value": "\"wms\".\"notification_preference\".\"event\" in ('alert-raised', 'ticket-assigned')"
+        "vehicle_defect_status_one_of": {
+          "name": "vehicle_defect_status_one_of",
+          "value": "\"wms\".\"vehicle_defect\".\"status\" in ('open', 'resolved')"
         },
-        "notification_preference_min_severity_one_of": {
-          "name": "notification_preference_min_severity_one_of",
-          "value": "\"wms\".\"notification_preference\".\"min_severity\" in ('critical', 'high', 'medium', 'low')"
-        },
-        "notification_preference_min_severity_shape": {
-          "name": "notification_preference_min_severity_shape",
-          "value": "(\"wms\".\"notification_preference\".\"event\" = 'alert-raised') = (\"wms\".\"notification_preference\".\"min_severity\" is not null)"
+        "vehicle_defect_resolution_shape": {
+          "name": "vehicle_defect_resolution_shape",
+          "value": "(\"wms\".\"vehicle_defect\".\"status\" = 'resolved') = (\"wms\".\"vehicle_defect\".\"resolved_at\" is not null)"
         }
       },
-      "isRLSEnabled": false
-    },
-    "wms.notification_rule": {
-      "name": "notification_rule",
-      "schema": "wms",
-      "columns": {
-        "id": {
-          "name": "id",
-          "type": "uuid",
-          "primaryKey": true,
-          "notNull": true,
-          "default": "wms.uuidv7()"
-        },
-        "company_id": {
-          "name": "company_id",
-          "type": "uuid",
-          "primaryKey": false,
-          "notNull": true
-        },
-        "project_id": {
-          "name": "project_id",
-          "type": "uuid",
-          "primaryKey": false,
-          "notNull": true
-        },
-        "created_at": {
-          "name": "created_at",
-          "type": "timestamp with time zone",
-          "primaryKey": false,
-          "notNull": true,
-          "default": "now()"
-        },
-        "updated_at": {
-          "name": "updated_at",
-          "type": "timestamp with time zone",
-          "primaryKey": false,
-          "notNull": true,
-          "default": "now()"
-        },
-        "event": {
-          "name": "event",
-          "type": "text",
-          "primaryKey": false,
-          "notNull": true
-        },
-        "template_id": {
-          "name": "template_id",
-          "type": "uuid",
-          "primaryKey": false,
-          "notNull": true
-        }
-      },
-      "indexes": {
-        "notification_rule_template_id_idx": {
-          "name": "notification_rule_template_id_idx",
-          "columns": [
-            {
-              "expression": "company_id",
-              "isExpression": false,
-              "asc": true,
-              "nulls": "last"
-            },
-            {
-              "expression": "template_id",
-              "isExpression": false,
-              "asc": true,
-              "nulls": "last"
-            }
-          ],
-          "isUnique": false,
-          "concurrently": false,
-          "method": "btree",
-          "with": {}
-        }
-      },
-      "foreignKeys": {
-        "notification_rule_company_id_fk": {
-          "name": "notification_rule_company_id_fk",
-          "tableFrom": "notification_rule",
-          "tableTo": "company",
-          "schemaTo": "wms",
-          "columnsFrom": [
-            "company_id"
-          ],
-          "columnsTo": [
-            "id"
-          ],
-          "onDelete": "no action",
-          "onUpdate": "no action"
-        },
-        "notification_rule_project_id_fk": {
-          "name": "notification_rule_project_id_fk",
-          "tableFrom": "notification_rule",
-          "tableTo": "project",
-          "schemaTo": "wms",
-          "columnsFrom": [
-            "company_id",
-            "project_id"
-          ],
-          "columnsTo": [
-            "company_id",
-            "id"
-          ],
-          "onDelete": "no action",
-          "onUpdate": "no action"
-        },
-        "notification_rule_template_id_fk": {
-          "name": "notification_rule_template_id_fk",
-          "tableFrom": "notification_rule",
-          "tableTo": "message_template",
-          "schemaTo": "wms",
-          "columnsFrom": [
-            "company_id",
-            "project_id",
-            "template_id"
-          ],
-          "columnsTo": [
-            "company_id",
-            "project_id",
-            "id"
-          ],
-          "onDelete": "no action",
-          "onUpdate": "no action"
-        }
-      },
-      "compositePrimaryKeys": {},
-      "uniqueConstraints": {
-        "notification_rule_project_key": {
-          "name": "notification_rule_project_key",
-          "nullsNotDistinct": false,
-          "columns": [
-            "company_id",
-            "project_id",
-            "id"
-          ]
-        },
-        "notification_rule_project_id_event_key": {
-          "name": "notification_rule_project_id_event_key",
-          "nullsNotDistinct": false,
-          "columns": [
-            "company_id",
-            "project_id",
-            "event"
-          ]
-        }
-      },
-      "policies": {},
-      "checkConstraints": {
-        "notification_rule_event_one_of": {
-          "name": "notification_rule_event_one_of",
-          "value": "\"wms\".\"notification_rule\".\"event\" in ('bulky-booking-booked', 'bulky-booking-cancelled', 'bulky-booking-collected', 'bulky-booking-not-collected', 'collection-reminder', 'ticket-replied', 'ticket-completed', 'route-cancelled', 'route-late')"
-        }
-      },
-      "isRLSEnabled": false
-    },
-    "wms.notification_rule_area": {
-      "name": "notification_rule_area",
-      "schema": "wms",
-      "columns": {
-        "id": {
-          "name": "id",
-          "type": "uuid",
-          "primaryKey": true,
-          "notNull": true,
-          "default": "wms.uuidv7()"
-        },
-        "company_id": {
-          "name": "company_id",
-          "type": "uuid",
-          "primaryKey": false,
-          "notNull": true
-        },
-        "project_id": {
-          "name": "project_id",
-          "type": "uuid",
-          "primaryKey": false,
-          "notNull": true
-        },
-        "created_at": {
-          "name": "created_at",
-          "type": "timestamp with time zone",
-          "primaryKey": false,
-          "notNull": true,
-          "default": "now()"
-        },
-        "updated_at": {
-          "name": "updated_at",
-          "type": "timestamp with time zone",
-          "primaryKey": false,
-          "notNull": true,
-          "default": "now()"
-        },
-        "rule_id": {
-          "name": "rule_id",
-          "type": "uuid",
-          "primaryKey": false,
-          "notNull": true
-        },
-        "planning_area_id": {
-          "name": "planning_area_id",
-          "type": "uuid",
-          "primaryKey": false,
-          "notNull": true
-        }
-      },
-      "indexes": {
-        "notification_rule_area_planning_area_id_idx": {
-          "name": "notification_rule_area_planning_area_id_idx",
-          "columns": [
-            {
-              "expression": "company_id",
-              "isExpression": false,
-              "asc": true,
-              "nulls": "last"
-            },
-            {
-              "expression": "planning_area_id",
-              "isExpression": false,
-              "asc": true,
-              "nulls": "last"
-            }
-          ],
-          "isUnique": false,
-          "concurrently": false,
-          "method": "btree",
-          "with": {}
-        }
-      },
-      "foreignKeys": {
-        "notification_rule_area_company_id_fk": {
-          "name": "notification_rule_area_company_id_fk",
-          "tableFrom": "notification_rule_area",
-          "tableTo": "company",
-          "schemaTo": "wms",
-          "columnsFrom": [
-            "company_id"
-          ],
-          "columnsTo": [
-            "id"
-          ],
-          "onDelete": "no action",
-          "onUpdate": "no action"
-        },
-        "notification_rule_area_project_id_fk": {
-          "name": "notification_rule_area_project_id_fk",
-          "tableFrom": "notification_rule_area",
-          "tableTo": "project",
-          "schemaTo": "wms",
-          "columnsFrom": [
-            "company_id",
-            "project_id"
-          ],
-          "columnsTo": [
-            "company_id",
-            "id"
-          ],
-          "onDelete": "no action",
-          "onUpdate": "no action"
-        },
-        "notification_rule_area_rule_id_fk": {
-          "name": "notification_rule_area_rule_id_fk",
-          "tableFrom": "notification_rule_area",
-          "tableTo": "notification_rule",
-          "schemaTo": "wms",
-          "columnsFrom": [
-            "company_id",
-            "project_id",
-            "rule_id"
-          ],
-          "columnsTo": [
-            "company_id",
-            "project_id",
-            "id"
-          ],
-          "onDelete": "no action",
-          "onUpdate": "no action"
-        },
-        "notification_rule_area_planning_area_id_fk": {
-          "name": "notification_rule_area_planning_area_id_fk",
-          "tableFrom": "notification_rule_area",
-          "tableTo": "planning_area",
-          "schemaTo": "wms",
-          "columnsFrom": [
-            "company_id",
-            "project_id",
-            "planning_area_id"
-          ],
-          "columnsTo": [
-            "company_id",
-            "project_id",
-            "id"
-          ],
-          "onDelete": "no action",
-          "onUpdate": "no action"
-        }
-      },
-      "compositePrimaryKeys": {},
-      "uniqueConstraints": {
-        "notification_rule_area_rule_id_planning_area_id_key": {
-          "name": "notification_rule_area_rule_id_planning_area_id_key",
-          "nullsNotDistinct": false,
-          "columns": [
-            "company_id",
-            "rule_id",
-            "planning_area_id"
-          ]
-        }
-      },
-      "policies": {},
-      "checkConstraints": {},
       "isRLSEnabled": false
     }
   },
