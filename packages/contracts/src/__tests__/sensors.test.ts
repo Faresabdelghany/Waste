@@ -14,7 +14,7 @@ const ID = "01a0d3a5-e5e0-7000-8000-000000000001"
 const OTHER = "01a0d3a5-e5e0-7000-8000-000000000002"
 const STAMP = "2026-10-28T09:00:00.000Z"
 
-const pairing = { id: OTHER, projectId: ID, sensorId: ID, containerId: OTHER, fullThresholdPercent: 85, validFrom: "2026-10-01", validTo: null, createdAt: STAMP, updatedAt: STAMP }
+const pairing = { id: OTHER, projectId: ID, sensorId: ID, containerId: OTHER, fullThresholdPercent: 85, booksEmptying: false, validFrom: "2026-10-01", validTo: null, createdAt: STAMP, updatedAt: STAMP }
 const reading = { id: OTHER, projectId: ID, sensorId: ID, pairingId: OTHER, containerId: OTHER, measuredAt: STAMP, fillPercent: 62, batteryPercent: 91, rssiDbm: -97, recordedAt: STAMP }
 
 describe("Sensor", () => {
@@ -41,7 +41,7 @@ describe("Sensor", () => {
 describe("SensorPairing", () => {
   test("names a container over a half-open period at a whole-percent threshold from 1 to 100, 85 when absent", () => {
     assert.deepEqual(SensorPairing.parse(pairing), pairing)
-    assert.deepEqual(SensorPairingCreate.parse({ containerId: OTHER, validFrom: "2026-10-01" }), { containerId: OTHER, fullThresholdPercent: 85, validFrom: "2026-10-01" })
+    assert.deepEqual(SensorPairingCreate.parse({ containerId: OTHER, validFrom: "2026-10-01" }), { containerId: OTHER, fullThresholdPercent: 85, booksEmptying: false, validFrom: "2026-10-01" })
     for (const fullThresholdPercent of [0, 101, 85.5]) assert.equal(SensorPairingCreate.safeParse({ containerId: OTHER, validFrom: "2026-10-01", fullThresholdPercent }).success, false, String(fullThresholdPercent))
     assert.deepEqual(refusal(SensorPairingCreate.safeParse({ containerId: OTHER, validFrom: "2026-10-01", validTo: "2026-10-01" })), [{ path: "validTo", message: ENDS_AFTER_IT_STARTS }])
     refusesWhatTheServerOwns(SensorPairingCreate, { containerId: OTHER, validFrom: "2026-10-01" })
@@ -49,6 +49,7 @@ describe("SensorPairing", () => {
 
   test("a patch moves the threshold or the end, never the container or the start", () => {
     assert.deepEqual(SensorPairingPatch.parse({ validTo: null }), { validTo: null })
+    assert.deepEqual(SensorPairingPatch.parse({ booksEmptying: true }), { booksEmptying: true })
     assert.equal(SensorPairingPatch.safeParse({ containerId: OTHER }).success, false)
     assert.equal(SensorPairingPatch.safeParse({ validFrom: "2026-10-02" }).success, false)
     refusesAnEmptyPatch(SensorPairingPatch)

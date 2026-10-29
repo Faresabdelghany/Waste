@@ -136,6 +136,8 @@ describe("fill-level sensors", { skip: database.skip || ownerDatabase.skip }, ()
       const pairing = await pair(olivia, sensor.id, { containerId: measured, validFrom: "2026-09-01", validTo: "2026-09-15", fullThresholdPercent: 90 })
       const patched = async (body: Record<string, unknown>) => olivia(`/sensor-pairings/${pairing.id}`, { method: "PATCH", body })
       assert.equal(SensorPairing.parse(await (await patched({ fullThresholdPercent: 75 })).json()).fullThresholdPercent, 75)
+      assert.equal(pairing.booksEmptying, false, "a pairing books no stop until the office asks")
+      assert.equal(SensorPairing.parse(await (await patched({ booksEmptying: true })).json()).booksEmptying, true)
       await refused(await patched({ validTo: "2026-09-01" }), 400)
       assert.equal(SensorPairing.parse(await (await patched({ validTo: "2026-09-20" })).json()).validTo, "2026-09-20")
       // The bin measured by another sensor from 1 October: this pairing left open would run into it.

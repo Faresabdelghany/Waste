@@ -2787,6 +2787,7 @@ column wms.sensor_pairing 7 valid_to date
 column wms.sensor_pairing 8 sensor_id uuid not-null
 column wms.sensor_pairing 9 container_id uuid not-null
 column wms.sensor_pairing 10 full_threshold_percent integer not-null
+column wms.sensor_pairing 11 books_emptying boolean not-null default=false
 constraint wms.sensor_pairing sensor_pairing_company_id_fk FOREIGN KEY (company_id) REFERENCES wms.company(id)
 constraint wms.sensor_pairing sensor_pairing_container_id_fk FOREIGN KEY (company_id, project_id, container_id) REFERENCES wms.container(company_id, project_id, id)
 constraint wms.sensor_pairing sensor_pairing_container_no_overlap EXCLUDE USING gist (company_id WITH =, container_id WITH =, daterange(valid_from, valid_to, '[)'::text) WITH &&)
@@ -4527,4 +4528,5 @@ journal 1793225274885 7d8dad0b8e97c8a9ec2805bac6030d16814cc91d63335a1501744a836b
 journal 1793227264394 ab9df765d72e64095403123cc17acf2f34f85c3caecb8ebea81a0321043ac64b
 journal 1793229147346 ea9804b6736352c3417743973dfdd0e9ac08c7ec714e43bfc7bb79a33034e30b
 journal 1793232910198 55627dafbd3cb890c76eb45db4afd21abdf2a8593bb40b111738da9cc9c67bef
+journal 1793235403314 743ec23d04aeeab55f061db6ccb5e4a41b62823362ca3f8f5fe3cc5358ddcd5e
 pgboss-version 42

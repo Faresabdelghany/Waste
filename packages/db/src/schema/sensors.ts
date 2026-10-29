@@ -10,6 +10,11 @@
 //
 // `sensor_pairing` is the sensor on a container: effective-dated and
 // half-open (ADR-0005), with the full threshold the worker's alert rule reads.
+// `books_emptying` (O26's second part) has a filling book the office's
+// emptying of the container ahead of its next scheduled one, which the
+// worker's `fill-threshold` rule does as it raises the alert
+// (commands/fill-emptying.ts); off unless the office asks, so a pairing never
+// adds a stop nobody wanted.
 // Two exclusion constraints, one over the sensor and one over the container:
 // a sensor measures one container at a time, and a container is measured by
 // one sensor at a time. The pairing is the bin's and not the place's, so it
@@ -23,7 +28,7 @@
 // sent twice records nothing the second time.
 import { SENSOR_NETWORKS, SENSOR_STATUSES } from "@waste/domain/resources/vocabulary"
 import { sql } from "drizzle-orm"
-import { check, index, integer, text, timestamp, uuid } from "drizzle-orm/pg-core"
+import { boolean, check, index, integer, text, timestamp, uuid } from "drizzle-orm/pg-core"
 
 import { tableObjectName } from "../names"
 import { oneOf } from "./checks"
@@ -66,6 +71,8 @@ export const sensorPairing = wms.table(
     containerId: uuid().notNull(),
     /** The fill, in whole percent, at which the container is full enough to raise an alert. */
     fullThresholdPercent: integer().notNull(),
+    /** Whether a filling books the office's emptying of the container ahead of its next scheduled one (O26 of #290); off unless the office says. */
+    booksEmptying: boolean().notNull().default(false),
   },
   (t) => [
     companyReference(t, company),

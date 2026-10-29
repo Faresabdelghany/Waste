@@ -183,7 +183,7 @@ A fill-level device the company owns, identified by the identifier its network k
 _Avoid_: Device (the Driver App's phone), IoT unit, tag
 
 **Sensor Pairing**:
-The effective-dated record that a Sensor measures a Container, with the full threshold, in whole percent, at which the container is full enough to raise an Alert. A Sensor measures one Container at a time, and a Container is measured by one Sensor at a time; the pairing is the bin's, not its place's, so it outlives a move.
+The effective-dated record that a Sensor measures a Container, with the full threshold, in whole percent, at which the container is full enough to raise an Alert. A Sensor measures one Container at a time, and a Container is measured by one Sensor at a time; the pairing is the bin's, not its place's, so it outlives a move. A pairing may book an emptying: a filling then puts the office's emptying of the container on the earliest route of its round ahead of its next scheduled emptying, where one runs and its vehicle takes the bin, and the Alert says what came of it.
 _Avoid_: Installation, assignment, mounting
 
 **Fill Reading**:
