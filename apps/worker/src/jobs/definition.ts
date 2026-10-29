@@ -12,6 +12,7 @@ import type { Database } from "@waste/db/client"
 import type { Complete, Send } from "@waste/db/jobs"
 import type { ProofStorage } from "@waste/db/storage"
 import type { QuotaEngine } from "@waste/routing/quota"
+import type { MessagingProvider } from "../messaging/provider"
 import type { Job, Queue, QueueOptions, ScheduleOptions, WorkOptions } from "pg-boss"
 
 /** What a handler runs with. Built once per process by main.ts, handed to every job; a test builds its own. */
@@ -77,6 +78,13 @@ export type JobContext = {
   proofRetentionDays?: number
   /** How many days a position is kept, `POSITION_RETENTION_DAYS` (O8 of #290): a Pilot setting; undefined, the purge keeps the domain's ceiling of thirty. */
   positionRetentionDays?: number
+  /**
+   * The messaging provider (#291 C15), built by main.ts from
+   * `MESSAGING_PROVIDER` (../messaging/select.ts): the log-only sender, which
+   * sends nothing, until a card-free provider is verified. Undefined, the one
+   * case a test needs, the send job uses the log-only sender over `log`.
+   */
+  messaging?: MessagingProvider
 }
 
 /**

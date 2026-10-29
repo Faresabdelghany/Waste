@@ -55,6 +55,8 @@
 import { PAYMENT_TERMS_MAX } from "@waste/domain/finance/payment"
 import { FOUR_DIGITS_PATTERN } from "@waste/domain/registry/address"
 import {
+  CONTACT_ROLES,
+  CONTACT_STATUSES,
   CUSTOMER_KINDS,
   CUSTOMER_STATUSES,
   PROPERTY_GROUP_MEMBER_ROLES,
@@ -114,6 +116,38 @@ export const customer = wms.table(
     uniqueIndex(tableObjectName(t.companyId.table, "registration_number_idx", "customer"))
       .on(t.companyId, t.registrationNumber)
       .where(sql`${t.registrationNumber} is not null`),
+  ],
+)
+
+// A Contact Person (#291 C14): a named person who speaks for an organisation
+// Customer, with a role and the channels they are reached on. Messaging
+// (C15) addresses them, so a contact is reachable on one channel at least
+// (`customer_contact_channel_shape`) and is deactivated, never deleted: a
+// message sent to one stays on its ledger naming them. That the Customer is
+// an organisation is the API's rule — a person is their own contact — since
+// a check cannot read the parent row. Company-wide like its Customer.
+export const customerContact = wms.table(
+  "customer_contact",
+  {
+    ...id,
+    ...tenant,
+    ...timestamps,
+    customerId: uuid().notNull(),
+    name: text().notNull(),
+    role: text().notNull(),
+    email: text(),
+    phone: text(),
+    status: text().notNull(),
+  },
+  (t) => [
+    companyReference(t, company),
+    tenantKey(t),
+    tenantReference(t, [t.customerId], customer),
+    tenantIndex(t, t.customerId),
+    oneOf(t.role, CONTACT_ROLES),
+    oneOf(t.status, CONTACT_STATUSES),
+    lowercase(t.email),
+    check(tableObjectName(t.id.table, "channel_shape", "customerContact"), sql`${t.email} is not null or ${t.phone} is not null`),
   ],
 )
 
