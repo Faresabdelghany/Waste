@@ -32,7 +32,7 @@ async function migrationText(): Promise<string> {
 describe("the stale-position rule as drizzle-kit writes it", () => {
   test("the rules are 0034's four and `position-stale`, last", () => {
     assert.deepEqual([...ALERT_RULES_AS_OF_0061], [...ALERT_RULES_AS_OF_0034, "position-stale"])
-    assert.deepEqual([...ALERT_RULES], [...ALERT_RULES_AS_OF_0061, "maintenance-due"], "and 0067's, after them")
+    assert.deepEqual([...ALERT_RULES], [...ALERT_RULES_AS_OF_0061, "maintenance-due"], "and 0078's, after them")
   })
 
   test("the migration is the rule's check respelt, under its header, and nothing hand-written", async () => {

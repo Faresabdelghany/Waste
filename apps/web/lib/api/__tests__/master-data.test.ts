@@ -50,8 +50,8 @@ const organisationFixtures = getModuleDefinition({ workspaceId: "configure", mod
 const context = (resolve: Resolver = NOTHING_RESOLVED): MappingContext => ({ fixtures: masterFixtures, resolve, companyRecordId: FIXTURE_COMPANY_ID, now: NOW })
 
 // The seeded rows as the API answers them (packages/db/src/seed/registry.ts, resources.ts).
-const copenhagen: Project = { id: "01a0d2a4-a280-7002-8000-000000000001", ...STAMPS, name: "Copenhagen Central", kind: "Municipality", language: "da", currency: "DKK", timezone: "Europe/Copenhagen", status: "active", weekend: ["saturday", "sunday"], holidayList: "Danish public holidays", publicSlug: null, weightTolerancePercent: 5, paymentTermsDays: 30, paymentReferenceScheme: "none", holdForReview: false }
-const residual: WasteFraction = { id: "01a0d2a4-a280-7005-8000-000000000001", ...STAMPS, key: "residual", name: "Residual", wasteCode: null, treatment: null, densityKgPerCubicMetre: null }
+const copenhagen: Project = { id: "01a0d2a4-a280-7002-8000-000000000001", ...STAMPS, name: "Copenhagen Central", kind: "Municipality", language: "da", currency: "DKK", timezone: "Europe/Copenhagen", status: "active", weekend: ["saturday", "sunday"], holidayList: "Danish public holidays", publicSlug: null, weightTolerancePercent: 5, paymentTermsDays: 30, paymentReferenceScheme: "none", holdForReview: false, privacyPolicy: { positionRetentionDays: null, proofRetentionDays: null, gpsPurpose: null } }
+const residual: WasteFraction = { id: "01a0d2a4-a280-7005-8000-000000000001", ...STAMPS, key: "residual", name: "Residual", wasteCode: null, treatment: null, densityKgPerCubicMetre: null, hazardous: false }
 const glass: WasteFraction = { ...residual, id: "01a0d2a4-a280-7005-8000-000000000005", key: "glass", name: "Glass" }
 const bin240: ContainerType = { id: "01a0d2a4-a280-7006-8000-000000000002", ...STAMPS, name: "Two-wheel bin · 240 L", volumeLitres: 240, serviceSeconds: null }
 const igloo: ContainerType = { ...bin240, id: "01a0d2a4-a280-7006-8000-000000000005", name: "Igloo · 2,500 L", volumeLitres: 2500 }
@@ -234,6 +234,23 @@ describe("a waste fraction", () => {
     assert.equal(wasteFractionAdapter.toPatchBody(coded, { ...coded, submittedValues: { ...coded.submittedValues, wasteCode: "20 03 01" } }, context()), null, "the same code spelled as printed is no change")
     assert.deepEqual(wasteFractionAdapter.toPatchBody(record, typed("2003"), context()), { path: "wasteCode", message: WASTE_CODE_REFUSAL })
     assert.equal(WasteCode.safeParse("2003").error?.issues[0]?.message, WASTE_CODE_REFUSAL, "the pane refuses in the contract's words")
+  })
+
+  test("carries its hazardous flag (O18 of #290): read into the record as a ticked box and a fact, sent only when ticked on a create, and patched both ways", () => {
+    const flagged = wasteFractionAdapter.toRecord({ ...residual, wasteCode: "200133*", hazardous: true }, context())
+    assert.equal(flagged.facts.Hazardous, "Yes")
+    assert.equal(flagged.submittedValues?.hazardous, true)
+    assert.equal(record.facts.Hazardous, undefined, "a fraction that is not hazardous says nothing of it")
+    assert.equal(record.submittedValues?.hazardous, undefined)
+    const lookups = { projectName: () => undefined, containerTypeName: () => undefined }
+    const ticked = createMasterDataRecord("waste-fraction", { name: "Asbestos", key: "asbestos", hazardous: true }, { now: 1, actorName: "Olivia Larsen", lookups })
+    assert.deepEqual(wasteFractionAdapter.toCreateBody?.(ticked, context()), { key: "asbestos", name: "Asbestos", hazardous: true })
+    const starred = createMasterDataRecord("waste-fraction", { name: "Batteries", key: "batteries", wasteCode: "20 01 33*", hazardous: false }, { now: 1, actorName: "Olivia Larsen", lookups })
+    assert.deepEqual(wasteFractionAdapter.toCreateBody?.(starred, context()), { key: "batteries", name: "Batteries", wasteCode: "200133*" }, "left to the API, which reads the asterisk")
+    assert.deepEqual(wasteFractionAdapter.toPatchBody(record, { ...record, submittedValues: { ...record.submittedValues, hazardous: true } }, context()), { hazardous: true })
+    const unticked = Object.fromEntries(Object.entries(flagged.submittedValues ?? {}).filter(([key]) => key !== "hazardous"))
+    assert.deepEqual(wasteFractionAdapter.toPatchBody(flagged, { ...flagged, submittedValues: unticked }, context()), { hazardous: false })
+    assert.ok(WasteFractionPatch.safeParse({ hazardous: false }).success)
   })
 
   test("carries its density (O10 of #290): read into the record, sent on a create, and patched, blank as null", () => {

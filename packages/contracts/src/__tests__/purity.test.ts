@@ -77,7 +77,9 @@
 // @waste/domain/resources/pre-trip: pre-trip.ts bounds a checklist and a
 // check by the domain's cap. O20 of #290 added
 // @waste/domain/resources/maintenance: maintenance.ts holds a plan to its
-// interval rule and bounds, and reads its due states.
+// interval rule and bounds, and reads its due states. C19 of #291 added
+// @waste/domain/privacy/retention and /vocabulary: organisation.ts bounds a
+// project's privacy policy by the domain's days and reads its purposes.
 import path from "node:path"
 import { fileURLToPath } from "node:url"
 
@@ -109,6 +111,8 @@ definePurityTests({
     "@waste/domain/messaging/vocabulary",
     "@waste/domain/planning/lifecycle",
     "@waste/domain/planning/vocabulary",
+    "@waste/domain/privacy/retention",
+    "@waste/domain/privacy/vocabulary",
     "@waste/domain/registry/address",
     "@waste/domain/registry/applications",
     "@waste/domain/registry/vocabulary",
