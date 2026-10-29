@@ -82,8 +82,8 @@ export const ALERT_SOURCES = ["manual", "execution", "telemetry", "rule"] as con
 export const ALERT_STATUSES = ["new", "acknowledged", "resolved"] as const
 /** Whether a Team takes tickets (O30 of #290, row 7.20): an inactive team is offered to no new ticket and keeps the ones it holds. */
 export const TEAM_STATUSES = ["active", "inactive"] as const
-/** The worker's rules an Alert is raised by (O4 of #290, and O8's stale position); null on an alert a person raised. */
-export const ALERT_RULES = ["route-not-started", "session-silent", "licence-expiring", "ticket-overdue", "position-stale"] as const
+/** The worker's rules an Alert is raised by (O4 of #290, O8's stale position, and O20's maintenance due); null on an alert a person raised. */
+export const ALERT_RULES = ["route-not-started", "session-silent", "licence-expiring", "ticket-overdue", "position-stale", "maintenance-due"] as const
 
 export type TicketStatus = (typeof TICKET_STATUSES)[number]
 export type TicketKind = (typeof TICKET_KINDS)[number]

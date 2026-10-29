@@ -505,7 +505,7 @@ constraint wms.alert alert_raised_by_fk FOREIGN KEY (company_id, raised_by) REFE
 constraint wms.alert alert_resolved_by_fk FOREIGN KEY (company_id, resolved_by) REFERENCES wms.user_account(company_id, id)
 constraint wms.alert alert_resolved_shape CHECK ((((resolved_by IS NULL) OR (resolved_at IS NOT NULL)) AND ((resolved_at IS NULL) OR (resolved_by IS NOT NULL) OR (rule IS NOT NULL)) AND ((resolution_note IS NULL) OR (resolved_at IS NOT NULL))))
 constraint wms.alert alert_route_id_fk FOREIGN KEY (company_id, project_id, route_id) REFERENCES wms.route(company_id, project_id, id)
-constraint wms.alert alert_rule_one_of CHECK ((rule = ANY (ARRAY['route-not-started'::text, 'session-silent'::text, 'licence-expiring'::text, 'ticket-overdue'::text, 'position-stale'::text])))
+constraint wms.alert alert_rule_one_of CHECK ((rule = ANY (ARRAY['route-not-started'::text, 'session-silent'::text, 'licence-expiring'::text, 'ticket-overdue'::text, 'position-stale'::text, 'maintenance-due'::text])))
 constraint wms.alert alert_rule_shape CHECK (((rule IS NULL) = (rule_key IS NULL)))
 constraint wms.alert alert_severity_one_of CHECK ((severity = ANY (ARRAY['critical'::text, 'high'::text, 'medium'::text, 'low'::text])))
 constraint wms.alert alert_source_one_of CHECK ((source = ANY (ARRAY['manual'::text, 'execution'::text, 'telemetry'::text, 'rule'::text])))
@@ -1786,6 +1786,41 @@ index wms.invoice_line invoice_line_pkey CREATE UNIQUE INDEX invoice_line_pkey O
 index wms.invoice_line invoice_line_product_id_idx CREATE INDEX invoice_line_product_id_idx ON wms.invoice_line USING btree (company_id, product_id)
 index wms.invoice_line invoice_line_project_key CREATE UNIQUE INDEX invoice_line_project_key ON wms.invoice_line USING btree (company_id, project_id, id)
 policy wms.invoice_line invoice_line_tenant_fence permissive ALL to=wms_api using=(company_id = ( SELECT wms.current_company_id() AS current_company_id)) check=(company_id = ( SELECT wms.current_company_id() AS current_company_id))
+relation wms.maintenance_order kind=table owner=<owner> persistence=p rls=true force-rls=true replica-identity=d acl=[<owner>=DELETE,INSERT,MAINTAIN,REFERENCES,SELECT,TRIGGER,TRUNCATE,UPDATE/<owner> wms_api=DELETE,INSERT,SELECT,UPDATE/<owner> wms_worker=SELECT/<owner>]
+column wms.maintenance_order 1 id uuid not-null default=wms.uuidv7()
+column wms.maintenance_order 2 company_id uuid not-null
+column wms.maintenance_order 3 project_id uuid not-null
+column wms.maintenance_order 4 created_at timestamp with time zone not-null default=now()
+column wms.maintenance_order 5 updated_at timestamp with time zone not-null default=now()
+column wms.maintenance_order 6 vehicle_id uuid not-null
+column wms.maintenance_order 7 plan_id uuid
+column wms.maintenance_order 8 title text not-null
+column wms.maintenance_order 9 status text not-null
+column wms.maintenance_order 10 due_on date
+column wms.maintenance_order 11 note text
+column wms.maintenance_order 12 completed_on date
+column wms.maintenance_order 13 odometer_km integer
+column wms.maintenance_order 14 engine_hours integer
+column wms.maintenance_order 15 closing_note text
+column wms.maintenance_order 16 closed_at timestamp with time zone
+column wms.maintenance_order 17 closed_by uuid
+constraint wms.maintenance_order maintenance_order_closed_by_fk FOREIGN KEY (company_id, closed_by) REFERENCES wms.user_account(company_id, id)
+constraint wms.maintenance_order maintenance_order_closing_shape CHECK ((((status = 'open'::text) = (closed_at IS NULL)) AND ((status = 'completed'::text) = (completed_on IS NOT NULL)) AND ((status = 'completed'::text) OR ((odometer_km IS NULL) AND (engine_hours IS NULL)))))
+constraint wms.maintenance_order maintenance_order_company_id_fk FOREIGN KEY (company_id) REFERENCES wms.company(id)
+constraint wms.maintenance_order maintenance_order_pkey PRIMARY KEY (id)
+constraint wms.maintenance_order maintenance_order_project_id_fk FOREIGN KEY (company_id, project_id) REFERENCES wms.project(company_id, id)
+constraint wms.maintenance_order maintenance_order_readings_range CHECK ((((odometer_km IS NULL) OR (odometer_km >= 0)) AND ((engine_hours IS NULL) OR (engine_hours >= 0))))
+constraint wms.maintenance_order maintenance_order_status_one_of CHECK ((status = ANY (ARRAY['open'::text, 'completed'::text, 'cancelled'::text])))
+constraint wms.maintenance_order maintenance_order_vehicle_id_fk FOREIGN KEY (company_id, project_id, vehicle_id) REFERENCES wms.vehicle(company_id, project_id, id)
+constraint wms.maintenance_order maintenance_order_vehicle_id_plan_id_fk FOREIGN KEY (company_id, project_id, vehicle_id, plan_id) REFERENCES wms.vehicle_maintenance_plan(company_id, project_id, vehicle_id, id)
+index wms.maintenance_order maintenance_order_closed_by_idx CREATE INDEX maintenance_order_closed_by_idx ON wms.maintenance_order USING btree (company_id, closed_by)
+index wms.maintenance_order maintenance_order_pkey CREATE UNIQUE INDEX maintenance_order_pkey ON wms.maintenance_order USING btree (id)
+index wms.maintenance_order maintenance_order_plan_id_idx CREATE INDEX maintenance_order_plan_id_idx ON wms.maintenance_order USING btree (company_id, plan_id)
+index wms.maintenance_order maintenance_order_project_id_idx CREATE INDEX maintenance_order_project_id_idx ON wms.maintenance_order USING btree (company_id, project_id)
+index wms.maintenance_order maintenance_order_vehicle_id_idx CREATE INDEX maintenance_order_vehicle_id_idx ON wms.maintenance_order USING btree (company_id, vehicle_id)
+trigger wms.maintenance_order maintenance_order_audit_trail enabled=O CREATE TRIGGER maintenance_order_audit_trail AFTER INSERT OR DELETE OR UPDATE ON wms.maintenance_order FOR EACH ROW EXECUTE FUNCTION wms.audit_row('vehicle', 'vehicle_id')
+trigger wms.maintenance_order maintenance_order_touch_updated_at enabled=O CREATE TRIGGER maintenance_order_touch_updated_at BEFORE UPDATE ON wms.maintenance_order FOR EACH ROW EXECUTE FUNCTION wms.touch_updated_at()
+policy wms.maintenance_order maintenance_order_tenant_fence permissive ALL to=wms_api using=(company_id = ( SELECT wms.current_company_id() AS current_company_id)) check=(company_id = ( SELECT wms.current_company_id() AS current_company_id))
 relation wms.message kind=table owner=<owner> persistence=p rls=true force-rls=true replica-identity=d acl=[<owner>=DELETE,INSERT,MAINTAIN,REFERENCES,SELECT,TRIGGER,TRUNCATE,UPDATE/<owner> wms_api=DELETE,INSERT,SELECT,UPDATE/<owner> wms_worker=SELECT/<owner>]
 column wms.message 1 id uuid not-null default=wms.uuidv7()
 column wms.message 2 company_id uuid not-null
@@ -4265,6 +4300,35 @@ index wms.vehicle_defect vehicle_defect_vehicle_id_idx CREATE INDEX vehicle_defe
 trigger wms.vehicle_defect vehicle_defect_audit_trail enabled=O CREATE TRIGGER vehicle_defect_audit_trail AFTER INSERT OR DELETE OR UPDATE ON wms.vehicle_defect FOR EACH ROW EXECUTE FUNCTION wms.audit_row('vehicle', 'vehicle_id')
 trigger wms.vehicle_defect vehicle_defect_touch_updated_at enabled=O CREATE TRIGGER vehicle_defect_touch_updated_at BEFORE UPDATE ON wms.vehicle_defect FOR EACH ROW EXECUTE FUNCTION wms.touch_updated_at()
 policy wms.vehicle_defect vehicle_defect_tenant_fence permissive ALL to=wms_api using=(company_id = ( SELECT wms.current_company_id() AS current_company_id)) check=(company_id = ( SELECT wms.current_company_id() AS current_company_id))
+relation wms.vehicle_maintenance_plan kind=table owner=<owner> persistence=p rls=true force-rls=true replica-identity=d acl=[<owner>=DELETE,INSERT,MAINTAIN,REFERENCES,SELECT,TRIGGER,TRUNCATE,UPDATE/<owner> wms_api=DELETE,INSERT,SELECT,UPDATE/<owner> wms_worker=SELECT/<owner>]
+column wms.vehicle_maintenance_plan 1 id uuid not-null default=wms.uuidv7()
+column wms.vehicle_maintenance_plan 2 company_id uuid not-null
+column wms.vehicle_maintenance_plan 3 project_id uuid not-null
+column wms.vehicle_maintenance_plan 4 created_at timestamp with time zone not-null default=now()
+column wms.vehicle_maintenance_plan 5 updated_at timestamp with time zone not-null default=now()
+column wms.vehicle_maintenance_plan 6 vehicle_id uuid not-null
+column wms.vehicle_maintenance_plan 7 name text not-null
+column wms.vehicle_maintenance_plan 8 interval_days integer
+column wms.vehicle_maintenance_plan 9 interval_km integer
+column wms.vehicle_maintenance_plan 10 interval_hours integer
+column wms.vehicle_maintenance_plan 11 last_done_on date not-null
+column wms.vehicle_maintenance_plan 12 last_done_km integer
+column wms.vehicle_maintenance_plan 13 last_done_hours integer
+column wms.vehicle_maintenance_plan 14 status text not-null
+constraint wms.vehicle_maintenance_plan vehicle_maintenance_plan_company_id_fk FOREIGN KEY (company_id) REFERENCES wms.company(id)
+constraint wms.vehicle_maintenance_plan vehicle_maintenance_plan_intervals_range CHECK ((((interval_days IS NULL) OR ((interval_days >= 1) AND (interval_days <= 3650))) AND ((interval_km IS NULL) OR ((interval_km >= 1) AND (interval_km <= 2000000))) AND ((interval_hours IS NULL) OR ((interval_hours >= 1) AND (interval_hours <= 100000))) AND ((last_done_km IS NULL) OR (last_done_km >= 0)) AND ((last_done_hours IS NULL) OR (last_done_hours >= 0))))
+constraint wms.vehicle_maintenance_plan vehicle_maintenance_plan_pkey PRIMARY KEY (id)
+constraint wms.vehicle_maintenance_plan vehicle_maintenance_plan_project_id_fk FOREIGN KEY (company_id, project_id) REFERENCES wms.project(company_id, id)
+constraint wms.vehicle_maintenance_plan vehicle_maintenance_plan_shape CHECK ((((interval_days IS NOT NULL) OR (interval_km IS NOT NULL) OR (interval_hours IS NOT NULL)) AND ((interval_km IS NULL) OR (last_done_km IS NOT NULL)) AND ((interval_hours IS NULL) OR (last_done_hours IS NOT NULL))))
+constraint wms.vehicle_maintenance_plan vehicle_maintenance_plan_status_one_of CHECK ((status = ANY (ARRAY['active'::text, 'retired'::text])))
+constraint wms.vehicle_maintenance_plan vehicle_maintenance_plan_vehicle_id_fk FOREIGN KEY (company_id, project_id, vehicle_id) REFERENCES wms.vehicle(company_id, project_id, id)
+constraint wms.vehicle_maintenance_plan vehicle_maintenance_plan_vehicle_id_project_key UNIQUE (company_id, project_id, vehicle_id, id)
+index wms.vehicle_maintenance_plan vehicle_maintenance_plan_pkey CREATE UNIQUE INDEX vehicle_maintenance_plan_pkey ON wms.vehicle_maintenance_plan USING btree (id)
+index wms.vehicle_maintenance_plan vehicle_maintenance_plan_project_id_idx CREATE INDEX vehicle_maintenance_plan_project_id_idx ON wms.vehicle_maintenance_plan USING btree (company_id, project_id)
+index wms.vehicle_maintenance_plan vehicle_maintenance_plan_vehicle_id_project_key CREATE UNIQUE INDEX vehicle_maintenance_plan_vehicle_id_project_key ON wms.vehicle_maintenance_plan USING btree (company_id, project_id, vehicle_id, id)
+trigger wms.vehicle_maintenance_plan vehicle_maintenance_plan_audit_trail enabled=O CREATE TRIGGER vehicle_maintenance_plan_audit_trail AFTER INSERT OR DELETE OR UPDATE ON wms.vehicle_maintenance_plan FOR EACH ROW EXECUTE FUNCTION wms.audit_row('vehicle', 'vehicle_id')
+trigger wms.vehicle_maintenance_plan vehicle_maintenance_plan_touch_updated_at enabled=O CREATE TRIGGER vehicle_maintenance_plan_touch_updated_at BEFORE UPDATE ON wms.vehicle_maintenance_plan FOR EACH ROW EXECUTE FUNCTION wms.touch_updated_at()
+policy wms.vehicle_maintenance_plan vehicle_maintenance_plan_tenant_fence permissive ALL to=wms_api using=(company_id = ( SELECT wms.current_company_id() AS current_company_id)) check=(company_id = ( SELECT wms.current_company_id() AS current_company_id))
 relation wms.vehicle_type kind=table owner=<owner> persistence=p rls=true force-rls=true replica-identity=d acl=[<owner>=DELETE,INSERT,MAINTAIN,REFERENCES,SELECT,TRIGGER,TRUNCATE,UPDATE/<owner> wms_api=DELETE,INSERT,SELECT,UPDATE/<owner> wms_worker=SELECT/<owner>]
 column wms.vehicle_type 1 id uuid not-null default=wms.uuidv7()
 column wms.vehicle_type 2 company_id uuid not-null
@@ -4644,4 +4708,5 @@ journal 1793235059830 38a2a0d60433c5319c88d1428ef79675b519bda7059587aea3fc5368f1
 journal 1793241234406 3e4f0b485e465f3836018f545d415793a377728d22334fe5b59d8e0b44ea8066
 journal 1793243238519 233234b7acf3c642f212331efc9afedc7d139dcd35159a8709e2d830322834c8
 journal 1793245578465 3b2865a553c39e7190c0b99795b29f5f18959d692c42e6a9d2a1f2e4ea7b5b3c
+journal 1793248325281 943c3a673ab19cf312029056552c383474a2058f7fcff6487ab9a3ebb06e545d
 pgboss-version 42

@@ -60,6 +60,7 @@ import { driverCommand, outboxEvent, pickup, proofOfService, route, session, ses
 import { accountingAccount, accountingExport, accountingExportLine, accountingExportVoucher, accountingProductAccount, accountingSettings, accountingVatCode, billableEvent, billingRun, billingRunExclusion, invoice, invoiceLine, priceList, priceListRow, serviceArea, serviceAreaAssignment, serviceAreaPlanningArea, serviceAreaWasteFraction, serviceProviderPrice, settlement, settlementEvent, settlementLine, payment, paymentAllocation, ticketKindProduct, weightReview, workOrderProduct } from "../schema/finance"
 import { contaminantCode, contaminantCodeFraction, pickupExceptionRule, pickupExceptionRuleStep } from "../schema/pickup-exceptions"
 import { preTripCheck, preTripChecklistItem, vehicleDefect } from "../schema/pre-trip"
+import { maintenanceOrder, vehicleMaintenancePlan } from "../schema/maintenance"
 import { driver, vehicle, vehicleCompartment, vehicleCompartmentFraction } from "../schema/fleet"
 import { fuelEmissionFactor, vehicleTypeConsumption } from "../schema/emissions"
 import { containerTypeVehicleType, vehicleType } from "../schema/fleet-types"
@@ -256,6 +257,12 @@ export const PRE_TRIP_AUDITED: readonly Audited[] = [
   { table: vehicleDefect, module: "fleet.vehicles", parent: setOf(vehicle, vehicleDefect.vehicleId) },
 ]
 
+/** Vehicle maintenance (O20 of #290): a vehicle's plans and its Maintenance Orders, each under the vehicle. */
+export const MAINTENANCE_AUDITED: readonly Audited[] = [
+  { table: vehicleMaintenancePlan, module: "fleet.vehicles", parent: setOf(vehicle, vehicleMaintenancePlan.vehicleId) },
+  { table: maintenanceOrder, module: "fleet.vehicles", parent: setOf(vehicle, maintenanceOrder.vehicleId) },
+]
+
 /** The Decommission Reasons (O30 of #290, row 9.6): the company's own list, kept in the master data beside its contaminant codes. */
 export const DECOMMISSION_REASONS_AUDITED: readonly Audited[] = [{ table: decommissionReason, module: "configure.master" }]
 
@@ -282,7 +289,7 @@ export const CONTACT_PERSONS_AUDITED: readonly Audited[] = [{ table: customerCon
 /** Messaging (#291 C15): a project's message templates, the office's configuration under Tickets & communication's module; the delivery log is exempt. */
 export const MESSAGING_AUDITED: readonly Audited[] = [{ table: messageTemplate, module: "configure.templates" }]
 
-export const AUDITED: readonly Audited[] = [...AUDITED_AT_0019, ...SUBSCRIPTION_PAUSE_AUDITED, ...TICKET_SLA_AUDITED, ...DROP_OFF_AUDITED, ...ABSENCES_AUDITED, ...TICKET_CHARGE_AUDITED, ...PICKUP_EXCEPTIONS_AUDITED, ...EMISSIONS_AUDITED, ...APPLICATIONS_AUDITED, ...SUSTAINABILITY_AUDITED, ...CONTAINER_HIRE_AUDITED, ...ACCOUNTING_AUDITED, ...BULKY_AUDITED, ...SITE_VISITS_AUDITED, ...SEASONS_AUDITED, ...SERVICE_PROVIDER_ACTIVITIES_AUDITED, ...STOCK_MINIMUMS_AUDITED, ...DECOMMISSION_REASONS_AUDITED, ...TEAMS_AUDITED, ...STOP_SET_PROPOSALS_AUDITED, ...WASTE_FRACTION_PROPOSALS_AUDITED, ...CONTACT_PERSONS_AUDITED, ...MESSAGING_AUDITED, ...PRE_TRIP_AUDITED]
+export const AUDITED: readonly Audited[] = [...AUDITED_AT_0019, ...SUBSCRIPTION_PAUSE_AUDITED, ...TICKET_SLA_AUDITED, ...DROP_OFF_AUDITED, ...ABSENCES_AUDITED, ...TICKET_CHARGE_AUDITED, ...PICKUP_EXCEPTIONS_AUDITED, ...EMISSIONS_AUDITED, ...APPLICATIONS_AUDITED, ...SUSTAINABILITY_AUDITED, ...CONTAINER_HIRE_AUDITED, ...ACCOUNTING_AUDITED, ...BULKY_AUDITED, ...SITE_VISITS_AUDITED, ...SEASONS_AUDITED, ...SERVICE_PROVIDER_ACTIVITIES_AUDITED, ...STOCK_MINIMUMS_AUDITED, ...DECOMMISSION_REASONS_AUDITED, ...TEAMS_AUDITED, ...STOP_SET_PROPOSALS_AUDITED, ...WASTE_FRACTION_PROPOSALS_AUDITED, ...CONTACT_PERSONS_AUDITED, ...MESSAGING_AUDITED, ...PRE_TRIP_AUDITED, ...MAINTENANCE_AUDITED]
 
 /** The audited tables by name, for a test that reads a migrated database's triggers. */
 export const AUDITED_TABLE_NAMES: ReadonlySet<string> = new Set(AUDITED.map((entry) => getTableName(entry.table)))

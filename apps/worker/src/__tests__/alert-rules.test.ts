@@ -7,7 +7,8 @@
 // holds while the condition does; and a new occurrence is a new alert. A
 // quiet tick reads nothing and writes nothing. Since O8 of #290 a running
 // device heard from but sending no position for ten minutes raises a fifth,
-// and a fix clears it.
+// and a fix clears it; since O20 a maintenance plan due soon or overdue a
+// sixth, cleared by its service, its retirement or its running overdue.
 import assert from "node:assert/strict"
 import { after, before, describe, test } from "node:test"
 
@@ -16,6 +17,8 @@ import { openTicket } from "@waste/db/commands/open-ticket"
 import { migrateDatabase } from "@waste/db/migrate"
 import { driverCommand, route, session, sessionPosition } from "@waste/db/schema/execution"
 import { driver } from "@waste/db/schema/fleet"
+import { vehicleMaintenancePlan } from "@waste/db/schema/maintenance"
+import { preTripCheck } from "@waste/db/schema/pre-trip"
 import { alert, ticket } from "@waste/db/schema/resolution"
 import { withCompany } from "@waste/db/tenant"
 import { CLEARED_NOTES } from "@waste/domain/resolution/alert-rules"
@@ -184,7 +187,7 @@ describe("resolution.alert-rules", { skip: roles.skip }, () => {
     assert.equal(lines.at(-1), "alert rules: raised 5, cleared 0")
   })
 
-  test("the next tick raises nothing twice and reads nothing: a quiet tick is six empty results and no write", async () => {
+  test("the next tick raises nothing twice and reads nothing: a quiet tick is seven empty results and no write", async () => {
     assert.deepEqual(await occurrencesToRaise(worker, NOW), [])
     assert.deepEqual(await alertsToClear(worker, NOW), [])
     const before = lines.length
@@ -284,6 +287,66 @@ describe("resolution.alert-rules", { skip: roles.skip }, () => {
     NOW = at("08:30")
     await withCompany(api.db, tenant.companyId, (tx) => tx.update(session).set({ lastSeenAt: at("08:29") }).where(and(eq(session.companyId, tenant.companyId), eq(session.id, sessionId))))
     assert.deepEqual((await occurrencesToRaise(worker, NOW)).map((found) => found.occurrence.rule).filter((rule) => rule === "position-stale"), ["position-stale"], "ten minutes after the resume")
+  })
+
+  test("a maintenance plan within its margins raises its alert about the vehicle, from the date or a pre-trip check's reading; overdue is a graver occurrence, and a service done or a plan retired clears (O20 of #290)", async () => {
+    const annual = testId()
+    const brakes = testId()
+    const plan = (id: string, values: Partial<typeof vehicleMaintenancePlan.$inferInsert>) => ({ id, companyId: tenant.companyId, projectId: tenant.projectId, vehicleId: tenant.vehicleId, name: "", lastDoneOn: "2026-06-01", status: "active", ...values })
+    await withCompany(api.db, tenant.companyId, (tx) =>
+      tx.insert(vehicleMaintenancePlan).values([
+        // A week from its date: due soon.
+        plan(annual, { name: "Annual service", intervalDays: 365, lastDoneOn: "2025-10-12" }),
+        // 19,000 km left by the last service's reading, until a check reads the odometer.
+        plan(brakes, { name: "Brake inspection", intervalKm: 20_000, lastDoneKm: 170_000 }),
+        // Not yet in its margin, and retired though past its date: nothing.
+        plan(testId(), { name: "Tachograph", intervalDays: 730, lastDoneOn: "2026-09-01" }),
+        plan(testId(), { name: "Old plan", intervalDays: 30, lastDoneOn: "2025-01-01", status: "retired" }),
+      ]),
+    )
+    const maintenance = async () => (await alerts()).filter((row) => row.rule === "maintenance-due")
+    const readsOdometer = (odometerKm: number, time: string) =>
+      withCompany(api.db, tenant.companyId, (tx) =>
+        tx.insert(preTripCheck).values({ id: testId(), companyId: tenant.companyId, projectId: tenant.projectId, routeId: running.id, vehicleId: tenant.vehicleId, driverId: tenant.driverId, occurredAt: at(time), recordedBy: tenant.officeUserId, deviceId: "device-1", items: [], defectCount: 0, odometerKm }),
+      )
+
+    await runAlertRules(context())
+    const [dated] = await maintenance()
+    assert.equal((await maintenance()).length, 1, "the brakes are 19,000 km off")
+    assert.deepEqual(
+      [dated.kind, dated.severity, dated.source, dated.vehicleId, dated.projectId, dated.title, dated.details, dated.ruleKey],
+      ["resource", "medium", "rule", tenant.vehicleId, tenant.projectId, "Annual service is due soon on WH-24", "Coming up to its next service at 2026-10-12. Open a maintenance order and complete it once the service is done.", `maintenance-due:${annual}:2025-10-12/-/-`],
+    )
+
+    await readsOdometer(189_200, "06:00")
+    await runAlertRules(context())
+    const soon = (await maintenance()).find((row) => row.ruleKey === `maintenance-due:${brakes}:2026-06-01/170000/-`)
+    assert.equal(soon?.title, "Brake inspection is due soon on WH-24", "the check's reading, 800 km off the limit")
+
+    await readsOdometer(190_050, "08:10")
+    await runAlertRules(context())
+    const brakeAlerts = (await maintenance()).filter((row) => row.ruleKey?.startsWith(`maintenance-due:${brakes}:`))
+    assert.deepEqual(
+      brakeAlerts.map((row) => [row.status, row.severity, row.ruleKey, row.resolutionNote]),
+      [
+        ["resolved", "medium", `maintenance-due:${brakes}:2026-06-01/170000/-`, CLEARED_NOTES["maintenance-due"]],
+        ["new", "high", `maintenance-due:${brakes}:2026-06-01/170000/-:overdue`, null],
+      ],
+    )
+    assert.equal(brakeAlerts[1].title, "Brake inspection is overdue on WH-24")
+    assert.deepEqual(await alertsToClear(worker, NOW), [], "an overdue alert stands while the plan does")
+
+    // The brakes serviced at 190,050 km, and the annual service's plan retired: both clear, and nothing is raised for them.
+    await withCompany(api.db, tenant.companyId, async (tx) => {
+      await tx.update(vehicleMaintenancePlan).set({ lastDoneOn: "2026-10-05", lastDoneKm: 190_050 }).where(and(eq(vehicleMaintenancePlan.companyId, tenant.companyId), eq(vehicleMaintenancePlan.id, brakes)))
+      await tx.update(vehicleMaintenancePlan).set({ status: "retired" }).where(and(eq(vehicleMaintenancePlan.companyId, tenant.companyId), eq(vehicleMaintenancePlan.id, annual)))
+    })
+    await runAlertRules(context())
+    assert.deepEqual(
+      (await maintenance()).map((row) => row.status),
+      ["resolved", "resolved", "resolved"],
+    )
+    assert.deepEqual((await occurrencesToRaise(worker, NOW)).filter((found) => found.occurrence.rule === "maintenance-due"), [])
   })
 
   async function ticketNumber(id: string): Promise<number> {
