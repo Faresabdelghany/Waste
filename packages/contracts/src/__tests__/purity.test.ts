@@ -69,7 +69,11 @@
 // added @waste/domain/service-providers/vocabulary: service-provider-activities.ts
 // reads an Activity's kinds and statuses. O30 of #290 added
 // @waste/domain/resources/stock-balance: stock.ts bounds a warehouse's set of
-// Stock Minimums by the domain's cap.
+// Stock Minimums by the domain's cap. C15 of #291 added
+// @waste/domain/messaging/vocabulary and @waste/domain/messaging/template:
+// messaging.ts reads the channels, purposes and statuses, and refuses a
+// template naming a placeholder no message fills, or out of its channel's
+// shape, in the domain's sentences.
 import path from "node:path"
 import { fileURLToPath } from "node:url"
 
@@ -97,6 +101,8 @@ definePurityTests({
     "@waste/domain/imports/vocabulary",
     "@waste/domain/insight/sustainability",
     "@waste/domain/insight/vocabulary",
+    "@waste/domain/messaging/template",
+    "@waste/domain/messaging/vocabulary",
     "@waste/domain/planning/lifecycle",
     "@waste/domain/planning/vocabulary",
     "@waste/domain/registry/address",
