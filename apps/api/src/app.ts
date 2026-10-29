@@ -101,6 +101,7 @@ import { roleRoutes } from "./routes/roles"
 import { routeSchemeRoutes } from "./routes/route-schemes"
 import { schemeLifecycleRoutes } from "./routes/scheme-lifecycle"
 import { SENSOR_BATCHES_PER_MINUTE, sensorRoutes } from "./routes/sensors"
+import { outboundLoadRoutes } from "./routes/outbound-loads"
 import { serviceProviderActivityRoutes } from "./routes/service-provider-activities"
 import { planRoutes } from "./routes/plans"
 import { routeRoutes } from "./routes/routes"
@@ -344,6 +345,7 @@ export function createApp({
   app.route("/", decommissionReasonRoutes(guard))
   // Fill-level Sensors (O26 of #290): a pairing's day and the ingest's clock are the project's on the app's clock, and the ingest is bounded per company.
   app.route("/", sensorRoutes(guard, { now, ingestAllowance: sensorIngestAllowance }))
+  app.route("/", outboundLoadRoutes(guard, { now }))
   app.route("/", pickupExceptionRoutes(guard, { now }))
   // Bulky-waste booking (O11 of #290): the areas' schedules of collection days, and the bookings that take a slot of one on the project's clock.
   app.route("/", bulkyScheduleRoutes(guard))

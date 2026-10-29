@@ -66,6 +66,7 @@ import { importRun, importRunRow } from "@waste/db/schema/imports"
 import { plan, planLeg, planStop, routingQuota } from "@waste/db/schema/routing"
 import { dropOffPoint, dropOffPointException, dropOffPointFraction, dropOffPointHours } from "@waste/db/schema/drop-off-points"
 import { sortingGuideItem } from "@waste/db/schema/sorting-guide"
+import { materialAdjustment, outboundLoad } from "@waste/db/schema/haul-out"
 import { fillReading, sensor, sensorPairing } from "@waste/db/schema/sensors"
 import { depot, unloadingStation, unloadingStationFraction, warehouse } from "@waste/db/schema/places"
 import { decommissionReason, stockMinimum, stockMovement } from "@waste/db/schema/stock"
@@ -362,6 +363,7 @@ export async function dropTenant(pool: Database, companyId: string, owner?: Data
     await owner.db.delete(vehicleDefect).where(eq(vehicleDefect.companyId, companyId))
     await owner.db.delete(preTripCheck).where(eq(preTripCheck.companyId, companyId))
     await owner.db.delete(fillReading).where(eq(fillReading.companyId, companyId))
+    await owner.db.delete(materialAdjustment).where(eq(materialAdjustment.companyId, companyId))
     await owner.db.delete(unload).where(eq(unload.companyId, companyId))
     await owner.db.delete(driverCommand).where(eq(driverCommand.companyId, companyId))
     await owner.db.delete(vehicleAllocationEvent).where(eq(vehicleAllocationEvent.companyId, companyId))
@@ -439,6 +441,8 @@ export async function dropTenant(pool: Database, companyId: string, owner?: Data
     await tx.delete(vehicleAllocation).where(eq(vehicleAllocation.companyId, companyId))
     await tx.delete(vehicleCompartmentFraction).where(eq(vehicleCompartmentFraction.companyId, companyId))
     await tx.delete(vehicleCompartment).where(eq(vehicleCompartment.companyId, companyId))
+    // A transfer station's outbound loads (M17 of #293) name a vehicle and two stations; the adjustments went above, as the owner.
+    await tx.delete(outboundLoad).where(eq(outboundLoad.companyId, companyId))
     await tx.delete(vehicle).where(eq(vehicle.companyId, companyId))
     await tx.delete(driver).where(eq(driver.companyId, companyId))
     await tx.delete(unloadingStationFraction).where(eq(unloadingStationFraction.companyId, companyId))

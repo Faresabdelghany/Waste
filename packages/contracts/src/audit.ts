@@ -127,6 +127,7 @@ export const AUDITED_TABLES = [
   "vehicle_defect",
   "sensor",
   "sensor_pairing",
+  "outbound_load",
 ] as const
 export type AuditedTable = (typeof AUDITED_TABLES)[number]
 

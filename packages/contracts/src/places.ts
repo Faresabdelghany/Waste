@@ -205,6 +205,8 @@ export const UnloadingStation = z.object({
   closesAt: IsoTime.nullable(),
   /** Whether the station weighs what is delivered; the tickets themselves are Execution's. */
   weighbridge: z.boolean(),
+  /** A Transfer Station (M17 of #293): it holds what is tipped there and sends it on in Outbound Loads. Absent from a row from before it, read as false. */
+  transfer: z.boolean().default(false),
   status: UnloadingStationStatus,
   notes: Paragraph.nullable(),
   /** What the station accepts, by id; replaced whole through its own route. */
@@ -224,6 +226,7 @@ export const UnloadingStationCreate = z
     opensAt: IsoTime.nullable().optional(),
     closesAt: IsoTime.nullable().optional(),
     weighbridge: z.boolean().default(false).describe("Defaults to false when absent: whether the station weighs what is delivered."),
+    transfer: z.boolean().default(false).describe("Defaults to false when absent: whether the station holds what is tipped there and sends it on."),
     status: UnloadingStationStatus.default("active").describe("Defaults to active when absent: a station is registered because routes already empty there."),
     notes: Paragraph.nullable().optional(),
     wasteFractionIds: WasteFractionIdsBody.default([]).describe("The fractions the station starts out accepting; none when absent."),
@@ -244,6 +247,7 @@ export const UnloadingStationPatch = z
     opensAt: IsoTime.nullable().optional(),
     closesAt: IsoTime.nullable().optional(),
     weighbridge: z.boolean().optional(),
+    transfer: z.boolean().optional(),
     status: UnloadingStationStatus.optional(),
     notes: Paragraph.nullable().optional(),
   })

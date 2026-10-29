@@ -1811,6 +1811,29 @@ index wms.invoice_line invoice_line_pkey CREATE UNIQUE INDEX invoice_line_pkey O
 index wms.invoice_line invoice_line_product_id_idx CREATE INDEX invoice_line_product_id_idx ON wms.invoice_line USING btree (company_id, product_id)
 index wms.invoice_line invoice_line_project_key CREATE UNIQUE INDEX invoice_line_project_key ON wms.invoice_line USING btree (company_id, project_id, id)
 policy wms.invoice_line invoice_line_tenant_fence permissive ALL to=wms_api using=(company_id = ( SELECT wms.current_company_id() AS current_company_id)) check=(company_id = ( SELECT wms.current_company_id() AS current_company_id))
+relation wms.material_adjustment kind=table owner=<owner> persistence=p rls=true force-rls=true replica-identity=d acl=[<owner>=DELETE,INSERT,MAINTAIN,REFERENCES,SELECT,TRIGGER,TRUNCATE,UPDATE/<owner> wms_api=INSERT,SELECT/<owner> wms_worker=SELECT/<owner>]
+column wms.material_adjustment 1 id uuid not-null default=wms.uuidv7()
+column wms.material_adjustment 2 company_id uuid not-null
+column wms.material_adjustment 3 project_id uuid not-null
+column wms.material_adjustment 4 recorded_at timestamp with time zone not-null default=now()
+column wms.material_adjustment 5 unloading_station_id uuid not-null
+column wms.material_adjustment 6 waste_fraction_id uuid not-null
+column wms.material_adjustment 7 delta_kg integer not-null
+column wms.material_adjustment 8 note text not-null
+column wms.material_adjustment 9 recorded_by uuid not-null
+constraint wms.material_adjustment material_adjustment_company_id_fk FOREIGN KEY (company_id) REFERENCES wms.company(id)
+constraint wms.material_adjustment material_adjustment_delta_not_zero CHECK ((delta_kg <> 0))
+constraint wms.material_adjustment material_adjustment_pkey PRIMARY KEY (id)
+constraint wms.material_adjustment material_adjustment_project_id_fk FOREIGN KEY (company_id, project_id) REFERENCES wms.project(company_id, id)
+constraint wms.material_adjustment material_adjustment_recorded_by_fk FOREIGN KEY (company_id, recorded_by) REFERENCES wms.user_account(company_id, id)
+constraint wms.material_adjustment material_adjustment_unloading_station_id_fk FOREIGN KEY (company_id, unloading_station_id) REFERENCES wms.unloading_station(company_id, id)
+constraint wms.material_adjustment material_adjustment_waste_fraction_id_fk FOREIGN KEY (company_id, waste_fraction_id) REFERENCES wms.waste_fraction(company_id, id)
+index wms.material_adjustment material_adjustment_pkey CREATE UNIQUE INDEX material_adjustment_pkey ON wms.material_adjustment USING btree (id)
+index wms.material_adjustment material_adjustment_project_id_idx CREATE INDEX material_adjustment_project_id_idx ON wms.material_adjustment USING btree (company_id, project_id)
+index wms.material_adjustment material_adjustment_recorded_by_idx CREATE INDEX material_adjustment_recorded_by_idx ON wms.material_adjustment USING btree (company_id, recorded_by)
+index wms.material_adjustment material_adjustment_station_idx CREATE INDEX material_adjustment_station_idx ON wms.material_adjustment USING btree (company_id, unloading_station_id, waste_fraction_id, id)
+index wms.material_adjustment material_adjustment_waste_fraction_id_idx CREATE INDEX material_adjustment_waste_fraction_id_idx ON wms.material_adjustment USING btree (company_id, waste_fraction_id)
+policy wms.material_adjustment material_adjustment_tenant_fence permissive ALL to=wms_api using=(company_id = ( SELECT wms.current_company_id() AS current_company_id)) check=(company_id = ( SELECT wms.current_company_id() AS current_company_id))
 relation wms.message kind=table owner=<owner> persistence=p rls=true force-rls=true replica-identity=d acl=[<owner>=DELETE,INSERT,MAINTAIN,REFERENCES,SELECT,TRIGGER,TRUNCATE,UPDATE/<owner> wms_api=DELETE,INSERT,SELECT,UPDATE/<owner> wms_worker=SELECT/<owner>]
 column wms.message 1 id uuid not-null default=wms.uuidv7()
 column wms.message 2 company_id uuid not-null
@@ -1876,6 +1899,60 @@ index wms.message_template message_template_project_key CREATE UNIQUE INDEX mess
 trigger wms.message_template message_template_audit_trail enabled=O CREATE TRIGGER message_template_audit_trail AFTER INSERT OR DELETE OR UPDATE ON wms.message_template FOR EACH ROW EXECUTE FUNCTION wms.audit_row('', '')
 trigger wms.message_template message_template_touch_updated_at enabled=O CREATE TRIGGER message_template_touch_updated_at BEFORE UPDATE ON wms.message_template FOR EACH ROW EXECUTE FUNCTION wms.touch_updated_at()
 policy wms.message_template message_template_tenant_fence permissive ALL to=wms_api using=(company_id = ( SELECT wms.current_company_id() AS current_company_id)) check=(company_id = ( SELECT wms.current_company_id() AS current_company_id))
+relation wms.outbound_load kind=table owner=<owner> persistence=p rls=true force-rls=true replica-identity=d acl=[<owner>=DELETE,INSERT,MAINTAIN,REFERENCES,SELECT,TRIGGER,TRUNCATE,UPDATE/<owner> wms_api=DELETE,INSERT,SELECT,UPDATE/<owner> wms_worker=SELECT/<owner>]
+column wms.outbound_load 1 id uuid not-null default=wms.uuidv7()
+column wms.outbound_load 2 company_id uuid not-null
+column wms.outbound_load 3 project_id uuid not-null
+column wms.outbound_load 4 created_at timestamp with time zone not-null default=now()
+column wms.outbound_load 5 updated_at timestamp with time zone not-null default=now()
+column wms.outbound_load 6 from_station_id uuid not-null
+column wms.outbound_load 7 to_station_id uuid not-null
+column wms.outbound_load 8 waste_fraction_id uuid not-null
+column wms.outbound_load 9 vehicle_id uuid
+column wms.outbound_load 10 service_provider_id uuid
+column wms.outbound_load 11 vehicle_registration text not-null
+column wms.outbound_load 12 departed_at timestamp with time zone not-null
+column wms.outbound_load 13 gross_kg integer
+column wms.outbound_load 14 tare_kg integer
+column wms.outbound_load 15 net_kg integer not-null
+column wms.outbound_load 16 outbound_ticket text
+column wms.outbound_load 17 receiving_ticket text
+column wms.outbound_load 18 received_net_kg integer
+column wms.outbound_load 19 received_at timestamp with time zone
+column wms.outbound_load 20 haul_cost_minor integer
+column wms.outbound_load 21 disposal_cost_minor integer
+column wms.outbound_load 22 status text not-null
+column wms.outbound_load 23 note text
+constraint wms.outbound_load outbound_load_company_id_fk FOREIGN KEY (company_id) REFERENCES wms.company(id)
+constraint wms.outbound_load outbound_load_costs_not_negative CHECK ((((haul_cost_minor IS NULL) OR (haul_cost_minor >= 0)) AND ((disposal_cost_minor IS NULL) OR (disposal_cost_minor >= 0))))
+constraint wms.outbound_load outbound_load_from_station_id_fk FOREIGN KEY (company_id, from_station_id) REFERENCES wms.unloading_station(company_id, id)
+constraint wms.outbound_load outbound_load_gross_kg_positive CHECK ((gross_kg > 0))
+constraint wms.outbound_load outbound_load_net_kg_positive CHECK ((net_kg > 0))
+constraint wms.outbound_load outbound_load_note_shape CHECK (((status <> ALL (ARRAY['disputed'::text, 'cancelled'::text])) OR (note IS NOT NULL)))
+constraint wms.outbound_load outbound_load_pkey PRIMARY KEY (id)
+constraint wms.outbound_load outbound_load_project_id_fk FOREIGN KEY (company_id, project_id) REFERENCES wms.project(company_id, id)
+constraint wms.outbound_load outbound_load_project_key UNIQUE (company_id, project_id, id)
+constraint wms.outbound_load outbound_load_receipt_shape CHECK ((((status = ANY (ARRAY['received'::text, 'reconciled'::text, 'disputed'::text])) = (receiving_ticket IS NOT NULL)) AND ((receiving_ticket IS NULL) = (received_net_kg IS NULL)) AND ((receiving_ticket IS NULL) = (received_at IS NULL))))
+constraint wms.outbound_load outbound_load_received_net_kg_positive CHECK ((received_net_kg > 0))
+constraint wms.outbound_load outbound_load_service_provider_id_fk FOREIGN KEY (company_id, service_provider_id) REFERENCES wms.service_provider(company_id, id)
+constraint wms.outbound_load outbound_load_stations_apart CHECK ((from_station_id <> to_station_id))
+constraint wms.outbound_load outbound_load_status_one_of CHECK ((status = ANY (ARRAY['departed'::text, 'received'::text, 'reconciled'::text, 'disputed'::text, 'cancelled'::text])))
+constraint wms.outbound_load outbound_load_tare_kg_positive CHECK ((tare_kg > 0))
+constraint wms.outbound_load outbound_load_to_station_id_fk FOREIGN KEY (company_id, to_station_id) REFERENCES wms.unloading_station(company_id, id)
+constraint wms.outbound_load outbound_load_vehicle_id_fk FOREIGN KEY (company_id, project_id, vehicle_id) REFERENCES wms.vehicle(company_id, project_id, id)
+constraint wms.outbound_load outbound_load_waste_fraction_id_fk FOREIGN KEY (company_id, waste_fraction_id) REFERENCES wms.waste_fraction(company_id, id)
+constraint wms.outbound_load outbound_load_weights_shape CHECK ((((gross_kg IS NULL) = (tare_kg IS NULL)) AND ((gross_kg IS NULL) OR (net_kg = (gross_kg - tare_kg)))))
+index wms.outbound_load outbound_load_from_station_idx CREATE INDEX outbound_load_from_station_idx ON wms.outbound_load USING btree (company_id, from_station_id, waste_fraction_id)
+index wms.outbound_load outbound_load_pkey CREATE UNIQUE INDEX outbound_load_pkey ON wms.outbound_load USING btree (id)
+index wms.outbound_load outbound_load_project_id_departed_at_idx CREATE INDEX outbound_load_project_id_departed_at_idx ON wms.outbound_load USING btree (company_id, project_id, departed_at)
+index wms.outbound_load outbound_load_project_key CREATE UNIQUE INDEX outbound_load_project_key ON wms.outbound_load USING btree (company_id, project_id, id)
+index wms.outbound_load outbound_load_service_provider_id_idx CREATE INDEX outbound_load_service_provider_id_idx ON wms.outbound_load USING btree (company_id, service_provider_id)
+index wms.outbound_load outbound_load_to_station_id_idx CREATE INDEX outbound_load_to_station_id_idx ON wms.outbound_load USING btree (company_id, to_station_id)
+index wms.outbound_load outbound_load_vehicle_id_idx CREATE INDEX outbound_load_vehicle_id_idx ON wms.outbound_load USING btree (company_id, vehicle_id)
+index wms.outbound_load outbound_load_waste_fraction_id_idx CREATE INDEX outbound_load_waste_fraction_id_idx ON wms.outbound_load USING btree (company_id, waste_fraction_id)
+trigger wms.outbound_load outbound_load_audit_trail enabled=O CREATE TRIGGER outbound_load_audit_trail AFTER INSERT OR DELETE OR UPDATE ON wms.outbound_load FOR EACH ROW EXECUTE FUNCTION wms.audit_row('', '')
+trigger wms.outbound_load outbound_load_touch_updated_at enabled=O CREATE TRIGGER outbound_load_touch_updated_at BEFORE UPDATE ON wms.outbound_load FOR EACH ROW EXECUTE FUNCTION wms.touch_updated_at()
+policy wms.outbound_load outbound_load_tenant_fence permissive ALL to=wms_api using=(company_id = ( SELECT wms.current_company_id() AS current_company_id)) check=(company_id = ( SELECT wms.current_company_id() AS current_company_id))
 relation wms.outbox_event kind=table owner=<owner> persistence=p rls=true force-rls=true replica-identity=d acl=[<owner>=DELETE,INSERT,MAINTAIN,REFERENCES,SELECT,TRIGGER,TRUNCATE,UPDATE/<owner> wms_api=DELETE,INSERT,SELECT,UPDATE/<owner> wms_worker=SELECT/<owner>]
 column wms.outbox_event 1 id uuid not-null default=wms.uuidv7()
 column wms.outbox_event 2 company_id uuid not-null
@@ -4075,6 +4152,7 @@ column wms.unloading_station 12 closes_at time without time zone
 column wms.unloading_station 13 weighbridge boolean not-null default=false
 column wms.unloading_station 14 status text not-null
 column wms.unloading_station 15 notes text
+column wms.unloading_station 16 transfer boolean not-null default=false
 constraint wms.unloading_station unloading_station_code_key UNIQUE (company_id, code)
 constraint wms.unloading_station unloading_station_company_id_fk FOREIGN KEY (company_id) REFERENCES wms.company(id)
 constraint wms.unloading_station unloading_station_hours_shape CHECK (((opens_at IS NULL) = (closes_at IS NULL)))
@@ -4735,4 +4813,5 @@ journal 1793247592226 4b92f6ad7212b3dafef3bbd4bfba4e6696da935f5c9f7354442f7860b0
 journal 1793251427635 28c1ebcb79fe09c31112ea7c107fd4fa02346fd0ea3241c4875ef71724c3300a
 journal 1793262692450 55627dafbd3cb890c76eb45db4afd21abdf2a8593bb40b111738da9cc9c67bef
 journal 1793263502443 743ec23d04aeeab55f061db6ccb5e4a41b62823362ca3f8f5fe3cc5358ddcd5e
+journal 1793269290325 4939a4466261f21e70aac488fcaf9d2bd3d8f4082c4923a264c2fd6b86696aee
 pgboss-version 42

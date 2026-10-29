@@ -66,6 +66,7 @@ const station = {
   opensAt: null,
   closesAt: null,
   weighbridge: true,
+  transfer: false,
   status: "active",
   notes: null,
   wasteFractionIds: [OTHER, THIRD],
@@ -171,7 +172,7 @@ describe("UnloadingStation", () => {
 
   test("the create names its ownership, defaults the weighbridge, the status and the fractions, holds the shapes, and mints nothing", () => {
     const body = { code: "ARC-AMAGER", name: "ARC Amager Bakke", address: "Vindmøllevej 6", location: POINT, ownership: "external" }
-    assert.deepEqual(UnloadingStationCreate.parse(body), { ...body, weighbridge: false, status: "active", wasteFractionIds: [] })
+    assert.deepEqual(UnloadingStationCreate.parse(body), { ...body, weighbridge: false, transfer: false, status: "active", wasteFractionIds: [] })
     assert.deepEqual(refusal(UnloadingStationCreate.safeParse({ ...body, ownership: "service-provider" })), [providerIssue])
     assert.deepEqual(refusal(UnloadingStationCreate.safeParse({ ...body, opensAt: "06:00" })), [hoursIssue])
     assert.deepEqual(refusal(UnloadingStationCreate.safeParse({ ...body, wasteFractionIds: [OTHER, OTHER] })), [{ path: "wasteFractionIds", message: EACH_FRACTION_ONCE }])

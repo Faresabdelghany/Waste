@@ -180,6 +180,16 @@ export const CODED_PROOF_KINDS = ["completion", "skip", "failure", "correction"]
 export const CLOSING_REASONS = ["route-ended", "route-cancelled"] as const satisfies readonly PickupReason[]
 export type ClosingReason = (typeof CLOSING_REASONS)[number]
 
+/**
+ * Where an Outbound Load stands (M17 of #293, row 28.3): `departed` from the
+ * transfer station with our out-weighing, `received` once the receiving
+ * site's ticket is recorded, then `reconciled` when the office accepts the two
+ * or `disputed` when it does not. A load that never left is `cancelled`. A
+ * disputed load is reconciled once the difference is settled.
+ */
+export const OUTBOUND_LOAD_STATUSES = ["departed", "received", "reconciled", "disputed", "cancelled"] as const
+export type OutboundLoadStatus = (typeof OUTBOUND_LOAD_STATUSES)[number]
+
 /** Every list of this module by its name, for a test that walks them and for a reader looking for the whole vocabulary at once. */
 export const EXECUTION_VOCABULARIES = {
   ROUTE_STATUSES,
@@ -199,4 +209,5 @@ export const EXECUTION_VOCABULARIES = {
   OUTBOX_KINDS,
   OUTBOX_AGGREGATES,
   CONTAMINANT_CODE_STATUSES,
+  OUTBOUND_LOAD_STATUSES,
 } as const satisfies Record<string, readonly [string, ...string[]]>
