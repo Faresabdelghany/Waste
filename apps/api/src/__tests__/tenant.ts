@@ -70,6 +70,7 @@ import { decommissionReason, stockMinimum, stockMovement } from "@waste/db/schem
 import { wasteFractionEmissionFactor } from "@waste/db/schema/sustainability"
 import {
   customer,
+  customerContact,
   property,
   propertyGroup,
   propertyGroupMember,
@@ -77,6 +78,7 @@ import {
   sharedCollectionPoint,
   sharedCollectionPointMember,
 } from "@waste/db/schema/customers"
+import { message, messageTemplate } from "@waste/db/schema/messaging"
 import { company, project, serviceProvider } from "@waste/db/schema/organisation"
 import { contaminantCode, contaminantCodeFraction, pickupExceptionRule, pickupExceptionRuleStep } from "@waste/db/schema/pickup-exceptions"
 import { planningArea, planningAreaBoundary } from "@waste/db/schema/planning-areas"
@@ -463,6 +465,11 @@ export async function dropTenant(pool: Database, companyId: string, owner?: Data
     await tx.delete(propertyGroup).where(eq(propertyGroup.companyId, companyId))
     await tx.delete(propertyParty).where(eq(propertyParty.companyId, companyId))
     await tx.delete(property).where(eq(property.companyId, companyId))
+    // Messaging (#291 C15): the delivery log names its template, its customer and its contact, so it goes first, then the templates.
+    await tx.delete(message).where(eq(message.companyId, companyId))
+    await tx.delete(messageTemplate).where(eq(messageTemplate.companyId, companyId))
+    // A customer's contact persons (#291 C14) go before it.
+    await tx.delete(customerContact).where(eq(customerContact.companyId, companyId))
     await tx.delete(customer).where(eq(customer.companyId, companyId))
     await tx.delete(containerType).where(eq(containerType.companyId, companyId))
     // The fractions' emission factors (M13 of #293) name the fractions.

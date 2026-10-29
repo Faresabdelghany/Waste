@@ -1,5 +1,5 @@
 {
-  "id": "1aaa81f3-0fdb-4690-9c1c-5895594ae697",
+  "id": "36171d10-a59c-466d-bea2-87333e8962b0",
   "prevId": "44019622-06fe-4e34-9849-85926d6b19de",
   "version": "7",
   "dialect": "postgresql",
@@ -1493,7 +1493,7 @@
         },
         "product_unit_one_of": {
           "name": "product_unit_one_of",
-          "value": "\"wms\".\"product\".\"unit\" in ('pickup', 'month', 'job', 'day', 'visit', 'item')"
+          "value": "\"wms\".\"product\".\"unit\" in ('pickup', 'month', 'job', 'day', 'visit')"
         },
         "product_vat_percent_range": {
           "name": "product_vat_percent_range",
@@ -1931,6 +1931,161 @@
         "customer_payment_terms_range": {
           "name": "customer_payment_terms_range",
           "value": "\"wms\".\"customer\".\"payment_terms_days\" between 0 and 365"
+        }
+      },
+      "isRLSEnabled": false
+    },
+    "wms.customer_contact": {
+      "name": "customer_contact",
+      "schema": "wms",
+      "columns": {
+        "id": {
+          "name": "id",
+          "type": "uuid",
+          "primaryKey": true,
+          "notNull": true,
+          "default": "wms.uuidv7()"
+        },
+        "company_id": {
+          "name": "company_id",
+          "type": "uuid",
+          "primaryKey": false,
+          "notNull": true
+        },
+        "created_at": {
+          "name": "created_at",
+          "type": "timestamp with time zone",
+          "primaryKey": false,
+          "notNull": true,
+          "default": "now()"
+        },
+        "updated_at": {
+          "name": "updated_at",
+          "type": "timestamp with time zone",
+          "primaryKey": false,
+          "notNull": true,
+          "default": "now()"
+        },
+        "customer_id": {
+          "name": "customer_id",
+          "type": "uuid",
+          "primaryKey": false,
+          "notNull": true
+        },
+        "name": {
+          "name": "name",
+          "type": "text",
+          "primaryKey": false,
+          "notNull": true
+        },
+        "role": {
+          "name": "role",
+          "type": "text",
+          "primaryKey": false,
+          "notNull": true
+        },
+        "email": {
+          "name": "email",
+          "type": "text",
+          "primaryKey": false,
+          "notNull": false
+        },
+        "phone": {
+          "name": "phone",
+          "type": "text",
+          "primaryKey": false,
+          "notNull": false
+        },
+        "status": {
+          "name": "status",
+          "type": "text",
+          "primaryKey": false,
+          "notNull": true
+        }
+      },
+      "indexes": {
+        "customer_contact_customer_id_idx": {
+          "name": "customer_contact_customer_id_idx",
+          "columns": [
+            {
+              "expression": "company_id",
+              "isExpression": false,
+              "asc": true,
+              "nulls": "last"
+            },
+            {
+              "expression": "customer_id",
+              "isExpression": false,
+              "asc": true,
+              "nulls": "last"
+            }
+          ],
+          "isUnique": false,
+          "concurrently": false,
+          "method": "btree",
+          "with": {}
+        }
+      },
+      "foreignKeys": {
+        "customer_contact_company_id_fk": {
+          "name": "customer_contact_company_id_fk",
+          "tableFrom": "customer_contact",
+          "tableTo": "company",
+          "schemaTo": "wms",
+          "columnsFrom": [
+            "company_id"
+          ],
+          "columnsTo": [
+            "id"
+          ],
+          "onDelete": "no action",
+          "onUpdate": "no action"
+        },
+        "customer_contact_customer_id_fk": {
+          "name": "customer_contact_customer_id_fk",
+          "tableFrom": "customer_contact",
+          "tableTo": "customer",
+          "schemaTo": "wms",
+          "columnsFrom": [
+            "company_id",
+            "customer_id"
+          ],
+          "columnsTo": [
+            "company_id",
+            "id"
+          ],
+          "onDelete": "no action",
+          "onUpdate": "no action"
+        }
+      },
+      "compositePrimaryKeys": {},
+      "uniqueConstraints": {
+        "customer_contact_tenant_key": {
+          "name": "customer_contact_tenant_key",
+          "nullsNotDistinct": false,
+          "columns": [
+            "company_id",
+            "id"
+          ]
+        }
+      },
+      "policies": {},
+      "checkConstraints": {
+        "customer_contact_role_one_of": {
+          "name": "customer_contact_role_one_of",
+          "value": "\"wms\".\"customer_contact\".\"role\" in ('primary', 'billing', 'operations', 'on-site', 'other')"
+        },
+        "customer_contact_status_one_of": {
+          "name": "customer_contact_status_one_of",
+          "value": "\"wms\".\"customer_contact\".\"status\" in ('active', 'inactive')"
+        },
+        "customer_contact_email_lowercase": {
+          "name": "customer_contact_email_lowercase",
+          "value": "\"wms\".\"customer_contact\".\"email\" = lower(\"wms\".\"customer_contact\".\"email\")"
+        },
+        "customer_contact_channel_shape": {
+          "name": "customer_contact_channel_shape",
+          "value": "\"wms\".\"customer_contact\".\"email\" is not null or \"wms\".\"customer_contact\".\"phone\" is not null"
         }
       },
       "isRLSEnabled": false
