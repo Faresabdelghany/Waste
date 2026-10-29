@@ -187,6 +187,16 @@ export function endRouteWarning(route: Pick<DriverRouteDetail, "id" | "pickups">
   return `${open} ${open === 1 ? "stop" : "stops"} not done will be marked skipped`
 }
 
+/**
+ * What a read the display cache stands in for says (O25 of #290): the
+ * server's last answer, and when it gave it, on the phone's own clock — the
+ * driver's, where the route runs.
+ */
+export function keptNotice(readAt: string, timeZone?: string): string {
+  const time = new Intl.DateTimeFormat("en-GB", { hour: "2-digit", minute: "2-digit", ...(timeZone === undefined ? {} : { timeZone }) }).format(new Date(readAt))
+  return `Offline copy: the server's answer at ${time}. What you do now is sent when the connection returns.`
+}
+
 /** The banner while the server is out of reach. */
 export function unreachableBanner(waiting: number): string {
   return `Can't reach the server · ${waiting} ${waiting === 1 ? "action" : "actions"} waiting`

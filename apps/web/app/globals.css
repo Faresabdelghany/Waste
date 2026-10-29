@@ -159,6 +159,16 @@
   --shadow-workstream: 0 1px 0 color-mix(in srgb, var(--custom-foreground) 8%, transparent);
 }
 
+/*
+ * A published project's public pages (Issue #293) are a resident's, held to
+ * WCAG 2.1 AA: their muted text is the page's own foreground mixed into its
+ * background, at least 4.5 to 1 on it whatever the theme the browser kept,
+ * where a theme's muted grey (Ash's #818287 on white, 3.8 to 1) is not.
+ */
+.public-page {
+  --muted-foreground: color-mix(in srgb, var(--foreground) 85%, var(--background));
+}
+
 @theme inline {
   --font-sans: var(--font-geist-sans);
   --font-mono: var(--font-geist-mono);

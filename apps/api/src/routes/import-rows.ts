@@ -57,6 +57,7 @@ import { PlanningAreaBoundaryCreate, PlanningAreaCreate, PlanningAreaPatch } fro
 import { VehicleTypeCreate, VehicleTypePatch } from "@waste/contracts/vehicle-types"
 import type { ImportKind, ImportRowResult, ImportRowValues } from "@waste/contracts/imports"
 import type { Tx } from "@waste/db/client"
+import { projectToday } from "@waste/db/commands/project-clock"
 import { Refused } from "@waste/db/commands/shared"
 import { validOn } from "@waste/db/query/valid-on"
 import { containerType, product } from "@waste/db/schema/catalogue"
@@ -386,20 +387,22 @@ async function importProperty(context: ImportContext, cells: Cells): Promise<Wri
   const [match] = matches
   if (match === undefined) {
     requireAllowed(principal.grants, IMPORT_MODULES.properties, "create")
-    return { outcome: "created", resourceId: (await step(PROPERTY_COLUMNS, () => createProperty(tx, principal, body))).id }
+    return { outcome: "created", resourceId: (await step(PROPERTY_COLUMNS, () => createProperty(tx, principal, body, context.now))).id }
   }
-  const current = await propertyWithParties(tx, principal.companyId, match)
+  const current = await propertyWithParties(tx, principal.companyId, match, context.now())
   // The address is the key and the parties a set of their own; neither is a patch's.
   const given = givenFields(cells, PROPERTY_COLUMNS)
   given.delete("address")
   given.delete("parties")
   const { parties: _parties, projectId: _projectId, ...fields } = body
   const patch = changes(current, fields, given)
-  const partiesMoved = parties !== undefined && !sameParties(current.parties, parties)
+  // The file's parties are the set in force today, as a `PUT` names it: a move booked ahead is not today's (#374).
+  const today = await projectToday(tx, { companyId: principal.companyId, projectId: match.projectId }, context.now)()
+  const partiesMoved = parties !== undefined && !sameParties(current.parties.filter((party) => party.validFrom <= today), parties)
   if (isEmpty(patch) && !partiesMoved) return { outcome: "unchanged", resourceId: current.id }
   requireAllowed(principal.grants, IMPORT_MODULES.properties, "edit")
-  if (!isEmpty(patch)) await step(PROPERTY_COLUMNS, () => patchProperty(tx, principal, current.id, parsed(PropertyPatch, patch, PROPERTY_COLUMNS)))
-  if (partiesMoved) await step(PROPERTY_COLUMNS, () => setPropertyParties(tx, principal, current.id, parties))
+  if (!isEmpty(patch)) await step(PROPERTY_COLUMNS, () => patchProperty(tx, principal, current.id, parsed(PropertyPatch, patch, PROPERTY_COLUMNS), context.now))
+  if (partiesMoved) await step(PROPERTY_COLUMNS, () => setPropertyParties(tx, principal, current.id, parties, context.now))
   return { outcome: "updated", resourceId: current.id }
 }
 

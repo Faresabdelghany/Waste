@@ -59,7 +59,7 @@ const copenhagen: Project = {
   status: "active",
   weekend: ["saturday", "sunday"],
   holidayList: "Danish public holidays",
-  publicSlug: null, paymentTermsDays: 30, paymentReferenceScheme: "none", holdForReview: false, privacyPolicy: { positionRetentionDays: null, proofRetentionDays: null, gpsPurpose: null },
+  publicSlug: null, paymentTermsDays: 30, paymentReferenceScheme: "none", holdForReview: false, privacyPolicy: { positionRetentionDays: null, proofRetentionDays: null, gpsPurpose: null }, branding: { brandColor: null, logoUrl: null, accessibilityStatementUrl: null },
   weightTolerancePercent: 5,
 }
 const harbor: Project = { ...copenhagen, id: "01a0d2a4-a280-7002-8000-000000000002", name: "Harbor Commercial", kind: "Business unit", status: "onboarding", holidayList: null }
