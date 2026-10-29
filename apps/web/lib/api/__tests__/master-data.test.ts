@@ -24,6 +24,7 @@ import {
 } from "@waste/contracts/catalogue"
 import type { Project } from "@waste/contracts/organisation"
 import type { ContaminantCode } from "@waste/contracts/pickup-exceptions"
+import type { DecommissionReason } from "@waste/contracts/stock"
 import { VehicleTypeContainerTypesSet, VehicleTypeCreate, VehicleTypePatch, type VehicleType } from "@waste/contracts/vehicle-types"
 
 import { FIXTURE_COMPANY_ID, FIXTURE_PROJECT_IDS, getModuleDefinition, type BusinessRecord } from "../../data/business-modules"
@@ -32,7 +33,7 @@ import { problemSentence } from "../problem"
 import { NOTHING_RESOLVED, type MappingContext, type Resolver } from "../records/adapter"
 import { VehicleTypeConsumptionSet } from "@waste/contracts/emissions"
 import { CONSUMPTION_REFUSAL } from "@/lib/data/fleet-emissions"
-import { containerTypeAdapter, contaminantCodeAdapter, masterDataModule, ONE_CADENCE as LOCAL_ONE_CADENCE, serviceFrequencyAdapter, vehicleTypeAdapter, wasteFractionAdapter } from "../records/master-data"
+import { containerTypeAdapter, contaminantCodeAdapter, decommissionReasonAdapter, masterDataModule, ONE_CADENCE as LOCAL_ONE_CADENCE, serviceFrequencyAdapter, vehicleTypeAdapter, wasteFractionAdapter } from "../records/master-data"
 import { isServerBacked, SERVER_MODULE_KEYS } from "../records/modules"
 import { projectAdapter } from "../records/organisation"
 import { loaded, loadModule, resolverOver, writeRecord, type ServerRecordsState } from "../records/server-records"
@@ -49,8 +50,8 @@ const organisationFixtures = getModuleDefinition({ workspaceId: "configure", mod
 const context = (resolve: Resolver = NOTHING_RESOLVED): MappingContext => ({ fixtures: masterFixtures, resolve, companyRecordId: FIXTURE_COMPANY_ID, now: NOW })
 
 // The seeded rows as the API answers them (packages/db/src/seed/registry.ts, resources.ts).
-const copenhagen: Project = { id: "01a0d2a4-a280-7002-8000-000000000001", ...STAMPS, name: "Copenhagen Central", kind: "Municipality", language: "da", currency: "DKK", timezone: "Europe/Copenhagen", status: "active", weekend: ["saturday", "sunday"], holidayList: "Danish public holidays", publicSlug: null, weightTolerancePercent: 5, paymentTermsDays: 30, paymentReferenceScheme: "none", holdForReview: false }
-const residual: WasteFraction = { id: "01a0d2a4-a280-7005-8000-000000000001", ...STAMPS, key: "residual", name: "Residual", wasteCode: null, treatment: null, densityKgPerCubicMetre: null }
+const copenhagen: Project = { id: "01a0d2a4-a280-7002-8000-000000000001", ...STAMPS, name: "Copenhagen Central", kind: "Municipality", language: "da", currency: "DKK", timezone: "Europe/Copenhagen", status: "active", weekend: ["saturday", "sunday"], holidayList: "Danish public holidays", publicSlug: null, weightTolerancePercent: 5, paymentTermsDays: 30, paymentReferenceScheme: "none", holdForReview: false, privacyPolicy: { positionRetentionDays: null, proofRetentionDays: null, gpsPurpose: null } }
+const residual: WasteFraction = { id: "01a0d2a4-a280-7005-8000-000000000001", ...STAMPS, key: "residual", name: "Residual", wasteCode: null, treatment: null, densityKgPerCubicMetre: null, hazardous: false }
 const glass: WasteFraction = { ...residual, id: "01a0d2a4-a280-7005-8000-000000000005", key: "glass", name: "Glass" }
 const bin240: ContainerType = { id: "01a0d2a4-a280-7006-8000-000000000002", ...STAMPS, name: "Two-wheel bin · 240 L", volumeLitres: 240, serviceSeconds: null }
 const igloo: ContainerType = { ...bin240, id: "01a0d2a4-a280-7006-8000-000000000005", name: "Igloo · 2,500 L", volumeLitres: 2500 }
@@ -59,9 +60,11 @@ const weekly: ServiceFrequency = { id: "01a0d2a4-a280-7007-8000-000000000001", .
 const monthly: ServiceFrequency = { ...weekly, id: "01a0d2a4-a280-7007-8000-000000000003", name: "Once a month", description: null, collectionsPerWeek: 1, weeksBetween: null, daysBetween: null }
 const onDemand: ServiceFrequency = { ...weekly, id: "01a0d2a4-a280-7007-8000-000000000004", name: "On demand", description: null, collectionsPerWeek: null, weeksBetween: null, daysBetween: null }
 const twiceWeekly: ServiceFrequency = { ...weekly, id: "01a0d2a4-a280-7007-8000-000000000005", name: "Twice a week", description: null, collectionsPerWeek: 2, weeksBetween: null, daysBetween: 3 }
-const rearLoader: VehicleType = { id: "01a0d2a4-a280-7008-8000-000000000001", ...STAMPS, key: "rear-loader", name: "Rear loader", description: null, containerTypeIds: [bin240.id], consumption: [] }
+const rearLoader: VehicleType = { id: "01a0d2a4-a280-7008-8000-000000000001", ...STAMPS, key: "rear-loader", name: "Rear loader", description: null, containerTypeIds: [bin240.id], consumption: [], checklist: [] }
 const foodInGlass: ContaminantCode = { id: "01a0d2a4-a280-702a-8000-000000000001", ...STAMPS, code: "food-in-glass", name: "Food in glass", status: "active", wasteFractionIds: [glass.id] }
 const hazardous: ContaminantCode = { ...foodInGlass, id: "01a0d2a4-a280-702a-8000-000000000002", code: "hazardous", name: "Hazardous waste", status: "inactive", wasteFractionIds: [] }
+const wornOut: DecommissionReason = { id: "01a0d2a4-a280-702e-8000-000000000001", createdAt: foodInGlass.createdAt, updatedAt: foodInGlass.updatedAt, code: "worn-out", name: "Worn out", status: "active" }
+const stolen: DecommissionReason = { ...wornOut, id: "01a0d2a4-a280-702e-8000-000000000002", code: "stolen", name: "Stolen", status: "inactive" }
 const glassCrane: VehicleType = { ...rearLoader, id: "01a0d2a4-a280-7008-8000-000000000004", key: "glass-crane", name: "Glass crane", description: "Crane over the igloo", containerTypeIds: [igloo.id] }
 const trailer: VehicleType = { ...rearLoader, id: "01a0d2a4-a280-7008-8000-000000000006", key: "closed-trailer", name: "Closed trailer", description: null, containerTypeIds: [] }
 
@@ -74,7 +77,7 @@ const pageOf = (items: unknown[]) => json({ items, nextCursor: null })
 
 /** The module loaded over the four seeded lists, in the module's own order. */
 async function loadedMaster() {
-  const { fetch, calls } = scripted([() => pageOf([residual, glass]), () => pageOf([bin240, igloo, unmeasured]), () => pageOf([weekly, monthly, onDemand, twiceWeekly]), () => pageOf([rearLoader, glassCrane, trailer]), () => pageOf([foodInGlass, hazardous])])
+  const { fetch, calls } = scripted([() => pageOf([residual, glass]), () => pageOf([bin240, igloo, unmeasured]), () => pageOf([weekly, monthly, onDemand, twiceWeekly]), () => pageOf([rearLoader, glassCrane, trailer]), () => pageOf([foodInGlass, hazardous]), () => pageOf([wornOut, stolen])])
   const result = await loadModule(clientOver(fetch), masterDataModule, { fixtures: masterFixtures, state, now: NOW })
   return { result, calls }
 }
@@ -85,11 +88,11 @@ describe("the master data module", () => {
     assert.ok(SERVER_MODULE_KEYS.indexOf("configure.master") > SERVER_MODULE_KEYS.indexOf("configure.organization"))
   })
 
-  test("loads the five lists in one order — container types before the vehicle types that name them, the fractions before the contaminant codes — and files every row under its own prefix", async () => {
+  test("loads the six lists in one order — container types before the vehicle types that name them, the fractions before the contaminant codes, the decommission reasons last — and files every row under its own prefix", async () => {
     const { result, calls } = await loadedMaster()
     assert.deepEqual(
       calls.map((call) => call.url),
-      ["http://api.test/waste-fractions?limit=200", "http://api.test/container-types?limit=200", "http://api.test/service-frequencies?limit=200", "http://api.test/vehicle-types?limit=200", "http://api.test/contaminant-codes?limit=200"],
+      ["http://api.test/waste-fractions?limit=200", "http://api.test/container-types?limit=200", "http://api.test/service-frequencies?limit=200", "http://api.test/vehicle-types?limit=200", "http://api.test/contaminant-codes?limit=200", "http://api.test/decommission-reasons?limit=200"],
     )
     assert.deepEqual(result.records.map((record) => masterDataKindOf(record)), [
       "waste-fraction",
@@ -106,8 +109,10 @@ describe("the master data module", () => {
       "vehicle-type",
       "contaminant-code",
       "contaminant-code",
+      "decommission-reason",
+      "decommission-reason",
     ])
-    assert.equal(result.records.length, 14, "the fixture master-data sets lend nothing: no row is one of them")
+    assert.equal(result.records.length, 16, "the fixture master-data sets lend nothing: no row is one of them")
     assert.equal(result.serverIds.get(`fraction-${residual.id}`), residual.id)
     const crane = result.records.find((record) => record.name === "Glass crane")
     assert.equal(crane?.facts["Container types"], "Igloo · 2,500 L", "a vehicle type names its container types by the rows loaded before it")
@@ -115,6 +120,9 @@ describe("the master data module", () => {
     assert.deepEqual([food?.facts.Code, food?.facts.Fractions, food?.facts.Status], ["food-in-glass", "Glass", "Active"], "a code names its fractions by the rows loaded before it")
     const retired = result.records.find((record) => record.name === "Hazardous waste")
     assert.deepEqual([retired?.facts.Fractions, retired?.facts.Status, retired?.value], ["Every fraction", "Retired", "Retired"])
+    // A decommission reason (O30 of #290): its code and whether it is still offered.
+    const scrap = result.records.find((record) => record.name === "Stolen")
+    assert.deepEqual([scrap?.id, scrap?.facts.Code, scrap?.facts.Status], [`decommission-reason-${stolen.id}`, "stolen", "Retired"])
   })
 })
 
@@ -146,6 +154,32 @@ describe("a contaminant code (M5 of #293)", () => {
     const answered = await contaminantCodeAdapter.update(clientOver(fetch), foodInGlass.id, body)
     assert.deepEqual(calls.map((call) => [call.init.method, call.url]), [["PATCH", `http://api.test/contaminant-codes/${foodInGlass.id}`], ["PUT", `http://api.test/contaminant-codes/${foodInGlass.id}/fractions`]])
     assert.deepEqual(answered.wasteFractionIds, [glass.id, residual.id])
+  })
+})
+
+describe("a decommission reason (O30 of #290, row 9.6)", () => {
+  const record = decommissionReasonAdapter.toRecord(wornOut, context())
+
+  test("is a record under its own prefix, its code the key and its status", () => {
+    assert.equal(record.id, `decommission-reason-${wornOut.id}`)
+    assert.deepEqual(record.submittedValues, { kind: "decommission-reason", name: "Worn out", key: "worn-out", status: "active" })
+  })
+
+  test("is created with its code, name and status; a code that is no slug is refused here", () => {
+    const made = { ...record, id: "decommission-reason-1700000000000", submittedValues: { kind: "decommission-reason", name: "Fire", key: "fire", status: "active" } }
+    assert.deepEqual(decommissionReasonAdapter.toCreateBody?.(made, context()), { code: "fire", name: "Fire", status: "active" })
+    assert.deepEqual(decommissionReasonAdapter.toCreateBody?.({ ...made, submittedValues: { ...made.submittedValues, key: "Fire" } }, context()), { path: "key", message: KEY_REFUSAL })
+  })
+
+  test("a patch moves the name or the status, one PATCH; the code never moves", async () => {
+    const retired = { ...record, submittedValues: { ...record.submittedValues, status: "inactive" } }
+    const body = decommissionReasonAdapter.toPatchBody(record, retired, context())
+    assert.deepEqual(body, { status: "inactive" })
+    assert.equal(decommissionReasonAdapter.toPatchBody(record, { ...record }, context()), null, "nothing moved")
+    assert.deepEqual(decommissionReasonAdapter.toPatchBody(record, { ...record, submittedValues: { ...record.submittedValues, key: "worn" } }, context()), { path: "key", message: "The code is set once: a decommission reason that needs another code is another reason" })
+    const { fetch, calls } = scripted([() => json({ ...wornOut, status: "inactive" })])
+    await decommissionReasonAdapter.update(clientOver(fetch), wornOut.id, body)
+    assert.deepEqual(calls.map((call) => [call.init.method, call.url]), [["PATCH", `http://api.test/decommission-reasons/${wornOut.id}`]])
   })
 })
 
@@ -200,6 +234,23 @@ describe("a waste fraction", () => {
     assert.equal(wasteFractionAdapter.toPatchBody(coded, { ...coded, submittedValues: { ...coded.submittedValues, wasteCode: "20 03 01" } }, context()), null, "the same code spelled as printed is no change")
     assert.deepEqual(wasteFractionAdapter.toPatchBody(record, typed("2003"), context()), { path: "wasteCode", message: WASTE_CODE_REFUSAL })
     assert.equal(WasteCode.safeParse("2003").error?.issues[0]?.message, WASTE_CODE_REFUSAL, "the pane refuses in the contract's words")
+  })
+
+  test("carries its hazardous flag (O18 of #290): read into the record as a ticked box and a fact, sent only when ticked on a create, and patched both ways", () => {
+    const flagged = wasteFractionAdapter.toRecord({ ...residual, wasteCode: "200133*", hazardous: true }, context())
+    assert.equal(flagged.facts.Hazardous, "Yes")
+    assert.equal(flagged.submittedValues?.hazardous, true)
+    assert.equal(record.facts.Hazardous, undefined, "a fraction that is not hazardous says nothing of it")
+    assert.equal(record.submittedValues?.hazardous, undefined)
+    const lookups = { projectName: () => undefined, containerTypeName: () => undefined }
+    const ticked = createMasterDataRecord("waste-fraction", { name: "Asbestos", key: "asbestos", hazardous: true }, { now: 1, actorName: "Olivia Larsen", lookups })
+    assert.deepEqual(wasteFractionAdapter.toCreateBody?.(ticked, context()), { key: "asbestos", name: "Asbestos", hazardous: true })
+    const starred = createMasterDataRecord("waste-fraction", { name: "Batteries", key: "batteries", wasteCode: "20 01 33*", hazardous: false }, { now: 1, actorName: "Olivia Larsen", lookups })
+    assert.deepEqual(wasteFractionAdapter.toCreateBody?.(starred, context()), { key: "batteries", name: "Batteries", wasteCode: "200133*" }, "left to the API, which reads the asterisk")
+    assert.deepEqual(wasteFractionAdapter.toPatchBody(record, { ...record, submittedValues: { ...record.submittedValues, hazardous: true } }, context()), { hazardous: true })
+    const unticked = Object.fromEntries(Object.entries(flagged.submittedValues ?? {}).filter(([key]) => key !== "hazardous"))
+    assert.deepEqual(wasteFractionAdapter.toPatchBody(flagged, { ...flagged, submittedValues: unticked }, context()), { hazardous: false })
+    assert.ok(WasteFractionPatch.safeParse({ hazardous: false }).success)
   })
 
   test("carries its density (O10 of #290): read into the record, sent on a create, and patched, blank as null", () => {

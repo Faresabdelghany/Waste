@@ -55,6 +55,7 @@ import { ProjectScopedListQuery } from "@waste/contracts/queries"
 import type { Tx } from "@waste/db/client"
 import { containerType, serviceFrequency, wasteFraction } from "@waste/db/schema/catalogue"
 import type { WasteTreatment } from "@waste/domain/registry/vocabulary"
+import { HAZARDOUS_CODE, hazardousOf, isHazardousCode } from "@waste/domain/registry/waste-code"
 import { and, asc, eq, gt } from "drizzle-orm"
 import { Hono, type MiddlewareHandler } from "hono"
 import { describeRoute } from "hono-openapi"
@@ -65,7 +66,7 @@ import { requireGrant } from "../auth/require"
 import { newId } from "../ids"
 import { afterCursor, fetchLimit, pageOf } from "../pagination"
 import { describeProblem, invalidRequest, problem, validate } from "../problem"
-import { created, describeCreated, describeJson, IdParam, refuseDuplicate, stampsOf } from "./shared"
+import { created, describeCreated, describeJson, IdParam, refuseCheck, refuseDuplicate, stampsOf } from "./shared"
 
 const MODULE = "configure.master"
 
@@ -80,6 +81,7 @@ const fractionColumns = {
   wasteCode: wasteFraction.wasteCode,
   treatment: wasteFraction.treatment,
   densityKgPerCubicMetre: wasteFraction.densityKgPerCubicMetre,
+  hazardous: wasteFraction.hazardous,
   createdAt: wasteFraction.createdAt,
   updatedAt: wasteFraction.updatedAt,
 }
@@ -87,7 +89,7 @@ const fractionColumns = {
 type FractionRow = Pick<typeof wasteFraction.$inferSelect, keyof typeof fractionColumns>
 
 function fractionOf(row: FractionRow): WasteFraction {
-  return { id: row.id, key: row.key, name: row.name, wasteCode: row.wasteCode, treatment: row.treatment as WasteTreatment | null, densityKgPerCubicMetre: row.densityKgPerCubicMetre, ...stampsOf(row) }
+  return { id: row.id, key: row.key, name: row.name, wasteCode: row.wasteCode, treatment: row.treatment as WasteTreatment | null, densityKgPerCubicMetre: row.densityKgPerCubicMetre, hazardous: row.hazardous, ...stampsOf(row) }
 }
 
 /** `unique (company_id, key)` and `unique (company_id, name)`: each is one fraction's inside a company, and free in the next. */
@@ -95,6 +97,9 @@ const FRACTION_KEY_TAKEN = "waste_fraction_key_key"
 const FRACTION_NAME_TAKEN = "waste_fraction_name_key"
 const fractionKeyTaken = (key: string) => `This company already has a waste fraction with the key ${JSON.stringify(key)}`
 const fractionNameTaken = (name: string) => `This company already has a waste fraction called ${JSON.stringify(name)}`
+
+/** `waste_fraction_hazardous_shape`: a patch telling a fraction under a starred code it is not hazardous (O18 of #290); a create's body is judged whole by the contract. */
+const FRACTION_CHECKS = { waste_fraction_hazardous_shape: { path: "hazardous", message: HAZARDOUS_CODE } }
 
 const noSuchFraction = (id: string) => problem(404, { detail: `No waste fraction ${id} in this company` })
 
@@ -118,6 +123,85 @@ const TYPE_NAME_TAKEN = "container_type_name_key"
 const typeNameTaken = (name: string) => `This company already has a container type called ${JSON.stringify(name)}`
 
 const noSuchType = (id: string) => problem(404, { detail: `No container type ${id} in this company` })
+
+// The writes the routes and the catalogue's CSV import (routes/import-rows.ts,
+// O30 of #290) share, so an imported row is held to every rule a form's is and
+// refused in the same sentence: the duplicate's 409, the missing row's 404.
+
+/** Adds a waste fraction to the caller's company. */
+export async function createWasteFraction(tx: Tx, principal: Principal, values: WasteFractionCreate): Promise<WasteFraction> {
+  const sentences = { [FRACTION_KEY_TAKEN]: fractionKeyTaken(values.key), [FRACTION_NAME_TAKEN]: fractionNameTaken(values.name) }
+  const [row] = await refuseDuplicate(sentences, () =>
+    tx
+      .insert(wasteFraction)
+      .values({ ...values, hazardous: hazardousOf(values.wasteCode ?? null, values.hazardous, false), id: newId(), companyId: principal.companyId })
+      .returning(fractionColumns),
+  )
+  return fractionOf(row)
+}
+
+/** Changes one waste fraction of the caller's company; the 404 where there is none. */
+export async function patchWasteFraction(tx: Tx, principal: Principal, id: string, patch: WasteFractionPatch): Promise<WasteFraction> {
+  const sentences: Record<string, string> = patch.name === undefined ? {} : { [FRACTION_NAME_TAKEN]: fractionNameTaken(patch.name) }
+  // A starred code set without a word on the flag makes the fraction hazardous (O18 of #290); anything else leaves the flag to the patch or as it is.
+  const hazardous = patch.hazardous ?? (patch.wasteCode != null && isHazardousCode(patch.wasteCode) ? true : undefined)
+  const [row] = await refuseCheck(FRACTION_CHECKS, () =>
+    refuseDuplicate(sentences, () =>
+      tx
+        .update(wasteFraction)
+        .set({ ...patch, hazardous })
+        .where(and(eq(wasteFraction.companyId, principal.companyId), eq(wasteFraction.id, id)))
+        .returning(fractionColumns),
+    ),
+  )
+  if (row === undefined) throw noSuchFraction(id)
+  return fractionOf(row)
+}
+
+/** The company's waste fraction with this key, or undefined. */
+export async function wasteFractionByKey(tx: Tx, companyId: string, key: string): Promise<WasteFraction | undefined> {
+  const [row] = await tx
+    .select(fractionColumns)
+    .from(wasteFraction)
+    .where(and(eq(wasteFraction.companyId, companyId), eq(wasteFraction.key, key)))
+    .limit(1)
+  return row === undefined ? undefined : fractionOf(row)
+}
+
+/** Adds a container type to the caller's company. */
+export async function createContainerType(tx: Tx, principal: Principal, values: ContainerTypeCreate): Promise<ContainerType> {
+  const [row] = await refuseDuplicate({ [TYPE_NAME_TAKEN]: typeNameTaken(values.name) }, () =>
+    tx
+      .insert(containerType)
+      .values({ ...values, id: newId(), companyId: principal.companyId })
+      .returning(typeColumns),
+  )
+  return typeOf(row)
+}
+
+/** Changes one container type of the caller's company; the 404 where there is none. */
+export async function patchContainerType(tx: Tx, principal: Principal, id: string, patch: ContainerTypePatch): Promise<ContainerType> {
+  const sentences: Record<string, string> = patch.name === undefined ? {} : { [TYPE_NAME_TAKEN]: typeNameTaken(patch.name) }
+  const [row] = await refuseDuplicate(sentences, () =>
+    tx
+      .update(containerType)
+      .set(patch)
+      .where(and(eq(containerType.companyId, principal.companyId), eq(containerType.id, id)))
+      .returning(typeColumns),
+  )
+  if (row === undefined) throw noSuchType(id)
+  return typeOf(row)
+}
+
+/** The company's container type with this name, or undefined. */
+export async function containerTypeByName(tx: Tx, companyId: string, name: string): Promise<ContainerType | undefined> {
+  const [row] = await tx
+    .select(typeColumns)
+    .from(containerType)
+    .where(and(eq(containerType.companyId, companyId), eq(containerType.name, name)))
+    .limit(1)
+  return row === undefined ? undefined : typeOf(row)
+}
 
 const frequencyColumns = {
   id: serviceFrequency.id,
@@ -207,11 +291,11 @@ export function catalogueRoutes(guard: MiddlewareHandler<AuthEnv>) {
         operationId: "createWasteFraction",
         summary: "Add a waste fraction",
         description:
-          "Adds a fraction to the company's own vocabulary. `key` is the stable slug the rest of the system quotes and is set once; `name` is what a person reads. Both are unique inside the company. `wasteCode`, optional, is the European List of Waste entry the national waste-data system keys the fraction by, six digits compact (`200301`) with an asterisk after a hazardous entry's; the waste-data report names a fraction without one with a warning. `treatment`, optional, is how it is treated once collected — `reuse`, `recycling`, `energy-recovery` or `disposal` — which the sustainability report's recycling rate reads (M13 of #293). The server mints the id; a body that carries one is refused.",
+          "Adds a fraction to the company's own vocabulary. `key` is the stable slug the rest of the system quotes and is set once; `name` is what a person reads. Both are unique inside the company. `wasteCode`, optional, is the European List of Waste entry the national waste-data system keys the fraction by, six digits compact (`200301`) with an asterisk after a hazardous entry's; the waste-data report names a fraction without one with a warning. `treatment`, optional, is how it is treated once collected — `reuse`, `recycling`, `energy-recovery` or `disposal` — which the sustainability report's recycling rate reads (M13 of #293). `hazardous`, optional, says it is hazardous waste, what its transfer note prints (O18 of #290): left out, it is hazardous exactly where the code is starred, and a starred code with `hazardous: false` is refused (400 at `hazardous`), since the list marks that entry hazardous. The server mints the id; a body that carries one is refused.",
         security: BEARER_SECURITY,
         responses: {
           201: describeCreated("The waste fraction as it was written.", WasteFraction),
-          400: describeProblem("The body is missing a field, holds a value of the wrong shape, or names one the server owns."),
+          400: describeProblem("The body is missing a field, holds a value of the wrong shape, names one the server owns, or gives a starred waste code with `hazardous: false`."),
           401: describeProblem("No usable token (see WWW-Authenticate)."),
           403: describeProblem("No active account here, or the caller's role does not allow `create` on `configure.master`."),
           409: describeProblem("The company already has a waste fraction with that key, or with that name."),
@@ -220,18 +304,7 @@ export function catalogueRoutes(guard: MiddlewareHandler<AuthEnv>) {
       guard,
       requireGrant(MODULE, "create"),
       validate("json", WasteFractionCreate),
-      async (c) => {
-        const values = c.req.valid("json")
-        const sentences = { [FRACTION_KEY_TAKEN]: fractionKeyTaken(values.key), [FRACTION_NAME_TAKEN]: fractionNameTaken(values.name) }
-        const [row] = await refuseDuplicate(sentences, () =>
-          c
-            .get("tx")
-            .insert(wasteFraction)
-            .values({ ...values, id: newId(), companyId: c.get("principal").companyId })
-            .returning(fractionColumns),
-        )
-        return created(c, "/waste-fractions", fractionOf(row))
-      },
+      async (c) => created(c, "/waste-fractions", await createWasteFraction(c.get("tx"), c.get("principal"), c.req.valid("json"))),
     )
     .get(
       "/waste-fractions/:id",
@@ -267,13 +340,13 @@ export function catalogueRoutes(guard: MiddlewareHandler<AuthEnv>) {
       "/waste-fractions/:id",
       describeRoute({
         operationId: "patchWasteFraction",
-        summary: "Rename a waste fraction or set its waste code, treatment or density",
+        summary: "Rename a waste fraction or set its waste code, treatment, density or hazardous flag",
         description:
-          "Changes the name a person reads, the waste code the national waste-data system keys the fraction by, how it is treated once collected, or its density, kg per cubic metre as it lies in a container, which a stop's expected weight multiplies its container's litres by (1 to 2000); a null clears the code, the treatment or the density. The key is not patchable: it is the slug reports, imports and fixtures quote, and a fraction that needs another key is another fraction.",
+          "Changes the name a person reads, the waste code the national waste-data system keys the fraction by, how it is treated once collected, or its density, kg per cubic metre as it lies in a container, which a stop's expected weight multiplies its container's litres by (1 to 2000); a null clears the code, the treatment or the density. `hazardous` says it is hazardous waste (O18 of #290); a patch setting a starred code and saying nothing of it makes the fraction hazardous, and a fraction under a starred code — the patch's or the one it holds — is never told it is not (400 at `hazardous`). The key is not patchable: it is the slug reports, imports and fixtures quote, and a fraction that needs another key is another fraction.",
         security: BEARER_SECURITY,
         responses: {
           200: describeJson("The waste fraction as it now stands.", WasteFraction),
-          400: describeProblem("The path does not hold an id, or the patch is empty or names a field the caller does not own, the key included."),
+          400: describeProblem("The path does not hold an id, or the patch is empty, names a field the caller does not own, the key included, or tells a fraction under a starred code it is not hazardous."),
           401: describeProblem("No usable token (see WWW-Authenticate)."),
           403: describeProblem("No active account here, or the caller's role does not allow `edit` on `configure.master`."),
           404: describeProblem("No waste fraction with that id in this company."),
@@ -284,21 +357,7 @@ export function catalogueRoutes(guard: MiddlewareHandler<AuthEnv>) {
       requireGrant(MODULE, "edit"),
       validate("param", IdParam),
       validate("json", WasteFractionPatch),
-      async (c) => {
-        const { id } = c.req.valid("param")
-        const patch = c.req.valid("json")
-        const sentences: Record<string, string> = patch.name === undefined ? {} : { [FRACTION_NAME_TAKEN]: fractionNameTaken(patch.name) }
-        const [row] = await refuseDuplicate(sentences, () =>
-          c
-            .get("tx")
-            .update(wasteFraction)
-            .set(patch)
-            .where(and(eq(wasteFraction.companyId, c.get("principal").companyId), eq(wasteFraction.id, id)))
-            .returning(fractionColumns),
-        )
-        if (row === undefined) throw noSuchFraction(id)
-        return c.json(fractionOf(row))
-      },
+      async (c) => c.json(await patchWasteFraction(c.get("tx"), c.get("principal"), c.req.valid("param").id, c.req.valid("json"))),
     )
     .get(
       "/container-types",
@@ -350,17 +409,7 @@ export function catalogueRoutes(guard: MiddlewareHandler<AuthEnv>) {
       guard,
       requireGrant(MODULE, "create"),
       validate("json", ContainerTypeCreate),
-      async (c) => {
-        const values = c.req.valid("json")
-        const [row] = await refuseDuplicate({ [TYPE_NAME_TAKEN]: typeNameTaken(values.name) }, () =>
-          c
-            .get("tx")
-            .insert(containerType)
-            .values({ ...values, id: newId(), companyId: c.get("principal").companyId })
-            .returning(typeColumns),
-        )
-        return created(c, "/container-types", typeOf(row))
-      },
+      async (c) => created(c, "/container-types", await createContainerType(c.get("tx"), c.get("principal"), c.req.valid("json"))),
     )
     .get(
       "/container-types/:id",
@@ -413,21 +462,7 @@ export function catalogueRoutes(guard: MiddlewareHandler<AuthEnv>) {
       requireGrant(MODULE, "edit"),
       validate("param", IdParam),
       validate("json", ContainerTypePatch),
-      async (c) => {
-        const { id } = c.req.valid("param")
-        const patch = c.req.valid("json")
-        const sentences: Record<string, string> = patch.name === undefined ? {} : { [TYPE_NAME_TAKEN]: typeNameTaken(patch.name) }
-        const [row] = await refuseDuplicate(sentences, () =>
-          c
-            .get("tx")
-            .update(containerType)
-            .set(patch)
-            .where(and(eq(containerType.companyId, c.get("principal").companyId), eq(containerType.id, id)))
-            .returning(typeColumns),
-        )
-        if (row === undefined) throw noSuchType(id)
-        return c.json(typeOf(row))
-      },
+      async (c) => c.json(await patchContainerType(c.get("tx"), c.get("principal"), c.req.valid("param").id, c.req.valid("json"))),
     )
     .get(
       "/service-frequencies",

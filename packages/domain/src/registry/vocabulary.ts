@@ -23,6 +23,11 @@ export const CUSTOMER_KINDS = ["person", "organisation"] as const
 /** Whether the Customer is served; a record is deactivated, never deleted. */
 export const CUSTOMER_STATUSES = ["active", "inactive"] as const
 
+/** What a Contact Person does for the organisation Customer they speak for (#291 C14): its main contact, who receives its invoices, who runs its service day to day, who is on site at its properties (a caretaker), or anything else. */
+export const CONTACT_ROLES = ["primary", "billing", "operations", "on-site", "other"] as const
+/** Whether the Contact Person still speaks for their Customer; one who has left is deactivated, never deleted, since a message sent to them stays on the ledger. */
+export const CONTACT_STATUSES = ["active", "inactive"] as const
+
 /** What stands on the Property, which decides what may be collected there. */
 export const PROPERTY_KINDS = ["residential", "commercial", "public", "mixed", "other"] as const
 /** Whether the Property is served. */
@@ -57,8 +62,8 @@ export const WASTE_TREATMENTS = ["reuse", "recycling", "energy-recovery", "dispo
 export const PRODUCT_KINDS = ["container-collection", "recurring-service", "additional-service"] as const
 /** Where the Product stands in the catalogue. Only an active Product can be subscribed to, which the API holds (Issue #79); a subscription already made stands when its Product is withdrawn. */
 export const PRODUCT_STATUSES = ["draft", "active", "inactive"] as const
-/** What one of the Product is: prices are Finance & Contracting's, the unit they are quoted per is here. A `day` is a container on hire, charged by its days on site (M14 of #293); a `visit` a recycling-centre visit its Visit Rule charges (#393); a `tonne` a collection charged by its reviewed weight (O28 of #290, C32 of #291). */
-export const PRODUCT_UNITS = ["pickup", "month", "job", "day", "visit", "tonne"] as const
+/** What one of the Product is: prices are Finance & Contracting's, the unit they are quoted per is here. A `day` is a container on hire, charged by its days on site (M14 of #293); a `visit` a recycling-centre visit its Visit Rule charges (#393); an `item` one of the things a bulky-waste booking lists, charged by their count (#449); a `tonne` a collection charged by its reviewed weight (O28 of #290, C32 of #291). */
+export const PRODUCT_UNITS = ["pickup", "month", "job", "day", "visit", "item", "tonne"] as const
 
 /** Where the Agreement stands; "expiring", "expired" and "terminated" are readings of `valid_to` (ADR-0005), never stored. */
 export const AGREEMENT_STATUSES = ["draft", "active", "cancelled"] as const
@@ -67,6 +72,8 @@ export const BILLING_CADENCES = ["monthly", "quarterly", "annual", "manual"] as 
 
 /** Whose Container it is; `unrecorded` is what an imported registry usually says. */
 export const CONTAINER_OWNERSHIPS = ["company", "customer", "unrecorded"] as const
+/** What a code read off a bin names a Container by (O19 of #290): the visible label, the printed barcode, the RFID tag, or the maker's serial number. */
+export const CONTAINER_IDENTIFIERS = ["label", "barcode", "rfid", "serial-number"] as const
 /** What a customer applies for (M7 of #293): to be exempt from a collection, to pause it, a longer interval between collections, to compost food waste at home, to share a bin with a neighbour, to be collected from where they can manage, or a fee put right. */
 export const APPLICATION_KINDS = ["exemption", "pause", "longer-interval", "home-composting", "shared-bin", "assisted-collection", "fee-correction"] as const
 /** Where an Application stands: received, under the office's review, decided, or withdrawn by the customer. Whether a decision is still in force is a reading of its period, never a status. */
@@ -78,6 +85,8 @@ export const DECISION_OUTCOMES = ["granted", "partly-granted", "refused"] as con
 
 export type CustomerKind = (typeof CUSTOMER_KINDS)[number]
 export type CustomerStatus = (typeof CUSTOMER_STATUSES)[number]
+export type ContactRole = (typeof CONTACT_ROLES)[number]
+export type ContactStatus = (typeof CONTACT_STATUSES)[number]
 export type PropertyKind = (typeof PROPERTY_KINDS)[number]
 export type PropertyStatus = (typeof PROPERTY_STATUSES)[number]
 export type PropertyPartyRole = (typeof PROPERTY_PARTY_ROLES)[number]
@@ -96,6 +105,7 @@ export type ProductUnit = (typeof PRODUCT_UNITS)[number]
 export type AgreementStatus = (typeof AGREEMENT_STATUSES)[number]
 export type BillingCadence = (typeof BILLING_CADENCES)[number]
 export type ContainerOwnership = (typeof CONTAINER_OWNERSHIPS)[number]
+export type ContainerIdentifier = (typeof CONTAINER_IDENTIFIERS)[number]
 export type ApplicationKind = (typeof APPLICATION_KINDS)[number]
 export type ApplicationStatus = (typeof APPLICATION_STATUSES)[number]
 export type ApplicationChannel = (typeof APPLICATION_CHANNELS)[number]
@@ -107,6 +117,8 @@ export const REGISTRY_VOCABULARIES = {
   WASTE_TREATMENTS,
   CUSTOMER_KINDS,
   CUSTOMER_STATUSES,
+  CONTACT_ROLES,
+  CONTACT_STATUSES,
   PROPERTY_KINDS,
   PROPERTY_STATUSES,
   PROPERTY_PARTY_ROLES,
@@ -125,6 +137,7 @@ export const REGISTRY_VOCABULARIES = {
   AGREEMENT_STATUSES,
   BILLING_CADENCES,
   CONTAINER_OWNERSHIPS,
+  CONTAINER_IDENTIFIERS,
   APPLICATION_KINDS,
   APPLICATION_STATUSES,
   APPLICATION_CHANNELS,

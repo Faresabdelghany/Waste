@@ -57,7 +57,8 @@
 // office to act on rather than a silent charge or a silent nothing. A bulky
 // collection (O11 of #290) is charged the same way, at the product its
 // booking froze, to the agreement the booking names: the worker reads both
-// off the booking into the same facts.
+// off the booking into the same facts. Its product may also be sold by the
+// item (#449), and is then charged the booking's item count, not one.
 //
 // Two of the facts are the table's word and not the payload's, because
 // pg-boss delivers at least once and in no promised order (part B): the
@@ -115,6 +116,7 @@
 // What the draft does not carry is the writer's: `createdBy` null,
 // `sourceEventId` the event's id (`billable_event_origin_shape` ties the two),
 // the stamps, and the row's own id.
+import { bulkyQuantity, isBulkyProductUnit } from "../execution/bulky"
 import type { PickupExceptionJudgement } from "../execution/pickup-exceptions"
 import { isWorkOrderService, type OutboxKind, type PickupOrigin, type PickupOutcome, type PickupService } from "../execution/vocabulary"
 import type { AgreementStatus, CustomerKind, ProductStatus, ProductUnit } from "../registry/vocabulary"
@@ -216,6 +218,8 @@ export type JobChargeFacts<Row extends PriceRow = PriceRow> = {
   subscriptionId: string | null
   /** The list that agreement is priced under, with its rows for the product on the service date; null where neither the agreement nor the project names one. */
   priceList: PricedList<Row> | null
+  /** A bulky collection's booking's items (#449), which a product sold by the item is charged by; null for a work order. */
+  items: readonly { quantity: number }[] | null
 }
 
 /** The product a completed ticket charges for, as the worker read it (#291 C3), with what its price is resolved from. */
@@ -345,8 +349,9 @@ export const chargesTicketWork = (charge: TicketChargeFacts): boolean => !charge
 
 const NO_LINKS: BillableEventLinks = { routeId: null, pickupId: null, ticketId: null, reversesEventId: null, proofId: null, visitId: null, unloadId: null }
 
-/** Whether a work order may be charged at the project's product: one sold by the job, while it is offered — a retired one is the office's to replace, never a silent charge. */
-export const chargesJob = (job: JobChargeFacts): boolean => job.product.unit === "job" && job.product.status === "active"
+/** Whether a work order may be charged at the project's product: one sold by the job, while it is offered — a retired one is the office's to replace, never a silent charge. A bulky collection may also be charged at one sold by the item (#449). */
+export const chargesJob = (job: JobChargeFacts): boolean =>
+  (job.items === null ? job.product.unit === "job" : isBulkyProductUnit(job.product.unit)) && job.product.status === "active"
 
 /** The office's services charged as a job once done: the work orders, and a bulky collection (O11 of #290) at its booking's product. */
 export const chargedAsJob = (service: PickupService): boolean => isWorkOrderService(service) || service === "bulky"
@@ -355,7 +360,9 @@ export const chargedAsJob = (service: PickupService): boolean => isWorkOrderServ
 function jobDraft<Row extends PriceRow>(facts: PickupEventFacts<Row>, labels: PriceLabels): BillableEventDraft | undefined {
   if (!chargedAsJob(facts.service) || facts.bookedForTicket || facts.job === null) return undefined
   const { job } = facts
-  const base = { kind: "job" as const, serviceDate: facts.serviceDate, quantity: 1, links: { ...NO_LINKS, routeId: facts.routeId, pickupId: facts.pickupId } }
+  // A bulky booking's product sold by the item is charged its items' count (#449); every other job is one.
+  const quantity = job.items === null ? 1 : bulkyQuantity(job.product.unit, job.items)
+  const base = { kind: "job" as const, serviceDate: facts.serviceDate, quantity, links: { ...NO_LINKS, routeId: facts.routeId, pickupId: facts.pickupId } }
   // The agreement first, as a pickup's placement is: with none reachable a product would price under nothing, so the block says what to fix.
   if (job.agreement === null) return { ...base, agreementId: null, subscriptionId: null, productId: chargesJob(job) ? job.product.id : null, price: null, blockReason: "no-subscription" }
   if (!chargesJob(job)) return { ...base, agreementId: job.agreement.id, subscriptionId: job.subscriptionId, productId: null, price: null, blockReason: "no-product" }
@@ -364,7 +371,7 @@ function jobDraft<Row extends PriceRow>(facts: PickupEventFacts<Row>, labels: Pr
       agreement: { status: job.agreement.status },
       priceList: job.priceList,
       product: job.product,
-      quantity: 1,
+      quantity,
       input: {
         on: facts.serviceDate,
         planningAreaId: facts.planningAreaId,

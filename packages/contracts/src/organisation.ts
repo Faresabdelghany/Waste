@@ -41,6 +41,8 @@
 import { PUBLIC_SLUG_LENGTH, PUBLIC_SLUG_PATTERN } from "@waste/domain/access/public-slug"
 import { DEFAULT_WEIGHT_TOLERANCE_PERCENT, WEIGHT_TOLERANCE_PERCENT } from "@waste/domain/execution/unloads"
 import { DEFAULT_WEEKEND } from "@waste/domain/planning/vocabulary"
+import { RETENTION_DAYS_BOUNDS } from "@waste/domain/privacy/retention"
+import { GPS_PURPOSES } from "@waste/domain/privacy/vocabulary"
 import * as z from "zod"
 
 import { Bic, DEFAULT_PAYMENT_TERMS_DAYS, FikCreditorNumber, Iban, PaymentReferenceScheme, PaymentTermsDays, VatNumber } from "./finance"
@@ -127,6 +129,25 @@ const ProjectTolerance = PositiveInt.max(WEIGHT_TOLERANCE_PERCENT.max)
 /** The days a project rests on: distinct weekdays, at most six. */
 const Weekend = ServiceDays.max(WEEKEND_MAX, { error: A_WORKING_DAY })
 
+export const GpsPurpose = z.enum(GPS_PURPOSES)
+export type GpsPurpose = z.infer<typeof GpsPurpose>
+
+/** A kind's days within the policy's bounds (@waste/domain/privacy/retention). */
+const retentionDays = (kind: keyof typeof RETENTION_DAYS_BOUNDS) => PositiveInt.max(RETENTION_DAYS_BOUNDS[kind].max)
+
+/**
+ * A project's privacy policy (#291 C19): the days its drivers' positions and
+ * its stops' photos and signatures are kept, and the purpose its vehicles'
+ * positions are recorded for. Null is no policy of its
+ * own: the deployment's setting stands, as before policies.
+ */
+export const PrivacyPolicy = z.strictObject({
+  positionRetentionDays: retentionDays("positions").nullable(),
+  proofRetentionDays: retentionDays("proofs").nullable(),
+  gpsPurpose: GpsPurpose.nullable(),
+})
+export type PrivacyPolicy = z.infer<typeof PrivacyPolicy>
+
 export const Project = z.object({
   ...stamped,
   name: Label,
@@ -150,6 +171,8 @@ export const Project = z.object({
   weightTolerancePercent: ProjectTolerance.default(DEFAULT_WEIGHT_TOLERANCE_PERCENT),
   /** Whether the project's hires and work-order jobs are held for the office's review as they are charged (M14 of #293): a run passes over a held event until it is released. */
   holdForReview: z.boolean(),
+  /** Its privacy policy (#291 C19), written whole through `PUT /projects/:id/privacy-policy` under `configure.privacy`; absent from a payload before it, read as no policy. */
+  privacyPolicy: PrivacyPolicy.default({ positionRetentionDays: null, proofRetentionDays: null, gpsPurpose: null }),
 })
 export type Project = z.infer<typeof Project>
 

@@ -103,7 +103,7 @@ import { customer } from "@waste/db/schema/customers"
 import { pickup, proofOfService, route, unload } from "@waste/db/schema/execution"
 import { weightReview } from "@waste/db/schema/finance"
 import { ticketKindProduct, workOrderProduct } from "@waste/db/schema/finance"
-import { bulkyBooking } from "@waste/db/schema/bulky"
+import { bulkyBooking, bulkyBookingItem } from "@waste/db/schema/bulky"
 import { ticket, ticketBooking } from "@waste/db/schema/resolution"
 import { routeScheme } from "@waste/db/schema/route-schemes"
 import { and, desc, eq, inArray, lte, sql } from "drizzle-orm"
@@ -378,20 +378,22 @@ async function jobFacts(tx: Tx, companyId: string, found: PickupRow): Promise<Jo
           .where(and(eq(subscription.companyId, companyId), eq(subscription.projectId, found.projectId), eq(subscription.id, subscriptionId)))
           .limit(1)
   const facts = served === undefined ? undefined : await agreementFacts(tx, scope, served.agreementId)
-  if (facts === undefined) return { product: jobProduct, agreement: null, subscriptionId: null, priceList: null }
+  if (facts === undefined) return { product: jobProduct, agreement: null, subscriptionId: null, priceList: null, items: null }
   const list = facts.status === "draft" ? undefined : await listInForce(tx, scope, facts.priceListId, found.serviceDate)
   return {
     product: jobProduct,
     agreement: { id: facts.id, status: facts.status, customerKind: facts.customerKind, customerId: facts.customerId },
     subscriptionId,
     priceList: list === undefined ? null : { id: list.id, currency: list.currency, rows: await rowsOn(tx, companyId, list.id, jobProduct.id, found.serviceDate) },
+    items: null,
   }
 }
 
 /**
  * A bulky collection's charge (O11 of #290): the product its booking froze
- * from its schedule, and the agreement the booking names, with the list it is
- * priced under on the service date; none for a booking cancelled. The
+ * from its schedule, the booking's items (#449), and the agreement the
+ * booking names, with the list it is priced under on the service date; none
+ * for a booking cancelled. The
  * booking is the stop's by the table's shape, so one missing is a broken
  * invariant and thrown.
  */
@@ -408,14 +410,20 @@ async function bulkyFacts(tx: Tx, companyId: string, found: PickupRow): Promise<
   // A cancelled booking is charged nothing, whatever a stop of it says: the API refuses its stop a correction to completed, and this is the second stop.
   if (booked.cancelledAt !== null) return null
   const bulkyProduct = { id: booked.id, status: booked.status as ProductStatus, unit: booked.unit as ProductUnit, vatPercent: booked.vatPercent }
+  // Its lines, which a product sold by the item is charged by (#449).
+  const items = await tx
+    .select({ quantity: bulkyBookingItem.quantity })
+    .from(bulkyBookingItem)
+    .where(and(eq(bulkyBookingItem.companyId, companyId), eq(bulkyBookingItem.bookingId, found.bulkyBookingId)))
   const facts = await agreementFacts(tx, scope, booked.agreementId)
-  if (facts === undefined) return { product: bulkyProduct, agreement: null, subscriptionId: null, priceList: null }
+  if (facts === undefined) return { product: bulkyProduct, agreement: null, subscriptionId: null, priceList: null, items }
   const list = facts.status === "draft" ? undefined : await listInForce(tx, scope, facts.priceListId, found.serviceDate)
   return {
     product: bulkyProduct,
     agreement: { id: facts.id, status: facts.status, customerKind: facts.customerKind, customerId: facts.customerId },
     subscriptionId: null,
     priceList: list === undefined ? null : { id: list.id, currency: list.currency, rows: await rowsOn(tx, companyId, list.id, bulkyProduct.id, found.serviceDate) },
+    items,
   }
 }
 

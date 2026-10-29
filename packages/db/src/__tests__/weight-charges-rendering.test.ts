@@ -26,7 +26,7 @@ import { checksOf, index, oneOfCheck, partialUniqueIndex, projectFkTo, ref } fro
 
 const alter = (table: string, statement: string): string => `ALTER TABLE "wms"."${table}" ${statement};`
 
-/** The clause 0066 adds to the event's kind shape. */
+/** The clause the weight charges' migration adds to the event's kind shape. */
 const WEIGHT_CLAUSE = `when 'weight' then ${ref("billable_event", "unload_id")} is not null and ${ref("billable_event", "pickup_id")} is not null and ${ref("billable_event", "ticket_id")} is null and ${ref("billable_event", "reverses_event_id")} is null`
 
 /** What drizzle-kit wrote: the checks and the consumer's key dropped, the two columns, the key into the Unload, the two indexes, the key again, then the checks added again. */

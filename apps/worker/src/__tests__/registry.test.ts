@@ -144,6 +144,7 @@ describe("the job registry", () => {
       "execution.purge-proof-objects",
       "resolution.alert-rules",
       "execution.purge-positions",
+      "messaging.send",
     ])
   })
 

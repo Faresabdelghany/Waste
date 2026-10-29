@@ -19,6 +19,11 @@
 // `Within tolerance`, `Above tolerance` or `Not measured`, the Tolerance
 // filter's values.
 //
+// Disposal documents (O18 of #290): an unload's details read or download its
+// waste transfer note, the PDF the API renders, except where the API has none
+// to give — a load the station refused, an unload a review corrected — and
+// the details say so instead (`transferNoteWithheld`).
+//
 // Two sentences of the contract's own rules are spelled again here (the web
 // imports the contracts as types only) and held equal by the test.
 //
@@ -33,7 +38,7 @@ import { MASTER_DATA_KIND_DETAILS } from "@/lib/data/master-data-kinds"
 import { isUnloadRecord, UNLOAD_PREFIX, UNLOAD_RECORD_KIND, WEIGHTS_MODULE } from "@/lib/data/provider-money"
 import { REFUSAL_LABELS, SAY_WHY_REFUSED } from "@/lib/data/unload-refusals"
 
-import { command, create, get, listAll } from "../client"
+import { command, create, get, getFile, listAll, type ApiFile } from "../client"
 import { inheritedPresentation, said, stampFacts, typed, webIdOf, type Client, type CommandInput, type ResourceAdapter, type ServerModule } from "./adapter"
 import { instantOn, projectTimezoneOf, shownOn } from "./clock"
 import { referenced, refusal } from "./places"
@@ -68,6 +73,24 @@ export function weightReviewsOffered(record: { submittedValues?: Record<string, 
   const status = WEIGHT_REVIEW_STATUSES.find((candidate) => candidate === record.submittedValues?.reviewStatus)
   if (status === undefined) return []
   return WEIGHT_REVIEW_COMMANDS.filter((name) => weightReviewTransition(status, DECISION[name], null).kind === "move")
+}
+
+/** Why an unload's details offer no transfer note (O18 of #290), the API's two 409s in the desk's words. */
+export const TRANSFER_NOTE_WITHHELD = {
+  refused: "The station refused this load: it was not transferred and has no transfer note.",
+  corrected: "This unload was corrected: its transfer note is the correction's.",
+} as const
+
+/** Why an unload has no transfer note — a load the station refused, an unload a review corrected — or null where it has one. */
+export function transferNoteWithheld(record: { submittedValues?: Record<string, unknown> }): string | null {
+  if (typeof record.submittedValues?.refusalReason === "string") return TRANSFER_NOTE_WITHHELD.refused
+  if (record.submittedValues?.reviewStatus === "corrected") return TRANSFER_NOTE_WITHHELD.corrected
+  return null
+}
+
+/** `GET /unloads/:id/transfer-note`: the unload's waste transfer note as the API renders it (O18 of #290). */
+export function unloadTransferNote(client: Client, serverId: string): Promise<ApiFile> {
+  return getFile(client, `/unloads/${serverId}/transfer-note`, "application/pdf")
 }
 
 /** An unload as a resource: a ledger row stamped with its `recordedAt` as both of a resource's stamps. */

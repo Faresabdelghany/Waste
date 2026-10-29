@@ -346,6 +346,25 @@ describe("finance.record-billable-events against Postgres", { skip }, () => {
     assert.equal((await handle(published("pickup-corrected", collected, { ...payload, status: "failed", reason: "not-presented" }))).did, "cancelled")
   })
 
+  test("a bulky booking at a product sold by the item is charged its items' count (#449): a sofa and two mattresses are three at the row's price", async () => {
+    const bulky = tenant.products.bulky.id
+    await withCompany(pool.db, tenant.companyId, (tx) => tx.update(product).set({ unit: "item" }).where(eq(product.id, bulky)))
+    try {
+      const booking = await seedBulkyBooking(pool, tenant, { agreementId: tenant.agreements.housing.id, customerId: tenant.customers.housing.id, propertyId: tenant.properties.havnegade.id, items: [1, 2] })
+      const stops = await seedCompletedRoute(pool, tenant, [{ containerId: null, propertyId: tenant.properties.havnegade.id, origin: "office", service: "bulky", bulkyBookingId: booking.id }], FIXTURE_DAY, { adHoc: true })
+      const [collected] = stops.pickupIds
+      const payload = { ...pickupPayload(stops.id, collected, null, "completed"), origin: "office", service: "bulky", bulkyBookingId: booking.id }
+      const recorded = await handle(published("pickup-completed", collected, payload))
+      const row = (await allEvents()).find((candidate) => candidate.id === recorded.billableEventId)
+      assert.deepEqual(
+        [recorded.did, row?.kind, row?.status, row?.productId, row?.quantity, row?.unitPriceMinor, row?.netMinor, row?.vatMinor, row?.blockReason],
+        ["recorded", "job", "ready", bulky, 3, 35_000, 105_000, 26_250, null],
+      )
+    } finally {
+      await withCompany(pool.db, tenant.companyId, (tx) => tx.update(product).set({ unit: "job" }).where(eq(product.id, bulky)))
+    }
+  })
+
   test("a cancelled bulky booking is charged nothing, whatever a stop of it says (O11 of #290)", async () => {
     const booking = await seedBulkyBooking(pool, tenant, { agreementId: tenant.agreements.housing.id, customerId: tenant.customers.housing.id, propertyId: tenant.properties.havnegade.id })
     await withCompany(pool.db, tenant.companyId, async (tx) => {

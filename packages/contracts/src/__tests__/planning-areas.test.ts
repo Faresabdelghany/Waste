@@ -12,6 +12,8 @@ import {
   PlanningAreaCreated,
   PlanningAreaListQuery,
   PlanningAreaPatch,
+  PlanningAreasAtQuery,
+  PlanningAreasContainingQuery,
 } from "../planning-areas"
 import { refusal, refusesAnEmptyPatch, refusesWhatTheServerOwns } from "./expect"
 
@@ -157,5 +159,24 @@ describe("PlanningAreaListQuery and PlanningAreaBoundaryListQuery", () => {
     assert.equal(PlanningAreaBoundaryVersionsQuery.safeParse({ validOn: "June" }).success, false)
     assert.equal("projectId" in PlanningAreaBoundaryVersionsQuery.shape, false, "no project filter: the area's is the only one")
     assert.equal("planningAreaId" in PlanningAreaBoundaryVersionsQuery.shape, false)
+  })
+})
+
+describe("the address → zone read's queries (O29 of #290, row 1.13)", () => {
+  test("a property's zones take a day and a purpose, the citizens' zones unless told", () => {
+    assert.deepEqual(PlanningAreasAtQuery.parse({}), { purpose: "notification" })
+    assert.deepEqual(PlanningAreasAtQuery.parse({ on: "2026-07-01", purpose: "route-planning" }), { on: "2026-07-01", purpose: "route-planning" })
+    assert.equal(PlanningAreasAtQuery.safeParse({ on: "2026-02-30" }).success, false)
+    assert.equal(PlanningAreasAtQuery.safeParse({ purpose: "billing" }).success, false)
+  })
+
+  test("a point's take the project and the point as decimal longitude and latitude on the globe", () => {
+    assert.deepEqual(PlanningAreasContainingQuery.parse({ projectId: ID, lng: "12.58", lat: "55.7" }), { projectId: ID, lng: 12.58, lat: 55.7, purpose: "notification" })
+    assert.deepEqual(PlanningAreasContainingQuery.parse({ projectId: ID, lng: "-0.5", lat: "-33" }), { projectId: ID, lng: -0.5, lat: -33, purpose: "notification" })
+    for (const lng of ["1e1", "0x1", "", " 12", "12,5", "200"]) {
+      assert.deepEqual(refusal(PlanningAreasContainingQuery.safeParse({ projectId: ID, lng, lat: "55.7" })).map((issue) => issue.path), ["lng"], lng)
+    }
+    assert.deepEqual(refusal(PlanningAreasContainingQuery.safeParse({ projectId: ID, lng: "12.58", lat: "91" })).map((issue) => issue.path), ["lat"])
+    assert.equal(PlanningAreasContainingQuery.safeParse({ lng: "12.58", lat: "55.7" }).success, false, "the project is named")
   })
 })

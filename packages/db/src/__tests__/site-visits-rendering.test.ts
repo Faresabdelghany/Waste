@@ -6,9 +6,7 @@
 // outbox's two checks by the visit's two kinds about a `site-visit`, and the
 // billable event's `visit` kind, its clause of the kind's shape, the
 // consumer's `visit-voided` reason, and the visit with its key, its index and
-// its shape — each as 0054 spelled them, today's less what 0066 added after
-// (O28 of #290): the `tonne` unit, `weight-reviewed`, the `weight` kind with
-// its clause and the `weight-revised` reason. The kind's shape is respelt whole, as Postgres has no ALTER for
+// its shape. The kind's shape is respelt whole, as Postgres has no ALTER for
 // a check; finance-rendering.test.ts spells it out, so here it is read from
 // the schema. Then the migration, whose head is exactly those statements and
 // whose tail is each new table's fence and `updated_at` trigger, the
@@ -39,16 +37,18 @@ const NEW_TABLES = { accessCredential, siteVisit, siteVisitFraction, visitRule, 
 
 const alter = (table: string, statement: string): string => `ALTER TABLE "wms"."${table}" ${statement};`
 
-/** The clause 0054 adds to the event's kind shape. */
-const VISIT_CLAUSE = `when 'visit' then ${ref("billable_event", "visit_id")} is not null and ${ref("billable_event", "pickup_id")} is null and ${ref("billable_event", "ticket_id")} is null and ${ref("billable_event", "reverses_event_id")} is null`
+/** The units 0054 wrote: every unit before the item (#449) and the tonne (O28 of #290), which later migrations added. */
+const UNITS_AS_OF_0054 = PRODUCT_UNITS.filter((unit) => unit !== "item" && unit !== "tonne")
 
-/** The clause 0066 added to the kind's shape (O28 of #290), after 0054's. */
+/** The clause the weight charges' migration added to the kind's shape (O28 of #290), after 0054's. */
 const WEIGHT_CLAUSE = ` when 'weight' then ${ref("billable_event", "unload_id")} is not null and ${ref("billable_event", "pickup_id")} is not null and ${ref("billable_event", "ticket_id")} is null and ${ref("billable_event", "reverses_event_id")} is null`
 
-/** The vocabularies as 0054 spelled them: today's less what 0066 added (O28 of #290). */
-const UNITS_AS_OF_0054 = PRODUCT_UNITS.filter((unit) => unit !== "tonne")
+/** The event's vocabularies as 0054 spelled them: today's less what the weight charges' migration added (O28 of #290). */
 const KINDS_AS_OF_0054 = BILLABLE_EVENT_KINDS.filter((kind) => kind !== "weight")
 const REASONS_AS_OF_0054 = CANCEL_REASONS.filter((reason) => reason !== "weight-revised")
+
+/** The clause 0054 adds to the event's kind shape. */
+const VISIT_CLAUSE = `when 'visit' then ${ref("billable_event", "visit_id")} is not null and ${ref("billable_event", "pickup_id")} is null and ${ref("billable_event", "ticket_id")} is null and ${ref("billable_event", "reverses_event_id")} is null`
 
 /** What drizzle-kit wrote into the contexts before: the checks dropped, the visit's column, key and index, and the checks added again. */
 const ALTERED = (): string[] => {

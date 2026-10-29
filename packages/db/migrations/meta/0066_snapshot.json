@@ -1,5 +1,5 @@
 {
-  "id": "d2151c85-4c93-47cf-9a78-dd8eba1de03b",
+  "id": "cc115fcf-cd34-4583-bf20-fbc65cb62db2",
   "prevId": "b09b6e28-b3c4-4ca7-909d-dcf2d1415c93",
   "version": "7",
   "dialect": "postgresql",
@@ -1493,7 +1493,7 @@
         },
         "product_unit_one_of": {
           "name": "product_unit_one_of",
-          "value": "\"wms\".\"product\".\"unit\" in ('pickup', 'month', 'job', 'day', 'visit', 'tonne')"
+          "value": "\"wms\".\"product\".\"unit\" in ('pickup', 'month', 'job', 'day', 'visit')"
         },
         "product_vat_percent_range": {
           "name": "product_vat_percent_range",
@@ -8457,6 +8457,114 @@
       "checkConstraints": {},
       "isRLSEnabled": false
     },
+    "wms.decommission_reason": {
+      "name": "decommission_reason",
+      "schema": "wms",
+      "columns": {
+        "id": {
+          "name": "id",
+          "type": "uuid",
+          "primaryKey": true,
+          "notNull": true,
+          "default": "wms.uuidv7()"
+        },
+        "company_id": {
+          "name": "company_id",
+          "type": "uuid",
+          "primaryKey": false,
+          "notNull": true
+        },
+        "created_at": {
+          "name": "created_at",
+          "type": "timestamp with time zone",
+          "primaryKey": false,
+          "notNull": true,
+          "default": "now()"
+        },
+        "updated_at": {
+          "name": "updated_at",
+          "type": "timestamp with time zone",
+          "primaryKey": false,
+          "notNull": true,
+          "default": "now()"
+        },
+        "code": {
+          "name": "code",
+          "type": "text",
+          "primaryKey": false,
+          "notNull": true
+        },
+        "name": {
+          "name": "name",
+          "type": "text",
+          "primaryKey": false,
+          "notNull": true
+        },
+        "status": {
+          "name": "status",
+          "type": "text",
+          "primaryKey": false,
+          "notNull": true,
+          "default": "'active'"
+        }
+      },
+      "indexes": {},
+      "foreignKeys": {
+        "decommission_reason_company_id_fk": {
+          "name": "decommission_reason_company_id_fk",
+          "tableFrom": "decommission_reason",
+          "tableTo": "company",
+          "schemaTo": "wms",
+          "columnsFrom": [
+            "company_id"
+          ],
+          "columnsTo": [
+            "id"
+          ],
+          "onDelete": "no action",
+          "onUpdate": "no action"
+        }
+      },
+      "compositePrimaryKeys": {},
+      "uniqueConstraints": {
+        "decommission_reason_code_key": {
+          "name": "decommission_reason_code_key",
+          "nullsNotDistinct": false,
+          "columns": [
+            "company_id",
+            "code"
+          ]
+        },
+        "decommission_reason_name_key": {
+          "name": "decommission_reason_name_key",
+          "nullsNotDistinct": false,
+          "columns": [
+            "company_id",
+            "name"
+          ]
+        },
+        "decommission_reason_tenant_key": {
+          "name": "decommission_reason_tenant_key",
+          "nullsNotDistinct": false,
+          "columns": [
+            "company_id",
+            "id"
+          ]
+        }
+      },
+      "policies": {},
+      "checkConstraints": {
+        "decommission_reason_code_lowercase": {
+          "name": "decommission_reason_code_lowercase",
+          "value": "\"wms\".\"decommission_reason\".\"code\" = lower(\"wms\".\"decommission_reason\".\"code\")"
+        },
+        "decommission_reason_status_one_of": {
+          "name": "decommission_reason_status_one_of",
+          "value": "\"wms\".\"decommission_reason\".\"status\" in ('active', 'inactive')"
+        }
+      },
+      "isRLSEnabled": false
+    },
     "wms.stock_minimum": {
       "name": "stock_minimum",
       "schema": "wms",
@@ -8734,6 +8842,12 @@
           "primaryKey": false,
           "notNull": false
         },
+        "decommission_reason_id": {
+          "name": "decommission_reason_id",
+          "type": "uuid",
+          "primaryKey": false,
+          "notNull": false
+        },
         "reference": {
           "name": "reference",
           "type": "text",
@@ -8900,6 +9014,27 @@
           "concurrently": false,
           "method": "btree",
           "with": {}
+        },
+        "stock_movement_decommission_reason_id_idx": {
+          "name": "stock_movement_decommission_reason_id_idx",
+          "columns": [
+            {
+              "expression": "company_id",
+              "isExpression": false,
+              "asc": true,
+              "nulls": "last"
+            },
+            {
+              "expression": "decommission_reason_id",
+              "isExpression": false,
+              "asc": true,
+              "nulls": "last"
+            }
+          ],
+          "isUnique": false,
+          "concurrently": false,
+          "method": "btree",
+          "with": {}
         }
       },
       "foreignKeys": {
@@ -9023,6 +9158,22 @@
           "onDelete": "no action",
           "onUpdate": "no action"
         },
+        "stock_movement_decommission_reason_id_fk": {
+          "name": "stock_movement_decommission_reason_id_fk",
+          "tableFrom": "stock_movement",
+          "tableTo": "decommission_reason",
+          "schemaTo": "wms",
+          "columnsFrom": [
+            "company_id",
+            "decommission_reason_id"
+          ],
+          "columnsTo": [
+            "company_id",
+            "id"
+          ],
+          "onDelete": "no action",
+          "onUpdate": "no action"
+        },
         "stock_movement_corrects_movement_id_fk": {
           "name": "stock_movement_corrects_movement_id_fk",
           "tableFrom": "stock_movement",
@@ -9076,6 +9227,10 @@
         "stock_movement_placement_shape": {
           "name": "stock_movement_placement_shape",
           "value": "(\"wms\".\"stock_movement\".\"from_kind\" = 'service' or \"wms\".\"stock_movement\".\"to_kind\" = 'service') = (\"wms\".\"stock_movement\".\"placement_id\" is not null)"
+        },
+        "stock_movement_decommission_reason_shape": {
+          "name": "stock_movement_decommission_reason_shape",
+          "value": "(\"wms\".\"stock_movement\".\"kind\" = 'decommission') = (\"wms\".\"stock_movement\".\"decommission_reason_id\" is not null)"
         },
         "stock_movement_kind_shape": {
           "name": "stock_movement_kind_shape",
@@ -10702,7 +10857,7 @@
       "checkConstraints": {
         "outbox_event_kind_one_of": {
           "name": "outbox_event_kind_one_of",
-          "value": "\"wms\".\"outbox_event\".\"kind\" in ('route-dispatched', 'route-started', 'route-completed', 'route-cancelled', 'route-reassigned', 'pickup-completed', 'pickup-failed', 'pickup-skipped', 'pickup-problem-reported', 'pickup-corrected', 'unload-recorded', 'command-rejected', 'ticket-opened', 'ticket-completed', 'ticket-rejected', 'invoice-issued', 'settlement-closed', 'application-decided', 'site-visit-recorded', 'site-visit-voided', 'weight-reviewed')"
+          "value": "\"wms\".\"outbox_event\".\"kind\" in ('route-dispatched', 'route-started', 'route-completed', 'route-cancelled', 'route-reassigned', 'pickup-completed', 'pickup-failed', 'pickup-skipped', 'pickup-problem-reported', 'pickup-corrected', 'unload-recorded', 'command-rejected', 'ticket-opened', 'ticket-completed', 'ticket-rejected', 'invoice-issued', 'settlement-closed', 'application-decided', 'site-visit-recorded', 'site-visit-voided')"
         },
         "outbox_event_aggregate_kind_one_of": {
           "name": "outbox_event_aggregate_kind_one_of",
@@ -17546,18 +17701,6 @@
           "primaryKey": false,
           "notNull": false
         },
-        "unload_id": {
-          "name": "unload_id",
-          "type": "uuid",
-          "primaryKey": false,
-          "notNull": false
-        },
-        "weight_kg": {
-          "name": "weight_kg",
-          "type": "integer",
-          "primaryKey": false,
-          "notNull": false
-        },
         "charge_period_from": {
           "name": "charge_period_from",
           "type": "date",
@@ -17679,56 +17822,7 @@
             }
           ],
           "isUnique": true,
-          "where": "\"wms\".\"billable_event\".\"source_event_id\" is not null and \"wms\".\"billable_event\".\"kind\" not in ('reversal', 'weight')",
-          "concurrently": false,
-          "method": "btree",
-          "with": {}
-        },
-        "billable_event_weight_charge_idx": {
-          "name": "billable_event_weight_charge_idx",
-          "columns": [
-            {
-              "expression": "company_id",
-              "isExpression": false,
-              "asc": true,
-              "nulls": "last"
-            },
-            {
-              "expression": "source_event_id",
-              "isExpression": false,
-              "asc": true,
-              "nulls": "last"
-            },
-            {
-              "expression": "pickup_id",
-              "isExpression": false,
-              "asc": true,
-              "nulls": "last"
-            }
-          ],
-          "isUnique": true,
-          "where": "\"wms\".\"billable_event\".\"kind\" = 'weight'",
-          "concurrently": false,
-          "method": "btree",
-          "with": {}
-        },
-        "billable_event_unload_id_idx": {
-          "name": "billable_event_unload_id_idx",
-          "columns": [
-            {
-              "expression": "company_id",
-              "isExpression": false,
-              "asc": true,
-              "nulls": "last"
-            },
-            {
-              "expression": "unload_id",
-              "isExpression": false,
-              "asc": true,
-              "nulls": "last"
-            }
-          ],
-          "isUnique": false,
+          "where": "\"wms\".\"billable_event\".\"source_event_id\" is not null and \"wms\".\"billable_event\".\"kind\" <> 'reversal'",
           "concurrently": false,
           "method": "btree",
           "with": {}
@@ -18289,24 +18383,6 @@
           "onDelete": "no action",
           "onUpdate": "no action"
         },
-        "billable_event_unload_id_fk": {
-          "name": "billable_event_unload_id_fk",
-          "tableFrom": "billable_event",
-          "tableTo": "unload",
-          "schemaTo": "wms",
-          "columnsFrom": [
-            "company_id",
-            "project_id",
-            "unload_id"
-          ],
-          "columnsTo": [
-            "company_id",
-            "project_id",
-            "id"
-          ],
-          "onDelete": "no action",
-          "onUpdate": "no action"
-        },
         "billable_event_container_id_placement_id_fk": {
           "name": "billable_event_container_id_placement_id_fk",
           "tableFrom": "billable_event",
@@ -18410,7 +18486,7 @@
       "checkConstraints": {
         "billable_event_kind_one_of": {
           "name": "billable_event_kind_one_of",
-          "value": "\"wms\".\"billable_event\".\"kind\" in ('pickup', 'ticket', 'manual', 'reversal', 'subscription', 'job', 'hire', 'pickup-exception', 'visit', 'weight')"
+          "value": "\"wms\".\"billable_event\".\"kind\" in ('pickup', 'ticket', 'manual', 'reversal', 'subscription', 'job', 'hire', 'pickup-exception', 'visit')"
         },
         "billable_event_block_reason_one_of": {
           "name": "billable_event_block_reason_one_of",
@@ -18418,15 +18494,11 @@
         },
         "billable_event_cancel_reason_one_of": {
           "name": "billable_event_cancel_reason_one_of",
-          "value": "\"wms\".\"billable_event\".\"cancel_reason\" in ('pickup-corrected', 'visit-voided', 'weight-revised', 'duplicate', 'not-delivered', 'other')"
+          "value": "\"wms\".\"billable_event\".\"cancel_reason\" in ('pickup-corrected', 'visit-voided', 'duplicate', 'not-delivered', 'other')"
         },
         "billable_event_quantity_positive": {
           "name": "billable_event_quantity_positive",
           "value": "\"wms\".\"billable_event\".\"quantity\" > 0"
-        },
-        "billable_event_weight_kg_positive": {
-          "name": "billable_event_weight_kg_positive",
-          "value": "\"wms\".\"billable_event\".\"weight_kg\" > 0"
         },
         "billable_event_priced_references": {
           "name": "billable_event_priced_references",
@@ -18458,7 +18530,7 @@
         },
         "billable_event_kind_shape": {
           "name": "billable_event_kind_shape",
-          "value": "case \"wms\".\"billable_event\".\"kind\" when 'pickup' then \"wms\".\"billable_event\".\"pickup_id\" is not null and \"wms\".\"billable_event\".\"ticket_id\" is null and \"wms\".\"billable_event\".\"reverses_event_id\" is null when 'ticket' then \"wms\".\"billable_event\".\"ticket_id\" is not null and \"wms\".\"billable_event\".\"pickup_id\" is null and \"wms\".\"billable_event\".\"reverses_event_id\" is null when 'manual' then \"wms\".\"billable_event\".\"pickup_id\" is null and \"wms\".\"billable_event\".\"ticket_id\" is null and \"wms\".\"billable_event\".\"reverses_event_id\" is null and \"wms\".\"billable_event\".\"created_by\" is not null when 'reversal' then \"wms\".\"billable_event\".\"reverses_event_id\" is not null and \"wms\".\"billable_event\".\"pickup_id\" is null and \"wms\".\"billable_event\".\"ticket_id\" is null and \"wms\".\"billable_event\".\"net_minor\" is not null and \"wms\".\"billable_event\".\"net_minor\" <= 0 when 'subscription' then \"wms\".\"billable_event\".\"subscription_id\" is not null and \"wms\".\"billable_event\".\"pickup_id\" is null and \"wms\".\"billable_event\".\"ticket_id\" is null and \"wms\".\"billable_event\".\"reverses_event_id\" is null when 'job' then \"wms\".\"billable_event\".\"pickup_id\" is not null and \"wms\".\"billable_event\".\"ticket_id\" is null and \"wms\".\"billable_event\".\"reverses_event_id\" is null when 'hire' then \"wms\".\"billable_event\".\"subscription_id\" is not null and \"wms\".\"billable_event\".\"placement_id\" is not null and \"wms\".\"billable_event\".\"pickup_id\" is null and \"wms\".\"billable_event\".\"ticket_id\" is null and \"wms\".\"billable_event\".\"reverses_event_id\" is null when 'pickup-exception' then \"wms\".\"billable_event\".\"pickup_id\" is not null and \"wms\".\"billable_event\".\"ticket_id\" is null and \"wms\".\"billable_event\".\"reverses_event_id\" is null when 'visit' then \"wms\".\"billable_event\".\"visit_id\" is not null and \"wms\".\"billable_event\".\"pickup_id\" is null and \"wms\".\"billable_event\".\"ticket_id\" is null and \"wms\".\"billable_event\".\"reverses_event_id\" is null when 'weight' then \"wms\".\"billable_event\".\"unload_id\" is not null and \"wms\".\"billable_event\".\"pickup_id\" is not null and \"wms\".\"billable_event\".\"ticket_id\" is null and \"wms\".\"billable_event\".\"reverses_event_id\" is null else false end"
+          "value": "case \"wms\".\"billable_event\".\"kind\" when 'pickup' then \"wms\".\"billable_event\".\"pickup_id\" is not null and \"wms\".\"billable_event\".\"ticket_id\" is null and \"wms\".\"billable_event\".\"reverses_event_id\" is null when 'ticket' then \"wms\".\"billable_event\".\"ticket_id\" is not null and \"wms\".\"billable_event\".\"pickup_id\" is null and \"wms\".\"billable_event\".\"reverses_event_id\" is null when 'manual' then \"wms\".\"billable_event\".\"pickup_id\" is null and \"wms\".\"billable_event\".\"ticket_id\" is null and \"wms\".\"billable_event\".\"reverses_event_id\" is null and \"wms\".\"billable_event\".\"created_by\" is not null when 'reversal' then \"wms\".\"billable_event\".\"reverses_event_id\" is not null and \"wms\".\"billable_event\".\"pickup_id\" is null and \"wms\".\"billable_event\".\"ticket_id\" is null and \"wms\".\"billable_event\".\"net_minor\" is not null and \"wms\".\"billable_event\".\"net_minor\" <= 0 when 'subscription' then \"wms\".\"billable_event\".\"subscription_id\" is not null and \"wms\".\"billable_event\".\"pickup_id\" is null and \"wms\".\"billable_event\".\"ticket_id\" is null and \"wms\".\"billable_event\".\"reverses_event_id\" is null when 'job' then \"wms\".\"billable_event\".\"pickup_id\" is not null and \"wms\".\"billable_event\".\"ticket_id\" is null and \"wms\".\"billable_event\".\"reverses_event_id\" is null when 'hire' then \"wms\".\"billable_event\".\"subscription_id\" is not null and \"wms\".\"billable_event\".\"placement_id\" is not null and \"wms\".\"billable_event\".\"pickup_id\" is null and \"wms\".\"billable_event\".\"ticket_id\" is null and \"wms\".\"billable_event\".\"reverses_event_id\" is null when 'pickup-exception' then \"wms\".\"billable_event\".\"pickup_id\" is not null and \"wms\".\"billable_event\".\"ticket_id\" is null and \"wms\".\"billable_event\".\"reverses_event_id\" is null when 'visit' then \"wms\".\"billable_event\".\"visit_id\" is not null and \"wms\".\"billable_event\".\"pickup_id\" is null and \"wms\".\"billable_event\".\"ticket_id\" is null and \"wms\".\"billable_event\".\"reverses_event_id\" is null else false end"
         },
         "billable_event_evidence_shape": {
           "name": "billable_event_evidence_shape",
@@ -18467,10 +18539,6 @@
         "billable_event_visit_shape": {
           "name": "billable_event_visit_shape",
           "value": "\"wms\".\"billable_event\".\"visit_id\" is null or \"wms\".\"billable_event\".\"kind\" = 'visit'"
-        },
-        "billable_event_weight_shape": {
-          "name": "billable_event_weight_shape",
-          "value": "(\"wms\".\"billable_event\".\"kind\" = 'weight') = (\"wms\".\"billable_event\".\"unload_id\" is not null) and (\"wms\".\"billable_event\".\"unload_id\" is null) = (\"wms\".\"billable_event\".\"weight_kg\" is null)"
         },
         "billable_event_origin_shape": {
           "name": "billable_event_origin_shape",

@@ -12,7 +12,7 @@ import { defineVocabularyTests } from "../../__tests__/vocabulary"
 import { EXECUTION_SOURCES } from "../../execution/vocabulary"
 import * as vocabulary from "../vocabulary"
 
-defineVocabularyTests("Resolution", vocabulary, vocabulary.RESOLUTION_VOCABULARIES, 12, ["OPEN_TICKET_STATUSES", "CLOSED_TICKET_STATUSES", "BILLABLE_RESOLUTIONS"])
+defineVocabularyTests("Resolution", vocabulary, vocabulary.RESOLUTION_VOCABULARIES, 13, ["OPEN_TICKET_STATUSES", "CLOSED_TICKET_STATUSES", "BILLABLE_RESOLUTIONS"])
 
 describe("the Resolution vocabulary's own rules", () => {
   test("the open and the closed statuses are values of the status list and together make the whole of it, in its order", () => {
@@ -25,7 +25,7 @@ describe("the Resolution vocabulary's own rules", () => {
   })
 
   test("the kinds are the prototype's five types, the repair ticket, the glossary's complaint and task, the consumer's two, and other", () => {
-    assert.deepEqual([...vocabulary.TICKET_KINDS], ["missed-collection", "overflow", "access-issue", "container-request", "container-defect", "proof-follow-up", "complaint", "reported-problem", "rejected-command", "internal-task", "other"])
+    assert.deepEqual([...vocabulary.TICKET_KINDS], ["missed-collection", "overflow", "access-issue", "container-request", "container-defect", "proof-follow-up", "complaint", "reported-problem", "rejected-command", "internal-task", "vehicle-defect", "other"])
     assert.deepEqual([...vocabulary.TICKET_PRIORITIES], ["critical", "high", "medium", "low", "none"])
     assert.deepEqual([...vocabulary.TICKET_RESOLUTIONS], ["recollected", "serviced", "answered", "no-action", "duplicate"])
     assert.deepEqual([...vocabulary.BILLABLE_RESOLUTIONS], ["recollected", "serviced"], "the work Finance charges for, a value of the resolutions")

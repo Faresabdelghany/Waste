@@ -27,6 +27,7 @@ import { vehicleAllocation, vehicleAllocationEvent } from "@waste/db/schema/allo
 import { driverAbsence, vehicleUnavailability } from "@waste/db/schema/availability"
 import { container, containerServicePlacement } from "@waste/db/schema/containers"
 import { driverCommand, outboxEvent, pickup, proofOfService, route, session, sessionPosition, unload } from "@waste/db/schema/execution"
+import { preTripCheck, preTripChecklistItem, vehicleDefect } from "@waste/db/schema/pre-trip"
 import {
   accountingAccount,
   accountingExport,
@@ -66,10 +67,11 @@ import { plan, planLeg, planStop, routingQuota } from "@waste/db/schema/routing"
 import { dropOffPoint, dropOffPointException, dropOffPointFraction, dropOffPointHours } from "@waste/db/schema/drop-off-points"
 import { sortingGuideItem } from "@waste/db/schema/sorting-guide"
 import { depot, unloadingStation, unloadingStationFraction, warehouse } from "@waste/db/schema/places"
-import { stockMinimum, stockMovement } from "@waste/db/schema/stock"
+import { decommissionReason, stockMinimum, stockMovement } from "@waste/db/schema/stock"
 import { wasteFractionEmissionFactor } from "@waste/db/schema/sustainability"
 import {
   customer,
+  customerContact,
   property,
   propertyGroup,
   propertyGroupMember,
@@ -77,13 +79,14 @@ import {
   sharedCollectionPoint,
   sharedCollectionPointMember,
 } from "@waste/db/schema/customers"
+import { message, messageTemplate } from "@waste/db/schema/messaging"
 import { company, project, serviceProvider } from "@waste/db/schema/organisation"
 import { contaminantCode, contaminantCodeFraction, pickupExceptionRule, pickupExceptionRuleStep } from "@waste/db/schema/pickup-exceptions"
 import { planningArea, planningAreaBoundary } from "@waste/db/schema/planning-areas"
-import { alert, ticket, ticketBooking, ticketEvent, ticketSla } from "@waste/db/schema/resolution"
+import { alert, team, teamMember, ticket, ticketBooking, ticketEvent, ticketSla, ticketTeamDefault } from "@waste/db/schema/resolution"
 import { application, applicationDecision } from "@waste/db/schema/applications"
 import { bulkyBooking, bulkyBookingItem, bulkySchedule } from "@waste/db/schema/bulky"
-import { serviceProviderActivity } from "@waste/db/schema/service-provider-activities"
+import { serviceProviderActivity, serviceProviderActivityContainer, serviceProviderActivityFraction } from "@waste/db/schema/service-provider-activities"
 import { collectionGroup, collectionGroupContainer, collectionGroupContainerType, collectionGroupFraction, routeScheme, routeSchemeSeason } from "@waste/db/schema/route-schemes"
 import { withCompany } from "@waste/db/tenant"
 import { normaliseGrants, type Grant } from "@waste/domain/access/grants"
@@ -357,6 +360,9 @@ export async function dropTenant(pool: Database, companyId: string, owner?: Data
     // A weight charge names the Unload it charges a share of (O28 of #290), so the events, and the settlement lines that name them, go before the ledger.
     await owner.db.delete(settlementLine).where(eq(settlementLine.companyId, companyId))
     await owner.db.delete(billableEvent).where(eq(billableEvent.companyId, companyId))
+    // A defect names its check (O13 of #290): both go with the ledgers, the defect first.
+    await owner.db.delete(vehicleDefect).where(eq(vehicleDefect.companyId, companyId))
+    await owner.db.delete(preTripCheck).where(eq(preTripCheck.companyId, companyId))
     await owner.db.delete(unload).where(eq(unload.companyId, companyId))
     await owner.db.delete(driverCommand).where(eq(driverCommand.companyId, companyId))
     await owner.db.delete(vehicleAllocationEvent).where(eq(vehicleAllocationEvent.companyId, companyId))
@@ -396,12 +402,18 @@ export async function dropTenant(pool: Database, companyId: string, owner?: Data
     await tx.delete(routingQuota).where(eq(routingQuota.companyId, companyId))
     await tx.delete(sortingGuideItem).where(eq(sortingGuideItem.companyId, companyId))
     await tx.delete(ticketSla).where(eq(ticketSla.companyId, companyId))
+    // The ticket teams (O30 of #290): the defaults and the members name a team, and a ticket did, so the team goes after the tickets.
+    await tx.delete(ticketTeamDefault).where(eq(ticketTeamDefault.companyId, companyId))
+    await tx.delete(teamMember).where(eq(teamMember.companyId, companyId))
+    await tx.delete(team).where(eq(team.companyId, companyId))
     // The Drop-off Points (#293 M3): the three sets, then the point, before the fractions and the project they name.
     await tx.delete(dropOffPointFraction).where(eq(dropOffPointFraction.companyId, companyId))
     await tx.delete(dropOffPointHours).where(eq(dropOffPointHours.companyId, companyId))
     await tx.delete(dropOffPointException).where(eq(dropOffPointException.companyId, companyId))
     await tx.delete(dropOffPoint).where(eq(dropOffPoint.companyId, companyId))
     // The providers' activities (#474) before the schemes, groups, awards, providers and accounts they name.
+    await tx.delete(serviceProviderActivityContainer).where(eq(serviceProviderActivityContainer.companyId, companyId))
+    await tx.delete(serviceProviderActivityFraction).where(eq(serviceProviderActivityFraction.companyId, companyId))
     await tx.delete(serviceProviderActivity).where(eq(serviceProviderActivity.companyId, companyId))
     await tx.delete(plan).where(eq(plan.companyId, companyId))
     await tx.delete(session).where(eq(session.companyId, companyId))
@@ -413,6 +425,7 @@ export async function dropTenant(pool: Database, companyId: string, owner?: Data
     // A stop and its proofs name the code they were tagged with, so the codes go after them, before the fractions they apply to.
     await tx.delete(contaminantCodeFraction).where(eq(contaminantCodeFraction.companyId, companyId))
     await tx.delete(contaminantCode).where(eq(contaminantCode.companyId, companyId))
+    await tx.delete(decommissionReason).where(eq(decommissionReason.companyId, companyId))
     await tx.delete(generationMatch).where(eq(generationMatch.companyId, companyId))
     await tx.delete(route).where(eq(route.companyId, companyId))
     await tx.delete(generationRun).where(eq(generationRun.companyId, companyId))
@@ -436,6 +449,7 @@ export async function dropTenant(pool: Database, companyId: string, owner?: Data
     await tx.delete(depot).where(eq(depot.companyId, companyId))
     await tx.delete(containerTypeVehicleType).where(eq(containerTypeVehicleType.companyId, companyId))
     await tx.delete(vehicleTypeConsumption).where(eq(vehicleTypeConsumption.companyId, companyId))
+    await tx.delete(preTripChecklistItem).where(eq(preTripChecklistItem.companyId, companyId))
     await tx.delete(fuelEmissionFactor).where(eq(fuelEmissionFactor.companyId, companyId))
     await tx.delete(vehicleType).where(eq(vehicleType.companyId, companyId))
     await tx.delete(collectionCalendarHoliday).where(eq(collectionCalendarHoliday.companyId, companyId))
@@ -459,6 +473,11 @@ export async function dropTenant(pool: Database, companyId: string, owner?: Data
     await tx.delete(propertyGroup).where(eq(propertyGroup.companyId, companyId))
     await tx.delete(propertyParty).where(eq(propertyParty.companyId, companyId))
     await tx.delete(property).where(eq(property.companyId, companyId))
+    // Messaging (#291 C15): the delivery log names its template, its customer and its contact, so it goes first, then the templates.
+    await tx.delete(message).where(eq(message.companyId, companyId))
+    await tx.delete(messageTemplate).where(eq(messageTemplate.companyId, companyId))
+    // A customer's contact persons (#291 C14) go before it.
+    await tx.delete(customerContact).where(eq(customerContact.companyId, companyId))
     await tx.delete(customer).where(eq(customer.companyId, companyId))
     await tx.delete(containerType).where(eq(containerType.companyId, companyId))
     // The fractions' emission factors (M13 of #293) name the fractions.

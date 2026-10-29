@@ -11,8 +11,7 @@
 // schema, less what a later migration added: M5b's `pickup-exception` kind
 // (#293, 0046), its value and its clause of the kind's shape, and the
 // recycling-centre visit's `visit` kind and unit (#393, 0054), its clause of
-// the kind's shape and the product's value, and the weight charge's `tonne`
-// unit and its clause (O28 of #290, 0066). Then the migration, which has to be exactly those statements and
+// the kind's shape and the product's value. Then the migration, which has to be exactly those statements and
 // below them the new table's fence, its `updated_at` trigger and its audit
 // trigger, a set of its project read under `commercial.products`. The file is
 // found by its name, not its number, which it takes at its turn. No database.
@@ -45,8 +44,8 @@ const EVENT_SHAPES = ["billable_event_kind_shape", "billable_event_origin_shape"
 /** The event's kinds as 0044 wrote them: today's through `hire`, before M5b's `pickup-exception` (#293). */
 const KINDS_AS_OF_0044 = BILLABLE_EVENT_KINDS.slice(0, BILLABLE_EVENT_KINDS.indexOf("hire") + 1)
 
-/** The product's units as 0044 wrote them: today's before the recycling-centre visit's (#393). */
-const UNITS_AS_OF_0044 = PRODUCT_UNITS.filter((unit) => unit !== "visit" && unit !== "tonne")
+/** The product's units as 0044 wrote them: today's before the recycling-centre visit's (#393), the bulky item's (#449) and the weight charge's tonne (O28 of #290). */
+const UNITS_AS_OF_0044 = PRODUCT_UNITS.filter((unit) => unit !== "visit" && unit !== "item" && unit !== "tonne")
 
 /** The clause M5b added to the kind's shape (#293), which 0044's spelling lacks. */
 const EXCEPTION_CLAUSE = ` when 'pickup-exception' then ${ref("billable_event", "pickup_id")} is not null and ${ref("billable_event", "ticket_id")} is null and ${ref("billable_event", "reverses_event_id")} is null`
@@ -54,10 +53,10 @@ const EXCEPTION_CLAUSE = ` when 'pickup-exception' then ${ref("billable_event", 
 /** The clause 0054 added to the kind's shape (#393), which 0044's spelling lacks too. */
 const VISIT_CLAUSE = ` when 'visit' then ${ref("billable_event", "visit_id")} is not null and ${ref("billable_event", "pickup_id")} is null and ${ref("billable_event", "ticket_id")} is null and ${ref("billable_event", "reverses_event_id")} is null`
 
-/** The clause 0066 added to the kind's shape (O28 of #290), which 0044's spelling lacks too. */
+/** The clause the weight charges' migration added to the kind's shape (O28 of #290), which 0044's spelling lacks too. */
 const WEIGHT_CLAUSE = ` when 'weight' then ${ref("billable_event", "unload_id")} is not null and ${ref("billable_event", "pickup_id")} is not null and ${ref("billable_event", "ticket_id")} is null and ${ref("billable_event", "reverses_event_id")} is null`
 
-/** The event's checks as 0044 spelled them: today's, the kind's shape less M5b's clause, 0054's and 0066's. */
+/** The event's checks as 0044 spelled them: today's, the kind's shape less M5b's clause, 0054's and the weight charges'. */
 const checksAsOf0044 = (): Map<string, string> => {
   const checks = new Map(checksOf(billableEvent))
   const kindShape = checks.get("billable_event_kind_shape") ?? ""

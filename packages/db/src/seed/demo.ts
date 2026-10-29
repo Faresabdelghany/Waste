@@ -90,6 +90,7 @@ import { applyFinance, FINANCE_COUNTS, FINANCE_IDS, type FinanceCounts } from ".
 import { DEMO_COMPANY_ID, DEMO_PROJECT_IDS, DEMO_SERVICE_PROVIDER_IDS, DEMO_USER_IDS } from "./ids"
 import { applyPlanning, PLANNING_COUNTS, PLANNING_IDS, type PlanningCounts } from "./planning"
 import { applyRegistry, REGISTRY_COUNTS, REGISTRY_IDS, type RegistryCounts } from "./registry"
+import { applyDecommissionReasons, DECOMMISSION_REASON_IDS, DECOMMISSION_REASONS_COUNTS, type DecommissionReasonsCounts } from "./decommission-reasons"
 import { applyPickupExceptions, PICKUP_EXCEPTIONS_COUNTS, PICKUP_EXCEPTIONS_IDS, type PickupExceptionsCounts } from "./pickup-exceptions"
 import { applyResources, RESOURCES_COUNTS, RESOURCES_IDS, type ResourcesCounts } from "./resources"
 import { upsertOwned } from "./upsert"
@@ -128,6 +129,7 @@ export const DEMO_IDS = {
   registry: REGISTRY_IDS,
   resources: RESOURCES_IDS,
   pickupExceptions: PICKUP_EXCEPTIONS_IDS,
+  decommissionReasons: DECOMMISSION_REASON_IDS,
   emissions: EMISSIONS_IDS,
   planning: PLANNING_IDS,
   finance: FINANCE_IDS,
@@ -300,7 +302,7 @@ const PROVIDER_ACCESS: (typeof serviceProviderAccess.$inferInsert)[] = [
   },
 ]
 
-/** What the seed says the company holds: Organisation & Access by name, then the Registry's fifteen tables, the configuration's twenty, the contaminant codes' two (M5 of #293) and the fleet's emissions' two (M10 of #293). */
+/** What the seed says the company holds: Organisation & Access by name, then the Registry's fifteen tables, the configuration's twenty, the contaminant codes' two (M5 of #293), the decommission reasons (O30 of #290) and the fleet's emissions' two (M10 of #293). */
 export type DemoSeedCounts = {
   projects: number
   serviceProviders: number
@@ -314,6 +316,7 @@ export type DemoSeedCounts = {
   PlanningCounts &
   FinanceCounts &
   PickupExceptionsCounts &
+  DecommissionReasonsCounts &
   EmissionsCounts
 
 export type DemoSeedReport = {
@@ -336,6 +339,7 @@ const COUNTS: DemoSeedCounts = {
   ...PLANNING_COUNTS,
   ...FINANCE_COUNTS,
   ...PICKUP_EXCEPTIONS_COUNTS,
+  ...DECOMMISSION_REASONS_COUNTS,
   ...EMISSIONS_COUNTS,
 }
 
@@ -466,6 +470,8 @@ export async function applyDemo(tx: Tx): Promise<number> {
   changed += await applyFinance(tx)
   // The contaminant codes (M5 of #293) name the Registry's fractions and nothing after it.
   changed += await applyPickupExceptions(tx)
+  // The decommission reasons (O30 of #290) name the company alone.
+  changed += await applyDecommissionReasons(tx)
   // The fleet's emission factors and its vehicle types' consumption (M10 of #293) name Resources' types and nothing after them.
   changed += await applyEmissions(tx)
 

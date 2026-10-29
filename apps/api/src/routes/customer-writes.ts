@@ -9,13 +9,13 @@
 // which is not: a housing administrator's address serves many organisations.
 import type { Customer, CustomerCreate, CustomerKind, CustomerPatch, CustomerStatus } from "@waste/contracts/customers"
 import type { Tx } from "@waste/db/client"
-import { customer } from "@waste/db/schema/customers"
-import { and, asc, eq } from "drizzle-orm"
+import { customer, customerContact } from "@waste/db/schema/customers"
+import { and, asc, count, eq } from "drizzle-orm"
 
 import type { Principal } from "../auth/principal"
 import { newId } from "../ids"
 import { problem } from "../problem"
-import { refuseDuplicate, stampsOf } from "./shared"
+import { lockRow, refuseDuplicate, stampsOf } from "./shared"
 
 export const customerColumns = {
   id: customer.id,
@@ -78,9 +78,22 @@ export async function createCustomer(tx: Tx, principal: Principal, body: Custome
   return customerOf(row)
 }
 
+/** An organisation that becomes a person while people still speak for it (#291 C14): they would be contacts of a customer who is their own. */
+export const keepsActiveContacts = (contacts: number) =>
+  `This organisation has ${contacts} active contact ${contacts === 1 ? "person" : "persons"}; make ${contacts === 1 ? "them" : "each"} inactive before it becomes a person, who is their own contact`
+
 /** Changes one customer of the caller's company; a 404 for one it does not have. */
 export async function patchCustomer(tx: Tx, principal: Principal, id: string, body: CustomerPatch): Promise<Customer> {
   const patch = lowercased(body)
+  if (patch.kind === "person") {
+    // Under the customer's lock, which a contact's create takes too, so the count holds until the patch commits.
+    await lockRow(tx, customer, { companyId: principal.companyId, id })
+    const [{ active }] = await tx
+      .select({ active: count() })
+      .from(customerContact)
+      .where(and(eq(customerContact.companyId, principal.companyId), eq(customerContact.customerId, id), eq(customerContact.status, "active")))
+    if (active > 0) throw problem(409, { detail: keepsActiveContacts(active) })
+  }
   const [row] = await refuseDuplicate(collisions(patch.registrationNumber), () =>
     tx
       .update(customer)

@@ -50,14 +50,14 @@ const fixturesOf = (workspaceId: "configure" | "service-providers" | "route-stud
 const schemeFixtures = fixturesOf(ROUTE_SCHEMES_MODULE.workspaceId, ROUTE_SCHEMES_MODULE.moduleId)
 
 // The seeded rows the schemes name, as the API answers them (packages/db/src/seed).
-const copenhagen: Project = { id: "01a0d2a4-a280-7002-8000-000000000001", ...STAMPS, name: "Copenhagen Central", kind: "Municipality", language: "da", currency: "DKK", timezone: "Europe/Copenhagen", status: "active", weekend: ["saturday", "sunday"], holidayList: "Danish public holidays", publicSlug: null, weightTolerancePercent: 5, paymentTermsDays: 30, paymentReferenceScheme: "none", holdForReview: false }
+const copenhagen: Project = { id: "01a0d2a4-a280-7002-8000-000000000001", ...STAMPS, name: "Copenhagen Central", kind: "Municipality", language: "da", currency: "DKK", timezone: "Europe/Copenhagen", status: "active", weekend: ["saturday", "sunday"], holidayList: "Danish public holidays", publicSlug: null, weightTolerancePercent: 5, paymentTermsDays: 30, paymentReferenceScheme: "none", holdForReview: false, privacyPolicy: { positionRetentionDays: null, proofRetentionDays: null, gpsPurpose: null } }
 const nordren: ServiceProvider = { id: "01a0d2a4-a280-7003-8000-000000000001", ...STAMPS, legalName: "NordRen ApS", registrationNumber: "40291188", country: "DK", contactName: "Lars Mikkelsen", contactEmail: "contact@nordren.example" }
 const indreBy: PlanningArea = { id: "01a0d2a4-a280-7016-8000-000000000001", ...STAMPS, projectId: copenhagen.id, code: "OP-CEN-01", name: "Indre By Operations", purpose: "route-planning" }
 const indreByBoundary: PlanningAreaBoundary = { id: "01a0d2a4-a280-7017-8000-000000000001", ...STAMPS, projectId: copenhagen.id, planningAreaId: indreBy.id, boundary: { type: "Polygon", coordinates: [[[12.56, 55.67], [12.59, 55.67], [12.59, 55.69], [12.56, 55.67]]] }, validFrom: "2026-01-01", validTo: null }
-const residual: WasteFraction = { id: "01a0d2a4-a280-7007-8000-000000000001", ...STAMPS, key: "residual", name: "Residual", wasteCode: null, treatment: null, densityKgPerCubicMetre: null }
+const residual: WasteFraction = { id: "01a0d2a4-a280-7007-8000-000000000001", ...STAMPS, key: "residual", name: "Residual", wasteCode: null, treatment: null, densityKgPerCubicMetre: null, hazardous: false }
 const organic: WasteFraction = { ...residual, id: "01a0d2a4-a280-7007-8000-000000000002", key: "organic", name: "Organic" }
 const bin240: ContainerType = { id: "01a0d2a4-a280-7008-8000-000000000002", ...STAMPS, name: "Two-wheel bin · 240 L", volumeLitres: 240, serviceSeconds: null }
-const rearLoader: VehicleType = { id: "01a0d2a4-a280-701f-8000-000000000001", ...STAMPS, key: "rear-loader", name: "Rear loader", description: null, containerTypeIds: [bin240.id], consumption: [] }
+const rearLoader: VehicleType = { id: "01a0d2a4-a280-701f-8000-000000000001", ...STAMPS, key: "rear-loader", name: "Rear loader", description: null, containerTypeIds: [bin240.id], consumption: [], checklist: [] }
 
 // Resources is still on fixtures here (slice 5a): the fleet and the places are named by the API's ids alone.
 const WH24 = "01a0d2a4-a280-7021-8000-000000000001"
@@ -660,7 +660,7 @@ describe("an edit of a scheme", () => {
 
   test("a rule the edit leaves alone is restated by the ids it was read with, even where another row now has its name", async () => {
     // Residual (as read) renamed Residual waste, and a new row named Residual: the untouched group still names the row it was read with.
-    const fresh = { id: "01a0d2a4-a280-7007-8000-0000000000ff", ...STAMPS, key: "residual-2", name: "Residual", wasteCode: null, treatment: null, densityKgPerCubicMetre: null }
+    const fresh = { id: "01a0d2a4-a280-7007-8000-0000000000ff", ...STAMPS, key: "residual-2", name: "Residual", wasteCode: null, treatment: null, densityKgPerCubicMetre: null, hazardous: false }
     const shifted = new Map(state).set(
       "configure.master",
       loaded({
