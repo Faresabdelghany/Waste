@@ -10,8 +10,7 @@
 // route, which stays ready. Before it, the driver checks the picked vehicle
 // and trailer against their type's checklist (O13 of #290): a critical
 // defect takes the vehicle off the road, and the start on it is refused.
-import Link from "next/link"
-import { useState } from "react"
+import { useEffect, useState } from "react"
 import { ArrowClockwise, ClipboardText, MapPin, Play } from "@phosphor-icons/react/dist/ssr"
 
 import { Badge } from "@/components/ui/badge"
@@ -19,13 +18,15 @@ import { Button } from "@/components/ui/button"
 import { useDriverApp, useDriverAppState } from "@/components/waste/driver/driver-app-provider"
 import { NativeSelect, PreTripDialog } from "@/components/waste/driver/driver-dialogs"
 import { DriverFrame } from "@/components/waste/driver/driver-frame"
-import { RejectionList, operatingDay, progressLine } from "@/components/waste/driver/driver-parts"
+import { DriverLink, KeptNotice, RejectionList, operatingDay, progressLine } from "@/components/waste/driver/driver-parts"
 import type { DriverMe } from "@waste/contracts/driver-commands"
 import type { Route } from "@waste/contracts/routes"
+import { keepShell, SHELL_ENABLED } from "@/lib/driver/app-shell"
 import { checkWaiting } from "@/lib/driver/pre-trip"
 import { ROUTE_STATUS_LABELS, routeActions, routesInDayOrder, waitingOn } from "@/lib/driver/route-view"
 
 export function DriverStartScreen() {
+  useEffect(() => void keepShell(window, SHELL_ENABLED), [])
   return (
     <DriverFrame>
       <StartContent />
@@ -42,6 +43,7 @@ function StartContent() {
 
   return (
     <main className="flex flex-col gap-4">
+      <KeptNotice readAt={state.shownFrom.me} />
       <p className="flex items-center gap-2 text-sm text-muted-foreground">
         <MapPin aria-hidden className="shrink-0" />
         Your position travels with your actions on your route, when this phone shares it.
@@ -53,7 +55,7 @@ function StartContent() {
             <p className="text-lg font-semibold">{open.label}</p>
           </div>
           <Button asChild className="h-11">
-            <Link href={`/driver/routes/${open.id}`}>Continue route</Link>
+            <DriverLink href={`/driver/routes/${open.id}`}>Continue route</DriverLink>
           </Button>
         </section>
       )}
@@ -105,7 +107,7 @@ function RouteCard({ route, me }: { route: Route; me: DriverMe }) {
       <RejectionList rejections={rejections} onDismiss={app.dismiss} />
       {actions.start && <StartForm route={route} me={me} />}
       <Button asChild variant={route.status === "active" ? "default" : "outline"} className="h-11">
-        <Link href={`/driver/routes/${route.id}`}>Open route</Link>
+        <DriverLink href={`/driver/routes/${route.id}`}>Open route</DriverLink>
       </Button>
     </article>
   )

@@ -44,6 +44,7 @@ import { emit } from "../outbox"
 import { afterCursor, fetchLimit, pageOf } from "../pagination"
 import { describeProblem, invalidRequest, problem, validate } from "../problem"
 import { projectToday } from "./fleet-lookups"
+import { partyInForce } from "./property-writes"
 import { requireCustomer, requireProperty, requireSharedCollectionPoint, requireSubscription } from "./references"
 import { created, describeCreated, describeJson, IdParam, lockRow, stampsOf } from "./shared"
 import type { ClockOptions } from "./scheme-groups"
@@ -159,17 +160,17 @@ export const RECEIVED_AHEAD = "An application is received on or before today on 
 
 /**
  * Whether what an Application names hangs together, each already proved the
- * project's: the customer is a party of the property, in any role; the
+ * project's: the customer is a party of the property today, in any role; the
  * subscription is under one of the customer's agreements, as its customer or
  * its payer, and serves the place named, where one is. A shared point has no
  * parties, so any customer may name one. Answers which rule fails.
  */
-async function subjectRefusal(tx: Tx, companyId: string, subject: Subject, checks: { party: boolean; subscription: boolean }): Promise<"party" | "customer" | "place" | undefined> {
+async function subjectRefusal(tx: Tx, companyId: string, subject: Subject, checks: { party: boolean; subscription: boolean }, now: Date): Promise<"party" | "customer" | "place" | undefined> {
   if (checks.party && subject.propertyId !== null) {
     const [party] = await tx
       .select({ id: propertyParty.id })
       .from(propertyParty)
-      .where(and(eq(propertyParty.companyId, companyId), eq(propertyParty.propertyId, subject.propertyId), eq(propertyParty.customerId, subject.customerId)))
+      .where(and(eq(propertyParty.companyId, companyId), eq(propertyParty.propertyId, subject.propertyId), eq(propertyParty.customerId, subject.customerId), partyInForce(now)))
       .limit(1)
     if (party === undefined) return "party"
   }
@@ -304,7 +305,7 @@ export function applicationRoutes(guard: MiddlewareHandler<AuthEnv>, { now = () 
         await requireCustomer(tx, principal.companyId, body.customerId)
         await requireSubject(tx, principal, body.projectId, body)
         const subject = { customerId: body.customerId, propertyId: body.propertyId ?? null, sharedCollectionPointId: body.sharedCollectionPointId ?? null, subscriptionId: body.subscriptionId ?? null }
-        const refused = await subjectRefusal(tx, principal.companyId, subject, { party: true, subscription: true })
+        const refused = await subjectRefusal(tx, principal.companyId, subject, { party: true, subscription: true }, now())
         if (refused !== undefined) throw invalidRequest("body", [{ path: refused === "party" ? "propertyId" : "subscriptionId", message: SUBJECT_SENTENCES[refused] }])
         // The company's row first, so two creates take the next number one after the other; a key share, so the company's children still insert beside it.
         await tx.select({ id: company.id }).from(company).where(eq(company.id, principal.companyId)).limit(1).for("no key update")
@@ -388,7 +389,7 @@ export function applicationRoutes(guard: MiddlewareHandler<AuthEnv>, { now = () 
         // The row as it would end, judged where the patch moves the property or the subscription: a place moved under a kept subscription is told at the place.
         const placeMoved = patch.propertyId !== undefined || patch.sharedCollectionPointId !== undefined
         const subject = { customerId: current.customerId, propertyId, sharedCollectionPointId, subscriptionId: patch.subscriptionId === undefined ? current.subscriptionId : patch.subscriptionId }
-        const refused = await subjectRefusal(tx, principal.companyId, subject, { party: patch.propertyId !== undefined, subscription: placeMoved || patch.subscriptionId !== undefined })
+        const refused = await subjectRefusal(tx, principal.companyId, subject, { party: patch.propertyId !== undefined, subscription: placeMoved || patch.subscriptionId !== undefined }, now())
         if (refused !== undefined) {
           const path = refused === "party" ? "propertyId" : refused === "customer" || patch.subscriptionId !== undefined ? "subscriptionId" : patch.propertyId !== undefined ? "propertyId" : "sharedCollectionPointId"
           throw invalidRequest("body", [{ path, message: SUBJECT_SENTENCES[refused] }])
