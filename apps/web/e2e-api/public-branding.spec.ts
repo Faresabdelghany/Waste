@@ -1,6 +1,7 @@
 import AxeBuilder from "@axe-core/playwright"
 import type { Page as BrowserPage } from "@playwright/test"
 
+import { APP_THEME_SELECTION_STORAGE_KEY } from "../lib/storage-keys"
 import { expect, freshContext, test } from "./fixtures"
 
 // A published project's branding on its public pages (M22 of #293), and
@@ -12,8 +13,10 @@ import { expect, freshContext, test } from "./fixtures"
 // the project's name on its colour beside its logo and the accessibility
 // statement at the foot, with no violation axe can find. Its branding cleared,
 // the pages read as before, again with none. The logo's address is answered
-// here, so the run asks nothing of the internet. The project goes back
-// unpublished and unbranded whatever happens.
+// here, so the run asks nothing of the internet. A browser that holds a staff
+// theme — Midnight, saved by the staff app — reads the same pages in Ash, the
+// theme they are held to, again with none, and keeps its saved theme (#506).
+// The project goes back unpublished and unbranded whatever happens.
 
 type Project = { id: string; name: string }
 type Listed<T> = { items: T[] }
@@ -30,7 +33,7 @@ async function violationsOf(page: BrowserPage): Promise<string[]> {
   return violations.map((violation) => `${violation.id}: ${violation.nodes.map((node) => node.target.join(" ")).join(", ")}`)
 }
 
-test("a published project's pages carry its colour, logo and accessibility statement, and every public page passes axe's WCAG 2.1 AA, branded or not", async ({ api, browser }) => {
+test("a published project's pages carry its colour, logo and accessibility statement, and every public page passes axe's WCAG 2.1 AA, branded or not, and in Ash under a saved staff theme", async ({ api, browser }) => {
   const listed = await api.get("/projects", { params: { limit: 200 } })
   expect(listed.status()).toBe(200)
   const project = ((await listed.json()) as Listed<Project>).items.find((candidate) => candidate.name === "Copenhagen Central")
@@ -78,6 +81,24 @@ test("a published project's pages carry its colour, logo and accessibility state
       await expect(mark.locator("img"), path).toHaveCount(0)
       await expect(reader.getByRole("link", { name: "Accessibility statement" }), path).toHaveCount(0)
       expect(await violationsOf(reader), `${path}, unbranded`).toEqual([])
+    }
+
+    // A staff member's browser (#506): Midnight saved, the pages still Ash, and the saved theme left as it was.
+    const staff = await freshContext(browser)
+    try {
+      const themed = await staff.newPage()
+      // Saved once, as the staff app saves it: a public page that wrote its own theme back would have replaced it by the next page.
+      await themed.goto(pages[0]!)
+      await themed.evaluate((key) => window.localStorage.setItem(key, "midnight"), APP_THEME_SELECTION_STORAGE_KEY)
+      for (const path of pages) {
+        await themed.goto(path)
+        await expect(themed.getByTestId("project-mark"), path).toContainText("Copenhagen Central")
+        await expect(themed.locator("html"), path).toHaveAttribute("data-app-theme", "ash")
+        expect(await violationsOf(themed), `${path}, under a saved Midnight`).toEqual([])
+        expect(await themed.evaluate((key) => window.localStorage.getItem(key), APP_THEME_SELECTION_STORAGE_KEY), path).toBe("midnight")
+      }
+    } finally {
+      await staff.close()
     }
   } finally {
     await visitor.close()
