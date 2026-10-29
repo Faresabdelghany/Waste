@@ -22,16 +22,24 @@ async function migrationName(): Promise<string> {
   return file
 }
 
+/** The journal's index of the migration: its snapshot's number, which a placeholder file number may differ from until its turn. */
+async function journalIndex(file: string): Promise<number> {
+  const journal = JSON.parse(await readFile(join(MIGRATIONS_FOLDER, "meta", "_journal.json"), "utf8")) as { entries: { idx: number; tag: string }[] }
+  const entry = journal.entries.find((candidate) => `${candidate.tag}.sql` === file)
+  assert.ok(entry !== undefined, `${file} is in the journal`)
+  return entry.idx
+}
+
 type Snapshot = Parameters<typeof generateMigration>[0]
-const snapshot = async (n: string): Promise<Snapshot> => JSON.parse(await readFile(join(MIGRATIONS_FOLDER, "meta", `${n}_snapshot.json`), "utf8")) as Snapshot
+const snapshot = async (n: number): Promise<Snapshot> => JSON.parse(await readFile(join(MIGRATIONS_FOLDER, "meta", `${String(n).padStart(4, "0")}_snapshot.json`), "utf8")) as Snapshot
 
 const REASON_ONE_OF = `ALTER TABLE "wms"."billing_run_exclusion" ADD CONSTRAINT "billing_run_exclusion_reason_one_of" CHECK (${ref("billing_run_exclusion", "reason")} in (${list(...EXCLUSION_REASONS)}));`
 
 describe("the batch's exclusion migration", () => {
   test("is drizzle-kit's statements alone: the reason check dropped and added with too-many-events", async () => {
     const file = await migrationName()
-    const own = file.slice(0, 4)
-    const generated = (await generateMigration(await snapshot(String(Number(own) - 1).padStart(4, "0")), await snapshot(own))).map(normalised)
+    const own = await journalIndex(file)
+    const generated = (await generateMigration(await snapshot(own - 1), await snapshot(own))).map(normalised)
     const expected = ['ALTER TABLE "wms"."billing_run_exclusion" DROP CONSTRAINT "billing_run_exclusion_reason_one_of";', REASON_ONE_OF].map(normalised)
     assert.deepEqual(generated, expected)
     const text = await readFile(join(MIGRATIONS_FOLDER, file), "utf8")
