@@ -70,3 +70,5 @@ export * from "./messaging"
 export * from "./notifications"
 // Pre-trip inspection (O13 of #290): a vehicle type's checklist, the checks made against it, and the defects they find.
 export * from "./pre-trip"
+// Fill-level Sensors (O26 of #290): the devices, their pairings with containers and the readings they send.
+export * from "./sensors"

@@ -505,7 +505,7 @@ constraint wms.alert alert_raised_by_fk FOREIGN KEY (company_id, raised_by) REFE
 constraint wms.alert alert_resolved_by_fk FOREIGN KEY (company_id, resolved_by) REFERENCES wms.user_account(company_id, id)
 constraint wms.alert alert_resolved_shape CHECK ((((resolved_by IS NULL) OR (resolved_at IS NOT NULL)) AND ((resolved_at IS NULL) OR (resolved_by IS NOT NULL) OR (rule IS NOT NULL)) AND ((resolution_note IS NULL) OR (resolved_at IS NOT NULL))))
 constraint wms.alert alert_route_id_fk FOREIGN KEY (company_id, project_id, route_id) REFERENCES wms.route(company_id, project_id, id)
-constraint wms.alert alert_rule_one_of CHECK ((rule = ANY (ARRAY['route-not-started'::text, 'session-silent'::text, 'licence-expiring'::text, 'ticket-overdue'::text, 'position-stale'::text])))
+constraint wms.alert alert_rule_one_of CHECK ((rule = ANY (ARRAY['route-not-started'::text, 'session-silent'::text, 'licence-expiring'::text, 'ticket-overdue'::text, 'position-stale'::text, 'fill-threshold'::text])))
 constraint wms.alert alert_rule_shape CHECK (((rule IS NULL) = (rule_key IS NULL)))
 constraint wms.alert alert_severity_one_of CHECK ((severity = ANY (ARRAY['critical'::text, 'high'::text, 'medium'::text, 'low'::text])))
 constraint wms.alert alert_source_one_of CHECK ((source = ANY (ARRAY['manual'::text, 'execution'::text, 'telemetry'::text, 'rule'::text])))
@@ -1567,6 +1567,31 @@ policy wms.drop_off_point_hours drop_off_point_hours_public_door permissive SELE
    FROM wms.drop_off_point point
   WHERE ((point.company_id = drop_off_point_hours.company_id) AND (point.id = drop_off_point_hours.drop_off_point_id) AND (point.status = 'active'::text))))) check=none
 policy wms.drop_off_point_hours drop_off_point_hours_tenant_fence permissive ALL to=wms_api using=(company_id = ( SELECT wms.current_company_id() AS current_company_id)) check=(company_id = ( SELECT wms.current_company_id() AS current_company_id))
+relation wms.fill_reading kind=table owner=<owner> persistence=p rls=true force-rls=true replica-identity=d acl=[<owner>=DELETE,INSERT,MAINTAIN,REFERENCES,SELECT,TRIGGER,TRUNCATE,UPDATE/<owner> wms_api=INSERT,SELECT/<owner> wms_worker=SELECT/<owner>]
+column wms.fill_reading 1 id uuid not-null default=wms.uuidv7()
+column wms.fill_reading 2 company_id uuid not-null
+column wms.fill_reading 3 project_id uuid not-null
+column wms.fill_reading 4 recorded_at timestamp with time zone not-null default=now()
+column wms.fill_reading 5 sensor_id uuid not-null
+column wms.fill_reading 6 pairing_id uuid
+column wms.fill_reading 7 measured_at timestamp with time zone not-null
+column wms.fill_reading 8 fill_percent integer not-null
+column wms.fill_reading 9 battery_percent integer
+column wms.fill_reading 10 rssi_dbm integer
+constraint wms.fill_reading fill_reading_battery_range CHECK (((battery_percent IS NULL) OR ((battery_percent >= 0) AND (battery_percent <= 100))))
+constraint wms.fill_reading fill_reading_company_id_fk FOREIGN KEY (company_id) REFERENCES wms.company(id)
+constraint wms.fill_reading fill_reading_fill_range CHECK (((fill_percent >= 0) AND (fill_percent <= 100)))
+constraint wms.fill_reading fill_reading_pairing_id_fk FOREIGN KEY (company_id, project_id, pairing_id) REFERENCES wms.sensor_pairing(company_id, project_id, id)
+constraint wms.fill_reading fill_reading_pkey PRIMARY KEY (id)
+constraint wms.fill_reading fill_reading_project_id_fk FOREIGN KEY (company_id, project_id) REFERENCES wms.project(company_id, id)
+constraint wms.fill_reading fill_reading_rssi_range CHECK (((rssi_dbm IS NULL) OR ((rssi_dbm >= '-200'::integer) AND (rssi_dbm <= 0))))
+constraint wms.fill_reading fill_reading_sensor_id_fk FOREIGN KEY (company_id, project_id, sensor_id) REFERENCES wms.sensor(company_id, project_id, id)
+constraint wms.fill_reading fill_reading_sensor_id_measured_at_key UNIQUE (company_id, sensor_id, measured_at)
+index wms.fill_reading fill_reading_pairing_id_idx CREATE INDEX fill_reading_pairing_id_idx ON wms.fill_reading USING btree (company_id, pairing_id, measured_at)
+index wms.fill_reading fill_reading_pkey CREATE UNIQUE INDEX fill_reading_pkey ON wms.fill_reading USING btree (id)
+index wms.fill_reading fill_reading_project_id_idx CREATE INDEX fill_reading_project_id_idx ON wms.fill_reading USING btree (company_id, project_id)
+index wms.fill_reading fill_reading_sensor_id_measured_at_key CREATE UNIQUE INDEX fill_reading_sensor_id_measured_at_key ON wms.fill_reading USING btree (company_id, sensor_id, measured_at)
+policy wms.fill_reading fill_reading_tenant_fence permissive ALL to=wms_api using=(company_id = ( SELECT wms.current_company_id() AS current_company_id)) check=(company_id = ( SELECT wms.current_company_id() AS current_company_id))
 relation wms.fuel_emission_factor kind=table owner=<owner> persistence=p rls=true force-rls=true replica-identity=d acl=[<owner>=DELETE,INSERT,MAINTAIN,REFERENCES,SELECT,TRIGGER,TRUNCATE,UPDATE/<owner> wms_api=DELETE,INSERT,SELECT,UPDATE/<owner> wms_worker=SELECT/<owner>]
 column wms.fuel_emission_factor 1 id uuid not-null default=wms.uuidv7()
 column wms.fuel_emission_factor 2 company_id uuid not-null
@@ -2706,17 +2731,21 @@ column wms.property_party 5 updated_at timestamp with time zone not-null default
 column wms.property_party 6 property_id uuid not-null
 column wms.property_party 7 customer_id uuid not-null
 column wms.property_party 8 role text not-null
+column wms.property_party 9 valid_from date not-null
+column wms.property_party 10 valid_to date
 constraint wms.property_party property_party_company_id_fk FOREIGN KEY (company_id) REFERENCES wms.company(id)
 constraint wms.property_party property_party_customer_id_fk FOREIGN KEY (company_id, customer_id) REFERENCES wms.customer(company_id, id)
+constraint wms.property_party property_party_no_overlap EXCLUDE USING gist (company_id WITH =, property_id WITH =, customer_id WITH =, role WITH =, daterange(valid_from, valid_to, '[)'::text) WITH &&)
 constraint wms.property_party property_party_pkey PRIMARY KEY (id)
 constraint wms.property_party property_party_project_id_fk FOREIGN KEY (company_id, project_id) REFERENCES wms.project(company_id, id)
-constraint wms.property_party property_party_property_id_customer_id_role_key UNIQUE (company_id, property_id, customer_id, role)
 constraint wms.property_party property_party_property_id_fk FOREIGN KEY (company_id, project_id, property_id) REFERENCES wms.property(company_id, project_id, id)
 constraint wms.property_party property_party_role_one_of CHECK ((role = ANY (ARRAY['owner'::text, 'payer'::text, 'tenant'::text, 'administrator'::text, 'service-contact'::text])))
+constraint wms.property_party property_party_validity CHECK (((valid_to IS NULL) OR (valid_to > valid_from)))
 index wms.property_party property_party_customer_id_idx CREATE INDEX property_party_customer_id_idx ON wms.property_party USING btree (company_id, customer_id)
+index wms.property_party property_party_no_overlap CREATE INDEX property_party_no_overlap ON wms.property_party USING gist (company_id, property_id, customer_id, role, daterange(valid_from, valid_to, '[)'::text))
 index wms.property_party property_party_pkey CREATE UNIQUE INDEX property_party_pkey ON wms.property_party USING btree (id)
 index wms.property_party property_party_project_id_idx CREATE INDEX property_party_project_id_idx ON wms.property_party USING btree (company_id, project_id)
-index wms.property_party property_party_property_id_customer_id_role_key CREATE UNIQUE INDEX property_party_property_id_customer_id_role_key ON wms.property_party USING btree (company_id, property_id, customer_id, role)
+index wms.property_party property_party_property_id_idx CREATE INDEX property_party_property_id_idx ON wms.property_party USING btree (company_id, property_id)
 trigger wms.property_party property_party_audit_trail enabled=O CREATE TRIGGER property_party_audit_trail AFTER INSERT OR DELETE OR UPDATE ON wms.property_party FOR EACH ROW EXECUTE FUNCTION wms.audit_row('property', 'property_id')
 trigger wms.property_party property_party_touch_updated_at enabled=O CREATE TRIGGER property_party_touch_updated_at BEFORE UPDATE ON wms.property_party FOR EACH ROW EXECUTE FUNCTION wms.touch_updated_at()
 policy wms.property_party property_party_tenant_fence permissive ALL to=wms_api using=(company_id = ( SELECT wms.current_company_id() AS current_company_id)) check=(company_id = ( SELECT wms.current_company_id() AS current_company_id))
@@ -2954,6 +2983,57 @@ index wms.routing_quota routing_quota_pkey CREATE UNIQUE INDEX routing_quota_pke
 index wms.routing_quota routing_quota_provider_family_key CREATE UNIQUE INDEX routing_quota_provider_family_key ON wms.routing_quota USING btree (company_id, provider, family)
 trigger wms.routing_quota routing_quota_touch_updated_at enabled=O CREATE TRIGGER routing_quota_touch_updated_at BEFORE UPDATE ON wms.routing_quota FOR EACH ROW EXECUTE FUNCTION wms.touch_updated_at()
 policy wms.routing_quota routing_quota_tenant_fence permissive ALL to=wms_api using=(company_id = ( SELECT wms.current_company_id() AS current_company_id)) check=(company_id = ( SELECT wms.current_company_id() AS current_company_id))
+relation wms.sensor kind=table owner=<owner> persistence=p rls=true force-rls=true replica-identity=d acl=[<owner>=DELETE,INSERT,MAINTAIN,REFERENCES,SELECT,TRIGGER,TRUNCATE,UPDATE/<owner> wms_api=DELETE,INSERT,SELECT,UPDATE/<owner> wms_worker=SELECT/<owner>]
+column wms.sensor 1 id uuid not-null default=wms.uuidv7()
+column wms.sensor 2 company_id uuid not-null
+column wms.sensor 3 project_id uuid not-null
+column wms.sensor 4 created_at timestamp with time zone not-null default=now()
+column wms.sensor 5 updated_at timestamp with time zone not-null default=now()
+column wms.sensor 6 identifier text not-null
+column wms.sensor 7 network text not-null
+column wms.sensor 8 status text not-null
+column wms.sensor 9 notes text
+constraint wms.sensor sensor_company_id_fk FOREIGN KEY (company_id) REFERENCES wms.company(id)
+constraint wms.sensor sensor_identifier_key UNIQUE (company_id, identifier)
+constraint wms.sensor sensor_network_one_of CHECK ((network = ANY (ARRAY['lorawan'::text, 'sigfox'::text, 'nb-iot'::text])))
+constraint wms.sensor sensor_pkey PRIMARY KEY (id)
+constraint wms.sensor sensor_project_id_fk FOREIGN KEY (company_id, project_id) REFERENCES wms.project(company_id, id)
+constraint wms.sensor sensor_project_key UNIQUE (company_id, project_id, id)
+constraint wms.sensor sensor_status_one_of CHECK ((status = ANY (ARRAY['active'::text, 'retired'::text])))
+index wms.sensor sensor_identifier_key CREATE UNIQUE INDEX sensor_identifier_key ON wms.sensor USING btree (company_id, identifier)
+index wms.sensor sensor_pkey CREATE UNIQUE INDEX sensor_pkey ON wms.sensor USING btree (id)
+index wms.sensor sensor_project_key CREATE UNIQUE INDEX sensor_project_key ON wms.sensor USING btree (company_id, project_id, id)
+trigger wms.sensor sensor_audit_trail enabled=O CREATE TRIGGER sensor_audit_trail AFTER INSERT OR DELETE OR UPDATE ON wms.sensor FOR EACH ROW EXECUTE FUNCTION wms.audit_row('', '')
+trigger wms.sensor sensor_touch_updated_at enabled=O CREATE TRIGGER sensor_touch_updated_at BEFORE UPDATE ON wms.sensor FOR EACH ROW EXECUTE FUNCTION wms.touch_updated_at()
+policy wms.sensor sensor_tenant_fence permissive ALL to=wms_api using=(company_id = ( SELECT wms.current_company_id() AS current_company_id)) check=(company_id = ( SELECT wms.current_company_id() AS current_company_id))
+relation wms.sensor_pairing kind=table owner=<owner> persistence=p rls=true force-rls=true replica-identity=d acl=[<owner>=DELETE,INSERT,MAINTAIN,REFERENCES,SELECT,TRIGGER,TRUNCATE,UPDATE/<owner> wms_api=DELETE,INSERT,SELECT,UPDATE/<owner> wms_worker=SELECT/<owner>]
+column wms.sensor_pairing 1 id uuid not-null default=wms.uuidv7()
+column wms.sensor_pairing 2 company_id uuid not-null
+column wms.sensor_pairing 3 project_id uuid not-null
+column wms.sensor_pairing 4 created_at timestamp with time zone not-null default=now()
+column wms.sensor_pairing 5 updated_at timestamp with time zone not-null default=now()
+column wms.sensor_pairing 6 valid_from date not-null
+column wms.sensor_pairing 7 valid_to date
+column wms.sensor_pairing 8 sensor_id uuid not-null
+column wms.sensor_pairing 9 container_id uuid not-null
+column wms.sensor_pairing 10 full_threshold_percent integer not-null
+constraint wms.sensor_pairing sensor_pairing_company_id_fk FOREIGN KEY (company_id) REFERENCES wms.company(id)
+constraint wms.sensor_pairing sensor_pairing_container_id_fk FOREIGN KEY (company_id, project_id, container_id) REFERENCES wms.container(company_id, project_id, id)
+constraint wms.sensor_pairing sensor_pairing_container_no_overlap EXCLUDE USING gist (company_id WITH =, container_id WITH =, daterange(valid_from, valid_to, '[)'::text) WITH &&)
+constraint wms.sensor_pairing sensor_pairing_no_overlap EXCLUDE USING gist (company_id WITH =, sensor_id WITH =, daterange(valid_from, valid_to, '[)'::text) WITH &&)
+constraint wms.sensor_pairing sensor_pairing_pkey PRIMARY KEY (id)
+constraint wms.sensor_pairing sensor_pairing_project_id_fk FOREIGN KEY (company_id, project_id) REFERENCES wms.project(company_id, id)
+constraint wms.sensor_pairing sensor_pairing_project_key UNIQUE (company_id, project_id, id)
+constraint wms.sensor_pairing sensor_pairing_sensor_id_fk FOREIGN KEY (company_id, project_id, sensor_id) REFERENCES wms.sensor(company_id, project_id, id)
+constraint wms.sensor_pairing sensor_pairing_threshold_range CHECK (((full_threshold_percent >= 1) AND (full_threshold_percent <= 100)))
+constraint wms.sensor_pairing sensor_pairing_validity CHECK (((valid_to IS NULL) OR (valid_to > valid_from)))
+index wms.sensor_pairing sensor_pairing_container_no_overlap CREATE INDEX sensor_pairing_container_no_overlap ON wms.sensor_pairing USING gist (company_id, container_id, daterange(valid_from, valid_to, '[)'::text))
+index wms.sensor_pairing sensor_pairing_no_overlap CREATE INDEX sensor_pairing_no_overlap ON wms.sensor_pairing USING gist (company_id, sensor_id, daterange(valid_from, valid_to, '[)'::text))
+index wms.sensor_pairing sensor_pairing_pkey CREATE UNIQUE INDEX sensor_pairing_pkey ON wms.sensor_pairing USING btree (id)
+index wms.sensor_pairing sensor_pairing_project_key CREATE UNIQUE INDEX sensor_pairing_project_key ON wms.sensor_pairing USING btree (company_id, project_id, id)
+trigger wms.sensor_pairing sensor_pairing_audit_trail enabled=O CREATE TRIGGER sensor_pairing_audit_trail AFTER INSERT OR DELETE OR UPDATE ON wms.sensor_pairing FOR EACH ROW EXECUTE FUNCTION wms.audit_row('sensor', 'sensor_id')
+trigger wms.sensor_pairing sensor_pairing_touch_updated_at enabled=O CREATE TRIGGER sensor_pairing_touch_updated_at BEFORE UPDATE ON wms.sensor_pairing FOR EACH ROW EXECUTE FUNCTION wms.touch_updated_at()
+policy wms.sensor_pairing sensor_pairing_tenant_fence permissive ALL to=wms_api using=(company_id = ( SELECT wms.current_company_id() AS current_company_id)) check=(company_id = ( SELECT wms.current_company_id() AS current_company_id))
 relation wms.service_area kind=table owner=<owner> persistence=p rls=true force-rls=true replica-identity=d acl=[<owner>=DELETE,INSERT,MAINTAIN,REFERENCES,SELECT,TRIGGER,TRUNCATE,UPDATE/<owner> wms_api=DELETE,INSERT,SELECT,UPDATE/<owner> wms_worker=SELECT/<owner>]
 column wms.service_area 1 id uuid not-null default=wms.uuidv7()
 column wms.service_area 2 company_id uuid not-null
@@ -4720,7 +4800,9 @@ journal 1793241234406 3e4f0b485e465f3836018f545d415793a377728d22334fe5b59d8e0b44
 journal 1793243238519 233234b7acf3c642f212331efc9afedc7d139dcd35159a8709e2d830322834c8
 journal 1793245578465 3b2865a553c39e7190c0b99795b29f5f18959d692c42e6a9d2a1f2e4ea7b5b3c
 journal 1793247592226 4b92f6ad7212b3dafef3bbd4bfba4e6696da935f5c9f7354442f7860b0bb123f
-journal 1793262198279 d11debc5f21b91706db12b266c1f9d1c9c0fc1d52f1ff23058b0a44641ad8501
-journal 1793262883504 2125da124d5ee7ff9696f7ba6262cee038ca4f70299587bd9787adb4629f251f
-journal 1793263509258 a9b2b87bfefab0d392d1c922804507e4aaac5ed2c6ad871ec91626f1524f1970
+journal 1793251427635 28c1ebcb79fe09c31112ea7c107fd4fa02346fd0ea3241c4875ef71724c3300a
+journal 1793262692450 55627dafbd3cb890c76eb45db4afd21abdf2a8593bb40b111738da9cc9c67bef
+journal 1793264847178 d11debc5f21b91706db12b266c1f9d1c9c0fc1d52f1ff23058b0a44641ad8501
+journal 1793265500589 2125da124d5ee7ff9696f7ba6262cee038ca4f70299587bd9787adb4629f251f
+journal 1793266175567 a9b2b87bfefab0d392d1c922804507e4aaac5ed2c6ad871ec91626f1524f1970
 pgboss-version 42

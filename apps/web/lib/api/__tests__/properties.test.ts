@@ -72,9 +72,9 @@ const parkvej: Property = {
   serviceWindow: null,
   status: "active",
   parties: [
-    { customerId: osterbro.id, role: "owner" },
-    { customerId: osterbro.id, role: "payer" },
-    { customerId: mikkel.id, role: "service-contact" },
+    { customerId: osterbro.id, role: "owner", validFrom: "2026-01-01", validTo: null },
+    { customerId: osterbro.id, role: "payer", validFrom: "2026-01-01", validTo: null },
+    { customerId: mikkel.id, role: "service-contact", validFrom: "2026-01-01", validTo: null },
   ],
 }
 const dock4: Property = {
@@ -89,8 +89,8 @@ const dock4: Property = {
   notes: null,
   status: "inactive",
   parties: [
-    { customerId: HARBOR_PROPERTIES, role: "owner" },
-    { customerId: kab.id, role: "tenant" },
+    { customerId: HARBOR_PROPERTIES, role: "owner", validFrom: "2026-01-01", validTo: null },
+    { customerId: kab.id, role: "tenant", validFrom: "2026-01-01", validTo: null },
   ],
 }
 const ryesgade: Property = { ...parkvej, id: "01a0d2a4-a280-700c-8000-000000000004", name: "Ryesgade 3", address: "Ryesgade 3, 2200 København N", registryId: "CPH-91000", location: null, notes: null, driverInstructions: null, parties: [] }
@@ -263,6 +263,21 @@ describe("a property", () => {
     assert.equal(record.submittedValues?.tenantIds, `company-${kab.id}`)
     assert.equal(record.submittedValues?.latitude, "")
     assert.equal(record.submittedValues?.longitude, "")
+  })
+
+  test("names the parties in force on the project's today and none booked ahead (#374): the set its form edits and its PUT sends back", () => {
+    const moving: Property = {
+      ...dock4,
+      parties: [
+        { customerId: kab.id, role: "tenant", validFrom: "2026-01-01", validTo: "2026-11-01" },
+        { customerId: HARBOR_PROPERTIES, role: "tenant", validFrom: "2026-11-01", validTo: null },
+      ],
+    }
+    const record = propertyAdapter.toRecord(moving, context())
+    assert.equal(record.facts.Tenants, "KAB Bolig", "the tenant moving in on 1 November is not a tenant on 30 September")
+    assert.equal(record.submittedValues?.tenantIds, `company-${kab.id}`)
+    assert.equal(record.facts["Booked ahead"], `KAB Bolig leaves as tenant on 2026-11-01 · customer-${HARBOR_PROPERTIES} joins as tenant on 2026-11-01`, "the move booked ahead, said in its details: who leaves first, then who joins, on the day")
+    assert.equal(propertyAdapter.toRecord(dock4, context()).facts["Booked ahead"], undefined, "nothing booked, nothing said")
   })
 
   test("says exactly the wire's two statuses, so the store refuses the lifecycle's Prospect, On hold and Archived before the API", () => {

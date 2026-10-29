@@ -1,5 +1,5 @@
 {
-  "id": "1478e7cf-d2ea-449a-ac7a-bf6b2114702f",
+  "id": "f846cb46-fa49-4817-bdaf-f60872b96345",
   "prevId": "9f7facba-3595-4617-be9f-eae8c8a9f2cc",
   "version": "7",
   "dialect": "postgresql",
@@ -2810,6 +2810,18 @@
           "notNull": true,
           "default": "now()"
         },
+        "valid_from": {
+          "name": "valid_from",
+          "type": "date",
+          "primaryKey": false,
+          "notNull": true
+        },
+        "valid_to": {
+          "name": "valid_to",
+          "type": "date",
+          "primaryKey": false,
+          "notNull": false
+        },
         "property_id": {
           "name": "property_id",
           "type": "uuid",
@@ -2830,6 +2842,27 @@
         }
       },
       "indexes": {
+        "property_party_property_id_idx": {
+          "name": "property_party_property_id_idx",
+          "columns": [
+            {
+              "expression": "company_id",
+              "isExpression": false,
+              "asc": true,
+              "nulls": "last"
+            },
+            {
+              "expression": "property_id",
+              "isExpression": false,
+              "asc": true,
+              "nulls": "last"
+            }
+          ],
+          "isUnique": false,
+          "concurrently": false,
+          "method": "btree",
+          "with": {}
+        },
         "property_party_project_id_idx": {
           "name": "property_party_project_id_idx",
           "columns": [
@@ -2940,20 +2973,13 @@
         }
       },
       "compositePrimaryKeys": {},
-      "uniqueConstraints": {
-        "property_party_property_id_customer_id_role_key": {
-          "name": "property_party_property_id_customer_id_role_key",
-          "nullsNotDistinct": false,
-          "columns": [
-            "company_id",
-            "property_id",
-            "customer_id",
-            "role"
-          ]
-        }
-      },
+      "uniqueConstraints": {},
       "policies": {},
       "checkConstraints": {
+        "property_party_validity": {
+          "name": "property_party_validity",
+          "value": "\"wms\".\"property_party\".\"valid_to\" is null or \"wms\".\"property_party\".\"valid_to\" > \"wms\".\"property_party\".\"valid_from\""
+        },
         "property_party_role_one_of": {
           "name": "property_party_role_one_of",
           "value": "\"wms\".\"property_party\".\"role\" in ('owner', 'payer', 'tenant', 'administrator', 'service-contact')"
@@ -11083,11 +11109,11 @@
       "checkConstraints": {
         "outbox_event_kind_one_of": {
           "name": "outbox_event_kind_one_of",
-          "value": "\"wms\".\"outbox_event\".\"kind\" in ('route-dispatched', 'route-started', 'route-completed', 'route-cancelled', 'route-reassigned', 'pickup-completed', 'pickup-failed', 'pickup-skipped', 'pickup-problem-reported', 'pickup-corrected', 'unload-recorded', 'command-rejected', 'ticket-opened', 'ticket-completed', 'ticket-rejected', 'invoice-issued', 'settlement-closed', 'application-decided', 'site-visit-recorded', 'site-visit-voided', 'alert-raised', 'ticket-assigned')"
+          "value": "\"wms\".\"outbox_event\".\"kind\" in ('route-dispatched', 'route-started', 'route-completed', 'route-cancelled', 'route-reassigned', 'pickup-completed', 'pickup-failed', 'pickup-skipped', 'pickup-problem-reported', 'pickup-corrected', 'unload-recorded', 'command-rejected', 'ticket-opened', 'ticket-completed', 'ticket-rejected', 'invoice-issued', 'settlement-closed', 'application-decided', 'site-visit-recorded', 'site-visit-voided')"
         },
         "outbox_event_aggregate_kind_one_of": {
           "name": "outbox_event_aggregate_kind_one_of",
-          "value": "\"wms\".\"outbox_event\".\"aggregate_kind\" in ('route', 'pickup', 'unload', 'command', 'ticket', 'invoice', 'settlement', 'application', 'site-visit', 'alert')"
+          "value": "\"wms\".\"outbox_event\".\"aggregate_kind\" in ('route', 'pickup', 'unload', 'command', 'ticket', 'invoice', 'settlement', 'application', 'site-visit')"
         }
       },
       "isRLSEnabled": false
@@ -31612,22 +31638,10 @@
           "name": "customer_id",
           "type": "uuid",
           "primaryKey": false,
-          "notNull": false
+          "notNull": true
         },
         "contact_id": {
           "name": "contact_id",
-          "type": "uuid",
-          "primaryKey": false,
-          "notNull": false
-        },
-        "user_account_id": {
-          "name": "user_account_id",
-          "type": "uuid",
-          "primaryKey": false,
-          "notNull": false
-        },
-        "source_event_id": {
-          "name": "source_event_id",
           "type": "uuid",
           "primaryKey": false,
           "notNull": false
@@ -31784,55 +31798,6 @@
           "concurrently": false,
           "method": "btree",
           "with": {}
-        },
-        "message_user_account_id_idx": {
-          "name": "message_user_account_id_idx",
-          "columns": [
-            {
-              "expression": "company_id",
-              "isExpression": false,
-              "asc": true,
-              "nulls": "last"
-            },
-            {
-              "expression": "user_account_id",
-              "isExpression": false,
-              "asc": true,
-              "nulls": "last"
-            }
-          ],
-          "isUnique": false,
-          "concurrently": false,
-          "method": "btree",
-          "with": {}
-        },
-        "message_source_event_id_user_account_id_idx": {
-          "name": "message_source_event_id_user_account_id_idx",
-          "columns": [
-            {
-              "expression": "company_id",
-              "isExpression": false,
-              "asc": true,
-              "nulls": "last"
-            },
-            {
-              "expression": "source_event_id",
-              "isExpression": false,
-              "asc": true,
-              "nulls": "last"
-            },
-            {
-              "expression": "user_account_id",
-              "isExpression": false,
-              "asc": true,
-              "nulls": "last"
-            }
-          ],
-          "isUnique": true,
-          "where": "\"wms\".\"message\".\"source_event_id\" is not null and \"wms\".\"message\".\"user_account_id\" is not null",
-          "concurrently": false,
-          "method": "btree",
-          "with": {}
         }
       },
       "foreignKeys": {
@@ -31915,39 +31880,19 @@
           ],
           "onDelete": "no action",
           "onUpdate": "no action"
-        },
-        "message_user_account_id_fk": {
-          "name": "message_user_account_id_fk",
-          "tableFrom": "message",
-          "tableTo": "user_account",
-          "schemaTo": "wms",
-          "columnsFrom": [
-            "company_id",
-            "user_account_id"
-          ],
-          "columnsTo": [
-            "company_id",
-            "id"
-          ],
-          "onDelete": "no action",
-          "onUpdate": "no action"
         }
       },
       "compositePrimaryKeys": {},
       "uniqueConstraints": {},
       "policies": {},
       "checkConstraints": {
-        "message_recipient_exactly_one": {
-          "name": "message_recipient_exactly_one",
-          "value": "(\"wms\".\"message\".\"customer_id\" is not null)::int + (\"wms\".\"message\".\"user_account_id\" is not null)::int = 1"
-        },
         "message_channel_one_of": {
           "name": "message_channel_one_of",
           "value": "\"wms\".\"message\".\"channel\" in ('email', 'sms')"
         },
         "message_purpose_one_of": {
           "name": "message_purpose_one_of",
-          "value": "\"wms\".\"message\".\"purpose\" in ('service', 'billing', 'staff')"
+          "value": "\"wms\".\"message\".\"purpose\" in ('service', 'billing')"
         },
         "message_status_one_of": {
           "name": "message_status_one_of",
@@ -32109,118 +32054,6 @@
         "message_template_subject_shape": {
           "name": "message_template_subject_shape",
           "value": "(\"wms\".\"message_template\".\"channel\" = 'email') = (\"wms\".\"message_template\".\"subject\" is not null)"
-        }
-      },
-      "isRLSEnabled": false
-    },
-    "wms.notification_preference": {
-      "name": "notification_preference",
-      "schema": "wms",
-      "columns": {
-        "id": {
-          "name": "id",
-          "type": "uuid",
-          "primaryKey": true,
-          "notNull": true,
-          "default": "wms.uuidv7()"
-        },
-        "company_id": {
-          "name": "company_id",
-          "type": "uuid",
-          "primaryKey": false,
-          "notNull": true
-        },
-        "created_at": {
-          "name": "created_at",
-          "type": "timestamp with time zone",
-          "primaryKey": false,
-          "notNull": true,
-          "default": "now()"
-        },
-        "updated_at": {
-          "name": "updated_at",
-          "type": "timestamp with time zone",
-          "primaryKey": false,
-          "notNull": true,
-          "default": "now()"
-        },
-        "user_account_id": {
-          "name": "user_account_id",
-          "type": "uuid",
-          "primaryKey": false,
-          "notNull": true
-        },
-        "event": {
-          "name": "event",
-          "type": "text",
-          "primaryKey": false,
-          "notNull": true
-        },
-        "min_severity": {
-          "name": "min_severity",
-          "type": "text",
-          "primaryKey": false,
-          "notNull": false
-        }
-      },
-      "indexes": {},
-      "foreignKeys": {
-        "notification_preference_company_id_fk": {
-          "name": "notification_preference_company_id_fk",
-          "tableFrom": "notification_preference",
-          "tableTo": "company",
-          "schemaTo": "wms",
-          "columnsFrom": [
-            "company_id"
-          ],
-          "columnsTo": [
-            "id"
-          ],
-          "onDelete": "no action",
-          "onUpdate": "no action"
-        },
-        "notification_preference_user_account_id_fk": {
-          "name": "notification_preference_user_account_id_fk",
-          "tableFrom": "notification_preference",
-          "tableTo": "user_account",
-          "schemaTo": "wms",
-          "columnsFrom": [
-            "company_id",
-            "user_account_id"
-          ],
-          "columnsTo": [
-            "company_id",
-            "id"
-          ],
-          "onDelete": "no action",
-          "onUpdate": "no action"
-        }
-      },
-      "compositePrimaryKeys": {},
-      "uniqueConstraints": {
-        "notification_preference_user_account_id_event_key": {
-          "name": "notification_preference_user_account_id_event_key",
-          "nullsNotDistinct": false,
-          "columns": [
-            "company_id",
-            "user_account_id",
-            "event"
-          ]
-        }
-      },
-      "policies": {},
-      "checkConstraints": {
-        "notification_preference_event_one_of": {
-          "name": "notification_preference_event_one_of",
-          "value": "\"wms\".\"notification_preference\".\"event\" in ('alert-raised', 'ticket-assigned')"
-        },
-        "notification_preference_min_severity_one_of": {
-          "name": "notification_preference_min_severity_one_of",
-          "value": "\"wms\".\"notification_preference\".\"min_severity\" in ('critical', 'high', 'medium', 'low')"
-        },
-        "notification_preference_min_severity_shape": {
-          "name": "notification_preference_min_severity_shape",
-          "value": "(\"wms\".\"notification_preference\".\"event\" = 'alert-raised') = (\"wms\".\"notification_preference\".\"min_severity\" is not null)"
         }
       },
       "isRLSEnabled": false
