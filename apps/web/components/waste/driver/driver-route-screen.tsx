@@ -24,6 +24,7 @@ import { Button } from "@/components/ui/button"
 import { useDriverApp, useDriverAppState } from "@/components/waste/driver/driver-app-provider"
 import { EndRouteDialog, NoteDialog, ReasonDialog, UnloadDialog, WeightDialog } from "@/components/waste/driver/driver-dialogs"
 import { DriverFrame } from "@/components/waste/driver/driver-frame"
+import { DriverRouteMessages } from "@/components/waste/driver/driver-route-messages"
 import { PhotoDialog, SignatureDialog } from "@/components/waste/driver/driver-proof-dialogs"
 import { DriverLink, KeptNotice, RejectionList, operatingDay, progressLine } from "@/components/waste/driver/driver-parts"
 import { ScanDialog } from "@/components/waste/driver/driver-scan-dialog"
@@ -174,6 +175,7 @@ function RouteDetailView({ detail, me }: { detail: DriverRouteDetail; me: Driver
       />
       <UnloadDialog open={dialog === "unload"} onOpenChange={close} me={me} onConfirm={(body) => void app.tap({ kind: "record-unload", routeId: detail.id, body })} />
       <EndRouteDialog open={dialog === "end"} onOpenChange={close} warning={endRouteWarning(detail, state.waiting)} onConfirm={() => void app.tap({ kind: "end-route", routeId: detail.id, body: {} })} />
+      <DriverRouteMessages routeId={detail.id} />
     </main>
   )
 }

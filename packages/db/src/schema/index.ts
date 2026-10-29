@@ -70,3 +70,4 @@ export * from "./messaging"
 export * from "./pre-trip"
 // Fill-level Sensors (O26 of #290): the devices, their pairings with containers and the readings they send.
 export * from "./sensors"
+export * from "./route-messages"

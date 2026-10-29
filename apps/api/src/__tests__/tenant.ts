@@ -81,6 +81,7 @@ import {
   sharedCollectionPointMember,
 } from "@waste/db/schema/customers"
 import { message, messageTemplate } from "@waste/db/schema/messaging"
+import { routeMessage } from "@waste/db/schema/route-messages"
 import { company, project, serviceProvider } from "@waste/db/schema/organisation"
 import { contaminantCode, contaminantCodeFraction, pickupExceptionRule, pickupExceptionRuleStep } from "@waste/db/schema/pickup-exceptions"
 import { planningArea, planningAreaBoundary } from "@waste/db/schema/planning-areas"
@@ -357,6 +358,7 @@ export async function dropTenant(pool: Database, companyId: string, owner?: Data
     await owner.db.delete(ticketEvent).where(eq(ticketEvent.companyId, companyId))
     await owner.db.delete(applicationDecision).where(eq(applicationDecision.companyId, companyId))
     await owner.db.delete(proofOfService).where(eq(proofOfService.companyId, companyId))
+    await owner.db.delete(routeMessage).where(eq(routeMessage.companyId, companyId))
     await owner.db.delete(sessionPosition).where(eq(sessionPosition.companyId, companyId))
     // A defect names its check (O13 of #290): both go with the ledgers, the defect first.
     await owner.db.delete(vehicleDefect).where(eq(vehicleDefect.companyId, companyId))
