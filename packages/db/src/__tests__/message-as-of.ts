@@ -1,12 +1,12 @@
 // `message`, the delivery log, as 0074 (#291 C15) left it: a customer's
 // message alone, before the staff notifications (O16 of #290, migration
-// 0092) gave it a user account, made its customer nullable behind
+// 0083) gave it a user account, made its customer nullable behind
 // `message_recipient_exactly_one`, keyed it on its source event and let its
 // purpose be `staff`. messaging-rendering.test.ts diffs to this spelling and
 // staff-notifications-rendering.test.ts from it, since an applied file is
 // never edited and the schema module spells the table as it is today. And as
-// 0092 left it: today's but for the key of a customer's notice by its source
-// event (O16 of #290, part b, migration 0093), which
+// 0083 left it: today's but for the key of a customer's notice by its source
+// event (O16 of #290, part b, migration 0084), which
 // staff-notifications-rendering.test.ts diffs to and
 // booking-notices-rendering.test.ts from.
 import { MESSAGE_CHANNELS, MESSAGE_PURPOSES, MESSAGE_STATUSES, MESSAGE_TEMPLATE_PURPOSES } from "@waste/domain/messaging/vocabulary"
@@ -66,7 +66,7 @@ export const messageAsOf0074 = wms.table(
   ],
 )
 
-export const messageAsOf0092 = wms.table(
+export const messageAsOf0083 = wms.table(
   "message",
   {
     ...id,
