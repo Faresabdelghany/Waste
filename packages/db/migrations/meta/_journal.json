@@ -516,15 +516,29 @@
     {
       "idx": 73,
       "version": "7",
-      "when": 1793232910198,
-      "tag": "0073_fill_level_sensors",
+      "when": 1793231090634,
+      "tag": "0073_contact_persons",
       "breakpoints": true
     },
     {
       "idx": 74,
       "version": "7",
-      "when": 1793235403314,
-      "tag": "0074_fill_driven_emptying",
+      "when": 1793231765311,
+      "tag": "0074_messaging",
+      "breakpoints": true
+    },
+    {
+      "idx": 75,
+      "version": "7",
+      "when": 1793236606158,
+      "tag": "0075_fill_level_sensors",
+      "breakpoints": true
+    },
+    {
+      "idx": 76,
+      "version": "7",
+      "when": 1793237266192,
+      "tag": "0076_fill_driven_emptying",
       "breakpoints": true
     }
   ]

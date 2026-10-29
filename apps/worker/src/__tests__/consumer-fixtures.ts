@@ -33,7 +33,8 @@ import { role, userAccount } from "@waste/db/schema/access"
 import { agreement, subscription } from "@waste/db/schema/agreements"
 import { containerType, product, wasteFraction } from "@waste/db/schema/catalogue"
 import { container, containerServicePlacement } from "@waste/db/schema/containers"
-import { customer, property } from "@waste/db/schema/customers"
+import { customer, customerContact, property } from "@waste/db/schema/customers"
+import { message, messageTemplate } from "@waste/db/schema/messaging"
 import { driverCommand, outboxEvent, pickup, proofOfService, route } from "@waste/db/schema/execution"
 import { driver, vehicle } from "@waste/db/schema/fleet"
 import { vehicleType } from "@waste/db/schema/fleet-types"
@@ -410,6 +411,10 @@ export async function dropConsumerTenant(pool: Database, owner: Database, compan
     await tx.delete(subscription).where(eq(subscription.companyId, companyId))
     await tx.delete(agreement).where(eq(agreement.companyId, companyId))
     await tx.delete(product).where(eq(product.companyId, companyId))
+    // Messaging (#291 C15): the log before its templates, both before the customer and its contacts.
+    await tx.delete(message).where(eq(message.companyId, companyId))
+    await tx.delete(messageTemplate).where(eq(messageTemplate.companyId, companyId))
+    await tx.delete(customerContact).where(eq(customerContact.companyId, companyId))
     await tx.delete(customer).where(eq(customer.companyId, companyId))
     await tx.delete(userAccount).where(eq(userAccount.companyId, companyId))
     await tx.delete(role).where(eq(role.companyId, companyId))

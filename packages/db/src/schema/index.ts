@@ -64,5 +64,7 @@ export * from "./sustainability"
 export * from "./site-visits"
 // The coordination between the office and a Service Provider: proposals, follow-ups and notes (#474).
 export * from "./service-provider-activities"
+// Messaging (#291 C15): the office's templates and the delivery log.
+export * from "./messaging"
 // Fill-level Sensors (O26 of #290): the devices, their pairings with containers and the readings they send.
 export * from "./sensors"
