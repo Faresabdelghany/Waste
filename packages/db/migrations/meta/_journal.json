@@ -530,8 +530,22 @@
     {
       "idx": 75,
       "version": "7",
-      "when": 1793236606158,
-      "tag": "0075_fill_level_sensors",
+      "when": 1793235059830,
+      "tag": "0075_pre_trip",
+      "breakpoints": true
+    },
+    {
+      "idx": 76,
+      "version": "7",
+      "when": 1793241234406,
+      "tag": "0076_fraction_hazardous",
+      "breakpoints": true
+    },
+    {
+      "idx": 77,
+      "version": "7",
+      "when": 1793244373991,
+      "tag": "0077_fill_level_sensors",
       "breakpoints": true
     }
   ]

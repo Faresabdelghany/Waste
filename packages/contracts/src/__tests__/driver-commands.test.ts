@@ -55,12 +55,13 @@ const bodies: Record<DriverCommandKind, object> = {
   resume: {},
   "end-route": { note: "Done for today", location: POINT },
   "record-positions": { points: [{ at: "2026-10-05T06:18:00.000Z", location: POINT, accuracyM: 9 }, { at: WHEN, location: POINT, accuracyM: 14, speedKmh: 32, headingDeg: 270 }] },
+  "pre-trip-check": { vehicleId: THIRD, items: [{ itemId: ID, passed: true }, { itemId: OTHER, passed: false, note: "Left indicator out" }], odometerKm: 182_400, engineHours: 6_120, location: POINT },
 }
 
 const command = (kind: DriverCommandKind, body: object = bodies[kind]) => ({ ...envelope, kind, body })
 
 describe("DriverCommand", () => {
-  test("is the discriminated union over the fifteen kinds, each a strict envelope around a strict body", () => {
+  test("is the discriminated union over the sixteen kinds, each a strict envelope around a strict body", () => {
     assert.deepEqual(Object.keys(COMMAND_BODIES).sort(), [...DRIVER_COMMAND_KINDS].sort())
     for (const kind of DRIVER_COMMAND_KINDS) assert.deepEqual(DriverCommand.parse(command(kind)), command(kind), kind)
     assert.equal(DriverCommand.safeParse(command("reschedule-stop" as DriverCommandKind, {})).success, false, "a Ticket's, not a command")
@@ -91,6 +92,7 @@ describe("DriverCommand", () => {
       resume: ["pickupId", THIRD],
       "end-route": ["pickupId", THIRD],
       "record-positions": ["location", POINT],
+      "pre-trip-check": ["pickupId", THIRD],
     }
     for (const kind of DRIVER_COMMAND_KINDS) {
       const [member, value] = foreign[kind]
@@ -244,8 +246,8 @@ describe("what the door answers and stores", () => {
   test("the driver's start screen is the profile, the open session, today's routes and what a start and an unload pick from", () => {
     const driver = { id: OTHER, projectId: OTHER, name: "Mads Jensen", workforceReference: null, employment: "employee", serviceProviderId: null, homeDepotId: null, licenceClass: "ce", licenceNumber: null, licenceExpiry: null, userAccountId: ID, status: "active", notes: null, shift: null, ...STAMPS }
     const vehicles = [
-      { id: ID, label: "WH-24", kind: "powered-vehicle", requiredLicenceClass: "c" },
-      { id: THIRD, label: "CN 90 112", kind: "trailer", requiredLicenceClass: "b" },
+      { id: ID, label: "WH-24", kind: "powered-vehicle", requiredLicenceClass: "c", checklist: [{ id: OTHER, label: "Brakes", critical: true }] },
+      { id: THIRD, label: "CN 90 112", kind: "trailer", requiredLicenceClass: "b", checklist: [] },
     ]
     const unloadingStations = [
       { id: OTHER, name: "Nordkaj transfer station", location: POINT, weighbridge: true, wasteFractionIds: [ID, THIRD] },
@@ -267,6 +269,9 @@ describe("what the door answers and stores", () => {
     assert.deepEqual(refusal(DriverMe.safeParse({ ...me, vehicles: [{ ...vehicles[0], kind: "crane" }] })).map((issue) => issue.path), ["vehicles.0.kind"], "a vehicle is powered or a trailer")
     assert.deepEqual(refusal(DriverMe.safeParse({ ...me, vehicles: [{ ...vehicles[0], requiredLicenceClass: null }] })).map((issue) => issue.path), ["vehicles.0.requiredLicenceClass"], "a vehicle's class is never unknown")
     assert.deepEqual(refusal(DriverMe.safeParse({ ...me, vehicles: [{ ...vehicles[0], label: " " }] })).map((issue) => issue.path), ["vehicles.0.label"])
+    // The checklist a pre-trip check answers (O13 of #290): an answer from before it reads as none.
+    const { checklist: _checklist, ...before } = vehicles[0]
+    assert.deepEqual(DriverMe.parse({ ...me, vehicles: [before] }).vehicles[0].checklist, [])
 
     // A station is where it is and says what it accepts, by id; accepting nothing is an empty list, not an absent one.
     for (const key of ["id", "name", "location", "weighbridge", "wasteFractionIds"]) {

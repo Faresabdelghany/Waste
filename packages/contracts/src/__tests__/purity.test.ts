@@ -73,7 +73,9 @@
 // @waste/domain/messaging/vocabulary and @waste/domain/messaging/template:
 // messaging.ts reads the channels, purposes and statuses, and refuses a
 // template naming a placeholder no message fills, or out of its channel's
-// shape, in the domain's sentences. O26 of #290 added
+// shape, in the domain's sentences. O13 of #290 added
+// @waste/domain/resources/pre-trip: pre-trip.ts bounds a checklist and a
+// check by the domain's cap. O26 of #290 added
 // @waste/domain/resources/sensors: sensors.ts bounds the ingest's batch by the
 // domain's cap and defaults a pairing's threshold to the domain's.
 import path from "node:path"
@@ -116,6 +118,7 @@ definePurityTests({
     "@waste/domain/resolution/vocabulary",
     "@waste/domain/resources/drop-off-points",
     "@waste/domain/resources/emissions",
+    "@waste/domain/resources/pre-trip",
     "@waste/domain/resources/sensors",
     "@waste/domain/resources/stock-balance",
     "@waste/domain/resources/vocabulary",

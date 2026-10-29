@@ -62,7 +62,10 @@ import { shownOn } from "@/lib/api/records/clock"
 import { providerPriceIndexHeldBack, providerPriceIndexOffered, settlementCommandsOffered, settlementDetail, settlementHeldBack, settlementHistory } from "@/lib/api/records/provider-money"
 import { typed } from "@/lib/api/records/adapter"
 import { ROUTES_MODULE } from "@/lib/api/records/routes"
-import { weightReviewsOffered } from "@/lib/api/records/weights"
+import { transferNoteWithheld, unloadTransferNote, weightReviewsOffered } from "@/lib/api/records/weights"
+import { problemSentence } from "@/lib/api/problem"
+import { problemOfError } from "@/lib/api/records/server-records"
+import { downloadBlob } from "@/lib/data/csv"
 import { formatMinor } from "@/lib/commercial/money"
 import type { BusinessFormValues } from "@/lib/data/business-form-types"
 import type { BusinessRecord, ModuleLocation } from "@/lib/data/business-modules"
@@ -643,18 +646,85 @@ export function WeightReviewSurface({ record }: RowSurfaceProps) {
     })
 
   return (
-    <section className="space-y-3" data-testid="weight-review-commands">
-      <h3 className="text-sm font-semibold">Weight review</h3>
-      {!moduleReady && <p className="text-sm text-muted-foreground">The weights are being read from the API; their reviews follow.</p>}
-      {correction !== undefined && <p className="text-sm text-muted-foreground">Corrected by {correction}: review that one.</p>}
-      <div className="flex flex-wrap gap-2">
-        {offered.map((name) => (
-          <Button key={name} variant="outline" size="sm" disabled={!moduleReady || busy} onClick={() => setOpen(name)}>
-            {WEIGHT_REVIEW_FORMS[name].submitLabel}
+    <>
+      <section className="space-y-3" data-testid="weight-review-commands">
+        <h3 className="text-sm font-semibold">Weight review</h3>
+        {!moduleReady && <p className="text-sm text-muted-foreground">The weights are being read from the API; their reviews follow.</p>}
+        {correction !== undefined && <p className="text-sm text-muted-foreground">Corrected by {correction}: review that one.</p>}
+        <div className="flex flex-wrap gap-2">
+          {offered.map((name) => (
+            <Button key={name} variant="outline" size="sm" disabled={!moduleReady || busy} onClick={() => setOpen(name)}>
+              {WEIGHT_REVIEW_FORMS[name].submitLabel}
+            </Button>
+          ))}
+        </div>
+        {open !== null && <BusinessRecordFormDialog schema={WEIGHT_REVIEW_FORMS[open]} open onOpenChange={(isOpen) => !isOpen && setOpen(null)} onSubmit={(values) => send(open, values)} relationOptions={(field) => field.options ?? []} />}
+      </section>
+      <TransferNote record={record} />
+    </>
+  )
+}
+
+/** An unload's waste transfer note (O18 of #290): read in a new tab or saved, as the API renders it; where it has none, the details say why. */
+function TransferNote({ record }: { record: BusinessRecord }) {
+  const client = useApiClient()
+  const weights = useServerModuleState(WEIGHTS_MODULE.workspaceId, WEIGHTS_MODULE.moduleId)
+  const serverId = weights?.serverIds.get(record.id)
+  const withheld = transferNoteWithheld(record)
+  const [busy, setBusy] = useState(false)
+
+  /** The note's file, or null where it could not be read, which is toasted. */
+  const fetchNote = async (): Promise<{ blob: Blob; fileName: string } | null> => {
+    if (client === null || serverId === undefined) return null
+    setBusy(true)
+    try {
+      const file = await unloadTransferNote(client, serverId)
+      return { blob: new Blob([file.bytes], { type: file.contentType ?? "application/pdf" }), fileName: file.fileName ?? `transfer-note-${serverId}.pdf` }
+    } catch (error) {
+      toast.error("The transfer note could not be read", { description: problemSentence(problemOfError(error)) })
+      return null
+    } finally {
+      setBusy(false)
+    }
+  }
+  const read = async () => {
+    // The tab is opened inside the click, before the read, so no popup blocker holds it back; it is pointed at the note once it is read.
+    const tab = window.open("about:blank", "_blank")
+    const note = await fetchNote()
+    if (tab === null) {
+      if (note !== null) downloadBlob(note.fileName, note.blob)
+      return
+    }
+    if (note === null) {
+      tab.close()
+      return
+    }
+    tab.opener = null
+    const url = URL.createObjectURL(note.blob)
+    tab.location.href = url
+    // The tab has the bytes once it loads them; the URL is let go after it has had time to.
+    setTimeout(() => URL.revokeObjectURL(url), 60_000)
+  }
+  const download = async () => {
+    const note = await fetchNote()
+    if (note !== null) downloadBlob(note.fileName, note.blob)
+  }
+
+  return (
+    <section className="space-y-2" data-testid="transfer-note">
+      <h3 className="text-sm font-semibold">Transfer note</h3>
+      {withheld !== null ? (
+        <p className="text-sm text-muted-foreground">{withheld}</p>
+      ) : (
+        <div className="flex flex-wrap gap-2">
+          <Button variant="outline" size="sm" disabled={serverId === undefined || client === null || busy} onClick={() => void read()}>
+            Read transfer note
           </Button>
-        ))}
-      </div>
-      {open !== null && <BusinessRecordFormDialog schema={WEIGHT_REVIEW_FORMS[open]} open onOpenChange={(isOpen) => !isOpen && setOpen(null)} onSubmit={(values) => send(open, values)} relationOptions={(field) => field.options ?? []} />}
+          <Button variant="outline" size="sm" disabled={serverId === undefined || client === null || busy} onClick={() => void download()}>
+            Download PDF
+          </Button>
+        </div>
+      )}
     </section>
   )
 }

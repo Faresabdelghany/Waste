@@ -343,9 +343,9 @@ describe("the driver door", { skip: database.skip || owner.skip }, () => {
         assert.deepEqual(
           me.vehicles,
           byId([
-            { id: fleet.vehicles.wh24.id, label: fleet.vehicles.wh24.label, kind: "powered-vehicle", requiredLicenceClass: "c" },
-            { id: fleet.vehicles.wh25.id, label: fleet.vehicles.wh25.label, kind: "powered-vehicle", requiredLicenceClass: "ce" },
-            { id: fleet.vehicles.trailer.id, label: "CN 90 112", kind: "trailer", requiredLicenceClass: "b" },
+            { id: fleet.vehicles.wh24.id, label: fleet.vehicles.wh24.label, kind: "powered-vehicle", requiredLicenceClass: "c", checklist: [] },
+            { id: fleet.vehicles.wh25.id, label: fleet.vehicles.wh25.label, kind: "powered-vehicle", requiredLicenceClass: "ce", checklist: [] },
+            { id: fleet.vehicles.trailer.id, label: "CN 90 112", kind: "trailer", requiredLicenceClass: "b", checklist: [] },
           ]),
           "Copenhagen Central's in service: not WH-99 or WH-T99 (retired) or WH-77 (unavailable), not Harbor's HB-1, none of the other company's",
         )

@@ -23,10 +23,13 @@ import { tenantFence } from "../sql/tenant-fence"
 import { checksOf, oneOfCheck, ref } from "./rendering"
 import { statementsFor } from "./specimen"
 
+/** The receipt's kinds as of this file: today's less `pre-trip-check`, which migration 0075 added (O13 of #290). */
+const KINDS_AS_OF_0060 = DRIVER_COMMAND_KINDS.filter((kind) => kind !== "pre-trip-check")
+
 const alter = (statement: string): string => `ALTER TABLE "wms"."driver_command" ${statement};`
 
 /** What drizzle-kit wrote into the receipt: its kind's check, dropped and added again with the new kind. */
-const ALTERED = [alter('DROP CONSTRAINT "driver_command_kind_one_of"'), alter(`ADD ${oneOfCheck("driver_command", "kind", ...DRIVER_COMMAND_KINDS)}`)]
+const ALTERED = [alter('DROP CONSTRAINT "driver_command_kind_one_of"'), alter(`ADD ${oneOfCheck("driver_command", "kind", ...KINDS_AS_OF_0060)}`)]
 
 /** What the file owes below drizzle-kit's statements: the fence, the revoke, the purge's grant. */
 const handWritten = (): string[] => [...tenantFence(sessionPosition), ...appendOnly(sessionPosition), ...retentionPurge(sessionPosition)]
@@ -60,7 +63,8 @@ describe("live positions as drizzle-kit writes them", () => {
   })
 
   test("the receipt's kinds grew by record-positions, last", () => {
-    assert.equal(DRIVER_COMMAND_KINDS.at(-1), "record-positions")
+    assert.equal(KINDS_AS_OF_0060.at(-1), "record-positions")
+    assert.equal(KINDS_AS_OF_0060.length, DRIVER_COMMAND_KINDS.length - 1, "one kind added since")
   })
 })
 

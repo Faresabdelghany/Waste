@@ -12,6 +12,7 @@ import { ASSET_MANAGEMENT_SETTINGS_PANE_ID, FINANCE_ON_API_SETTINGS_PANE_ID, FIN
 import { SORTING_GUIDE_SETTINGS_PANE_ID } from "../sorting-guide"
 import { PICKUP_EXCEPTION_CHARGES_SETTINGS_PANE_ID } from "../pickup-exception-rules"
 import { EMISSION_FACTORS_SETTINGS_PANE_ID } from "../fleet-emissions"
+import { PRE_TRIP_CHECKLISTS_SETTINGS_PANE_ID } from "../pre-trip-checklists"
 import { TICKET_SLA_SETTINGS_PANE_ID } from "../ticket-sla"
 
 describe("the Settings panes offered", () => {
@@ -37,6 +38,8 @@ describe("the Settings panes offered", () => {
   test("the emission factors on the Pilot only (M10 of #293): they are the API's alone", () => {
     assert.equal(settingsPaneOffered(EMISSION_FACTORS_SETTINGS_PANE_ID, true), true)
     assert.equal(settingsPaneOffered(EMISSION_FACTORS_SETTINGS_PANE_ID, false), false)
+    assert.equal(settingsPaneOffered(PRE_TRIP_CHECKLISTS_SETTINGS_PANE_ID, true), true)
+    assert.equal(settingsPaneOffered(PRE_TRIP_CHECKLISTS_SETTINGS_PANE_ID, false), false)
   })
 
   test("the Ticket SLA on the Pilot only, in place of Tickets & communication, whose link opens it there (O4 of #290)", () => {
