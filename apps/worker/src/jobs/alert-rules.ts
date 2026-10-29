@@ -57,6 +57,10 @@
 // occurrence. It clears when the newest reading is below the threshold — the
 // container emptied, or the threshold raised — or the pairing is no longer in
 // force. Both readings are probes into `fill_reading_pairing_id_idx`.
+// Where the pairing books an emptying (`books_emptying`), the raise also
+// books the office's emptying of the container in the same
+// transaction (@waste/db/commands/fill-emptying), and the alert ends with
+// what that came to; a tick that overlaps finds the stop booked already.
 //
 // Each alert raised writes `alert-raised` to the outbox in the raise's
 // transaction (O16 of #290), the `Alert` as the API would answer it, so the
@@ -64,6 +68,7 @@
 // severe; an alert the key already held writes neither row nor event.
 import { routeLabel } from "@waste/contracts/execution"
 import { ticketLabel } from "@waste/contracts/resolution"
+import { bookFillEmptying, fillEmptyingNote } from "@waste/db/commands/fill-emptying"
 import { emit } from "@waste/db/commands/outbox"
 import { alertColumns, alertOf } from "@waste/db/commands/resolution-rows"
 import { alert } from "@waste/db/schema/resolution"
@@ -87,8 +92,8 @@ export type AlertRulesData = {
   source: "schedule" | "manual"
 }
 
-/** One occurrence to raise, with the company and project its alert is of. */
-export type RaisedOccurrence = { companyId: string; projectId: string; ruleKey: string; occurrence: RuleOccurrence }
+/** One occurrence to raise, with the company and project its alert is of, and, for a filling whose pairing books one, the emptying to book on the project's today. */
+export type RaisedOccurrence = { companyId: string; projectId: string; ruleKey: string; occurrence: RuleOccurrence; books?: { containerId: string; today: string; note: string } }
 /** One rule alert to resolve. */
 export type ClearedAlert = { companyId: string; alertId: string; rule: AlertRule }
 
@@ -202,10 +207,11 @@ export async function occurrencesToRaise(worker: JobContext["worker"], at: Date)
        and ${noAlertWith(KEYS.ticket, sql`t.company_id`)}
   `)
 
-  const fills = await worker.db.execute<{ company_id: string; project_id: string; rule_key: string; container_id: string; label: string; identifier: string; fill_percent: number; threshold: number; measured_at: string }>(sql`
+  const fills = await worker.db.execute<{ company_id: string; project_id: string; rule_key: string; container_id: string; label: string; identifier: string; fill_percent: number; threshold: number; measured_at: string; books_emptying: boolean; today: string }>(sql`
     select sp.company_id, sp.project_id, ${KEYS.fill} as rule_key, sp.container_id, c.label, se.identifier,
            ${NEWEST_FILL} as fill_percent, sp.full_threshold_percent as threshold,
-           to_char(${NEWEST_MEASURED} at time zone p.timezone, 'YYYY-MM-DD HH24:MI') as measured_at
+           to_char(${NEWEST_MEASURED} at time zone p.timezone, 'YYYY-MM-DD HH24:MI') as measured_at,
+           sp.books_emptying, to_char((${now} at time zone p.timezone)::date, 'YYYY-MM-DD') as today
       from wms.sensor_pairing sp
       join wms.sensor se on se.company_id = sp.company_id and se.id = sp.sensor_id
       join wms.container c on c.company_id = sp.company_id and c.id = sp.container_id
@@ -223,7 +229,11 @@ export async function occurrencesToRaise(worker: JobContext["worker"], at: Date)
     ...positions.map((row) => ({ ...of(row), occurrence: { rule: "position-stale" as const, routeId: row.route_id, routeLabel: routeLabel(Number(row.number)), driverId: row.driver_id, driverName: row.driver_name, vehicleId: row.vehicle_id, lastFix: row.last_fix } })),
     ...licences.map((row) => ({ ...of(row), occurrence: { rule: "licence-expiring" as const, driverId: row.driver_id, driverName: row.driver_name, licenceExpiry: row.licence_expiry, today: row.today } })),
     ...tickets.map((row) => ({ ...of(row), occurrence: { rule: "ticket-overdue" as const, ticketId: row.ticket_id, ticketLabel: ticketLabel(Number(row.number)), subject: row.subject, due: row.due } })),
-    ...fills.map((row) => ({ ...of(row), occurrence: { rule: "fill-threshold" as const, containerId: row.container_id, containerLabel: row.label, sensorIdentifier: row.identifier, fillPercent: Number(row.fill_percent), thresholdPercent: Number(row.threshold), measuredAt: row.measured_at } })),
+    ...fills.map((row) => ({
+      ...of(row),
+      occurrence: { rule: "fill-threshold" as const, containerId: row.container_id, containerLabel: row.label, sensorIdentifier: row.identifier, fillPercent: Number(row.fill_percent), thresholdPercent: Number(row.threshold), measuredAt: row.measured_at },
+      ...(row.books_emptying ? { books: { containerId: row.container_id, today: row.today, note: fillEmptyingNote(row.identifier, Number(row.fill_percent), row.measured_at) } } : {}),
+    })),
   ]
 }
 
@@ -298,10 +308,16 @@ export async function runAlertRules({ api, worker, now, log }: JobContext): Prom
   let raised = 0
   for (const [companyId, occurrences] of byCompany(toRaise)) {
     const rows = await withCompany(api.db, companyId, async (tx) => {
+      // A filling whose pairing books one has its emptying booked first, so its alert can say what that came to.
+      const told: RuleOccurrence[] = []
+      for (const { projectId, occurrence, books } of occurrences) {
+        told.push(books === undefined || occurrence.rule !== "fill-threshold" ? occurrence : { ...occurrence, emptying: await bookFillEmptying(tx, { companyId, projectId }, books.containerId, books.today, books.note) })
+      }
       const written = await tx
         .insert(alert)
         .values(
-          occurrences.map(({ projectId, ruleKey, occurrence }) => {
+          occurrences.map(({ projectId, ruleKey }, index) => {
+            const occurrence = told[index]!
             const { rule, kind, severity, source, title, details, routeId, vehicleId, driverId, containerId, ticketId } = alertOfRule(occurrence)
             return { companyId, projectId, rule, ruleKey, kind, severity, source, title, details, detectedAt: at, routeId, vehicleId, driverId, containerId, ticketId, raisedBy: null }
           }),

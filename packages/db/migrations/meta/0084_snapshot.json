@@ -1,6 +1,6 @@
 {
-  "id": "210023a5-68e4-41fd-9f71-af813ef10eb9",
-  "prevId": "93f206cc-22a2-472d-92d9-53ba0975a976",
+  "id": "45b97c57-c4fe-4063-b299-1302f4a6d39f",
+  "prevId": "ef8fb3e5-8f94-48a8-b00b-e8b119df5ea1",
   "version": "7",
   "dialect": "postgresql",
   "tables": {
@@ -11109,7 +11109,7 @@
       "checkConstraints": {
         "outbox_event_kind_one_of": {
           "name": "outbox_event_kind_one_of",
-          "value": "\"wms\".\"outbox_event\".\"kind\" in ('route-dispatched', 'route-started', 'route-completed', 'route-cancelled', 'route-reassigned', 'pickup-completed', 'pickup-failed', 'pickup-skipped', 'pickup-problem-reported', 'pickup-corrected', 'unload-recorded', 'command-rejected', 'ticket-opened', 'ticket-completed', 'ticket-rejected', 'invoice-issued', 'settlement-closed', 'application-decided', 'site-visit-recorded', 'site-visit-voided', 'alert-raised', 'ticket-assigned', 'bulky-booking-booked', 'bulky-booking-cancelled', 'ticket-replied')"
+          "value": "\"wms\".\"outbox_event\".\"kind\" in ('route-dispatched', 'route-started', 'route-completed', 'route-cancelled', 'route-reassigned', 'pickup-completed', 'pickup-failed', 'pickup-skipped', 'pickup-problem-reported', 'pickup-corrected', 'unload-recorded', 'command-rejected', 'ticket-opened', 'ticket-completed', 'ticket-rejected', 'invoice-issued', 'settlement-closed', 'application-decided', 'site-visit-recorded', 'site-visit-voided', 'alert-raised', 'ticket-assigned', 'bulky-booking-booked', 'bulky-booking-cancelled')"
         },
         "outbox_event_aggregate_kind_one_of": {
           "name": "outbox_event_aggregate_kind_one_of",
@@ -32404,15 +32404,6 @@
       },
       "compositePrimaryKeys": {},
       "uniqueConstraints": {
-        "notification_rule_project_key": {
-          "name": "notification_rule_project_key",
-          "nullsNotDistinct": false,
-          "columns": [
-            "company_id",
-            "project_id",
-            "id"
-          ]
-        },
         "notification_rule_project_id_event_key": {
           "name": "notification_rule_project_id_event_key",
           "nullsNotDistinct": false,
@@ -32427,166 +32418,9 @@
       "checkConstraints": {
         "notification_rule_event_one_of": {
           "name": "notification_rule_event_one_of",
-          "value": "\"wms\".\"notification_rule\".\"event\" in ('bulky-booking-booked', 'bulky-booking-cancelled', 'bulky-booking-collected', 'bulky-booking-not-collected', 'collection-reminder', 'ticket-replied', 'ticket-completed', 'route-cancelled', 'route-late')"
+          "value": "\"wms\".\"notification_rule\".\"event\" in ('bulky-booking-booked', 'bulky-booking-cancelled', 'bulky-booking-collected', 'bulky-booking-not-collected')"
         }
       },
-      "isRLSEnabled": false
-    },
-    "wms.notification_rule_area": {
-      "name": "notification_rule_area",
-      "schema": "wms",
-      "columns": {
-        "id": {
-          "name": "id",
-          "type": "uuid",
-          "primaryKey": true,
-          "notNull": true,
-          "default": "wms.uuidv7()"
-        },
-        "company_id": {
-          "name": "company_id",
-          "type": "uuid",
-          "primaryKey": false,
-          "notNull": true
-        },
-        "project_id": {
-          "name": "project_id",
-          "type": "uuid",
-          "primaryKey": false,
-          "notNull": true
-        },
-        "created_at": {
-          "name": "created_at",
-          "type": "timestamp with time zone",
-          "primaryKey": false,
-          "notNull": true,
-          "default": "now()"
-        },
-        "updated_at": {
-          "name": "updated_at",
-          "type": "timestamp with time zone",
-          "primaryKey": false,
-          "notNull": true,
-          "default": "now()"
-        },
-        "rule_id": {
-          "name": "rule_id",
-          "type": "uuid",
-          "primaryKey": false,
-          "notNull": true
-        },
-        "planning_area_id": {
-          "name": "planning_area_id",
-          "type": "uuid",
-          "primaryKey": false,
-          "notNull": true
-        }
-      },
-      "indexes": {
-        "notification_rule_area_planning_area_id_idx": {
-          "name": "notification_rule_area_planning_area_id_idx",
-          "columns": [
-            {
-              "expression": "company_id",
-              "isExpression": false,
-              "asc": true,
-              "nulls": "last"
-            },
-            {
-              "expression": "planning_area_id",
-              "isExpression": false,
-              "asc": true,
-              "nulls": "last"
-            }
-          ],
-          "isUnique": false,
-          "concurrently": false,
-          "method": "btree",
-          "with": {}
-        }
-      },
-      "foreignKeys": {
-        "notification_rule_area_company_id_fk": {
-          "name": "notification_rule_area_company_id_fk",
-          "tableFrom": "notification_rule_area",
-          "tableTo": "company",
-          "schemaTo": "wms",
-          "columnsFrom": [
-            "company_id"
-          ],
-          "columnsTo": [
-            "id"
-          ],
-          "onDelete": "no action",
-          "onUpdate": "no action"
-        },
-        "notification_rule_area_project_id_fk": {
-          "name": "notification_rule_area_project_id_fk",
-          "tableFrom": "notification_rule_area",
-          "tableTo": "project",
-          "schemaTo": "wms",
-          "columnsFrom": [
-            "company_id",
-            "project_id"
-          ],
-          "columnsTo": [
-            "company_id",
-            "id"
-          ],
-          "onDelete": "no action",
-          "onUpdate": "no action"
-        },
-        "notification_rule_area_rule_id_fk": {
-          "name": "notification_rule_area_rule_id_fk",
-          "tableFrom": "notification_rule_area",
-          "tableTo": "notification_rule",
-          "schemaTo": "wms",
-          "columnsFrom": [
-            "company_id",
-            "project_id",
-            "rule_id"
-          ],
-          "columnsTo": [
-            "company_id",
-            "project_id",
-            "id"
-          ],
-          "onDelete": "no action",
-          "onUpdate": "no action"
-        },
-        "notification_rule_area_planning_area_id_fk": {
-          "name": "notification_rule_area_planning_area_id_fk",
-          "tableFrom": "notification_rule_area",
-          "tableTo": "planning_area",
-          "schemaTo": "wms",
-          "columnsFrom": [
-            "company_id",
-            "project_id",
-            "planning_area_id"
-          ],
-          "columnsTo": [
-            "company_id",
-            "project_id",
-            "id"
-          ],
-          "onDelete": "no action",
-          "onUpdate": "no action"
-        }
-      },
-      "compositePrimaryKeys": {},
-      "uniqueConstraints": {
-        "notification_rule_area_rule_id_planning_area_id_key": {
-          "name": "notification_rule_area_rule_id_planning_area_id_key",
-          "nullsNotDistinct": false,
-          "columns": [
-            "company_id",
-            "rule_id",
-            "planning_area_id"
-          ]
-        }
-      },
-      "policies": {},
-      "checkConstraints": {},
       "isRLSEnabled": false
     },
     "wms.pre_trip_check": {
@@ -33782,6 +33616,13 @@
           "type": "integer",
           "primaryKey": false,
           "notNull": true
+        },
+        "books_emptying": {
+          "name": "books_emptying",
+          "type": "boolean",
+          "primaryKey": false,
+          "notNull": true,
+          "default": false
         }
       },
       "indexes": {},
