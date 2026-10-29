@@ -1,5 +1,5 @@
 {
-  "id": "47a11aa2-1511-42bd-b50d-4668bd428199",
+  "id": "fb51a485-cac4-48c5-b47b-721d4a739585",
   "prevId": "36171d10-a59c-466d-bea2-87333e8962b0",
   "version": "7",
   "dialect": "postgresql",
@@ -2739,18 +2739,6 @@
           "notNull": true,
           "default": "now()"
         },
-        "valid_from": {
-          "name": "valid_from",
-          "type": "date",
-          "primaryKey": false,
-          "notNull": true
-        },
-        "valid_to": {
-          "name": "valid_to",
-          "type": "date",
-          "primaryKey": false,
-          "notNull": false
-        },
         "property_id": {
           "name": "property_id",
           "type": "uuid",
@@ -2771,27 +2759,6 @@
         }
       },
       "indexes": {
-        "property_party_property_id_idx": {
-          "name": "property_party_property_id_idx",
-          "columns": [
-            {
-              "expression": "company_id",
-              "isExpression": false,
-              "asc": true,
-              "nulls": "last"
-            },
-            {
-              "expression": "property_id",
-              "isExpression": false,
-              "asc": true,
-              "nulls": "last"
-            }
-          ],
-          "isUnique": false,
-          "concurrently": false,
-          "method": "btree",
-          "with": {}
-        },
         "property_party_project_id_idx": {
           "name": "property_party_project_id_idx",
           "columns": [
@@ -2902,13 +2869,20 @@
         }
       },
       "compositePrimaryKeys": {},
-      "uniqueConstraints": {},
+      "uniqueConstraints": {
+        "property_party_property_id_customer_id_role_key": {
+          "name": "property_party_property_id_customer_id_role_key",
+          "nullsNotDistinct": false,
+          "columns": [
+            "company_id",
+            "property_id",
+            "customer_id",
+            "role"
+          ]
+        }
+      },
       "policies": {},
       "checkConstraints": {
-        "property_party_validity": {
-          "name": "property_party_validity",
-          "value": "\"wms\".\"property_party\".\"valid_to\" is null or \"wms\".\"property_party\".\"valid_to\" > \"wms\".\"property_party\".\"valid_from\""
-        },
         "property_party_role_one_of": {
           "name": "property_party_role_one_of",
           "value": "\"wms\".\"property_party\".\"role\" in ('owner', 'payer', 'tenant', 'administrator', 'service-contact')"
@@ -31518,6 +31492,473 @@
       },
       "policies": {},
       "checkConstraints": {},
+      "isRLSEnabled": false
+    },
+    "wms.message": {
+      "name": "message",
+      "schema": "wms",
+      "columns": {
+        "id": {
+          "name": "id",
+          "type": "uuid",
+          "primaryKey": true,
+          "notNull": true,
+          "default": "wms.uuidv7()"
+        },
+        "company_id": {
+          "name": "company_id",
+          "type": "uuid",
+          "primaryKey": false,
+          "notNull": true
+        },
+        "project_id": {
+          "name": "project_id",
+          "type": "uuid",
+          "primaryKey": false,
+          "notNull": true
+        },
+        "created_at": {
+          "name": "created_at",
+          "type": "timestamp with time zone",
+          "primaryKey": false,
+          "notNull": true,
+          "default": "now()"
+        },
+        "updated_at": {
+          "name": "updated_at",
+          "type": "timestamp with time zone",
+          "primaryKey": false,
+          "notNull": true,
+          "default": "now()"
+        },
+        "template_id": {
+          "name": "template_id",
+          "type": "uuid",
+          "primaryKey": false,
+          "notNull": false
+        },
+        "customer_id": {
+          "name": "customer_id",
+          "type": "uuid",
+          "primaryKey": false,
+          "notNull": true
+        },
+        "contact_id": {
+          "name": "contact_id",
+          "type": "uuid",
+          "primaryKey": false,
+          "notNull": false
+        },
+        "channel": {
+          "name": "channel",
+          "type": "text",
+          "primaryKey": false,
+          "notNull": true
+        },
+        "purpose": {
+          "name": "purpose",
+          "type": "text",
+          "primaryKey": false,
+          "notNull": true
+        },
+        "recipient": {
+          "name": "recipient",
+          "type": "text",
+          "primaryKey": false,
+          "notNull": true
+        },
+        "subject": {
+          "name": "subject",
+          "type": "text",
+          "primaryKey": false,
+          "notNull": false
+        },
+        "body": {
+          "name": "body",
+          "type": "text",
+          "primaryKey": false,
+          "notNull": true
+        },
+        "status": {
+          "name": "status",
+          "type": "text",
+          "primaryKey": false,
+          "notNull": true
+        },
+        "attempts": {
+          "name": "attempts",
+          "type": "integer",
+          "primaryKey": false,
+          "notNull": true,
+          "default": 0
+        },
+        "provider": {
+          "name": "provider",
+          "type": "text",
+          "primaryKey": false,
+          "notNull": false
+        },
+        "provider_message_id": {
+          "name": "provider_message_id",
+          "type": "text",
+          "primaryKey": false,
+          "notNull": false
+        },
+        "reason": {
+          "name": "reason",
+          "type": "text",
+          "primaryKey": false,
+          "notNull": false
+        },
+        "sent_at": {
+          "name": "sent_at",
+          "type": "timestamp with time zone",
+          "primaryKey": false,
+          "notNull": false
+        }
+      },
+      "indexes": {
+        "message_project_id_idx": {
+          "name": "message_project_id_idx",
+          "columns": [
+            {
+              "expression": "company_id",
+              "isExpression": false,
+              "asc": true,
+              "nulls": "last"
+            },
+            {
+              "expression": "project_id",
+              "isExpression": false,
+              "asc": true,
+              "nulls": "last"
+            }
+          ],
+          "isUnique": false,
+          "concurrently": false,
+          "method": "btree",
+          "with": {}
+        },
+        "message_template_id_idx": {
+          "name": "message_template_id_idx",
+          "columns": [
+            {
+              "expression": "company_id",
+              "isExpression": false,
+              "asc": true,
+              "nulls": "last"
+            },
+            {
+              "expression": "template_id",
+              "isExpression": false,
+              "asc": true,
+              "nulls": "last"
+            }
+          ],
+          "isUnique": false,
+          "concurrently": false,
+          "method": "btree",
+          "with": {}
+        },
+        "message_customer_id_idx": {
+          "name": "message_customer_id_idx",
+          "columns": [
+            {
+              "expression": "company_id",
+              "isExpression": false,
+              "asc": true,
+              "nulls": "last"
+            },
+            {
+              "expression": "customer_id",
+              "isExpression": false,
+              "asc": true,
+              "nulls": "last"
+            }
+          ],
+          "isUnique": false,
+          "concurrently": false,
+          "method": "btree",
+          "with": {}
+        },
+        "message_contact_id_idx": {
+          "name": "message_contact_id_idx",
+          "columns": [
+            {
+              "expression": "company_id",
+              "isExpression": false,
+              "asc": true,
+              "nulls": "last"
+            },
+            {
+              "expression": "contact_id",
+              "isExpression": false,
+              "asc": true,
+              "nulls": "last"
+            }
+          ],
+          "isUnique": false,
+          "concurrently": false,
+          "method": "btree",
+          "with": {}
+        }
+      },
+      "foreignKeys": {
+        "message_company_id_fk": {
+          "name": "message_company_id_fk",
+          "tableFrom": "message",
+          "tableTo": "company",
+          "schemaTo": "wms",
+          "columnsFrom": [
+            "company_id"
+          ],
+          "columnsTo": [
+            "id"
+          ],
+          "onDelete": "no action",
+          "onUpdate": "no action"
+        },
+        "message_project_id_fk": {
+          "name": "message_project_id_fk",
+          "tableFrom": "message",
+          "tableTo": "project",
+          "schemaTo": "wms",
+          "columnsFrom": [
+            "company_id",
+            "project_id"
+          ],
+          "columnsTo": [
+            "company_id",
+            "id"
+          ],
+          "onDelete": "no action",
+          "onUpdate": "no action"
+        },
+        "message_template_id_fk": {
+          "name": "message_template_id_fk",
+          "tableFrom": "message",
+          "tableTo": "message_template",
+          "schemaTo": "wms",
+          "columnsFrom": [
+            "company_id",
+            "project_id",
+            "template_id"
+          ],
+          "columnsTo": [
+            "company_id",
+            "project_id",
+            "id"
+          ],
+          "onDelete": "no action",
+          "onUpdate": "no action"
+        },
+        "message_customer_id_fk": {
+          "name": "message_customer_id_fk",
+          "tableFrom": "message",
+          "tableTo": "customer",
+          "schemaTo": "wms",
+          "columnsFrom": [
+            "company_id",
+            "customer_id"
+          ],
+          "columnsTo": [
+            "company_id",
+            "id"
+          ],
+          "onDelete": "no action",
+          "onUpdate": "no action"
+        },
+        "message_contact_id_fk": {
+          "name": "message_contact_id_fk",
+          "tableFrom": "message",
+          "tableTo": "customer_contact",
+          "schemaTo": "wms",
+          "columnsFrom": [
+            "company_id",
+            "contact_id"
+          ],
+          "columnsTo": [
+            "company_id",
+            "id"
+          ],
+          "onDelete": "no action",
+          "onUpdate": "no action"
+        }
+      },
+      "compositePrimaryKeys": {},
+      "uniqueConstraints": {},
+      "policies": {},
+      "checkConstraints": {
+        "message_channel_one_of": {
+          "name": "message_channel_one_of",
+          "value": "\"wms\".\"message\".\"channel\" in ('email', 'sms')"
+        },
+        "message_purpose_one_of": {
+          "name": "message_purpose_one_of",
+          "value": "\"wms\".\"message\".\"purpose\" in ('service', 'billing')"
+        },
+        "message_status_one_of": {
+          "name": "message_status_one_of",
+          "value": "\"wms\".\"message\".\"status\" in ('queued', 'sent', 'failed', 'withheld')"
+        },
+        "message_attempts_range": {
+          "name": "message_attempts_range",
+          "value": "\"wms\".\"message\".\"attempts\" >= 0"
+        },
+        "message_sent_shape": {
+          "name": "message_sent_shape",
+          "value": "(\"wms\".\"message\".\"status\" = 'sent') = (\"wms\".\"message\".\"sent_at\" is not null and \"wms\".\"message\".\"provider\" is not null)"
+        }
+      },
+      "isRLSEnabled": false
+    },
+    "wms.message_template": {
+      "name": "message_template",
+      "schema": "wms",
+      "columns": {
+        "id": {
+          "name": "id",
+          "type": "uuid",
+          "primaryKey": true,
+          "notNull": true,
+          "default": "wms.uuidv7()"
+        },
+        "company_id": {
+          "name": "company_id",
+          "type": "uuid",
+          "primaryKey": false,
+          "notNull": true
+        },
+        "project_id": {
+          "name": "project_id",
+          "type": "uuid",
+          "primaryKey": false,
+          "notNull": true
+        },
+        "created_at": {
+          "name": "created_at",
+          "type": "timestamp with time zone",
+          "primaryKey": false,
+          "notNull": true,
+          "default": "now()"
+        },
+        "updated_at": {
+          "name": "updated_at",
+          "type": "timestamp with time zone",
+          "primaryKey": false,
+          "notNull": true,
+          "default": "now()"
+        },
+        "name": {
+          "name": "name",
+          "type": "text",
+          "primaryKey": false,
+          "notNull": true
+        },
+        "purpose": {
+          "name": "purpose",
+          "type": "text",
+          "primaryKey": false,
+          "notNull": true
+        },
+        "channel": {
+          "name": "channel",
+          "type": "text",
+          "primaryKey": false,
+          "notNull": true
+        },
+        "subject": {
+          "name": "subject",
+          "type": "text",
+          "primaryKey": false,
+          "notNull": false
+        },
+        "body": {
+          "name": "body",
+          "type": "text",
+          "primaryKey": false,
+          "notNull": true
+        },
+        "status": {
+          "name": "status",
+          "type": "text",
+          "primaryKey": false,
+          "notNull": true
+        }
+      },
+      "indexes": {},
+      "foreignKeys": {
+        "message_template_company_id_fk": {
+          "name": "message_template_company_id_fk",
+          "tableFrom": "message_template",
+          "tableTo": "company",
+          "schemaTo": "wms",
+          "columnsFrom": [
+            "company_id"
+          ],
+          "columnsTo": [
+            "id"
+          ],
+          "onDelete": "no action",
+          "onUpdate": "no action"
+        },
+        "message_template_project_id_fk": {
+          "name": "message_template_project_id_fk",
+          "tableFrom": "message_template",
+          "tableTo": "project",
+          "schemaTo": "wms",
+          "columnsFrom": [
+            "company_id",
+            "project_id"
+          ],
+          "columnsTo": [
+            "company_id",
+            "id"
+          ],
+          "onDelete": "no action",
+          "onUpdate": "no action"
+        }
+      },
+      "compositePrimaryKeys": {},
+      "uniqueConstraints": {
+        "message_template_project_key": {
+          "name": "message_template_project_key",
+          "nullsNotDistinct": false,
+          "columns": [
+            "company_id",
+            "project_id",
+            "id"
+          ]
+        },
+        "message_template_project_id_name_key": {
+          "name": "message_template_project_id_name_key",
+          "nullsNotDistinct": false,
+          "columns": [
+            "company_id",
+            "project_id",
+            "name"
+          ]
+        }
+      },
+      "policies": {},
+      "checkConstraints": {
+        "message_template_purpose_one_of": {
+          "name": "message_template_purpose_one_of",
+          "value": "\"wms\".\"message_template\".\"purpose\" in ('service', 'billing')"
+        },
+        "message_template_channel_one_of": {
+          "name": "message_template_channel_one_of",
+          "value": "\"wms\".\"message_template\".\"channel\" in ('email', 'sms')"
+        },
+        "message_template_status_one_of": {
+          "name": "message_template_status_one_of",
+          "value": "\"wms\".\"message_template\".\"status\" in ('active', 'inactive')"
+        },
+        "message_template_subject_shape": {
+          "name": "message_template_subject_shape",
+          "value": "(\"wms\".\"message_template\".\"channel\" = 'email') = (\"wms\".\"message_template\".\"subject\" is not null)"
+        }
+      },
       "isRLSEnabled": false
     }
   },
