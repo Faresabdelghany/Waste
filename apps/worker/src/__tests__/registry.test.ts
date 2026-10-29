@@ -22,6 +22,7 @@ import { generateRoutes } from "../jobs/generate-routes"
 import { heartbeat } from "../jobs/heartbeat"
 import { OPEN_TICKETS_QUEUE_OPTIONS, openTickets, RESOLUTION_KINDS } from "../jobs/open-tickets"
 import { planAheadJob } from "../jobs/plan-ahead"
+import { proposeRightSizingJob } from "../jobs/propose-right-sizing"
 import { FINANCE_EVENT_KINDS, RECORD_BILLABLE_EVENTS_QUEUE_OPTIONS, recordBillableEvents } from "../jobs/record-billable-events"
 import { BATCH_SIZE, RELAY_INTERVAL_SECONDS, relayOutbox } from "../jobs/relay-outbox"
 import { OUTBOX_CONSUMERS, OUTBOX_ROUTES, routesOf } from "../outbox/routes"
@@ -145,7 +146,15 @@ describe("the job registry", () => {
       "resolution.alert-rules",
       "execution.purge-positions",
       "messaging.send",
+      "customers.propose-right-sizing",
     ])
+  })
+
+  test("holds right-sizing's nightly run (M23b of #293): at 03:23 UTC, once for every night missed, sent as the schedule's, one retry", () => {
+    assert.ok(JOBS.includes(proposeRightSizingJob))
+    assert.equal(proposeRightSizingJob.schedule, "23 3 * * *")
+    assert.deepEqual(proposeRightSizingJob.scheduleData, { source: "schedule" })
+    assert.deepEqual(proposeRightSizingJob.scheduleOptions, { tz: "UTC", missed: "once" })
   })
 
   test("holds the alert rules (O4 of #290): every five minutes unless the knob says otherwise, a missed tick skipped, sent as the schedule's, no retry — the next tick reads the same", () => {

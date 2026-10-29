@@ -9,6 +9,7 @@ import { SCHEME_SERVICE_TYPES, allowedContainerTypes } from "@waste/domain/route
 
 import type { BusinessFormOption, BusinessFormSchema } from "@/lib/data/business-form-types"
 import { INSPECTION_FORM } from "@/lib/data/inspections"
+import { RIGHT_SIZING_SCHEMA } from "@/lib/data/right-sizing"
 import { FUEL_TYPE_OPTIONS, VEHICLE_STATUS_OPTIONS } from "@/lib/data/resources-vocabulary"
 
 /**
@@ -916,6 +917,7 @@ export const operationsBusinessFormSchemas = [
   },
   // Field inspections (M23 of #293): the form is the module's own, beside its words.
   INSPECTION_FORM,
+  RIGHT_SIZING_SCHEMA,
   {
     key: "operate.driver-app",
     mode: "action",

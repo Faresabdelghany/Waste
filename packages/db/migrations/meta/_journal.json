@@ -568,6 +568,13 @@
       "when": 1793261978033,
       "tag": "0095_field_inspections",
       "breakpoints": true
+    },
+    {
+      "idx": 81,
+      "version": "7",
+      "when": 1793264807614,
+      "tag": "0096_right_sizing",
+      "breakpoints": true
     }
   ]
 }

@@ -18,6 +18,7 @@ import { agreementsModule } from "./agreements"
 import { applicationsModule } from "./applications"
 import { bulkyBookingsModule } from "./bulky-bookings"
 import { inspectionsModule } from "./inspections"
+import { rightSizingModule } from "./right-sizing"
 import { siteAccessModule } from "./site-access"
 import { siteVisitsModule } from "./site-visits"
 import { alertsModule } from "./alerts"
@@ -107,6 +108,8 @@ export const SERVER_MODULES: readonly ServerModule[] = [
   productsModule,
   priceRowsModule,
   agreementsModule,
+  // Right-sizing's proposals (M23b of #293), after the agreements and the products they name.
+  rightSizingModule,
   // The Applications (M7 of #293), after the customers, the places and the agreements their subjects name.
   applicationsModule,
   // The register of plates and cards (#393), after the customers, the properties and the agreements its holders name.

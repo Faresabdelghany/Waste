@@ -263,6 +263,7 @@ export const publicWorkspaceDomains: readonly PublicWorkspaceDomain[] = [
       "agreements",
       "applications",
       "site-access",
+      "right-sizing",
       "citizen-portal",
     ],
     boundaryNote:
@@ -640,6 +641,19 @@ export const publicModuleDomains: readonly PublicModuleDomain[] = [
     downstream: ["M03", "M09", "M16"],
     boundaryNote:
       "An Application is a customer's written request decided by the office, not a Ticket: a case is worked, an application is granted or refused, and its effect is applied in the lane that owns it.",
+  },
+  {
+    key: "customers.right-sizing",
+    workspaceId: "customers",
+    moduleId: "right-sizing",
+    primaryBlueprintModule: "M05",
+    supportingBlueprintModules: ["M06", "M11"],
+    canonicalOwner: "Customers · Right-sizing",
+    personas: ["Customer-service agent", "Operations manager"],
+    upstream: ["M06", "M11"],
+    downstream: ["M05", "M16"],
+    boundaryNote:
+      "A Right-sizing Proposal is a subscription's container a size down or up, or its collections fewer or more, from the drivers' fill estimates; it changes nothing until the office approves it into the subscription's change.",
   },
   {
     key: "customers.site-access",

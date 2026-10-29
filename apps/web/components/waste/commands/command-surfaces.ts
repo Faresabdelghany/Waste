@@ -52,6 +52,7 @@ import { PriceRowCommandsSurface, PriceRowsPrimarySurface, ProductCommandsSurfac
 import { PROVIDER_PRICES_LIST, SERVICE_AREAS_LIST, SETTLEMENTS_LIST, WEIGHTS_LIST } from "./provider-money-lists"
 import { CreateServiceAreaSurface, OpenSettlementSurface, ProviderPriceCommandsSurface, ProviderPricesPrimarySurface, RecordUnloadSurface, ServiceAreaCommandsSurface, ServiceAreasRead, SettlementSurface, WeightReviewSurface } from "./provider-money-surfaces"
 import { InspectionSurface } from "./inspection-surfaces"
+import { ProposeRightSizingSurface, RightSizingSurface } from "./right-sizing-surfaces"
 import { InviteTeamMemberSurface, TeamMemberCommandsSurface } from "./team-surfaces"
 import { LiveBoardRefresh, LiveRouteSurface, PickupCommandsSurface, RouteCommandsSurface, RoutesPrimarySurface } from "./route-surfaces"
 import { WarehouseStockSurface } from "./stock-surfaces"
@@ -184,6 +185,8 @@ export const COMMAND_SURFACES: Readonly<Record<string, CommandSurface>> = {
   "customers.site-access": { primary: RegisterCredentialSurface, rowActions: CredentialCommandsSurface },
   // M23 of #293: an inspection recorded by the module's form, its photos added and Close in its details; corrected by the generic Edit while open.
   "operate.inspections": { primary: "form", rowActions: InspectionSurface, genericEdit: inspectionOpen },
+  // M23b of #293: proposals the run makes, Propose now the primary; approved or dismissed in their details.
+  "customers.right-sizing": { primary: ProposeRightSizingSurface, rowActions: RightSizingSurface },
   "operate.tickets": { primary: NewTicketSurface, list: { readers: ({ accountId }) => ticketListReaders(accountId), initial: TICKET_LIST_INITIAL } },
   "operate.exceptions": { primary: RaiseAlertSurface, rowActions: AlertCommandsSurface, list: { readers: alertListReaders, initial: ALERT_LIST_INITIAL } },
   // Slice 10 (#185): a product is made in Settings, so both pricing modules'

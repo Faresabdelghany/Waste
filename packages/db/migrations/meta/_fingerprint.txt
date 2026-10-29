@@ -2710,6 +2710,52 @@ index wms.property_party property_party_property_id_customer_id_role_key CREATE 
 trigger wms.property_party property_party_audit_trail enabled=O CREATE TRIGGER property_party_audit_trail AFTER INSERT OR DELETE OR UPDATE ON wms.property_party FOR EACH ROW EXECUTE FUNCTION wms.audit_row('property', 'property_id')
 trigger wms.property_party property_party_touch_updated_at enabled=O CREATE TRIGGER property_party_touch_updated_at BEFORE UPDATE ON wms.property_party FOR EACH ROW EXECUTE FUNCTION wms.touch_updated_at()
 policy wms.property_party property_party_tenant_fence permissive ALL to=wms_api using=(company_id = ( SELECT wms.current_company_id() AS current_company_id)) check=(company_id = ( SELECT wms.current_company_id() AS current_company_id))
+relation wms.right_sizing_proposal kind=table owner=<owner> persistence=p rls=true force-rls=true replica-identity=d acl=[<owner>=DELETE,INSERT,MAINTAIN,REFERENCES,SELECT,TRIGGER,TRUNCATE,UPDATE/<owner> wms_api=DELETE,INSERT,SELECT,UPDATE/<owner> wms_worker=SELECT/<owner>]
+column wms.right_sizing_proposal 1 id uuid not-null default=wms.uuidv7()
+column wms.right_sizing_proposal 2 company_id uuid not-null
+column wms.right_sizing_proposal 3 project_id uuid not-null
+column wms.right_sizing_proposal 4 created_at timestamp with time zone not-null default=now()
+column wms.right_sizing_proposal 5 updated_at timestamp with time zone not-null default=now()
+column wms.right_sizing_proposal 6 subscription_id uuid not-null
+column wms.right_sizing_proposal 7 product_id uuid not-null
+column wms.right_sizing_proposal 8 direction text not-null
+column wms.right_sizing_proposal 9 suggested_product_id uuid
+column wms.right_sizing_proposal 10 evidence text[] not-null
+column wms.right_sizing_proposal 11 evidence_through timestamp with time zone not-null
+column wms.right_sizing_proposal 12 subscription_updated_at timestamp with time zone not-null
+column wms.right_sizing_proposal 13 status text not-null default='open'::text
+column wms.right_sizing_proposal 14 decided_at timestamp with time zone
+column wms.right_sizing_proposal 15 decided_by uuid
+column wms.right_sizing_proposal 16 dismiss_note text
+column wms.right_sizing_proposal 17 changed_on date
+column wms.right_sizing_proposal 18 replacement_subscription_id uuid
+constraint wms.right_sizing_proposal right_sizing_proposal_change_shape CHECK ((((changed_on IS NULL) = (replacement_subscription_id IS NULL)) AND ((changed_on IS NULL) OR (status = 'approved'::text))))
+constraint wms.right_sizing_proposal right_sizing_proposal_company_id_fk FOREIGN KEY (company_id) REFERENCES wms.company(id)
+constraint wms.right_sizing_proposal right_sizing_proposal_decided_by_fk FOREIGN KEY (company_id, decided_by) REFERENCES wms.user_account(company_id, id)
+constraint wms.right_sizing_proposal right_sizing_proposal_decided_shape CHECK (((status <> 'open'::text) = ((decided_at IS NOT NULL) AND (decided_by IS NOT NULL))))
+constraint wms.right_sizing_proposal right_sizing_proposal_direction_one_of CHECK ((direction = ANY (ARRAY['smaller'::text, 'bigger'::text, 'less-frequent'::text, 'more-frequent'::text])))
+constraint wms.right_sizing_proposal right_sizing_proposal_dismiss_shape CHECK (((status = 'dismissed'::text) = (dismiss_note IS NOT NULL)))
+constraint wms.right_sizing_proposal right_sizing_proposal_evidence_non_empty CHECK ((cardinality(evidence) > 0))
+constraint wms.right_sizing_proposal right_sizing_proposal_evidence_subset_of CHECK ((evidence <@ ARRAY['empty'::text, 'quarter'::text, 'half'::text, 'three-quarters'::text, 'full'::text, 'overflowing'::text]))
+constraint wms.right_sizing_proposal right_sizing_proposal_pkey PRIMARY KEY (id)
+constraint wms.right_sizing_proposal right_sizing_proposal_product_id_fk FOREIGN KEY (company_id, project_id, product_id) REFERENCES wms.product(company_id, project_id, id)
+constraint wms.right_sizing_proposal right_sizing_proposal_project_id_fk FOREIGN KEY (company_id, project_id) REFERENCES wms.project(company_id, id)
+constraint wms.right_sizing_proposal right_sizing_proposal_replacement_subscription_id_fk FOREIGN KEY (company_id, project_id, replacement_subscription_id) REFERENCES wms.subscription(company_id, project_id, id)
+constraint wms.right_sizing_proposal right_sizing_proposal_status_one_of CHECK ((status = ANY (ARRAY['open'::text, 'approved'::text, 'dismissed'::text])))
+constraint wms.right_sizing_proposal right_sizing_proposal_subscription_id_fk FOREIGN KEY (company_id, project_id, subscription_id) REFERENCES wms.subscription(company_id, project_id, id)
+constraint wms.right_sizing_proposal right_sizing_proposal_suggested_product_id_fk FOREIGN KEY (company_id, project_id, suggested_product_id) REFERENCES wms.product(company_id, project_id, id)
+constraint wms.right_sizing_proposal right_sizing_proposal_suggestion_shape CHECK (((direction = ANY (ARRAY['smaller'::text, 'bigger'::text])) = (suggested_product_id IS NOT NULL)))
+index wms.right_sizing_proposal right_sizing_proposal_decided_by_idx CREATE INDEX right_sizing_proposal_decided_by_idx ON wms.right_sizing_proposal USING btree (company_id, decided_by)
+index wms.right_sizing_proposal right_sizing_proposal_pkey CREATE UNIQUE INDEX right_sizing_proposal_pkey ON wms.right_sizing_proposal USING btree (id)
+index wms.right_sizing_proposal right_sizing_proposal_product_id_idx CREATE INDEX right_sizing_proposal_product_id_idx ON wms.right_sizing_proposal USING btree (company_id, product_id)
+index wms.right_sizing_proposal right_sizing_proposal_project_id_idx CREATE INDEX right_sizing_proposal_project_id_idx ON wms.right_sizing_proposal USING btree (company_id, project_id)
+index wms.right_sizing_proposal right_sizing_proposal_replacement_subscription_id_idx CREATE INDEX right_sizing_proposal_replacement_subscription_id_idx ON wms.right_sizing_proposal USING btree (company_id, replacement_subscription_id)
+index wms.right_sizing_proposal right_sizing_proposal_subscription_id_idx CREATE INDEX right_sizing_proposal_subscription_id_idx ON wms.right_sizing_proposal USING btree (company_id, subscription_id)
+index wms.right_sizing_proposal right_sizing_proposal_subscription_id_open_key CREATE UNIQUE INDEX right_sizing_proposal_subscription_id_open_key ON wms.right_sizing_proposal USING btree (company_id, subscription_id) WHERE (status = 'open'::text)
+index wms.right_sizing_proposal right_sizing_proposal_suggested_product_id_idx CREATE INDEX right_sizing_proposal_suggested_product_id_idx ON wms.right_sizing_proposal USING btree (company_id, suggested_product_id)
+trigger wms.right_sizing_proposal right_sizing_proposal_audit_trail enabled=O CREATE TRIGGER right_sizing_proposal_audit_trail AFTER INSERT OR DELETE OR UPDATE ON wms.right_sizing_proposal FOR EACH ROW EXECUTE FUNCTION wms.audit_row('', '')
+trigger wms.right_sizing_proposal right_sizing_proposal_touch_updated_at enabled=O CREATE TRIGGER right_sizing_proposal_touch_updated_at BEFORE UPDATE ON wms.right_sizing_proposal FOR EACH ROW EXECUTE FUNCTION wms.touch_updated_at()
+policy wms.right_sizing_proposal right_sizing_proposal_tenant_fence permissive ALL to=wms_api using=(company_id = ( SELECT wms.current_company_id() AS current_company_id)) check=(company_id = ( SELECT wms.current_company_id() AS current_company_id))
 relation wms.role kind=table owner=<owner> persistence=p rls=true force-rls=true replica-identity=d acl=[<owner>=DELETE,INSERT,MAINTAIN,REFERENCES,SELECT,TRIGGER,TRUNCATE,UPDATE/<owner> wms_api=DELETE,INSERT,SELECT,UPDATE/<owner> wms_worker=SELECT/<owner>]
 column wms.role 1 id uuid not-null default=wms.uuidv7()
 column wms.role 2 company_id uuid not-null
@@ -4711,4 +4757,5 @@ journal 1793243238519 233234b7acf3c642f212331efc9afedc7d139dcd35159a8709e2d83032
 journal 1793245578465 3b2865a553c39e7190c0b99795b29f5f18959d692c42e6a9d2a1f2e4ea7b5b3c
 journal 1793247592226 4b92f6ad7212b3dafef3bbd4bfba4e6696da935f5c9f7354442f7860b0bb123f
 journal 1793261978033 81a63cf5bde53c4c20971274980ee3cfcc4a686c988b2b30afc664be9c100e6e
+journal 1793264807614 01038c5b80fdfe8f3003c33478a26c26a232def44352834db92114655a8e234c
 pgboss-version 42

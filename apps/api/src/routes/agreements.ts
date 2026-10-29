@@ -511,6 +511,93 @@ const placementsPast = (companyId: string, subscriptionIds: readonly string[], o
     or(isNull(containerServicePlacement.validTo), gt(containerServicePlacement.validTo, on)),
   )
 
+/**
+ * A change of service from a day (#291): the subscription ends on `on` and
+ * the one replacing it begins there with the product or the quantity named,
+ * its containers and its pause carried over. The route's handler, and a
+ * right-sizing proposal's approve (M23b of #293), which runs it in its own
+ * transaction; answers the replacement.
+ */
+export async function changeSubscription(tx: Tx, principal: Principal, id: string, { on, productId, quantity }: SubscriptionChange): Promise<Subscription> {
+  const { companyId } = principal
+
+  // The agreement first and then the subscription, top down, as its patch takes them, and the row read again underneath.
+  const found = await findSubscription(tx, principal, id)
+  if (found === undefined) throw noSuchSubscription(id)
+  await lockRow(tx, agreement, { companyId, id: found.agreementId })
+  await lockRow(tx, subscription, { companyId, id })
+  const current = await findSubscription(tx, principal, id)
+  if (current === undefined) throw noSuchSubscription(id)
+
+  requireStrictlyInside(current, on, INSIDE_SUBSCRIPTION)
+  const named = productId === undefined ? undefined : changed(productId, current.productId)
+  const productStatus = await requireProduct(tx, { companyId, projectId: current.projectId }, named)
+  const takes = { productId: named ?? current.productId, quantity: quantity ?? current.quantity }
+  if (named === undefined && takes.quantity === current.quantity) throw invalidRequest("body", [{ path: "", message: CHANGES_NOTHING }])
+
+  // Every 400 above, every 409 below (routes/statuses.ts).
+  refuseUnofferedProduct(productStatus)
+  await refuseStranded(
+    tx,
+    containerServicePlacement,
+    and(eq(containerServicePlacement.companyId, companyId), eq(containerServicePlacement.subscriptionId, id), gte(containerServicePlacement.validFrom, on)),
+    placementsBeginLater,
+  )
+  await refuseStranded(tx, subscriptionPause, and(eq(subscriptionPause.companyId, companyId), eq(subscriptionPause.subscriptionId, id), gte(subscriptionPause.validFrom, on)), pausesBeginLater)
+
+  // The containers serving it on the day, read before their placements end, since each one's replacement keeps its end.
+  const serving = await tx
+    .select({
+      id: containerServicePlacement.id,
+      containerId: containerServicePlacement.containerId,
+      wasteFractionId: containerServicePlacement.wasteFractionId,
+      serviceFrequencyId: containerServicePlacement.serviceFrequencyId,
+      validTo: containerServicePlacement.validTo,
+    })
+    .from(containerServicePlacement)
+    .where(placementsPast(companyId, [id], on))
+    .orderBy(asc(containerServicePlacement.id))
+
+  // Each half ends before the other begins, so no exclusion constraint sees two at once. The placements end first, so the
+  // subscription's own patch strands none; the replacement is written as any subscription is (`createSubscription`, the CSV
+  // import's writer too): an active product and a served place, a period inside the agreement's, no second of it at the place.
+  if (serving.length > 0) {
+    await tx
+      .update(containerServicePlacement)
+      .set({ validTo: on })
+      .where(and(eq(containerServicePlacement.companyId, companyId), inArray(containerServicePlacement.id, serving.map((placement) => placement.id))))
+  }
+  const [pausing] = await tx.select({ id: subscriptionPause.id, validTo: subscriptionPause.validTo }).from(subscriptionPause).where(pausesPast(companyId, [id], on))
+  if (pausing !== undefined) await tx.update(subscriptionPause).set({ validTo: on }).where(and(eq(subscriptionPause.companyId, companyId), eq(subscriptionPause.id, pausing.id)))
+  await patchSubscription(tx, principal, id, { validTo: on })
+  const replacement = await createSubscription(tx, principal, current.agreementId, {
+    productId: takes.productId,
+    propertyId: current.propertyId,
+    sharedCollectionPointId: current.sharedCollectionPointId,
+    quantity: takes.quantity,
+    validFrom: on,
+    validTo: current.validTo,
+  })
+  if (serving.length > 0) {
+    await tx.insert(containerServicePlacement).values(
+      serving.map((placement) => ({
+        id: newId(),
+        companyId,
+        projectId: current.projectId,
+        containerId: placement.containerId,
+        subscriptionId: replacement.id,
+        wasteFractionId: placement.wasteFractionId,
+        serviceFrequencyId: placement.serviceFrequencyId,
+        validFrom: on,
+        validTo: placement.validTo,
+      })),
+    )
+  }
+  // The pause in force on the day goes on under the replacement, as the containers do (#291).
+  if (pausing !== undefined) await tx.insert(subscriptionPause).values({ id: newId(), companyId, projectId: current.projectId, subscriptionId: replacement.id, validFrom: on, validTo: pausing.validTo })
+  return replacement
+}
+
 export function agreementRoutes(guard: MiddlewareHandler<AuthEnv>, { now = () => new Date(), jobs }: ClockOptions & { jobs: JobSender }) {
   return new Hono<AuthEnv>()
     .get(
@@ -810,89 +897,7 @@ export function agreementRoutes(guard: MiddlewareHandler<AuthEnv>, { now = () =>
       requireGrant(MODULE, "edit"),
       validate("param", IdParam),
       validate("json", SubscriptionChange),
-      async (c) => {
-        const { id } = c.req.valid("param")
-        const { on, productId, quantity } = c.req.valid("json")
-        const tx = c.get("tx")
-        const principal = c.get("principal")
-        const { companyId } = principal
-
-        // The agreement first and then the subscription, top down, as its patch takes them, and the row read again underneath.
-        const found = await findSubscription(tx, principal, id)
-        if (found === undefined) throw noSuchSubscription(id)
-        await lockRow(tx, agreement, { companyId, id: found.agreementId })
-        await lockRow(tx, subscription, { companyId, id })
-        const current = await findSubscription(tx, principal, id)
-        if (current === undefined) throw noSuchSubscription(id)
-
-        requireStrictlyInside(current, on, INSIDE_SUBSCRIPTION)
-        const named = productId === undefined ? undefined : changed(productId, current.productId)
-        const productStatus = await requireProduct(tx, { companyId, projectId: current.projectId }, named)
-        const takes = { productId: named ?? current.productId, quantity: quantity ?? current.quantity }
-        if (named === undefined && takes.quantity === current.quantity) throw invalidRequest("body", [{ path: "", message: CHANGES_NOTHING }])
-
-        // Every 400 above, every 409 below (routes/statuses.ts).
-        refuseUnofferedProduct(productStatus)
-        await refuseStranded(
-          tx,
-          containerServicePlacement,
-          and(eq(containerServicePlacement.companyId, companyId), eq(containerServicePlacement.subscriptionId, id), gte(containerServicePlacement.validFrom, on)),
-          placementsBeginLater,
-        )
-        await refuseStranded(tx, subscriptionPause, and(eq(subscriptionPause.companyId, companyId), eq(subscriptionPause.subscriptionId, id), gte(subscriptionPause.validFrom, on)), pausesBeginLater)
-
-        // The containers serving it on the day, read before their placements end, since each one's replacement keeps its end.
-        const serving = await tx
-          .select({
-            id: containerServicePlacement.id,
-            containerId: containerServicePlacement.containerId,
-            wasteFractionId: containerServicePlacement.wasteFractionId,
-            serviceFrequencyId: containerServicePlacement.serviceFrequencyId,
-            validTo: containerServicePlacement.validTo,
-          })
-          .from(containerServicePlacement)
-          .where(placementsPast(companyId, [id], on))
-          .orderBy(asc(containerServicePlacement.id))
-
-        // Each half ends before the other begins, so no exclusion constraint sees two at once. The placements end first, so the
-        // subscription's own patch strands none; the replacement is written as any subscription is (`createSubscription`, the CSV
-        // import's writer too): an active product and a served place, a period inside the agreement's, no second of it at the place.
-        if (serving.length > 0) {
-          await tx
-            .update(containerServicePlacement)
-            .set({ validTo: on })
-            .where(and(eq(containerServicePlacement.companyId, companyId), inArray(containerServicePlacement.id, serving.map((placement) => placement.id))))
-        }
-        const [pausing] = await tx.select({ id: subscriptionPause.id, validTo: subscriptionPause.validTo }).from(subscriptionPause).where(pausesPast(companyId, [id], on))
-        if (pausing !== undefined) await tx.update(subscriptionPause).set({ validTo: on }).where(and(eq(subscriptionPause.companyId, companyId), eq(subscriptionPause.id, pausing.id)))
-        await patchSubscription(tx, principal, id, { validTo: on })
-        const replacement = await createSubscription(tx, principal, current.agreementId, {
-          productId: takes.productId,
-          propertyId: current.propertyId,
-          sharedCollectionPointId: current.sharedCollectionPointId,
-          quantity: takes.quantity,
-          validFrom: on,
-          validTo: current.validTo,
-        })
-        if (serving.length > 0) {
-          await tx.insert(containerServicePlacement).values(
-            serving.map((placement) => ({
-              id: newId(),
-              companyId,
-              projectId: current.projectId,
-              containerId: placement.containerId,
-              subscriptionId: replacement.id,
-              wasteFractionId: placement.wasteFractionId,
-              serviceFrequencyId: placement.serviceFrequencyId,
-              validFrom: on,
-              validTo: placement.validTo,
-            })),
-          )
-        }
-        // The pause in force on the day goes on under the replacement, as the containers do (#291).
-        if (pausing !== undefined) await tx.insert(subscriptionPause).values({ id: newId(), companyId, projectId: current.projectId, subscriptionId: replacement.id, validFrom: on, validTo: pausing.validTo })
-        return created(c, "/subscriptions", replacement)
-      },
+      async (c) => created(c, "/subscriptions", await changeSubscription(c.get("tx"), c.get("principal"), c.req.valid("param").id, c.req.valid("json"))),
     )
     .post(
       "/agreements/:id/terminate",
