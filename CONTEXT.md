@@ -162,6 +162,10 @@ _Avoid_: Warehouse, unloading station
 A destination where a route unloads collected material and records weight or disposal evidence.
 _Avoid_: Depot, warehouse
 
+**Transfer Station**:
+An Unloading Station that holds what is tipped there and sends it on in Outbound Loads to the site that treats or disposes of it. What it holds is read by project and fraction: what Unloads tipped there by their weight review, less what Outbound Loads took away, plus the office's adjustments after a stock count. It is stored nowhere and may read below zero.
+_Avoid_: Depot, warehouse, transfer note (the document)
+
 **Treatment**:
 How a waste fraction is handled once collected: reuse, recycling (composting and digestion among it), energy recovery, or disposal. A Customer's recycling rate is read from it.
 _Avoid_: Disposal method, processing, destination
@@ -331,6 +335,10 @@ _Avoid_: Pickup, proof of service, tip, dump
 **Transfer Note**:
 The document that goes with an Unload's load from the company that collected and carried it to the Unloading Station that took it: the parties, the waste fraction with its waste code and whether it is hazardous, the weights, and when. One per Unload the station accepted; a refused load was not transferred and has none, and a corrected Unload's note is its correction's.
 _Avoid_: Consignment note, waybill, disposal receipt
+
+**Outbound Load**:
+A load a Transfer Station sends on to another Unloading Station, usually an external plant, carried by our vehicle or a hauler's, with our out-weighing and the haul and disposal costs. It is reconciled against the receiving site's own ticket: received, then reconciled or disputed, and cancelled only if it was never received. Its costs are recorded, never billed or settled.
+_Avoid_: Unload (what a route tips), haul-out (the activity), shipment
 
 ## Resolution and finance
 

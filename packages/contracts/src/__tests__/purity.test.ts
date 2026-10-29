@@ -82,7 +82,8 @@
 // its shapes and its colour to WCAG 2.1 AA's contrast.
 // O26 of #290 added @waste/domain/resources/sensors: sensors.ts bounds the
 // ingest's batch by the domain's cap and defaults a pairing's threshold to the
-// domain's.
+// domain's. M17 of #293 added @waste/domain/execution/haul-out: haul-out.ts
+// tells a load sent back to the station it left the domain's sentence.
 import path from "node:path"
 import { fileURLToPath } from "node:url"
 
@@ -96,6 +97,7 @@ definePurityTests({
     "@waste/domain/access/public-slug",
     "@waste/domain/audit/vocabulary",
     "@waste/domain/execution/bulky",
+    "@waste/domain/execution/haul-out",
     "@waste/domain/execution/positions",
     "@waste/domain/execution/proof-shapes",
     "@waste/domain/execution/shift",
