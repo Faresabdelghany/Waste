@@ -125,6 +125,8 @@ export const AUDITED_TABLES = [
   "message_template",
   "pre_trip_checklist_item",
   "vehicle_defect",
+  "sensor",
+  "sensor_pairing",
   "notification_preference",
   "notification_rule",
 ] as const
