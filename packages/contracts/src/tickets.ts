@@ -13,9 +13,11 @@
 // The writes (#109 §3). `TicketCreate` opens a case from the office's doors —
 // `source` defaults to `office` and may never be `driver-app` or `dispatch`,
 // which are the consumer's — and may name what it is about, the pickup with
-// its route (`pickupWithItsRoute`, at `links.pickupId`), the assignee and the
-// alert it answers; `occurredAt` defaults to the request's clock. `TicketPatch`
-// moves the case's own fields and nothing the machine or the assignment owns:
+// its route (`pickupWithItsRoute`, at `links.pickupId`), the assignee, the
+// team (O30 of #290, row 7.20; the project's default for the kind when
+// absent) and the alert it answers; `occurredAt` defaults to the request's
+// clock. `TicketPatch` moves the case's own fields, its team among them, and
+// nothing the machine or the assignment owns:
 // never `status`, `assigneeUserAccountId`, `source`, `projectId`, `number`,
 // `resolution` or the stamps; the pickup rule is held here where both halves
 // are in the body and by the route against the stored row where only one is.
@@ -92,6 +94,12 @@ export const ticketFields = {
   dueAt: IsoDateTime.nullable(),
   /** Who works it; null is unassigned. */
   assigneeUserAccountId: Id.nullable(),
+  /**
+   * The team it waits with (O30 of #290, row 7.20): the opener's, or the
+   * project's default team for its kind; null for none. Absent on an event
+   * the outbox took before O30, read as none.
+   */
+  teamId: Id.nullable().default(null),
   /** The person who opened it, or null for the consumer's ticket. */
   createdBy: Id.nullable(),
   /** The outbox event the consumer made it from, or null for a person's. */
@@ -209,6 +217,8 @@ export const TicketCreate = z
     /** The due date; null for none, and the project's SLA target of the kind and priority when absent. */
     dueAt: IsoDateTime.nullable().optional(),
     assigneeUserAccountId: Id.nullable().optional(),
+    /** The team it waits with; null for none, and the project's default team for the kind when absent. */
+    teamId: Id.nullable().optional(),
     /** What the ticket is about; nothing at all for an internal task. */
     links: TicketLinksSet.optional(),
     /** An alert of the project the ticket answers, linked to it in the same transaction. */
@@ -236,6 +246,8 @@ export const TicketPatch = z
     kind: TicketKind.optional(),
     priority: TicketPriority.optional(),
     dueAt: IsoDateTime.nullable().optional(),
+    /** Hands the case to another team, or to none with null; the assignee stays as it is. */
+    teamId: Id.nullable().optional(),
     links: TicketLinksSet.optional(),
   })
   .refine(changesSomething, somethingToChange)
@@ -334,7 +346,7 @@ export const TicketComment = z.strictObject({
 })
 export type TicketComment = z.infer<typeof TicketComment>
 
-/** A page of tickets: one project's, by status or open at all, overdue or not, by kind, priority or source, by assignee, about a customer, a property, a route, a pickup, a container or a driver, over a window of when they happened. */
+/** A page of tickets: one project's, by status or open at all, overdue or not, by kind, priority or source, by assignee or team, assigned or not, about a customer, a property, a route, a pickup, a container or a driver, over a window of when they happened. */
 export const TicketListQuery = ProjectScopedListQuery.extend({
   status: TicketStatus.optional(),
   /** A query string spells a boolean as `true` or `false`, exactly; `true` is the four open statuses, `false` the two closed. */
@@ -345,6 +357,10 @@ export const TicketListQuery = ProjectScopedListQuery.extend({
   priority: TicketPriority.optional(),
   source: TicketSource.optional(),
   assigneeUserAccountId: Id.optional(),
+  /** One team's tickets (O30 of #290, row 7.20); with `open=true` and `unassigned=true`, its queue. */
+  teamId: Id.optional(),
+  /** Likewise a boolean: `true` is a ticket nobody works, `false` one somebody does. */
+  unassigned: z.stringbool({ truthy: ["true"], falsy: ["false"], case: "sensitive" }).optional(),
   /** The portal's read: the tickets naming the customer, or a property they are a party to. */
   customerId: Id.optional(),
   propertyId: Id.optional(),

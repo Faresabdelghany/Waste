@@ -43,7 +43,8 @@
 // `retry-sync` (the device's, not a command) and `reschedule-stop` (a
 // Ticket's), plus `arrive`, the four evidence commands, `record-unload`, and
 // `pause`/`resume` in place of breaks, and `record-positions`, where the
-// vehicle was while the session ran (O8 of #290). `COMMAND_OUTCOMES` is what the receipt
+// vehicle was while the session ran (O8 of #290), and `pre-trip-check`, a
+// vehicle's walk-round before or during the day (O13 of #290). `COMMAND_OUTCOMES` is what the receipt
 // stores; `replayed` is the wire's word for the first outcome answered again
 // and is never stored. `OUTBOX_KINDS` and `OUTBOX_AGGREGATES` are the events
 // the outbox carries and what each is about: the table is Execution's and its
@@ -85,7 +86,7 @@ export const PROOF_KINDS = ["arrival", "completion", "skip", "failure", "problem
 /** Who recorded a proof or an unload. */
 export const EXECUTION_SOURCES = ["driver-app", "dispatch", "integration"] as const
 /** What a driver's device may say, one contract each. */
-export const DRIVER_COMMAND_KINDS = ["start-route", "arrive", "complete-pickup", "skip-pickup", "fail-pickup", "report-problem", "add-photo", "add-weight", "add-signature", "add-note", "record-unload", "pause", "resume", "end-route", "record-positions"] as const
+export const DRIVER_COMMAND_KINDS = ["start-route", "arrive", "complete-pickup", "skip-pickup", "fail-pickup", "report-problem", "add-photo", "add-weight", "add-signature", "add-note", "record-unload", "pause", "resume", "end-route", "record-positions", "pre-trip-check"] as const
 /** How a driver read the code that confirms a stop's container (O19 of #290): the phone's camera reading a barcode, or the code typed in — off the bin's label, or off a hand-held RFID reader's screen. */
 export const IDENTIFICATION_METHODS = ["camera", "typed"] as const
 /** What the receipt stores of a command; a replay answers the stored one again and stores nothing. */

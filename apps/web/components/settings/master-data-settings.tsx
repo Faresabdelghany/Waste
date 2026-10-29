@@ -93,6 +93,8 @@ function detailOf(record: BusinessRecord, kind: MasterDataKind): string {
       return record.facts["Container types"] ?? "No container types"
     case "contaminant-code":
       return record.facts.Status === "Retired" ? `${record.facts.Fractions ?? "Every fraction"} · Retired` : (record.facts.Fractions ?? "Every fraction")
+    case "decommission-reason":
+      return record.facts.Status === "Retired" ? `${record.facts.Code ?? "—"} · Retired` : (record.facts.Code ?? "—")
   }
 }
 
@@ -279,7 +281,7 @@ export function MasterDataSettings() {
             <TableHeader>
               <TableRow className="bg-muted/40 hover:bg-muted/40">
                 <TableHead>Name</TableHead>
-                <TableHead>{kind === "waste-fraction" ? "Key" : kind === "container-type" ? "Volume" : kind === "service-frequency" ? "Cadence" : kind === "contaminant-code" ? "Fractions" : "Container types"}</TableHead>
+                <TableHead>{kind === "waste-fraction" ? "Key" : kind === "container-type" ? "Volume" : kind === "service-frequency" ? "Cadence" : kind === "contaminant-code" ? "Fractions" : kind === "decommission-reason" ? "Code" : "Container types"}</TableHead>
                 {kind === "waste-fraction" && <TableHead>Waste code</TableHead>}
                 <TableHead>Scope</TableHead>
                 <TableHead>Updated</TableHead>
@@ -299,7 +301,12 @@ export function MasterDataSettings() {
                       )}
                     </TableCell>
                     <TableCell className="text-sm text-muted-foreground">{detail}</TableCell>
-                    {kind === "waste-fraction" && <TableCell className="whitespace-nowrap font-mono text-sm text-muted-foreground">{record.facts["Waste code"] ?? "—"}</TableCell>}
+                    {kind === "waste-fraction" && (
+                      <TableCell className="whitespace-nowrap text-sm text-muted-foreground">
+                        <span className="font-mono">{record.facts["Waste code"] ?? "—"}</span>
+                        {record.facts.Hazardous === "Yes" && <span className="ml-2 font-medium text-destructive">Hazardous</span>}
+                      </TableCell>
+                    )}
                     <TableCell className="whitespace-nowrap text-sm text-muted-foreground">{scope}</TableCell>
                     <TableCell className="whitespace-nowrap text-sm text-muted-foreground">{record.updated}</TableCell>
                     <TableCell className="whitespace-nowrap text-right">

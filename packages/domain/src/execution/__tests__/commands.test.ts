@@ -6,14 +6,17 @@ import assert from "node:assert/strict"
 import { describe, test } from "node:test"
 
 import { licenceSentence } from "../../resources/licence"
+import { NOT_ON_THE_CHECKLIST, unanswered, type ChecklistItem } from "../../resources/pre-trip"
 import {
   alreadyOnRoute,
   BEFORE_THE_SESSION_STARTED,
+  checkNotNow,
   decide,
   NOT_A_FRACTION,
   NOT_A_POWERED_VEHICLE,
   NOT_A_STATION,
   NOT_A_TRAILER,
+  NOT_A_VEHICLE,
   noContainerToConfirm,
   noPickupOnRoute,
   noRouteAssigned,
@@ -439,5 +442,72 @@ describe("decide: record-positions (O8 of #290)", () => {
       detail: BEFORE_THE_SESSION_STARTED,
       errors: [{ path: "body.points.0.at", message: BEFORE_THE_SESSION_STARTED }],
     })
+  })
+})
+
+describe("decide: pre-trip-check (O13 of #290)", () => {
+  const BRAKES = "018f7c31-a000-7000-8000-000000000070"
+  const LIGHTS = "018f7c31-a000-7000-8000-000000000071"
+  const checklist: ChecklistItem[] = [
+    { id: BRAKES, label: "Brakes", critical: true },
+    { id: LIGHTS, label: "Lights", critical: false },
+  ]
+  const ready = (over: Partial<Lookups> = {}) => readyToStart({ checklist, ...over })
+  const check = (items: { itemId: string; passed: boolean; note?: string }[], over: { odometerKm?: number; engineHours?: number } = {}) => command("pre-trip-check", { vehicleId: VEHICLE, items, ...over })
+  const allPassed = [
+    { itemId: BRAKES, passed: true },
+    { itemId: LIGHTS, passed: true },
+  ]
+
+  test("a check on a ready route, every item passed, is appended with the readings and the items' labels copied beside the answers, and finds nothing", () => {
+    assert.deepEqual(applied(decide(check(allPassed, { odometerKm: 182_400, engineHours: 6_120 }), mads, ready(), clock)), [
+      {
+        kind: "append-pre-trip-check",
+        check: {
+          id: COMMAND,
+          vehicleId: VEHICLE,
+          occurredAt: EARLIER,
+          items: [
+            { itemId: BRAKES, label: "Brakes", critical: true, passed: true, note: null },
+            { itemId: LIGHTS, label: "Lights", critical: false, passed: true, note: null },
+          ],
+          odometerKm: 182_400,
+          engineHours: 6_120,
+          location: null,
+          locationAccuracyM: null,
+        },
+        defects: [],
+        grounds: false,
+      },
+    ])
+  })
+
+  test("a critical defect grounds the vehicle; a minor one is a defect that leaves it on the road", () => {
+    const critical = applied(decide(check([{ itemId: BRAKES, passed: false, note: "Pulls left" }, { itemId: LIGHTS, passed: true }]), mads, ready(), clock))[0] as { defects: unknown[]; grounds: boolean }
+    assert.deepEqual(critical.defects, [{ itemId: BRAKES, label: "Brakes", critical: true, passed: false, note: "Pulls left" }])
+    assert.equal(critical.grounds, true)
+    const minor = applied(decide(check([{ itemId: BRAKES, passed: true }, { itemId: LIGHTS, passed: false }]), mads, ready(), clock))[0] as { defects: unknown[]; grounds: boolean }
+    assert.equal(minor.defects.length, 1)
+    assert.equal(minor.grounds, false)
+  })
+
+  test("the check is made on a ready or an active route, with or without a session, and refused on any other", () => {
+    assert.equal(applied(decide(check(allPassed), mads, ready({ route: route("active"), session: session() }), clock)).length, 1, "during the day")
+    for (const status of ["planned", "completed", "cancelled"] as const) {
+      assert.deepEqual(rejected(decide(check(allPassed), mads, ready({ route: route(status) }), clock)), { status: 409, detail: checkNotNow("RC-1042") }, status)
+    }
+  })
+
+  test("the vehicle is one of the project's — a trailer will do — and in service", () => {
+    assert.deepEqual(rejected(decide(check(allPassed), mads, ready({ vehicle: undefined }), clock)), { status: 400, detail: NOT_A_VEHICLE, errors: [{ path: "body.vehicleId", message: NOT_A_VEHICLE }] })
+    assert.equal(applied(decide({ ...check(allPassed), body: { vehicleId: TRAILER, items: allPassed } }, mads, ready({ vehicle: trailer }), clock)).length, 1)
+    assert.deepEqual(rejected(decide(check(allPassed), mads, ready({ vehicle: { ...truck, status: "maintenance" } }), clock)), { status: 409, detail: notInService("WH-24", "maintenance", "vehicle") })
+    assert.deepEqual(rejected(decide({ ...check(allPassed), body: { vehicleId: TRAILER, items: allPassed } }, mads, ready({ vehicle: { ...trailer, status: "unavailable" } }), clock)), { status: 409, detail: notInService("WH-T3", "unavailable", "trailer") })
+  })
+
+  test("every item of the type's checklist is answered once and nothing else: 400 at the answer, or at the items", () => {
+    assert.deepEqual(rejected(decide(check([{ itemId: BRAKES, passed: true }]), mads, ready(), clock)).errors, [{ path: "body.items", message: unanswered("Lights") }])
+    assert.deepEqual(rejected(decide(check([...allPassed, { itemId: PICKUP, passed: true }]), mads, ready(), clock)).errors, [{ path: "body.items.2.itemId", message: NOT_ON_THE_CHECKLIST }])
+    assert.equal(applied(decide(check([]), mads, ready({ checklist: [] }), clock)).length, 1, "a type with no checklist takes a check of no items")
   })
 })
