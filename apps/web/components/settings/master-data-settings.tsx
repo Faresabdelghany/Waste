@@ -93,6 +93,8 @@ function detailOf(record: BusinessRecord, kind: MasterDataKind): string {
       return record.facts["Container types"] ?? "No container types"
     case "contaminant-code":
       return record.facts.Status === "Retired" ? `${record.facts.Fractions ?? "Every fraction"} · Retired` : (record.facts.Fractions ?? "Every fraction")
+    case "decommission-reason":
+      return record.facts.Status === "Retired" ? `${record.facts.Code ?? "—"} · Retired` : (record.facts.Code ?? "—")
   }
 }
 
@@ -279,7 +281,7 @@ export function MasterDataSettings() {
             <TableHeader>
               <TableRow className="bg-muted/40 hover:bg-muted/40">
                 <TableHead>Name</TableHead>
-                <TableHead>{kind === "waste-fraction" ? "Key" : kind === "container-type" ? "Volume" : kind === "service-frequency" ? "Cadence" : kind === "contaminant-code" ? "Fractions" : "Container types"}</TableHead>
+                <TableHead>{kind === "waste-fraction" ? "Key" : kind === "container-type" ? "Volume" : kind === "service-frequency" ? "Cadence" : kind === "contaminant-code" ? "Fractions" : kind === "decommission-reason" ? "Code" : "Container types"}</TableHead>
                 {kind === "waste-fraction" && <TableHead>Waste code</TableHead>}
                 <TableHead>Scope</TableHead>
                 <TableHead>Updated</TableHead>

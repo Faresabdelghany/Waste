@@ -1,5 +1,5 @@
 // Which run a restore or a recovery may read from (Issue #152): a run of the
-// protected workflow on main, dispatched by hand, and the newest valid
+// protected workflow on main, dispatched by hand or started after CI, and the newest valid
 // artifact of the kind asked for among its attempts. The GitHub API answers
 // are scripted; the shapes are the REST API's.
 import assert from "node:assert/strict"
@@ -26,14 +26,15 @@ const artifact = (name: string, overrides: Partial<RunArtifact> = {}): RunArtifa
 const expected = { repository: "Faresabdelghany/Waste", workflowPath: ".github/workflows/pilot-database.yml" }
 
 describe("checkSourceRun", () => {
-  test("takes a dispatched run of this workflow on main", () => {
+  test("takes a dispatched run of this workflow on main, and an automatic release's, which CI's success on main started", () => {
     assert.doesNotThrow(() => checkSourceRun(RUN, expected))
+    assert.doesNotThrow(() => checkSourceRun({ ...RUN, event: "workflow_run" }, expected))
   })
 
   test("refuses another workflow, another branch, another trigger and another repository", () => {
     assert.throws(() => checkSourceRun({ ...RUN, path: ".github/workflows/ci.yml" }, expected), /Run 18000000001 is a run of \.github\/workflows\/ci\.yml, not of \.github\/workflows\/pilot-database\.yml/)
     assert.throws(() => checkSourceRun({ ...RUN, head_branch: "db/152" }, expected), /Run 18000000001 ran on db\/152, not main/)
-    assert.throws(() => checkSourceRun({ ...RUN, event: "push" }, expected), /Run 18000000001 was triggered by push, not by hand/)
+    assert.throws(() => checkSourceRun({ ...RUN, event: "push" }, expected), /Run 18000000001 was triggered by push, not by hand or by CI's success on main/)
     assert.throws(() => checkSourceRun({ ...RUN, repository: { full_name: "someone/fork" } }, expected), /Run 18000000001 is a run of someone\/fork/)
   })
 })

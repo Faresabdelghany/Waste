@@ -143,7 +143,7 @@ export type MasterDataFields = {
   daysBetween?: number | null
   /** A vehicle type's container types, by web id. */
   containerTypeIds?: string[]
-  /** A contaminant code's state: in use, or retired from new tags. */
+  /** A contaminant code's or a decommission reason's state: in use, or retired from new tags or decommissions. */
   status?: "active" | "inactive"
   /** A contaminant code's fractions, by web id; none is every fraction. */
   wasteFractionIds?: string[]
@@ -168,6 +168,7 @@ const KIND_FIELD_IDS: Readonly<Record<MasterDataKind, readonly string[]>> = {
   "service-frequency": ["name", "projectId", "description", "collectionsPerWeek", "weeksBetween", "daysBetween"],
   "vehicle-type": ["name", "key", "description", "containerTypeIds", ...CONSUMPTION_FIELDS.map((field) => field.id)],
   "contaminant-code": ["name", "key", "status", "wasteFractionIds"],
+  "decommission-reason": ["name", "key", "status"],
 }
 
 /** A fraction's treatment as a person reads it. */
@@ -238,6 +239,8 @@ export function masterDataFieldsOf(kind: MasterDataKind, values: BusinessFormVal
       const ids = text(values, "wasteFractionIds")
       return { kind, name, key: text(values, "key") ?? "", status: text(values, "status") === "inactive" ? "inactive" : "active", wasteFractionIds: ids === undefined ? [] : splitMultiValue(ids) }
     }
+    case "decommission-reason":
+      return { kind, name, key: text(values, "key") ?? "", status: text(values, "status") === "inactive" ? "inactive" : "active" }
   }
 }
 
@@ -271,7 +274,7 @@ export function masterDataFieldErrors(kind: MasterDataKind, values: BusinessForm
   const fields = masterDataFieldsOf(kind, values)
   const errors: Record<string, string> = {}
   if (!fields.name) errors.name = nameRefusal(kind)
-  if ((kind === "waste-fraction" || kind === "vehicle-type" || kind === "contaminant-code") && !isKey(fields.key)) errors.key = KEY_REFUSAL
+  if ((kind === "waste-fraction" || kind === "vehicle-type" || kind === "contaminant-code" || kind === "decommission-reason") && !isKey(fields.key)) errors.key = KEY_REFUSAL
   if (kind === "waste-fraction" && fields.wasteCode != null && !isWasteCode(fields.wasteCode)) errors.wasteCode = WASTE_CODE_REFUSAL
   if (kind === "waste-fraction" && !within(fields.densityKgPerCubicMetre, DENSITY_KG_PER_CUBIC_METRE)) errors.densityKgPerCubicMetre = DENSITY_REFUSAL
   if (kind === "container-type" && Number.isNaN(fields.volumeLitres)) errors.volumeLitres = VOLUME_REFUSAL
@@ -385,6 +388,11 @@ export function presentMasterData(fields: MasterDataFields, lookups: MasterDataL
         facts: { Kind: details.label, Code: key, Status: state, Fractions: fractions },
       }
     }
+    case "decommission-reason": {
+      const key = fields.key ?? ""
+      const state = fields.status === "inactive" ? "Retired" : "Active"
+      return { ...base, context: `${details.label} · ${key}`, value: state, facts: { Kind: details.label, Code: key, Status: state } }
+    }
   }
 }
 
@@ -444,6 +452,21 @@ export function masterDataSchema(kind: MasterDataKind): BusinessFormSchema {
           { id: "wasteFractionIds", label: "Waste fractions", type: "multiselect" as const, relation: MASTER_DATA_MODULE, description: "The fractions it is found in; none is every fraction." },
         ]
       : []),
+    ...(kind === "decommission-reason"
+      ? [
+          { id: "key", label: "Code", type: "text" as const, required: true, placeholder: "worn-out" },
+          {
+            id: "status",
+            label: "Status",
+            type: "select" as const,
+            defaultValue: "active",
+            options: [
+              { value: "active", label: "Active" },
+              { value: "inactive", label: "Retired: offered for no new decommission" },
+            ],
+          },
+        ]
+      : []),
     ...(kind === "container-type"
       ? [
           { id: "volumeLitres", label: "Volume", type: "number" as const, min: 1, unit: "L" },
@@ -482,7 +505,9 @@ export function masterDataSchema(kind: MasterDataKind): BusinessFormSchema {
     description:
       kind === "contaminant-code"
         ? "A name for the wrong waste in a bin, which a stop is tagged with. Retire it rather than delete it: the stops tagged with it keep it."
-        : `A ${lower} of the company's own vocabulary${kind === "service-frequency" ? ", offered on one project" : ""}.`,
+        : kind === "decommission-reason"
+          ? "Why a container is scrapped, which a decommission names. Retire it rather than delete it: the decommissions given it keep it."
+          : `A ${lower} of the company's own vocabulary${kind === "service-frequency" ? ", offered on one project" : ""}.`,
     submitLabel: `Create ${lower}`,
     nameField: "name",
     contextFieldIds: kind === "service-frequency" ? ["projectId"] : kind === "container-type" ? ["volumeLitres"] : ["key"],

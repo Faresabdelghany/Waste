@@ -42,6 +42,7 @@ import { routeSchemesModule } from "./route-schemes"
 import { serviceAreasModule } from "./service-areas"
 import { sortingGuideModule } from "./sorting-guide"
 import { routesModule } from "./routes"
+import { ticketTeamsModule } from "./ticket-teams"
 import { ticketsModule } from "./tickets"
 import { weightsModule } from "./weights"
 
@@ -87,6 +88,8 @@ export const SERVER_MODULES: readonly ServerModule[] = [
   accessModule,
   // A provider's team (#291 C24), after the providers its accounts name.
   teamModule,
+  // The ticket teams (O30 of #290), after the accounts their members are, and before the tickets that name them.
+  ticketTeamsModule,
   customersModule,
   planningAreasModule,
   collectionCalendarsModule,

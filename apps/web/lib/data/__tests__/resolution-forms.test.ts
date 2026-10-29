@@ -40,6 +40,7 @@ const ids = {
   ticket: "01a0d2a4-a280-7040-8000-000000000001",
   alert: "01a0d2a4-a280-7041-8000-000000000001",
   product: "01a0d2a4-a280-700a-8000-000000000005",
+  team: "01a0d2a4-a280-7042-8000-000000000001",
 }
 const row = (id: string, recordKind: string): BusinessRecord => ({ ...projectRecord, id, name: id, recordKind, facts: {}, submittedValues: {} })
 const rows: Array<[string, BusinessRecord, string]> = [
@@ -58,6 +59,7 @@ const rows: Array<[string, BusinessRecord, string]> = [
   ["operate.tickets", row(`ticket-${ids.ticket}`, "Ticket"), ids.ticket],
   ["operate.exceptions", row(`alert-${ids.alert}`, "Alert"), ids.alert],
   ["commercial.products", row(`product-${ids.product}`, "Product"), ids.product],
+  ["configure.templates", row(`team-${ids.team}`, "Ticket team"), ids.team],
 ]
 const state: ServerRecordsState = new Map(rows.map(([key, record, serverId]) => [key, loaded({ records: [record], serverIds: new Map([[record.id, serverId]]) }, 1)]))
 const context: MappingContext = { fixtures: [], resolve: resolverOver(state), companyRecordId: FIXTURE_COMPANY_ID, now: NOW }
@@ -76,6 +78,7 @@ describe("New ticket", () => {
     occurredAt: "2026-10-01T09:15",
     dueAt: "2026-10-01T16:00",
     assigneeUserAccountId: web("configure.access"),
+    teamId: web("configure.templates"),
     routeId: web("route-studio.routes"),
     pickupId: web("route-studio.pickups"),
     answerFromRecord: false,
@@ -94,6 +97,7 @@ describe("New ticket", () => {
     assert.ok(TicketCreate.safeParse(body).success, JSON.stringify(body))
     assert.deepEqual(body.links, { routeId: ids.route, pickupId: ids.pickup, containerId: ids.container, propertyId: ids.property, sharedCollectionPointId: ids.point, customerId: ids.customer, agreementId: ids.agreement, driverId: ids.driver, parentTicketId: ids.ticket })
     assert.equal(body.assigneeUserAccountId, ids.user)
+    assert.equal(body.teamId, ids.team)
     assert.equal(body.answerFromRecord, false, "the opt-out reaches the body")
   })
 
@@ -139,7 +143,7 @@ describe("sub-tickets (7.10 of #290)", () => {
 })
 
 describe("the ticket's command dialogs", () => {
-  const ticket: Ticket = { id: ids.ticket, ...STAMPS, projectId: copenhagen.id, number: 1001, label: "T-1001", kind: "other", status: "open", priority: "none", source: "office", subject: "A task", description: "Check the gate", occurredAt: STAMPS.createdAt, dueAt: null, assigneeUserAccountId: null, createdBy: null, sourceEventId: null, links: { routeId: null, pickupId: null, containerId: null, propertyId: null, sharedCollectionPointId: null, customerId: null, agreementId: null, driverId: null, parentTicketId: null }, resolution: null, recollectionRouteId: null, recollectionPickupId: null, chargeProductId: null, closedAt: null, bookedRouteId: null, bookedPickupId: null }
+  const ticket: Ticket = { id: ids.ticket, ...STAMPS, projectId: copenhagen.id, number: 1001, label: "T-1001", kind: "other", status: "open", priority: "none", source: "office", subject: "A task", description: "Check the gate", occurredAt: STAMPS.createdAt, dueAt: null, assigneeUserAccountId: null, teamId: null, createdBy: null, sourceEventId: null, links: { routeId: null, pickupId: null, containerId: null, propertyId: null, sharedCollectionPointId: null, customerId: null, agreementId: null, driverId: null, parentTicketId: null }, resolution: null, recollectionRouteId: null, recollectionPickupId: null, chargeProductId: null, closedAt: null, bookedRouteId: null, bookedPickupId: null }
   const record = ticketAdapter.toRecord(ticket, context)
   const filled: Record<keyof typeof TICKET_COMMAND_FORMS, [BusinessFormValues, { safeParse: (body: unknown) => { success: boolean } }]> = {
     assign: [{ assigneeUserAccountId: web("configure.access"), note: "Taking it" }, TicketAssign],

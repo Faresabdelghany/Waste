@@ -1,5 +1,5 @@
 {
-  "id": "cabad984-de7f-442e-a1d1-dae4a7cba518",
+  "id": "cc115fcf-cd34-4583-bf20-fbc65cb62db2",
   "prevId": "b09b6e28-b3c4-4ca7-909d-dcf2d1415c93",
   "version": "7",
   "dialect": "postgresql",
@@ -1709,13 +1709,6 @@
           "type": "integer",
           "primaryKey": false,
           "notNull": false
-        },
-        "hazardous": {
-          "name": "hazardous",
-          "type": "boolean",
-          "primaryKey": false,
-          "notNull": true,
-          "default": false
         }
       },
       "indexes": {},
@@ -1775,10 +1768,6 @@
         "waste_fraction_treatment_one_of": {
           "name": "waste_fraction_treatment_one_of",
           "value": "\"wms\".\"waste_fraction\".\"treatment\" in ('reuse', 'recycling', 'energy-recovery', 'disposal')"
-        },
-        "waste_fraction_hazardous_shape": {
-          "name": "waste_fraction_hazardous_shape",
-          "value": "\"wms\".\"waste_fraction\".\"hazardous\" or \"wms\".\"waste_fraction\".\"waste_code\" is null or \"wms\".\"waste_fraction\".\"waste_code\" not like '%*'"
         },
         "waste_fraction_density_kg_per_cubic_metre_range": {
           "name": "waste_fraction_density_kg_per_cubic_metre_range",
@@ -8468,6 +8457,114 @@
       "checkConstraints": {},
       "isRLSEnabled": false
     },
+    "wms.decommission_reason": {
+      "name": "decommission_reason",
+      "schema": "wms",
+      "columns": {
+        "id": {
+          "name": "id",
+          "type": "uuid",
+          "primaryKey": true,
+          "notNull": true,
+          "default": "wms.uuidv7()"
+        },
+        "company_id": {
+          "name": "company_id",
+          "type": "uuid",
+          "primaryKey": false,
+          "notNull": true
+        },
+        "created_at": {
+          "name": "created_at",
+          "type": "timestamp with time zone",
+          "primaryKey": false,
+          "notNull": true,
+          "default": "now()"
+        },
+        "updated_at": {
+          "name": "updated_at",
+          "type": "timestamp with time zone",
+          "primaryKey": false,
+          "notNull": true,
+          "default": "now()"
+        },
+        "code": {
+          "name": "code",
+          "type": "text",
+          "primaryKey": false,
+          "notNull": true
+        },
+        "name": {
+          "name": "name",
+          "type": "text",
+          "primaryKey": false,
+          "notNull": true
+        },
+        "status": {
+          "name": "status",
+          "type": "text",
+          "primaryKey": false,
+          "notNull": true,
+          "default": "'active'"
+        }
+      },
+      "indexes": {},
+      "foreignKeys": {
+        "decommission_reason_company_id_fk": {
+          "name": "decommission_reason_company_id_fk",
+          "tableFrom": "decommission_reason",
+          "tableTo": "company",
+          "schemaTo": "wms",
+          "columnsFrom": [
+            "company_id"
+          ],
+          "columnsTo": [
+            "id"
+          ],
+          "onDelete": "no action",
+          "onUpdate": "no action"
+        }
+      },
+      "compositePrimaryKeys": {},
+      "uniqueConstraints": {
+        "decommission_reason_code_key": {
+          "name": "decommission_reason_code_key",
+          "nullsNotDistinct": false,
+          "columns": [
+            "company_id",
+            "code"
+          ]
+        },
+        "decommission_reason_name_key": {
+          "name": "decommission_reason_name_key",
+          "nullsNotDistinct": false,
+          "columns": [
+            "company_id",
+            "name"
+          ]
+        },
+        "decommission_reason_tenant_key": {
+          "name": "decommission_reason_tenant_key",
+          "nullsNotDistinct": false,
+          "columns": [
+            "company_id",
+            "id"
+          ]
+        }
+      },
+      "policies": {},
+      "checkConstraints": {
+        "decommission_reason_code_lowercase": {
+          "name": "decommission_reason_code_lowercase",
+          "value": "\"wms\".\"decommission_reason\".\"code\" = lower(\"wms\".\"decommission_reason\".\"code\")"
+        },
+        "decommission_reason_status_one_of": {
+          "name": "decommission_reason_status_one_of",
+          "value": "\"wms\".\"decommission_reason\".\"status\" in ('active', 'inactive')"
+        }
+      },
+      "isRLSEnabled": false
+    },
     "wms.stock_minimum": {
       "name": "stock_minimum",
       "schema": "wms",
@@ -8745,6 +8842,12 @@
           "primaryKey": false,
           "notNull": false
         },
+        "decommission_reason_id": {
+          "name": "decommission_reason_id",
+          "type": "uuid",
+          "primaryKey": false,
+          "notNull": false
+        },
         "reference": {
           "name": "reference",
           "type": "text",
@@ -8911,6 +9014,27 @@
           "concurrently": false,
           "method": "btree",
           "with": {}
+        },
+        "stock_movement_decommission_reason_id_idx": {
+          "name": "stock_movement_decommission_reason_id_idx",
+          "columns": [
+            {
+              "expression": "company_id",
+              "isExpression": false,
+              "asc": true,
+              "nulls": "last"
+            },
+            {
+              "expression": "decommission_reason_id",
+              "isExpression": false,
+              "asc": true,
+              "nulls": "last"
+            }
+          ],
+          "isUnique": false,
+          "concurrently": false,
+          "method": "btree",
+          "with": {}
         }
       },
       "foreignKeys": {
@@ -9034,6 +9158,22 @@
           "onDelete": "no action",
           "onUpdate": "no action"
         },
+        "stock_movement_decommission_reason_id_fk": {
+          "name": "stock_movement_decommission_reason_id_fk",
+          "tableFrom": "stock_movement",
+          "tableTo": "decommission_reason",
+          "schemaTo": "wms",
+          "columnsFrom": [
+            "company_id",
+            "decommission_reason_id"
+          ],
+          "columnsTo": [
+            "company_id",
+            "id"
+          ],
+          "onDelete": "no action",
+          "onUpdate": "no action"
+        },
         "stock_movement_corrects_movement_id_fk": {
           "name": "stock_movement_corrects_movement_id_fk",
           "tableFrom": "stock_movement",
@@ -9087,6 +9227,10 @@
         "stock_movement_placement_shape": {
           "name": "stock_movement_placement_shape",
           "value": "(\"wms\".\"stock_movement\".\"from_kind\" = 'service' or \"wms\".\"stock_movement\".\"to_kind\" = 'service') = (\"wms\".\"stock_movement\".\"placement_id\" is not null)"
+        },
+        "stock_movement_decommission_reason_shape": {
+          "name": "stock_movement_decommission_reason_shape",
+          "value": "(\"wms\".\"stock_movement\".\"kind\" = 'decommission') = (\"wms\".\"stock_movement\".\"decommission_reason_id\" is not null)"
         },
         "stock_movement_kind_shape": {
           "name": "stock_movement_kind_shape",

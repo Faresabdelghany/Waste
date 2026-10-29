@@ -11,7 +11,7 @@ import { describe, test } from "node:test"
 import type { ContainerType, ServiceFrequency, WasteFraction } from "@waste/contracts/catalogue"
 import { ContainerCreate, ContainerPatch, ContainerServicePlacementCreate, ContainerServicePlacementPatch, type Container, type ContainerServicePlacement } from "@waste/contracts/containers"
 import type { Project } from "@waste/contracts/organisation"
-import { Adjust, Decommission, Receive, Return, Transfer, WAREHOUSE_WITH_A_STOCK_PLACE, type StockMovement } from "@waste/contracts/stock"
+import { Adjust, Decommission, Receive, Return, Transfer, WAREHOUSE_WITH_A_STOCK_PLACE, type DecommissionReason, type StockMovement } from "@waste/contracts/stock"
 import { PROMISED_RATE_KEY, schemeFrequencyPromiseOfRecord } from "@waste/domain/service-frequencies"
 
 import { FIXTURE_COMPANY_ID, getModuleDefinition, type BusinessRecord } from "../../data/business-modules"
@@ -19,7 +19,7 @@ import { createExternalStore } from "../../external-store"
 import { problemSentence } from "../problem"
 import { moduleKeyOf, NOTHING_RESOLVED, type MappingContext, type Resolver } from "../records/adapter"
 import { CONTAINERS_MODULE, containerAdapter, containerMovements, containersModule, INVENTORY_MODULE, inventoryModule, ledgerRow, stockMovementAdapter, WAREHOUSE_WITH_A_STOCK_PLACE as LOCAL_WAREHOUSE_WITH_A_STOCK_PLACE } from "../records/containers"
-import { containerTypeAdapter, serviceFrequencyAdapter, wasteFractionAdapter } from "../records/master-data"
+import { containerTypeAdapter, decommissionReasonAdapter, serviceFrequencyAdapter, wasteFractionAdapter } from "../records/master-data"
 import { isServerBacked, SERVER_MODULE_KEYS, SERVER_MODULES } from "../records/modules"
 import { projectAdapter } from "../records/organisation"
 import { commandRecord, loaded, loadModule, readModuleInto, rereadsOf, resolverOver, writeRecord, type ServerRecordsState } from "../records/server-records"
@@ -38,6 +38,7 @@ const copenhagen: Project = { id: "01a0d2a4-a280-7002-8000-000000000001", ...STA
 const harbor: Project = { ...copenhagen, id: "01a0d2a4-a280-7002-8000-000000000002", name: "Harbor Commercial" }
 const residual: WasteFraction = { id: "01a0d2a4-a280-7007-8000-000000000001", ...STAMPS, key: "residual", name: "Residual", wasteCode: null, treatment: null, densityKgPerCubicMetre: null, hazardous: false }
 const organic: WasteFraction = { ...residual, id: "01a0d2a4-a280-7007-8000-000000000002", key: "organic", name: "Organic" }
+const wornOut: DecommissionReason = { id: "01a0d2a4-a280-70ae-8000-000000000001", createdAt: residual.createdAt, updatedAt: residual.updatedAt, code: "worn-out", name: "Worn out", status: "active" }
 const bin240: ContainerType = { id: "01a0d2a4-a280-7008-8000-000000000002", ...STAMPS, name: "Two-wheel bin · 240 L", volumeLitres: 240, serviceSeconds: null }
 const bin660: ContainerType = { ...bin240, id: "01a0d2a4-a280-7008-8000-000000000003", name: "Four-wheel bin · 660 L", volumeLitres: 660 }
 const warehouseId = "01a0d2a4-a280-7021-8000-000000000001"
@@ -89,11 +90,13 @@ const masterRecords = [
   wasteFractionAdapter.toRecord(organic, masterContext),
   containerTypeAdapter.toRecord(bin240, masterContext),
   containerTypeAdapter.toRecord(bin660, masterContext),
+  // Why a container is scrapped (O30 of #290).
+  decommissionReasonAdapter.toRecord(wornOut, masterContext),
 ]
 const serverIdsOf = (records: readonly BusinessRecord[], ids: readonly string[]) => new Map(records.map((record, index) => [record.id, ids[index]]))
 const state: ServerRecordsState = new Map([
   ["configure.organization", loaded({ records: projectRecords, serverIds: serverIdsOf(projectRecords, [copenhagen.id, harbor.id]) }, 1)],
-  ["configure.master", loaded({ records: masterRecords, serverIds: serverIdsOf(masterRecords, [residual.id, organic.id, bin240.id, bin660.id]) }, 1)],
+  ["configure.master", loaded({ records: masterRecords, serverIds: serverIdsOf(masterRecords, [residual.id, organic.id, bin240.id, bin660.id, wornOut.id]) }, 1)],
 ])
 const resolve = resolverOver(state)
 const context = (resolver: Resolver = resolve): MappingContext => ({ fixtures, resolve: resolver, companyRecordId: FIXTURE_COMPANY_ID, now: NOW })
@@ -103,6 +106,7 @@ const copenhagenWebId = projectRecords[0].id
 const bin240WebId = masterRecords[2].id
 const bin660WebId = masterRecords[3].id
 const organicWebId = masterRecords[1].id
+const wornOutWebId = masterRecords[4].id
 
 /** A record the Add container form makes: the generic create path's id and kind, its values by field id. */
 const formRecord = (values: Record<string, string>): BusinessRecord => ({
@@ -369,8 +373,9 @@ describe("the container's commands", () => {
       ["receive", { warehouseId: nordhavn.webId, occurredAt: "2026-09-30T09:00:00.000Z" }, Receive, { warehouseId, occurredAt: "2026-09-30T09:00:00.000Z" }],
       ["return", { warehouseId: nordhavn.webId, toKind: "maintenance", lastDay: "2026-09-29", reason: "Cracked lid" }, Return, { warehouseId, toKind: "maintenance", validTo: "2026-09-30", reason: "Cracked lid" }],
       ["transfer", { warehouseId: nordhavn.webId, toKind: "warehouse", reference: "TR-12" }, Transfer, { warehouseId, toKind: "warehouse", reference: "TR-12" }],
-      ["decommission", { reason: "Burnt out", lastDay: "2026-09-29" }, Decommission, { reason: "Burnt out", validTo: "2026-09-30" }],
-      ["decommission", { reason: "Burnt out" }, Decommission, { reason: "Burnt out" }],
+      // The reason is one of the master data's by server id, the note beside it optional (O30 of #290).
+      ["decommission", { decommissionReasonId: wornOutWebId, reason: "Burnt out", lastDay: "2026-09-29" }, Decommission, { decommissionReasonId: wornOut.id, reason: "Burnt out", validTo: "2026-09-30" }],
+      ["decommission", { decommissionReasonId: wornOutWebId }, Decommission, { decommissionReasonId: wornOut.id }],
       ["adjust", { toKind: "scrap", reason: "Counted twice at import" }, Adjust, { toKind: "scrap", warehouseId: null, reason: "Counted twice at import" }],
       ["adjust", { toKind: "warehouse", warehouseId: nordhavn.webId, reason: "Imported without its receipt" }, Adjust, { toKind: "warehouse", warehouseId, reason: "Imported without its receipt" }],
       // The movement it corrects by the web id Inventory shows it under, and when it happened on the project's clock (Copenhagen, summer time).
@@ -391,7 +396,8 @@ describe("the container's commands", () => {
     assert.deepEqual(bodyFor("issue", { subscriptionId, wasteFractionId: bin240WebId, validFrom: "2026-10-01" }), { path: "wasteFractionId", message: "Pick a waste fraction the API holds" }, "a container type is no fraction")
     assert.deepEqual(bodyFor("return", { warehouseId: nordhavn.webId }), { path: "lastDay", message: "Give the last day it serves" })
     assert.deepEqual(bodyFor("transfer", { warehouseId: nordhavn.webId, toKind: "service" }), { path: "toKind", message: "It arrives in a warehouse or in maintenance at one" })
-    assert.deepEqual(bodyFor("decommission", { reason: " " }), { path: "reason", message: "Say why" })
+    assert.deepEqual(bodyFor("decommission", { reason: "Burnt out" }), { path: "decommissionReasonId", message: "Pick a decommission reason the API holds" })
+    assert.deepEqual(bodyFor("decommission", { decommissionReasonId: organicWebId }), { path: "decommissionReasonId", message: "Pick a decommission reason the API holds" }, "a fraction is no reason")
     assert.deepEqual(bodyFor("adjust", { toKind: "scrap", warehouseId: nordhavn.webId, reason: "x" }), { path: "warehouseId", message: "Name the warehouse with warehouse or maintenance and not with scrap" }, "the contract's own sentence")
     assert.deepEqual(bodyFor("adjust", { toKind: "maintenance", reason: "x" }), { path: "warehouseId", message: "Name the warehouse with warehouse or maintenance and not with scrap" })
     assert.deepEqual(bodyFor("issue", { wasteFractionId: organicWebId, validFrom: "2026-10-01" }), { path: "subscriptionId", message: "Give the subscription's id" })
@@ -465,6 +471,7 @@ describe("the inventory module", () => {
     occurredAt: "2026-09-29T08:00:00.000Z",
     recordedBy: "01a0d2a4-a280-7005-8000-000000000001",
     reason: null,
+    decommissionReasonId: null,
     reference: "DN-4471",
     correctsMovementId: null,
   }
@@ -534,7 +541,7 @@ describe("a placed container's promised service frequency (O22 of #290)", () => 
   const frequencies = [twiceWeekly, onDemand].map((frequency) => serviceFrequencyAdapter.toRecord(frequency, masterContext))
   const withFrequencies: ServerRecordsState = new Map([
     ...state,
-    ["configure.master", loaded({ records: [...masterRecords, ...frequencies], serverIds: serverIdsOf([...masterRecords, ...frequencies], [residual.id, organic.id, bin240.id, bin660.id, twiceWeekly.id, onDemand.id]) }, 1)],
+    ["configure.master", loaded({ records: [...masterRecords, ...frequencies], serverIds: serverIdsOf([...masterRecords, ...frequencies], [residual.id, organic.id, bin240.id, bin660.id, wornOut.id, twiceWeekly.id, onDemand.id]) }, 1)],
   ])
   const read = (placement: ContainerServicePlacement | undefined) =>
     containerAdapter.toRecord({ ...bin91007, placements: placement === undefined ? [] : [placement] }, context(resolverOver(withFrequencies)))

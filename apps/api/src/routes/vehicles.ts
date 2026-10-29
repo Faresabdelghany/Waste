@@ -338,6 +338,94 @@ async function findVehicle(tx: Tx, principal: Principal, id: string): Promise<Ro
   return row
 }
 
+// The writes the routes and the fleet's CSV import (routes/import-rows.ts,
+// O30 of #290) share, so an imported row is held to every rule a form's is and
+// refused in the same sentence.
+
+/** Registers a vehicle with its compartments: the project reached, the fleet the caller's own, every reference held, then the row and its compartments. */
+export async function createVehicle(tx: Tx, principal: Principal, body: VehicleCreate, now: () => Date): Promise<Vehicle> {
+  const { compartments, ...values } = body
+  await requireReachedProject(tx, principal, values.projectId, now)
+  requireOwnFleet(principal, { kind: values.ownership, serviceProviderId: values.serviceProviderId }, "vehicle", "create")
+  const within: Scope = { companyId: principal.companyId, projectId: values.projectId }
+
+  // The 400s first, each at its field, in the order a body reads.
+  await requireVehicleType(tx, principal.companyId, values.vehicleTypeId)
+  await requireServiceProvider(tx, principal.companyId, values.serviceProviderId)
+  await requireDepot(tx, within, values.homeDepotId, "homeDepotId")
+  await requireCompartmentFractions(tx, principal.companyId, compartments)
+
+  const [row] = await refuseDuplicate(collisions(values), () =>
+    tx
+      .insert(vehicle)
+      .values({
+        ...values,
+        id: newId(),
+        companyId: principal.companyId,
+        callsign: values.callsign ?? null,
+        serviceProviderId: values.serviceProviderId ?? null,
+        capacityKg: values.capacityKg ?? null,
+        homeDepotId: values.homeDepotId ?? null,
+        fuel: values.fuel ?? null,
+        telematicsDeviceId: values.telematicsDeviceId ?? null,
+        notes: values.notes ?? null,
+      })
+      .returning(columns),
+  )
+  await writeCompartments(tx, within, row.id, compartments)
+  return await vehicleWithCompartments(tx, principal.companyId, row)
+}
+
+/** Changes one vehicle the caller reaches, under its row lock: the provider rule against the row the patch leaves, every new reference held, and a retirement refused under what it would strand. */
+export async function patchVehicle(tx: Tx, principal: Principal, id: string, patch: VehiclePatch): Promise<Vehicle> {
+  // The row every rule below is held against, locked before it is read
+  // (routes/shared.ts): a retirement and an allocation being made are two
+  // halves of one rule, and they serialise here.
+  await lockRow(tx, vehicle, { companyId: principal.companyId, id }, strengthFor(vehicle, patch))
+  const current = await findVehicle(tx, principal, id)
+  if (current === undefined) throw noSuchVehicle(id)
+  const within: Scope = { companyId: principal.companyId, projectId: current.projectId }
+  const merged = { ...current, ...patch }
+
+  // A provider's own vehicle stays its own; then the provider rule as the merged row must hold it (routes/shared.ts): a patch carries one half and the stored row the other.
+  requireOwnFleet(principal, { kind: patch.ownership, serviceProviderId: patch.serviceProviderId }, "vehicle", "patch")
+  requireProviderShape(merged.ownership, merged, PROVIDER_WITH_PROVIDER_OWNERSHIP)
+  await requireVehicleType(tx, principal.companyId, patch.vehicleTypeId)
+  await requireServiceProvider(tx, principal.companyId, patch.serviceProviderId)
+  await requireDepot(tx, within, patch.homeDepotId, "homeDepotId")
+  if (patch.status === "retired" && current.status !== "retired") {
+    await refuseStranded(tx, vehicleAllocation, liveAllocations(principal.companyId, id), liveAllocationsNameThis)
+    await refuseStranded(tx, collectionGroup, groupsInForceNaming(tx, collectionGroup.vehicleId, principal.companyId, id), groupsNameThis)
+  }
+
+  const [row] = await refuseDuplicate(collisions(patch), () =>
+    tx
+      .update(vehicle)
+      .set(patch)
+      .where(and(scope(principal), eq(vehicle.id, id)))
+      .returning(columns),
+  )
+  if (row === undefined) throw noSuchVehicle(id)
+  return await vehicleWithCompartments(tx, principal.companyId, row)
+}
+
+/** Replaces one vehicle's compartments; the 404 where the caller reaches no such vehicle. */
+export async function replaceVehicleCompartments(tx: Tx, principal: Principal, id: string, compartments: VehicleCompartmentsSet["compartments"]): Promise<Vehicle> {
+  const row = await replaceCompartments(tx, principal, id, compartments)
+  if (row === undefined) throw noSuchVehicle(id)
+  return await vehicleWithCompartments(tx, principal.companyId, row)
+}
+
+/** The company's vehicle with this registration, wherever it is based, with its compartments; undefined where there is none. A plate is the company's, so the caller learns its project and decides. */
+export async function vehicleByRegistration(tx: Tx, companyId: string, registration: string): Promise<Vehicle | undefined> {
+  const [row] = await tx
+    .select(columns)
+    .from(vehicle)
+    .where(and(eq(vehicle.companyId, companyId), eq(vehicle.registration, registration)))
+    .limit(1)
+  return row === undefined ? undefined : await vehicleWithCompartments(tx, companyId, row)
+}
+
 export function vehicleRoutes(guard: MiddlewareHandler<AuthEnv>, { now = () => new Date() }: ClockOptions = {}) {
   return new Hono<AuthEnv>()
     .get(
@@ -407,40 +495,7 @@ export function vehicleRoutes(guard: MiddlewareHandler<AuthEnv>, { now = () => n
       guard,
       requireGrant(MODULE, "create"),
       validate("json", VehicleCreate),
-      async (c) => {
-        const { compartments, ...values } = c.req.valid("json")
-        const tx = c.get("tx")
-        const principal = c.get("principal")
-        await requireReachedProject(tx, principal, values.projectId, now)
-        requireOwnFleet(principal, { kind: values.ownership, serviceProviderId: values.serviceProviderId }, "vehicle", "create")
-        const within: Scope = { companyId: principal.companyId, projectId: values.projectId }
-
-        // The 400s first, each at its field, in the order a body reads.
-        await requireVehicleType(tx, principal.companyId, values.vehicleTypeId)
-        await requireServiceProvider(tx, principal.companyId, values.serviceProviderId)
-        await requireDepot(tx, within, values.homeDepotId, "homeDepotId")
-        await requireCompartmentFractions(tx, principal.companyId, compartments)
-
-        const [row] = await refuseDuplicate(collisions(values), () =>
-          tx
-            .insert(vehicle)
-            .values({
-              ...values,
-              id: newId(),
-              companyId: principal.companyId,
-              callsign: values.callsign ?? null,
-              serviceProviderId: values.serviceProviderId ?? null,
-              capacityKg: values.capacityKg ?? null,
-              homeDepotId: values.homeDepotId ?? null,
-              fuel: values.fuel ?? null,
-              telematicsDeviceId: values.telematicsDeviceId ?? null,
-              notes: values.notes ?? null,
-            })
-            .returning(columns),
-        )
-        await writeCompartments(tx, within, row.id, compartments)
-        return created(c, "/vehicles", await vehicleWithCompartments(tx, principal.companyId, row))
-      },
+      async (c) => created(c, "/vehicles", await createVehicle(c.get("tx"), c.get("principal"), c.req.valid("json"), now)),
     )
     .get(
       "/vehicles/:id",
@@ -493,42 +548,7 @@ export function vehicleRoutes(guard: MiddlewareHandler<AuthEnv>, { now = () => n
       requireGrant(MODULE, "edit"),
       validate("param", IdParam),
       validate("json", VehiclePatch),
-      async (c) => {
-        const { id } = c.req.valid("param")
-        const patch = c.req.valid("json")
-        const tx = c.get("tx")
-        const principal = c.get("principal")
-
-        // The row every rule below is held against, locked before it is read
-        // (routes/shared.ts): a retirement and an allocation being made are two
-        // halves of one rule, and they serialise here.
-        await lockRow(tx, vehicle, { companyId: principal.companyId, id }, strengthFor(vehicle, patch))
-        const current = await findVehicle(tx, principal, id)
-        if (current === undefined) throw noSuchVehicle(id)
-        const within: Scope = { companyId: principal.companyId, projectId: current.projectId }
-        const merged = { ...current, ...patch }
-
-        // A provider's own vehicle stays its own; then the provider rule as the merged row must hold it (routes/shared.ts): a patch carries one half and the stored row the other.
-        requireOwnFleet(principal, { kind: patch.ownership, serviceProviderId: patch.serviceProviderId }, "vehicle", "patch")
-        requireProviderShape(merged.ownership, merged, PROVIDER_WITH_PROVIDER_OWNERSHIP)
-        await requireVehicleType(tx, principal.companyId, patch.vehicleTypeId)
-        await requireServiceProvider(tx, principal.companyId, patch.serviceProviderId)
-        await requireDepot(tx, within, patch.homeDepotId, "homeDepotId")
-        if (patch.status === "retired" && current.status !== "retired") {
-          await refuseStranded(tx, vehicleAllocation, liveAllocations(principal.companyId, id), liveAllocationsNameThis)
-          await refuseStranded(tx, collectionGroup, groupsInForceNaming(tx, collectionGroup.vehicleId, principal.companyId, id), groupsNameThis)
-        }
-
-        const [row] = await refuseDuplicate(collisions(patch), () =>
-          tx
-            .update(vehicle)
-            .set(patch)
-            .where(and(scope(principal), eq(vehicle.id, id)))
-            .returning(columns),
-        )
-        if (row === undefined) throw noSuchVehicle(id)
-        return c.json(await vehicleWithCompartments(tx, principal.companyId, row))
-      },
+      async (c) => c.json(await patchVehicle(c.get("tx"), c.get("principal"), c.req.valid("param").id, c.req.valid("json"))),
     )
     .put(
       "/vehicles/:id/compartments",
@@ -552,14 +572,6 @@ export function vehicleRoutes(guard: MiddlewareHandler<AuthEnv>, { now = () => n
       requireGrant(MODULE, "edit"),
       validate("param", IdParam),
       validate("json", VehicleCompartmentsSet),
-      async (c) => {
-        const { id } = c.req.valid("param")
-        const { compartments } = c.req.valid("json")
-        const tx = c.get("tx")
-        const principal = c.get("principal")
-        const row = await replaceCompartments(tx, principal, id, compartments)
-        if (row === undefined) throw noSuchVehicle(id)
-        return c.json(await vehicleWithCompartments(tx, principal.companyId, row))
-      },
+      async (c) => c.json(await replaceVehicleCompartments(c.get("tx"), c.get("principal"), c.req.valid("param").id, c.req.valid("json").compartments)),
     )
 }
