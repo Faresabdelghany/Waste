@@ -18,6 +18,7 @@ import { IDBFactory } from "fake-indexeddb"
 
 import { PROBLEM_MEDIA_TYPE } from "../../api/problem"
 import { openCommandQueue, type QueueEntry } from "../command-queue"
+import { openReadSnapshot, SNAPSHOT_MAX_AGE_MS } from "../read-snapshot"
 import { createDriverApp, DRAIN_RETRY_MS, REQUEST_TIMEOUT_MS, type DriverAppOptions } from "../driver-app"
 import {
   commandsOf,
@@ -59,6 +60,7 @@ function phone(overrides: Partial<DriverAppOptions> = {}) {
   let now = NOW
   const options: DriverAppOptions = {
     openQueue: () => openCommandQueue(factory, { mintDeviceId: () => DEVICE }),
+    openSnapshot: () => openReadSnapshot(factory),
     geolocation: position.geolocation,
     now: () => now,
     timers,
@@ -171,7 +173,7 @@ describe("loading", () => {
     await eventually(() => assert.equal(app.store.getSnapshot().routes[ROUTE_ID]?.status, "ready"))
   })
 
-  test("with no connection there is no stale stop, only the count of what waits and Retry", async () => {
+  test("with no connection and nothing kept on the phone there is no stale stop, only the count of what waits and Retry", async () => {
     const device = phone()
     await device.seed([waiting("01950000-0000-7000-8000-00000000c001"), waiting("01950000-0000-7000-8000-00000000c002")])
     device.door.next("GET /driver/me", offline)
@@ -869,5 +871,112 @@ describe("positions (O8 of #290)", () => {
     await eventually(() => assert.equal(positionBatches(device.door).length, 1))
     await settle()
     assert.deepEqual(device.app.store.getSnapshot().rejections, [])
+  })
+})
+
+describe("the display cache (O25 of #290)", () => {
+  /** A phone that read the start screen and the route online, then is opened again — a reload, a new day's tab — with no signal. */
+  async function readThenOffline(overrides: Partial<DriverAppOptions> = {}) {
+    const device = phone(overrides)
+    device.door.next("GET /driver/me", () => json(driverMe()))
+    device.door.next(`GET /driver/routes/${ROUTE_ID}`, () => json(routeDetail({ status: "active" })))
+    const first = device.open()
+    first.watchRoute(ROUTE_ID)
+    await first.load()
+    await eventually(async () => {
+      const kept = await (await openReadSnapshot(device.factory)).read(WHO, NOW)
+      assert.ok(kept.me !== null && kept.routes[ROUTE_ID] !== undefined, "both reads kept")
+    })
+    first.dispose()
+    device.tick(10 * 60_000)
+    device.door.always("GET /driver/me", offline)
+    device.door.always(`GET /driver/routes/${ROUTE_ID}`, offline)
+    return device
+  }
+
+  test("a phone with no signal shows the day as the server last answered it, each read marked with when, and sends nothing", async () => {
+    const device = await readThenOffline()
+    const app = device.open()
+    app.watchRoute(ROUTE_ID)
+    await app.load()
+    await eventually(() => assert.equal(app.store.getSnapshot().unreachable, true))
+    const state = app.store.getSnapshot()
+    assert.equal(state.status, "ready", "not the empty unreachable screen: there is something to read")
+    assert.equal(state.me?.driver.name, "Mads Jensen")
+    assert.equal(state.routes[ROUTE_ID]?.status, "ready")
+    const readAt = new Date(NOW).toISOString()
+    assert.deepEqual(state.shownFrom, { me: readAt, routes: { [ROUTE_ID]: readAt } })
+    assert.deepEqual(device.door.batches(), [])
+    app.dispose()
+  })
+
+  test("a live read replaces the kept one and its mark, and is kept in its place", async () => {
+    const device = await readThenOffline()
+    const app = device.open()
+    app.watchRoute(ROUTE_ID)
+    await app.load()
+    await eventually(() => assert.equal(app.store.getSnapshot().unreachable, true))
+    device.door.always("GET /driver/me", () => json(driverMe()))
+    device.door.always(`GET /driver/routes/${ROUTE_ID}`, () => json(routeDetail({ status: "active", label: "RC-1042" })))
+    await app.retry()
+    await eventually(() => assert.deepEqual(app.store.getSnapshot().shownFrom, { me: null, routes: {} }))
+    await eventually(async () => {
+      const kept = await (await openReadSnapshot(device.factory)).read(WHO, NOW + 20 * 60_000)
+      assert.equal(kept.me?.readAt, new Date(NOW + 10 * 60_000).toISOString())
+    })
+    app.dispose()
+  })
+
+  test("never stands in for a read already on screen", async () => {
+    const device = await readThenOffline()
+    device.door.next("GET /driver/me", () => json(driverMe()))
+    const app = device.open()
+    await app.load()
+    await settle()
+    assert.equal(app.store.getSnapshot().shownFrom.me, null)
+    app.dispose()
+  })
+
+  test("another person on the phone is shown nothing of the last one's day", async () => {
+    const device = await readThenOffline()
+    const app = createDriverApp({ openQueue: () => openCommandQueue(device.factory, { mintDeviceId: () => DEVICE }), openSnapshot: () => openReadSnapshot(device.factory), now: () => NOW, timers: device.timers })
+    app.setSession({ who: "freja-login", client: device.door.client() })
+    await app.load()
+    await eventually(() => assert.equal(app.store.getSnapshot().status, "unreachable"))
+    assert.equal(app.store.getSnapshot().me, null)
+    assert.deepEqual(app.store.getSnapshot().routes, {})
+    app.dispose()
+  })
+
+  test("a day-old answer is not shown: yesterday's routes are not today's work", async () => {
+    const device = await readThenOffline()
+    device.tick(SNAPSHOT_MAX_AGE_MS)
+    const app = device.open()
+    await app.load()
+    await eventually(() => assert.equal(app.store.getSnapshot().status, "unreachable"))
+    assert.equal(app.store.getSnapshot().me, null)
+    app.dispose()
+  })
+
+  test("a route the door no longer answers for leaves the cache, and a login the door refuses, or a sign-out, forgets its own", async () => {
+    const device = await readThenOffline()
+    device.door.always(`GET /driver/routes/${ROUTE_ID}`, () => problem(404, `No route ${ROUTE_ID} assigned to this driver`))
+    device.door.always("GET /driver/me", () => json(driverMe()))
+    const app = device.open()
+    app.watchRoute(ROUTE_ID)
+    await app.load()
+    await eventually(async () => assert.deepEqual((await (await openReadSnapshot(device.factory)).read(WHO, NOW)).routes, {}))
+    await app.forgetReads()
+    assert.equal((await (await openReadSnapshot(device.factory)).read(WHO, NOW)).me, null)
+    app.dispose()
+
+    const again = await readThenOffline()
+    again.door.always("GET /driver/me", () => problem(403, "This account is not an active driver's login"))
+    const refused = again.open()
+    await refused.load()
+    await eventually(() => assert.equal(refused.store.getSnapshot().status, "not-a-driver"))
+    assert.deepEqual(refused.store.getSnapshot().shownFrom, { me: null, routes: {} })
+    await eventually(async () => assert.equal((await (await openReadSnapshot(again.factory)).read(WHO, NOW)).me, null))
+    refused.dispose()
   })
 })
