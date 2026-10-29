@@ -2977,7 +2977,7 @@ constraint wms.scale_ticket scale_ticket_vehicle_tare_id_fk FOREIGN KEY (company
 constraint wms.scale_ticket scale_ticket_void_reason_one_of CHECK ((void_reason = ANY (ARRAY['entered-in-error'::text, 'duplicate'::text, 'visitor-left'::text, 'other'::text])))
 constraint wms.scale_ticket scale_ticket_void_shape CHECK ((((status = 'voided'::text) = (void_reason IS NOT NULL)) AND ((void_reason IS NULL) = (voided_at IS NULL)) AND ((void_reason IS NULL) = (voided_by IS NULL)) AND ((void_reason <> 'other'::text) OR (void_note IS NOT NULL))))
 constraint wms.scale_ticket scale_ticket_voided_by_fk FOREIGN KEY (company_id, voided_by) REFERENCES wms.user_account(company_id, id)
-constraint wms.scale_ticket scale_ticket_weighing_shape CHECK ((((tare_kg IS NULL) = (tare_source IS NULL)) AND ((tare_kg IS NULL) = (weighed_out_at IS NULL)) AND ((tare_kg IS NULL) = (net_kg IS NULL)) AND ((net_kg IS NULL) OR (net_kg = (gross_kg - tare_kg))) AND (NOT ((tare_source = 'registered'::text) IS DISTINCT FROM (vehicle_tare_id IS NOT NULL))) AND ((status <> 'open'::text) OR (tare_kg IS NULL)) AND ((status <> 'completed'::text) OR (tare_kg IS NOT NULL))))
+constraint wms.scale_ticket scale_ticket_weighing_shape CHECK ((((tare_kg IS NULL) = (tare_source IS NULL)) AND ((tare_kg IS NULL) = (weighed_out_at IS NULL)) AND ((tare_kg IS NULL) = (net_kg IS NULL)) AND ((net_kg IS NULL) OR (net_kg = (gross_kg - tare_kg))) AND ((NOT (tare_source IS DISTINCT FROM 'registered'::text)) = (vehicle_tare_id IS NOT NULL)) AND ((status <> 'open'::text) OR (tare_kg IS NULL)) AND ((status <> 'completed'::text) OR (tare_kg IS NOT NULL))))
 index wms.scale_ticket scale_ticket_agreement_id_idx CREATE INDEX scale_ticket_agreement_id_idx ON wms.scale_ticket USING btree (company_id, agreement_id)
 index wms.scale_ticket scale_ticket_customer_id_idx CREATE INDEX scale_ticket_customer_id_idx ON wms.scale_ticket USING btree (company_id, customer_id)
 index wms.scale_ticket scale_ticket_number_key CREATE UNIQUE INDEX scale_ticket_number_key ON wms.scale_ticket USING btree (company_id, number)
@@ -4917,5 +4917,5 @@ journal 1793251427635 28c1ebcb79fe09c31112ea7c107fd4fa02346fd0ea3241c4875ef71724
 journal 1793262692450 55627dafbd3cb890c76eb45db4afd21abdf2a8593bb40b111738da9cc9c67bef
 journal 1793263502443 743ec23d04aeeab55f061db6ccb5e4a41b62823362ca3f8f5fe3cc5358ddcd5e
 journal 1793268055021 0af2b76238c11d4ba16e36731b790eab4c626367642b10024682025cf7c59496
-journal 1793269509286 d145d8eda3b3bdcc7ff0ca3e29f4369176176c59de0e3dea13025ea0787af252
+journal 1793269509286 e59c1011c1c23f0ed1d8491b6453cd47652e8b03fc01a12a7a1d718feff56ecb
 pgboss-version 42

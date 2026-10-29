@@ -150,7 +150,7 @@ export const scaleTicket = wms.table(
     // The second weighing is all or nothing, the net the gross less the tare, the register's tare named exactly when it was used; an open ticket has none, a completed one has it.
     check(
       tableObjectName(t.id.table, "weighing_shape", "scaleTicket"),
-      sql`(${t.tareKg} is null) = (${t.tareSource} is null) and (${t.tareKg} is null) = (${t.weighedOutAt} is null) and (${t.tareKg} is null) = (${t.netKg} is null) and (${t.netKg} is null or ${t.netKg} = ${t.grossKg} - ${t.tareKg}) and (${t.tareSource} = 'registered') is not distinct from (${t.vehicleTareId} is not null) and (${t.status} <> 'open' or ${t.tareKg} is null) and (${t.status} <> 'completed' or ${t.tareKg} is not null)`,
+      sql`(${t.tareKg} is null) = (${t.tareSource} is null) and (${t.tareKg} is null) = (${t.weighedOutAt} is null) and (${t.tareKg} is null) = (${t.netKg} is null) and (${t.netKg} is null or ${t.netKg} = ${t.grossKg} - ${t.tareKg}) and (${t.tareSource} is not distinct from 'registered') = (${t.vehicleTareId} is not null) and (${t.status} <> 'open' or ${t.tareKg} is null) and (${t.status} <> 'completed' or ${t.tareKg} is not null)`,
     ),
     // Voided says when, by whom and why; nothing else is.
     check(tableObjectName(t.id.table, "void_shape", "scaleTicket"), sql`(${t.status} = 'voided') = (${t.voidReason} is not null) and (${t.voidReason} is null) = (${t.voidedAt} is null) and (${t.voidReason} is null) = (${t.voidedBy} is null) and (${t.voidReason} <> 'other' or ${t.voidNote} is not null)`),
