@@ -188,7 +188,7 @@ const stampsShape = (() => {
  * Registry's decided application after them (M7 of #293); today, the
  * recycling-centre visits' two after it (#393, migration 0054).
  */
-const outboxEventTable = (asOf: "0008" | "0009" | "0010" | "0040" | "0054" | "0092"): string =>
+const outboxEventTable = (asOf: "0008" | "0009" | "0010" | "0040" | "0054" | "0083"): string =>
   createTable("outbox_event", "project", [
     '"kind" text NOT NULL',
     '"aggregate_kind" text NOT NULL',
@@ -215,7 +215,7 @@ const outboxEventTable = (asOf: "0008" | "0009" | "0010" | "0040" | "0054" | "00
       ...(asOf >= "0010" ? ["invoice-issued", "settlement-closed"] : []),
       ...(asOf >= "0040" ? ["application-decided"] : []),
       ...(asOf >= "0054" ? ["site-visit-recorded", "site-visit-voided"] : []),
-      ...(asOf >= "0092" ? ["alert-raised", "ticket-assigned"] : []),
+      ...(asOf >= "0083" ? ["alert-raised", "ticket-assigned"] : []),
     ),
     oneOfCheck(
       "outbox_event",
@@ -228,7 +228,7 @@ const outboxEventTable = (asOf: "0008" | "0009" | "0010" | "0040" | "0054" | "00
       ...(asOf >= "0010" ? ["invoice", "settlement"] : []),
       ...(asOf >= "0040" ? ["application"] : []),
       ...(asOf >= "0054" ? ["site-visit"] : []),
-      ...(asOf >= "0092" ? ["alert"] : []),
+      ...(asOf >= "0083" ? ["alert"] : []),
     ),
   ])
 
@@ -316,10 +316,10 @@ const CHANGED_IN_0060 = new Map([[driverCommandTable("0060"), driverCommandTable
 /** What 0075 changed on one of the seven (O13 of #290): the receipt's CREATE TABLE as drizzle-kit generates it now onto what 0060 says. Applied first of all; pre-trip-rendering.test.ts pins the statements themselves. */
 const CHANGED_IN_0075 = new Map([[driverCommandTable("0075"), driverCommandTable("0060")]])
 
-/** What 0092 changed on one of the seven (O16 of #290): the outbox's CREATE TABLE as drizzle-kit generates it now onto what it generated as of 0054. Applied first of the outbox's chain; staff-notifications-rendering.test.ts pins the statements themselves. */
-const CHANGED_IN_0092 = new Map([[outboxEventTable("0092"), outboxEventTable("0054")]])
+/** What 0083 changed on one of the seven (O16 of #290): the outbox's CREATE TABLE as drizzle-kit generates it now onto what it generated as of 0054. Applied first of the outbox's chain; staff-notifications-rendering.test.ts pins the statements themselves. */
+const CHANGED_IN_0083 = new Map([[outboxEventTable("0083"), outboxEventTable("0054")]])
 
-/** What 0054 changed on one of the seven (#393): the outbox's CREATE TABLE as drizzle-kit generated it as of 0054 onto what it generated as of 0040. Applied after `CHANGED_IN_0092`. */
+/** What 0054 changed on one of the seven (#393): the outbox's CREATE TABLE as drizzle-kit generated it as of 0054 onto what it generated as of 0040. Applied after `CHANGED_IN_0083`. */
 const CHANGED_IN_0054 = new Map([[outboxEventTable("0054"), outboxEventTable("0040")]])
 
 /** What 0040 changed on one of the seven (M7 of #293): the outbox's CREATE TABLE as drizzle-kit generated it as of 0040 onto what it generated as of 0010. Applied after `CHANGED_IN_0054`, one file at a time. */
@@ -561,7 +561,7 @@ const expected = [
   proofTable("0038"),
   unloadTable("0045"),
   driverCommandTable("0075"),
-  outboxEventTable("0092"),
+  outboxEventTable("0083"),
   companyFk("route"),
   projectFk("route"),
   projectFkTo("route", "route_scheme_id", "route_scheme"),
@@ -724,7 +724,7 @@ const generatedHead = async (): Promise<string[]> => [
     .map((statement) => CHANGED_IN_0060.get(statement) ?? statement)
     .map((statement) => CHANGED_IN_0055.get(statement) ?? statement)
     .map((statement) => CHANGED_IN_0053.get(statement) ?? statement)
-    .map((statement) => CHANGED_IN_0092.get(statement) ?? statement)
+    .map((statement) => CHANGED_IN_0083.get(statement) ?? statement)
     .map((statement) => CHANGED_IN_0054.get(statement) ?? statement)
     .map((statement) => CHANGED_IN_0045.get(statement) ?? statement)
     .map((statement) => CHANGED_IN_0040.get(statement) ?? statement)
@@ -779,8 +779,8 @@ describe("the Execution tables as drizzle-kit writes them", () => {
     for (const statement of ADDED_IN_0013) assert.ok(today.includes(statement), statement)
     for (const statement of CHANGED_IN_0012.keys()) assert.ok([...CHANGED_IN_0013.values()].includes(statement), statement.split("\n")[0])
     for (const statement of ADDED_IN_0012) assert.ok(today.includes(statement), statement)
-    for (const statement of CHANGED_IN_0092.keys()) assert.ok(today.includes(statement), statement.split("\n")[0])
-    for (const statement of CHANGED_IN_0054.keys()) assert.ok([...CHANGED_IN_0092.values()].includes(statement), statement.split("\n")[0])
+    for (const statement of CHANGED_IN_0083.keys()) assert.ok(today.includes(statement), statement.split("\n")[0])
+    for (const statement of CHANGED_IN_0054.keys()) assert.ok([...CHANGED_IN_0083.values()].includes(statement), statement.split("\n")[0])
     for (const statement of CHANGED_IN_0040.keys()) assert.ok([...CHANGED_IN_0054.values()].includes(statement), statement.split("\n")[0])
     for (const statement of CHANGED_IN_0045.keys()) assert.ok(today.includes(statement), statement.split("\n")[0])
     for (const statement of CHANGED_IN_0010.keys()) assert.ok(today.includes(statement) || [...CHANGED_IN_0040.values(), ...CHANGED_IN_0045.values()].includes(statement), statement.split("\n")[0])
@@ -796,7 +796,7 @@ describe("the Execution tables as drizzle-kit writes them", () => {
     assert.equal(CHANGED_IN_0038.size, 2, "the stop's and the proof's contaminant code")
     assert.equal(CHANGED_IN_0040.size, 1, "the outbox's decided application")
     assert.equal(CHANGED_IN_0054.size, 1, "the outbox's recycling-centre visits")
-    assert.equal(CHANGED_IN_0092.size, 1, "the outbox's staff notifications")
+    assert.equal(CHANGED_IN_0083.size, 1, "the outbox's staff notifications")
     assert.equal(CHANGED_IN_0053.size, 1, "the stop's bulky booking")
     assert.equal(CHANGED_IN_0055.size, 1, "the stop a moved stop was moved from")
     assert.equal(CHANGED_IN_0060.size, 1, "the receipt's record-positions")

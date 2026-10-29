@@ -1,6 +1,6 @@
 // `message`, the delivery log, as 0074 (#291 C15) left it: a customer's
 // message alone, before the staff notifications (O16 of #290, migration
-// 0092) gave it a user account, made its customer nullable behind
+// 0083) gave it a user account, made its customer nullable behind
 // `message_recipient_exactly_one`, keyed it on its source event and let its
 // purpose be `staff`. messaging-rendering.test.ts diffs to this spelling and
 // staff-notifications-rendering.test.ts from it, since an applied file is
