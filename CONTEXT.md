@@ -306,6 +306,14 @@ _Avoid_: Pickup, proof of service, tip, dump
 A case that owns the resolution of a request, deviation, complaint, task, or operational issue. It is opened by the office, the portal or from an execution event; a re-collection is a Route the ticket names, never one it makes.
 _Avoid_: Alert, message
 
+**Message Template**:
+A project's text for one kind of message the office sends — an e-mail with a subject, or a text message — for service (sent only to a Customer who allows service messages) or for billing (sent whatever they chose), its values named as `{{placeholders}}`. Retired by its status, never deleted.
+_Avoid_: Notification template, letter
+
+**Message**:
+One e-mail or text message rendered from a Message Template to a Customer or one of its Contact Persons, kept on the delivery log with the address it went to and how its sending stands: queued, sent, failed, or withheld for want of consent. Sent through a log-only sender until a card-free provider is chosen.
+_Avoid_: Notification, SMS (one channel of it), mail
+
 **Alert**:
 A condition that requires attention, notification, or acknowledgement and may create or link to a ticket. It is acknowledged and resolved, and links to at most one Ticket. The office raises one by hand; the worker's rules raise one per occurrence of a route not started, a device silent, a licence running out or a ticket overdue — an overdue ticket's alert is about that Ticket, never a new one — and resolve it when the condition clears.
 _Avoid_: Ticket, insight

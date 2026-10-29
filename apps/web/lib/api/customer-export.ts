@@ -1,10 +1,10 @@
 // The reads a Customer's export is made of (#291 C19, part 2, #381): each
 // family's own list, filtered by the customer, one after another — the
-// customer itself, its row's history, its contact persons, the properties it
-// is a party to, its agreements with each one's subscriptions, its billable
-// events, invoices and payments, its tickets with each one's messages, its
-// access credentials and recycling-centre visits, its bulky-waste bookings
-// and its applications.
+// customer itself, its row's history, its contact persons, the messages
+// sent to it, the properties it is a party to, its agreements with each
+// one's subscriptions, its billable events, invoices and payments, its
+// tickets with each one's messages, its access credentials and
+// recycling-centre visits, its bulky-waste bookings and its applications.
 // A family the role is refused (403) is not included, with the API's
 // sentence (lib/data/customer-export.ts); any other failure fails the export,
 // so nobody is handed a file that is missing a family without knowing it.
@@ -32,6 +32,7 @@ export async function readCustomerExport(client: ApiClient, customerId: string):
     customer: await section(() => get(client, `/customers/${encoded}`)),
     history: await section(() => listAll(client, "/audit-events", { table: "customer", rowId: customerId })),
     contacts: await section(async () => (await get<{ items: unknown[] }>(client, `/customers/${encoded}/contacts`)).items),
+    messages: await section(byCustomer("/messages")),
     properties: await section(byCustomer("/properties")),
     agreements: await section(async () => {
       const agreements = await listAll<Row>(client, "/agreements", { customerId })
