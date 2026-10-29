@@ -94,6 +94,8 @@ export const RESOLVED_SHAPE = `(${column("resolved_by")} is null or ${column("re
 /** A rule and its occurrence together or not at all. */
 /** The rules 0034 spelled into `alert_rule_one_of`, before 0061 (O8 of #290) added `position-stale`. */
 export const ALERT_RULES_AS_OF_0034 = ["route-not-started", "session-silent", "licence-expiring", "ticket-overdue"] as const
+/** The rules 0061 spelled, before the fill-level sensors' migration (O26 of #290) added `fill-threshold`. */
+export const ALERT_RULES_AS_OF_0061 = [...ALERT_RULES_AS_OF_0034, "position-stale"] as const
 
 export const RULE_SHAPE = `(${column("rule")} is null) = (${column("rule_key")} is null)`
 /** One alert per occurrence, whatever its status, but for one the worker cleared. */

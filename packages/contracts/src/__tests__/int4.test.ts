@@ -71,6 +71,7 @@ import * as serviceProviderActivitiesModule from "../service-provider-activities
 import * as serviceProviderPricesModule from "../service-provider-prices"
 import * as movesModule from "../moves"
 import * as pickupExceptionsModule from "../pickup-exceptions"
+import * as sensorsModule from "../sensors"
 import * as sessionsModule from "../sessions"
 import * as shiftsModule from "../shifts"
 import * as siteVisitsModule from "../site-visits"
@@ -157,6 +158,7 @@ const MODULES: Readonly<Record<string, Record<string, unknown>>> = {
   "service-areas": serviceAreasModule,
   "service-provider-activities": serviceProviderActivitiesModule,
   "service-provider-prices": serviceProviderPricesModule,
+  "sensors": sensorsModule,
   "sessions": sessionsModule,
   "shifts": shiftsModule,
   "site-visits": siteVisitsModule,
