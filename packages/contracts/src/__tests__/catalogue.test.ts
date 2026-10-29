@@ -29,7 +29,7 @@ const ID = "01a0d3a5-e5e0-7000-8000-000000000001"
 const OTHER = "01a0d3a5-e5e0-7000-8000-000000000002"
 const STAMPS = { createdAt: "2026-09-24T13:41:00.000Z", updatedAt: "2026-09-24T13:41:00.000Z" }
 
-const fraction = { id: ID, key: "hard-plastic", name: "Hard plastic", wasteCode: "150102", treatment: "recycling", densityKgPerCubicMetre: 40, ...STAMPS }
+const fraction = { id: ID, key: "hard-plastic", name: "Hard plastic", wasteCode: "150102", treatment: "recycling", densityKgPerCubicMetre: 40, hazardous: false, ...STAMPS }
 const containerType = { id: ID, name: "240 L two-wheeled", volumeLitres: 240, serviceSeconds: 30, ...STAMPS }
 const frequency = {
   id: ID,
@@ -106,6 +106,21 @@ describe("WasteFractionCreate and WasteFractionPatch", () => {
     assert.deepEqual(WasteFractionPatch.parse({ wasteCode: "200121*" }), { wasteCode: "200121*" })
     assert.deepEqual(WasteFractionPatch.parse({ wasteCode: null }), { wasteCode: null })
     assert.equal(WasteFraction.parse({ ...fraction, wasteCode: null }).wasteCode, null)
+  })
+
+  test("a fraction's hazardous flag is set on create and moved by a patch, never false beside a starred code (O18 of #290)", () => {
+    assert.equal(WasteFraction.parse({ ...fraction, hazardous: true }).hazardous, true)
+    assert.equal(WasteFraction.safeParse({ ...fraction, hazardous: undefined }).success, false, "the row always says")
+    assert.deepEqual(WasteFractionCreate.parse({ key: "batteries", name: "Batteries", wasteCode: "200133*" }), { key: "batteries", name: "Batteries", wasteCode: "200133*" })
+    assert.equal(WasteFractionCreate.parse({ key: "asbestos", name: "Asbestos", hazardous: true }).hazardous, true)
+    assert.deepEqual(WasteFractionPatch.parse({ hazardous: false }), { hazardous: false })
+    for (const body of [{ key: "batteries", name: "Batteries", wasteCode: "200133*", hazardous: false }]) {
+      const [issue] = refusal(WasteFractionCreate.safeParse(body))
+      assert.equal(issue.path, "hazardous")
+      assert.equal(issue.message, "A waste code with an asterisk is a hazardous entry of the list: the fraction is hazardous")
+    }
+    assert.deepEqual(refusal(WasteFractionPatch.safeParse({ wasteCode: "200133*", hazardous: false })).map((issue) => issue.path), ["hazardous"])
+    assert.equal(WasteFractionPatch.safeParse({ wasteCode: "200301", hazardous: false }).success, true)
   })
 
   test("a fraction's treatment is the domain's list or none, set on create and moved or cleared by a patch (M13 of #293)", () => {

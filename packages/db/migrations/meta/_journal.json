@@ -530,8 +530,36 @@
     {
       "idx": 75,
       "version": "7",
-      "when": 1793235133148,
-      "tag": "0075_staff_notifications",
+      "when": 1793235059830,
+      "tag": "0075_pre_trip",
+      "breakpoints": true
+    },
+    {
+      "idx": 76,
+      "version": "7",
+      "when": 1793241234406,
+      "tag": "0076_fraction_hazardous",
+      "breakpoints": true
+    },
+    {
+      "idx": 77,
+      "version": "7",
+      "when": 1793243238519,
+      "tag": "0077_privacy_policy",
+      "breakpoints": true
+    },
+    {
+      "idx": 78,
+      "version": "7",
+      "when": 1793245578465,
+      "tag": "0078_item_product_unit",
+      "breakpoints": true
+    },
+    {
+      "idx": 79,
+      "version": "7",
+      "when": 1793251090085,
+      "tag": "0092_staff_notifications",
       "breakpoints": true
     }
   ]

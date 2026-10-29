@@ -321,6 +321,19 @@ describe("the container and placement endpoints", { skip: database.skip || owner
       assert.deepEqual(byType.items.map((row) => row.id), [harbor.id])
     })
 
+    test("looks a container up by a code read off it (O19 of #290): its label, barcode, RFID tag or serial number, spaces either side and case ignored, within the caller's projects", async () => {
+      const tagged = await container("BIN-3424", { barcode: "5709999000017", rfid: "e2003412dc03011815", serialNumber: "SN-77-3424" })
+      const elsewhere = await container("BIN-3425", { projectId: a.projects.harbor.id, barcode: "5709999000024" })
+      for (const code of ["BIN-3424", " bin-3424 ", "5709999000017", "E2003412DC03011815", "sn-77-3424"]) {
+        assert.deepEqual((await page(olivia, `?identifier=${encodeURIComponent(code)}`)).items.map((row) => row.id), [tagged.id], code)
+      }
+      assert.deepEqual((await page(olivia, "?identifier=5709999")).items, [], "a code names a container whole, never by its start")
+      assert.deepEqual((await page(olivia, `?identifier=5709999000024&projectId=${a.projects.copenhagen.id}`)).items, [], "the other filters narrow it as ever")
+      assert.deepEqual((await page(viewer, "?identifier=5709999000024")).items, [], "a project the caller does not work in is not looked into")
+      assert.deepEqual((await page(olivia, "?identifier=5709999000024")).items.map((row) => row.id), [elsewhere.id])
+      assert.deepEqual((await refused(await olivia("/containers?identifier=%20"), 400)).errors?.map((error) => error.path), ["identifier"])
+    })
+
     test("shows an account only the projects it works in, and answers an empty page to one that works in none", async () => {
       const here = await container("BIN-3422")
       const elsewhere = await container("BIN-3423", { projectId: a.projects.harbor.id })

@@ -130,6 +130,14 @@ _Avoid_: Working hours, roster, schedule
 When in the day a stop may be served: a Property's access hours and an Agreement's promised window, each optional, the stop's window being where the two overlap. Route optimisation holds a stop inside it.
 _Avoid_: Time slot, booking slot, opening hours (a station's)
 
+**Pre-trip Check**:
+A driver's walk-round of a Vehicle before or during the day, answering every item of the checklist its vehicle type holds — passed, or a defect with what was seen — and the odometer and engine hours where read. A check is kept as it was answered, whatever the checklist says later.
+_Avoid_: Inspection report, vehicle audit, service
+
+**Vehicle Defect**:
+A checklist item a Pre-trip Check failed, open until the office marks it resolved. A defect of a critical item takes the Vehicle out of service — its status maintenance — until the office mends it and sets it active again; every check that finds defects opens the office one ticket for them.
+_Avoid_: Fault, damage report, container defect (a container's)
+
 **Vehicle Allocation**:
 A time-bounded plan that reserves a compatible vehicle and, where applicable, a driver for expected work.
 _Avoid_: Actual assignment, route, vehicle
@@ -241,11 +249,11 @@ A Pickup the office books whose service is not an emptying: a delivery, a remova
 _Avoid_: Job, task (a Ticket's kind), collection
 
 **Bulky Booking**:
-A Customer's booked collection of bulky items at one of their places, a Property or a Shared Collection Point, on a day of a Bulky Schedule: the Agreement it is charged to, the waste fraction and the items, each a description and a count. It takes one slot of its day, and freezes the Planning Area, the Bulky Schedule and the Product it was booked under. The office routes it as a Pickup at its address with no container, on a Route running on its day; its completion is charged at its Product to its Agreement. Booked, routed, collected or cancelled is read from its cancellation and its stop; a stop missed leaves it booked, the office's to move and route again.
+A Customer's booked collection of bulky items at one of their places, a Property or a Shared Collection Point, on a day of a Bulky Schedule: the Agreement it is charged to, the waste fraction and the items, each a description and a count. It takes one slot of its day, and freezes the Planning Area, the Bulky Schedule and the Product it was booked under. The office routes it as a Pickup at its address with no container, on a Route running on its day; its completion is charged at its Product to its Agreement: once for a Product sold by the job, or at its items' count for one sold by the item. Booked, routed, collected or cancelled is read from its cancellation and its stop; a stop missed leaves it booked, the office's to move and route again.
 _Avoid_: Order, reservation, appointment, Work Order (a Work Order is of a container)
 
 **Bulky Schedule**:
-A Planning Area's effective-dated recurrence of the days bulky waste is collected there — a Route Scheme's frequency, service days, week rotation and holiday policy — with the slots each day has, one per Bulky Booking, and the Product a booking is charged at, sold by the job. One of an area is in force at a time; a place is booked on the days of the schedule of the area it lies in.
+A Planning Area's effective-dated recurrence of the days bulky waste is collected there — a Route Scheme's frequency, service days, week rotation and holiday policy — with the slots each day has, one per Bulky Booking, and the Product a booking is charged at, sold by the job or by the item. One of an area is in force at a time; a place is booked on the days of the schedule of the area it lies in.
 _Avoid_: Bulky route, slot calendar, Route Scheme (a scheme generates Routes; a schedule only offers days)
 
 **Pickup Exception**:
@@ -299,6 +307,10 @@ _Avoid_: Route status, customer note
 **Unload**:
 A recorded event on a dated Route at an Unloading Station in which the vehicle disposes of some or all of its collected load, with weight or disposal evidence. It is neither a Pickup nor a stop's Proof of Service; a planned unload visit belongs to a Plan.
 _Avoid_: Pickup, proof of service, tip, dump
+
+**Transfer Note**:
+The document that goes with an Unload's load from the company that collected and carried it to the Unloading Station that took it: the parties, the waste fraction with its waste code and whether it is hazardous, the weights, and when. One per Unload the station accepted; a refused load was not transferred and has none, and a corrected Unload's note is its correction's.
+_Avoid_: Consignment note, waybill, disposal receipt
 
 ## Resolution and finance
 

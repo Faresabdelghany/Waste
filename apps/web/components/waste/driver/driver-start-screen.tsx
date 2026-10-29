@@ -7,22 +7,26 @@
 // door carries (#144). Whether the driver may take that vehicle, whether it
 // is in service and whether another route is still open are the server's to
 // say: the start is sent, and a refusal comes back as its sentence on the
-// route, which stays ready.
-import Link from "next/link"
-import { useState } from "react"
-import { ArrowClockwise, MapPin, Play } from "@phosphor-icons/react/dist/ssr"
+// route, which stays ready. Before it, the driver checks the picked vehicle
+// and trailer against their type's checklist (O13 of #290): a critical
+// defect takes the vehicle off the road, and the start on it is refused.
+import { useEffect, useState } from "react"
+import { ArrowClockwise, ClipboardText, MapPin, Play } from "@phosphor-icons/react/dist/ssr"
 
 import { Badge } from "@/components/ui/badge"
 import { Button } from "@/components/ui/button"
 import { useDriverApp, useDriverAppState } from "@/components/waste/driver/driver-app-provider"
-import { NativeSelect } from "@/components/waste/driver/driver-dialogs"
+import { NativeSelect, PreTripDialog } from "@/components/waste/driver/driver-dialogs"
 import { DriverFrame } from "@/components/waste/driver/driver-frame"
-import { RejectionList, operatingDay, progressLine } from "@/components/waste/driver/driver-parts"
+import { DriverLink, KeptNotice, RejectionList, operatingDay, progressLine } from "@/components/waste/driver/driver-parts"
 import type { DriverMe } from "@waste/contracts/driver-commands"
 import type { Route } from "@waste/contracts/routes"
+import { keepShell, SHELL_ENABLED } from "@/lib/driver/app-shell"
+import { checkWaiting } from "@/lib/driver/pre-trip"
 import { ROUTE_STATUS_LABELS, routeActions, routesInDayOrder, waitingOn } from "@/lib/driver/route-view"
 
 export function DriverStartScreen() {
+  useEffect(() => void keepShell(window, SHELL_ENABLED), [])
   return (
     <DriverFrame>
       <StartContent />
@@ -39,6 +43,7 @@ function StartContent() {
 
   return (
     <main className="flex flex-col gap-4">
+      <KeptNotice readAt={state.shownFrom.me} />
       <p className="flex items-center gap-2 text-sm text-muted-foreground">
         <MapPin aria-hidden className="shrink-0" />
         Your position travels with your actions on your route, when this phone shares it.
@@ -50,7 +55,7 @@ function StartContent() {
             <p className="text-lg font-semibold">{open.label}</p>
           </div>
           <Button asChild className="h-11">
-            <Link href={`/driver/routes/${open.id}`}>Continue route</Link>
+            <DriverLink href={`/driver/routes/${open.id}`}>Continue route</DriverLink>
           </Button>
         </section>
       )}
@@ -102,7 +107,7 @@ function RouteCard({ route, me }: { route: Route; me: DriverMe }) {
       <RejectionList rejections={rejections} onDismiss={app.dismiss} />
       {actions.start && <StartForm route={route} me={me} />}
       <Button asChild variant={route.status === "active" ? "default" : "outline"} className="h-11">
-        <Link href={`/driver/routes/${route.id}`}>Open route</Link>
+        <DriverLink href={`/driver/routes/${route.id}`}>Open route</DriverLink>
       </Button>
     </article>
   )
@@ -110,44 +115,66 @@ function RouteCard({ route, me }: { route: Route; me: DriverMe }) {
 
 function StartForm({ route, me }: { route: Route; me: DriverMe }) {
   const app = useDriverApp()
+  const state = useDriverAppState()
+  const [checking, setChecking] = useState<string | null>(null)
   const vehicles = me.vehicles.filter((vehicle) => vehicle.kind !== "trailer")
   const trailers = me.vehicles.filter((vehicle) => vehicle.kind === "trailer")
   const planned = (id: string | null, from: typeof vehicles) => (id !== null && from.some((vehicle) => vehicle.id === id) ? id : "")
   const [vehicleId, setVehicleId] = useState(() => planned(route.planned.vehicleId, vehicles) || (vehicles[0]?.id ?? ""))
   const [trailerId, setTrailerId] = useState(() => planned(route.planned.trailerId, trailers))
 
+  const checked = checking === null ? undefined : me.vehicles.find((candidate) => candidate.id === checking)
+
   return (
-    <form
-      className="flex flex-col gap-3 border-t pt-3"
-      onSubmit={(event) => {
-        event.preventDefault()
-        if (vehicleId === "") return
-        void app.tap({ kind: "start-route", routeId: route.id, body: { vehicleId, ...(trailerId === "" ? {} : { trailerId }) } })
-      }}
-    >
-      <NativeSelect id={`vehicle-${route.id}`} label="Vehicle" value={vehicleId} onChange={setVehicleId}>
-        {vehicles.map((vehicle) => (
-          <option key={vehicle.id} value={vehicle.id}>
-            {vehicle.label}
-            {vehicle.id === route.planned.vehicleId ? " (planned)" : ""}
-          </option>
-        ))}
-      </NativeSelect>
-      {trailers.length > 0 && (
-        <NativeSelect id={`trailer-${route.id}`} label="Trailer" value={trailerId} onChange={setTrailerId}>
-          <option value="">No trailer</option>
-          {trailers.map((trailer) => (
-            <option key={trailer.id} value={trailer.id}>
-              {trailer.label}
-              {trailer.id === route.planned.trailerId ? " (planned)" : ""}
+    <>
+      <form
+        className="flex flex-col gap-3 border-t pt-3"
+        onSubmit={(event) => {
+          event.preventDefault()
+          if (vehicleId === "") return
+          void app.tap({ kind: "start-route", routeId: route.id, body: { vehicleId, ...(trailerId === "" ? {} : { trailerId }) } })
+        }}
+      >
+        <NativeSelect id={`vehicle-${route.id}`} label="Vehicle" value={vehicleId} onChange={setVehicleId}>
+          {vehicles.map((vehicle) => (
+            <option key={vehicle.id} value={vehicle.id}>
+              {vehicle.label}
+              {vehicle.id === route.planned.vehicleId ? " (planned)" : ""}
             </option>
           ))}
         </NativeSelect>
-      )}
-      <Button type="submit" className="h-11" disabled={vehicleId === ""}>
-        <Play aria-hidden weight="fill" />
-        Start route
-      </Button>
-    </form>
+        {trailers.length > 0 && (
+          <NativeSelect id={`trailer-${route.id}`} label="Trailer" value={trailerId} onChange={setTrailerId}>
+            <option value="">No trailer</option>
+            {trailers.map((trailer) => (
+              <option key={trailer.id} value={trailer.id}>
+                {trailer.label}
+                {trailer.id === route.planned.trailerId ? " (planned)" : ""}
+              </option>
+            ))}
+          </NativeSelect>
+        )}
+        <div className="grid grid-cols-2 gap-2">
+          {[vehicleId, trailerId]
+            .filter((id) => id !== "")
+            .map((id) => {
+              const picked = me.vehicles.find((candidate) => candidate.id === id)
+              const sending = checkWaiting(state.waiting, route.id, id)
+              return (
+                <Button key={id} type="button" variant="outline" className="h-11" disabled={picked === undefined || sending} onClick={() => setChecking(id)}>
+                  <ClipboardText aria-hidden />
+                  {sending ? "Check sending" : `Check ${picked?.label ?? "vehicle"}`}
+                </Button>
+              )
+            })}
+        </div>
+        <Button type="submit" className="h-11" disabled={vehicleId === ""}>
+          <Play aria-hidden weight="fill" />
+          Start route
+        </Button>
+      </form>
+      {/* Beside the form, never inside it: a portal's submit still bubbles through React's tree, and the check's would start the route. */}
+      {checked !== undefined && <PreTripDialog open onOpenChange={(open) => !open && setChecking(null)} vehicle={checked} onConfirm={(body) => void app.tap({ kind: "pre-trip-check", routeId: route.id, body })} />}
+    </>
   )
 }

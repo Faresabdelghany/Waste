@@ -73,7 +73,11 @@
 // @waste/domain/messaging/vocabulary and @waste/domain/messaging/template:
 // messaging.ts reads the channels, purposes and statuses, and refuses a
 // template naming a placeholder no message fills, or out of its channel's
-// shape, in the domain's sentences.
+// shape, in the domain's sentences. O13 of #290 added
+// @waste/domain/resources/pre-trip: pre-trip.ts bounds a checklist and a
+// check by the domain's cap. C19 of #291 added
+// @waste/domain/privacy/retention and /vocabulary: organisation.ts bounds a
+// project's privacy policy by the domain's days and reads its purposes.
 import path from "node:path"
 import { fileURLToPath } from "node:url"
 
@@ -105,6 +109,8 @@ definePurityTests({
     "@waste/domain/messaging/vocabulary",
     "@waste/domain/planning/lifecycle",
     "@waste/domain/planning/vocabulary",
+    "@waste/domain/privacy/retention",
+    "@waste/domain/privacy/vocabulary",
     "@waste/domain/registry/address",
     "@waste/domain/registry/applications",
     "@waste/domain/registry/vocabulary",
@@ -114,6 +120,7 @@ definePurityTests({
     "@waste/domain/resolution/vocabulary",
     "@waste/domain/resources/drop-off-points",
     "@waste/domain/resources/emissions",
+    "@waste/domain/resources/pre-trip",
     "@waste/domain/resources/stock-balance",
     "@waste/domain/resources/vocabulary",
     "@waste/domain/route-schemes/seasons",

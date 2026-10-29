@@ -12,6 +12,8 @@ import {
   DriverCommandBatchOutcome,
   DriverCommandEnvelope,
   DriverCommandReceipt,
+  DriverIdentification,
+  DriverIdentifyQuery,
   DriverMe,
   DriverPickup,
   DriverRouteDetail,
@@ -55,12 +57,13 @@ const bodies: Record<DriverCommandKind, object> = {
   resume: {},
   "end-route": { note: "Done for today", location: POINT },
   "record-positions": { points: [{ at: "2026-10-05T06:18:00.000Z", location: POINT, accuracyM: 9 }, { at: WHEN, location: POINT, accuracyM: 14, speedKmh: 32, headingDeg: 270 }] },
+  "pre-trip-check": { vehicleId: THIRD, items: [{ itemId: ID, passed: true }, { itemId: OTHER, passed: false, note: "Left indicator out" }], odometerKm: 182_400, engineHours: 6_120, location: POINT },
 }
 
 const command = (kind: DriverCommandKind, body: object = bodies[kind]) => ({ ...envelope, kind, body })
 
 describe("DriverCommand", () => {
-  test("is the discriminated union over the fifteen kinds, each a strict envelope around a strict body", () => {
+  test("is the discriminated union over the sixteen kinds, each a strict envelope around a strict body", () => {
     assert.deepEqual(Object.keys(COMMAND_BODIES).sort(), [...DRIVER_COMMAND_KINDS].sort())
     for (const kind of DRIVER_COMMAND_KINDS) assert.deepEqual(DriverCommand.parse(command(kind)), command(kind), kind)
     assert.equal(DriverCommand.safeParse(command("reschedule-stop" as DriverCommandKind, {})).success, false, "a Ticket's, not a command")
@@ -91,6 +94,7 @@ describe("DriverCommand", () => {
       resume: ["pickupId", THIRD],
       "end-route": ["pickupId", THIRD],
       "record-positions": ["location", POINT],
+      "pre-trip-check": ["pickupId", THIRD],
     }
     for (const kind of DRIVER_COMMAND_KINDS) {
       const [member, value] = foreign[kind]
@@ -140,6 +144,27 @@ describe("DriverCommand", () => {
       assert.ok(refusal(DriverCommand.safeParse(command("record-unload", body))).some((issue) => issue.path === `body.${member}`), member)
     }
     assert.equal(DriverCommand.safeParse(command("arrive", { pickupId: THIRD, location: { type: "Point", coordinates: [12.5951, 55.7089, 10] } })).success, false, "a flat point")
+  })
+
+  test("an arrival may carry the code read off the bin and how it was read (O19 of #290), the code saying something and the method the vocabulary's", () => {
+    const arrive = (identification: unknown) => DriverCommand.safeParse(command("arrive", { pickupId: THIRD, identification }))
+    assert.equal(arrive({ code: "WH82014", method: "camera" }).success, true)
+    assert.equal(arrive({ code: "BIN-82014", method: "typed" }).success, true)
+    assert.deepEqual(refusal(arrive({ code: "WH82014", method: "nfc" })).map((issue) => issue.path), ["body.identification.method"])
+    assert.deepEqual(refusal(arrive({ code: "  ", method: "typed" })).map((issue) => issue.path), ["body.identification.code"])
+    assert.deepEqual(refusal(arrive({ code: "WH82014", method: "typed", matchedBy: "barcode" })).map((issue) => issue.path), ["body.identification"], "which identifier matched is the server's to say")
+  })
+})
+
+describe("the identify read (O19 of #290)", () => {
+  test("asks by a code that says something, and answers the stops it names by which identifier", () => {
+    assert.equal(DriverIdentifyQuery.safeParse({ code: "WH82014" }).success, true)
+    assert.equal(DriverIdentifyQuery.safeParse({ code: " " }).success, false)
+    assert.equal(DriverIdentifyQuery.safeParse({}).success, false)
+    const stop = { pickupId: THIRD, position: 1, containerId: COMPANY, containerLabel: "BIN-82014", matchedBy: "rfid", replacement: false }
+    assert.deepEqual(DriverIdentification.parse({ code: "E200", stops: [stop] }), { code: "E200", stops: [stop] })
+    assert.deepEqual(DriverIdentification.parse({ code: "E200", stops: [] }).stops, [], "a code naming no container on the route")
+    assert.equal(DriverIdentification.safeParse({ code: "E200", stops: [{ ...stop, matchedBy: "qr" }] }).success, false)
   })
 })
 
@@ -244,8 +269,8 @@ describe("what the door answers and stores", () => {
   test("the driver's start screen is the profile, the open session, today's routes and what a start and an unload pick from", () => {
     const driver = { id: OTHER, projectId: OTHER, name: "Mads Jensen", workforceReference: null, employment: "employee", serviceProviderId: null, homeDepotId: null, licenceClass: "ce", licenceNumber: null, licenceExpiry: null, userAccountId: ID, status: "active", notes: null, shift: null, ...STAMPS }
     const vehicles = [
-      { id: ID, label: "WH-24", kind: "powered-vehicle", requiredLicenceClass: "c" },
-      { id: THIRD, label: "CN 90 112", kind: "trailer", requiredLicenceClass: "b" },
+      { id: ID, label: "WH-24", kind: "powered-vehicle", requiredLicenceClass: "c", checklist: [{ id: OTHER, label: "Brakes", critical: true }] },
+      { id: THIRD, label: "CN 90 112", kind: "trailer", requiredLicenceClass: "b", checklist: [] },
     ]
     const unloadingStations = [
       { id: OTHER, name: "Nordkaj transfer station", location: POINT, weighbridge: true, wasteFractionIds: [ID, THIRD] },
@@ -267,6 +292,9 @@ describe("what the door answers and stores", () => {
     assert.deepEqual(refusal(DriverMe.safeParse({ ...me, vehicles: [{ ...vehicles[0], kind: "crane" }] })).map((issue) => issue.path), ["vehicles.0.kind"], "a vehicle is powered or a trailer")
     assert.deepEqual(refusal(DriverMe.safeParse({ ...me, vehicles: [{ ...vehicles[0], requiredLicenceClass: null }] })).map((issue) => issue.path), ["vehicles.0.requiredLicenceClass"], "a vehicle's class is never unknown")
     assert.deepEqual(refusal(DriverMe.safeParse({ ...me, vehicles: [{ ...vehicles[0], label: " " }] })).map((issue) => issue.path), ["vehicles.0.label"])
+    // The checklist a pre-trip check answers (O13 of #290): an answer from before it reads as none.
+    const { checklist: _checklist, ...before } = vehicles[0]
+    assert.deepEqual(DriverMe.parse({ ...me, vehicles: [before] }).vehicles[0].checklist, [])
 
     // A station is where it is and says what it accepts, by id; accepting nothing is an empty list, not an absent one.
     for (const key of ["id", "name", "location", "weighbridge", "wasteFractionIds"]) {
@@ -289,8 +317,11 @@ describe("what the door answers and stores", () => {
 
   test("the driver's route read is the detail with each pickup's place joined: the address, the point or null, the place's instructions or null, the container's label and the fraction's name", () => {
     const pickup = { id: THIRD, projectId: OTHER, routeId: ID, containerId: COMPANY, position: 1, status: "planned", origin: "generation", service: "empty", reason: null, contaminantCodeId: null, note: null, propertyId: ID, sharedCollectionPointId: null, wasteFractionId: OTHER, arrivedAt: null, outcomeAt: null, subscriptionId: null, warehouseId: null, replacementContainerId: null, bulkyBookingId: null, movedFromPickupId: null, ...STAMPS }
-    const joined = { ...pickup, address: "Parkvej 18, 2100 København Ø", driverInstructions: "Gate code 4711", location: POINT, containerLabel: "BIN-82014", wasteFractionName: "Residual waste", replacementContainerLabel: null, bulkyItems: [] }
+    const joined = { ...pickup, address: "Parkvej 18, 2100 København Ø", driverInstructions: "Gate code 4711", location: POINT, containerLabel: "BIN-82014", wasteFractionName: "Residual waste", replacementContainerLabel: null, bulkyItems: [], containerConfirmedAt: null }
     assert.deepEqual(DriverPickup.parse(joined), joined)
+    const { containerConfirmedAt: _, ...beforeTheScan } = joined
+    assert.deepEqual(DriverPickup.parse(beforeTheScan), joined, "an answer from before the scan (O19 of #290) reads as never confirmed")
+    assert.equal(DriverPickup.parse({ ...joined, containerConfirmedAt: "2026-10-05T06:41:00.000Z" }).containerConfirmedAt, "2026-10-05T06:41:00.000Z")
     assert.deepEqual(DriverPickup.parse({ ...joined, location: null }), { ...joined, location: null }, "a property not yet geocoded has no point")
     assert.deepEqual(DriverPickup.parse({ ...joined, driverInstructions: null }), { ...joined, driverInstructions: null }, "a place that tells the driver nothing")
     const addressOnly = { ...joined, containerId: null, origin: "office", containerLabel: null, note: "Re-collection of T-8831" }

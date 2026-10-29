@@ -68,3 +68,5 @@ export * from "./service-provider-activities"
 export * from "./messaging"
 // A staff member's notification preferences (O16 of #290).
 export * from "./notifications"
+// Pre-trip inspection (O13 of #290): a vehicle type's checklist, the checks made against it, and the defects they find.
+export * from "./pre-trip"
