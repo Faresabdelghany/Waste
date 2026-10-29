@@ -15,14 +15,13 @@ import { planningArea } from "@waste/db/schema/planning-areas"
 import { pickup, route as route_ } from "@waste/db/schema/execution"
 import { eq } from "drizzle-orm"
 import { withCompany } from "@waste/db/tenant"
-import { dayFull, NO_BULKY_SCHEDULE, NO_LOCATION, notABulkyDay, notAfterToday, notTheBookingsDay, onlyABookedBooking } from "@waste/domain/execution/bulky"
+import { A_BULKY_PRODUCT_IS_SOLD_BY_THE_JOB_OR_ITEM, dayFull, NO_BULKY_SCHEDULE, NO_LOCATION, notABulkyDay, notAfterToday, notTheBookingsDay, onlyABookedBooking } from "@waste/domain/execution/bulky"
 
 import { createApp } from "../app"
 import { bookingsOutside, unofferedBulkyProduct } from "../routes/bulky-schedules"
 import { INACTIVE_CUSTOMER } from "../routes/bulky-bookings"
 import { BOOKING_CANCELLED, NOT_A_BULKY_BOOKING } from "../routes/pickups"
 import { bulkyKeepsTheDay } from "../routes/routes"
-import { A_JOB_IS_SOLD_BY_THE_JOB } from "../routes/work-order-charges"
 import { callingAs, type Call } from "./calls"
 import { created } from "./created"
 import { databaseUnderTest, ownerUnderTest } from "./database"
@@ -75,6 +74,7 @@ describe("bulky-waste booking (O11 of #290)", { skip: database.skip || owner.ski
     bulky: testId(),
     collection: testId(),
     draft: testId(),
+    byItem: testId(),
     fraction: testId(),
     customer: testId(),
     stranger: testId(),
@@ -103,6 +103,7 @@ describe("bulky-waste booking (O11 of #290)", { skip: database.skip || owner.ski
         { id: ids.bulky, ...scoped, name: "Bulky collection", kind: "additional-service", unit: "job", status: "active" },
         { id: ids.collection, ...scoped, name: "Residual 240 L", kind: "container-collection", unit: "pickup", status: "active" },
         { id: ids.draft, ...scoped, name: "Bulky collection (draft)", kind: "additional-service", unit: "job", status: "draft" },
+        { id: ids.byItem, ...scoped, name: "Bulky collection per item", kind: "additional-service", unit: "item", status: "active" },
       ])
       const organisation = (id: string, name: string) => ({ id, companyId: a.companyId, kind: "organisation", name, registrationNumber: String(randomInt(10_000_000, 100_000_000)), status: "active" })
       await tx.insert(customer).values([organisation(ids.customer, "Parkvej Boligforening"), organisation(ids.stranger, "Another Housing")])
@@ -144,7 +145,7 @@ describe("bulky-waste booking (O11 of #290)", { skip: database.skip || owner.ski
 
   test("a schedule is an area's Tuesdays with two slots each, charged at a product sold by the job; one of an area is in force at a time", async () => {
     const body = { projectId: a.projects.copenhagen.id, planningAreaId: ids.area, frequency: "weekly", serviceDays: ["tuesday"], slotsPerDay: 2, productId: ids.bulky, validFrom: "2027-01-01" }
-    assert.deepEqual((await refused(await post(olivia, "/bulky-schedules", { ...body, productId: ids.collection }), 400)).errors, [{ path: "productId", message: A_JOB_IS_SOLD_BY_THE_JOB }])
+    assert.deepEqual((await refused(await post(olivia, "/bulky-schedules", { ...body, productId: ids.collection }), 400)).errors, [{ path: "productId", message: A_BULKY_PRODUCT_IS_SOLD_BY_THE_JOB_OR_ITEM }])
     assert.equal((await refused(await post(olivia, "/bulky-schedules", { ...body, productId: ids.draft }), 409)).detail, unofferedBulkyProduct("draft"))
     schedule = await created(olivia, "/bulky-schedules", await post(olivia, "/bulky-schedules", body), BulkySchedule)
     assert.deepEqual([schedule.holidayPolicy, schedule.weekRotation, schedule.validTo], ["skip", null, null])
@@ -156,6 +157,14 @@ describe("bulky-waste booking (O11 of #290)", { skip: database.skip || owner.ski
     )
     await refused(await other(`/bulky-schedules/${schedule.id}`), 404)
     assert.match((await refused(await ungranted("/bulky-schedules"), 403)).detail ?? "", /view on route-studio\.schemes/)
+  })
+
+  test("a schedule may charge a product sold by the item instead (#449), which a booking is then charged by its items' count", async () => {
+    const byItem = await patch(olivia, `/bulky-schedules/${schedule.id}`, { productId: ids.byItem })
+    assert.equal(byItem.status, 200, JSON.stringify(await byItem.clone().json()))
+    assert.equal(BulkySchedule.parse(await byItem.json()).productId, ids.byItem)
+    const back = await patch(olivia, `/bulky-schedules/${schedule.id}`, { productId: ids.bulky })
+    assert.equal(back.status, 200, JSON.stringify(await back.clone().json()))
   })
 
   test("a place's days are its area's Tuesdays after today, each with its slots left; a place outside every scheduled area or with no location is refused", async () => {

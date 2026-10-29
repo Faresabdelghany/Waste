@@ -169,6 +169,7 @@ describe("billableFor a completed work order (M14 of #293)", () => {
     agreement: { id: AGREEMENT, status: "active", customerKind: "organisation", customerId: CUSTOMER },
     subscriptionId: SUBSCRIPTION,
     priceList: { id: "list", currency: "DKK", rows: [row("delivery", { unitPriceMinor: 45_000 })] },
+    items: null,
     ...values,
   })
   const office = (values: Partial<PickupEventFacts> = {}) => pickupEvent("pickup-completed", { origin: "office", service: "deliver", job: job(), ...values })
@@ -213,6 +214,24 @@ describe("billableFor a completed work order (M14 of #293)", () => {
     assert.deepEqual(billableFor(office({ service: "bulky", kind: "pickup-corrected", outcome: "skipped", liveEvent: live() })), { action: "cancel", eventId: LIVE, reason: "pickup-corrected" })
     assert.equal(chargedAsJob("bulky"), true)
     assert.equal(chargedAsJob("empty"), false)
+  })
+
+  test("charges a bulky booking's product sold by the item (#449) its items' count, and one sold by the job once, whatever it lists", () => {
+    const sofaAndTwoMattresses = [{ quantity: 1 }, { quantity: 2 }]
+    const bulky = (unit: "job" | "item" | "month") => {
+      const action = billableFor(office({ service: "bulky", containerTypeId: null, job: job({ subscriptionId: null, items: sofaAndTwoMattresses, product: { id: JOB, status: "active", unit, vatPercent: 25 } }) }))
+      return action?.action === "record" ? action.draft : undefined
+    }
+    const byItem = bulky("item")
+    assert.deepEqual([byItem?.quantity, byItem?.price?.unitPriceMinor, byItem?.price?.netMinor, byItem?.price?.vatMinor, byItem?.blockReason], [3, 45_000, 135_000, 33_750, null], "three items at the row's price each")
+    assert.deepEqual([bulky("job")?.quantity, bulky("job")?.price?.netMinor], [1, 45_000], "a job product is the booking once")
+    assert.deepEqual([bulky("month")?.blockReason, bulky("month")?.productId], ["no-product", null], "a unit neither the job nor the item is the office's to fix")
+    assert.equal(chargesJob(job({ items: sofaAndTwoMattresses, product: { id: JOB, status: "active", unit: "item", vatPercent: 25 } })), true)
+  })
+
+  test("never charges a work order at a product sold by the item: that unit is a bulky booking's alone", () => {
+    const action = billableFor(office({ job: job({ product: { id: JOB, status: "active", unit: "item", vatPercent: 25 } }) }))
+    assert.deepEqual(action?.action === "record" ? [action.draft.blockReason, action.draft.quantity] : undefined, ["no-product", 1])
   })
 
   test("is charged once: a completion of a work order that already has a live event is nothing, and its correction away from completed cancels it", () => {
