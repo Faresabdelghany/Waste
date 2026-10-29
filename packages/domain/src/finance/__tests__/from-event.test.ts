@@ -11,7 +11,7 @@ import { describe, test } from "node:test"
 import { OUTBOX_KINDS, PICKUP_OUTCOMES, type OutboxKind } from "../../execution/vocabulary"
 import { PRODUCT_UNITS } from "../../registry/vocabulary"
 import { TICKET_RESOLUTIONS } from "../../resolution/vocabulary"
-import { BILLABLE_RESOLUTIONS, billableActionsFor, billableFor, chargesJob, chargedAsJob, chargesTicketWork, isBillableResolution, PICKUP_EVENT_KINDS, reversalOf, VISIT_EVENT_KINDS, type EventFacts, type VisitEventFacts, type ExceptionFacts, type JobChargeFacts, type LiveEventFacts, type PickupEventFacts, type PlacementFacts, type TicketChargeFacts, type TicketCompletedFacts } from "../from-event"
+import { BILLABLE_RESOLUTIONS, billableActionsFor, billableFor, weightActionsFor, WEIGHT_EVENT_KINDS, type WeighedStopFacts, type WeightReviewedFacts, chargesJob, chargedAsJob, chargesTicketWork, isBillableResolution, PICKUP_EVENT_KINDS, reversalOf, VISIT_EVENT_KINDS, type EventFacts, type VisitEventFacts, type ExceptionFacts, type JobChargeFacts, type LiveEventFacts, type PickupEventFacts, type PlacementFacts, type TicketChargeFacts, type TicketCompletedFacts } from "../from-event"
 import type { PriceRow } from "../pricing"
 
 const ROUTE = "route"
@@ -97,7 +97,7 @@ const charge = (values: Partial<TicketChargeFacts> = {}): TicketChargeFacts => (
   ...values,
 })
 
-const links = { routeId: ROUTE, pickupId: PICKUP, ticketId: null, reversesEventId: null, proofId: null, visitId: null }
+const links = { routeId: ROUTE, pickupId: PICKUP, ticketId: null, reversesEventId: null, proofId: null, visitId: null, unloadId: null }
 
 describe("billableFor a completed pickup", () => {
   test("under a per-pickup product with a placement, a signed agreement, a list, a row and a rate is a pickup event of quantity one, priced by the resolver on the service date, the winning row traceable", () => {
@@ -134,10 +134,10 @@ describe("billableFor a completed pickup", () => {
     assert.equal(blocked({ placement: placement({ product: { id: PRODUCT, unit: "pickup", vatPercent: null } }) })?.blockReason, "no-vat-rate")
   })
 
-  test("under a month or a day product is nothing, whatever else the facts say: the collection is inside a recurring charge or a hire (M14 of #293)", () => {
+  test("under a month, a day or a tonne product is nothing, whatever else the facts say: the collection is inside a recurring charge or a hire (M14 of #293), or charged by its reviewed weight (O28 of #290)", () => {
     for (const unit of PRODUCT_UNITS) {
       const action = billableFor(pickupEvent("pickup-completed", { placement: placement({ product: { id: PRODUCT, unit, vatPercent: 25 } }) }))
-      if (unit === "month" || unit === "day") assert.equal(action, undefined, unit)
+      if (unit === "month" || unit === "day" || unit === "tonne") assert.equal(action, undefined, unit)
       else assert.equal(action?.action, "record", unit)
     }
     // Even a month product under a draft agreement or without a list is nothing: the unit is judged first.
@@ -268,7 +268,7 @@ describe("billableFor a corrected pickup", () => {
       quantity: 2,
       price: { priceListRowId: null, unitPriceMinor: 1_500, netMinor: -3_000, vatPercent: 25, vatMinor: -750, currency: "DKK" },
       blockReason: null,
-      links: { routeId: null, pickupId: null, ticketId: null, reversesEventId: LIVE, proofId: null, visitId: null },
+      links: { routeId: null, pickupId: null, ticketId: null, reversesEventId: LIVE, proofId: null, visitId: null, unloadId: null },
     })
     // A reversal of nothing to reverse is a bug: a blocked event is cancelled, never reversed.
     assert.throws(() => reversalOf(live({ price: null })), /reversalOf: event live-event carries no price; a blocked event is cancelled, never reversed/)
@@ -287,7 +287,7 @@ describe("billableFor a completed ticket", () => {
           action,
           {
             action: "record",
-            draft: { kind: "ticket", serviceDate: "2026-10-07", agreementId: AGREEMENT, subscriptionId: SUBSCRIPTION, productId: null, quantity: 1, price: null, blockReason: "no-product", links: { routeId: null, pickupId: null, ticketId: TICKET, reversesEventId: null, proofId: null, visitId: null } },
+            draft: { kind: "ticket", serviceDate: "2026-10-07", agreementId: AGREEMENT, subscriptionId: SUBSCRIPTION, productId: null, quantity: 1, price: null, blockReason: "no-product", links: { routeId: null, pickupId: null, ticketId: TICKET, reversesEventId: null, proofId: null, visitId: null, unloadId: null } },
           },
           resolution,
         )
@@ -300,7 +300,7 @@ describe("billableFor a completed ticket", () => {
   })
 
   test("with a product — the completion's or its kind's — is priced as a pickup is, on the day it closed, by the customer's conditions alone: no zone, no container type, no fraction (#291 C3)", () => {
-    const ticketLinks = { routeId: null, pickupId: null, ticketId: TICKET, reversesEventId: null, proofId: null, visitId: null }
+    const ticketLinks = { routeId: null, pickupId: null, ticketId: TICKET, reversesEventId: null, proofId: null, visitId: null, unloadId: null }
     assert.deepEqual(billableFor(completedTicket({ charge: charge() })), {
       action: "record",
       draft: {
@@ -373,10 +373,12 @@ describe("billableFor every other kind", () => {
           ? completedTicket()
           : (VISIT_EVENT_KINDS as readonly string[]).includes(kind)
             ? visitEvent(kind as VisitEventFacts["kind"], { liveEvent: kind === "site-visit-voided" ? live() : null })
-            : ({ kind } as EventFacts)
+            : kind === "weight-reviewed"
+              ? weightEvent()
+              : ({ kind } as EventFacts)
       ;(billableFor(event) === undefined ? news : money).push(kind)
     }
-    assert.deepEqual(money, ["pickup-completed", "pickup-corrected", "ticket-completed", "site-visit-recorded", "site-visit-voided"])
+    assert.deepEqual(money, ["pickup-completed", "pickup-corrected", "ticket-completed", "site-visit-recorded", "site-visit-voided", "weight-reviewed"])
     assert.deepEqual(news, ["route-dispatched", "route-started", "route-completed", "route-cancelled", "route-reassigned", "pickup-failed", "pickup-skipped", "pickup-problem-reported", "unload-recorded", "command-rejected", "ticket-opened", "ticket-rejected", "invoice-issued", "settlement-closed", "application-decided"])
     assert.deepEqual([...PICKUP_EVENT_KINDS], ["pickup-completed", "pickup-corrected", "pickup-failed", "pickup-skipped"])
   })
@@ -402,7 +404,7 @@ describe("billableActionsFor a Pickup Exception (#293 M5)", () => {
     quantity: 1,
     price: { priceListRowId: "fee", unitPriceMinor, netMinor: unitPriceMinor, vatPercent: 25, vatMinor: unitPriceMinor / 4, currency: "DKK" },
     blockReason: null,
-    links: { routeId: ROUTE, pickupId: PICKUP, ticketId: null, reversesEventId: null, proofId: PROOF, visitId: null },
+    links: { routeId: ROUTE, pickupId: PICKUP, ticketId: null, reversesEventId: null, proofId: PROOF, visitId: null, unloadId: null },
   })
   const liveFee = (values: Partial<LiveEventFacts> = {}) => live({ id: "live-fee", productId: FEE, ...values })
 
@@ -475,7 +477,7 @@ describe("billableFor a Site Visit (#393)", () => {
         quantity: 1,
         price: { priceListRowId: "everyone", unitPriceMinor: 7_000, netMinor: 7_000, vatPercent: 25, vatMinor: 1_750, currency: "DKK" },
         blockReason: null,
-        links: { routeId: null, pickupId: null, ticketId: null, reversesEventId: null, proofId: null, visitId: "visit" },
+        links: { routeId: null, pickupId: null, ticketId: null, reversesEventId: null, proofId: null, visitId: "visit", unloadId: null },
       },
     })
   })
@@ -499,5 +501,82 @@ describe("billableFor a Site Visit (#393)", () => {
     const reversed = billableFor(visitEvent("site-visit-voided", { liveEvent: live({ invoiced: true }) }))
     assert.equal(reversed?.action, "reverse")
     assert.equal(billableFor(visitEvent("site-visit-voided")), undefined)
+  })
+})
+
+const UNLOAD = "unload"
+const TONNE = "per-tonne"
+
+/** A stop an approved Unload carried: 2,500 kg of residual waste under a per-tonne product at 512.50 kr a tonne, 25 % VAT. */
+const weighedStop = (values: Partial<WeighedStopFacts> = {}): WeighedStopFacts => ({
+  pickupId: PICKUP,
+  weightKg: 2_500,
+  planningAreaId: null,
+  containerTypeId: BIN_240,
+  wasteFractionId: RESIDUAL,
+  placement: placement({ product: { id: TONNE, unit: "tonne", vatPercent: 25 }, priceList: { id: "list", currency: "DKK", rows: [row("gate-fee", { unitPriceMinor: 51_250, wasteFractionId: RESIDUAL })] } }),
+  ...values,
+})
+
+/** An Unload's review (O28 of #290): approved, one stop carried, nothing charged yet. */
+const weightEvent = (values: Partial<WeightReviewedFacts> = {}): WeightReviewedFacts => ({ kind: "weight-reviewed", unloadId: UNLOAD, routeId: ROUTE, serviceDate: DAY, approved: true, stops: [weighedStop()], liveEvents: [], ...values })
+
+describe("billableActionsFor an Unload's weight review (O28 of #290)", () => {
+  test("approved and uncharged: a weight event per stop under a tonne product, its share priced per tonne on the service date — 2,500 kg at 512.50 kr is 1,281.25 kr", () => {
+    assert.deepEqual([...WEIGHT_EVENT_KINDS], ["weight-reviewed"])
+    assert.deepEqual(billableActionsFor(weightEvent()), [
+      {
+        action: "record",
+        draft: {
+          kind: "weight",
+          serviceDate: DAY,
+          quantity: 1,
+          weightKg: 2_500,
+          agreementId: AGREEMENT,
+          subscriptionId: SUBSCRIPTION,
+          productId: TONNE,
+          price: { priceListRowId: "gate-fee", unitPriceMinor: 128_125, netMinor: 128_125, vatPercent: 25, vatMinor: 32_031, currency: "DKK" },
+          blockReason: null,
+          links: { routeId: ROUTE, pickupId: PICKUP, ticketId: null, reversesEventId: null, proofId: null, visitId: null, unloadId: UNLOAD },
+        },
+      },
+    ])
+    assert.equal(billableFor(weightEvent())?.action, "record")
+  })
+
+  test("charges only stops under a tonne product: a per-pickup product's stop, or one with no placement, is nothing here", () => {
+    const stops = [weighedStop({ pickupId: "per-pickup", placement: placement() }), weighedStop({ pickupId: "unplaced", placement: null }), weighedStop({ pickupId: "per-tonne" })]
+    assert.deepEqual(
+      weightActionsFor(weightEvent({ stops })).map((action) => (action.action === "record" ? action.draft.links.pickupId : action.action)),
+      ["per-tonne"],
+    )
+  })
+
+  test("is blocked as a pickup's would be: an unsigned agreement, no list, no row for the fraction, no rate", () => {
+    const blockOf = (stop: WeighedStopFacts) => {
+      const [action] = weightActionsFor(weightEvent({ stops: [stop] }))
+      return action?.action === "record" ? [action.draft.blockReason, action.draft.weightKg, action.draft.price] : action
+    }
+    const tonne = weighedStop().placement!
+    assert.deepEqual(blockOf(weighedStop({ placement: { ...tonne, agreement: { ...tonne.agreement, status: "draft" } } })), ["agreement-draft", 2_500, null])
+    assert.deepEqual(blockOf(weighedStop({ placement: { ...tonne, priceList: null } })), ["no-price-list", 2_500, null])
+    assert.deepEqual(blockOf(weighedStop({ wasteFractionId: "glass" })), ["no-price-row", 2_500, null])
+    assert.deepEqual(blockOf(weighedStop({ placement: { ...tonne, product: { ...tonne.product, vatPercent: null } } })), ["no-vat-rate", 2_500, null])
+  })
+
+  test("is charged once: approved again, or delivered twice, with live weight events is nothing", () => {
+    assert.deepEqual(weightActionsFor(weightEvent({ liveEvents: [live({ productId: TONNE })] })), [])
+  })
+
+  test("a review leaving the Unload anything but approved cancels each live weight event with weight-revised, or reverses it once invoiced; nothing without one", () => {
+    const actions = weightActionsFor(weightEvent({ approved: false, liveEvents: [live({ id: "a" }), live({ id: "b", invoiced: true })] }))
+    assert.deepEqual(
+      actions.map((action) => (action.action === "record" ? [action.action] : [action.action, action.eventId, action.action === "cancel" ? action.reason : action.draft.kind])),
+      [
+        ["cancel", "a", "weight-revised"],
+        ["reverse", "b", "reversal"],
+      ],
+    )
+    assert.deepEqual(weightActionsFor(weightEvent({ approved: false })), [])
   })
 })

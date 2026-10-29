@@ -143,6 +143,8 @@ export async function mintRecurringCharges(tx: Tx, scope: Scope, period: Billing
       reversesEventId: null,
       evidenceProofId: null,
       visitId: null,
+      unloadId: null,
+      weightKg: null,
       subscriptionId: charge.subscriptionId,
       sourceEventId: null,
       createdBy: null,

@@ -17,7 +17,7 @@ import { readdir, readFile } from "node:fs/promises"
 import { join } from "node:path"
 import { describe, test } from "node:test"
 
-import { OUTBOX_AGGREGATES, OUTBOX_KINDS } from "@waste/domain/execution/vocabulary"
+import { OUTBOX_AGGREGATES } from "@waste/domain/execution/vocabulary"
 import { BILLABLE_EVENT_KINDS, CANCEL_REASONS } from "@waste/domain/finance/vocabulary"
 import { PRODUCT_UNITS } from "@waste/domain/registry/vocabulary"
 
@@ -29,6 +29,7 @@ import { excludeOverlapping } from "../sql/exclude-overlapping"
 import { normalised, statementsOf } from "../sql/hand-written"
 import { tenantFence } from "../sql/tenant-fence"
 import { touchUpdatedAt } from "../sql/touch-updated-at"
+import { OUTBOX_KINDS_AS_OF_0054 } from "./outbox-as-of"
 import { checksOf, index, oneOfCheck, projectFkTo, ref } from "./rendering"
 import { statementsFor } from "./specimen"
 
@@ -36,8 +37,15 @@ const NEW_TABLES = { accessCredential, siteVisit, siteVisitFraction, visitRule, 
 
 const alter = (table: string, statement: string): string => `ALTER TABLE "wms"."${table}" ${statement};`
 
-/** The units 0054 wrote: every unit before the item, which a later migration added (#449). */
-const UNITS_AS_OF_0054 = PRODUCT_UNITS.filter((unit) => unit !== "item")
+/** The units 0054 wrote: every unit before the item (#449) and the tonne (O28 of #290), which later migrations added. */
+const UNITS_AS_OF_0054 = PRODUCT_UNITS.filter((unit) => unit !== "item" && unit !== "tonne")
+
+/** The clause the weight charges' migration added to the kind's shape (O28 of #290), after 0054's. */
+const WEIGHT_CLAUSE = ` when 'weight' then ${ref("billable_event", "unload_id")} is not null and ${ref("billable_event", "pickup_id")} is not null and ${ref("billable_event", "ticket_id")} is null and ${ref("billable_event", "reverses_event_id")} is null`
+
+/** The event's vocabularies as 0054 spelled them: today's less what the weight charges' migration added (O28 of #290). */
+const KINDS_AS_OF_0054 = BILLABLE_EVENT_KINDS.filter((kind) => kind !== "weight")
+const REASONS_AS_OF_0054 = CANCEL_REASONS.filter((reason) => reason !== "weight-revised")
 
 /** The clause 0054 adds to the event's kind shape. */
 const VISIT_CLAUSE = `when 'visit' then ${ref("billable_event", "visit_id")} is not null and ${ref("billable_event", "pickup_id")} is null and ${ref("billable_event", "ticket_id")} is null and ${ref("billable_event", "reverses_event_id")} is null`
@@ -56,12 +64,12 @@ const ALTERED = (): string[] => {
     projectFkTo("billable_event", "visit_id", "site_visit"),
     index("billable_event", "billable_event_visit_id_idx", "company_id", "visit_id"),
     alter("product", `ADD ${oneOfCheck("product", "unit", ...UNITS_AS_OF_0054)}`),
-    alter("outbox_event", `ADD ${oneOfCheck("outbox_event", "kind", ...OUTBOX_KINDS)}`),
+    alter("outbox_event", `ADD ${oneOfCheck("outbox_event", "kind", ...OUTBOX_KINDS_AS_OF_0054)}`),
     alter("outbox_event", `ADD ${oneOfCheck("outbox_event", "aggregate_kind", ...OUTBOX_AGGREGATES)}`),
     alter("billable_event", `ADD CONSTRAINT "billable_event_visit_shape" CHECK (${events.get("billable_event_visit_shape")})`),
-    alter("billable_event", `ADD ${oneOfCheck("billable_event", "kind", ...BILLABLE_EVENT_KINDS)}`),
-    alter("billable_event", `ADD ${oneOfCheck("billable_event", "cancel_reason", ...CANCEL_REASONS)}`),
-    alter("billable_event", `ADD CONSTRAINT "billable_event_kind_shape" CHECK (${events.get("billable_event_kind_shape")})`),
+    alter("billable_event", `ADD ${oneOfCheck("billable_event", "kind", ...KINDS_AS_OF_0054)}`),
+    alter("billable_event", `ADD ${oneOfCheck("billable_event", "cancel_reason", ...REASONS_AS_OF_0054)}`),
+    alter("billable_event", `ADD CONSTRAINT "billable_event_kind_shape" CHECK (${events.get("billable_event_kind_shape")?.replace(WEIGHT_CLAUSE, "")})`),
   ]
 }
 
@@ -101,10 +109,10 @@ describe("recycling-centre visits as drizzle-kit writes them", () => {
 
   test("the vocabularies the checks spell grew by the visit, last of each", () => {
     assert.equal(UNITS_AS_OF_0054.at(-1), "visit")
-    assert.deepEqual(OUTBOX_KINDS.slice(-2), ["site-visit-recorded", "site-visit-voided"])
+    assert.deepEqual(OUTBOX_KINDS_AS_OF_0054.slice(-2), ["site-visit-recorded", "site-visit-voided"])
     assert.equal(OUTBOX_AGGREGATES.at(-1), "site-visit")
-    assert.equal(BILLABLE_EVENT_KINDS.at(-1), "visit")
-    assert.deepEqual(CANCEL_REASONS.slice(0, 2), ["pickup-corrected", "visit-voided"], "the consumer's two reasons first")
+    assert.equal(KINDS_AS_OF_0054.at(-1), "visit")
+    assert.deepEqual(REASONS_AS_OF_0054.slice(0, 2), ["pickup-corrected", "visit-voided"], "the consumer's two reasons first")
     assert.ok(checksOf(billableEvent).get("billable_event_kind_shape")?.includes(VISIT_CLAUSE))
   })
 })

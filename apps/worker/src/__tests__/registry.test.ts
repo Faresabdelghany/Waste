@@ -214,10 +214,10 @@ describe("the job registry", () => {
   })
 
   test("holds Finance's two: the consumer one entry per kind it reads on outbox.<kind>.finance, never scheduled, with five backed-off retries under a cap over the seam's dead letter; the billing run scheduled monthly at noon UTC", () => {
-    assert.deepEqual([...FINANCE_EVENT_KINDS], ["pickup-completed", "pickup-corrected", "pickup-failed", "pickup-skipped", "ticket-completed", "site-visit-recorded", "site-visit-voided"])
+    assert.deepEqual([...FINANCE_EVENT_KINDS], ["pickup-completed", "pickup-corrected", "pickup-failed", "pickup-skipped", "ticket-completed", "site-visit-recorded", "site-visit-voided", "weight-reviewed"])
     assert.deepEqual(
       recordBillableEvents.map((job) => job.queue),
-      ["outbox.pickup-completed.finance", "outbox.pickup-corrected.finance", "outbox.pickup-failed.finance", "outbox.pickup-skipped.finance", "outbox.ticket-completed.finance", "outbox.site-visit-recorded.finance", "outbox.site-visit-voided.finance"],
+      ["outbox.pickup-completed.finance", "outbox.pickup-corrected.finance", "outbox.pickup-failed.finance", "outbox.pickup-skipped.finance", "outbox.ticket-completed.finance", "outbox.site-visit-recorded.finance", "outbox.site-visit-voided.finance", "outbox.weight-reviewed.finance"],
     )
     // A missed stop's two kinds fan out to Resolution and Finance both (#293 M5b on #339's fan-out).
     for (const kind of ["pickup-failed", "pickup-skipped"] as const) assert.deepEqual(OUTBOX_ROUTES.get(kind), [consumerQueue(kind, "resolution"), consumerQueue(kind, "finance")], kind)

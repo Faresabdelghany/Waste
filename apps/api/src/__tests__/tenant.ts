@@ -358,6 +358,9 @@ export async function dropTenant(pool: Database, companyId: string, owner?: Data
     await owner.db.delete(applicationDecision).where(eq(applicationDecision.companyId, companyId))
     await owner.db.delete(proofOfService).where(eq(proofOfService.companyId, companyId))
     await owner.db.delete(sessionPosition).where(eq(sessionPosition.companyId, companyId))
+    // A weight charge names the Unload it charges a share of (O28 of #290), so the events, and the settlement lines that name them, go before the ledger.
+    await owner.db.delete(settlementLine).where(eq(settlementLine.companyId, companyId))
+    await owner.db.delete(billableEvent).where(eq(billableEvent.companyId, companyId))
     // A defect names its check (O13 of #290): both go with the ledgers, the defect first.
     await owner.db.delete(vehicleDefect).where(eq(vehicleDefect.companyId, companyId))
     await owner.db.delete(preTripCheck).where(eq(preTripCheck.companyId, companyId))
