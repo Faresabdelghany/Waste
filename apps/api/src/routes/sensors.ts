@@ -34,6 +34,15 @@
 // the database's two exclusion constraints (23P01, `refuseOverlap`). A
 // sensor is retired only once no pairing of it is open on or after today
 // (409 counting them), so a retired sensor measures nothing.
+//
+// The ingest is no open door: it needs a token and `create` on
+// `resources.sensors` like every write, it reaches only the sensors of the
+// caller's company in the projects the caller works in (any other identifier
+// is `unknown-sensor`), and it is bounded twice — a body of at most
+// `SENSOR_READINGS_MAX_BYTES`, refused as a 413 before the token is read, and
+// `SENSOR_BATCHES_PER_MINUTE` batches a minute per company, a 429 with
+// Retry-After beyond it, counted per API instance as the public door's
+// allowance is.
 import { Page } from "@waste/contracts/pagination"
 import {
   FillReading,
@@ -56,6 +65,7 @@ import { project } from "@waste/db/schema/organisation"
 import { fillReading, sensor, sensorPairing } from "@waste/db/schema/sensors"
 import { and, asc, desc, eq, gt, inArray, isNull, lt, lte, or, sql } from "drizzle-orm"
 import { Hono, type MiddlewareHandler } from "hono"
+import { bodyLimit } from "hono/body-limit"
 import { describeRoute } from "hono-openapi"
 
 import { BEARER_SECURITY, type AuthEnv, type Principal } from "../auth/principal"
@@ -66,10 +76,15 @@ import { afterCursor, fetchLimit, pageOf } from "../pagination"
 import { describeProblem, problem, validate } from "../problem"
 import { periodAfter, requireOrdered } from "./periods"
 import { requireContainer } from "./references"
-import type { ClockOptions } from "./scheme-groups"
+import { Allowance } from "../auth/public-door"
 import { created, describeCreated, describeJson, IdParam, lockRow, OCCURRED_AT_SKEW_MS, refuseDuplicate, refuseOverlap, stampsOf, strengthFor } from "./shared"
 
 const MODULE = "resources.sensors"
+
+/** The largest ingest body: 500 readings of the widest shape the contracts take fit inside it. */
+export const SENSOR_READINGS_MAX_BYTES = 256 * 1024
+/** A company's ingest batches a minute on one API instance: a vendor flushing its queue every few seconds stays well inside it. */
+export const SENSOR_BATCHES_PER_MINUTE = 120
 
 const SensorPage = Page(Sensor)
 const PairingPage = Page(SensorPairing)
@@ -333,7 +348,20 @@ const commonProblems = (action: "view" | "edit" | "create") => ({
   403: describeProblem(`No active account here, or the caller's role does not allow \`${action}\` on \`${MODULE}\`.`),
 })
 
-export function sensorRoutes(guard: MiddlewareHandler<AuthEnv>, { now = () => new Date() }: ClockOptions = {}) {
+export type SensorRouteOptions = { now?: () => Date; ingestAllowance?: Allowance }
+
+export function sensorRoutes(guard: MiddlewareHandler<AuthEnv>, { now = () => new Date(), ingestAllowance = new Allowance(SENSOR_BATCHES_PER_MINUTE, now) }: SensorRouteOptions = {}) {
+  /** The company's batch counted against its allowance, after the guard has said whose it is. */
+  const withinAllowance: MiddlewareHandler<AuthEnv> = async (c, next) => {
+    const taken = ingestAllowance.take(c.get("principal").companyId)
+    if (!taken.allowed) {
+      throw problem(429, {
+        detail: `Too many reading batches from this company; send again in ${taken.retryAfterSeconds} s`,
+        headers: { "Retry-After": String(taken.retryAfterSeconds) },
+      })
+    }
+    await next()
+  }
   return new Hono<AuthEnv>()
     .get(
       "/sensors",
@@ -661,16 +689,25 @@ export function sensorRoutes(guard: MiddlewareHandler<AuthEnv>, { now = () => ne
         operationId: "recordSensorReadings",
         summary: "Record a batch of fill readings",
         description:
-          "The vendor-neutral ingest: up to 500 readings by each sensor's identifier, the fill a whole percent the vendor computed, the battery and the signal strength where it reports them. Each reading is judged alone and answered in the body's order: `recorded` with the ledger row's id; `replayed` with the row's id when the sensor's reading at that instant is already recorded, so a batch sent twice records nothing twice; or `refused` with why — `unknown-sensor` (no sensor of that identifier in the caller's projects), `retired-sensor`, or `ahead-of-clock` (measured more than five minutes after the server's clock). A reading is tied to the pairing in force on its day on the project's clock, and to none where the sensor measured nothing that day.",
+          "The vendor-neutral ingest, under a token with `create` on `resources.sensors`, at most 256 KiB and 120 batches a minute per company: up to 500 readings by each sensor's identifier, the fill a whole percent the vendor computed, the battery and the signal strength where it reports them. Each reading is judged alone and answered in the body's order: `recorded` with the ledger row's id; `replayed` with the row's id when the sensor's reading at that instant is already recorded, so a batch sent twice records nothing twice; or `refused` with why — `unknown-sensor` (no sensor of that identifier in the caller's projects), `retired-sensor`, or `ahead-of-clock` (measured more than five minutes after the server's clock). A reading is tied to the pairing in force on its day on the project's clock, and to none where the sensor measured nothing that day.",
         security: BEARER_SECURITY,
         responses: {
           200: describeJson("One outcome per reading, in the body's order.", FillReadingResults),
           400: describeProblem("The body is not a batch of one to 500 readings of the right shape."),
           ...commonProblems("create"),
+          413: describeProblem("The body is larger than 256 KiB."),
+          429: describeProblem("The company has sent more batches this minute than the ingest takes; Retry-After says when to send again."),
+        },
+      }),
+      bodyLimit({
+        maxSize: SENSOR_READINGS_MAX_BYTES,
+        onError: () => {
+          throw problem(413, { detail: `A batch of readings is at most ${SENSOR_READINGS_MAX_BYTES / 1024} KiB` })
         },
       }),
       guard,
       requireGrant(MODULE, "create"),
+      withinAllowance,
       validate("json", FillReadingBatch),
       async (c) => {
         const batch = c.req.valid("json")

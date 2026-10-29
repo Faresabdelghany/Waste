@@ -17,7 +17,8 @@ import { withCompany } from "@waste/db/tenant"
 import { SYSTEM_ROLES } from "@waste/domain/access/system-roles"
 
 import { createApp } from "../app"
-import { RETIRED_SENSOR, stillPaired } from "../routes/sensors"
+import { Allowance } from "../auth/public-door"
+import { RETIRED_SENSOR, SENSOR_READINGS_MAX_BYTES, stillPaired } from "../routes/sensors"
 import { callingAs, type Call } from "./calls"
 import { created } from "./created"
 import { databaseUnderTest, ownerUnderTest } from "./database"
@@ -209,6 +210,21 @@ describe("fill-level sensors", { skip: database.skip || ownerDatabase.skip }, ()
       assert.deepEqual(results.results.map((result) => (result.outcome === "refused" ? result.reason : result.outcome)), ["unknown-sensor", "unknown-sensor"])
       await refused(await integration("/sensor-readings", { method: "POST", body: { readings: [] } }), 400)
       await refused(await integration("/sensor-readings", { method: "POST", body: { readings: [{ sensorIdentifier: "S", measuredAt: "2026-10-28T08:00:00Z", fillPercent: 101 }] } }), 400)
+    })
+  })
+
+  describe("the bounds", () => {
+    test("a body over the size bound is a 413 before the token is read, and a company past its batches a minute a 429 with Retry-After", async () => {
+      const app = createApp({ probe: pool, pool, verifier: keys.verifier, now: () => NOW, sensorIngestAllowance: new Allowance(2, () => NOW) })
+      const call = callingAs(app, keys, a.users.viewer, a.companyId)
+      const huge = JSON.stringify({ readings: [{ sensorIdentifier: "x".repeat(SENSOR_READINGS_MAX_BYTES), measuredAt: "2026-10-28T08:00:00Z", fillPercent: 1 }] })
+      const tooLarge = await app.request("/sensor-readings", { method: "POST", headers: { "content-type": "application/json" }, body: huge })
+      assert.equal(await refused(tooLarge, 413), "A batch of readings is at most 256 KiB")
+      const one = [{ sensorIdentifier: "NO-SUCH-SENSOR", measuredAt: "2026-10-28T08:00:00Z", fillPercent: 1 }]
+      for (let batch = 0; batch < 2; batch += 1) assert.equal((await call("/sensor-readings", { method: "POST", body: { readings: one } })).status, 200)
+      const third = await call("/sensor-readings", { method: "POST", body: { readings: one } })
+      assert.equal(third.headers.get("retry-after"), "60")
+      assert.match(await refused(third, 429), /Too many reading batches from this company/)
     })
   })
 
