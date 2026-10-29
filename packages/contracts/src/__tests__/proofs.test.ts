@@ -15,7 +15,7 @@ const POINT = { type: "Point", coordinates: [12.5951, 55.7089] }
 const KEY = `${OTHER}/${THIRD}/${ID}.jpg`
 
 /** The columns the shape decides over, as a full row would carry them. */
-const full = { reason: "inaccessible", objectKey: KEY, weightKg: 148, outcome: "failed", note: "Gate locked" } as const
+const full = { reason: "inaccessible", objectKey: KEY, weightKg: 148, volumeLitres: 2800, outcome: "failed", note: "Gate locked" } as const
 
 /** The one row of each kind that carries exactly what the kind requires, from the source it may come from. */
 const exemplar = (kind: ProofKind): ProofRow => {
@@ -25,6 +25,7 @@ const exemplar = (kind: ProofKind): ProofRow => {
     reason: shape.reason === "none" ? null : full.reason,
     objectKey: shape.objectKey === "none" ? null : full.objectKey,
     weightKg: shape.weightKg === "none" ? null : full.weightKg,
+    volumeLitres: shape.volumeLitres === "none" ? null : full.volumeLitres,
     outcome: shape.outcome === "none" ? null : full.outcome,
     note: shape.note === "none" ? null : full.note,
     source: shape.source === "dispatch" ? "dispatch" : "driver-app",
@@ -56,7 +57,7 @@ describe("ProofOfService", () => {
   })
 
   test("runs the domain's table as its refine: a row that disagrees with its kind does not parse, and the sentence names the column at kind", () => {
-    const columns = ["reason", "objectKey", "weightKg", "outcome", "note"] as const
+    const columns = ["reason", "objectKey", "weightKg", "volumeLitres", "outcome", "note"] as const
     let disagreements = 0
     for (const kind of PROOF_KINDS) {
       for (const column of columns) {
@@ -81,9 +82,11 @@ describe("ProofOfService", () => {
     assert.deepEqual(refusal(ProofOfService.safeParse(proof("correction", { ...exemplar("correction"), source: "driver-app" }))), [{ path: "kind", message: "A correction proof comes from dispatch" }])
   })
 
-  test("holds the point flat, the weight and the accuracy positive, the key to its shape, and the reason and outcome to their vocabularies", () => {
+  test("holds the point flat, the weight, the litres and the accuracy positive, the key to its shape, and the reason and outcome to their vocabularies", () => {
     assert.deepEqual(refusal(ProofOfService.safeParse({ ...proof("arrival"), location: { type: "Point", coordinates: [12.5951, 55.7089, 10] } })).map((issue) => issue.path), ["location.coordinates"])
     assert.deepEqual(refusal(ProofOfService.safeParse({ ...proof("weight"), weightKg: 0 })).map((issue) => issue.path), ["weightKg"])
+    assert.deepEqual(refusal(ProofOfService.safeParse({ ...proof("volume"), volumeLitres: 0 })).map((issue) => issue.path), ["volumeLitres"])
+    assert.deepEqual(ProofOfService.parse({ ...proof("arrival"), volumeLitres: undefined }).volumeLitres, null, "a row relayed before the litres carries none")
     assert.deepEqual(refusal(ProofOfService.safeParse({ ...proof("arrival"), locationAccuracyM: -1 })).map((issue) => issue.path), ["locationAccuracyM"])
     assert.deepEqual(refusal(ProofOfService.safeParse({ ...proof("photo"), objectKey: "photo.jpg" })).map((issue) => issue.path), ["objectKey"])
     assert.deepEqual(refusal(ProofOfService.safeParse({ ...proof("skip"), reason: "lunch" })).map((issue) => issue.path), ["reason"])

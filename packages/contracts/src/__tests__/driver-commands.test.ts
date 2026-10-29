@@ -58,12 +58,13 @@ const bodies: Record<DriverCommandKind, object> = {
   "end-route": { note: "Done for today", location: POINT },
   "record-positions": { points: [{ at: "2026-10-05T06:18:00.000Z", location: POINT, accuracyM: 9 }, { at: WHEN, location: POINT, accuracyM: 14, speedKmh: 32, headingDeg: 270 }] },
   "pre-trip-check": { vehicleId: THIRD, items: [{ itemId: ID, passed: true }, { itemId: OTHER, passed: false, note: "Left indicator out" }], odometerKm: 182_400, engineHours: 6_120, location: POINT },
+  "record-volume": { pickupId: THIRD, volumeLitres: 2_800 },
 }
 
 const command = (kind: DriverCommandKind, body: object = bodies[kind]) => ({ ...envelope, kind, body })
 
 describe("DriverCommand", () => {
-  test("is the discriminated union over the sixteen kinds, each a strict envelope around a strict body", () => {
+  test("is the discriminated union over the seventeen kinds, each a strict envelope around a strict body", () => {
     assert.deepEqual(Object.keys(COMMAND_BODIES).sort(), [...DRIVER_COMMAND_KINDS].sort())
     for (const kind of DRIVER_COMMAND_KINDS) assert.deepEqual(DriverCommand.parse(command(kind)), command(kind), kind)
     assert.equal(DriverCommand.safeParse(command("reschedule-stop" as DriverCommandKind, {})).success, false, "a Ticket's, not a command")
@@ -95,6 +96,7 @@ describe("DriverCommand", () => {
       "end-route": ["pickupId", THIRD],
       "record-positions": ["location", POINT],
       "pre-trip-check": ["pickupId", THIRD],
+      "record-volume": ["weightKg", 1],
     }
     for (const kind of DRIVER_COMMAND_KINDS) {
       const [member, value] = foreign[kind]

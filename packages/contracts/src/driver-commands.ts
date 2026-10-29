@@ -1,10 +1,10 @@
-// The driver's commands on the wire (Issue #104, ADR-0004): sixteen kinds,
+// The driver's commands on the wire (Issue #104, ADR-0004): seventeen kinds,
 // one contract each, every one a `z.strictObject` under a common envelope —
 // `{ id, kind, routeId, occurredAt, deviceId, body }` — where `id` is minted
 // by the device (a UUIDv7 from the device's clock, through
 // @waste/domain/ids) and is the command's idempotency key and, where the
 // command makes a row, that row's id. `DriverCommand` is the discriminated
-// union over the sixteen, so a client that imports this package as the
+// union over the seventeen, so a client that imports this package as the
 // Expo app does builds a typed command per kind.
 //
 // The door, `POST /driver/commands`, takes `DriverCommandBatch`: one to two
@@ -138,7 +138,7 @@ const inOrder = (points: readonly { at: string }[]): boolean => points.every((po
 export const Identification = z.strictObject({ code: Label, method: IdentificationMethod })
 export type Identification = z.infer<typeof Identification>
 
-/** The sixteen bodies, by kind, for the route to parse a loosely read envelope's body against. */
+/** The seventeen bodies, by kind, for the route to parse a loosely read envelope's body against. */
 export const COMMAND_BODIES = {
   "start-route": z.strictObject({ vehicleId: Id, trailerId: Id.optional(), appVersion: Label.optional(), ...located }),
   arrive: z.strictObject({ pickupId: Id, identification: Identification.optional(), ...located }),
@@ -173,6 +173,8 @@ export const COMMAND_BODIES = {
     points: z.array(PositionFix).min(1).max(POSITIONS_MAX).refine(inOrder, { message: FIXES_IN_ORDER }),
   }),
   "pre-trip-check": z.strictObject({ ...PreTripCheckBody, ...located }),
+  /** The litres a tank was emptied of at the stop (M11 of #293), whole litres: `PositiveInt`, bounded like the column. */
+  "record-volume": z.strictObject({ pickupId: Id, volumeLitres: PositiveInt }),
 } as const satisfies Record<DriverCommandKind, z.ZodType>
 
 export const StartRoute = commandOf("start-route", COMMAND_BODIES["start-route"])
@@ -191,9 +193,10 @@ export const Resume = commandOf("resume", COMMAND_BODIES.resume)
 export const EndRoute = commandOf("end-route", COMMAND_BODIES["end-route"])
 export const RecordPositions = commandOf("record-positions", COMMAND_BODIES["record-positions"])
 export const PreTripCheckCommand = commandOf("pre-trip-check", COMMAND_BODIES["pre-trip-check"])
+export const RecordVolume = commandOf("record-volume", COMMAND_BODIES["record-volume"])
 
 /** One command of any kind: the envelope and the body its kind takes. */
-export const DriverCommand = z.discriminatedUnion("kind", [StartRoute, Arrive, CompletePickup, SkipPickup, FailPickup, ReportProblem, AddPhoto, AddWeight, AddSignature, AddNote, RecordUnload, Pause, Resume, EndRoute, RecordPositions, PreTripCheckCommand])
+export const DriverCommand = z.discriminatedUnion("kind", [StartRoute, Arrive, CompletePickup, SkipPickup, FailPickup, ReportProblem, AddPhoto, AddWeight, AddSignature, AddNote, RecordUnload, Pause, Resume, EndRoute, RecordPositions, PreTripCheckCommand, RecordVolume])
 export type DriverCommand = z.infer<typeof DriverCommand>
 
 /** The envelope read loosely, its body unparsed, so a body that fails its kind is one command's rejection and not the batch's 400. */

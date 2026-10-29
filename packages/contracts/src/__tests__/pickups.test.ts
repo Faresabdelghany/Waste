@@ -56,6 +56,7 @@ const proof = {
   reason: null,
   note: null,
   weightKg: null,
+  volumeLitres: null,
   objectKey: null,
   outcome: null,
   contaminantCodeId: null,
