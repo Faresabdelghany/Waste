@@ -23,8 +23,8 @@ import { tenantFence } from "../sql/tenant-fence"
 import { checksOf, oneOfCheck, ref } from "./rendering"
 import { statementsFor } from "./specimen"
 
-/** The receipt's kinds as of this file: today's less `pre-trip-check`, which migration 0075 added (O13 of #290). */
-const KINDS_AS_OF_0060 = DRIVER_COMMAND_KINDS.filter((kind) => kind !== "pre-trip-check")
+/** The receipt's kinds as of this file: today's less `pre-trip-check`, which migration 0075 added (O13 of #290), and `record-volume`, which 0098 did (M11 of #293). */
+const KINDS_AS_OF_0060 = DRIVER_COMMAND_KINDS.filter((kind) => kind !== "pre-trip-check" && kind !== "record-volume")
 
 const alter = (statement: string): string => `ALTER TABLE "wms"."driver_command" ${statement};`
 
@@ -64,7 +64,7 @@ describe("live positions as drizzle-kit writes them", () => {
 
   test("the receipt's kinds grew by record-positions, last", () => {
     assert.equal(KINDS_AS_OF_0060.at(-1), "record-positions")
-    assert.equal(KINDS_AS_OF_0060.length, DRIVER_COMMAND_KINDS.length - 1, "one kind added since")
+    assert.equal(KINDS_AS_OF_0060.length, DRIVER_COMMAND_KINDS.length - 2, "two kinds added since")
   })
 })
 

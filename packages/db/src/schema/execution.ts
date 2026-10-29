@@ -452,10 +452,10 @@ export const session = wms.table(
 export const kindsNaming = (pickup: "required" | "optional" | "none") => sql.raw(PROOF_KINDS.filter((kind) => PROOF_SHAPES[kind].pickup === pickup).map(literal).join(", "))
 
 /** One `WHEN` of the kind CASE: what the kind carries and forbids, as SQL over the row's columns; exported for the same test. */
-export function kindClause(kind: (typeof PROOF_KINDS)[number], columns: { reason: PgColumn; objectKey: PgColumn; weightKg: PgColumn; outcome: PgColumn; note: PgColumn; source: PgColumn }): SQL {
+export function kindClause(kind: (typeof PROOF_KINDS)[number], columns: { reason: PgColumn; objectKey: PgColumn; weightKg: PgColumn; volumeLitres: PgColumn; outcome: PgColumn; note: PgColumn; source: PgColumn }): SQL {
   const shape = PROOF_SHAPES[kind]
   const terms: SQL[] = []
-  for (const column of ["reason", "objectKey", "weightKg", "outcome", "note"] as const) {
+  for (const column of ["reason", "objectKey", "weightKg", "volumeLitres", "outcome", "note"] as const) {
     const presence = shape[column]
     if (presence === "required") terms.push(sql`${columns[column]} is not null`)
     else if (presence === "none") terms.push(sql`${columns[column]} is null`)
@@ -489,6 +489,8 @@ export const proofOfService = wms.table(
     note: text(),
     /** A lifter's or a hand scale's reading, whole kilograms. */
     weightKg: integer(),
+    /** The litres a tank was emptied of (M11 of #293), whole litres. */
+    volumeLitres: integer(),
     /** The Storage object of a photo or a signature, under the row's own ids. */
     objectKey: text(),
     /** On a correction: the status the pickup was moved to. */
@@ -511,6 +513,7 @@ export const proofOfService = wms.table(
     validGeometry(t.location),
     positive(t.locationAccuracyM),
     positive(t.weightKg),
+    positive(t.volumeLitres),
     // A stop's kind names a pickup, the route's two name none, and a problem, a photo and a note may stand on the route alone. From the domain's table.
     check(
       tableObjectName(t.id.table, "pickup_shape", "proofOfService"),

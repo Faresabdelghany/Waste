@@ -68,3 +68,5 @@ export * from "./service-provider-activities"
 export * from "./messaging"
 // Pre-trip inspection (O13 of #290): a vehicle type's checklist, the checks made against it, and the defects they find.
 export * from "./pre-trip"
+// Septic-tank emptying (M11 of #293): the register of tank installations and their inspections.
+export * from "./tanks"
