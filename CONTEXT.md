@@ -319,8 +319,8 @@ An e-mail to one of the company's own User Accounts that it asked for in Setting
 _Avoid_: Notification, alert e-mail (an Alert is the condition, not the e-mail)
 
 **Customer Notice**:
-A Message a project sends a Customer on its own account when something happens to them — today a Bulky Booking booked, cancelled, collected or not collected — from the service Message Template its notification rule names for that notice. The rule is the opt-in: a notice no rule names is never sent, and there is no default text. Consent is honoured as for any service Message.
-_Avoid_: Notification, alert, automatic e-mail
+A Message a project sends a Customer on its own account when something happens to them — a Bulky Booking booked, cancelled, collected or not collected; a reminder the afternoon before a scheduled collection; the office's reply on a Ticket naming them, and its completion; a Route of theirs cancelled or running late — from the service Message Template its notification rule names for that notice. The rule is the opt-in: a notice no rule names is never sent, and there is no default text. Consent is honoured as for any service Message. The two about a Route are broadcasts: they reach the Customers its stops serve, within the notification Planning Areas the rule names, or the whole Project where it names none.
+_Avoid_: Notification, alert, automatic e-mail, push
 
 **Alert**:
 A condition that requires attention, notification, or acknowledgement and may create or link to a ticket. It is acknowledged and resolved, and links to at most one Ticket. The office raises one by hand; the worker's rules raise one per occurrence of a route not started, a device silent, a licence running out or a ticket overdue — an overdue ticket's alert is about that Ticket, never a new one — and resolve it when the condition clears.
