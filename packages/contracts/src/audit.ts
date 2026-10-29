@@ -124,6 +124,7 @@ export const AUDITED_TABLES = [
   "customer_contact",
   "message_template",
   "notification_preference",
+  "notification_rule",
 ] as const
 export type AuditedTable = (typeof AUDITED_TABLES)[number]
 

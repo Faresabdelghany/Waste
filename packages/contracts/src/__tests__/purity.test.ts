@@ -73,7 +73,9 @@
 // @waste/domain/messaging/vocabulary and @waste/domain/messaging/template:
 // messaging.ts reads the channels, purposes and statuses, and refuses a
 // template naming a placeholder no message fills, or out of its channel's
-// shape, in the domain's sentences.
+// shape, in the domain's sentences. O16 of #290 (part b) added
+// @waste/domain/notifications/vocabulary: notifications.ts reads the customer
+// notices a project's rules map to templates.
 import path from "node:path"
 import { fileURLToPath } from "node:url"
 
@@ -103,6 +105,7 @@ definePurityTests({
     "@waste/domain/insight/vocabulary",
     "@waste/domain/messaging/template",
     "@waste/domain/messaging/vocabulary",
+    "@waste/domain/notifications/vocabulary",
     "@waste/domain/planning/lifecycle",
     "@waste/domain/planning/vocabulary",
     "@waste/domain/registry/address",

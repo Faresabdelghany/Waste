@@ -58,6 +58,7 @@ import { customerContactRoutes } from "./routes/customer-contacts"
 import { customerRoutes } from "./routes/customers"
 import { messageTemplateRoutes } from "./routes/message-templates"
 import { messageRoutes } from "./routes/messages"
+import { notificationRuleRoutes } from "./routes/notification-rules"
 import { notificationRoutes } from "./routes/notifications"
 import { depotRoutes } from "./routes/depots"
 import { applicationRoutes } from "./routes/applications"
@@ -257,6 +258,7 @@ export function createApp({
   const guard = authenticate({ pool, verifier })
   app.route("/", meRoutes(guard))
   app.route("/", notificationRoutes(guard))
+  app.route("/", notificationRuleRoutes(guard))
   app.route("/", companyRoutes(guard))
   app.route("/", projectRoutes(guard))
   app.route("/", serviceProviderRoutes(guard))

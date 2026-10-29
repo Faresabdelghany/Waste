@@ -358,7 +358,7 @@ describe("billableFor every other kind", () => {
       ;(billableFor(event) === undefined ? news : money).push(kind)
     }
     assert.deepEqual(money, ["pickup-completed", "pickup-corrected", "ticket-completed", "site-visit-recorded", "site-visit-voided"])
-    assert.deepEqual(news, ["route-dispatched", "route-started", "route-completed", "route-cancelled", "route-reassigned", "pickup-failed", "pickup-skipped", "pickup-problem-reported", "unload-recorded", "command-rejected", "ticket-opened", "ticket-rejected", "invoice-issued", "settlement-closed", "application-decided", "alert-raised", "ticket-assigned"])
+    assert.deepEqual(news, ["route-dispatched", "route-started", "route-completed", "route-cancelled", "route-reassigned", "pickup-failed", "pickup-skipped", "pickup-problem-reported", "unload-recorded", "command-rejected", "ticket-opened", "ticket-rejected", "invoice-issued", "settlement-closed", "application-decided", "alert-raised", "ticket-assigned", "bulky-booking-booked", "bulky-booking-cancelled"])
     assert.deepEqual([...PICKUP_EVENT_KINDS], ["pickup-completed", "pickup-corrected", "pickup-failed", "pickup-skipped"])
   })
 })

@@ -29,6 +29,8 @@ import { agreement, subscription } from "@waste/db/schema/agreements"
 import { containerType, product, wasteFraction } from "@waste/db/schema/catalogue"
 import { container, containerServicePlacement } from "@waste/db/schema/containers"
 import { customer, property } from "@waste/db/schema/customers"
+import { message, messageTemplate } from "@waste/db/schema/messaging"
+import { notificationRule } from "@waste/db/schema/notifications"
 import { outboxEvent, pickup, proofOfService, route } from "@waste/db/schema/execution"
 import { billableEvent, billingRun, billingRunExclusion, invoice, invoiceLine, priceList, priceListRow, ticketKindProduct, workOrderProduct } from "@waste/db/schema/finance"
 import { driver, vehicle } from "@waste/db/schema/fleet"
@@ -434,6 +436,10 @@ export async function dropFinanceTenant(pool: Database, owner: Database, company
     await tx.delete(bulkyBookingItem).where(eq(bulkyBookingItem.companyId, companyId))
     await tx.delete(bulkyBooking).where(eq(bulkyBooking.companyId, companyId))
     await tx.delete(bulkySchedule).where(eq(bulkySchedule.companyId, companyId))
+    // The customer notices (O16 of #290, part b): the log and the rules before the templates, all before the customers they name.
+    await tx.delete(message).where(eq(message.companyId, companyId))
+    await tx.delete(notificationRule).where(eq(notificationRule.companyId, companyId))
+    await tx.delete(messageTemplate).where(eq(messageTemplate.companyId, companyId))
     await tx.delete(route).where(eq(route.companyId, companyId))
     await tx.delete(collectionGroup).where(eq(collectionGroup.companyId, companyId))
     await tx.delete(routeSchemeSeason).where(eq(routeSchemeSeason.companyId, companyId))

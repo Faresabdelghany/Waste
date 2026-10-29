@@ -533,6 +533,13 @@
       "when": 1793235133148,
       "tag": "0075_staff_notifications",
       "breakpoints": true
+    },
+    {
+      "idx": 76,
+      "version": "7",
+      "when": 1793236892603,
+      "tag": "0076_booking_notices",
+      "breakpoints": true
     }
   ]
 }
