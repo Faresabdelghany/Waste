@@ -1269,6 +1269,31 @@ index wms.customer customer_tenant_key CREATE UNIQUE INDEX customer_tenant_key O
 trigger wms.customer customer_audit_trail enabled=O CREATE TRIGGER customer_audit_trail AFTER INSERT OR DELETE OR UPDATE ON wms.customer FOR EACH ROW EXECUTE FUNCTION wms.audit_row('', '')
 trigger wms.customer customer_touch_updated_at enabled=O CREATE TRIGGER customer_touch_updated_at BEFORE UPDATE ON wms.customer FOR EACH ROW EXECUTE FUNCTION wms.touch_updated_at()
 policy wms.customer customer_tenant_fence permissive ALL to=wms_api using=(company_id = ( SELECT wms.current_company_id() AS current_company_id)) check=(company_id = ( SELECT wms.current_company_id() AS current_company_id))
+relation wms.customer_contact kind=table owner=<owner> persistence=p rls=true force-rls=true replica-identity=d acl=[<owner>=DELETE,INSERT,MAINTAIN,REFERENCES,SELECT,TRIGGER,TRUNCATE,UPDATE/<owner> wms_api=DELETE,INSERT,SELECT,UPDATE/<owner> wms_worker=SELECT/<owner>]
+column wms.customer_contact 1 id uuid not-null default=wms.uuidv7()
+column wms.customer_contact 2 company_id uuid not-null
+column wms.customer_contact 3 created_at timestamp with time zone not-null default=now()
+column wms.customer_contact 4 updated_at timestamp with time zone not-null default=now()
+column wms.customer_contact 5 customer_id uuid not-null
+column wms.customer_contact 6 name text not-null
+column wms.customer_contact 7 role text not-null
+column wms.customer_contact 8 email text
+column wms.customer_contact 9 phone text
+column wms.customer_contact 10 status text not-null
+constraint wms.customer_contact customer_contact_channel_shape CHECK (((email IS NOT NULL) OR (phone IS NOT NULL)))
+constraint wms.customer_contact customer_contact_company_id_fk FOREIGN KEY (company_id) REFERENCES wms.company(id)
+constraint wms.customer_contact customer_contact_customer_id_fk FOREIGN KEY (company_id, customer_id) REFERENCES wms.customer(company_id, id)
+constraint wms.customer_contact customer_contact_email_lowercase CHECK ((email = lower(email)))
+constraint wms.customer_contact customer_contact_pkey PRIMARY KEY (id)
+constraint wms.customer_contact customer_contact_role_one_of CHECK ((role = ANY (ARRAY['primary'::text, 'billing'::text, 'operations'::text, 'on-site'::text, 'other'::text])))
+constraint wms.customer_contact customer_contact_status_one_of CHECK ((status = ANY (ARRAY['active'::text, 'inactive'::text])))
+constraint wms.customer_contact customer_contact_tenant_key UNIQUE (company_id, id)
+index wms.customer_contact customer_contact_customer_id_idx CREATE INDEX customer_contact_customer_id_idx ON wms.customer_contact USING btree (company_id, customer_id)
+index wms.customer_contact customer_contact_pkey CREATE UNIQUE INDEX customer_contact_pkey ON wms.customer_contact USING btree (id)
+index wms.customer_contact customer_contact_tenant_key CREATE UNIQUE INDEX customer_contact_tenant_key ON wms.customer_contact USING btree (company_id, id)
+trigger wms.customer_contact customer_contact_audit_trail enabled=O CREATE TRIGGER customer_contact_audit_trail AFTER INSERT OR DELETE OR UPDATE ON wms.customer_contact FOR EACH ROW EXECUTE FUNCTION wms.audit_row('customer', 'customer_id')
+trigger wms.customer_contact customer_contact_touch_updated_at enabled=O CREATE TRIGGER customer_contact_touch_updated_at BEFORE UPDATE ON wms.customer_contact FOR EACH ROW EXECUTE FUNCTION wms.touch_updated_at()
+policy wms.customer_contact customer_contact_tenant_fence permissive ALL to=wms_api using=(company_id = ( SELECT wms.current_company_id() AS current_company_id)) check=(company_id = ( SELECT wms.current_company_id() AS current_company_id))
 relation wms.decommission_reason kind=table owner=<owner> persistence=p rls=true force-rls=true replica-identity=d acl=[<owner>=DELETE,INSERT,MAINTAIN,REFERENCES,SELECT,TRIGGER,TRUNCATE,UPDATE/<owner> wms_api=DELETE,INSERT,SELECT,UPDATE/<owner> wms_worker=SELECT/<owner>]
 column wms.decommission_reason 1 id uuid not-null default=wms.uuidv7()
 column wms.decommission_reason 2 company_id uuid not-null
@@ -4454,5 +4479,6 @@ journal 1793216335264 64275b21651c0614f779f558aa0d732f781137bd7a3d84380b2c419861
 journal 1793225274885 7d8dad0b8e97c8a9ec2805bac6030d16814cc91d63335a1501744a836bc96d19
 journal 1793227264394 ab9df765d72e64095403123cc17acf2f34f85c3caecb8ebea81a0321043ac64b
 journal 1793229147346 ea9804b6736352c3417743973dfdd0e9ac08c7ec714e43bfc7bb79a33034e30b
-journal 1793231244210 28c1ebcb79fe09c31112ea7c107fd4fa02346fd0ea3241c4875ef71724c3300a
+journal 1793231090634 3a342c060d9cc6b5b37397d1817bf12b3e56217d68c7fb5aa6f3a3561827bb70
+journal 1793233258158 28c1ebcb79fe09c31112ea7c107fd4fa02346fd0ea3241c4875ef71724c3300a
 pgboss-version 42

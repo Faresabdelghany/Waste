@@ -2,6 +2,8 @@ import assert from "node:assert/strict"
 import { describe, test } from "node:test"
 
 import {
+  CONTACT_ROLES,
+  CONTACT_STATUSES,
   CUSTOMER_KINDS,
   CUSTOMER_STATUSES,
   PROPERTY_GROUP_MEMBER_ROLES,
@@ -19,7 +21,11 @@ import {
 } from "@waste/domain/registry/vocabulary"
 
 import {
+  ContactRole,
+  ContactStatus,
   Customer,
+  CustomerContactCreate,
+  CustomerContactPatch,
   CustomerCreate,
   CustomerKind,
   CustomerPatch,
@@ -38,6 +44,7 @@ import {
   PropertyPartyRole,
   PropertyListQuery,
   PropertyPatch,
+  REACHABLE_ON_A_CHANNEL,
   PropertyStatus,
   SharedCollectionPoint,
   SharedCollectionPointAccessMode,
@@ -445,5 +452,25 @@ describe("the list query of a property", () => {
     assert.deepEqual(PropertyListQuery.parse({}), { limit: 50 })
     assert.deepEqual(PropertyListQuery.parse({ projectId: OTHER, customerId: THIRD, limit: "25" }), { projectId: OTHER, customerId: THIRD, limit: 25 })
     assert.equal(PropertyListQuery.safeParse({ customerId: "everyone" }).success, false)
+  })
+})
+
+describe("a contact person (#291 C14)", () => {
+  test("is named, has a role and is reached on an e-mail or a phone, active unless the body says otherwise", () => {
+    assert.deepEqual(CustomerContactCreate.parse({ name: "Hanne Holm", role: "billing", email: "hanne@example.dk" }), { name: "Hanne Holm", role: "billing", email: "hanne@example.dk", status: "active" })
+    assert.deepEqual(CustomerContactCreate.parse({ name: "Ole", role: "on-site", phone: "+45 20 30 40 50", status: "inactive" }).status, "inactive")
+    assert.deepEqual(refusal(CustomerContactCreate.safeParse({ name: "Nobody", role: "primary" })), [{ path: "email", message: REACHABLE_ON_A_CHANNEL }])
+    assert.deepEqual(refusal(CustomerContactCreate.safeParse({ name: "Nobody", role: "primary", email: null, phone: null })), [{ path: "email", message: REACHABLE_ON_A_CHANNEL }])
+    assert.equal(CustomerContactCreate.safeParse({ name: "X", role: "chairman", email: "x@example.dk" }).success, false)
+    assert.equal(CustomerContactCreate.safeParse({ name: "X", role: "primary", email: "x@example.dk", customerId: THIRD }).success, false)
+  })
+
+  test("is patched field by field, a null clearing a channel, and an empty patch refused", () => {
+    assert.deepEqual(CustomerContactPatch.parse({ phone: null }), { phone: null })
+    assert.deepEqual(CustomerContactPatch.parse({ status: "inactive" }), { status: "inactive" })
+    assert.equal(CustomerContactPatch.safeParse({}).success, false)
+    assert.equal(CustomerContactPatch.safeParse({ customerId: THIRD }).success, false)
+    assert.deepEqual([...ContactRole.options], [...CONTACT_ROLES])
+    assert.deepEqual([...ContactStatus.options], [...CONTACT_STATUSES])
   })
 })

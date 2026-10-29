@@ -516,8 +516,15 @@
     {
       "idx": 73,
       "version": "7",
-      "when": 1793231244210,
-      "tag": "0073_dated_parties",
+      "when": 1793231090634,
+      "tag": "0073_contact_persons",
+      "breakpoints": true
+    },
+    {
+      "idx": 74,
+      "version": "7",
+      "when": 1793233258158,
+      "tag": "0074_dated_parties",
       "breakpoints": true
     }
   ]

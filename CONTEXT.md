@@ -56,6 +56,10 @@ _Avoid_: Pickup day (a Pickup is one stop on a route), bin day, tømmedag in cop
 A person or organization that receives or finances a service.
 _Avoid_: Property, payer, account
 
+**Contact Person**:
+A named person who speaks for an organisation Customer, with a role (primary, billing, operations, on-site, other) and the channels they are reached on, an e-mail or a phone or both. A person Customer is their own contact and has none; one who leaves is made inactive, never deleted.
+_Avoid_: Contact (the prototype's word for a person Customer), representative, user
+
 **Property**:
 A physical service address or cadastral location where service is delivered.
 _Avoid_: Customer, contact
