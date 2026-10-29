@@ -354,7 +354,7 @@ describe("the pickup's commands", () => {
   })
 
   test("the stop's proofs are its own read, in recording order", async () => {
-    const proof: ProofOfService = { id: "01a0d2a4-a280-7034-8000-000000000001", recordedAt: "2026-10-01T04:15:00.000Z", projectId: copenhagen.id, routeId: route.id, pickupId: first.id, sessionId: "01a0d2a4-a280-7035-8000-000000000001", kind: "completion", source: "driver-app", occurredAt: "2026-10-01T04:15:00.000Z", recordedBy: "01a0d2a4-a280-7009-8000-000000000003", deviceId: "phone-1", location: null, locationAccuracyM: null, reason: null, note: null, weightKg: null, objectKey: null, outcome: null, contaminantCodeId: null }
+    const proof: ProofOfService = { id: "01a0d2a4-a280-7034-8000-000000000001", recordedAt: "2026-10-01T04:15:00.000Z", projectId: copenhagen.id, routeId: route.id, pickupId: first.id, sessionId: "01a0d2a4-a280-7035-8000-000000000001", kind: "completion", source: "driver-app", occurredAt: "2026-10-01T04:15:00.000Z", recordedBy: "01a0d2a4-a280-7009-8000-000000000003", deviceId: "phone-1", location: null, locationAccuracyM: null, reason: null, note: null, weightKg: null, volumeLitres: null, objectKey: null, outcome: null, contaminantCodeId: null }
     const { fetch, calls } = scripted([() => json(detail(first, [proof]))])
     assert.deepEqual(await pickupProofs(clientOver(fetch), first.id), [proof])
     assert.equal(calls[0].url, `http://api.test/pickups/${first.id}`)
@@ -372,7 +372,7 @@ describe("the pickup's commands", () => {
   })
 
   test("a proof reads as one line on the project's clock: its kind and source, an outcome, a weight and a note where it has them (O2 of #290)", () => {
-    const proof: ProofOfService = { id: "01a0d2a4-a280-7034-8000-000000000001", recordedAt: "2026-10-01T04:15:00.000Z", projectId: copenhagen.id, routeId: route.id, pickupId: first.id, sessionId: "01a0d2a4-a280-7035-8000-000000000001", kind: "arrival", source: "driver-app", occurredAt: "2026-10-01T04:15:00.000Z", recordedBy: "01a0d2a4-a280-7009-8000-000000000003", deviceId: "phone-1", location: null, locationAccuracyM: null, reason: null, note: null, weightKg: null, objectKey: null, outcome: null, contaminantCodeId: null }
+    const proof: ProofOfService = { id: "01a0d2a4-a280-7034-8000-000000000001", recordedAt: "2026-10-01T04:15:00.000Z", projectId: copenhagen.id, routeId: route.id, pickupId: first.id, sessionId: "01a0d2a4-a280-7035-8000-000000000001", kind: "arrival", source: "driver-app", occurredAt: "2026-10-01T04:15:00.000Z", recordedBy: "01a0d2a4-a280-7009-8000-000000000003", deviceId: "phone-1", location: null, locationAccuracyM: null, reason: null, note: null, weightKg: null, volumeLitres: null, objectKey: null, outcome: null, contaminantCodeId: null }
     assert.equal(proofLine(proof, "Europe/Copenhagen"), "2026-10-01 06:15 · Arrival · Driver app")
     assert.equal(proofLine({ ...proof, kind: "weight", weightKg: 212 }, "Europe/Copenhagen"), "2026-10-01 06:15 · Weight · Driver app · 212 kg")
     assert.equal(proofLine({ ...proof, kind: "note", note: "Lid cracked" }, "Europe/Copenhagen"), "2026-10-01 06:15 · Note · Driver app · Lid cracked")
