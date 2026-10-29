@@ -1,9 +1,11 @@
 // A project's branding (M22 of #293) as drizzle-kit writes it: one colour and
 // two https addresses, three nullable columns on `project` — null is none —
 // each held to its shape (`@waste/domain/access/branding`); the colour's
-// contrast is the API's to judge. The migration is exactly those statements:
-// no table is new, so nothing is written by hand. The file is found by its
-// name, not its number, which it takes at its turn. No database.
+// contrast is the API's to judge. The migration is exactly those statements,
+// then the public door's grant of the three columns (`BRANDING_DOOR`), so a
+// project's published pages carry its branding; the project keeps 0017's
+// policy. The file is found by its name, not its number, which it takes at
+// its turn. No database.
 import assert from "node:assert/strict"
 import { readdir, readFile } from "node:fs/promises"
 import { join } from "node:path"
@@ -12,7 +14,8 @@ import { describe, test } from "node:test"
 import { BRAND_COLOR_PATTERN, HTTPS_ADDRESS_MAX, HTTPS_ADDRESS_PATTERN } from "@waste/domain/access/branding"
 
 import { MIGRATIONS_FOLDER } from "../migrate"
-import { statementsOf } from "../sql/hand-written"
+import { normalised, statementsOf } from "../sql/hand-written"
+import { brandingDoorStatements } from "../sql/public-door"
 import { ref } from "./rendering"
 
 /** The migration, by its name: it takes its number at its turn. */
@@ -26,7 +29,7 @@ const https = (label: string, column: string) =>
   `ALTER TABLE "wms"."project" ADD CONSTRAINT "project_${label}" CHECK (${ref("project", column)} ~ '${HTTPS_ADDRESS_PATTERN}' and char_length(${ref("project", column)}) <= ${HTTPS_ADDRESS_MAX});`
 
 describe("a project's branding as drizzle-kit writes it", () => {
-  test("three nullable columns, the colour's shape and each address https within the length: exactly the migration", async () => {
+  test("three nullable columns, the colour's shape and each address https within the length, then the door's grant of the three: exactly the migration", async () => {
     assert.deepEqual(await migration(), [
       'ALTER TABLE "wms"."project" ADD COLUMN "brand_color" text;',
       'ALTER TABLE "wms"."project" ADD COLUMN "logo_url" text;',
@@ -34,6 +37,7 @@ describe("a project's branding as drizzle-kit writes it", () => {
       `ALTER TABLE "wms"."project" ADD CONSTRAINT "project_brand_color_shape" CHECK (${ref("project", "brand_color")} ~ '${BRAND_COLOR_PATTERN}');`,
       https("logo_url_shape", "logo_url"),
       https("accessibility_statement_url_shape", "accessibility_statement_url"),
+      ...brandingDoorStatements().map(normalised),
     ])
   })
 })
