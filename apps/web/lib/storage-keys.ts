@@ -61,6 +61,9 @@ export const CHECK_IN_SITE_STORAGE_KEY = "waste.check-in.site.v1"
 /** The Driver App's Command Queue, an IndexedDB database with two stores, the installation id and the queue (Issue #145, lib/driver/command-queue.ts). Never carried a legacy name. */
 export const DRIVER_COMMAND_QUEUE_DATABASE = "waste.driver-command-queue"
 
+/** The Driver App's display cache (O25 of #290): the door's last answers per login, an IndexedDB database with one store (lib/driver/read-snapshot.ts). Never carried a legacy name. */
+export const DRIVER_READ_SNAPSHOT_DATABASE = "waste.driver-read-snapshot"
+
 /** The selected app theme (a preset id or "custom"). */
 export const APP_THEME_SELECTION_STORAGE_KEY = "waste.theme.selection.v1"
 
