@@ -30,6 +30,11 @@ describe("a message template", () => {
     assert.equal(unknownPlaceholderSentence(["nobody"]), "{{nobody}} is filled by no message; use {{recipientName}}, {{customerName}}, {{companyName}}")
   })
 
+  test("is for service or billing, never for staff: a staff notice is the domain's text (O16 of #290)", () => {
+    assert.equal(MessageTemplateCreate.safeParse({ ...email, purpose: "staff" }).success, false)
+    assert.equal(MessageTemplatePatch.safeParse({ purpose: "staff" }).success, false)
+  })
+
   test("is patched field by field; its project is its own for good", () => {
     assert.deepEqual(MessageTemplatePatch.parse({ status: "inactive" }), { status: "inactive" })
     assert.equal(MessageTemplatePatch.safeParse({ projectId: OTHER }).success, false)

@@ -29,12 +29,13 @@ import type { Route } from "@waste/contracts/routes"
 import type { Database, Tx } from "@waste/db/client"
 import { nextNumber } from "@waste/db/commands/shared"
 import { createIdMinter } from "@waste/db/ids"
-import { role, userAccount } from "@waste/db/schema/access"
+import { projectAccess, role, roleGrant, userAccount } from "@waste/db/schema/access"
 import { agreement, subscription } from "@waste/db/schema/agreements"
 import { containerType, product, wasteFraction } from "@waste/db/schema/catalogue"
 import { container, containerServicePlacement } from "@waste/db/schema/containers"
 import { customer, customerContact, property } from "@waste/db/schema/customers"
 import { message, messageTemplate } from "@waste/db/schema/messaging"
+import { notificationPreference } from "@waste/db/schema/notifications"
 import { driverCommand, outboxEvent, pickup, proofOfService, route } from "@waste/db/schema/execution"
 import { driver, vehicle } from "@waste/db/schema/fleet"
 import { vehicleType } from "@waste/db/schema/fleet-types"
@@ -416,6 +417,10 @@ export async function dropConsumerTenant(pool: Database, owner: Database, compan
     await tx.delete(messageTemplate).where(eq(messageTemplate.companyId, companyId))
     await tx.delete(customerContact).where(eq(customerContact.companyId, companyId))
     await tx.delete(customer).where(eq(customer.companyId, companyId))
+    // The staff notices (O16 of #290): a person's preferences, Project Access and a role's grants before the accounts and roles they name.
+    await tx.delete(notificationPreference).where(eq(notificationPreference.companyId, companyId))
+    await tx.delete(projectAccess).where(eq(projectAccess.companyId, companyId))
+    await tx.delete(roleGrant).where(eq(roleGrant.companyId, companyId))
     await tx.delete(userAccount).where(eq(userAccount.companyId, companyId))
     await tx.delete(role).where(eq(role.companyId, companyId))
     await tx.delete(container).where(eq(container.companyId, companyId))

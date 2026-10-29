@@ -39,8 +39,9 @@
 // fixtures — map layers, a "Version 18" of fractions, a EUR currency and a WH-
 // invoice prefix, push alerts no one sends — are fixture mode's alone (#487).
 // On the Pilot a link to one opens where its subject lives on the API: Master
-// data, Products, and Account & appearance; the notifications themselves are
-// O16's (#351).
+// data, Products, and the API's Notifications (O16 of #290,
+// `NOTIFICATIONS_ON_API_SETTINGS_PANE_ID`): the e-mails a person asked for —
+// an alert raised, a ticket assigned to them — and the ones they were sent.
 import { MASTER_DATA_SETTINGS_PANE_ID } from "./business-links"
 import { BULKY_SCHEDULES_SETTINGS_PANE_ID } from "./bulky"
 import { EMISSION_FACTORS_SETTINGS_PANE_ID } from "./fleet-emissions"
@@ -76,8 +77,10 @@ export const COMMERCIAL_PRODUCTS_SETTINGS_PANE_ID = "commercial-products"
 export const OPERATIONS_SETUP_SETTINGS_PANE_ID = "operations-setup"
 /** The fixtures' Commercial defaults: a currency, a default VAT and an invoice prefix, saved in the browser alone. */
 export const COMMERCIAL_DEFAULTS_SETTINGS_PANE_ID = "pricing"
-/** The fixtures' Notifications: personal delivery preferences no sender reads yet (O16, #351). */
+/** The fixtures' Notifications: personal delivery preferences no sender reads, fixture mode's alone. */
 export const NOTIFICATIONS_SETTINGS_PANE_ID = "notifications"
+/** Settings › Notifications on the Pilot (O16 of #290): the staff e-mails a person asked for and the ones they were sent, the API's. */
+export const NOTIFICATIONS_ON_API_SETTINGS_PANE_ID = "notifications-on-api"
 /** Settings › Account & appearance. */
 export const ACCOUNT_SETTINGS_PANE_ID = "account"
 
@@ -85,7 +88,7 @@ export const ACCOUNT_SETTINGS_PANE_ID = "account"
 const BROWSER_ONLY_PANES: ReadonlyMap<string, string> = new Map([
   [OPERATIONS_SETUP_SETTINGS_PANE_ID, MASTER_DATA_SETTINGS_PANE_ID],
   [COMMERCIAL_DEFAULTS_SETTINGS_PANE_ID, COMMERCIAL_PRODUCTS_SETTINGS_PANE_ID],
-  [NOTIFICATIONS_SETTINGS_PANE_ID, ACCOUNT_SETTINGS_PANE_ID],
+  [NOTIFICATIONS_SETTINGS_PANE_ID, NOTIFICATIONS_ON_API_SETTINGS_PANE_ID],
 ])
 
 /** Account & appearance's group of personal defaults — a default project, a first view, remembered layouts — which this browser saves and nothing reads: shown in fixture mode alone (#487). */
@@ -93,7 +96,7 @@ export const ACCOUNT_DEFAULTS_GROUP = "Defaults"
 
 /** Whether the Settings nav offers a pane, with the adapter configured or not. */
 export function settingsPaneOffered(paneId: string, configured: boolean): boolean {
-  if (paneId === MASTER_DATA_SETTINGS_PANE_ID || paneId === SORTING_GUIDE_SETTINGS_PANE_ID || paneId === TICKET_SLA_SETTINGS_PANE_ID || paneId === PRE_TRIP_CHECKLISTS_SETTINGS_PANE_ID || paneId === TICKET_TEAMS_SETTINGS_PANE_ID || paneId === MESSAGE_TEMPLATES_SETTINGS_PANE_ID || paneId === FINANCE_ON_API_SETTINGS_PANE_ID || paneId === PICKUP_EXCEPTION_CHARGES_SETTINGS_PANE_ID || paneId === EMISSION_FACTORS_SETTINGS_PANE_ID || paneId === BULKY_SCHEDULES_SETTINGS_PANE_ID || paneId === VISIT_RULES_SETTINGS_PANE_ID || paneId === PRIVACY_ON_API_SETTINGS_PANE_ID || paneId === INTEGRATIONS_ON_API_SETTINGS_PANE_ID || paneId === PORTALS_ON_API_SETTINGS_PANE_ID) return configured
+  if (paneId === MASTER_DATA_SETTINGS_PANE_ID || paneId === SORTING_GUIDE_SETTINGS_PANE_ID || paneId === TICKET_SLA_SETTINGS_PANE_ID || paneId === PRE_TRIP_CHECKLISTS_SETTINGS_PANE_ID || paneId === TICKET_TEAMS_SETTINGS_PANE_ID || paneId === MESSAGE_TEMPLATES_SETTINGS_PANE_ID || paneId === FINANCE_ON_API_SETTINGS_PANE_ID || paneId === PICKUP_EXCEPTION_CHARGES_SETTINGS_PANE_ID || paneId === EMISSION_FACTORS_SETTINGS_PANE_ID || paneId === BULKY_SCHEDULES_SETTINGS_PANE_ID || paneId === VISIT_RULES_SETTINGS_PANE_ID || paneId === PRIVACY_ON_API_SETTINGS_PANE_ID || paneId === INTEGRATIONS_ON_API_SETTINGS_PANE_ID || paneId === PORTALS_ON_API_SETTINGS_PANE_ID || paneId === NOTIFICATIONS_ON_API_SETTINGS_PANE_ID) return configured
   if (paneId === ASSET_MANAGEMENT_SETTINGS_PANE_ID || paneId === FINANCE_SETTINGS_PANE_ID || paneId === TICKETS_COMMUNICATION_SETTINGS_PANE_ID || paneId === PRIVACY_SETTINGS_PANE_ID || paneId === INTEGRATIONS_SETTINGS_PANE_ID || paneId === PORTALS_SETTINGS_PANE_ID || BROWSER_ONLY_PANES.has(paneId)) return !configured
   return true
 }
@@ -104,6 +107,7 @@ export function settingsPaneOpened(paneId: string, configured: boolean): string 
     if (paneId === FINANCE_ON_API_SETTINGS_PANE_ID) return FINANCE_SETTINGS_PANE_ID
     if (paneId === PRIVACY_ON_API_SETTINGS_PANE_ID) return PRIVACY_SETTINGS_PANE_ID
     if (paneId === INTEGRATIONS_ON_API_SETTINGS_PANE_ID) return INTEGRATIONS_SETTINGS_PANE_ID
+    if (paneId === NOTIFICATIONS_ON_API_SETTINGS_PANE_ID) return NOTIFICATIONS_SETTINGS_PANE_ID
     return paneId === PORTALS_ON_API_SETTINGS_PANE_ID ? PORTALS_SETTINGS_PANE_ID : paneId
   }
   if (paneId === PRIVACY_SETTINGS_PANE_ID) return PRIVACY_ON_API_SETTINGS_PANE_ID

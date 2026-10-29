@@ -7,8 +7,9 @@
 // Consent is judged here, at the send, against the customer as they stand
 // now (`needsConsent`, @waste/domain/messaging/template): a service message
 // to a customer who allows none is `withheld` with the reason and never
-// reaches the provider; a billing message is owed whatever they chose. Then
-// an attempt is counted, in its own short transaction, and the provider is
+// reaches the provider; a billing message is owed whatever they chose; and a
+// staff notice (O16 of #290) goes to the company's own user account, whom
+// consent does not govern. Then an attempt is counted, in its own short transaction, and the provider is
 // called outside any transaction, as every call to another service is
 // (#124 §4); the answer is recorded in a second one: `sent` with the
 // provider and its id, or the failure's sentence as the reason. A failure
@@ -22,6 +23,7 @@
 // key takes the message's id as it (`OutgoingMessage.id`).
 //
 // Every write is `wms_api`'s under `withCompany`, fenced like a request's.
+import type { Tx } from "@waste/db/client"
 import { SEND_MESSAGE_QUEUE, type SendMessageData } from "@waste/db/commands/messaging"
 import { customer } from "@waste/db/schema/customers"
 import { message } from "@waste/db/schema/messaging"
@@ -50,6 +52,13 @@ export const reasonOf = (error: unknown): string => (error instanceof Error ? me
 /** The provider the job sends through: the context's, or the log-only sender where a test hands none. */
 const providerOf = (context: JobContext): MessagingProvider => context.messaging ?? new LogOnlyProvider(context.log)
 
+/** Whether the customer a message names allows service messages now; a message that names none (a staff notice) has no one's consent to ask. */
+async function allowsServiceMessages(tx: Tx, companyId: string, customerId: string | null): Promise<boolean> {
+  if (customerId === null) return false
+  const [holder] = await tx.select({ allowed: customer.serviceMessagesAllowed }).from(customer).where(and(eq(customer.companyId, companyId), eq(customer.id, customerId))).limit(1)
+  return holder?.allowed === true
+}
+
 /** Sends one message, recording each step; throws to have pg-boss retry a failed attempt that was not the last. */
 export async function sendMessage(data: SendMessageData, context: JobContext): Promise<SendOutcome> {
   const provider = providerOf(context)
@@ -64,8 +73,7 @@ export async function sendMessage(data: SendMessageData, context: JobContext): P
       .limit(1)
       .for("no key update")
     if (row === undefined) return { kind: "settled" as const }
-    const [holder] = await tx.select({ allowed: customer.serviceMessagesAllowed }).from(customer).where(and(eq(customer.companyId, data.companyId), eq(customer.id, row.customerId))).limit(1)
-    if (needsConsent(row.purpose as MessagePurpose) && holder?.allowed !== true) {
+    if (needsConsent(row.purpose as MessagePurpose) && !(await allowsServiceMessages(tx, data.companyId, row.customerId))) {
       await tx.update(message).set({ status: "withheld", reason: NO_CONSENT }).where(fence())
       return { kind: "withheld" as const }
     }

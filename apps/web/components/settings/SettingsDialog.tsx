@@ -61,6 +61,7 @@ import { CollectionCalendarsSettings } from "@/components/settings/collection-ca
 import { HolidayListsSettings } from "@/components/settings/holiday-lists-settings"
 import { SortingGuideSettings } from "@/components/settings/sorting-guide-settings"
 import { FinanceSettingsOnApi } from "@/components/settings/finance-settings-on-api"
+import { NotificationsSettingsOnApi } from "@/components/settings/notifications-settings-on-api"
 import { PrivacySettingsOnApi } from "@/components/settings/privacy-settings-on-api"
 import { IntegrationsSettingsOnApi } from "@/components/settings/integrations-settings-on-api"
 import { PortalsSettingsOnApi } from "@/components/settings/portals-settings-on-api"
@@ -75,7 +76,7 @@ import { MasterDataSettings } from "@/components/settings/master-data-settings"
 import { useApiConfigured, useApiSession } from "@/components/waste/api-session-store"
 import { profileOf, type AccountProfile } from "@/lib/data/account-profile"
 import { HOLIDAY_LISTS_SETTINGS_PANE_ID, MASTER_DATA_SETTINGS_PANE_ID } from "@/lib/data/business-links"
-import { ASSET_MANAGEMENT_SETTINGS_PANE_ID, FINANCE_ON_API_SETTINGS_PANE_ID, FINANCE_SETTINGS_PANE_ID, PRIVACY_ON_API_SETTINGS_PANE_ID, PRIVACY_SETTINGS_PANE_ID, INTEGRATIONS_ON_API_SETTINGS_PANE_ID, INTEGRATIONS_SETTINGS_PANE_ID, PORTALS_ON_API_SETTINGS_PANE_ID, PORTALS_SETTINGS_PANE_ID, ACCOUNT_DEFAULTS_GROUP, settingsPaneOffered, settingsPaneOpened } from "@/lib/data/settings-panes"
+import { ASSET_MANAGEMENT_SETTINGS_PANE_ID, FINANCE_ON_API_SETTINGS_PANE_ID, NOTIFICATIONS_ON_API_SETTINGS_PANE_ID, FINANCE_SETTINGS_PANE_ID, PRIVACY_ON_API_SETTINGS_PANE_ID, PRIVACY_SETTINGS_PANE_ID, INTEGRATIONS_ON_API_SETTINGS_PANE_ID, INTEGRATIONS_SETTINGS_PANE_ID, PORTALS_ON_API_SETTINGS_PANE_ID, PORTALS_SETTINGS_PANE_ID, ACCOUNT_DEFAULTS_GROUP, settingsPaneOffered, settingsPaneOpened } from "@/lib/data/settings-panes"
 import { SORTING_GUIDE_SETTINGS_PANE_ID } from "@/lib/data/sorting-guide"
 import { MESSAGE_TEMPLATES_SETTINGS_PANE_ID } from "@/lib/data/message-templates"
 import { TICKET_SLA_SETTINGS_PANE_ID } from "@/lib/data/ticket-sla"
@@ -154,7 +155,9 @@ const settingsSections: Array<{
     label: "Personal",
     items: [
       { id: "account", label: "Account & appearance", icon: UserCircle },
+      // The browser's pane in fixture mode; on the Pilot the API's (O16 of #290), the staff e-mails asked for and sent.
       { id: "notifications", label: "Notifications", icon: Bell },
+      { id: NOTIFICATIONS_ON_API_SETTINGS_PANE_ID, label: "Notifications", icon: Bell },
     ],
   },
   {
@@ -1530,6 +1533,11 @@ const visiblePaneDefinitions: Record<string, SettingsPaneDefinition> = {
     description: "The services this deployment calls, which way data goes, and their state.",
     groups: [],
   },
+  [NOTIFICATIONS_ON_API_SETTINGS_PANE_ID]: {
+    title: "Notifications",
+    description: "The e-mails you get when something needs you. Nothing is sent until you ask for it.",
+    groups: [],
+  },
   [PRIVACY_ON_API_SETTINGS_PANE_ID]: {
     title: "Privacy, audit & retention",
     description: "Who changed what across the company, newest first, and the controls the platform enforces.",
@@ -1556,6 +1564,7 @@ function isFullPanelPane(paneId: string): boolean {
     paneId === MESSAGE_TEMPLATES_SETTINGS_PANE_ID ||
     paneId === FINANCE_ON_API_SETTINGS_PANE_ID ||
     paneId === PRIVACY_ON_API_SETTINGS_PANE_ID ||
+    paneId === NOTIFICATIONS_ON_API_SETTINGS_PANE_ID ||
     paneId === INTEGRATIONS_ON_API_SETTINGS_PANE_ID ||
     paneId === PORTALS_ON_API_SETTINGS_PANE_ID ||
     paneId === PICKUP_EXCEPTION_CHARGES_SETTINGS_PANE_ID ||
@@ -1983,6 +1992,8 @@ function SettingsPane({
         <FinanceSettingsOnApi />
       ) : paneId === PRIVACY_ON_API_SETTINGS_PANE_ID ? (
         <PrivacySettingsOnApi />
+      ) : paneId === NOTIFICATIONS_ON_API_SETTINGS_PANE_ID ? (
+        <NotificationsSettingsOnApi />
       ) : paneId === INTEGRATIONS_ON_API_SETTINGS_PANE_ID ? (
         <IntegrationsSettingsOnApi />
       ) : paneId === PORTALS_ON_API_SETTINGS_PANE_ID ? (

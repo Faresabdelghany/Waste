@@ -10,7 +10,7 @@
 // stand, since a channel moved alone changes what the subject must be (the
 // table's check is the backstop). The grant is `configure.templates`, Tickets
 // & communication's module, which the Ticket SLA is configured under too.
-import { MessageTemplate, MessageTemplateCreate, MessageTemplateListQuery, MessageTemplatePatch, type MessageChannel, type MessagePurpose, type MessageTemplateStatus } from "@waste/contracts/messaging"
+import { MessageTemplate, MessageTemplateCreate, MessageTemplateListQuery, MessageTemplatePatch, type MessageChannel, type MessageTemplatePurpose, type MessageTemplateStatus } from "@waste/contracts/messaging"
 import { Page } from "@waste/contracts/pagination"
 import type { Tx } from "@waste/db/client"
 import { messageTemplate } from "@waste/db/schema/messaging"
@@ -55,7 +55,7 @@ const templateOf = (row: Row): MessageTemplate => ({
   id: row.id,
   projectId: row.projectId,
   name: row.name,
-  purpose: row.purpose as MessagePurpose,
+  purpose: row.purpose as MessageTemplatePurpose,
   channel: row.channel as MessageChannel,
   subject: row.subject,
   body: row.body,
