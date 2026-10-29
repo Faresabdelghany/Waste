@@ -27,6 +27,7 @@ import { vehicleAllocation, vehicleAllocationEvent } from "@waste/db/schema/allo
 import { driverAbsence, vehicleUnavailability } from "@waste/db/schema/availability"
 import { container, containerServicePlacement } from "@waste/db/schema/containers"
 import { driverCommand, outboxEvent, pickup, proofOfService, route, session, sessionPosition, unload } from "@waste/db/schema/execution"
+import { maintenanceOrder, vehicleMaintenancePlan } from "@waste/db/schema/maintenance"
 import { preTripCheck, preTripChecklistItem, vehicleDefect } from "@waste/db/schema/pre-trip"
 import {
   accountingAccount,
@@ -433,6 +434,8 @@ export async function dropTenant(pool: Database, companyId: string, owner?: Data
     await tx.delete(routeSchemeSeason).where(eq(routeSchemeSeason.companyId, companyId))
     await tx.delete(routeScheme).where(eq(routeScheme.companyId, companyId))
     await tx.delete(driverAbsence).where(eq(driverAbsence.companyId, companyId))
+    await tx.delete(maintenanceOrder).where(eq(maintenanceOrder.companyId, companyId))
+    await tx.delete(vehicleMaintenancePlan).where(eq(vehicleMaintenancePlan.companyId, companyId))
     await tx.delete(vehicleUnavailability).where(eq(vehicleUnavailability.companyId, companyId))
     await tx.delete(vehicleAllocation).where(eq(vehicleAllocation.companyId, companyId))
     await tx.delete(vehicleCompartmentFraction).where(eq(vehicleCompartmentFraction.companyId, companyId))
