@@ -54,6 +54,7 @@ import { collectionCalendarRoutes } from "./routes/collection-calendars"
 import { collectionGroupRoutes } from "./routes/collection-groups"
 import { companyRoutes } from "./routes/company"
 import { containerRoutes } from "./routes/containers"
+import { customerContactRoutes } from "./routes/customer-contacts"
 import { customerRoutes } from "./routes/customers"
 import { depotRoutes } from "./routes/depots"
 import { applicationRoutes } from "./routes/applications"
@@ -262,6 +263,7 @@ export function createApp({
   app.route("/", wasteFractionEmissionFactorRoutes(guard))
   app.route("/", productRoutes(guard))
   app.route("/", customerRoutes(guard))
+  app.route("/", customerContactRoutes(guard))
   // The address lookup calls the register (#291 C13), so, like the preview, its guard ends the principal's transaction; a property's write reads its `addressId` from the register before its guard opens the request's.
   const addressOptions = { register: addressRegister, log: log ?? console.error }
   app.route("/", addressRoutes(identify({ pool, verifier }), addressOptions))
