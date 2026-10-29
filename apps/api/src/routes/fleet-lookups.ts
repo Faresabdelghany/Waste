@@ -62,7 +62,7 @@ export type VehicleRow = {
 }
 
 /** How a person names a vehicle: the yard's callsign (`WH-24`) where it has one, the plate otherwise. */
-export const vehicleLabel = (row: Pick<VehicleRow, "registration" | "callsign">): string => row.callsign ?? row.registration
+export { vehicleLabel } from "@waste/db/commands/fleet-fit"
 
 /** The columns a `VehicleRow` is read from. */
 export const vehicleColumns = {

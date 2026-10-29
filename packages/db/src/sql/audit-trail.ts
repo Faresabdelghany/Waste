@@ -77,6 +77,7 @@ import { bulkyBooking, bulkyBookingItem, bulkySchedule } from "../schema/bulky"
 import { collectionGroup, collectionGroupContainer, collectionGroupContainerType, collectionGroupFraction, routeScheme, routeSchemeSeason } from "../schema/route-schemes"
 import { plan, planLeg, planStop, routingQuota } from "../schema/routing"
 import { sortingGuideItem } from "../schema/sorting-guide"
+import { fillReading, sensor, sensorPairing } from "../schema/sensors"
 import { decommissionReason, stockMinimum, stockMovement } from "../schema/stock"
 import { wasteFractionEmissionFactor } from "../schema/sustainability"
 import { accessCredential, siteVisit, siteVisitFraction, visitRule, visitRuleFreeFraction, visitRuleStep } from "../schema/site-visits"
@@ -286,7 +287,13 @@ export const CONTACT_PERSONS_AUDITED: readonly Audited[] = [{ table: customerCon
 /** Messaging (#291 C15): a project's message templates, the office's configuration under Tickets & communication's module; the delivery log is exempt. */
 export const MESSAGING_AUDITED: readonly Audited[] = [{ table: messageTemplate, module: "configure.templates" }]
 
-export const AUDITED: readonly Audited[] = [...AUDITED_AT_0019, ...SUBSCRIPTION_PAUSE_AUDITED, ...TICKET_SLA_AUDITED, ...DROP_OFF_AUDITED, ...ABSENCES_AUDITED, ...TICKET_CHARGE_AUDITED, ...PICKUP_EXCEPTIONS_AUDITED, ...EMISSIONS_AUDITED, ...APPLICATIONS_AUDITED, ...SUSTAINABILITY_AUDITED, ...CONTAINER_HIRE_AUDITED, ...ACCOUNTING_AUDITED, ...BULKY_AUDITED, ...SITE_VISITS_AUDITED, ...SEASONS_AUDITED, ...SERVICE_PROVIDER_ACTIVITIES_AUDITED, ...STOCK_MINIMUMS_AUDITED, ...DECOMMISSION_REASONS_AUDITED, ...TEAMS_AUDITED, ...STOP_SET_PROPOSALS_AUDITED, ...WASTE_FRACTION_PROPOSALS_AUDITED, ...CONTACT_PERSONS_AUDITED, ...MESSAGING_AUDITED, ...PRE_TRIP_AUDITED, ...WEIGHBRIDGE_AUDITED]
+/** The fill-level Sensors (O26 of #290, row 9.10): the devices and their pairings with containers, audited under the sensor; the readings are a ledger. */
+export const SENSORS_AUDITED: readonly Audited[] = [
+  { table: sensor, module: "resources.sensors" },
+  { table: sensorPairing, module: "resources.sensors", parent: setOf(sensor, sensorPairing.sensorId) },
+]
+
+export const AUDITED: readonly Audited[] = [...AUDITED_AT_0019, ...SUBSCRIPTION_PAUSE_AUDITED, ...TICKET_SLA_AUDITED, ...DROP_OFF_AUDITED, ...ABSENCES_AUDITED, ...TICKET_CHARGE_AUDITED, ...PICKUP_EXCEPTIONS_AUDITED, ...EMISSIONS_AUDITED, ...APPLICATIONS_AUDITED, ...SUSTAINABILITY_AUDITED, ...CONTAINER_HIRE_AUDITED, ...ACCOUNTING_AUDITED, ...BULKY_AUDITED, ...SITE_VISITS_AUDITED, ...SEASONS_AUDITED, ...SERVICE_PROVIDER_ACTIVITIES_AUDITED, ...STOCK_MINIMUMS_AUDITED, ...DECOMMISSION_REASONS_AUDITED, ...TEAMS_AUDITED, ...STOP_SET_PROPOSALS_AUDITED, ...WASTE_FRACTION_PROPOSALS_AUDITED, ...CONTACT_PERSONS_AUDITED, ...MESSAGING_AUDITED, ...PRE_TRIP_AUDITED, ...SENSORS_AUDITED, ...WEIGHBRIDGE_AUDITED]
 
 /** The audited tables by name, for a test that reads a migrated database's triggers. */
 export const AUDITED_TABLE_NAMES: ReadonlySet<string> = new Set(AUDITED.map((entry) => getTableName(entry.table)))
@@ -316,6 +323,7 @@ export const EXEMPT: readonly Exempt[] = [
   { table: importRun, why: "an import's own log, as a generation run is: who ran which file, and its counts, moved by the batches that wrote the rows the audit log records under the import's reason" },
   { table: importRunRow, why: "a ledger: each row of an import's outcome, appended once by the batch that wrote it and never rewritten" },
   { table: message, why: "the delivery log (#291 C15): written once by the office's request with what was rendered, then moved by the worker's sends; its status, attempts and stamps are its history" },
+  { table: fillReading, why: "a ledger of what a fill-level sensor sent, appended by the ingest in bulk; a trail of it would repeat every reading" },
 ]
 
 /** The trigger function, once (migration 0019). */

@@ -1,5 +1,5 @@
 {
-  "id": "cb6cdefc-c245-4ad9-83ea-23dd707cfec5",
+  "id": "9f7facba-3595-4617-be9f-eae8c8a9f2cc",
   "prevId": "ee951be3-e746-4fe3-8c86-ad0ae2c06b6e",
   "version": "7",
   "dialect": "postgresql",
@@ -290,6 +290,24 @@
           "type": "text",
           "primaryKey": false,
           "notNull": false
+        },
+        "brand_color": {
+          "name": "brand_color",
+          "type": "text",
+          "primaryKey": false,
+          "notNull": false
+        },
+        "logo_url": {
+          "name": "logo_url",
+          "type": "text",
+          "primaryKey": false,
+          "notNull": false
+        },
+        "accessibility_statement_url": {
+          "name": "accessibility_statement_url",
+          "type": "text",
+          "primaryKey": false,
+          "notNull": false
         }
       },
       "indexes": {},
@@ -376,6 +394,18 @@
         "project_gps_purpose_one_of": {
           "name": "project_gps_purpose_one_of",
           "value": "\"wms\".\"project\".\"gps_purpose\" in ('dispatch', 'dispatch-and-proof')"
+        },
+        "project_brand_color_shape": {
+          "name": "project_brand_color_shape",
+          "value": "\"wms\".\"project\".\"brand_color\" ~ '^#[0-9a-fA-F]{6}$'"
+        },
+        "project_logo_url_shape": {
+          "name": "project_logo_url_shape",
+          "value": "\"wms\".\"project\".\"logo_url\" ~ '^https://[^\\s/?#]+[^\\s]*$' and char_length(\"wms\".\"project\".\"logo_url\") <= 2048"
+        },
+        "project_accessibility_statement_url_shape": {
+          "name": "project_accessibility_statement_url_shape",
+          "value": "\"wms\".\"project\".\"accessibility_statement_url\" ~ '^https://[^\\s/?#]+[^\\s]*$' and char_length(\"wms\".\"project\".\"accessibility_statement_url\") <= 2048"
         }
       },
       "isRLSEnabled": false
@@ -32783,437 +32813,6 @@
         "vehicle_defect_resolution_shape": {
           "name": "vehicle_defect_resolution_shape",
           "value": "(\"wms\".\"vehicle_defect\".\"status\" = 'resolved') = (\"wms\".\"vehicle_defect\".\"resolved_at\" is not null)"
-        }
-      },
-      "isRLSEnabled": false
-    },
-    "wms.weighbridge_ticket": {
-      "name": "weighbridge_ticket",
-      "schema": "wms",
-      "columns": {
-        "id": {
-          "name": "id",
-          "type": "uuid",
-          "primaryKey": true,
-          "notNull": true,
-          "default": "wms.uuidv7()"
-        },
-        "company_id": {
-          "name": "company_id",
-          "type": "uuid",
-          "primaryKey": false,
-          "notNull": true
-        },
-        "project_id": {
-          "name": "project_id",
-          "type": "uuid",
-          "primaryKey": false,
-          "notNull": false
-        },
-        "created_at": {
-          "name": "created_at",
-          "type": "timestamp with time zone",
-          "primaryKey": false,
-          "notNull": true,
-          "default": "now()"
-        },
-        "updated_at": {
-          "name": "updated_at",
-          "type": "timestamp with time zone",
-          "primaryKey": false,
-          "notNull": true,
-          "default": "now()"
-        },
-        "unloading_station_id": {
-          "name": "unloading_station_id",
-          "type": "uuid",
-          "primaryKey": false,
-          "notNull": true
-        },
-        "ticket_number": {
-          "name": "ticket_number",
-          "type": "text",
-          "primaryKey": false,
-          "notNull": true
-        },
-        "vehicle_registration": {
-          "name": "vehicle_registration",
-          "type": "text",
-          "primaryKey": false,
-          "notNull": true
-        },
-        "vehicle_id": {
-          "name": "vehicle_id",
-          "type": "uuid",
-          "primaryKey": false,
-          "notNull": false
-        },
-        "weighed_at": {
-          "name": "weighed_at",
-          "type": "timestamp with time zone",
-          "primaryKey": false,
-          "notNull": true
-        },
-        "gross_kg": {
-          "name": "gross_kg",
-          "type": "integer",
-          "primaryKey": false,
-          "notNull": false
-        },
-        "tare_kg": {
-          "name": "tare_kg",
-          "type": "integer",
-          "primaryKey": false,
-          "notNull": false
-        },
-        "net_kg": {
-          "name": "net_kg",
-          "type": "integer",
-          "primaryKey": false,
-          "notNull": true
-        },
-        "fraction_key": {
-          "name": "fraction_key",
-          "type": "text",
-          "primaryKey": false,
-          "notNull": false
-        },
-        "waste_code": {
-          "name": "waste_code",
-          "type": "text",
-          "primaryKey": false,
-          "notNull": false
-        },
-        "status": {
-          "name": "status",
-          "type": "text",
-          "primaryKey": false,
-          "notNull": true
-        },
-        "unmatched_reason": {
-          "name": "unmatched_reason",
-          "type": "text",
-          "primaryKey": false,
-          "notNull": false
-        },
-        "route_id": {
-          "name": "route_id",
-          "type": "uuid",
-          "primaryKey": false,
-          "notNull": false
-        },
-        "unload_id": {
-          "name": "unload_id",
-          "type": "uuid",
-          "primaryKey": false,
-          "notNull": false
-        },
-        "dismissed_note": {
-          "name": "dismissed_note",
-          "type": "text",
-          "primaryKey": false,
-          "notNull": false
-        },
-        "received_by": {
-          "name": "received_by",
-          "type": "uuid",
-          "primaryKey": false,
-          "notNull": true
-        }
-      },
-      "indexes": {
-        "weighbridge_ticket_project_id_idx": {
-          "name": "weighbridge_ticket_project_id_idx",
-          "columns": [
-            {
-              "expression": "company_id",
-              "isExpression": false,
-              "asc": true,
-              "nulls": "last"
-            },
-            {
-              "expression": "project_id",
-              "isExpression": false,
-              "asc": true,
-              "nulls": "last"
-            }
-          ],
-          "isUnique": false,
-          "concurrently": false,
-          "method": "btree",
-          "with": {}
-        },
-        "weighbridge_ticket_vehicle_id_idx": {
-          "name": "weighbridge_ticket_vehicle_id_idx",
-          "columns": [
-            {
-              "expression": "company_id",
-              "isExpression": false,
-              "asc": true,
-              "nulls": "last"
-            },
-            {
-              "expression": "vehicle_id",
-              "isExpression": false,
-              "asc": true,
-              "nulls": "last"
-            }
-          ],
-          "isUnique": false,
-          "concurrently": false,
-          "method": "btree",
-          "with": {}
-        },
-        "weighbridge_ticket_route_id_idx": {
-          "name": "weighbridge_ticket_route_id_idx",
-          "columns": [
-            {
-              "expression": "company_id",
-              "isExpression": false,
-              "asc": true,
-              "nulls": "last"
-            },
-            {
-              "expression": "route_id",
-              "isExpression": false,
-              "asc": true,
-              "nulls": "last"
-            }
-          ],
-          "isUnique": false,
-          "concurrently": false,
-          "method": "btree",
-          "with": {}
-        },
-        "weighbridge_ticket_unload_id_idx": {
-          "name": "weighbridge_ticket_unload_id_idx",
-          "columns": [
-            {
-              "expression": "company_id",
-              "isExpression": false,
-              "asc": true,
-              "nulls": "last"
-            },
-            {
-              "expression": "unload_id",
-              "isExpression": false,
-              "asc": true,
-              "nulls": "last"
-            }
-          ],
-          "isUnique": false,
-          "concurrently": false,
-          "method": "btree",
-          "with": {}
-        },
-        "weighbridge_ticket_received_by_idx": {
-          "name": "weighbridge_ticket_received_by_idx",
-          "columns": [
-            {
-              "expression": "company_id",
-              "isExpression": false,
-              "asc": true,
-              "nulls": "last"
-            },
-            {
-              "expression": "received_by",
-              "isExpression": false,
-              "asc": true,
-              "nulls": "last"
-            }
-          ],
-          "isUnique": false,
-          "concurrently": false,
-          "method": "btree",
-          "with": {}
-        },
-        "weighbridge_ticket_status_idx": {
-          "name": "weighbridge_ticket_status_idx",
-          "columns": [
-            {
-              "expression": "company_id",
-              "isExpression": false,
-              "asc": true,
-              "nulls": "last"
-            },
-            {
-              "expression": "status",
-              "isExpression": false,
-              "asc": true,
-              "nulls": "last"
-            },
-            {
-              "expression": "id",
-              "isExpression": false,
-              "asc": true,
-              "nulls": "last"
-            }
-          ],
-          "isUnique": false,
-          "concurrently": false,
-          "method": "btree",
-          "with": {}
-        }
-      },
-      "foreignKeys": {
-        "weighbridge_ticket_company_id_fk": {
-          "name": "weighbridge_ticket_company_id_fk",
-          "tableFrom": "weighbridge_ticket",
-          "tableTo": "company",
-          "schemaTo": "wms",
-          "columnsFrom": [
-            "company_id"
-          ],
-          "columnsTo": [
-            "id"
-          ],
-          "onDelete": "no action",
-          "onUpdate": "no action"
-        },
-        "weighbridge_ticket_project_id_fk": {
-          "name": "weighbridge_ticket_project_id_fk",
-          "tableFrom": "weighbridge_ticket",
-          "tableTo": "project",
-          "schemaTo": "wms",
-          "columnsFrom": [
-            "company_id",
-            "project_id"
-          ],
-          "columnsTo": [
-            "company_id",
-            "id"
-          ],
-          "onDelete": "no action",
-          "onUpdate": "no action"
-        },
-        "weighbridge_ticket_unloading_station_id_fk": {
-          "name": "weighbridge_ticket_unloading_station_id_fk",
-          "tableFrom": "weighbridge_ticket",
-          "tableTo": "unloading_station",
-          "schemaTo": "wms",
-          "columnsFrom": [
-            "company_id",
-            "unloading_station_id"
-          ],
-          "columnsTo": [
-            "company_id",
-            "id"
-          ],
-          "onDelete": "no action",
-          "onUpdate": "no action"
-        },
-        "weighbridge_ticket_vehicle_id_fk": {
-          "name": "weighbridge_ticket_vehicle_id_fk",
-          "tableFrom": "weighbridge_ticket",
-          "tableTo": "vehicle",
-          "schemaTo": "wms",
-          "columnsFrom": [
-            "company_id",
-            "project_id",
-            "vehicle_id"
-          ],
-          "columnsTo": [
-            "company_id",
-            "project_id",
-            "id"
-          ],
-          "onDelete": "no action",
-          "onUpdate": "no action"
-        },
-        "weighbridge_ticket_route_id_fk": {
-          "name": "weighbridge_ticket_route_id_fk",
-          "tableFrom": "weighbridge_ticket",
-          "tableTo": "route",
-          "schemaTo": "wms",
-          "columnsFrom": [
-            "company_id",
-            "project_id",
-            "route_id"
-          ],
-          "columnsTo": [
-            "company_id",
-            "project_id",
-            "id"
-          ],
-          "onDelete": "no action",
-          "onUpdate": "no action"
-        },
-        "weighbridge_ticket_unload_id_fk": {
-          "name": "weighbridge_ticket_unload_id_fk",
-          "tableFrom": "weighbridge_ticket",
-          "tableTo": "unload",
-          "schemaTo": "wms",
-          "columnsFrom": [
-            "company_id",
-            "project_id",
-            "unload_id"
-          ],
-          "columnsTo": [
-            "company_id",
-            "project_id",
-            "id"
-          ],
-          "onDelete": "no action",
-          "onUpdate": "no action"
-        },
-        "weighbridge_ticket_received_by_fk": {
-          "name": "weighbridge_ticket_received_by_fk",
-          "tableFrom": "weighbridge_ticket",
-          "tableTo": "user_account",
-          "schemaTo": "wms",
-          "columnsFrom": [
-            "company_id",
-            "received_by"
-          ],
-          "columnsTo": [
-            "company_id",
-            "id"
-          ],
-          "onDelete": "no action",
-          "onUpdate": "no action"
-        }
-      },
-      "compositePrimaryKeys": {},
-      "uniqueConstraints": {
-        "weighbridge_ticket_unloading_station_id_ticket_number_key": {
-          "name": "weighbridge_ticket_unloading_station_id_ticket_number_key",
-          "nullsNotDistinct": false,
-          "columns": [
-            "company_id",
-            "unloading_station_id",
-            "ticket_number"
-          ]
-        }
-      },
-      "policies": {},
-      "checkConstraints": {
-        "weighbridge_ticket_status_one_of": {
-          "name": "weighbridge_ticket_status_one_of",
-          "value": "\"wms\".\"weighbridge_ticket\".\"status\" in ('matched', 'unmatched', 'dismissed')"
-        },
-        "weighbridge_ticket_unmatched_reason_one_of": {
-          "name": "weighbridge_ticket_unmatched_reason_one_of",
-          "value": "\"wms\".\"weighbridge_ticket\".\"unmatched_reason\" in ('unknown-vehicle', 'no-route', 'several-routes', 'unknown-fraction', 'fraction-not-accepted')"
-        },
-        "weighbridge_ticket_gross_kg_positive": {
-          "name": "weighbridge_ticket_gross_kg_positive",
-          "value": "\"wms\".\"weighbridge_ticket\".\"gross_kg\" > 0"
-        },
-        "weighbridge_ticket_tare_kg_positive": {
-          "name": "weighbridge_ticket_tare_kg_positive",
-          "value": "\"wms\".\"weighbridge_ticket\".\"tare_kg\" > 0"
-        },
-        "weighbridge_ticket_net_kg_positive": {
-          "name": "weighbridge_ticket_net_kg_positive",
-          "value": "\"wms\".\"weighbridge_ticket\".\"net_kg\" > 0"
-        },
-        "weighbridge_ticket_weights_shape": {
-          "name": "weighbridge_ticket_weights_shape",
-          "value": "(\"wms\".\"weighbridge_ticket\".\"gross_kg\" is null) = (\"wms\".\"weighbridge_ticket\".\"tare_kg\" is null) and (\"wms\".\"weighbridge_ticket\".\"gross_kg\" is null or \"wms\".\"weighbridge_ticket\".\"net_kg\" = \"wms\".\"weighbridge_ticket\".\"gross_kg\" - \"wms\".\"weighbridge_ticket\".\"tare_kg\")"
-        },
-        "weighbridge_ticket_status_shape": {
-          "name": "weighbridge_ticket_status_shape",
-          "value": "(\"wms\".\"weighbridge_ticket\".\"status\" = 'matched') = (\"wms\".\"weighbridge_ticket\".\"route_id\" is not null and \"wms\".\"weighbridge_ticket\".\"unload_id\" is not null and \"wms\".\"weighbridge_ticket\".\"project_id\" is not null) and (\"wms\".\"weighbridge_ticket\".\"status\" = 'dismissed') = (\"wms\".\"weighbridge_ticket\".\"dismissed_note\" is not null) and (\"wms\".\"weighbridge_ticket\".\"status\" <> 'unmatched' or \"wms\".\"weighbridge_ticket\".\"unmatched_reason\" is not null)"
         }
       },
       "isRLSEnabled": false

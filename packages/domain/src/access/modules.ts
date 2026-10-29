@@ -54,6 +54,8 @@ export const MODULE_KEYS = [
   "resources.warehouses",
   "resources.depots",
   "resources.drop-off-points",
+  // The fill-level Sensors, their pairings with containers and the readings they send (O26 of #290).
+  "resources.sensors",
   // Service providers
   "service-providers.service-providers",
   "service-providers.service-areas",

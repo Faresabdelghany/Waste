@@ -558,7 +558,35 @@
     {
       "idx": 79,
       "version": "7",
-      "when": 1793250392013,
+      "when": 1793247592226,
+      "tag": "0079_project_branding",
+      "breakpoints": true
+    },
+    {
+      "idx": 80,
+      "version": "7",
+      "when": 1793251427635,
+      "tag": "0080_dated_parties",
+      "breakpoints": true
+    },
+    {
+      "idx": 81,
+      "version": "7",
+      "when": 1793262692450,
+      "tag": "0081_fill_level_sensors",
+      "breakpoints": true
+    },
+    {
+      "idx": 82,
+      "version": "7",
+      "when": 1793263502443,
+      "tag": "0082_fill_driven_emptying",
+      "breakpoints": true
+    },
+    {
+      "idx": 83,
+      "version": "7",
+      "when": 1793268055021,
       "tag": "0091_weighbridge_tickets",
       "breakpoints": true
     }

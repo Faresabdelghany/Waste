@@ -2,6 +2,7 @@
 
 import {
   createContext,
+  Suspense,
   useContext,
   useEffect,
   useMemo,
@@ -9,8 +10,10 @@ import {
   useSyncExternalStore,
   type ReactNode,
 } from "react"
+import { usePathname } from "next/navigation"
 import { useTheme } from "next-themes"
 
+import { isPublicPath } from "@/lib/api/landing"
 import { createExternalStore, type ExternalStore } from "@/lib/external-store"
 import {
   defaultCustomTheme,
@@ -20,6 +23,7 @@ import {
   isDarkThemeColor,
   migrateThemeSelection,
   normalizeCustomTheme,
+  PUBLIC_PAGE_THEME,
   type AppThemeSelection,
   type CustomThemePalette,
 } from "@/lib/app-themes"
@@ -190,12 +194,20 @@ function createAppThemeStore(): AppThemeStoreHandle {
 export function AppThemeProvider({ children }: { children: ReactNode }) {
   const { setTheme: setBaseTheme } = useTheme()
   const [store] = useState(createAppThemeStore)
+  // A public page (#506) takes PUBLIC_PAGE_THEME whatever the browser holds, and writes and follows nothing stored.
+  // Seeded from the address so the first effect is already right; PublicPathWatch follows client navigation.
+  const [publicPage, setPublicPage] = useState(() => typeof window !== "undefined" && isPublicPath(window.location.pathname))
 
   useEffect(() => {
     store.bindSetBaseTheme(setBaseTheme)
   }, [setBaseTheme, store])
 
   useEffect(() => {
+    if (publicPage) {
+      store.set({ selection: PUBLIC_PAGE_THEME, customPalette: defaultCustomTheme, mounted: true })
+      applyThemeSelection(PUBLIC_PAGE_THEME, defaultCustomTheme, setBaseTheme)
+      return
+    }
     const storedPalette = readStoredPalette()
     const storedSelection = readStoredSelection()
 
@@ -213,9 +225,10 @@ export function AppThemeProvider({ children }: { children: ReactNode }) {
     } catch {
       // The migrated selection still applies for the current session.
     }
-  }, [setBaseTheme, store])
+  }, [publicPage, setBaseTheme, store])
 
   useEffect(() => {
+    if (publicPage) return
     const syncStoredTheme = () => {
       const storedPalette = readStoredPalette()
       const storedSelection = readStoredSelection()
@@ -229,13 +242,27 @@ export function AppThemeProvider({ children }: { children: ReactNode }) {
 
     window.addEventListener("storage", syncStoredTheme)
     return () => window.removeEventListener("storage", syncStoredTheme)
-  }, [setBaseTheme, store])
+  }, [publicPage, setBaseTheme, store])
 
   return (
     <AppThemeContext.Provider value={store}>
+      <Suspense fallback={null}>
+        <PublicPathWatch onChange={setPublicPage} />
+      </Suspense>
       {children}
     </AppThemeContext.Provider>
   )
+}
+
+// The pathname is request data: read in the root layout outside a Suspense
+// boundary it stops every dynamic route from prerendering, so it is read here
+// alone, and renders nothing.
+function PublicPathWatch({ onChange }: { onChange: (publicPage: boolean) => void }) {
+  const pathname = usePathname()
+  useEffect(() => {
+    onChange(isPublicPath(pathname ?? ""))
+  }, [onChange, pathname])
+  return null
 }
 
 export function useAppTheme(): AppThemeContextValue {

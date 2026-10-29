@@ -5,9 +5,10 @@
 // With the adapter off — no API configured — and with nobody signed in it
 // shows sign-in and never a fixture or demo stop (the gate sends a signed-out
 // visitor to /login before this renders on the Pilot); a login the door does
-// not take shows the door's sentence; a first read that found no server shows
-// only the count of what waits and Retry, since there is no display cache to
-// show stale stops from. Once the start screen has been read, the last read
+// not take shows the door's sentence; a first read that found no server, with
+// nothing kept on the phone, shows only the count of what waits and Retry,
+// and with the display cache's last answer (O25 of #290) shows that, marked
+// as the server's answer and when. Once the start screen has been read, the last read
 // stays on screen and the banner says when the server is out of reach or a
 // batch was refused whole — the second beside Discard waiting actions, the
 // only way a person empties the queue.
@@ -25,6 +26,7 @@ import { unreachableBanner } from "@/lib/driver/route-view"
 
 export function DriverFrame({ children }: { children: ReactNode }) {
   const { apiConfigured, session, signOut } = useApiSession()
+  const app = useDriverApp()
   const state = useDriverAppState()
   const signedIn = apiConfigured && session !== null
 
@@ -40,7 +42,7 @@ export function DriverFrame({ children }: { children: ReactNode }) {
             </div>
           </div>
           {signedIn && (
-            <Button variant="ghost" size="sm" onClick={() => void signOut()}>
+            <Button variant="ghost" size="sm" onClick={() => void app.forgetReads().then(signOut)}>
               <SignOut aria-hidden />
               Sign out
             </Button>
