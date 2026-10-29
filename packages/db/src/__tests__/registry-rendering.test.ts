@@ -49,6 +49,11 @@
 // `CHANGED_IN_0050`, first of both chains, maps today's CREATE TABLEs onto
 // 0043's and 0004's, and workload-rendering.test.ts pins the statements.
 //
+// The hazardous flag's migration (O18 of #290) gave `waste_fraction` its
+// `hazardous` and the check over a starred code: `CHANGED_FOR_HAZARDOUS`,
+// first of the fraction's chain, maps today's CREATE TABLE onto 0050's, and
+// fraction-hazardous-rendering.test.ts pins the statements.
+//
 // Migration 0044 (M14 of #293) gave `product` the `day` unit and a hire's free
 // days with their shape: `CHANGED_IN_0010` maps the product as drizzle-kit
 // writes it as of 0044 onto 0004's, and container-hire-rendering.test.ts pins
@@ -307,20 +312,22 @@ const CHANGED_IN_0022 = new Map([
   [pointTable(true), pointTable(false)],
 ])
 
-/** waste_fraction as drizzle-kit wrote it as of 0004; as of 0029, with the waste code and its shape check; as of 0043, with the treatment and its check; and as it writes it since 0050, with the density and its range. */
-const fractionTable = (asOf: "0004" | "0029" | "0043" | "0050"): string =>
+/** waste_fraction as drizzle-kit wrote it as of 0004; as of 0029, with the waste code and its shape check; as of 0043, with the treatment and its check; as of 0050, with the density and its range; and as it writes it since the hazardous flag's migration, with the flag and its check. */
+const fractionTable = (asOf: "0004" | "0029" | "0043" | "0050" | "hazardous"): string =>
   createTable("waste_fraction", "tenant", [
     '"key" text NOT NULL',
     '"name" text NOT NULL',
     ...(asOf >= "0029" ? ['"waste_code" text'] : []),
     ...(asOf >= "0043" ? ['"treatment" text'] : []),
     ...(asOf >= "0050" ? ['"density_kg_per_cubic_metre" integer'] : []),
+    ...(asOf === "hazardous" ? ['"hazardous" boolean DEFAULT false NOT NULL'] : []),
     uniqueKey("waste_fraction_key_key", "company_id", "key"),
     uniqueKey("waste_fraction_name_key", "company_id", "name"),
     uniqueKey("waste_fraction_tenant_key", "company_id", "id"),
     lowercaseCheck("waste_fraction", "key"),
     ...(asOf >= "0029" ? [`CONSTRAINT "waste_fraction_waste_code_shape" CHECK (${ref("waste_fraction", "waste_code")} ~ '${WASTE_CODE_PATTERN}')`] : []),
     ...(asOf >= "0043" ? [oneOfCheck("waste_fraction", "treatment", "reuse", "recycling", "energy-recovery", "disposal")] : []),
+    ...(asOf === "hazardous" ? [`CONSTRAINT "waste_fraction_hazardous_shape" CHECK (${ref("waste_fraction", "hazardous")} or ${ref("waste_fraction", "waste_code")} is null or ${ref("waste_fraction", "waste_code")} not like '%*')`] : []),
     ...(asOf >= "0050" ? [`CONSTRAINT "waste_fraction_density_kg_per_cubic_metre_range" CHECK (${ref("waste_fraction", "density_kg_per_cubic_metre")} between 1 and 2000)`] : []),
   ])
 
@@ -336,6 +343,9 @@ const containerTypeTable = (asOf: "0004" | "0050"): string =>
     ...(asOf >= "0050" ? [`CONSTRAINT "container_type_service_seconds_range" CHECK (${ref("container_type", "service_seconds")} between 1 and 3600)`] : []),
   ])
 
+/** What the hazardous flag's migration changed: the fraction's CREATE TABLE as drizzle-kit generates it now onto what it generated as of 0050. Applied first. */
+const CHANGED_FOR_HAZARDOUS = new Map([[fractionTable("hazardous"), fractionTable("0050")]])
+
 /** What 0050 changed: the fraction's and the container type's CREATE TABLEs as drizzle-kit generates them now onto what they were before it. Applied first, one file at a time. */
 const CHANGED_IN_0050 = new Map([
   [fractionTable("0050"), fractionTable("0043")],
@@ -349,7 +359,7 @@ const CHANGED_IN_0043 = new Map([[fractionTable("0043"), fractionTable("0029")]]
 const CHANGED_IN_0029 = new Map([[fractionTable("0029"), fractionTable("0004")]])
 
 const expected = [
-  fractionTable("0050"),
+  fractionTable("hazardous"),
   containerTypeTable("0050"),
   createTable("service_frequency", "project", [
     '"name" text NOT NULL',
@@ -519,7 +529,7 @@ describe("the Registry tables as drizzle-kit writes them", () => {
   const generatedHead = async (): Promise<string[]> => [
     ...(await statementsFor(tables))
       .filter((statement) => !ADDED_IN_0010.includes(statement))
-      .map((statement) => CHANGED_IN_0062.get(statement) ?? statement)
+      .map((statement) => CHANGED_FOR_HAZARDOUS.get(statement) ?? CHANGED_IN_0062.get(statement) ?? statement)
       .map((statement) => CHANGED_IN_0056.get(statement) ?? statement)
       .map((statement) => CHANGED_IN_0054.get(statement) ?? statement)
       .map((statement) => CHANGED_IN_0050.get(statement) ?? statement)
@@ -540,7 +550,8 @@ describe("the Registry tables as drizzle-kit writes them", () => {
     for (const statement of CHANGED_IN_0056.keys()) assert.ok(today.includes(statement) || [...CHANGED_IN_0062.values()].includes(statement), statement.split("\n")[0])
     for (const statement of CHANGED_IN_0010.keys()) assert.ok([...CHANGED_IN_0054.values(), ...CHANGED_IN_0056.values()].includes(statement), statement.split("\n")[0])
     for (const statement of CHANGED_IN_0022.keys()) assert.ok(today.includes(statement) || [...CHANGED_IN_0056.values()].includes(statement), statement.split("\n")[0])
-    for (const statement of CHANGED_IN_0050.keys()) assert.ok(today.includes(statement), statement.split("\n")[0])
+    for (const statement of CHANGED_FOR_HAZARDOUS.keys()) assert.ok(today.includes(statement), statement.split("\n")[0])
+    for (const statement of CHANGED_IN_0050.keys()) assert.ok(today.includes(statement) || [...CHANGED_FOR_HAZARDOUS.values()].includes(statement), statement.split("\n")[0])
     for (const statement of CHANGED_IN_0043.keys()) assert.ok([...CHANGED_IN_0050.values()].includes(statement), statement.split("\n")[0])
     for (const statement of CHANGED_IN_0029.keys()) assert.ok([...CHANGED_IN_0043.values()].includes(statement), statement.split("\n")[0])
     for (const statement of CHANGED_IN_0037.keys()) assert.ok(today.includes(statement), statement.split("\n")[0])

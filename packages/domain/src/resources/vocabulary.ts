@@ -25,6 +25,8 @@
 // `DECOMMISSION_REASON_STATUSES` (O30 of #290) is whether a reason the office
 // keeps for scrapping a container is still offered; the reasons themselves
 // are the company's rows, not a list here (resources/decommission-reasons.ts).
+// `VEHICLE_DEFECT_STATUSES` (O13 of #290) is where a defect a pre-trip check
+// found stands (resources/pre-trip.ts).
 // `SENSOR_NETWORKS` and `SENSOR_STATUSES` (O26 of #290, row 9.10) are what a
 // fill-level Sensor reports over and whether it still reports: the three
 // networks the prototype offers, and a sensor retired once it is taken off
@@ -87,6 +89,8 @@ export const SENSOR_STATUSES = ["active", "retired"] as const
 export const ENERGY_UNITS = ["litre", "kg", "kwh"] as const
 /** Why a route's emissions are not measured, in the order they are judged: no active Plan, a Plan not yet measured, no vehicle planned, a vehicle with no fuel, no consumption for its type and fuel, no factor in force for its fuel. */
 export const EMISSION_GAPS = ["no-plan", "plan-unmeasured", "no-vehicle", "no-fuel", "no-consumption", "no-factor"] as const
+/** Where a Vehicle Defect a pre-trip check found stands (O13 of #290): open until the office marks it mended. */
+export const VEHICLE_DEFECT_STATUSES = ["open", "resolved"] as const
 
 /**
  * The places a container stands in while in stock — a warehouse, or
@@ -126,6 +130,7 @@ export type SensorNetwork = (typeof SENSOR_NETWORKS)[number]
 export type SensorStatus = (typeof SENSOR_STATUSES)[number]
 export type EnergyUnit = (typeof ENERGY_UNITS)[number]
 export type EmissionGap = (typeof EMISSION_GAPS)[number]
+export type VehicleDefectStatus = (typeof VEHICLE_DEFECT_STATUSES)[number]
 
 /** Every list of this module by its name, for a test that walks them and for a reader looking for the whole vocabulary at once. */
 export const RESOURCES_VOCABULARIES = {
@@ -155,4 +160,5 @@ export const RESOURCES_VOCABULARIES = {
   SENSOR_STATUSES,
   ENERGY_UNITS,
   EMISSION_GAPS,
+  VEHICLE_DEFECT_STATUSES,
 } as const satisfies Record<string, readonly [string, ...string[]]>
