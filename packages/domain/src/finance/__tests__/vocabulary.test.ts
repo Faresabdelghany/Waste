@@ -26,7 +26,7 @@ describe("the Finance vocabulary's own rules", () => {
 
   test("a run stands in three statuses and excludes a payer for one reason; a document is an invoice or a credit note, credited for one of the prototype's five reasons", () => {
     assert.deepEqual([...vocabulary.BILLING_RUN_STATUSES], ["requested", "completed", "failed"])
-    assert.deepEqual([...vocabulary.EXCLUSION_REASONS], ["all-events-blocked", "all-events-held", "all-events-blocked-or-held"])
+    assert.deepEqual([...vocabulary.EXCLUSION_REASONS], ["all-events-blocked", "all-events-held", "all-events-blocked-or-held", "too-many-events"])
     assert.deepEqual([...vocabulary.INVOICE_KINDS], ["invoice", "credit-note"])
     assert.deepEqual([...vocabulary.CREDIT_REASONS], ["service-not-delivered", "quantity-correction", "price-correction", "duplicate", "other"])
   })

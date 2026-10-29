@@ -373,7 +373,7 @@ export function createApp({
   // A project's ticket charges (#291 C3): the product a completed ticket's work is charged at; nothing stamped, no clock.
   app.route("/", ticketChargeRoutes(guard))
   app.route("/", workOrderProductRoutes(guard))
-  app.route("/", billingRunRoutes(guard, { now }))
+  app.route("/", billingRunRoutes(guard, { pool, identified: identify({ pool, verifier }), now }))
   app.route("/", invoiceRoutes(guard, { now }))
   // Payments and reconciliation (#291 C6): an invoice's standing is read on its project's day, so the module takes `now`; a payment's `recordedAt` is the database's.
   app.route("/", paymentRoutes(guard, { now }))
