@@ -10,7 +10,7 @@
 // the object's key and signs an upload URL for it, and the bytes go to that
 // URL — Storage, another origin than the API's, and no token of the API's
 // with them, the URL being the permission.
-import type { DriverCommandBatchOutcome, DriverMe, DriverRouteDetail } from "@waste/contracts/driver-commands"
+import type { DriverCommandBatchOutcome, DriverIdentification, DriverMe, DriverRouteDetail } from "@waste/contracts/driver-commands"
 import type { ProofUpload, ProofUploadRequest } from "@waste/contracts/proof-objects"
 
 import { command, get, UNREACHABLE_STATUS, type ApiClient } from "../api/client"
@@ -29,6 +29,10 @@ type StorageError = { statusCode?: unknown; code?: unknown; message?: unknown }
 export const readDriverMe = (client: ApiClient): Promise<DriverMe> => get<DriverMe>(client, "/driver/me")
 
 export const readDriverRoute = (client: ApiClient, id: string): Promise<DriverRouteDetail> => get<DriverRouteDetail>(client, `/driver/routes/${encodeURIComponent(id)}`)
+
+/** Which stop of the route a code read off a bin names (O19 of #290): a read, never a record. */
+export const identifyOnRoute = (client: ApiClient, routeId: string, code: string): Promise<DriverIdentification> =>
+  get<DriverIdentification>(client, `/driver/routes/${encodeURIComponent(routeId)}/identify?code=${encodeURIComponent(code)}`)
 
 export const sendCommands = (client: ApiClient, commands: readonly PilotCommand[]): Promise<DriverCommandBatchOutcome> => command<DriverCommandBatchOutcome>(client, "/driver/commands", { commands })
 

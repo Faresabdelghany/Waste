@@ -302,8 +302,8 @@ export async function seedCompletedRoute(pool: Database, tenant: FinanceTenant, 
   return { id, number, serviceDate, pickupIds }
 }
 
-/** A Bulky Booking at a property under an agreement on the day, of the centrum area's schedule charging the bulky product (O11 of #290): what a bulky collection's stop names. */
-export async function seedBulkyBooking(pool: Database, tenant: FinanceTenant, booking: { agreementId: string; customerId: string; propertyId: string; day?: string }): Promise<{ id: string }> {
+/** A Bulky Booking at a property under an agreement on the day, of the centrum area's schedule charging the bulky product (O11 of #290), with the item quantities given (#449): what a bulky collection's stop names. */
+export async function seedBulkyBooking(pool: Database, tenant: FinanceTenant, booking: { agreementId: string; customerId: string; propertyId: string; day?: string; items?: readonly number[] }): Promise<{ id: string }> {
   const { companyId } = tenant
   const projectId = tenant.projects.copenhagen.id
   const id = testId()
@@ -313,6 +313,9 @@ export async function seedBulkyBooking(pool: Database, tenant: FinanceTenant, bo
     const scheduleId = held?.id ?? testId()
     if (held === undefined) await tx.insert(bulkySchedule).values({ id: scheduleId, companyId, projectId, planningAreaId: tenant.planningAreas.centrum.id, frequency: "weekly", serviceDays: ["monday"], holidayPolicy: "skip", slotsPerDay: 10, productId: tenant.products.bulky.id, validFrom: "2026-01-01", validTo: null })
     await tx.insert(bulkyBooking).values({ id, companyId, projectId, customerId: booking.customerId, agreementId: booking.agreementId, propertyId: booking.propertyId, wasteFractionId: tenant.fractions.residual.id, day: booking.day ?? FIXTURE_DAY, planningAreaId: tenant.planningAreas.centrum.id, scheduleId, productId: tenant.products.bulky.id })
+    // Its lines (#449), one item each of the quantities given, in order.
+    const items = booking.items ?? []
+    if (items.length > 0) await tx.insert(bulkyBookingItem).values(items.map((quantity, index) => ({ id: testId(), companyId, projectId, bookingId: id, position: index + 1, description: `Item ${index + 1}`, quantity })))
   })
   return { id }
 }

@@ -17,7 +17,8 @@
 // new pane's, so a link to it there opens the SLA; its templates are the API's
 // Message templates (#291 C15), offered on the Pilot alone too. Exception charges (M5 of
 // #293), the emission factors (M10 of #293), the bulky schedules (O11 of
-// #290) and the recycling-centre charges (#393) are the API's alone too.
+// #290), the recycling-centre charges (#393) and the pre-trip checklists (O13
+// of #290) are the API's alone too.
 // Privacy, audit & retention is the API's on the Pilot (#487,
 // `PRIVACY_ON_API_SETTINGS_PANE_ID`): the company's audit history and the
 // controls the platform enforces; the browser's pane (`configure.privacy` —
@@ -46,6 +47,7 @@ import { BULKY_SCHEDULES_SETTINGS_PANE_ID } from "./bulky"
 import { EMISSION_FACTORS_SETTINGS_PANE_ID } from "./fleet-emissions"
 import { MESSAGE_TEMPLATES_SETTINGS_PANE_ID } from "./message-templates"
 import { PICKUP_EXCEPTION_CHARGES_SETTINGS_PANE_ID } from "./pickup-exception-rules"
+import { PRE_TRIP_CHECKLISTS_SETTINGS_PANE_ID } from "./pre-trip-checklists"
 import { VISIT_RULES_SETTINGS_PANE_ID } from "./site-visits"
 import { SORTING_GUIDE_SETTINGS_PANE_ID } from "./sorting-guide"
 import { TICKET_SLA_SETTINGS_PANE_ID } from "./ticket-sla"
@@ -94,7 +96,7 @@ export const ACCOUNT_DEFAULTS_GROUP = "Defaults"
 
 /** Whether the Settings nav offers a pane, with the adapter configured or not. */
 export function settingsPaneOffered(paneId: string, configured: boolean): boolean {
-  if (paneId === MASTER_DATA_SETTINGS_PANE_ID || paneId === SORTING_GUIDE_SETTINGS_PANE_ID || paneId === TICKET_SLA_SETTINGS_PANE_ID || paneId === TICKET_TEAMS_SETTINGS_PANE_ID || paneId === MESSAGE_TEMPLATES_SETTINGS_PANE_ID || paneId === FINANCE_ON_API_SETTINGS_PANE_ID || paneId === PICKUP_EXCEPTION_CHARGES_SETTINGS_PANE_ID || paneId === EMISSION_FACTORS_SETTINGS_PANE_ID || paneId === BULKY_SCHEDULES_SETTINGS_PANE_ID || paneId === VISIT_RULES_SETTINGS_PANE_ID || paneId === PRIVACY_ON_API_SETTINGS_PANE_ID || paneId === INTEGRATIONS_ON_API_SETTINGS_PANE_ID || paneId === PORTALS_ON_API_SETTINGS_PANE_ID || paneId === NOTIFICATIONS_ON_API_SETTINGS_PANE_ID) return configured
+  if (paneId === MASTER_DATA_SETTINGS_PANE_ID || paneId === SORTING_GUIDE_SETTINGS_PANE_ID || paneId === TICKET_SLA_SETTINGS_PANE_ID || paneId === PRE_TRIP_CHECKLISTS_SETTINGS_PANE_ID || paneId === TICKET_TEAMS_SETTINGS_PANE_ID || paneId === MESSAGE_TEMPLATES_SETTINGS_PANE_ID || paneId === FINANCE_ON_API_SETTINGS_PANE_ID || paneId === PICKUP_EXCEPTION_CHARGES_SETTINGS_PANE_ID || paneId === EMISSION_FACTORS_SETTINGS_PANE_ID || paneId === BULKY_SCHEDULES_SETTINGS_PANE_ID || paneId === VISIT_RULES_SETTINGS_PANE_ID || paneId === PRIVACY_ON_API_SETTINGS_PANE_ID || paneId === INTEGRATIONS_ON_API_SETTINGS_PANE_ID || paneId === PORTALS_ON_API_SETTINGS_PANE_ID || paneId === NOTIFICATIONS_ON_API_SETTINGS_PANE_ID) return configured
   if (paneId === ASSET_MANAGEMENT_SETTINGS_PANE_ID || paneId === FINANCE_SETTINGS_PANE_ID || paneId === TICKETS_COMMUNICATION_SETTINGS_PANE_ID || paneId === PRIVACY_SETTINGS_PANE_ID || paneId === INTEGRATIONS_SETTINGS_PANE_ID || paneId === PORTALS_SETTINGS_PANE_ID || BROWSER_ONLY_PANES.has(paneId)) return !configured
   return true
 }

@@ -1,10 +1,10 @@
-// The driver's commands on the wire (Issue #104, ADR-0004): fifteen kinds,
+// The driver's commands on the wire (Issue #104, ADR-0004): sixteen kinds,
 // one contract each, every one a `z.strictObject` under a common envelope —
 // `{ id, kind, routeId, occurredAt, deviceId, body }` — where `id` is minted
 // by the device (a UUIDv7 from the device's clock, through
 // @waste/domain/ids) and is the command's idempotency key and, where the
 // command makes a row, that row's id. `DriverCommand` is the discriminated
-// union over the fifteen, so a client that imports this package as the
+// union over the sixteen, so a client that imports this package as the
 // Expo app does builds a typed command per kind.
 //
 // The door, `POST /driver/commands`, takes `DriverCommandBatch`: one to two
@@ -43,19 +43,23 @@
 // object key has the agreed shape (execution.ts; which ids it names is the
 // applier's), `pause`, `resume` carry nothing at all, and `record-positions`
 // (O8 of #290) carries one to `POSITIONS_MAX` fixes in the order they were
-// taken, each judged by the door on the envelope's own clock rules. What each command
+// taken, each judged by the door on the envelope's own clock rules, and
+// `pre-trip-check` (O13 of #290) names a vehicle or a trailer and answers
+// every item of its type's checklist once (pre-trip.ts). What each command
 // does when applied is #104 §3's table and the domain's `decide`.
 import { POSITION_RULES } from "@waste/domain/execution/positions"
 import { COMMAND_OUTCOMES } from "@waste/domain/execution/vocabulary"
 import * as z from "zod"
 
 import { WasteFraction } from "./catalogue"
+import { ContainerIdentifier } from "./containers"
 import { IsoDateTime } from "./dates"
-import { CommandOutcome, DriverCommandKind, DriverPickupReason, OBJECT_KEY, OBJECT_KEY_SHAPE, ObjectKey } from "./execution"
+import { CommandOutcome, DriverCommandKind, DriverPickupReason, IdentificationMethod, OBJECT_KEY, OBJECT_KEY_SHAPE, ObjectKey } from "./execution"
 import { Driver, Vehicle } from "./fleet"
 import { FlatPoint } from "./geojson"
 import { Id } from "./ids"
 import { Pickup } from "./pickups"
+import { ChecklistItem, PreTripCheck, PreTripCheckBody } from "./pre-trip"
 import { UnloadingStation } from "./places"
 import { Problem } from "./problem"
 import { ProofOfService } from "./proofs"
@@ -124,10 +128,20 @@ export type PositionFix = z.infer<typeof PositionFix>
 
 const inOrder = (points: readonly { at: string }[]): boolean => points.every((point, index) => index === 0 || Date.parse(point.at) > Date.parse(points[index - 1].at))
 
-/** The fifteen bodies, by kind, for the route to parse a loosely read envelope's body against. */
+/**
+ * The code a driver read off the bin to confirm the stop's container (O19 of
+ * #290) — its label, barcode, RFID tag or serial number — and how it was
+ * read. The door judges it against the stop's own container and refuses an
+ * arrival whose code names another at `body.identification.code`, so the
+ * receipt of an applied one is the confirmation.
+ */
+export const Identification = z.strictObject({ code: Label, method: IdentificationMethod })
+export type Identification = z.infer<typeof Identification>
+
+/** The sixteen bodies, by kind, for the route to parse a loosely read envelope's body against. */
 export const COMMAND_BODIES = {
   "start-route": z.strictObject({ vehicleId: Id, trailerId: Id.optional(), appVersion: Label.optional(), ...located }),
-  arrive: z.strictObject({ pickupId: Id, ...located }),
+  arrive: z.strictObject({ pickupId: Id, identification: Identification.optional(), ...located }),
   "complete-pickup": z.strictObject({ pickupId: Id, note: Paragraph.optional(), ...located }),
   "skip-pickup": z.strictObject({ pickupId: Id, reason: DriverPickupReason, note: Paragraph.optional(), ...located }),
   "fail-pickup": z.strictObject({ pickupId: Id, reason: DriverPickupReason, note: Paragraph.optional(), ...located }),
@@ -158,6 +172,7 @@ export const COMMAND_BODIES = {
   "record-positions": z.strictObject({
     points: z.array(PositionFix).min(1).max(POSITIONS_MAX).refine(inOrder, { message: FIXES_IN_ORDER }),
   }),
+  "pre-trip-check": z.strictObject({ ...PreTripCheckBody, ...located }),
 } as const satisfies Record<DriverCommandKind, z.ZodType>
 
 export const StartRoute = commandOf("start-route", COMMAND_BODIES["start-route"])
@@ -175,9 +190,10 @@ export const Pause = commandOf("pause", COMMAND_BODIES.pause)
 export const Resume = commandOf("resume", COMMAND_BODIES.resume)
 export const EndRoute = commandOf("end-route", COMMAND_BODIES["end-route"])
 export const RecordPositions = commandOf("record-positions", COMMAND_BODIES["record-positions"])
+export const PreTripCheckCommand = commandOf("pre-trip-check", COMMAND_BODIES["pre-trip-check"])
 
 /** One command of any kind: the envelope and the body its kind takes. */
-export const DriverCommand = z.discriminatedUnion("kind", [StartRoute, Arrive, CompletePickup, SkipPickup, FailPickup, ReportProblem, AddPhoto, AddWeight, AddSignature, AddNote, RecordUnload, Pause, Resume, EndRoute, RecordPositions])
+export const DriverCommand = z.discriminatedUnion("kind", [StartRoute, Arrive, CompletePickup, SkipPickup, FailPickup, ReportProblem, AddPhoto, AddWeight, AddSignature, AddNote, RecordUnload, Pause, Resume, EndRoute, RecordPositions, PreTripCheckCommand])
 export type DriverCommand = z.infer<typeof DriverCommand>
 
 /** The envelope read loosely, its body unparsed, so a body that fails its kind is one command's rejection and not the batch's 400. */
@@ -204,12 +220,13 @@ export type DriverCommandBatch = z.infer<typeof DriverCommandBatch>
 export const WireOutcome = z.enum([...COMMAND_OUTCOMES, "replayed"])
 export type WireOutcome = z.infer<typeof WireOutcome>
 
-/** The row a command made, read back and tagged with what it is — a session for `start-route`, a proof for the evidence and outcome commands, an unload for `record-unload`, the route for `end-route` — so a device never takes a stripped object of one resource for another. */
+/** The row a command made, read back and tagged with what it is — a session for `start-route`, a proof for the evidence and outcome commands, an unload for `record-unload`, the route for `end-route`, the check for `pre-trip-check` — so a device never takes a stripped object of one resource for another. */
 export const CommandResult = z.discriminatedUnion("resource", [
   z.object({ resource: z.literal("session"), value: Session }),
   z.object({ resource: z.literal("proof"), value: ProofOfService }),
   z.object({ resource: z.literal("unload"), value: Unload }),
   z.object({ resource: z.literal("route"), value: Route }),
+  z.object({ resource: z.literal("pre-trip-check"), value: PreTripCheck }),
 ])
 export type CommandResult = z.infer<typeof CommandResult>
 
@@ -258,8 +275,8 @@ export const DriverCommandReceipt = z
   .refine((receipt) => (receipt.outcome === "rejected") === (receipt.problem !== null), problemWithARejection)
 export type DriverCommandReceipt = z.infer<typeof DriverCommandReceipt>
 
-/** A vehicle or a trailer a `start-route` names, as the start screen offers it: the `Vehicle`'s id, kind and required licence class, and the one label a person names it by — the callsign where it has one, the plate otherwise. */
-export const DriverVehicle = Vehicle.pick({ id: true, kind: true, requiredLicenceClass: true }).extend({ label: Label })
+/** A vehicle or a trailer a `start-route` names, as the start screen offers it: the `Vehicle`'s id, kind and required licence class, the one label a person names it by — the callsign where it has one, the plate otherwise — and the checklist of its type a `pre-trip-check` answers (O13 of #290), absent from an answer before it and read as none. */
+export const DriverVehicle = Vehicle.pick({ id: true, kind: true, requiredLicenceClass: true }).extend({ label: Label, checklist: z.array(ChecklistItem).default([]) })
 export type DriverVehicle = z.infer<typeof DriverVehicle>
 
 /** A station a `record-unload` names, as the unload screen offers it: the `UnloadingStation`'s id, name, point and weighbridge, and the fractions it accepts, sorted by id — none on record, an empty list. */
@@ -309,8 +326,38 @@ export const DriverPickup = Pickup.extend({
   replacementContainerLabel: Label.nullable().default(null),
   /** A bulky collection's items (O11 of #290): what the driver takes away, as the booking lists them; empty for any other service, and absent from an answer before it, read as none. */
   bulkyItems: z.array(z.object({ description: Label, quantity: PositiveInt })).default([]),
+  /** When the driver last confirmed the stop's container by its code (O19 of #290): the device's instant of the latest applied `arrive` that carried an identification, or null. Absent from an answer before it, read as null. */
+  containerConfirmedAt: IsoDateTime.nullable().default(null),
 })
 export type DriverPickup = z.infer<typeof DriverPickup>
+
+/** `GET /driver/routes/:id/identify?code=`: a code read off a bin (O19 of #290). */
+export const DriverIdentifyQuery = z.object({ code: Label })
+export type DriverIdentifyQuery = z.infer<typeof DriverIdentifyQuery>
+
+/** A stop of the route whose container — or, on a swap, whose replacement — the code names, and by which of its identifiers. */
+export const DriverIdentifiedStop = z.object({
+  pickupId: Id,
+  position: PositiveInt,
+  containerId: Id,
+  containerLabel: Label,
+  matchedBy: ContainerIdentifier,
+  /** Whether the code names the replacement a swap brings rather than the container standing there. */
+  replacement: z.boolean(),
+})
+export type DriverIdentifiedStop = z.infer<typeof DriverIdentifiedStop>
+
+/**
+ * What a code names on one of the driver's routes: the stops it names, by
+ * position — none when it names no container on this route, which is all a
+ * device learns of a code, since the door reads only the route's own
+ * containers.
+ */
+export const DriverIdentification = z.object({
+  code: Label,
+  stops: z.array(DriverIdentifiedStop),
+})
+export type DriverIdentification = z.infer<typeof DriverIdentification>
 
 /** `GET /driver/routes/:id`: `RouteDetail` with the pickups' places joined — the one read that denormalises for the wire what the device otherwise gets by sync. */
 export const DriverRouteDetail = z

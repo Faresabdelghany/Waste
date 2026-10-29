@@ -5,15 +5,14 @@
 // left as it stands rather than written again under the seed's id; the
 // reasons are the tenant's once there — the office renames and retires them —
 // so nothing is ever restored, and a run that finds them writes nothing.
-import { DEFAULT_DECOMMISSION_REASONS } from "@waste/domain/resources/decommission-reasons"
-
 import type { Tx } from "../client"
+import { defaultDecommissionReasonRows } from "../commands/provision-company"
 import { decommissionReason } from "../schema/stock"
 import { counted, DEMO_COMPANY_ID } from "./ids"
 
 const next = counted("decommissionReason")
 
-const ROWS: readonly (typeof decommissionReason.$inferInsert)[] = DEFAULT_DECOMMISSION_REASONS.map(({ code, name }) => ({ id: next(), companyId: DEMO_COMPANY_ID, code, name, status: "active" }))
+const ROWS: readonly (typeof decommissionReason.$inferInsert)[] = defaultDecommissionReasonRows(DEMO_COMPANY_ID, next)
 
 /** Every decommission reason id the seed writes, by code. */
 export const DECOMMISSION_REASON_IDS: Readonly<Record<string, string>> = Object.fromEntries(ROWS.map((row) => [row.code, row.id as string]))

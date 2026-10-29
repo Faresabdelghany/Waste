@@ -18,11 +18,13 @@
 // resource unbounded, since a set already stored has to read back however
 // long it grew. Since M10 of #293 it carries its consumption by fuel too, a
 // set of its own replaced through `PUT /vehicle-types/:id/consumption`
-// (@waste/contracts/emissions).
+// (@waste/contracts/emissions), and since O13 of #290 its pre-trip checklist,
+// replaced through `PUT /vehicle-types/:id/checklist` (@waste/contracts/pre-trip).
 import * as z from "zod"
 
 import { VehicleTypeConsumption } from "./emissions"
 import { Id } from "./ids"
+import { ChecklistItem } from "./pre-trip"
 import { PageRequest } from "./pagination"
 import { changesSomething, eachOnce, eachOnceSentence, somethingToChange, stamped } from "./resource"
 import { Label, Paragraph, Slug } from "./text"
@@ -50,6 +52,8 @@ export const VehicleType = z.object({
   containerTypeIds: ContainerTypeIds,
   /** What a vehicle of this type burns of each fuel it may run on, one per fuel; replaced whole through its own route. */
   consumption: z.array(VehicleTypeConsumption),
+  /** What a driver checks on a vehicle of this type before the day, in order; replaced whole through its own route. */
+  checklist: z.array(ChecklistItem),
 })
 export type VehicleType = z.infer<typeof VehicleType>
 

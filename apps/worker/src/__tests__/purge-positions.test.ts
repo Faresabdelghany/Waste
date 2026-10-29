@@ -118,4 +118,13 @@ describe("execution.purge-positions", { skip: roles.skip }, () => {
     const rows = await owner.db.select({ id: sessionPosition.id }).from(sessionPosition).where(and(eq(sessionPosition.companyId, tenant.companyId), eq(sessionPosition.sessionId, sessionId)))
     assert.equal(rows.length, 3, "nothing moved")
   })
+  test("a project whose privacy policy names days of its own (#291 C19) is held to them, under the ceiling, whatever the deployment's setting", async () => {
+    await owner.sql`update wms.project set position_retention_days = 3 where id = ${tenant.projectId}`
+    try {
+      assert.deepEqual(await purgePositions(context({ positionRetentionDays: 30 })), { removed: 2, days: 30 })
+      assert.deepEqual(await left(), [1])
+    } finally {
+      await owner.sql`update wms.project set position_retention_days = null where id = ${tenant.projectId}`
+    }
+  })
 })
