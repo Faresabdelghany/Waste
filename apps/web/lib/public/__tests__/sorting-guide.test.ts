@@ -22,7 +22,7 @@ describe("queryOf", () => {
   })
 })
 
-const project = { slug: "kystbyen", name: "Kystbyen", language: "da", timezone: "Europe/Copenhagen" }
+const project = { slug: "kystbyen", name: "Kystbyen", language: "da", timezone: "Europe/Copenhagen", branding: { brandColor: null, logoUrl: null, accessibilityStatementUrl: null } }
 
 describe("pageViewOf", () => {
   test("a page that asks nothing shows the project and the prompt", () => {

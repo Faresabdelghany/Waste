@@ -30,6 +30,7 @@ import type { Grant } from "@waste/contracts/permissions"
 
 import { FIXTURE_COMPANY_ID, type BusinessRecord } from "@/lib/data/business-modules"
 import { PRIVACY_POLICY_KEY } from "@/lib/data/privacy-policy"
+import { BRANDING_KEY } from "@/lib/data/project-branding"
 import { COMPANY_IDENTITY_FIELDS, holdForReviewLabel, paymentReferenceSchemeLabel, paymentTermsLabel, paymentTermsRefusalOf } from "@/lib/data/finance-settings"
 import { isRoleAccessMap, type RoleAccessMap } from "@/lib/data/role-permissions"
 
@@ -221,7 +222,8 @@ export const projectAdapter: ResourceAdapter<Project> = {
       recordKind: "Project",
       // Whether its hires and jobs wait for a person before a run (M14 of #293), a flag as the form's switch says it.
       // Its privacy policy (#291 C19) as the wire's JSON, which Settings › Privacy reads and writes whole through its own route (lib/data/privacy-policy.ts).
-      submittedValues: { ...submittedValues, holdForReview: project.holdForReview, [PRIVACY_POLICY_KEY]: JSON.stringify(project.privacyPolicy) },
+      // Its branding on its public pages (M22 of #293) as the wire's JSON, which Settings › Portals & branding reads and writes whole through its own route (lib/data/project-branding.ts).
+      submittedValues: { ...submittedValues, holdForReview: project.holdForReview, [PRIVACY_POLICY_KEY]: JSON.stringify(project.privacyPolicy), [BRANDING_KEY]: JSON.stringify(project.branding) },
     }
   },
   toCreateBody: (record) => {

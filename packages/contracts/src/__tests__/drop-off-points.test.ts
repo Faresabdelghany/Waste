@@ -112,7 +112,7 @@ describe("DropOffPointListQuery and the public shapes", () => {
 
   test("a public point carries no code and no office notes", () => {
     const answer = {
-      project: { slug: "kystbyen", name: "Kystbyen", language: "da", timezone: "Europe/Copenhagen" },
+      project: { slug: "kystbyen", name: "Kystbyen", language: "da", timezone: "Europe/Copenhagen", branding: { brandColor: null, logoUrl: null, accessibilityStatementUrl: null } },
       fraction: { key: "glass", name: "Glas" },
       from: "2026-10-24",
       truncated: false,
