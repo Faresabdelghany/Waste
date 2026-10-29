@@ -81,7 +81,7 @@ describe("the four forms", () => {
       assert.ok(!ids.includes("kind"), "the kind is the tab, not a field")
     }
     const fields = (kind: (typeof MASTER_DATA_KINDS)[number]) => masterDataSchema(kind).sections.flatMap((section) => section.fields.map((field) => field.id))
-    assert.deepEqual(fields("waste-fraction"), ["name", "key", "wasteCode", "treatment", "densityKgPerCubicMetre"])
+    assert.deepEqual(fields("waste-fraction"), ["name", "key", "wasteCode", "hazardous", "treatment", "densityKgPerCubicMetre"])
     assert.deepEqual(fields("container-type"), ["name", "volumeLitres", "serviceSeconds"])
     assert.deepEqual(fields("service-frequency"), ["name", "projectId", "description", "collectionsPerWeek", "weeksBetween", "daysBetween"])
     assert.deepEqual(fields("vehicle-type"), ["name", "key", "description", "containerTypeIds"])

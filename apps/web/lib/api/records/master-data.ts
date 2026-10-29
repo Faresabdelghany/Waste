@@ -128,7 +128,7 @@ export const wasteFractionAdapter: ResourceAdapter<WasteFraction> = {
   statuses: undefined,
   list: (client) => listAll<WasteFraction>(client, "/waste-fractions"),
   toRecord: (fraction, context) =>
-    recordOf("waste-fraction", fraction, { name: fraction.name, key: fraction.key, wasteCode: fraction.wasteCode ?? "", treatment: fraction.treatment ?? "", densityKgPerCubicMetre: spelled(fraction.densityKgPerCubicMetre) }, context),
+    recordOf("waste-fraction", fraction, { name: fraction.name, key: fraction.key, wasteCode: fraction.wasteCode ?? "", treatment: fraction.treatment ?? "", densityKgPerCubicMetre: spelled(fraction.densityKgPerCubicMetre), hazardous: fraction.hazardous }, context),
   toCreateBody: (record) => {
     const refused = firstRefusal("waste-fraction", record)
     if (refused) return refused
@@ -139,6 +139,8 @@ export const wasteFractionAdapter: ResourceAdapter<WasteFraction> = {
       ...(fields.wasteCode == null ? {} : { wasteCode: fields.wasteCode }),
       ...(fields.treatment == null ? {} : { treatment: fields.treatment }),
       ...(fields.densityKgPerCubicMetre == null ? {} : { densityKgPerCubicMetre: fields.densityKgPerCubicMetre }),
+      // Left out unless ticked: the API reads a starred code as hazardous itself.
+      ...(fields.hazardous === true ? { hazardous: true } : {}),
     }
   },
   toPatchBody: (before, after) => {
@@ -148,7 +150,7 @@ export const wasteFractionAdapter: ResourceAdapter<WasteFraction> = {
     if (refused) return refused
     return patchOf(before, after, (record) => {
       const read = fieldsOf("waste-fraction", record)
-      return { name: read.name || record.name, wasteCode: read.wasteCode ?? null, treatment: read.treatment ?? null, densityKgPerCubicMetre: read.densityKgPerCubicMetre ?? null }
+      return { name: read.name || record.name, wasteCode: read.wasteCode ?? null, treatment: read.treatment ?? null, densityKgPerCubicMetre: read.densityKgPerCubicMetre ?? null, hazardous: read.hazardous === true }
     })
   },
   create: (client, body) => create<WasteFraction>(client, "/waste-fractions", body).then((created) => created.body),
