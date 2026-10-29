@@ -72,3 +72,5 @@ export * from "./pre-trip"
 export * from "./weighbridge"
 // Fill-level Sensors (O26 of #290): the devices, their pairings with containers and the readings they send.
 export * from "./sensors"
+// The scale house (M16a of #293): the tare register and the window's tickets with their lines.
+export * from "./scale-house"

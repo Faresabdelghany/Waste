@@ -90,6 +90,8 @@ export const company = wms.table(
     nextTicketNumber: integer().notNull().default(1000),
     /** The invoice-number counter (Issue #112): the next document number this company mints, `INV-<n>` or `CN-<n>` on the wire, one per invoice or credit note under the same row lock, held for the rest of the transaction so a run that fails leaves no gap. */
     nextInvoiceNumber: integer().notNull().default(1000),
+    /** The scale-ticket counter (M16a of #293): the next `ST-<n>` the window hands a customer, one per ticket under the same row lock. */
+    nextScaleTicketNumber: integer().notNull().default(1000),
     /** The invoice identity (#291 C4): what an invoice document prints beside the legal name and the registration — the VAT registration, the bank account a payment goes to, and the creditor number a FI card names; each null until the company sets it. */
     vatNumber: text(),
     bankIban: text(),

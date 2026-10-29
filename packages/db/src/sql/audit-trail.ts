@@ -61,6 +61,7 @@ import { accountingAccount, accountingExport, accountingExportLine, accountingEx
 import { contaminantCode, contaminantCodeFraction, pickupExceptionRule, pickupExceptionRuleStep } from "../schema/pickup-exceptions"
 import { preTripCheck, preTripChecklistItem, vehicleDefect } from "../schema/pre-trip"
 import { weighbridgeTicket } from "../schema/weighbridge"
+import { scaleTicket, scaleTicketLine, vehicleTare } from "../schema/scale-house"
 import { driver, vehicle, vehicleCompartment, vehicleCompartmentFraction } from "../schema/fleet"
 import { fuelEmissionFactor, vehicleTypeConsumption } from "../schema/emissions"
 import { containerTypeVehicleType, vehicleType } from "../schema/fleet-types"
@@ -293,7 +294,13 @@ export const SENSORS_AUDITED: readonly Audited[] = [
   { table: sensorPairing, module: "resources.sensors", parent: setOf(sensor, sensorPairing.sensorId) },
 ]
 
-export const AUDITED: readonly Audited[] = [...AUDITED_AT_0019, ...SUBSCRIPTION_PAUSE_AUDITED, ...TICKET_SLA_AUDITED, ...DROP_OFF_AUDITED, ...ABSENCES_AUDITED, ...TICKET_CHARGE_AUDITED, ...PICKUP_EXCEPTIONS_AUDITED, ...EMISSIONS_AUDITED, ...APPLICATIONS_AUDITED, ...SUSTAINABILITY_AUDITED, ...CONTAINER_HIRE_AUDITED, ...ACCOUNTING_AUDITED, ...BULKY_AUDITED, ...SITE_VISITS_AUDITED, ...SEASONS_AUDITED, ...SERVICE_PROVIDER_ACTIVITIES_AUDITED, ...STOCK_MINIMUMS_AUDITED, ...DECOMMISSION_REASONS_AUDITED, ...TEAMS_AUDITED, ...STOP_SET_PROPOSALS_AUDITED, ...WASTE_FRACTION_PROPOSALS_AUDITED, ...CONTACT_PERSONS_AUDITED, ...MESSAGING_AUDITED, ...PRE_TRIP_AUDITED, ...SENSORS_AUDITED, ...WEIGHBRIDGE_AUDITED]
+/** The scale house (M16a of #293): the tare register and the window's tickets, under the window's module; a ticket's lines are a ledger. */
+export const SCALE_HOUSE_AUDITED: readonly Audited[] = [
+  { table: vehicleTare, module: "operate.scale-house" },
+  { table: scaleTicket, module: "operate.scale-house" },
+]
+
+export const AUDITED: readonly Audited[] = [...AUDITED_AT_0019, ...SUBSCRIPTION_PAUSE_AUDITED, ...TICKET_SLA_AUDITED, ...DROP_OFF_AUDITED, ...ABSENCES_AUDITED, ...TICKET_CHARGE_AUDITED, ...PICKUP_EXCEPTIONS_AUDITED, ...EMISSIONS_AUDITED, ...APPLICATIONS_AUDITED, ...SUSTAINABILITY_AUDITED, ...CONTAINER_HIRE_AUDITED, ...ACCOUNTING_AUDITED, ...BULKY_AUDITED, ...SITE_VISITS_AUDITED, ...SEASONS_AUDITED, ...SERVICE_PROVIDER_ACTIVITIES_AUDITED, ...STOCK_MINIMUMS_AUDITED, ...DECOMMISSION_REASONS_AUDITED, ...TEAMS_AUDITED, ...STOP_SET_PROPOSALS_AUDITED, ...WASTE_FRACTION_PROPOSALS_AUDITED, ...CONTACT_PERSONS_AUDITED, ...MESSAGING_AUDITED, ...PRE_TRIP_AUDITED, ...SENSORS_AUDITED, ...WEIGHBRIDGE_AUDITED, ...SCALE_HOUSE_AUDITED]
 
 /** The audited tables by name, for a test that reads a migrated database's triggers. */
 export const AUDITED_TABLE_NAMES: ReadonlySet<string> = new Set(AUDITED.map((entry) => getTableName(entry.table)))
@@ -324,6 +331,7 @@ export const EXEMPT: readonly Exempt[] = [
   { table: importRunRow, why: "a ledger: each row of an import's outcome, appended once by the batch that wrote it and never rewritten" },
   { table: message, why: "the delivery log (#291 C15): written once by the office's request with what was rendered, then moved by the worker's sends; its status, attempts and stamps are its history" },
   { table: fillReading, why: "a ledger of what a fill-level sensor sent, appended by the ingest in bulk; a trail of it would repeat every reading" },
+  { table: scaleTicketLine, why: "a ledger of a completed ticket's split, written once with the completion its ticket's trail records; a voided ticket voids its lines with it" },
 ]
 
 /** The trigger function, once (migration 0019). */

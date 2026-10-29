@@ -83,6 +83,9 @@
 // O26 of #290 added @waste/domain/resources/sensors: sensors.ts bounds the
 // ingest's batch by the domain's cap and defaults a pairing's threshold to the
 // domain's.
+// M16a of #293 added @waste/domain/scale-house/vocabulary and
+// @waste/domain/scale-house/rules: scale-house.ts reads a ticket's and a
+// tare's lists and bounds a ticket's lines by the domain's cap.
 import path from "node:path"
 import { fileURLToPath } from "node:url"
 
@@ -132,6 +135,8 @@ definePurityTests({
     "@waste/domain/resources/stock-balance",
     "@waste/domain/resources/vocabulary",
     "@waste/domain/route-schemes/seasons",
+    "@waste/domain/scale-house/rules",
+    "@waste/domain/scale-house/vocabulary",
     "@waste/domain/routing/balance",
     "@waste/domain/routing/vocabulary",
     "@waste/domain/service-providers/vocabulary",
