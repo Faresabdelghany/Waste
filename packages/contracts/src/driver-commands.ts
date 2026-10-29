@@ -67,6 +67,7 @@ import { eachOnce, eachOnceSentence, PositiveInt, recorded } from "./resource"
 import { ActivePlan } from "./plans"
 import { labelIsTheNumber, labelMatches, Route, routeFields } from "./routes"
 import { Session } from "./sessions"
+import { TankKind, TankOutlet } from "./tanks"
 import { Label, Paragraph } from "./text"
 import { bothGrossAndTare, netIsGrossLessTare, Unload, UnloadRefusal, weightsAddUp, weightsPaired } from "./unloads"
 
@@ -331,6 +332,8 @@ export const DriverPickup = Pickup.extend({
   bulkyItems: z.array(z.object({ description: Label, quantity: PositiveInt })).default([]),
   /** When the driver last confirmed the stop's container by its code (O19 of #290): the device's instant of the latest applied `arrive` that carried an identification, or null. Absent from an answer before it, read as null. */
   containerConfirmedAt: IsoDateTime.nullable().default(null),
+  /** The tank the stop's container stands for on the route's day (M11 of #293): what it is, what it holds and where it lets its water out, so the driver knows what to pump; null for any other container. Absent from an answer before it, read as null. */
+  tank: z.object({ kind: TankKind, volumeLitres: PositiveInt, outlet: TankOutlet }).nullable().default(null),
 })
 export type DriverPickup = z.infer<typeof DriverPickup>
 

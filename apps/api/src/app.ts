@@ -55,6 +55,7 @@ import { collectionGroupRoutes } from "./routes/collection-groups"
 import { companyRoutes } from "./routes/company"
 import { containerRoutes } from "./routes/containers"
 import { customerContactRoutes } from "./routes/customer-contacts"
+import { tankRoutes } from "./routes/tanks"
 import { customerRoutes } from "./routes/customers"
 import { messageTemplateRoutes } from "./routes/message-templates"
 import { messageRoutes } from "./routes/messages"
@@ -268,6 +269,7 @@ export function createApp({
   app.route("/", productRoutes(guard))
   app.route("/", customerRoutes(guard))
   app.route("/", customerContactRoutes(guard))
+  app.route("/", tankRoutes(guard, { now }))
   app.route("/", messageTemplateRoutes(guard))
   app.route("/", messageRoutes(guard, { jobs }))
   // The address lookup calls the register (#291 C13), so, like the preview, its guard ends the principal's transaction; a property's write reads its `addressId` from the register before its guard opens the request's.

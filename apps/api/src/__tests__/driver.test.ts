@@ -12,6 +12,7 @@ import { createDb, type Database } from "@waste/db/client"
 import { wasteFraction } from "@waste/db/schema/catalogue"
 import { container as containerTable } from "@waste/db/schema/containers"
 import { property as propertyTable, sharedCollectionPoint } from "@waste/db/schema/customers"
+import { tankInstallation } from "@waste/db/schema/tanks"
 import { driverCommand, outboxEvent, pickup as pickupTable, proofOfService, route as routeTable, session as sessionTable, sessionPosition } from "@waste/db/schema/execution"
 import { vehicle as vehicleTable } from "@waste/db/schema/fleet"
 import { unloadingStation, unloadingStationFraction } from "@waste/db/schema/places"
@@ -496,6 +497,20 @@ describe("the driver door", { skip: database.skip || owner.skip }, () => {
       }
     })
 
+    test("a stop whose container stands for a tank on the route's day carries the tank, what the driver pumps; any other stop none (M11 of #293)", async () => {
+      const route = await minted({ pickups: 2 })
+      const tankId = testId()
+      await withCompany(pool.db, a.companyId, (tx) =>
+        tx.insert(tankInstallation).values({ id: tankId, companyId: a.companyId, projectId: a.projects.copenhagen.id, propertyId: fixtures.property.id, containerId: fixtures.containers[0].id, kind: "holding-tank", volumeLitres: 6000, outlet: "none", emptyingIntervalMonths: 12, validFrom: "2020-01-01" }),
+      )
+      try {
+        const found = await detail(route.id)
+        assert.deepEqual(found.pickups.map((pickup) => pickup.tank), [{ kind: "holding-tank", volumeLitres: 6000, outlet: "none" }, null])
+      } finally {
+        await withCompany(pool.db, a.companyId, (tx) => tx.delete(tankInstallation).where(and(eq(tankInstallation.companyId, a.companyId), eq(tankInstallation.id, tankId))))
+      }
+    })
+
     test("a route not assigned to this driver, of another company, or not there is one sentence (404)", async () => {
       const jonass = await minted({ driver: fleet.drivers.jonas })
       const nobodys = await minted({ driver: null })
@@ -843,7 +858,7 @@ describe("the driver door", { skip: database.skip || owner.skip }, () => {
       }
     })
 
-    test("report-problem, add-photo, add-weight, add-signature and add-note append their proofs, on a stop or on the route alone", async () => {
+    test("report-problem, add-photo, add-weight, record-volume, add-signature and add-note append their proofs, on a stop or on the route alone", async () => {
       const route = await minted()
       const sessionId = await started(route)
       const [pickupId] = route.pickupIds
@@ -867,6 +882,11 @@ describe("the driver door", { skip: database.skip || owner.skip }, () => {
       assert.deepEqual([photo.kind, photo.pickupId, photo.objectKey], ["photo", null, `${a.companyId}/${route.id}/${photoId}.jpg`])
       const weight = valueOf(await applied(envelope("add-weight", route.id, { pickupId, weightKg: 148 }, { occurredAt: at("07:03") })), "proof", ProofOfService)
       assert.deepEqual([weight.kind, weight.pickupId, weight.weightKg], ["weight", pickupId, 148])
+      // The litres a tank was emptied of (M11 of #293), the stop's evidence like a weight.
+      const volume = valueOf(await applied(envelope("record-volume", route.id, { pickupId, volumeLitres: 2800 }, { occurredAt: at("07:03") })), "proof", ProofOfService)
+      assert.deepEqual([volume.kind, volume.pickupId, volume.volumeLitres, volume.weightKg], ["volume", pickupId, 2800, null])
+      const litreless = await rejected(envelope("record-volume", route.id, { pickupId, volumeLitres: 0 }, { occurredAt: at("07:03") }), 400, "The request body is invalid")
+      assert.deepEqual(litreless.errors?.map((error) => error.path), ["body.volumeLitres"])
       const signatureId = mint()
       const signature = valueOf(await applied(envelope("add-signature", route.id, { pickupId, objectKey: objectKeyOf({ companyId: a.companyId, routeId: route.id, commandId: signatureId }, "png") }, { id: signatureId, occurredAt: at("07:04") })), "proof", ProofOfService)
       assert.deepEqual([signature.kind, signature.pickupId, signature.objectKey], ["signature", pickupId, `${a.companyId}/${route.id}/${signatureId}.png`])

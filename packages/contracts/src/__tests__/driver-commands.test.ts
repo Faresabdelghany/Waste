@@ -319,7 +319,7 @@ describe("what the door answers and stores", () => {
 
   test("the driver's route read is the detail with each pickup's place joined: the address, the point or null, the place's instructions or null, the container's label and the fraction's name", () => {
     const pickup = { id: THIRD, projectId: OTHER, routeId: ID, containerId: COMPANY, position: 1, status: "planned", origin: "generation", service: "empty", reason: null, contaminantCodeId: null, note: null, propertyId: ID, sharedCollectionPointId: null, wasteFractionId: OTHER, arrivedAt: null, outcomeAt: null, subscriptionId: null, warehouseId: null, replacementContainerId: null, bulkyBookingId: null, movedFromPickupId: null, ...STAMPS }
-    const joined = { ...pickup, address: "Parkvej 18, 2100 København Ø", driverInstructions: "Gate code 4711", location: POINT, containerLabel: "BIN-82014", wasteFractionName: "Residual waste", replacementContainerLabel: null, bulkyItems: [], containerConfirmedAt: null }
+    const joined = { ...pickup, address: "Parkvej 18, 2100 København Ø", driverInstructions: "Gate code 4711", location: POINT, containerLabel: "BIN-82014", wasteFractionName: "Residual waste", replacementContainerLabel: null, bulkyItems: [], containerConfirmedAt: null, tank: null }
     assert.deepEqual(DriverPickup.parse(joined), joined)
     const { containerConfirmedAt: _, ...beforeTheScan } = joined
     assert.deepEqual(DriverPickup.parse(beforeTheScan), joined, "an answer from before the scan (O19 of #290) reads as never confirmed")
