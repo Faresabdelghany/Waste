@@ -138,6 +138,14 @@ _Avoid_: Inspection report, vehicle audit, service
 A checklist item a Pre-trip Check failed, open until the office marks it resolved. A defect of a critical item takes the Vehicle out of service — its status maintenance — until the office mends it and sets it active again; every check that finds defects opens the office one ticket for them.
 _Avoid_: Fault, damage report, container defect (a container's)
 
+**Maintenance Plan**:
+A Vehicle's service at intervals — every so many days, kilometres or engine hours, whichever comes first — counted from its last service, the day and the readings then. It is due soon within two weeks, 1,000 km or 50 hours of a limit and overdue past one, judged against the newest odometer and engine hours a Pre-trip Check read; the office is alerted either way. A plan is retired, never deleted.
+_Avoid_: Service schedule, maintenance interval, PM
+
+**Maintenance Order**:
+Work the office opens on a Vehicle: a Maintenance Plan's service, or a one-off — a repair, a Vehicle Defect mended. It is completed once, on the day the work was done with the readings then, or cancelled; completing a plan's order is the plan's service done, and the plan counts from it.
+_Avoid_: Work Order (a Work Order is a Pickup's), job card, repair ticket
+
 **Vehicle Allocation**:
 A time-bounded plan that reserves a compatible vehicle and, where applicable, a driver for expected work.
 _Avoid_: Actual assignment, route, vehicle
