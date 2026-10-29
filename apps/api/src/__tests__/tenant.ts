@@ -70,6 +70,7 @@ import { decommissionReason, stockMinimum, stockMovement } from "@waste/db/schem
 import { wasteFractionEmissionFactor } from "@waste/db/schema/sustainability"
 import {
   customer,
+  customerContact,
   property,
   propertyGroup,
   propertyGroupMember,
@@ -83,7 +84,7 @@ import { planningArea, planningAreaBoundary } from "@waste/db/schema/planning-ar
 import { alert, team, teamMember, ticket, ticketBooking, ticketEvent, ticketSla, ticketTeamDefault } from "@waste/db/schema/resolution"
 import { application, applicationDecision } from "@waste/db/schema/applications"
 import { bulkyBooking, bulkyBookingItem, bulkySchedule } from "@waste/db/schema/bulky"
-import { serviceProviderActivity, serviceProviderActivityContainer } from "@waste/db/schema/service-provider-activities"
+import { serviceProviderActivity, serviceProviderActivityContainer, serviceProviderActivityFraction } from "@waste/db/schema/service-provider-activities"
 import { collectionGroup, collectionGroupContainer, collectionGroupContainerType, collectionGroupFraction, routeScheme, routeSchemeSeason } from "@waste/db/schema/route-schemes"
 import { withCompany } from "@waste/db/tenant"
 import { normaliseGrants, type Grant } from "@waste/domain/access/grants"
@@ -404,6 +405,7 @@ export async function dropTenant(pool: Database, companyId: string, owner?: Data
     await tx.delete(dropOffPoint).where(eq(dropOffPoint.companyId, companyId))
     // The providers' activities (#474) before the schemes, groups, awards, providers and accounts they name.
     await tx.delete(serviceProviderActivityContainer).where(eq(serviceProviderActivityContainer.companyId, companyId))
+    await tx.delete(serviceProviderActivityFraction).where(eq(serviceProviderActivityFraction.companyId, companyId))
     await tx.delete(serviceProviderActivity).where(eq(serviceProviderActivity.companyId, companyId))
     await tx.delete(plan).where(eq(plan.companyId, companyId))
     await tx.delete(session).where(eq(session.companyId, companyId))
@@ -462,6 +464,8 @@ export async function dropTenant(pool: Database, companyId: string, owner?: Data
     await tx.delete(propertyGroup).where(eq(propertyGroup.companyId, companyId))
     await tx.delete(propertyParty).where(eq(propertyParty.companyId, companyId))
     await tx.delete(property).where(eq(property.companyId, companyId))
+    // A customer's contact persons (#291 C14) go before it.
+    await tx.delete(customerContact).where(eq(customerContact.companyId, companyId))
     await tx.delete(customer).where(eq(customer.companyId, companyId))
     await tx.delete(containerType).where(eq(containerType.companyId, companyId))
     // The fractions' emission factors (M13 of #293) name the fractions.

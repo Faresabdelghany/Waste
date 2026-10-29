@@ -10,6 +10,7 @@
 export const CUSTOMER_EXPORT_SECTIONS = [
   { key: "customer", title: "The customer" },
   { key: "history", title: "Its history" },
+  { key: "contacts", title: "Contact persons" },
   { key: "properties", title: "Properties it is a party to" },
   { key: "agreements", title: "Agreements and their subscriptions" },
   { key: "billableEvents", title: "Billable events" },

@@ -24,6 +24,7 @@ const PROPOSAL = { ...BASE, kind: "route-day-change", routeSchemeId: ID, collect
 const FOLLOW_UP = { ...BASE, kind: "compliance-follow-up", subject: "Insurance document renewal", dueOn: "2026-11-12" } as const
 const VEHICLE = { ...BASE, kind: "vehicle-change", routeSchemeId: ID, collectionGroupId: OTHER, vehicleId: ID, effectiveFrom: "2026-11-04" } as const
 const STOPS = { ...BASE, kind: "stop-set-change", routeSchemeId: ID, collectionGroupId: OTHER, containerIds: [OTHER, ID], effectiveFrom: "2026-11-04" } as const
+const FRACTIONS = { ...BASE, kind: "waste-fraction-change", routeSchemeId: ID, collectionGroupId: OTHER, wasteFractionIds: [ID], effectiveFrom: "2026-11-04" } as const
 const NOTE = { ...BASE, kind: "coordination-note", subject: "Harbour access closed Friday", body: "The harbour gate is closed for works." } as const
 
 const fails = (result: { success: boolean }) => !result.success
@@ -86,6 +87,15 @@ describe("a stop-set change", () => {
   })
 })
 
+describe("a waste-fraction change", () => {
+  test("names its rule group, one fraction at least, each once, and its day", () => {
+    assert.deepEqual(ServiceProviderActivityCreate.parse(FRACTIONS), FRACTIONS)
+    assert.ok(fails(ServiceProviderActivityCreate.safeParse({ ...FRACTIONS, wasteFractionIds: [] })))
+    assert.ok(fails(ServiceProviderActivityCreate.safeParse({ ...FRACTIONS, wasteFractionIds: [ID, ID] })))
+    assert.ok(fails(ServiceProviderActivityCreate.safeParse({ ...FRACTIONS, containerIds: [ID] })), "a waste-fraction change names no containers")
+  })
+})
+
 describe("a patch", () => {
   test("changes something", () => {
     assert.ok(fails(ServiceProviderActivityPatch.safeParse({})))
@@ -95,6 +105,7 @@ describe("a patch", () => {
     assert.equal(ServiceProviderActivityPatch.safeParse({ vehicleId: ID, driverId: null }).success, true)
     assert.equal(ServiceProviderActivityPatch.safeParse({ containerIds: [ID] }).success, true)
     assert.ok(fails(ServiceProviderActivityPatch.safeParse({ containerIds: [] })))
+    assert.equal(ServiceProviderActivityPatch.safeParse({ wasteFractionIds: [ID] }).success, true)
   })
 
   test("never moves the kind, the provider or the project", () => {
@@ -134,6 +145,7 @@ describe("the resource and its list", () => {
       vehicleId: null,
       driverId: null,
       containerIds: null,
+      wasteFractionIds: null,
       successorSchemeId: OTHER,
       openedBy: ID,
       closedBy: OTHER,

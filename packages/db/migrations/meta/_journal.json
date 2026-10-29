@@ -505,6 +505,20 @@
       "when": 1793227264394,
       "tag": "0071_stop_set_proposals",
       "breakpoints": true
+    },
+    {
+      "idx": 72,
+      "version": "7",
+      "when": 1793229147346,
+      "tag": "0072_waste_fraction_proposals",
+      "breakpoints": true
+    },
+    {
+      "idx": 73,
+      "version": "7",
+      "when": 1793231090634,
+      "tag": "0073_contact_persons",
+      "breakpoints": true
     }
   ]
 }

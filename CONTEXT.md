@@ -56,6 +56,10 @@ _Avoid_: Pickup day (a Pickup is one stop on a route), bin day, tømmedag in cop
 A person or organization that receives or finances a service.
 _Avoid_: Property, payer, account
 
+**Contact Person**:
+A named person who speaks for an organisation Customer, with a role (primary, billing, operations, on-site, other) and the channels they are reached on, an e-mail or a phone or both. A person Customer is their own contact and has none; one who leaves is made inactive, never deleted.
+_Avoid_: Contact (the prototype's word for a person Customer), representative, user
+
 **Property**:
 A physical service address or cadastral location where service is delivered.
 _Avoid_: Customer, contact
@@ -355,7 +359,7 @@ An effective-dated geographic and service responsibility awarded to a service pr
 _Avoid_: Contract area, operational area, route, service provider zone
 
 **Service Provider Activity**:
-One item of coordination between the office and one Service Provider about the work it holds under an award, numbered `ACT-<n>`: a proposal of a protected change, which asks for the office's Approval — a route-day change, a Collection Group of a scheme the provider serves run on other days from a day, a vehicle change, the group run with another vehicle and optionally another driver, or a stop-set change, a group that picks its stops run on another list of containers — a compliance follow-up the office raises with a due day, or a note either side keeps. An approved proposal is applied as the scheme's next version from its day; a refused one changes nothing. Every end is final, and overdue is a reading of a follow-up's due day, never a status. It restates no operational record: a route's assignment is the route's own.
+One item of coordination between the office and one Service Provider about the work it holds under an award, numbered `ACT-<n>`: a proposal of a protected change, which asks for the office's Approval — a route-day change, a Collection Group of a scheme the provider serves run on other days from a day, a vehicle change, the group run with another vehicle and optionally another driver, a stop-set change, a group that picks its stops run on another list of containers, or a waste-fraction change, a rule group's rule collect other fractions — a compliance follow-up the office raises with a due day, or a note either side keeps. An approved proposal is applied as the scheme's next version from its day; a refused one changes nothing. Every end is final, and overdue is a reading of a follow-up's due day, never a status. It restates no operational record: a route's assignment is the route's own.
 _Avoid_: Task, case (that is a Ticket), request (that is an Application), assignment notice
 
 **Service Area Assignment**:

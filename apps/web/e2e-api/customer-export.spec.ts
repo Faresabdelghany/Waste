@@ -41,5 +41,5 @@ test("a customer's details export everything held about it as one file, read by 
   const exported = file.sections.agreements as (Agreement & { subscriptions: unknown[] })[]
   expect(exported.map((agreement) => agreement.id).sort()).toEqual(agreements.map((agreement) => agreement.id).sort())
   for (const agreement of exported) expect(Array.isArray(agreement.subscriptions)).toBe(true)
-  for (const key of ["history", "properties", "billableEvents", "invoices", "payments", "tickets", "accessCredentials", "siteVisits", "bulkyBookings", "applications"]) expect(Array.isArray(file.sections[key]), key).toBe(true)
+  for (const key of ["history", "contacts", "properties", "billableEvents", "invoices", "payments", "tickets", "accessCredentials", "siteVisits", "bulkyBookings", "applications"]) expect(Array.isArray(file.sections[key]), key).toBe(true)
 })

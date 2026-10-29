@@ -1,7 +1,8 @@
 // The reads a Customer's export is made of (#291 C19, part 2): each family's
-// own list filtered by the customer, an agreement's subscriptions and a
-// ticket's messages read beside it, a family refused to the role (403) not
-// included with the API's sentence, and any other failure failing the export.
+// own list filtered by the customer, its contact persons, an agreement's
+// subscriptions and a ticket's messages read beside it, a family refused to
+// the role (403) not included with the API's sentence, and any other failure
+// failing the export.
 import assert from "node:assert/strict"
 import { describe, test } from "node:test"
 
@@ -18,6 +19,7 @@ describe("a customer's export, as the API answers it", () => {
     const { fetch, calls } = scripted([
       () => json({ id: CUSTOMER, name: "Østerbro Boligselskab" }),
       () => page([{ id: "a-1", table: "customer" }]),
+      () => json({ items: [{ id: "c-1", name: "Mette Holm" }] }),
       () => page([{ id: "p-1" }]),
       () => page([{ id: AGREEMENT }]),
       () => page([{ id: "s-1" }]),
@@ -37,6 +39,7 @@ describe("a customer's export, as the API answers it", () => {
       [
         `/customers/${CUSTOMER}`,
         "/audit-events",
+        `/customers/${CUSTOMER}/contacts`,
         "/properties?customerId",
         "/agreements?customerId",
         `/agreements/${AGREEMENT}/subscriptions`,
@@ -52,6 +55,7 @@ describe("a customer's export, as the API answers it", () => {
       ],
     )
     assert.equal(new URL(calls[1].url).searchParams.get("rowId"), CUSTOMER)
+    assert.deepEqual(outcomes.contacts, { included: true, data: [{ id: "c-1", name: "Mette Holm" }] })
     assert.deepEqual(outcomes.agreements, { included: true, data: [{ id: AGREEMENT, subscriptions: [{ id: "s-1" }] }] })
     assert.deepEqual(outcomes.tickets, { included: true, data: [{ id: TICKET, events: [{ id: "e-1", kind: "comment" }] }] })
     assert.deepEqual(outcomes.payments, { included: false, reason: "This account's role does not allow view on commercial.payments" })
