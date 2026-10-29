@@ -108,6 +108,7 @@ const pairingColumns = {
   sensorId: sensorPairing.sensorId,
   containerId: sensorPairing.containerId,
   fullThresholdPercent: sensorPairing.fullThresholdPercent,
+  booksEmptying: sensorPairing.booksEmptying,
   validFrom: sensorPairing.validFrom,
   validTo: sensorPairing.validTo,
   createdAt: sensorPairing.createdAt,
@@ -121,6 +122,7 @@ const pairingOf = (row: PairingRow): SensorPairing => ({
   sensorId: row.sensorId,
   containerId: row.containerId,
   fullThresholdPercent: row.fullThresholdPercent,
+  booksEmptying: row.booksEmptying,
   validFrom: row.validFrom,
   validTo: row.validTo,
   ...stampsOf(row),
@@ -549,7 +551,7 @@ export function sensorRoutes(guard: MiddlewareHandler<AuthEnv>, { now = () => ne
         operationId: "createSensorPairing",
         summary: "Pair a sensor with a container",
         description:
-          "Has the sensor measure a container of its project over a half-open period, at a full threshold in whole percent (85 unless said), the fill at which the worker's `fill-threshold` rule raises an alert. One sensor measures one container at a time and one container is measured by one sensor at a time. A retired sensor is paired with nothing new.",
+          "Has the sensor measure a container of its project over a half-open period, at a full threshold in whole percent (85 unless said), the fill at which the worker's `fill-threshold` rule raises an alert. With `booksEmptying` the alert also books the office's emptying of the container on the next route of its round ahead of its next scheduled emptying, where one runs and its vehicle takes the bin; the alert says what it came to. One sensor measures one container at a time and one container is measured by one sensor at a time. A retired sensor is paired with nothing new.",
         security: BEARER_SECURITY,
         responses: {
           201: describeCreated("The pairing as it was written, read at `/sensor-pairings/{id}`.", SensorPairing),
@@ -613,9 +615,9 @@ export function sensorRoutes(guard: MiddlewareHandler<AuthEnv>, { now = () => ne
       "/sensor-pairings/:id",
       describeRoute({
         operationId: "patchSensorPairing",
-        summary: "Move a pairing's threshold or its end",
+        summary: "Move a pairing's threshold, its booking or its end",
         description:
-          "Moves the full threshold, or the first day the sensor no longer measures the container (`validTo`; null leaves the pairing open). A pairing that starts on another day or measures another container is another pairing. An end taken later is held to the same rule as a create: the sensor and the container each paired once at a time.",
+          "Moves the full threshold, whether a filling books an emptying, or the first day the sensor no longer measures the container (`validTo`; null leaves the pairing open). A pairing that starts on another day or measures another container is another pairing. An end taken later is held to the same rule as a create: the sensor and the container each paired once at a time.",
         security: BEARER_SECURITY,
         responses: {
           200: describeJson("The pairing as it now stands.", SensorPairing),
