@@ -89,10 +89,14 @@ test("Containers: registered, received, refused a second receipt by sentence, mo
   expect(transferred.status()).toBe(201)
   await expect(details.getByText("In maintenance").first()).toBeVisible()
 
-  const decommissioned = await runCommand(page, "Decommission", new RegExp(`^/containers/${container.id}/decommission$`), () =>
-    page.getByRole("dialog").filter({ has: page.getByRole("heading", { name: "Decommission" }) }).getByLabel("Reason").fill("E2E: burnt out"),
-  )
+  // Why, by one of the company's reasons the seed gives it (O30 of #290), and a note beside it.
+  const decommissioned = await runCommand(page, "Decommission", new RegExp(`^/containers/${container.id}/decommission$`), async () => {
+    await pick(page, "Reason", /^Worn out/)
+    await page.getByRole("dialog").filter({ has: page.getByRole("heading", { name: "Decommission" }) }).getByLabel("Note").fill("E2E: burnt out")
+  })
   expect(decommissioned.status()).toBe(201)
+  expect(decommissioned.request().postDataJSON()).toMatchObject({ reason: "E2E: burnt out" })
+  expect(((await decommissioned.json()) as { decommissionReasonId: string | null }).decommissionReasonId).not.toBeNull()
   await expect(details.getByText("Retired").first()).toBeVisible()
   await expect(details.getByTestId("container-ledger").getByRole("listitem")).toHaveCount(3)
 

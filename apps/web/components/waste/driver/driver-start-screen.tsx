@@ -121,59 +121,58 @@ function StartForm({ route, me }: { route: Route; me: DriverMe }) {
   const [vehicleId, setVehicleId] = useState(() => planned(route.planned.vehicleId, vehicles) || (vehicles[0]?.id ?? ""))
   const [trailerId, setTrailerId] = useState(() => planned(route.planned.trailerId, trailers))
 
+  const checked = checking === null ? undefined : me.vehicles.find((candidate) => candidate.id === checking)
+
   return (
-    <form
-      className="flex flex-col gap-3 border-t pt-3"
-      onSubmit={(event) => {
-        event.preventDefault()
-        if (vehicleId === "") return
-        void app.tap({ kind: "start-route", routeId: route.id, body: { vehicleId, ...(trailerId === "" ? {} : { trailerId }) } })
-      }}
-    >
-      <NativeSelect id={`vehicle-${route.id}`} label="Vehicle" value={vehicleId} onChange={setVehicleId}>
-        {vehicles.map((vehicle) => (
-          <option key={vehicle.id} value={vehicle.id}>
-            {vehicle.label}
-            {vehicle.id === route.planned.vehicleId ? " (planned)" : ""}
-          </option>
-        ))}
-      </NativeSelect>
-      {trailers.length > 0 && (
-        <NativeSelect id={`trailer-${route.id}`} label="Trailer" value={trailerId} onChange={setTrailerId}>
-          <option value="">No trailer</option>
-          {trailers.map((trailer) => (
-            <option key={trailer.id} value={trailer.id}>
-              {trailer.label}
-              {trailer.id === route.planned.trailerId ? " (planned)" : ""}
+    <>
+      <form
+        className="flex flex-col gap-3 border-t pt-3"
+        onSubmit={(event) => {
+          event.preventDefault()
+          if (vehicleId === "") return
+          void app.tap({ kind: "start-route", routeId: route.id, body: { vehicleId, ...(trailerId === "" ? {} : { trailerId }) } })
+        }}
+      >
+        <NativeSelect id={`vehicle-${route.id}`} label="Vehicle" value={vehicleId} onChange={setVehicleId}>
+          {vehicles.map((vehicle) => (
+            <option key={vehicle.id} value={vehicle.id}>
+              {vehicle.label}
+              {vehicle.id === route.planned.vehicleId ? " (planned)" : ""}
             </option>
           ))}
         </NativeSelect>
-      )}
-      <div className="grid grid-cols-2 gap-2">
-        {[vehicleId, trailerId]
-          .filter((id) => id !== "")
-          .map((id) => {
-            const picked = me.vehicles.find((candidate) => candidate.id === id)
-            const sending = checkWaiting(state.waiting, route.id, id)
-            return (
-              <Button key={id} type="button" variant="outline" className="h-11" disabled={picked === undefined || sending} onClick={() => setChecking(id)}>
-                <ClipboardText aria-hidden />
-                {sending ? "Check sending" : `Check ${picked?.label ?? "vehicle"}`}
-              </Button>
-            )
-          })}
-      </div>
-      {checking !== null &&
-        (() => {
-          const picked = me.vehicles.find((candidate) => candidate.id === checking)
-          return picked === undefined ? null : (
-            <PreTripDialog open onOpenChange={(open) => !open && setChecking(null)} vehicle={picked} onConfirm={(body) => void app.tap({ kind: "pre-trip-check", routeId: route.id, body })} />
-          )
-        })()}
-      <Button type="submit" className="h-11" disabled={vehicleId === ""}>
-        <Play aria-hidden weight="fill" />
-        Start route
-      </Button>
-    </form>
+        {trailers.length > 0 && (
+          <NativeSelect id={`trailer-${route.id}`} label="Trailer" value={trailerId} onChange={setTrailerId}>
+            <option value="">No trailer</option>
+            {trailers.map((trailer) => (
+              <option key={trailer.id} value={trailer.id}>
+                {trailer.label}
+                {trailer.id === route.planned.trailerId ? " (planned)" : ""}
+              </option>
+            ))}
+          </NativeSelect>
+        )}
+        <div className="grid grid-cols-2 gap-2">
+          {[vehicleId, trailerId]
+            .filter((id) => id !== "")
+            .map((id) => {
+              const picked = me.vehicles.find((candidate) => candidate.id === id)
+              const sending = checkWaiting(state.waiting, route.id, id)
+              return (
+                <Button key={id} type="button" variant="outline" className="h-11" disabled={picked === undefined || sending} onClick={() => setChecking(id)}>
+                  <ClipboardText aria-hidden />
+                  {sending ? "Check sending" : `Check ${picked?.label ?? "vehicle"}`}
+                </Button>
+              )
+            })}
+        </div>
+        <Button type="submit" className="h-11" disabled={vehicleId === ""}>
+          <Play aria-hidden weight="fill" />
+          Start route
+        </Button>
+      </form>
+      {/* Beside the form, never inside it: a portal's submit still bubbles through React's tree, and the check's would start the route. */}
+      {checked !== undefined && <PreTripDialog open onOpenChange={(open) => !open && setChecking(null)} vehicle={checked} onConfirm={(body) => void app.tap({ kind: "pre-trip-check", routeId: route.id, body })} />}
+    </>
   )
 }

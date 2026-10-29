@@ -4,8 +4,8 @@
 // customer, the property, the agreement, the driver, the vehicle — and the
 // rows Resolution names beside them: the accounts a ticket is assigned to
 // (Users & roles), the routes and the re-collection's route (Route Studio),
-// the containers, the shared points and the tickets themselves — an alert's
-// ticket and a sub-ticket's parent. Each reads the module the store loaded
+// the containers, the shared points, the tickets themselves — an alert's
+// ticket and a sub-ticket's parent — and the ticket teams (O30 of #290). Each reads the module the store loaded
 // and offers nothing before it has answered.
 //
 // A picker hides no row by status — a status gates a new reference and never
@@ -25,6 +25,7 @@ import { moduleKeyOf } from "@/lib/api/records/adapter"
 import { CONTAINERS_MODULE } from "@/lib/api/records/containers"
 import { PICKUPS_MODULE } from "@/lib/api/records/pickups"
 import { ROUTES_MODULE } from "@/lib/api/records/routes"
+import { isTicketTeamRecord } from "@/lib/api/records/ticket-teams"
 import { TICKET_NUMBER_FACT, TICKETS_MODULE } from "@/lib/api/records/tickets"
 import { AGREEMENTS_MODULE, isAgreementRecord } from "@/lib/data/agreements"
 import { PRODUCTS_MODULE } from "@/lib/data/commercial"
@@ -33,6 +34,7 @@ import { getModuleDefinition, type BusinessRecord, type ModuleLocation } from "@
 import { keptOptions, keptValue } from "@/lib/data/place-pickers"
 import { NO_ONE, SHARED_POINTS_MODULE } from "@/lib/data/properties"
 import { ticketWorkProductOptions } from "@/lib/data/ticket-charges"
+import { TICKET_TEAMS_MODULE } from "@/lib/data/ticket-teams"
 import { ACCESS_MODULE, recollectionStopOptions, ticketStopOptions } from "@/lib/data/tickets"
 import { isSoftDeleted } from "@waste/domain/record-visibility"
 
@@ -67,6 +69,8 @@ export function useResolutionPickers(): RelationPickers {
   const tickets = useModuleRecords(TICKETS_MODULE.workspaceId, TICKETS_MODULE.moduleId, fixturesOf(TICKETS_MODULE))
   const pickups = useModuleRecords(PICKUPS_MODULE.workspaceId, PICKUPS_MODULE.moduleId, fixturesOf(PICKUPS_MODULE))
   const products = useModuleRecords(PRODUCTS_MODULE.workspaceId, PRODUCTS_MODULE.moduleId, fixturesOf(PRODUCTS_MODULE))
+  // The ticket teams (O30 of #290): the API's alone, so no fixture stands in for one.
+  const teams = useModuleRecords(TICKET_TEAMS_MODULE.workspaceId, TICKET_TEAMS_MODULE.moduleId, NO_RECORDS)
   // The modules a dialog waits on. Not the stops: the re-collection's stop is
   // optional and a recollected completion's alone, so a Complete answering
   // otherwise is never held back by the stops' read — before it lands the
@@ -77,6 +81,7 @@ export function useResolutionPickers(): RelationPickers {
     [keyOf(CONTAINERS_MODULE), containers],
     [keyOf(SHARED_POINTS_MODULE), points],
     [keyOf(TICKETS_MODULE), tickets],
+    [keyOf(TICKET_TEAMS_MODULE), teams],
   ])
 
   const rowsFor = (field: BusinessFormField, projectId: string | undefined, values: BusinessFormValues): readonly BusinessFormOption[] | undefined => {
@@ -115,6 +120,9 @@ export function useResolutionPickers(): RelationPickers {
       // The case a ticket is part of (7.10 of #290): a ticket of its project, optional.
       case "parentTicketId":
         return optional(inProject(tickets.records, projectId).map(ticketOption))
+      // The team a new ticket waits with (O30 of #290): an active one, or None for no team; left blank, the project's default for the kind.
+      case "teamId":
+        return [{ value: NO_ONE, label: "None: no team" }, ...teams.records.filter((record) => isTicketTeamRecord(record) && record.status === "Active").map((record) => optionOf(record))]
       default:
         return undefined
     }

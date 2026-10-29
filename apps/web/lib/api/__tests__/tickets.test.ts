@@ -99,6 +99,7 @@ const missed: Ticket = {
   occurredAt: "2026-10-01T05:31:00.000Z",
   dueAt: "2026-10-01T12:00:00.000Z",
   assigneeUserAccountId: null,
+  teamId: null,
   createdBy: null,
   sourceEventId: "01a0d2a4-a280-7050-8000-000000000001",
   links: { ...NO_LINKS, routeId, pickupId, containerId },
@@ -169,6 +170,7 @@ describe("a ticket", () => {
       Kind: "Missed collection",
       Priority: "High",
       Assignee: "Unassigned",
+      Team: "No team",
       "Opened via": "Driver app",
       Occurred: "2026-10-01 07:31",
       Due: "2026-10-01 14:00",
@@ -178,7 +180,7 @@ describe("a ticket", () => {
       Pickup: `pickup-${pickupId}`,
       Container: "BIN-82014",
     })
-    assert.ok(!("Team" in record.facts), "no team or configured type: the wire has neither")
+    assert.ok(!("Type" in record.facts), "no configured type: the wire has none")
     assert.ok(!("Source" in record.facts), "the wire's source is no fixture's Source")
     assert.deepEqual(record.submittedValues, {
       projectId: projectRecord.id,
@@ -193,6 +195,7 @@ describe("a ticket", () => {
       dueAt: "2026-10-01T14:00",
       assigneeUserAccountId: "",
       [ASSIGNEE_ACCOUNT_KEY]: "",
+      teamId: NO_ONE,
       routeId: rc1042.id,
       pickupId: `pickup-${pickupId}`,
       containerId: bin.id,

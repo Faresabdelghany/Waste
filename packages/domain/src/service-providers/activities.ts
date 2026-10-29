@@ -27,7 +27,7 @@ export type ActivitySide = "office" | "provider"
 export type ActivityCommand = "approve" | "reject" | "withdraw" | "complete" | "cancel"
 
 /** The kinds that ask for an Approval. */
-export const PROPOSAL_KINDS = ["route-day-change"] as const satisfies readonly ServiceProviderActivityKind[]
+export const PROPOSAL_KINDS = ["route-day-change", "vehicle-change", "stop-set-change", "waste-fraction-change"] as const satisfies readonly ServiceProviderActivityKind[]
 
 export const isProposal = (kind: ServiceProviderActivityKind): boolean => (PROPOSAL_KINDS as readonly string[]).includes(kind)
 
@@ -42,6 +42,9 @@ const CREATE_SIDES: Readonly<Record<ServiceProviderActivityKind, readonly Activi
   "route-day-change": ["office", "provider"],
   "compliance-follow-up": ["office"],
   "coordination-note": ["office", "provider"],
+  "vehicle-change": ["office", "provider"],
+  "stop-set-change": ["office", "provider"],
+  "waste-fraction-change": ["office", "provider"],
 }
 
 export const OFFICE_RAISES_FOLLOW_UPS = "A compliance follow-up is the office's to raise"
@@ -68,6 +71,9 @@ const COMMAND_SIDES: Readonly<Record<ServiceProviderActivityKind, Partial<Record
   "route-day-change": { approve: ["office"], reject: ["office"], withdraw: ["office", "provider"] },
   "compliance-follow-up": { complete: ["office"], cancel: ["office"] },
   "coordination-note": { complete: ["office", "provider"] },
+  "vehicle-change": { approve: ["office"], reject: ["office"], withdraw: ["office", "provider"] },
+  "stop-set-change": { approve: ["office"], reject: ["office"], withdraw: ["office", "provider"] },
+  "waste-fraction-change": { approve: ["office"], reject: ["office"], withdraw: ["office", "provider"] },
 }
 
 /** The sides that may give the command on an Activity of the kind; empty where the kind does not take it. */
@@ -89,6 +95,9 @@ export const KIND_WORDS: Readonly<Record<ServiceProviderActivityKind, string>> =
   "route-day-change": "route-day change",
   "compliance-follow-up": "compliance follow-up",
   "coordination-note": "coordination note",
+  "vehicle-change": "vehicle change",
+  "stop-set-change": "stop-set change",
+  "waste-fraction-change": "waste-fraction change",
 }
 
 const article = (words: string): string => (/^[aeiou]/.test(words) ? `an ${words}` : `a ${words}`)
@@ -144,6 +153,32 @@ export const SAME_DAYS = "The proposed days are the days the group runs on alrea
 export function routeDayChangeRefusal(current: readonly ServiceDay[], proposed: readonly ServiceDay[]): string | null {
   const same = current.length === proposed.length && proposed.every((day) => current.includes(day))
   return same ? SAME_DAYS : null
+}
+
+export const SAME_CREW = "The proposed vehicle and driver are the group's already"
+
+/** Why a vehicle change of a group running with `current` to `proposed` is no change, or null where it moves the vehicle or the driver; a driver left unsaid keeps the group's. */
+export function vehicleChangeRefusal(current: { vehicleId: string | null; driverId: string | null }, proposed: { vehicleId: string; driverId: string | null }): string | null {
+  const driver = proposed.driverId ?? current.driverId
+  return current.vehicleId === proposed.vehicleId && current.driverId === driver ? SAME_CREW : null
+}
+
+export const SAME_STOPS = "The proposed stops are the group's already, in the same order"
+export const RULE_GROUP_STOPS = "This group finds its stops by its rule, not a list: propose a waste-fraction change to its rule instead"
+
+/** Why a stop-set change of a group picking `current` to `proposed` is no change, or null where it moves a stop or their order: the list is stop order. */
+export function stopSetChangeRefusal(current: readonly string[], proposed: readonly string[]): string | null {
+  const same = current.length === proposed.length && current.every((id, index) => proposed[index] === id)
+  return same ? SAME_STOPS : null
+}
+
+export const SAME_FRACTIONS = "The proposed waste fractions are the ones the group's rule collects already"
+export const MANUAL_GROUP_FRACTIONS = "This group picks its stops, so it has no rule to collect by: propose a stop-set change to its list instead"
+
+/** Why a waste-fraction change of a rule collecting `current` to `proposed` is no change, or null where it moves a fraction: a rule's fractions are a set. */
+export function wasteFractionChangeRefusal(current: readonly string[], proposed: readonly string[]): string | null {
+  const same = current.length === proposed.length && proposed.every((id) => current.includes(id))
+  return same ? SAME_FRACTIONS : null
 }
 
 /**

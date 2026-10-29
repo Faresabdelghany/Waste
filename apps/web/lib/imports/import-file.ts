@@ -11,6 +11,7 @@
 import type { ImportKind, ImportRowResult } from "@waste/contracts/imports"
 import type { ModuleKey } from "@waste/domain/access/modules"
 import { importRows, type ImportFile, type ImportRow } from "@waste/domain/imports/csv"
+import { planningAreaRows } from "@waste/domain/imports/geojson"
 import { IMPORT_BATCH_MAX, IMPORT_ROWS_MAX } from "@waste/domain/imports/vocabulary"
 
 import { allows, type Grants } from "@/lib/api/grants"
@@ -22,6 +23,16 @@ export const IMPORT_KIND_OPTIONS = [
   { kind: "properties", label: "Properties", moduleKey: "customers.properties", projectScoped: true },
   { kind: "containers", label: "Containers", moduleKey: "resources.containers", projectScoped: true },
   { kind: "agreements", label: "Agreements and subscriptions", moduleKey: "customers.agreements", projectScoped: true },
+  // The company's catalogue (O30 of #290, row 1.18), kept in Settings › Master data.
+  { kind: "waste-fractions", label: "Waste fractions", moduleKey: "configure.master", projectScoped: false },
+  { kind: "container-types", label: "Container types", moduleKey: "configure.master", projectScoped: false },
+  { kind: "vehicle-types", label: "Vehicle types", moduleKey: "configure.master", projectScoped: false },
+  // A project's fleet (O30 of #290, row 1.18).
+  { kind: "vehicles", label: "Vehicles", moduleKey: "fleet.vehicles", projectScoped: true },
+  { kind: "drivers", label: "Drivers", moduleKey: "fleet.drivers", projectScoped: true },
+  // A project's calendars and planning areas (O30 of #290, row 1.18), the areas from a GeoJSON file or a CSV one.
+  { kind: "collection-calendars", label: "Collection calendars", moduleKey: "configure.calendars", projectScoped: true },
+  { kind: "planning-areas", label: "Planning areas (GeoJSON)", moduleKey: "configure.areas", projectScoped: true },
 ] as const satisfies readonly { kind: ImportKind; label: string; moduleKey: ModuleKey; projectScoped: boolean }[]
 
 export type ImportKindOption = (typeof IMPORT_KIND_OPTIONS)[number]
@@ -57,14 +68,22 @@ export function textOf(bytes: ArrayBuffer | Uint8Array): string {
 /** What a file is told before any row is sent: the reasons it cannot be previewed, and the columns it holds that the kind will not read. */
 export type FileReading = { file: ImportFile; blocking: string[]; ignored: string[] }
 
+/** Whether a kind reads a GeoJSON file: the planning areas, whose text then opens as a JSON object does. */
+const readsGeoJson = (kind: ImportKind, text: string): boolean => kind === "planning-areas" && text.trimStart().replace(/^\uFEFF/, "").startsWith("{")
+
+/** The files the file picker offers for a kind: a CSV, and for the planning areas a GeoJSON file too. */
+export const acceptedFiles = (kind: ImportKind): string => (kind === "planning-areas" ? ".geojson,.json,application/geo+json,application/json,.csv,text/csv" : ".csv,text/csv")
+
 export function readImportFile(kind: ImportKind, text: string): FileReading {
-  const file = importRows(kind, text)
+  const geojson = readsGeoJson(kind, text) ? planningAreaRows(text) : undefined
+  if (geojson !== undefined && "problem" in geojson) return { file: { rows: [], issues: { unknown: [], missing: [], repeated: [], unclosedQuote: null } }, blocking: [geojson.problem], ignored: [] }
+  const file = geojson ?? importRows(kind, text)
   const blocking: string[] = []
   const { missing, repeated, unknown, unclosedQuote } = file.issues
   if (unclosedQuote !== null) blocking.push(`Row ${unclosedQuote} opens a quoted cell that never closes, so every row after it ran into it; close the quote and choose the file again.`)
   if (missing.length > 0) blocking.push(`The file has no ${listed(missing)} ${missing.length === 1 ? "column" : "columns"}; every row needs ${missing.length === 1 ? "it" : "them"}.`)
   if (repeated.length > 0) blocking.push(`The file names ${listed(repeated)} twice; give each column once.`)
-  if (file.rows.length === 0) blocking.push("The file has no rows below its header.")
+  if (file.rows.length === 0) blocking.push(geojson === undefined ? "The file has no rows below its header." : "The file has no features.")
   if (file.rows.length > IMPORT_ROWS_MAX) blocking.push(`The file has ${file.rows.length} rows; an import takes at most ${IMPORT_ROWS_MAX}, so split it.`)
   return { file, blocking, ignored: unknown }
 }

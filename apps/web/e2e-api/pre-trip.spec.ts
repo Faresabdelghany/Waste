@@ -134,7 +134,8 @@ test("the office sets a type's checklist, the driver's checks find a minor and a
     await expect(toasts(office)).toContainText("Defect resolved")
     expect(((await (await api.get(`/vehicles/${nr08.id}`)).json()) as Vehicle).status, "resolving leaves the status to the vehicle's own edit").toBe("maintenance")
   } finally {
-    await context.close()
+    // A test that timed out has closed the context already; its own error is the one to read.
+    await context.close().catch(() => undefined)
     await mended()
     expect((await api.put(`/vehicle-types/${type.id}/checklist`, { data: { items: before } })).status()).toBe(200)
   }

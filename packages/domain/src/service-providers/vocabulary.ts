@@ -13,10 +13,13 @@
  * day — asks for the office's Approval, which writes the scheme's next version;
  * a `compliance-follow-up` is the office asking the provider to bring what its
  * award requires up to date by a day; a `coordination-note` is a dated note
- * between the two, open until either closes it. The other proposal kinds of
- * #474 join this list one by one, each with what approval applies.
+ * between the two, open until either closes it. A `vehicle-change` is a
+ * proposal too: the group runs with another vehicle, and optionally another
+ * driver, from a day; a `stop-set-change` the containers a group that picks
+ * its stops runs on, in stop order, from a day; a `waste-fraction-change` the
+ * fractions a rule group's Stop Matching Rule collects, from a day.
  */
-export const SERVICE_PROVIDER_ACTIVITY_KINDS = ["route-day-change", "compliance-follow-up", "coordination-note"] as const
+export const SERVICE_PROVIDER_ACTIVITY_KINDS = ["route-day-change", "compliance-follow-up", "coordination-note", "vehicle-change", "stop-set-change", "waste-fraction-change"] as const
 /**
  * Where an Activity stands. A proposal is pending approval until the office
  * approves or rejects it or its provider withdraws it; every other kind is

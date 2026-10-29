@@ -2,9 +2,9 @@
 // type's checklist items, the checks a driver appends — a ledger keyed into
 // the route, the vehicle and the driver through their project — and the
 // defects a check finds, keyed into the check, the vehicle and the ticket;
-// and four checks respelt, which Postgres has no ALTER for: the receipt's
+// and five checks respelt, which Postgres has no ALTER for: the receipt's
 // kind grown by `pre-trip-check`, and a ticket's kind, read by a ticket's, an
-// SLA's and a ticket charge's checks, grown by `vehicle-defect`. Then the
+// SLA's, a team default's and a ticket charge's checks, grown by `vehicle-defect`. Then the
 // migration, whose head is exactly those statements and whose tail is what
 // the tables owe the file. The file is found by its name, not its number,
 // which it takes at its turn. No database.
@@ -32,11 +32,12 @@ const respelt = (table: string, column: string, name: string, values: readonly s
   `ALTER TABLE "wms"."${table}" ADD ${oneOfCheck(table, column, ...values).replace(/^CONSTRAINT "[^"]+"/, `CONSTRAINT "${name}"`)};`,
 ]
 
-/** What drizzle-kit wrote into the tables already applied: the four checks respelt. */
+/** What drizzle-kit wrote into the tables already applied: the five checks respelt. */
 const ALTERED = [
   ...respelt("driver_command", "kind", "driver_command_kind_one_of", DRIVER_COMMAND_KINDS),
   ...respelt("ticket", "kind", "ticket_kind_one_of", TICKET_KINDS),
   ...respelt("ticket_sla", "kind", "ticket_sla_kind_one_of", TICKET_KINDS),
+  ...respelt("ticket_team_default", "kind", "ticket_team_default_kind_one_of", TICKET_KINDS),
   ...respelt("ticket_kind_product", "ticket_kind", "ticket_kind_product_ticket_kind_one_of", TICKET_KINDS),
 ]
 
@@ -60,7 +61,7 @@ async function migration(): Promise<{ text: string; statements: string[] }> {
 }
 
 describe("pre-trip inspection as drizzle-kit writes it", () => {
-  test("the migration's head is exactly drizzle-kit's statements: the three tables with their keys and indexes, and the four checks respelt", async () => {
+  test("the migration's head is exactly drizzle-kit's statements: the three tables with their keys and indexes, and the five checks respelt", async () => {
     const { statements } = await migration()
     const generated = [...(await statementsFor({ preTripCheck, preTripChecklistItem, vehicleDefect })), ...ALTERED].map(normalised)
     // The same statements, whatever order drizzle-kit's loader gave them.

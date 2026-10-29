@@ -37,6 +37,7 @@ import * as geojsonModule from "../geojson"
 import * as healthModule from "../health"
 import * as idsModule from "../ids"
 import * as importsModule from "../imports"
+import * as integrationsModule from "../integrations"
 import * as invoicesModule from "../invoices"
 import * as maintenanceModule from "../maintenance"
 import * as meModule from "../me"
@@ -79,11 +80,13 @@ import * as stockModule from "../stock"
 import * as sustainabilityModule from "../sustainability"
 import * as textModule from "../text"
 import * as ticketSlaModule from "../ticket-sla"
+import * as ticketTeamsModule from "../ticket-teams"
 import * as ticketsModule from "../tickets"
 import * as unloadsModule from "../unloads"
 import * as validityModule from "../validity"
 import * as vehicleTypesModule from "../vehicle-types"
 import * as visitRulesModule from "../visit-rules"
+import * as messagingModule from "../messaging"
 import * as weightControlModule from "../weight-control"
 import * as workOrderChargesModule from "../work-order-charges"
 import { Int4, INT4_MAX, INT4_MIN, NonNegativeInt, NonNegativeMinor, NonNegativeTotal, PositiveInt } from "../resource"
@@ -99,6 +102,7 @@ const MODULES: Readonly<Record<string, Record<string, unknown>>> = {
   "alerts": alertsModule,
   "allocations": allocationsModule,
   "audit": auditModule,
+  "messaging": messagingModule,
   "availability": availabilityModule,
   "billable-events": billableEventsModule,
   "billing": billingModule,
@@ -119,6 +123,7 @@ const MODULES: Readonly<Record<string, Record<string, unknown>>> = {
   "health": healthModule,
   "ids": idsModule,
   "imports": importsModule,
+  "integrations": integrationsModule,
   "invoices": invoicesModule,
   "maintenance": maintenanceModule,
   "me": meModule,
@@ -161,6 +166,7 @@ const MODULES: Readonly<Record<string, Record<string, unknown>>> = {
   "sustainability": sustainabilityModule,
   "text": textModule,
   "ticket-sla": ticketSlaModule,
+  "ticket-teams": ticketTeamsModule,
   "tickets": ticketsModule,
   "unloads": unloadsModule,
   "validity": validityModule,
