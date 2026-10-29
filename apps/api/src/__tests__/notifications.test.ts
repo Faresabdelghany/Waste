@@ -79,8 +79,11 @@ describe("a staff member's notices", { skip: database.skip }, () => {
   })
 
   test("the notices sent are read by their recipient alone, newest first, and are no customer's message", async () => {
+    // Each a millisecond apart: an id's order is its time's, and two minted in one millisecond have none.
+    const minted = Date.now()
+    let made = 0
     const staff = (userAccountId: string, subject: string) => ({
-      id: testId(),
+      id: testId(minted + made++),
       companyId: a.companyId,
       projectId: a.projects.copenhagen.id,
       userAccountId,
