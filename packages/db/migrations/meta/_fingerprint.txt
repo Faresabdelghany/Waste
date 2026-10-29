@@ -1931,6 +1931,7 @@ constraint wms.outbound_load outbound_load_net_kg_positive CHECK ((net_kg > 0))
 constraint wms.outbound_load outbound_load_note_shape CHECK (((status <> ALL (ARRAY['disputed'::text, 'cancelled'::text])) OR (note IS NOT NULL)))
 constraint wms.outbound_load outbound_load_pkey PRIMARY KEY (id)
 constraint wms.outbound_load outbound_load_project_id_fk FOREIGN KEY (company_id, project_id) REFERENCES wms.project(company_id, id)
+constraint wms.outbound_load outbound_load_project_key UNIQUE (company_id, project_id, id)
 constraint wms.outbound_load outbound_load_receipt_shape CHECK ((((status = ANY (ARRAY['received'::text, 'reconciled'::text, 'disputed'::text])) = (receiving_ticket IS NOT NULL)) AND ((receiving_ticket IS NULL) = (received_net_kg IS NULL)) AND ((receiving_ticket IS NULL) = (received_at IS NULL))))
 constraint wms.outbound_load outbound_load_received_net_kg_positive CHECK ((received_net_kg > 0))
 constraint wms.outbound_load outbound_load_service_provider_id_fk FOREIGN KEY (company_id, service_provider_id) REFERENCES wms.service_provider(company_id, id)
@@ -1944,6 +1945,7 @@ constraint wms.outbound_load outbound_load_weights_shape CHECK ((((gross_kg IS N
 index wms.outbound_load outbound_load_from_station_idx CREATE INDEX outbound_load_from_station_idx ON wms.outbound_load USING btree (company_id, from_station_id, waste_fraction_id)
 index wms.outbound_load outbound_load_pkey CREATE UNIQUE INDEX outbound_load_pkey ON wms.outbound_load USING btree (id)
 index wms.outbound_load outbound_load_project_id_departed_at_idx CREATE INDEX outbound_load_project_id_departed_at_idx ON wms.outbound_load USING btree (company_id, project_id, departed_at)
+index wms.outbound_load outbound_load_project_key CREATE UNIQUE INDEX outbound_load_project_key ON wms.outbound_load USING btree (company_id, project_id, id)
 index wms.outbound_load outbound_load_service_provider_id_idx CREATE INDEX outbound_load_service_provider_id_idx ON wms.outbound_load USING btree (company_id, service_provider_id)
 index wms.outbound_load outbound_load_to_station_id_idx CREATE INDEX outbound_load_to_station_id_idx ON wms.outbound_load USING btree (company_id, to_station_id)
 index wms.outbound_load outbound_load_vehicle_id_idx CREATE INDEX outbound_load_vehicle_id_idx ON wms.outbound_load USING btree (company_id, vehicle_id)
@@ -4811,5 +4813,5 @@ journal 1793247592226 4b92f6ad7212b3dafef3bbd4bfba4e6696da935f5c9f7354442f7860b0
 journal 1793251427635 28c1ebcb79fe09c31112ea7c107fd4fa02346fd0ea3241c4875ef71724c3300a
 journal 1793262692450 55627dafbd3cb890c76eb45db4afd21abdf2a8593bb40b111738da9cc9c67bef
 journal 1793263502443 743ec23d04aeeab55f061db6ccb5e4a41b62823362ca3f8f5fe3cc5358ddcd5e
-journal 1793266797592 6c63a1f2501dd21dd79eb33ed5a7a34f6130b37f179f06dce1866b5367cd5dcd
+journal 1793269290325 4939a4466261f21e70aac488fcaf9d2bd3d8f4082c4923a264c2fd6b86696aee
 pgboss-version 42

@@ -57,6 +57,8 @@ describe("the transfer stock as drizzle-kit writes it", () => {
     ]) {
       assert.ok(statements.includes(normalised(statement)), statement)
     }
+    // The key an alert about the load points at (part 2), held to the alert's own project.
+    assert.match(statements.find((statement) => statement.startsWith('CREATE TABLE "wms"."outbound_load"')) ?? "", /CONSTRAINT "outbound_load_project_key" UNIQUE\("company_id","project_id","id"\)/)
     const load = checksOf(outboundLoad)
     const column = (name: string) => ref("outbound_load", name)
     assert.equal(load.get("outbound_load_status_one_of"), `${column("status")} in (${list(...OUTBOUND_LOAD_STATUSES)})`)

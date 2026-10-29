@@ -38,7 +38,7 @@ import { id, projectScoped, recorded, timestamps } from "./columns"
 import { vehicle } from "./fleet"
 import { company, project, serviceProvider } from "./organisation"
 import { unloadingStation } from "./places"
-import { companyReference, projectReference, tenantIndex, tenantReference } from "./references"
+import { companyReference, projectKey, projectReference, tenantIndex, tenantReference } from "./references"
 import { wms } from "./wms"
 
 const instant = () => timestamp({ withTimezone: true })
@@ -89,6 +89,8 @@ export const outboundLoad = wms.table(
     tenantReference(t, [t.wasteFractionId], wasteFraction),
     projectReference(t, [t.vehicleId], vehicle),
     tenantReference(t, [t.serviceProviderId], serviceProvider),
+    // What an alert about the load points at (part 2): the load of the alert's own project.
+    projectKey(t),
     oneOf(t.status, OUTBOUND_LOAD_STATUSES),
     positive(t.grossKg),
     positive(t.tareKg),

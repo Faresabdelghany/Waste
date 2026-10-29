@@ -45,6 +45,7 @@ CREATE TABLE "wms"."outbound_load" (
 	"disposal_cost_minor" integer,
 	"status" text NOT NULL,
 	"note" text,
+	CONSTRAINT "outbound_load_project_key" UNIQUE("company_id","project_id","id"),
 	CONSTRAINT "outbound_load_status_one_of" CHECK ("wms"."outbound_load"."status" in ('departed', 'received', 'reconciled', 'disputed', 'cancelled')),
 	CONSTRAINT "outbound_load_gross_kg_positive" CHECK ("wms"."outbound_load"."gross_kg" > 0),
 	CONSTRAINT "outbound_load_tare_kg_positive" CHECK ("wms"."outbound_load"."tare_kg" > 0),

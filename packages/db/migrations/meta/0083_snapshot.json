@@ -1,5 +1,5 @@
 {
-  "id": "266e5be5-86e4-4dd8-96d7-5390d17c1f2d",
+  "id": "b3839b2c-aeb3-4c1e-9f52-1dd8f0f93d5a",
   "prevId": "8862a7a3-54f2-4422-921b-93a1773660e9",
   "version": "7",
   "dialect": "postgresql",
@@ -34012,7 +34012,17 @@
         }
       },
       "compositePrimaryKeys": {},
-      "uniqueConstraints": {},
+      "uniqueConstraints": {
+        "outbound_load_project_key": {
+          "name": "outbound_load_project_key",
+          "nullsNotDistinct": false,
+          "columns": [
+            "company_id",
+            "project_id",
+            "id"
+          ]
+        }
+      },
       "policies": {},
       "checkConstraints": {
         "outbound_load_status_one_of": {
