@@ -79,3 +79,5 @@ export * from "./maintenance"
 // The scale house (M16a of #293): the tare register and the window's tickets with their lines.
 export * from "./scale-house"
 export * from "./route-messages"
+// Field inspections (M23 of #293): an inspector's visits to containers and properties, and their photos.
+export * from "./inspections"

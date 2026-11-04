@@ -336,6 +336,18 @@ _Avoid_: Save, publish draft
 Evidence that work occurred, such as time, GPS, photo, weight, signature, or driver event. It is appended and never rewritten; a correction is a new row that names the outcome it replaces.
 _Avoid_: Route status, customer note
 
+**Fill Estimate**:
+How full a stop's container was when the driver emptied it, judged by eye: empty, a quarter, half, three quarters, full or overflowing. Recorded from the Driver App on a stop with a container, a later estimate of the same stop replacing it; what right-sizing reads. It is the driver's alone: an inspector's "overfilled" is a finding, not an estimate.
+_Avoid_: Fill level reading (a sensor's), weight, capacity
+
+**Right-sizing Proposal**:
+A subscription's container a size down or up — the product of the same project, kind, fraction and frequency the catalogue sells the next size of — or its collections fewer or more where it sells none, proposed from the drivers' latest Fill Estimates. It changes nothing until the office approves it: a size into the subscription's change from a day, the price following the product, refused when the subscription changed since the proposal was made; a frequency as a decision the office then makes in the scheme. Dismissed with why, and proposed again only on newer estimates.
+_Avoid_: Recommendation, upsell, automatic resize
+
+**Field Inspection**:
+An inspector's visit to a container or a property — exactly one — with what it came to (compliant, a minor or a major finding), what was found, a note and photos. The office corrects it while it is open and closes it once done; a closed inspection changes no more. It changes nothing it names: a finding is followed up by a ticket or a change the office makes.
+_Avoid_: Audit (the audit log is the history of rows), pre-trip check (a vehicle's), Site Visit (a recycling centre's), Ticket
+
 **Unload**:
 A recorded event on a dated Route at an Unloading Station in which the vehicle disposes of some or all of its collected load, with weight or disposal evidence. It is neither a Pickup nor a stop's Proof of Service; a planned unload visit belongs to a Plan.
 _Avoid_: Pickup, proof of service, tip, dump

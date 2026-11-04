@@ -30,6 +30,7 @@ import type { ProofObjectLink, ProofObjectLinks } from "@waste/contracts/proof-o
 import type { ProofOfService } from "@waste/contracts/proofs"
 import { PICKUP_OUTCOMES, PICKUP_REASONS } from "@waste/domain/execution/vocabulary"
 
+import { FILL_LABELS } from "@/lib/data/fill-levels"
 import { FIXTURE_COMPANY_ID, type BusinessRecord, type ModuleLocation } from "@/lib/data/business-modules"
 import { MASTER_DATA_KIND_DETAILS, masterDataKindOf } from "@/lib/data/master-data-kinds"
 import { PICKUP_SERVICE_LABELS } from "@/lib/data/pickup-services"
@@ -120,6 +121,8 @@ export function toPickupRecord(pickup: Pickup, context: MappingContext): Busines
   if (pickup.arrivedAt !== null) facts["Arrived at"] = clockOn(pickup.arrivedAt, timezone)
   if (pickup.status === "completed" && pickup.outcomeAt !== null) facts["Completed at"] = clockOn(pickup.outcomeAt, timezone)
   if (pickup.reason !== null) facts.Reason = statusLabel(pickup.reason)
+  // The driver's latest estimate (M23 of #293); a payload from before it carries none.
+  if (pickup.fill) facts["Fill estimate"] = FILL_LABELS[pickup.fill]
   // The wrong waste the stop was tagged with (M5 of #293), by the master data's row where it is loaded, its chip where it is not.
   const codeRow = pickup.contaminantCodeId == null ? undefined : context.resolve.byServerId(pickup.contaminantCodeId)
   const codeWebId = pickup.contaminantCodeId == null ? undefined : (codeRow?.id ?? webIdOf(CONTAMINANT_CODE_PREFIX, pickup.contaminantCodeId))

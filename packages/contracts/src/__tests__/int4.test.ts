@@ -76,6 +76,8 @@ import * as scaleHouseModule from "../scale-house"
 import * as sensorsModule from "../sensors"
 import * as sessionsModule from "../sessions"
 import * as shiftsModule from "../shifts"
+import * as fieldInspectionsModule from "../field-inspections"
+import * as rightSizingModule from "../right-sizing"
 import * as siteVisitsModule from "../site-visits"
 import * as settlementsModule from "../settlements"
 import * as sortingGuideModule from "../sorting-guide"
@@ -171,6 +173,8 @@ const MODULES: Readonly<Record<string, Record<string, unknown>>> = {
   "sessions": sessionsModule,
   "shifts": shiftsModule,
   "site-visits": siteVisitsModule,
+  "field-inspections": fieldInspectionsModule,
+  "right-sizing": rightSizingModule,
   "settlements": settlementsModule,
   "sorting-guide": sortingGuideModule,
   "stock": stockModule,

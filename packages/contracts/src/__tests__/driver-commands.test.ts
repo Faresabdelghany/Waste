@@ -58,12 +58,13 @@ const bodies: Record<DriverCommandKind, object> = {
   "end-route": { note: "Done for today", location: POINT },
   "record-positions": { points: [{ at: "2026-10-05T06:18:00.000Z", location: POINT, accuracyM: 9 }, { at: WHEN, location: POINT, accuracyM: 14, speedKmh: 32, headingDeg: 270 }] },
   "pre-trip-check": { vehicleId: THIRD, items: [{ itemId: ID, passed: true }, { itemId: OTHER, passed: false, note: "Left indicator out" }], odometerKm: 182_400, engineHours: 6_120, location: POINT },
+  "record-fill": { pickupId: ID, fill: "three-quarters" },
 }
 
 const command = (kind: DriverCommandKind, body: object = bodies[kind]) => ({ ...envelope, kind, body })
 
 describe("DriverCommand", () => {
-  test("is the discriminated union over the sixteen kinds, each a strict envelope around a strict body", () => {
+  test("is the discriminated union over the seventeen kinds, each a strict envelope around a strict body", () => {
     assert.deepEqual(Object.keys(COMMAND_BODIES).sort(), [...DRIVER_COMMAND_KINDS].sort())
     for (const kind of DRIVER_COMMAND_KINDS) assert.deepEqual(DriverCommand.parse(command(kind)), command(kind), kind)
     assert.equal(DriverCommand.safeParse(command("reschedule-stop" as DriverCommandKind, {})).success, false, "a Ticket's, not a command")
@@ -95,6 +96,7 @@ describe("DriverCommand", () => {
       "end-route": ["pickupId", THIRD],
       "record-positions": ["location", POINT],
       "pre-trip-check": ["pickupId", THIRD],
+      "record-fill": ["location", POINT],
     }
     for (const kind of DRIVER_COMMAND_KINDS) {
       const [member, value] = foreign[kind]
@@ -316,7 +318,7 @@ describe("what the door answers and stores", () => {
   })
 
   test("the driver's route read is the detail with each pickup's place joined: the address, the point or null, the place's instructions or null, the container's label and the fraction's name", () => {
-    const pickup = { id: THIRD, projectId: OTHER, routeId: ID, containerId: COMPANY, position: 1, status: "planned", origin: "generation", service: "empty", reason: null, contaminantCodeId: null, note: null, propertyId: ID, sharedCollectionPointId: null, wasteFractionId: OTHER, arrivedAt: null, outcomeAt: null, subscriptionId: null, warehouseId: null, replacementContainerId: null, bulkyBookingId: null, movedFromPickupId: null, ...STAMPS }
+    const pickup = { id: THIRD, projectId: OTHER, routeId: ID, containerId: COMPANY, position: 1, status: "planned", origin: "generation", service: "empty", reason: null, contaminantCodeId: null, note: null, propertyId: ID, sharedCollectionPointId: null, wasteFractionId: OTHER, arrivedAt: null, outcomeAt: null, subscriptionId: null, warehouseId: null, replacementContainerId: null, bulkyBookingId: null, movedFromPickupId: null, fill: null, ...STAMPS }
     const joined = { ...pickup, address: "Parkvej 18, 2100 København Ø", driverInstructions: "Gate code 4711", location: POINT, containerLabel: "BIN-82014", wasteFractionName: "Residual waste", replacementContainerLabel: null, bulkyItems: [], containerConfirmedAt: null }
     assert.deepEqual(DriverPickup.parse(joined), joined)
     const { containerConfirmedAt: _, ...beforeTheScan } = joined

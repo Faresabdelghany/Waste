@@ -205,7 +205,7 @@ export const publicWorkspaceDomains: readonly PublicWorkspaceDomain[] = [
       "Customer-service agent",
       "Driver",
     ],
-    moduleIds: ["tickets", "bulky-bookings", "exceptions", "site-visits", "scale-house", "driver-app"],
+    moduleIds: ["tickets", "bulky-bookings", "exceptions", "site-visits", "scale-house", "inspections", "driver-app"],
     boundaryNote:
       "Tickets owns resolution work and linked communication. Driver App remains available only through its restricted shell.",
   },
@@ -263,6 +263,7 @@ export const publicWorkspaceDomains: readonly PublicWorkspaceDomain[] = [
       "agreements",
       "applications",
       "site-access",
+      "right-sizing",
       "citizen-portal",
     ],
     boundaryNote:
@@ -453,6 +454,19 @@ export const publicModuleDomains: readonly PublicModuleDomain[] = [
     downstream: ["M11", "M16"],
     boundaryNote:
       "A Scale Ticket is one vehicle weighed in and out at one of our own sites, its load split by fraction and origin; one of our own vehicles' becomes its route's unload, and a mistake is voided, never deleted.",
+  },
+  {
+    key: "operate.inspections",
+    workspaceId: "operate",
+    moduleId: "inspections",
+    primaryBlueprintModule: "M11",
+    supportingBlueprintModules: ["M03", "M06"],
+    canonicalOwner: "Operate · Inspections",
+    personas: ["Operations manager", "Customer-service agent"],
+    upstream: ["M03", "M06"],
+    downstream: ["M13"],
+    boundaryNote:
+      "A Field Inspection is an inspector's visit to a container or a property, with its verdict, findings and photos; it changes nothing it names, and a closed one changes no more.",
   },
   {
     key: "route-studio.pickups",
@@ -653,6 +667,19 @@ export const publicModuleDomains: readonly PublicModuleDomain[] = [
     downstream: ["M03", "M09", "M16"],
     boundaryNote:
       "An Application is a customer's written request decided by the office, not a Ticket: a case is worked, an application is granted or refused, and its effect is applied in the lane that owns it.",
+  },
+  {
+    key: "customers.right-sizing",
+    workspaceId: "customers",
+    moduleId: "right-sizing",
+    primaryBlueprintModule: "M05",
+    supportingBlueprintModules: ["M06", "M11"],
+    canonicalOwner: "Customers · Right-sizing",
+    personas: ["Customer-service agent", "Operations manager"],
+    upstream: ["M06", "M11"],
+    downstream: ["M05", "M16"],
+    boundaryNote:
+      "A Right-sizing Proposal is a subscription's container a size down or up, or its collections fewer or more, from the drivers' fill estimates; it changes nothing until the office approves it into the subscription's change.",
   },
   {
     key: "customers.site-access",

@@ -135,7 +135,7 @@
 // e-mail index, for the same reason: the relay's read is one statement in the
 // system that crosses companies.
 import { PROOF_SHAPES } from "@waste/domain/execution/proof-shapes"
-import { CODED_PROOF_KINDS, COMMAND_OUTCOMES, DRIVER_COMMAND_KINDS, EXECUTION_SOURCES, OUTBOX_AGGREGATES, OUTBOX_KINDS, PICKUP_ORIGINS, PICKUP_OUTCOMES, PICKUP_REASONS, PICKUP_SERVICES, PICKUP_STATUSES, PROOF_KINDS, ROUTE_CANCEL_REASON_CODES, ROUTE_STATUSES, UNLOAD_REFUSAL_REASONS } from "@waste/domain/execution/vocabulary"
+import { CODED_PROOF_KINDS, COMMAND_OUTCOMES, DRIVER_COMMAND_KINDS, EXECUTION_SOURCES, FILL_LEVELS, OUTBOX_AGGREGATES, OUTBOX_KINDS, PICKUP_ORIGINS, PICKUP_OUTCOMES, PICKUP_REASONS, PICKUP_SERVICES, PICKUP_STATUSES, PROOF_KINDS, ROUTE_CANCEL_REASON_CODES, ROUTE_STATUSES, UNLOAD_REFUSAL_REASONS } from "@waste/domain/execution/vocabulary"
 import { sql, type SQL } from "drizzle-orm"
 import { boolean, check, date, index, integer, jsonb, text, time, timestamp, unique, uniqueIndex, uuid, type PgColumn } from "drizzle-orm/pg-core"
 
@@ -337,6 +337,8 @@ export const pickup = wms.table(
      */
     movedFromRouteId: uuid(),
     movedFromPickupId: uuid(),
+    /** How full its container was, the driver's latest `record-fill` (M23 of #293): a later estimate replaces it, and the receipt keeps each. */
+    fillLevel: text(),
   },
   (t) => [
     companyReference(t, company),
@@ -358,6 +360,7 @@ export const pickup = wms.table(
     oneOf(t.status, PICKUP_STATUSES),
     oneOf(t.origin, PICKUP_ORIGINS),
     oneOf(t.service, PICKUP_SERVICES),
+    oneOf(t.fillLevel, FILL_LEVELS),
     // Generation empties; a work order is the office's.
     check(tableObjectName(t.id.table, "service_origin_shape", "pickup"), sql`${t.service} = 'empty' or ${t.origin} = 'office'`),
     // A work order is of a container; an address-only stop empties, or collects a bulky booking.
