@@ -95,6 +95,7 @@ const pickupOf = (id: string, containerId: string, position: number, over: Parti
   replacementContainerId: null,
   bulkyBookingId: null,
   movedFromPickupId: null,
+  fill: null,
   arrivedAt: null,
   outcomeAt: null,
   ...over,

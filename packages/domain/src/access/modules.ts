@@ -25,6 +25,8 @@ export const MODULE_KEYS = [
   "operate.site-visits",
   // The scale house's window: the tare register and the tickets weighed at our own sites (M16a of #293).
   "operate.scale-house",
+  // An inspector's visits to containers and properties, with findings and photos (M23 of #293).
+  "operate.inspections",
   // Map Planning
   "plan.map-planning",
   // Route Studio

@@ -24,6 +24,7 @@ import {
   DRIVER_COMMAND_KINDS,
   DRIVER_PICKUP_REASONS,
   EXECUTION_SOURCES,
+  FILL_LEVELS,
   IDENTIFICATION_METHODS,
   OFFICE_CANCEL_REASON_CODES,
   OFFICE_STOP_SERVICES,
@@ -94,6 +95,9 @@ export type DriverCommandKind = z.infer<typeof DriverCommandKind>
 
 /** How a driver read the code that confirms a stop's container (O19 of #290). */
 export const IdentificationMethod = z.enum(IDENTIFICATION_METHODS)
+/** How full a stop's container was, the driver's estimate (M23 of #293). */
+export const FillLevel = z.enum(FILL_LEVELS)
+export type FillLevel = z.infer<typeof FillLevel>
 export type IdentificationMethod = z.infer<typeof IdentificationMethod>
 
 /** What the receipt stores of a command: applied or rejected. */

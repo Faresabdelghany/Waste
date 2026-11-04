@@ -81,8 +81,8 @@ function workspace(id: WorkspaceKey, actions: readonly Action[], except: readonl
 /** The modules of the recycling centres' visits (M4 of #293): the plates, the cards and a household's visit history are personal data the office keeps, never a Service Provider's to read. */
 const VISIT_MODULES: readonly ModuleKey[] = ["operate.site-visits", "customers.site-access"]
 
-/** The Operate modules a Service Provider never reads: the visits', and the scale house's window (M16a of #293), whose tickets name the office's customers and walk-ins. */
-const OFFICE_OPERATE: readonly ModuleKey[] = [...VISIT_MODULES, "operate.scale-house"]
+/** The Operate modules a Service Provider never reads: the visits', the scale house's window (M16a of #293), whose tickets name the office's customers and walk-ins, and the inspections' (M23 of #293), whose photos and findings at a customer's bins are the office's to follow up. */
+const OFFICE_OPERATE: readonly ModuleKey[] = [...VISIT_MODULES, "operate.scale-house", "operate.inspections"]
 
 /** One module's actions, for the charters that name a single surface. */
 function only(moduleKey: ModuleKey, actions: readonly Action[]): Grant {

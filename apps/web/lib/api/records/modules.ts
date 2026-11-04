@@ -17,6 +17,7 @@ import { moduleKeyOf, type ServerModule } from "./adapter"
 import { agreementsModule } from "./agreements"
 import { applicationsModule } from "./applications"
 import { bulkyBookingsModule } from "./bulky-bookings"
+import { inspectionsModule } from "./inspections"
 import { sensorsModule } from "./sensors"
 import { siteAccessModule } from "./site-access"
 import { siteVisitsModule } from "./site-visits"
@@ -116,6 +117,8 @@ export const SERVER_MODULES: readonly ServerModule[] = [
   containersModule,
   // The fill-level Sensors (O26 of #290), after the containers their pairings name.
   sensorsModule,
+  // The field inspections (M23 of #293), after the containers and the properties they are of; they name no route.
+  inspectionsModule,
   inventoryModule,
   vehiclePlanningModule,
   serviceAreasModule,

@@ -28,6 +28,7 @@ import { driverAbsence, vehicleUnavailability } from "@waste/db/schema/availabil
 import { container, containerServicePlacement } from "@waste/db/schema/containers"
 import { driverCommand, outboxEvent, pickup, proofOfService, route, session, sessionPosition, unload } from "@waste/db/schema/execution"
 import { maintenanceOrder, vehicleMaintenancePlan } from "@waste/db/schema/maintenance"
+import { fieldInspection, fieldInspectionPhoto } from "@waste/db/schema/inspections"
 import { preTripCheck, preTripChecklistItem, vehicleDefect } from "@waste/db/schema/pre-trip"
 import { weighbridgeTicket } from "@waste/db/schema/weighbridge"
 import { scaleTicket, scaleTicketLine, vehicleTare } from "@waste/db/schema/scale-house"
@@ -377,6 +378,8 @@ export async function dropTenant(pool: Database, companyId: string, owner?: Data
     await owner.db.delete(scaleTicketLine).where(eq(scaleTicketLine.companyId, companyId))
     await owner.db.delete(scaleTicket).where(eq(scaleTicket.companyId, companyId))
     await owner.db.delete(vehicleTare).where(eq(vehicleTare.companyId, companyId))
+    // An inspection's photos (M23 of #293), a ledger, before the inspections they name.
+    await owner.db.delete(fieldInspectionPhoto).where(eq(fieldInspectionPhoto.companyId, companyId))
     await owner.db.delete(unload).where(eq(unload.companyId, companyId))
     await owner.db.delete(driverCommand).where(eq(driverCommand.companyId, companyId))
     await owner.db.delete(vehicleAllocationEvent).where(eq(vehicleAllocationEvent.companyId, companyId))
@@ -398,6 +401,8 @@ export async function dropTenant(pool: Database, companyId: string, owner?: Data
     // Recycling-centre visits (M4 of #293): a charge names its visit, so the ledger goes after the events and before the sites, the credentials, the agreements and the properties it names; a rule's sets before the products they name.
     await tx.delete(siteVisitFraction).where(eq(siteVisitFraction.companyId, companyId))
     await tx.delete(siteVisit).where(eq(siteVisit.companyId, companyId))
+    // Field inspections (M23 of #293) name a container or a property and an account: before all three.
+    await tx.delete(fieldInspection).where(eq(fieldInspection.companyId, companyId))
     await tx.delete(accessCredential).where(eq(accessCredential.companyId, companyId))
     await tx.delete(visitRuleStep).where(eq(visitRuleStep.companyId, companyId))
     await tx.delete(visitRuleFreeFraction).where(eq(visitRuleFreeFraction.companyId, companyId))

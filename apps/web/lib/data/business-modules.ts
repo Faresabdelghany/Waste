@@ -1997,6 +1997,25 @@ const operate: WorkspaceDefinition = {
       ],
       records: [],
     },
+    {
+      // Field inspections (M23 of #293): on the API only, so no fixture records; recorded through the module's form, its photos and Close in its details (components/waste/commands/inspection-surfaces.tsx).
+      id: "inspections",
+      label: "Inspections",
+      title: "Field inspections",
+      description: "An inspector's visits to containers and properties: what each came to, what was found, and the photos taken there.",
+      entityLabel: "Field inspection",
+      contextLabel: "Verdict",
+      valueLabel: "Findings",
+      primaryAction: "Record an inspection",
+      metrics: [],
+      lifecycle: ["Open", "Closed"],
+      rules: [
+        "An inspection is of a container or of a property, never both.",
+        "A compliant visit names no findings; a minor or a major one names what was found.",
+        "A closed inspection changes no more.",
+      ],
+      records: [],
+    },
   ],
 }
 
@@ -3743,6 +3762,8 @@ const operateWithoutRouteStudio: WorkspaceDefinition = {
     requireWorkspaceModule(operate, "site-visits"),
     // The scale house (M16a of #293): the window's tickets and its tare register.
     requireWorkspaceModule(operate, "scale-house"),
+    // Field inspections (M23 of #293): an inspector's visits, their findings and photos.
+    requireWorkspaceModule(operate, "inspections"),
   ],
 }
 

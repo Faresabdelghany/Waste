@@ -19,10 +19,11 @@ import { Label } from "@/components/ui/label"
 import { Textarea } from "@/components/ui/textarea"
 import { PhotoField } from "@/components/waste/driver/driver-proof-dialogs"
 import type { DriverMe, DriverVehicle } from "@waste/contracts/driver-commands"
-import { DRIVER_PICKUP_REASONS, UNLOAD_REFUSAL_REASONS, type DriverPickupReason, type UnloadRefusalReason } from "@waste/domain/execution/vocabulary"
+import { DRIVER_PICKUP_REASONS, UNLOAD_REFUSAL_REASONS, type DriverPickupReason, type FillLevel, type UnloadRefusalReason } from "@waste/domain/execution/vocabulary"
 import { NOTE_MAX, wholeKilograms, type PilotBody, type ProofBytes } from "@/lib/driver/commands"
 import { checkOutcome, preTripBody, type CheckForm, type CheckMark } from "@/lib/driver/pre-trip"
 import { DRIVER_REASON_LABELS } from "@/lib/driver/route-view"
+import { FILL_OPTIONS } from "@/lib/data/fill-levels"
 import { REFUSAL_LABELS, SAY_WHY_REFUSED } from "@/lib/data/unload-refusals"
 
 const SELECT = "border-input dark:bg-input/30 h-11 w-full rounded-md border bg-transparent px-3 text-base shadow-xs outline-none focus-visible:border-ring focus-visible:ring-[3px] focus-visible:ring-ring/50"
@@ -314,6 +315,36 @@ export function WeightDialog({ open, onOpenChange, title, description, onConfirm
             </Button>
           </DialogFooter>
         </form>
+      </DialogContent>
+    </Dialog>
+  )
+}
+
+/** How full the stop's container was (M23 of #293): one tap on a level records it, a later one replacing it. */
+export function FillDialog({ open, onOpenChange, title, description, current, onConfirm }: DialogProps & { title: string; description: string; current: FillLevel | null; onConfirm: (fill: FillLevel) => void }) {
+  const pick = (fill: FillLevel) => {
+    onConfirm(fill)
+    onOpenChange(false)
+  }
+  return (
+    <Dialog open={open} onOpenChange={onOpenChange}>
+      <DialogContent>
+        <DialogHeader>
+          <DialogTitle>{title}</DialogTitle>
+          <DialogDescription>{description}</DialogDescription>
+        </DialogHeader>
+        <div role="group" aria-label="How full it was" className="grid grid-cols-2 gap-2">
+          {FILL_OPTIONS.map((option) => (
+            <Button key={option.value} type="button" variant={option.value === current ? "default" : "outline"} className="h-11" aria-pressed={option.value === current} onClick={() => pick(option.value)}>
+              {option.label}
+            </Button>
+          ))}
+        </div>
+        <DialogFooter>
+          <Button type="button" variant="outline" onClick={() => onOpenChange(false)}>
+            Cancel
+          </Button>
+        </DialogFooter>
       </DialogContent>
     </Dialog>
   )

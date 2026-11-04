@@ -135,6 +135,7 @@ export const AUDITED_TABLES = [
   "weighbridge_ticket",
   "vehicle_tare",
   "scale_ticket",
+  "field_inspection",
 ] as const
 export type AuditedTable = (typeof AUDITED_TABLES)[number]
 
