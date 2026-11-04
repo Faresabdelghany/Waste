@@ -50,6 +50,7 @@ const raw: Unload = {
   weightReview: { status: "captured", latestReviewId: null, correctionUnloadId: null },
   refusal: null,
   load: null,
+  possibleDuplicates: [],
 }
 /** As the adapter lists it: a ledger row with a resource's stamps. */
 const unload = { ...raw, createdAt: raw.recordedAt, updatedAt: raw.recordedAt }
@@ -102,6 +103,17 @@ describe("the weighbridge in the office (O9 of #290)", () => {
     assert.deepEqual([calls[0].init.method, calls[0].url], ["POST", `http://api.test/routes/${ROUTE}/unloads`])
     assert.deepEqual(bodyOf(calls[0]), { unloadingStationId: STATION, wasteFractionId: RESIDUAL, netKg: 7200, occurredAt: "2026-09-29T13:05:00.000Z" }, "the route is the path's, never the body's")
     assert.equal(outcome.kind, "created")
+  })
+})
+
+describe("an unload's possible duplicate (O27 of #290)", () => {
+  test("names the other unload of the same load by its row's name, and says nothing where there is none", () => {
+    const other = "01a0d2a4-a280-7096-8000-000000000009"
+    const named = new Map([...state, ["route-studio.weights", moduleOf([plain(`unload-${other}`, "WB-2026-3902 · Residual")], [other])]])
+    const record = unloadAdapter.toRecord({ ...unload, possibleDuplicates: [other] }, { ...bare, resolve: resolverOver(named) })
+    assert.equal(record.facts["Possible duplicate of"], "WB-2026-3902 · Residual")
+    assert.equal(unloadAdapter.toRecord(unload, context).facts["Possible duplicate of"], undefined)
+    assert.equal(unloadAdapter.toRecord({ ...unload, source: "integration", sessionId: null }, context).facts.Source, "The weighbridge")
   })
 })
 

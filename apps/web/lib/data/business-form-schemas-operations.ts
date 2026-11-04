@@ -673,6 +673,17 @@ export const operationsBusinessFormSchemas = [
     ],
   },
   {
+    // A weighbridge's tickets (O27 of #290): sent by the weighbridge, matched or dismissed in a ticket's details, never made here.
+    key: "route-studio.weighbridge",
+    mode: "disabled",
+    recordKind: "Weighbridge ticket",
+    title: "Weighbridge tickets",
+    description: "A station's weighbridge sends its tickets; each is matched to the route its vehicle ran, or waits for the office.",
+    submitLabel: "Match ticket",
+    disabledReason: "Tickets come from the weighbridge. Open an unmatched ticket to match it to a route or dismiss it.",
+    sections: [{ id: "ticket", title: "Ticket", fields: [{ id: "note", label: "Note", type: "textarea" }] }],
+  },
+  {
     key: "route-studio.weights",
     mode: "action",
     recordKind: "Weight capture or adjustment",
