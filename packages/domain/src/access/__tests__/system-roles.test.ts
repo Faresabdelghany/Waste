@@ -137,13 +137,14 @@ describe("the seeded system roles", () => {
     )
   })
 
-  test("the Site attendant (M4 of #293) checks visitors in and reads the ledger and the register, and nothing else", () => {
+  test("the Site attendant (M4 of #293) checks visitors in, reads the ledger and the register, and works the scale house's window (M16a), and nothing else", () => {
     const attendant = SYSTEM_ROLES.find((role) => role.key === "site-attendant")
     assert.ok(attendant)
     assert.deepEqual(
       attendant.grants.map((grant) => ({ moduleKey: grant.moduleKey, actions: [...grant.actions] })),
       [
         { moduleKey: "customers.site-access", actions: ["view"] },
+        { moduleKey: "operate.scale-house", actions: ["view", "edit", "create"] },
         { moduleKey: "operate.site-visits", actions: ["view", "create"] },
       ],
     )
@@ -151,7 +152,7 @@ describe("the seeded system roles", () => {
 
   test("the recycling centres' visits and register (M4 of #293) go to the office's roles and never to a Service Provider's", () => {
     const actionsOn = (key: string, moduleKey: string) => SYSTEM_ROLES.find((role) => role.key === key)?.grants.find((grant) => grant.moduleKey === moduleKey)?.actions
-    for (const moduleKey of ["operate.site-visits", "customers.site-access"]) {
+    for (const moduleKey of ["operate.site-visits", "customers.site-access", "operate.scale-house"]) {
       for (const key of ["service-provider-manager", "service-provider-foreman", "driver", "integration-writer"]) assert.equal(actionsOn(key, moduleKey), undefined, `${key} on ${moduleKey}`)
       assert.deepEqual(actionsOn("company-administrator", moduleKey), ["view", "edit", "create", "delete"])
     }

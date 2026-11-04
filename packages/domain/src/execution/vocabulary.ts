@@ -96,10 +96,18 @@ export const IDENTIFICATION_METHODS = ["camera", "typed"] as const
 export const COMMAND_OUTCOMES = ["applied", "rejected"] as const
 /** Why a station refused a load (O9 of #290): the facility's side of an unload, apart from weight review's `rejected`, which is the office rejecting a weighbridge reading. */
 export const UNLOAD_REFUSAL_REASONS = ["contamination", "fraction-not-accepted", "hazardous", "overweight", "other"] as const
-/** What the outbox tells the other contexts: Execution's twelve, then Resolution's three (Issue #109), which Finance reads, then Finance's two (Issue #112), which the export reads. */
-export const OUTBOX_KINDS = ["route-dispatched", "route-started", "route-completed", "route-cancelled", "route-reassigned", "pickup-completed", "pickup-failed", "pickup-skipped", "pickup-problem-reported", "pickup-corrected", "unload-recorded", "command-rejected", "ticket-opened", "ticket-completed", "ticket-rejected", "invoice-issued", "settlement-closed", "application-decided", "site-visit-recorded", "site-visit-voided"] as const
+/** Where a Weighbridge Ticket stands (O27 of #290): matched to a route and written as its Unload, unmatched with the reason, or dismissed by the office with a note. */
+export const WEIGHBRIDGE_TICKET_STATUSES = ["matched", "unmatched", "dismissed"] as const
+/** Why a Weighbridge Ticket found no route on its own (O27 of #290): what the office reads in the queue before it matches the ticket by hand. */
+export const WEIGHBRIDGE_UNMATCHED_REASONS = ["unknown-vehicle", "no-route", "several-routes", "unknown-fraction", "fraction-not-accepted"] as const
+/** What a ticket of an ingest batch came to that is not kept (O27 of #290): a station not registered, or an instant ahead of the server's clock. */
+export const WEIGHBRIDGE_REFUSALS = ["unknown-station", "ahead-of-clock"] as const
+/** What the outbox tells the other contexts: Execution's twelve, then Resolution's three (Issue #109), which Finance reads, then Finance's two (Issue #112), which the export reads; the staff notices' two (O16 of #290, part a), and a Bulky Booking booked or cancelled, which the customer notices read (part b); and a reply the customer may read on a ticket (C18 of #291); then Finance's weight review (O28 of #290). */
+export const OUTBOX_KINDS = ["route-dispatched", "route-started", "route-completed", "route-cancelled", "route-reassigned", "pickup-completed", "pickup-failed", "pickup-skipped", "pickup-problem-reported", "pickup-corrected", "unload-recorded", "command-rejected", "ticket-opened", "ticket-completed", "ticket-rejected", "invoice-issued", "settlement-closed", "application-decided", "site-visit-recorded", "site-visit-voided", "alert-raised", "ticket-assigned", "bulky-booking-booked", "bulky-booking-cancelled", "ticket-replied", "weight-reviewed"] as const
 /** What an outbox event is about; the payload is that resource on the wire. */
-export const OUTBOX_AGGREGATES = ["route", "pickup", "unload", "command", "ticket", "invoice", "settlement", "application", "site-visit"] as const
+export const OUTBOX_AGGREGATES = ["route", "pickup", "unload", "command", "ticket", "invoice", "settlement", "application", "site-visit", "alert", "bulky-booking"] as const
+/** Who wrote a Route Message (O24 of #290): the office, to the route's driver, or the driver, to the office. */
+export const ROUTE_MESSAGE_AUTHORS = ["office", "driver"] as const
 /** A contaminant code's: in use, or retired from new tags while the stops tagged with it keep it. */
 export const CONTAMINANT_CODE_STATUSES = ["active", "inactive"] as const
 
@@ -113,6 +121,9 @@ export type BulkyBookingStatus = (typeof BULKY_BOOKING_STATUSES)[number]
 export type RouteCancelReasonCode = (typeof ROUTE_CANCEL_REASON_CODES)[number]
 export type ProofKind = (typeof PROOF_KINDS)[number]
 export type ExecutionSource = (typeof EXECUTION_SOURCES)[number]
+export type WeighbridgeTicketStatus = (typeof WEIGHBRIDGE_TICKET_STATUSES)[number]
+export type WeighbridgeUnmatchedReason = (typeof WEIGHBRIDGE_UNMATCHED_REASONS)[number]
+export type WeighbridgeRefusal = (typeof WEIGHBRIDGE_REFUSALS)[number]
 export type DriverCommandKind = (typeof DRIVER_COMMAND_KINDS)[number]
 export type IdentificationMethod = (typeof IDENTIFICATION_METHODS)[number]
 export type FillLevel = (typeof FILL_LEVELS)[number]
@@ -121,6 +132,7 @@ export type UnloadRefusalReason = (typeof UNLOAD_REFUSAL_REASONS)[number]
 export type OutboxKind = (typeof OUTBOX_KINDS)[number]
 export type OutboxAggregate = (typeof OUTBOX_AGGREGATES)[number]
 export type ContaminantCodeStatus = (typeof CONTAMINANT_CODE_STATUSES)[number]
+export type RouteMessageAuthor = (typeof ROUTE_MESSAGE_AUTHORS)[number]
 
 /**
  * The reasons a driver's device may give for a skip, a failure or a problem:
@@ -201,7 +213,11 @@ export const EXECUTION_VOCABULARIES = {
   FILL_LEVELS,
   COMMAND_OUTCOMES,
   UNLOAD_REFUSAL_REASONS,
+  WEIGHBRIDGE_TICKET_STATUSES,
+  WEIGHBRIDGE_UNMATCHED_REASONS,
+  WEIGHBRIDGE_REFUSALS,
   OUTBOX_KINDS,
   OUTBOX_AGGREGATES,
   CONTAMINANT_CODE_STATUSES,
+  ROUTE_MESSAGE_AUTHORS,
 } as const satisfies Record<string, readonly [string, ...string[]]>

@@ -7,7 +7,7 @@
 // templates of the fixtures' Tickets & communication onto the API. A draft
 // the API would refuse is refused here first, at its field, in the domain's
 // sentence (@waste/domain/messaging/template, which the contracts read too).
-import type { MessageChannel, MessagePurpose, MessageTemplate, MessageTemplateStatus } from "@waste/contracts/messaging"
+import type { MessageChannel, MessageTemplatePurpose, MessageTemplate, MessageTemplateStatus } from "@waste/contracts/messaging"
 import { channelShapeIssue, MESSAGE_VARIABLES, unknownPlaceholders } from "@waste/domain/messaging/template"
 
 import { allows, type Grants } from "../api/grants"
@@ -19,9 +19,9 @@ export const MESSAGE_TEMPLATES_SETTINGS_PANE_ID = "message-templates"
 export const MESSAGE_TEMPLATES_MODULE_KEY = "configure.templates"
 
 export const CHANNEL_LABELS: Readonly<Record<MessageChannel, string>> = { email: "E-mail", sms: "Text message" }
-export const PURPOSE_LABELS: Readonly<Record<MessagePurpose, string>> = { service: "Service", billing: "Billing" }
+export const PURPOSE_LABELS: Readonly<Record<MessageTemplatePurpose, string>> = { service: "Service", billing: "Billing" }
 /** What each purpose means for consent, as the form says it beside the picker. */
-export const PURPOSE_HINTS: Readonly<Record<MessagePurpose, string>> = {
+export const PURPOSE_HINTS: Readonly<Record<MessageTemplatePurpose, string>> = {
   service: "Sent only to customers who allow service messages.",
   billing: "Sent whatever the customer chose about service messages.",
 }
@@ -40,7 +40,7 @@ export const templatesAccessOf = (grants: Grants | undefined) => ({
 export type TemplateDraft = {
   id?: string
   name: string
-  purpose: MessagePurpose
+  purpose: MessageTemplatePurpose
   channel: MessageChannel
   subject: string
   body: string
@@ -68,7 +68,7 @@ export const isTemplateRefusal = (value: unknown): value is TemplateRefusal => t
 export const unknownPlaceholderSentence = (names: readonly string[]) =>
   `${names.map((name) => `{{${name}}}`).join(", ")} ${names.length === 1 ? "is" : "are"} filled by no message; use ${PLACEHOLDERS.join(", ")}`
 
-type TemplateFields = { name: string; purpose: MessagePurpose; channel: MessageChannel; subject: string | null; body: string; status: MessageTemplateStatus }
+type TemplateFields = { name: string; purpose: MessageTemplatePurpose; channel: MessageChannel; subject: string | null; body: string; status: MessageTemplateStatus }
 
 /** The draft as the wire spells a template, or the first field the API would refuse: a text message's subject is dropped, never sent. */
 export function templateFieldsOf(draft: TemplateDraft): TemplateFields | TemplateRefusal {

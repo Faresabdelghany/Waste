@@ -19,6 +19,7 @@ import { applicationsModule } from "./applications"
 import { bulkyBookingsModule } from "./bulky-bookings"
 import { inspectionsModule } from "./inspections"
 import { rightSizingModule } from "./right-sizing"
+import { sensorsModule } from "./sensors"
 import { siteAccessModule } from "./site-access"
 import { siteVisitsModule } from "./site-visits"
 import { alertsModule } from "./alerts"
@@ -46,6 +47,8 @@ import { sortingGuideModule } from "./sorting-guide"
 import { routesModule } from "./routes"
 import { ticketTeamsModule } from "./ticket-teams"
 import { ticketsModule } from "./tickets"
+import { scaleHouseModule } from "./scale-house"
+import { weighbridgeModule } from "./weighbridge"
 import { weightsModule } from "./weights"
 
 /**
@@ -115,6 +118,8 @@ export const SERVER_MODULES: readonly ServerModule[] = [
   // The register of plates and cards (#393), after the customers, the properties and the agreements its holders name.
   siteAccessModule,
   containersModule,
+  // The fill-level Sensors (O26 of #290), after the containers their pairings name.
+  sensorsModule,
   // The field inspections (M23 of #293), after the containers and the properties they are of; they name no route.
   inspectionsModule,
   inventoryModule,
@@ -140,6 +145,10 @@ export const SERVER_MODULES: readonly ServerModule[] = [
   accountingModule,
   settlementsModule,
   weightsModule,
+  // A weighbridge's tickets (O27 of #290), after the stations, the routes, the vehicles and the fractions they name.
+  weighbridgeModule,
+  // The scale house (M16a of #293), after the projects, the stations, the customers, the agreements, the vehicles, the routes and the fractions its rows name.
+  scaleHouseModule,
 ]
 
 const byKey = new Map(SERVER_MODULES.map((module) => [moduleKeyOf(module.workspaceId, module.moduleId), module]))

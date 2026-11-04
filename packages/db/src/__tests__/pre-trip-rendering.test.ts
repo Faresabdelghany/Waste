@@ -32,7 +32,7 @@ const respelt = (table: string, column: string, name: string, values: readonly s
   `ALTER TABLE "wms"."${table}" ADD ${oneOfCheck(table, column, ...values).replace(/^CONSTRAINT "[^"]+"/, `CONSTRAINT "${name}"`)};`,
 ]
 
-/** The receipt's kinds as of this file: today's less `record-fill`, which migration 0095 added (M23 of #293). */
+/** The receipt's kinds as of this file: today's less `record-fill`, which migration 0092 added (M23 of #293). */
 const KINDS_AS_OF_0075 = DRIVER_COMMAND_KINDS.filter((kind) => kind !== "record-fill")
 
 /** What drizzle-kit wrote into the tables already applied: the five checks respelt. */

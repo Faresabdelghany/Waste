@@ -97,7 +97,8 @@ export function unloadTransferNote(client: Client, serverId: string): Promise<Ap
 export type UnloadResource = Unload & { createdAt: string; updatedAt: string }
 const stamped = (unload: Unload): UnloadResource => ({ ...unload, createdAt: unload.recordedAt, updatedAt: unload.recordedAt })
 
-const kilograms = (value: number) => `${new Intl.NumberFormat("en").format(value)} kg`
+/** Whole kilograms as a person reads them: 8,240 kg; the weights list and a weight charge (O28 of #290) both spell them so. */
+export const kilograms = (value: number) => `${new Intl.NumberFormat("en").format(value)} kg`
 
 /** A form's weight: undefined for blank, the whole kilograms of one, NaN for anything else. */
 function weightOf(input: CommandInput, key: string): number | undefined {
@@ -153,9 +154,11 @@ export const unloadAdapter: ResourceAdapter<UnloadResource> = {
         ...(refusal === null ? {} : { Refused: refusal.note === null ? REFUSAL_LABELS[refusal.reason] : `${REFUSAL_LABELS[refusal.reason]}: ${refusal.note}` }),
         ...(unload.weighbridgeTicket === null ? {} : { Ticket: unload.weighbridgeTicket }),
         Occurred: shownOn(unload.occurredAt, timezone),
-        Source: unload.source === "driver-app" ? "Driver App" : unload.source === "dispatch" ? "The office" : "An integration",
+        Source: unload.source === "driver-app" ? "Driver App" : unload.source === "dispatch" ? "The office" : "The weighbridge",
         ...(unload.note === null ? {} : { Note: unload.note }),
         ...(correction === null ? {} : { "Corrected by": webIdOf(UNLOAD_PREFIX, correction) }),
+        // The weighbridge's Unload and the driver's of the same load (O27 of #290): both stand until the desk rejects one.
+        ...(unload.possibleDuplicates.length === 0 ? {} : { "Possible duplicate of": unload.possibleDuplicates.map((id) => context.resolve.byServerId(id)?.name ?? webIdOf(UNLOAD_PREFIX, id)).join(", ") }),
       },
       related: [route, station],
       allowedTransitions: [],

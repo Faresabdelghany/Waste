@@ -58,6 +58,8 @@ import { customerContactRoutes } from "./routes/customer-contacts"
 import { customerRoutes } from "./routes/customers"
 import { messageTemplateRoutes } from "./routes/message-templates"
 import { messageRoutes } from "./routes/messages"
+import { notificationRuleRoutes } from "./routes/notification-rules"
+import { notificationRoutes } from "./routes/notifications"
 import { depotRoutes } from "./routes/depots"
 import { applicationRoutes } from "./routes/applications"
 import { dropOffPointRoutes } from "./routes/drop-off-points"
@@ -67,6 +69,7 @@ import { fuelEmissionFactorRoutes } from "./routes/fuel-emission-factors"
 import { driverDoorRoutes } from "./routes/driver"
 import { availabilityRoutes } from "./routes/availability"
 import { preTripRoutes } from "./routes/pre-trip-checks"
+import { maintenanceRoutes } from "./routes/maintenance"
 import { driverRoutes } from "./routes/drivers"
 import { generationRoutes } from "./routes/generation"
 import { importRoutes } from "./routes/imports"
@@ -101,6 +104,7 @@ import { publicRoutes } from "./routes/public"
 import { roleRoutes } from "./routes/roles"
 import { routeSchemeRoutes } from "./routes/route-schemes"
 import { schemeLifecycleRoutes } from "./routes/scheme-lifecycle"
+import { scaleHouseRoutes } from "./routes/scale-house"
 import { SENSOR_BATCHES_PER_MINUTE, sensorRoutes } from "./routes/sensors"
 import { serviceProviderActivityRoutes } from "./routes/service-provider-activities"
 import { planRoutes } from "./routes/plans"
@@ -122,6 +126,7 @@ import { sortingGuideRoutes } from "./routes/sorting-guide"
 import { sustainabilityRoutes } from "./routes/sustainability"
 import { ticketChargeRoutes } from "./routes/ticket-charges"
 import { workOrderProductRoutes } from "./routes/work-order-charges"
+import { routeMessageRoutes } from "./routes/route-messages"
 import { ticketSlaRoutes } from "./routes/ticket-sla"
 import { ticketTeamRoutes } from "./routes/ticket-teams"
 import { ticketRoutes } from "./routes/tickets"
@@ -135,6 +140,7 @@ import { vehicleRoutes } from "./routes/vehicles"
 import { stockBalanceRoutes } from "./routes/stock-balances"
 import { warehouseRoutes } from "./routes/warehouses"
 import { wasteFractionEmissionFactorRoutes } from "./routes/waste-fraction-emission-factors"
+import { weighbridgeRoutes } from "./routes/weighbridge"
 import { weightControlRoutes } from "./routes/weight-control"
 
 export type AppOptions = {
@@ -179,6 +185,10 @@ export type AppOptions = {
   sensorIngestAllowance?: Allowance
   /** An address's calendar feed's own allowance, per client and address and per client across addresses; a test injects small bounds or a pinned clock. */
   feedAllowance?: FeedAllowance
+  /** Each company's weighbridge batches a minute (O27 of #290); a test injects a small allowance or a pinned clock. */
+  weighbridgeAllowance?: Allowance
+  /** A weighbridge batch's bytes before the token is read; a test injects a small bound. */
+  weighbridgeMaxBodyBytes?: number
   /** The socket's peer address, the public door's client where no trusted proxy names one: server.ts reads the Node request's; a test has none. */
   peer?: (c: Context) => string | undefined
   /** How many proxies in front of the API append to X-Forwarded-For (PUBLIC_TRUSTED_PROXIES): 0, the default, ignores the header. */
@@ -202,6 +212,8 @@ export function createApp({
   routingEngine = new QuotaEngine(new FakeProvider(), { ...STANDARD_PLAN, callsPerMinute: PREVIEW_CALLS_PER_MINUTE, waits: false }),
   publicAllowance = new Allowance(PUBLIC_REQUESTS_PER_MINUTE, now),
   feedAllowance = new FeedAllowance(FEED_REQUESTS_PER_ADDRESS, FEED_ADDRESSES_PER_CLIENT, now),
+  weighbridgeAllowance,
+  weighbridgeMaxBodyBytes,
   sensorIngestAllowance = new Allowance(SENSOR_BATCHES_PER_MINUTE, now),
   peer = () => undefined,
   trustedProxies = 0,
@@ -263,6 +275,8 @@ export function createApp({
   // The authenticated routes, each module given the guard to put on its routes.
   const guard = authenticate({ pool, verifier })
   app.route("/", meRoutes(guard))
+  app.route("/", notificationRoutes(guard))
+  app.route("/", notificationRuleRoutes(guard))
   app.route("/", companyRoutes(guard))
   app.route("/", projectRoutes(guard))
   app.route("/", serviceProviderRoutes(guard))
@@ -311,6 +325,7 @@ export function createApp({
   app.route("/", driverRoutes(guard, { now }))
   app.route("/", availabilityRoutes(guard))
   app.route("/", preTripRoutes(guard, { now }))
+  app.route("/", maintenanceRoutes(guard, { now }))
   // Execution's office (Issue #104, slice 3). The live read goes on before the
   // route module: Hono runs handlers in registration order, and `/routes/live`
   // would otherwise be caught by `/routes/:id`, whose path validator refuses
@@ -334,18 +349,23 @@ export function createApp({
   // Proof objects (O1 of #290) call Storage, so, like the preview, their guard ends the principal's transaction and each handler reads its fence in a short one of its own.
   app.route("/", proofObjectRoutes(identify({ pool, verifier }), { pool, storage, now, log: log ?? console.error }))
   app.route("/", unloadRoutes(guard, { now }))
+  // A weighbridge's tickets (O27 of #290): the ingest bounded by its own allowance and body size, the office's queue, match and dismissal.
+  app.route("/", weighbridgeRoutes(guard, { now, allowance: weighbridgeAllowance, maxBodyBytes: weighbridgeMaxBodyBytes }))
   // The driver door (Issue #104, slice 4) goes on after the office: its commands are judged against the request's clock, so it takes `now` like the ledger routes.
   app.route("/", driverDoorRoutes(guard, { now }))
   // Resolution (Issue #109): a ticket's `occurredAt` and an alert's `detectedAt` default to the request's clock and may not run ahead of it, and every command stamps and publishes with it, so both modules take `now` too.
   app.route("/", ticketRoutes(guard, { now }))
   app.route("/", sortingGuideRoutes(guard))
   app.route("/", ticketSlaRoutes(guard))
+  app.route("/", routeMessageRoutes(guard))
   app.route("/", ticketTeamRoutes(guard))
   // The Pickup Exceptions (M5 of #293): the company's contaminant codes, the projects' charge rules, and a place's exception history.
   app.route("/", contaminantCodeRoutes(guard))
   app.route("/", decommissionReasonRoutes(guard))
   // Fill-level Sensors (O26 of #290): a pairing's day and the ingest's clock are the project's on the app's clock, and the ingest is bounded per company.
   app.route("/", sensorRoutes(guard, { now, ingestAllowance: sensorIngestAllowance }))
+  // The scale house (M16a of #293): the tare register and the window's tickets.
+  app.route("/", scaleHouseRoutes(guard, { now }))
   app.route("/", pickupExceptionRoutes(guard, { now }))
   // Bulky-waste booking (O11 of #290): the areas' schedules of collection days, and the bookings that take a slot of one on the project's clock.
   app.route("/", bulkyScheduleRoutes(guard))
@@ -381,7 +401,7 @@ export function createApp({
   // A project's ticket charges (#291 C3): the product a completed ticket's work is charged at; nothing stamped, no clock.
   app.route("/", ticketChargeRoutes(guard))
   app.route("/", workOrderProductRoutes(guard))
-  app.route("/", billingRunRoutes(guard, { now }))
+  app.route("/", billingRunRoutes(guard, { pool, identified: identify({ pool, verifier }), now }))
   app.route("/", invoiceRoutes(guard, { now }))
   // Payments and reconciliation (#291 C6): an invoice's standing is read on its project's day, so the module takes `now`; a payment's `recordedAt` is the database's.
   app.route("/", paymentRoutes(guard, { now }))

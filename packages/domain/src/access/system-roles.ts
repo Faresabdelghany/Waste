@@ -81,8 +81,8 @@ function workspace(id: WorkspaceKey, actions: readonly Action[], except: readonl
 /** The modules of the recycling centres' visits (M4 of #293): the plates, the cards and a household's visit history are personal data the office keeps, never a Service Provider's to read. */
 const VISIT_MODULES: readonly ModuleKey[] = ["operate.site-visits", "customers.site-access"]
 
-/** The modules of Operate a Service Provider's roles never read: the visits', and the inspections' (M23 of #293), whose photos and findings at a customer's bins are the office's to follow up. */
-const OFFICE_OPERATE: readonly ModuleKey[] = [...VISIT_MODULES, "operate.inspections"]
+/** The Operate modules a Service Provider never reads: the visits', the scale house's window (M16a of #293), whose tickets name the office's customers and walk-ins, and the inspections' (M23 of #293), whose photos and findings at a customer's bins are the office's to follow up. */
+const OFFICE_OPERATE: readonly ModuleKey[] = [...VISIT_MODULES, "operate.scale-house", "operate.inspections"]
 
 /** One module's actions, for the charters that name a single surface. */
 function only(moduleKey: ModuleKey, actions: readonly Action[]): Grant {
@@ -291,6 +291,8 @@ export const SYSTEM_ROLES: readonly SystemRole[] = [
       only("improve.imports", VIEW_EDIT_CREATE),
       only("configure.integrations", VIEW_EDIT),
       only("configure.privacy", VIEW),
+      // A weighbridge's tickets (O27 of #290): the ingest and its queue's read, never the office's match or dismissal.
+      only("route-studio.weighbridge", ["view", "create"]),
       // A sensor vendor's integration (O26 of #290): it reads the sensors, registers and pairs them as a vendor's provisioning does, and appends their readings; retiring a sensor and ending or moving a pairing are the office's edits.
       only("resources.sensors", ["view", "create"]),
     ),
@@ -302,6 +304,7 @@ export const SYSTEM_ROLES: readonly SystemRole[] = [
     description: "Recycling-centre check-in and the visit ledger",
     system: true,
     // A recycling centre's staff (M4 of #293): the check-in records a visit and the ledger reads it, the register of plates and cards is read to answer a visitor, and nothing else. The web lands the role on `/check-in`, as a driver's lands on `/driver`.
-    grants: charter(only("operate.site-visits", ["view", "create"]), only("customers.site-access", VIEW)),
+    // The scale house's window too (M16a of #293): the tare register and the tickets, weighed in, completed and voided at the site.
+    grants: charter(only("operate.site-visits", ["view", "create"]), only("customers.site-access", VIEW), only("operate.scale-house", VIEW_EDIT_CREATE)),
   },
 ]

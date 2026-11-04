@@ -1,5 +1,5 @@
 {
-  "id": "3d34aa05-ad0d-4d31-b813-4fd049a549ab",
+  "id": "ef8fb3e5-8f94-48a8-b00b-e8b119df5ea1",
   "prevId": "8862a7a3-54f2-4422-921b-93a1773660e9",
   "version": "7",
   "dialect": "postgresql",
@@ -10920,7 +10920,7 @@
       "checkConstraints": {
         "driver_command_kind_one_of": {
           "name": "driver_command_kind_one_of",
-          "value": "\"wms\".\"driver_command\".\"kind\" in ('start-route', 'arrive', 'complete-pickup', 'skip-pickup', 'fail-pickup', 'report-problem', 'add-photo', 'add-weight', 'add-signature', 'add-note', 'record-unload', 'pause', 'resume', 'end-route', 'record-positions', 'pre-trip-check', 'record-fill')"
+          "value": "\"wms\".\"driver_command\".\"kind\" in ('start-route', 'arrive', 'complete-pickup', 'skip-pickup', 'fail-pickup', 'report-problem', 'add-photo', 'add-weight', 'add-signature', 'add-note', 'record-unload', 'pause', 'resume', 'end-route', 'record-positions', 'pre-trip-check')"
         },
         "driver_command_outcome_one_of": {
           "name": "driver_command_outcome_one_of",
@@ -11109,11 +11109,11 @@
       "checkConstraints": {
         "outbox_event_kind_one_of": {
           "name": "outbox_event_kind_one_of",
-          "value": "\"wms\".\"outbox_event\".\"kind\" in ('route-dispatched', 'route-started', 'route-completed', 'route-cancelled', 'route-reassigned', 'pickup-completed', 'pickup-failed', 'pickup-skipped', 'pickup-problem-reported', 'pickup-corrected', 'unload-recorded', 'command-rejected', 'ticket-opened', 'ticket-completed', 'ticket-rejected', 'invoice-issued', 'settlement-closed', 'application-decided', 'site-visit-recorded', 'site-visit-voided')"
+          "value": "\"wms\".\"outbox_event\".\"kind\" in ('route-dispatched', 'route-started', 'route-completed', 'route-cancelled', 'route-reassigned', 'pickup-completed', 'pickup-failed', 'pickup-skipped', 'pickup-problem-reported', 'pickup-corrected', 'unload-recorded', 'command-rejected', 'ticket-opened', 'ticket-completed', 'ticket-rejected', 'invoice-issued', 'settlement-closed', 'application-decided', 'site-visit-recorded', 'site-visit-voided', 'alert-raised', 'ticket-assigned')"
         },
         "outbox_event_aggregate_kind_one_of": {
           "name": "outbox_event_aggregate_kind_one_of",
-          "value": "\"wms\".\"outbox_event\".\"aggregate_kind\" in ('route', 'pickup', 'unload', 'command', 'ticket', 'invoice', 'settlement', 'application', 'site-visit')"
+          "value": "\"wms\".\"outbox_event\".\"aggregate_kind\" in ('route', 'pickup', 'unload', 'command', 'ticket', 'invoice', 'settlement', 'application', 'site-visit', 'alert')"
         }
       },
       "isRLSEnabled": false
@@ -11295,12 +11295,6 @@
         "moved_from_pickup_id": {
           "name": "moved_from_pickup_id",
           "type": "uuid",
-          "primaryKey": false,
-          "notNull": false
-        },
-        "fill_level": {
-          "name": "fill_level",
-          "type": "text",
           "primaryKey": false,
           "notNull": false
         }
@@ -11941,10 +11935,6 @@
         "pickup_service_one_of": {
           "name": "pickup_service_one_of",
           "value": "\"wms\".\"pickup\".\"service\" in ('empty', 'deliver', 'remove', 'swap', 'repair', 'wash', 'bulky')"
-        },
-        "pickup_fill_level_one_of": {
-          "name": "pickup_fill_level_one_of",
-          "value": "\"wms\".\"pickup\".\"fill_level\" in ('empty', 'quarter', 'half', 'three-quarters', 'full', 'overflowing')"
         },
         "pickup_service_origin_shape": {
           "name": "pickup_service_origin_shape",
@@ -31648,10 +31638,22 @@
           "name": "customer_id",
           "type": "uuid",
           "primaryKey": false,
-          "notNull": true
+          "notNull": false
         },
         "contact_id": {
           "name": "contact_id",
+          "type": "uuid",
+          "primaryKey": false,
+          "notNull": false
+        },
+        "user_account_id": {
+          "name": "user_account_id",
+          "type": "uuid",
+          "primaryKey": false,
+          "notNull": false
+        },
+        "source_event_id": {
+          "name": "source_event_id",
           "type": "uuid",
           "primaryKey": false,
           "notNull": false
@@ -31808,6 +31810,55 @@
           "concurrently": false,
           "method": "btree",
           "with": {}
+        },
+        "message_user_account_id_idx": {
+          "name": "message_user_account_id_idx",
+          "columns": [
+            {
+              "expression": "company_id",
+              "isExpression": false,
+              "asc": true,
+              "nulls": "last"
+            },
+            {
+              "expression": "user_account_id",
+              "isExpression": false,
+              "asc": true,
+              "nulls": "last"
+            }
+          ],
+          "isUnique": false,
+          "concurrently": false,
+          "method": "btree",
+          "with": {}
+        },
+        "message_source_event_id_user_account_id_idx": {
+          "name": "message_source_event_id_user_account_id_idx",
+          "columns": [
+            {
+              "expression": "company_id",
+              "isExpression": false,
+              "asc": true,
+              "nulls": "last"
+            },
+            {
+              "expression": "source_event_id",
+              "isExpression": false,
+              "asc": true,
+              "nulls": "last"
+            },
+            {
+              "expression": "user_account_id",
+              "isExpression": false,
+              "asc": true,
+              "nulls": "last"
+            }
+          ],
+          "isUnique": true,
+          "where": "\"wms\".\"message\".\"source_event_id\" is not null and \"wms\".\"message\".\"user_account_id\" is not null",
+          "concurrently": false,
+          "method": "btree",
+          "with": {}
         }
       },
       "foreignKeys": {
@@ -31890,19 +31941,39 @@
           ],
           "onDelete": "no action",
           "onUpdate": "no action"
+        },
+        "message_user_account_id_fk": {
+          "name": "message_user_account_id_fk",
+          "tableFrom": "message",
+          "tableTo": "user_account",
+          "schemaTo": "wms",
+          "columnsFrom": [
+            "company_id",
+            "user_account_id"
+          ],
+          "columnsTo": [
+            "company_id",
+            "id"
+          ],
+          "onDelete": "no action",
+          "onUpdate": "no action"
         }
       },
       "compositePrimaryKeys": {},
       "uniqueConstraints": {},
       "policies": {},
       "checkConstraints": {
+        "message_recipient_exactly_one": {
+          "name": "message_recipient_exactly_one",
+          "value": "(\"wms\".\"message\".\"customer_id\" is not null)::int + (\"wms\".\"message\".\"user_account_id\" is not null)::int = 1"
+        },
         "message_channel_one_of": {
           "name": "message_channel_one_of",
           "value": "\"wms\".\"message\".\"channel\" in ('email', 'sms')"
         },
         "message_purpose_one_of": {
           "name": "message_purpose_one_of",
-          "value": "\"wms\".\"message\".\"purpose\" in ('service', 'billing')"
+          "value": "\"wms\".\"message\".\"purpose\" in ('service', 'billing', 'staff')"
         },
         "message_status_one_of": {
           "name": "message_status_one_of",
@@ -32064,6 +32135,118 @@
         "message_template_subject_shape": {
           "name": "message_template_subject_shape",
           "value": "(\"wms\".\"message_template\".\"channel\" = 'email') = (\"wms\".\"message_template\".\"subject\" is not null)"
+        }
+      },
+      "isRLSEnabled": false
+    },
+    "wms.notification_preference": {
+      "name": "notification_preference",
+      "schema": "wms",
+      "columns": {
+        "id": {
+          "name": "id",
+          "type": "uuid",
+          "primaryKey": true,
+          "notNull": true,
+          "default": "wms.uuidv7()"
+        },
+        "company_id": {
+          "name": "company_id",
+          "type": "uuid",
+          "primaryKey": false,
+          "notNull": true
+        },
+        "created_at": {
+          "name": "created_at",
+          "type": "timestamp with time zone",
+          "primaryKey": false,
+          "notNull": true,
+          "default": "now()"
+        },
+        "updated_at": {
+          "name": "updated_at",
+          "type": "timestamp with time zone",
+          "primaryKey": false,
+          "notNull": true,
+          "default": "now()"
+        },
+        "user_account_id": {
+          "name": "user_account_id",
+          "type": "uuid",
+          "primaryKey": false,
+          "notNull": true
+        },
+        "event": {
+          "name": "event",
+          "type": "text",
+          "primaryKey": false,
+          "notNull": true
+        },
+        "min_severity": {
+          "name": "min_severity",
+          "type": "text",
+          "primaryKey": false,
+          "notNull": false
+        }
+      },
+      "indexes": {},
+      "foreignKeys": {
+        "notification_preference_company_id_fk": {
+          "name": "notification_preference_company_id_fk",
+          "tableFrom": "notification_preference",
+          "tableTo": "company",
+          "schemaTo": "wms",
+          "columnsFrom": [
+            "company_id"
+          ],
+          "columnsTo": [
+            "id"
+          ],
+          "onDelete": "no action",
+          "onUpdate": "no action"
+        },
+        "notification_preference_user_account_id_fk": {
+          "name": "notification_preference_user_account_id_fk",
+          "tableFrom": "notification_preference",
+          "tableTo": "user_account",
+          "schemaTo": "wms",
+          "columnsFrom": [
+            "company_id",
+            "user_account_id"
+          ],
+          "columnsTo": [
+            "company_id",
+            "id"
+          ],
+          "onDelete": "no action",
+          "onUpdate": "no action"
+        }
+      },
+      "compositePrimaryKeys": {},
+      "uniqueConstraints": {
+        "notification_preference_user_account_id_event_key": {
+          "name": "notification_preference_user_account_id_event_key",
+          "nullsNotDistinct": false,
+          "columns": [
+            "company_id",
+            "user_account_id",
+            "event"
+          ]
+        }
+      },
+      "policies": {},
+      "checkConstraints": {
+        "notification_preference_event_one_of": {
+          "name": "notification_preference_event_one_of",
+          "value": "\"wms\".\"notification_preference\".\"event\" in ('alert-raised', 'ticket-assigned')"
+        },
+        "notification_preference_min_severity_one_of": {
+          "name": "notification_preference_min_severity_one_of",
+          "value": "\"wms\".\"notification_preference\".\"min_severity\" in ('critical', 'high', 'medium', 'low')"
+        },
+        "notification_preference_min_severity_shape": {
+          "name": "notification_preference_min_severity_shape",
+          "value": "(\"wms\".\"notification_preference\".\"event\" = 'alert-raised') = (\"wms\".\"notification_preference\".\"min_severity\" is not null)"
         }
       },
       "isRLSEnabled": false
@@ -33362,518 +33545,6 @@
           "value": "\"wms\".\"sensor_pairing\".\"full_threshold_percent\" between 1 and 100"
         }
       },
-      "isRLSEnabled": false
-    },
-    "wms.field_inspection": {
-      "name": "field_inspection",
-      "schema": "wms",
-      "columns": {
-        "id": {
-          "name": "id",
-          "type": "uuid",
-          "primaryKey": true,
-          "notNull": true,
-          "default": "wms.uuidv7()"
-        },
-        "company_id": {
-          "name": "company_id",
-          "type": "uuid",
-          "primaryKey": false,
-          "notNull": true
-        },
-        "project_id": {
-          "name": "project_id",
-          "type": "uuid",
-          "primaryKey": false,
-          "notNull": true
-        },
-        "created_at": {
-          "name": "created_at",
-          "type": "timestamp with time zone",
-          "primaryKey": false,
-          "notNull": true,
-          "default": "now()"
-        },
-        "updated_at": {
-          "name": "updated_at",
-          "type": "timestamp with time zone",
-          "primaryKey": false,
-          "notNull": true,
-          "default": "now()"
-        },
-        "container_id": {
-          "name": "container_id",
-          "type": "uuid",
-          "primaryKey": false,
-          "notNull": false
-        },
-        "property_id": {
-          "name": "property_id",
-          "type": "uuid",
-          "primaryKey": false,
-          "notNull": false
-        },
-        "inspector_id": {
-          "name": "inspector_id",
-          "type": "uuid",
-          "primaryKey": false,
-          "notNull": true
-        },
-        "inspected_at": {
-          "name": "inspected_at",
-          "type": "timestamp with time zone",
-          "primaryKey": false,
-          "notNull": true
-        },
-        "outcome": {
-          "name": "outcome",
-          "type": "text",
-          "primaryKey": false,
-          "notNull": true
-        },
-        "findings": {
-          "name": "findings",
-          "type": "text[]",
-          "primaryKey": false,
-          "notNull": true,
-          "default": "'{}'::text[]"
-        },
-        "note": {
-          "name": "note",
-          "type": "text",
-          "primaryKey": false,
-          "notNull": false
-        },
-        "status": {
-          "name": "status",
-          "type": "text",
-          "primaryKey": false,
-          "notNull": true,
-          "default": "'open'"
-        },
-        "closed_at": {
-          "name": "closed_at",
-          "type": "timestamp with time zone",
-          "primaryKey": false,
-          "notNull": false
-        }
-      },
-      "indexes": {
-        "field_inspection_container_id_idx": {
-          "name": "field_inspection_container_id_idx",
-          "columns": [
-            {
-              "expression": "company_id",
-              "isExpression": false,
-              "asc": true,
-              "nulls": "last"
-            },
-            {
-              "expression": "container_id",
-              "isExpression": false,
-              "asc": true,
-              "nulls": "last"
-            },
-            {
-              "expression": "inspected_at",
-              "isExpression": false,
-              "asc": true,
-              "nulls": "last"
-            }
-          ],
-          "isUnique": false,
-          "concurrently": false,
-          "method": "btree",
-          "with": {}
-        },
-        "field_inspection_property_id_idx": {
-          "name": "field_inspection_property_id_idx",
-          "columns": [
-            {
-              "expression": "company_id",
-              "isExpression": false,
-              "asc": true,
-              "nulls": "last"
-            },
-            {
-              "expression": "property_id",
-              "isExpression": false,
-              "asc": true,
-              "nulls": "last"
-            },
-            {
-              "expression": "inspected_at",
-              "isExpression": false,
-              "asc": true,
-              "nulls": "last"
-            }
-          ],
-          "isUnique": false,
-          "concurrently": false,
-          "method": "btree",
-          "with": {}
-        },
-        "field_inspection_project_id_idx": {
-          "name": "field_inspection_project_id_idx",
-          "columns": [
-            {
-              "expression": "company_id",
-              "isExpression": false,
-              "asc": true,
-              "nulls": "last"
-            },
-            {
-              "expression": "project_id",
-              "isExpression": false,
-              "asc": true,
-              "nulls": "last"
-            }
-          ],
-          "isUnique": false,
-          "concurrently": false,
-          "method": "btree",
-          "with": {}
-        },
-        "field_inspection_inspector_id_idx": {
-          "name": "field_inspection_inspector_id_idx",
-          "columns": [
-            {
-              "expression": "company_id",
-              "isExpression": false,
-              "asc": true,
-              "nulls": "last"
-            },
-            {
-              "expression": "inspector_id",
-              "isExpression": false,
-              "asc": true,
-              "nulls": "last"
-            }
-          ],
-          "isUnique": false,
-          "concurrently": false,
-          "method": "btree",
-          "with": {}
-        }
-      },
-      "foreignKeys": {
-        "field_inspection_company_id_fk": {
-          "name": "field_inspection_company_id_fk",
-          "tableFrom": "field_inspection",
-          "tableTo": "company",
-          "schemaTo": "wms",
-          "columnsFrom": [
-            "company_id"
-          ],
-          "columnsTo": [
-            "id"
-          ],
-          "onDelete": "no action",
-          "onUpdate": "no action"
-        },
-        "field_inspection_project_id_fk": {
-          "name": "field_inspection_project_id_fk",
-          "tableFrom": "field_inspection",
-          "tableTo": "project",
-          "schemaTo": "wms",
-          "columnsFrom": [
-            "company_id",
-            "project_id"
-          ],
-          "columnsTo": [
-            "company_id",
-            "id"
-          ],
-          "onDelete": "no action",
-          "onUpdate": "no action"
-        },
-        "field_inspection_container_id_fk": {
-          "name": "field_inspection_container_id_fk",
-          "tableFrom": "field_inspection",
-          "tableTo": "container",
-          "schemaTo": "wms",
-          "columnsFrom": [
-            "company_id",
-            "project_id",
-            "container_id"
-          ],
-          "columnsTo": [
-            "company_id",
-            "project_id",
-            "id"
-          ],
-          "onDelete": "no action",
-          "onUpdate": "no action"
-        },
-        "field_inspection_property_id_fk": {
-          "name": "field_inspection_property_id_fk",
-          "tableFrom": "field_inspection",
-          "tableTo": "property",
-          "schemaTo": "wms",
-          "columnsFrom": [
-            "company_id",
-            "project_id",
-            "property_id"
-          ],
-          "columnsTo": [
-            "company_id",
-            "project_id",
-            "id"
-          ],
-          "onDelete": "no action",
-          "onUpdate": "no action"
-        },
-        "field_inspection_inspector_id_fk": {
-          "name": "field_inspection_inspector_id_fk",
-          "tableFrom": "field_inspection",
-          "tableTo": "user_account",
-          "schemaTo": "wms",
-          "columnsFrom": [
-            "company_id",
-            "inspector_id"
-          ],
-          "columnsTo": [
-            "company_id",
-            "id"
-          ],
-          "onDelete": "no action",
-          "onUpdate": "no action"
-        }
-      },
-      "compositePrimaryKeys": {},
-      "uniqueConstraints": {
-        "field_inspection_project_key": {
-          "name": "field_inspection_project_key",
-          "nullsNotDistinct": false,
-          "columns": [
-            "company_id",
-            "project_id",
-            "id"
-          ]
-        }
-      },
-      "policies": {},
-      "checkConstraints": {
-        "field_inspection_subject_exactly_one": {
-          "name": "field_inspection_subject_exactly_one",
-          "value": "(\"wms\".\"field_inspection\".\"container_id\" is not null)::int + (\"wms\".\"field_inspection\".\"property_id\" is not null)::int = 1"
-        },
-        "field_inspection_outcome_one_of": {
-          "name": "field_inspection_outcome_one_of",
-          "value": "\"wms\".\"field_inspection\".\"outcome\" in ('compliant', 'minor', 'major')"
-        },
-        "field_inspection_status_one_of": {
-          "name": "field_inspection_status_one_of",
-          "value": "\"wms\".\"field_inspection\".\"status\" in ('open', 'closed')"
-        },
-        "field_inspection_findings_subset_of": {
-          "name": "field_inspection_findings_subset_of",
-          "value": "\"wms\".\"field_inspection\".\"findings\" <@ ARRAY['contamination', 'wrong-fraction', 'overfilled', 'damaged', 'blocked-access', 'missing-container', 'other']::text[]"
-        },
-        "field_inspection_findings_shape": {
-          "name": "field_inspection_findings_shape",
-          "value": "(\"wms\".\"field_inspection\".\"outcome\" = 'compliant') = (cardinality(\"wms\".\"field_inspection\".\"findings\") = 0)"
-        },
-        "field_inspection_closed_shape": {
-          "name": "field_inspection_closed_shape",
-          "value": "(\"wms\".\"field_inspection\".\"status\" = 'closed') = (\"wms\".\"field_inspection\".\"closed_at\" is not null)"
-        }
-      },
-      "isRLSEnabled": false
-    },
-    "wms.field_inspection_photo": {
-      "name": "field_inspection_photo",
-      "schema": "wms",
-      "columns": {
-        "id": {
-          "name": "id",
-          "type": "uuid",
-          "primaryKey": true,
-          "notNull": true,
-          "default": "wms.uuidv7()"
-        },
-        "company_id": {
-          "name": "company_id",
-          "type": "uuid",
-          "primaryKey": false,
-          "notNull": true
-        },
-        "project_id": {
-          "name": "project_id",
-          "type": "uuid",
-          "primaryKey": false,
-          "notNull": true
-        },
-        "recorded_at": {
-          "name": "recorded_at",
-          "type": "timestamp with time zone",
-          "primaryKey": false,
-          "notNull": true,
-          "default": "now()"
-        },
-        "inspection_id": {
-          "name": "inspection_id",
-          "type": "uuid",
-          "primaryKey": false,
-          "notNull": true
-        },
-        "object_key": {
-          "name": "object_key",
-          "type": "text",
-          "primaryKey": false,
-          "notNull": true
-        },
-        "recorded_by": {
-          "name": "recorded_by",
-          "type": "uuid",
-          "primaryKey": false,
-          "notNull": true
-        }
-      },
-      "indexes": {
-        "field_inspection_photo_inspection_id_idx": {
-          "name": "field_inspection_photo_inspection_id_idx",
-          "columns": [
-            {
-              "expression": "company_id",
-              "isExpression": false,
-              "asc": true,
-              "nulls": "last"
-            },
-            {
-              "expression": "inspection_id",
-              "isExpression": false,
-              "asc": true,
-              "nulls": "last"
-            }
-          ],
-          "isUnique": false,
-          "concurrently": false,
-          "method": "btree",
-          "with": {}
-        },
-        "field_inspection_photo_project_id_idx": {
-          "name": "field_inspection_photo_project_id_idx",
-          "columns": [
-            {
-              "expression": "company_id",
-              "isExpression": false,
-              "asc": true,
-              "nulls": "last"
-            },
-            {
-              "expression": "project_id",
-              "isExpression": false,
-              "asc": true,
-              "nulls": "last"
-            }
-          ],
-          "isUnique": false,
-          "concurrently": false,
-          "method": "btree",
-          "with": {}
-        },
-        "field_inspection_photo_recorded_by_idx": {
-          "name": "field_inspection_photo_recorded_by_idx",
-          "columns": [
-            {
-              "expression": "company_id",
-              "isExpression": false,
-              "asc": true,
-              "nulls": "last"
-            },
-            {
-              "expression": "recorded_by",
-              "isExpression": false,
-              "asc": true,
-              "nulls": "last"
-            }
-          ],
-          "isUnique": false,
-          "concurrently": false,
-          "method": "btree",
-          "with": {}
-        }
-      },
-      "foreignKeys": {
-        "field_inspection_photo_company_id_fk": {
-          "name": "field_inspection_photo_company_id_fk",
-          "tableFrom": "field_inspection_photo",
-          "tableTo": "company",
-          "schemaTo": "wms",
-          "columnsFrom": [
-            "company_id"
-          ],
-          "columnsTo": [
-            "id"
-          ],
-          "onDelete": "no action",
-          "onUpdate": "no action"
-        },
-        "field_inspection_photo_project_id_fk": {
-          "name": "field_inspection_photo_project_id_fk",
-          "tableFrom": "field_inspection_photo",
-          "tableTo": "project",
-          "schemaTo": "wms",
-          "columnsFrom": [
-            "company_id",
-            "project_id"
-          ],
-          "columnsTo": [
-            "company_id",
-            "id"
-          ],
-          "onDelete": "no action",
-          "onUpdate": "no action"
-        },
-        "field_inspection_photo_inspection_id_fk": {
-          "name": "field_inspection_photo_inspection_id_fk",
-          "tableFrom": "field_inspection_photo",
-          "tableTo": "field_inspection",
-          "schemaTo": "wms",
-          "columnsFrom": [
-            "company_id",
-            "project_id",
-            "inspection_id"
-          ],
-          "columnsTo": [
-            "company_id",
-            "project_id",
-            "id"
-          ],
-          "onDelete": "no action",
-          "onUpdate": "no action"
-        },
-        "field_inspection_photo_recorded_by_fk": {
-          "name": "field_inspection_photo_recorded_by_fk",
-          "tableFrom": "field_inspection_photo",
-          "tableTo": "user_account",
-          "schemaTo": "wms",
-          "columnsFrom": [
-            "company_id",
-            "recorded_by"
-          ],
-          "columnsTo": [
-            "company_id",
-            "id"
-          ],
-          "onDelete": "no action",
-          "onUpdate": "no action"
-        }
-      },
-      "compositePrimaryKeys": {},
-      "uniqueConstraints": {
-        "field_inspection_photo_object_key_key": {
-          "name": "field_inspection_photo_object_key_key",
-          "nullsNotDistinct": false,
-          "columns": [
-            "company_id",
-            "object_key"
-          ]
-        }
-      },
-      "policies": {},
-      "checkConstraints": {},
       "isRLSEnabled": false
     }
   },

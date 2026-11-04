@@ -9,6 +9,7 @@ import { singleFilterValue, splitFilterValues } from "@waste/domain/business-fil
 import type { BusinessRecord } from "@/lib/data/business-modules"
 import { isServiceAreaRecord } from "@/lib/data/provider-money"
 import { REVIEW_LABELS } from "@/lib/api/records/weights"
+import { TICKET_STATUS_LABELS } from "@/lib/data/weighbridge"
 
 import type { ModuleList } from "./command-surfaces"
 
@@ -35,4 +36,16 @@ export const SETTLEMENTS_LIST: ModuleList = {
 export const WEIGHTS_LIST: ModuleList = {
   readers: () => ({ statuses: status, routes: fact("Route"), wasteFractions: fact("Waste fraction"), tolerance: fact("Tolerance") }),
   initial: { statuses: [REVIEW_LABELS.captured] },
+}
+
+/** The scale house (M16a of #293): its tickets and its registered tares together, by status. */
+export const SCALE_HOUSE_LIST: ModuleList = {
+  readers: () => ({ statuses: status }),
+  initial: {},
+}
+
+/** A weighbridge's tickets (O27 of #290) open on what waits for the office, and filter by the route a ticket was matched to. */
+export const WEIGHBRIDGE_LIST: ModuleList = {
+  readers: () => ({ statuses: status, routes: fact("Route") }),
+  initial: { statuses: [TICKET_STATUS_LABELS.unmatched] },
 }

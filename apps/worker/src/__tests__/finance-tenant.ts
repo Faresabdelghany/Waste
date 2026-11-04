@@ -29,8 +29,10 @@ import { agreement, subscription } from "@waste/db/schema/agreements"
 import { containerType, product, wasteFraction } from "@waste/db/schema/catalogue"
 import { container, containerServicePlacement } from "@waste/db/schema/containers"
 import { customer, property } from "@waste/db/schema/customers"
-import { outboxEvent, pickup, proofOfService, route } from "@waste/db/schema/execution"
-import { billableEvent, billingRun, billingRunExclusion, invoice, invoiceLine, priceList, priceListRow, ticketKindProduct, workOrderProduct } from "@waste/db/schema/finance"
+import { message, messageTemplate } from "@waste/db/schema/messaging"
+import { notificationRule, notificationRuleArea } from "@waste/db/schema/notifications"
+import { outboxEvent, pickup, proofOfService, route, unload } from "@waste/db/schema/execution"
+import { billableEvent, billingRun, billingRunExclusion, invoice, invoiceLine, priceList, priceListRow, ticketKindProduct, weightReview, workOrderProduct } from "@waste/db/schema/finance"
 import { driver, vehicle } from "@waste/db/schema/fleet"
 import { dropOffPoint, dropOffPointFraction } from "@waste/db/schema/drop-off-points"
 import { accessCredential, siteVisit, siteVisitFraction, visitRule, visitRuleFreeFraction, visitRuleStep } from "@waste/db/schema/site-visits"
@@ -38,9 +40,9 @@ import { vehicleType } from "@waste/db/schema/fleet-types"
 import { bulkyBooking, bulkyBookingItem, bulkySchedule } from "@waste/db/schema/bulky"
 import { company, project } from "@waste/db/schema/organisation"
 import { pickupExceptionRule, pickupExceptionRuleStep } from "@waste/db/schema/pickup-exceptions"
-import { warehouse } from "@waste/db/schema/places"
-import { planningArea } from "@waste/db/schema/planning-areas"
-import { ticket, ticketBooking, ticketEvent } from "@waste/db/schema/resolution"
+import { unloadingStation, warehouse } from "@waste/db/schema/places"
+import { planningArea, planningAreaBoundary } from "@waste/db/schema/planning-areas"
+import { alert, ticket, ticketBooking, ticketEvent } from "@waste/db/schema/resolution"
 import { collectionGroup, routeScheme, routeSchemeSeason } from "@waste/db/schema/route-schemes"
 import { withCompany } from "@waste/db/tenant"
 import type { PickupOrigin, PickupOutcome, PickupReason, PickupService, PickupStatus } from "@waste/domain/execution/vocabulary"
@@ -412,6 +414,10 @@ export async function dropFinanceTenant(pool: Database, owner: Database, company
   await owner.db.delete(invoiceLine).where(eq(invoiceLine.companyId, companyId))
   await owner.db.delete(invoice).where(eq(invoice.companyId, companyId))
   await owner.db.delete(billingRunExclusion).where(eq(billingRunExclusion.companyId, companyId))
+  // A weight charge names the Unload it charges a share of (O28 of #290), and a review the Unload it judged: the events, then the two ledgers.
+  await owner.db.delete(billableEvent).where(eq(billableEvent.companyId, companyId))
+  await owner.db.delete(weightReview).where(eq(weightReview.companyId, companyId))
+  await owner.db.delete(unload).where(eq(unload.companyId, companyId))
   await owner.db.delete(ticketBooking).where(eq(ticketBooking.companyId, companyId))
   await owner.db.delete(ticketEvent).where(eq(ticketEvent.companyId, companyId))
   await withCompany(pool.db, companyId, async (tx: Tx) => {
@@ -437,7 +443,15 @@ export async function dropFinanceTenant(pool: Database, owner: Database, company
     await tx.delete(bulkyBookingItem).where(eq(bulkyBookingItem.companyId, companyId))
     await tx.delete(bulkyBooking).where(eq(bulkyBooking.companyId, companyId))
     await tx.delete(bulkySchedule).where(eq(bulkySchedule.companyId, companyId))
+    // The customer notices (O16 of #290, part b): the log and the rules before the templates, all before the customers they name.
+    await tx.delete(message).where(eq(message.companyId, companyId))
+    // Service notifications (C18 of #291): a broadcast's areas before its rule and the areas they name; a rule's alert before its route.
+    await tx.delete(notificationRuleArea).where(eq(notificationRuleArea.companyId, companyId))
+    await tx.delete(notificationRule).where(eq(notificationRule.companyId, companyId))
+    await tx.delete(alert).where(eq(alert.companyId, companyId))
+    await tx.delete(messageTemplate).where(eq(messageTemplate.companyId, companyId))
     await tx.delete(route).where(eq(route.companyId, companyId))
+    await tx.delete(unloadingStation).where(eq(unloadingStation.companyId, companyId))
     await tx.delete(collectionGroup).where(eq(collectionGroup.companyId, companyId))
     await tx.delete(routeSchemeSeason).where(eq(routeSchemeSeason.companyId, companyId))
     await tx.delete(routeScheme).where(eq(routeScheme.companyId, companyId))
@@ -445,6 +459,7 @@ export async function dropFinanceTenant(pool: Database, owner: Database, company
     await tx.delete(vehicle).where(eq(vehicle.companyId, companyId))
     await tx.delete(driver).where(eq(driver.companyId, companyId))
     await tx.delete(vehicleType).where(eq(vehicleType.companyId, companyId))
+    await tx.delete(planningAreaBoundary).where(eq(planningAreaBoundary.companyId, companyId))
     await tx.delete(planningArea).where(eq(planningArea.companyId, companyId))
     await tx.delete(containerServicePlacement).where(eq(containerServicePlacement.companyId, companyId))
     await tx.delete(subscription).where(eq(subscription.companyId, companyId))

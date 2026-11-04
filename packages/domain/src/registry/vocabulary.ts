@@ -62,8 +62,8 @@ export const WASTE_TREATMENTS = ["reuse", "recycling", "energy-recovery", "dispo
 export const PRODUCT_KINDS = ["container-collection", "recurring-service", "additional-service"] as const
 /** Where the Product stands in the catalogue. Only an active Product can be subscribed to, which the API holds (Issue #79); a subscription already made stands when its Product is withdrawn. */
 export const PRODUCT_STATUSES = ["draft", "active", "inactive"] as const
-/** What one of the Product is: prices are Finance & Contracting's, the unit they are quoted per is here. A `day` is a container on hire, charged by its days on site (M14 of #293); a `visit` a recycling-centre visit its Visit Rule charges (#393); an `item` one of the things a bulky-waste booking lists, charged by their count (#449). */
-export const PRODUCT_UNITS = ["pickup", "month", "job", "day", "visit", "item"] as const
+/** What one of the Product is: prices are Finance & Contracting's, the unit they are quoted per is here. A `day` is a container on hire, charged by its days on site (M14 of #293); a `visit` a recycling-centre visit its Visit Rule charges (#393); an `item` one of the things a bulky-waste booking lists, charged by their count (#449); a `tonne` a collection charged by its reviewed weight (O28 of #290, C32 of #291). */
+export const PRODUCT_UNITS = ["pickup", "month", "job", "day", "visit", "item", "tonne"] as const
 
 /** Where the Agreement stands; "expiring", "expired" and "terminated" are readings of `valid_to` (ADR-0005), never stored. */
 export const AGREEMENT_STATUSES = ["draft", "active", "cancelled"] as const
