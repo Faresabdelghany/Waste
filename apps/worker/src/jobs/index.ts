@@ -23,8 +23,11 @@
 // kind (../outbox/subscribe.ts). Execution's two nightly purges keep what a
 // driver's day leaves for no longer than it is owed: the proofs' objects (O1
 // of #290) and the positions (O8 of #290). And messaging's `messaging.send`
-// (#291 C15), one queued message through the messaging provider.
+// (#291 C15), one queued message through the messaging provider, and the
+// hourly `messaging.collection-reminders` (C18 of #291), the next day's
+// reminders, bounded per run and per day.
 import { alertRulesJob, ALERT_RULES_QUEUE, rulesSchedule } from "./alert-rules"
+import { collectionRemindersJob } from "./collection-reminders"
 import type { AnyJob } from "./definition"
 import { generateRoutes } from "./generate-routes"
 import { heartbeat } from "./heartbeat"
@@ -39,7 +42,7 @@ import { runScheduledBilling } from "./run-billing"
 import { sendMessageJob } from "./send-message"
 import { OUTBOX_CONSUMERS } from "../outbox/routes"
 
-export const JOBS: readonly AnyJob[] = [heartbeat, generateRoutes, planAheadJob, routingMeasure, routingOptimise, sweepHorizonJob, relayOutbox, ...OUTBOX_CONSUMERS, runScheduledBilling, purgeProofObjectsJob, alertRulesJob, purgePositionsJob, sendMessageJob]
+export const JOBS: readonly AnyJob[] = [heartbeat, generateRoutes, planAheadJob, routingMeasure, routingOptimise, sweepHorizonJob, relayOutbox, ...OUTBOX_CONSUMERS, runScheduledBilling, purgeProofObjectsJob, alertRulesJob, purgePositionsJob, sendMessageJob, collectionRemindersJob]
 
 /** The registry with the alert rules on the cadence `WORKER_RULES_INTERVAL_SECONDS` sets (O4 of #290); the registry as it is where it is unset. */
 export const jobsWithRulesEvery = (seconds: number | undefined): readonly AnyJob[] =>
