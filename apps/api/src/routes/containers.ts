@@ -109,7 +109,7 @@ import { subscription } from "@waste/db/schema/agreements"
 import { product } from "@waste/db/schema/catalogue"
 import { container, containerServicePlacement } from "@waste/db/schema/containers"
 import { property, sharedCollectionPoint } from "@waste/db/schema/customers"
-import { and, asc, eq, gt, sql } from "drizzle-orm"
+import { and, asc, eq, gt, or, sql } from "drizzle-orm"
 import { Hono, type MiddlewareHandler } from "hono"
 import { describeRoute } from "hono-openapi"
 
@@ -143,6 +143,7 @@ const placementColumns = {
   projectId: containerServicePlacement.projectId,
   containerId: containerServicePlacement.containerId,
   subscriptionId: containerServicePlacement.subscriptionId,
+  sharedCollectionPointId: containerServicePlacement.sharedCollectionPointId,
   wasteFractionId: containerServicePlacement.wasteFractionId,
   serviceFrequencyId: containerServicePlacement.serviceFrequencyId,
   effectiveServiceFrequencyId: sql<string | null>`coalesce(${containerServicePlacement.serviceFrequencyId}, ${product.serviceFrequencyId})`,
@@ -164,6 +165,7 @@ function placementOf(row: PlacementRow): ContainerServicePlacement {
     projectId: row.projectId,
     containerId: row.containerId,
     subscriptionId: row.subscriptionId,
+    sharedCollectionPointId: row.sharedCollectionPointId,
     wasteFractionId: row.wasteFractionId,
     serviceFrequencyId: row.serviceFrequencyId,
     effectiveServiceFrequencyId: row.effectiveServiceFrequencyId,
@@ -175,6 +177,9 @@ function placementOf(row: PlacementRow): ContainerServicePlacement {
 
 /** What a body is told when it names a subscription of another project; the composite key holds it to the same thing. */
 const NOT_A_SUBSCRIPTION = "Not a subscription of this container's project"
+
+/** The same for the point a public placement names (M12 of #293). */
+const NOT_A_POINT = "Not a shared collection point of this container's project"
 
 /**
  * A placement starts inside the subscription's period: on or after its first
@@ -210,7 +215,9 @@ const placementScope = (principal: Principal) =>
 /**
  * The one statement every placement is read through, and the three joins it
  * takes: the subscription because a place and a period hang off it, the
- * product because the cadence in force coalesces onto its, and the container
+ * product because the cadence in force coalesces onto its — both left joins,
+ * since a public placement (M12 of #293) has neither, its period unbounded by
+ * any subscription and its cadence its own override — and the container
  * because the sentence a refused overlap answers names its label. Each join
  * carries `company_id` beside the key, the way every statement of this API
  * does (ADR-0001).
@@ -229,19 +236,17 @@ function placementsFrom(tx: Tx, companyId: string) {
       subscriptionValidTo: subscription.validTo,
     })
     .from(containerServicePlacement)
-    .innerJoin(
+    .leftJoin(
       subscription,
       and(eq(subscription.companyId, companyId), eq(subscription.id, containerServicePlacement.subscriptionId)),
     )
-    .innerJoin(product, and(eq(product.companyId, companyId), eq(product.id, subscription.productId)))
+    .leftJoin(product, and(eq(product.companyId, companyId), eq(product.id, subscription.productId)))
     .innerJoin(container, and(eq(container.companyId, companyId), eq(container.id, containerServicePlacement.containerId)))
 }
 
-/** The period a placement of this row has to lie inside, as the row carries it. */
-const servedPeriod = (row: { subscriptionValidFrom: string; subscriptionValidTo: string | null }): Period => ({
-  validFrom: row.subscriptionValidFrom,
-  validTo: row.subscriptionValidTo,
-})
+/** The period a placement of this row has to lie inside, as the row carries it: its subscription's, or none for a public placement. */
+const servedPeriod = (row: { subscriptionValidFrom: string | null; subscriptionValidTo: string | null }): Period | null =>
+  row.subscriptionValidFrom === null ? null : { validFrom: row.subscriptionValidFrom, validTo: row.subscriptionValidTo }
 
 /**
  * One placement, with the two things a write of it is held against: the
@@ -287,8 +292,23 @@ async function findServedSubscription(tx: Tx, within: Scope, id: string): Promis
   return row as Period & Place
 }
 
-/** What an issue opens a placement with: the body's fields less the movement's own. */
-export type IssueValues = { subscriptionId: string; wasteFractionId: string; serviceFrequencyId?: string | null; validFrom: string }
+/**
+ * The Shared Collection Point a public placement names (M12 of #293), held to
+ * the container's project and answered with its state, for the status gate
+ * as a subscription's place is.
+ */
+async function findPublicPoint(tx: Tx, within: Scope, id: string): Promise<Place> {
+  const [row] = await tx
+    .select({ status: sharedCollectionPoint.status })
+    .from(sharedCollectionPoint)
+    .where(and(eq(sharedCollectionPoint.companyId, within.companyId), eq(sharedCollectionPoint.projectId, within.projectId), eq(sharedCollectionPoint.id, id)))
+    .limit(1)
+  if (row === undefined) throw invalidRequest("body", [{ path: "sharedCollectionPointId", message: NOT_A_POINT }])
+  return { propertyStatus: null, sharedCollectionPointStatus: row.status as Place["sharedCollectionPointStatus"] }
+}
+
+/** What an issue opens a placement with: the body's fields less the movement's own, serving a subscription or standing for the project at a point. */
+export type IssueValues = { subscriptionId?: string | null; sharedCollectionPointId?: string | null; wasteFractionId: string; serviceFrequencyId?: string | null; validFrom: string }
 
 /**
  * The `issue` command (Issue #101): the placement under its subscription and
@@ -304,10 +324,13 @@ export async function issueContainer(tx: Tx, principal: Principal, into: Contain
   // period, is refused whatever the container's state. The period is
   // read again and held again under the subscription's lock inside
   // `open`; this unlocked check is the cheap one that answers first.
-  const served = await findServedSubscription(tx, within, values.subscriptionId)
+  const point = values.sharedCollectionPointId ?? null
+  const subscriptionId = values.subscriptionId ?? null
+  const served = subscriptionId === null ? null : await findServedSubscription(tx, within, subscriptionId)
+  if (point !== null) await findPublicPoint(tx, within, point)
   await requireWasteFraction(tx, principal.companyId, values.wasteFractionId)
   await requireServiceFrequency(tx, within, values.serviceFrequencyId)
-  requireStartsWithin(served, values.validFrom)
+  if (served !== null) requireStartsWithin(served, values.validFrom)
 
   const movement = await move(tx, principal, into, {
     kind: "issue",
@@ -315,18 +338,28 @@ export async function issueContainer(tx: Tx, principal: Principal, into: Contain
     // allows: the subscription locked (after the container's, top
     // down), its period and its place's state read again underneath,
     // the start held inside the period and the place held to still
-    // serve, then the placement written, open.
+    // serve, then the placement written, open. A public placement's
+    // point is locked and read again the same way; no period bounds it.
     open: async () => {
-      await lockRow(tx, subscription, { companyId: principal.companyId, id: values.subscriptionId })
-      const served = await findServedSubscription(tx, within, values.subscriptionId)
-      requireStartsWithin(served, values.validFrom)
-      // Every 400 above, every 409 below (routes/statuses.ts).
-      refuseUnservedPlace(served, "placement")
+      if (subscriptionId !== null) {
+        await lockRow(tx, subscription, { companyId: principal.companyId, id: subscriptionId })
+        const served = await findServedSubscription(tx, within, subscriptionId)
+        requireStartsWithin(served, values.validFrom)
+        // Every 400 above, every 409 below (routes/statuses.ts).
+        refuseUnservedPlace(served, "placement")
+      } else if (point !== null) {
+        await lockRow(tx, sharedCollectionPoint, { companyId: principal.companyId, id: point })
+        refuseUnservedPlace(await findPublicPoint(tx, within, point), "public placement")
+      }
       const [written] = await refuseOverlap({ [ALREADY_PLACED]: alreadyPlaced(into.label) }, () =>
         tx
           .insert(containerServicePlacement)
           .values({
-            ...values,
+            wasteFractionId: values.wasteFractionId,
+            serviceFrequencyId: values.serviceFrequencyId,
+            validFrom: values.validFrom,
+            subscriptionId,
+            sharedCollectionPointId: point,
             id: newId(),
             companyId: principal.companyId,
             projectId: into.projectId,
@@ -472,17 +505,17 @@ export function containerRoutes(guard: MiddlewareHandler<AuthEnv>, { now = () =>
         operationId: "createPlacement",
         summary: "Issue a container into service",
         description:
-          "Puts the container the path names into service under a subscription, which says the agreement, the product and the place it serves. The container says the project, so the body names neither it nor the project, and the subscription must be that project's. The place, read through the subscription, must still serve: a property no longer active, or a point no longer open or restricted, is refused (409) naming the status it has, while the placements already there are ended by their period, since a status gates a new reference and never an existing one. The waste fraction is this company's; the service frequency, where given, is the project's and overrides the product's — leave it out and the cadence in force is the product's, answered as `effectiveServiceFrequencyId`. The placement starts inside the subscription's period (400 on `validFrom`) and carries no end: a placement ends only through `POST /containers/{id}/return` or `/decommission`, which end it on the day they say and append the movement together, so `validTo` on this body is refused by name. The container may not already be placed over part of the period: one container serves in one place at a time. This is the `issue` command of the Stock Movement ledger and the only door into service: the container must be in a warehouse or in maintenance — one with no stock record (receive it first), one in service at another placement (return it first) or one retired is refused (409 naming the state), though a body that names nothing real is a 400 whatever the state — and the placement and the `issue` movement from the warehouse it stood in are written in one transaction, both or neither. `occurredAt` is when it was issued, the request's clock when absent and at most five minutes ahead of it (400), and `reference` the paper it quotes; both are the movement's, read through `GET /containers/{id}/movements`. The server mints the id.",
+          "Puts the container the path names into service under a subscription, which says the agreement, the product and the place it serves — or, a public placement (M12 of #293), at one of the project's Shared Collection Points with no subscription: a litter or dog bin the project's contract pays for, named by `sharedCollectionPointId` in place of `subscriptionId`, exactly one of the two (400 at `subscriptionId`), with no subscription's period to start inside and no payer, so its collections are charged to nobody. The container says the project, so the body names neither it nor the project, and the subscription must be that project's. The place, read through the subscription, must still serve: a property no longer active, or a point no longer open or restricted, is refused (409) naming the status it has, while the placements already there are ended by their period, since a status gates a new reference and never an existing one. The waste fraction is this company's; the service frequency, where given, is the project's and overrides the product's — leave it out and the cadence in force is the product's, answered as `effectiveServiceFrequencyId`. The placement starts inside the subscription's period (400 on `validFrom`) and carries no end: a placement ends only through `POST /containers/{id}/return` or `/decommission`, which end it on the day they say and append the movement together, so `validTo` on this body is refused by name. The container may not already be placed over part of the period: one container serves in one place at a time. This is the `issue` command of the Stock Movement ledger and the only door into service: the container must be in a warehouse or in maintenance — one with no stock record (receive it first), one in service at another placement (return it first) or one retired is refused (409 naming the state), though a body that names nothing real is a 400 whatever the state — and the placement and the `issue` movement from the warehouse it stood in are written in one transaction, both or neither. `occurredAt` is when it was issued, the request's clock when absent and at most five minutes ahead of it (400), and `reference` the paper it quotes; both are the movement's, read through `GET /containers/{id}/movements`. The server mints the id.",
         security: BEARER_SECURITY,
         responses: {
           201: describeCreated("The placement as it was written, open, with the cadence in force; the issue movement is on the container's ledger.", ContainerServicePlacement),
           400: describeProblem(
-            "The path does not hold an id, or the body is missing a field, names a member the server owns (`validTo` included: a placement ends through the ledger's commands), starts outside the subscription's period, names a subscription, waste fraction or service frequency outside the scope its key allows, or dates the issue more than five minutes after the request.",
+            "The path does not hold an id, or the body is missing a field, names a member the server owns (`validTo` included: a placement ends through the ledger's commands), starts outside the subscription's period, names both or neither of a subscription and a point, names a subscription, shared collection point, waste fraction or service frequency outside the scope its key allows, or dates the issue more than five minutes after the request.",
           ),
           401: describeProblem("No usable token (see WWW-Authenticate)."),
           403: describeProblem("No active account here, or the caller's role does not allow `create` on `resources.containers`."),
           404: describeProblem("No container with that id in the projects this account works in."),
-          409: describeProblem("The container is not in stock — no record, in service at another placement, or retired — is already placed over part of that period, or the subscription's place no longer serves: a property not active, or a point not open or restricted."),
+          409: describeProblem("The container is not in stock — no record, in service at another placement, or retired — is already placed over part of that period, or the subscription's place, or the public placement's point, no longer serves: a property not active, or a point not open or restricted."),
         },
       }),
       guard,
@@ -511,7 +544,7 @@ export function containerRoutes(guard: MiddlewareHandler<AuthEnv>, { now = () =>
         operationId: "listPlacements",
         summary: "Where containers are in service",
         description:
-          "One page of container service placements, oldest first (ids are time-ordered), from the projects the caller works in. `containerId` answers one container's service history and `subscriptionId` one subscription's containers. `propertyId` and `sharedCollectionPointId` answer what stands at a place, which is reached through the subscription and is only answerable for a day, so either takes `validOn` with it. `validOn` on its own answers the placements in force that day, `validFrom` inclusive and `validTo` exclusive — a container between two placements is in neither. Every item carries `effectiveServiceFrequencyId`, the placement's cadence where it overrides and the product's otherwise. Hand `nextCursor` back as `cursor` for the next page.",
+          "One page of container service placements, oldest first (ids are time-ordered), from the projects the caller works in. `containerId` answers one container's service history and `subscriptionId` one subscription's containers. `propertyId` and `sharedCollectionPointId` answer what stands at a place, which is reached through the subscription — or, for a public placement, is the placement's own point — and is only answerable for a day, so either takes `validOn` with it. `validOn` on its own answers the placements in force that day, `validFrom` inclusive and `validTo` exclusive — a container between two placements is in neither. Every item carries `effectiveServiceFrequencyId`, the placement's cadence where it overrides and the product's otherwise. Hand `nextCursor` back as `cursor` for the next page.",
         security: BEARER_SECURITY,
         responses: {
           200: describeJson("One page of placements, each with the cadence in force.", PlacementPage),
@@ -536,7 +569,9 @@ export function containerRoutes(guard: MiddlewareHandler<AuthEnv>, { now = () =>
               containerId === undefined ? undefined : eq(containerServicePlacement.containerId, containerId),
               subscriptionId === undefined ? undefined : eq(containerServicePlacement.subscriptionId, subscriptionId),
               propertyId === undefined ? undefined : eq(subscription.propertyId, propertyId),
-              sharedCollectionPointId === undefined ? undefined : eq(subscription.sharedCollectionPointId, sharedCollectionPointId),
+              sharedCollectionPointId === undefined
+                ? undefined
+                : or(eq(subscription.sharedCollectionPointId, sharedCollectionPointId), eq(containerServicePlacement.sharedCollectionPointId, sharedCollectionPointId)),
               day === undefined ? undefined : validOn(containerServicePlacement, day),
               after === undefined ? undefined : gt(containerServicePlacement.id, after),
             ),
@@ -611,7 +646,7 @@ export function containerRoutes(guard: MiddlewareHandler<AuthEnv>, { now = () =>
           // The subscription this placement is held inside, locked and then
           // read again underneath the lock: the read above only said which
           // subscription to lock.
-          await lockRow(tx, subscription, { companyId: principal.companyId, id: current.subscriptionId })
+          if (current.subscriptionId !== null) await lockRow(tx, subscription, { companyId: principal.companyId, id: current.subscriptionId })
           current = await findPlacement(tx, principal, id)
           if (current === undefined) throw noSuchPlacement(id)
           // The end is the ledger's to set and to keep: a form corrects a
@@ -619,7 +654,9 @@ export function containerRoutes(guard: MiddlewareHandler<AuthEnv>, { now = () =>
           // which would take the end off, never reaches here: the contracts
           // refuse it).
           if (current.validTo === null) throw problem(409, { detail: END_BY_COMMAND })
-          requireWithin(servedPeriod(current), periodAfter(current, patch), OUTSIDE_SUBSCRIPTION)
+          // A public placement has no subscription's period to stay inside (M12 of #293).
+          const served = servedPeriod(current)
+          if (served !== null) requireWithin(served, periodAfter(current, patch), OUTSIDE_SUBSCRIPTION)
         }
 
         const [written] = await refuseOverlap({ [ALREADY_PLACED]: alreadyPlaced(current.label) }, () =>

@@ -25,10 +25,10 @@ import { randomBytes, randomInt, randomUUID } from "node:crypto"
 
 import type { Database, Tx } from "@waste/db/client"
 import { role, roleGrant, userAccount } from "@waste/db/schema/access"
-import { agreement, subscription } from "@waste/db/schema/agreements"
+import { agreement, subscription, subscriptionPause } from "@waste/db/schema/agreements"
 import { containerType, product, wasteFraction } from "@waste/db/schema/catalogue"
 import { container, containerServicePlacement } from "@waste/db/schema/containers"
-import { customer, property } from "@waste/db/schema/customers"
+import { customer, property, sharedCollectionPoint } from "@waste/db/schema/customers"
 import { message, messageTemplate } from "@waste/db/schema/messaging"
 import { notificationRule, notificationRuleArea } from "@waste/db/schema/notifications"
 import { outboxEvent, pickup, proofOfService, route, unload } from "@waste/db/schema/execution"
@@ -202,11 +202,38 @@ export async function placeBin(pool: Database, tenant: FinanceTenant, label: str
   return placed
 }
 
+/** A litter bin placed publicly (M12 of #293): one of the project's points, the bin, and its placement there with no subscription. */
+export async function placePublicBin(pool: Database, tenant: FinanceTenant, label: string): Promise<{ containerId: string; sharedCollectionPointId: string; placementId: string }> {
+  const { companyId } = tenant
+  const projectId = tenant.projects.copenhagen.id
+  const placed = { containerId: testId(), sharedCollectionPointId: testId(), placementId: testId() }
+  await withCompany(pool.db, companyId, async (tx: Tx) => {
+    await tx.insert(sharedCollectionPoint).values({
+      id: placed.sharedCollectionPointId,
+      companyId,
+      projectId,
+      name: `${label}'s square`,
+      kind: "surface",
+      address: `${label} Torv 1, 2100 København Ø`,
+      location: { type: "Point", coordinates: [12.57, 55.69] },
+      operatingModel: "municipal",
+      accessMode: "open",
+      billingMode: "municipal",
+      status: "open",
+    })
+    await tx.insert(container).values({ id: placed.containerId, companyId, projectId, label, containerTypeId: tenant.containerTypes.bin.id, ownership: "company" })
+    await tx.insert(containerServicePlacement).values({ id: placed.placementId, companyId, projectId, containerId: placed.containerId, sharedCollectionPointId: placed.sharedCollectionPointId, wasteFractionId: tenant.fractions.residual.id, validFrom: "2026-01-01" })
+  })
+  return placed
+}
+
 /** A stop to seed: a container's, or — with `containerId` null — an address-only one, which only the office adds (#111). */
 /** A stop as a test seeds it; an emptying unless it says a work order, a delivery naming the subscription it books (O3b of #290). */
 export type StopSeed = {
   containerId: string | null
-  propertyId: string
+  /** The stop's place: a property, or null for one at a shared collection point. */
+  propertyId: string | null
+  sharedCollectionPointId?: string
   status?: PickupStatus
   /** A missed stop's reason; `not-presented` unless said. */
   reason?: PickupReason
@@ -288,7 +315,7 @@ export async function seedCompletedRoute(pool: Database, tenant: FinanceTenant, 
           replacementContainerId: stop.replacementContainerId ?? null,
           bulkyBookingId: stop.bulkyBookingId ?? null,
           propertyId: stop.propertyId,
-          sharedCollectionPointId: null,
+          sharedCollectionPointId: stop.sharedCollectionPointId ?? null,
           wasteFractionId: stop.wasteFractionId ?? tenant.fractions.residual.id,
           arrivedAt: status === "planned" ? null : at(serviceDate, "06:40"),
           outcomeAt: status === "planned" ? null : at(serviceDate, "06:45"),
@@ -462,12 +489,15 @@ export async function dropFinanceTenant(pool: Database, owner: Database, company
     await tx.delete(planningAreaBoundary).where(eq(planningAreaBoundary.companyId, companyId))
     await tx.delete(planningArea).where(eq(planningArea.companyId, companyId))
     await tx.delete(containerServicePlacement).where(eq(containerServicePlacement.companyId, companyId))
+    // A granted pause (M11 of #293) hangs on its subscription.
+    await tx.delete(subscriptionPause).where(eq(subscriptionPause.companyId, companyId))
     await tx.delete(subscription).where(eq(subscription.companyId, companyId))
     await tx.delete(agreement).where(eq(agreement.companyId, companyId))
     await tx.delete(priceList).where(eq(priceList.companyId, companyId))
     await tx.delete(container).where(eq(container.companyId, companyId))
     await tx.delete(product).where(eq(product.companyId, companyId))
     await tx.delete(property).where(eq(property.companyId, companyId))
+    await tx.delete(sharedCollectionPoint).where(eq(sharedCollectionPoint.companyId, companyId))
     await tx.delete(customer).where(eq(customer.companyId, companyId))
     await tx.delete(containerType).where(eq(containerType.companyId, companyId))
     await tx.delete(wasteFraction).where(eq(wasteFraction.companyId, companyId))

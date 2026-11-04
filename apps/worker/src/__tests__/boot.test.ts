@@ -357,7 +357,10 @@ describe("the worker booted against a migrated database", { skip: owner.skip }, 
     // The deploy: the process started again, with a second consumer of the kind beside Resolution's, so the event fans out to both. Finance's entry of the kind (#293 M5b) is left out: its handler reads the pickup the event names, which this file never wrote, where Resolution's answers a skip with nothing.
     const heard: string[] = []
     const second = defineOutboxConsumer({ name: "test", kinds: ["pickup-skipped"], description: "Counts.", workOptions: { pollingIntervalSeconds: 0.5 }, handler: async (relayed) => void heard.push(relayed.id) })
-    const registry = [...JOBS.filter((job) => job.queue !== consumerQueue("pickup-skipped", "finance")), ...second]
+    // And a third that starts fresh (M11 of #293): it hears what is relayed once it runs, never what waited before it existed.
+    const heardFresh: string[] = []
+    const fresh_ = defineOutboxConsumer({ name: "fresh", kinds: ["pickup-skipped"], description: "Counts from now on.", startsFresh: true, workOptions: { pollingIntervalSeconds: 0.5 }, handler: async (relayed) => void heardFresh.push(relayed.id) })
+    const registry = [...JOBS.filter((job) => job.queue !== consumerQueue("pickup-skipped", "finance")), ...second, ...fresh_]
     const boss = createBoss({ url, log: (line) => void errors.push(line) })
     running = await startBoss(boss, registry, context(fresh))
     const [drained] = await boss.findJobs(legacy, { id: sent! })
@@ -367,6 +370,8 @@ describe("the worker booted against a migrated database", { skip: owner.skip }, 
     // Once each, however long the workers keep polling.
     await new Promise((resolve) => setTimeout(resolve, 1_500))
     assert.deepEqual(heard, [event.id])
+    assert.deepEqual(heardFresh, [], "the consumer that starts fresh took none of the backlog")
+    assert.equal((await boss.findJobs<RelayedEvent>(consumerQueue("pickup-skipped", "fresh"), { data: { id: event.id } })).length, 0)
     assert.equal(lines.filter((line) => line === `resolution.open-tickets: pickup-skipped ${event.id} → nothing`).length, 1)
     for (const queue of [consumerQueue("pickup-skipped", "resolution"), consumerQueue("pickup-skipped", "test")]) {
       assert.equal((await boss.findJobs<RelayedEvent>(queue, { data: { id: event.id } })).length, 1, `one job on ${queue}`)

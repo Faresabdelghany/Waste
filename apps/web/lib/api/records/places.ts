@@ -58,6 +58,7 @@ import {
   type ResourceAdapter,
   type ServerModule,
 } from "./adapter"
+import { HAUL_OUT_ACTIONS } from "./haul-out"
 import { SET_STOCK_MINIMUMS, SET_STOCK_MINIMUMS_ACTION } from "./stock"
 
 /** What a body giving one opening time is told (`@waste/contracts/places`, `BOTH_HOURS_OR_NEITHER`); the test holds the two equal. */
@@ -398,6 +399,8 @@ export const unloadingStationAdapter: ResourceAdapter<UnloadingStation> = {
     }
     if (hours) facts.Hours = hours
     facts.Weighbridge = station.weighbridge ? "Yes" : "No"
+    // A transfer station holds what is tipped there and sends it on (M17 of #293); its stock and loads are in its details.
+    if (station.transfer) facts["Transfer station"] = "Yes"
     if (fractions.length > 0) facts.Fractions = fractions.map((fraction) => fraction.name ?? fraction.webId).join(" · ")
     return {
       id: webIdOf("station", station.id),
@@ -424,6 +427,7 @@ export const unloadingStationAdapter: ResourceAdapter<UnloadingStation> = {
         operatingHours: hours,
         [FRACTIONS_KEY]: fractions.map((fraction) => fraction.webId).join(","),
         weighbridgeAvailable: station.weighbridge,
+        transferStation: station.transfer,
       },
     }
   },
@@ -457,6 +461,7 @@ export const unloadingStationAdapter: ResourceAdapter<UnloadingStation> = {
       ...(serviceProviderId === null ? {} : { serviceProviderId }),
       ...(hours.opensAt === null ? {} : { opensAt: hours.opensAt, closesAt: hours.closesAt }),
       weighbridge: typedFlag(record, "weighbridgeAvailable") ?? false,
+      transfer: typedFlag(record, "transferStation") ?? false,
       ...(status === undefined ? {} : { status }),
       wasteFractionIds,
     }
@@ -493,6 +498,7 @@ export const unloadingStationAdapter: ResourceAdapter<UnloadingStation> = {
           opensAt: isLocalRefusal(read) ? undefined : read.opensAt,
           closesAt: isLocalRefusal(read) ? undefined : read.closesAt,
           weighbridge: typedFlag(record, "weighbridgeAvailable"),
+          transfer: typedFlag(record, "transferStation"),
         }
       }),
       before,
@@ -517,6 +523,8 @@ export const unloadingStationAdapter: ResourceAdapter<UnloadingStation> = {
     if (write.wasteFractionIds !== undefined) station = await put<UnloadingStation>(client, `/unloading-stations/${serverId}/fractions`, { wasteFractionIds: write.wasteFractionIds })
     return station ?? (await get<UnloadingStation>(client, `/unloading-stations/${serverId}`))
   },
+  // A transfer station's stock adjustments and its loads (M17 of #293): requests about the station that answer another resource.
+  actions: HAUL_OUT_ACTIONS,
 }
 
 // ---------------------------------------------------------------------------

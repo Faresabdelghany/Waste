@@ -45,7 +45,7 @@ describe("the Resolution vocabulary's own rules", () => {
     assert.deepEqual([...vocabulary.ALERT_SEVERITIES], ["critical", "high", "medium", "low"])
     assert.deepEqual([...vocabulary.ALERT_SOURCES], ["manual", "execution", "telemetry", "rule"])
     assert.deepEqual([...vocabulary.ALERT_STATUSES], ["new", "acknowledged", "resolved"])
-    assert.deepEqual([...vocabulary.ALERT_RULES], ["route-not-started", "session-silent", "licence-expiring", "ticket-overdue", "position-stale", "fill-threshold", "maintenance-due"])
+    assert.deepEqual([...vocabulary.ALERT_RULES], ["route-not-started", "session-silent", "licence-expiring", "ticket-overdue", "position-stale", "fill-threshold", "maintenance-due", "load-not-received", "load-weight-mismatch", "load-overweight", "route-not-tipped"])
     assert.equal((vocabulary.ALERT_STATUSES as readonly string[]).includes("linked"), false, "a reading of ticket_id")
   })
 })

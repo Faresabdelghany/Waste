@@ -17,12 +17,12 @@
 // command waiting shows "Sending" until the server has answered; everything
 // else is sent and the server decides (lib/driver/route-view.ts).
 import { useEffect, useState } from "react"
-import { ArrowLeft, Barcode, Camera, CheckCircle, FlagCheckered, Gauge, Info, MapPin, MapTrifold, NavigationArrow, NotePencil, Pause, Play, Scales, Signature, SkipForward, Truck, Warning, XCircle } from "@phosphor-icons/react/dist/ssr"
+import { ArrowLeft, Barcode, Camera, CheckCircle, Drop, FlagCheckered, Gauge, Info, MapPin, MapTrifold, NavigationArrow, NotePencil, Pause, Play, Scales, Signature, SkipForward, Truck, Warning, XCircle } from "@phosphor-icons/react/dist/ssr"
 
 import { Badge } from "@/components/ui/badge"
 import { Button } from "@/components/ui/button"
 import { useDriverApp, useDriverAppState } from "@/components/waste/driver/driver-app-provider"
-import { EndRouteDialog, FillDialog, NoteDialog, ReasonDialog, UnloadDialog, WeightDialog } from "@/components/waste/driver/driver-dialogs"
+import { EndRouteDialog, FillDialog, NoteDialog, ReasonDialog, UnloadDialog, VolumeDialog, WeightDialog } from "@/components/waste/driver/driver-dialogs"
 import { DriverFrame } from "@/components/waste/driver/driver-frame"
 import { DriverRouteMessages } from "@/components/waste/driver/driver-route-messages"
 import { PhotoDialog, SignatureDialog } from "@/components/waste/driver/driver-proof-dialogs"
@@ -34,6 +34,7 @@ import type { ProofBytes } from "@/lib/driver/commands"
 import { scanOffered } from "@/lib/driver/container-scan"
 import type { DriverAppController, Tap } from "@/lib/driver/driver-app"
 import { STOP_PHOTOS } from "@/lib/driver/proof-images"
+import { tankSummary } from "@/lib/data/tank-words"
 import { sessionRecords } from "@/lib/driver/position-recorder"
 import { DRIVER_REASON_LABELS, endRouteWarning, entriesInOrder, mapsHref, PICKUP_STATUS_LABELS, ROUTE_STATUS_LABELS, routeActions, routeMapsHref, stopActions, stopCollects, stopServices, stopsInOrder, waitingOn } from "@/lib/driver/route-view"
 import { FILL_LABELS } from "@/lib/data/fill-levels"
@@ -217,7 +218,7 @@ function StopCard({ detail, stop, number, service, numberOf }: { detail: DriverR
   const actions = stopActions(detail, stop, state.waiting)
   const rejections = state.rejections.filter((rejection) => rejection.pickupId === stop.id)
   const maps = mapsHref(stop.location)
-  const [dialog, setDialog] = useState<"skip" | "fail" | "report" | "note" | "weight" | "fill" | "signature" | "photo" | "scan" | null>(null)
+  const [dialog, setDialog] = useState<"skip" | "fail" | "report" | "note" | "weight" | "fill" | "volume" | "signature" | "photo" | "scan" | null>(null)
   const close = (open: boolean) => {
     if (!open) setDialog(null)
   }
@@ -251,6 +252,13 @@ function StopCard({ detail, stop, number, service, numberOf }: { detail: DriverR
         <div role="note" aria-label="Driver instructions" className="flex gap-2 rounded-lg bg-muted px-3 py-2 text-sm">
           <Info aria-hidden className="mt-0.5 shrink-0" />
           <p className="whitespace-pre-line">{stop.driverInstructions}</p>
+        </div>
+      ) : null}
+      {/* Truthy, not non-null: an API from before the tank register answers none at all (M11 of #293). */}
+      {stop.tank ? (
+        <div role="note" aria-label="Tank" className="flex gap-2 rounded-lg bg-muted px-3 py-2 text-sm">
+          <Drop aria-hidden className="mt-0.5 shrink-0" />
+          <p>{tankSummary(stop.tank)}</p>
         </div>
       ) : null}
       <RejectionList rejections={rejections} onDismiss={app.dismiss} />
@@ -314,6 +322,12 @@ function StopCard({ detail, stop, number, service, numberOf }: { detail: DriverR
               Fill
             </Button>
           )}
+          {stop.tank ? (
+            <Button variant="outline" className="h-11" disabled={!actions.report} onClick={() => setDialog("volume")}>
+              <Drop aria-hidden />
+              Volume
+            </Button>
+          ) : null}
           <Button variant="outline" className="h-11" disabled={!actions.report} onClick={() => setDialog("signature")}>
             <Signature aria-hidden />
             Signature
@@ -383,6 +397,7 @@ function StopCard({ detail, stop, number, service, numberOf }: { detail: DriverR
         current={stop.fill ?? null}
         onConfirm={(fill) => void app.tap({ kind: "record-fill", routeId: detail.id, body: { pickupId: stop.id, fill } })}
       />
+      <VolumeDialog open={dialog === "volume"} onOpenChange={close} title={`Volume at stop ${number}`} description={stop.tank ? tankSummary(stop.tank) : stop.address} onConfirm={(volumeLitres) => void app.tap({ kind: "record-volume", routeId: detail.id, body: { pickupId: stop.id, volumeLitres } })} />
       <WeightDialog open={dialog === "weight"} onOpenChange={close} title={`Weight at stop ${number}`} description={stopCollects(stop)} onConfirm={(weightKg) => void app.tap({ kind: "add-weight", routeId: detail.id, body: { pickupId: stop.id, weightKg } })} />
     </article>
   )

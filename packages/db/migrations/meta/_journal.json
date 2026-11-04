@@ -659,6 +659,34 @@
       "when": 1793815881668,
       "tag": "0093_right_sizing",
       "breakpoints": true
+    },
+    {
+      "idx": 94,
+      "version": "7",
+      "when": 1793819121112,
+      "tag": "0094_septic_tanks",
+      "breakpoints": true
+    },
+    {
+      "idx": 95,
+      "version": "7",
+      "when": 1793819252515,
+      "tag": "0095_transfer_stock",
+      "breakpoints": true
+    },
+    {
+      "idx": 96,
+      "version": "7",
+      "when": 1793819334732,
+      "tag": "0096_reconciliation_rules",
+      "breakpoints": true
+    },
+    {
+      "idx": 97,
+      "version": "7",
+      "when": 1793819438754,
+      "tag": "0097_public_placements",
+      "breakpoints": true
     }
   ]
 }

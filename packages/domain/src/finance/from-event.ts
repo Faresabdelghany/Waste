@@ -203,6 +203,8 @@ export type PickupEventFacts<Row extends PriceRow = PriceRow> = {
   service: PickupService
   /** Whether the stop was booked to answer a ticket (O3c of #290): the ticket's charge is the one, never a job's. */
   bookedForTicket: boolean
+  /** Whether the container stood under a public placement on the service date (M12 of #293): a litter or dog bin the project's contract pays for, with no subscription and so no payer, whose collection, work order and exception are charged to nobody. */
+  publicService: boolean
   /** The `job` product the project names for a work order's service, or a bulky collection's booking's, with the agreement it charges and its pricing (M14 of #293, O11 of #290); null where none is named. */
   job: JobChargeFacts<Row> | null
   /** The stop as a Pickup Exception (#293 M5); null where it is none the rules may charge. */
@@ -386,8 +388,10 @@ function jobDraft<Row extends PriceRow>(facts: PickupEventFacts<Row>, labels: Pr
   return { ...base, agreementId: job.agreement.id, subscriptionId: job.subscriptionId, productId: job.product.id, price: outcome.price, blockReason: outcome.blockReason }
 }
 
-/** A completed pickup's event: a work order's job for a stop the office added, blocked with `no-subscription` where no placement was valid, nothing under a `month` product, otherwise priced by the resolver or blocked with the reason that stood in the way. */
+/** A completed pickup's event: nothing for a stop of public service, a work order's job for a stop the office added, blocked with `no-subscription` where no placement was valid, nothing under a `month` product, otherwise priced by the resolver or blocked with the reason that stood in the way. */
 function pickupDraft<Row extends PriceRow>(facts: PickupEventFacts<Row>, labels: PriceLabels): BillableEventDraft | undefined {
+  // Public service is the contract's, not a lift's: nothing to record, rather than a blocked `no-subscription` event in Finance's queue.
+  if (facts.publicService) return undefined
   // The office's extra collection (#111) — a re-collection, a container added to a route, an address-only stop — is not a pickup charge; its billable event is the follow-up's. Its work order is a job (M14 of #293).
   if (facts.origin === "office") return jobDraft(facts, labels)
   const links: BillableEventLinks = { ...NO_LINKS, routeId: facts.routeId, pickupId: facts.pickupId }
@@ -496,6 +500,7 @@ const isPickupEvent = <Row extends PriceRow>(event: EventFacts<Row>): event is P
 
 /** A Pickup Exception's charge at the step the rules judged: nothing while free or ungoverned, blocked `no-subscription` with no placement, otherwise priced on the service date under the placement's agreement. */
 function exceptionDraft<Row extends PriceRow>(event: PickupEventFacts<Row>, labels: PriceLabels): BillableEventDraft | undefined {
+  if (event.publicService) return undefined
   const exception = event.exception
   const judgement = exception?.judgement ?? null
   if (exception === null || judgement === null || judgement.free || judgement.productId === null) return undefined

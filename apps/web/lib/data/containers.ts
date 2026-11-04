@@ -157,11 +157,25 @@ const commandForm = (title: string, description: string, submitLabel: string, fi
   execution: { kind: "append-event", completionMessage: `${title} recorded.` },
 })
 
+/** How an issue serves (M12 of #293): under a subscription, or publicly at one of the project's shared points. */
+export const SERVED_BY_SUBSCRIPTION = "subscription"
+export const SERVED_PUBLICLY = "public"
+const SERVED_BY_OPTIONS = [
+  { value: SERVED_BY_SUBSCRIPTION, label: "Under a subscription" },
+  { value: SERVED_PUBLICLY, label: "Publicly, at a shared point" },
+]
+/** The shared points' module, `SHARED_POINTS_MODULE` (properties.ts), spelled again since that file imports this one; the test holds the two equal. */
+export const SHARED_POINTS: ModuleLocation = { workspaceId: "customers", moduleId: "shared" }
+const UNDER_A_SUBSCRIPTION = { fieldId: "servedBy", equals: SERVED_BY_SUBSCRIPTION } as const
+const SERVING_PUBLICLY = { fieldId: "servedBy", equals: SERVED_PUBLICLY } as const
+
 /** Each command's dialog, its fields the keys its `toBody` reads. */
 export const CONTAINER_COMMAND_FORMS: Readonly<Record<OfferedContainerCommand, BusinessFormSchema>> = {
   receive: commandForm("Receive", "The container arrives from a supplier into a warehouse: its first stock record.", "Receive", [warehouse(), occurredAt, reference]),
-  issue: commandForm("Issue into service", "The container enters service at a subscription's place from the stock it stands in: the placement and the issue movement together.", "Issue into service", [
-    { id: "subscriptionId", label: "Subscription", type: "select", required: true, relation: AGREEMENTS_MODULE, description: "The subscription it serves, at the place the subscription is delivered at." },
+  issue: commandForm("Issue into service", "The container enters service at a subscription's place, or publicly at one of the project's shared points, from the stock it stands in: the placement and the issue movement together.", "Issue into service", [
+    { id: "servedBy", label: "Serves", type: "select", defaultValue: SERVED_BY_SUBSCRIPTION, options: SERVED_BY_OPTIONS },
+    { id: "subscriptionId", label: "Subscription", type: "select", relation: AGREEMENTS_MODULE, visibleWhen: UNDER_A_SUBSCRIPTION, requiredWhen: UNDER_A_SUBSCRIPTION, description: "The subscription it serves, at the place the subscription is delivered at." },
+    { id: "sharedPointId", label: "Shared point", type: "select", relation: SHARED_POINTS, visibleWhen: SERVING_PUBLICLY, requiredWhen: SERVING_PUBLICLY, description: "A litter or dog bin the project serves itself: no subscription, so its collections are charged to nobody." },
     { id: "wasteFractionId", label: "Waste fraction", type: "select", required: true, relation: MASTER_DATA_MODULE },
     { id: "serviceFrequencyId", label: "Service frequency", type: "select", relation: MASTER_DATA_MODULE, description: "Blank serves at the product's cadence." },
     { id: "validFrom", label: "First day in service", type: "date", required: true },

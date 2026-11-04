@@ -72,6 +72,14 @@ _Avoid_: Contact, occupant (that is the tenant role)
 A Property changing occupant on a day: the outgoing customer's parties and subscriptions there end, and the incoming customer takes the same roles and a new agreement with the same products, the containers staying in service. A sale is a move of the owner.
 _Avoid_: Transfer (a container's stock movement), change of service (a subscription's own)
 
+**Tank Installation**:
+A septic tank, holding tank, small treatment plant or grease separator at a Property, with what it holds, where it lets its water out and how many months lie between emptyings. A Container stands for it in the plan, one tank at a time, so it is planned, stopped at and billed as any container is; its next emptying falls due its interval after the last one, not on a calendar's day.
+_Avoid_: Septic (a kind of it), well, cesspit
+
+**Tank Inspection**:
+What the office found when it inspected a Tank Installation — approved, remarks, defects or failed — with its findings and when it is next due. Appended, never rewritten.
+_Avoid_: Pre-trip check (a vehicle's), audit
+
 **Property Group**:
 A managed grouping of properties that share administration, reporting, service rules, or agreements.
 _Avoid_: Shared collection point, customer
@@ -169,6 +177,10 @@ _Avoid_: Warehouse, unloading station
 **Unloading Station**:
 A destination where a route unloads collected material and records weight or disposal evidence.
 _Avoid_: Depot, warehouse
+
+**Transfer Station**:
+An Unloading Station that holds what is tipped there and sends it on in Outbound Loads to the site that treats or disposes of it. What it holds is read by project and fraction: what Unloads tipped there by their weight review, less what Outbound Loads took away, plus the office's adjustments after a stock count. It is stored nowhere and may read below zero.
+_Avoid_: Depot, warehouse, transfer note (the document)
 
 **Treatment**:
 How a waste fraction is handled once collected: reuse, recycling (composting and digestion among it), energy recovery, or disposal. A Customer's recycling rate is read from it.
@@ -368,6 +380,10 @@ _Avoid_: Tare weight, empty weight, unladen weight
 The document that goes with an Unload's load from the company that collected and carried it to the Unloading Station that took it: the parties, the waste fraction with its waste code and whether it is hazardous, the weights, and when. One per Unload the station accepted; a refused load was not transferred and has none, and a corrected Unload's note is its correction's.
 _Avoid_: Consignment note, waybill, disposal receipt
 
+**Outbound Load**:
+A load a Transfer Station sends on to another Unloading Station, usually an external plant, carried by our vehicle or a hauler's, with our out-weighing and the haul and disposal costs. It is reconciled against the receiving site's own ticket: received, then reconciled or disputed, and cancelled only if it was never received. Its costs are recorded, never billed or settled.
+_Avoid_: Unload (what a route tips), haul-out (the activity), shipment
+
 ## Resolution and finance
 
 **Ticket**:
@@ -391,7 +407,7 @@ A Message a project sends a Customer on its own account when something happens t
 _Avoid_: Notification, alert, automatic e-mail, push
 
 **Alert**:
-A condition that requires attention, notification, or acknowledgement and may create or link to a ticket. It is acknowledged and resolved, and links to at most one Ticket. The office raises one by hand; the worker's rules raise one per occurrence of a route not started, a device silent, a licence running out, a ticket overdue, a position stale, or a Container filled past its Sensor Pairing's threshold — an overdue ticket's alert is about that Ticket, never a new one — and resolve it when the condition clears.
+A condition that requires attention, notification, or acknowledgement and may create or link to a ticket. It is acknowledged and resolved, and links to at most one Ticket. The office raises one by hand; the worker's rules raise one per occurrence of a route not started, a device silent, a licence running out, a ticket overdue, a position stale, a Container filled past its Sensor Pairing's threshold, an Outbound Load not received, weighed beyond the tolerance or over its vehicle's payload, or a route that never tipped — an overdue ticket's alert is about that Ticket, never a new one — and resolve it when the condition clears.
 _Avoid_: Ticket, insight
 
 **Team**:

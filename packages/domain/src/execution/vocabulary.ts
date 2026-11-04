@@ -37,7 +37,8 @@
 // — `arrival`, `completion`, `skip`, `failure`, `problem` about a stop,
 // `route-started` and `route-ended` about the route, so what the device said
 // when it started and ended the day is a row and not a discarded body — four
-// kinds of evidence, and `correction`, the dispatcher's audited change of an
+// kinds of evidence and the litres a tank was emptied of (`volume`, M11 of #293),
+// and `correction`, the dispatcher's audited change of an
 // outcome; execution/proof-shapes.ts says what each carries.
 // `DRIVER_COMMAND_KINDS` is the prototype's ten driver actions less
 // `retry-sync` (the device's, not a command) and `reschedule-stop` (a
@@ -45,7 +46,8 @@
 // `pause`/`resume` in place of breaks, and `record-positions`, where the
 // vehicle was while the session ran (O8 of #290), and `pre-trip-check`, a
 // vehicle's walk-round before or during the day (O13 of #290), and
-// `record-fill`, how full a stop's container was (M23 of #293). `COMMAND_OUTCOMES` is what the receipt
+// `record-fill`, how full a stop's container was (M23 of #293), and
+// `record-volume`, the litres a tank was emptied of (M11 of #293). `COMMAND_OUTCOMES` is what the receipt
 // stores; `replayed` is the wire's word for the first outcome answered again
 // and is never stored. `OUTBOX_KINDS` and `OUTBOX_AGGREGATES` are the events
 // the outbox carries and what each is about: the table is Execution's and its
@@ -83,11 +85,11 @@ export const BULKY_BOOKING_STATUSES = ["booked", "routed", "collected", "cancell
 /** Why a route was cancelled (O5 of #290): the office's eight, then the one the system writes when a run no longer plans the route. */
 export const ROUTE_CANCEL_REASON_CODES = ["vehicle-breakdown", "crew-unavailable", "weather", "road-closure", "holiday", "duplicate", "merged", "other", "regeneration"] as const
 /** What a Proof of Service is: seven driver events — five about a stop, two about the route — four kinds of evidence, and the dispatcher's correction. */
-export const PROOF_KINDS = ["arrival", "completion", "skip", "failure", "problem", "route-started", "route-ended", "photo", "weight", "signature", "note", "correction"] as const
+export const PROOF_KINDS = ["arrival", "completion", "skip", "failure", "problem", "route-started", "route-ended", "photo", "weight", "volume", "signature", "note", "correction"] as const
 /** Who recorded a proof or an unload. */
 export const EXECUTION_SOURCES = ["driver-app", "dispatch", "integration"] as const
 /** What a driver's device may say, one contract each. */
-export const DRIVER_COMMAND_KINDS = ["start-route", "arrive", "complete-pickup", "skip-pickup", "fail-pickup", "report-problem", "add-photo", "add-weight", "add-signature", "add-note", "record-unload", "pause", "resume", "end-route", "record-positions", "pre-trip-check", "record-fill"] as const
+export const DRIVER_COMMAND_KINDS = ["start-route", "arrive", "complete-pickup", "skip-pickup", "fail-pickup", "report-problem", "add-photo", "add-weight", "add-signature", "add-note", "record-unload", "pause", "resume", "end-route", "record-positions", "pre-trip-check", "record-fill", "record-volume"] as const
 /** How full a container was when the driver emptied it (M23 of #293): the driver's estimate by eye, a quarter at a time, and past full. What right-sizing reads. */
 export const FILL_LEVELS = ["empty", "quarter", "half", "three-quarters", "full", "overflowing"] as const
 /** How a driver read the code that confirms a stop's container (O19 of #290): the phone's camera reading a barcode, or the code typed in — off the bin's label, or off a hand-held RFID reader's screen. */
@@ -196,6 +198,16 @@ export const CODED_PROOF_KINDS = ["completion", "skip", "failure", "correction"]
 export const CLOSING_REASONS = ["route-ended", "route-cancelled"] as const satisfies readonly PickupReason[]
 export type ClosingReason = (typeof CLOSING_REASONS)[number]
 
+/**
+ * Where an Outbound Load stands (M17 of #293, row 28.3): `departed` from the
+ * transfer station with our out-weighing, `received` once the receiving
+ * site's ticket is recorded, then `reconciled` when the office accepts the two
+ * or `disputed` when it does not. A load that never left is `cancelled`. A
+ * disputed load is reconciled once the difference is settled.
+ */
+export const OUTBOUND_LOAD_STATUSES = ["departed", "received", "reconciled", "disputed", "cancelled"] as const
+export type OutboundLoadStatus = (typeof OUTBOUND_LOAD_STATUSES)[number]
+
 /** Every list of this module by its name, for a test that walks them and for a reader looking for the whole vocabulary at once. */
 export const EXECUTION_VOCABULARIES = {
   ROUTE_STATUSES,
@@ -220,4 +232,5 @@ export const EXECUTION_VOCABULARIES = {
   OUTBOX_AGGREGATES,
   CONTAMINANT_CODE_STATUSES,
   ROUTE_MESSAGE_AUTHORS,
+  OUTBOUND_LOAD_STATUSES,
 } as const satisfies Record<string, readonly [string, ...string[]]>

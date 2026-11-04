@@ -44,12 +44,13 @@ import { createDb, type Database, type Tx } from "@waste/db/client"
 import { GENERATE_ROUTES_QUEUE } from "@waste/db/commands/generation"
 import { migrateDatabase } from "@waste/db/migrate"
 import { agreement, subscription, subscriptionPause } from "@waste/db/schema/agreements"
+import { tankInstallation } from "@waste/db/schema/tanks"
 import { driverAbsence, vehicleUnavailability } from "@waste/db/schema/availability"
 import { bulkyBooking, bulkySchedule } from "@waste/db/schema/bulky"
 import { containerType, product, wasteFraction } from "@waste/db/schema/catalogue"
 import { collectionCalendar, collectionCalendarHoliday } from "@waste/db/schema/collection-calendars"
 import { container, containerServicePlacement } from "@waste/db/schema/containers"
-import { customer, property } from "@waste/db/schema/customers"
+import { customer, property, sharedCollectionPoint } from "@waste/db/schema/customers"
 import { pickup, route } from "@waste/db/schema/execution"
 import { driver, vehicle } from "@waste/db/schema/fleet"
 import { vehicleType } from "@waste/db/schema/fleet-types"
@@ -912,6 +913,49 @@ describe("generation against a migrated database", { skip }, () => {
     assert.deepEqual(await stopsOn(b.glassGroup, "2026-10-15"), [b.glassBin], "and so is the pick")
   })
 
+  test("a tank (M11 of #293) is a stop on the first service day on or after its emptying falls due, and on no other; an emptying completed moves the next a year on, and the later routes drop it", async () => {
+    // Company b again, far from its other windows: bin 3 at Havnegade stands for a tank last emptied on 3 March 2026, due on Wednesday 3 March 2027.
+    const march = { from: "2027-03-01", to: "2027-03-14" }
+    const [tank] = await ownerPool.db
+      .insert(tankInstallation)
+      .values({ companyId: b.company, projectId: b.project, propertyId: b.havnegade, containerId: b.bin3, kind: "septic-tank", volumeLitres: 3000, outlet: "soakaway", emptyingIntervalMonths: 12, lastEmptiedOn: "2026-03-03", validFrom: OPENED })
+      .returning({ id: tankInstallation.id })
+    const generateB = async () => {
+      const runId = await runFor(b.scheme, b.company, b.project, march)
+      const outcome = await runGeneration({ generationRunId: runId, companyId: b.company }, null, context())
+      assert.equal(outcome.kind, "succeeded")
+    }
+    const stopsOn = async (day: string): Promise<string[]> => {
+      const [row] = await ownerPool.db.select().from(route).where(and(eq(route.collectionGroupId, b.residualGroup), eq(route.serviceDate, day)))
+      return row === undefined ? [] : (await pickupsOf(row.id)).map((stop) => stop.containerId ?? "")
+    }
+    try {
+      await generateB()
+      assert.equal((await stopsOn("2027-03-01")).includes(b.bin3), false, "Monday the 1st: not yet due")
+      assert.deepEqual(await stopsOn("2027-03-04"), [b.bin1, b.bin3], "Thursday the 4th: the first service day on or after the 3rd")
+      for (const day of ["2027-03-08", "2027-03-11"]) assert.equal((await stopsOn(day)).includes(b.bin3), false, `${day}: its stop is held on the 4th`)
+      await generateB()
+      assert.deepEqual(await stopsOn("2027-03-04"), [b.bin1, b.bin3], "a second run plans it on the same day, and once")
+      assert.equal((await stopsOn("2027-03-08")).includes(b.bin3), false)
+
+      // The tanker empties it on the 4th.
+      const [thursday] = await ownerPool.db.select().from(route).where(and(eq(route.collectionGroupId, b.residualGroup), eq(route.serviceDate, "2027-03-04")))
+      await ownerPool.db
+        .update(pickup)
+        .set({ status: "completed", outcomeAt: new Date("2027-03-04T09:00:00Z") })
+        .where(and(eq(pickup.routeId, thursday.id), eq(pickup.containerId, b.bin3)))
+      await ownerPool.db
+        .update(tankInstallation)
+        .set({ lastEmptiedOn: null })
+        .where(eq(tankInstallation.id, tank.id))
+      await generateB()
+      for (const day of ["2027-03-08", "2027-03-11"]) assert.equal((await stopsOn(day)).includes(b.bin3), false, `${day}: due again on 4 March 2028`)
+      assert.ok((await stopsOn("2027-03-04")).includes(b.bin3), "the emptying it was stays on its route")
+    } finally {
+      await ownerPool.db.delete(tankInstallation).where(eq(tankInstallation.id, tank.id))
+    }
+  })
+
   test("a season runs the scheme at its own cadence (O17 of #290): every other week in summer, the routes between not written; the season gone, the next run writes them", async () => {
     // A summer of even weeks; 7 Jun 2027 is in week 23, 14 Jun in week 24. Far from every other test's window.
     const summer = { from: "2027-06-07", to: "2027-06-20" }
@@ -967,5 +1011,53 @@ describe("generation against a migrated database", { skip }, () => {
     }
     await generateA(march)
     assert.deepEqual(await residualOn("2027-03-01"), [a.bin1], "the scheme's area again, its western half in force since October; bin 2's placement ended then")
+  })
+  test("a public placement (M12 of #293) is a stop like any other: a litter bin at the project's point inside the area is planned at the point with no subscription behind it, one outside is not, and every subscribed container's stop is as it was", async () => {
+    // Company b, far from every other window: Monday 8 and Thursday 11 March 2027.
+    const week = { from: "2027-03-08", to: "2027-03-14" }
+    const square = "018f7c36-b000-7000-8000-000000000081"
+    const outside = "018f7c36-b000-7000-8000-000000000082"
+    const litter = "018f7c36-b000-7000-8000-000000000083"
+    const farLitter = "018f7c36-b000-7000-8000-000000000084"
+    const scoped = { companyId: b.company, projectId: b.project }
+    const pointValues = { kind: "surface", operatingModel: "municipal", accessMode: "open", billingMode: "municipal", status: "open" } as const
+    const generateB = async () => {
+      const runId = await runFor(b.scheme, b.company, b.project, week)
+      assert.equal((await runGeneration({ generationRunId: runId, companyId: b.company }, null, context())).kind, "succeeded")
+      const [run] = await ownerPool.db.select().from(generationRun).where(eq(generationRun.id, runId))
+      return run
+    }
+    const mondayOfB = async () => {
+      const [row] = await ownerPool.db.select().from(route).where(and(eq(route.collectionGroupId, b.residualGroup), eq(route.serviceDate, "2027-03-08")))
+      return row === undefined ? [] : await pickupsOf(row.id)
+    }
+    const before = await generateB()
+    const subscribedStops = (await mondayOfB()).map((stop) => [stop.containerId, stop.propertyId, stop.sharedCollectionPointId, stop.wasteFractionId])
+    assert.deepEqual(subscribedStops.map(([containerId]) => containerId), [b.bin1, b.bin3], "Parkvej's and Havnegade's bins, as the week before")
+
+    await ownerPool.db.insert(sharedCollectionPoint).values([
+      { id: square, ...scoped, ...pointValues, name: "Torvet", address: "Torvet 1", location: { type: "Point", coordinates: [12.56, 55.69] } },
+      { id: outside, ...scoped, ...pointValues, name: "Amager Strand", address: "Amager Strand 1", location: AMAGER },
+    ])
+    await ownerPool.db.insert(container).values([
+      { id: litter, ...scoped, label: "BIN-PUB-1", containerTypeId: b.containerType, ownership: "company" },
+      { id: farLitter, ...scoped, label: "BIN-PUB-2", containerTypeId: b.containerType, ownership: "company" },
+    ])
+    await ownerPool.db.insert(containerServicePlacement).values([
+      { ...scoped, validFrom: OPENED, containerId: litter, sharedCollectionPointId: square, wasteFractionId: b.wasteFraction },
+      { ...scoped, validFrom: OPENED, containerId: farLitter, sharedCollectionPointId: outside, wasteFractionId: b.wasteFraction },
+    ])
+    const after = await generateB()
+    assert.deepEqual([after.status, after.unlocated], ["succeeded", before.unlocated], "nothing new unlocated: a point is always located")
+    const monday = await mondayOfB()
+    const publicStop = monday.find((stop) => stop.containerId === litter)
+    assert.ok(publicStop, "the litter bin inside the square is planned")
+    assert.deepEqual([publicStop.propertyId, publicStop.sharedCollectionPointId, publicStop.wasteFractionId, publicStop.subscriptionId, publicStop.origin], [null, square, b.wasteFraction, null, "generation"])
+    assert.equal(monday.some((stop) => stop.containerId === farLitter), false, "the one outside the area is not")
+    assert.deepEqual(
+      monday.filter((stop) => stop.containerId !== litter).map((stop) => [stop.containerId, stop.propertyId, stop.sharedCollectionPointId, stop.wasteFractionId]),
+      subscribedStops,
+      "every subscribed stop as before, in its order",
+    )
   })
 })

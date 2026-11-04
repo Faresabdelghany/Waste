@@ -67,7 +67,7 @@ const mixed: WasteFraction = { ...residual, id: "01a0d2a4-a280-7005-8000-0000000
 const at = (lng: number, lat: number) => ({ type: "Point" as const, coordinates: [lng, lat] as [number, number] })
 
 const nordhavnDepot: Depot = { id: "01a0d2a4-a280-7010-8000-000000000001", ...STAMPS, projectId: copenhagen.id, code: "DEPOT-NORDHAVN", name: "Nordhavn Depot", address: "Kaj 14, Nordhavn", location: at(12.5958, 55.7091), ownership: "company", serviceProviderId: null, opensAt: "05:00", closesAt: "22:00", vehicleCapacity: null, status: "active", notes: null }
-const arc: UnloadingStation = { id: "01a0d2a4-a280-7012-8000-000000000001", ...STAMPS, code: "STATION-ARC", name: "ARC Amager", address: "Kraftværksvej 31", location: at(12.6186, 55.6903), ownership: "external", serviceProviderId: null, opensAt: null, closesAt: null, weighbridge: true, status: "active", notes: null, wasteFractionIds: [residual.id, mixed.id] }
+const arc: UnloadingStation = { id: "01a0d2a4-a280-7012-8000-000000000001", ...STAMPS, code: "STATION-ARC", name: "ARC Amager", address: "Kraftværksvej 31", location: at(12.6186, 55.6903), ownership: "external", serviceProviderId: null, opensAt: null, closesAt: null, weighbridge: true, transfer: false, status: "active", notes: null, wasteFractionIds: [residual.id, mixed.id] }
 const west: Warehouse = { id: "01a0d2a4-a280-7011-8000-000000000001", ...STAMPS, projectId: copenhagen.id, code: "WAREHOUSE-WEST", name: "Warehouse West", address: "Logistikvej 8, Valby", location: null, depotId: null, status: "active", notes: null }
 const nordhavnWarehouse: Warehouse = { ...west, id: "01a0d2a4-a280-7011-8000-000000000002", code: "WAREHOUSE-NORDHAVN", name: "Nordhavn Warehouse", address: "Kaj 14, Nordhavn", depotId: nordhavnDepot.id }
 
@@ -336,6 +336,7 @@ describe("an unloading station", () => {
       operatingHours: "",
       acceptedFractionIds: `${fractionWebId(residual)},${fractionWebId(mixed)}`,
       weighbridgeAvailable: true,
+      transferStation: false,
     })
     assert.deepEqual(unloadingStationAdapter.statuses, DEPOT_STATUSES, "the same four as a depot's")
   })
@@ -365,6 +366,7 @@ describe("an unloading station", () => {
       opensAt: "07:00",
       closesAt: "15:00",
       weighbridge: false,
+      transfer: false,
       status: "draft",
       wasteFractionIds: [glass.id, residual.id],
     })

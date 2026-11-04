@@ -164,6 +164,8 @@ export type ProofSeed = {
   note?: string | null
   location?: FlatPoint | null
   weightKg?: number | null
+  /** The litres a tank was emptied of, on a `volume` proof (M11 of #293). */
+  volumeLitres?: number | null
   objectKey?: string | null
   outcome?: PickupStatus | null
 }
@@ -349,6 +351,7 @@ export async function seedRoute(pool: Database, tenant: Tenant, fleet: FleetFixt
             reason: proof.reason ?? null,
             note: proof.note ?? null,
             weightKg: proof.weightKg ?? null,
+            volumeLitres: proof.volumeLitres ?? null,
             objectKey: proof.objectKey ?? null,
             outcome: proof.outcome ?? null,
           }

@@ -18,6 +18,7 @@ import { NOTIFICATION_EVENTS } from "@waste/domain/notifications/vocabulary"
 import { isCronExpression } from "../boss"
 import { defineJob, JOBS } from "../jobs"
 import { alertRulesJob } from "../jobs/alert-rules"
+import { applyPauseGrants } from "../jobs/apply-pause-grants"
 import { updatableOptions } from "../jobs/definition"
 import { generateRoutes } from "../jobs/generate-routes"
 import { heartbeat } from "../jobs/heartbeat"
@@ -40,6 +41,8 @@ const resolutionQueues = RESOLUTION_KINDS.map((kind) => consumerQueue(kind, "res
 const financeQueues = FINANCE_EVENT_KINDS.map((kind) => consumerQueue(kind, "finance"))
 const notificationQueues = NOTIFICATION_EVENTS.map((kind) => consumerQueue(kind, "notifications"))
 const customerNoticeQueues = CUSTOMER_NOTICE_KINDS.map((kind) => consumerQueue(kind, "customer-notices"))
+/** The Registry's one (M11 of #293): a granted pause, applied. */
+const registryQueues = [consumerQueue("application-decided", "registry")]
 
 describe("the job registry", () => {
   test("names every queue once", () => {
@@ -83,7 +86,7 @@ describe("the job registry", () => {
       assert.equal(job.queueOptions?.deadLetter, OUTBOX_DEAD_QUEUE, `${job.queue}: a consumer's queue dead-letters to outbox.dead, so a poison job is kept for a redrive and not lost with its retention`)
       assert.equal(job.queueOptions?.retentionSeconds, CONSUMED_RETENTION_SECONDS, `${job.queue}: a consumed queue keeps a job a fortnight`)
     }
-    assert.deepEqual([...consumed].sort(), [...resolutionQueues, ...financeQueues, ...notificationQueues, ...customerNoticeQueues].sort(), "the four consumers take Resolution's kinds, Finance's, the staff notices' two and the customer notices' four, and nothing else is consumed")
+    assert.deepEqual([...consumed].sort(), [...resolutionQueues, ...financeQueues, ...notificationQueues, ...customerNoticeQueues, ...registryQueues].sort(), "the five consumers take Resolution's kinds, Finance's, the staff notices' two, the customer notices' four and the Registry's one, and nothing else is consumed")
     assert.ok(!consumed.includes(OUTBOX_DEAD_QUEUE), "nobody works the dead-letter queue: an operator redrives it")
     // The relay's routes are the consumers' queues by kind, in the consumers' order.
     for (const kind of OUTBOX_KINDS) {
@@ -148,6 +151,7 @@ describe("the job registry", () => {
       ...financeQueues,
       ...notificationQueues,
       ...customerNoticeQueues,
+      ...registryQueues,
       "finance.run-billing",
       "execution.purge-proof-objects",
       "resolution.alert-rules",
@@ -261,11 +265,17 @@ describe("the job registry", () => {
     )
     // What the consumers inherit is the consumed kinds' own queues, each published; the rest wait for a consumer under retention, and the dead-letter queue for an operator.
     const inherited = [...new Set(JOBS.flatMap((job) => (job.inherits === undefined ? [] : [job.inherits])))]
-    assert.deepEqual(inherited.sort(), [...new Set([...RESOLUTION_KINDS, ...FINANCE_EVENT_KINDS, ...NOTIFICATION_EVENTS, ...CUSTOMER_NOTICE_KINDS])].map(outboxQueue).sort())
+    assert.deepEqual(inherited.sort(), [...new Set([...RESOLUTION_KINDS, ...FINANCE_EVENT_KINDS, ...NOTIFICATION_EVENTS, ...CUSTOMER_NOTICE_KINDS, "application-decided" as const])].map(outboxQueue).sort())
     for (const queue of inherited) assert.ok(published.includes(queue), queue)
     assert.ok(published.includes(OUTBOX_DEAD_QUEUE), "the dead-letter queue is published and worked by nobody")
     assert.ok(worked.has(ROUTING_OPTIMISE_QUEUE) && !published.includes(ROUTING_OPTIMISE_QUEUE), "the API sends optimiser Plans (#170) to a queue with a worker of its own (#171), which nobody publishes to hold it open")
     assert.equal(published.length - 1, OUTBOX_KINDS.length, "every kind's own queue, and the dead-letter queue")
+  })
+
+  test("holds the Registry's consumer (M11 of #293): one entry on outbox.application-decided.registry that starts fresh, so a decision relayed before it ran is never applied", () => {
+    assert.deepEqual(applyPauseGrants.map((job) => [job.queue, job.inherits, job.startsFresh]), [["outbox.application-decided.registry", "outbox.application-decided", true]])
+    assert.deepEqual(OUTBOX_ROUTES.get("application-decided"), ["outbox.application-decided.registry"], "the relay sends a decision to it from the first start")
+    assert.equal(openTickets.some((job) => job.startsFresh === true) || recordBillableEvents.some((job) => job.startsFresh === true), false, "the others take their kinds' backlog")
   })
 
   test("holds the staff notices' consumer (O16 of #290): one entry per kind on outbox.<kind>.notifications, never scheduled, on the seam's policy", () => {

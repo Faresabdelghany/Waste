@@ -8,7 +8,7 @@
 // with each column set and unset through both.
 //
 // The glossary's "time, GPS, photo, weight, signature, or driver event" is
-// twelve kinds with a shape each. A driver event about a stop — `arrival`,
+// thirteen kinds with a shape each. A driver event about a stop — `arrival`,
 // `completion`, `skip`, `failure`, `problem` — names a pickup, but for the
 // problem, which may stand on the route alone (a road closed); a skip, a
 // failure and a problem say why (`reason`), and an arrival and a completion
@@ -18,7 +18,8 @@
 // than discarded with the command's body. The evidence kinds carry their evidence and
 // nothing else's: a `photo` and a `signature` carry the Storage object's key
 // and nothing else carries one, a `weight` carries whole kilograms and
-// nothing else does, a `note` carries its note. A photo and a note may stand
+// nothing else does, a `volume` carries the litres a tank was emptied of (M11
+// of #293) and nothing else does, a `note` carries its note. A photo and a note may stand
 // on the route (a photo of the load), a signature is a stop's. `correction`
 // is the dispatcher's audited change of an outcome: it names the pickup,
 // carries the outcome the pickup was moved to and a note saying why, and
@@ -41,6 +42,7 @@ export type ProofShape = {
   reason: Presence
   objectKey: Presence
   weightKg: Presence
+  volumeLitres: Presence
   outcome: Presence
   note: Presence
   /** Who may record it: the dispatcher alone, or anyone. */
@@ -53,6 +55,8 @@ export type ProofRow = {
   reason: string | null
   objectKey: string | null
   weightKg: number | null
+  /** The litres a tank was emptied of (M11 of #293); absent on a row from before it. */
+  volumeLitres?: number | null
   outcome: string | null
   note: string | null
   source: ExecutionSource
@@ -61,13 +65,13 @@ export type ProofRow = {
 }
 
 /** A driver event about a stop, carrying nothing but that it happened. */
-const EVENT: ProofShape = { pickup: "required", reason: "none", objectKey: "none", weightKg: "none", outcome: "none", note: "any", source: "any" }
+const EVENT: ProofShape = { pickup: "required", reason: "none", objectKey: "none", weightKg: "none", volumeLitres: "none", outcome: "none", note: "any", source: "any" }
 /** A driver event about a stop, saying why. */
 const REASONED: ProofShape = { ...EVENT, reason: "required" }
 /** A Storage object's key and nothing else. */
 const OBJECT: ProofShape = { ...EVENT, objectKey: "required" }
 
-/** The table: what each of the twelve kinds carries. */
+/** The table: what each of the thirteen kinds carries. */
 export const PROOF_SHAPES: Readonly<Record<ProofKind, ProofShape>> = {
   arrival: EVENT,
   completion: EVENT,
@@ -78,13 +82,14 @@ export const PROOF_SHAPES: Readonly<Record<ProofKind, ProofShape>> = {
   "route-ended": { ...EVENT, pickup: "none" },
   photo: { ...OBJECT, pickup: "optional" },
   weight: { ...EVENT, weightKg: "required" },
+  volume: { ...EVENT, volumeLitres: "required" },
   signature: OBJECT,
   note: { ...EVENT, pickup: "optional", note: "required" },
   correction: { ...EVENT, reason: "any", outcome: "required", note: "required", source: "dispatch" },
 }
 
 /** The columns a `Presence` decides over, in the order the sentence names them. */
-const PRESENCE_COLUMNS = ["reason", "objectKey", "weightKg", "outcome", "note"] as const
+const PRESENCE_COLUMNS = ["reason", "objectKey", "weightKg", "volumeLitres", "outcome", "note"] as const
 
 const holds = (presence: Presence, value: unknown): boolean => (presence === "any" ? true : presence === "required" ? value !== null : value === null)
 
@@ -94,7 +99,7 @@ export function proofShapeIssue(kind: ProofKind, row: ProofRow): string | undefi
   if (shape.pickup === "required" && row.pickupId === null) return `A ${kind} proof names a pickup`
   if (shape.pickup === "none" && row.pickupId !== null) return `A ${kind} proof is the route's and names no pickup`
   for (const column of PRESENCE_COLUMNS) {
-    if (holds(shape[column], row[column])) continue
+    if (holds(shape[column], row[column] ?? null)) continue
     return shape[column] === "required" ? `A ${kind} proof carries ${column}` : `A ${kind} proof carries no ${column}`
   }
   if (shape.source === "dispatch" && row.source !== "dispatch") return `A ${kind} proof comes from dispatch`
@@ -103,5 +108,5 @@ export function proofShapeIssue(kind: ProofKind, row: ProofRow): string | undefi
   return undefined
 }
 
-/** Whether the row is what its kind carries: the pickup, the five columns, the source. */
+/** Whether the row is what its kind carries: the pickup, the six columns, the source. */
 export const proofShape = (kind: ProofKind, row: ProofRow): boolean => proofShapeIssue(kind, row) === undefined

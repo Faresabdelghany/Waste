@@ -76,6 +76,7 @@
 import type { PickupOrigin, PickupReason, PickupService, PickupStatus, RouteStatus } from "../execution/vocabulary"
 import { ruleSignature } from "../route-schemes/container-drift"
 import { WALK_CAP_DAYS } from "../route-schemes/generation"
+import { tankWaits, type TankCadence, type TankGate } from "../route-schemes/due-from-last"
 import { holidayLabel, holidayNamesFor, withCarriedNames } from "../route-schemes/holiday-names"
 import { formatOccurrenceShortDate, generateOccurrences, holidayDecision, NO_HOLIDAYS, shiftedNote, type HolidayList, type HolidayPolicy, type Occurrence, type SchemeCalendar } from "../route-schemes/occurrences"
 import { addDays, serviceDayOf, type SchemeRecurrence } from "../route-schemes/recurrence"
@@ -384,6 +385,8 @@ export type StopCandidate = {
   containedIn: readonly string[]
   /** Whether a pause of its subscription is in force that day (#291): no group plans it, and it is not unlocated, since nobody wants it collected. */
   paused: boolean
+  /** The tank installation it is the container of, in force that day (M11 of #293), whose due-from-last cadence decides the days it is wanted (`tankWaits`); null for a container that is no tank. */
+  tank: TankCadence | null
 }
 
 /** A Stop Matching Rule by ids: the fractions it matches, the container types it is restricted to (none is no restriction), the vehicle type it asks for, and the planning area it matches within — the group's own, else the scheme's (`ruleAreaOf`); null for none, which matches nothing. */
@@ -466,10 +469,13 @@ const stopOf = (candidate: StopCandidate, position: number): PlannedStop => ({
  * first in position order, then rule groups in position order take what is
  * left; a container is on one route a day. A container whose subscription is
  * paused that day (#291) is passed over by both: no stop, no claim, and not
- * unlocated. What a rule matches (`ruleMatchSet`, the drift stamp) still
- * counts it, since a pause is not drift.
+ * unlocated, and so is a tank that waits on the gate's day (M11 of #293,
+ * `tankWaits`): not yet due, or due with its stop held on an earlier date.
+ * What a rule matches (`ruleMatchSet`, the drift stamp) still counts both,
+ * since neither is drift.
  */
-export function resolveStops(groups: readonly StopGroup[], candidates: readonly StopCandidate[], compatible: ReadonlySet<string>): ResolvedStops {
+export function resolveStops(groups: readonly StopGroup[], candidates: readonly StopCandidate[], compatible: ReadonlySet<string>, gate: TankGate): ResolvedStops {
+  const passedOver = (candidate: StopCandidate): boolean => candidate.paused || tankWaits(candidate, gate)
   const byId = new Map(candidates.map((candidate) => [candidate.containerId, candidate]))
   const ordered = [...groups].sort((a, b) => a.position - b.position || a.id.localeCompare(b.id))
   const claimed = new Set<string>()
@@ -486,7 +492,7 @@ export function resolveStops(groups: readonly StopGroup[], candidates: readonly 
         unlocated.add(containerId)
         continue
       }
-      if (candidate.paused) continue
+      if (passedOver(candidate)) continue
       claimed.add(containerId)
       planned.push(stopOf(candidate, planned.length + 1))
     }
@@ -497,14 +503,14 @@ export function resolveStops(groups: readonly StopGroup[], candidates: readonly 
     const planned: PlannedStop[] = []
     if (group.rule !== null) {
       for (const candidate of candidates) {
-        if (candidate.located || candidate.paused || !ruleMatches(candidate, group.rule, compatible)) continue
+        if (candidate.located || passedOver(candidate) || !ruleMatches(candidate, group.rule, compatible)) continue
         // A manual group planned it already, its place looked up by the pick and not by geometry: it has a stop, and is not unlocated for a rule that would have wanted it too.
         if (claimed.has(candidate.containerId)) continue
         // The rule wants it and nobody can say where it is.
         unlocated.add(candidate.containerId)
       }
       for (const candidate of ruleMatchSet(candidates, group.rule, compatible)) {
-        if (candidate.paused || claimed.has(candidate.containerId)) continue
+        if (passedOver(candidate) || claimed.has(candidate.containerId)) continue
         claimed.add(candidate.containerId)
         planned.push(stopOf(candidate, planned.length + 1))
       }

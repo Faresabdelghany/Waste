@@ -13,7 +13,7 @@
 // upcoming, in force or expired is a reading of its period against a day,
 // never a status anyone has to remember to change.
 import { addDays } from "../route-schemes/recurrence"
-import type { ApplicationStatus, DecisionOutcome } from "./vocabulary"
+import type { ApplicationKind, ApplicationStatus, DecisionOutcome } from "./vocabulary"
 
 /** The commands that move an Application. */
 export type ApplicationCommand = "review" | "decide" | "withdraw" | "reopen"
@@ -88,4 +88,29 @@ export function applicationReading(status: ApplicationStatus, decision: Decision
     case "expired":
       return `${outcome} · expired ${addDays(decision.validTo as string, -1)}`
   }
+}
+
+/** What a pause's grant reads: the Application's kind and subscription, and its Decision's outcome and period. */
+export type PauseGrant = { kind: ApplicationKind; subscriptionId: string | null; decision: DecisionPeriod }
+
+/** A subscription pause to write: the subscription and the half-open period (ADR-0005), null `validTo` until it is resumed. */
+export type GrantedPause = { subscriptionId: string; validFrom: string; validTo: string | null }
+
+/**
+ * The subscription pause a decided Application puts in force (M11 of #293):
+ * a grant, whole or in part, of a `pause` that names a subscription pauses it
+ * over the granted period, cut to today on — an office pause begins today or
+ * later, and a grant decided after its first day pauses the days to come, never
+ * the days gone — and to the subscription's own period. Anything else, or a
+ * period with nothing left, pauses nothing.
+ */
+export function pauseOfGrant(grant: PauseGrant, subscription: { validFrom: string; validTo: string | null }, today: string): GrantedPause | null {
+  if (grant.kind !== "pause" || grant.subscriptionId === null) return null
+  const { decision } = grant
+  if (decision.outcome === "refused" || decision.validFrom === null) return null
+  const validFrom = [decision.validFrom, subscription.validFrom, today].sort().at(-1) as string
+  const ends = [decision.validTo, subscription.validTo].filter((end): end is string => end !== null).sort()
+  const validTo = ends[0] ?? null
+  if (validTo !== null && validTo <= validFrom) return null
+  return { subscriptionId: grant.subscriptionId, validFrom, validTo }
 }

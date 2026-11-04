@@ -141,6 +141,7 @@ describe("the pilot's configuration against a fresh database", { skip: database.
         opensAt: null,
         closesAt: null,
         weighbridge: true,
+        transfer: false,
         status: "active",
         notes: null,
         createdAt: undefined,

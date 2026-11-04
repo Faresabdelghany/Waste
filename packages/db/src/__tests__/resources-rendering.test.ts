@@ -46,7 +46,7 @@ import { vehicleAllocation, vehicleAllocationEvent } from "../schema/allocations
 import { serviceFrequency, wasteFraction } from "../schema/catalogue"
 import { nonEmpty, oneOf, positive, subsetOf } from "../schema/checks"
 import { id, orderedWindow, projectScoped, recorded, tenant, timestamps, validity, validPeriod, window } from "../schema/columns"
-import { container, containerServicePlacement } from "../schema/containers"
+import { container } from "../schema/containers"
 import { driver, vehicle, vehicleCompartment, vehicleCompartmentFraction } from "../schema/fleet"
 import { containerTypeVehicleType, vehicleType } from "../schema/fleet-types"
 import { company, project, serviceProvider } from "../schema/organisation"
@@ -173,6 +173,34 @@ const ADDED_IN_0066 = [
   index("stock_movement", "stock_movement_decommission_reason_id_idx", "company_id", "decommission_reason_id"),
 ]
 
+/** The station as 0007 made it, and as it reads since a station may be a transfer station (M17 of #293); transfer-stock-rendering.test.ts pins that migration's statements. */
+const unloadingStationTable = (asOf: "0007" | "transfer"): string =>
+  createTable("unloading_station", "tenant", [
+    '"code" text NOT NULL',
+    '"name" text NOT NULL',
+    '"address" text NOT NULL',
+    '"location" geometry(Point, 4326) NOT NULL',
+    '"ownership" text NOT NULL',
+    '"service_provider_id" uuid',
+    '"opens_at" time',
+    '"closes_at" time',
+    '"weighbridge" boolean DEFAULT false NOT NULL',
+    ...(asOf === "transfer" ? ['"transfer" boolean DEFAULT false NOT NULL'] : []),
+    '"status" text NOT NULL',
+    '"notes" text',
+    uniqueKey("unloading_station_code_key", "company_id", "code"),
+    uniqueKey("unloading_station_name_key", "company_id", "name"),
+    uniqueKey("unloading_station_tenant_key", "company_id", "id"),
+    oneOfCheck("unloading_station", "ownership", "company", "service-provider", "external"),
+    oneOfCheck("unloading_station", "status", "draft", "active", "seasonal", "closed"),
+    geometryCheck("unloading_station", "location"),
+    providerShape("unloading_station"),
+    hoursShape("unloading_station"),
+  ])
+
+/** What the transfer station's migration changed: the station's CREATE TABLE as drizzle-kit generates it now onto what 0007 says. */
+const CHANGED_FOR_TRANSFER = new Map([[unloadingStationTable("transfer"), unloadingStationTable("0007")]])
+
 const expected = [
   createTable("vehicle_type", "tenant", [
     '"key" text NOT NULL',
@@ -224,27 +252,7 @@ const expected = [
     oneOfCheck("warehouse", "status", "draft", "active", "restricted", "closed"),
     geometryCheck("warehouse", "location"),
   ]),
-  createTable("unloading_station", "tenant", [
-    '"code" text NOT NULL',
-    '"name" text NOT NULL',
-    '"address" text NOT NULL',
-    '"location" geometry(Point, 4326) NOT NULL',
-    '"ownership" text NOT NULL',
-    '"service_provider_id" uuid',
-    '"opens_at" time',
-    '"closes_at" time',
-    '"weighbridge" boolean DEFAULT false NOT NULL',
-    '"status" text NOT NULL',
-    '"notes" text',
-    uniqueKey("unloading_station_code_key", "company_id", "code"),
-    uniqueKey("unloading_station_name_key", "company_id", "name"),
-    uniqueKey("unloading_station_tenant_key", "company_id", "id"),
-    oneOfCheck("unloading_station", "ownership", "company", "service-provider", "external"),
-    oneOfCheck("unloading_station", "status", "draft", "active", "seasonal", "closed"),
-    geometryCheck("unloading_station", "location"),
-    providerShape("unloading_station"),
-    hoursShape("unloading_station"),
-  ]),
+  unloadingStationTable("transfer"),
   createTable("unloading_station_fraction", "tenant", [
     '"unloading_station_id" uuid NOT NULL',
     '"waste_fraction_id" uuid NOT NULL',
@@ -580,6 +588,24 @@ const containerServicePlacementAsOf0004 = wms.table(
     tenantIndex(t, t.serviceFrequencyId),
   ],
 )
+/** container_service_placement as 0007 left it, its subscription required: the public placements (M12 of #293) since made it nullable beside a point, which public-placements-rendering.test.ts pins. */
+const containerServicePlacementAsOf0007 = wms.table(
+  "container_service_placement",
+  { ...id, ...projectScoped, ...timestamps, ...validity, containerId: uuid().notNull(), subscriptionId: uuid().notNull(), wasteFractionId: uuid().notNull(), serviceFrequencyId: uuid() },
+  (t) => [
+    companyReference(t, company),
+    tenantReference(t, [t.projectId], project),
+    projectReference(t, [t.containerId], container),
+    projectReference(t, [t.subscriptionId], subscription),
+    projectReference(t, [t.serviceFrequencyId], serviceFrequency),
+    tenantReference(t, [t.wasteFractionId], wasteFraction),
+    projectKey(t, t.containerId),
+    validPeriod(t),
+    tenantIndex(t, t.subscriptionId),
+    tenantIndex(t, t.wasteFractionId),
+    tenantIndex(t, t.serviceFrequencyId),
+  ],
+)
 
 /** What 0007 does to the three tables, in the two diffs: everything added, then the token dropped and its checks re-spelled. */
 const altered = {
@@ -636,14 +662,14 @@ async function fileStatements(): Promise<{ all: string[]; guardAt: number; witho
 const generatedAlterations = async (): Promise<string[]> => [
   ...(await statementsBetween(
     { collectionGroup: collectionGroupAsOf0006, routeScheme: routeSchemeAsOf0006, containerServicePlacement: containerServicePlacementAsOf0004 },
-    { collectionGroup: collectionGroupBetween, routeScheme: routeSchemeAsOf0007, containerServicePlacement },
+    { collectionGroup: collectionGroupBetween, routeScheme: routeSchemeAsOf0007, containerServicePlacement: containerServicePlacementAsOf0007 },
   )),
   ...(await statementsBetween({ collectionGroup: collectionGroupBetween }, { collectionGroup: collectionGroupAsOf0007 })),
 ]
 
 /** Everything drizzle-kit wrote at the head of 0007: the thirteen tables and the three altered ones. */
 const generatedHead = async (): Promise<string[]> => [
-  ...(await statementsFor(tables)).filter((statement) => !ADDED_IN_0066.includes(statement)).map((statement) => CHANGED_IN_0056.get(statement) ?? statement),
+  ...(await statementsFor(tables)).filter((statement) => !ADDED_IN_0066.includes(statement)).map((statement) => CHANGED_IN_0056.get(statement) ?? CHANGED_FOR_TRANSFER.get(statement) ?? statement),
   ...(await generatedAlterations()),
 ]
 
@@ -659,7 +685,7 @@ describe("the Resources tables as drizzle-kit writes them", () => {
   test("migration 0007 begins with exactly what drizzle-kit generates for the schema, the guard aside: 125 statements", async () => {
     const { withoutGuard } = await fileStatements()
     // The same statements, whatever order drizzle-kit's loader gave the tables, and wherever the placement's key was moved to.
-    for (const statement of CHANGED_IN_0056.keys()) assert.ok((await statementsFor(tables)).includes(statement), statement.split("\n")[0])
+    for (const statement of [...CHANGED_IN_0056.keys(), ...CHANGED_FOR_TRANSFER.keys()]) assert.ok((await statementsFor(tables)).includes(statement), statement.split("\n")[0])
     const generated = (await generatedHead()).map(normalised).sort()
     assert.equal(generated.length, 125, "thirteen CREATE TABLE, five ADD COLUMN, one DROP INDEX, sixty foreign keys, forty-one indexes, one unique, two DROP CONSTRAINT, one DROP COLUMN, one check")
     assert.deepEqual([...withoutGuard.slice(0, generated.length)].sort(), generated)

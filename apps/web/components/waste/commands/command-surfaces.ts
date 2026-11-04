@@ -58,6 +58,7 @@ import { SensorPairingSurface } from "./sensor-surfaces"
 import { InviteTeamMemberSurface, TeamMemberCommandsSurface } from "./team-surfaces"
 import { LiveBoardRefresh, LiveRouteSurface, PickupCommandsSurface, RouteCommandsSurface, RoutesPrimarySurface } from "./route-surfaces"
 import { WarehouseStockSurface } from "./stock-surfaces"
+import { TransferStationSurface } from "./haul-out-surfaces"
 import { WeighbridgeTicketSurface } from "./weighbridge-surfaces"
 
 /** What a primary surface is handed: the label the module's primary action carries. */
@@ -155,6 +156,8 @@ export const COMMAND_SURFACES: Readonly<Record<string, CommandSurface>> = {
   "resources.warehouses": { primary: "form", rowActions: WarehouseStockSurface, genericEdit: true },
   // O26 of #290: a sensor by its own form, corrected and retired by Edit, its pairings and readings in its details.
   "resources.sensors": { primary: "form", rowActions: SensorPairingSurface, genericEdit: true },
+  // A transfer station's stock and loads (M17 of #293); a depot and any other station show none.
+  "resources.depots": { primary: "form", rowActions: TransferStationSurface, genericEdit: true },
   "fleet.vehicle-planning": { primary: AllocateSurface, rowActions: AllocationCommandsSurface },
   // O6 of #290: a driver's absences and a vehicle's periods out of use, in the row's details; the row itself by its own form as before.
   "fleet.drivers": { primary: "form", rowActions: DriverAbsenceSurface, genericEdit: true },
