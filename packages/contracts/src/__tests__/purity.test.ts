@@ -75,7 +75,9 @@
 // template naming a placeholder no message fills, or out of its channel's
 // shape, in the domain's sentences. O13 of #290 added
 // @waste/domain/resources/pre-trip: pre-trip.ts bounds a checklist and a
-// check by the domain's cap. C19 of #291 added
+// check by the domain's cap. O20 of #290 added
+// @waste/domain/resources/maintenance: maintenance.ts holds a plan to its
+// interval rule and bounds, and reads its due states. C19 of #291 added
 // @waste/domain/privacy/retention and /vocabulary: organisation.ts bounds a
 // project's privacy policy by the domain's days and reads its purposes. M22 of #293 added
 // @waste/domain/access/branding: organisation.ts holds a project's branding to
@@ -129,6 +131,7 @@ definePurityTests({
     "@waste/domain/resolution/vocabulary",
     "@waste/domain/resources/drop-off-points",
     "@waste/domain/resources/emissions",
+    "@waste/domain/resources/maintenance",
     "@waste/domain/resources/pre-trip",
     "@waste/domain/resources/sensors",
     "@waste/domain/resources/stock-balance",

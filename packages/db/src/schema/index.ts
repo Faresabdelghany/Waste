@@ -72,5 +72,7 @@ export * from "./notifications"
 export * from "./pre-trip"
 // Fill-level Sensors (O26 of #290): the devices, their pairings with containers and the readings they send.
 export * from "./sensors"
+// Vehicle maintenance (O20 of #290): a vehicle's service plans and the Maintenance Orders that do them.
+export * from "./maintenance"
 // Septic-tank emptying (M11 of #293): the register of tank installations and their inspections.
 export * from "./tanks"
