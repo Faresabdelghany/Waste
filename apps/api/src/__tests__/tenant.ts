@@ -84,6 +84,7 @@ import {
   sharedCollectionPointMember,
 } from "@waste/db/schema/customers"
 import { message, messageTemplate } from "@waste/db/schema/messaging"
+import { routeMessage } from "@waste/db/schema/route-messages"
 import { notificationPreference, notificationRule, notificationRuleArea } from "@waste/db/schema/notifications"
 import { company, project, serviceProvider } from "@waste/db/schema/organisation"
 import { contaminantCode, contaminantCodeFraction, pickupExceptionRule, pickupExceptionRuleStep } from "@waste/db/schema/pickup-exceptions"
@@ -361,6 +362,7 @@ export async function dropTenant(pool: Database, companyId: string, owner?: Data
     await owner.db.delete(ticketEvent).where(eq(ticketEvent.companyId, companyId))
     await owner.db.delete(applicationDecision).where(eq(applicationDecision.companyId, companyId))
     await owner.db.delete(proofOfService).where(eq(proofOfService.companyId, companyId))
+    await owner.db.delete(routeMessage).where(eq(routeMessage.companyId, companyId))
     await owner.db.delete(sessionPosition).where(eq(sessionPosition.companyId, companyId))
     // A weight charge names the Unload it charges a share of (O28 of #290), so the events, and the settlement lines that name them, go before the ledger.
     await owner.db.delete(settlementLine).where(eq(settlementLine.companyId, companyId))

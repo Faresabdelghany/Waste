@@ -103,6 +103,8 @@ export const WEIGHBRIDGE_REFUSALS = ["unknown-station", "ahead-of-clock"] as con
 export const OUTBOX_KINDS = ["route-dispatched", "route-started", "route-completed", "route-cancelled", "route-reassigned", "pickup-completed", "pickup-failed", "pickup-skipped", "pickup-problem-reported", "pickup-corrected", "unload-recorded", "command-rejected", "ticket-opened", "ticket-completed", "ticket-rejected", "invoice-issued", "settlement-closed", "application-decided", "site-visit-recorded", "site-visit-voided", "alert-raised", "ticket-assigned", "bulky-booking-booked", "bulky-booking-cancelled", "ticket-replied", "weight-reviewed"] as const
 /** What an outbox event is about; the payload is that resource on the wire. */
 export const OUTBOX_AGGREGATES = ["route", "pickup", "unload", "command", "ticket", "invoice", "settlement", "application", "site-visit", "alert", "bulky-booking"] as const
+/** Who wrote a Route Message (O24 of #290): the office, to the route's driver, or the driver, to the office. */
+export const ROUTE_MESSAGE_AUTHORS = ["office", "driver"] as const
 /** A contaminant code's: in use, or retired from new tags while the stops tagged with it keep it. */
 export const CONTAMINANT_CODE_STATUSES = ["active", "inactive"] as const
 
@@ -126,6 +128,7 @@ export type UnloadRefusalReason = (typeof UNLOAD_REFUSAL_REASONS)[number]
 export type OutboxKind = (typeof OUTBOX_KINDS)[number]
 export type OutboxAggregate = (typeof OUTBOX_AGGREGATES)[number]
 export type ContaminantCodeStatus = (typeof CONTAMINANT_CODE_STATUSES)[number]
+export type RouteMessageAuthor = (typeof ROUTE_MESSAGE_AUTHORS)[number]
 
 /**
  * The reasons a driver's device may give for a skip, a failure or a problem:
@@ -211,4 +214,5 @@ export const EXECUTION_VOCABULARIES = {
   OUTBOX_KINDS,
   OUTBOX_AGGREGATES,
   CONTAMINANT_CODE_STATUSES,
+  ROUTE_MESSAGE_AUTHORS,
 } as const satisfies Record<string, readonly [string, ...string[]]>
