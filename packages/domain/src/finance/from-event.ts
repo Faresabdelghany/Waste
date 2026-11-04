@@ -309,14 +309,16 @@ export type WeightReviewedFacts<Row extends PriceRow = PriceRow> = {
   liveEvents: readonly LiveEventFacts[]
 }
 
-/** One line of a Scale Ticket as the worker read it: its measure, its fraction, and the window's product it is sold by, or null where it names none. */
-export type ScaleTicketLineFacts = {
+/** One line of a Scale Ticket as the worker read it: its measure, its fraction, the window's product it is sold by, or null where it names none, and that product's rows on the agreement's list. */
+export type ScaleTicketLineFacts<Row extends PriceRow = PriceRow> = {
   lineId: string
   wasteFractionId: string
   netKg: number
   /** The declared volume, for a product sold by the cubic metre; null where none was declared. */
   volumeLitres: number | null
   product: { id: string; unit: ProductUnit; vatPercent: number | null } | null
+  /** The list the ticket's agreement is priced under on the day, with the line's product's rows; null where it names none or the line names no product. */
+  priceList: PricedList<Row> | null
 }
 
 /** A Scale Ticket's event as the worker reads it (M16b of #293): whether it stands completed now, its agreement priced on its weighed-out day, its lines, and its live events. */
@@ -328,8 +330,8 @@ export type ScaleTicketEventFacts<Row extends PriceRow = PriceRow> = {
   /** Whether the ticket reads `completed` now: a completion delivered after the void is stale news. */
   completed: boolean
   /** An account's agreement with the list it is priced under; null for a walk-in's ticket, which is never an event. */
-  agreement: { id: string; status: AgreementStatus; customerKind: CustomerKind; customerId: string; priceList: PricedList<Row> | null } | null
-  lines: readonly ScaleTicketLineFacts[]
+  agreement: { id: string; status: AgreementStatus; customerKind: CustomerKind; customerId: string } | null
+  lines: readonly ScaleTicketLineFacts<Row>[]
   /** The ticket's live `scale-ticket` events. */
   liveEvents: readonly LiveEventFacts[]
 }
@@ -582,7 +584,7 @@ function exceptionActionsFor<Row extends PriceRow>(event: PickupEventFacts<Row>,
 }
 
 /** One window line's event (M16b of #293): blocked `no-product` where the line names no product the window sells or the measure its unit needs, otherwise priced per unit under the ticket's agreement on its day, the tier on the line's quantity. */
-function scaleTicketDraft<Row extends PriceRow>(event: ScaleTicketEventFacts<Row>, agreement: NonNullable<ScaleTicketEventFacts<Row>["agreement"]>, serviceDate: string, line: ScaleTicketLineFacts, labels: PriceLabels): BillableEventDraft {
+function scaleTicketDraft<Row extends PriceRow>(agreement: NonNullable<ScaleTicketEventFacts<Row>["agreement"]>, serviceDate: string, line: ScaleTicketLineFacts<Row>, labels: PriceLabels): BillableEventDraft {
   const base = { kind: "scale-ticket" as const, serviceDate, quantity: 1, weightKg: line.netKg, agreementId: agreement.id, subscriptionId: null, links: { ...NO_LINKS, scaleTicketLineId: line.lineId } }
   const product = line.product
   const thousandths = product === null || !soldAtTheWindow(product.unit) ? null : thousandthsOf(product.unit, line)
@@ -590,7 +592,7 @@ function scaleTicketDraft<Row extends PriceRow>(event: ScaleTicketEventFacts<Row
   const outcome = priceOccurrence(
     {
       agreement: { status: agreement.status },
-      priceList: agreement.priceList,
+      priceList: line.priceList,
       product,
       quantity: 1,
       input: { on: serviceDate, planningAreaId: null, customerKind: agreement.customerKind, containerTypeId: null, wasteFractionId: line.wasteFractionId, customerId: agreement.customerId, quantity: quantityOf(thousandths) },
@@ -607,7 +609,7 @@ export function scaleTicketActionsFor<Row extends PriceRow>(event: ScaleTicketEv
   if (event.kind === "scale-ticket-voided") return event.liveEvents.flatMap((live) => correctionOf(live, "scale-ticket-voided") ?? [])
   const { agreement, serviceDate } = event
   if (!event.completed || agreement === null || serviceDate === null || event.liveEvents.length > 0) return []
-  return event.lines.map((line) => ({ action: "record" as const, draft: scaleTicketDraft(event, agreement, serviceDate, line, labels) }))
+  return event.lines.map((line) => ({ action: "record" as const, draft: scaleTicketDraft(agreement, serviceDate, line, labels) }))
 }
 
 /** Every action an event is worth, in order: a pickup's collection charge, then its exception charge (#293 M5); for any other event its one action, or none. */

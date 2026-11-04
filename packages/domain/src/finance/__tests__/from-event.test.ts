@@ -376,7 +376,7 @@ describe("billableFor every other kind", () => {
             : kind === "weight-reviewed"
               ? weightEvent()
               : kind === "scale-ticket-completed" || kind === "scale-ticket-voided"
-                ? ({ kind, ticketId: "scale-ticket", serviceDate: "2026-10-07", completed: kind === "scale-ticket-completed", agreement: { id: AGREEMENT, status: "active", customerKind: "organisation", customerId: "customer", priceList: null }, lines: [{ lineId: "line", wasteFractionId: "fraction", netKg: 900, volumeLitres: null, product: null }], liveEvents: kind === "scale-ticket-voided" ? [live()] : [] } as EventFacts)
+                ? ({ kind, ticketId: "scale-ticket", serviceDate: "2026-10-07", completed: kind === "scale-ticket-completed", agreement: { id: AGREEMENT, status: "active", customerKind: "organisation", customerId: "customer" }, lines: [{ lineId: "line", wasteFractionId: "fraction", netKg: 900, volumeLitres: null, product: null, priceList: null }], liveEvents: kind === "scale-ticket-voided" ? [live()] : [] } as EventFacts)
                 : ({ kind } as EventFacts)
       ;(billableFor(event) === undefined ? news : money).push(kind)
     }

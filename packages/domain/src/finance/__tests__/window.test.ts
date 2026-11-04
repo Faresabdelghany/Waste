@@ -75,10 +75,10 @@ describe("a Scale Ticket's events", () => {
     ticketId: "ticket",
     serviceDate: "2026-10-07",
     completed: true,
-    agreement: { id: "agreement", status: "active", customerKind: "organisation", customerId: "anna", priceList },
+    agreement: { id: "agreement", status: "active", customerKind: "organisation", customerId: "anna" },
     lines: [
-      { lineId: "line-1", wasteFractionId: "garden", netKg: 1_200, volumeLitres: null, product: tonne },
-      { lineId: "line-2", wasteFractionId: "bulky", netKg: 300, volumeLitres: 2_500, product: m3 },
+      { lineId: "line-1", wasteFractionId: "garden", netKg: 1_200, volumeLitres: null, product: tonne, priceList: { ...priceList, rows: [priceList.rows[0]!] } },
+      { lineId: "line-2", wasteFractionId: "bulky", netKg: 300, volumeLitres: 2_500, product: m3, priceList: { ...priceList, rows: [priceList.rows[1]!] } },
     ],
     liveEvents: [],
     ...values,
@@ -96,7 +96,7 @@ describe("a Scale Ticket's events", () => {
   })
 
   test("is blocked no-product where a line names none, or a volume product with no volume", () => {
-    const actions = scaleTicketActionsFor(event({ lines: [{ lineId: "line-1", wasteFractionId: "garden", netKg: 1_200, volumeLitres: null, product: null }, { lineId: "line-2", wasteFractionId: "bulky", netKg: 300, volumeLitres: null, product: m3 }] }))
+    const actions = scaleTicketActionsFor(event({ lines: [{ lineId: "line-1", wasteFractionId: "garden", netKg: 1_200, volumeLitres: null, product: null, priceList: null }, { lineId: "line-2", wasteFractionId: "bulky", netKg: 300, volumeLitres: null, product: m3, priceList }] }))
     assert.deepEqual(
       actions.map((action) => (action.action === "record" ? action.draft.blockReason : null)),
       ["no-product", "no-product"],
