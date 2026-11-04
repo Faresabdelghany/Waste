@@ -86,6 +86,7 @@ import { referenced, refusal } from "./places"
 import { lastDayIn } from "./planning"
 import { nameVia, referencedServerId, webIdVia } from "./references"
 import { customerKindOf } from "./registry"
+import { kilograms } from "./weights"
 
 /** What a body giving a price of its own without a reason, or a reason without a price, is told (`@waste/contracts/billable-events`, `OVERRIDE_WITH_A_REASON`). */
 export const OVERRIDE_WITH_A_REASON = "Give the reason with a price of your own, and neither without the other"
@@ -152,6 +153,8 @@ function originOf(event: BillableEvent, context: MappingContext): string {
       return "Pickup exception charged by its project's rules"
     case "visit":
       return "Recycling-centre visit charged by its project's Visit Rule"
+    case "weight":
+      return "Reviewed weight charged by the tonne"
   }
 }
 
@@ -261,6 +264,7 @@ export const billableEventAdapter: ResourceAdapter<BillableEvent> = {
     const product = named(context, PRODUCT_PREFIX, event.productId)
     const route = named(context, "route", event.links.routeId)
     const ticket = named(context, "ticket", event.links.ticketId)
+    const unload = named(context, "unload", event.links.unloadId)
     const money = (minor: number | null) => (minor === null || event.currency === null ? undefined : formatMinor(minor, event.currency))
     const net = money(event.netMinor)
     const block = event.blockReason === null ? undefined : BLOCK_REASON_LABELS[event.blockReason]
@@ -284,6 +288,8 @@ export const billableEventAdapter: ResourceAdapter<BillableEvent> = {
         // A recurring charge's period, spelt by its last day in, and how many of its days it charged.
         ...(event.charge === null ? {} : { "Charge period": `${event.charge.periodFrom} – ${lastDayIn(event.charge.periodTo)}`, "Days charged": `${event.charge.chargedDays} of ${event.charge.periodDays}` }),
         Quantity: String(event.quantity),
+        // A weight charge (O28 of #290): the stop's share of its Unload's reviewed net; its unit price is the rate per tonne times it.
+        ...(event.weightKg === null ? {} : { Weight: kilograms(event.weightKg) }),
         ...(money(event.unitPriceMinor) === undefined ? {} : { "Unit price": money(event.unitPriceMinor)! }),
         ...(net === undefined ? {} : { Net: net }),
         ...(event.vatPercent === null || money(event.vatMinor) === undefined ? {} : { VAT: `${event.vatPercent}% · ${money(event.vatMinor)}` }),
@@ -291,6 +297,7 @@ export const billableEventAdapter: ResourceAdapter<BillableEvent> = {
         ...(block === undefined ? {} : { "Block reason": block }),
         ...(route === undefined ? {} : { Route: route.name }),
         ...(ticket === undefined ? {} : { Ticket: ticket.name }),
+        ...(unload === undefined ? {} : { Unload: unload.name }),
         // A Pickup Exception's charge names the proof that recorded it (#293 M5); its photo is the stop's, read in the stop's details.
         ...(event.links.proofId === null ? {} : { Evidence: `Proof of service ${event.links.proofId.slice(0, 8)}` }),
         Origin: originOf(event, context),
@@ -300,7 +307,7 @@ export const billableEventAdapter: ResourceAdapter<BillableEvent> = {
         ...(event.hold === null ? {} : { "Held for review": `${shownOn(event.hold.at, timezone)} · ${event.hold.reason}` }),
         Invoiced: event.invoiceLineId === null ? "Not yet" : "On an invoice line",
       },
-      related: [agreement?.name, product?.name, route?.name].filter((part): part is string => part !== undefined),
+      related: [agreement?.name, product?.name, route?.name, unload?.name].filter((part): part is string => part !== undefined),
       allowedTransitions: [],
       companyId: context.companyRecordId ?? FIXTURE_COMPANY_ID,
       projectIds: [project.webId],

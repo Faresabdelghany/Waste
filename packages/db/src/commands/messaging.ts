@@ -21,12 +21,19 @@
 // channel. A template, a customer or a contact the company does not have is
 // the caller's to have answered first (each its family's 404); here it is a
 // refusal of the same shape, in case a worker's caller did not.
+//
+// `queueStaffMessage` (O16 of #290) is the staff notices' writer: an e-mail
+// to one of the company's own user accounts, its text rendered by the domain
+// (@waste/domain/notifications/notices) from the outbox event it is sent
+// for. The event and the recipient key it once, so a redelivered event
+// writes nothing and sends nothing the second time.
 import { renderTemplate, type MessageValues } from "@waste/domain/messaging/template"
 import type { MessageChannel, MessagePurpose } from "@waste/domain/messaging/vocabulary"
-import { and, eq } from "drizzle-orm"
+import { and, eq, sql } from "drizzle-orm"
 
 import type { Tx } from "../client"
 import { sendInTransaction, type Send } from "../jobs"
+import { userAccount } from "../schema/access"
 import { customer, customerContact } from "../schema/customers"
 import { message, messageTemplate } from "../schema/messaging"
 import { company } from "../schema/organisation"
@@ -107,4 +114,49 @@ export async function queueMessage(tx: Tx, send: Send, draft: MessageDraft): Pro
   const data: SendMessageData = { companyId: draft.companyId, messageId: draft.id }
   await sendInTransaction(send, tx, SEND_MESSAGE_QUEUE, data)
   return { id: draft.id, projectId: template.projectId, channel, purpose: template.purpose as MessagePurpose, recipient }
+}
+
+/** A staff notice: the text the domain rendered, to one of the company's user accounts, for the event that raised it. */
+export type StaffMessageDraft = {
+  id: string
+  companyId: string
+  projectId: string
+  userAccountId: string
+  sourceEventId: string
+  subject: string
+  body: string
+}
+
+/** Writes the staff notice `queued` and sends its job, both in `tx`; null where the event already told this user. */
+export async function queueStaffMessage(tx: Tx, send: Send, draft: StaffMessageDraft): Promise<QueuedMessage | null> {
+  const [user] = await tx
+    .select({ email: userAccount.email })
+    .from(userAccount)
+    .where(and(eq(userAccount.companyId, draft.companyId), eq(userAccount.id, draft.userAccountId)))
+    .limit(1)
+  if (user === undefined) throw new RefusedField("userAccountId", "Pick a user account the company has")
+  const written = await tx
+    .insert(message)
+    .values({
+      id: draft.id,
+      companyId: draft.companyId,
+      projectId: draft.projectId,
+      userAccountId: draft.userAccountId,
+      sourceEventId: draft.sourceEventId,
+      channel: "email",
+      purpose: "staff",
+      recipient: user.email,
+      subject: draft.subject,
+      body: draft.body,
+      status: "queued",
+    })
+    .onConflictDoNothing({
+      target: [message.companyId, message.sourceEventId, message.userAccountId],
+      where: sql`${message.sourceEventId} is not null and ${message.userAccountId} is not null`,
+    })
+    .returning({ id: message.id })
+  if (written.length === 0) return null
+  const data: SendMessageData = { companyId: draft.companyId, messageId: draft.id }
+  await sendInTransaction(send, tx, SEND_MESSAGE_QUEUE, data)
+  return { id: draft.id, projectId: draft.projectId, channel: "email", purpose: "staff", recipient: user.email }
 }

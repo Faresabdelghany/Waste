@@ -127,6 +127,7 @@ export const AUDITED_TABLES = [
   "vehicle_defect",
   "sensor",
   "sensor_pairing",
+  "notification_preference",
   "weighbridge_ticket",
   "vehicle_tare",
   "scale_ticket",

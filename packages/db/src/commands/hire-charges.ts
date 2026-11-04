@@ -165,6 +165,8 @@ export async function mintHireCharges(tx: Tx, scope: Scope, period: BillingPerio
       reversesEventId: null,
       evidenceProofId: null,
       visitId: null,
+      unloadId: null,
+      weightKg: null,
       subscriptionId: hire.subscriptionId,
       sourceEventId: null,
       createdBy: null,

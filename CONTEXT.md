@@ -358,6 +358,10 @@ _Avoid_: Notification template, letter
 One e-mail or text message rendered from a Message Template to a Customer or one of its Contact Persons, kept on the delivery log with the address it went to and how its sending stands: queued, sent, failed, or withheld for want of consent. Sent through a log-only sender until a card-free provider is chosen.
 _Avoid_: Notification, SMS (one channel of it), mail
 
+**Staff Notice**:
+An e-mail to one of the company's own User Accounts that it asked for in Settings › Notifications: an Alert raised at or above the severity it picked, in a project where it reads alerts, or a Ticket assigned to it. Its text is the platform's, never a Message Template's, no consent governs it, and it is kept on the delivery log beside the Messages, read by its recipient alone. Nothing is sent until asked for.
+_Avoid_: Notification, alert e-mail (an Alert is the condition, not the e-mail)
+
 **Alert**:
 A condition that requires attention, notification, or acknowledgement and may create or link to a ticket. It is acknowledged and resolved, and links to at most one Ticket. The office raises one by hand; the worker's rules raise one per occurrence of a route not started, a device silent, a licence running out, a ticket overdue, a position stale, or a Container filled past its Sensor Pairing's threshold — an overdue ticket's alert is about that Ticket, never a new one — and resolve it when the condition clears.
 _Avoid_: Ticket, insight
@@ -381,6 +385,10 @@ _Avoid_: Service fee, job price
 **Hire**:
 What a Subscription to a Product sold by the day charges each of its containers: the days it stands on site, from the day it is delivered to the day it is taken back, by calendar month in arrears, each placement's Free Days not charged. A pause of the Subscription does not stop a Hire, since the container still stands there.
 _Avoid_: Rental (a Product sold by the month is a recurring charge), demurrage
+
+**Weight Charge**:
+What a Subscription to a Product sold by the tonne charges a stop: its share of an Unload's net once the office's weight review approves that weight, at the price per tonne on the Route's service date. The share is the Unload's net split among the stops it carried, by what each weighed on board where every one was weighed, in equal parts otherwise. A review that takes the approval back cancels the charge, or reverses it once invoiced; a Service Provider is paid its own price per tonne for the same weight.
+_Avoid_: Gate fee (a gate fee is a price per tonne by fraction on the list), tonnage invoice
 
 **Free Days**:
 A Hire Product's first days of each placement on site, charged nothing, counted from the delivery across the months.

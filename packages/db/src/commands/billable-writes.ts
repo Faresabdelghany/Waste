@@ -45,6 +45,7 @@
 import type { BillableEvent } from "@waste/contracts/billable-events"
 import type { BillableEventDraft } from "@waste/domain/finance/from-event"
 import { vatOf } from "@waste/domain/finance/money"
+import { weighedLoad } from "@waste/domain/finance/tonnage"
 import { priceOccurrence, type PriceLabels, type PriceRow, type PricingOutcome } from "@waste/domain/finance/pricing"
 import type { BillableEventKind, BlockReason, CancelReason } from "@waste/domain/finance/vocabulary"
 import type { AgreementStatus, CustomerKind } from "@waste/domain/registry/vocabulary"
@@ -213,6 +214,8 @@ export type ComposedEvent = {
   reversesEventId: string | null
   evidenceProofId: string | null
   visitId: string | null
+  unloadId: string | null
+  weightKg: number | null
   subscriptionId: string | null
   sourceEventId: string | null
   createdBy: string | null
@@ -243,6 +246,7 @@ export function billableEventShapeIssue(row: ComposedEvent): string | undefined 
   if (row.pickupId !== null && row.routeId === null) return "a pickup is named with its route (billable_event_pickup_shape)"
   if (row.evidenceProofId !== null && row.kind !== "pickup-exception") return "only a Pickup Exception's charge names its evidence (billable_event_evidence_shape)"
   if (row.visitId !== null && row.kind !== "visit") return "only a recycling-centre visit's charge names its visit (billable_event_visit_shape)"
+  if ((row.kind === "weight") !== (row.unloadId !== null) || (row.unloadId === null) !== (row.weightKg === null)) return "only a weight charge names its Unload, and it carries its share's kilograms (billable_event_weight_shape)"
   switch (row.kind) {
     case "pickup":
       if (row.pickupId === null || row.ticketId !== null || row.reversesEventId !== null) return "a pickup event names its pickup and no ticket and no reversal (billable_event_kind_shape)"
@@ -258,6 +262,9 @@ export function billableEventShapeIssue(row: ComposedEvent): string | undefined 
       break
     case "pickup-exception":
       if (row.pickupId === null || row.ticketId !== null || row.reversesEventId !== null) return "a Pickup Exception's charge names its pickup and no ticket and no reversal (billable_event_kind_shape)"
+      break
+    case "weight":
+      if (row.unloadId === null || row.pickupId === null || row.ticketId !== null || row.reversesEventId !== null) return "a weight charge names its Unload and its stop, and no ticket and no reversal (billable_event_kind_shape)"
       break
     case "visit":
       if (row.visitId === null || row.pickupId !== null || row.ticketId !== null || row.reversesEventId !== null) return "a recycling-centre visit's charge names its visit and no pickup, no ticket and no reversal (billable_event_kind_shape)"
@@ -345,6 +352,7 @@ export async function recordBillableEvent(tx: Tx, input: RecordBillableEventInpu
     blockReason: draft.blockReason,
     ...links,
     evidenceProofId: proofId,
+    weightKg: draft.weightKg ?? null,
     subscriptionId: draft.subscriptionId,
     sourceEventId: input.sourceEventId,
     createdBy: input.createdBy,
@@ -444,6 +452,51 @@ export async function liveVisitEventOf(tx: Tx, companyId: string, visitId: strin
   const [current] = await eventsFrom(tx, companyId).query.where(and(eq(billableEvent.companyId, companyId), eq(billableEvent.id, live.id))).limit(1)
   if (current === undefined || current.cancelledAt !== null || current.reversalId !== null) return undefined
   return current
+}
+
+/**
+ * An Unload's live `weight` events (O28 of #290), not cancelled and not
+ * reversed, each under its row lock as a pickup's is, in id order; empty
+ * where the Unload has none — never charged, or every charge already
+ * cancelled or reversed. One approval charges each stop it carried once.
+ */
+export async function liveWeightEventsOf(tx: Tx, companyId: string, unloadId: string): Promise<EventReading[]> {
+  const { query, reversing } = eventsFrom(tx, companyId)
+  const rows = await query
+    .where(and(eq(billableEvent.companyId, companyId), eq(billableEvent.kind, "weight"), eq(billableEvent.unloadId, unloadId), isNull(billableEvent.cancelledAt), isNull(reversing.id)))
+    .orderBy(asc(billableEvent.id))
+  const live: EventReading[] = []
+  for (const row of rows) {
+    await lockRow(tx, billableEvent, { companyId, id: row.id })
+    const [current] = await eventsFrom(tx, companyId).query.where(and(eq(billableEvent.companyId, companyId), eq(billableEvent.id, row.id))).limit(1)
+    if (current !== undefined && current.cancelledAt === null && current.reversalId === null) live.push(current)
+  }
+  return live
+}
+
+/** `billable_event_weight_charge_idx`: one weight charge per outbox event and stop (O28 of #290), the consumer's idempotency key for a weight record. */
+export const ONE_WEIGHT_CHARGE_PER_STOP = "billable_event_weight_charge_idx"
+
+/** The consumer's weight charge of a stop already recorded from an outbox event, with its reading; undefined when the event has made none for the stop yet. */
+export async function weightChargeBySource(tx: Tx, companyId: string, sourceEventId: string, pickupId: string): Promise<EventReading | undefined> {
+  const [row] = await eventsFrom(tx, companyId)
+    .query.where(and(eq(billableEvent.companyId, companyId), eq(billableEvent.sourceEventId, sourceEventId), eq(billableEvent.kind, "weight"), eq(billableEvent.pickupId, pickupId)))
+    .limit(1)
+  return row
+}
+
+/**
+ * A weight charge priced again (O28 of #290): its share's kilograms at the
+ * day's price per tonne, under the conditions its stop carries — the
+ * resolver through `priceDraft` for one tonne's rate, then the weighed load's
+ * amount; `amount-too-large` where that does not fit the event's columns.
+ */
+export async function priceWeightCharge(tx: Tx, scope: Scope, input: Omit<PricingInput, "quantity"> & { weightKg: number }, labels: PriceLabels = {}): Promise<PricingOutcome> {
+  const { weightKg, ...pricing } = input
+  const outcome = await priceDraft(tx, scope, { ...pricing, quantity: 1 }, labels)
+  if (outcome.price === null) return outcome
+  const load = weighedLoad(outcome.price, weightKg)
+  return load === null ? { blockReason: "amount-too-large", price: null, resolution: outcome.resolution } : { ...outcome, price: load }
 }
 
 /**

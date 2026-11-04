@@ -100,9 +100,9 @@ export const WEIGHBRIDGE_UNMATCHED_REASONS = ["unknown-vehicle", "no-route", "se
 /** What a ticket of an ingest batch came to that is not kept (O27 of #290): a station not registered, or an instant ahead of the server's clock. */
 export const WEIGHBRIDGE_REFUSALS = ["unknown-station", "ahead-of-clock"] as const
 /** What the outbox tells the other contexts: Execution's twelve, then Resolution's three (Issue #109), which Finance reads, then Finance's two (Issue #112), which the export reads. */
-export const OUTBOX_KINDS = ["route-dispatched", "route-started", "route-completed", "route-cancelled", "route-reassigned", "pickup-completed", "pickup-failed", "pickup-skipped", "pickup-problem-reported", "pickup-corrected", "unload-recorded", "command-rejected", "ticket-opened", "ticket-completed", "ticket-rejected", "invoice-issued", "settlement-closed", "application-decided", "site-visit-recorded", "site-visit-voided"] as const
+export const OUTBOX_KINDS = ["route-dispatched", "route-started", "route-completed", "route-cancelled", "route-reassigned", "pickup-completed", "pickup-failed", "pickup-skipped", "pickup-problem-reported", "pickup-corrected", "unload-recorded", "command-rejected", "ticket-opened", "ticket-completed", "ticket-rejected", "invoice-issued", "settlement-closed", "application-decided", "site-visit-recorded", "site-visit-voided", "alert-raised", "ticket-assigned", "weight-reviewed"] as const
 /** What an outbox event is about; the payload is that resource on the wire. */
-export const OUTBOX_AGGREGATES = ["route", "pickup", "unload", "command", "ticket", "invoice", "settlement", "application", "site-visit"] as const
+export const OUTBOX_AGGREGATES = ["route", "pickup", "unload", "command", "ticket", "invoice", "settlement", "application", "site-visit", "alert"] as const
 /** A contaminant code's: in use, or retired from new tags while the stops tagged with it keep it. */
 export const CONTAMINANT_CODE_STATUSES = ["active", "inactive"] as const
 
