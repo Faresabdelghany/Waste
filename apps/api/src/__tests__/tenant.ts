@@ -81,7 +81,7 @@ import {
   sharedCollectionPointMember,
 } from "@waste/db/schema/customers"
 import { message, messageTemplate } from "@waste/db/schema/messaging"
-import { notificationPreference } from "@waste/db/schema/notifications"
+import { notificationPreference, notificationRule, notificationRuleArea } from "@waste/db/schema/notifications"
 import { company, project, serviceProvider } from "@waste/db/schema/organisation"
 import { contaminantCode, contaminantCodeFraction, pickupExceptionRule, pickupExceptionRuleStep } from "@waste/db/schema/pickup-exceptions"
 import { planningArea, planningAreaBoundary } from "@waste/db/schema/planning-areas"
@@ -454,6 +454,7 @@ export async function dropTenant(pool: Database, companyId: string, owner?: Data
     await tx.delete(vehicleType).where(eq(vehicleType.companyId, companyId))
     await tx.delete(collectionCalendarHoliday).where(eq(collectionCalendarHoliday.companyId, companyId))
     await tx.delete(collectionCalendar).where(eq(collectionCalendar.companyId, companyId))
+    await tx.delete(notificationRuleArea).where(eq(notificationRuleArea.companyId, companyId))
     await tx.delete(planningAreaBoundary).where(eq(planningAreaBoundary.companyId, companyId))
     await tx.delete(planningArea).where(eq(planningArea.companyId, companyId))
     await tx.delete(containerServicePlacement).where(eq(containerServicePlacement.companyId, companyId))
@@ -478,6 +479,7 @@ export async function dropTenant(pool: Database, companyId: string, owner?: Data
     await tx.delete(property).where(eq(property.companyId, companyId))
     // Messaging (#291 C15): the delivery log names its template, its customer and its contact, so it goes first, then the templates.
     await tx.delete(message).where(eq(message.companyId, companyId))
+    await tx.delete(notificationRule).where(eq(notificationRule.companyId, companyId))
     await tx.delete(messageTemplate).where(eq(messageTemplate.companyId, companyId))
     // A customer's contact persons (#291 C14) go before it.
     await tx.delete(customerContact).where(eq(customerContact.companyId, companyId))

@@ -82,7 +82,9 @@
 // its shapes and its colour to WCAG 2.1 AA's contrast.
 // O26 of #290 added @waste/domain/resources/sensors: sensors.ts bounds the
 // ingest's batch by the domain's cap and defaults a pairing's threshold to the
-// domain's.
+// domain's. O16 of #290 (part b) added @waste/domain/notifications/vocabulary:
+// notifications.ts reads the customer notices a project's rules map to
+// templates.
 import path from "node:path"
 import { fileURLToPath } from "node:url"
 
@@ -113,6 +115,7 @@ definePurityTests({
     "@waste/domain/insight/vocabulary",
     "@waste/domain/messaging/template",
     "@waste/domain/messaging/vocabulary",
+    "@waste/domain/notifications/vocabulary",
     "@waste/domain/planning/lifecycle",
     "@waste/domain/planning/vocabulary",
     "@waste/domain/privacy/retention",
