@@ -209,7 +209,7 @@ export async function lockRows(tx: Tx, table: TenantTable, companyId: string, id
 }
 
 /** The counters a company's row carries, one per document series. */
-export type Series = "nextInvoiceNumber" | "nextTicketNumber" | "nextRouteNumber"
+export type Series = "nextInvoiceNumber" | "nextTicketNumber" | "nextRouteNumber" | "nextScaleTicketNumber"
 
 /** The next number of a company's series, never renumbered: the one the counter had, the counter stepped past it in the database as an expression over its own column. */
 export async function nextNumber(tx: Tx, companyId: string, series: Series): Promise<number> {
