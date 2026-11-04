@@ -13,6 +13,7 @@ import { describe, test } from "node:test"
 
 import { ROUTING_OPTIMISE_QUEUE } from "@waste/db/commands/plans"
 import { OUTBOX_KINDS, type OutboxKind } from "@waste/domain/execution/vocabulary"
+import { NOTIFICATION_EVENTS } from "@waste/domain/notifications/vocabulary"
 
 import { isCronExpression } from "../boss"
 import { defineJob, JOBS } from "../jobs"
@@ -26,6 +27,7 @@ import { FINANCE_EVENT_KINDS, RECORD_BILLABLE_EVENTS_QUEUE_OPTIONS, recordBillab
 import { BATCH_SIZE, RELAY_INTERVAL_SECONDS, relayOutbox } from "../jobs/relay-outbox"
 import { OUTBOX_CONSUMERS, OUTBOX_ROUTES, routesOf } from "../outbox/routes"
 import { purgePositionsJob } from "../jobs/purge-positions"
+import { notifyStaff } from "../jobs/staff-notifications"
 import { purgeProofObjectsJob } from "../jobs/purge-proof-objects"
 import { sweepHorizonJob } from "../jobs/routing-horizon"
 import { runScheduledBilling } from "../jobs/run-billing"
@@ -34,6 +36,7 @@ import { CONSUMED_OUTBOX_QUEUE_OPTIONS, CONSUMED_RETENTION_SECONDS, consumerQueu
 /** Resolution's and Finance's queues of their kinds, as the fan-out spells them (#339). */
 const resolutionQueues = RESOLUTION_KINDS.map((kind) => consumerQueue(kind, "resolution"))
 const financeQueues = FINANCE_EVENT_KINDS.map((kind) => consumerQueue(kind, "finance"))
+const notificationQueues = NOTIFICATION_EVENTS.map((kind) => consumerQueue(kind, "notifications"))
 
 describe("the job registry", () => {
   test("names every queue once", () => {
@@ -77,7 +80,7 @@ describe("the job registry", () => {
       assert.equal(job.queueOptions?.deadLetter, OUTBOX_DEAD_QUEUE, `${job.queue}: a consumer's queue dead-letters to outbox.dead, so a poison job is kept for a redrive and not lost with its retention`)
       assert.equal(job.queueOptions?.retentionSeconds, CONSUMED_RETENTION_SECONDS, `${job.queue}: a consumed queue keeps a job a fortnight`)
     }
-    assert.deepEqual([...consumed].sort(), [...resolutionQueues, ...financeQueues].sort(), "the two consumers take Resolution's four and Finance's five, and nothing else is consumed")
+    assert.deepEqual([...consumed].sort(), [...resolutionQueues, ...financeQueues, ...notificationQueues].sort(), "the three consumers take Resolution's kinds, Finance's and the staff notices' two, and nothing else is consumed")
     assert.ok(!consumed.includes(OUTBOX_DEAD_QUEUE), "nobody works the dead-letter queue: an operator redrives it")
     // The relay's routes are the consumers' queues by kind, in the consumers' order.
     for (const kind of OUTBOX_KINDS) {
@@ -140,6 +143,7 @@ describe("the job registry", () => {
       "execution.relay-outbox",
       ...resolutionQueues,
       ...financeQueues,
+      ...notificationQueues,
       "finance.run-billing",
       "execution.purge-proof-objects",
       "resolution.alert-rules",
@@ -244,11 +248,24 @@ describe("the job registry", () => {
     )
     // What the consumers inherit is the consumed kinds' own queues, each published; the rest wait for a consumer under retention, and the dead-letter queue for an operator.
     const inherited = [...new Set(JOBS.flatMap((job) => (job.inherits === undefined ? [] : [job.inherits])))]
-    assert.deepEqual(inherited.sort(), [...new Set([...RESOLUTION_KINDS, ...FINANCE_EVENT_KINDS])].map(outboxQueue).sort())
+    assert.deepEqual(inherited.sort(), [...new Set([...RESOLUTION_KINDS, ...FINANCE_EVENT_KINDS, ...NOTIFICATION_EVENTS])].map(outboxQueue).sort())
     for (const queue of inherited) assert.ok(published.includes(queue), queue)
     assert.ok(published.includes(OUTBOX_DEAD_QUEUE), "the dead-letter queue is published and worked by nobody")
     assert.ok(worked.has(ROUTING_OPTIMISE_QUEUE) && !published.includes(ROUTING_OPTIMISE_QUEUE), "the API sends optimiser Plans (#170) to a queue with a worker of its own (#171), which nobody publishes to hold it open")
     assert.equal(published.length - 1, OUTBOX_KINDS.length, "every kind's own queue, and the dead-letter queue")
+  })
+
+  test("holds the staff notices' consumer (O16 of #290): one entry per kind on outbox.<kind>.notifications, never scheduled, on the seam's policy", () => {
+    assert.deepEqual([...NOTIFICATION_EVENTS], ["alert-raised", "ticket-assigned"])
+    assert.deepEqual(
+      notifyStaff.map((job) => job.queue),
+      ["outbox.alert-raised.notifications", "outbox.ticket-assigned.notifications"],
+    )
+    for (const job of notifyStaff) {
+      assert.ok(JOBS.includes(job), job.queue)
+      assert.deepEqual(job.queueOptions, { ...OUTBOX_QUEUE_OPTIONS, ...CONSUMED_OUTBOX_QUEUE_OPTIONS })
+      assert.equal(job.schedule, undefined)
+    }
   })
 
   test("updatableOptions drops the policy and nothing else, the dead letter among what it keeps", () => {

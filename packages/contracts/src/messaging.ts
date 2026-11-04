@@ -14,7 +14,7 @@
 // stored template, since a channel moved alone changes what the subject must
 // be.
 import { channelShapeIssue, MESSAGE_VARIABLES, unknownPlaceholders } from "@waste/domain/messaging/template"
-import { MESSAGE_CHANNELS, MESSAGE_PURPOSES, MESSAGE_STATUSES, MESSAGE_TEMPLATE_STATUSES } from "@waste/domain/messaging/vocabulary"
+import { MESSAGE_CHANNELS, MESSAGE_PURPOSES, MESSAGE_STATUSES, MESSAGE_TEMPLATE_PURPOSES, MESSAGE_TEMPLATE_STATUSES } from "@waste/domain/messaging/vocabulary"
 import * as z from "zod"
 
 import { IsoDateTime } from "./dates"
@@ -28,6 +28,9 @@ export const MessageChannel = z.enum(MESSAGE_CHANNELS)
 export type MessageChannel = z.infer<typeof MessageChannel>
 export const MessagePurpose = z.enum(MESSAGE_PURPOSES)
 export type MessagePurpose = z.infer<typeof MessagePurpose>
+/** What a template is for: service or billing; a staff notice is the domain's text, never a template's. */
+export const MessageTemplatePurpose = z.enum(MESSAGE_TEMPLATE_PURPOSES)
+export type MessageTemplatePurpose = z.infer<typeof MessageTemplatePurpose>
 export const MessageStatus = z.enum(MESSAGE_STATUSES)
 export type MessageStatus = z.infer<typeof MessageStatus>
 export const MessageTemplateStatus = z.enum(MESSAGE_TEMPLATE_STATUSES)
@@ -55,7 +58,7 @@ export const MessageTemplate = z.object({
   ...stamped,
   projectId: Id,
   name: Label,
-  purpose: MessagePurpose,
+  purpose: MessageTemplatePurpose,
   channel: MessageChannel,
   subject: Label.nullable(),
   body: z.string(),
@@ -67,7 +70,7 @@ export const MessageTemplateCreate = z
   .strictObject({
     projectId: Id,
     name: Label,
-    purpose: MessagePurpose,
+    purpose: MessageTemplatePurpose,
     channel: MessageChannel,
     subject: Label.nullable().optional().describe("An e-mail's subject, required for one; a text message has none."),
     body: TemplateBody,
@@ -84,7 +87,7 @@ export type MessageTemplateCreate = z.infer<typeof MessageTemplateCreate>
 export const MessageTemplatePatch = z
   .strictObject({
     name: Label.optional(),
-    purpose: MessagePurpose.optional(),
+    purpose: MessageTemplatePurpose.optional(),
     channel: MessageChannel.optional(),
     subject: Label.nullable().optional(),
     body: TemplateBody.optional(),
@@ -102,8 +105,11 @@ export const Message = z.object({
   ...stamped,
   projectId: Id,
   templateId: Id.nullable(),
-  customerId: Id,
+  /** The customer it was sent to or about; null for a staff notice. */
+  customerId: Id.nullable(),
   contactId: Id.nullable(),
+  /** The company's own user account a staff notice went to (O16 of #290); null for a customer's message. */
+  userAccountId: Id.nullable(),
   channel: MessageChannel,
   purpose: MessagePurpose,
   /** The address it went to, copied when it was queued. */
