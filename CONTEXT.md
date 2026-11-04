@@ -332,6 +332,14 @@ _Avoid_: Pickup, proof of service, tip, dump
 What a station's weighbridge sent of one weighing: its ticket number, the vehicle's plate, when, the weights and the product. It is matched to the route its vehicle was out on and written as that route's Unload, or waits for the office, which matches it by hand or dismisses it. A ticket is never edited.
 _Avoid_: Weight record, scale reading, weigh slip
 
+**Scale Ticket**:
+The window's record of one vehicle weighed at one of our own sites with a weighbridge: weighed in at its gross, out at its tare from a second pass or its Registered Tare, for an account customer under one of its Agreements or a walk-in. Its load is split into lines by Waste Fraction and the municipality it came from, which sum to its net. One of our own vehicles' ticket is also its route's Unload. A mistake is voided with its reason, never deleted. Unlike a Weighbridge Ticket, it is entered by staff and faces the customer.
+_Avoid_: Weigh slip, scale reading, gate ticket
+
+**Registered Tare**:
+A vehicle's weight empty, kept so the window can complete a Scale Ticket without a second pass: by its plate and, where it is weighed with them, its trailer's plate and the container it carries. One is active per combination; a re-weighing changes it and a retired one stays for the tickets completed on it.
+_Avoid_: Tare weight, empty weight, unladen weight
+
 **Transfer Note**:
 The document that goes with an Unload's load from the company that collected and carried it to the Unloading Station that took it: the parties, the waste fraction with its waste code and whether it is hazardous, the weights, and when. One per Unload the station accepted; a refused load was not transferred and has none, and a corrected Unload's note is its correction's.
 _Avoid_: Consignment note, waybill, disposal receipt

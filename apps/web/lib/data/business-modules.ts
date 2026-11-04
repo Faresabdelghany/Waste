@@ -3741,6 +3741,8 @@ const operateWithoutRouteStudio: WorkspaceDefinition = {
     requireWorkspaceModule(operate, "driver-app"),
     // Recycling-centre visits (M4 of #293): the ledger, beside the attendant's own /check-in.
     requireWorkspaceModule(operate, "site-visits"),
+    // The scale house (M16a of #293): the window's tickets and its tare register.
+    requireWorkspaceModule(operate, "scale-house"),
   ],
 }
 

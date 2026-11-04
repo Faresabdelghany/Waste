@@ -93,6 +93,7 @@ export const WEIGH_IN_FORM: BusinessFormSchema = {
       ],
     },
   ],
+  execution: { kind: "create-record", initialStatus: "Weighed in", completionMessage: "Weighed in." },
 }
 
 /** The fields of one line of the Weigh out form, numbered from 1; the first is required. */
@@ -180,6 +181,7 @@ export const TARE_FORM: BusinessFormSchema = {
       ],
     },
   ],
+  execution: { kind: "create-record", initialStatus: "Active", completionMessage: "Tare registered." },
 }
 
 /** Re-weigh: the tare's new weight and its day. */
