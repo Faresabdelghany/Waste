@@ -76,14 +76,14 @@ export const TICKET_VISIBILITIES = ["internal", "customer", "service-provider"] 
 export const ALERT_KINDS = ["route-exception", "resource", "service-risk", "asset", "weight", "other"] as const
 /** How severe an Alert is. */
 export const ALERT_SEVERITIES = ["critical", "high", "medium", "low"] as const
-/** Who raised an Alert: the office (`manual`), the worker's rules (`rule`, and `execution` for a condition of the work itself), or a sensor, which waits for its source. */
+/** Who raised an Alert: the office (`manual`), the worker's rules (`rule`, `execution` for a condition of the work itself, and `telemetry` for what a device reports: a driver's position, a container's fill level). */
 export const ALERT_SOURCES = ["manual", "execution", "telemetry", "rule"] as const
 /** Where an Alert stands; "linked to a ticket" is a reading of `ticket_id`, not a status. */
 export const ALERT_STATUSES = ["new", "acknowledged", "resolved"] as const
 /** Whether a Team takes tickets (O30 of #290, row 7.20): an inactive team is offered to no new ticket and keeps the ones it holds. */
 export const TEAM_STATUSES = ["active", "inactive"] as const
-/** The worker's rules an Alert is raised by (O4 of #290, and O8's stale position); null on an alert a person raised. */
-export const ALERT_RULES = ["route-not-started", "session-silent", "licence-expiring", "ticket-overdue", "position-stale"] as const
+/** The worker's rules an Alert is raised by (O4 of #290, O8's stale position and O26's filling container); null on an alert a person raised. */
+export const ALERT_RULES = ["route-not-started", "session-silent", "licence-expiring", "ticket-overdue", "position-stale", "fill-threshold"] as const
 
 export type TicketStatus = (typeof TICKET_STATUSES)[number]
 export type TicketKind = (typeof TICKET_KINDS)[number]
