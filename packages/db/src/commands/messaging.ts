@@ -17,16 +17,28 @@
 // then, so a consent withdrawn while a message waits is honoured.
 //
 // It throws `Refused`: a template that is not active, a contact that is not
-// the customer's or has left, and a recipient with no address on the
-// channel. A template, a customer or a contact the company does not have is
+// the customer's or has left, a recipient with no address on the channel,
+// and a template naming a value its sender does not have (a
+// `{{collectionDate}}` the office's send has no day for). A sender on an
+// outbox event names it (`sourceEventId`, O16 of #290 part b): a draft for
+// an event already queued to the customer answers that message and writes
+// nothing, and `message_source_event_id_customer_id_idx` is the word behind
+// it for two workers at once. A template, a customer or a contact the company does not have is
 // the caller's to have answered first (each its family's 404); here it is a
 // refusal of the same shape, in case a worker's caller did not.
-import { renderTemplate, type MessageValues } from "@waste/domain/messaging/template"
+//
+// `queueStaffMessage` (O16 of #290) is the staff notices' writer: an e-mail
+// to one of the company's own user accounts, its text rendered by the domain
+// (@waste/domain/notifications/notices) from the outbox event it is sent
+// for. The event and the recipient key it once, so a redelivered event
+// writes nothing and sends nothing the second time.
+import { renderTemplate, unfilledPlaceholders, unfilledSentence, type MessageValues } from "@waste/domain/messaging/template"
 import type { MessageChannel, MessagePurpose } from "@waste/domain/messaging/vocabulary"
-import { and, eq } from "drizzle-orm"
+import { and, eq, sql } from "drizzle-orm"
 
 import type { Tx } from "../client"
 import { sendInTransaction, type Send } from "../jobs"
+import { userAccount } from "../schema/access"
 import { customer, customerContact } from "../schema/customers"
 import { message, messageTemplate } from "../schema/messaging"
 import { company } from "../schema/organisation"
@@ -46,6 +58,10 @@ export type MessageDraft = {
   templateId: string
   customerId: string
   contactId: string | null
+  /** The outbox event a sender queues it for (O16 of #290, part b): with the customer, the message's key, so a redelivered event queues it once. */
+  sourceEventId?: string
+  /** The values its sender has beyond the three every message fills: a notice's collection day, a ticket's number and reply (`NOTICE_VALUES`). */
+  values?: Partial<Omit<MessageValues, "recipientName" | "customerName" | "companyName">>
 }
 
 export const templateInactive = (name: string) => `The template ${name} is inactive; make it active, or pick another`
@@ -56,8 +72,16 @@ export const contactInactive = (name: string) => `${name} is inactive: they no l
 /** The message as written: its id and what it was queued as. */
 export type QueuedMessage = { id: string; projectId: string; channel: MessageChannel; purpose: MessagePurpose; recipient: string }
 
-/** Writes the message `queued` and sends its job, both in `tx`; throws `Refused` where it cannot be sent. */
+/** Writes the message `queued` and sends its job, both in `tx`; throws `Refused` where it cannot be sent. A draft for an event already queued answers that message and writes nothing. */
 export async function queueMessage(tx: Tx, send: Send, draft: MessageDraft): Promise<QueuedMessage> {
+  if (draft.sourceEventId !== undefined) {
+    const [already] = await tx
+      .select({ id: message.id, projectId: message.projectId, channel: message.channel, purpose: message.purpose, recipient: message.recipient })
+      .from(message)
+      .where(and(eq(message.companyId, draft.companyId), eq(message.sourceEventId, draft.sourceEventId), eq(message.customerId, draft.customerId)))
+      .limit(1)
+    if (already !== undefined) return { ...already, channel: already.channel as MessageChannel, purpose: already.purpose as MessagePurpose }
+  }
   const [template] = await tx
     .select({ projectId: messageTemplate.projectId, name: messageTemplate.name, purpose: messageTemplate.purpose, channel: messageTemplate.channel, subject: messageTemplate.subject, body: messageTemplate.body, status: messageTemplate.status })
     .from(messageTemplate)
@@ -89,7 +113,9 @@ export async function queueMessage(tx: Tx, send: Send, draft: MessageDraft): Pro
   if (recipient === null) throw new Refused(409, noAddress(to.name, channel))
 
   const [sender] = await tx.select({ name: company.name }).from(company).where(eq(company.id, draft.companyId)).limit(1)
-  const values: MessageValues = { recipientName: to.name, customerName: holder.name, companyName: sender?.name ?? "" }
+  const values: MessageValues = { recipientName: to.name, customerName: holder.name, companyName: sender?.name ?? "", ...draft.values }
+  const unfilled = [...new Set([...unfilledPlaceholders(template.subject ?? "", values), ...unfilledPlaceholders(template.body, values)])]
+  if (unfilled.length > 0) throw new Refused(409, unfilledSentence(template.name, unfilled))
   await tx.insert(message).values({
     id: draft.id,
     companyId: draft.companyId,
@@ -97,6 +123,7 @@ export async function queueMessage(tx: Tx, send: Send, draft: MessageDraft): Pro
     templateId: draft.templateId,
     customerId: draft.customerId,
     contactId: draft.contactId,
+    sourceEventId: draft.sourceEventId ?? null,
     channel,
     purpose: template.purpose,
     recipient,
@@ -107,4 +134,49 @@ export async function queueMessage(tx: Tx, send: Send, draft: MessageDraft): Pro
   const data: SendMessageData = { companyId: draft.companyId, messageId: draft.id }
   await sendInTransaction(send, tx, SEND_MESSAGE_QUEUE, data)
   return { id: draft.id, projectId: template.projectId, channel, purpose: template.purpose as MessagePurpose, recipient }
+}
+
+/** A staff notice: the text the domain rendered, to one of the company's user accounts, for the event that raised it. */
+export type StaffMessageDraft = {
+  id: string
+  companyId: string
+  projectId: string
+  userAccountId: string
+  sourceEventId: string
+  subject: string
+  body: string
+}
+
+/** Writes the staff notice `queued` and sends its job, both in `tx`; null where the event already told this user. */
+export async function queueStaffMessage(tx: Tx, send: Send, draft: StaffMessageDraft): Promise<QueuedMessage | null> {
+  const [user] = await tx
+    .select({ email: userAccount.email })
+    .from(userAccount)
+    .where(and(eq(userAccount.companyId, draft.companyId), eq(userAccount.id, draft.userAccountId)))
+    .limit(1)
+  if (user === undefined) throw new RefusedField("userAccountId", "Pick a user account the company has")
+  const written = await tx
+    .insert(message)
+    .values({
+      id: draft.id,
+      companyId: draft.companyId,
+      projectId: draft.projectId,
+      userAccountId: draft.userAccountId,
+      sourceEventId: draft.sourceEventId,
+      channel: "email",
+      purpose: "staff",
+      recipient: user.email,
+      subject: draft.subject,
+      body: draft.body,
+      status: "queued",
+    })
+    .onConflictDoNothing({
+      target: [message.companyId, message.sourceEventId, message.userAccountId],
+      where: sql`${message.sourceEventId} is not null and ${message.userAccountId} is not null`,
+    })
+    .returning({ id: message.id })
+  if (written.length === 0) return null
+  const data: SendMessageData = { companyId: draft.companyId, messageId: draft.id }
+  await sendInTransaction(send, tx, SEND_MESSAGE_QUEUE, data)
+  return { id: draft.id, projectId: draft.projectId, channel: "email", purpose: "staff", recipient: user.email }
 }

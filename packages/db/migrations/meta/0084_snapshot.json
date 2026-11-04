@@ -1,6 +1,6 @@
 {
-  "id": "6227a340-364e-44c9-a37f-e5b7a9affff1",
-  "prevId": "c75caf4c-d038-4081-b879-ca4e8fa9d646",
+  "id": "45b97c57-c4fe-4063-b299-1302f4a6d39f",
+  "prevId": "ef8fb3e5-8f94-48a8-b00b-e8b119df5ea1",
   "version": "7",
   "dialect": "postgresql",
   "tables": {
@@ -81,13 +81,6 @@
         },
         "next_invoice_number": {
           "name": "next_invoice_number",
-          "type": "integer",
-          "primaryKey": false,
-          "notNull": true,
-          "default": 1000
-        },
-        "next_scale_ticket_number": {
-          "name": "next_scale_ticket_number",
           "type": "integer",
           "primaryKey": false,
           "notNull": true,
@@ -11116,11 +11109,11 @@
       "checkConstraints": {
         "outbox_event_kind_one_of": {
           "name": "outbox_event_kind_one_of",
-          "value": "\"wms\".\"outbox_event\".\"kind\" in ('route-dispatched', 'route-started', 'route-completed', 'route-cancelled', 'route-reassigned', 'pickup-completed', 'pickup-failed', 'pickup-skipped', 'pickup-problem-reported', 'pickup-corrected', 'unload-recorded', 'command-rejected', 'ticket-opened', 'ticket-completed', 'ticket-rejected', 'invoice-issued', 'settlement-closed', 'application-decided', 'site-visit-recorded', 'site-visit-voided')"
+          "value": "\"wms\".\"outbox_event\".\"kind\" in ('route-dispatched', 'route-started', 'route-completed', 'route-cancelled', 'route-reassigned', 'pickup-completed', 'pickup-failed', 'pickup-skipped', 'pickup-problem-reported', 'pickup-corrected', 'unload-recorded', 'command-rejected', 'ticket-opened', 'ticket-completed', 'ticket-rejected', 'invoice-issued', 'settlement-closed', 'application-decided', 'site-visit-recorded', 'site-visit-voided', 'alert-raised', 'ticket-assigned', 'bulky-booking-booked', 'bulky-booking-cancelled')"
         },
         "outbox_event_aggregate_kind_one_of": {
           "name": "outbox_event_aggregate_kind_one_of",
-          "value": "\"wms\".\"outbox_event\".\"aggregate_kind\" in ('route', 'pickup', 'unload', 'command', 'ticket', 'invoice', 'settlement', 'application', 'site-visit')"
+          "value": "\"wms\".\"outbox_event\".\"aggregate_kind\" in ('route', 'pickup', 'unload', 'command', 'ticket', 'invoice', 'settlement', 'application', 'site-visit', 'alert', 'bulky-booking')"
         }
       },
       "isRLSEnabled": false
@@ -31645,10 +31638,22 @@
           "name": "customer_id",
           "type": "uuid",
           "primaryKey": false,
-          "notNull": true
+          "notNull": false
         },
         "contact_id": {
           "name": "contact_id",
+          "type": "uuid",
+          "primaryKey": false,
+          "notNull": false
+        },
+        "user_account_id": {
+          "name": "user_account_id",
+          "type": "uuid",
+          "primaryKey": false,
+          "notNull": false
+        },
+        "source_event_id": {
+          "name": "source_event_id",
           "type": "uuid",
           "primaryKey": false,
           "notNull": false
@@ -31805,6 +31810,83 @@
           "concurrently": false,
           "method": "btree",
           "with": {}
+        },
+        "message_user_account_id_idx": {
+          "name": "message_user_account_id_idx",
+          "columns": [
+            {
+              "expression": "company_id",
+              "isExpression": false,
+              "asc": true,
+              "nulls": "last"
+            },
+            {
+              "expression": "user_account_id",
+              "isExpression": false,
+              "asc": true,
+              "nulls": "last"
+            }
+          ],
+          "isUnique": false,
+          "concurrently": false,
+          "method": "btree",
+          "with": {}
+        },
+        "message_source_event_id_user_account_id_idx": {
+          "name": "message_source_event_id_user_account_id_idx",
+          "columns": [
+            {
+              "expression": "company_id",
+              "isExpression": false,
+              "asc": true,
+              "nulls": "last"
+            },
+            {
+              "expression": "source_event_id",
+              "isExpression": false,
+              "asc": true,
+              "nulls": "last"
+            },
+            {
+              "expression": "user_account_id",
+              "isExpression": false,
+              "asc": true,
+              "nulls": "last"
+            }
+          ],
+          "isUnique": true,
+          "where": "\"wms\".\"message\".\"source_event_id\" is not null and \"wms\".\"message\".\"user_account_id\" is not null",
+          "concurrently": false,
+          "method": "btree",
+          "with": {}
+        },
+        "message_source_event_id_customer_id_idx": {
+          "name": "message_source_event_id_customer_id_idx",
+          "columns": [
+            {
+              "expression": "company_id",
+              "isExpression": false,
+              "asc": true,
+              "nulls": "last"
+            },
+            {
+              "expression": "source_event_id",
+              "isExpression": false,
+              "asc": true,
+              "nulls": "last"
+            },
+            {
+              "expression": "customer_id",
+              "isExpression": false,
+              "asc": true,
+              "nulls": "last"
+            }
+          ],
+          "isUnique": true,
+          "where": "\"wms\".\"message\".\"source_event_id\" is not null and \"wms\".\"message\".\"customer_id\" is not null",
+          "concurrently": false,
+          "method": "btree",
+          "with": {}
         }
       },
       "foreignKeys": {
@@ -31887,19 +31969,39 @@
           ],
           "onDelete": "no action",
           "onUpdate": "no action"
+        },
+        "message_user_account_id_fk": {
+          "name": "message_user_account_id_fk",
+          "tableFrom": "message",
+          "tableTo": "user_account",
+          "schemaTo": "wms",
+          "columnsFrom": [
+            "company_id",
+            "user_account_id"
+          ],
+          "columnsTo": [
+            "company_id",
+            "id"
+          ],
+          "onDelete": "no action",
+          "onUpdate": "no action"
         }
       },
       "compositePrimaryKeys": {},
       "uniqueConstraints": {},
       "policies": {},
       "checkConstraints": {
+        "message_recipient_exactly_one": {
+          "name": "message_recipient_exactly_one",
+          "value": "(\"wms\".\"message\".\"customer_id\" is not null)::int + (\"wms\".\"message\".\"user_account_id\" is not null)::int = 1"
+        },
         "message_channel_one_of": {
           "name": "message_channel_one_of",
           "value": "\"wms\".\"message\".\"channel\" in ('email', 'sms')"
         },
         "message_purpose_one_of": {
           "name": "message_purpose_one_of",
-          "value": "\"wms\".\"message\".\"purpose\" in ('service', 'billing')"
+          "value": "\"wms\".\"message\".\"purpose\" in ('service', 'billing', 'staff')"
         },
         "message_status_one_of": {
           "name": "message_status_one_of",
@@ -32061,6 +32163,262 @@
         "message_template_subject_shape": {
           "name": "message_template_subject_shape",
           "value": "(\"wms\".\"message_template\".\"channel\" = 'email') = (\"wms\".\"message_template\".\"subject\" is not null)"
+        }
+      },
+      "isRLSEnabled": false
+    },
+    "wms.notification_preference": {
+      "name": "notification_preference",
+      "schema": "wms",
+      "columns": {
+        "id": {
+          "name": "id",
+          "type": "uuid",
+          "primaryKey": true,
+          "notNull": true,
+          "default": "wms.uuidv7()"
+        },
+        "company_id": {
+          "name": "company_id",
+          "type": "uuid",
+          "primaryKey": false,
+          "notNull": true
+        },
+        "created_at": {
+          "name": "created_at",
+          "type": "timestamp with time zone",
+          "primaryKey": false,
+          "notNull": true,
+          "default": "now()"
+        },
+        "updated_at": {
+          "name": "updated_at",
+          "type": "timestamp with time zone",
+          "primaryKey": false,
+          "notNull": true,
+          "default": "now()"
+        },
+        "user_account_id": {
+          "name": "user_account_id",
+          "type": "uuid",
+          "primaryKey": false,
+          "notNull": true
+        },
+        "event": {
+          "name": "event",
+          "type": "text",
+          "primaryKey": false,
+          "notNull": true
+        },
+        "min_severity": {
+          "name": "min_severity",
+          "type": "text",
+          "primaryKey": false,
+          "notNull": false
+        }
+      },
+      "indexes": {},
+      "foreignKeys": {
+        "notification_preference_company_id_fk": {
+          "name": "notification_preference_company_id_fk",
+          "tableFrom": "notification_preference",
+          "tableTo": "company",
+          "schemaTo": "wms",
+          "columnsFrom": [
+            "company_id"
+          ],
+          "columnsTo": [
+            "id"
+          ],
+          "onDelete": "no action",
+          "onUpdate": "no action"
+        },
+        "notification_preference_user_account_id_fk": {
+          "name": "notification_preference_user_account_id_fk",
+          "tableFrom": "notification_preference",
+          "tableTo": "user_account",
+          "schemaTo": "wms",
+          "columnsFrom": [
+            "company_id",
+            "user_account_id"
+          ],
+          "columnsTo": [
+            "company_id",
+            "id"
+          ],
+          "onDelete": "no action",
+          "onUpdate": "no action"
+        }
+      },
+      "compositePrimaryKeys": {},
+      "uniqueConstraints": {
+        "notification_preference_user_account_id_event_key": {
+          "name": "notification_preference_user_account_id_event_key",
+          "nullsNotDistinct": false,
+          "columns": [
+            "company_id",
+            "user_account_id",
+            "event"
+          ]
+        }
+      },
+      "policies": {},
+      "checkConstraints": {
+        "notification_preference_event_one_of": {
+          "name": "notification_preference_event_one_of",
+          "value": "\"wms\".\"notification_preference\".\"event\" in ('alert-raised', 'ticket-assigned')"
+        },
+        "notification_preference_min_severity_one_of": {
+          "name": "notification_preference_min_severity_one_of",
+          "value": "\"wms\".\"notification_preference\".\"min_severity\" in ('critical', 'high', 'medium', 'low')"
+        },
+        "notification_preference_min_severity_shape": {
+          "name": "notification_preference_min_severity_shape",
+          "value": "(\"wms\".\"notification_preference\".\"event\" = 'alert-raised') = (\"wms\".\"notification_preference\".\"min_severity\" is not null)"
+        }
+      },
+      "isRLSEnabled": false
+    },
+    "wms.notification_rule": {
+      "name": "notification_rule",
+      "schema": "wms",
+      "columns": {
+        "id": {
+          "name": "id",
+          "type": "uuid",
+          "primaryKey": true,
+          "notNull": true,
+          "default": "wms.uuidv7()"
+        },
+        "company_id": {
+          "name": "company_id",
+          "type": "uuid",
+          "primaryKey": false,
+          "notNull": true
+        },
+        "project_id": {
+          "name": "project_id",
+          "type": "uuid",
+          "primaryKey": false,
+          "notNull": true
+        },
+        "created_at": {
+          "name": "created_at",
+          "type": "timestamp with time zone",
+          "primaryKey": false,
+          "notNull": true,
+          "default": "now()"
+        },
+        "updated_at": {
+          "name": "updated_at",
+          "type": "timestamp with time zone",
+          "primaryKey": false,
+          "notNull": true,
+          "default": "now()"
+        },
+        "event": {
+          "name": "event",
+          "type": "text",
+          "primaryKey": false,
+          "notNull": true
+        },
+        "template_id": {
+          "name": "template_id",
+          "type": "uuid",
+          "primaryKey": false,
+          "notNull": true
+        }
+      },
+      "indexes": {
+        "notification_rule_template_id_idx": {
+          "name": "notification_rule_template_id_idx",
+          "columns": [
+            {
+              "expression": "company_id",
+              "isExpression": false,
+              "asc": true,
+              "nulls": "last"
+            },
+            {
+              "expression": "template_id",
+              "isExpression": false,
+              "asc": true,
+              "nulls": "last"
+            }
+          ],
+          "isUnique": false,
+          "concurrently": false,
+          "method": "btree",
+          "with": {}
+        }
+      },
+      "foreignKeys": {
+        "notification_rule_company_id_fk": {
+          "name": "notification_rule_company_id_fk",
+          "tableFrom": "notification_rule",
+          "tableTo": "company",
+          "schemaTo": "wms",
+          "columnsFrom": [
+            "company_id"
+          ],
+          "columnsTo": [
+            "id"
+          ],
+          "onDelete": "no action",
+          "onUpdate": "no action"
+        },
+        "notification_rule_project_id_fk": {
+          "name": "notification_rule_project_id_fk",
+          "tableFrom": "notification_rule",
+          "tableTo": "project",
+          "schemaTo": "wms",
+          "columnsFrom": [
+            "company_id",
+            "project_id"
+          ],
+          "columnsTo": [
+            "company_id",
+            "id"
+          ],
+          "onDelete": "no action",
+          "onUpdate": "no action"
+        },
+        "notification_rule_template_id_fk": {
+          "name": "notification_rule_template_id_fk",
+          "tableFrom": "notification_rule",
+          "tableTo": "message_template",
+          "schemaTo": "wms",
+          "columnsFrom": [
+            "company_id",
+            "project_id",
+            "template_id"
+          ],
+          "columnsTo": [
+            "company_id",
+            "project_id",
+            "id"
+          ],
+          "onDelete": "no action",
+          "onUpdate": "no action"
+        }
+      },
+      "compositePrimaryKeys": {},
+      "uniqueConstraints": {
+        "notification_rule_project_id_event_key": {
+          "name": "notification_rule_project_id_event_key",
+          "nullsNotDistinct": false,
+          "columns": [
+            "company_id",
+            "project_id",
+            "event"
+          ]
+        }
+      },
+      "policies": {},
+      "checkConstraints": {
+        "notification_rule_event_one_of": {
+          "name": "notification_rule_event_one_of",
+          "value": "\"wms\".\"notification_rule\".\"event\" in ('bulky-booking-booked', 'bulky-booking-cancelled', 'bulky-booking-collected', 'bulky-booking-not-collected')"
         }
       },
       "isRLSEnabled": false
@@ -32850,437 +33208,6 @@
       },
       "isRLSEnabled": false
     },
-    "wms.weighbridge_ticket": {
-      "name": "weighbridge_ticket",
-      "schema": "wms",
-      "columns": {
-        "id": {
-          "name": "id",
-          "type": "uuid",
-          "primaryKey": true,
-          "notNull": true,
-          "default": "wms.uuidv7()"
-        },
-        "company_id": {
-          "name": "company_id",
-          "type": "uuid",
-          "primaryKey": false,
-          "notNull": true
-        },
-        "project_id": {
-          "name": "project_id",
-          "type": "uuid",
-          "primaryKey": false,
-          "notNull": false
-        },
-        "created_at": {
-          "name": "created_at",
-          "type": "timestamp with time zone",
-          "primaryKey": false,
-          "notNull": true,
-          "default": "now()"
-        },
-        "updated_at": {
-          "name": "updated_at",
-          "type": "timestamp with time zone",
-          "primaryKey": false,
-          "notNull": true,
-          "default": "now()"
-        },
-        "unloading_station_id": {
-          "name": "unloading_station_id",
-          "type": "uuid",
-          "primaryKey": false,
-          "notNull": true
-        },
-        "ticket_number": {
-          "name": "ticket_number",
-          "type": "text",
-          "primaryKey": false,
-          "notNull": true
-        },
-        "vehicle_registration": {
-          "name": "vehicle_registration",
-          "type": "text",
-          "primaryKey": false,
-          "notNull": true
-        },
-        "vehicle_id": {
-          "name": "vehicle_id",
-          "type": "uuid",
-          "primaryKey": false,
-          "notNull": false
-        },
-        "weighed_at": {
-          "name": "weighed_at",
-          "type": "timestamp with time zone",
-          "primaryKey": false,
-          "notNull": true
-        },
-        "gross_kg": {
-          "name": "gross_kg",
-          "type": "integer",
-          "primaryKey": false,
-          "notNull": false
-        },
-        "tare_kg": {
-          "name": "tare_kg",
-          "type": "integer",
-          "primaryKey": false,
-          "notNull": false
-        },
-        "net_kg": {
-          "name": "net_kg",
-          "type": "integer",
-          "primaryKey": false,
-          "notNull": true
-        },
-        "fraction_key": {
-          "name": "fraction_key",
-          "type": "text",
-          "primaryKey": false,
-          "notNull": false
-        },
-        "waste_code": {
-          "name": "waste_code",
-          "type": "text",
-          "primaryKey": false,
-          "notNull": false
-        },
-        "status": {
-          "name": "status",
-          "type": "text",
-          "primaryKey": false,
-          "notNull": true
-        },
-        "unmatched_reason": {
-          "name": "unmatched_reason",
-          "type": "text",
-          "primaryKey": false,
-          "notNull": false
-        },
-        "route_id": {
-          "name": "route_id",
-          "type": "uuid",
-          "primaryKey": false,
-          "notNull": false
-        },
-        "unload_id": {
-          "name": "unload_id",
-          "type": "uuid",
-          "primaryKey": false,
-          "notNull": false
-        },
-        "dismissed_note": {
-          "name": "dismissed_note",
-          "type": "text",
-          "primaryKey": false,
-          "notNull": false
-        },
-        "received_by": {
-          "name": "received_by",
-          "type": "uuid",
-          "primaryKey": false,
-          "notNull": true
-        }
-      },
-      "indexes": {
-        "weighbridge_ticket_project_id_idx": {
-          "name": "weighbridge_ticket_project_id_idx",
-          "columns": [
-            {
-              "expression": "company_id",
-              "isExpression": false,
-              "asc": true,
-              "nulls": "last"
-            },
-            {
-              "expression": "project_id",
-              "isExpression": false,
-              "asc": true,
-              "nulls": "last"
-            }
-          ],
-          "isUnique": false,
-          "concurrently": false,
-          "method": "btree",
-          "with": {}
-        },
-        "weighbridge_ticket_vehicle_id_idx": {
-          "name": "weighbridge_ticket_vehicle_id_idx",
-          "columns": [
-            {
-              "expression": "company_id",
-              "isExpression": false,
-              "asc": true,
-              "nulls": "last"
-            },
-            {
-              "expression": "vehicle_id",
-              "isExpression": false,
-              "asc": true,
-              "nulls": "last"
-            }
-          ],
-          "isUnique": false,
-          "concurrently": false,
-          "method": "btree",
-          "with": {}
-        },
-        "weighbridge_ticket_route_id_idx": {
-          "name": "weighbridge_ticket_route_id_idx",
-          "columns": [
-            {
-              "expression": "company_id",
-              "isExpression": false,
-              "asc": true,
-              "nulls": "last"
-            },
-            {
-              "expression": "route_id",
-              "isExpression": false,
-              "asc": true,
-              "nulls": "last"
-            }
-          ],
-          "isUnique": false,
-          "concurrently": false,
-          "method": "btree",
-          "with": {}
-        },
-        "weighbridge_ticket_unload_id_idx": {
-          "name": "weighbridge_ticket_unload_id_idx",
-          "columns": [
-            {
-              "expression": "company_id",
-              "isExpression": false,
-              "asc": true,
-              "nulls": "last"
-            },
-            {
-              "expression": "unload_id",
-              "isExpression": false,
-              "asc": true,
-              "nulls": "last"
-            }
-          ],
-          "isUnique": false,
-          "concurrently": false,
-          "method": "btree",
-          "with": {}
-        },
-        "weighbridge_ticket_received_by_idx": {
-          "name": "weighbridge_ticket_received_by_idx",
-          "columns": [
-            {
-              "expression": "company_id",
-              "isExpression": false,
-              "asc": true,
-              "nulls": "last"
-            },
-            {
-              "expression": "received_by",
-              "isExpression": false,
-              "asc": true,
-              "nulls": "last"
-            }
-          ],
-          "isUnique": false,
-          "concurrently": false,
-          "method": "btree",
-          "with": {}
-        },
-        "weighbridge_ticket_status_idx": {
-          "name": "weighbridge_ticket_status_idx",
-          "columns": [
-            {
-              "expression": "company_id",
-              "isExpression": false,
-              "asc": true,
-              "nulls": "last"
-            },
-            {
-              "expression": "status",
-              "isExpression": false,
-              "asc": true,
-              "nulls": "last"
-            },
-            {
-              "expression": "id",
-              "isExpression": false,
-              "asc": true,
-              "nulls": "last"
-            }
-          ],
-          "isUnique": false,
-          "concurrently": false,
-          "method": "btree",
-          "with": {}
-        }
-      },
-      "foreignKeys": {
-        "weighbridge_ticket_company_id_fk": {
-          "name": "weighbridge_ticket_company_id_fk",
-          "tableFrom": "weighbridge_ticket",
-          "tableTo": "company",
-          "schemaTo": "wms",
-          "columnsFrom": [
-            "company_id"
-          ],
-          "columnsTo": [
-            "id"
-          ],
-          "onDelete": "no action",
-          "onUpdate": "no action"
-        },
-        "weighbridge_ticket_project_id_fk": {
-          "name": "weighbridge_ticket_project_id_fk",
-          "tableFrom": "weighbridge_ticket",
-          "tableTo": "project",
-          "schemaTo": "wms",
-          "columnsFrom": [
-            "company_id",
-            "project_id"
-          ],
-          "columnsTo": [
-            "company_id",
-            "id"
-          ],
-          "onDelete": "no action",
-          "onUpdate": "no action"
-        },
-        "weighbridge_ticket_unloading_station_id_fk": {
-          "name": "weighbridge_ticket_unloading_station_id_fk",
-          "tableFrom": "weighbridge_ticket",
-          "tableTo": "unloading_station",
-          "schemaTo": "wms",
-          "columnsFrom": [
-            "company_id",
-            "unloading_station_id"
-          ],
-          "columnsTo": [
-            "company_id",
-            "id"
-          ],
-          "onDelete": "no action",
-          "onUpdate": "no action"
-        },
-        "weighbridge_ticket_vehicle_id_fk": {
-          "name": "weighbridge_ticket_vehicle_id_fk",
-          "tableFrom": "weighbridge_ticket",
-          "tableTo": "vehicle",
-          "schemaTo": "wms",
-          "columnsFrom": [
-            "company_id",
-            "project_id",
-            "vehicle_id"
-          ],
-          "columnsTo": [
-            "company_id",
-            "project_id",
-            "id"
-          ],
-          "onDelete": "no action",
-          "onUpdate": "no action"
-        },
-        "weighbridge_ticket_route_id_fk": {
-          "name": "weighbridge_ticket_route_id_fk",
-          "tableFrom": "weighbridge_ticket",
-          "tableTo": "route",
-          "schemaTo": "wms",
-          "columnsFrom": [
-            "company_id",
-            "project_id",
-            "route_id"
-          ],
-          "columnsTo": [
-            "company_id",
-            "project_id",
-            "id"
-          ],
-          "onDelete": "no action",
-          "onUpdate": "no action"
-        },
-        "weighbridge_ticket_unload_id_fk": {
-          "name": "weighbridge_ticket_unload_id_fk",
-          "tableFrom": "weighbridge_ticket",
-          "tableTo": "unload",
-          "schemaTo": "wms",
-          "columnsFrom": [
-            "company_id",
-            "project_id",
-            "unload_id"
-          ],
-          "columnsTo": [
-            "company_id",
-            "project_id",
-            "id"
-          ],
-          "onDelete": "no action",
-          "onUpdate": "no action"
-        },
-        "weighbridge_ticket_received_by_fk": {
-          "name": "weighbridge_ticket_received_by_fk",
-          "tableFrom": "weighbridge_ticket",
-          "tableTo": "user_account",
-          "schemaTo": "wms",
-          "columnsFrom": [
-            "company_id",
-            "received_by"
-          ],
-          "columnsTo": [
-            "company_id",
-            "id"
-          ],
-          "onDelete": "no action",
-          "onUpdate": "no action"
-        }
-      },
-      "compositePrimaryKeys": {},
-      "uniqueConstraints": {
-        "weighbridge_ticket_unloading_station_id_ticket_number_key": {
-          "name": "weighbridge_ticket_unloading_station_id_ticket_number_key",
-          "nullsNotDistinct": false,
-          "columns": [
-            "company_id",
-            "unloading_station_id",
-            "ticket_number"
-          ]
-        }
-      },
-      "policies": {},
-      "checkConstraints": {
-        "weighbridge_ticket_status_one_of": {
-          "name": "weighbridge_ticket_status_one_of",
-          "value": "\"wms\".\"weighbridge_ticket\".\"status\" in ('matched', 'unmatched', 'dismissed')"
-        },
-        "weighbridge_ticket_unmatched_reason_one_of": {
-          "name": "weighbridge_ticket_unmatched_reason_one_of",
-          "value": "\"wms\".\"weighbridge_ticket\".\"unmatched_reason\" in ('unknown-vehicle', 'no-route', 'several-routes', 'unknown-fraction', 'fraction-not-accepted')"
-        },
-        "weighbridge_ticket_gross_kg_positive": {
-          "name": "weighbridge_ticket_gross_kg_positive",
-          "value": "\"wms\".\"weighbridge_ticket\".\"gross_kg\" > 0"
-        },
-        "weighbridge_ticket_tare_kg_positive": {
-          "name": "weighbridge_ticket_tare_kg_positive",
-          "value": "\"wms\".\"weighbridge_ticket\".\"tare_kg\" > 0"
-        },
-        "weighbridge_ticket_net_kg_positive": {
-          "name": "weighbridge_ticket_net_kg_positive",
-          "value": "\"wms\".\"weighbridge_ticket\".\"net_kg\" > 0"
-        },
-        "weighbridge_ticket_weights_shape": {
-          "name": "weighbridge_ticket_weights_shape",
-          "value": "(\"wms\".\"weighbridge_ticket\".\"gross_kg\" is null) = (\"wms\".\"weighbridge_ticket\".\"tare_kg\" is null) and (\"wms\".\"weighbridge_ticket\".\"gross_kg\" is null or \"wms\".\"weighbridge_ticket\".\"net_kg\" = \"wms\".\"weighbridge_ticket\".\"gross_kg\" - \"wms\".\"weighbridge_ticket\".\"tare_kg\")"
-        },
-        "weighbridge_ticket_status_shape": {
-          "name": "weighbridge_ticket_status_shape",
-          "value": "(\"wms\".\"weighbridge_ticket\".\"status\" = 'matched') = (\"wms\".\"weighbridge_ticket\".\"route_id\" is not null and \"wms\".\"weighbridge_ticket\".\"unload_id\" is not null and \"wms\".\"weighbridge_ticket\".\"project_id\" is not null) and (\"wms\".\"weighbridge_ticket\".\"status\" = 'dismissed') = (\"wms\".\"weighbridge_ticket\".\"dismissed_note\" is not null) and (\"wms\".\"weighbridge_ticket\".\"status\" <> 'unmatched' or \"wms\".\"weighbridge_ticket\".\"unmatched_reason\" is not null)"
-        }
-      },
-      "isRLSEnabled": false
-    },
     "wms.fill_reading": {
       "name": "fill_reading",
       "schema": "wms",
@@ -33788,1094 +33715,6 @@
         "sensor_pairing_threshold_range": {
           "name": "sensor_pairing_threshold_range",
           "value": "\"wms\".\"sensor_pairing\".\"full_threshold_percent\" between 1 and 100"
-        }
-      },
-      "isRLSEnabled": false
-    },
-    "wms.scale_ticket": {
-      "name": "scale_ticket",
-      "schema": "wms",
-      "columns": {
-        "id": {
-          "name": "id",
-          "type": "uuid",
-          "primaryKey": true,
-          "notNull": true,
-          "default": "wms.uuidv7()"
-        },
-        "company_id": {
-          "name": "company_id",
-          "type": "uuid",
-          "primaryKey": false,
-          "notNull": true
-        },
-        "project_id": {
-          "name": "project_id",
-          "type": "uuid",
-          "primaryKey": false,
-          "notNull": true
-        },
-        "created_at": {
-          "name": "created_at",
-          "type": "timestamp with time zone",
-          "primaryKey": false,
-          "notNull": true,
-          "default": "now()"
-        },
-        "updated_at": {
-          "name": "updated_at",
-          "type": "timestamp with time zone",
-          "primaryKey": false,
-          "notNull": true,
-          "default": "now()"
-        },
-        "number": {
-          "name": "number",
-          "type": "integer",
-          "primaryKey": false,
-          "notNull": true
-        },
-        "unloading_station_id": {
-          "name": "unloading_station_id",
-          "type": "uuid",
-          "primaryKey": false,
-          "notNull": true
-        },
-        "vehicle_plate": {
-          "name": "vehicle_plate",
-          "type": "text",
-          "primaryKey": false,
-          "notNull": true
-        },
-        "trailer_plate": {
-          "name": "trailer_plate",
-          "type": "text",
-          "primaryKey": false,
-          "notNull": false
-        },
-        "container_ref": {
-          "name": "container_ref",
-          "type": "text",
-          "primaryKey": false,
-          "notNull": false
-        },
-        "vehicle_id": {
-          "name": "vehicle_id",
-          "type": "uuid",
-          "primaryKey": false,
-          "notNull": false
-        },
-        "party": {
-          "name": "party",
-          "type": "text",
-          "primaryKey": false,
-          "notNull": true
-        },
-        "customer_id": {
-          "name": "customer_id",
-          "type": "uuid",
-          "primaryKey": false,
-          "notNull": false
-        },
-        "agreement_id": {
-          "name": "agreement_id",
-          "type": "uuid",
-          "primaryKey": false,
-          "notNull": false
-        },
-        "visitor_name": {
-          "name": "visitor_name",
-          "type": "text",
-          "primaryKey": false,
-          "notNull": false
-        },
-        "gross_kg": {
-          "name": "gross_kg",
-          "type": "integer",
-          "primaryKey": false,
-          "notNull": true
-        },
-        "weighed_in_at": {
-          "name": "weighed_in_at",
-          "type": "timestamp with time zone",
-          "primaryKey": false,
-          "notNull": true
-        },
-        "tare_kg": {
-          "name": "tare_kg",
-          "type": "integer",
-          "primaryKey": false,
-          "notNull": false
-        },
-        "tare_source": {
-          "name": "tare_source",
-          "type": "text",
-          "primaryKey": false,
-          "notNull": false
-        },
-        "vehicle_tare_id": {
-          "name": "vehicle_tare_id",
-          "type": "uuid",
-          "primaryKey": false,
-          "notNull": false
-        },
-        "weighed_out_at": {
-          "name": "weighed_out_at",
-          "type": "timestamp with time zone",
-          "primaryKey": false,
-          "notNull": false
-        },
-        "net_kg": {
-          "name": "net_kg",
-          "type": "integer",
-          "primaryKey": false,
-          "notNull": false
-        },
-        "status": {
-          "name": "status",
-          "type": "text",
-          "primaryKey": false,
-          "notNull": true
-        },
-        "route_id": {
-          "name": "route_id",
-          "type": "uuid",
-          "primaryKey": false,
-          "notNull": false
-        },
-        "unload_id": {
-          "name": "unload_id",
-          "type": "uuid",
-          "primaryKey": false,
-          "notNull": false
-        },
-        "unmatched_reason": {
-          "name": "unmatched_reason",
-          "type": "text",
-          "primaryKey": false,
-          "notNull": false
-        },
-        "void_reason": {
-          "name": "void_reason",
-          "type": "text",
-          "primaryKey": false,
-          "notNull": false
-        },
-        "void_note": {
-          "name": "void_note",
-          "type": "text",
-          "primaryKey": false,
-          "notNull": false
-        },
-        "voided_at": {
-          "name": "voided_at",
-          "type": "timestamp with time zone",
-          "primaryKey": false,
-          "notNull": false
-        },
-        "voided_by": {
-          "name": "voided_by",
-          "type": "uuid",
-          "primaryKey": false,
-          "notNull": false
-        },
-        "note": {
-          "name": "note",
-          "type": "text",
-          "primaryKey": false,
-          "notNull": false
-        },
-        "recorded_by": {
-          "name": "recorded_by",
-          "type": "uuid",
-          "primaryKey": false,
-          "notNull": true
-        }
-      },
-      "indexes": {
-        "scale_ticket_vehicle_id_idx": {
-          "name": "scale_ticket_vehicle_id_idx",
-          "columns": [
-            {
-              "expression": "company_id",
-              "isExpression": false,
-              "asc": true,
-              "nulls": "last"
-            },
-            {
-              "expression": "vehicle_id",
-              "isExpression": false,
-              "asc": true,
-              "nulls": "last"
-            }
-          ],
-          "isUnique": false,
-          "concurrently": false,
-          "method": "btree",
-          "with": {}
-        },
-        "scale_ticket_customer_id_idx": {
-          "name": "scale_ticket_customer_id_idx",
-          "columns": [
-            {
-              "expression": "company_id",
-              "isExpression": false,
-              "asc": true,
-              "nulls": "last"
-            },
-            {
-              "expression": "customer_id",
-              "isExpression": false,
-              "asc": true,
-              "nulls": "last"
-            }
-          ],
-          "isUnique": false,
-          "concurrently": false,
-          "method": "btree",
-          "with": {}
-        },
-        "scale_ticket_agreement_id_idx": {
-          "name": "scale_ticket_agreement_id_idx",
-          "columns": [
-            {
-              "expression": "company_id",
-              "isExpression": false,
-              "asc": true,
-              "nulls": "last"
-            },
-            {
-              "expression": "agreement_id",
-              "isExpression": false,
-              "asc": true,
-              "nulls": "last"
-            }
-          ],
-          "isUnique": false,
-          "concurrently": false,
-          "method": "btree",
-          "with": {}
-        },
-        "scale_ticket_vehicle_tare_id_idx": {
-          "name": "scale_ticket_vehicle_tare_id_idx",
-          "columns": [
-            {
-              "expression": "company_id",
-              "isExpression": false,
-              "asc": true,
-              "nulls": "last"
-            },
-            {
-              "expression": "vehicle_tare_id",
-              "isExpression": false,
-              "asc": true,
-              "nulls": "last"
-            }
-          ],
-          "isUnique": false,
-          "concurrently": false,
-          "method": "btree",
-          "with": {}
-        },
-        "scale_ticket_route_id_idx": {
-          "name": "scale_ticket_route_id_idx",
-          "columns": [
-            {
-              "expression": "company_id",
-              "isExpression": false,
-              "asc": true,
-              "nulls": "last"
-            },
-            {
-              "expression": "route_id",
-              "isExpression": false,
-              "asc": true,
-              "nulls": "last"
-            }
-          ],
-          "isUnique": false,
-          "concurrently": false,
-          "method": "btree",
-          "with": {}
-        },
-        "scale_ticket_unload_id_idx": {
-          "name": "scale_ticket_unload_id_idx",
-          "columns": [
-            {
-              "expression": "company_id",
-              "isExpression": false,
-              "asc": true,
-              "nulls": "last"
-            },
-            {
-              "expression": "unload_id",
-              "isExpression": false,
-              "asc": true,
-              "nulls": "last"
-            }
-          ],
-          "isUnique": false,
-          "concurrently": false,
-          "method": "btree",
-          "with": {}
-        },
-        "scale_ticket_recorded_by_idx": {
-          "name": "scale_ticket_recorded_by_idx",
-          "columns": [
-            {
-              "expression": "company_id",
-              "isExpression": false,
-              "asc": true,
-              "nulls": "last"
-            },
-            {
-              "expression": "recorded_by",
-              "isExpression": false,
-              "asc": true,
-              "nulls": "last"
-            }
-          ],
-          "isUnique": false,
-          "concurrently": false,
-          "method": "btree",
-          "with": {}
-        },
-        "scale_ticket_voided_by_idx": {
-          "name": "scale_ticket_voided_by_idx",
-          "columns": [
-            {
-              "expression": "company_id",
-              "isExpression": false,
-              "asc": true,
-              "nulls": "last"
-            },
-            {
-              "expression": "voided_by",
-              "isExpression": false,
-              "asc": true,
-              "nulls": "last"
-            }
-          ],
-          "isUnique": false,
-          "concurrently": false,
-          "method": "btree",
-          "with": {}
-        },
-        "scale_ticket_station_status_idx": {
-          "name": "scale_ticket_station_status_idx",
-          "columns": [
-            {
-              "expression": "company_id",
-              "isExpression": false,
-              "asc": true,
-              "nulls": "last"
-            },
-            {
-              "expression": "unloading_station_id",
-              "isExpression": false,
-              "asc": true,
-              "nulls": "last"
-            },
-            {
-              "expression": "status",
-              "isExpression": false,
-              "asc": true,
-              "nulls": "last"
-            },
-            {
-              "expression": "weighed_out_at",
-              "isExpression": false,
-              "asc": true,
-              "nulls": "last"
-            }
-          ],
-          "isUnique": false,
-          "concurrently": false,
-          "method": "btree",
-          "with": {}
-        }
-      },
-      "foreignKeys": {
-        "scale_ticket_company_id_fk": {
-          "name": "scale_ticket_company_id_fk",
-          "tableFrom": "scale_ticket",
-          "tableTo": "company",
-          "schemaTo": "wms",
-          "columnsFrom": [
-            "company_id"
-          ],
-          "columnsTo": [
-            "id"
-          ],
-          "onDelete": "no action",
-          "onUpdate": "no action"
-        },
-        "scale_ticket_project_id_fk": {
-          "name": "scale_ticket_project_id_fk",
-          "tableFrom": "scale_ticket",
-          "tableTo": "project",
-          "schemaTo": "wms",
-          "columnsFrom": [
-            "company_id",
-            "project_id"
-          ],
-          "columnsTo": [
-            "company_id",
-            "id"
-          ],
-          "onDelete": "no action",
-          "onUpdate": "no action"
-        },
-        "scale_ticket_unloading_station_id_fk": {
-          "name": "scale_ticket_unloading_station_id_fk",
-          "tableFrom": "scale_ticket",
-          "tableTo": "unloading_station",
-          "schemaTo": "wms",
-          "columnsFrom": [
-            "company_id",
-            "unloading_station_id"
-          ],
-          "columnsTo": [
-            "company_id",
-            "id"
-          ],
-          "onDelete": "no action",
-          "onUpdate": "no action"
-        },
-        "scale_ticket_vehicle_id_fk": {
-          "name": "scale_ticket_vehicle_id_fk",
-          "tableFrom": "scale_ticket",
-          "tableTo": "vehicle",
-          "schemaTo": "wms",
-          "columnsFrom": [
-            "company_id",
-            "project_id",
-            "vehicle_id"
-          ],
-          "columnsTo": [
-            "company_id",
-            "project_id",
-            "id"
-          ],
-          "onDelete": "no action",
-          "onUpdate": "no action"
-        },
-        "scale_ticket_customer_id_fk": {
-          "name": "scale_ticket_customer_id_fk",
-          "tableFrom": "scale_ticket",
-          "tableTo": "customer",
-          "schemaTo": "wms",
-          "columnsFrom": [
-            "company_id",
-            "customer_id"
-          ],
-          "columnsTo": [
-            "company_id",
-            "id"
-          ],
-          "onDelete": "no action",
-          "onUpdate": "no action"
-        },
-        "scale_ticket_agreement_id_fk": {
-          "name": "scale_ticket_agreement_id_fk",
-          "tableFrom": "scale_ticket",
-          "tableTo": "agreement",
-          "schemaTo": "wms",
-          "columnsFrom": [
-            "company_id",
-            "project_id",
-            "agreement_id"
-          ],
-          "columnsTo": [
-            "company_id",
-            "project_id",
-            "id"
-          ],
-          "onDelete": "no action",
-          "onUpdate": "no action"
-        },
-        "scale_ticket_vehicle_tare_id_fk": {
-          "name": "scale_ticket_vehicle_tare_id_fk",
-          "tableFrom": "scale_ticket",
-          "tableTo": "vehicle_tare",
-          "schemaTo": "wms",
-          "columnsFrom": [
-            "company_id",
-            "project_id",
-            "vehicle_tare_id"
-          ],
-          "columnsTo": [
-            "company_id",
-            "project_id",
-            "id"
-          ],
-          "onDelete": "no action",
-          "onUpdate": "no action"
-        },
-        "scale_ticket_route_id_fk": {
-          "name": "scale_ticket_route_id_fk",
-          "tableFrom": "scale_ticket",
-          "tableTo": "route",
-          "schemaTo": "wms",
-          "columnsFrom": [
-            "company_id",
-            "project_id",
-            "route_id"
-          ],
-          "columnsTo": [
-            "company_id",
-            "project_id",
-            "id"
-          ],
-          "onDelete": "no action",
-          "onUpdate": "no action"
-        },
-        "scale_ticket_unload_id_fk": {
-          "name": "scale_ticket_unload_id_fk",
-          "tableFrom": "scale_ticket",
-          "tableTo": "unload",
-          "schemaTo": "wms",
-          "columnsFrom": [
-            "company_id",
-            "project_id",
-            "unload_id"
-          ],
-          "columnsTo": [
-            "company_id",
-            "project_id",
-            "id"
-          ],
-          "onDelete": "no action",
-          "onUpdate": "no action"
-        },
-        "scale_ticket_recorded_by_fk": {
-          "name": "scale_ticket_recorded_by_fk",
-          "tableFrom": "scale_ticket",
-          "tableTo": "user_account",
-          "schemaTo": "wms",
-          "columnsFrom": [
-            "company_id",
-            "recorded_by"
-          ],
-          "columnsTo": [
-            "company_id",
-            "id"
-          ],
-          "onDelete": "no action",
-          "onUpdate": "no action"
-        },
-        "scale_ticket_voided_by_fk": {
-          "name": "scale_ticket_voided_by_fk",
-          "tableFrom": "scale_ticket",
-          "tableTo": "user_account",
-          "schemaTo": "wms",
-          "columnsFrom": [
-            "company_id",
-            "voided_by"
-          ],
-          "columnsTo": [
-            "company_id",
-            "id"
-          ],
-          "onDelete": "no action",
-          "onUpdate": "no action"
-        }
-      },
-      "compositePrimaryKeys": {},
-      "uniqueConstraints": {
-        "scale_ticket_project_key": {
-          "name": "scale_ticket_project_key",
-          "nullsNotDistinct": false,
-          "columns": [
-            "company_id",
-            "project_id",
-            "id"
-          ]
-        },
-        "scale_ticket_number_key": {
-          "name": "scale_ticket_number_key",
-          "nullsNotDistinct": false,
-          "columns": [
-            "company_id",
-            "number"
-          ]
-        }
-      },
-      "policies": {},
-      "checkConstraints": {
-        "scale_ticket_party_one_of": {
-          "name": "scale_ticket_party_one_of",
-          "value": "\"wms\".\"scale_ticket\".\"party\" in ('account', 'cash')"
-        },
-        "scale_ticket_status_one_of": {
-          "name": "scale_ticket_status_one_of",
-          "value": "\"wms\".\"scale_ticket\".\"status\" in ('open', 'completed', 'voided')"
-        },
-        "scale_ticket_tare_source_one_of": {
-          "name": "scale_ticket_tare_source_one_of",
-          "value": "\"wms\".\"scale_ticket\".\"tare_source\" in ('weighed', 'registered')"
-        },
-        "scale_ticket_void_reason_one_of": {
-          "name": "scale_ticket_void_reason_one_of",
-          "value": "\"wms\".\"scale_ticket\".\"void_reason\" in ('entered-in-error', 'duplicate', 'visitor-left', 'other')"
-        },
-        "scale_ticket_unmatched_reason_one_of": {
-          "name": "scale_ticket_unmatched_reason_one_of",
-          "value": "\"wms\".\"scale_ticket\".\"unmatched_reason\" in ('unknown-vehicle', 'no-route', 'several-routes', 'unknown-fraction', 'fraction-not-accepted')"
-        },
-        "scale_ticket_gross_kg_positive": {
-          "name": "scale_ticket_gross_kg_positive",
-          "value": "\"wms\".\"scale_ticket\".\"gross_kg\" > 0"
-        },
-        "scale_ticket_tare_kg_positive": {
-          "name": "scale_ticket_tare_kg_positive",
-          "value": "\"wms\".\"scale_ticket\".\"tare_kg\" > 0"
-        },
-        "scale_ticket_net_kg_positive": {
-          "name": "scale_ticket_net_kg_positive",
-          "value": "\"wms\".\"scale_ticket\".\"net_kg\" > 0"
-        },
-        "scale_ticket_party_shape": {
-          "name": "scale_ticket_party_shape",
-          "value": "case when \"wms\".\"scale_ticket\".\"party\" = 'account' then \"wms\".\"scale_ticket\".\"customer_id\" is not null and \"wms\".\"scale_ticket\".\"agreement_id\" is not null else \"wms\".\"scale_ticket\".\"customer_id\" is null and \"wms\".\"scale_ticket\".\"agreement_id\" is null end"
-        },
-        "scale_ticket_weighing_shape": {
-          "name": "scale_ticket_weighing_shape",
-          "value": "(\"wms\".\"scale_ticket\".\"tare_kg\" is null) = (\"wms\".\"scale_ticket\".\"tare_source\" is null) and (\"wms\".\"scale_ticket\".\"tare_kg\" is null) = (\"wms\".\"scale_ticket\".\"weighed_out_at\" is null) and (\"wms\".\"scale_ticket\".\"tare_kg\" is null) = (\"wms\".\"scale_ticket\".\"net_kg\" is null) and (\"wms\".\"scale_ticket\".\"net_kg\" is null or \"wms\".\"scale_ticket\".\"net_kg\" = \"wms\".\"scale_ticket\".\"gross_kg\" - \"wms\".\"scale_ticket\".\"tare_kg\") and (\"wms\".\"scale_ticket\".\"tare_source\" is not distinct from 'registered') = (\"wms\".\"scale_ticket\".\"vehicle_tare_id\" is not null) and (\"wms\".\"scale_ticket\".\"status\" <> 'open' or \"wms\".\"scale_ticket\".\"tare_kg\" is null) and (\"wms\".\"scale_ticket\".\"status\" <> 'completed' or \"wms\".\"scale_ticket\".\"tare_kg\" is not null)"
-        },
-        "scale_ticket_void_shape": {
-          "name": "scale_ticket_void_shape",
-          "value": "(\"wms\".\"scale_ticket\".\"status\" = 'voided') = (\"wms\".\"scale_ticket\".\"void_reason\" is not null) and (\"wms\".\"scale_ticket\".\"void_reason\" is null) = (\"wms\".\"scale_ticket\".\"voided_at\" is null) and (\"wms\".\"scale_ticket\".\"void_reason\" is null) = (\"wms\".\"scale_ticket\".\"voided_by\" is null) and (\"wms\".\"scale_ticket\".\"void_reason\" <> 'other' or \"wms\".\"scale_ticket\".\"void_note\" is not null)"
-        },
-        "scale_ticket_match_shape": {
-          "name": "scale_ticket_match_shape",
-          "value": "(\"wms\".\"scale_ticket\".\"route_id\" is null) = (\"wms\".\"scale_ticket\".\"unload_id\" is null) and (\"wms\".\"scale_ticket\".\"unload_id\" is null or (\"wms\".\"scale_ticket\".\"vehicle_id\" is not null and \"wms\".\"scale_ticket\".\"tare_kg\" is not null)) and (\"wms\".\"scale_ticket\".\"unmatched_reason\" is null or (\"wms\".\"scale_ticket\".\"vehicle_id\" is not null and \"wms\".\"scale_ticket\".\"tare_kg\" is not null and \"wms\".\"scale_ticket\".\"unload_id\" is null))"
-        }
-      },
-      "isRLSEnabled": false
-    },
-    "wms.scale_ticket_line": {
-      "name": "scale_ticket_line",
-      "schema": "wms",
-      "columns": {
-        "id": {
-          "name": "id",
-          "type": "uuid",
-          "primaryKey": true,
-          "notNull": true,
-          "default": "wms.uuidv7()"
-        },
-        "company_id": {
-          "name": "company_id",
-          "type": "uuid",
-          "primaryKey": false,
-          "notNull": true
-        },
-        "project_id": {
-          "name": "project_id",
-          "type": "uuid",
-          "primaryKey": false,
-          "notNull": true
-        },
-        "recorded_at": {
-          "name": "recorded_at",
-          "type": "timestamp with time zone",
-          "primaryKey": false,
-          "notNull": true,
-          "default": "now()"
-        },
-        "ticket_id": {
-          "name": "ticket_id",
-          "type": "uuid",
-          "primaryKey": false,
-          "notNull": true
-        },
-        "position": {
-          "name": "position",
-          "type": "integer",
-          "primaryKey": false,
-          "notNull": true
-        },
-        "waste_fraction_id": {
-          "name": "waste_fraction_id",
-          "type": "uuid",
-          "primaryKey": false,
-          "notNull": true
-        },
-        "origin_municipality": {
-          "name": "origin_municipality",
-          "type": "text",
-          "primaryKey": false,
-          "notNull": false
-        },
-        "net_kg": {
-          "name": "net_kg",
-          "type": "integer",
-          "primaryKey": false,
-          "notNull": true
-        }
-      },
-      "indexes": {
-        "scale_ticket_line_waste_fraction_id_idx": {
-          "name": "scale_ticket_line_waste_fraction_id_idx",
-          "columns": [
-            {
-              "expression": "company_id",
-              "isExpression": false,
-              "asc": true,
-              "nulls": "last"
-            },
-            {
-              "expression": "waste_fraction_id",
-              "isExpression": false,
-              "asc": true,
-              "nulls": "last"
-            }
-          ],
-          "isUnique": false,
-          "concurrently": false,
-          "method": "btree",
-          "with": {}
-        },
-        "scale_ticket_line_project_id_idx": {
-          "name": "scale_ticket_line_project_id_idx",
-          "columns": [
-            {
-              "expression": "company_id",
-              "isExpression": false,
-              "asc": true,
-              "nulls": "last"
-            },
-            {
-              "expression": "project_id",
-              "isExpression": false,
-              "asc": true,
-              "nulls": "last"
-            }
-          ],
-          "isUnique": false,
-          "concurrently": false,
-          "method": "btree",
-          "with": {}
-        }
-      },
-      "foreignKeys": {
-        "scale_ticket_line_company_id_fk": {
-          "name": "scale_ticket_line_company_id_fk",
-          "tableFrom": "scale_ticket_line",
-          "tableTo": "company",
-          "schemaTo": "wms",
-          "columnsFrom": [
-            "company_id"
-          ],
-          "columnsTo": [
-            "id"
-          ],
-          "onDelete": "no action",
-          "onUpdate": "no action"
-        },
-        "scale_ticket_line_project_id_fk": {
-          "name": "scale_ticket_line_project_id_fk",
-          "tableFrom": "scale_ticket_line",
-          "tableTo": "project",
-          "schemaTo": "wms",
-          "columnsFrom": [
-            "company_id",
-            "project_id"
-          ],
-          "columnsTo": [
-            "company_id",
-            "id"
-          ],
-          "onDelete": "no action",
-          "onUpdate": "no action"
-        },
-        "scale_ticket_line_ticket_id_fk": {
-          "name": "scale_ticket_line_ticket_id_fk",
-          "tableFrom": "scale_ticket_line",
-          "tableTo": "scale_ticket",
-          "schemaTo": "wms",
-          "columnsFrom": [
-            "company_id",
-            "project_id",
-            "ticket_id"
-          ],
-          "columnsTo": [
-            "company_id",
-            "project_id",
-            "id"
-          ],
-          "onDelete": "no action",
-          "onUpdate": "no action"
-        },
-        "scale_ticket_line_waste_fraction_id_fk": {
-          "name": "scale_ticket_line_waste_fraction_id_fk",
-          "tableFrom": "scale_ticket_line",
-          "tableTo": "waste_fraction",
-          "schemaTo": "wms",
-          "columnsFrom": [
-            "company_id",
-            "waste_fraction_id"
-          ],
-          "columnsTo": [
-            "company_id",
-            "id"
-          ],
-          "onDelete": "no action",
-          "onUpdate": "no action"
-        }
-      },
-      "compositePrimaryKeys": {},
-      "uniqueConstraints": {
-        "scale_ticket_line_ticket_id_position_key": {
-          "name": "scale_ticket_line_ticket_id_position_key",
-          "nullsNotDistinct": false,
-          "columns": [
-            "company_id",
-            "ticket_id",
-            "position"
-          ]
-        }
-      },
-      "policies": {},
-      "checkConstraints": {
-        "scale_ticket_line_position_positive": {
-          "name": "scale_ticket_line_position_positive",
-          "value": "\"wms\".\"scale_ticket_line\".\"position\" > 0"
-        },
-        "scale_ticket_line_net_kg_positive": {
-          "name": "scale_ticket_line_net_kg_positive",
-          "value": "\"wms\".\"scale_ticket_line\".\"net_kg\" > 0"
-        },
-        "scale_ticket_line_origin_shape": {
-          "name": "scale_ticket_line_origin_shape",
-          "value": "\"wms\".\"scale_ticket_line\".\"origin_municipality\" ~ '^[0-9]{4}$'"
-        }
-      },
-      "isRLSEnabled": false
-    },
-    "wms.vehicle_tare": {
-      "name": "vehicle_tare",
-      "schema": "wms",
-      "columns": {
-        "id": {
-          "name": "id",
-          "type": "uuid",
-          "primaryKey": true,
-          "notNull": true,
-          "default": "wms.uuidv7()"
-        },
-        "company_id": {
-          "name": "company_id",
-          "type": "uuid",
-          "primaryKey": false,
-          "notNull": true
-        },
-        "project_id": {
-          "name": "project_id",
-          "type": "uuid",
-          "primaryKey": false,
-          "notNull": true
-        },
-        "created_at": {
-          "name": "created_at",
-          "type": "timestamp with time zone",
-          "primaryKey": false,
-          "notNull": true,
-          "default": "now()"
-        },
-        "updated_at": {
-          "name": "updated_at",
-          "type": "timestamp with time zone",
-          "primaryKey": false,
-          "notNull": true,
-          "default": "now()"
-        },
-        "plate": {
-          "name": "plate",
-          "type": "text",
-          "primaryKey": false,
-          "notNull": true
-        },
-        "trailer_plate": {
-          "name": "trailer_plate",
-          "type": "text",
-          "primaryKey": false,
-          "notNull": false
-        },
-        "container_ref": {
-          "name": "container_ref",
-          "type": "text",
-          "primaryKey": false,
-          "notNull": false
-        },
-        "tare_kg": {
-          "name": "tare_kg",
-          "type": "integer",
-          "primaryKey": false,
-          "notNull": true
-        },
-        "weighed_on": {
-          "name": "weighed_on",
-          "type": "date",
-          "primaryKey": false,
-          "notNull": true
-        },
-        "customer_id": {
-          "name": "customer_id",
-          "type": "uuid",
-          "primaryKey": false,
-          "notNull": false
-        },
-        "label": {
-          "name": "label",
-          "type": "text",
-          "primaryKey": false,
-          "notNull": false
-        },
-        "status": {
-          "name": "status",
-          "type": "text",
-          "primaryKey": false,
-          "notNull": true
-        }
-      },
-      "indexes": {
-        "vehicle_tare_active_key": {
-          "name": "vehicle_tare_active_key",
-          "columns": [
-            {
-              "expression": "company_id",
-              "isExpression": false,
-              "asc": true,
-              "nulls": "last"
-            },
-            {
-              "expression": "project_id",
-              "isExpression": false,
-              "asc": true,
-              "nulls": "last"
-            },
-            {
-              "expression": "plate",
-              "isExpression": false,
-              "asc": true,
-              "nulls": "last"
-            },
-            {
-              "expression": "coalesce(\"trailer_plate\", '')",
-              "asc": true,
-              "isExpression": true,
-              "nulls": "last"
-            },
-            {
-              "expression": "coalesce(\"container_ref\", '')",
-              "asc": true,
-              "isExpression": true,
-              "nulls": "last"
-            }
-          ],
-          "isUnique": true,
-          "where": "\"wms\".\"vehicle_tare\".\"status\" = 'active'",
-          "concurrently": false,
-          "method": "btree",
-          "with": {}
-        },
-        "vehicle_tare_customer_id_idx": {
-          "name": "vehicle_tare_customer_id_idx",
-          "columns": [
-            {
-              "expression": "company_id",
-              "isExpression": false,
-              "asc": true,
-              "nulls": "last"
-            },
-            {
-              "expression": "customer_id",
-              "isExpression": false,
-              "asc": true,
-              "nulls": "last"
-            }
-          ],
-          "isUnique": false,
-          "concurrently": false,
-          "method": "btree",
-          "with": {}
-        }
-      },
-      "foreignKeys": {
-        "vehicle_tare_company_id_fk": {
-          "name": "vehicle_tare_company_id_fk",
-          "tableFrom": "vehicle_tare",
-          "tableTo": "company",
-          "schemaTo": "wms",
-          "columnsFrom": [
-            "company_id"
-          ],
-          "columnsTo": [
-            "id"
-          ],
-          "onDelete": "no action",
-          "onUpdate": "no action"
-        },
-        "vehicle_tare_project_id_fk": {
-          "name": "vehicle_tare_project_id_fk",
-          "tableFrom": "vehicle_tare",
-          "tableTo": "project",
-          "schemaTo": "wms",
-          "columnsFrom": [
-            "company_id",
-            "project_id"
-          ],
-          "columnsTo": [
-            "company_id",
-            "id"
-          ],
-          "onDelete": "no action",
-          "onUpdate": "no action"
-        },
-        "vehicle_tare_customer_id_fk": {
-          "name": "vehicle_tare_customer_id_fk",
-          "tableFrom": "vehicle_tare",
-          "tableTo": "customer",
-          "schemaTo": "wms",
-          "columnsFrom": [
-            "company_id",
-            "customer_id"
-          ],
-          "columnsTo": [
-            "company_id",
-            "id"
-          ],
-          "onDelete": "no action",
-          "onUpdate": "no action"
-        }
-      },
-      "compositePrimaryKeys": {},
-      "uniqueConstraints": {
-        "vehicle_tare_project_key": {
-          "name": "vehicle_tare_project_key",
-          "nullsNotDistinct": false,
-          "columns": [
-            "company_id",
-            "project_id",
-            "id"
-          ]
-        }
-      },
-      "policies": {},
-      "checkConstraints": {
-        "vehicle_tare_status_one_of": {
-          "name": "vehicle_tare_status_one_of",
-          "value": "\"wms\".\"vehicle_tare\".\"status\" in ('active', 'retired')"
-        },
-        "vehicle_tare_tare_kg_positive": {
-          "name": "vehicle_tare_tare_kg_positive",
-          "value": "\"wms\".\"vehicle_tare\".\"tare_kg\" > 0"
-        },
-        "vehicle_tare_key_shape": {
-          "name": "vehicle_tare_key_shape",
-          "value": "(\"wms\".\"vehicle_tare\".\"plate\" <> '' and \"wms\".\"vehicle_tare\".\"plate\" = upper(\"wms\".\"vehicle_tare\".\"plate\") and \"wms\".\"vehicle_tare\".\"plate\" !~ '[[:space:][:punct:]]') and (\"wms\".\"vehicle_tare\".\"trailer_plate\" is null or (\"wms\".\"vehicle_tare\".\"trailer_plate\" <> '' and \"wms\".\"vehicle_tare\".\"trailer_plate\" = upper(\"wms\".\"vehicle_tare\".\"trailer_plate\") and \"wms\".\"vehicle_tare\".\"trailer_plate\" !~ '[[:space:][:punct:]]')) and (\"wms\".\"vehicle_tare\".\"container_ref\" is null or (\"wms\".\"vehicle_tare\".\"container_ref\" <> '' and \"wms\".\"vehicle_tare\".\"container_ref\" = upper(\"wms\".\"vehicle_tare\".\"container_ref\") and \"wms\".\"vehicle_tare\".\"container_ref\" !~ '[[:space:][:punct:]]'))"
         }
       },
       "isRLSEnabled": false

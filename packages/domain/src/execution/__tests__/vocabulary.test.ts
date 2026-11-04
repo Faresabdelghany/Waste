@@ -64,8 +64,8 @@ describe("the Execution vocabulary's own rules", () => {
     assert.deepEqual([...vocabulary.COMMAND_OUTCOMES], ["applied", "rejected"], "replayed is the wire's word and is never stored")
   })
 
-  test("the outbox carries Execution's twelve kinds, Resolution's three and Finance's two, the Registry's one and the visits' two (#393), about nine aggregates: the table is Execution's and its vocabulary the union of every context's news", () => {
-    assert.deepEqual([...vocabulary.OUTBOX_KINDS], ["route-dispatched", "route-started", "route-completed", "route-cancelled", "route-reassigned", "pickup-completed", "pickup-failed", "pickup-skipped", "pickup-problem-reported", "pickup-corrected", "unload-recorded", "command-rejected", "ticket-opened", "ticket-completed", "ticket-rejected", "invoice-issued", "settlement-closed", "application-decided", "site-visit-recorded", "site-visit-voided"])
-    assert.deepEqual([...vocabulary.OUTBOX_AGGREGATES], ["route", "pickup", "unload", "command", "ticket", "invoice", "settlement", "application", "site-visit"])
+  test("the outbox carries Execution's twelve kinds, Resolution's three and Finance's two, the Registry's one, the visits' two (#393), the notices' five (O16 of #290, C18 of #291) and Finance's weight review (O28 of #290), about nine aggregates: the table is Execution's and its vocabulary the union of every context's news", () => {
+    assert.deepEqual([...vocabulary.OUTBOX_KINDS], ["route-dispatched", "route-started", "route-completed", "route-cancelled", "route-reassigned", "pickup-completed", "pickup-failed", "pickup-skipped", "pickup-problem-reported", "pickup-corrected", "unload-recorded", "command-rejected", "ticket-opened", "ticket-completed", "ticket-rejected", "invoice-issued", "settlement-closed", "application-decided", "site-visit-recorded", "site-visit-voided", "alert-raised", "ticket-assigned", "bulky-booking-booked", "bulky-booking-cancelled", "ticket-replied", "weight-reviewed"])
+    assert.deepEqual([...vocabulary.OUTBOX_AGGREGATES], ["route", "pickup", "unload", "command", "ticket", "invoice", "settlement", "application", "site-visit", "alert", "bulky-booking"])
   })
 })
