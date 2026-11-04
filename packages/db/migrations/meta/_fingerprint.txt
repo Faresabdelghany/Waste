@@ -493,19 +493,21 @@ column wms.alert 22 resolved_by uuid
 column wms.alert 23 resolution_note text
 column wms.alert 24 rule text
 column wms.alert 25 rule_key text
+column wms.alert 26 outbound_load_id uuid
 constraint wms.alert alert_acknowledged_by_fk FOREIGN KEY (company_id, acknowledged_by) REFERENCES wms.user_account(company_id, id)
 constraint wms.alert alert_acknowledged_shape CHECK (((acknowledged_at IS NULL) = (acknowledged_by IS NULL)))
 constraint wms.alert alert_company_id_fk FOREIGN KEY (company_id) REFERENCES wms.company(id)
 constraint wms.alert alert_container_id_fk FOREIGN KEY (company_id, project_id, container_id) REFERENCES wms.container(company_id, project_id, id)
 constraint wms.alert alert_driver_id_fk FOREIGN KEY (company_id, project_id, driver_id) REFERENCES wms.driver(company_id, project_id, id)
 constraint wms.alert alert_kind_one_of CHECK ((kind = ANY (ARRAY['route-exception'::text, 'resource'::text, 'service-risk'::text, 'asset'::text, 'weight'::text, 'other'::text])))
+constraint wms.alert alert_outbound_load_id_fk FOREIGN KEY (company_id, project_id, outbound_load_id) REFERENCES wms.outbound_load(company_id, project_id, id)
 constraint wms.alert alert_pkey PRIMARY KEY (id)
 constraint wms.alert alert_project_id_fk FOREIGN KEY (company_id, project_id) REFERENCES wms.project(company_id, id)
 constraint wms.alert alert_raised_by_fk FOREIGN KEY (company_id, raised_by) REFERENCES wms.user_account(company_id, id)
 constraint wms.alert alert_resolved_by_fk FOREIGN KEY (company_id, resolved_by) REFERENCES wms.user_account(company_id, id)
 constraint wms.alert alert_resolved_shape CHECK ((((resolved_by IS NULL) OR (resolved_at IS NOT NULL)) AND ((resolved_at IS NULL) OR (resolved_by IS NOT NULL) OR (rule IS NOT NULL)) AND ((resolution_note IS NULL) OR (resolved_at IS NOT NULL))))
 constraint wms.alert alert_route_id_fk FOREIGN KEY (company_id, project_id, route_id) REFERENCES wms.route(company_id, project_id, id)
-constraint wms.alert alert_rule_one_of CHECK ((rule = ANY (ARRAY['route-not-started'::text, 'session-silent'::text, 'licence-expiring'::text, 'ticket-overdue'::text, 'position-stale'::text, 'fill-threshold'::text, 'maintenance-due'::text])))
+constraint wms.alert alert_rule_one_of CHECK ((rule = ANY (ARRAY['route-not-started'::text, 'session-silent'::text, 'licence-expiring'::text, 'ticket-overdue'::text, 'position-stale'::text, 'fill-threshold'::text, 'maintenance-due'::text, 'load-not-received'::text, 'load-weight-mismatch'::text, 'load-overweight'::text, 'route-not-tipped'::text])))
 constraint wms.alert alert_rule_shape CHECK (((rule IS NULL) = (rule_key IS NULL)))
 constraint wms.alert alert_severity_one_of CHECK ((severity = ANY (ARRAY['critical'::text, 'high'::text, 'medium'::text, 'low'::text])))
 constraint wms.alert alert_source_one_of CHECK ((source = ANY (ARRAY['manual'::text, 'execution'::text, 'telemetry'::text, 'rule'::text])))
@@ -517,12 +519,13 @@ CASE status
     ELSE false
 END)
 constraint wms.alert alert_status_one_of CHECK ((status = ANY (ARRAY['new'::text, 'acknowledged'::text, 'resolved'::text])))
-constraint wms.alert alert_subject_shape CHECK ((((((((route_id IS NOT NULL))::integer + ((vehicle_id IS NOT NULL))::integer) + ((driver_id IS NOT NULL))::integer) + ((container_id IS NOT NULL))::integer) + ((ticket_id IS NOT NULL))::integer) >= 1))
+constraint wms.alert alert_subject_shape CHECK (((((((((route_id IS NOT NULL))::integer + ((vehicle_id IS NOT NULL))::integer) + ((driver_id IS NOT NULL))::integer) + ((container_id IS NOT NULL))::integer) + ((ticket_id IS NOT NULL))::integer) + ((outbound_load_id IS NOT NULL))::integer) >= 1))
 constraint wms.alert alert_ticket_id_fk FOREIGN KEY (company_id, project_id, ticket_id) REFERENCES wms.ticket(company_id, project_id, id)
 constraint wms.alert alert_vehicle_id_fk FOREIGN KEY (company_id, project_id, vehicle_id) REFERENCES wms.vehicle(company_id, project_id, id)
 index wms.alert alert_acknowledged_by_idx CREATE INDEX alert_acknowledged_by_idx ON wms.alert USING btree (company_id, acknowledged_by)
 index wms.alert alert_container_id_idx CREATE INDEX alert_container_id_idx ON wms.alert USING btree (company_id, container_id)
 index wms.alert alert_driver_id_idx CREATE INDEX alert_driver_id_idx ON wms.alert USING btree (company_id, driver_id)
+index wms.alert alert_outbound_load_id_idx CREATE INDEX alert_outbound_load_id_idx ON wms.alert USING btree (company_id, outbound_load_id)
 index wms.alert alert_pkey CREATE UNIQUE INDEX alert_pkey ON wms.alert USING btree (id)
 index wms.alert alert_project_id_status_idx CREATE INDEX alert_project_id_status_idx ON wms.alert USING btree (company_id, project_id, status)
 index wms.alert alert_raised_by_idx CREATE INDEX alert_raised_by_idx ON wms.alert USING btree (company_id, raised_by)
@@ -1148,16 +1151,19 @@ column wms.container_service_placement 5 updated_at timestamp with time zone not
 column wms.container_service_placement 6 valid_from date not-null acl=[wms_public=SELECT/<owner>]
 column wms.container_service_placement 7 valid_to date acl=[wms_public=SELECT/<owner>]
 column wms.container_service_placement 8 container_id uuid not-null acl=[wms_public=SELECT/<owner>]
-column wms.container_service_placement 9 subscription_id uuid not-null acl=[wms_public=SELECT/<owner>]
+column wms.container_service_placement 9 subscription_id uuid acl=[wms_public=SELECT/<owner>]
 column wms.container_service_placement 10 waste_fraction_id uuid not-null acl=[wms_public=SELECT/<owner>]
 column wms.container_service_placement 11 service_frequency_id uuid
+column wms.container_service_placement 12 shared_collection_point_id uuid
 constraint wms.container_service_placement container_service_placement_company_id_fk FOREIGN KEY (company_id) REFERENCES wms.company(id)
 constraint wms.container_service_placement container_service_placement_container_id_fk FOREIGN KEY (company_id, project_id, container_id) REFERENCES wms.container(company_id, project_id, id)
 constraint wms.container_service_placement container_service_placement_container_id_project_key UNIQUE (company_id, project_id, container_id, id)
 constraint wms.container_service_placement container_service_placement_no_overlap EXCLUDE USING gist (company_id WITH =, container_id WITH =, daterange(valid_from, valid_to, '[)'::text) WITH &&)
 constraint wms.container_service_placement container_service_placement_pkey PRIMARY KEY (id)
 constraint wms.container_service_placement container_service_placement_project_id_fk FOREIGN KEY (company_id, project_id) REFERENCES wms.project(company_id, id)
+constraint wms.container_service_placement container_service_placement_served_exactly_one CHECK (((((subscription_id IS NOT NULL))::integer + ((shared_collection_point_id IS NOT NULL))::integer) = 1))
 constraint wms.container_service_placement container_service_placement_service_frequency_id_fk FOREIGN KEY (company_id, project_id, service_frequency_id) REFERENCES wms.service_frequency(company_id, project_id, id)
+constraint wms.container_service_placement container_service_placement_shared_collection_point_id_fk FOREIGN KEY (company_id, project_id, shared_collection_point_id) REFERENCES wms.shared_collection_point(company_id, project_id, id)
 constraint wms.container_service_placement container_service_placement_subscription_id_fk FOREIGN KEY (company_id, project_id, subscription_id) REFERENCES wms.subscription(company_id, project_id, id)
 constraint wms.container_service_placement container_service_placement_validity CHECK (((valid_to IS NULL) OR (valid_to > valid_from)))
 constraint wms.container_service_placement container_service_placement_waste_fraction_id_fk FOREIGN KEY (company_id, waste_fraction_id) REFERENCES wms.waste_fraction(company_id, id)
@@ -1165,6 +1171,7 @@ index wms.container_service_placement container_service_placement_container_id_p
 index wms.container_service_placement container_service_placement_no_overlap CREATE INDEX container_service_placement_no_overlap ON wms.container_service_placement USING gist (company_id, container_id, daterange(valid_from, valid_to, '[)'::text))
 index wms.container_service_placement container_service_placement_pkey CREATE UNIQUE INDEX container_service_placement_pkey ON wms.container_service_placement USING btree (id)
 index wms.container_service_placement container_service_placement_service_frequency_id_idx CREATE INDEX container_service_placement_service_frequency_id_idx ON wms.container_service_placement USING btree (company_id, service_frequency_id)
+index wms.container_service_placement container_service_placement_shared_collection_point_id_idx CREATE INDEX container_service_placement_shared_collection_point_id_idx ON wms.container_service_placement USING btree (company_id, shared_collection_point_id)
 index wms.container_service_placement container_service_placement_subscription_id_idx CREATE INDEX container_service_placement_subscription_id_idx ON wms.container_service_placement USING btree (company_id, subscription_id)
 index wms.container_service_placement container_service_placement_waste_fraction_id_idx CREATE INDEX container_service_placement_waste_fraction_id_idx ON wms.container_service_placement USING btree (company_id, waste_fraction_id)
 trigger wms.container_service_placement container_service_placement_audit_trail enabled=O CREATE TRIGGER container_service_placement_audit_trail AFTER INSERT OR DELETE OR UPDATE ON wms.container_service_placement FOR EACH ROW EXECUTE FUNCTION wms.audit_row('container', 'container_id')
@@ -1450,7 +1457,7 @@ column wms.driver_command 13 outcome text not-null
 column wms.driver_command 14 problem jsonb
 constraint wms.driver_command driver_command_company_id_fk FOREIGN KEY (company_id) REFERENCES wms.company(id)
 constraint wms.driver_command driver_command_driver_id_fk FOREIGN KEY (company_id, project_id, driver_id) REFERENCES wms.driver(company_id, project_id, id)
-constraint wms.driver_command driver_command_kind_one_of CHECK ((kind = ANY (ARRAY['start-route'::text, 'arrive'::text, 'complete-pickup'::text, 'skip-pickup'::text, 'fail-pickup'::text, 'report-problem'::text, 'add-photo'::text, 'add-weight'::text, 'add-signature'::text, 'add-note'::text, 'record-unload'::text, 'pause'::text, 'resume'::text, 'end-route'::text, 'record-positions'::text, 'pre-trip-check'::text, 'record-fill'::text])))
+constraint wms.driver_command driver_command_kind_one_of CHECK ((kind = ANY (ARRAY['start-route'::text, 'arrive'::text, 'complete-pickup'::text, 'skip-pickup'::text, 'fail-pickup'::text, 'report-problem'::text, 'add-photo'::text, 'add-weight'::text, 'add-signature'::text, 'add-note'::text, 'record-unload'::text, 'pause'::text, 'resume'::text, 'end-route'::text, 'record-positions'::text, 'pre-trip-check'::text, 'record-fill'::text, 'record-volume'::text])))
 constraint wms.driver_command driver_command_outcome_one_of CHECK ((outcome = ANY (ARRAY['applied'::text, 'rejected'::text])))
 constraint wms.driver_command driver_command_pkey PRIMARY KEY (id)
 constraint wms.driver_command driver_command_problem_shape CHECK (((outcome = 'rejected'::text) = (problem IS NOT NULL)))
@@ -1912,6 +1919,29 @@ index wms.maintenance_order maintenance_order_vehicle_id_idx CREATE INDEX mainte
 trigger wms.maintenance_order maintenance_order_audit_trail enabled=O CREATE TRIGGER maintenance_order_audit_trail AFTER INSERT OR DELETE OR UPDATE ON wms.maintenance_order FOR EACH ROW EXECUTE FUNCTION wms.audit_row('vehicle', 'vehicle_id')
 trigger wms.maintenance_order maintenance_order_touch_updated_at enabled=O CREATE TRIGGER maintenance_order_touch_updated_at BEFORE UPDATE ON wms.maintenance_order FOR EACH ROW EXECUTE FUNCTION wms.touch_updated_at()
 policy wms.maintenance_order maintenance_order_tenant_fence permissive ALL to=wms_api using=(company_id = ( SELECT wms.current_company_id() AS current_company_id)) check=(company_id = ( SELECT wms.current_company_id() AS current_company_id))
+relation wms.material_adjustment kind=table owner=<owner> persistence=p rls=true force-rls=true replica-identity=d acl=[<owner>=DELETE,INSERT,MAINTAIN,REFERENCES,SELECT,TRIGGER,TRUNCATE,UPDATE/<owner> wms_api=INSERT,SELECT/<owner> wms_worker=SELECT/<owner>]
+column wms.material_adjustment 1 id uuid not-null default=wms.uuidv7()
+column wms.material_adjustment 2 company_id uuid not-null
+column wms.material_adjustment 3 project_id uuid not-null
+column wms.material_adjustment 4 recorded_at timestamp with time zone not-null default=now()
+column wms.material_adjustment 5 unloading_station_id uuid not-null
+column wms.material_adjustment 6 waste_fraction_id uuid not-null
+column wms.material_adjustment 7 delta_kg integer not-null
+column wms.material_adjustment 8 note text not-null
+column wms.material_adjustment 9 recorded_by uuid not-null
+constraint wms.material_adjustment material_adjustment_company_id_fk FOREIGN KEY (company_id) REFERENCES wms.company(id)
+constraint wms.material_adjustment material_adjustment_delta_not_zero CHECK ((delta_kg <> 0))
+constraint wms.material_adjustment material_adjustment_pkey PRIMARY KEY (id)
+constraint wms.material_adjustment material_adjustment_project_id_fk FOREIGN KEY (company_id, project_id) REFERENCES wms.project(company_id, id)
+constraint wms.material_adjustment material_adjustment_recorded_by_fk FOREIGN KEY (company_id, recorded_by) REFERENCES wms.user_account(company_id, id)
+constraint wms.material_adjustment material_adjustment_unloading_station_id_fk FOREIGN KEY (company_id, unloading_station_id) REFERENCES wms.unloading_station(company_id, id)
+constraint wms.material_adjustment material_adjustment_waste_fraction_id_fk FOREIGN KEY (company_id, waste_fraction_id) REFERENCES wms.waste_fraction(company_id, id)
+index wms.material_adjustment material_adjustment_pkey CREATE UNIQUE INDEX material_adjustment_pkey ON wms.material_adjustment USING btree (id)
+index wms.material_adjustment material_adjustment_project_id_idx CREATE INDEX material_adjustment_project_id_idx ON wms.material_adjustment USING btree (company_id, project_id)
+index wms.material_adjustment material_adjustment_recorded_by_idx CREATE INDEX material_adjustment_recorded_by_idx ON wms.material_adjustment USING btree (company_id, recorded_by)
+index wms.material_adjustment material_adjustment_station_idx CREATE INDEX material_adjustment_station_idx ON wms.material_adjustment USING btree (company_id, unloading_station_id, waste_fraction_id, id)
+index wms.material_adjustment material_adjustment_waste_fraction_id_idx CREATE INDEX material_adjustment_waste_fraction_id_idx ON wms.material_adjustment USING btree (company_id, waste_fraction_id)
+policy wms.material_adjustment material_adjustment_tenant_fence permissive ALL to=wms_api using=(company_id = ( SELECT wms.current_company_id() AS current_company_id)) check=(company_id = ( SELECT wms.current_company_id() AS current_company_id))
 relation wms.message kind=table owner=<owner> persistence=p rls=true force-rls=true replica-identity=d acl=[<owner>=DELETE,INSERT,MAINTAIN,REFERENCES,SELECT,TRIGGER,TRUNCATE,UPDATE/<owner> wms_api=DELETE,INSERT,SELECT,UPDATE/<owner> wms_worker=SELECT/<owner>]
 column wms.message 1 id uuid not-null default=wms.uuidv7()
 column wms.message 2 company_id uuid not-null
@@ -2046,6 +2076,60 @@ index wms.notification_rule_area notification_rule_area_rule_id_planning_area_id
 trigger wms.notification_rule_area notification_rule_area_audit_trail enabled=O CREATE TRIGGER notification_rule_area_audit_trail AFTER INSERT OR DELETE OR UPDATE ON wms.notification_rule_area FOR EACH ROW EXECUTE FUNCTION wms.audit_row('project', 'project_id')
 trigger wms.notification_rule_area notification_rule_area_touch_updated_at enabled=O CREATE TRIGGER notification_rule_area_touch_updated_at BEFORE UPDATE ON wms.notification_rule_area FOR EACH ROW EXECUTE FUNCTION wms.touch_updated_at()
 policy wms.notification_rule_area notification_rule_area_tenant_fence permissive ALL to=wms_api using=(company_id = ( SELECT wms.current_company_id() AS current_company_id)) check=(company_id = ( SELECT wms.current_company_id() AS current_company_id))
+relation wms.outbound_load kind=table owner=<owner> persistence=p rls=true force-rls=true replica-identity=d acl=[<owner>=DELETE,INSERT,MAINTAIN,REFERENCES,SELECT,TRIGGER,TRUNCATE,UPDATE/<owner> wms_api=DELETE,INSERT,SELECT,UPDATE/<owner> wms_worker=SELECT/<owner>]
+column wms.outbound_load 1 id uuid not-null default=wms.uuidv7()
+column wms.outbound_load 2 company_id uuid not-null
+column wms.outbound_load 3 project_id uuid not-null
+column wms.outbound_load 4 created_at timestamp with time zone not-null default=now()
+column wms.outbound_load 5 updated_at timestamp with time zone not-null default=now()
+column wms.outbound_load 6 from_station_id uuid not-null
+column wms.outbound_load 7 to_station_id uuid not-null
+column wms.outbound_load 8 waste_fraction_id uuid not-null
+column wms.outbound_load 9 vehicle_id uuid
+column wms.outbound_load 10 service_provider_id uuid
+column wms.outbound_load 11 vehicle_registration text not-null
+column wms.outbound_load 12 departed_at timestamp with time zone not-null
+column wms.outbound_load 13 gross_kg integer
+column wms.outbound_load 14 tare_kg integer
+column wms.outbound_load 15 net_kg integer not-null
+column wms.outbound_load 16 outbound_ticket text
+column wms.outbound_load 17 receiving_ticket text
+column wms.outbound_load 18 received_net_kg integer
+column wms.outbound_load 19 received_at timestamp with time zone
+column wms.outbound_load 20 haul_cost_minor integer
+column wms.outbound_load 21 disposal_cost_minor integer
+column wms.outbound_load 22 status text not-null
+column wms.outbound_load 23 note text
+constraint wms.outbound_load outbound_load_company_id_fk FOREIGN KEY (company_id) REFERENCES wms.company(id)
+constraint wms.outbound_load outbound_load_costs_not_negative CHECK ((((haul_cost_minor IS NULL) OR (haul_cost_minor >= 0)) AND ((disposal_cost_minor IS NULL) OR (disposal_cost_minor >= 0))))
+constraint wms.outbound_load outbound_load_from_station_id_fk FOREIGN KEY (company_id, from_station_id) REFERENCES wms.unloading_station(company_id, id)
+constraint wms.outbound_load outbound_load_gross_kg_positive CHECK ((gross_kg > 0))
+constraint wms.outbound_load outbound_load_net_kg_positive CHECK ((net_kg > 0))
+constraint wms.outbound_load outbound_load_note_shape CHECK (((status <> ALL (ARRAY['disputed'::text, 'cancelled'::text])) OR (note IS NOT NULL)))
+constraint wms.outbound_load outbound_load_pkey PRIMARY KEY (id)
+constraint wms.outbound_load outbound_load_project_id_fk FOREIGN KEY (company_id, project_id) REFERENCES wms.project(company_id, id)
+constraint wms.outbound_load outbound_load_project_key UNIQUE (company_id, project_id, id)
+constraint wms.outbound_load outbound_load_receipt_shape CHECK ((((status = ANY (ARRAY['received'::text, 'reconciled'::text, 'disputed'::text])) = (receiving_ticket IS NOT NULL)) AND ((receiving_ticket IS NULL) = (received_net_kg IS NULL)) AND ((receiving_ticket IS NULL) = (received_at IS NULL))))
+constraint wms.outbound_load outbound_load_received_net_kg_positive CHECK ((received_net_kg > 0))
+constraint wms.outbound_load outbound_load_service_provider_id_fk FOREIGN KEY (company_id, service_provider_id) REFERENCES wms.service_provider(company_id, id)
+constraint wms.outbound_load outbound_load_stations_apart CHECK ((from_station_id <> to_station_id))
+constraint wms.outbound_load outbound_load_status_one_of CHECK ((status = ANY (ARRAY['departed'::text, 'received'::text, 'reconciled'::text, 'disputed'::text, 'cancelled'::text])))
+constraint wms.outbound_load outbound_load_tare_kg_positive CHECK ((tare_kg > 0))
+constraint wms.outbound_load outbound_load_to_station_id_fk FOREIGN KEY (company_id, to_station_id) REFERENCES wms.unloading_station(company_id, id)
+constraint wms.outbound_load outbound_load_vehicle_id_fk FOREIGN KEY (company_id, project_id, vehicle_id) REFERENCES wms.vehicle(company_id, project_id, id)
+constraint wms.outbound_load outbound_load_waste_fraction_id_fk FOREIGN KEY (company_id, waste_fraction_id) REFERENCES wms.waste_fraction(company_id, id)
+constraint wms.outbound_load outbound_load_weights_shape CHECK ((((gross_kg IS NULL) = (tare_kg IS NULL)) AND ((gross_kg IS NULL) OR (net_kg = (gross_kg - tare_kg)))))
+index wms.outbound_load outbound_load_from_station_idx CREATE INDEX outbound_load_from_station_idx ON wms.outbound_load USING btree (company_id, from_station_id, waste_fraction_id)
+index wms.outbound_load outbound_load_pkey CREATE UNIQUE INDEX outbound_load_pkey ON wms.outbound_load USING btree (id)
+index wms.outbound_load outbound_load_project_id_departed_at_idx CREATE INDEX outbound_load_project_id_departed_at_idx ON wms.outbound_load USING btree (company_id, project_id, departed_at)
+index wms.outbound_load outbound_load_project_key CREATE UNIQUE INDEX outbound_load_project_key ON wms.outbound_load USING btree (company_id, project_id, id)
+index wms.outbound_load outbound_load_service_provider_id_idx CREATE INDEX outbound_load_service_provider_id_idx ON wms.outbound_load USING btree (company_id, service_provider_id)
+index wms.outbound_load outbound_load_to_station_id_idx CREATE INDEX outbound_load_to_station_id_idx ON wms.outbound_load USING btree (company_id, to_station_id)
+index wms.outbound_load outbound_load_vehicle_id_idx CREATE INDEX outbound_load_vehicle_id_idx ON wms.outbound_load USING btree (company_id, vehicle_id)
+index wms.outbound_load outbound_load_waste_fraction_id_idx CREATE INDEX outbound_load_waste_fraction_id_idx ON wms.outbound_load USING btree (company_id, waste_fraction_id)
+trigger wms.outbound_load outbound_load_audit_trail enabled=O CREATE TRIGGER outbound_load_audit_trail AFTER INSERT OR DELETE OR UPDATE ON wms.outbound_load FOR EACH ROW EXECUTE FUNCTION wms.audit_row('', '')
+trigger wms.outbound_load outbound_load_touch_updated_at enabled=O CREATE TRIGGER outbound_load_touch_updated_at BEFORE UPDATE ON wms.outbound_load FOR EACH ROW EXECUTE FUNCTION wms.touch_updated_at()
+policy wms.outbound_load outbound_load_tenant_fence permissive ALL to=wms_api using=(company_id = ( SELECT wms.current_company_id() AS current_company_id)) check=(company_id = ( SELECT wms.current_company_id() AS current_company_id))
 relation wms.outbox_event kind=table owner=<owner> persistence=p rls=true force-rls=true replica-identity=d acl=[<owner>=DELETE,INSERT,MAINTAIN,REFERENCES,SELECT,TRIGGER,TRUNCATE,UPDATE/<owner> wms_api=DELETE,INSERT,SELECT,UPDATE/<owner> wms_worker=SELECT/<owner>]
 column wms.outbox_event 1 id uuid not-null default=wms.uuidv7()
 column wms.outbox_event 2 company_id uuid not-null
@@ -2689,30 +2773,32 @@ column wms.proof_of_service 17 weight_kg integer
 column wms.proof_of_service 18 object_key text
 column wms.proof_of_service 19 outcome text
 column wms.proof_of_service 20 contaminant_code_id uuid
+column wms.proof_of_service 21 volume_litres integer
 constraint wms.proof_of_service proof_of_service_company_id_fk FOREIGN KEY (company_id) REFERENCES wms.company(id)
 constraint wms.proof_of_service proof_of_service_contaminant_code_id_fk FOREIGN KEY (company_id, contaminant_code_id) REFERENCES wms.contaminant_code(company_id, id)
 constraint wms.proof_of_service proof_of_service_contaminant_code_shape CHECK (((contaminant_code_id IS NULL) OR (kind = ANY (ARRAY['completion'::text, 'skip'::text, 'failure'::text, 'correction'::text]))))
-constraint wms.proof_of_service proof_of_service_kind_one_of CHECK ((kind = ANY (ARRAY['arrival'::text, 'completion'::text, 'skip'::text, 'failure'::text, 'problem'::text, 'route-started'::text, 'route-ended'::text, 'photo'::text, 'weight'::text, 'signature'::text, 'note'::text, 'correction'::text])))
+constraint wms.proof_of_service proof_of_service_kind_one_of CHECK ((kind = ANY (ARRAY['arrival'::text, 'completion'::text, 'skip'::text, 'failure'::text, 'problem'::text, 'route-started'::text, 'route-ended'::text, 'photo'::text, 'weight'::text, 'volume'::text, 'signature'::text, 'note'::text, 'correction'::text])))
 constraint wms.proof_of_service proof_of_service_kind_shape CHECK (
 CASE kind
-    WHEN 'arrival'::text THEN ((reason IS NULL) AND (object_key IS NULL) AND (weight_kg IS NULL) AND (outcome IS NULL))
-    WHEN 'completion'::text THEN ((reason IS NULL) AND (object_key IS NULL) AND (weight_kg IS NULL) AND (outcome IS NULL))
-    WHEN 'skip'::text THEN ((reason IS NOT NULL) AND (object_key IS NULL) AND (weight_kg IS NULL) AND (outcome IS NULL))
-    WHEN 'failure'::text THEN ((reason IS NOT NULL) AND (object_key IS NULL) AND (weight_kg IS NULL) AND (outcome IS NULL))
-    WHEN 'problem'::text THEN ((reason IS NOT NULL) AND (object_key IS NULL) AND (weight_kg IS NULL) AND (outcome IS NULL) AND (note IS NOT NULL))
-    WHEN 'route-started'::text THEN ((reason IS NULL) AND (object_key IS NULL) AND (weight_kg IS NULL) AND (outcome IS NULL))
-    WHEN 'route-ended'::text THEN ((reason IS NULL) AND (object_key IS NULL) AND (weight_kg IS NULL) AND (outcome IS NULL))
-    WHEN 'photo'::text THEN ((reason IS NULL) AND (object_key IS NOT NULL) AND (weight_kg IS NULL) AND (outcome IS NULL))
-    WHEN 'weight'::text THEN ((reason IS NULL) AND (object_key IS NULL) AND (weight_kg IS NOT NULL) AND (outcome IS NULL))
-    WHEN 'signature'::text THEN ((reason IS NULL) AND (object_key IS NOT NULL) AND (weight_kg IS NULL) AND (outcome IS NULL))
-    WHEN 'note'::text THEN ((reason IS NULL) AND (object_key IS NULL) AND (weight_kg IS NULL) AND (outcome IS NULL) AND (note IS NOT NULL))
-    WHEN 'correction'::text THEN ((object_key IS NULL) AND (weight_kg IS NULL) AND (outcome IS NOT NULL) AND (note IS NOT NULL) AND (source = 'dispatch'::text))
+    WHEN 'arrival'::text THEN ((reason IS NULL) AND (object_key IS NULL) AND (weight_kg IS NULL) AND (volume_litres IS NULL) AND (outcome IS NULL))
+    WHEN 'completion'::text THEN ((reason IS NULL) AND (object_key IS NULL) AND (weight_kg IS NULL) AND (volume_litres IS NULL) AND (outcome IS NULL))
+    WHEN 'skip'::text THEN ((reason IS NOT NULL) AND (object_key IS NULL) AND (weight_kg IS NULL) AND (volume_litres IS NULL) AND (outcome IS NULL))
+    WHEN 'failure'::text THEN ((reason IS NOT NULL) AND (object_key IS NULL) AND (weight_kg IS NULL) AND (volume_litres IS NULL) AND (outcome IS NULL))
+    WHEN 'problem'::text THEN ((reason IS NOT NULL) AND (object_key IS NULL) AND (weight_kg IS NULL) AND (volume_litres IS NULL) AND (outcome IS NULL) AND (note IS NOT NULL))
+    WHEN 'route-started'::text THEN ((reason IS NULL) AND (object_key IS NULL) AND (weight_kg IS NULL) AND (volume_litres IS NULL) AND (outcome IS NULL))
+    WHEN 'route-ended'::text THEN ((reason IS NULL) AND (object_key IS NULL) AND (weight_kg IS NULL) AND (volume_litres IS NULL) AND (outcome IS NULL))
+    WHEN 'photo'::text THEN ((reason IS NULL) AND (object_key IS NOT NULL) AND (weight_kg IS NULL) AND (volume_litres IS NULL) AND (outcome IS NULL))
+    WHEN 'weight'::text THEN ((reason IS NULL) AND (object_key IS NULL) AND (weight_kg IS NOT NULL) AND (volume_litres IS NULL) AND (outcome IS NULL))
+    WHEN 'volume'::text THEN ((reason IS NULL) AND (object_key IS NULL) AND (weight_kg IS NULL) AND (volume_litres IS NOT NULL) AND (outcome IS NULL))
+    WHEN 'signature'::text THEN ((reason IS NULL) AND (object_key IS NOT NULL) AND (weight_kg IS NULL) AND (volume_litres IS NULL) AND (outcome IS NULL))
+    WHEN 'note'::text THEN ((reason IS NULL) AND (object_key IS NULL) AND (weight_kg IS NULL) AND (volume_litres IS NULL) AND (outcome IS NULL) AND (note IS NOT NULL))
+    WHEN 'correction'::text THEN ((object_key IS NULL) AND (weight_kg IS NULL) AND (volume_litres IS NULL) AND (outcome IS NOT NULL) AND (note IS NOT NULL) AND (source = 'dispatch'::text))
     ELSE false
 END)
 constraint wms.proof_of_service proof_of_service_location_accuracy_m_positive CHECK ((location_accuracy_m > 0))
 constraint wms.proof_of_service proof_of_service_location_valid CHECK ((extensions.st_isvalid(location) AND (NOT extensions.st_isempty(location)) AND (extensions.st_xmin((location)::extensions.box3d) >= ('-180'::integer)::double precision) AND (extensions.st_xmax((location)::extensions.box3d) <= (180)::double precision) AND (extensions.st_ymin((location)::extensions.box3d) >= ('-90'::integer)::double precision) AND (extensions.st_ymax((location)::extensions.box3d) <= (90)::double precision)))
 constraint wms.proof_of_service proof_of_service_outcome_one_of CHECK ((outcome = ANY (ARRAY['completed'::text, 'skipped'::text, 'failed'::text])))
-constraint wms.proof_of_service proof_of_service_pickup_shape CHECK ((((kind = ANY (ARRAY['arrival'::text, 'completion'::text, 'skip'::text, 'failure'::text, 'weight'::text, 'signature'::text, 'correction'::text])) AND (pickup_id IS NOT NULL)) OR ((kind = ANY (ARRAY['route-started'::text, 'route-ended'::text])) AND (pickup_id IS NULL)) OR (kind = ANY (ARRAY['problem'::text, 'photo'::text, 'note'::text]))))
+constraint wms.proof_of_service proof_of_service_pickup_shape CHECK ((((kind = ANY (ARRAY['arrival'::text, 'completion'::text, 'skip'::text, 'failure'::text, 'weight'::text, 'volume'::text, 'signature'::text, 'correction'::text])) AND (pickup_id IS NOT NULL)) OR ((kind = ANY (ARRAY['route-started'::text, 'route-ended'::text])) AND (pickup_id IS NULL)) OR (kind = ANY (ARRAY['problem'::text, 'photo'::text, 'note'::text]))))
 constraint wms.proof_of_service proof_of_service_pkey PRIMARY KEY (id)
 constraint wms.proof_of_service proof_of_service_project_id_fk FOREIGN KEY (company_id, project_id) REFERENCES wms.project(company_id, id)
 constraint wms.proof_of_service proof_of_service_reason_one_of CHECK ((reason = ANY (ARRAY['inaccessible'::text, 'contamination'::text, 'not-presented'::text, 'capacity'::text, 'safety'::text, 'other'::text, 'route-ended'::text, 'route-cancelled'::text, 'removed-by-dispatcher'::text, 'regeneration'::text])))
@@ -2722,6 +2808,7 @@ constraint wms.proof_of_service proof_of_service_route_id_pickup_id_fk FOREIGN K
 constraint wms.proof_of_service proof_of_service_route_id_session_id_fk FOREIGN KEY (company_id, project_id, route_id, session_id) REFERENCES wms.session(company_id, project_id, route_id, id)
 constraint wms.proof_of_service proof_of_service_session_shape CHECK (((source = 'driver-app'::text) = (session_id IS NOT NULL)))
 constraint wms.proof_of_service proof_of_service_source_one_of CHECK ((source = ANY (ARRAY['driver-app'::text, 'dispatch'::text, 'integration'::text])))
+constraint wms.proof_of_service proof_of_service_volume_litres_positive CHECK ((volume_litres > 0))
 constraint wms.proof_of_service proof_of_service_weight_kg_positive CHECK ((weight_kg > 0))
 index wms.proof_of_service proof_of_service_contaminant_code_id_idx CREATE INDEX proof_of_service_contaminant_code_id_idx ON wms.proof_of_service USING btree (company_id, contaminant_code_id)
 index wms.proof_of_service proof_of_service_pickup_id_idx CREATE INDEX proof_of_service_pickup_id_idx ON wms.proof_of_service USING btree (company_id, pickup_id)
@@ -4105,6 +4192,66 @@ policy wms.subscription_pause subscription_pause_public_door permissive SELECT t
    FROM wms.project published
   WHERE ((published.company_id = subscription_pause.company_id) AND (published.id = subscription_pause.project_id) AND (published.public_slug IS NOT NULL))))) check=none
 policy wms.subscription_pause subscription_pause_tenant_fence permissive ALL to=wms_api using=(company_id = ( SELECT wms.current_company_id() AS current_company_id)) check=(company_id = ( SELECT wms.current_company_id() AS current_company_id))
+relation wms.tank_inspection kind=table owner=<owner> persistence=p rls=true force-rls=true replica-identity=d acl=[<owner>=DELETE,INSERT,MAINTAIN,REFERENCES,SELECT,TRIGGER,TRUNCATE,UPDATE/<owner> wms_api=INSERT,SELECT/<owner> wms_worker=SELECT/<owner>]
+column wms.tank_inspection 1 id uuid not-null default=wms.uuidv7()
+column wms.tank_inspection 2 company_id uuid not-null
+column wms.tank_inspection 3 project_id uuid not-null
+column wms.tank_inspection 4 recorded_at timestamp with time zone not-null default=now()
+column wms.tank_inspection 5 tank_installation_id uuid not-null
+column wms.tank_inspection 6 inspected_on date not-null
+column wms.tank_inspection 7 outcome text not-null
+column wms.tank_inspection 8 findings text
+column wms.tank_inspection 9 next_inspection_on date
+column wms.tank_inspection 10 recorded_by uuid not-null
+constraint wms.tank_inspection tank_inspection_company_id_fk FOREIGN KEY (company_id) REFERENCES wms.company(id)
+constraint wms.tank_inspection tank_inspection_next_inspection_after CHECK (((next_inspection_on IS NULL) OR (next_inspection_on > inspected_on)))
+constraint wms.tank_inspection tank_inspection_outcome_one_of CHECK ((outcome = ANY (ARRAY['approved'::text, 'remarks'::text, 'defects'::text, 'failed'::text])))
+constraint wms.tank_inspection tank_inspection_pkey PRIMARY KEY (id)
+constraint wms.tank_inspection tank_inspection_project_id_fk FOREIGN KEY (company_id, project_id) REFERENCES wms.project(company_id, id)
+constraint wms.tank_inspection tank_inspection_recorded_by_fk FOREIGN KEY (company_id, recorded_by) REFERENCES wms.user_account(company_id, id)
+constraint wms.tank_inspection tank_inspection_tank_installation_id_fk FOREIGN KEY (company_id, project_id, tank_installation_id) REFERENCES wms.tank_installation(company_id, project_id, id)
+index wms.tank_inspection tank_inspection_pkey CREATE UNIQUE INDEX tank_inspection_pkey ON wms.tank_inspection USING btree (id)
+index wms.tank_inspection tank_inspection_project_id_idx CREATE INDEX tank_inspection_project_id_idx ON wms.tank_inspection USING btree (company_id, project_id)
+index wms.tank_inspection tank_inspection_recorded_by_idx CREATE INDEX tank_inspection_recorded_by_idx ON wms.tank_inspection USING btree (company_id, recorded_by)
+index wms.tank_inspection tank_inspection_tank_installation_id_idx CREATE INDEX tank_inspection_tank_installation_id_idx ON wms.tank_inspection USING btree (company_id, tank_installation_id, inspected_on)
+policy wms.tank_inspection tank_inspection_tenant_fence permissive ALL to=wms_api using=(company_id = ( SELECT wms.current_company_id() AS current_company_id)) check=(company_id = ( SELECT wms.current_company_id() AS current_company_id))
+relation wms.tank_installation kind=table owner=<owner> persistence=p rls=true force-rls=true replica-identity=d acl=[<owner>=DELETE,INSERT,MAINTAIN,REFERENCES,SELECT,TRIGGER,TRUNCATE,UPDATE/<owner> wms_api=DELETE,INSERT,SELECT,UPDATE/<owner> wms_worker=SELECT/<owner>]
+column wms.tank_installation 1 id uuid not-null default=wms.uuidv7()
+column wms.tank_installation 2 company_id uuid not-null
+column wms.tank_installation 3 project_id uuid not-null
+column wms.tank_installation 4 created_at timestamp with time zone not-null default=now()
+column wms.tank_installation 5 updated_at timestamp with time zone not-null default=now()
+column wms.tank_installation 6 valid_from date not-null
+column wms.tank_installation 7 valid_to date
+column wms.tank_installation 8 property_id uuid not-null
+column wms.tank_installation 9 container_id uuid not-null
+column wms.tank_installation 10 kind text not-null
+column wms.tank_installation 11 volume_litres integer not-null
+column wms.tank_installation 12 outlet text not-null
+column wms.tank_installation 13 emptying_interval_months integer not-null
+column wms.tank_installation 14 last_emptied_on date
+column wms.tank_installation 15 notes text
+constraint wms.tank_installation tank_installation_company_id_fk FOREIGN KEY (company_id) REFERENCES wms.company(id)
+constraint wms.tank_installation tank_installation_container_id_fk FOREIGN KEY (company_id, project_id, container_id) REFERENCES wms.container(company_id, project_id, id)
+constraint wms.tank_installation tank_installation_emptying_interval_months_range CHECK (((emptying_interval_months >= 1) AND (emptying_interval_months <= 120)))
+constraint wms.tank_installation tank_installation_kind_one_of CHECK ((kind = ANY (ARRAY['septic-tank'::text, 'holding-tank'::text, 'small-treatment-plant'::text, 'grease-separator'::text])))
+constraint wms.tank_installation tank_installation_no_overlap EXCLUDE USING gist (company_id WITH =, container_id WITH =, daterange(valid_from, valid_to, '[)'::text) WITH &&)
+constraint wms.tank_installation tank_installation_outlet_one_of CHECK ((outlet = ANY (ARRAY['soakaway'::text, 'sand-filter'::text, 'watercourse'::text, 'sewer'::text, 'none'::text])))
+constraint wms.tank_installation tank_installation_pkey PRIMARY KEY (id)
+constraint wms.tank_installation tank_installation_project_id_fk FOREIGN KEY (company_id, project_id) REFERENCES wms.project(company_id, id)
+constraint wms.tank_installation tank_installation_project_key UNIQUE (company_id, project_id, id)
+constraint wms.tank_installation tank_installation_property_id_fk FOREIGN KEY (company_id, project_id, property_id) REFERENCES wms.property(company_id, project_id, id)
+constraint wms.tank_installation tank_installation_validity CHECK (((valid_to IS NULL) OR (valid_to > valid_from)))
+constraint wms.tank_installation tank_installation_volume_litres_positive CHECK ((volume_litres > 0))
+index wms.tank_installation tank_installation_container_id_idx CREATE INDEX tank_installation_container_id_idx ON wms.tank_installation USING btree (company_id, container_id)
+index wms.tank_installation tank_installation_no_overlap CREATE INDEX tank_installation_no_overlap ON wms.tank_installation USING gist (company_id, container_id, daterange(valid_from, valid_to, '[)'::text))
+index wms.tank_installation tank_installation_pkey CREATE UNIQUE INDEX tank_installation_pkey ON wms.tank_installation USING btree (id)
+index wms.tank_installation tank_installation_project_id_idx CREATE INDEX tank_installation_project_id_idx ON wms.tank_installation USING btree (company_id, project_id)
+index wms.tank_installation tank_installation_project_key CREATE UNIQUE INDEX tank_installation_project_key ON wms.tank_installation USING btree (company_id, project_id, id)
+index wms.tank_installation tank_installation_property_id_idx CREATE INDEX tank_installation_property_id_idx ON wms.tank_installation USING btree (company_id, property_id)
+trigger wms.tank_installation tank_installation_audit_trail enabled=O CREATE TRIGGER tank_installation_audit_trail AFTER INSERT OR DELETE OR UPDATE ON wms.tank_installation FOR EACH ROW EXECUTE FUNCTION wms.audit_row('property', 'property_id')
+trigger wms.tank_installation tank_installation_touch_updated_at enabled=O CREATE TRIGGER tank_installation_touch_updated_at BEFORE UPDATE ON wms.tank_installation FOR EACH ROW EXECUTE FUNCTION wms.touch_updated_at()
+policy wms.tank_installation tank_installation_tenant_fence permissive ALL to=wms_api using=(company_id = ( SELECT wms.current_company_id() AS current_company_id)) check=(company_id = ( SELECT wms.current_company_id() AS current_company_id))
 relation wms.team kind=table owner=<owner> persistence=p rls=true force-rls=true replica-identity=d acl=[<owner>=DELETE,INSERT,MAINTAIN,REFERENCES,SELECT,TRIGGER,TRUNCATE,UPDATE/<owner> wms_api=DELETE,INSERT,SELECT,UPDATE/<owner> wms_worker=SELECT/<owner>]
 column wms.team 1 id uuid not-null default=wms.uuidv7()
 column wms.team 2 company_id uuid not-null
@@ -4419,6 +4566,7 @@ column wms.unloading_station 12 closes_at time without time zone
 column wms.unloading_station 13 weighbridge boolean not-null default=false
 column wms.unloading_station 14 status text not-null
 column wms.unloading_station 15 notes text
+column wms.unloading_station 16 transfer boolean not-null default=false
 constraint wms.unloading_station unloading_station_code_key UNIQUE (company_id, code)
 constraint wms.unloading_station unloading_station_company_id_fk FOREIGN KEY (company_id) REFERENCES wms.company(id)
 constraint wms.unloading_station unloading_station_hours_shape CHECK (((opens_at IS NULL) = (closes_at IS NULL)))
@@ -5197,4 +5345,8 @@ journal 1793808436400 8e1da41950f1d986cc6fea41328cbc0c772a104e679678680a07b829df
 journal 1793810668841 744d0a6acbf2ace0de63e9d89b3722b39f09d06909ce6c09341cdb7bf43323c8
 journal 1793815506663 81a63cf5bde53c4c20971274980ee3cfcc4a686c988b2b30afc664be9c100e6e
 journal 1793815881668 01038c5b80fdfe8f3003c33478a26c26a232def44352834db92114655a8e234c
+journal 1793819121112 14969d96a0613681852264ce9b4de81b2e7d1b44f1942117d9ef977b9d9fb2e2
+journal 1793819252515 4939a4466261f21e70aac488fcaf9d2bd3d8f4082c4923a264c2fd6b86696aee
+journal 1793819334732 01e9eab6e971605b07b65b2d8e6344013082d5a8f2e5f441748193488483a62f
+journal 1793819438754 69211a9db7ef26f17b5eb0ca05c26144c7c7b5b1c49bcfe216140eb16e5528f7
 pgboss-version 42

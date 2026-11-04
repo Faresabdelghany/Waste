@@ -34,6 +34,7 @@ import * as financeModule from "../finance"
 import * as fleetModule from "../fleet"
 import * as generationModule from "../generation"
 import * as geojsonModule from "../geojson"
+import * as haulOutModule from "../haul-out"
 import * as healthModule from "../health"
 import * as idsModule from "../ids"
 import * as importsModule from "../imports"
@@ -53,6 +54,7 @@ import * as planningAreasModule from "../planning-areas"
 import * as plansModule from "../plans"
 import * as positionsModule from "../positions"
 import * as preTripModule from "../pre-trip"
+import * as tanksModule from "../tanks"
 import * as priceListsModule from "../price-lists"
 import * as problemModule from "../problem"
 import * as proofObjectsModule from "../proof-objects"
@@ -130,6 +132,7 @@ const MODULES: Readonly<Record<string, Record<string, unknown>>> = {
   "fleet": fleetModule,
   "generation": generationModule,
   "geojson": geojsonModule,
+  "haul-out": haulOutModule,
   "health": healthModule,
   "ids": idsModule,
   "imports": importsModule,
@@ -151,6 +154,7 @@ const MODULES: Readonly<Record<string, Record<string, unknown>>> = {
   "plans": plansModule,
   "positions": positionsModule,
   "pre-trip": preTripModule,
+  tanks: tanksModule,
   "price-lists": priceListsModule,
   "problem": problemModule,
   "proof-objects": proofObjectsModule,

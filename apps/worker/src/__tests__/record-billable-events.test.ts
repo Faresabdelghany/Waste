@@ -49,7 +49,7 @@ import type { JobContext } from "../jobs"
 import { FINANCE_EVENT_KINDS, recordBillableEvents, type PublishedEvent, type Recorded } from "../jobs/record-billable-events"
 import { consumerQueue } from "../outbox/subscribe"
 import { databaseUnderTest, ownerUnderTest } from "./database"
-import { at, dropFinanceTenant, FIXTURE_DAY, movePickup, placeBin, seedBulkyBooking, seedCompletedRoute, seedCorrectionProof, seedExceptionRule, seedFinanceTenant, seedTicket, testId, type FinanceTenant } from "./finance-tenant"
+import { at, dropFinanceTenant, FIXTURE_DAY, movePickup, placeBin, placePublicBin, seedBulkyBooking, seedCompletedRoute, seedCorrectionProof, seedExceptionRule, seedFinanceTenant, seedTicket, testId, type FinanceTenant } from "./finance-tenant"
 import { fakeRouting, settlesNothing } from "./routing-context"
 
 const database = databaseUnderTest()
@@ -328,6 +328,19 @@ describe("finance.record-billable-events against Postgres", { skip }, () => {
     await movePickup(pool, tenant, wash, "skipped")
     assert.equal((await handle(published("pickup-corrected", wash, office(wash, washed.containerId, "wash", "skipped")))).did, "cancelled")
     assert.equal((await eventsOfPickup(wash))[0].status, "cancelled")
+  })
+
+  test("a public bin's stop (M12 of #293) records nothing — its collection, a correction to completed, the office's wash of it under the project's wash product (the work order test above names it) — rather than a blocked no-subscription event: the project's contract pays for public service", async () => {
+    const litter = await placePublicBin(pool, tenant, "BIN-PUB-1")
+    const seeded = await seedCompletedRoute(pool, tenant, [
+      { containerId: litter.containerId, propertyId: null, sharedCollectionPointId: litter.sharedCollectionPointId },
+      { containerId: litter.containerId, propertyId: null, sharedCollectionPointId: litter.sharedCollectionPointId, origin: "office", service: "wash" },
+    ])
+    const [collected, washed] = seeded.pickupIds
+    assert.equal((await handle(published("pickup-completed", collected, pickupPayload(seeded.id, collected, litter.containerId)))).did, "nothing")
+    assert.equal((await handle(published("pickup-corrected", collected, pickupPayload(seeded.id, collected, litter.containerId)))).did, "nothing")
+    assert.equal((await handle(published("pickup-completed", washed, { ...pickupPayload(seeded.id, washed, litter.containerId), origin: "office" }))).did, "nothing")
+    assert.deepEqual([...(await eventsOfPickup(collected)), ...(await eventsOfPickup(washed))], [], "nothing in Finance's queue, blocked or otherwise")
   })
 
   test("a bulky collection's completion records a job at its booking's product, charged to the booking's agreement with no subscription (O11 of #290), and a correction away cancels it", async () => {

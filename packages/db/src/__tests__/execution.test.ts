@@ -606,11 +606,12 @@ describe("the Execution tables against a fresh database", { skip: database.skip 
       await assert.rejects(tx.transaction((savepoint) => savepoint.insert(proofOfService).values(proof({ source: "dispatch" }))), refusedWith("23514", /proof_of_service_session_shape/), "the office's row with a session")
       await assert.rejects(tx.transaction((savepoint) => savepoint.insert(proofOfService).values(proof({ kind: "gps" }))), refusedWith("23514", /proof_of_service_kind_one_of/))
       await assert.rejects(tx.transaction((savepoint) => savepoint.insert(proofOfService).values(proof({ kind: "weight", weightKg: 0 }))), refusedWith("23514", /proof_of_service_weight_kg_positive/))
+      await assert.rejects(tx.transaction((savepoint) => savepoint.insert(proofOfService).values(proof({ kind: "volume", volumeLitres: 0 }))), refusedWith("23514", /proof_of_service_volume_litres_positive/))
       await assert.rejects(tx.transaction((savepoint) => savepoint.insert(proofOfService).values(proof({ location: { type: "Point", coordinates: [200, 55] } }))), refusedWith("23514", /proof_of_service_location_valid/))
 
-      /** The whole row for a kind: what the row says of the five columns and the source, on the pickup or on the route. */
-      const full = { reason: "inaccessible", objectKey: `${a.company}/${a.route}/${a.spare}.jpg`, weightKg: 148, outcome: "failed", note: "Gate locked" } as const
-      const columns = ["reason", "objectKey", "weightKg", "outcome", "note"] as const
+      /** The whole row for a kind: what the row says of the six columns and the source, on the pickup or on the route. */
+      const full = { reason: "inaccessible", objectKey: `${a.company}/${a.route}/${a.spare}.jpg`, weightKg: 148, volumeLitres: 2800, outcome: "failed", note: "Gate locked" } as const
+      const columns = ["reason", "objectKey", "weightKg", "volumeLitres", "outcome", "note"] as const
       const exemplar = (kind: ProofKind): ProofRow => {
         const shape = PROOF_SHAPES[kind]
         return {
@@ -618,6 +619,7 @@ describe("the Execution tables against a fresh database", { skip: database.skip 
           reason: shape.reason === "none" ? null : full.reason,
           objectKey: shape.objectKey === "none" ? null : full.objectKey,
           weightKg: shape.weightKg === "none" ? null : full.weightKg,
+          volumeLitres: shape.volumeLitres === "none" ? null : full.volumeLitres,
           outcome: shape.outcome === "none" ? null : full.outcome,
           note: shape.note === "none" ? null : full.note,
           source: shape.source === "dispatch" ? "dispatch" : "driver-app",
@@ -650,7 +652,7 @@ describe("the Execution tables against a fresh database", { skip: database.skip 
           rows += 1
         }
       }
-      assert.equal(rows, 180, "twelve kinds, fifteen rows each")
+      assert.equal(rows, 221, "thirteen kinds, seventeen rows each")
     }))
 
   test("an unload's weights come together and add up, and the office's row names no session (23514 unload_weights_shape, unload_session_shape)", () =>

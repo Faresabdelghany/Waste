@@ -19,13 +19,14 @@ import { auditTrail, MAINTENANCE_AUDITED } from "../sql/audit-trail"
 import { normalised, statementsOf } from "../sql/hand-written"
 import { tenantFence } from "../sql/tenant-fence"
 import { touchUpdatedAt } from "../sql/touch-updated-at"
+import { ALERT_RULES_AS_OF_MAINTENANCE } from "./alert-as-of"
 import { checksOf, list, ref } from "./rendering"
 import { statementsFor } from "./specimen"
 
 /** What drizzle-kit wrote into the alert: its rule's check, dropped and added again with the new rule. */
 const ALTERED = [
   'ALTER TABLE "wms"."alert" DROP CONSTRAINT "alert_rule_one_of";',
-  `ALTER TABLE "wms"."alert" ADD CONSTRAINT "alert_rule_one_of" CHECK (${ref("alert", "rule")} in (${list(...ALERT_RULES)}));`,
+  `ALTER TABLE "wms"."alert" ADD CONSTRAINT "alert_rule_one_of" CHECK (${ref("alert", "rule")} in (${list(...ALERT_RULES_AS_OF_MAINTENANCE)}));`,
 ]
 
 /** What the file owes below drizzle-kit's statements: the two fences, the two triggers, the two audit trails. */
@@ -57,7 +58,8 @@ describe("vehicle maintenance as drizzle-kit writes it", () => {
     assert.deepEqual(statements.slice(statements.length - tail.length), tail)
     assert.equal(statements.length, (await statementsFor({ vehicleMaintenancePlan, maintenanceOrder })).length + ALTERED.length + tail.length, "nothing else in the file")
     assert.match(text, /^-- Vehicle maintenance plans \(O20 of #290\)/)
-    assert.equal(ALERT_RULES.at(-1), "maintenance-due")
+    // The reconciliation's migration (M17 of #293) has since added its four, so the rules this file spelled are `ALERT_RULES_AS_OF_MAINTENANCE`.
+    assert.deepEqual([...ALERT_RULES].slice(0, ALERT_RULES_AS_OF_MAINTENANCE.length), [...ALERT_RULES_AS_OF_MAINTENANCE])
   })
 })
 

@@ -120,10 +120,16 @@ function contains({ rings: [outer, ...holes] }: LoadedArea, at: LngLat): boolean
   return pointInPolygon(at, outer) && !holes.some((hole) => pointInPolygon(at, hole))
 }
 
-/** A placement read through: its subscription's agreement, its place, and the period the three share (null where they share none); undefined where a link is not loaded. */
-type Chain = { agreement: BusinessRecord; property: BusinessRecord | undefined; place: BusinessRecord | undefined; period: Period | null }
+/** A placement read through: its subscription's agreement — none for a public placement — its place, and the period the three share (null where they share none); undefined where a link is not loaded. */
+type Chain = { agreement: BusinessRecord | undefined; property: BusinessRecord | undefined; place: BusinessRecord | undefined; period: Period | null }
 
 function chainOf(placement: ContainerServicePlacement, context: MappingContext): Chain | undefined {
+  // A public placement (M12 of #293) stands at the project's own point with no subscription: its period is its own.
+  if (placement.subscriptionId === null) {
+    const point = placement.sharedCollectionPointId === null ? undefined : context.resolve.byServerId(placement.sharedCollectionPointId)
+    if (point === undefined || !isSharedPointRecord(point)) return undefined
+    return { agreement: undefined, property: undefined, place: point, period: shared([{ from: placement.validFrom, until: placement.validTo }]) }
+  }
   const subscription = context.resolve.byServerId(placement.subscriptionId)
   if (subscription === undefined || !isSubscriptionRecord(subscription)) return undefined
   const agreement = placeRecord(typed(subscription, "agreementId"), AGREEMENT_PREFIX, isAgreementRecord, context)
@@ -208,8 +214,8 @@ export function containerPlace(shown: ContainerServicePlacement | undefined, pla
       [property === undefined ? "Shared collection point" : "Property"]: place.name,
       ...(address === undefined ? {} : { Address: address }),
       ...(kind === undefined ? {} : { "Property type": kind }),
-      // As the fixtures spell it, which the Selected area's count of active agreements reads.
-      Agreement: `${typed(agreement, "agreementNumber") ?? agreement.name} · ${agreement.status.toLowerCase()}`,
+      // As the fixtures spell it, which the Selected area's count of active agreements reads; a public placement serves under none.
+      ...(agreement === undefined ? { Service: "Public: the project's own" } : { Agreement: `${typed(agreement, "agreementNumber") ?? agreement.name} · ${agreement.status.toLowerCase()}` }),
       // Every area it lies in, for a person to read; the map's readers read the serving's ids and names (`containerAreaRefs`, #232).
       ...(areas.length === 0 ? {} : { "Planning area": areas.map((area) => area.name).join(" · ") }),
     },

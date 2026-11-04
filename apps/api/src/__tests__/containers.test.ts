@@ -630,6 +630,49 @@ describe("the container and placement endpoints", { skip: database.skip || owner
     })
   })
 
+  describe("a public placement (M12 of #293)", () => {
+    /** A container issued at a point the project serves itself: no subscription, the point named in its place. */
+    const placePublicly = (into: Container, sharedCollectionPointId: string, values: Record<string, unknown> = {}) =>
+      create(olivia, `/containers/${into.id}/placements`, { sharedCollectionPointId, wasteFractionId: residual.id, validFrom: JANUARY, ...values }, ContainerServicePlacement)
+
+    test("issues a litter bin into service at one of the project's points with no subscription: read, listed at its point, in service, its cadence its own override", async () => {
+      const square = await point(a.projects.copenhagen.id, "Torvet litter bins", "open")
+      const into = await stocked("BIN-PUB-1")
+      const placed = await placePublicly(into, square.id, { serviceFrequencyId: weekly.id })
+      assert.deepEqual([placed.subscriptionId, placed.sharedCollectionPointId, placed.serviceFrequencyId, placed.effectiveServiceFrequencyId, placed.validTo], [null, square.id, weekly.id, weekly.id, null])
+      assert.deepEqual(await onePlacement(olivia, placed.id), placed)
+      const atThePoint = (await placements(olivia, `?limit=200&sharedCollectionPointId=${square.id}&validOn=${FEBRUARY}`)).items
+      assert.deepEqual(atThePoint.map((row) => row.id), [placed.id], "the point's own placement, reached without a subscription")
+      assert.equal((await one(olivia, into.id)).assetState?.status, "in-service", "the issue movement was appended with it")
+      const inherited = await placePublicly(await stocked("BIN-PUB-2"), square.id)
+      assert.deepEqual([inherited.serviceFrequencyId, inherited.effectiveServiceFrequencyId], [null, null], "no product to inherit a cadence from")
+    })
+
+    test("names exactly one of a subscription and a point (400 at subscriptionId), a point of the container's project (400), and one that still serves (409)", async () => {
+      const square = await point(a.projects.copenhagen.id, "Torvet south", "open")
+      const into = await stocked("BIN-PUB-3")
+      const both = await refused(await olivia(`/containers/${into.id}/placements`, { method: "POST", body: { subscriptionId: subscribed.id, sharedCollectionPointId: square.id, wasteFractionId: residual.id, validFrom: JANUARY } }), 400)
+      assert.deepEqual(both.errors?.map((error) => error.path), ["subscriptionId"])
+      const harborPoint = await point(a.projects.harbor.id, "Havnen litter bins", "open")
+      const elsewhere = await refused(await olivia(`/containers/${into.id}/placements`, { method: "POST", body: { sharedCollectionPointId: harborPoint.id, wasteFractionId: residual.id, validFrom: JANUARY } }), 400)
+      assert.deepEqual(elsewhere.errors?.map((error) => [error.path, error.message]), [["sharedCollectionPointId", "Not a shared collection point of this container's project"]])
+      const closed = await point(a.projects.copenhagen.id, "Torvet closed", "closed")
+      const notServing = await refused(await olivia(`/containers/${into.id}/placements`, { method: "POST", body: { sharedCollectionPointId: closed.id, wasteFractionId: residual.id, validFrom: JANUARY } }), 409)
+      assert.equal(notServing.detail, "The shared collection point is closed; a public placement needs an open or restricted point")
+      assert.equal((await one(olivia, into.id)).assetState?.status, "in-warehouse", "nothing was issued")
+    })
+
+    test("ends through the container's return, with no subscription's period to stay inside, and its end is corrected as any other's", async () => {
+      const square = await point(a.projects.copenhagen.id, "Torvet north", "open")
+      const into = await stocked("BIN-PUB-4")
+      const placed = await placePublicly(into, square.id)
+      await returned(into, JULY)
+      assert.equal((await onePlacement(olivia, placed.id)).validTo, JULY)
+      assert.equal((await patchPlacement(placed.id, { validTo: OCTOBER })).validTo, OCTOBER, "a corrected end, bounded by no subscription")
+      assert.equal((await one(olivia, into.id)).assetState?.status, "in-warehouse")
+    })
+  })
+
   describe("GET /placements", () => {
     test("filters by container, by subscription and by the day, and answers none between two placements", async () => {
       const into = await stocked("BIN-3450")

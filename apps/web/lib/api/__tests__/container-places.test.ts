@@ -25,6 +25,8 @@ import { FIXTURE_COMPANY_ID, FIXTURE_PROJECT_IDS, getModuleDefinition, type Busi
 import { NOTHING_RESOLVED, type MappingContext, type ResourceAdapter, type Resource } from "../records/adapter"
 import { agreementAdapter, subscriptionAdapter } from "../records/agreements"
 import { containerAdapter, type ContainerResource } from "../records/containers"
+import { SERVED_PUBLICLY, SHARED_POINTS } from "../../data/containers"
+import { SHARED_POINTS_MODULE } from "../../data/properties"
 import { containerTypeAdapter, wasteFractionAdapter } from "../records/master-data"
 import { projectAdapter } from "../records/organisation"
 import { planningAreaAdapter } from "../records/planning"
@@ -110,7 +112,7 @@ state = new Map([
 const context: MappingContext = { ...bare, resolve: resolverOver(state) }
 
 const containerOf = (id: string, label: string): Container => ({ id, ...STAMPS, projectId: copenhagen.id, label, containerTypeId: bin240.id, barcode: null, rfid: null, serialNumber: null, ownership: "company", notes: null, assetState: null })
-const placementOf = (id: string, container: Container, subscription: Subscription, validFrom: string, validTo: string | null): ContainerServicePlacement => ({ id, ...STAMPS, projectId: copenhagen.id, containerId: container.id, subscriptionId: subscription.id, wasteFractionId: residual.id, serviceFrequencyId: null, effectiveServiceFrequencyId: null, validFrom, validTo })
+const placementOf = (id: string, container: Container, subscription: Subscription, validFrom: string, validTo: string | null): ContainerServicePlacement => ({ id, ...STAMPS, projectId: copenhagen.id, containerId: container.id, subscriptionId: subscription.id, sharedCollectionPointId: null, wasteFractionId: residual.id, serviceFrequencyId: null, effectiveServiceFrequencyId: null, validFrom, validTo })
 function placed(label: string, index: number, subscription: Subscription, validFrom: string, validTo: string | null = null): BusinessRecord {
   const ordinal = String(index).padStart(12, "0")
   const container = containerOf(`01a0d2a4-a280-7014-8000-${ordinal}`, label)
@@ -243,5 +245,35 @@ describe("a container serving nowhere today", () => {
     assert.equal(containerLocation(record, FIXTURE_GAZETTEER), null)
     assert.deepEqual(readingOf(record), serving({ from: "2026-01-01", until: "2026-10-05", areaIds: [areaId, blockId], place: PARKVEJ }, { from: "2026-10-05", until: null, areaIds: [], place: KONGENS, shown: true }))
     assert.equal(record.facts["Serves at"], `${KONGENS} — from 2026-10-05`, "a point by its name and its address")
+  })
+})
+
+describe("a public placement (M12 of #293)", () => {
+  const litter = containerOf("01a0d2a4-a280-7014-8000-000000000201", "BIN-PUB-1")
+  const publicly: ContainerServicePlacement = { ...placementOf("01a0d2a4-a280-7015-8000-000000000201", litter, atKongens, "2026-01-01", null), subscriptionId: null, sharedCollectionPointId: kongens.id }
+  const record = containerAdapter.toRecord({ ...litter, placements: [publicly] }, context)
+  const pointWebId = String(record.submittedValues?.sharedPointId ?? "")
+
+  test("stands at the project's own point, served under no subscription and no agreement, and is a stop the rule preview reads like any other", () => {
+    assert.equal(record.facts["Public placement"], "Kongens Nytorv Shared Point")
+    assert.equal(record.facts.Subscription, undefined)
+    assert.equal(record.facts["Shared collection point"], "Kongens Nytorv Shared Point")
+    assert.equal(record.facts.Agreement, undefined, "no agreement to name")
+    assert.equal(record.facts.Service, "Public: the project's own")
+    assert.deepEqual([record.submittedValues?.subscriptionId, pointWebId === "" ? undefined : pointWebId.startsWith("shared-point")], ["", true])
+    assert.deepEqual(readingOf(record), serving({ from: "2026-01-01", until: null, areaIds: [], place: KONGENS, shown: true }), "its own period, at its point")
+    assert.deepEqual(containerLocation(record, FIXTURE_GAZETTEER), { lng: 12.5855, lat: 55.6805 })
+  })
+
+  test("is issued publicly by naming the point instead of a subscription, and refused here without one", () => {
+    const issue = containerAdapter.commands?.issue?.toBody
+    const residualWebId = masterRecords[0].id
+    assert.deepEqual(issue?.({ servedBy: SERVED_PUBLICLY, sharedPointId: pointWebId, wasteFractionId: residualWebId, validFrom: "2026-10-01" }, record, context), { sharedCollectionPointId: kongens.id, wasteFractionId: residual.id, validFrom: "2026-10-01" })
+    assert.deepEqual(issue?.({ servedBy: SERVED_PUBLICLY, wasteFractionId: residualWebId, validFrom: "2026-10-01" }, record, context), { path: "sharedPointId", message: "Pick a shared collection point the API holds" })
+    assert.deepEqual(issue?.({ servedBy: SERVED_PUBLICLY, sharedPointId: residualWebId, wasteFractionId: residualWebId, validFrom: "2026-10-01" }, record, context), { path: "sharedPointId", message: "Pick a shared collection point the API holds" }, "a fraction is no point")
+  })
+
+  test("the issue dialog's point field points at the shared points' module, spelled again as SHARED_POINTS_MODULE is", () => {
+    assert.deepEqual(SHARED_POINTS, SHARED_POINTS_MODULE)
   })
 })

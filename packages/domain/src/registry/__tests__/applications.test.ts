@@ -4,7 +4,7 @@
 import assert from "node:assert/strict"
 import { describe, test } from "node:test"
 
-import { APPEAL_TEXT_NEEDED, appealTextNeeded, APPLICATION_MOVES, applicationReading, decisionPeriodRefusal, decisionStanding, GRANT_STARTS, moveOf, moveRefusal, REFUSAL_HAS_NO_PERIOD, type ApplicationCommand } from "../applications"
+import { APPEAL_TEXT_NEEDED, appealTextNeeded, APPLICATION_MOVES, applicationReading, decisionPeriodRefusal, decisionStanding, GRANT_STARTS, moveOf, moveRefusal, pauseOfGrant, REFUSAL_HAS_NO_PERIOD, type ApplicationCommand } from "../applications"
 import { APPLICATION_STATUSES } from "../vocabulary"
 
 describe("the moves", () => {
@@ -90,5 +90,29 @@ describe("a decision against a day", () => {
     assert.equal(applicationReading("decided", { outcome: "refused", validFrom: null, validTo: null }, "2026-11-01"), "Refused")
     // Reopened on appeal: in review again, whatever was decided before.
     assert.equal(applicationReading("in-review", grant, "2026-11-02"), "In review")
+  })
+})
+
+describe("a granted pause's effect (M11 of #293)", () => {
+  const subscription = { validFrom: "2026-01-01", validTo: null }
+  const pause = (outcome: "granted" | "partly-granted" | "refused", validFrom: string | null, validTo: string | null) => ({ kind: "pause" as const, subscriptionId: "sub-1", decision: { outcome, validFrom, validTo } })
+
+  test("a grant, whole or in part, of a pause naming a subscription pauses it over the granted period", () => {
+    assert.deepEqual(pauseOfGrant(pause("granted", "2026-07-01", "2026-09-01"), subscription, "2026-06-15"), { subscriptionId: "sub-1", validFrom: "2026-07-01", validTo: "2026-09-01" })
+    assert.deepEqual(pauseOfGrant(pause("partly-granted", "2026-07-01", null), subscription, "2026-06-15"), { subscriptionId: "sub-1", validFrom: "2026-07-01", validTo: null }, "open-ended until resumed")
+  })
+
+  test("a refusal, another kind, or a pause naming no subscription pauses nothing", () => {
+    assert.equal(pauseOfGrant(pause("refused", null, null), subscription, "2026-06-15"), null)
+    assert.equal(pauseOfGrant({ ...pause("granted", "2026-07-01", null), kind: "exemption" }, subscription, "2026-06-15"), null)
+    assert.equal(pauseOfGrant({ ...pause("granted", "2026-07-01", null), subscriptionId: null }, subscription, "2026-06-15"), null)
+  })
+
+  test("the period is cut to today on, as an office pause begins, and to the subscription's own; nothing is left, nothing is paused", () => {
+    assert.deepEqual(pauseOfGrant(pause("granted", "2026-05-01", "2026-09-01"), subscription, "2026-06-15"), { subscriptionId: "sub-1", validFrom: "2026-06-15", validTo: "2026-09-01" }, "a grant decided after its first day pauses from today, never the days gone")
+    assert.deepEqual(pauseOfGrant(pause("granted", "2026-07-01", null), { validFrom: "2026-01-01", validTo: "2026-08-01" }, "2026-06-15"), { subscriptionId: "sub-1", validFrom: "2026-07-01", validTo: "2026-08-01" }, "inside the subscription's period")
+    assert.equal(pauseOfGrant(pause("granted", "2026-05-01", "2026-06-01"), subscription, "2026-06-15"), null, "over before today")
+    assert.equal(pauseOfGrant(pause("granted", "2026-09-01", null), { validFrom: "2026-01-01", validTo: "2026-08-01" }, "2026-06-15"), null, "after the subscription ends")
+    assert.deepEqual(pauseOfGrant(pause("granted", "2026-07-01", null), { validFrom: "2026-08-01", validTo: null }, "2026-06-15"), { subscriptionId: "sub-1", validFrom: "2026-08-01", validTo: null }, "from the subscription's first day")
   })
 })

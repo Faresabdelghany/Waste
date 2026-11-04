@@ -108,6 +108,7 @@ const alert = {
   driverId: null,
   containerId: null,
   ticketId: ID,
+  outboundLoadId: null,
   raisedBy: OTHER,
   acknowledgedAt: null,
   acknowledgedBy: null,

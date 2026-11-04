@@ -95,7 +95,7 @@ describe("the Registry seed's generated rows against @waste/domain's generator",
       }
       assert.ok(placement, `${container.label} is placed`)
       const property = seededProperty(container.propertyIndex)
-      const subscription = rowOf(REGISTRY_ROWS.subscriptions, placement.subscriptionId, "subscription")
+      const subscription = rowOf(REGISTRY_ROWS.subscriptions, placement.subscriptionId ?? undefined, "subscription")
       assert.deepEqual(
         [subscription.propertyId, subscription.agreementId, placement.wasteFractionId, placement.validFrom],
         [

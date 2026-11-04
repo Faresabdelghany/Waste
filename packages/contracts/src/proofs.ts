@@ -45,6 +45,8 @@ export const ProofOfService = z
     note: Paragraph.nullable(),
     /** A lifter's or a hand scale's reading, whole kilograms. */
     weightKg: PositiveInt.nullable(),
+    /** The litres a tank was emptied of (M11 of #293); a row relayed before it carries none. */
+    volumeLitres: PositiveInt.nullable().default(null),
     /** The Storage object of a photo or a signature. */
     objectKey: ObjectKey.nullable(),
     /** On a correction: the outcome the pickup was moved to. */

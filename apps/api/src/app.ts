@@ -55,6 +55,7 @@ import { collectionGroupRoutes } from "./routes/collection-groups"
 import { companyRoutes } from "./routes/company"
 import { containerRoutes } from "./routes/containers"
 import { customerContactRoutes } from "./routes/customer-contacts"
+import { tankRoutes } from "./routes/tanks"
 import { customerRoutes } from "./routes/customers"
 import { messageTemplateRoutes } from "./routes/message-templates"
 import { messageRoutes } from "./routes/messages"
@@ -106,6 +107,7 @@ import { routeSchemeRoutes } from "./routes/route-schemes"
 import { schemeLifecycleRoutes } from "./routes/scheme-lifecycle"
 import { scaleHouseRoutes } from "./routes/scale-house"
 import { SENSOR_BATCHES_PER_MINUTE, sensorRoutes } from "./routes/sensors"
+import { outboundLoadRoutes } from "./routes/outbound-loads"
 import { serviceProviderActivityRoutes } from "./routes/service-provider-activities"
 import { planRoutes } from "./routes/plans"
 import { routeRoutes } from "./routes/routes"
@@ -288,6 +290,7 @@ export function createApp({
   app.route("/", productRoutes(guard))
   app.route("/", customerRoutes(guard))
   app.route("/", customerContactRoutes(guard))
+  app.route("/", tankRoutes(guard, { now }))
   app.route("/", messageTemplateRoutes(guard))
   app.route("/", messageRoutes(guard, { jobs }))
   // The address lookup calls the register (#291 C13), so, like the preview, its guard ends the principal's transaction; a property's write reads its `addressId` from the register before its guard opens the request's.
@@ -366,6 +369,7 @@ export function createApp({
   app.route("/", sensorRoutes(guard, { now, ingestAllowance: sensorIngestAllowance }))
   // The scale house (M16a of #293): the tare register and the window's tickets.
   app.route("/", scaleHouseRoutes(guard, { now }))
+  app.route("/", outboundLoadRoutes(guard, { now }))
   app.route("/", pickupExceptionRoutes(guard, { now }))
   // Bulky-waste booking (O11 of #290): the areas' schedules of collection days, and the bookings that take a slot of one on the project's clock.
   app.route("/", bulkyScheduleRoutes(guard))
