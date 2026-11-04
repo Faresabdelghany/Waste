@@ -21,6 +21,8 @@ const publicModuleIdsByWorkspace: Partial<
     "applications",
     // #393: the plates and cards a project's recycling centres admit by.
     "site-access",
+    // M23b of #293: the right-sizing proposals.
+    "right-sizing",
   ],
 }
 

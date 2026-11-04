@@ -6,7 +6,7 @@ import { describe, test } from "node:test"
 import { defineVocabularyTests } from "../../__tests__/vocabulary"
 import * as vocabulary from "../vocabulary"
 
-defineVocabularyTests("inspections", vocabulary, vocabulary.INSPECTIONS_VOCABULARIES, 3)
+defineVocabularyTests("inspections", vocabulary, vocabulary.INSPECTIONS_VOCABULARIES, 5)
 
 describe("the inspections vocabulary's own rules", () => {
   test("an inspection is compliant or finds something of either weight, and is open until the office closes it", () => {

@@ -63,7 +63,8 @@
 // seasons. M23 of #293 added @waste/domain/inspections/vocabulary and
 // @waste/domain/inspections/rules: field-inspections.ts reads an
 // inspection's lists, holds its verdict to its findings and a photo to the
-// bucket's formats. O21 of #290 added @waste/domain/planning/lifecycle: route-schemes.ts
+// bucket's formats, and right-sizing.ts reads a proposal's directions and
+// statuses. O21 of #290 added @waste/domain/planning/lifecycle: route-schemes.ts
 // reads the Plan Ahead window's bounds the database's check reads. O8 of
 // #290 added @waste/domain/execution/positions: driver-commands.ts bounds a
 // `record-positions` by the batch the Driver App closes, one spelling. C13
