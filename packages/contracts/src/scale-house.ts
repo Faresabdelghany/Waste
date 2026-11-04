@@ -23,7 +23,8 @@ import * as z from "zod"
 import { IsoDate, IsoDateTime } from "./dates"
 import { Id } from "./ids"
 import { ProjectScopedListQuery } from "./queries"
-import { changesSomething, eachOnce, PositiveInt, somethingToChange, stamped } from "./resource"
+import { BlockReason } from "./finance"
+import { changesSomething, eachOnce, Minor, PositiveInt, somethingToChange, stamped } from "./resource"
 import { Label, Paragraph } from "./text"
 
 export const ScaleTicketStatus = z.enum(SCALE_TICKET_STATUSES)
@@ -94,6 +95,10 @@ export const ScaleTicketLine = z.object({
   wasteFractionId: Id,
   originMunicipality: MunicipalityCode.nullable(),
   netKg: PositiveInt,
+  /** The window's product the line is sold by (M16b of #293), per tonne or per cubic metre; null where none was named. */
+  productId: Id.nullable(),
+  /** The declared volume of a line sold by the cubic metre, whole litres. */
+  volumeLitres: PositiveInt.nullable(),
 })
 export type ScaleTicketLine = z.infer<typeof ScaleTicketLine>
 
@@ -179,6 +184,10 @@ export const ScaleTicketLineIn = z.strictObject({
   wasteFractionId: Id,
   originMunicipality: MunicipalityCode.nullable().optional(),
   netKg: PositiveInt,
+  /** The window's product the line is sold by (M16b of #293): one of the project's sold per tonne or per cubic metre. An account's line names one to be charged. */
+  productId: Id.nullable().optional(),
+  /** The declared volume, whole litres: required for a product sold by the cubic metre, and refused otherwise. */
+  volumeLitres: PositiveInt.nullable().optional(),
 })
 export type ScaleTicketLineIn = z.infer<typeof ScaleTicketLineIn>
 
@@ -214,3 +223,35 @@ export const ScaleTicketListQuery = ProjectScopedListQuery.extend({
   customerId: Id.optional(),
 })
 export type ScaleTicketListQuery = z.infer<typeof ScaleTicketListQuery>
+
+/** One line of what is due at the window: its product and measure, and its price, or why it has none. */
+export const AmountDueLine = z.object({
+  lineId: Id,
+  productId: Id.nullable(),
+  /** The line's measure in its product's unit: 2.34 tonnes, 1.5 m³; null where it names no product the window sells. */
+  quantity: z.number().nullable(),
+  unitPriceMinor: Minor.nullable(),
+  netMinor: Minor.nullable(),
+  vatMinor: Minor.nullable(),
+  /** Why the line has no price; null for a priced one. */
+  blockReason: BlockReason.nullable(),
+})
+export type AmountDueLine = z.infer<typeof AmountDueLine>
+
+/**
+ * `GET /scale-tickets/:id/amount-due` (M16b of #293): what the ticket comes
+ * to at the window — each line priced as Finance would price it, an account's
+ * under its agreement, a walk-in's under the project's default list — and the
+ * total, in the list's currency. It stores nothing and takes no payment.
+ */
+export const ScaleTicketAmountDue = z.object({
+  ticketId: Id,
+  currency: z.string().nullable(),
+  lines: z.array(AmountDueLine),
+  /** The net and the VAT of the priced lines, and their sum; every line priced or the total is not whole. */
+  netMinor: Minor,
+  vatMinor: Minor,
+  totalMinor: Minor,
+  complete: z.boolean(),
+})
+export type ScaleTicketAmountDue = z.infer<typeof ScaleTicketAmountDue>

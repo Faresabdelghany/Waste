@@ -1,7 +1,7 @@
 import assert from "node:assert/strict"
 import { describe, test } from "node:test"
 
-import { PARTY_SHAPE, ScaleTicket, ScaleTicketComplete, ScaleTicketCreate, ScaleTicketListQuery, ScaleTicketPatch, ScaleTicketVoid, VehicleTare, VehicleTareCreate, VehicleTarePatch } from "../scale-house"
+import { PARTY_SHAPE, ScaleTicket, ScaleTicketAmountDue, ScaleTicketComplete, ScaleTicketCreate, ScaleTicketListQuery, ScaleTicketPatch, ScaleTicketVoid, VehicleTare, VehicleTareCreate, VehicleTarePatch } from "../scale-house"
 import { refusal, refusesWhatTheServerOwns } from "./expect"
 
 const ID = "01a0d3a5-e5e0-7000-8000-000000000001"
@@ -94,7 +94,7 @@ describe("a scale ticket (M16a of #293)", () => {
       weighedOutAt: "2026-10-29T08:20:00.000Z",
       netKg: 4_220,
       status: "completed",
-      lines: [{ id: OTHER, position: 1, wasteFractionId: ID, originMunicipality: null, netKg: 4_220 }],
+      lines: [{ id: OTHER, position: 1, wasteFractionId: ID, originMunicipality: null, netKg: 4_220, productId: null, volumeLitres: null }],
       routeId: null,
       unloadId: null,
       unmatchedReason: null,
@@ -110,5 +110,29 @@ describe("a scale ticket (M16a of #293)", () => {
   test("is listed by project, site, standing, party and customer", () => {
     assert.equal(ScaleTicketListQuery.parse({ status: "open", party: "cash" }).party, "cash")
     assert.equal(ScaleTicketListQuery.safeParse({ status: "weighed" }).success, false)
+  })
+})
+
+describe("the window's prices (M16b of #293)", () => {
+  test("a line names the product it is sold by, and a volume for one sold by the cubic metre", () => {
+    const line = { wasteFractionId: ID, netKg: 900, productId: OTHER, volumeLitres: 1_500 }
+    assert.deepEqual(ScaleTicketComplete.parse({ tare: { source: "registered" }, lines: [line] }).lines, [line])
+    assert.equal(ScaleTicketComplete.safeParse({ tare: { source: "registered" }, lines: [{ ...line, volumeLitres: 0 }] }).success, false)
+  })
+
+  test("what is due reads each line priced or blocked, and the totals", () => {
+    const due = {
+      ticketId: ID,
+      currency: "DKK",
+      lines: [
+        { lineId: OTHER, productId: ID, quantity: 0.9, unitPriceMinor: 54_000, netMinor: 54_000, vatMinor: 13_500, blockReason: null },
+        { lineId: ID, productId: null, quantity: null, unitPriceMinor: null, netMinor: null, vatMinor: null, blockReason: "no-product" },
+      ],
+      netMinor: 54_000,
+      vatMinor: 13_500,
+      totalMinor: 67_500,
+      complete: false,
+    }
+    assert.deepEqual(ScaleTicketAmountDue.parse(due), due)
   })
 })
