@@ -4,7 +4,14 @@
 // from a customer's message template; the worker's notifications consumer
 // queues it through @waste/db's `queueStaffMessage` to each person who opted
 // in. A ticket's number reads as the API spells it, `T-<number>`.
+//
+// A customer's notice (part b) is the project's own template, never a text of
+// the platform's: here is only which notice an outbox event is, the booking's
+// own two kinds, and its stop's completion or failure where the stop
+// collects a Bulky Booking.
+import type { OutboxKind } from "../execution/vocabulary"
 import type { AlertSeverity, TicketPriority } from "../resolution/vocabulary"
+import type { CustomerNoticeEvent } from "./vocabulary"
 import { ALERT_SEVERITIES } from "../resolution/vocabulary"
 
 /** Whether an alert of `severity` reaches a person's `threshold`: the tuple runs from critical down to low. */
@@ -39,4 +46,13 @@ export function ticketAssignedNotice(ticket: { number: number; subject: string; 
       signed(where.companyName),
     ].join("\n"),
   }
+}
+
+/** The customer notice an outbox event is, or null: a booking booked or cancelled, and its stop's completion or failure where the stop is a Bulky Booking's. */
+export function customerNoticeOf(kind: OutboxKind, stop: { bulkyBookingId: string | null } | null): CustomerNoticeEvent | null {
+  if (kind === "bulky-booking-booked" || kind === "bulky-booking-cancelled") return kind
+  if (stop === null || stop.bulkyBookingId === null) return null
+  if (kind === "pickup-completed") return "bulky-booking-collected"
+  if (kind === "pickup-failed") return "bulky-booking-not-collected"
+  return null
 }

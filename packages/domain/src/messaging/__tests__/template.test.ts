@@ -5,7 +5,7 @@
 import assert from "node:assert/strict"
 import { describe, test } from "node:test"
 
-import { channelShapeIssue, maskedAddress, MESSAGE_VARIABLES, needsConsent, placeholdersOf, renderTemplate, SMS_BODY_MAX, unknownPlaceholders } from "../template"
+import { channelShapeIssue, maskedAddress, MESSAGE_VARIABLES, needsConsent, placeholdersOf, renderTemplate, SMS_BODY_MAX, unfilledPlaceholders, unfilledSentence, unknownPlaceholders } from "../template"
 
 describe("a template's placeholders", () => {
   test("are the names between double braces, spaces allowed, each once in the order first named", () => {
@@ -16,13 +16,21 @@ describe("a template's placeholders", () => {
   test("that no message fills are named back, so a template is refused before it is ever sent", () => {
     assert.deepEqual(unknownPlaceholders("Hello {{recipientName}} from {{companyName}}"), [])
     assert.deepEqual(unknownPlaceholders("Hello {{firstName}}, invoice {{invoiceNumber}} {{customerName}}"), ["firstName", "invoiceNumber"])
-    assert.deepEqual([...MESSAGE_VARIABLES], ["recipientName", "customerName", "companyName"])
+    assert.deepEqual([...MESSAGE_VARIABLES], ["recipientName", "customerName", "companyName", "collectionDate"])
   })
 })
 
 describe("a template rendered", () => {
   test("fills each placeholder with its value, however it was spaced, and leaves the rest of the text as written", () => {
     assert.equal(renderTemplate("Dear {{ recipientName }}, about {{customerName}}: {{recipientName}}.", { recipientName: "Hanne", customerName: "Østerbro Boligforening", companyName: "Kystbyen" }), "Dear Hanne, about Østerbro Boligforening: Hanne.")
+  })
+
+  test("a known value its sender does not have is named back, so the send is refused rather than sent with a hole (O16 of #290, part b)", () => {
+    const office = { recipientName: "Hanne", customerName: "X", companyName: "Y" }
+    assert.deepEqual(unfilledPlaceholders("Your collection on {{collectionDate}}, {{recipientName}} {{invoiceNumber}}", office), ["collectionDate"], "an unknown name is the template's refusal, not the send's")
+    assert.deepEqual(unfilledPlaceholders("On {{collectionDate}}", { ...office, collectionDate: "2026-11-02" }), [])
+    assert.equal(renderTemplate("On {{collectionDate}}", { ...office, collectionDate: "2026-11-02" }), "On 2026-11-02")
+    assert.equal(unfilledSentence("Collection booked", ["collectionDate"]), "The template Collection booked names {{collectionDate}}, which this message has no value for; pick a template without it")
   })
 
   test("never interprets a value as a placeholder of its own", () => {
