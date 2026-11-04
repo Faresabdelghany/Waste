@@ -39,6 +39,7 @@ import * as idsModule from "../ids"
 import * as importsModule from "../imports"
 import * as integrationsModule from "../integrations"
 import * as invoicesModule from "../invoices"
+import * as maintenanceModule from "../maintenance"
 import * as meModule from "../me"
 import * as organisationModule from "../organisation"
 import * as outboxModule from "../outbox"
@@ -128,6 +129,7 @@ const MODULES: Readonly<Record<string, Record<string, unknown>>> = {
   "imports": importsModule,
   "integrations": integrationsModule,
   "invoices": invoicesModule,
+  "maintenance": maintenanceModule,
   "me": meModule,
   "moves": movesModule,
   "organisation": organisationModule,
