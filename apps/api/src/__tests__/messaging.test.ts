@@ -15,6 +15,7 @@ import { Page } from "@waste/contracts/pagination"
 import { createDb, type Database } from "@waste/db/client"
 import { CONTACT_NOT_THE_CUSTOMERS, noAddress, SEND_MESSAGE_QUEUE, templateInactive } from "@waste/db/commands/messaging"
 import { QueueMissing } from "@waste/db/jobs"
+import { unfilledSentence } from "@waste/domain/messaging/template"
 import { PGBOSS_SCHEMA } from "@waste/db/sql/pgboss"
 import { sql } from "drizzle-orm"
 import { PgBoss } from "pg-boss"
@@ -149,6 +150,10 @@ describe("messaging", { skip: database.skip || owner.skip }, () => {
       }
       const theirs = await refused(await other("/messages", { method: "POST", body: { templateId: email.id, customerId: housing.id } }), 400)
       assert.deepEqual(theirs.errors, [{ path: "templateId", message: PICK_A_TEMPLATE }])
+      // A booking notice's template names the collection's day, which the office's send has none of (O16 of #290, part b).
+      const notice = await writeTemplate({ projectId: a.projects.copenhagen.id, name: "Bulky booked", purpose: "service", channel: "email", subject: "On {{collectionDate}}", body: "Dear {{recipientName}}" })
+      const unfilled = await refused(await olivia("/messages", { method: "POST", body: { templateId: notice.id, customerId: person.id } }), 409)
+      assert.equal(unfilled.detail, unfilledSentence("Bulky booked", ["collectionDate"]))
     })
 
     test("is read newest first, by customer and status, inside the caller's projects", async () => {

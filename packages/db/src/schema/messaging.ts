@@ -24,7 +24,8 @@
 // template's project's. A staff message (O16 of #290) names instead the
 // company's own user account it went to, its text rendered by the domain from
 // the outbox event it was sent for (`source_event_id`), which with the
-// recipient keys it once (`queueStaffMessage`).
+// recipient keys it once (`queueStaffMessage`); a customer's notice of a
+// booking (part b) is keyed the same way, by its event and its customer.
 import { MESSAGE_CHANNELS, MESSAGE_PURPOSES, MESSAGE_STATUSES, MESSAGE_TEMPLATE_PURPOSES, MESSAGE_TEMPLATE_STATUSES } from "@waste/domain/messaging/vocabulary"
 import { sql } from "drizzle-orm"
 import { check, integer, text, timestamp, uniqueIndex, uuid } from "drizzle-orm/pg-core"
@@ -112,6 +113,10 @@ export const message = wms.table(
     uniqueIndex(tableObjectName(t.id.table, "source_event_id_user_account_id_idx", "message"))
       .on(t.companyId, t.sourceEventId, t.userAccountId)
       .where(sql`${t.sourceEventId} is not null and ${t.userAccountId} is not null`),
+    // And a customer once (O16 of #290, part b): a redelivered booking's event queues its notice once.
+    uniqueIndex(tableObjectName(t.id.table, "source_event_id_customer_id_idx", "message"))
+      .on(t.companyId, t.sourceEventId, t.customerId)
+      .where(sql`${t.sourceEventId} is not null and ${t.customerId} is not null`),
     oneOf(t.channel, MESSAGE_CHANNELS),
     oneOf(t.purpose, MESSAGE_PURPOSES),
     oneOf(t.status, MESSAGE_STATUSES),
