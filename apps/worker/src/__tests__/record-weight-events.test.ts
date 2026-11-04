@@ -155,7 +155,7 @@ describe("finance.record-billable-events over an Unload's weight review (O28 of 
   })
 
   test("the run's line names the kilograms the charge was weighed at", async () => {
-    const run = await withCompany(pool.db, tenant.companyId, (tx: Tx) => runBilling(tx, { companyId: tenant.companyId, projectId: copenhagen, periodFrom: FIXTURE_DAY, periodTo: FIXTURE_DAY, note: null, requestedBy: null, newId, now: () => NOON }))
+    const run = await runBilling((work) => withCompany(pool.db, tenant.companyId, work), { companyId: tenant.companyId, projectId: copenhagen, periodFrom: FIXTURE_DAY, periodTo: FIXTURE_DAY, note: null, requestedBy: null, newId, now: () => NOON })
     assert.ok(run)
     const live = (await weightEventsOf(tipped)).find((event) => event.status !== "cancelled")!
     const [line] = await withCompany(pool.db, tenant.companyId, (tx: Tx) => tx.select({ description: invoiceLine.description }).from(invoiceLine).where(and(eq(invoiceLine.companyId, tenant.companyId), eq(invoiceLine.billableEventId, live.id))))

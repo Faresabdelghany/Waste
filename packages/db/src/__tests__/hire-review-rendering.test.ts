@@ -21,6 +21,9 @@ import { billableEvent } from "../schema/finance"
 import { statementsOf } from "../sql/hand-written"
 import { checksOf, index, ref, tenantFk } from "./rendering"
 
+/** The exclusion's reasons as 0048 wrote them: today's before a batch's `too-many-events` (#329). */
+const REASONS_AS_OF_0048 = EXCLUSION_REASONS.filter((reason) => reason !== "too-many-events")
+
 const HOLD_SHAPE = `(${ref("billable_event", "held_at")} is null) = (${ref("billable_event", "hold_reason")} is null) and (${ref("billable_event", "held_by")} is null or ${ref("billable_event", "held_at")} is not null) and (${ref("billable_event", "held_at")} is null or ${ref("billable_event", "block_reason")} is null)`
 
 /** The migration, by its name: it takes its number at its turn. */
@@ -41,7 +44,7 @@ describe("the review of hires and jobs as drizzle-kit writes it", () => {
       tenantFk("billable_event", "held_by", "user_account"),
       index("billable_event", "billable_event_held_by_idx", "company_id", "held_by"),
       `ALTER TABLE "wms"."billable_event" ADD CONSTRAINT "billable_event_hold_shape" CHECK (${HOLD_SHAPE});`,
-      `ALTER TABLE "wms"."billing_run_exclusion" ADD CONSTRAINT "billing_run_exclusion_reason_one_of" CHECK (${ref("billing_run_exclusion", "reason")} in (${EXCLUSION_REASONS.map((reason) => `'${reason}'`).join(", ")}));`,
+      `ALTER TABLE "wms"."billing_run_exclusion" ADD CONSTRAINT "billing_run_exclusion_reason_one_of" CHECK (${ref("billing_run_exclusion", "reason")} in (${REASONS_AS_OF_0048.map((reason) => `'${reason}'`).join(", ")}));`,
     ])
   })
 
