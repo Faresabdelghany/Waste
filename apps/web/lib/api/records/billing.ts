@@ -155,6 +155,8 @@ function originOf(event: BillableEvent, context: MappingContext): string {
       return "Recycling-centre visit charged by its project's Visit Rule"
     case "weight":
       return "Reviewed weight charged by the tonne"
+    case "scale-ticket":
+      return "Load weighed at the scale house, charged by the tonne or the cubic metre"
   }
 }
 

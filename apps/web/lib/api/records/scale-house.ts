@@ -9,10 +9,12 @@
 // A completed ticket of one of our own vehicles is its route's Unload, which
 // Weight Control reads again (`touches`). The words are
 // lib/data/scale-house.ts'.
-import type { ScaleTicket, ScaleTicketComplete, ScaleTicketCreate, VehicleTare, VehicleTareCreate } from "@waste/contracts/scale-house"
+import type { ScaleTicket, ScaleTicketAmountDue, ScaleTicketComplete, ScaleTicketCreate, VehicleTare, VehicleTareCreate } from "@waste/contracts/scale-house"
+import { LITRES_PER_M3 } from "@waste/domain/finance/window"
 import { SCALE_TICKET_PARTIES, SCALE_TICKET_VOID_REASONS, TARE_SOURCES, type ScaleTicketParty, type ScaleTicketVoidReason, type TareSource } from "@waste/domain/scale-house/vocabulary"
 
 import { AGREEMENT_PREFIX, isAgreementRecord } from "@/lib/data/agreements"
+import { isProductRecord, PRODUCT_PREFIX } from "@/lib/data/commercial"
 import { FIXTURE_COMPANY_ID, type BusinessRecord } from "@/lib/data/business-modules"
 import { MASTER_DATA_KIND_DETAILS } from "@/lib/data/master-data-kinds"
 import { WEIGHTS_MODULE } from "@/lib/data/provider-money"
@@ -81,7 +83,16 @@ export function toScaleTicketRecord(ticket: ScaleTicket, context: MappingContext
   const party = ticket.customerId === null ? (ticket.visitorName ?? PARTY_LABELS.cash) : nameVia(context, CUSTOMER_PREFIX, ticket.customerId)
   const route = ticket.routeId === null ? undefined : nameVia(context, "route", ticket.routeId)
   const lines = Object.fromEntries(
-    ticket.lines.map((line) => [`Line ${line.position}`, `${nameVia(context, FRACTION_PREFIX, line.wasteFractionId)}${line.originMunicipality === null ? "" : ` · ${line.originMunicipality}`} · ${kilograms(line.netKg)}`]),
+    ticket.lines.map((line) => [
+      `Line ${line.position}`,
+      [
+        nameVia(context, FRACTION_PREFIX, line.wasteFractionId),
+        ...(line.originMunicipality === null ? [] : [line.originMunicipality]),
+        kilograms(line.netKg),
+        ...(line.volumeLitres === null ? [] : [`${line.volumeLitres / LITRES_PER_M3} m³`]),
+        ...(line.productId === null ? [] : [nameVia(context, PRODUCT_PREFIX, line.productId)]),
+      ].join(" · "),
+    ]),
   )
   return {
     id: webIdOf(SCALE_TICKET_PREFIX, ticket.id),
@@ -188,7 +199,13 @@ export function toCompleteBody(input: CommandInput, context: MappingContext): Sc
     if (netKg === undefined || Number.isNaN(netKg)) return refusal(`net${n}`, KILOGRAMS)
     const origin = said(input, `origin${n}`)
     if (origin !== undefined && !/^[0-9]{4}$/.test(origin)) return refusal(`origin${n}`, "A municipality code is four digits")
-    lines.push({ wasteFractionId, netKg, ...(origin === undefined ? {} : { originMunicipality: origin }) })
+    const productWebId = said(input, `product${n}`)
+    const productId = productWebId === undefined ? undefined : referencedServerId(productWebId, PRODUCT_PREFIX, context, { owns: isProductRecord })
+    if (productWebId !== undefined && productId === undefined) return refusal(`product${n}`, "Pick a product the API holds")
+    const volume = said(input, `volume${n}`)
+    const volumeLitres = volume === undefined ? undefined : Math.round(Number(volume) * LITRES_PER_M3)
+    if (volumeLitres !== undefined && !(Number.isFinite(volumeLitres) && volumeLitres >= 1)) return refusal(`volume${n}`, "A volume is cubic metres above 0: 1.5")
+    lines.push({ wasteFractionId, netKg, ...(origin === undefined ? {} : { originMunicipality: origin }), ...(productId === undefined ? {} : { productId }), ...(volumeLitres === undefined ? {} : { volumeLitres }) })
   }
   if (lines.length === 0) return refusal("fraction1", "Split the load into at least one line")
   return { tare, lines }
@@ -328,3 +345,8 @@ export const vehicleTareAdapter: ResourceAdapter<VehicleTare> = {
 
 /** Operate › Scale house: the tickets and the tares, read after the projects, the stations, the customers, the agreements, the vehicles, the routes and the fractions they name. */
 export const scaleHouseModule: ServerModule = { workspaceId: SCALE_HOUSE_MODULE.workspaceId, moduleId: SCALE_HOUSE_MODULE.moduleId, resources: [scaleTicketAdapter, vehicleTareAdapter] }
+
+/** `GET /scale-tickets/:id/amount-due` (M16b of #293): what a completed ticket comes to at the window, each line priced as Finance would price it. A read; nothing is stored or paid. */
+export function amountDueOf(client: ApiClient, serverId: string): Promise<ScaleTicketAmountDue> {
+  return get<ScaleTicketAmountDue>(client, `/scale-tickets/${serverId}/amount-due`)
+}

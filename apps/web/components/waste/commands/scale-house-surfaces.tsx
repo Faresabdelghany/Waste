@@ -8,18 +8,24 @@
 // split into up to three lines — and Void; a completed one Void, unless it is
 // one of our own vehicles' and its route's unload; a tare Re-weigh and Retire,
 // or Take back once retired. The API holds the rules and answers each at its
-// field.
+// field. A line may name the window's product, by the tonne or the cubic
+// metre, and a completed ticket's details read what it comes to (M16b of
+// #293): a read of the API's, nothing stored and nothing paid.
 import { useState } from "react"
 import { toast } from "sonner"
 
 import { Button } from "@/components/ui/button"
 import { BusinessRecordFormDialog } from "@/components/waste/business-record-form-dialog"
-import { useModuleRecords, useServerModuleState } from "@/components/waste/business-record-store"
+import { useApiClient } from "@/components/waste/api-session-store"
+import { useModuleRecords, useServerModuleState, useServerResolver } from "@/components/waste/business-record-store"
 import type { PrimarySurfaceProps, RowSurfaceProps } from "@/components/waste/commands/command-surfaces"
 import { CreateSurface } from "@/components/waste/commands/create-surface"
 import { useCommandRunner, useModuleReady, useRelationPickers, type RelationPickers } from "@/components/waste/commands/use-command-support"
+import { problemSentence } from "@/lib/api/problem"
 import { unloadingStationAdapter } from "@/lib/api/records/places"
+import { problemOfError } from "@/lib/api/records/server-records"
 import {
+  amountDueOf,
   COMPLETE_TICKET,
   REACTIVATE_TARE,
   RETIRE_TARE,
@@ -34,7 +40,10 @@ import { DEPOTS_MODULE } from "@/lib/data/allocations"
 import type { BusinessFormField, BusinessFormOption, BusinessFormSchema, BusinessFormValues } from "@/lib/data/business-form-types"
 import type { BusinessRecord } from "@/lib/data/business-modules"
 import { mintedRecord } from "@/lib/data/containers"
+import { BLOCK_REASON_LABELS, isProductRecord, PRODUCTS_MODULE } from "@/lib/data/commercial"
 import { masterDataKindOf } from "@/lib/data/master-data-kinds"
+import { formatMinor } from "@/lib/commercial/money"
+import type { ScaleTicketAmountDue } from "@waste/contracts/scale-house"
 import { recordsForProject } from "@/lib/data/project-scope"
 import { REWEIGH_FORM, SCALE_HOUSE_MODULE, SCALE_TICKET_RECORD_KIND, TARE_FORM, VEHICLE_TARE_RECORD_KIND, VOID_TICKET_FORM, WEIGH_IN_FORM, WEIGH_OUT_FORM } from "@/lib/data/scale-house"
 
@@ -116,12 +125,21 @@ export function ScaleHouseRowSurface({ record }: RowSurfaceProps) {
   const tare = vehicleTareAdapter.owns(record)
   const offered = (tare ? tareCommandsOffered(record) : ticketCommandsOffered(record)) as FormName[]
   const fractionOptions: BusinessFormOption[] = (master?.records ?? []).filter((row) => masterDataKindOf(row) === "waste-fraction").map(optionOf)
+  // The window's products (M16b of #293): the ticket's project's, sold by the tonne or the cubic metre.
+  const products = useModuleRecords(PRODUCTS_MODULE.workspaceId, PRODUCTS_MODULE.moduleId, NO_RECORDS)
+  const project = record.projectIds?.[0]
+  const productOptions: BusinessFormOption[] = recordsForProject(products.records.filter(isProductRecord), project)
+    .filter((row) => row.submittedValues?.priceUnit === "tonne" || row.submittedValues?.priceUnit === "m3")
+    .map((row) => ({ value: row.id, label: `${row.name} · ${row.submittedValues?.priceUnit === "m3" ? "per m³" : "per tonne"}` }))
 
   // Weigh out's fraction pickers are this window's: the form is the schema with them filled in.
   const forms: Partial<Record<FormName, BusinessFormSchema>> = {
     [COMPLETE_TICKET]: {
       ...WEIGH_OUT_FORM,
-      sections: WEIGH_OUT_FORM.sections.map((section) => ({ ...section, fields: section.fields.map((field) => (field.id.startsWith("fraction") ? { ...field, options: fractionOptions } : field)) })),
+      sections: WEIGH_OUT_FORM.sections.map((section) => ({
+        ...section,
+        fields: section.fields.map((field) => (field.id.startsWith("fraction") ? { ...field, options: fractionOptions } : field.id.startsWith("product") ? { ...field, options: productOptions } : field)),
+      })),
     },
     [VOID_TICKET]: VOID_TICKET_FORM,
     [REWEIGH_TARE]: REWEIGH_FORM,
@@ -145,6 +163,7 @@ export function ScaleHouseRowSurface({ record }: RowSurfaceProps) {
           </Button>
         ))}
       </div>
+      {!tare && record.submittedValues?.status === "completed" && <AmountDue record={record} />}
       {open !== null && forms[open] !== undefined && (
         <BusinessRecordFormDialog
           schema={forms[open]!}
@@ -155,5 +174,48 @@ export function ScaleHouseRowSurface({ record }: RowSurfaceProps) {
         />
       )}
     </section>
+  )
+}
+
+type AmountRead = { status: "idle" } | { status: "reading" } | { status: "read"; answer: ScaleTicketAmountDue } | { status: "refused"; sentence: string }
+
+/** What a completed ticket comes to at the window, read from the API when asked: each line priced as Finance would, or why it has no price, and the total. */
+function AmountDue({ record }: RowSurfaceProps) {
+  const client = useApiClient()
+  const resolver = useServerResolver()
+  const [read, setRead] = useState<AmountRead>({ status: "idle" })
+  const ask = () => {
+    const serverId = resolver.serverIdOf(record.id)
+    if (client === null || serverId === undefined) {
+      setRead({ status: "refused", sentence: "The ticket is not one the API holds yet." })
+      return
+    }
+    setRead({ status: "reading" })
+    amountDueOf(client, serverId).then(
+      (answer) => setRead({ status: "read", answer }),
+      (error: unknown) => setRead({ status: "refused", sentence: problemSentence(problemOfError(error)) }),
+    )
+  }
+  const answer = read.status === "read" ? read.answer : null
+  const money = (minor: number | null) => (minor === null || answer?.currency == null ? "—" : formatMinor(minor, answer.currency))
+  return (
+    <div className="space-y-2" data-testid="scale-ticket-amount-due">
+      <Button variant="outline" size="sm" disabled={read.status === "reading"} onClick={ask}>
+        {answer === null ? "Amount due" : "Read again"}
+      </Button>
+      {read.status === "refused" && <p className="text-sm text-destructive">{read.sentence}</p>}
+      {answer !== null && (
+        <div className="space-y-1 text-sm">
+          {answer.lines.map((line, index) => (
+            <p key={line.lineId}>
+              Line {index + 1}: {line.blockReason === null ? `${line.quantity ?? ""} → ${money(line.netMinor)}` : BLOCK_REASON_LABELS[line.blockReason]}
+            </p>
+          ))}
+          <p className="font-semibold">
+            Total {money(answer.totalMinor)} (VAT {money(answer.vatMinor)}){answer.complete ? "" : " — not every line is priced"}
+          </p>
+        </div>
+      )}
+    </div>
   )
 }

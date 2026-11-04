@@ -36,6 +36,7 @@ const AGREEMENT = "01a0d2a4-a280-7006-8000-000000000001"
 const RESIDUAL = "01a0d2a4-a280-7005-8000-000000000001"
 const GARDEN = "01a0d2a4-a280-7005-8000-000000000002"
 const UNLOAD = "01a0d2a4-a280-7096-8000-000000000001"
+const WINDOW_PRODUCT = "01a0d2a4-a280-7007-8000-000000000009"
 
 const plain = (id: string, name: string, extra: Partial<BusinessRecord> = {}): BusinessRecord =>
   ({ id, name, context: "", status: "Active", owner: "", value: "", updated: "", description: "", facts: {}, related: [], source: "", freshness: "", recordKind: "", submittedValues: {}, ...extra }) as BusinessRecord
@@ -45,6 +46,7 @@ const state: ServerRecordsState = new Map([
   ["resources.depots", moduleOf([plain(`station-${SITE}`, "Nordhavn genbrugsplads")], [SITE])],
   ["customers.contacts", moduleOf([plain(`company-${CUSTOMER}`, "Anna Byg ApS")], [CUSTOMER])],
   ["customers.agreements", moduleOf([plain(`agreement-${AGREEMENT}`, "AGR-2408")], [AGREEMENT])],
+  ["commercial.products", moduleOf([plain(`product-${WINDOW_PRODUCT}`, "Bulky at the window", { submittedValues: { priceUnit: "m3" } })], [WINDOW_PRODUCT])],
   [
     "configure.master",
     moduleOf(
@@ -79,8 +81,8 @@ const ticket: ScaleTicket = {
   netKg: 900,
   status: "completed",
   lines: [
-    { id: "01a0d2a4-a280-7099-8000-000000000201", position: 1, wasteFractionId: RESIDUAL, originMunicipality: "0101", netKg: 500 },
-    { id: "01a0d2a4-a280-7099-8000-000000000202", position: 2, wasteFractionId: GARDEN, originMunicipality: null, netKg: 400 },
+    { id: "01a0d2a4-a280-7099-8000-000000000201", position: 1, wasteFractionId: RESIDUAL, originMunicipality: "0101", netKg: 500, productId: null, volumeLitres: null },
+    { id: "01a0d2a4-a280-7099-8000-000000000202", position: 2, wasteFractionId: GARDEN, originMunicipality: null, netKg: 400, productId: null, volumeLitres: null },
   ],
   routeId: null,
   unloadId: null,
@@ -177,6 +179,17 @@ describe("Operate › Scale house", () => {
     assert.equal(pathOf({ tareSource: "weighed", fraction1: `fraction-${RESIDUAL}`, net1: "900" }), "tareKg")
     assert.equal(pathOf({ tareSource: "registered", fraction1: `fraction-${RESIDUAL}`, origin1: "101", net1: "900" }), "origin1")
     assert.equal(pathOf({ tareSource: "registered" }), "fraction1")
+  })
+
+  test("names a line's product by the server's id and turns a volume in cubic metres into litres (M16b of #293)", () => {
+    const body = toCompleteBody({ tareSource: "weighed", tareKg: "2500", fraction1: `fraction-${RESIDUAL}`, net1: "900", product1: `product-${WINDOW_PRODUCT}`, volume1: "1.5" }, context)
+    assert.deepEqual(ScaleTicketComplete.parse(body).lines, [{ wasteFractionId: RESIDUAL, netKg: 900, productId: WINDOW_PRODUCT, volumeLitres: 1_500 }])
+    const pathOf = (input: Record<string, string>) => {
+      const refused = toCompleteBody(input, context)
+      return isLocalRefusal(refused) ? refused.path : undefined
+    }
+    assert.equal(pathOf({ tareSource: "weighed", tareKg: "2500", fraction1: `fraction-${RESIDUAL}`, net1: "900", volume1: "0" }), "volume1")
+    assert.equal(pathOf({ tareSource: "weighed", tareKg: "2500", fraction1: `fraction-${RESIDUAL}`, net1: "900", product1: "product-unknown" }), "product1")
   })
 
   test("voids with a reason, and another reason with its note", () => {

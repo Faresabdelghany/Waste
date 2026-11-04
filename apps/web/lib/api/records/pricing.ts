@@ -519,6 +519,7 @@ export const priceRowAdapter: ResourceAdapter<PriceListRow> = {
         ...(type === undefined ? {} : { "Container type": type.name }),
         ...(fraction === undefined ? {} : { "Waste fraction": fraction.name }),
         ...(customer === undefined ? {} : { "Negotiated customer": customer.name }),
+        ...(row.fromQuantity === null ? {} : { "From quantity": `${row.fromQuantity}${unit === undefined ? "" : ` ${unit}`}` }),
         "Effective from": row.validFrom,
         ...(lastDay === undefined ? {} : { "Effective to": lastDay }),
         ...(row.note === null ? {} : { Note: row.note }),
@@ -538,6 +539,7 @@ export const priceRowAdapter: ResourceAdapter<PriceListRow> = {
         ...(type === undefined ? {} : { containerType: type.id }),
         ...(fraction === undefined ? {} : { wasteFraction: fraction.id }),
         ...(customer === undefined ? {} : { customerId: customer.id }),
+        ...(row.fromQuantity === null ? {} : { fromQuantity: String(row.fromQuantity) }),
         ...(row.note === null ? {} : { note: row.note }),
         validFrom: row.validFrom,
         ...(lastDay === undefined ? {} : { validTo: lastDay }),
@@ -566,6 +568,9 @@ export const priceRowAdapter: ResourceAdapter<PriceListRow> = {
     if (validFrom === undefined) return refusal("validFrom", "A row needs the first day it is in force")
     const lastDay = typed(record, "validTo")
     const note = typed(record, "note")
+    const tierText = typed(record, "fromQuantity")
+    const fromQuantity = tierText === undefined ? undefined : Number(tierText)
+    if (fromQuantity !== undefined && !(Number.isInteger(fromQuantity) && fromQuantity >= 1)) return refusal("fromQuantity", "A quantity tier is a whole number, 1 or more")
     const write: RowWrite = {
       priceListId: list.serverId,
       body: {
@@ -576,6 +581,7 @@ export const priceRowAdapter: ResourceAdapter<PriceListRow> = {
         ...(containerTypeId === undefined ? {} : { containerTypeId }),
         ...(wasteFractionId === undefined ? {} : { wasteFractionId }),
         ...(customerId === undefined ? {} : { customerId }),
+        ...(fromQuantity === undefined ? {} : { fromQuantity }),
         ...(note === undefined ? {} : { note }),
         validFrom,
         ...(lastDay === undefined ? {} : { validTo: firstDayOut(lastDay) }),
@@ -647,6 +653,12 @@ export function explainQuery(values: BusinessFormValues, resolve: Resolver = NOT
     ...(containerTypeId === undefined ? {} : { containerTypeId: containerTypeId as string }),
     ...(wasteFractionId === undefined ? {} : { wasteFractionId: wasteFractionId as string }),
     ...(customerId === undefined ? {} : { customerId: customerId as string }),
+  }
+  const quantityText = typed(record, "quantity")
+  if (quantityText !== undefined) {
+    const quantity = Number(quantityText)
+    if (!(quantity > 0)) return refusal("quantity", "A quantity is a number above 0")
+    query.quantity = quantity
   }
   return { priceListId: list.serverId, query }
 }
