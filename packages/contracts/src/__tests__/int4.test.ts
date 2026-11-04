@@ -91,6 +91,7 @@ import * as vehicleTypesModule from "../vehicle-types"
 import * as visitRulesModule from "../visit-rules"
 import * as messagingModule from "../messaging"
 import * as notificationsModule from "../notifications"
+import * as routeMessagesModule from "../route-messages"
 import * as weightControlModule from "../weight-control"
 import * as weighbridgeModule from "../weighbridge"
 import * as workOrderChargesModule from "../work-order-charges"
@@ -109,6 +110,7 @@ const MODULES: Readonly<Record<string, Record<string, unknown>>> = {
   "audit": auditModule,
   "messaging": messagingModule,
   "notifications": notificationsModule,
+  "route-messages": routeMessagesModule,
   "availability": availabilityModule,
   "billable-events": billableEventsModule,
   "billing": billingModule,
