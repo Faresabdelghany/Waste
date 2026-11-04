@@ -174,7 +174,7 @@ describe("finance.record-billable-events over a Site Visit's events (M4 of #293)
     assert.equal(unknown.refusalReason, "unknown-identifier", "no credential, no charge")
     const charged = await visit({ kind: "property", propertyId: tenant.properties.parkvej.id }, "2026-04-03T09:00:00.000Z")
     assert.equal(await handle(published("site-visit-recorded", charged)), "recorded")
-    await withCompany(pool.db, tenant.companyId, (tx: Tx) => runBilling(tx, { companyId: tenant.companyId, projectId: copenhagen, periodFrom: "2026-04-01", periodTo: "2026-04-30", note: null, requestedBy: null, newId, now: () => NOON }))
+    await runBilling((work) => withCompany(pool.db, tenant.companyId, work), { companyId: tenant.companyId, projectId: copenhagen, periodFrom: "2026-04-01", periodTo: "2026-04-30", note: null, requestedBy: null, newId, now: () => NOON })
     const [line] = await withCompany(pool.db, tenant.companyId, async (tx: Tx) => {
       const [event] = await eventsOf(charged.id)
       return tx.select({ description: invoiceLine.description }).from(invoiceLine).where(and(eq(invoiceLine.companyId, tenant.companyId), eq(invoiceLine.billableEventId, event.id)))

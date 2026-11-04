@@ -243,13 +243,13 @@ describe("recurring charges in a billing run", { skip: database.skip || owner.sk
     assert.equal((await readProblem(refused)).detail, AMOUNT_TOO_LARGE)
   })
 
-  test("serialises two runs of one project on the project's lock: one mints and invoices, the other finds every charge minted and invoiced", async () => {
+  test("serialises two runs of one project over one period on the project's lock: the second joins the first while it is under way, or finds every charge minted and invoiced (#329)", async () => {
     const march = period("2027-03-01", "2027-03-31")
     const [first, second] = await Promise.all([olivia("/billing-runs", { method: "POST", body: march }), olivia("/billing-runs", { method: "POST", body: march })])
     assert.deepEqual([first.status, second.status], [201, 201])
-    const counts = [BillingRunDetail.parse(await first.json()).eventCount, BillingRunDetail.parse(await second.json()).eventCount].sort((x, y) => x - y)
-    // March and April for the five monthly cases priced now, the garden bin included; the first and second quarters of 2027; and the garden bin's October charge, blocked at October's run and repriced since, caught up (#447).
-    assert.deepEqual(counts, [0, 11])
+    const runs = new Map([BillingRunDetail.parse(await first.json()), BillingRunDetail.parse(await second.json())].map((done) => [done.id, done]))
+    // March and April for the five monthly cases priced now, the garden bin included; the first and second quarters of 2027; and the garden bin's October charge, blocked at October's run and repriced since, caught up (#447) — once, whether by one run the two requests shared, or by one run and an empty one after it.
+    assert.equal([...runs.values()].reduce((sum, done) => sum + done.eventCount, 0), 11)
     const minted = await charges(["2027-01-01", "2027-03-01", "2027-04-01"])
     const keys = minted.map((row) => `${row.subscriptionId}/${row.periodFrom}`)
     assert.equal(new Set(keys).size, keys.length, "one charge per subscription and period")

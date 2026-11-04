@@ -179,7 +179,7 @@ describe("finance.run-billing against Postgres", { skip }, () => {
   test("a person's run over the month is not the schedule's record: the schedule still runs once after it, writing its own completed run of zero invoices, and skips only its own", async () => {
     // The office ran November's billing by hand on the first of December (`requested_by` set), before the schedule fired.
     const november = await ready(tenant.agreements.housing.id, "2026-11-12", 7_000)
-    const office = await withCompany(api.db, tenant.companyId, (tx) => runBilling(tx, { companyId: tenant.companyId, projectId: tenant.projects.copenhagen.id, periodFrom: "2026-11-01", periodTo: "2026-11-30", note: "By hand", requestedBy: tenant.users.olivia.id, newId, now: () => new Date("2026-12-01T09:00:00Z") }))
+    const office = await runBilling((work) => withCompany(api.db, tenant.companyId, work), { companyId: tenant.companyId, projectId: tenant.projects.copenhagen.id, periodFrom: "2026-11-01", periodTo: "2026-11-30", note: "By hand", requestedBy: tenant.users.olivia.id, newId, now: () => new Date("2026-12-01T09:00:00Z") })
     assert.equal(office.run.invoiceCount, 1)
     assert.equal(await statusOf(november), "invoiced")
     const before = (await runs()).length

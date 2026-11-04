@@ -2,147 +2,44 @@ import assert from "node:assert/strict"
 import { after, before, describe, test } from "node:test"
 
 import { BillableEvent } from "@waste/contracts/billable-events"
-import { BillingRun, BillingRunDetail, BillingRunPreview, PERIOD_ENDS_BY_TODAY, PERIOD_ORDERED } from "@waste/contracts/billing"
+import { BillingRunDetail, PERIOD_ENDS_BY_TODAY } from "@waste/contracts/billing"
 import { InvoiceDetail } from "@waste/contracts/invoices"
-import { Page } from "@waste/contracts/pagination"
-import { DAY_WINDOW_ORDERED } from "@waste/contracts/queries"
-import { createDb, type Database, type Tx } from "@waste/db/client"
+import { type Database, type Tx } from "@waste/db/client"
 import { customer } from "@waste/db/schema/customers"
-import { outboxEvent } from "@waste/db/schema/execution"
-import { billableEvent, billingRun, billingRunExclusion, invoice, invoiceLine } from "@waste/db/schema/finance"
-import { company, project } from "@waste/db/schema/organisation"
 import { withCompany } from "@waste/db/tenant"
-import { and, asc, count, eq, inArray, sql } from "drizzle-orm"
+import { and, eq } from "drizzle-orm"
 
-import { createApp } from "../app"
-import { newId, type IdMinter } from "../ids"
-import { notCancelled } from "../routes/billable-events"
-import { BILLING_RUN_MAX_EVENTS, runBilling, selectBilling, tooManyEvents } from "../routes/billing-runs"
-import { lockRow } from "../routes/shared"
-import { pickupEvent, reversalEvent, seedBilling, type BillingFixtures } from "./billing-fixtures"
-import { callingAs, type Call } from "./calls"
-import { created } from "./created"
+import { pickupEvent, reversalEvent, type BillingFixtures } from "./billing-fixtures"
+import { billingRunCalls, NOON, setUpBillingRuns, tearDownBillingRuns, type BillingRunSuite } from "./billing-run-suite"
+import { type Call } from "./calls"
 import { databaseUnderTest, ownerUnderTest } from "./database"
-import { seedExecution, type ExecutionFixtures } from "./execution-fixtures"
+import { type ExecutionFixtures } from "./execution-fixtures"
 import { readProblem } from "./read-problem"
-import { seedFleet, seedPlanning } from "./scheme-fixtures"
-import { dropTenant, grantRole, seedTenant, testId, type Tenant } from "./tenant"
-import { signingKeys, type SigningKeys } from "./tokens"
+import { type Tenant } from "./tenant"
 
 const database = databaseUnderTest()
 /** The owner sweeps the proofs the fixtures append and the invoices and lines the runs write, which `wms_api` may not delete. */
 const owner = ownerUnderTest()
-const RunPage = Page(BillingRun)
 
-const MODULE = "commercial.billing"
-
-/** The request's clock, pinned: noon on the fixtures' Monday, so "today" on Copenhagen's clock is that Monday and every stamp is known. */
-/** The instant the suite's clock stands at: past every period it runs, since a run is for a closed period (M14 of #293). */
-const NOON = new Date("2027-02-05T12:00:00Z")
-
+// The ceiling, the lock and the scope are billing-run-ceiling.test.ts, the batches billing-run-batches.test.ts (#329).
 describe("the billing run endpoints", { skip: database.skip || owner.skip }, () => {
+  let suite: BillingRunSuite
   let pool: Database
-  let ownerPool: Database
-  let keys: SigningKeys
   let a: Tenant
-  let b: Tenant
   let ex: ExecutionFixtures
   let fx: BillingFixtures
-  let app: ReturnType<typeof createApp>
   let olivia: Call
-  /** The custom role, granted the module, with Project Access to Copenhagen Central only. */
-  let viewer: Call
-  /** The Service Provider Manager, granted the module: a role that reaches no project of the company. */
   let lars: Call
-  let other: Call
-  let ungranted: Call
   let copenhagen: string
-  let harbor: string
 
   before(async () => {
-    pool = createDb(database.url, { max: 4 })
-    ownerPool = createDb(owner.url, { max: 1 })
-    keys = await signingKeys()
-    a = await seedTenant(pool)
-    b = await seedTenant(pool)
-    copenhagen = a.projects.copenhagen.id
-    harbor = a.projects.harbor.id
-    const fleet = await seedFleet(pool, a, await seedPlanning(pool, a))
-    ex = await seedExecution(pool, a, fleet)
-    fx = await seedBilling(pool, a, ex)
-    await grantRole(pool, a.companyId, a.roles.viewer.id, [{ moduleKey: MODULE, actions: ["view", "create"] }, { moduleKey: "commercial.invoices", actions: ["view"] }])
-    await grantRole(pool, a.companyId, a.roles.providerManager.id, [{ moduleKey: MODULE, actions: ["view", "create"] }])
-    app = createApp({ probe: pool, pool, verifier: keys.verifier, now: () => NOON })
-    olivia = callingAs(app, keys, a.users.olivia, a.companyId)
-    viewer = callingAs(app, keys, a.users.viewer, a.companyId)
-    lars = callingAs(app, keys, a.users.lars, a.companyId)
-    other = callingAs(app, keys, b.users.olivia, b.companyId)
-    ungranted = callingAs(app, keys, b.users.viewer, b.companyId)
+    suite = await setUpBillingRuns(database.url, owner.url)
+    ;({ pool, a, ex, fx, olivia, lars, copenhagen } = suite)
   })
 
-  after(async () => {
-    if (a) await dropTenant(pool, a.companyId, ownerPool)
-    if (b) await dropTenant(pool, b.companyId, ownerPool)
-    await pool?.close()
-    await ownerPool?.close()
-  })
+  after(() => tearDownBillingRuns(suite))
 
-  const refused = async (response: Response, status: number) => {
-    assert.equal(response.status, status, JSON.stringify(await response.clone().json()))
-    return await readProblem(response)
-  }
-
-  const manual = (overrides: Record<string, unknown> = {}) => ({ projectId: copenhagen, agreementId: fx.agreements.housingDkk.id, productId: fx.products.residual.id, quantity: 1, serviceDate: fx.day, ...overrides })
-
-  const entered = async (body: Record<string, unknown>): Promise<BillableEvent> => {
-    const response = await olivia("/billable-events", { method: "POST", body })
-    assert.equal(response.status, 201, JSON.stringify(await response.clone().json()))
-    return BillableEvent.parse(await response.json())
-  }
-
-  const readEvent = async (id: string): Promise<BillableEvent> => {
-    const response = await olivia(`/billable-events/${id}`)
-    assert.equal(response.status, 200, JSON.stringify(await response.clone().json()))
-    return BillableEvent.parse(await response.json())
-  }
-
-  const readInvoice = async (id: string, call: Call = olivia): Promise<InvoiceDetail> => {
-    const response = await call(`/invoices/${id}`)
-    assert.equal(response.status, 200, JSON.stringify(await response.clone().json()))
-    return InvoiceDetail.parse(await response.json())
-  }
-
-  const period = (periodFrom: string, periodTo: string = periodFrom, projectId: string = copenhagen) => ({ projectId, periodFrom, periodTo })
-
-  const run = async (body: Record<string, unknown>, call: Call = olivia): Promise<BillingRunDetail> => created(call, "/billing-runs", await call("/billing-runs", { method: "POST", body }), BillingRunDetail)
-
-  const preview = async (body: Record<string, unknown>, call: Call = olivia): Promise<BillingRunPreview> => {
-    const response = await call("/billing-runs/preview", { method: "POST", body })
-    assert.equal(response.status, 200, JSON.stringify(await response.clone().json()))
-    return BillingRunPreview.parse(await response.json())
-  }
-
-  /** The outbox rows about one document, oldest first, read as `wms_api` under the fence. */
-  const eventsAbout = async (aggregateId: string) =>
-    withCompany(pool.db, a.companyId, (tx: Tx) =>
-      tx
-        .select({ kind: outboxEvent.kind, aggregateKind: outboxEvent.aggregateKind, projectId: outboxEvent.projectId, occurredAt: outboxEvent.occurredAt, payload: outboxEvent.payload })
-        .from(outboxEvent)
-        .where(and(eq(outboxEvent.companyId, a.companyId), eq(outboxEvent.aggregateId, aggregateId)))
-        .orderBy(asc(outboxEvent.id)),
-    )
-
-  /** What the company has written so far: runs, invoices, invoice events, and the counter — to prove a preview and a refused run write nothing. */
-  const written = () =>
-    withCompany(pool.db, a.companyId, async (tx: Tx) => {
-      const [runs] = await tx.select({ rows: count() }).from(billingRun).where(eq(billingRun.companyId, a.companyId))
-      const [invoices] = await tx.select({ rows: count() }).from(invoice).where(eq(invoice.companyId, a.companyId))
-      const [issued] = await tx.select({ rows: count() }).from(outboxEvent).where(and(eq(outboxEvent.companyId, a.companyId), eq(outboxEvent.kind, "invoice-issued")))
-      const [counter] = await tx.select({ next: company.nextInvoiceNumber }).from(company).where(eq(company.id, a.companyId))
-      return { runs: runs?.rows ?? 0, invoices: invoices?.rows ?? 0, issued: issued?.rows ?? 0, next: counter?.next }
-    })
-
-  const byId = (x: { id: string }, y: { id: string }) => (x.id < y.id ? -1 : x.id > y.id ? 1 : 0)
+  const { refused, manual, entered, readEvent, readInvoice, period, run, preview, eventsAbout, written } = billingRunCalls(() => suite)
 
   describe("held for review (M14 of #293)", () => {
     test("excludes a payer whose events are all held, or each blocked or held, with the reason its events give: the preview counts the held, and the run writes each exclusion", async () => {
@@ -316,170 +213,6 @@ describe("the billing run endpoints", { skip: database.skip || owner.skip }, () 
       assert.deepEqual([issued.kind, issued.customerId, issued.currency, issued.netMinor, issued.vatMinor, issued.grossMinor], ["invoice", fx.customers.housing.id, "DKK", -10_000, -2_500, -12_500], "an invoice may carry a negative net when reversals outweigh")
       assert.deepEqual(issued.lines.map((line) => [line.billableEventId, line.quantity, line.unitPriceMinor, line.netMinor, line.vatMinor]), [[reversal.id, 1, 10_000, -10_000, -2_500]])
       assert.deepEqual([(await readEvent(e1.id)).status, (await readEvent(reversal.id)).status], ["reversed", "invoiced"])
-    })
-  })
-
-  describe("the ceiling, the lock and the scope", () => {
-    test("refuses a selection above the ceiling as one transaction, writing nothing, on the run and on the preview alike", async () => {
-      assert.equal(BILLING_RUN_MAX_EVENTS, 5_000)
-      const day = "2027-01-05"
-      const rows = Array.from({ length: BILLING_RUN_MAX_EVENTS + 1 }, () => ({
-        id: testId(),
-        companyId: a.companyId,
-        projectId: copenhagen,
-        kind: "manual",
-        serviceDate: day,
-        agreementId: fx.agreements.anna.id,
-        productId: fx.products.residual.id,
-        quantity: 1,
-        unitPriceMinor: 12_000,
-        netMinor: 12_000,
-        vatPercent: 25,
-        vatMinor: 3_000,
-        currency: "DKK",
-        priceListRowId: fx.rows.residual.id,
-        createdBy: a.users.olivia.id,
-      }))
-      await withCompany(pool.db, a.companyId, async (tx: Tx) => {
-        for (let start = 0; start < rows.length; start += 500) await tx.insert(billableEvent).values(rows.slice(start, start + 500))
-      })
-      const before = await written()
-      const tooMany = await refused(await olivia("/billing-runs", { method: "POST", body: period("2027-01-01", "2027-01-31") }), 409)
-      assert.equal(tooMany.detail, tooManyEvents(BILLING_RUN_MAX_EVENTS + 1))
-      assert.equal(tooMany.detail, "5 001 ready events fall in the period; narrow it — a run is one transaction")
-      assert.equal((await refused(await olivia("/billing-runs/preview", { method: "POST", body: period("2027-01-01", "2027-01-31") }), 409)).detail, tooMany.detail)
-      assert.deepEqual(await written(), before, "a refused run leaves nothing behind, the counter included")
-      const narrower = await run(period("2027-01-04"))
-      assert.deepEqual([narrower.eventCount, narrower.invoiceCount], [0, 0], "the day before holds nothing")
-    })
-
-    test("serialises two runs of one project on the project's lock: the second finds only what the first left", async () => {
-      const day = "2026-11-02"
-      await entered(manual({ serviceDate: day }))
-      await entered(manual({ serviceDate: day, agreementId: fx.agreements.anna.id }))
-      const [first, second] = await Promise.all([olivia("/billing-runs", { method: "POST", body: period("2026-11-01", "2026-11-03") }), olivia("/billing-runs", { method: "POST", body: period("2026-11-01", "2026-11-03") })])
-      assert.deepEqual([first.status, second.status], [201, 201])
-      const counts = [BillingRunDetail.parse(await first.json()).invoiceCount, BillingRunDetail.parse(await second.json()).invoiceCount].sort()
-      assert.deepEqual(counts, [0, 2], "one run issued both invoices and the other none")
-    })
-
-    test("locks the events it invoices: a cancellation sent while a run holds them waits for the run and is then refused as invoiced, so no event is both invoiced and cancelled", async () => {
-      // The run is hand-driven to its selection — the project locked and the ready events read `for update` the way `runBilling` reads them, the transaction held open — so a cancellation that found the row unlocked would stamp `cancelled_at` on an event the run is about to invoice (READ COMMITTED: the run's line is invisible until it commits), a line the customer pays for a row the office thinks is gone. With the lock the cancellation waits: the run goes on to its invoices and commits only once Postgres reports the cancellation blocked behind it (`pg_blocking_pids`, the driver suite's precedent), and the cancellation then reads the line the run wrote.
-      const day = "2026-12-07"
-      const event = await entered(manual({ serviceDate: day }))
-      assert.equal(event.status, "ready")
-      const scope = { companyId: a.companyId, projectId: copenhagen }
-      const window = { periodFrom: day, periodTo: day }
-      const proceed = Promise.withResolvers<void>()
-      const selected = Promise.withResolvers<number>()
-      const running = withCompany(pool.db, a.companyId, async (tx: Tx) => {
-        const [{ pid }] = await tx.execute<{ pid: number }>(sql`select pg_backend_pid() as pid`)
-        await lockRow(tx, project, { companyId: a.companyId, id: copenhagen })
-        const selection = await selectBilling(tx, scope, window, { lock: true })
-        assert.deepEqual(
-          selection.events.map((ready) => ready.id),
-          [event.id],
-          "the one ready event of the day",
-        )
-        selected.resolve(pid)
-        await proceed.promise
-        return await runBilling(tx, { ...scope, ...window, note: null, requestedBy: a.users.olivia.id, newId, now: () => NOON })
-      })
-      /** Rejects if the run ends before it is let go — a statement refused, say — so a broken run fails the test instead of hanging it on the pid. */
-      const endedEarly = running.then(() => Promise.reject(new Error("the run's transaction ended before it was released")))
-      void endedEarly.catch(() => undefined)
-      // The cancellation is sent once the selection is made and held, so what it meets is the lock and not the timing.
-      let cancelling: Promise<Response> | undefined
-      try {
-        const pid = await Promise.race([selected.promise, endedEarly])
-        cancelling = olivia(`/billable-events/${event.id}/cancel`, { method: "POST", body: { reason: "not-delivered" } })
-        // Postgres names the backends a process blocks: the cancellation is waiting on the run's transaction once this answers a row, and not before.
-        const blocked = async (): Promise<boolean> => (await pool.sql`select pid from pg_stat_activity where ${pid} = any(pg_blocking_pids(pid))`).length > 0
-        const deadline = Date.now() + 10_000
-        while (!(await blocked())) {
-          assert.ok(Date.now() < deadline, "the cancellation never waited on the run: the selection took no lock on the events")
-          await new Promise((resolve) => setTimeout(resolve, 20))
-        }
-      } finally {
-        proceed.resolve()
-        await running.catch(() => undefined)
-        await cancelling?.catch(() => undefined)
-      }
-      const done = await running
-      assert.ok(cancelling, "the cancellation was sent")
-      assert.deepEqual([done.run.eventCount, done.invoiceIds.length], [1, 1], "the run invoiced the event")
-      assert.equal((await refused(await cancelling, 409)).detail, notCancelled(event.id, "invoiced"), "the cancellation read the line the run wrote")
-      const charged = await readEvent(event.id)
-      assert.deepEqual([charged.status, charged.cancelledAt, charged.cancelReason, charged.invoiceLineId !== null], ["invoiced", null, null, true], "invoiced and never cancelled")
-    })
-
-    test("is one transaction: a run that fails after its first invoice is written leaves no run, invoice, line, exclusion, event or number behind, and the events stay ready", async () => {
-      // The failure is provoked at the second invoice's id: a minter that gives out after the run's id, the first invoice's and its one line's, so the first document — row, line and `invoice-issued` — has been written when the run dies, and everything the transaction holds has to go with it.
-      const day = "2026-12-14"
-      const housing = await entered(manual({ serviceDate: day }))
-      const anna = await entered(manual({ serviceDate: day, agreementId: fx.agreements.anna.id }))
-      /** The exclusion rows and the lines naming the two events: what `written` does not count. */
-      const rest = () =>
-        withCompany(pool.db, a.companyId, async (tx: Tx) => {
-          const [exclusions] = await tx.select({ rows: count() }).from(billingRunExclusion).where(eq(billingRunExclusion.companyId, a.companyId))
-          const [lines] = await tx.select({ rows: count() }).from(invoiceLine).where(and(eq(invoiceLine.companyId, a.companyId), inArray(invoiceLine.billableEventId, [housing.id, anna.id])))
-          return { exclusions: exclusions?.rows ?? 0, lines: lines?.rows ?? 0 }
-        })
-      const before = { ...(await written()), ...(await rest()) }
-      assert.equal(before.lines, 0)
-      let minted = 0
-      const givesOut: IdMinter = () => {
-        if (++minted > 3) throw new Error("the minter gave out")
-        return newId()
-      }
-      await assert.rejects(
-        withCompany(pool.db, a.companyId, (tx: Tx) => runBilling(tx, { companyId: a.companyId, projectId: copenhagen, periodFrom: day, periodTo: day, note: null, requestedBy: a.users.olivia.id, newId: givesOut, now: () => NOON })),
-        /the minter gave out/,
-      )
-      assert.equal(minted, 4, "the run's id, the first invoice's, its line's, and the second invoice's: the first document was written before the run died")
-      assert.deepEqual({ ...(await written()), ...(await rest()) }, before, "no run, no invoice, no line, no exclusion, no invoice-issued, and the counter where it was")
-      assert.deepEqual([(await readEvent(housing.id)).status, (await readEvent(anna.id)).status], ["ready", "ready"], "neither event is on a line")
-      const done = await run(period(day))
-      assert.deepEqual([done.eventCount, done.invoiceCount], [2, 2], "the same run, with a minter that lasts, issues both")
-    })
-
-    test("holds the body to the caller's projects and its period to its order, and refuses a member the server owns", async () => {
-      const outside = await refused(await viewer("/billing-runs", { method: "POST", body: period("2026-10-01", "2026-10-10", harbor) }), 400)
-      assert.deepEqual(outside.errors?.map((error) => error.path), ["projectId"])
-      const none = await refused(await lars("/billing-runs", { method: "POST", body: period("2026-10-01", "2026-10-10") }), 400)
-      assert.deepEqual(none.errors?.map((error) => error.path), ["projectId"])
-      const backwards = await refused(await olivia("/billing-runs", { method: "POST", body: period("2026-10-10", "2026-10-01") }), 400)
-      assert.deepEqual(backwards.errors, [{ path: "periodTo", message: PERIOD_ORDERED }])
-      const owned = await refused(await olivia("/billing-runs", { method: "POST", body: { ...period("2026-10-01"), status: "completed" } }), 400)
-      assert.deepEqual(owned.errors?.map((error) => error.path), ["status"])
-      await refused(await ungranted("/billing-runs", { method: "POST", body: period("2026-10-01") }), 403)
-    })
-
-    test("lists the runs of the caller's projects by status and by a window over the period's start, reads one, and is the family's 404 across tenants", async () => {
-      const harbors = await run(period("2026-10-01", "2026-10-31", harbor))
-      const listed = await olivia("/billing-runs?status=completed&limit=200")
-      assert.equal(listed.status, 200)
-      const page = RunPage.parse(await listed.json())
-      assert.ok(page.items.some((item) => item.id === harbors.id))
-      assert.ok(page.items.every((item) => item.status === "completed"))
-      assert.deepEqual([...page.items].sort(byId).map((item) => item.id), page.items.map((item) => item.id), "oldest first")
-
-      const viewers = await viewer("/billing-runs?limit=200")
-      assert.equal(viewers.status, 200)
-      const viewed = RunPage.parse(await viewers.json())
-      assert.ok(viewed.items.length > 0 && viewed.items.every((item) => item.projectId === copenhagen), "Copenhagen Central only")
-      assert.ok(!viewed.items.some((item) => item.id === harbors.id))
-      await refused(await viewer(`/billing-runs/${harbors.id}`), 404)
-      await refused(await other(`/billing-runs/${harbors.id}`), 404)
-      await refused(await ungranted(`/billing-runs/${harbors.id}`), 403)
-
-      const windowed = await olivia("/billing-runs?from=2026-10-01&to=2026-10-01&limit=200")
-      assert.ok(RunPage.parse(await windowed.json()).items.every((item) => item.periodFrom === "2026-10-01"))
-      const backwards = await refused(await olivia("/billing-runs?from=2026-10-10&to=2026-10-01"), 400)
-      assert.deepEqual(backwards.errors, [{ path: "to", message: DAY_WINDOW_ORDERED }])
-      const larsPage = await lars("/billing-runs")
-      assert.equal(larsPage.status, 200)
-      assert.deepEqual(await larsPage.json(), { items: [], nextCursor: null })
     })
   })
 })
