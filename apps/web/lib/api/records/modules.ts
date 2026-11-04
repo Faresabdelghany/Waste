@@ -45,6 +45,8 @@ import { sortingGuideModule } from "./sorting-guide"
 import { routesModule } from "./routes"
 import { ticketTeamsModule } from "./ticket-teams"
 import { ticketsModule } from "./tickets"
+import { scaleHouseModule } from "./scale-house"
+import { weighbridgeModule } from "./weighbridge"
 import { weightsModule } from "./weights"
 
 /**
@@ -137,6 +139,10 @@ export const SERVER_MODULES: readonly ServerModule[] = [
   accountingModule,
   settlementsModule,
   weightsModule,
+  // A weighbridge's tickets (O27 of #290), after the stations, the routes, the vehicles and the fractions they name.
+  weighbridgeModule,
+  // The scale house (M16a of #293), after the projects, the stations, the customers, the agreements, the vehicles, the routes and the fractions its rows name.
+  scaleHouseModule,
 ]
 
 const byKey = new Map(SERVER_MODULES.map((module) => [moduleKeyOf(module.workspaceId, module.moduleId), module]))

@@ -607,8 +607,43 @@
     {
       "idx": 86,
       "version": "7",
-      "when": 1793798367226,
-      "tag": "0097_too_many_events_exclusion",
+      "when": 1793796531744,
+      "tag": "0086_maintenance",
+      "breakpoints": true
+    },
+    {
+      "idx": 87,
+      "version": "7",
+      "when": 1793798725666,
+      "tag": "0087_weight_charges",
+      "breakpoints": true
+    },
+    {
+      "idx": 88,
+      "version": "7",
+      "when": 1793800727146,
+      "tag": "0088_weighbridge_tickets",
+      "breakpoints": true
+    },
+    {
+      "idx": 89,
+      "version": "7",
+      "when": 1793803421661,
+      "tag": "0089_scale_house",
+      "breakpoints": true
+    },
+    {
+      "idx": 90,
+      "version": "7",
+      "when": 1793808436400,
+      "tag": "0090_driver_messaging",
+      "breakpoints": true
+    },
+    {
+      "idx": 91,
+      "version": "7",
+      "when": 1793810668841,
+      "tag": "0091_too_many_events_exclusion",
       "breakpoints": true
     }
   ]

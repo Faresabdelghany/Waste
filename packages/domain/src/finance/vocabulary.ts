@@ -48,12 +48,12 @@
 // is a `readonly` tuple with a type read off it; `FINANCE_VOCABULARIES` names
 // them all for the test that walks them.
 
-/** What the occurrence was: a completed pickup, a resolved ticket, a person's entry, the reversal of an invoiced event a correction undid, a subscription's charge period a billing run charged, since M14 of #293 a completed work order and a hired container's month on site, a Pickup Exception its project's rules charge (#293 M5), and a recycling-centre visit its Visit Rule charges (#393). */
-export const BILLABLE_EVENT_KINDS = ["pickup", "ticket", "manual", "reversal", "subscription", "job", "hire", "pickup-exception", "visit"] as const
+/** What the occurrence was: a completed pickup, a resolved ticket, a person's entry, the reversal of an invoiced event a correction undid, a subscription's charge period a billing run charged, since M14 of #293 a completed work order and a hired container's month on site, a Pickup Exception its project's rules charge (#293 M5), a recycling-centre visit its Visit Rule charges (#393), and a stop's share of a reviewed Unload's weight under a product sold by the tonne (O28 of #290). */
+export const BILLABLE_EVENT_KINDS = ["pickup", "ticket", "manual", "reversal", "subscription", "job", "hire", "pickup-exception", "visit", "weight"] as const
 /** Why an event cannot be invoiced, each actionable; cleared by `reprice`. */
 export const BLOCK_REASONS = ["no-subscription", "agreement-draft", "no-price-list", "no-price-row", "no-product", "no-vat-rate", "amount-too-large"] as const
-/** Why a ready event was cancelled: the consumer's two reasons first — a corrected pickup, a voided Site Visit (#393) — the office's three after them. */
-export const CANCEL_REASONS = ["pickup-corrected", "visit-voided", "duplicate", "not-delivered", "other"] as const
+/** Why a ready event was cancelled: the consumer's three reasons first — a corrected pickup, a voided Site Visit (#393), an Unload's weight no longer approved (O28 of #290) — the office's three after them. */
+export const CANCEL_REASONS = ["pickup-corrected", "visit-voided", "weight-revised", "duplicate", "not-delivered", "other"] as const
 /** Where a Billable Event stands: a reading over its stamps and its invoice line, never a column. */
 export const BILLABLE_EVENT_STATUSES = ["blocked", "ready", "held", "invoiced", "cancelled", "reversed"] as const
 /** Where a Billing Run stands; part A writes `completed` alone. */

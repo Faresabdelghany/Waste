@@ -16,6 +16,7 @@ import type { Customer } from "@waste/contracts/customers"
 import { CreditNoteCreate, type Invoice, type InvoiceDetail, type InvoiceLine } from "@waste/contracts/invoices"
 import type { Project } from "@waste/contracts/organisation"
 
+import { OFFICE_CANCEL_REASONS } from "../../data/commercial"
 import { FIXTURE_COMPANY_ID, getModuleDefinition, type BusinessRecord } from "../../data/business-modules"
 import { problemSentence } from "../problem"
 import { NOTHING_RESOLVED, type MappingContext } from "../records/adapter"
@@ -78,6 +79,7 @@ const ready: BillableEvent = {
   subscriptionId: null,
   productId: res240.id,
   quantity: 1,
+  weightKg: null,
   unitPriceMinor: 1650,
   netMinor: 1650,
   vatPercent: 25,
@@ -85,7 +87,7 @@ const ready: BillableEvent = {
   currency: "DKK",
   priceListRowId: "01a0d2a4-a280-7029-8000-000000000003",
   blockReason: null,
-  links: { routeId: ROUTE, pickupId: PICKUP, ticketId: null, reversesEventId: null, proofId: null, visitId: null },
+  links: { routeId: ROUTE, pickupId: PICKUP, ticketId: null, reversesEventId: null, proofId: null, visitId: null, unloadId: null },
   charge: null,
   sourceEventId: "01a0d2a4-a280-7060-8000-000000000001",
   createdBy: null,
@@ -97,8 +99,8 @@ const ready: BillableEvent = {
   hold: null,
   invoiceLineId: null,
 }
-const blocked: BillableEvent = { ...ready, id: "01a0d2a4-a280-7050-8000-000000000002", kind: "ticket", status: "blocked", productId: null, unitPriceMinor: null, netMinor: null, vatPercent: null, vatMinor: null, currency: null, priceListRowId: null, blockReason: "no-product", links: { routeId: ROUTE, pickupId: null, ticketId: TICKET, reversesEventId: null, proofId: null, visitId: null } }
-const manual: BillableEvent = { ...ready, id: "01a0d2a4-a280-7050-8000-000000000003", kind: "manual", productId: bulky.id, quantity: 2, unitPriceMinor: 30000, netMinor: 60000, vatMinor: 15000, priceListRowId: null, links: { routeId: null, pickupId: null, ticketId: null, reversesEventId: null, proofId: null, visitId: null }, sourceEventId: null, createdBy: ADMIN, overrideReason: "Agreed on the phone", note: "Two sofas" }
+const blocked: BillableEvent = { ...ready, id: "01a0d2a4-a280-7050-8000-000000000002", kind: "ticket", status: "blocked", productId: null, unitPriceMinor: null, netMinor: null, vatPercent: null, vatMinor: null, currency: null, priceListRowId: null, blockReason: "no-product", links: { routeId: ROUTE, pickupId: null, ticketId: TICKET, reversesEventId: null, proofId: null, visitId: null, unloadId: null } }
+const manual: BillableEvent = { ...ready, id: "01a0d2a4-a280-7050-8000-000000000003", kind: "manual", productId: bulky.id, quantity: 2, unitPriceMinor: 30000, netMinor: 60000, vatMinor: 15000, priceListRowId: null, links: { routeId: null, pickupId: null, ticketId: null, reversesEventId: null, proofId: null, visitId: null, unloadId: null }, sourceEventId: null, createdBy: ADMIN, overrideReason: "Agreed on the phone", note: "Two sofas" }
 
 const NO_CONTEXT = (fixtures: readonly BusinessRecord[]): MappingContext => ({ fixtures, resolve: NOTHING_RESOLVED, companyRecordId: FIXTURE_COMPANY_ID, now: NOW })
 const copenhagenRecord = projectAdapter.toRecord(copenhagen, NO_CONTEXT(fixturesOf("configure", "organization")))
@@ -195,7 +197,7 @@ describe("the billable events module", () => {
   })
 
   test("shows a recurring charge by its charge period's first and last days and the days it charged, a run's and nobody's (#291 C2)", () => {
-    const charge: BillableEvent = { ...ready, id: "01a0d2a4-a280-7050-8000-000000000004", kind: "subscription", serviceDate: "2026-11-16", subscriptionId: "01a0d2a4-a280-7013-8000-000000000001", unitPriceMinor: 5500, netMinor: 5500, vatMinor: 1375, links: { routeId: null, pickupId: null, ticketId: null, reversesEventId: null, proofId: null, visitId: null }, charge: { periodFrom: "2026-11-01", periodTo: "2026-12-01", chargedDays: 15, periodDays: 30 }, sourceEventId: null }
+    const charge: BillableEvent = { ...ready, id: "01a0d2a4-a280-7050-8000-000000000004", kind: "subscription", serviceDate: "2026-11-16", subscriptionId: "01a0d2a4-a280-7013-8000-000000000001", unitPriceMinor: 5500, netMinor: 5500, vatMinor: 1375, links: { routeId: null, pickupId: null, ticketId: null, reversesEventId: null, proofId: null, visitId: null, unloadId: null }, charge: { periodFrom: "2026-11-01", periodTo: "2026-12-01", chargedDays: 15, periodDays: 30 }, sourceEventId: null }
     const record = billableEventAdapter.toRecord(charge, context(eventFixtures))
     assert.equal(record.name, "Recurring charge · Residual waste · 240L bin")
     assert.equal(record.facts.Kind, "Recurring charge")
@@ -205,6 +207,19 @@ describe("the billable events module", () => {
     assert.equal(billableEventAdapter.toRecord(ready, context(eventFixtures)).facts["Charge period"], undefined, "a pickup's event charges no period")
     const tooMuch = billableEventAdapter.toRecord({ ...charge, status: "blocked", unitPriceMinor: null, netMinor: null, vatPercent: null, vatMinor: null, currency: null, priceListRowId: null, blockReason: "amount-too-large" }, context(eventFixtures))
     assert.equal(tooMuch.facts["Block reason"], "Amount too large")
+  })
+
+  test("shows a weight charge by its share's kilograms, its Unload and its origin, the unit price the weighed load's amount (O28 of #290)", () => {
+    const UNLOAD = "01a0d2a4-a280-7032-8000-000000000001"
+    const weighed: BillableEvent = { ...ready, id: "01a0d2a4-a280-7050-8000-000000000005", kind: "weight", weightKg: 8240, unitPriceMinor: 422_300, netMinor: 422_300, vatMinor: 105_575, links: { ...ready.links, unloadId: UNLOAD } }
+    const record = billableEventAdapter.toRecord(weighed, context(eventFixtures))
+    assert.equal(record.facts.Kind, "Weight charge")
+    assert.equal(record.facts.Weight, "8,240 kg")
+    assert.equal(record.facts.Unload, `unload-${UNLOAD}`, "named by its id where the weights are not read")
+    assert.equal(record.facts.Origin, "Reviewed weight charged by the tonne")
+    assert.equal(record.facts["Unit price"], "DKK 4,223.00")
+    assert.equal(billableEventAdapter.toRecord(ready, context(eventFixtures)).facts.Weight, undefined, "a pickup's event weighs nothing")
+    assert.equal(OFFICE_CANCEL_REASONS.includes("weight-revised" as never), false, "the consumer's reason is never the office's")
   })
 
   test("makes the manual event's body: the project the agreement's, a person's price in the agreement's currency with its reason", () => {

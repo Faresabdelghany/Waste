@@ -31,8 +31,8 @@ import { container, containerServicePlacement } from "@waste/db/schema/container
 import { customer, property } from "@waste/db/schema/customers"
 import { message, messageTemplate } from "@waste/db/schema/messaging"
 import { notificationRule, notificationRuleArea } from "@waste/db/schema/notifications"
-import { outboxEvent, pickup, proofOfService, route } from "@waste/db/schema/execution"
-import { billableEvent, billingRun, billingRunExclusion, invoice, invoiceLine, priceList, priceListRow, ticketKindProduct, workOrderProduct } from "@waste/db/schema/finance"
+import { outboxEvent, pickup, proofOfService, route, unload } from "@waste/db/schema/execution"
+import { billableEvent, billingRun, billingRunExclusion, invoice, invoiceLine, priceList, priceListRow, ticketKindProduct, weightReview, workOrderProduct } from "@waste/db/schema/finance"
 import { driver, vehicle } from "@waste/db/schema/fleet"
 import { dropOffPoint, dropOffPointFraction } from "@waste/db/schema/drop-off-points"
 import { accessCredential, siteVisit, siteVisitFraction, visitRule, visitRuleFreeFraction, visitRuleStep } from "@waste/db/schema/site-visits"
@@ -40,7 +40,7 @@ import { vehicleType } from "@waste/db/schema/fleet-types"
 import { bulkyBooking, bulkyBookingItem, bulkySchedule } from "@waste/db/schema/bulky"
 import { company, project } from "@waste/db/schema/organisation"
 import { pickupExceptionRule, pickupExceptionRuleStep } from "@waste/db/schema/pickup-exceptions"
-import { warehouse } from "@waste/db/schema/places"
+import { unloadingStation, warehouse } from "@waste/db/schema/places"
 import { planningArea, planningAreaBoundary } from "@waste/db/schema/planning-areas"
 import { alert, ticket, ticketBooking, ticketEvent } from "@waste/db/schema/resolution"
 import { collectionGroup, routeScheme, routeSchemeSeason } from "@waste/db/schema/route-schemes"
@@ -414,6 +414,10 @@ export async function dropFinanceTenant(pool: Database, owner: Database, company
   await owner.db.delete(invoiceLine).where(eq(invoiceLine.companyId, companyId))
   await owner.db.delete(invoice).where(eq(invoice.companyId, companyId))
   await owner.db.delete(billingRunExclusion).where(eq(billingRunExclusion.companyId, companyId))
+  // A weight charge names the Unload it charges a share of (O28 of #290), and a review the Unload it judged: the events, then the two ledgers.
+  await owner.db.delete(billableEvent).where(eq(billableEvent.companyId, companyId))
+  await owner.db.delete(weightReview).where(eq(weightReview.companyId, companyId))
+  await owner.db.delete(unload).where(eq(unload.companyId, companyId))
   await owner.db.delete(ticketBooking).where(eq(ticketBooking.companyId, companyId))
   await owner.db.delete(ticketEvent).where(eq(ticketEvent.companyId, companyId))
   await withCompany(pool.db, companyId, async (tx: Tx) => {
@@ -447,6 +451,7 @@ export async function dropFinanceTenant(pool: Database, owner: Database, company
     await tx.delete(alert).where(eq(alert.companyId, companyId))
     await tx.delete(messageTemplate).where(eq(messageTemplate.companyId, companyId))
     await tx.delete(route).where(eq(route.companyId, companyId))
+    await tx.delete(unloadingStation).where(eq(unloadingStation.companyId, companyId))
     await tx.delete(collectionGroup).where(eq(collectionGroup.companyId, companyId))
     await tx.delete(routeSchemeSeason).where(eq(routeSchemeSeason.companyId, companyId))
     await tx.delete(routeScheme).where(eq(routeScheme.companyId, companyId))

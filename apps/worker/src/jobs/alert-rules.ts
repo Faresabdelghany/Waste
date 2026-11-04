@@ -1,5 +1,5 @@
 // The worker's alert rules (O4 of #290): every few minutes, across companies,
-// the four conditions — five since O8, below — the office should hear of without anyone raising them
+// the four conditions — seven since O8, O26 and O20, below — the office should hear of without anyone raising them
 // — a route still waiting half an hour after its planned start, a running
 // route's device silent for a quarter of an hour, an active driver's licence
 // within a month of running out or run out, and an open ticket past its due
@@ -25,7 +25,7 @@
 // the raise statements read only the occurrences no alert names yet,
 // and the clear statement only the open rule alerts whose condition no longer
 // holds, each with the few columns an alert or a resolution needs, so a quiet
-// tick reads seven empty results. They read across companies as `wms_worker`,
+// tick reads eight empty results. They read across companies as `wms_worker`,
 // one after another, since the Pilot's worker pool is two connections the
 // other sweeps share; the writes go per company as `wms_api` under
 // `withCompany`, only where there is something to raise or resolve. A route
@@ -66,6 +66,19 @@
 // transaction (O16 of #290), the `Alert` as the API would answer it, so the
 // staff notices' consumer tells the people who asked to hear of an alert that
 // severe; an alert the key already held writes neither row nor event.
+//
+// O20 of #290 added the seventh, `maintenance-due`: an active maintenance plan
+// of a vehicle not retired that is within its margins of a limit — fourteen
+// days, a thousand kilometres, fifty engine hours — or past one, judged as
+// @waste/domain/resources/maintenance judges it: on its project's today, and
+// against the newest odometer and engine hours a pre-trip check read of the
+// vehicle, or the last service's where none is newer (`DUE_PLANS`, one probe
+// each into `pre_trip_check_vehicle_id_idx`). Its key is
+// `maintenance-due:<plan>:<last service's day>/<km>/<hours>` (`-` for a reading
+// the plan has none of), `:overdue` once past a limit: a service done moves
+// the baseline and clears it, a plan retired or relieved by a patch clears
+// it, and running from due soon to overdue is a second, graver occurrence,
+// the first cleared, as a licence's expiry is.
 import { routeLabel } from "@waste/contracts/execution"
 import { ticketLabel } from "@waste/contracts/resolution"
 import { bookFillEmptying, fillEmptyingNote } from "@waste/db/commands/fill-emptying"
@@ -73,6 +86,7 @@ import { emit } from "@waste/db/commands/outbox"
 import { alertColumns, alertOf } from "@waste/db/commands/resolution-rows"
 import { alert } from "@waste/db/schema/resolution"
 import { withCompany } from "@waste/db/tenant"
+import { MAINTENANCE_WARNING_DAYS, MAINTENANCE_WARNING_HOURS, MAINTENANCE_WARNING_KM } from "@waste/domain/resources/maintenance"
 import { alertOfRule, CLEARED_NOTES, LICENCE_WARNING_DAYS, POSITION_STALE_MINUTES, ROUTE_START_GRACE_MINUTES, RULE_LOOKBACK_HOURS, SESSION_SILENCE_MINUTES, type RuleOccurrence } from "@waste/domain/resolution/alert-rules"
 import { ALERT_RULES, OPEN_TICKET_STATUSES, type AlertRule } from "@waste/domain/resolution/vocabulary"
 import { and, eq, inArray, ne, sql, type SQL } from "drizzle-orm"
@@ -118,6 +132,41 @@ const NEWEST_MEASURED = sql`(select max(fr.measured_at) from wms.fill_reading fr
 const LAST_LOW = sql`(select fr.id::text from wms.fill_reading fr where fr.company_id = sp.company_id and fr.pairing_id = sp.id and fr.fill_percent < sp.full_threshold_percent order by fr.measured_at desc limit 1)`
 /** A pairing in force on the project's today. */
 const pairingInForce = (now: SQL) => sql`sp.valid_from <= (${now} at time zone p.timezone)::date and (sp.valid_to is null or sp.valid_to > (${now} at time zone p.timezone)::date)`
+/** A vehicle's newest reading of one kind by a pre-trip check, one backward probe into the check's vehicle index. */
+const newestReading = (column: "odometer_km" | "engine_hours") =>
+  sql.raw(`(select pc.${column} from wms.pre_trip_check pc where pc.company_id = m.company_id and pc.vehicle_id = m.vehicle_id and pc.${column} is not null order by pc.occurred_at desc limit 1)`)
+
+/**
+ * The active plans of vehicles not retired, each judged at the tick's
+ * instant: its next limits, the readings it is judged on — the newest a
+ * pre-trip check read, else the last service's (`greatest` passes over a
+ * null) — whether it is past a limit or within the margins of one, and its
+ * key. As `mp`, read by the raise and, by the plan in the key, the clear.
+ */
+const duePlans = (now: SQL) => sql`(
+  select j.*,
+         'maintenance-due:' || j.plan_id || ':' || to_char(j.last_done_on, 'YYYY-MM-DD') || '/' || coalesce(j.last_done_km::text, '-') || '/' || coalesce(j.last_done_hours::text, '-')
+           || case when j.overdue then ':overdue' else '' end as rule_key
+    from (
+      select r.*,
+             coalesce(r.today >= r.next_on or r.odometer_km >= r.next_km or r.engine_hours >= r.next_hours, false) as overdue,
+             coalesce(r.today >= r.next_on - ${MAINTENANCE_WARNING_DAYS}::int or r.odometer_km >= r.next_km - ${MAINTENANCE_WARNING_KM}::int or r.engine_hours >= r.next_hours - ${MAINTENANCE_WARNING_HOURS}::int, false) as due
+        from (
+          select m.company_id, m.project_id, m.id as plan_id, m.vehicle_id, m.name, coalesce(v.callsign, v.registration) as vehicle_label,
+                 m.last_done_on, m.last_done_km, m.last_done_hours,
+                 (${now} at time zone p.timezone)::date as today,
+                 m.last_done_on + m.interval_days as next_on,
+                 m.last_done_km + m.interval_km as next_km,
+                 m.last_done_hours + m.interval_hours as next_hours,
+                 greatest(${newestReading("odometer_km")}, m.last_done_km) as odometer_km,
+                 greatest(${newestReading("engine_hours")}, m.last_done_hours) as engine_hours
+            from wms.vehicle_maintenance_plan m
+            join wms.vehicle v on v.company_id = m.company_id and v.id = m.vehicle_id
+            join wms.project p on p.company_id = m.company_id and p.id = m.project_id
+           where m.status = 'active' and v.status <> 'retired'
+        ) r
+    ) j
+) mp`
 
 /** Each rule's key at the tick's instant, spelled once for the raise and the clear. */
 const keysAt = (now: SQL) => ({
@@ -206,6 +255,13 @@ export async function occurrencesToRaise(worker: JobContext["worker"], at: Date)
        and t.due_at < ${now}
        and ${noAlertWith(KEYS.ticket, sql`t.company_id`)}
   `)
+  const plans = await worker.db.execute<{ company_id: string; project_id: string; rule_key: string; vehicle_id: string; vehicle_label: string; name: string; overdue: boolean; next_on: string | null; next_km: number | null; next_hours: number | null }>(sql`
+    select mp.company_id, mp.project_id, mp.rule_key, mp.vehicle_id, mp.vehicle_label, mp.name, mp.overdue,
+           to_char(mp.next_on, 'YYYY-MM-DD') as next_on, mp.next_km, mp.next_hours
+      from ${duePlans(now)}
+     where mp.due
+       and ${noAlertWith(sql`mp.rule_key`, sql`mp.company_id`)}
+  `)
 
   const fills = await worker.db.execute<{ company_id: string; project_id: string; rule_key: string; container_id: string; label: string; identifier: string; fill_percent: number; threshold: number; measured_at: string; books_emptying: boolean; today: string }>(sql`
     select sp.company_id, sp.project_id, ${KEYS.fill} as rule_key, sp.container_id, c.label, se.identifier,
@@ -234,6 +290,19 @@ export async function occurrencesToRaise(worker: JobContext["worker"], at: Date)
       occurrence: { rule: "fill-threshold" as const, containerId: row.container_id, containerLabel: row.label, sensorIdentifier: row.identifier, fillPercent: Number(row.fill_percent), thresholdPercent: Number(row.threshold), measuredAt: row.measured_at },
       ...(row.books_emptying ? { books: { containerId: row.container_id, today: row.today, note: fillEmptyingNote(row.identifier, Number(row.fill_percent), row.measured_at) } } : {}),
     })),
+    ...plans.map((row) => ({
+      ...of(row),
+      occurrence: {
+        rule: "maintenance-due" as const,
+        vehicleId: row.vehicle_id,
+        vehicleLabel: row.vehicle_label,
+        planName: row.name,
+        overdue: row.overdue,
+        nextDueOn: row.next_on,
+        nextDueKm: row.next_km === null ? null : Number(row.next_km),
+        nextDueHours: row.next_hours === null ? null : Number(row.next_hours),
+      },
+    })),
   ]
 }
 
@@ -243,7 +312,8 @@ export async function occurrencesToRaise(worker: JobContext["worker"], at: Date)
  * alert's key — a route started, moved or cancelled; a device heard from or
  * its session or route ended; a licence renewed or run out, or its driver no
  * longer active; a ticket closed or re-dated; a container read below its
- * threshold, or its pairing ended — or its condition has passed.
+ * threshold, or its pairing ended; a plan serviced, retired or run overdue —
+ * or its condition has passed.
  */
 export async function alertsToClear(worker: JobContext["worker"], at: Date): Promise<ClearedAlert[]> {
   const now = sql`${at.toISOString()}::timestamptz`
@@ -276,6 +346,9 @@ export async function alertsToClear(worker: JobContext["worker"], at: Date): Pro
          when 'ticket-overdue' then not exists (
            select 1 from wms.ticket t
             where t.company_id = a.company_id and t.id = a.ticket_id and a.rule_key = ${KEYS.ticket} and t.status in (${OPEN_TICKETS}) and t.due_at < ${now})
+         when 'maintenance-due' then not exists (
+           select 1 from ${duePlans(now)}
+            where mp.company_id = a.company_id and mp.plan_id = split_part(a.rule_key, ':', 2)::uuid and mp.rule_key = a.rule_key and mp.due)
          else false
        end
   `)
