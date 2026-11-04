@@ -572,7 +572,28 @@
     {
       "idx": 81,
       "version": "7",
-      "when": 1793264962164,
+      "when": 1793262692450,
+      "tag": "0081_fill_level_sensors",
+      "breakpoints": true
+    },
+    {
+      "idx": 82,
+      "version": "7",
+      "when": 1793263502443,
+      "tag": "0082_fill_driven_emptying",
+      "breakpoints": true
+    },
+    {
+      "idx": 83,
+      "version": "7",
+      "when": 1793267564046,
+      "tag": "0083_staff_notifications",
+      "breakpoints": true
+    },
+    {
+      "idx": 84,
+      "version": "7",
+      "when": 1793794910083,
       "tag": "0098_septic_tanks",
       "breakpoints": true
     }

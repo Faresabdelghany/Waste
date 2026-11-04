@@ -27,6 +27,10 @@
 // are the company's rows, not a list here (resources/decommission-reasons.ts).
 // `VEHICLE_DEFECT_STATUSES` (O13 of #290) is where a defect a pre-trip check
 // found stands (resources/pre-trip.ts).
+// `SENSOR_NETWORKS` and `SENSOR_STATUSES` (O26 of #290, row 9.10) are what a
+// fill-level Sensor reports over and whether it still reports: the three
+// networks the prototype offers, and a sensor retired once it is taken off
+// its last bin for good (resources/sensors.ts).
 //
 // A value is a kebab-case token: it goes into a migration as a SQL literal
 // and onto the wire as an enum member, and those are the same string. A list
@@ -77,6 +81,10 @@ export const DRIVER_ABSENCE_REASONS = ["holiday", "sick", "training", "leave", "
 export const VEHICLE_UNAVAILABILITY_REASONS = ["maintenance", "repair", "inspection", "breakdown", "other"] as const
 /** A Decommission Reason's state (O30 of #290): offered for a new decommission, or retired from them; a retired one still names the decommissions it was given to. */
 export const DECOMMISSION_REASON_STATUSES = ["active", "inactive"] as const
+/** The network a fill-level Sensor reports over (O26 of #290): the prototype's three. */
+export const SENSOR_NETWORKS = ["lorawan", "sigfox", "nb-iot"] as const
+/** A Sensor's state (O26 of #290): reporting, or retired, when its readings are refused and it is paired to no new container; a retired one keeps its pairings and readings. */
+export const SENSOR_STATUSES = ["active", "retired"] as const
 /** The unit a fuel is burnt and its emission factor given in (M10 of #293): a litre of a liquid fuel, a kilogram of gas, a kilowatt-hour of electricity. */
 export const ENERGY_UNITS = ["litre", "kg", "kwh"] as const
 /** Why a route's emissions are not measured, in the order they are judged: no active Plan, a Plan not yet measured, no vehicle planned, a vehicle with no fuel, no consumption for its type and fuel, no factor in force for its fuel. */
@@ -118,6 +126,8 @@ export type DropOffPointStatus = (typeof DROP_OFF_POINT_STATUSES)[number]
 export type DriverAbsenceReason = (typeof DRIVER_ABSENCE_REASONS)[number]
 export type VehicleUnavailabilityReason = (typeof VEHICLE_UNAVAILABILITY_REASONS)[number]
 export type DecommissionReasonStatus = (typeof DECOMMISSION_REASON_STATUSES)[number]
+export type SensorNetwork = (typeof SENSOR_NETWORKS)[number]
+export type SensorStatus = (typeof SENSOR_STATUSES)[number]
 export type EnergyUnit = (typeof ENERGY_UNITS)[number]
 export type EmissionGap = (typeof EMISSION_GAPS)[number]
 export type VehicleDefectStatus = (typeof VEHICLE_DEFECT_STATUSES)[number]
@@ -146,6 +156,8 @@ export const RESOURCES_VOCABULARIES = {
   DRIVER_ABSENCE_REASONS,
   VEHICLE_UNAVAILABILITY_REASONS,
   DECOMMISSION_REASON_STATUSES,
+  SENSOR_NETWORKS,
+  SENSOR_STATUSES,
   ENERGY_UNITS,
   EMISSION_GAPS,
   VEHICLE_DEFECT_STATUSES,

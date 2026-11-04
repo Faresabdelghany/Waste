@@ -65,8 +65,8 @@
 import { Page } from "@waste/contracts/pagination"
 import { PickupAdd, PickupCorrection, PickupDetail, PickupListItem, PickupListQuery, PickupRemove } from "@waste/contracts/pickups"
 import type { Tx } from "@waste/db/client"
-import { validOn } from "@waste/db/query/valid-on"
-import { agreement, subscription } from "@waste/db/schema/agreements"
+import { placementStopOn } from "@waste/db/commands/fill-emptying"
+import { subscription } from "@waste/db/schema/agreements"
 import { product } from "@waste/db/schema/catalogue"
 import { container, containerServicePlacement } from "@waste/db/schema/containers"
 import { property, sharedCollectionPoint } from "@waste/db/schema/customers"
@@ -137,16 +137,7 @@ async function containerStop(tx: Tx, scope: Scope, containerId: string, serviceD
     .where(and(eq(container.companyId, scope.companyId), eq(container.projectId, scope.projectId), eq(container.id, containerId)))
     .limit(1)
   if (found === undefined) throw invalidRequest("body", [{ path: "containerId", message: NOT_A_CONTAINER }])
-  const [place] = await tx
-    .select({ propertyId: subscription.propertyId, sharedCollectionPointId: subscription.sharedCollectionPointId, wasteFractionId: containerServicePlacement.wasteFractionId })
-    .from(containerServicePlacement)
-    .innerJoin(
-      subscription,
-      and(eq(subscription.companyId, containerServicePlacement.companyId), eq(subscription.projectId, containerServicePlacement.projectId), eq(subscription.id, containerServicePlacement.subscriptionId), validOn(subscription, serviceDate)),
-    )
-    .innerJoin(agreement, and(eq(agreement.companyId, subscription.companyId), eq(agreement.projectId, subscription.projectId), eq(agreement.id, subscription.agreementId), validOn(agreement, serviceDate)))
-    .where(and(eq(containerServicePlacement.companyId, scope.companyId), eq(containerServicePlacement.projectId, scope.projectId), eq(containerServicePlacement.containerId, containerId), validOn(containerServicePlacement, serviceDate)))
-    .limit(1)
+  const place = await placementStopOn(tx, scope, containerId, serviceDate)
   return { label: found.label, place }
 }
 
