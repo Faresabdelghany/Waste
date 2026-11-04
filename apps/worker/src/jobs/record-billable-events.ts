@@ -144,8 +144,9 @@ async function factsOf(tx: Tx, event: PublishedEvent) {
     }
     case "scale-ticket-completed":
     case "scale-ticket-voided": {
-      const answered = ScaleTicket.parse(event.payload)
-      return await scaleTicketFacts(tx, event.companyId, event.kind, answered.id)
+      // The ticket's id is all the consumer reads off the payload; the rest is read from the tables as they stand.
+      const named = ScaleTicket.pick({ id: true }).parse(event.payload)
+      return await scaleTicketFacts(tx, event.companyId, event.kind, named.id)
     }
     default:
       return { facts: { kind: event.kind } as EventFacts, live: [] }

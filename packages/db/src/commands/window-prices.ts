@@ -31,8 +31,8 @@ export type WindowLine = {
   product: { id: string; unit: ProductUnit; vatPercent: number | null } | null
 }
 
-/** A ticket's lines in position order, each with its product read beside it. */
-export async function windowLinesOf(tx: Tx, companyId: string, ticketId: string): Promise<WindowLine[]> {
+/** A ticket's lines in position order, each with its product read beside it; or the one line `lineId` names, where it is given. */
+export async function windowLinesOf(tx: Tx, companyId: string, ticketId: string | null, lineId?: string): Promise<WindowLine[]> {
   const rows = await tx
     .select({
       lineId: scaleTicketLine.id,
@@ -46,7 +46,7 @@ export async function windowLinesOf(tx: Tx, companyId: string, ticketId: string)
     })
     .from(scaleTicketLine)
     .leftJoin(product, and(eq(product.companyId, scaleTicketLine.companyId), eq(product.id, scaleTicketLine.productId)))
-    .where(and(eq(scaleTicketLine.companyId, companyId), eq(scaleTicketLine.ticketId, ticketId)))
+    .where(and(eq(scaleTicketLine.companyId, companyId), ticketId === null ? undefined : eq(scaleTicketLine.ticketId, ticketId), lineId === undefined ? undefined : eq(scaleTicketLine.id, lineId)))
     .orderBy(asc(scaleTicketLine.position))
   return rows.map((row) => ({
     lineId: row.lineId,

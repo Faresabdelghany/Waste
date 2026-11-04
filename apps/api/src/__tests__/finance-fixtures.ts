@@ -72,6 +72,8 @@ export type RowSeed = {
   wasteFractionId?: string | null
   customerId?: string | null
   note?: string | null
+  /** A quantity tier (M16b of #293); none where absent. */
+  fromQuantity?: number | null
   validFrom?: string
   validTo?: string | null
 }
@@ -118,6 +120,7 @@ export async function seedPriceList(pool: Database, tenant: Tenant, seed: PriceL
           wasteFractionId: row.wasteFractionId ?? null,
           customerId: row.customerId ?? null,
           note: row.note ?? null,
+          fromQuantity: row.fromQuantity ?? null,
           validFrom: row.validFrom ?? validFrom,
           validTo: row.validTo === undefined ? validTo : row.validTo,
         })),
