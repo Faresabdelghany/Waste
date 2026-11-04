@@ -407,7 +407,7 @@ A Message a project sends a Customer on its own account when something happens t
 _Avoid_: Notification, alert, automatic e-mail, push
 
 **Alert**:
-A condition that requires attention, notification, or acknowledgement and may create or link to a ticket. It is acknowledged and resolved, and links to at most one Ticket. The office raises one by hand; the worker's rules raise one per occurrence of a route not started, a device silent, a licence running out, a ticket overdue, a position stale, or a Container filled past its Sensor Pairing's threshold — an overdue ticket's alert is about that Ticket, never a new one — and resolve it when the condition clears.
+A condition that requires attention, notification, or acknowledgement and may create or link to a ticket. It is acknowledged and resolved, and links to at most one Ticket. The office raises one by hand; the worker's rules raise one per occurrence of a route not started, a device silent, a licence running out, a ticket overdue, a position stale, a Container filled past its Sensor Pairing's threshold, an Outbound Load not received, weighed beyond the tolerance or over its vehicle's payload, or a route that never tipped — an overdue ticket's alert is about that Ticket, never a new one — and resolve it when the condition clears.
 _Avoid_: Ticket, insight
 
 **Team**:

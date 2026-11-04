@@ -117,6 +117,7 @@ import { container } from "./containers"
 import { customer, property, sharedCollectionPoint } from "./customers"
 import { pickup, route } from "./execution"
 import { driver, vehicle } from "./fleet"
+import { outboundLoad } from "./haul-out"
 import { company, project } from "./organisation"
 import { companyReference, projectKey, projectReference, tenantIndex, tenantKey, tenantReference, tenantUnique, type ProjectTable } from "./references"
 import { wms } from "./wms"
@@ -406,6 +407,8 @@ export const alert = wms.table(
     containerId: uuid(),
     /** The ticket the alert created or was linked to; "linked to ticket" is this not null. */
     ticketId: uuid(),
+    /** The Outbound Load a disposal-site reconciliation rule's alert is about (M17 of #293). */
+    outboundLoadId: uuid(),
     /** The caller; null for a source that is not a person. */
     raisedBy: uuid(),
     /** Together or not at all. */
@@ -428,6 +431,7 @@ export const alert = wms.table(
     projectReference(t, [t.driverId], driver),
     projectReference(t, [t.containerId], container),
     projectReference(t, [t.ticketId], ticket),
+    projectReference(t, [t.outboundLoadId], outboundLoad),
     tenantReference(t, [t.raisedBy], userAccount),
     tenantReference(t, [t.acknowledgedBy], userAccount),
     tenantReference(t, [t.resolvedBy], userAccount),
@@ -439,7 +443,7 @@ export const alert = wms.table(
     // An alert about nothing is nothing: the prototype's own validation, and a ticket since the worker's rules.
     check(
       tableObjectName(t.id.table, "subject_shape", "alert"),
-      sql`(${t.routeId} is not null)::int + (${t.vehicleId} is not null)::int + (${t.driverId} is not null)::int + (${t.containerId} is not null)::int + (${t.ticketId} is not null)::int >= 1`,
+      sql`(${t.routeId} is not null)::int + (${t.vehicleId} is not null)::int + (${t.driverId} is not null)::int + (${t.containerId} is not null)::int + (${t.ticketId} is not null)::int + (${t.outboundLoadId} is not null)::int >= 1`,
     ),
     // A rule's alert names its occurrence, and only a rule's does.
     check(tableObjectName(t.id.table, "rule_shape", "alert"), sql`(${t.rule} is null) = (${t.ruleKey} is null)`),
@@ -462,6 +466,7 @@ export const alert = wms.table(
     tenantIndex(t, t.driverId),
     tenantIndex(t, t.containerId),
     tenantIndex(t, t.ticketId),
+    tenantIndex(t, t.outboundLoadId),
     tenantIndex(t, t.raisedBy),
     tenantIndex(t, t.acknowledgedBy),
     tenantIndex(t, t.resolvedBy),
