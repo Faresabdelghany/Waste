@@ -27,7 +27,7 @@ describe("a message template", () => {
   test("names only placeholders a message fills, refused at the field that names them", () => {
     assert.deepEqual(refusal(MessageTemplateCreate.safeParse({ ...email, body: "Invoice {{invoiceNumber}} for {{ firstName }}" })), [{ path: "body", message: unknownPlaceholderSentence(["invoiceNumber", "firstName"]) }])
     assert.deepEqual(refusal(MessageTemplatePatch.safeParse({ subject: "Hi {{nobody}}" })), [{ path: "subject", message: unknownPlaceholderSentence(["nobody"]) }])
-    assert.equal(unknownPlaceholderSentence(["nobody"]), "{{nobody}} is filled by no message; use {{recipientName}}, {{customerName}}, {{companyName}}")
+    assert.equal(unknownPlaceholderSentence(["nobody"]), "{{nobody}} is filled by no message; use {{recipientName}}, {{customerName}}, {{companyName}}, {{collectionDate}}")
   })
 
   test("is for service or billing, never for staff: a staff notice is the domain's text (O16 of #290)", () => {

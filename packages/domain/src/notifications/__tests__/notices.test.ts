@@ -4,7 +4,8 @@
 import assert from "node:assert/strict"
 import { describe, test } from "node:test"
 
-import { alertNotice, severityReaches, ticketAssignedNotice } from "../notices"
+import { OUTBOX_KINDS } from "../../execution/vocabulary"
+import { alertNotice, customerNoticeOf, severityReaches, ticketAssignedNotice } from "../notices"
 
 describe("an alert's severity against a person's threshold", () => {
   test("reaches it at the threshold and above, never below", () => {
@@ -29,5 +30,23 @@ describe("the notices", () => {
       body: "Olivia Larsen, ticket T-1207 in Copenhagen Central is now yours.\n\nMissed collection at Parkvej 18\nPriority: high.\n\n— Kystbyen",
     })
     assert.match(ticketAssignedNotice({ number: 7, subject: "x", priority: "none", dueAt: "2026-10-30T12:00:00.000Z" }, { projectName: "P", companyName: "C", recipientName: "R" }).body, /Due 2026-10-30T12:00:00\.000Z\./)
+  })
+})
+
+describe("the customer notice an outbox event is", () => {
+  const booking = { bulkyBookingId: "01a0d3a5-e5e0-7000-8000-000000000001" }
+  test("a booking booked or cancelled is its own, and its stop's completion or failure its collection or its miss", () => {
+    assert.equal(customerNoticeOf("bulky-booking-booked", null), "bulky-booking-booked")
+    assert.equal(customerNoticeOf("bulky-booking-cancelled", null), "bulky-booking-cancelled")
+    assert.equal(customerNoticeOf("pickup-completed", booking), "bulky-booking-collected")
+    assert.equal(customerNoticeOf("pickup-failed", booking), "bulky-booking-not-collected")
+  })
+
+  test("a stop that collects no booking, and every other kind, is no notice", () => {
+    assert.equal(customerNoticeOf("pickup-completed", { bulkyBookingId: null }), null)
+    assert.equal(customerNoticeOf("pickup-failed", null), null)
+    const quiet = OUTBOX_KINDS.filter((kind) => customerNoticeOf(kind, booking) === null)
+    assert.equal(quiet.length, OUTBOX_KINDS.length - 4)
+    assert.ok(quiet.includes("pickup-skipped"), "a skipped stop was never tried: the office books it again")
   })
 })

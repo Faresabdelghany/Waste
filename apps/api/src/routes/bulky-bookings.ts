@@ -18,6 +18,12 @@
 // stored; only a booked one is moved to another day, given other items or
 // cancelled — a routed one's stop is taken off its route first. The grant is
 // `operate.bulky-bookings`.
+//
+// A booking made and a booking cancelled write `bulky-booking-booked` and
+// `bulky-booking-cancelled` to the outbox (O16 of #290, part b), the booking
+// as answered, from which the worker sends the customer the project's notice
+// where a notification rule names one; its stop's completion or failure is
+// read off the stop's own events.
 import { Page } from "@waste/contracts/pagination"
 import { BulkyAvailability, BulkyAvailabilityQuery, BulkyBooking, BulkyBookingCancel, BulkyBookingCreate, BulkyBookingListQuery, BulkyBookingPatch, type BulkyStop } from "@waste/contracts/bulky"
 import type { Tx } from "@waste/db/client"
@@ -37,6 +43,7 @@ import { BEARER_SECURITY, type AuthEnv, type Principal } from "../auth/principal
 import { inProjects, requireProject } from "../auth/projects"
 import { requireGrant } from "../auth/require"
 import { newId } from "../ids"
+import { emit } from "../outbox"
 import { afterCursor, fetchLimit, pageOf } from "../pagination"
 import { describeProblem, invalidRequest, problem, validate } from "../problem"
 import { NOT_AN_AGREEMENT, requireCustomer, requireProperty, requireSharedCollectionPoint, requireWasteFraction, type Scope } from "./references"
@@ -265,7 +272,7 @@ export function bulkyBookingRoutes(guard: MiddlewareHandler<AuthEnv>, { now = ()
       describeRoute({
         operationId: "createBulkyBooking",
         summary: "Book a bulky collection",
-        description: `Books a bulky collection for a customer: at one of the two places — a property or a shared collection point of the agreement's project — on a day, of a waste fraction, with its items (at least one, each a description and a count), charged to an agreement of a project the caller works in (400 at \`agreementId\` otherwise). The customer is the company's (400) and the agreement's (400 at \`customerId\`), the place the project's (400 at its field) and the fraction the company's (400). Then the rows: the customer active (409), the place served — an active property, an open or restricted point (409); the agreement signed, in force on the day, and serving the place that day through a subscription there (409 each); then the day: ${DAY_REFUSALS} (409). The booking takes one slot of its day under its schedule's row lock, so two bookings of the last slot take turns and the second is refused. It freezes the area, the schedule and the schedule's product — what its completion is charged at — and stands \`booked\` until the office routes it as a stop (\`POST /routes/{id}/pickups\` with \`service: bulky\`). The same statement answers the citizen portal's door (#383).`,
+        description: `Books a bulky collection for a customer: at one of the two places — a property or a shared collection point of the agreement's project — on a day, of a waste fraction, with its items (at least one, each a description and a count), charged to an agreement of a project the caller works in (400 at \`agreementId\` otherwise). The customer is the company's (400) and the agreement's (400 at \`customerId\`), the place the project's (400 at its field) and the fraction the company's (400). Then the rows: the customer active (409), the place served — an active property, an open or restricted point (409); the agreement signed, in force on the day, and serving the place that day through a subscription there (409 each); then the day: ${DAY_REFUSALS} (409). The booking takes one slot of its day under its schedule's row lock, so two bookings of the last slot take turns and the second is refused. It freezes the area, the schedule and the schedule's product — what its completion is charged at — and stands \`booked\` until the office routes it as a stop (\`POST /routes/{id}/pickups\` with \`service: bulky\`). \`bulky-booking-booked\` is written to the outbox with the booking as answered, from which the customer is sent the project's notice where a rule names one (O16 of #290). The same statement answers the citizen portal's door (#383).`,
         security: BEARER_SECURITY,
         responses: {
           201: describeCreated("The booking, booked, with its items.", BulkyBooking),
@@ -301,7 +308,9 @@ export function bulkyBookingRoutes(guard: MiddlewareHandler<AuthEnv>, { now = ()
         const id = await bookBulky(tx, scope, newId(), { ...body, place, note: body.note ?? null, bookedBy: principal.user.id }, today)
         const row = await findBooking(tx, principal, id)
         if (row === undefined) throw new Error(`bulky booking ${id} written and then not there`)
-        return created(c, "/bulky-bookings", await answerOf(tx, principal.companyId, row))
+        const answered = await answerOf(tx, principal.companyId, row)
+        await emit(tx, principal, { aggregate: "bulky-booking", aggregateId: id, kind: "bulky-booking-booked", payload: answered, projectId: row.projectId, occurredAt: now() })
+        return created(c, "/bulky-bookings", answered)
       },
     )
     .get(
@@ -379,7 +388,7 @@ export function bulkyBookingRoutes(guard: MiddlewareHandler<AuthEnv>, { now = ()
         operationId: "cancelBulkyBooking",
         summary: "Cancel a bulky booking",
         description:
-          "Cancels a booked Bulky Booking, saying why: its instant, the person and the reason are stamped, and its slot is freed. Under the booking's row lock, only a `booked` one is cancelled (409: a routed one's stop is taken off its route first, `POST /pickups/{id}/remove`; a collected or cancelled one stands). The row stays, with its items.",
+          "Cancels a booked Bulky Booking, saying why: its instant, the person and the reason are stamped, and its slot is freed. Under the booking's row lock, only a `booked` one is cancelled (409: a routed one's stop is taken off its route first, `POST /pickups/{id}/remove`; a collected or cancelled one stands). The row stays, with its items. `bulky-booking-cancelled` is written to the outbox with the booking as answered, from which the customer is sent the project's notice where a rule names one (O16 of #290).",
         security: BEARER_SECURITY,
         responses: {
           200: describeJson("The booking, cancelled.", BulkyBooking),
@@ -399,13 +408,16 @@ export function bulkyBookingRoutes(guard: MiddlewareHandler<AuthEnv>, { now = ()
         const tx = c.get("tx")
         const principal = c.get("principal")
         await lockedBooked(tx, principal, id, "cancel")
+        const at = now()
         await tx
           .update(bulkyBooking)
-          .set({ cancelledAt: now(), cancelledBy: principal.user.id, cancelReason: reason })
+          .set({ cancelledAt: at, cancelledBy: principal.user.id, cancelReason: reason })
           .where(and(bookingScope(principal), eq(bulkyBooking.id, id)))
         const row = await findBooking(tx, principal, id)
         if (row === undefined) throw noSuchBooking(id)
-        return c.json(await answerOf(tx, principal.companyId, row))
+        const answered = await answerOf(tx, principal.companyId, row)
+        await emit(tx, principal, { aggregate: "bulky-booking", aggregateId: id, kind: "bulky-booking-cancelled", payload: answered, projectId: row.projectId, occurredAt: at })
+        return c.json(answered)
       },
     )
 }

@@ -12,8 +12,8 @@ import { agreement, subscription } from "@waste/db/schema/agreements"
 import { product, wasteFraction } from "@waste/db/schema/catalogue"
 import { customer, property } from "@waste/db/schema/customers"
 import { planningArea } from "@waste/db/schema/planning-areas"
-import { pickup, route as route_ } from "@waste/db/schema/execution"
-import { eq } from "drizzle-orm"
+import { outboxEvent, pickup, route as route_ } from "@waste/db/schema/execution"
+import { and, asc, eq } from "drizzle-orm"
 import { withCompany } from "@waste/db/tenant"
 import { A_BULKY_PRODUCT_IS_SOLD_BY_THE_JOB_OR_ITEM, dayFull, NO_BULKY_SCHEDULE, NO_LOCATION, notABulkyDay, notAfterToday, notTheBookingsDay, onlyABookedBooking } from "@waste/domain/execution/bulky"
 
@@ -142,6 +142,15 @@ describe("bulky-waste booking (O11 of #290)", { skip: database.skip || owner.ski
     return BulkyAvailability.parse(await response.json())
   }
   let schedule: BulkySchedule
+  /** The outbox rows about one booking, oldest first, read as `wms_api` under the fence. */
+  const eventsAbout = (aggregateId: string) =>
+    withCompany(pool.db, a.companyId, (tx: Tx) =>
+      tx
+        .select({ kind: outboxEvent.kind, aggregateKind: outboxEvent.aggregateKind, projectId: outboxEvent.projectId, occurredAt: outboxEvent.occurredAt, payload: outboxEvent.payload })
+        .from(outboxEvent)
+        .where(and(eq(outboxEvent.companyId, a.companyId), eq(outboxEvent.aggregateId, aggregateId)))
+        .orderBy(asc(outboxEvent.id)),
+    )
 
   test("a schedule is an area's Tuesdays with two slots each, charged at a product sold by the job; one of an area is in force at a time", async () => {
     const body = { projectId: a.projects.copenhagen.id, planningAreaId: ids.area, frequency: "weekly", serviceDays: ["tuesday"], slotsPerDay: 2, productId: ids.bulky, validFrom: "2027-01-01" }
@@ -183,6 +192,11 @@ describe("bulky-waste booking (O11 of #290)", { skip: database.skip || owner.ski
     assert.deepEqual(answer.days.map((day) => [day.booked, day.left]), [[1, 1]])
     assert.deepEqual(BulkyBooking.parse(await (await olivia(`/bulky-bookings/${made.id}`)).json()), made)
     await refused(await other(`/bulky-bookings/${made.id}`), 404)
+    // The customer notices' news (O16 of #290, part b): the booking as answered, at the request's clock.
+    const [news, ...more] = await eventsAbout(made.id)
+    assert.equal(more.length, 0)
+    assert.deepEqual([news.kind, news.aggregateKind, news.projectId, news.occurredAt.toISOString()], ["bulky-booking-booked", "bulky-booking", a.projects.copenhagen.id, NOW.toISOString()])
+    assert.deepEqual(BulkyBooking.parse(news.payload), made)
   })
 
   test("a booking is refused another customer's agreement, today, a day that is no collection day, a place the agreement serves nothing at, and a full day", async () => {
@@ -234,6 +248,9 @@ describe("bulky-waste booking (O11 of #290)", { skip: database.skip || owner.ski
     assert.deepEqual([again.status, again.stop], ["booked", null])
     const cancelled = BulkyBooking.parse(await (await post(olivia, `/bulky-bookings/${made.id}/cancel`, { reason: "Customer called" })).json())
     assert.deepEqual([cancelled.status, cancelled.cancelReason, cancelled.cancelledBy], ["cancelled", "Customer called", a.users.olivia.id])
+    const news = await eventsAbout(made.id)
+    assert.deepEqual(news.map((event) => event.kind), ["bulky-booking-booked", "bulky-booking-cancelled"], "a move, a routing and a removal are nobody's news; the cancel is the customer's")
+    assert.deepEqual(BulkyBooking.parse(news[1].payload), cancelled)
     assert.equal((await refused(await post(olivia, `/routes/${route.id}/pickups`, { service: "bulky", bulkyBookingId: made.id }), 409)).detail, onlyABookedBooking("cancelled", "route"))
   })
 
