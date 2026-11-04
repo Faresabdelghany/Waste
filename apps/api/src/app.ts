@@ -58,6 +58,7 @@ import { customerContactRoutes } from "./routes/customer-contacts"
 import { customerRoutes } from "./routes/customers"
 import { messageTemplateRoutes } from "./routes/message-templates"
 import { messageRoutes } from "./routes/messages"
+import { notificationRuleRoutes } from "./routes/notification-rules"
 import { notificationRoutes } from "./routes/notifications"
 import { depotRoutes } from "./routes/depots"
 import { applicationRoutes } from "./routes/applications"
@@ -67,6 +68,7 @@ import { fuelEmissionFactorRoutes } from "./routes/fuel-emission-factors"
 import { driverDoorRoutes } from "./routes/driver"
 import { availabilityRoutes } from "./routes/availability"
 import { preTripRoutes } from "./routes/pre-trip-checks"
+import { maintenanceRoutes } from "./routes/maintenance"
 import { driverRoutes } from "./routes/drivers"
 import { generationRoutes } from "./routes/generation"
 import { importRoutes } from "./routes/imports"
@@ -263,6 +265,7 @@ export function createApp({
   const guard = authenticate({ pool, verifier })
   app.route("/", meRoutes(guard))
   app.route("/", notificationRoutes(guard))
+  app.route("/", notificationRuleRoutes(guard))
   app.route("/", companyRoutes(guard))
   app.route("/", projectRoutes(guard))
   app.route("/", serviceProviderRoutes(guard))
@@ -311,6 +314,7 @@ export function createApp({
   app.route("/", driverRoutes(guard, { now }))
   app.route("/", availabilityRoutes(guard))
   app.route("/", preTripRoutes(guard, { now }))
+  app.route("/", maintenanceRoutes(guard, { now }))
   // Execution's office (Issue #104, slice 3). The live read goes on before the
   // route module: Hono runs handlers in registration order, and `/routes/live`
   // would otherwise be caught by `/routes/:id`, whose path validator refuses

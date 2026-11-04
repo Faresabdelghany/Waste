@@ -27,6 +27,7 @@ import { vehicleAllocation, vehicleAllocationEvent } from "@waste/db/schema/allo
 import { driverAbsence, vehicleUnavailability } from "@waste/db/schema/availability"
 import { container, containerServicePlacement } from "@waste/db/schema/containers"
 import { driverCommand, outboxEvent, pickup, proofOfService, route, session, sessionPosition, unload } from "@waste/db/schema/execution"
+import { maintenanceOrder, vehicleMaintenancePlan } from "@waste/db/schema/maintenance"
 import { preTripCheck, preTripChecklistItem, vehicleDefect } from "@waste/db/schema/pre-trip"
 import {
   accountingAccount,
@@ -81,7 +82,7 @@ import {
   sharedCollectionPointMember,
 } from "@waste/db/schema/customers"
 import { message, messageTemplate } from "@waste/db/schema/messaging"
-import { notificationPreference } from "@waste/db/schema/notifications"
+import { notificationPreference, notificationRule, notificationRuleArea } from "@waste/db/schema/notifications"
 import { company, project, serviceProvider } from "@waste/db/schema/organisation"
 import { contaminantCode, contaminantCodeFraction, pickupExceptionRule, pickupExceptionRuleStep } from "@waste/db/schema/pickup-exceptions"
 import { planningArea, planningAreaBoundary } from "@waste/db/schema/planning-areas"
@@ -439,6 +440,8 @@ export async function dropTenant(pool: Database, companyId: string, owner?: Data
     await tx.delete(routeSchemeSeason).where(eq(routeSchemeSeason.companyId, companyId))
     await tx.delete(routeScheme).where(eq(routeScheme.companyId, companyId))
     await tx.delete(driverAbsence).where(eq(driverAbsence.companyId, companyId))
+    await tx.delete(maintenanceOrder).where(eq(maintenanceOrder.companyId, companyId))
+    await tx.delete(vehicleMaintenancePlan).where(eq(vehicleMaintenancePlan.companyId, companyId))
     await tx.delete(vehicleUnavailability).where(eq(vehicleUnavailability.companyId, companyId))
     await tx.delete(vehicleAllocation).where(eq(vehicleAllocation.companyId, companyId))
     await tx.delete(vehicleCompartmentFraction).where(eq(vehicleCompartmentFraction.companyId, companyId))
@@ -457,6 +460,7 @@ export async function dropTenant(pool: Database, companyId: string, owner?: Data
     await tx.delete(vehicleType).where(eq(vehicleType.companyId, companyId))
     await tx.delete(collectionCalendarHoliday).where(eq(collectionCalendarHoliday.companyId, companyId))
     await tx.delete(collectionCalendar).where(eq(collectionCalendar.companyId, companyId))
+    await tx.delete(notificationRuleArea).where(eq(notificationRuleArea.companyId, companyId))
     await tx.delete(planningAreaBoundary).where(eq(planningAreaBoundary.companyId, companyId))
     await tx.delete(planningArea).where(eq(planningArea.companyId, companyId))
     await tx.delete(containerServicePlacement).where(eq(containerServicePlacement.companyId, companyId))
@@ -481,6 +485,7 @@ export async function dropTenant(pool: Database, companyId: string, owner?: Data
     await tx.delete(property).where(eq(property.companyId, companyId))
     // Messaging (#291 C15): the delivery log names its template, its customer and its contact, so it goes first, then the templates.
     await tx.delete(message).where(eq(message.companyId, companyId))
+    await tx.delete(notificationRule).where(eq(notificationRule.companyId, companyId))
     await tx.delete(messageTemplate).where(eq(messageTemplate.companyId, companyId))
     // A customer's contact persons (#291 C14) go before it.
     await tx.delete(customerContact).where(eq(customerContact.companyId, companyId))

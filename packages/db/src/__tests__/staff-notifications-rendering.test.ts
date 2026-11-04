@@ -16,21 +16,21 @@ import { describe, test } from "node:test"
 import { MIGRATIONS_FOLDER } from "../migrate"
 import { role, userAccount } from "../schema/access"
 import { customer, customerContact } from "../schema/customers"
-import { message, messageTemplate } from "../schema/messaging"
+import { messageTemplate } from "../schema/messaging"
 import { notificationPreference } from "../schema/notifications"
 import { company, project, serviceProvider } from "../schema/organisation"
 import { auditTrail, NOTIFICATIONS_AUDITED } from "../sql/audit-trail"
 import { handWrittenStatements, normalised, statementsOf } from "../sql/hand-written"
-import { messageAsOf0074 } from "./message-as-of"
-import { outboxEventAsOf0054, outboxEventAsOf0083 } from "./outbox-as-of"
+import { messageAsOf0074, messageAsOf0083 as message } from "./message-as-of"
+import { outboxEventAsOf0054, outboxEventAsOf0083 as outboxEvent } from "./outbox-as-of"
 import { checksOf, ref } from "./rendering"
 import { statementsBetween } from "./specimen"
 
 const referenced = { company, project, serviceProvider, role, userAccount, customer, customerContact, messageTemplate }
 
-/** What drizzle-kit writes for the migration: the outbox from 0054's spelling to 0083's (today's but for the weight review's kind, O28 of #290), the log from its earlier spelling to today's, and the new table. */
+/** What drizzle-kit writes for the migration: the outbox and the log from their earlier spelling to today's, and the new table. */
 const generated = (): Promise<string[]> =>
-  statementsBetween({ ...referenced, outboxEvent: outboxEventAsOf0054, message: messageAsOf0074 }, { ...referenced, outboxEvent: outboxEventAsOf0083, message, notificationPreference })
+  statementsBetween({ ...referenced, outboxEvent: outboxEventAsOf0054, message: messageAsOf0074 }, { ...referenced, outboxEvent, message, notificationPreference })
 
 const handWritten = [...handWrittenStatements(notificationPreference), ...NOTIFICATIONS_AUDITED.flatMap(auditTrail)]
 
