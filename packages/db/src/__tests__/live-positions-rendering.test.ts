@@ -64,7 +64,7 @@ describe("live positions as drizzle-kit writes them", () => {
 
   test("the receipt's kinds grew by record-positions, last", () => {
     assert.equal(KINDS_AS_OF_0060.at(-1), "record-positions")
-    assert.equal(KINDS_AS_OF_0060.length, DRIVER_COMMAND_KINDS.length - 2, "two kinds added since")
+    assert.equal(KINDS_AS_OF_0060.length, DRIVER_COMMAND_KINDS.length - 3, "three kinds added since")
   })
 })
 

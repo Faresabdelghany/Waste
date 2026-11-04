@@ -25,10 +25,13 @@ import { statementsFor } from "./specimen"
 
 const alter = (table: string, statement: string): string => `ALTER TABLE "wms"."${table}" ${statement};`
 
+/** The receipt's kinds as this file spelled them: today's less `record-volume`, which 0094 added since (M11 of #293). */
+const KINDS_AS_OF_0092 = DRIVER_COMMAND_KINDS.filter((kind) => kind !== "record-volume")
+
 /** What drizzle-kit wrote into the tables already applied: the receipt's kind respelt, and the stop's fill estimate with its check. */
 const ALTERED = [
   alter("driver_command", 'DROP CONSTRAINT "driver_command_kind_one_of"'),
-  alter("driver_command", `ADD ${oneOfCheck("driver_command", "kind", ...DRIVER_COMMAND_KINDS)}`),
+  alter("driver_command", `ADD ${oneOfCheck("driver_command", "kind", ...KINDS_AS_OF_0092)}`),
   alter("pickup", 'ADD COLUMN "fill_level" text'),
   alter("pickup", `ADD ${oneOfCheck("pickup", "fill_level", ...FILL_LEVELS)}`),
 ]
