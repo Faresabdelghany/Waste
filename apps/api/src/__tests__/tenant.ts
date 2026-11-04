@@ -29,6 +29,7 @@ import { container, containerServicePlacement } from "@waste/db/schema/container
 import { driverCommand, outboxEvent, pickup, proofOfService, route, session, sessionPosition, unload } from "@waste/db/schema/execution"
 import { maintenanceOrder, vehicleMaintenancePlan } from "@waste/db/schema/maintenance"
 import { preTripCheck, preTripChecklistItem, vehicleDefect } from "@waste/db/schema/pre-trip"
+import { weighbridgeTicket } from "@waste/db/schema/weighbridge"
 import {
   accountingAccount,
   accountingExport,
@@ -366,6 +367,8 @@ export async function dropTenant(pool: Database, companyId: string, owner?: Data
     // A defect names its check (O13 of #290): both go with the ledgers, the defect first.
     await owner.db.delete(vehicleDefect).where(eq(vehicleDefect.companyId, companyId))
     await owner.db.delete(preTripCheck).where(eq(preTripCheck.companyId, companyId))
+    // A weighbridge's ticket names the Unload it was written as (O27 of #290): it goes first.
+    await owner.db.delete(weighbridgeTicket).where(eq(weighbridgeTicket.companyId, companyId))
     await owner.db.delete(fillReading).where(eq(fillReading.companyId, companyId))
     await owner.db.delete(unload).where(eq(unload.companyId, companyId))
     await owner.db.delete(driverCommand).where(eq(driverCommand.companyId, companyId))
@@ -373,6 +376,7 @@ export async function dropTenant(pool: Database, companyId: string, owner?: Data
     await owner.db.delete(stockMovement).where(eq(stockMovement.companyId, companyId))
   }
   await withCompany(pool.db, companyId, async (tx: Tx) => {
+    await tx.delete(weighbridgeTicket).where(eq(weighbridgeTicket.companyId, companyId))
     await tx.delete(importRun).where(eq(importRun.companyId, companyId))
     await tx.delete(accountingProductAccount).where(eq(accountingProductAccount.companyId, companyId))
     await tx.delete(accountingVatCode).where(eq(accountingVatCode.companyId, companyId))

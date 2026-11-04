@@ -45,6 +45,7 @@ import { project } from "@waste/db/schema/organisation"
 import { noRouteAssigned } from "@waste/domain/execution/commands"
 import { progressOf, type PickupCounts } from "@waste/domain/execution/progress"
 import { loadReading, onBoardByUnload } from "@waste/domain/execution/unloads"
+import { possibleDuplicates } from "@waste/domain/execution/weighbridge"
 import type { CommandOutcome, DriverCommandKind, ExecutionSource, PickupOrigin, PickupOutcome, PickupReason, PickupService, PickupStatus, ProofKind, RouteCancelReasonCode, RouteStatus, UnloadRefusalReason } from "@waste/domain/execution/vocabulary"
 import type { WeightReviewStatus } from "@waste/domain/finance/vocabulary"
 import { and, asc, count, eq, inArray, isNull, sql, type SQL } from "drizzle-orm"
@@ -473,7 +474,7 @@ export function unloadsFrom(tx: Tx, companyId: string) {
 export const weightReviewOfRow = (row: ReviewRead): WeightReviewState => ({ status: row.reviewStatus, latestReviewId: row.reviewId, correctionUnloadId: row.reviewCorrectionUnloadId })
 
 /** The unload on the wire, its review reading beside it, and the load on board where `unloadsAnswered` read one. */
-export function unloadOf(row: UnloadRow, load: LoadReading | null = null): Unload {
+export function unloadOf(row: UnloadRow, load: LoadReading | null = null, possibleDuplicates: readonly string[] = []): Unload {
   return {
     id: row.id,
     recordedAt: row.recordedAt.toISOString(),
@@ -496,6 +497,7 @@ export function unloadOf(row: UnloadRow, load: LoadReading | null = null): Unloa
     weightReview: weightReviewOfRow(row),
     refusal: row.refusalReason === null ? null : { reason: row.refusalReason as UnloadRefusalReason, note: row.refusalNote },
     load,
+    possibleDuplicates: [...possibleDuplicates],
   }
 }
 
@@ -549,10 +551,34 @@ async function loadsOf(tx: Tx, companyId: string, rows: readonly UnloadRow[]): P
   return loads
 }
 
-/** Unloads as every door answers them: each with its review reading and its load on board (`loadsOf`), in the rows' order. */
+/**
+ * Each unload's possible duplicates (O27 of #290): a weighbridge's Unload and
+ * one recorded by hand on the same route and fraction, both taken and both
+ * still open to review (`possibleDuplicates`). Read over every unload of the
+ * rows' routes, not only the rows answered, with each one's review reading, so
+ * the pair is told on whichever of the two a page holds.
+ */
+async function duplicatesOf(tx: Tx, companyId: string, rows: readonly UnloadRow[]): Promise<Map<string, string[]>> {
+  if (rows.length === 0) return new Map()
+  const routeIds = [...new Set(rows.map((row) => row.routeId))]
+  const projectIds = [...new Set(rows.map((row) => row.projectId))]
+  const siblings = await unloadsFrom(tx, companyId).query.where(and(eq(unload.companyId, companyId), inArray(unload.projectId, projectIds), inArray(unload.routeId, routeIds)))
+  return possibleDuplicates(
+    siblings.map((sibling) => ({
+      id: sibling.id,
+      routeId: sibling.routeId,
+      wasteFractionId: sibling.wasteFractionId,
+      source: sibling.source as ExecutionSource,
+      refused: sibling.refusalReason !== null,
+      settled: sibling.reviewStatus === "rejected" || sibling.reviewStatus === "corrected",
+    })),
+  )
+}
+
+/** Unloads as every door answers them: each with its review reading, its load on board (`loadsOf`) and its possible duplicates (`duplicatesOf`), in the rows' order. */
 export async function unloadsAnswered(tx: Tx, companyId: string, rows: readonly UnloadRow[]): Promise<Unload[]> {
-  const loads = await loadsOf(tx, companyId, rows)
-  return rows.map((row) => unloadOf(row, loads.get(row.id) ?? null))
+  const [loads, duplicates] = await Promise.all([loadsOf(tx, companyId, rows), duplicatesOf(tx, companyId, rows)])
+  return rows.map((row) => unloadOf(row, loads.get(row.id) ?? null, duplicates.get(row.id) ?? []))
 }
 
 /** One unload as every door answers it: `unloadsAnswered` of the one row. */
